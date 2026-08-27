@@ -29,6 +29,11 @@ mkdir -p "$AXION_LOG_DIR" "$MIRROR_DIR" "$ARCHIVE_DIR"
 AXION_LOG_FILE="$AXION_LOG_DIR/backup-minio-$TS.log"
 export AXION_LOG_FILE
 
+# shellcheck disable=SC2154
+#   Faux positif : `rc` EST affecté — par `rc=$?`, première instruction du piège.
+#   Shellcheck ne le voit pas parce que le corps du `trap` est une chaîne entre
+#   apostrophes, évaluée au déclenchement et non à l'analyse. Désactivation ciblée
+#   sur cette ligne uniquement, jamais sur le fichier.
 trap 'rc=$?; axion_error "Sauvegarde MinIO ÉCHOUÉE (code $rc) — journal : $AXION_LOG_FILE"; axion_notify "ÉCHEC sauvegarde MinIO (code $rc). Journal : $AXION_LOG_FILE"; exit $rc' ERR
 
 NETWORK="$(axion_project_name)"

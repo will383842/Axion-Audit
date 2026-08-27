@@ -28,6 +28,11 @@ AXION_LOG_FILE="$AXION_LOG_DIR/backup-postgres-$TS.log"
 export AXION_LOG_FILE
 
 # Toute erreur non rattrapée alerte et sort en code non nul (02 §11.3).
+# shellcheck disable=SC2154
+#   Faux positif : `rc` EST affecté — par `rc=$?`, première instruction du piège.
+#   Shellcheck ne le voit pas parce que le corps du `trap` est une chaîne entre
+#   apostrophes, évaluée au déclenchement et non à l'analyse. Désactivation ciblée
+#   sur cette ligne uniquement, jamais sur le fichier.
 trap 'rc=$?; axion_error "Sauvegarde Postgres ÉCHOUÉE (code $rc) — journal : $AXION_LOG_FILE"; axion_notify "ÉCHEC sauvegarde Postgres (code $rc). Journal : $AXION_LOG_FILE"; exit $rc' ERR
 
 axion_log "=== Sauvegarde PostgreSQL — début ($TS) ==="

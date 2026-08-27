@@ -261,7 +261,13 @@ jobs:
   lint:
     name: 1 · lint
     runs-on: ubuntu-latest
-    needs: [jonction]
+    # `lint` dépend de la CONSTRUCTION, et non l'inverse. Les règles typées
+    # d'ESLint résolvent `@axion/shared` et `@axion/ui` par leurs déclarations de
+    # types, qui n'existent qu'une fois `packages/*/dist` produit : sur un clone
+    # neuf, linter d'abord donnait 55 erreurs « type cannot be resolved ».
+    # Trouvé à la PREMIÈRE EXÉCUTION RÉELLE — en local, un `dist` résiduel masquait
+    # le défaut.
+    needs: [build-sources]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-node-pnpm
@@ -328,7 +334,7 @@ jobs:
   build-sources:
     name: 2bis · build (sources)
     runs-on: ubuntu-latest
-    needs: [typecheck]
+    needs: [jonction]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-node-pnpm

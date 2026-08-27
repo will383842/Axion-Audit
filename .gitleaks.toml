@@ -83,6 +83,5 @@ regexes = [
 #
 # Trace : DECISIONS.md 2026-08-27 « Faux positif gitleaks sur le sceau du pack ».
 paths = [
-  '''^docs/.pack-integrity.json
-'',
+'''^docs/\.pack-integrity\.json$''',
 ]
