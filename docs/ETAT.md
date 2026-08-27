@@ -146,3 +146,33 @@ Ses 4 réserves sont traitées et commitées : **F-1** (l'invariant 2 jamais vé
 Prochaine action : **la porte P-A elle-même** — démonstration à Williams, checklist signée, merge, tag `v0.1`. Aucun lot suivant ne s'ouvre avant (11 §9bis : les portes arrêtent tout).
 Tests rouges connus : aucun en local. **La CI sera rouge sur `invariants` jusqu'à la création du secret — c'est le comportement voulu, pas une régression.**
 Piège de machine, pour toute reprise : `pnpm verify` sature ce poste (3,3 Go libres sur 15,8 avec Docker). Lancer avec `npm_config_workspace_concurrency=1`, rien d'autre en parallèle.
+
+---
+
+## 2026-08-28 00h55 — [lot L1] — RECTIFICATION du bloc précédent : la CI est VERTE, aucune action de Williams
+
+**Le bloc de 00h40 annonçait « la CI sera ROUGE sur `invariants` jusqu'à la création du secret ».
+C'EST FAUX, et la rectification arrive avant que quiconque agisse dessus.**
+
+**Vérifié :** `gh secret list` → **`AXION_CLIENTS_SURVEILLES` existe depuis le 2026-08-27T16:53:55Z**,
+créé pendant la mise en public du dépôt. Ce qui manquait n'était pas le secret, **c'était le
+câblage** : aucun workflow ne le lisait.
+
+Le diagnostic du gardien A02 reste **entièrement exact** — l'invariant 2 n'a jamais été vérifié par la
+CI, et deux fichiers affirmaient le contraire. Seule ma conclusion sur la CAUSE était fausse : j'ai
+supposé un secret absent au lieu de le vérifier, alors qu'une commande suffisait.
+
+**Conséquence : le job `invariants` du run `8ca27a4` est VERT, et il l'est pour une bonne raison** —
+le contrôle a réellement tourné, avec la vraie liste, pour la première fois. Étape `pnpm
+check:invariants` → `success` (vérifié par l'API sur le job lui-même, pas déduit du run).
+
+**Williams n'a RIEN à créer.** Le point 1 de la liste « ce qui attend Williams » du bloc de 00h40 est
+**ANNULÉ**. Les points 2 (VPS), 3 (fiches A-001, A-002, A-003) et 4 (`estimation_params`) restent
+valides et inchangés.
+
+**Ce que je retiens, et qui vaut au-delà de ce cas :** j'ai affirmé « le secret n'existe pas » alors
+que je n'avais vérifié que son ABSENCE DANS `.github/`. C'est exactement le défaut que ce lot
+poursuit depuis trois passes — **conclure d'un contrôle sur ce qu'il n'a pas regardé**. La vérification
+coûtait une commande.
+
+Tests rouges connus : aucun. CI verte.
