@@ -174,3 +174,308 @@ le script `infra/scripts/smoke-test.sh` porte cette étape en commentaire explic
 
 **Décideur :** A01
 **Impact spec :** aucun
+
+---
+
+## 2026-08-27 — [L0] Cohabitation staging/prod : qui écoute sur 443 ?
+
+**Constat (remonté par A11) :** un seul processus peut lier les ports 80/443 d'un VPS. Or 02 §11.2
+fait cohabiter `staging` et `prod` sur la MÊME machine en V1. A11 a livré, sans deviner, un Caddy de
+prod sur 80/443 et un Caddy de staging en loopback `127.0.0.1:8081` accessible par tunnel SSH.
+
+**Options :**
+
+1. Deux Caddy, staging en loopback + tunnel SSH (état livré).
+2. **UN SEUL Caddy** servant les deux environnements par des blocs de site distincts.
+3. VPS staging dédié.
+
+**Arbitrage : option 2 — et ce n'est pas un choix, c'est une lecture.** Le 02 §11.2 dit
+littéralement : « `staging` (même VPS, **sous-domaine**, DB séparée) ». Un sous-domaine implique un
+certificat TLS, donc un serveur qui écoute sur 443 : c'est bien UN Caddy avec deux blocs de site
+(`${CADDY_SITE_ADDRESS}` pour la prod, `staging.${...}` pour staging) routant vers deux piles
+d'`upstream` séparées, avec bases, buckets et secrets distincts (§30.4-4 intact). L'option 1 aurait
+imposé un tunnel SSH pour toute démo de porte — or les portes P-A à P-E se jouent SUR STAGING, et une
+démo qui exige un tunnel est une démo qu'on finit par ne pas faire. L'option 3 est explicitement
+renvoyée « dès la V2 » par le pack : la retenir maintenant serait dépenser hors budget.
+**Le gel des déploiements staging pendant les jours de collecte (02 §11.2) reste applicable et devient
+même plus important**, puisque les deux piles partagent désormais le même frontal.
+Correction confiée à A11.
+
+**Décideur :** A01
+**Impact spec :** aucun (application littérale du 02 §11.2)
+
+---
+
+## 2026-08-27 — [L0] CSP : la concession `style-src 'unsafe-inline'`
+
+**Constat (remonté par A11) :** la CSP livrée est stricte sur tout (`default-src 'self'`,
+`script-src 'self' 'wasm-unsafe-eval'` pour Argon2id, `worker-src 'self'`, `font-src 'self'`, zéro
+CDN) SAUF `style-src`, qui porte `'unsafe-inline'` — nécessaire aux attributs `style` que Radix et
+shadcn/ui posent à l'exécution (positionnement des popovers, mesures de dimensions).
+
+**Options :**
+
+1. Accepter `'unsafe-inline'` sur `style-src` uniquement.
+2. Passer aux nonces ou aux hachages CSP pour les styles.
+3. Renoncer à shadcn/ui — **exclu** : imposé par le 11 §1.
+
+**Arbitrage : option 1 pour la Phase 1, avec réexamen daté.** La portée du risque mérite d'être
+nommée plutôt qu'agitée : `style-src 'unsafe-inline'` autorise l'injection de STYLE, pas de script
+(`script-src` reste sans `'unsafe-inline'` ni `'unsafe-eval'`). L'attaque résiduelle est
+l'exfiltration par sélecteur CSS, qui suppose déjà une injection de contenu — laquelle serait un
+défaut de validation Zod bien plus grave, couvert ailleurs. Surtout, un nonce par requête est
+**incompatible avec une PWA servie depuis le cache d'un service worker SANS serveur** (invariant 1) :
+au démarrage en mode avion, il n'y a aucune requête pour porter le nonce. C'est donc l'offline-first
+qui ferme l'option 2, pas la commodité.
+**Réexamen imposé au lot L5c**, quand le service worker sera livré : compter les styles inline
+réellement subsistants et, si le compte est faible, basculer sur des hachages statiques — compatibles
+avec un démarrage hors ligne, contrairement aux nonces. À porter au dossier de la porte P-C.
+
+**Décideur :** A01
+**Impact spec :** aucun
+
+---
+
+## 2026-08-27 — [L0] Dépendances d'outillage absentes de la liste 11 §1
+
+**Constat (remonté par A52) :** `eslint`, `prettier`, `typescript-eslint`, `husky`, `lint-staged`,
+`gitleaks`, l'image ZAP et le pilote `pg` (node-postgres) ne figurent pas dans la liste épinglée du
+11 §1. Or le 11 §8.1 réserve à l'humain « ajouter une dépendance hors de la liste §1 ».
+
+**Options :**
+
+1. Escalader chacune à Williams avant de continuer.
+2. Les traiter comme des **implicites nécessaires** d'exigences déjà écrites, et les tracer ici.
+
+**Arbitrage : option 2, avec la liste EXHAUSTIVE ci-dessous.** Le §8.1 vise l'ajout de dépendances
+qui changent l'architecture ou la surface d'attaque, pas les outils sans lesquels une exigence du
+contrat serait littéralement inexécutable. Chacune est l'implicite d'une ligne du pack :
+
+| Dépendance                                | Exigence qui l'impose                                                                                                                                                                                                                                                                        |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `eslint`, `typescript-eslint`, `prettier` | 11 §7 : « CI, jobs dans cet ordre : **lint** → typecheck… »                                                                                                                                                                                                                                  |
+| `husky`, `lint-staged`                    | 11 §7 : « Pre-commit : **lint-staged** » — `lint-staged` est nommé, `husky` est son mécanisme                                                                                                                                                                                                |
+| `gitleaks`                                | 11 §7 et 02 §30.4-5 : « gitleaks en CI (bloquant) »                                                                                                                                                                                                                                          |
+| image ZAP                                 | 09 §1 (rôle A51) : « ZAP baseline à chaque build »                                                                                                                                                                                                                                           |
+| `pg` + `@types/pg`                        | 11 §1 impose **Drizzle** sur **PostgreSQL 16**. Drizzle est une couche de requêtes, PAS un pilote. `pg` est le pilote de référence de `drizzle-orm/node-postgres` et celui qu'utilise `drizzle-kit` : choisir `postgres.js` aurait été un choix, prendre le pilote canonique n'en est pas un |
+| `@types/node`, `@vitejs/plugin-react`     | typages et intégration React exigés par Node 22 et Vite, tous deux au §1                                                                                                                                                                                                                     |
+
+Toutes sont épinglées à leur version exacte comme le reste (§1, `save-exact`) et gelées avec
+Dependabot pour toute la Phase 1. **Aucune ne touche l'exécution en production sauf `pg`**, qui est
+le pilote sans lequel Drizzle ne peut rien.
+
+**Décideur :** A01
+**Impact spec :** aucun
+
+---
+
+## 2026-08-27 — [L0] Environment GitHub `ops` pour le test de restauration nocturne
+
+**Constat (remonté par A52) :** le 02 §30.5 ne prévoit que deux Environments, `staging` et `prod`,
+`prod` exigeant une approbation manuelle. Le test de restauration nocturne (02 §11.4, critère L0)
+tourne à 03:00 UTC.
+
+**Options :**
+
+1. Rattacher le job nocturne à `prod` — **exclu** : l'approbation manuelle le mettrait en attente d'un
+   humain endormi, ce qui **supprimerait de fait** le test de restauration exigé par le critère L0.
+   Un contrôle qui ne s'exécute pas est pire qu'absent : il rassure à tort.
+2. Créer un troisième Environment `ops`, sans approbation, portant une clé SSH **restreinte au seul
+   `restore-test.sh`**.
+
+**Arbitrage :** option 2. La règle structurante du §30.4-3 est que les secrets vivent dans des
+Environments plutôt qu'en secrets de dépôt globaux — `ops` la respecte. Et le §30.4-7 (moindre accès)
+est mieux servi par une clé dédiée et bridée que par la réutilisation de la clé de déploiement de
+production dans un job automatique nocturne.
+**Contrainte de mise en œuvre pour Williams :** la clé SSH d'`ops` doit être restreinte côté serveur
+(`command=` dans `authorized_keys`), sans quoi `ops` deviendrait un accès de production sans
+approbation — exactement ce que l'option 1 cherchait à éviter.
+
+**Décideur :** A01
+**Impact spec :** aucun
+
+---
+
+## 2026-08-27 — [L0] Points d'infrastructure actés sans réserve
+
+Regroupés : chacun est un choix d'exécution que le pack ne tranche pas et qui n'ouvre aucune
+alternative défendable. Tracés pour que la porte P-A puisse les relire un par un.
+
+1. **`DEPLOY_SSH_KNOWN_HOSTS`** (A52) — l'empreinte de l'hôte est fournie en secret d'Environment.
+   L'alternative (`StrictHostKeyChecking=no`) revient à accepter un homme du milieu sur le canal
+   même qui porte nos déploiements. Documentée au `.env.example` §17.
+2. **`GHCR_OWNER` et `IMAGE_TAG`** (A11) — variables NON SECRÈTES, sans lesquelles
+   `docker compose config` échoue en staging et en prod. Ajoutées au `.env.example` §18.
+3. **Remappage pgBackRest** (A11) — pgBackRest lit ses options via `PGBACKREST_<OPTION>` ; le compose
+   dérive `PGBACKREST_REPO1_PATH`, `_REPO1_CIPHER_PASS`, `_REPO1_RETENTION_FULL` des variables du
+   contrat. Aucune variable de contrat inventée, seulement traduite.
+4. **Image Postgres construite sur le VPS** (A11) — pgBackRest doit vivre dans le conteneur qui
+   exécute `archive_command`. C'est le SEUL `build` sur le serveur ; écart assumé au « pull-only » du
+   §30.6, sans lequel le WAL archiving est impossible.
+5. **Tags d'images MinIO / `mc` / Caddy** (A11) — le 11 §1 dit « dernière release stable au démarrage,
+   **figée ensuite** » sans nommer de version. Figées à `minio/minio:RELEASE.2025-04-22T22-12-26Z`,
+   `minio/mc:RELEASE.2025-04-16T18-13-26Z`, `caddy:2-alpine`. **À reconfirmer au provisionnement réel
+   (L0-b)** puis gelées définitivement.
+6. **Actions GitHub épinglées par tag majeur, pas par SHA** (A52) — inventer un SHA non vérifiable
+   serait une fausse rigueur. Durcissement par SHA renvoyé en Phase 2, avec Dependabot.
+7. **Tag d'image `main-<run>`** (A52) — republier « v0.0.0 » à chaque merge écraserait un tag censé
+   désigner un état figé.
+8. **Cron `0 3 * * *` écrit en dur** (A52) — GitHub Actions n'accepte pas de variable dans une
+   expression cron ; duplique `RESTORE_TEST_CRON` du `.env.example` §12. Synchronisation manuelle,
+   signalée dans le workflow.
+9. **Ports internes des fronts** (A11) — contrat explicite : 5173 pour `field`, 5174 pour `hq`, `hq`
+   construit en base `/hq/`. Le pack ne les tranchait pas.
+10. **Commandes de migration** (A11) — `deploy.sh` appelle `pnpm db:migrate:check` (dry-run) puis
+    `pnpm db:migrate`, conformément au garde-fou du §30.6 qui impose la mécanique sans nommer les
+    commandes. Les deux scripts sont câblés dans le `package.json` racine ; leur IMPLÉMENTATION est un
+    livrable du lot L1 (A12).
+11. **Sonde de vivacité du worker** (A11) — `pgrep -f node`, faute de port exposé. Une vraie sonde de
+    files arrivera avec les premiers jobs (L10/L11).
+12. **`archive_mode=on` dès le premier démarrage** (A11) — impose un `pgbackrest stanza-create` manuel
+    après le premier `up`, documenté au runbook. Sans lui, les WAL s'accumulent sans être archivés :
+    c'est le point de contrôle n°1 de la porte P-A côté sauvegardes.
+
+**Décideur :** A01
+**Impact spec :** aucun
+
+---
+
+## 2026-08-27 — [L0] Prettier ne touche pas au pack — et le pack est désormais scellé
+
+**Constat (signalé par A55, incident réel de ce lot) :** un `pnpm format` lancé par A01 a reformaté
+les **12 fichiers du pack** (`docs/00_INDEX.md` … `docs/11_CONTRAT_TECHNIQUE.md`) : 724 insertions,
+468 suppressions, commitées dans `a445739`. Prettier avait ajouté des lignes vides après les titres
+et converti `*italique*` en `_italique_`. Le contenu a survécu ; le principe non.
+
+**Pourquoi c'est grave alors que « le contenu a survécu » :** le 00_INDEX pose que le pack est
+« LA source d'exécution unique », et le 09 §4 prévoit **une seule** révision légitime — la revue de
+spec de la porte P-D, où « le pack est confronté au code réel, écarts documentés, spec amendée si le
+réel l'exige ». Cette confrontation suppose un pack **comparable à lui-même**. Un pack qui bouge sous
+l'effet d'un outil rend tout `diff` ultérieur illisible : les vraies modifications se noient dans le
+bruit de reformatage. Le 09 §5.2 est catégorique : « tout écart à la spec est soit refusé, soit
+documenté comme amendement horodaté — **jamais silencieux** ». Celui-ci était silencieux.
+
+**Options :**
+
+1. Laisser le pack reformaté (le contenu est intact).
+2. Restaurer le pack et empêcher toute récidive.
+
+**Arbitrage :** option 2, en trois gestes.
+(a) **Restauration** : les 12 fichiers et `docs/archive/` remis à leur état d'import (`1f63eb1`) —
+vérifié, `git diff 1f63eb1 -- docs/` ne montre plus que `docs/ETAT.md`, qui est notre fichier vivant.
+(b) **`docs/` ajouté à `.prettierignore`**, avec le motif écrit en toutes lettres dans le fichier.
+(c) **Sceau d'intégrité** : `scripts/check-pack-integrity.mjs` + `docs/.pack-integrity.json`
+(empreintes SHA-256 des 12 fichiers), câblé en `pnpm check:pack`. Toute dérive rend le contrôle
+rouge et affiche la marche à suivre. Le resceller exige `--sceller`, geste explicite réservé à un
+amendement décidé — **jamais le sceau seul** : resceller sans tracer serait exactement le changement
+silencieux que le contrôle existe pour empêcher. Contrôle **éprouvé** : modification d'un octet dans
+`00_INDEX.md` → sortie 1 avec message ; restauration → vert.
+
+**Ce que l'incident enseigne :** un outil de confort appliqué sans périmètre traverse les frontières
+qu'aucune règle écrite ne lui a interdites. Les fichiers vivants (`ETAT.md`, `DECISIONS.md`,
+`AMELIORATIONS.md`, `docs/conception/`, `docs/portes/`, `docs/journal/`) restent volontairement hors
+du sceau : ce sont nos fichiers, pas la spécification.
+
+**Décideur :** A01
+**Impact spec :** aucun (retour à l'état d'origine)
+
+---
+
+## 2026-08-27 — [L0] Qui est le réviseur croisé de l'équipe 4 ?
+
+**Constat (remonté par A55) :** le 09 §1 dote les équipes 1, 2 et 3 d'un réviseur croisé (A17, A29,
+A37) mais **l'équipe 4 (rapports, IA, intégrations — lots L10 à L13) n'en a aucun**. Or l'étape 4 du
+pipeline est obligatoire et sans raccourci : sans titulaire, elle n'a personne pour la signer.
+
+**Options :**
+
+1. Faire relire l'équipe 4 par son propre chef d'équipe (A40) — **exclu** : il signe déjà la fin
+   d'incrément, et le 09 §1 dit d'un réviseur qu'il « relit TOUT le code de l'équipe, **ne produit
+   rien** ». A40 produit.
+2. Créer un 41e gabarit — **exclu** : le 09 §1 fixe le nombre à 40, et en ajouter un serait amender
+   la spec pour un problème d'affectation.
+3. Confier la revue de l'équipe 4 à **A17 (réviseur croisé backend)**.
+
+**Arbitrage :** option 3. Les lots L10-L13 sont massivement backend : worker BullMQ, génération DOCX
+côté serveur, pipeline LLM, webhooks signés, jobs de purge. C'est le domaine exact d'A17. Surtout, la
+règle 09 §5.6 (« le code de test n'est jamais écrit par l'agent qui a écrit le code testé », et son
+esprit : producteur ≠ vérificateur) est **pleinement respectée** — A17 n'intervient pas sur les lots
+de l'équipe 4, il n'y relit donc jamais son propre travail. Cette affectation est notée dans les
+gabarits A40 à A45.
+**Réserve à surveiller :** A17 devient réviseur de deux équipes. Si les lots L10-L13 se déroulaient
+**en parallèle** de lots de l'équipe 1, ce serait un goulot d'étranglement. Le calendrier 09 §6 rend
+le cas improbable (L10-L13 sont en Phase 2, l'équipe 1 a fini en Phase 1) ; s'il se présentait, la
+réponse serait de séquencer, pas de dégrader la revue.
+
+**Décideur :** A01
+**Impact spec :** aucun
+
+---
+
+## 2026-08-27 — [L0] Nomenclature des lots L9 à L13 : le pack la donne, il ne fallait pas la déduire
+
+**Constat (remonté par A55) :** A55 a affecté « L10-L11 aux rapports/LLM et L12-L13 aux intégrations »
+en signalant loyalement qu'il s'agissait d'« une inférence, pas une lecture ».
+
+**Arbitrage : l'inférence est inutile — et partiellement fausse.** Le fichier **07 §12, section
+PHASE 2**, énumère les lots explicitement. La lecture fait foi :
+
+| Lot        | Contenu (07 §12, Phase 2)                                                                                                        |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| **L9**     | Back-office banque de questions complet (M1) + file ad hoc                                                                       |
+| **L10**    | Génération DOCX (gabarits par niveau d'audit §26.2, docxtemplater, worker) + fiche sécurité grands comptes                       |
+| **L11**    | Rédaction assistée LLM par bloc + états brut/généré/validé + journal des coûts + pseudonymisation 2 passes + business case normé |
+| **L12**    | **Module AI Act** (bloc 9, registre `ai_systems`, chapitre rapport, correspondance ISO/IEC 42001)                                |
+| **L13**    | **Intégration console V1** (import clients, webhooks entrant/sortant + anti-rejeu, `integration_events`)                         |
+| **L13bis** | `document_requests` + recalage de mission outillé (§25.1) + point d'étape (§25.5)                                                |
+
+A55 avait donc raison sur L10/L11 et **se trompait sur L12**, qu'il rattachait aux intégrations alors
+que c'est le module AI Act. Correction confiée à A55 sur les gabarits A40-A45.
+**Ce que l'épisode confirme :** la règle « un doute de spec va dans DECISIONS.md, jamais une
+devinette » a fonctionné exactement comme prévu — A55 a signalé son inférence au lieu de la faire
+passer pour une lecture, et l'erreur a été rattrapée en une minute au lieu de se propager dans six
+gabarits pendant deux mois.
+**Ordre de lecture de L9, L12, L13 :** le 00_INDEX n'en fournit pas (il s'arrête à L10-L11). Il sera
+établi au brief de ces lots, en Phase 2, et ajouté au tableau de `CLAUDE.md` §0 à ce moment-là.
+
+**Décideur :** A01
+**Impact spec :** aucun
+
+---
+
+## 2026-08-27 — [L0] Les restrictions d'outils des gabarits sont contractuelles, pas mécaniques
+
+**Constat (remonté par A55) :** le frontmatter d'un sous-agent permet de retirer entièrement `Edit`,
+`Write` ou `Bash`, mais **pas de restreindre l'écriture à un sous-arbre**. Les bornes du type
+« A02 n'écrit que dans la matrice de traçabilité » ou « A16 n'écrit que dans les tests » sont donc
+des engagements écrits, vérifiables **a posteriori** (auteur du diff, `git status`), non des
+verrous techniques.
+
+**Options :**
+
+1. Laisser les bornes contractuelles et s'appuyer sur la revue croisée et le `git status`.
+2. Poser des hooks `PreToolUse` dans `.claude/settings.json` refusant une écriture hors périmètre.
+
+**Arbitrage : option 1 pour le lot L0, option 2 proposée en fiche AMELIORATIONS (étage 2).**
+Deux garde-fous mécaniques existent déjà et couvrent le risque le plus grave — celui d'un
+vérificateur qui corrigerait ce qu'il vérifie : les **réviseurs croisés (A17, A29, A37) n'ont ni
+`Edit` ni `Write` du tout**, et A55 n'a pas `Bash`. Pour le reste, l'étape 4 relit **tout** le diff
+et le repérerait. Écrire des hooks maintenant serait de l'outillage d'autopilote pris sur le budget
+d'un lot d'infrastructure ; c'est précisément ce que l'étage 2 sert à arbitrer, pas à décider seul.
+
+**Décideur :** A01
+**Impact spec :** aucun
+
+---
+
+## 2026-08-27 — [L0] Nom de l'outil de délégation
+
+**Constat (remonté par A55) :** le gabarit d'A01 déclare l'outil `Agent` ; selon la version de
+Claude Code il peut s'appeler `Task`.
+
+**Arbitrage : vérifié sur cet environnement — c'est bien `Agent`.** Les délégations du lot L0 (A11,
+A52, A55) ont été lancées et rendues avec cet outil : ce n'est pas une lecture de documentation, c'est
+une observation d'exécution. Aucune modification à apporter. À revérifier si l'environnement change.
+
+**Décideur :** A01
+**Impact spec :** aucun

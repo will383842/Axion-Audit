@@ -1,5 +1,4 @@
 # MODELE DE DONNEES
-
 > **Pack d'implémentation Axion Audit — fichier 04/12** · Pack V2.12 (27/08/2026) — DDL unique consolidé après revue adversariale indépendante
 > **Contenu :** Schéma PostgreSQL 16 INTÉGRAL — source UNIQUE du lot L1. Toutes les tables et colonnes des sections 1-15, des avenants 16-29 et des corrections V2.2 (§32) sont ici.
 > **Règle de précédence (V2.2) :** le présent pack est LA source d'exécution. En cas de divergence interne : §32-36 (corrections et compléments V2.2→V2.12 — le plus récent prévaut) > §24-31 > §16-22 > §1-15. **Tout DDL apparaissant ailleurs (fichiers 01, 03, 05, CDC maître) est historique et remplacé par le présent fichier.** Le CDC maître est une archive de référence ; les rapports d'audit cités (30 agents, recette, certification) ne sont pas joints : leurs conclusions sont intégralement reprises aux §24, §25, §29 et dans ce DDL.
@@ -316,17 +315,13 @@ app_settings(key PRIMARY KEY, value JSONB)       -- seuils, purges, URLs console
 ```
 
 ## 7.1 Index critiques (V2.2)
-
 `answers(interview_id)` · `answers(mission_question_id)` · index UNIQUE `answers(interview_id, mission_question_id)` · `interviews(mission_id)` · `interviews(org_unit_id)` · `interviews(conducted_by)` · `interviews(schedule_status)` · `org_units(mission_id)` · `org_units(parent_id)` · `missions(company_id)` · `missions(status)` · `missions(parent_mission_id)` · `questions(status, block_id)` · index UNIQUE partiel `questions(code, version) WHERE code IS NOT NULL` (V2.9) · GIN sur `questions.sectors`, `questions.profiles`, `questions.target_services` · index UNIQUE partiel `companies(siren) WHERE siren IS NOT NULL` · `findings(mission_id)` · `use_cases(mission_id)` · `roadmap_items(mission_id)` · `attachments(mission_id)` · `step_validations(mission_id, step_code)` · `alerts(mission_id, status)` · `work_assignments(mission_id)` · `document_requests(mission_id)` · `integration_events(status)` · `integration_events(nonce)` · `processed_ops(processed_at)` · `activity_log(entity_type, entity_id)` · `sync_log(user_id, started_at)`.
 
 ## 7.2 Relations clés (décisions prises)
-
 Entreprise 1→n missions · mission ↔ utilisateurs via `mission_users` · mission 1→n unités (`org_units`, arbre) · mission 1→n sessions de collecte (`interviews`) · session 1→n réponses · bloc 1→n questions · mission mère 1→n missions filles (consolidation groupe, §32.3) · snapshot du questionnaire (texte + options + barème) dans `mission_questions` · snapshot du texte de question dans la réponse · propriétaire d'une session = `conducted_by` (règle d'écriture §9.9).
 
 ## 7.3 Format normé du champ `questions.scoring` (JSONB — spécification complète : fichier 03 §32.1)
-
 Rappel de structure (le fichier 03 §32.1 est la référence métier) :
-
 - `yes_no` : `{"map": {"oui": 5, "non": 0}}` (inversable par question).
 - `scale_1_5` : `{"map": "identity"}`.
 - `single_choice` / `multi_choice` : `{"source": "options"}` (+ `"aggregate": "max"|"mean"` pour multi) — les scores vivent dans `options[].score`.
@@ -336,9 +331,7 @@ Rappel de structure (le fichier 03 §32.1 est la référence métier) :
 - Contrôle d'import (lot L4, bloquant) : toute question `weight > 0` sans `scoring` valide est REJETÉE à l'import.
 
 ## 7.4 Corrections d'audit intégrées (traçabilité)
-
 Les tables et règles issues de **§24.1** (`step_validations`, `alerts`, `scoping_financials`, P1-4 UUID clients, P1-5 note volante, P2-1 person_service_id) sont intégrées ci-dessus. Les extensions **§25** (agenda, unités proposées, hors-parcours, entretien complémentaire), **§26** (kind `poste`, gabarits par niveau), **§27** (5 types de session, provenance, non-communiqué, `tools_inventory`, fourchette), **§28** (baselines, faisabilité, atelier, tables Phase 2) et **§29** (R2-R6) sont intégrées ci-dessus. Les décisions de résolution V2.2 (kind/mode, unicité des réponses, clé des gabarits, `group_code` des profils) sont documentées au fichier 03 §32.6 et dans le CHANGELOG (fichier 10).
 
 ## 7.5 Priorisation du noyau strict
-
 La re-priorisation P0-2 (noyau strict vs différable) est maintenue : **la référence unique de charge et de contenu des lots est le 00_INDEX + le fichier 07 V2.2.** Tout chiffrage figurant dans les sections historiques est remplacé par cette référence.

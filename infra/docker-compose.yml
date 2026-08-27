@@ -294,7 +294,13 @@ services:
       timeout: 5s
       retries: 12
       start_period: 60s
-    networks: [axion]
+    networks:
+      # Alias NON AMBIGU. Le Caddy unique (arbitrage DECISIONS 2026-08-27
+      # Â« Cohabitation staging/prod Â») est attache au reseau de CETTE pile ET au
+      # reseau partage `axion-edge-staging`, ou le nom court `api` existe AUSSI.
+      # Le Caddyfile ne route donc QUE sur `axion-api` / `staging-api`.
+      axion:
+        aliases: [axion-api]
 
   # ---------------------------------------------------------------------------
   # Worker BullMQ (apps/worker) — seul conteneur à détenir ANTHROPIC_API_KEY
@@ -411,7 +417,13 @@ services:
       timeout: 5s
       retries: 18
       start_period: 60s
-    networks: [axion]
+    networks:
+      # Alias NON AMBIGU. Le Caddy unique (arbitrage DECISIONS 2026-08-27
+      # Â« Cohabitation staging/prod Â») est attache au reseau de CETTE pile ET au
+      # reseau partage `axion-edge-staging`, ou le nom court `field` existe AUSSI.
+      # Le Caddyfile ne route donc QUE sur `axion-field` / `staging-field`.
+      axion:
+        aliases: [axion-field]
 
   # ---------------------------------------------------------------------------
   # Console siège (apps/hq) — servie sous /hq du MÊME domaine (11 §2).
@@ -449,7 +461,13 @@ services:
       timeout: 5s
       retries: 18
       start_period: 60s
-    networks: [axion]
+    networks:
+      # Alias NON AMBIGU. Le Caddy unique (arbitrage DECISIONS 2026-08-27
+      # Â« Cohabitation staging/prod Â») est attache au reseau de CETTE pile ET au
+      # reseau partage `axion-edge-staging`, ou le nom court `hq` existe AUSSI.
+      # Le Caddyfile ne route donc QUE sur `axion-hq` / `staging-hq`.
+      axion:
+        aliases: [axion-hq]
 
   # ---------------------------------------------------------------------------
   # Caddy — SEUL point d'entrée public (02 §4.1). Domaine UNIQUE : c'est ce qui

@@ -1,18 +1,45 @@
 # =============================================================================
-# infra/caddy/Caddyfile — reverse proxy, DOMAINE UNIQUE (lot L0)
+# infra/caddy/Caddyfile — reverse proxy UNIQUE du VPS (lot L0)
 # Applique : 11 §2 « Pas de CORS » (field, hq et l'API sous le MÊME domaine —
 # c'est la raison d'être de ce fichier), 06 §10.2 (en-têtes de sécurité : HSTS,
 # CSP stricte, nosniff…), 11 §1 (police AUTO-HÉBERGÉE, jamais de CDN),
+# 02 §11.2 (staging = MÊME VPS, SOUS-DOMAINE, DB séparée),
 # 02 §11.3 (logs JSON), §31 (mise à jour applicative : SW jamais mis en cache).
 # =============================================================================
 #
-# ROUTAGE (contrat de ports rappelé dans infra/docker-compose.yml) :
-#   /api/*  → api:{$API_PORT}  (le préfixe /api est RETIRÉ : l'API voit /v1/…)
-#   /hq*    → hq:5173          (préfixe CONSERVÉ : la console est buildée en base /hq/)
-#   /*      → field:5173       (PWA terrain à la racine)
+# UN SEUL CADDY, DEUX BLOCS DE SITE — arbitrage A01 du 2026-08-27
+# (DECISIONS.md « Cohabitation staging/prod : qui écoute sur 443 ? », option 2).
+# Un seul processus peut lier 80/443 : ce processus sert LES DEUX piles, par
+# deux blocs de site distincts routant vers deux jeux d'upstream séparés.
+# Ce conteneur vit dans la pile de PROD ; la pile de staging n'a plus de Caddy.
 #
-# ADRESSE : {$CADDY_SITE_ADDRESS} — `:8080` en local (aucun ACME), le vrai
-# domaine en staging/prod (TLS automatique via {$CADDY_ACME_EMAIL}).
+#   {$CADDY_SITE_ADDRESS}          → pile PRINCIPALE (dev en local / PROD sur le VPS)
+#   {$CADDY_STAGING_SITE_ADDRESS}  → pile STAGING (sous-domaine)
+#
+# ROUTAGE INTERNE, IDENTIQUE DANS LES DEUX BLOCS (contrat de ports rappelé dans
+# infra/docker-compose.yml) :
+#   /api/*  → api de la pile    (le préfixe /api est RETIRÉ : l'API voit /v1/…)
+#   /hq*    → hq de la pile     (préfixe CONSERVÉ : la console est buildée en base /hq/)
+#   /*      → field de la pile  (PWA terrain à la racine)
+#
+# ┌───────────────────────────────────────────────────────────────────────────┐
+# │ ⚠️ NOMS D'UPSTREAM — RÈGLE ABSOLUE                                        │
+# │ Ce conteneur est attaché à DEUX réseaux Docker (celui de la pile prod et  │
+# │ `axion-edge-staging`). Les noms COURTS `api`, `field`, `hq` y existent    │
+# │ DEUX FOIS et résoudraient de façon NON DÉTERMINISTE : un reverse_proxy de │
+# │ staging atteignant la base de prod serait une catastrophe silencieuse.    │
+# │ On n'utilise donc ICI QUE des alias réseau non ambigus, déclarés dans les │
+# │ fichiers Compose :                                                        │
+# │   pile principale : axion-api   · axion-field   · axion-hq                │
+# │   pile staging    : staging-api · staging-field · staging-hq              │
+# │ N'ÉCRIVEZ JAMAIS `reverse_proxy api:…` dans ce fichier.                   │
+# └───────────────────────────────────────────────────────────────────────────┘
+#
+# ADRESSES : `:8080` / `:8081` en local (aucun ACME), les vrais domaines en
+# staging/prod (TLS automatique via {$CADDY_ACME_EMAIL}).
+# ⚠️ L'ENREGISTREMENT DNS DU SOUS-DOMAINE DOIT EXISTER AVANT LE PREMIER
+#    DÉMARRAGE : sans lui l'émission ACME échoue et Caddy retente en boucle
+#    (voir infra/README.md §3.5).
 
 {
 	# Adresse ACME Let's Encrypt. Le défaut n'est qu'un repli syntaxique : en
@@ -30,8 +57,16 @@
 	}
 }
 
-{$CADDY_SITE_ADDRESS} {
-
+# =============================================================================
+# SNIPPET (securite) — POSTURE DE SÉCURITÉ COMMUNE AUX DEUX ENVIRONNEMENTS.
+# =============================================================================
+# Importé À L'IDENTIQUE par le bloc prod ET par le bloc staging, SANS EXCEPTION.
+# Raison : staging sert à valider ce que la prod fera. Un staging plus permissif
+# (une CSP relâchée « juste pour tester ») ne valide plus rien et laisse passer
+# en prod exactement ce qu'il était censé attraper.
+# C'est un SNIPPET et non un copier-coller parce que deux copies divergent.
+# =============================================================================
+(securite) {
 	# --- Journal d'accès JSON ------------------------------------------------
 	log {
 		output stdout
@@ -63,13 +98,27 @@
 		# Tout est same-origin par défaut : AUCUN CDN nulle part (11 §1).
 		# script-src : 'wasm-unsafe-eval' est requis par hash-wasm (Argon2id navigateur, 11 §4).
 		# worker-src : le service worker Workbox (offline-first, invariant 1) est same-origin.
-		# style-src  : 'unsafe-inline' couvre les attributs style posés par Radix/shadcn ;
-		#              aucune feuille externe n'est autorisée pour autant.
 		# img-src    : data: (icônes inline) et blob: (photos terrain avant upload).
 		# media-src  : blob: pour la relecture des audios d'entretien hors ligne.
 		# font-src   : 'self' uniquement — police @fontsource-variable/inter AUTO-HÉBERGÉE (11 §1).
 		# connect-src: 'self' — API sur le même domaine (11 §2, pas de CORS) ; couvre le WS de HMR en dev.
 		# manifest-src / frame-ancestors / object-src / base-uri / form-action : verrouillage PWA.
+		#
+		# ┌─────────────────────────────────────────────────────────────────────┐
+		# │ `style-src 'unsafe-inline'` — CONCESSION DÉLIBÉRÉE, PAS UN OUBLI.   │
+		# │ Validée par A01 pour la PHASE 1 : DECISIONS.md, 2026-08-27,         │
+		# │ « CSP : la concession style-src 'unsafe-inline' ».                  │
+		# │ Motif : les attributs `style` posés à l'exécution par Radix/shadcn  │
+		# │ (positionnement des popovers, mesures) — imposés par 11 §1. Un      │
+		# │ nonce par requête est incompatible avec un démarrage HORS LIGNE     │
+		# │ depuis le cache du service worker (invariant 1) : sans requête, pas │
+		# │ de nonce. `script-src` reste, lui, sans 'unsafe-inline' ni 'unsafe-eval'. │
+		# │ RÉEXAMEN IMPOSÉ AU LOT L5c (livraison du service worker), à porter  │
+		# │ au dossier de la PORTE P-C : compter les styles inline subsistants  │
+		# │ et basculer sur des HACHAGES STATIQUES (compatibles hors ligne,     │
+		# │ contrairement aux nonces) si le compte est faible.                  │
+		# │ NE PAS SUPPRIMER CETTE LIGNE SANS AVOIR FAIT CE COMPTAGE.           │
+		# └─────────────────────────────────────────────────────────────────────┘
 		Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 	}
 
@@ -85,13 +134,23 @@
 	@fingerprinted path /assets/* /hq/assets/*
 	header @fingerprinted Cache-Control "public, max-age=31536000, immutable"
 
-	# -------------------------------------------------------------------------
-	# ROUTAGE — un seul domaine, aucun CORS (11 §2)
-	# -------------------------------------------------------------------------
+	# Page d'erreur neutre : aucune fuite d'implémentation.
+	handle_errors {
+		respond "Erreur {err.status_code}" {err.status_code}
+	}
+}
+
+# =============================================================================
+# BLOC 1 — PILE PRINCIPALE : `dev` en local, `prod` sur le VPS.
+# Upstreams : axion-api / axion-field / axion-hq (alias déclarés dans
+# infra/docker-compose.yml, réseau `axion` du projet courant).
+# =============================================================================
+{$CADDY_SITE_ADDRESS} {
+	import securite
 
 	# API : `handle_path` RETIRE le préfixe /api → l'API reçoit /v1/…
 	handle_path /api/* {
-		reverse_proxy api:{$API_PORT} {
+		reverse_proxy axion-api:{$API_PORT} {
 			# En-têtes d'origine conservés (rate limiting par IP, 11 §3).
 			header_up X-Real-IP {remote_host}
 			# Uploads par chunks (§9.6) : pas de tampon, flux direct.
@@ -103,16 +162,49 @@
 	# Matcher explicite : `/hq` et `/hq/**` uniquement — surtout pas `/hqautre`.
 	@hq path /hq /hq/*
 	handle @hq {
-		reverse_proxy hq:5173
+		reverse_proxy axion-hq:5173
 	}
 
 	# PWA terrain : tout le reste, à la racine.
 	handle {
-		reverse_proxy field:5173
+		reverse_proxy axion-field:5173
+	}
+}
+
+# =============================================================================
+# BLOC 2 — PILE STAGING (02 §11.2 : « staging (même VPS, sous-domaine, DB séparée) »).
+# Upstreams : staging-api / staging-field / staging-hq (alias déclarés dans
+# infra/docker-compose.staging.yml, réseau partagé `axion-edge-staging`).
+# Base, buckets, volumes et secrets restent STRICTEMENT séparés (02 §30.4-4) :
+# seul CE frontal est partagé, et il ne fait que relayer du HTTP.
+#
+# EN LOCAL (`docker compose -f infra/docker-compose.yml`) ce bloc est INERTE :
+# il écoute sur `:8081` À L'INTÉRIEUR du conteneur, ce port n'est pas publié et
+# les upstreams `staging-*` n'existent pas. La variable est néanmoins
+# OBLIGATOIRE : une adresse de site vide empêcherait Caddy de démarrer.
+# =============================================================================
+{$CADDY_STAGING_SITE_ADDRESS} {
+	# MÊME posture de sécurité que la prod, sans exception (cf. snippet ci-dessus).
+	import securite
+
+	# Un sous-domaine de staging porte un VRAI certificat : il est donc
+	# indexable. L'outil est confidentiel — on l'exclut explicitement des
+	# moteurs de recherche.
+	header X-Robots-Tag "noindex, nofollow"
+
+	handle_path /api/* {
+		reverse_proxy staging-api:{$CADDY_STAGING_API_PORT} {
+			header_up X-Real-IP {remote_host}
+			flush_interval -1
+		}
 	}
 
-	# Page d'erreur neutre : aucune fuite d'implémentation.
-	handle_errors {
-		respond "Erreur {err.status_code}" {err.status_code}
+	@hq path /hq /hq/*
+	handle @hq {
+		reverse_proxy staging-hq:5173
+	}
+
+	handle {
+		reverse_proxy staging-field:5173
 	}
 }

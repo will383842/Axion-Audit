@@ -28,6 +28,7 @@
     "test:watch": "vitest",
     "check:no-skipped-tests": "node scripts/check-no-skipped-tests.mjs",
     "check:invariants": "node scripts/check-invariants.mjs",
+    "check:pack": "node scripts/check-pack-integrity.mjs",
     "schema:diff": "node scripts/schema-diff.mjs",
     "db:generate": "pnpm --filter @axion/api db:generate",
     "db:migrate": "pnpm --filter @axion/api db:migrate",

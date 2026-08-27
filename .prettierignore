@@ -4,3 +4,14 @@ coverage/
 docs/archive/
 playwright-report/
 test-results/
+
+# ---------------------------------------------------------------------------
+# LE PACK EST IMMUABLE (00_INDEX : « LA source d'exécution unique »).
+#
+# Prettier a réécrit les 12 fichiers du pack au lot L0 (724 insertions,
+# 468 suppressions) avant d'être arrêté ici. Le contenu avait survécu, mais
+# le principe non : un pack reformaté n'est plus comparable à l'original,
+# et c'est exactement sur ce pack que se joue la revue de spec de la porte P-D.
+# Voir DECISIONS.md 2026-08-27 « Prettier ne touche pas au pack ».
+# ---------------------------------------------------------------------------
+docs/

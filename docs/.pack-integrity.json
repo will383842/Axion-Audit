@@ -1,0 +1,17 @@
+{
+  "_lisez_moi": "Empreintes SHA-256 des 12 fichiers du pack. Régénéré par `node scripts/check-pack-integrity.mjs --sceller` UNIQUEMENT lors d’un amendement de spec décidé (revue de spec de la porte P-D, 09 §4), accompagné de son entrée DECISIONS.md.",
+  "empreintes": {
+    "docs/00_INDEX.md": "fcd6546b93d57ec85f05de863154528608b1d5b552e81b5a9d232dae31761fdc",
+    "docs/01_PRODUIT_ET_METHODOLOGIE.md": "2f1d3c8dc3c275f6da51f3f32341661855419b8ca2ba3e160d4fad2201a72401",
+    "docs/02_ARCHITECTURE_ET_INFRA.md": "3475ebaca37698658c8e4a439d374e9cdddc80c16c3cb32a11079bdd2aea019e",
+    "docs/03_MODULES_FONCTIONNELS.md": "e505f582e1efcb96973d3e30dc636068a53c0245b02f232181893c48e116a945",
+    "docs/04_MODELE_DE_DONNEES.md": "63633ea51166cd28daee97272425605c98a56d4d25294251e98277c8eebcbb4a",
+    "docs/05_API_ET_SYNC.md": "375e1e1ffbba968393d8a9c2166371a85a7979b4dfd8b031644cd5d9b9a7ac98",
+    "docs/06_SECURITE_RGPD.md": "8650fee8354745d8d59908c22a8e61d9bcd3fc9b0134ee7237f4839cffe7c6fe",
+    "docs/07_PLAN_TESTS_RISQUES.md": "4a8040bddf192f4cb34d17a1a8bf28ba2bc42c9e4b09b2d25abfe3d1f0ff5bd8",
+    "docs/08_TRACABILITE.md": "6954c3027863dc7866dba60d3e722c6d5bb1120512f7e49307a480d3576232ac",
+    "docs/09_PLAN_EXECUTION_AUTOPILOTE.md": "43e0f794f2e5163a210b76ff3ea96546f872fc159dd76928ecf33d36b32cdf1e",
+    "docs/10_CHANGELOG_V2.2.md": "1898a3134fada6e0495a9dcc46a684092c6a06afbf3601e48731755a9eb4015e",
+    "docs/11_CONTRAT_TECHNIQUE.md": "84c3750b7f88331268616051a87f487394bd7262744634156c20afd77760007c"
+  }
+}
