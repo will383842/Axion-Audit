@@ -1051,3 +1051,40 @@ véritable coût de cette décision, et il est assumé en connaissance de cause.
 **Impact spec :** **amendement horodaté du 02 §30.5** — « repo privé » devient « repo public,
 pseudonymisé ». Le reste du §30.5 (protections, Environments, GHCR) est inchangé et devient enfin
 applicable.
+
+---
+
+## 2026-08-27 — [L0-b] Les protections GitHub sont rétablies par le passage en public
+
+**Constat :** l'entrée « Protections GitHub indisponibles sur le plan actuel » du même jour établissait
+que GitHub refusait les trois mécanismes du 02 §30.5 sur un dépôt **privé au plan gratuit**. Le dépôt
+étant devenu **public** (entrée précédente), **les trois sont désormais gratuits et posés**.
+
+**Options :** aucune — cette entrée constate une levée de contrainte et annule la compensation
+devenue inutile. Règle de précédence **sans objet**.
+
+**Arbitrage — état vérifié par appel d'API :**
+
+| Protection                       | État     | Détail                                                                                                                                                                  |
+| -------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Protection de `main`             | ✅ posée | PR obligatoire · **11 contrôles de CI requis** · à jour avant merge · historique linéaire · force-push interdit · suppression interdite · fils de discussion à résoudre |
+| Relecteur obligatoire sur `prod` | ✅ posée | `required_reviewers` = Williams. C'est l'approbation manuelle du 02 §30.4-3, enfin réelle.                                                                              |
+| Stratégie de merge               | ✅ posée | **squash uniquement** (11 §9bis), suppression automatique de la branche après merge                                                                                     |
+
+**Ce qui est annulé :** le garde-fou compensatoire de `deploy-prod.yml` (confirmation tapée) est
+**retiré**, et le **déclencheur par tag `v*` est rétabli** — c'est la lettre du 11 §9bis (« tag
+`v0.<lot>` à chaque porte franchie ») et du 02 §30.6. L'approbation est de nouveau portée par
+l'Environment, là où le pack la place. Le fichier conserve l'historique de ce va-et-vient en tête,
+pour que personne ne retire le déclencheur en croyant corriger un oubli — ni ne le laisse en place si
+le dépôt redevenait privé sans plan payant.
+
+**Ce que GitHub Pro n'est plus :** nécessaire. La recommandation faite plus tôt dans la journée était
+**conditionnée à la confidentialité du dépôt** ; elle tombe avec le passage en public.
+
+**Point de vigilance qui subsiste, propre au public :** les secrets de dépôt ne sont pas transmis aux
+workflows déclenchés depuis un **fork**. Le contrôle de l'invariant 2 y annoncera donc « NON
+APPLIQUÉ » plutôt que vert — c'est voulu, et c'est écrit dans sa sortie.
+
+**Décideur :** A01
+**Impact spec :** aucun — le 02 §30.5 redevient applicable **intégralement**, ce qu'il n'était pas
+depuis ce matin.
