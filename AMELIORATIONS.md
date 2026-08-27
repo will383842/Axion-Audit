@@ -175,3 +175,44 @@ marqué → vert).
 Coût : ~0,1 j.
 
 **Relu par :** gardien A02 (recommandation) · **Trace :** dossier de porte `PORTE_A_2026-08-27.md` §5
+
+---
+
+## ÉTAGE 2 — fiches en attente d'arbitrage (suite)
+
+### FICHE A-002 — Cloudflare R2 pour la copie de sauvegarde hors Hetzner
+
+**Constat terrain (question de Williams, 2026-08-27) :** le 02 §11.4 impose la règle **3-2-1** —
+sauvegarde locale, copie sur Storage Box Hetzner, **et « 2ᵉ copie hebdo HORS Hetzner (ex. Scaleway) »**.
+Le pack **laisse le fournisseur ouvert** : « ex. » n'est pas une prescription. Le script
+`backup-postgres.sh` prévoit déjà `OFFSITE_RCLONE_REMOTE` sans imposer de destination.
+
+**Valeur :** R2 n'a **aucun frais de sortie**. C'est sans importance tant que rien ne va mal, et
+décisif le jour d'un PRA — le moment où l'on rapatrie l'intégralité des sauvegardes est précisément
+celui où les frais de sortie d'un stockage objet classique se déclenchent, sur un volume maximal, sous
+la pression du RTO de 4 h. Un coût imprévisible pendant une reprise est un mauvais coût.
+
+**Ce que ce n'est PAS :** un remplacement de MinIO. Le stockage applicatif est **imposé** par le
+02 §4.2 et l'exigence E17 (« stack imposée ») ; le changer serait une modification de spec, pas une
+amélioration. R2 ne concerne que la **troisième copie**.
+
+**Condition impérative si retenue :** la juridiction R2 doit être **forcée sur l'UE**. Le 06 §10.4 est
+sans ambiguïté — « hébergement : Hetzner Allemagne (UE). **Aucun transfert hors UE** sauf appel LLM
+(couvert par DPA) ». Une copie de sauvegarde chez Cloudflare sans restriction de juridiction serait un
+transfert hors UE de données d'entretiens de salariés, c'est-à-dire un manquement RGPD dans le
+document même (AIPD) que le pack exige avant la première mission grand compte. À vérifier à la
+souscription, pas après.
+
+**Coût estimé :** ~0,25 j (un remote rclone supplémentaire, la restriction de juridiction, et
+l'extension du test de restauration nocturne à cette troisième copie — une sauvegarde jamais
+restaurée n'est pas une sauvegarde).
+
+**Impact schéma / API / crypto :** **aucun.** Les archives partent déjà chiffrées ; R2 n'en voit que
+des octets opaques.
+
+**Recommandation d'A01 :** **ABSORBÉE au lot L0-b**, si Williams souscrit R2 en même temps que le VPS.
+C'est le seul moment où cela ne coûte presque rien : les scripts sont ouverts, le runbook est en cours
+d'écriture, et la troisième copie doit de toute façon exister avant la première collecte réelle.
+Sinon **PHASE 2**.
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-A_
