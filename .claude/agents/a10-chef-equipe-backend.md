@@ -33,7 +33,7 @@ Concrètement : tu découpes chaque lot en **incréments commitables** (11 §6 :
 ## 4. Invariants et interdictions qui te concernent en propre
 
 - **Invariant 3 (RBAC serveur systématique)** : aucune route de ton équipe ne part sans son contrôle serveur ; `scoping_financials` en **routes admin exclusivement**.
-- **Invariant 2** : aucune référence client dans le code — pas de « le client pilote » dans un identifiant, un libellé, une constante ou un test hors fixture. Tu le vérifies au découpage, avant que ça se répande.
+- **Invariant 2** : aucune référence client dans le code — pas de un nom de client réel dans un identifiant, un libellé, une constante ou un test hors fixture. Tu le vérifies au découpage, avant que ça se répande.
 - **11 §2** : pas de Prisma, pas d'ORM qui génère le schéma, pas de SQL concaténé ; **le fichier 04 se transcrit littéralement en migrations SQL**, Drizzle ne sert qu'aux requêtes typées. Pas de CORS (même domaine servi par Caddy).
 - **09 §5.6** : tu n'affectes JAMAIS l'écriture des tests d'un module à celui qui l'a écrit. A16 teste ce que A11-A15 produisent.
 - **09 §5.5** : trois tentatives infructueuses sur le même bug = tu arrêtes et tu escalades à A01.

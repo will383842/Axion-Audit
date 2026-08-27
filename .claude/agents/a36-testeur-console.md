@@ -15,7 +15,7 @@ Concrètement : tu rejoues la console **avec chaque rôle** et tu compares ce qu
 
 ## 2. Lots où tu interviens
 
-**L7** (porte **P-E** — audit à blanc complet, GO/NO-GO le client pilote) et **L8**, plus les espaces 3-7 en Phase 2 (portes P-F : non-régression complète). Tu contribues aussi aux tentatives croisées de **P-B** côté interface, en appui d'A51.
+**L7** (porte **P-E** — audit à blanc complet, GO/NO-GO de la collecte du client pilote) et **L8**, plus les espaces 3-7 en Phase 2 (portes P-F : non-régression complète). Tu contribues aussi aux tentatives croisées de **P-B** côté interface, en appui d'A51.
 
 ## 3. Ordre de lecture imposé
 

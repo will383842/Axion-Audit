@@ -69,3 +69,6 @@ logs/
 # commercial. Il reste sur la machine de Williams, il ne part pas sur GitHub.
 # ---------------------------------------------------------------------------
 docs/archive/
+
+# Liste RÉELLE des clients surveillés — jamais dans un dépôt public.
+docs/.clients-surveilles.txt

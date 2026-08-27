@@ -11,13 +11,86 @@
 // que personne ne croie la checklist complète.
 // Traçabilité : E31 (généricité absolue), E27/E44 (design system), E43.
 // =============================================================================
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 
 const ROUGE = '[31m';
 const VERT = '[32m';
 const JAUNE = '[33m';
 const RAZ = '[0m';
+
+/**
+ * NOMS DE CLIENTS SURVEILLÉS — chargés HORS DU DÉPÔT, délibérément.
+ *
+ * Ce contrôle cherchait auparavant un nom de client écrit en dur ici. C'était un
+ * défaut de conception, devenu visible au moment de rendre le dépôt PUBLIC : le
+ * garde-fou de l'invariant 2 publiait lui-même le nom qu'il servait à traquer. Et
+ * la liste est vouée à grandir avec les clients d'Axion — elle n'a rien à faire
+ * dans un dépôt public, aujourd'hui moins que jamais.
+ *
+ * Deux sources, dans cet ordre :
+ *   1. la variable d'environnement `AXION_CLIENTS_SURVEILLES` (noms séparés par
+ *      des virgules) — c'est ainsi que la CI la reçoit, par un secret de dépôt ;
+ *   2. le fichier `docs/.clients-surveilles.txt`, gitignoré, un nom par ligne —
+ *      c'est ainsi qu'un poste de développement la reçoit.
+ *
+ * Si AUCUNE source n'est disponible, le contrôle ne prétend pas être vert : il
+ * annonce explicitement qu'il n'a PAS été appliqué. Un garde-fou muet serait pire
+ * qu'absent, et c'est précisément la faute que ce dépôt s'interdit ailleurs.
+ */
+function chargerNomsDeClients() {
+  const brut =
+    process.env.AXION_CLIENTS_SURVEILLES ??
+    (existsSync('docs/.clients-surveilles.txt')
+      ? readFileSync('docs/.clients-surveilles.txt', 'utf8').split('\n').join(',')
+      : '');
+  return brut
+    .split(',')
+    .map((n) => n.trim())
+    .filter((n) => n !== '' && !n.startsWith('#'));
+}
+
+/** Échappe les caractères spéciaux d'une expression régulière. */
+function echapper(texte) {
+  return texte.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Rend un nom INSENSIBLE AUX ACCENTS : un nom écrit « Prénommé » doit aussi être
+ * attrapé écrit « Prenomme ». C'est justement la graphie relâchée, tapée à la hâte dans un
+ * identifiant ou un commentaire, qu'on veut voir. La version précédente du contrôle
+ * écrivait `[ée]` à la main dans un motif codé en dur ; la liste vivant désormais
+ * hors du dépôt, la tolérance doit être dérivée, pas recopiée.
+ */
+const VARIANTES = {
+  a: '[aàâäá]',
+  c: '[cç]',
+  e: '[eéèêëẽ]',
+  i: '[iîïí]',
+  n: '[nñ]',
+  o: '[oôöó]',
+  u: '[uùûüú]',
+  y: '[yÿý]',
+};
+
+function insensibleAuxAccents(nom) {
+  return [...nom]
+    .map((c) => {
+      // On compare sur la forme SANS diacritique pour que « é » et « e » mènent
+      // tous deux à la même classe de caractères.
+      const nu = c.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+      return VARIANTES[nu] ?? echapper(c);
+    })
+    .join('');
+}
+
+const NOMS_SURVEILLES = chargerNomsDeClients();
+const NOMS_DE_CLIENTS =
+  NOMS_SURVEILLES.length > 0
+    ? new RegExp(NOMS_SURVEILLES.map(insensibleAuxAccents).join('|'), 'gi')
+    : null;
+
+/** Noms des secrets du §30.3, pour les contrôles SEC-30.4a et SEC-30.4b. */
 
 /** Noms des secrets du §30.3, pour les contrôles SEC-30.4a et SEC-30.4b. */
 const NOMS_DE_SECRETS = [
@@ -93,12 +166,9 @@ const controles = [
       'Tout ce qui varie est une DONNÉE DE MISSION. Un nom de client dans un identifiant,\n' +
       '  un libellé, une constante ou une condition rend le produit non générique (E31 :\n' +
       '  « des centaines de clients »). Les fixtures de test utilisent FIL-TPE et FIL-GC,\n' +
-      '  des entreprises FICTIVES (09 §4bis) — jamais un client réel.',
-    // Le nom du client pilote ne doit apparaître NULLE PART dans le code, pas même
-    // en commentaire : c'est le test de généricité du §21.1.
-    motif: /nom-de-client-surveille/gi,
-    // Le pack documentaire cite légitimement le client : il est hors périmètre
-    // d'analyse (fichiersSources() ne renvoie pas docs/).
+      '  des entreprises FICTIVES (09 §4bis) — jamais un client réel.\n' +
+      '  La liste des noms surveillés vit HORS du dépôt : voir chargerNomsDeClients().',
+    motif: NOMS_DE_CLIENTS,
     fichiersExclus: [],
   },
   {
@@ -212,6 +282,19 @@ let echecs = 0;
 console.log(`\nChecklist des invariants — ${fichiers.length} fichier(s) analysé(s)\n`);
 
 for (const c of controles) {
+  // Un contrôle sans motif n'a pas été appliqué : il le DIT, il ne se tait pas.
+  if (c.motif === null) {
+    console.log(
+      `${JAUNE}⚠${RAZ} ${c.id}  ${c.titre} — NON APPLIQUÉ` +
+        `
+  Aucune liste de noms fournie. Renseigne AXION_CLIENTS_SURVEILLES (la CI la` +
+        `
+  reçoit par un secret de dépôt) ou docs/.clients-surveilles.txt (gitignoré).` +
+        `
+  Voir docs/.clients-surveilles.exemple.txt.`,
+    );
+    continue;
+  }
   const trouvailles = [];
 
   for (const fichier of fichiers) {

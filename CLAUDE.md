@@ -34,7 +34,7 @@ Interdiction de charger le pack entier dans un sous-agent (09 §5.8).
 1. **Offline-first** : l'app terrain fonctionne à 100 % sans réseau ; **UUID v7 côté client** pour
    toute entité créable hors ligne ; push idempotent.
 2. **Aucune référence client dans le code** : tout ce qui varie est une donnée de mission.
-   (Pas de « le client pilote » dans un identifiant, un libellé, une constante ou un test hors fixture.)
+   (Pas de nom de client dans un identifiant, un libellé, une constante ou un test hors fixture.)
 3. **RBAC serveur systématique** ; données financières (`scoping_financials`) : **routes admin
    exclusivement** ; écritures de sync réservées au **propriétaire de la session** (05 §9.9).
 4. **Aucune couleur/taille en dur** : tokens du design system uniquement.

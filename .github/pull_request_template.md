@@ -52,7 +52,7 @@ Traçabilité E36/E43 — lot L0 (07 §12), agent A52.
 
 ## Invariants et interdictions (CLAUDE.md §1 et §2)
 
-- [ ] Aucune **référence client** (« le client pilote »…) hors fixture — invariant 2
+- [ ] Aucune **référence client** (nom d’un client réel) hors fixture — invariant 2
 - [ ] Aucune **couleur / taille en dur** : tokens du design system uniquement — invariant 4
 - [ ] **UUID v7 côté applicatif** (`uuidv7`), jamais de fonction SQL de génération v7
 - [ ] Aucune **donnée personnelle dans les logs** (redaction pino configurée)

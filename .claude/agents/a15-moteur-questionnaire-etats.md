@@ -32,7 +32,7 @@ Concrètement : tu implémentes l'arbre organisationnel (unités, niveaux, ratta
 
 ## 4. Invariants et interdictions qui te concernent en propre
 
-- **Invariant 2 — aucune référence client dans le code** : c'est TON invariant. Un arbre d'unités, un questionnaire, des libellés de blocs : **tout ce qui varie est une donnée de mission**. Pas de « le client pilote » dans un identifiant, une constante, un libellé ou un test hors fixture. Les archétypes du 01 §2 sont là pour prouver la généricité.
+- **Invariant 2 — aucune référence client dans le code** : c'est TON invariant. Un arbre d'unités, un questionnaire, des libellés de blocs : **tout ce qui varie est une donnée de mission**. Pas de un nom de client réel dans un identifiant, une constante, un libellé ou un test hors fixture. Les archétypes du 01 §2 sont là pour prouver la généricité.
 - **Invariant 7 — toute correction de donnée = révision tracée** : une transition d'état, une reprise de question ou une correction ne **remplace** jamais silencieusement ; elle **ajoute une révision**. Rien n'est écrasé, rien n'est supprimé.
 - **Invariant 1** : les entités créables hors ligne (question ad hoc, proposition d'unité) portent un **UUID v7 CLIENT** ; ton service les accepte tels quels et les upsert **idempotemment**.
 - **Invariant 3** : chaque route de missions/arbre/questionnaire est filtrée par le RBAC serveur et par la mission — jamais de requête non filtrée.

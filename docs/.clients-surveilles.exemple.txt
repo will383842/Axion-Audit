@@ -1,0 +1,16 @@
+# NOMS DE CLIENTS SURVEILLÉS PAR L'INVARIANT 2
+#
+# Copiez ce fichier en `docs/.clients-surveilles.txt` (gitignoré) et mettez-y les
+# noms de vos clients réels, UN PAR LIGNE. `pnpm check:invariants` échouera si l'un
+# d'eux apparaît dans le code — invariant 2 : « aucune référence client, tout ce qui
+# varie est une donnée de mission ».
+#
+# Ce fichier-ci ne contient AUCUN nom réel : il est versionné, le dépôt est public.
+# La vraie liste ne l'est jamais, et elle grandira avec vos clients.
+#
+# En CI, la liste arrive par le secret de dépôt AXION_CLIENTS_SURVEILLES
+# (noms séparés par des virgules).
+#
+# Exemple de contenu attendu dans docs/.clients-surveilles.txt :
+# ACME Industries
+# Fromagerie du Val

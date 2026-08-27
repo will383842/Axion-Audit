@@ -1028,7 +1028,7 @@ lui fait donc rien perdre d'opérationnel, et **renforce** l'invariant au lieu d
 
 **Exécution :**
 
-1. « le client pilote » → « le client pilote » dans les 9 fichiers du pack, avec des règles ordonnées du
+1. le nom du client → « le client pilote » dans les 9 fichiers du pack, avec des règles ordonnées du
    plus spécifique au plus général pour que la grammaire tienne (« mission le client pilote » → « mission
    **du** client pilote », et non « mission le client pilote »). 47 mentions, relues.
 2. `docs/archive/` (CDC maître) **retiré du dépôt** et gitignoré. C'est une archive qui « ne prévaut
