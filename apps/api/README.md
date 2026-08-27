@@ -3,12 +3,11 @@
 Fastify 5 sur Node 22, PostgreSQL 16 via Drizzle. **Seul point d'entrée aux données** (02 §4.3-2) :
 la PWA terrain et la console consomment la même API.
 
-## État au lot L0
+## État au lot L1
 
-Squelette d'infrastructure HTTP uniquement — **aucune route métier, aucune table**. Ce périmètre est
-délibéré : il rend les critères L0 testables (image qui démarre, healthcheck Compose, smoke test de
-déploiement) sans empiéter sur L1 (schéma) ni L2 (authentification).
-Voir `DECISIONS.md` 2026-08-27 « Squelette applicatif minimal des 5 espaces de travail dès L0 ».
+Le **schéma** est livré : 43 tables, transcrites LITTÉRALEMENT de `docs/04_MODELE_DE_DONNEES.md` en
+SQL brut versionné (`drizzle/0001` → `0008`), plus le seed des référentiels et le compte fondateur.
+Toujours **aucune route métier** (L2/L3) : l'API n'expose que ses deux sondes de santé.
 
 ## Routes exposées
 
@@ -39,6 +38,39 @@ pino 9 avec **redaction obligatoire** posée sur l'instance racine (`src/logger.
 emails, contenus de réponse, notes, verbatims et jetons sont masqués. C'est un choix structurel —
 compter sur la discipline de chaque appel à `log.info()` ne tiendrait pas (11 §2, 06 §10.4).
 
+## Schéma et données (lot L1)
+
+**Le DDL vit EXCLUSIVEMENT dans `docs/04_MODELE_DE_DONNEES.md`** (11 §2). Les fichiers de
+`drizzle/` en sont une transcription ; `src/db/schema.ts` en est un REFLET pour le typage des
+requêtes. Ni l'un ni l'autre n'est une source de vérité, et rien n'est jamais « généré » par un ORM.
+
+| Commande                                              | Effet                                                                                  |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `pnpm db:migrate:check`                               | dry-run : liste les migrations en attente, vérifie leur réversibilité, n'applique rien |
+| `pnpm db:migrate`                                     | applique les migrations en attente, **une transaction par migration**                  |
+| `node apps/api/scripts/migrations.mjs --status`       | état du journal `schema_migrations`                                                    |
+| `node apps/api/scripts/migrations.mjs --down`         | redescend la dernière migration appliquée                                              |
+| `node apps/api/scripts/migrations.mjs --down-to 0000` | redescend TOUT (bac à sable local uniquement)                                          |
+| `pnpm db:generate <sujet>`                            | crée le squelette numéroté d'une nouvelle migration (@UP / @DOWN à remplir)            |
+| `pnpm seed`                                           | référentiels + compte fondateur — **rejouable à l'identique**                          |
+| `pnpm seed:demo`                                      | fixtures de démo déterministes — **refusé si `APP_ENV=prod`**                          |
+| `pnpm schema:diff`                                    | compare la base RÉELLE au manifeste extrait du 04 — **zéro écart exigé**               |
+
+`--empreinte` sur le seed imprime, par table, le nombre de lignes et un md5 du contenu : c'est ce
+qui PROUVE la rejouabilité au lieu de l'affirmer.
+
+**Format des migrations** : un fichier `NNNN_sujet.sql`, deux sentinelles `-- @UP` et `-- @DOWN`.
+Les deux sont obligatoires — l'exécuteur refuse un fichier sans descente. Les FK circulaires de
+`interviews` (`linked_review_answer_id`, `document_request_id`) sont posées par `ALTER TABLE` dans
+`0008`, comme le fichier 04 l'impose : une transcription table par table ne compile pas sans cela.
+
+**Depuis la machine hôte**, le `DATABASE_URL` du `.env` vise l'hôte Docker `postgres`, qui ne résout
+que depuis un conteneur. Préfixe alors la commande :
+
+```bash
+DATABASE_URL=postgresql://axion:<mdp>@localhost:5432/axion_audit pnpm db:migrate
+```
+
 ## Développement
 
 ```bash
@@ -50,5 +82,7 @@ secret vaut encore `__CHANGEME__` — un `undefined` silencieux sur un secret es
 
 ## À venir
 
-L1 migrations SQL (transcription littérale du fichier 04) + seed · L2 authentification JWT et RBAC ·
-L3 missions, arbre, questionnaire, machine à états · L6 moteur de synchronisation.
+L2 authentification JWT et RBAC · L3 missions, arbre, questionnaire, machine à états ·
+L6 moteur de synchronisation. Les tables `surveys`, `survey_responses` et `solutions_catalog`
+arriveront avec **leurs** lots (§28.2-4, §28.2-7) : voir `DECISIONS.md` 2026-08-27, « Les tables de
+Phase 2/3 ne sont PAS créées au lot L1 ».

@@ -8,23 +8,47 @@
 // lot L1 et relu ligne à ligne à la porte P-A ; types non précisés par le 04 = TEXT,
 // conventions en tête du 04) ». DoD transverse : « diff schéma-vs-04 = zéro écart ».
 //
-// ÉTAT AU LOT L0 : le manifeste est un LIVRABLE DU LOT L1 — il n'existe pas encore.
-// Ce script existe dès L0 pour que la CI soit complète (critère L0), et il REFUSE de
-// mentir : tant que le manifeste est absent, il sort en code 0 avec un avertissement
-// explicite ; dès que L1 est marqué livré, son absence devient une erreur.
-// Le marqueur de livraison est l'existence de `apps/api/drizzle/` (les migrations L1).
+// CE QUE CE SCRIPT COMPARE — et rien d'autre, exactement le périmètre du 11 §7 :
+//   1. TABLES              présence, et AUCUNE table de trop ;
+//   2. COLONNES            présence, type normalisé, et aucune colonne de trop ;
+//   3. CONTRAINTES         PK / FK / UNIQUE / CHECK, par NOM, avec leur contenu
+//                          (colonnes, cible de FK, ensemble de valeurs d'un enum) ;
+//   4. INDEX du §7.1       nom, table, méthode, colonnes, unicité, prédicat partiel.
+// Hors périmètre ASSUMÉ (le 11 §7 ne les cite pas) : nullabilité, valeurs par
+// défaut, commentaires, ordre des colonnes, privilèges.
+//
+// DIRECTION DU CONTRÔLE : le manifeste est la RÉFÉRENCE (il est extrait du fichier
+// 04) ; la base est le SUJET. Un écart dans un sens comme dans l'autre est un
+// échec — une table en trop dans la base est aussi grave qu'une table manquante :
+// c'est du schéma que le fichier 04 n'a jamais autorisé.
+//
+// ÉTAT AU LOT L0 : le manifeste était un livrable à venir ; le script sortait en 0
+// avec un avertissement tant que `apps/api/drizzle/` n'existait pas. Ce garde-fou
+// est CONSERVÉ tel quel ci-dessous — il protège toujours un dépôt fraîchement
+// cloné dont on aurait retiré les migrations.
 // Traçabilité : E17, E36, E43 · critère L1 du fichier 07.
 // =============================================================================
 import { existsSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 
+// `pg` est une dépendance de l'API (11 §1), pas de la racine du monorepo : on la
+// résout depuis `apps/api` plutôt que d'ajouter une dépendance racine — le 11 §8.1
+// interdit d'élargir la liste des dépendances sans arbitrage humain.
+const requireApi = createRequire(resolve(import.meta.dirname, '..', 'apps/api/package.json'));
+
 const ROUGE = '[31m';
+const VERT = '[32m';
 const JAUNE = '[33m';
+const GRIS = '[90m';
 const RAZ = '[0m';
 
 const RACINE = resolve(import.meta.dirname, '..');
 const MANIFESTE = resolve(RACINE, 'apps/api/schema-manifest.json');
 const DOSSIER_MIGRATIONS = resolve(RACINE, 'apps/api/drizzle');
+
+/** Table du journal de migrations : outillage, absente du fichier 04 par nature. */
+const TABLES_HORS_PERIMETRE = new Set(['schema_migrations']);
 
 const l1Livre = existsSync(DOSSIER_MIGRATIONS);
 
@@ -52,12 +76,19 @@ if (!existsSync(MANIFESTE)) {
   process.exit(0);
 }
 
-// ---------------------------------------------------------------------------
-// À partir d'ici : le manifeste existe. Comparaison réelle contre la base vivante.
-// L'implémentation complète (introspection information_schema + pg_indexes) est
-// écrite au lot L1 par A12 (DBA), qui possède la transcription du fichier 04.
-// ---------------------------------------------------------------------------
 const manifeste = JSON.parse(readFileSync(MANIFESTE, 'utf8'));
+
+// Le `.env` de la racine reste la source unique en local (comme pour db:migrate).
+if (!process.env.DATABASE_URL) {
+  const fichierEnv = resolve(RACINE, '.env');
+  if (existsSync(fichierEnv)) {
+    try {
+      process.loadEnvFile(fichierEnv);
+    } catch {
+      /* un .env illisible ne doit pas masquer le message utile ci-dessous */
+    }
+  }
+}
 
 if (!process.env.DATABASE_URL) {
   console.error(`${ROUGE}✗ diff schéma-vs-04 : DATABASE_URL absente.${RAZ}`);
@@ -65,12 +96,380 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
+// ---------------------------------------------------------------------------
+// Normalisations
+// ---------------------------------------------------------------------------
+
+/**
+ * Type PostgreSQL interne (`udt_name`) → vocabulaire du manifeste.
+ * Le manifeste parle la langue du fichier 04 (« TEXT », « TIMESTAMPTZ »,
+ * « JSONB »…), pas celle du catalogue système.
+ */
+const TYPES = new Map([
+  ['uuid', 'uuid'],
+  ['text', 'text'],
+  // `varchar` n'est PAS un alias de `text` : le 04 ne prescrit jamais de longueur
+  // bornée, et une colonne passée en varchar(n) est un écart, pas un synonyme.
+  ['varchar', 'varchar'],
+  ['int4', 'integer'],
+  ['int8', 'bigint'],
+  ['numeric', 'numeric'],
+  ['bool', 'boolean'],
+  ['jsonb', 'jsonb'],
+  ['timestamptz', 'timestamptz'],
+  ['timestamp', 'timestamp'],
+  ['date', 'date'],
+]);
+
+function typeNormalise(udtName) {
+  return TYPES.get(udtName) ?? udtName;
+}
+
+/** Comparaison d'expressions SQL : la mise en forme du catalogue n'est pas un écart. */
+function expressionNormalisee(sql) {
+  return String(sql ?? '')
+    .toLowerCase()
+    .replace(/::[a-z_ ]+(\[\])?/g, '') // casts explicites ajoutés par le catalogue
+    .replace(/[\s()"]/g, '');
+}
+
+/** Extrait l'ensemble des littéraux d'une définition de CHECK enum. */
+function litterauxDe(definition) {
+  return new Set([...String(definition).matchAll(/'([^']*)'/g)].map((m) => m[1]));
+}
+
+/**
+ * Découpe `CREATE [UNIQUE] INDEX nom ON schema.table USING methode (cols) [WHERE p]`.
+ * On lit `indexdef`, la forme canonique produite par PostgreSQL lui-même : elle est
+ * stable, contrairement au SQL que nous avons écrit à la main.
+ */
+function analyserIndexdef(indexdef) {
+  const re =
+    /^CREATE\s+(UNIQUE\s+)?INDEX\s+(\S+)\s+ON\s+\S+\s+USING\s+(\w+)\s+\((.+?)\)(?:\s+WHERE\s+(.+))?$/i;
+  const m = re.exec(indexdef);
+  if (!m) return null;
+  return {
+    unique: Boolean(m[1]),
+    nom: m[2],
+    methode: m[3].toLowerCase(),
+    colonnes: m[4].split(',').map((c) => c.trim().replace(/\s+.*$/, '')),
+    predicat: m[5] ?? null,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Introspection
+// ---------------------------------------------------------------------------
+async function introspecter(client) {
+  const tables = await client.query(`
+    SELECT table_name
+      FROM information_schema.tables
+     WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+     ORDER BY table_name
+  `);
+
+  const colonnes = await client.query(`
+    SELECT table_name, column_name, udt_name
+      FROM information_schema.columns
+     WHERE table_schema = 'public'
+     ORDER BY table_name, column_name
+  `);
+
+  const contraintes = await client.query(`
+    SELECT c.conname                                   AS nom,
+           c.contype                                   AS type,
+           rel.relname                                 AS table_name,
+           pg_get_constraintdef(c.oid)                 AS definition
+      FROM pg_constraint c
+      JOIN pg_class rel      ON rel.oid = c.conrelid
+      JOIN pg_namespace nsp  ON nsp.oid = rel.relnamespace
+     WHERE nsp.nspname = 'public'
+       AND c.contype IN ('p', 'f', 'u', 'c')
+     ORDER BY rel.relname, c.conname
+  `);
+
+  const index = await client.query(`
+    SELECT tablename AS table_name, indexname AS nom, indexdef
+      FROM pg_indexes
+     WHERE schemaname = 'public'
+     ORDER BY tablename, indexname
+  `);
+
+  return {
+    tables: tables.rows,
+    colonnes: colonnes.rows,
+    contraintes: contraintes.rows,
+    index: index.rows,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Comparaison
+// ---------------------------------------------------------------------------
+function comparer(manifeste, base) {
+  /** @type {{categorie: string, message: string}[]} */
+  const ecarts = [];
+  const ecart = (categorie, message) => ecarts.push({ categorie, message });
+
+  const tablesBase = new Set(
+    base.tables.map((t) => t.table_name).filter((n) => !TABLES_HORS_PERIMETRE.has(n)),
+  );
+  const tablesManifeste = new Set(Object.keys(manifeste.tables));
+
+  // --- 1. TABLES -----------------------------------------------------------
+  for (const t of tablesManifeste) {
+    if (!tablesBase.has(t)) ecart('table', `table MANQUANTE en base : ${t}`);
+  }
+  for (const t of tablesBase) {
+    if (!tablesManifeste.has(t)) {
+      ecart('table', `table EN TROP en base (absente du fichier 04) : ${t}`);
+    }
+  }
+
+  // --- 2. COLONNES ---------------------------------------------------------
+  const colonnesParTable = new Map();
+  for (const c of base.colonnes) {
+    if (!colonnesParTable.has(c.table_name)) colonnesParTable.set(c.table_name, new Map());
+    colonnesParTable.get(c.table_name).set(c.column_name, typeNormalise(c.udt_name));
+  }
+
+  for (const [table, def] of Object.entries(manifeste.tables)) {
+    const reelles = colonnesParTable.get(table);
+    if (!reelles) continue; // table manquante : déjà signalée
+    for (const [col, typeAttendu] of Object.entries(def.columns)) {
+      const typeReel = reelles.get(col);
+      if (typeReel === undefined) {
+        ecart('colonne', `${table}.${col} MANQUANTE en base`);
+      } else if (typeReel !== typeAttendu) {
+        ecart('colonne', `${table}.${col} : type ${typeReel} en base, ${typeAttendu} au 04`);
+      }
+    }
+    for (const col of reelles.keys()) {
+      if (!(col in def.columns)) ecart('colonne', `${table}.${col} EN TROP en base`);
+    }
+  }
+
+  // --- 3. CONTRAINTES PK / FK / UNIQUE / CHECK ------------------------------
+  const contraintesParNom = new Map(base.contraintes.map((c) => [c.nom, c]));
+  const attendues = new Set();
+
+  for (const [table, def] of Object.entries(manifeste.tables)) {
+    // 3a. PK
+    const pk = def.primaryKey;
+    if (pk) {
+      attendues.add(pk.name);
+      const reelle = contraintesParNom.get(pk.name);
+      if (!reelle || reelle.type !== 'p') {
+        ecart('contrainte', `PK MANQUANTE : ${pk.name} sur ${table}`);
+      } else if (
+        expressionNormalisee(reelle.definition) !==
+        expressionNormalisee(`PRIMARY KEY (${pk.columns.join(', ')})`)
+      ) {
+        ecart(
+          'contrainte',
+          `PK ${pk.name} : ${reelle.definition} ≠ colonnes ${pk.columns.join(', ')}`,
+        );
+      }
+    }
+
+    // 3b. UNIQUE
+    for (const u of def.unique ?? []) {
+      attendues.add(u.name);
+      const reelle = contraintesParNom.get(u.name);
+      if (!reelle || reelle.type !== 'u') {
+        ecart('contrainte', `UNIQUE MANQUANTE : ${u.name} sur ${table}`);
+      } else if (
+        expressionNormalisee(reelle.definition) !==
+        expressionNormalisee(`UNIQUE (${u.columns.join(', ')})`)
+      ) {
+        ecart(
+          'contrainte',
+          `UNIQUE ${u.name} : ${reelle.definition} ≠ colonnes ${u.columns.join(', ')}`,
+        );
+      }
+    }
+
+    // 3c. FK
+    for (const f of def.foreignKeys ?? []) {
+      attendues.add(f.name);
+      const reelle = contraintesParNom.get(f.name);
+      if (!reelle || reelle.type !== 'f') {
+        ecart('contrainte', `FK MANQUANTE : ${f.name} sur ${table}`);
+        continue;
+      }
+      const attendu = `FOREIGN KEY (${f.columns.join(', ')}) REFERENCES ${f.references.table}(${f.references.columns.join(', ')})`;
+      if (expressionNormalisee(reelle.definition) !== expressionNormalisee(attendu)) {
+        ecart('contrainte', `FK ${f.name} : « ${reelle.definition} » ≠ « ${attendu} »`);
+      }
+    }
+
+    // 3d. CHECK
+    for (const k of def.checks ?? []) {
+      attendues.add(k.name);
+      const reelle = contraintesParNom.get(k.name);
+      if (!reelle || reelle.type !== 'c') {
+        ecart('contrainte', `CHECK MANQUANTE : ${k.name} sur ${table}`);
+        continue;
+      }
+      if (k.kind === 'enum') {
+        const attendues2 = new Set(k.values);
+        const reelles = litterauxDe(reelle.definition);
+        const manquantes = [...attendues2].filter((v) => !reelles.has(v));
+        const enTrop = [...reelles].filter((v) => !attendues2.has(v));
+        if (!expressionNormalisee(reelle.definition).includes(k.column.toLowerCase())) {
+          ecart('contrainte', `CHECK ${k.name} ne porte pas sur la colonne ${k.column}`);
+        }
+        if (manquantes.length > 0) {
+          ecart('contrainte', `CHECK ${k.name} : valeurs manquantes ${manquantes.join(', ')}`);
+        }
+        if (enTrop.length > 0) {
+          ecart('contrainte', `CHECK ${k.name} : valeurs en trop ${enTrop.join(', ')}`);
+        }
+      } else if (k.kind === 'expression') {
+        // Cohérence composite (ex. step_validations step_code ↔ scope) : on compare
+        // l'expression normalisée, littéral par littéral et opérateur par opérateur.
+        if (
+          expressionNormalisee(reelle.definition) !== expressionNormalisee(`CHECK ${k.expression}`)
+        ) {
+          ecart(
+            'contrainte',
+            `CHECK ${k.name} : expression divergente.\n      base : ${reelle.definition}\n      04   : CHECK ${k.expression}`,
+          );
+        }
+      }
+    }
+  }
+
+  // 3e. Contraintes de la base absentes du manifeste (schéma non autorisé).
+  //     Les NOT NULL (contype 'c' implicite) n'existent pas dans pg_constraint :
+  //     rien n'est donc signalé à tort ici, la nullabilité restant hors périmètre.
+  for (const c of base.contraintes) {
+    if (TABLES_HORS_PERIMETRE.has(c.table_name)) continue;
+    if (!attendues.has(c.nom)) {
+      ecart(
+        'contrainte',
+        `contrainte EN TROP en base : ${c.nom} sur ${c.table_name} (${c.definition})`,
+      );
+    }
+  }
+
+  // --- 4. INDEX DU §7.1 ----------------------------------------------------
+  const indexParNom = new Map();
+  for (const i of base.index) {
+    if (TABLES_HORS_PERIMETRE.has(i.table_name)) continue;
+    indexParNom.set(i.nom, {
+      ...analyserIndexdef(i.indexdef),
+      table: i.table_name,
+      brut: i.indexdef,
+    });
+  }
+
+  const indexAttendus = new Set();
+  for (const idx of manifeste.indexes) {
+    indexAttendus.add(idx.name);
+    const reel = indexParNom.get(idx.name);
+    if (!reel) {
+      ecart('index', `index MANQUANT : ${idx.name} sur ${idx.table} (${idx.source})`);
+      continue;
+    }
+    if (reel.table !== idx.table) {
+      ecart('index', `index ${idx.name} : porté par ${reel.table}, attendu sur ${idx.table}`);
+    }
+    if (reel.unique !== Boolean(idx.unique)) {
+      ecart(
+        'index',
+        `index ${idx.name} : unique=${String(reel.unique)}, attendu ${String(Boolean(idx.unique))}`,
+      );
+    }
+    if (reel.methode !== (idx.method ?? 'btree')) {
+      ecart(
+        'index',
+        `index ${idx.name} : méthode ${reel.methode}, attendue ${idx.method ?? 'btree'}`,
+      );
+    }
+    if (reel.colonnes.join(',') !== idx.columns.join(',')) {
+      ecart(
+        'index',
+        `index ${idx.name} : colonnes (${reel.colonnes.join(', ')}), attendues (${idx.columns.join(', ')})`,
+      );
+    }
+    if (expressionNormalisee(reel.predicat) !== expressionNormalisee(idx.where)) {
+      ecart(
+        'index',
+        `index ${idx.name} : prédicat partiel « ${reel.predicat ?? '—'} », attendu « ${idx.where ?? '—'} »`,
+      );
+    }
+  }
+
+  // 4b. Index en trop. Ceux qui matérialisent une PK ou une UNIQUE sont déjà
+  //     contrôlés au point 3 : les signaler ici ferait un doublon de bruit.
+  for (const [nom, reel] of indexParNom) {
+    if (indexAttendus.has(nom)) continue;
+    if (attendues.has(nom)) continue; // index porté par une contrainte déclarée
+    ecart('index', `index EN TROP en base : ${nom} sur ${reel.table} (${reel.brut})`);
+  }
+
+  return ecarts;
+}
+
+// ---------------------------------------------------------------------------
+// Exécution
+// ---------------------------------------------------------------------------
+const pg = requireApi('pg');
+const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+try {
+  await client.connect();
+} catch (err) {
+  console.error(`${ROUGE}✗ diff schéma-vs-04 : PostgreSQL injoignable — ${err.message}${RAZ}`);
+  process.exit(1);
+}
+
+let ecarts;
+try {
+  ecarts = comparer(manifeste, await introspecter(client));
+} finally {
+  await client.end();
+}
+
+const nbTables = Object.keys(manifeste.tables).length;
+const nbColonnes = Object.values(manifeste.tables).reduce(
+  (n, t) => n + Object.keys(t.columns).length,
+  0,
+);
+const nbContraintes = Object.values(manifeste.tables).reduce(
+  (n, t) =>
+    n +
+    (t.primaryKey ? 1 : 0) +
+    (t.unique?.length ?? 0) +
+    (t.foreignKeys?.length ?? 0) +
+    (t.checks?.length ?? 0),
+  0,
+);
+
+if (ecarts.length === 0) {
+  console.log(
+    `${VERT}✓${RAZ} diff schéma-vs-04 : ZÉRO ÉCART.\n` +
+      `  ${GRIS}${String(nbTables)} tables · ${String(nbColonnes)} colonnes · ` +
+      `${String(nbContraintes)} contraintes PK/FK/UNIQUE/CHECK · ` +
+      `${String(manifeste.indexes.length)} index du §7.1${RAZ}\n` +
+      `  ${GRIS}manifeste : apps/api/schema-manifest.json (extrait de ${manifeste.source})${RAZ}`,
+  );
+  process.exit(0);
+}
+
+console.error(`${ROUGE}✗ diff schéma-vs-04 : ${String(ecarts.length)} ÉCART(S).${RAZ}\n`);
+for (const categorie of ['table', 'colonne', 'contrainte', 'index']) {
+  const lot = ecarts.filter((e) => e.categorie === categorie);
+  if (lot.length === 0) continue;
+  console.error(`  ${JAUNE}${categorie.toUpperCase()} (${String(lot.length)})${RAZ}`);
+  for (const e of lot) console.error(`    ${e.message}`);
+  console.error('');
+}
 console.error(
-  `${ROUGE}✗ diff schéma-vs-04 : comparateur non implémenté.${RAZ}\n` +
-    `  Manifeste trouvé (${Object.keys(manifeste.tables ?? {}).length} table(s) déclarée(s))\n` +
-    '  mais l’introspection est un livrable du lot L1 (agent A12 — DBA).\n' +
-    '  Périmètre imposé par le 11 §7 : tables, colonnes, contraintes PK/FK/UNIQUE/CHECK\n' +
-    '  et index du §7.1. Types non précisés par le 04 = TEXT.\n' +
-    '  Échec DÉLIBÉRÉ : mieux vaut une CI rouge qu’un « zéro écart » non vérifié.\n',
+  '  La DoD transverse exige ZÉRO écart. Deux corrections possibles, jamais une troisième :\n' +
+    '    · le schéma diverge du fichier 04  → corriger la MIGRATION ;\n' +
+    '    · le manifeste diverge du fichier 04 → corriger le MANIFESTE.\n' +
+    '  Modifier le fichier 04 pour faire taire ce contrôle est interdit (11 §8.2) :\n' +
+    '  le schéma est scellé, son amendement passe par la revue de spec de la porte P-D.\n',
 );
 process.exit(1);

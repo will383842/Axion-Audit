@@ -1088,3 +1088,164 @@ APPLIQUÉ » plutôt que vert — c'est voulu, et c'est écrit dans sa sortie.
 **Décideur :** A01
 **Impact spec :** aucun — le 02 §30.5 redevient applicable **intégralement**, ce qu'il n'était pas
 depuis ce matin.
+
+---
+
+## 2026-08-27 — [L1] Les tables de Phase 2/3 ne sont PAS créées au lot L1
+
+**Constat (divergence relevée par A16, seul test rouge de sa suite) :** deux fichiers du pack se
+lisent différemment sur `surveys`, `survey_responses` et `solutions_catalog`.
+
+- Le **fichier 04 §7** les range sous un intertitre explicite :
+  « PHASE 2/3 (DDL de référence — **créées par les migrations de leurs lots**) ».
+- Le **fichier 07 §12**, ligne L1, commande « Schéma SQL fichier 04 V2.2 **INTÉGRAL**
+  (toutes tables + colonnes des avenants) », et `CLAUDE.md` §0 fait du fichier 07 le brief
+  exclusif d'un lot.
+
+A12 les a créées (migration `0007`), A16 a testé leur absence. **Aucun des deux n'a tort de lire ce
+qu'il a lu** — et l'enjeu est réel : le manifeste du diff schéma-vs-04 (11 §7) est extrait du
+fichier 04, donc les deux lectures produisent deux manifestes, et la porte P-A trancherait au pire
+moment.
+
+**Options :**
+
+1. Créer les trois tables dès L1 — lecture du fichier 07, et argument pratique : elles ne coûtent
+   rien et évitent une migration ultérieure.
+2. Les différer à leurs lots — lecture du fichier 04.
+
+**Arbitrage : option 2.** Règle de précédence : les deux passages appartiennent à la même strate
+(§1-15), elle ne les départage donc pas directement. **Trois raisons tranchent :**
+
+1. Le **00_INDEX** pose que « **le DDL vit exclusivement dans le fichier 04** ». Sur une question de
+   DDL — quelles tables existent — le fichier 04 est l'autorité désignée, pas le fichier 07.
+2. Le fichier 04 parle **spécifiquement** de ces trois tables ; le fichier 07 parle **généralement**
+   du périmètre de la transcription. Le spécifique l'emporte sur le général.
+3. Le « INTÉGRAL (toutes tables **+ colonnes des avenants**) » du fichier 07 vise un risque précis et
+   différent : oublier les tables et colonnes ajoutées par les avenants §16-29. C'est un vrai risque,
+   et cette phrase le couvre — elle ne dit pas « y compris celles que le 04 diffère explicitement ».
+
+**Conséquence :** migration `0007` retirée, les trois tables sortent du manifeste. Elles arrivent avec
+leurs lots (sondage collaborateurs en tête de Phase 2, §28.2-4 ; catalogue de solutions §28.2-7). Le
+test d'A16 est conservé **tel quel** : il devient la garantie qu'elles n'apparaîtront pas par
+inadvertance avant leur lot.
+
+**Décideur :** A01
+**Impact spec :** aucun
+
+---
+
+## 2026-08-27 — [L1] Bornes des paliers : le contrat technique fait foi
+
+**Constat (A16) :** deux jeux de bornes coexistent.
+
+| Source  | micro | pme        | eti           | grand_compte |
+| ------- | ----- | ---------- | ------------- | ------------ |
+| 01 §2.3 | 1-10  | **10**-250 | **250**-5 000 | **5 000**+   |
+| 11 §5   | 1-10  | **11**-249 | 250-4999      | 5000+        |
+
+**Options :**
+
+1. Suivre le 01 §2.3, plus ancien et cité comme source.
+2. Suivre le 11 §5.
+
+**Arbitrage : option 2.** Règle de précédence : **sans objet au sens strict** — il n'y a pas ici deux
+règles contradictoires, mais une prose imprécise et sa normalisation.
+Les bornes du 01 §2.3 **se chevauchent** : une entreprise de 250 salariés relève à la fois de `pme` et
+d'`eti`, une de 5 000 à la fois d'`eti` et de `grand_compte`. Traduites telles quelles en
+`headcount_min`/`headcount_max`, elles produiraient **deux paliers pour un même effectif** — le
+questionnaire assemblé dépendrait alors de l'ordre des lignes en base. Ce n'est pas une divergence,
+c'est une ambiguïté que le §2.3 ne tranche pas.
+Le 11 §5 cite d'ailleurs « (bornes §2.3) » : il se présente comme la **transcription** du §2.3, et il
+la désambiguïse. C'est exactement le rôle que le contrat s'assigne — « épingler TOUTES les décisions
+techniques que l'autopilote devrait sinon deviner ».
+Le seed retient donc **1-10 · 11-249 · 250-4999 · 5000+**, disjointes et exhaustives.
+
+**Décideur :** A01
+**Impact spec :** aucun
+
+---
+
+## 2026-08-27 — [L1] Le fil rouge naît en tests d'intégration, il passe à Playwright au lot L3
+
+**Constat :** le 09 §4bis dit « un test **Playwright** unique marqué `@filrouge` rejoue à CHAQUE merge
+le parcours de bout en bout **DISPONIBLE À DATE** ». A16 l'a livré en test d'INTÉGRATION, pas
+Playwright.
+
+**Options :**
+
+1. Écrire un test Playwright dès L1 — **impossible en pratique** : le parcours du fil rouge commence
+   à « création mission → import arbre » (L3). Au lot L1 il n'existe ni écran ni route métier ; un
+   Playwright n'aurait littéralement rien à piloter, et sa seule fonction serait de porter le tag.
+2. Le faire vivre au niveau d'intégration tant qu'il n'y a pas d'interface, puis le migrer.
+
+**Arbitrage : option 2.** Règle de précédence **sans objet** (aucune divergence interne).
+C'est la lecture littérale de « **disponible à date** », que le §4bis souligne lui-même : le fil rouge
+n'est pas un test figé qu'on écrit une fois, c'est un parcours qui **grandit à chaque lot**. Au L1, ce
+qui est disponible, ce sont les deux missions canoniques en fixtures — et A16 en a tiré une vraie
+preuve : FIL-GC construit **150 unités sur 4 niveaux vérifiés par requête récursive, 60 sessions,
+8 100 réponses**, ce qui démontre au passage que l'unicité `answers` tient à l'échelle et que les deux
+missions ne se mélangent pas.
+**Migration imposée au lot L3**, dès que « création mission → import arbre → questionnaire figé »
+existe : le fil rouge devient alors un test Playwright, et les fixtures d'A16 en deviennent le jeu de
+données. À porter au brief du L3 ; sans cette date écrite, le fil rouge resterait au niveau
+d'intégration par inertie, et la porte P-C réclamerait un Playwright que personne n'aurait écrit.
+
+**Décideur :** A01
+**Impact spec :** aucun
+
+---
+
+## 2026-08-27 — [L1] Testcontainers : à installer, ce n'est pas un ajout de dépendance
+
+**Constat :** A16 a écrit ses tests d'intégration sur des **bases éphémères** de la pile Compose
+(`axion_l1_<suffixe>`, créées puis supprimées en `afterAll`), faute de Testcontainers dans le dépôt.
+Il a refusé de l'installer lui-même : `package.json` n'est pas son périmètre, et le 11 §8.1 réserve à
+l'humain l'ajout d'une dépendance hors de la liste §1. **Prudence correcte, prémisse inexacte.**
+
+**Options :**
+
+1. Conserver le repli sur bases éphémères.
+2. Installer Testcontainers.
+
+**Arbitrage : option 2.** Règle de précédence **sans objet**. Le 11 §1 liste nommément
+« **Vitest 3 + Testcontainers** » : l'installer, c'est appliquer le contrat, pas s'en écarter — le
+§8.1 ne mord que sur ce qui est **hors** de cette liste. A16 a eu raison de ne pas trancher seul, et
+raison de le signaler plutôt que de contourner en silence.
+Ce que le repli coûterait si on le gardait : les tests dépendraient d'une pile Compose **déjà
+démarrée**, donc d'un état extérieur au dépôt. Un développeur sur un clone neuf verrait des tests
+d'intégration rouges sans comprendre pourquoi — exactement le défaut de `lint` avant `build` corrigé
+au lot L0. Testcontainers rend la suite **autoportante**.
+A16 indique que la bascule ne touche que deux fonctions de `apps/api/tests/aide/base-l1.ts`. Elle lui
+revient : c'est son périmètre, et il ne testerait pas son propre code de production ce faisant.
+**Le repli reste documenté** en tête du fichier : si Testcontainers échouait sur un poste, on saurait
+quoi faire au lieu de désactiver la suite.
+
+**Décideur :** A01
+**Impact spec :** aucun
+
+---
+
+## 2026-08-27 — [L1] Portée du marqueur `@critique`
+
+**Constat (A16) :** il a marqué `@critique` les 12 tests couvrant les critères durs du lot L1. Le pack
+ne désigne nommément que trois familles : « **les 8 scénarios offline, les tests RBAC/propriété et le
+diff schéma-vs-04** » (09 §2, repris au 11 §7).
+
+**Options :**
+
+1. Étendre `@critique` à tout critère d'acceptation dur, lot par lot.
+2. Le réserver aux trois familles nommées par le pack.
+
+**Arbitrage : option 2.** Règle de précédence **sans objet**.
+Un marqueur qui désigne presque tout ne désigne plus rien. Sa fonction est de distinguer, dans une
+suite où **aucun** test n'est skippable (la liste d'exceptions de `check-no-skipped-tests` est vide et
+un garde-fou de CI vérifie qu'elle le reste), le sous-ensemble dont l'échec signe une **perte de
+données ou une fuite de droits** — ce que `pnpm test:critique` permet de rejouer seul, en urgence,
+sans attendre la suite complète.
+Au lot L1, une seule famille nommée s'applique : le **diff schéma-vs-04**. Les autres tests de L1
+restent obligatoires — ils le sont tous — mais sans le marqueur.
+Cet arbitrage vaudra pour les lots suivants : c'est le pack qui décide de ce qui est `@critique`, pas
+la difficulté ressentie du test.
+
+**Décideur :** A01
+**Impact spec :** aucun

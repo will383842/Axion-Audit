@@ -20,7 +20,7 @@
     "typecheck": "pnpm build:packages && pnpm --recursive --stream typecheck",
     "test": "pnpm test:unit && pnpm test:integration",
     "test:unit": "vitest run --project unit",
-    "test:integration": "vitest run --project integration --passWithNoTests",
+    "test:integration": "vitest run --project integration",
     "test:e2e": "pnpm build && playwright test",
     "test:e2e:filrouge": "pnpm build && playwright test --grep @filrouge",
     "test:critique": "vitest run --project unit --project integration -t @critique && playwright test --grep @critique",

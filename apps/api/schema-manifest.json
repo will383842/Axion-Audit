@@ -1,0 +1,2393 @@
+{
+  "$schema-manifest": "Axion Audit — base de comparaison du diff schéma-vs-04 (contrat 11 §7)",
+  "source": "docs/04_MODELE_DE_DONNEES.md §7 et §7.1 — Pack V2.12 (27/08/2026)",
+  "extraitPar": "A12 (DBA), lot L1 — transcription, pas interprétation",
+  "reluALaPorte": "P-A, ligne à ligne, contre le fichier 04",
+  "perimetre": {
+    "compare": [
+      "tables (présence, et aucune table de trop)",
+      "colonnes (présence + type normalisé)",
+      "contraintes PRIMARY KEY / FOREIGN KEY / UNIQUE / CHECK, par nom et par contenu",
+      "index nommément énumérés au §7.1"
+    ],
+    "horsPerimetreAssume": [
+      "nullabilité (le 11 §7 ne la cite pas ; le 04 ne la spécifie que par le suffixe NULL)",
+      "valeurs par défaut",
+      "commentaires, ordre des colonnes, privilèges"
+    ],
+    "tablesIgnorees": [
+      "schema_migrations (journal de l'exécuteur, absent du fichier 04)",
+      "surveys, survey_responses, solutions_catalog : rangées par le 04 sous « PHASE 2/3 — créées par les migrations de leurs lots ». Arbitrage A01 du 2026-08-27 (DECISIONS.md) : elles ne sont PAS du lot L1 et sortent donc du manifeste ; elles y entreront avec leurs lots (§28.2-4, §28.2-7)."
+    ]
+  },
+  "conventionsDeTypage": {
+    "regleDeBase": "04 §7 (V2.9) — colonne sans type explicite = TEXT",
+    "exceptions": {
+      "horodatages": "created_at/updated_at TIMESTAMPTZ (04 §7, « TIMESTAMPTZ partout »), généralisé à toute colonne *_at (invariant 5 : horodatages UTC en base ; 11 §3 : TIMESTAMPTZ en base). client_updated_at en TEXT rendrait le LWW §9.4 incorrect.",
+      "dates": "colonnes typées DATE par le 04 (nda_signed_at, purge_after) + les dates de planification sans heure (start_planned, end_planned, date_from, date_to)",
+      "identifiants": "id et *_id = UUID, sauf les clés naturelles TEXT : naf_sector_map.naf_code, estimation_params.key, app_settings.key",
+      "denombrables": "*_count, headcount*, position, version, tokens_*, duration_ms, *_months, *_weeks, attempts, revision, palier, month_* = INTEGER ; size_bytes = BIGINT",
+      "booleens": "is_* = BOOLEAN",
+      "montantsLibres": "estimated_gain, estimated_cost, expected_gain, indicative_cost restent TEXT : le 04 fournit à côté gain_low/gain_high/baseline_value/target_value en NUMERIC pour la valeur chiffrée"
+    },
+    "uuidV7": "AUCUN DEFAULT SQL de génération v7 (PostgreSQL 16 n'a pas uuidv7(), PG18 seulement — 11 §2). DEFAULT gen_random_uuid() (v4) uniquement sur les quatre tables purement serveur sync_log, activity_log, integration_events, llm_calls. processed_ops.op_id n'a délibérément aucun défaut : cet id EST l'op_id de l'outbox du client (11 §4)."
+  },
+  "tables": {
+    "users": {
+      "section": "RÉFÉRENTIELS",
+      "columns": {
+        "id": "uuid",
+        "name": "text",
+        "email": "text",
+        "password_hash": "text",
+        "role": "text",
+        "usage_profile": "text",
+        "habilitated_at": "timestamptz",
+        "is_active": "boolean",
+        "last_login_at": "timestamptz",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "primaryKey": {
+        "name": "users_pkey",
+        "columns": ["id"]
+      },
+      "unique": [
+        {
+          "name": "users_email_key",
+          "columns": ["email"]
+        }
+      ],
+      "foreignKeys": [],
+      "checks": [
+        {
+          "name": "users_role_check",
+          "kind": "enum",
+          "column": "role",
+          "values": ["admin", "consultant", "analyste", "lecteur"]
+        },
+        {
+          "name": "users_usage_profile_check",
+          "kind": "enum",
+          "column": "usage_profile",
+          "values": ["guide_strict", "expert"]
+        }
+      ]
+    },
+    "refresh_tokens": {
+      "section": "RÉFÉRENTIELS",
+      "columns": {
+        "id": "uuid",
+        "user_id": "uuid",
+        "token_hash": "text",
+        "expires_at": "timestamptz",
+        "revoked_at": "timestamptz",
+        "device_label": "text"
+      },
+      "primaryKey": {
+        "name": "refresh_tokens_pkey",
+        "columns": ["id"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "refresh_tokens_user_id_fkey",
+          "columns": ["user_id"],
+          "references": {
+            "table": "users",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": []
+    },
+    "sectors": {
+      "section": "RÉFÉRENTIELS",
+      "columns": {
+        "id": "uuid",
+        "code": "text",
+        "label_fr": "text",
+        "label_en": "text",
+        "is_active": "boolean"
+      },
+      "primaryKey": {
+        "name": "sectors_pkey",
+        "columns": ["id"]
+      },
+      "unique": [
+        {
+          "name": "sectors_code_key",
+          "columns": ["code"]
+        }
+      ],
+      "foreignKeys": [],
+      "checks": []
+    },
+    "services": {
+      "section": "RÉFÉRENTIELS — les 11 fonctions métier de la taxonomie (§16.3)",
+      "columns": {
+        "id": "uuid",
+        "code": "text",
+        "label_fr": "text"
+      },
+      "primaryKey": {
+        "name": "services_pkey",
+        "columns": ["id"]
+      },
+      "unique": [
+        {
+          "name": "services_code_key",
+          "columns": ["code"]
+        }
+      ],
+      "foreignKeys": [],
+      "checks": []
+    },
+    "interlocutor_profiles": {
+      "section": "RÉFÉRENTIELS — group_code = base du calcul de divergence direction/terrain (§32.1)",
+      "columns": {
+        "id": "uuid",
+        "code": "text",
+        "label_fr": "text",
+        "group_code": "text"
+      },
+      "primaryKey": {
+        "name": "interlocutor_profiles_pkey",
+        "columns": ["id"]
+      },
+      "unique": [
+        {
+          "name": "interlocutor_profiles_code_key",
+          "columns": ["code"]
+        }
+      ],
+      "foreignKeys": [],
+      "checks": [
+        {
+          "name": "interlocutor_profiles_group_code_check",
+          "kind": "enum",
+          "column": "group_code",
+          "values": ["direction", "encadrement", "terrain"]
+        }
+      ]
+    },
+    "size_tiers": {
+      "section": "RÉFÉRENTIELS — micro, pme, eti, grand_compte (§2.3)",
+      "columns": {
+        "id": "uuid",
+        "code": "text",
+        "label": "text",
+        "headcount_min": "integer",
+        "headcount_max": "integer"
+      },
+      "primaryKey": {
+        "name": "size_tiers_pkey",
+        "columns": ["id"]
+      },
+      "unique": [
+        {
+          "name": "size_tiers_code_key",
+          "columns": ["code"]
+        }
+      ],
+      "foreignKeys": [],
+      "checks": []
+    },
+    "naf_sector_map": {
+      "section": "RÉFÉRENTIELS — R4 : pré-remplissage secteur",
+      "columns": {
+        "naf_code": "text",
+        "sector_id": "uuid"
+      },
+      "primaryKey": {
+        "name": "naf_sector_map_pkey",
+        "columns": ["naf_code"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "naf_sector_map_sector_id_fkey",
+          "columns": ["sector_id"],
+          "references": {
+            "table": "sectors",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": []
+    },
+    "companies": {
+      "section": "CLIENTS & MISSIONS",
+      "columns": {
+        "id": "uuid",
+        "external_ref": "text",
+        "name": "text",
+        "siren": "text",
+        "naf_code": "text",
+        "sector_id": "uuid",
+        "headcount": "integer",
+        "sites_count": "integer",
+        "countries": "jsonb",
+        "notes": "text",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz",
+        "deleted_at": "timestamptz"
+      },
+      "primaryKey": {
+        "name": "companies_pkey",
+        "columns": ["id"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "companies_sector_id_fkey",
+          "columns": ["sector_id"],
+          "references": {
+            "table": "sectors",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": []
+    },
+    "missions": {
+      "section": "CLIENTS & MISSIONS",
+      "columns": {
+        "id": "uuid",
+        "company_id": "uuid",
+        "parent_mission_id": "uuid",
+        "title": "text",
+        "geo_scope": "text",
+        "country_code": "text",
+        "size_tier_id": "uuid",
+        "active_sectors": "jsonb",
+        "active_blocks": "jsonb",
+        "audit_level": "text",
+        "commercial_offer": "text",
+        "timezone": "text",
+        "nda_ref": "text",
+        "nda_signed_at": "date",
+        "status": "text",
+        "llm_provider": "text",
+        "start_planned": "date",
+        "end_planned": "date",
+        "delivered_at": "timestamptz",
+        "created_by": "uuid",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz",
+        "deleted_at": "timestamptz"
+      },
+      "primaryKey": {
+        "name": "missions_pkey",
+        "columns": ["id"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "missions_company_id_fkey",
+          "columns": ["company_id"],
+          "references": {
+            "table": "companies",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "missions_parent_mission_id_fkey",
+          "columns": ["parent_mission_id"],
+          "references": {
+            "table": "missions",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "missions_size_tier_id_fkey",
+          "columns": ["size_tier_id"],
+          "references": {
+            "table": "size_tiers",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "missions_created_by_fkey",
+          "columns": ["created_by"],
+          "references": {
+            "table": "users",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": [
+        {
+          "name": "missions_geo_scope_check",
+          "kind": "enum",
+          "column": "geo_scope",
+          "values": ["france", "multi_pays"]
+        },
+        {
+          "name": "missions_audit_level_check",
+          "kind": "enum",
+          "column": "audit_level",
+          "values": ["diagnostic_cadrage", "operationnel", "strategique_groupe"]
+        },
+        {
+          "name": "missions_commercial_offer_check",
+          "kind": "enum",
+          "column": "commercial_offer",
+          "values": ["audit_flash", "audit_cible", "mission_pme", "mission_eti", "grand_programme"]
+        },
+        {
+          "name": "missions_status_check",
+          "kind": "enum",
+          "column": "status",
+          "values": ["preparation", "en_cours", "en_analyse", "livree", "cloturee"]
+        },
+        {
+          "name": "missions_llm_provider_check",
+          "kind": "enum",
+          "column": "llm_provider",
+          "values": ["anthropic", "ue_hosted"]
+        }
+      ]
+    },
+    "mission_users": {
+      "section": "CLIENTS & MISSIONS",
+      "columns": {
+        "mission_id": "uuid",
+        "user_id": "uuid",
+        "role_on_mission": "text"
+      },
+      "primaryKey": {
+        "name": "mission_users_pkey",
+        "columns": ["mission_id", "user_id"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "mission_users_mission_id_fkey",
+          "columns": ["mission_id"],
+          "references": {
+            "table": "missions",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "mission_users_user_id_fkey",
+          "columns": ["user_id"],
+          "references": {
+            "table": "users",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": [
+        {
+          "name": "mission_users_role_on_mission_check",
+          "kind": "enum",
+          "column": "role_on_mission",
+          "values": ["lead", "consultant", "analyste", "lecteur"]
+        }
+      ]
+    },
+    "org_units": {
+      "section": "ORGANISATION (§16.2, §25.3, §26.3, R6)",
+      "columns": {
+        "id": "uuid",
+        "mission_id": "uuid",
+        "parent_id": "uuid",
+        "kind": "text",
+        "name": "text",
+        "country_code": "text",
+        "timezone": "text",
+        "headcount": "integer",
+        "service_ref_id": "uuid",
+        "sector_id": "uuid",
+        "in_scope": "boolean",
+        "status": "text",
+        "proposed_by": "uuid",
+        "merged_into_id": "uuid",
+        "position": "integer",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "primaryKey": {
+        "name": "org_units_pkey",
+        "columns": ["id"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "org_units_mission_id_fkey",
+          "columns": ["mission_id"],
+          "references": {
+            "table": "missions",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "org_units_parent_id_fkey",
+          "columns": ["parent_id"],
+          "references": {
+            "table": "org_units",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "org_units_service_ref_id_fkey",
+          "columns": ["service_ref_id"],
+          "references": {
+            "table": "services",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "org_units_sector_id_fkey",
+          "columns": ["sector_id"],
+          "references": {
+            "table": "sectors",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "org_units_proposed_by_fkey",
+          "columns": ["proposed_by"],
+          "references": {
+            "table": "users",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "org_units_merged_into_id_fkey",
+          "columns": ["merged_into_id"],
+          "references": {
+            "table": "org_units",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": [
+        {
+          "name": "org_units_kind_check",
+          "kind": "enum",
+          "column": "kind",
+          "values": [
+            "groupe",
+            "filiale",
+            "etablissement",
+            "direction",
+            "service",
+            "equipe",
+            "poste"
+          ]
+        },
+        {
+          "name": "org_units_status_check",
+          "kind": "enum",
+          "column": "status",
+          "values": ["active", "proposee", "fusionnee"]
+        }
+      ]
+    },
+    "blocks": {
+      "section": "QUESTIONNAIRE — seed : 9 blocs (§2.1)",
+      "columns": {
+        "id": "uuid",
+        "code": "text",
+        "label_fr": "text",
+        "position": "integer",
+        "is_default": "boolean",
+        "description": "text"
+      },
+      "primaryKey": {
+        "name": "blocks_pkey",
+        "columns": ["id"]
+      },
+      "unique": [
+        {
+          "name": "blocks_code_key",
+          "columns": ["code"]
+        }
+      ],
+      "foreignKeys": [],
+      "checks": []
+    },
+    "questions": {
+      "section": "QUESTIONNAIRE",
+      "columns": {
+        "id": "uuid",
+        "code": "text",
+        "block_id": "uuid",
+        "version": "integer",
+        "status": "text",
+        "text_fr": "text",
+        "guidance_fr": "text",
+        "answer_type": "text",
+        "options": "jsonb",
+        "allow_range": "boolean",
+        "weight": "numeric",
+        "scoring": "jsonb",
+        "criticality": "text",
+        "expected_source": "text",
+        "sectors": "jsonb",
+        "target_services": "jsonb",
+        "levels": "jsonb",
+        "headcount_min": "integer",
+        "headcount_max": "integer",
+        "profiles": "jsonb",
+        "geo": "text",
+        "display_if": "jsonb",
+        "origin": "text",
+        "origin_mission_id": "uuid",
+        "created_by": "uuid",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "primaryKey": {
+        "name": "questions_pkey",
+        "columns": ["id"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "questions_block_id_fkey",
+          "columns": ["block_id"],
+          "references": {
+            "table": "blocks",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "questions_origin_mission_id_fkey",
+          "columns": ["origin_mission_id"],
+          "references": {
+            "table": "missions",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "questions_created_by_fkey",
+          "columns": ["created_by"],
+          "references": {
+            "table": "users",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": [
+        {
+          "name": "questions_status_check",
+          "kind": "enum",
+          "column": "status",
+          "values": ["draft", "active", "archived"]
+        },
+        {
+          "name": "questions_answer_type_check",
+          "kind": "enum",
+          "column": "answer_type",
+          "values": [
+            "yes_no",
+            "scale_1_5",
+            "single_choice",
+            "multi_choice",
+            "free_text",
+            "number",
+            "percent",
+            "duration",
+            "money",
+            "date",
+            "table"
+          ]
+        },
+        {
+          "name": "questions_criticality_check",
+          "kind": "enum",
+          "column": "criticality",
+          "values": ["bloquant", "important", "informatif"]
+        },
+        {
+          "name": "questions_expected_source_check",
+          "kind": "enum",
+          "column": "expected_source",
+          "values": ["entretien", "observation", "demonstration", "document", "releve"]
+        },
+        {
+          "name": "questions_geo_check",
+          "kind": "enum",
+          "column": "geo",
+          "values": ["france", "multi_pays", "tous"]
+        },
+        {
+          "name": "questions_origin_check",
+          "kind": "enum",
+          "column": "origin",
+          "values": ["banque", "ad_hoc"]
+        }
+      ]
+    },
+    "question_translations": {
+      "section": "QUESTIONNAIRE (V2)",
+      "columns": {
+        "question_id": "uuid",
+        "lang": "text",
+        "text": "text",
+        "guidance": "text"
+      },
+      "primaryKey": {
+        "name": "question_translations_pkey",
+        "columns": ["question_id", "lang"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "question_translations_question_id_fkey",
+          "columns": ["question_id"],
+          "references": {
+            "table": "questions",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": []
+    },
+    "mission_questions": {
+      "section": "QUESTIONNAIRE — figeage COMPLET V2.9 (la mission est autonome de la banque)",
+      "columns": {
+        "id": "uuid",
+        "mission_id": "uuid",
+        "question_id": "uuid",
+        "question_version": "integer",
+        "text_snapshot": "text",
+        "options_snapshot": "jsonb",
+        "weight_snapshot": "numeric",
+        "scoring_snapshot": "jsonb",
+        "guidance_snapshot": "text",
+        "answer_type_snapshot": "text",
+        "criticality_snapshot": "text",
+        "allow_range_snapshot": "boolean",
+        "position": "integer",
+        "added_ad_hoc": "boolean"
+      },
+      "primaryKey": {
+        "name": "mission_questions_pkey",
+        "columns": ["id"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "mission_questions_mission_id_fkey",
+          "columns": ["mission_id"],
+          "references": {
+            "table": "missions",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "mission_questions_question_id_fkey",
+          "columns": ["question_id"],
+          "references": {
+            "table": "questions",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": []
+    },
+    "interviews": {
+      "section": "COLLECTE — SESSIONS (§27.1, §25.2, §25.6, §28.1)",
+      "columns": {
+        "id": "uuid",
+        "mission_id": "uuid",
+        "conducted_by": "uuid",
+        "kind": "text",
+        "mode": "text",
+        "linked_review_answer_id": "uuid",
+        "person_name": "text",
+        "person_role": "text",
+        "person_service_id": "uuid",
+        "person_email": "text",
+        "participants": "jsonb",
+        "org_unit_id": "uuid",
+        "document_request_id": "uuid",
+        "consent_given": "boolean",
+        "consent_audio": "boolean",
+        "consented_at": "timestamptz",
+        "information_notice_version": "text",
+        "notice_shown_at": "timestamptz",
+        "scheduled_at": "timestamptz",
+        "scheduled_duration_min": "integer",
+        "schedule_status": "text",
+        "status": "text",
+        "started_at": "timestamptz",
+        "ended_at": "timestamptz",
+        "general_notes": "text",
+        "client_created_at": "timestamptz",
+        "client_updated_at": "timestamptz",
+        "synced_at": "timestamptz",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "primaryKey": {
+        "name": "interviews_pkey",
+        "columns": ["id"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "interviews_mission_id_fkey",
+          "columns": ["mission_id"],
+          "references": {
+            "table": "missions",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "interviews_conducted_by_fkey",
+          "columns": ["conducted_by"],
+          "references": {
+            "table": "users",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "interviews_person_service_id_fkey",
+          "columns": ["person_service_id"],
+          "references": {
+            "table": "services",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "interviews_org_unit_id_fkey",
+          "columns": ["org_unit_id"],
+          "references": {
+            "table": "org_units",
+            "columns": ["id"]
+          }
+        },
+        {
+          "$note": "FK CIRCULAIRE — posée par ALTER TABLE en fin de migration (04 §7, 0008_fk_differees.sql)",
+          "name": "interviews_linked_review_answer_id_fkey",
+          "columns": ["linked_review_answer_id"],
+          "references": {
+            "table": "answers",
+            "columns": ["id"]
+          }
+        },
+        {
+          "$note": "FK CIRCULAIRE — posée par ALTER TABLE en fin de migration (04 §7, 0008_fk_differees.sql)",
+          "name": "interviews_document_request_id_fkey",
+          "columns": ["document_request_id"],
+          "references": {
+            "table": "document_requests",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": [
+        {
+          "name": "interviews_kind_check",
+          "kind": "enum",
+          "column": "kind",
+          "values": [
+            "entretien",
+            "observation",
+            "demonstration",
+            "analyse_documentaire",
+            "releve_donnees",
+            "atelier"
+          ]
+        },
+        {
+          "$note": "défaut APPLICATIF V2.8 : 'sur_site' si kind='entretien', NULL sinon — un DEFAULT SQL conditionnel n'existe pas",
+          "name": "interviews_mode_check",
+          "kind": "enum",
+          "column": "mode",
+          "values": ["sur_site", "distanciel", "complementaire"]
+        },
+        {
+          "name": "interviews_schedule_status_check",
+          "kind": "enum",
+          "column": "schedule_status",
+          "values": ["a_planifier", "planifie", "confirme", "realise", "reporte", "annule"]
+        },
+        {
+          "name": "interviews_status_check",
+          "kind": "enum",
+          "column": "status",
+          "values": ["non_demarre", "en_cours", "termine"]
+        }
+      ]
+    },
+    "answers": {
+      "section": "COLLECTE — UNE réponse par question et par session (V2.2 §32.6)",
+      "columns": {
+        "id": "uuid",
+        "interview_id": "uuid",
+        "mission_question_id": "uuid",
+        "value": "jsonb",
+        "source": "text",
+        "withheld": "boolean",
+        "withheld_reason": "text",
+        "hors_parcours": "boolean",
+        "note": "text",
+        "flag_review": "boolean",
+        "review_reason": "text",
+        "not_applicable": "boolean",
+        "na_reason": "text",
+        "question_text_snapshot": "text",
+        "revision": "integer",
+        "client_created_at": "timestamptz",
+        "client_updated_at": "timestamptz",
+        "synced_at": "timestamptz",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "primaryKey": {
+        "name": "answers_pkey",
+        "columns": ["id"]
+      },
+      "unique": [
+        {
+          "$note": "CRITÈRE D'ACCEPTATION L1 — toute re-réponse est une révision (answer_revisions), jamais une seconde ligne",
+          "name": "answers_interview_id_mission_question_id_key",
+          "columns": ["interview_id", "mission_question_id"]
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "answers_interview_id_fkey",
+          "columns": ["interview_id"],
+          "references": {
+            "table": "interviews",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "answers_mission_question_id_fkey",
+          "columns": ["mission_question_id"],
+          "references": {
+            "table": "mission_questions",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": [
+        {
+          "name": "answers_source_check",
+          "kind": "enum",
+          "column": "source",
+          "values": ["entretien", "observation", "demonstration", "document", "releve"]
+        },
+        {
+          "name": "answers_withheld_reason_check",
+          "kind": "enum",
+          "column": "withheld_reason",
+          "values": ["confidentiel", "non_disponible", "hors_perimetre", "autre"]
+        }
+      ]
+    },
+    "answer_revisions": {
+      "section": "COLLECTE — traçabilité §9.3/§9.9 (invariant 7)",
+      "columns": {
+        "id": "uuid",
+        "answer_id": "uuid",
+        "previous_value": "jsonb",
+        "changed_by": "uuid",
+        "changed_at": "timestamptz",
+        "change_origin": "text"
+      },
+      "primaryKey": {
+        "name": "answer_revisions_pkey",
+        "columns": ["id"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "answer_revisions_answer_id_fkey",
+          "columns": ["answer_id"],
+          "references": {
+            "table": "answers",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "answer_revisions_changed_by_fkey",
+          "columns": ["changed_by"],
+          "references": {
+            "table": "users",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": [
+        {
+          "name": "answer_revisions_change_origin_check",
+          "kind": "enum",
+          "column": "change_origin",
+          "values": ["terrain", "sync_arbitrage", "correction_siege"]
+        }
+      ]
+    },
+    "attachments": {
+      "section": "COLLECTE — 'note' intégré au CHECK (P1-5)",
+      "columns": {
+        "id": "uuid",
+        "interview_id": "uuid",
+        "answer_id": "uuid",
+        "mission_id": "uuid",
+        "kind": "text",
+        "content": "text",
+        "filename": "text",
+        "mime": "text",
+        "size_bytes": "bigint",
+        "storage_key": "text",
+        "transcription": "text",
+        "purge_after": "date",
+        "client_created_at": "timestamptz",
+        "client_updated_at": "timestamptz",
+        "synced_at": "timestamptz",
+        "created_at": "timestamptz"
+      },
+      "primaryKey": {
+        "name": "attachments_pkey",
+        "columns": ["id"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "attachments_interview_id_fkey",
+          "columns": ["interview_id"],
+          "references": {
+            "table": "interviews",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "attachments_answer_id_fkey",
+          "columns": ["answer_id"],
+          "references": {
+            "table": "answers",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "attachments_mission_id_fkey",
+          "columns": ["mission_id"],
+          "references": {
+            "table": "missions",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": [
+        {
+          "name": "attachments_kind_check",
+          "kind": "enum",
+          "column": "kind",
+          "values": ["photo", "document", "audio", "note"]
+        }
+      ]
+    },
+    "tools_inventory": {
+      "section": "INVENTAIRES & AI ACT (§27.3)",
+      "columns": {
+        "id": "uuid",
+        "mission_id": "uuid",
+        "org_unit_id": "uuid",
+        "name": "text",
+        "category": "text",
+        "vendor": "text",
+        "usage_description": "text",
+        "users_count": "integer",
+        "criticality": "text",
+        "data_quality_note": "text",
+        "source_session_id": "uuid",
+        "created_at": "timestamptz"
+      },
+      "primaryKey": {
+        "name": "tools_inventory_pkey",
+        "columns": ["id"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "tools_inventory_mission_id_fkey",
+          "columns": ["mission_id"],
+          "references": {
+            "table": "missions",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "tools_inventory_org_unit_id_fkey",
+          "columns": ["org_unit_id"],
+          "references": {
+            "table": "org_units",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "tools_inventory_source_session_id_fkey",
+          "columns": ["source_session_id"],
+          "references": {
+            "table": "interviews",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": [
+        {
+          "name": "tools_inventory_category_check",
+          "kind": "enum",
+          "column": "category",
+          "values": [
+            "erp",
+            "crm",
+            "bureautique",
+            "metier",
+            "ia",
+            "fichier_excel",
+            "papier",
+            "autre"
+          ]
+        },
+        {
+          "name": "tools_inventory_criticality_check",
+          "kind": "enum",
+          "column": "criticality",
+          "values": ["critique", "importante", "faible"]
+        }
+      ]
+    },
+    "ai_systems": {
+      "section": "INVENTAIRES & AI ACT — bloc 9 (§16.2)",
+      "columns": {
+        "id": "uuid",
+        "mission_id": "uuid",
+        "org_unit_id": "uuid",
+        "name": "text",
+        "vendor": "text",
+        "usage_description": "text",
+        "data_categories": "jsonb",
+        "service_id": "uuid",
+        "business_owner": "text",
+        "actor_role": "text",
+        "risk_level": "text",
+        "obligations": "jsonb",
+        "compliance_status": "text",
+        "source": "text",
+        "notes": "text",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "primaryKey": {
+        "name": "ai_systems_pkey",
+        "columns": ["id"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "ai_systems_mission_id_fkey",
+          "columns": ["mission_id"],
+          "references": {
+            "table": "missions",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "ai_systems_org_unit_id_fkey",
+          "columns": ["org_unit_id"],
+          "references": {
+            "table": "org_units",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "ai_systems_service_id_fkey",
+          "columns": ["service_id"],
+          "references": {
+            "table": "services",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": [
+        {
+          "name": "ai_systems_actor_role_check",
+          "kind": "enum",
+          "column": "actor_role",
+          "values": ["deployeur", "fournisseur", "les_deux"]
+        },
+        {
+          "name": "ai_systems_risk_level_check",
+          "kind": "enum",
+          "column": "risk_level",
+          "values": ["inacceptable", "haut_risque", "risque_limite_art50", "minimal"]
+        },
+        {
+          "name": "ai_systems_compliance_status_check",
+          "kind": "enum",
+          "column": "compliance_status",
+          "values": ["conforme", "partiel", "non_conforme", "a_qualifier"]
+        },
+        {
+          "name": "ai_systems_source_check",
+          "kind": "enum",
+          "column": "source",
+          "values": ["declare", "detecte_entretien"]
+        }
+      ]
+    },
+    "block_scores": {
+      "section": "ANALYSE, SCORING & CONSTATS (§32.1)",
+      "columns": {
+        "mission_id": "uuid",
+        "block_id": "uuid",
+        "score": "numeric",
+        "computed_at": "timestamptz",
+        "details": "jsonb",
+        "completeness": "numeric",
+        "is_indicative": "boolean"
+      },
+      "primaryKey": {
+        "name": "block_scores_pkey",
+        "columns": ["mission_id", "block_id"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "block_scores_mission_id_fkey",
+          "columns": ["mission_id"],
+          "references": {
+            "table": "missions",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "block_scores_block_id_fkey",
+          "columns": ["block_id"],
+          "references": {
+            "table": "blocks",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": []
+    },
+    "unit_scores": {
+      "section": "ANALYSE, SCORING & CONSTATS (§16.4)",
+      "columns": {
+        "mission_id": "uuid",
+        "org_unit_id": "uuid",
+        "block_id": "uuid",
+        "score": "numeric",
+        "answers_count": "integer",
+        "completeness": "numeric",
+        "computed_at": "timestamptz"
+      },
+      "primaryKey": {
+        "name": "unit_scores_pkey",
+        "columns": ["mission_id", "org_unit_id", "block_id"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "unit_scores_mission_id_fkey",
+          "columns": ["mission_id"],
+          "references": {
+            "table": "missions",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "unit_scores_org_unit_id_fkey",
+          "columns": ["org_unit_id"],
+          "references": {
+            "table": "org_units",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "unit_scores_block_id_fkey",
+          "columns": ["block_id"],
+          "references": {
+            "table": "blocks",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": []
+    },
+    "findings": {
+      "section": "ANALYSE, SCORING & CONSTATS (§16.5)",
+      "columns": {
+        "id": "uuid",
+        "mission_id": "uuid",
+        "org_unit_id": "uuid",
+        "block_id": "uuid",
+        "severity": "text",
+        "title": "text",
+        "statement": "text",
+        "sources": "jsonb",
+        "recommendation": "text",
+        "owner_suggested": "text",
+        "remediation_status": "text",
+        "wave": "text",
+        "status": "text",
+        "created_by": "uuid",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "primaryKey": {
+        "name": "findings_pkey",
+        "columns": ["id"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "findings_mission_id_fkey",
+          "columns": ["mission_id"],
+          "references": {
+            "table": "missions",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "findings_org_unit_id_fkey",
+          "columns": ["org_unit_id"],
+          "references": {
+            "table": "org_units",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "findings_block_id_fkey",
+          "columns": ["block_id"],
+          "references": {
+            "table": "blocks",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "findings_created_by_fkey",
+          "columns": ["created_by"],
+          "references": {
+            "table": "users",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": [
+        {
+          "name": "findings_severity_check",
+          "kind": "enum",
+          "column": "severity",
+          "values": ["drapeau_rouge", "majeur", "mineur", "point_fort"]
+        },
+        {
+          "name": "findings_remediation_status_check",
+          "kind": "enum",
+          "column": "remediation_status",
+          "values": ["a_traiter", "planifie", "en_cours", "clos", "abandonne"]
+        },
+        {
+          "name": "findings_wave_check",
+          "kind": "enum",
+          "column": "wave",
+          "values": ["quick_win", "chantier", "transformation"]
+        },
+        {
+          "name": "findings_status_check",
+          "kind": "enum",
+          "column": "status",
+          "values": ["brouillon", "valide"]
+        }
+      ]
+    },
+    "use_cases": {
+      "section": "CAS D'USAGE & FEUILLE DE ROUTE (§20.3, §28)",
+      "columns": {
+        "id": "uuid",
+        "mission_id": "uuid",
+        "org_unit_id": "uuid",
+        "title": "text",
+        "description": "text",
+        "service_id": "uuid",
+        "status": "text",
+        "conditions": "text",
+        "estimated_gain": "text",
+        "estimated_cost": "text",
+        "complexity": "text",
+        "delay_months": "integer",
+        "risk_level": "text",
+        "wave": "text",
+        "baseline_value": "numeric",
+        "baseline_unit": "text",
+        "baseline_source_session_id": "uuid",
+        "target_value": "numeric",
+        "data_required": "text",
+        "data_available": "text",
+        "approach": "text",
+        "success_metric": "text",
+        "assumptions": "text",
+        "gain_low": "numeric",
+        "gain_high": "numeric",
+        "payback_months": "integer",
+        "taxonomy_ref": "text",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "primaryKey": {
+        "name": "use_cases_pkey",
+        "columns": ["id"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "use_cases_mission_id_fkey",
+          "columns": ["mission_id"],
+          "references": {
+            "table": "missions",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "use_cases_org_unit_id_fkey",
+          "columns": ["org_unit_id"],
+          "references": {
+            "table": "org_units",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "use_cases_service_id_fkey",
+          "columns": ["service_id"],
+          "references": {
+            "table": "services",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "use_cases_baseline_source_session_id_fkey",
+          "columns": ["baseline_source_session_id"],
+          "references": {
+            "table": "interviews",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": [
+        {
+          "name": "use_cases_status_check",
+          "kind": "enum",
+          "column": "status",
+          "values": ["candidate", "short_list", "ecarte", "retenu"]
+        },
+        {
+          "name": "use_cases_complexity_check",
+          "kind": "enum",
+          "column": "complexity",
+          "values": ["faible", "moyenne", "elevee"]
+        },
+        {
+          "name": "use_cases_risk_level_check",
+          "kind": "enum",
+          "column": "risk_level",
+          "values": ["faible", "moyen", "eleve"]
+        },
+        {
+          "name": "use_cases_wave_check",
+          "kind": "enum",
+          "column": "wave",
+          "values": ["quick_win", "chantier", "transformation"]
+        },
+        {
+          "name": "use_cases_data_available_check",
+          "kind": "enum",
+          "column": "data_available",
+          "values": ["oui", "partiel", "non", "a_verifier"]
+        },
+        {
+          "name": "use_cases_approach_check",
+          "kind": "enum",
+          "column": "approach",
+          "values": ["acheter", "integrer", "developper"]
+        }
+      ]
+    },
+    "roadmap_items": {
+      "section": "CAS D'USAGE & FEUILLE DE ROUTE (§20.3, §28)",
+      "columns": {
+        "id": "uuid",
+        "mission_id": "uuid",
+        "use_case_id": "uuid",
+        "palier": "integer",
+        "month_start": "integer",
+        "month_end": "integer",
+        "description": "text",
+        "expected_gain": "text",
+        "kpi": "text",
+        "assimilation_weeks": "integer",
+        "baseline_value": "numeric",
+        "baseline_unit": "text",
+        "target_value": "numeric",
+        "depends_on": "jsonb",
+        "scenario": "text",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "primaryKey": {
+        "name": "roadmap_items_pkey",
+        "columns": ["id"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "roadmap_items_mission_id_fkey",
+          "columns": ["mission_id"],
+          "references": {
+            "table": "missions",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "roadmap_items_use_case_id_fkey",
+          "columns": ["use_case_id"],
+          "references": {
+            "table": "use_cases",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": [
+        {
+          "name": "roadmap_items_scenario_check",
+          "kind": "enum",
+          "column": "scenario",
+          "values": ["standard", "prudent", "ambitieux"]
+        }
+      ]
+    },
+    "report_sections": {
+      "section": "RAPPORT",
+      "columns": {
+        "id": "uuid",
+        "mission_id": "uuid",
+        "block_id": "uuid",
+        "section_code": "text",
+        "position": "integer",
+        "raw_data": "jsonb",
+        "generated_text": "text",
+        "generated_at": "timestamptz",
+        "llm_model": "text",
+        "llm_tokens": "integer",
+        "llm_cost_eur": "numeric",
+        "validated_text": "text",
+        "validated_by": "uuid",
+        "validated_at": "timestamptz",
+        "status": "text"
+      },
+      "primaryKey": {
+        "name": "report_sections_pkey",
+        "columns": ["id"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "report_sections_mission_id_fkey",
+          "columns": ["mission_id"],
+          "references": {
+            "table": "missions",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "report_sections_block_id_fkey",
+          "columns": ["block_id"],
+          "references": {
+            "table": "blocks",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "report_sections_validated_by_fkey",
+          "columns": ["validated_by"],
+          "references": {
+            "table": "users",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": [
+        {
+          "name": "report_sections_status_check",
+          "kind": "enum",
+          "column": "status",
+          "values": ["brut", "genere", "valide"]
+        }
+      ]
+    },
+    "report_templates": {
+      "section": "RAPPORT — clé = NIVEAU D'AUDIT (V2.2 §32.6, §26.2)",
+      "columns": {
+        "id": "uuid",
+        "name": "text",
+        "audit_level": "text",
+        "kind": "text",
+        "storage_key": "text",
+        "version": "integer",
+        "is_active": "boolean",
+        "created_at": "timestamptz"
+      },
+      "primaryKey": {
+        "name": "report_templates_pkey",
+        "columns": ["id"]
+      },
+      "unique": [],
+      "foreignKeys": [],
+      "checks": [
+        {
+          "name": "report_templates_audit_level_check",
+          "kind": "enum",
+          "column": "audit_level",
+          "values": ["diagnostic_cadrage", "operationnel", "strategique_groupe"]
+        },
+        {
+          "name": "report_templates_kind_check",
+          "kind": "enum",
+          "column": "kind",
+          "values": ["rapport", "point_etape"]
+        }
+      ]
+    },
+    "report_files": {
+      "section": "RAPPORT",
+      "columns": {
+        "id": "uuid",
+        "mission_id": "uuid",
+        "template_id": "uuid",
+        "kind": "text",
+        "storage_key": "text",
+        "generated_by": "uuid",
+        "generated_at": "timestamptz"
+      },
+      "primaryKey": {
+        "name": "report_files_pkey",
+        "columns": ["id"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "report_files_mission_id_fkey",
+          "columns": ["mission_id"],
+          "references": {
+            "table": "missions",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "report_files_template_id_fkey",
+          "columns": ["template_id"],
+          "references": {
+            "table": "report_templates",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "report_files_generated_by_fkey",
+          "columns": ["generated_by"],
+          "references": {
+            "table": "users",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": [
+        {
+          "name": "report_files_kind_check",
+          "kind": "enum",
+          "column": "kind",
+          "values": ["docx", "pdf", "pptx"]
+        }
+      ]
+    },
+    "scoping_estimates": {
+      "section": "CADRAGE, CHIFFRAGE & PILOTAGE — P1-3 : AUCUNE colonne financière ici",
+      "columns": {
+        "id": "uuid",
+        "company_id": "uuid",
+        "mission_id": "uuid",
+        "scope_tree": "jsonb",
+        "planned_interviews": "jsonb",
+        "workload_days": "numeric",
+        "team_size": "integer",
+        "calendar_days": "integer",
+        "scenario_label": "text",
+        "status": "text",
+        "created_by": "uuid",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "primaryKey": {
+        "name": "scoping_estimates_pkey",
+        "columns": ["id"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "scoping_estimates_company_id_fkey",
+          "columns": ["company_id"],
+          "references": {
+            "table": "companies",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "scoping_estimates_mission_id_fkey",
+          "columns": ["mission_id"],
+          "references": {
+            "table": "missions",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "scoping_estimates_created_by_fkey",
+          "columns": ["created_by"],
+          "references": {
+            "table": "users",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": [
+        {
+          "name": "scoping_estimates_status_check",
+          "kind": "enum",
+          "column": "status",
+          "values": ["brouillon", "envoye_console", "signe", "abandonne"]
+        }
+      ]
+    },
+    "scoping_financials": {
+      "section": "CADRAGE — table SÉPARÉE EXPRÈS (P1-3, exigence E21) ; accès routes ADMIN exclusivement",
+      "columns": {
+        "scoping_estimate_id": "uuid",
+        "daily_rates": "jsonb",
+        "travel_costs": "numeric",
+        "total_amount": "numeric",
+        "currency": "text",
+        "updated_by": "uuid",
+        "updated_at": "timestamptz"
+      },
+      "primaryKey": {
+        "name": "scoping_financials_pkey",
+        "columns": ["scoping_estimate_id"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "scoping_financials_scoping_estimate_id_fkey",
+          "columns": ["scoping_estimate_id"],
+          "references": {
+            "table": "scoping_estimates",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "scoping_financials_updated_by_fkey",
+          "columns": ["updated_by"],
+          "references": {
+            "table": "users",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": []
+    },
+    "estimation_params": {
+      "section": "CADRAGE — clés normées seedées au lot L1 (11 §5)",
+      "columns": {
+        "key": "text",
+        "value": "numeric",
+        "unit": "text",
+        "description": "text",
+        "updated_by": "uuid",
+        "updated_at": "timestamptz"
+      },
+      "primaryKey": {
+        "name": "estimation_params_pkey",
+        "columns": ["key"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "estimation_params_updated_by_fkey",
+          "columns": ["updated_by"],
+          "references": {
+            "table": "users",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": []
+    },
+    "work_assignments": {
+      "section": "CADRAGE, CHIFFRAGE & PILOTAGE",
+      "columns": {
+        "id": "uuid",
+        "mission_id": "uuid",
+        "user_id": "uuid",
+        "org_unit_id": "uuid",
+        "planned_interviews": "integer",
+        "planned_days": "numeric",
+        "date_from": "date",
+        "date_to": "date"
+      },
+      "primaryKey": {
+        "name": "work_assignments_pkey",
+        "columns": ["id"]
+      },
+      "unique": [
+        {
+          "name": "work_assignments_mission_id_user_id_org_unit_id_key",
+          "columns": ["mission_id", "user_id", "org_unit_id"]
+        }
+      ],
+      "foreignKeys": [
+        {
+          "name": "work_assignments_mission_id_fkey",
+          "columns": ["mission_id"],
+          "references": {
+            "table": "missions",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "work_assignments_user_id_fkey",
+          "columns": ["user_id"],
+          "references": {
+            "table": "users",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "work_assignments_org_unit_id_fkey",
+          "columns": ["org_unit_id"],
+          "references": {
+            "table": "org_units",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": []
+    },
+    "mission_rebaselines": {
+      "section": "CADRAGE — §25.1 (Phase 2 ; processus manuel mission 1, voir 07 §15)",
+      "columns": {
+        "id": "uuid",
+        "mission_id": "uuid",
+        "delta_interviews": "integer",
+        "delta_days": "numeric",
+        "decision": "text",
+        "note": "text",
+        "decided_by": "uuid",
+        "decided_at": "timestamptz"
+      },
+      "primaryKey": {
+        "name": "mission_rebaselines_pkey",
+        "columns": ["id"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "mission_rebaselines_mission_id_fkey",
+          "columns": ["mission_id"],
+          "references": {
+            "table": "missions",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "mission_rebaselines_decided_by_fkey",
+          "columns": ["decided_by"],
+          "references": {
+            "table": "users",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": [
+        {
+          "name": "mission_rebaselines_decision_check",
+          "kind": "enum",
+          "column": "decision",
+          "values": ["absorbe", "avenant", "descope"]
+        }
+      ]
+    },
+    "document_requests": {
+      "section": "CADRAGE — §27.1",
+      "columns": {
+        "id": "uuid",
+        "mission_id": "uuid",
+        "org_unit_id": "uuid",
+        "label": "text",
+        "description": "text",
+        "status": "text",
+        "attachment_id": "uuid",
+        "requested_at": "timestamptz",
+        "received_at": "timestamptz"
+      },
+      "primaryKey": {
+        "name": "document_requests_pkey",
+        "columns": ["id"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "document_requests_mission_id_fkey",
+          "columns": ["mission_id"],
+          "references": {
+            "table": "missions",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "document_requests_org_unit_id_fkey",
+          "columns": ["org_unit_id"],
+          "references": {
+            "table": "org_units",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "document_requests_attachment_id_fkey",
+          "columns": ["attachment_id"],
+          "references": {
+            "table": "attachments",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": [
+        {
+          "name": "document_requests_status_check",
+          "kind": "enum",
+          "column": "status",
+          "values": ["demande", "recu", "partiel", "non_disponible"]
+        }
+      ]
+    },
+    "step_validations": {
+      "section": "PILOTAGE — énumération fermée V2.2 §32.2 (P1-1)",
+      "columns": {
+        "id": "uuid",
+        "mission_id": "uuid",
+        "step_code": "text",
+        "scope": "text",
+        "scope_id": "uuid",
+        "validated_by": "uuid",
+        "validated_at": "timestamptz",
+        "was_override": "boolean",
+        "override_reason": "text"
+      },
+      "primaryKey": {
+        "name": "step_validations_pkey",
+        "columns": ["id"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "step_validations_mission_id_fkey",
+          "columns": ["mission_id"],
+          "references": {
+            "table": "missions",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "step_validations_validated_by_fkey",
+          "columns": ["validated_by"],
+          "references": {
+            "table": "users",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": [
+        {
+          "name": "step_validations_step_code_check",
+          "kind": "enum",
+          "column": "step_code",
+          "values": [
+            "cadrage",
+            "preparation",
+            "collecte",
+            "analyse",
+            "rapport",
+            "livraison",
+            "entretien",
+            "unite"
+          ]
+        },
+        {
+          "name": "step_validations_scope_check",
+          "kind": "enum",
+          "column": "scope",
+          "values": ["mission", "interview", "org_unit"]
+        },
+        {
+          "$note": "04 §7 : « Cohérence : step_code ∈ {entretien}→scope=interview · {unite}→scope=org_unit · autres→scope=mission ». Une RÈGLE, donc une CHECK composite, pas un commentaire.",
+          "name": "step_validations_scope_coherence_check",
+          "kind": "expression",
+          "expression": "(((step_code = 'entretien') AND (scope = 'interview')) OR ((step_code = 'unite') AND (scope = 'org_unit')) OR ((step_code = ANY (ARRAY['cadrage', 'preparation', 'collecte', 'analyse', 'rapport', 'livraison'])) AND (scope = 'mission')))"
+        }
+      ]
+    },
+    "alerts": {
+      "section": "PILOTAGE — P1-2 §20.4 ; générées par jobs + triggers, JAMAIS supprimées",
+      "columns": {
+        "id": "uuid",
+        "mission_id": "uuid",
+        "org_unit_id": "uuid",
+        "user_id": "uuid",
+        "type": "text",
+        "severity": "text",
+        "message": "text",
+        "entity_type": "text",
+        "entity_id": "uuid",
+        "status": "text",
+        "ack_by": "uuid",
+        "ack_reason": "text",
+        "ack_at": "timestamptz",
+        "created_at": "timestamptz"
+      },
+      "primaryKey": {
+        "name": "alerts_pkey",
+        "columns": ["id"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "alerts_mission_id_fkey",
+          "columns": ["mission_id"],
+          "references": {
+            "table": "missions",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "alerts_org_unit_id_fkey",
+          "columns": ["org_unit_id"],
+          "references": {
+            "table": "org_units",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "alerts_user_id_fkey",
+          "columns": ["user_id"],
+          "references": {
+            "table": "users",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "alerts_ack_by_fkey",
+          "columns": ["ack_by"],
+          "references": {
+            "table": "users",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": [
+        {
+          "name": "alerts_status_check",
+          "kind": "enum",
+          "column": "status",
+          "values": ["active", "acquittee", "resolue"]
+        }
+      ]
+    },
+    "processed_ops": {
+      "section": "TRANSVERSE — déduplication du push V2.3 (§9.2), rétention 30 j",
+      "columns": {
+        "op_id": "uuid",
+        "batch_id": "uuid",
+        "result": "text",
+        "processed_at": "timestamptz"
+      },
+      "primaryKey": {
+        "name": "processed_ops_pkey",
+        "columns": ["op_id"]
+      },
+      "unique": [],
+      "foreignKeys": [],
+      "checks": []
+    },
+    "sync_log": {
+      "section": "TRANSVERSE — outbox_remaining = LA donnée du garde-fou reset mot de passe (§9.7)",
+      "columns": {
+        "id": "uuid",
+        "user_id": "uuid",
+        "device_id": "text",
+        "direction": "text",
+        "items_count": "integer",
+        "conflicts_count": "integer",
+        "outbox_remaining": "integer",
+        "started_at": "timestamptz",
+        "ended_at": "timestamptz",
+        "status": "text",
+        "error": "text"
+      },
+      "primaryKey": {
+        "name": "sync_log_pkey",
+        "columns": ["id"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "sync_log_user_id_fkey",
+          "columns": ["user_id"],
+          "references": {
+            "table": "users",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": [
+        {
+          "name": "sync_log_direction_check",
+          "kind": "enum",
+          "column": "direction",
+          "values": ["push", "pull"]
+        }
+      ]
+    },
+    "integration_events": {
+      "section": "TRANSVERSE — anti-rejeu V2.2 §8.6",
+      "columns": {
+        "id": "uuid",
+        "direction": "text",
+        "system": "text",
+        "event_type": "text",
+        "payload": "jsonb",
+        "nonce": "text",
+        "event_timestamp": "timestamptz",
+        "status": "text",
+        "attempts": "integer",
+        "last_attempt_at": "timestamptz",
+        "created_at": "timestamptz"
+      },
+      "primaryKey": {
+        "name": "integration_events_pkey",
+        "columns": ["id"]
+      },
+      "unique": [],
+      "foreignKeys": [],
+      "checks": [
+        {
+          "name": "integration_events_direction_check",
+          "kind": "enum",
+          "column": "direction",
+          "values": ["in", "out"]
+        },
+        {
+          "name": "integration_events_system_check",
+          "kind": "enum",
+          "column": "system",
+          "values": ["console", "crm_pro"]
+        },
+        {
+          "name": "integration_events_status_check",
+          "kind": "enum",
+          "column": "status",
+          "values": ["pending", "ok", "failed"]
+        }
+      ]
+    },
+    "activity_log": {
+      "section": "TRANSVERSE — RGPD : rétention 12 mois, IP anonymisée à 90 j (§10.4)",
+      "columns": {
+        "id": "uuid",
+        "user_id": "uuid",
+        "action": "text",
+        "entity_type": "text",
+        "entity_id": "uuid",
+        "meta": "jsonb",
+        "ip": "text",
+        "created_at": "timestamptz"
+      },
+      "primaryKey": {
+        "name": "activity_log_pkey",
+        "columns": ["id"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "activity_log_user_id_fkey",
+          "columns": ["user_id"],
+          "references": {
+            "table": "users",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": []
+    },
+    "llm_calls": {
+      "section": "TRANSVERSE",
+      "columns": {
+        "id": "uuid",
+        "mission_id": "uuid",
+        "section_id": "uuid",
+        "provider": "text",
+        "model": "text",
+        "prompt_version": "text",
+        "tokens_in": "integer",
+        "tokens_out": "integer",
+        "cost_eur": "numeric",
+        "duration_ms": "integer",
+        "status": "text",
+        "created_at": "timestamptz"
+      },
+      "primaryKey": {
+        "name": "llm_calls_pkey",
+        "columns": ["id"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "llm_calls_mission_id_fkey",
+          "columns": ["mission_id"],
+          "references": {
+            "table": "missions",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "llm_calls_section_id_fkey",
+          "columns": ["section_id"],
+          "references": {
+            "table": "report_sections",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": []
+    },
+    "app_settings": {
+      "section": "TRANSVERSE — seuils, purges, URLs console, secrets chiffrés (AES via APP_ENCRYPTION_KEY)",
+      "columns": {
+        "key": "text",
+        "value": "jsonb"
+      },
+      "primaryKey": {
+        "name": "app_settings_pkey",
+        "columns": ["key"]
+      },
+      "unique": [],
+      "foreignKeys": [],
+      "checks": []
+    }
+  },
+  "indexes": [
+    {
+      "name": "idx_answers_interview_id",
+      "table": "answers",
+      "columns": ["interview_id"],
+      "source": "04 §7.1"
+    },
+    {
+      "name": "idx_answers_mission_question_id",
+      "table": "answers",
+      "columns": ["mission_question_id"],
+      "source": "04 §7.1"
+    },
+    {
+      "$note": "index UNIQUE answers(interview_id, mission_question_id) — matérialisé par la contrainte UNIQUE du même nom",
+      "name": "answers_interview_id_mission_question_id_key",
+      "table": "answers",
+      "columns": ["interview_id", "mission_question_id"],
+      "unique": true,
+      "source": "04 §7.1 · critère d'acceptation L1"
+    },
+    {
+      "name": "idx_interviews_mission_id",
+      "table": "interviews",
+      "columns": ["mission_id"],
+      "source": "04 §7.1"
+    },
+    {
+      "name": "idx_interviews_org_unit_id",
+      "table": "interviews",
+      "columns": ["org_unit_id"],
+      "source": "04 §7.1"
+    },
+    {
+      "name": "idx_interviews_conducted_by",
+      "table": "interviews",
+      "columns": ["conducted_by"],
+      "source": "04 §7.1"
+    },
+    {
+      "name": "idx_interviews_schedule_status",
+      "table": "interviews",
+      "columns": ["schedule_status"],
+      "source": "04 §7.1"
+    },
+    {
+      "name": "idx_org_units_mission_id",
+      "table": "org_units",
+      "columns": ["mission_id"],
+      "source": "04 §7.1"
+    },
+    {
+      "name": "idx_org_units_parent_id",
+      "table": "org_units",
+      "columns": ["parent_id"],
+      "source": "04 §7.1"
+    },
+    {
+      "name": "idx_missions_company_id",
+      "table": "missions",
+      "columns": ["company_id"],
+      "source": "04 §7.1"
+    },
+    {
+      "name": "idx_missions_status",
+      "table": "missions",
+      "columns": ["status"],
+      "source": "04 §7.1"
+    },
+    {
+      "name": "idx_missions_parent_mission_id",
+      "table": "missions",
+      "columns": ["parent_mission_id"],
+      "source": "04 §7.1"
+    },
+    {
+      "name": "idx_questions_status_block_id",
+      "table": "questions",
+      "columns": ["status", "block_id"],
+      "source": "04 §7.1"
+    },
+    {
+      "$note": "V2.9 — index UNIQUE PARTIEL : NULL pour les questions ad hoc non versées, qui ne doivent donc pas entrer en collision",
+      "name": "uq_questions_code_version",
+      "table": "questions",
+      "columns": ["code", "version"],
+      "unique": true,
+      "where": "code IS NOT NULL",
+      "source": "04 §7.1 · critère d'acceptation L1"
+    },
+    {
+      "name": "idx_questions_sectors_gin",
+      "table": "questions",
+      "columns": ["sectors"],
+      "method": "gin",
+      "source": "04 §7.1"
+    },
+    {
+      "name": "idx_questions_profiles_gin",
+      "table": "questions",
+      "columns": ["profiles"],
+      "method": "gin",
+      "source": "04 §7.1"
+    },
+    {
+      "name": "idx_questions_target_services_gin",
+      "table": "questions",
+      "columns": ["target_services"],
+      "method": "gin",
+      "source": "04 §7.1"
+    },
+    {
+      "$note": "clé de déduplication R3 (alerte doublon) ; siren NULL autorisé pour les filiales étrangères",
+      "name": "uq_companies_siren",
+      "table": "companies",
+      "columns": ["siren"],
+      "unique": true,
+      "where": "siren IS NOT NULL",
+      "source": "04 §7.1 · critère d'acceptation L1"
+    },
+    {
+      "name": "idx_findings_mission_id",
+      "table": "findings",
+      "columns": ["mission_id"],
+      "source": "04 §7.1"
+    },
+    {
+      "name": "idx_use_cases_mission_id",
+      "table": "use_cases",
+      "columns": ["mission_id"],
+      "source": "04 §7.1"
+    },
+    {
+      "name": "idx_roadmap_items_mission_id",
+      "table": "roadmap_items",
+      "columns": ["mission_id"],
+      "source": "04 §7.1"
+    },
+    {
+      "name": "idx_attachments_mission_id",
+      "table": "attachments",
+      "columns": ["mission_id"],
+      "source": "04 §7.1"
+    },
+    {
+      "name": "idx_step_validations_mission_id_step_code",
+      "table": "step_validations",
+      "columns": ["mission_id", "step_code"],
+      "source": "04 §7.1"
+    },
+    {
+      "name": "idx_alerts_mission_id_status",
+      "table": "alerts",
+      "columns": ["mission_id", "status"],
+      "source": "04 §7.1"
+    },
+    {
+      "name": "idx_work_assignments_mission_id",
+      "table": "work_assignments",
+      "columns": ["mission_id"],
+      "source": "04 §7.1"
+    },
+    {
+      "name": "idx_document_requests_mission_id",
+      "table": "document_requests",
+      "columns": ["mission_id"],
+      "source": "04 §7.1"
+    },
+    {
+      "name": "idx_integration_events_status",
+      "table": "integration_events",
+      "columns": ["status"],
+      "source": "04 §7.1"
+    },
+    {
+      "name": "idx_integration_events_nonce",
+      "table": "integration_events",
+      "columns": ["nonce"],
+      "source": "04 §7.1"
+    },
+    {
+      "name": "idx_processed_ops_processed_at",
+      "table": "processed_ops",
+      "columns": ["processed_at"],
+      "source": "04 §7.1"
+    },
+    {
+      "name": "idx_activity_log_entity_type_entity_id",
+      "table": "activity_log",
+      "columns": ["entity_type", "entity_id"],
+      "source": "04 §7.1"
+    },
+    {
+      "name": "idx_sync_log_user_id_started_at",
+      "table": "sync_log",
+      "columns": ["user_id", "started_at"],
+      "source": "04 §7.1"
+    }
+  ]
+}
