@@ -72,6 +72,21 @@ for h in "content-security-policy" "x-content-type-options" "referrer-policy"; d
 done
 
 # -----------------------------------------------------------------------------
+# 3bis. STAGING UNIQUEMENT — X-Robots-Tag (arbitrage A01, DECISIONS.md 2026-08-27
+#       « Cohabitation staging/prod : qui écoute sur 443 ? »). Le staging vit
+#       désormais sur un SOUS-DOMAINE avec un VRAI certificat : il est donc
+#       indexable, et l’outil est confidentiel.
+# -----------------------------------------------------------------------------
+if [[ "${APP_ENV:-}" == "staging" ]]; then
+  if grep -qi "^x-robots-tag:.*noindex" <<<"$headers"; then
+    axion_log "OK   — en-tête x-robots-tag: noindex présent (staging non indexable)"
+  else
+    axion_error "ÉCHEC — staging indexable : en-tête x-robots-tag noindex absent"
+    FAILURES=$((FAILURES + 1))
+  fi
+fi
+
+# -----------------------------------------------------------------------------
 # 4. ÉCRITURE / LECTURE POSTGRES — table témoin créée, relue, puis SUPPRIMÉE.
 #    Non destructif : rien d'existant n'est touché (invariant 7).
 # -----------------------------------------------------------------------------

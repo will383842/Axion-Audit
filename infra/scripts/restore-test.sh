@@ -4,6 +4,8 @@
 # Applique : 02 §11.4 (« test de restauration automatique nocturne : restore dans
 # un conteneur jetable + requêtes de contrôle + alerte si échec »), 07 ligne L0
 # (critère d'acceptation « restauration Postgres ET MinIO testée depuis zéro »),
+# étendu au MAGASIN TLS de Caddy (arbitrage A01 du 2026-08-27 : un PRA ne peut pas
+# dépendre d’une réémission ACME sous quota Let’s Encrypt),
 # 02 §11.3 (alerte Telegram), 02 §30.4 (aucun secret écrit sur disque).
 # =============================================================================
 #
@@ -28,6 +30,10 @@ MC_IMAGE="${MC_IMAGE:-minio/mc:RELEASE.2025-04-16T18-13-26Z}"
 MINIO_IMAGE="${MINIO_IMAGE:-minio/minio:RELEASE.2025-04-22T22-12-26Z}"
 PG_IMAGE="${PG_IMAGE:-axion-audit-postgres:16}"
 ARCHIVE_DIR="${ARCHIVE_DIR:-/var/backups/axion/minio/archives}"
+# Image utilitaire : UNE SEULE définition, dans lib/common.sh (mineur de revue).
+ALPINE_IMAGE="${ALPINE_IMAGE:-$AXION_ALPINE_IMAGE}"
+# Archives du magasin TLS de Caddy (arbitrage A01 du 2026-08-27).
+CADDY_ARCHIVE_DIR="${CADDY_ARCHIVE_DIR:-/var/backups/axion/caddy/archives}"
 
 TS="$(date -u +'%Y%m%dT%H%M%SZ')"
 RESTORE_PREFIX="axion-restore-test"
@@ -49,6 +55,7 @@ PG_CONTAINER="${RESTORE_ID}-pg"
 MINIO_CONTAINER="${RESTORE_ID}-minio"
 PG_VOLUME="${RESTORE_ID}-pgdata"
 MINIO_VOLUME="${RESTORE_ID}-miniodata"
+CADDY_VOLUME="${RESTORE_ID}-caddydata"
 NET_NAME="${RESTORE_ID}-net"
 FAILURES=0
 
@@ -61,7 +68,7 @@ cleanup() {
   set +e
   axion_log "Nettoyage du conteneur jetable et de ses ressources…"
   docker rm -f "$PG_CONTAINER" "$MINIO_CONTAINER" >/dev/null 2>&1
-  docker volume rm -f "$PG_VOLUME" "$MINIO_VOLUME" >/dev/null 2>&1
+  docker volume rm -f "$PG_VOLUME" "$MINIO_VOLUME" "$CADDY_VOLUME" >/dev/null 2>&1
   docker network rm "$NET_NAME" >/dev/null 2>&1
   if [[ "$WORK_DIR" == /var/tmp/${RESTORE_PREFIX}-* ]]; then
     rm -rf "$WORK_DIR"
@@ -83,7 +90,7 @@ fail() {
 guard_not_production() {
   local vol
   # 1. Aucune ressource de test ne doit porter un nom de ressource vivante.
-  for vol in "$PG_VOLUME" "$MINIO_VOLUME"; do
+  for vol in "$PG_VOLUME" "$MINIO_VOLUME" "$CADDY_VOLUME"; do
     case "$vol" in
       "${LIVE_PROJECT}_"*) axion_die "GARDE-FOU : volume de test « $vol » dans l'espace de nommage de production." ;;
     esac
@@ -290,13 +297,37 @@ restore_minio() {
       continue
     fi
 
-    # 2. CONTRÔLE D'INTÉGRITÉ PAR SOMME DE CONTRÔLE (pas une simple présence).
+    # 2. INTÉGRITÉ — TROIS VERDICTS DISTINCTS, jamais amalgamés (M-9).
+    #    a) manifeste ou compte ABSENT   → ÉCHEC : la sauvegarde est incomplète.
+    #    b) compte = 0 et cohérent       → OK   : bucket vide, état LÉGITIME au lot L0
+    #                                            (aucune mission n’a encore produit de
+    #                                            fichier). La chaîne est prouvée : archive
+    #                                            déchiffrée, manifeste lu, compte recoupé.
+    #    c) sommes qui ne concordent pas → ÉCHEC : corruption réelle.
+    # Confondre (b) et (c) ferait crier à la corruption dès la première nuit — et une
+    # alerte fausse la première nuit est une alerte que plus personne ne lit ensuite.
     if [[ ! -f "$WORK_DIR/minio/$bucket/MANIFEST.sha256" ]]; then
-      fail "Manifeste sha256 absent pour « $bucket » — intégrité invérifiable"
+      fail "Bucket $bucket : manifeste sha256 ABSENT — sauvegarde incomplète, intégrité invérifiable"
+      continue
+    fi
+    if [[ ! -f "$WORK_DIR/minio/$bucket/MANIFEST.count" ]]; then
+      fail "Bucket $bucket : compte d’objets ABSENT — archive antérieure au correctif M-9, relancer backup-minio.sh"
+      continue
+    fi
+    local annonces relevees
+    # `tr -dc` : on ne garde que les chiffres (fin de ligne, espaces éventuels).
+    annonces="$(tr -dc '0-9' <"$WORK_DIR/minio/$bucket/MANIFEST.count")"
+    relevees="$(wc -l <"$WORK_DIR/minio/$bucket/MANIFEST.sha256" | tr -dc '0-9')"
+    if [[ "$annonces" != "$relevees" ]]; then
+      fail "Bucket $bucket : manifeste TRONQUÉ — $relevees ligne(s) pour $annonces objet(s) annoncé(s)"
+      continue
+    fi
+    if [[ "$annonces" -eq 0 ]]; then
+      axion_log "Bucket $bucket : VIDE (0 objet) — état légitime au lot L0. Chaîne de sauvegarde prouvée (archive déchiffrée, manifeste cohérent)."
       continue
     fi
     if ( cd "$WORK_DIR/minio/$bucket" && sha256sum --quiet -c MANIFEST.sha256 ); then
-      axion_log "Bucket $bucket : sommes de contrôle du miroir VALIDES."
+      axion_log "Bucket $bucket : $annonces objet(s), sommes de contrôle du miroir VALIDES."
     else
       fail "Bucket $bucket : sommes de contrôle INVALIDES (corruption de sauvegarde)"
       continue
@@ -317,9 +348,12 @@ restore_minio() {
     # 4. Relecture d'un objet depuis le MinIO restauré et comparaison de sa
     #    somme de contrôle avec le manifeste (bout en bout).
     local sample expected actual
-    sample="$(grep -v 'MANIFEST.sha256' "$WORK_DIR/minio/$bucket/MANIFEST.sha256" | head -n1 || true)"
+    sample="$(grep -v -e 'MANIFEST.sha256' -e 'MANIFEST.count' "$WORK_DIR/minio/$bucket/MANIFEST.sha256" | head -n1 || true)"
     if [[ -z "$sample" ]]; then
-      axion_warn "Bucket $bucket : vide (aucun objet à relire) — normal tant qu'aucune mission n'a produit de fichier."
+      # Ne peut plus se produire : le cas « 0 objet » est traité plus haut, avec son
+      # propre verdict. Garde-fou conservé — un manifeste non vide dont on
+      # n’extrait aucun objet témoin serait une anomalie, pas une normalité.
+      fail "Bucket $bucket : $annonces objet(s) annoncé(s) mais aucun objet témoin extractible"
       continue
     fi
     local objpath
@@ -337,6 +371,91 @@ restore_minio() {
   unset MC_HOST_restore
 }
 
+
+# =============================================================================
+# (c) CADDY / TLS — restauration du magasin de certificats depuis l'archive
+# =============================================================================
+# Arbitrage A01 du 2026-08-27 : `caddy_data` est entré dans le périmètre de
+# sauvegarde parce que le raisonnement « ACME régénérera » ne tient pas dans le
+# seul moment qui compte, un PRA — une réémission sous plafond Let's Encrypt
+# peut échouer et laisser les DEUX environnements injoignables en HTTPS, y
+# compris celui qui devrait servir à vérifier que la restauration a réussi.
+# Et une sauvegarde jamais restaurée n'est pas une sauvegarde : on la restaure
+# donc ICI dans un VOLUME JETABLE — le geste exact du PRA — puis on vérifie que
+# les certificats qui en sortent sont lisibles, accompagnés de leur clé privée,
+# et NON EXPIRÉS.
+restore_caddy() {
+  axion_log "--- (c) Caddy / TLS : restauration du magasin de certificats depuis zéro ---"
+
+  if [[ "$APP_ENV" == "staging" ]]; then
+    axion_log "Environnement staging : cette pile n'a pas de frontal (arbitrage 2026-08-27)."
+    axion_log "Les certificats des DEUX domaines vivent dans la pile de PROD — rien à restaurer ici."
+    return 0
+  fi
+
+  local archive
+  archive="$(find "$CADDY_ARCHIVE_DIR" -maxdepth 1 -type f -name 'caddy-data-*.tar.gpg' -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n1 | cut -d' ' -f2-)"
+  if [[ -z "$archive" ]]; then
+    fail "Aucune archive du magasin TLS dans $CADDY_ARCHIVE_DIR — backup-caddy.sh n'a jamais tourné"
+    return 1
+  fi
+  axion_log "Archive retenue : $(basename "$archive")"
+
+  # --- 1. Restauration dans un VOLUME JETABLE (le geste exact du PRA) --------
+  docker volume create "$CADDY_VOLUME" >/dev/null
+  if ! axion_decrypt_stream <"$archive" \
+       | docker run --rm -i -v "$CADDY_VOLUME:/data" "$ALPINE_IMAGE" tar -C /data -xf -; then
+    fail "Déchiffrement/extraction du magasin TLS impossible (archive corrompue ou passphrase changée)"
+    return 1
+  fi
+
+  # --- 2. Le magasin restauré doit contenir des certificats -----------------
+  local certs
+  certs="$(docker run --rm -v "$CADDY_VOLUME:/data:ro" "$ALPINE_IMAGE" \
+             find /data -type f -name '*.crt' 2>/dev/null || true)"
+  if [[ -z "$certs" ]]; then
+    axion_warn "Magasin TLS restauré mais SANS aucun certificat : normal UNIQUEMENT si le site écoute sur une adresse sans ACME (:8080). En production, c'est une anomalie à traiter."
+    return 0
+  fi
+
+  # --- 3. Chaque certificat : lisible, avec sa clé privée, et non expiré ----
+  local crt pem subject enddate keyfile total=0 valid=0
+  while IFS= read -r crt; do
+    [[ -z "$crt" ]] && continue
+    total=$((total + 1))
+
+    pem="$(docker run --rm -v "$CADDY_VOLUME:/data:ro" "$ALPINE_IMAGE" cat "$crt" 2>/dev/null || true)"
+    if [[ -z "$pem" ]]; then
+      fail "Certificat vide ou illisible dans le magasin restauré : $crt"
+      continue
+    fi
+    if ! subject="$(printf '%s\n' "$pem" | openssl x509 -noout -subject 2>/dev/null)"; then
+      fail "Certificat non analysable (PEM corrompu) dans le magasin restauré : $crt"
+      continue
+    fi
+    enddate="$(printf '%s\n' "$pem" | openssl x509 -noout -enddate 2>/dev/null || true)"
+
+    # Un certificat sans sa clé privée ne permet de servir AUCUN octet en HTTPS.
+    keyfile="${crt%.crt}.key"
+    if ! docker run --rm -v "$CADDY_VOLUME:/data:ro" "$ALPINE_IMAGE" test -s "$keyfile"; then
+      fail "Clé privée absente ou vide pour le certificat restauré : $keyfile"
+    fi
+
+    if printf '%s\n' "$pem" | openssl x509 -noout -checkend 0 >/dev/null 2>&1; then
+      valid=$((valid + 1))
+      axion_log "Certificat restauré VALIDE — ${subject#subject=} (${enddate#notAfter=})"
+    else
+      axion_warn "Certificat restauré EXPIRÉ — ${subject#subject=} (${enddate#notAfter=}) : reliquat de renouvellement, sans gravité tant qu'un autre est valide."
+    fi
+  done <<<"$certs"
+
+  if [[ "$valid" -eq 0 ]]; then
+    fail "Aucun certificat VALIDE dans le magasin TLS restauré ($total lu(s), tous expirés) — un PRA repartirait sans HTTPS"
+  else
+    axion_log "Magasin TLS restauré et vérifié : $valid/$total certificat(s) valide(s), clés privées présentes."
+  fi
+}
+
 # =============================================================================
 # DÉROULÉ
 # =============================================================================
@@ -347,6 +466,7 @@ docker network create "$NET_NAME" >/dev/null
 
 restore_postgres || true
 restore_minio || true
+restore_caddy || true
 
 # -----------------------------------------------------------------------------
 # VERDICT — code de sortie non nul + alerte Telegram si échec (critère (d)).
@@ -357,6 +477,6 @@ if [[ "$FAILURES" -gt 0 ]]; then
   exit 1
 fi
 
-axion_log "=== TEST DE RESTAURATION : SUCCÈS (Postgres + MinIO restaurés depuis zéro) ==="
+axion_log "=== TEST DE RESTAURATION : SUCCÈS (Postgres + MinIO + magasin TLS restaurés depuis zéro) ==="
 axion_log "Rapport : $AXION_LOG_FILE"
 exit 0

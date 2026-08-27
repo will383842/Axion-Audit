@@ -24,7 +24,7 @@ field_count="$(printf '%s\n' "$RESTORE_TEST_CRON" | awk '{print NF}')"
 [[ "$field_count" -eq 5 ]] || axion_die "RESTORE_TEST_CRON invalide (5 champs attendus) : « $RESTORE_TEST_CRON »"
 
 # --- Prérequis d'exécution ----------------------------------------------------
-for s in backup-postgres.sh backup-minio.sh restore-test.sh; do
+for s in backup-postgres.sh backup-minio.sh backup-caddy.sh restore-test.sh; do
   [[ -x "$SCRIPT_DIR/$s" ]] || axion_die "Script non exécutable : $SCRIPT_DIR/$s (chmod +x)"
 done
 mkdir -p "$AXION_LOG_DIR"
@@ -47,7 +47,13 @@ MAILTO=""
 # Miroir MinIO quotidien (mc mirror + archive chiffrée, 02 §11.4)
 30 1 * * * root $SCRIPT_DIR/backup-minio.sh $ENV_FILE >/dev/null 2>&1
 
-# TEST DE RESTAURATION NOCTURNE (critère d'acceptation L0) — RESTORE_TEST_CRON
+# Magasin TLS de Caddy — certificats des DEUX domaines (02 §11.4 + arbitrage A01
+# du 2026-08-27 : une réémission ACME sous quota peut échouer PENDANT un PRA).
+# Programmé APRÈS le miroir MinIO et AVANT le test de restauration, pour que le
+# test de la nuit porte sur une archive du jour.
+45 1 * * * root $SCRIPT_DIR/backup-caddy.sh $ENV_FILE >/dev/null 2>&1
+
+# TEST DE RESTAURATION NOCTURNE (critère d’acceptation L0) — RESTORE_TEST_CRON
 $RESTORE_TEST_CRON root $SCRIPT_DIR/restore-test.sh $ENV_FILE >/dev/null 2>&1
 EOF
 

@@ -12,6 +12,11 @@ AXION_ROOT="${AXION_ROOT:-/opt/axion-audit}"
 AXION_LOG_DIR="${AXION_LOG_DIR:-/var/log/axion}"
 # Racine du répertoire infra/ du dépôt, déduite de l'emplacement de ce fichier.
 AXION_INFRA_DIR="${AXION_INFRA_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+# Image utilitaire (tar, cp) des scripts d’exploitation. UNE SEULE définition :
+# elle était auparavant recopiée dans chaque script, et avait déjà divergé de
+# celle des Dockerfiles des fronts (3.20 ici, 3.21 là-bas). Alignée sur 3.21,
+# et FIGÉE comme le reste (11 §1).
+AXION_ALPINE_IMAGE=${AXION_ALPINE_IMAGE:-alpine:3.21}
 
 # -----------------------------------------------------------------------------
 # Journalisation — sortie standard + fichier si AXION_LOG_FILE est défini.
@@ -80,7 +85,12 @@ axion_require_env() {
 # -----------------------------------------------------------------------------
 axion_load_env() {
   local env_file="${1:-$AXION_ROOT/.env}"
-  [[ -r "$env_file" ]] || axion_die "Fichier d'environnement illisible : $env_file"
+  # M-11 : la convention est /opt/axion-audit/<env>/.env, JAMAIS un .env unique
+  # à la racine — le 02 §30.4-4 impose des valeurs distinctes par environnement.
+  # Le message le dit, pour qu’un appel sans argument échoue en expliquant.
+  if [[ ! -r "$env_file" ]]; then
+    axion_die "Fichier d’environnement illisible : $env_file — convention : $AXION_ROOT/<staging|prod>/.env (passer le chemin en argument)."
+  fi
 
   # Garde-fou de permissions : un .env lisible par tous est une fuite de secrets.
   local perms
@@ -191,6 +201,15 @@ axion_mc_host_url() {
 # -----------------------------------------------------------------------------
 axion_storagebox_ssh_opts() {
   axion_require_env STORAGE_BOX_PORT STORAGE_BOX_SSH_KEY_PATH
+  # `accept-new` = TOFU (confiance au premier contact) : l’empreinte est
+  # mémorisée au premier accès puis EXIGÉE à chaque fois — un changement
+  # d’empreinte fait échouer la connexion, contrairement à `no`.
+  # Écart ASSUMÉ et BORNÉ avec la CI, qui impose `yes` : là-bas l’empreinte est
+  # fournie en secret d’Environment (DEPLOY_SSH_KNOWN_HOSTS), ici la Storage Box
+  # est louée au provisionnement et son empreinte n’est pas connue d’avance.
+  # DURCISSEMENT (à faire une fois la Storage Box en service, porte P-A) :
+  #   ssh-keyscan -p $STORAGE_BOX_PORT $STORAGE_BOX_HOST >> /root/.ssh/known_hosts
+  # puis remplacer `accept-new` par `yes` sur la ligne ci-dessous.
   echo "-p ${STORAGE_BOX_PORT} -i ${STORAGE_BOX_SSH_KEY_PATH} -o StrictHostKeyChecking=accept-new -o BatchMode=yes"
 }
 

@@ -19,8 +19,8 @@
 # ROUTAGE INTERNE, IDENTIQUE DANS LES DEUX BLOCS (contrat de ports rappelé dans
 # infra/docker-compose.yml) :
 #   /api/*  → api de la pile    (le préfixe /api est RETIRÉ : l'API voit /v1/…)
-#   /hq*    → hq de la pile     (préfixe CONSERVÉ : la console est buildée en base /hq/)
-#   /*      → field de la pile  (PWA terrain à la racine)
+#   /hq*    → console siège  (voir caddy/fronts.dev.caddy ou fronts.static.caddy)
+#   /*      → PWA terrain   (voir caddy/fronts.dev.caddy ou fronts.static.caddy)
 #
 # ┌───────────────────────────────────────────────────────────────────────────┐
 # │ ⚠️ NOMS D'UPSTREAM — RÈGLE ABSOLUE                                        │
@@ -33,6 +33,23 @@
 # │   pile principale : axion-api   · axion-field   · axion-hq                │
 # │   pile staging    : staging-api · staging-field · staging-hq              │
 # │ N'ÉCRIVEZ JAMAIS `reverse_proxy api:…` dans ce fichier.                   │
+# │ Les upstreams des FRONTS ont déménagé dans fronts.dev.caddy (en dev) ;    │
+# │ en staging/prod ce ne sont plus des upstreams du tout mais des            │
+# │ RACINES DE FICHIERS distinctes (fronts.static.caddy). La règle vaut       │
+# │ à l’identique : jamais un chemin de prod dans le bloc de staging.         │
+# └───────────────────────────────────────────────────────────────────────────┘
+#
+# ┌───────────────────────────────────────────────────────────────────────────┐
+# │ PORT INTERNE DE L’API — CONVENTION COMMUNE AUX DEUX ENVIRONNEMENTS.       │
+# │ Les DEUX blocs utilisent {$API_PORT}. Ce port n’est JAMAIS publié         │
+# │ (06 §10.3, 11 §2) : il n’existe aucun scénario où il devrait différer     │
+# │ entre staging et prod. Une variable séparée dont deux copies doivent      │
+# │ coïncider À LA MAIN dans deux `.env` distincts serait une panne en        │
+# │ attente : le jour où elles divergent, c’est la PRODUCTION qui rend des    │
+# │ 502 à cause d’une valeur de staging.                                      │
+# │ `API_PORT=3000` est donc une CONVENTION des deux environnements : NE PAS  │
+# │ LA CHANGER SANS LA CHANGER DANS LES DEUX `.env`.                          │
+# │ Arbitrage A01 du 2026-08-27.                                              │
 # └───────────────────────────────────────────────────────────────────────────┘
 #
 # ADRESSES : `:8080` / `:8081` en local (aucun ACME), les vrais domaines en
@@ -56,6 +73,27 @@
 		level INFO
 	}
 }
+
+# =============================================================================
+# SERVICE DES FRONTS — un fichier par MODE, choisi par {$CADDY_FRONT_CONFIG}.
+# =============================================================================
+#   /etc/caddy/fronts.dev.caddy     → `reverse_proxy` vers les serveurs Vite
+#                                     (rechargement à chaud : tout l’intérêt du dev)
+#   /etc/caddy/fronts.static.caddy  → `root` + `file_server` + repli SPA sur les
+#                                     volumes où les jobs one-shot ont déposé le build
+#
+# Ce fichier définit DEUX snippets, `(fronts_principal)` et `(fronts_staging)`,
+# avec les MÊMES noms dans les deux modes : les blocs de site plus bas sont donc
+# rigoureusement identiques quel que soit le mode, et la bascule ne touche qu’un
+# fichier. La posture de sécurité `(securite)` est appliquée AVANT eux, à
+# l’identique dans les deux modes et les deux environnements.
+#
+# En staging et en prod, la surcharge Compose IMPOSE la valeur `fronts.static.caddy`
+# au lieu de la lire dans le `.env` : le mode de service découle de la FORME du
+# déploiement (images one-shot + volumes) et non d’un réglage d’exploitant. Un `.env`
+# de prod portant la valeur `dev` mettrait le site entier en 502.
+# =============================================================================
+import {$CADDY_FRONT_CONFIG}
 
 # =============================================================================
 # SNIPPET (securite) — POSTURE DE SÉCURITÉ COMMUNE AUX DEUX ENVIRONNEMENTS.
@@ -142,8 +180,8 @@
 
 # =============================================================================
 # BLOC 1 — PILE PRINCIPALE : `dev` en local, `prod` sur le VPS.
-# Upstreams : axion-api / axion-field / axion-hq (alias déclarés dans
-# infra/docker-compose.yml, réseau `axion` du projet courant).
+# API : upstream `axion-api` (alias déclaré dans infra/docker-compose.yml,
+# réseau `axion` du projet courant). Fronts : snippet `(fronts_principal)`.
 # =============================================================================
 {$CADDY_SITE_ADDRESS} {
 	import securite
@@ -158,23 +196,17 @@
 		}
 	}
 
-	# Console siège : préfixe CONSERVÉ (build Vite en base /hq/).
-	# Matcher explicite : `/hq` et `/hq/**` uniquement — surtout pas `/hqautre`.
-	@hq path /hq /hq/*
-	handle @hq {
-		reverse_proxy axion-hq:5173
-	}
-
-	# PWA terrain : tout le reste, à la racine.
-	handle {
-		reverse_proxy axion-field:5173
-	}
+	# FRONTS : délégués au fichier désigné par {$CADDY_FRONT_CONFIG}, importé
+	# en tête de ce Caddyfile. `reverse_proxy` vers Vite en dev, `root` +
+	# `file_server` + repli SPA en staging/prod. MÊME nom de snippet dans les
+	# deux modes : ce bloc de site ne change JAMAIS.
+	import fronts_principal
 }
 
 # =============================================================================
 # BLOC 2 — PILE STAGING (02 §11.2 : « staging (même VPS, sous-domaine, DB séparée) »).
-# Upstreams : staging-api / staging-field / staging-hq (alias déclarés dans
-# infra/docker-compose.staging.yml, réseau partagé `axion-edge-staging`).
+# API : upstream `staging-api` (alias déclaré dans docker-compose.staging.yml,
+# réseau partagé `axion-edge-staging`). Fronts : snippet `(fronts_staging)`.
 # Base, buckets, volumes et secrets restent STRICTEMENT séparés (02 §30.4-4) :
 # seul CE frontal est partagé, et il ne fait que relayer du HTTP.
 #
@@ -193,18 +225,16 @@
 	header X-Robots-Tag "noindex, nofollow"
 
 	handle_path /api/* {
-		reverse_proxy staging-api:{$CADDY_STAGING_API_PORT} {
+		# {$API_PORT} : MÊME variable que le bloc de prod — voir la convention
+		# « PORT INTERNE DE L’API » en tête de fichier.
+		reverse_proxy staging-api:{$API_PORT} {
 			header_up X-Real-IP {remote_host}
 			flush_interval -1
 		}
 	}
 
-	@hq path /hq /hq/*
-	handle @hq {
-		reverse_proxy staging-hq:5173
-	}
-
-	handle {
-		reverse_proxy staging-field:5173
-	}
+	# FRONTS de la pile de staging — racines et upstreams DISTINCTS de ceux de
+	# la prod (voir les fichiers fronts.*.caddy). MÊme forme, jamais les mêmes
+	# fichiers ni les mêmes conteneurs.
+	import fronts_staging
 }

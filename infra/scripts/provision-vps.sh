@@ -29,6 +29,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SSH_PORT="2222"
 ADMIN_USER="${SUDO_USER:-root}"
 USERNS_REMAP="yes"
+# Réseau Docker de liaison entre la pile de STAGING et le Caddy de la pile de
+# PROD (arbitrage A01, DECISIONS.md 2026-08-27). Déclaré `external` dans
+# infra/docker-compose.staging.yml ET .prod.yml : il doit donc exister AVANT le
+# premier `up`. Le nom est ÉCRIT EN DUR dans les deux fichiers Compose — le
+# changer ici sans les corriger casserait les deux piles.
+AXION_EDGE_NETWORK="axion-edge-staging"
+# Volumes des FICHIERS CONSTRUITS des fronts de STAGING. En staging et en prod,
+# `field` et `hq` sont des JOBS ONE-SHOT qui déposent leur build dans /sortie ;
+# c’est le Caddy de la pile de PROD qui les SERT, en lecture seule. Comme le
+# réseau de liaison, ils sont déclarés `external` des deux côtés : créés ici, ils
+# survivent aux `down` et ne dépendent pas de l’ordre de démarrage des piles.
+# Ils ne contiennent que du HTML/JS/CSS publiquement servi : aucune donnée,
+# aucun secret — la séparation du 02 §30.4-4 reste intacte.
+AXION_SHARED_VOLUMES=(axion-staging-field-dist axion-staging-hq-dist)
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -194,6 +208,34 @@ fi
 systemctl enable --now docker >/dev/null
 
 # -----------------------------------------------------------------------------
+# 7bis. RÉSEAU DE LIAISON staging → Caddy de prod (02 §11.2 + arbitrage A01,
+#       DECISIONS.md 2026-08-27 « Cohabitation staging/prod : qui écoute sur 443 ? »)
+#       UN SEUL Caddy lie 80/443 : celui de la pile de PROD. Il atteint les
+#       services web de la pile de STAGING par ce réseau, déclaré `external` dans
+#       les deux surcharges Compose. Il est créé ICI, hors Compose, pour qu’il
+#       survive aux `down` et ne dépende pas de l’ordre de démarrage des piles.
+#       Seuls Caddy et les 3 services web de staging y sont attachés : ni Postgres,
+#       ni Redis, ni MinIO, ni le worker (02 §30.4-4 — un secret de staging ne peut
+#       RIEN sur la prod).
+# -----------------------------------------------------------------------------
+axion_log "7bis/9 réseau de liaison Docker « $AXION_EDGE_NETWORK »"
+if docker network inspect "$AXION_EDGE_NETWORK" >/dev/null 2>&1; then
+  axion_log "7bis/9 réseau $AXION_EDGE_NETWORK déjà présent — laissé intact (idempotence)."
+else
+  docker network create --driver bridge "$AXION_EDGE_NETWORK" >/dev/null
+  axion_log "7bis/9 réseau $AXION_EDGE_NETWORK créé."
+fi
+
+for vol in "${AXION_SHARED_VOLUMES[@]}"; do
+  if docker volume inspect "$vol" >/dev/null 2>&1; then
+    axion_log "7bis/9 volume partagé $vol déjà présent — laissé intact (idempotence)."
+  else
+    docker volume create "$vol" >/dev/null
+    axion_log "7bis/9 volume partagé $vol créé."
+  fi
+done
+
+# -----------------------------------------------------------------------------
 # 8. Mises à jour de sécurité automatiques (06 §10.3)
 # -----------------------------------------------------------------------------
 axion_log "8/9 unattended-upgrades"
@@ -218,31 +260,59 @@ systemctl enable --now unattended-upgrades >/dev/null
 # -----------------------------------------------------------------------------
 # 9. Arborescence d'exploitation + .env VIDE DE SECRETS (02 §30.4-2)
 # -----------------------------------------------------------------------------
-axion_log "9/9 arborescence /opt/axion-audit et fichier .env"
+axion_log "9/9 arborescence /opt/axion-audit et un .env PAR ENVIRONNEMENT"
 mkdir -p "$AXION_ROOT" "$AXION_LOG_DIR" \
          /var/backups/axion/postgres /var/backups/axion/pgbackrest-export \
-         /var/backups/axion/minio/mirror /var/backups/axion/minio/archives
+         /var/backups/axion/minio/mirror /var/backups/axion/minio/archives \
+         /var/backups/axion/caddy/archives
 chown -R root:root "$AXION_ROOT" "$AXION_LOG_DIR" /var/backups/axion
 chmod 750 "$AXION_ROOT" "$AXION_LOG_DIR"
 chmod 700 /var/backups/axion
 
 ENV_EXAMPLE="${ENV_EXAMPLE:-$AXION_INFRA_DIR/../.env.example}"
-if [[ ! -f "$AXION_ROOT/.env" ]]; then
-  [[ -r "$ENV_EXAMPLE" ]] || axion_die "Modèle introuvable : $ENV_EXAMPLE (attendu : .env.example à la racine du dépôt)"
-  cp "$ENV_EXAMPLE" "$AXION_ROOT/.env"
+[[ -r "$ENV_EXAMPLE" ]] || axion_die "Modèle introuvable : $ENV_EXAMPLE (attendu : .env.example à la racine du dépôt)"
+
+# ---------------------------------------------------------------------------
+# CONVENTION DE CHEMIN DU .env — UNE SEULE, ARBITRÉE (revue croisée M-11) :
+#         /opt/axion-audit/<env>/.env      avec <env> ∈ { staging, prod }
+# Le 02 §30.4-4 impose des valeurs DISTINCTES par environnement : un fichier
+# unique à la racine ne peut pas porter deux bases, deux jeux de clés JWT et deux
+# jeux de buckets. La forme par environnement est donc la SEULE valide ; c’est
+# aussi celle qu’utilisent deploy.sh et le runbook.
+# On ne crée VOLONTAIREMENT PAS /opt/axion-audit/.env : son existence ferait
+# silencieusement réussir un script appelé sans argument, sur un modèle plein de
+# __CHANGEME__ — c’est-à-dire la panne la plus coûteuse à diagnostiquer.
+# ---------------------------------------------------------------------------
+AXION_ENVS=(staging prod)
+for env_name in "${AXION_ENVS[@]}"; do
+  env_dir="$AXION_ROOT/$env_name"
+  mkdir -p "$env_dir"
+  chown root:root "$env_dir"
+  chmod 700 "$env_dir"
+  if [[ ! -f "$env_dir/.env" ]]; then
+    cp "$ENV_EXAMPLE" "$env_dir/.env"
+    axion_log "Fichier $env_dir/.env créé depuis $ENV_EXAMPLE (root, chmod 600)."
+  else
+    axion_log "Fichier $env_dir/.env déjà présent — contenu intact."
+  fi
+  chown root:root "$env_dir/.env"
+  chmod 600 "$env_dir/.env"
+done
+
+# Reliquat d’une version antérieure du script : on ne le SUPPRIME pas (il peut
+# contenir des secrets posés à la main), mais on le signale fort — tant qu’il
+# existe, un script appelé sans argument le chargera au lieu d’échouer.
+if [[ -e "$AXION_ROOT/.env" ]]; then
   chown root:root "$AXION_ROOT/.env"
   chmod 600 "$AXION_ROOT/.env"
-  axion_log "Fichier $AXION_ROOT/.env créé depuis $ENV_EXAMPLE (root, chmod 600)."
-else
-  chown root:root "$AXION_ROOT/.env"
-  chmod 600 "$AXION_ROOT/.env"
-  axion_log "Fichier $AXION_ROOT/.env déjà présent — permissions réappliquées, contenu intact."
+  axion_warn "$AXION_ROOT/.env existe encore : chemin OBSOLÈTE (convention = $AXION_ROOT/<env>/.env)."
+  axion_warn "Reportez son contenu dans staging/.env ou prod/.env, puis supprimez-le à la main."
 fi
 
 # -----------------------------------------------------------------------------
 # ARRÊT VOLONTAIRE : les secrets se posent À LA MAIN (02 §30.4-2), jamais ici.
 # -----------------------------------------------------------------------------
-remaining="$(grep -c '__CHANGEME__' "$AXION_ROOT/.env" || true)"
+remaining="$(grep -c '__CHANGEME__' "$AXION_ROOT/prod/.env" || true)"
 cat <<EOF
 
 =============================================================================
@@ -255,17 +325,23 @@ pas par la CI »). Il reste ${remaining} valeur(s) « __CHANGEME__ » à remplir
   1. Tester le nouvel accès SSH DEPUIS UN AUTRE TERMINAL, sans fermer celui-ci :
          ssh -p $SSH_PORT $ADMIN_USER@<IP>
   2. Éditer les secrets à la main :
-         sudo nano $AXION_ROOT/.env         (le fichier est déjà en root:600)
+         sudo nano $AXION_ROOT/prod/.env       (déjà en root:600)
+         sudo nano $AXION_ROOT/staging/.env    (VALEURS DISTINCTES, 02 §30.4-4)
      Génération : openssl rand -hex 64  ·  openssl rand -base64 32
      Rappel 02 §30.4-4 : staging et prod ont des valeurs DISTINCTES.
   3. Poser la clé SSH de la Storage Box (\${STORAGE_BOX_SSH_KEY_PATH}) et tester :
          ssh -p \${STORAGE_BOX_PORT} -i \${STORAGE_BOX_SSH_KEY_PATH} \${STORAGE_BOX_USER}@\${STORAGE_BOX_HOST} ls
   4. Sauvegarder le .env CHIFFRÉ dans la Storage Box (02 §30.4-2 — sans lui, un
      PRA restaure une infra sans ses clés) :
-         gpg --symmetric --cipher-algo AES256 -o /tmp/env.gpg $AXION_ROOT/.env
+         gpg --symmetric --cipher-algo AES256 -o /tmp/env.gpg $AXION_ROOT/prod/.env
+  4bis. CRÉER LES ENREGISTREMENTS DNS AVANT TOUT DÉMARRAGE : le domaine de prod
+     ET le sous-domaine de staging (02 §11.2) doivent pointer sur ce VPS. Sans
+     eux, l’émission ACME échoue et Caddy retente en boucle.
   5. Déployer, puis créer la stanza pgBackRest, puis installer les tâches :
          infra/scripts/deploy.sh --env <staging|prod> --tag <IMAGE_TAG>
          docker compose ... exec postgres pgbackrest --stanza=\$PGBACKREST_STANZA stanza-create
+         # ^ POINT DE CONTRÔLE N°1 DE LA PORTE P-A côté sauvegardes : sans
+         #   cette stanza, archive_command échoue et les WAL s’accumulent.
          infra/scripts/install-cron.sh
 =============================================================================
 EOF

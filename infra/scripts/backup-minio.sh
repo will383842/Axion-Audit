@@ -60,10 +60,26 @@ for bucket in "${BUCKETS[@]}"; do
   #    par présence de fichier »).
   # ---------------------------------------------------------------------------
   axion_log "2/4 manifeste sha256 du bucket $bucket"
-  ( cd "$MIRROR_DIR/$bucket" 2>/dev/null || exit 0
-    find . -type f ! -name 'MANIFEST.sha256' -print0 \
+  # M-9 — UN MANIFESTE EST ÉCRIT MÊME POUR ZÉRO OBJET.
+  # Au lot L0 les trois buckets SONT vides : aucune mission n’a encore produit de
+  # fichier. La version précédente sortait en silence (`cd || exit 0`) ou laissait un
+  # manifeste VIDE ; côté restauration, `sha256sum -c` sur un fichier vide sort en 1,
+  # ce qui était interprété comme UNE CORRUPTION. Le test de restauration nocturne —
+  # seule preuve automatisée du PRA — aurait donc crié au loup dès la première nuit.
+  # Une alerte qui se déclenche à tort la première nuit est une alerte que plus
+  # personne ne lira la dixième.
+  # On écrit donc TOUJOURS deux fichiers, et le compte rend l’état VÉRIFIABLE :
+  #   MANIFEST.sha256 — une ligne par objet (0 ligne si le bucket est vide)
+  #   MANIFEST.count  — le nombre d’objets annoncé, que la restauration recoupe
+  # « vide » devient ainsi un ÉTAT LÉGITIME ET PROUVÉ, distinct de « manifeste absent »
+  # (sauvegarde incomplète) et de « sommes invalides » (corruption réelle).
+  mkdir -p "$MIRROR_DIR/$bucket"
+  ( cd "$MIRROR_DIR/$bucket" || axion_die "Miroir inaccessible : $MIRROR_DIR/$bucket"
+    find . -type f ! -name 'MANIFEST.sha256' ! -name 'MANIFEST.count' -print0 \
       | sort -z \
-      | xargs -0 --no-run-if-empty sha256sum >"$MIRROR_DIR/$bucket/MANIFEST.sha256" )
+      | xargs -0 --no-run-if-empty sha256sum >MANIFEST.sha256
+    wc -l <MANIFEST.sha256 | tr -dc '0-9' >MANIFEST.count )
+  axion_log "2/4 bucket $bucket : $(cat "$MIRROR_DIR/$bucket/MANIFEST.count") objet(s) au manifeste"
 
   # ---------------------------------------------------------------------------
   # 3. Archive CHIFFRÉE horodatée (02 §11.4 « copie chiffrée »).

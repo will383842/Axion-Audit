@@ -1,0 +1,58 @@
+# =============================================================================
+# infra/caddy/fronts.dev.caddy — SERVICE DES FRONTS EN DÉVELOPPEMENT LOCAL
+# Importé par infra/caddy/Caddyfile via `import {$CADDY_FRONT_CONFIG}`.
+# Variante SŒUR : fronts.static.caddy (staging et production).
+# =============================================================================
+#
+# EN DEV, ET SEULEMENT EN DEV : `reverse_proxy` vers les serveurs Vite.
+# Le rechargement à chaud est tout l'intérêt du mode développement ; le servir
+# depuis un volume de fichiers construits le supprimerait.
+#
+# ⚠️ CE FICHIER NE DOIT JAMAIS ÊTRE CHARGÉ EN STAGING NI EN PRODUCTION.
+#    Là-bas les images `field`/`hq` sont des JOBS ONE-SHOT qui déposent un build
+#    dans un volume puis sortent : aucun serveur Vite n'écoute, tout renverrait
+#    502. C'est pourquoi les surcharges Compose staging/prod IMPOSENT
+#    `CADDY_FRONT_CONFIG=/etc/caddy/fronts.static.caddy` au lieu de le lire dans
+#    le `.env` : le mode de service est une propriété de la FORME du déploiement,
+#    pas un réglage d'exploitant.
+#
+# LES DEUX SNIPPETS CI-DESSOUS PORTENT LES MÊMES NOMS que dans fronts.static.caddy
+# (`fronts_principal`, `fronts_staging`) : les blocs de site du Caddyfile sont
+# ainsi identiques dans les deux modes, et la bascule ne touche qu'un fichier.
+#
+# La posture de sécurité (snippet `(securite)`) est appliquée par le Caddyfile
+# AVANT cet import, à l'identique dans les deux modes et dans les deux
+# environnements : un dev plus permissif ne validerait rien.
+#
+# PORTS (contrat rappelé en tête de infra/docker-compose.yml) :
+#   field → 5173 · hq → 5174 (un port par application, identique dedans/dehors).
+# =============================================================================
+
+# --- Pile PRINCIPALE (dev en local / prod sur le VPS) ------------------------
+(fronts_principal) {
+	# Console siège : préfixe /hq CONSERVÉ (build Vite en base /hq/).
+	# Matcher explicite : `/hq` et `/hq/**` uniquement — surtout pas `/hqautre`.
+	@hq path /hq /hq/*
+	handle @hq {
+		reverse_proxy axion-hq:5174
+	}
+
+	# PWA terrain : tout le reste, à la racine.
+	handle {
+		reverse_proxy axion-field:5173
+	}
+}
+
+# --- Pile STAGING ------------------------------------------------------------
+# INERTE en dev : ces upstreams n'existent pas dans la pile locale, et le bloc de
+# site qui les utilise écoute sur un port non publié.
+(fronts_staging) {
+	@hq path /hq /hq/*
+	handle @hq {
+		reverse_proxy staging-hq:5174
+	}
+
+	handle {
+		reverse_proxy staging-field:5173
+	}
+}

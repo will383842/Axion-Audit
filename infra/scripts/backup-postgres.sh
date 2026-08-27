@@ -91,7 +91,7 @@ PROJECT="$(axion_project_name)"
 docker run --rm \
   -v "${PROJECT}_pgbackrest_repo:/repo:ro" \
   -v "$PGBR_EXPORT_DIR:/export" \
-  alpine:3.20 sh -c 'cp -a /repo/. /export/'
+  $AXION_ALPINE_IMAGE sh -c 'cp -a /repo/. /export/'
 
 rsync -a --delete-after --partial \
       -e "ssh $SSH_OPTS" \

@@ -9,12 +9,59 @@
 #   docker compose --env-file /opt/axion-audit/prod/.env \
 #     -f infra/docker-compose.yml -f infra/docker-compose.prod.yml up -d
 #
-# La prod est le SEUL point d'entrée public du VPS : elle lie 80/443 (02 §11.2).
+# LA PROD PORTE LE FRONTAL DES DEUX ENVIRONNEMENTS — arbitrage A01, DECISIONS.md
+# 2026-08-27 « Cohabitation staging/prod : qui écoute sur 443 ? » (option 2).
+# Un seul processus peut lier 80/443 : c'est le Caddy de CETTE pile. Il sert
+# `{$CADDY_SITE_ADDRESS}` (prod) ET `{$CADDY_STAGING_SITE_ADDRESS}` (sous-domaine
+# de staging, 02 §11.2), par deux blocs de site aux upstreams et aux racines de
+# fichiers distincts.
+#
+# CADDY SERT LUI-MÊME LES FICHIERS DES FRONTS (B-7) — arbitrage A01, DECISIONS.md
+# « Comment les fronts sont servis en production ». Les images `field`/`hq` sont
+# des JOBS ONE-SHOT (cible `runtime` : copie du build dans /sortie, puis sortie) ;
+# Caddy monte les quatre volumes résultants EN LECTURE SEULE et applique lui-même
+# `root` + `file_server` + repli SPA. Motif : la PWA. Le `Cache-Control` du
+# service worker et le repli SPA décident de la version que voit un iPad en
+# clientèle (§31, invariant 1) ; les déléguer à un serveur intermédiaire, c'est
+# perdre ce mécanisme.
+#
+# ⚠️ CONSÉQUENCES OPÉRATIONNELLES, à connaître AVANT toute manœuvre :
+#   1. `down`/`restart` de CETTE pile coupe AUSSI l'accès HTTP au staging.
+#   2. Le volume `caddy_data` de cette pile détient les certificats des DEUX
+#      domaines. Il est sauvegardé chaque nuit (`backup-caddy.sh`) et sa
+#      restauration est vérifiée par `restore-test.sh` — mais un `down -v` reste
+#      une manœuvre à éviter (voir infra/README.md §8).
+#   3. Le rollback de prod (deploy.sh) recrée le conteneur `caddy` : brève
+#      coupure du staging également.
+#   4. Le GEL DES DÉPLOIEMENTS STAGING pendant les jours de collecte (02 §11.2)
+#      est renforcé par ce partage : voir docker-compose.staging.yml.
+#   5. Si la pile de staging n'a jamais été déployée, ses volumes de build sont
+#      vides : le sous-domaine de staging répond 404. C'est visible, sans danger,
+#      et sans effet sur la prod — rien ne « retombe » d'un environnement sur
+#      l'autre.
+#
+# ⚠️ DNS : les enregistrements des DEUX noms doivent exister AVANT le premier
+#    démarrage, sinon l'émission ACME échoue et Caddy retente en boucle.
+#
 # Nécessite Docker Compose >= 2.24 (balises YAML `!reset` / `!override`).
 #
+# ⚠️ PRÉREQUIS (une seule fois par VPS, posés par provision-vps.sh) :
+#      docker network create --driver bridge axion-edge-staging
+#      docker volume  create axion-staging-field-dist
+#      docker volume  create axion-staging-hq-dist
+#    Déclarés `external` ici ET dans la surcharge staging : sans eux, `up` échoue
+#    immédiatement au lieu de démarrer une prod à moitié câblée.
+#
 # VARIABLES SUPPLÉMENTAIRES attendues dans le .env prod (non secrètes) :
-#   GHCR_OWNER = compte/organisation GitHub propriétaire des images
-#   IMAGE_TAG  = tag d'image déployé (`v*`), posé par la CI après approbation
+#   GHCR_OWNER                  = compte/organisation GitHub propriétaire des images
+#   IMAGE_TAG                   = tag d'image déployé (`v*`), posé par la CI après approbation
+#   CADDY_STAGING_SITE_ADDRESS  = sous-domaine servi par le second bloc de site
+#                                 (ex. `staging.audit.<domaine>`)
+# Le PORT INTERNE de l'API est une CONVENTION commune (`API_PORT`, jamais publié) :
+# les deux blocs du Caddyfile l'utilisent. Ne pas le changer sans le changer dans
+# LES DEUX `.env` (arbitrage A01 du 2026-08-27).
+# `CADDY_FRONT_CONFIG` n'est PAS lue depuis le `.env` ici : elle est IMPOSÉE plus
+# bas (voir le service `caddy`).
 
 name: axion-audit-prod
 
@@ -30,7 +77,9 @@ services:
     # INTERDICTION 11 §2 : MinIO n'est JAMAIS exposé publiquement.
     ports: !reset []
 
-  # --- Applications : images GHCR immuables, aucun code monté -----------------
+  # --- API et worker : images GHCR immuables, aucun code monté ----------------
+  # L'alias `axion-api` vient du fichier de base : c'est LUI que le bloc de site
+  # de prod cible dans le Caddyfile.
   api:
     build: !reset null
     image: ghcr.io/${GHCR_OWNER}/axion-audit-api:${IMAGE_TAG}
@@ -42,32 +91,104 @@ services:
     build: !reset null
     image: ghcr.io/${GHCR_OWNER}/axion-audit-worker:${IMAGE_TAG}
     pull_policy: always
-    volumes: !reset []
     ports: !reset []
+    volumes: !reset []
 
+  # --- Fronts : JOBS ONE-SHOT, pas des serveurs (B-7) -------------------------
+  # Ils déposent leur build dans /sortie puis sortent en 0. Trois réglages qui
+  # vont ensemble et qu'il ne faut pas dissocier :
+  #   · `restart: "no"` — redémarrer un job terminé le ferait boucler ;
+  #   · AUCUN healthcheck — un job sorti n'a pas de vivacité à sonder, et une
+  #     sonde qui ne peut pas réussir bloque tout ce qui en dépend ;
+  #   · Caddy en dépend par `service_completed_successfully`, jamais `_healthy`.
   field:
     build: !reset null
     image: ghcr.io/${GHCR_OWNER}/axion-audit-field:${IMAGE_TAG}
     pull_policy: always
-    volumes: !reset []
     ports: !reset []
+    restart: 'no'
+    healthcheck: !override
+      disable: true
+    volumes: !override
+      - field_dist:/sortie
 
   hq:
     build: !reset null
     image: ghcr.io/${GHCR_OWNER}/axion-audit-hq:${IMAGE_TAG}
     pull_policy: always
-    volumes: !reset []
     ports: !reset []
+    restart: 'no'
+    healthcheck: !override
+      disable: true
+    volumes: !override
+      - hq_dist:/sortie
 
-  # --- Caddy : UNIQUE point d'entrée public, TLS automatique ------------------
+  # --- Caddy : UNIQUE point d'entrée public du VPS, TLS automatique -----------
+  # Il est le SEUL service à voir les deux réseaux et les quatre volumes de
+  # build. Rien d'autre ne traverse : aucun conteneur de staging n'atteint la
+  # base, les buckets ni Redis de la prod (02 §30.4-4 intact — un secret de
+  # staging ne peut RIEN sur la prod).
   caddy:
+    depends_on:
+      api:
+        condition: service_healthy
+      # Les fronts ne deviennent jamais `healthy` : ce sont des jobs. On attend
+      # qu'ils AIENT FINI, ce qui est la seule chose qui ait un sens ici — et
+      # qui garantit que les volumes contiennent bien un build avant de servir.
+      field:
+        condition: service_completed_successfully
+      hq:
+        condition: service_completed_successfully
+    environment:
+      # IMPOSÉE, pas lue dans le `.env` : le mode de service découle de la FORME
+      # du déploiement (images one-shot + volumes), pas d'un réglage d'exploitant.
+      # Un `.env` de prod portant par erreur la valeur `dev` mettrait le site
+      # entier en 502 — cette ligne rend cette panne impossible.
+      CADDY_FRONT_CONFIG: /etc/caddy/fronts.static.caddy
     ports: !override
       - '80:80'
       - '443:443'
       - '443:443/udp' # HTTP/3
+    volumes:
+      # Quatre racines DISTINCTES, toutes en LECTURE SEULE : Caddy sert des
+      # fichiers, il n'en écrit aucun. Croiser ces chemins servirait le build
+      # d'un environnement sous le domaine de l'autre.
+      - field_dist:/srv/principal/field:ro
+      - hq_dist:/srv/principal/hq:ro
+      - staging_field_dist:/srv/staging/field:ro
+      - staging_hq_dist:/srv/staging/hq:ro
+    networks:
+      # Réseau de la pile de prod : y résout `axion-api`.
+      axion: {}
+      # Réseau partagé avec la pile de staging : y résout `staging-api`.
+      # ⚠️ Le nom COURT `api` existe des DEUX côtés et est donc AMBIGU : le
+      # Caddyfile ne l'utilise jamais.
+      edge: {}
 
 # Réseau DISTINCT de celui du staging (02 §30.4-4). Les volumes nommés sont
 # préfixés par le nom de projet `axion-audit-prod` : bases et buckets distincts.
 networks:
   axion:
     name: axion-audit-prod
+  # Réseau de LIAISON, créé hors Compose (voir PRÉREQUIS ci-dessus) et partagé
+  # avec la pile de staging. Seuls Caddy (ici) et l'API de staging y sont
+  # attachés — jamais Postgres, Redis, MinIO ni le worker.
+  edge:
+    name: axion-edge-staging
+    external: true
+
+volumes:
+  # Fichiers construits des fronts de CETTE pile (nommés
+  # `axion-audit-prod_field_dist` / `_hq_dist` par Compose).
+  field_dist:
+  hq_dist:
+  # Fichiers construits des fronts de la pile de STAGING, montés ici en lecture
+  # seule pour que le frontal unique puisse servir le sous-domaine. Ils ne
+  # contiennent que du HTML/JS/CSS publiquement servi : aucune donnée, aucun
+  # secret. Créés une fois par provision-vps.sh, comme le réseau de liaison.
+  staging_field_dist:
+    name: axion-staging-field-dist
+    external: true
+  staging_hq_dist:
+    name: axion-staging-hq-dist
+    external: true

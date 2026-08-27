@@ -1,0 +1,84 @@
+# =============================================================================
+# infra/caddy/fronts.static.caddy — SERVICE DES FRONTS EN STAGING ET EN PRODUCTION
+# Importé par infra/caddy/Caddyfile via `import {$CADDY_FRONT_CONFIG}`.
+# Variante SŒUR : fronts.dev.caddy (développement local).
+# =============================================================================
+#
+# CADDY SERT LUI-MÊME LES FICHIERS (`root` + `file_server`), depuis les volumes
+# où les images `field`/`hq` ont déposé leur build (cible `runtime` des
+# Dockerfiles : un JOB ONE-SHOT qui copie `dist` dans /sortie puis sort).
+#
+# POURQUOI CE CHOIX — arbitrage A01, DECISIONS.md « Comment les fronts sont
+# servis en production ». Ce n'est pas l'économie d'un composant, c'est la PWA :
+# Caddy doit MAÎTRISER LUI-MÊME le `Cache-Control` du service worker et le repli
+# SPA. Derrière un serveur intermédiaire, ces en-têtes ne sont plus les siens —
+# or la mise à jour applicative (§31) et le démarrage hors ligne (invariant 1)
+# dépendent exactement d'eux : les déléguer, c'est perdre le seul mécanisme qui
+# décide de la version que voit un iPad en clientèle.
+#
+# LES DEUX SNIPPETS CI-DESSOUS PORTENT LES MÊMES NOMS que dans fronts.dev.caddy
+# (`fronts_principal`, `fronts_staging`) : les blocs de site du Caddyfile sont
+# identiques dans les deux modes, et la bascule ne touche qu'un fichier.
+#
+# La posture de sécurité (snippet `(securite)`) est appliquée par le Caddyfile
+# AVANT cet import — donc identiquement ici et en dev, en prod et en staging.
+# C'est en mode statique que ses règles de cache prennent tout leur sens :
+#   · /sw.js, /manifest.webmanifest → `no-cache, no-store, must-revalidate`
+#   · /assets/* (noms = hachage de contenu) → `immutable`, un an
+#
+# ┌───────────────────────────────────────────────────────────────────────────┐
+# │ RACINES — montées EN LECTURE SEULE par le service `caddy` (surcharge prod)│
+# │   /srv/principal/field  ← volume `field_dist`         (pile de PROD)      │
+# │   /srv/principal/hq     ← volume `hq_dist`            (pile de PROD)      │
+# │   /srv/staging/field    ← volume `axion-staging-field-dist`               │
+# │   /srv/staging/hq       ← volume `axion-staging-hq-dist`                  │
+# │ Quatre racines DISTINCTES : servir la prod depuis le build de staging     │
+# │ serait la version « fichiers » de la catastrophe silencieuse que les      │
+# │ alias d'upstream évitent côté API. Ne jamais croiser ces chemins.         │
+# └───────────────────────────────────────────────────────────────────────────┘
+#
+# Si un volume est vide (front jamais déployé dans cet environnement), Caddy
+# répond 404 : c'est visible et sans danger. Rien ne « retombe » sur l'autre
+# environnement.
+# =============================================================================
+
+# --- Pile PRINCIPALE (prod sur le VPS) ---------------------------------------
+(fronts_principal) {
+	# `/hq` sans barre oblique finale → redirection : sinon les chemins relatifs
+	# de la page seraient résolus depuis la racine et la console ne chargerait rien.
+	redir /hq /hq/ 308
+
+	# Console siège : `handle_path` RETIRE le préfixe /hq. Le build Vite est en
+	# base /hq/, donc ses URL d'assets sont `/hq/assets/…` → après retrait,
+	# `/assets/…` sous la racine de la console. `try_files … /index.html` est le
+	# repli SPA : une route profonde rechargée à la main sert l'application.
+	handle_path /hq/* {
+		root * /srv/principal/hq
+		try_files {path} {path}/ /index.html
+		file_server
+	}
+
+	# PWA terrain : tout le reste, à la racine du domaine.
+	handle {
+		root * /srv/principal/field
+		try_files {path} {path}/ /index.html
+		file_server
+	}
+}
+
+# --- Pile STAGING ------------------------------------------------------------
+(fronts_staging) {
+	redir /hq /hq/ 308
+
+	handle_path /hq/* {
+		root * /srv/staging/hq
+		try_files {path} {path}/ /index.html
+		file_server
+	}
+
+	handle {
+		root * /srv/staging/field
+		try_files {path} {path}/ /index.html
+		file_server
+	}
+}

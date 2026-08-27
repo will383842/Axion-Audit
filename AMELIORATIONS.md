@@ -23,7 +23,7 @@
 
 | Lot | Consommé | Plafond | Reste  |
 | --- | -------- | ------- | ------ |
-| L0  | ~0,1 j   | 0,5 j   | ~0,4 j |
+| L0  | ~0,3 j   | 0,5 j   | ~0,2 j |
 
 ---
 
@@ -102,3 +102,33 @@ l'absence totale d'écriture chez les réviseurs. À reconsidérer si un inciden
 cas cette fiche porte déjà l'analyse.
 
 **Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-A_
+
+### 2026-08-27 — [L0] Contrôle de jonction appelant → appelé (`pnpm check:jonction`)
+
+**Constat terrain :** la revue croisée du lot L0 a rendu NON CONFORME avec **7 défauts bloquants**,
+tous de la même cause — trois agents ont livré en parallèle trois moitiés d'interface qui ne se
+rejoignaient pas. La CI appelait `deploy.sh` sans ses arguments obligatoires, sondait `/api/health`
+là où la route est `/api/v1/health`, entrait dans `/opt/axion-audit` quand le dépôt est cloné dans
+`/opt/axion-audit/repo`, et invoquait des scripts `pnpm` inexistants.
+**Aucun de ces défauts n'était visible depuis un seul fichier. Tous étaient évidents en en croisant
+deux.** C'est précisément ce qu'une machine fait bien et qu'une relecture rate, parce qu'elle lit un
+fichier à la fois.
+
+**Ajout :** `scripts/check-jonction.mjs`, câblé en `pnpm check:jonction` et intégré à `pnpm verify`.
+Trois jonctions contrôlées : tout `pnpm <script>` appelé par la CI existe · toute variable interpolée
+par l'infrastructure est documentée au `.env.example` · tout `infra/scripts/*.sh` invoqué existe.
+
+**Pourquoi c'est de l'étage 1 :** robustesse d'outillage, ne touche NI le schéma 04, NI l'API, NI la
+crypto, NI le périmètre fonctionnel. Coût réel : ~0,2 j.
+
+**Éprouvé, dans les deux sens.** Détecte : un script `pnpm` inexistant injecté dans `ci.yml`, une
+variable non documentée injectée dans le Compose. Ne crie pas à tort : deux faux positifs mesurés sur
+le dépôt réel (`echo "pnpm activé"` lu comme un appel au script « activ », et `pnpm --version | cut`
+lu comme un appel à « cut ») ont été corrigés avant livraison — un contrôle qui crie à tort est un
+contrôle qu'on finit par désactiver.
+
+**Ce qu'il ne fait pas :** il ne remplace pas la revue croisée. Il lui rend le temps qu'elle passait
+à croiser des tableaux, pour qu'elle le passe à juger.
+
+**Relu par :** revue croisée du lot L0 (étape 4, seconde passe) · **Trace :** DECISIONS.md 2026-08-27
+« Verdict de la revue croisée : NON CONFORME — et pourquoi c'est le système qui fonctionne »

@@ -15,9 +15,24 @@
 # CONTRAT DE PORTS INTERNES (à respecter par les Dockerfiles des apps, A01) :
 #   - api    : écoute API_PORT (défaut 3000), route de santé GET /v1/health
 #   - worker : aucun port (BullMQ), un unique processus `node`
-#   - field  : cibles `dev` ET `runtime` → HTTP sur 5173, avec --host 0.0.0.0
-#   - hq     : cibles `dev` ET `runtime` → HTTP sur 5173, base publique /hq/
+#   - field  : cible `dev`     → serveur Vite sur 5173 (--host 0.0.0.0)
+#              cible `runtime` → JOB ONE-SHOT : dépose le build dans /sortie, puis SORT
+#   - hq     : cible `dev`     → serveur Vite sur 5174 — PAS 5173.
+#              UN PORT PAR APPLICATION, IDENTIQUE DEDANS ET DEHORS : apps/hq/
+#              vite.config.ts, apps/hq/package.json et apps/hq/Dockerfile disent
+#              tous 5174 (DECISIONS.md 2026-08-27, « Points d’infrastructure
+#              actés sans réserve », point 9). La moindre asymétrie ici se paie en
+#              heures de débogage : la sonde échouerait, donc Caddy ne démarrerait
+#              jamais (il en dépend), donc « docker compose up » serait faux.
+#              cible `runtime` → JOB ONE-SHOT : dépose le build (base /hq/) dans /sortie
 # Ce contrat est ce que le Caddyfile route ; il est rappelé dans infra/README.md.
+#
+# ALIAS RÉSEAU (arbitrage A01, DECISIONS.md 2026-08-27 « Cohabitation staging/prod ») :
+#   `api`, `field` et `hq` portent en plus les alias `axion-api`, `axion-field`,
+#   `axion-hq`. Le Caddy unique est attaché À DEUX réseaux (celui de sa pile et
+#   `axion-edge-staging`), où les noms courts existent DEUX fois : seuls les alias
+#   longs (`axion-*` côté pile principale, `staging-*` côté staging) sont déterministes.
+#   C’est ce qui interdit à un `reverse_proxy` de staging d’atteindre la pile de prod.
 
 name: axion-audit-dev
 
@@ -247,6 +262,14 @@ services:
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
       API_HOST: ${API_HOST}
       API_PORT: ${API_PORT}
+      # MODE DE SERVICE DES FRONTS (B-7). En DEV : `reverse_proxy` vers les
+      # serveurs Vite — le rechargement à chaud est tout l’intérêt du mode dev.
+      # Les surcharges staging/prod IMPOSENT `fronts.static.caddy` : là-bas,
+      # `field` et `hq` sont des jobs one-shot qui déposent un build dans un
+      # volume et sortent — aucun serveur Vite n’écoute.
+      # Le repli ci-dessous est la valeur de DEV : il ne rend pas la variable
+      # facultative sur le VPS, où la surcharge la fixe elle-même.
+      CADDY_FRONT_CONFIG: ${CADDY_FRONT_CONFIG:-/etc/caddy/fronts.dev.caddy}
       POSTGRES_HOST: ${POSTGRES_HOST}
       POSTGRES_PORT: ${POSTGRES_PORT}
       POSTGRES_DB: ${POSTGRES_DB}
@@ -296,8 +319,8 @@ services:
       start_period: 60s
     networks:
       # Alias NON AMBIGU. Le Caddy unique (arbitrage DECISIONS 2026-08-27
-      # Â« Cohabitation staging/prod Â») est attache au reseau de CETTE pile ET au
-      # reseau partage `axion-edge-staging`, ou le nom court `api` existe AUSSI.
+      # « Cohabitation staging/prod ») est attaché au réseau de CETTE pile ET au
+      # réseau partagé `axion-edge-staging`, où le nom court `api` existe AUSSI.
       # Le Caddyfile ne route donc QUE sur `axion-api` / `staging-api`.
       axion:
         aliases: [axion-api]
@@ -419,8 +442,8 @@ services:
       start_period: 60s
     networks:
       # Alias NON AMBIGU. Le Caddy unique (arbitrage DECISIONS 2026-08-27
-      # Â« Cohabitation staging/prod Â») est attache au reseau de CETTE pile ET au
-      # reseau partage `axion-edge-staging`, ou le nom court `field` existe AUSSI.
+      # « Cohabitation staging/prod ») est attaché au réseau de CETTE pile ET au
+      # réseau partagé `axion-edge-staging`, où le nom court `field` existe AUSSI.
       # Le Caddyfile ne route donc QUE sur `axion-field` / `staging-field`.
       axion:
         aliases: [axion-field]
@@ -450,28 +473,36 @@ services:
       - hq_app_node_modules:/app/apps/hq/node_modules
     ports:
       # DEV UNIQUEMENT (voir field).
-      - '127.0.0.1:5174:5173'
+      - '127.0.0.1:5174:5174'
     healthcheck:
       test:
         - CMD
         - node
         - -e
-        - "fetch('http://127.0.0.1:5173/hq/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        - "fetch('http://127.0.0.1:5174/hq/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
       interval: 10s
       timeout: 5s
       retries: 18
       start_period: 60s
     networks:
       # Alias NON AMBIGU. Le Caddy unique (arbitrage DECISIONS 2026-08-27
-      # Â« Cohabitation staging/prod Â») est attache au reseau de CETTE pile ET au
-      # reseau partage `axion-edge-staging`, ou le nom court `hq` existe AUSSI.
+      # « Cohabitation staging/prod ») est attaché au réseau de CETTE pile ET au
+      # réseau partagé `axion-edge-staging`, où le nom court `hq` existe AUSSI.
       # Le Caddyfile ne route donc QUE sur `axion-hq` / `staging-hq`.
       axion:
         aliases: [axion-hq]
 
   # ---------------------------------------------------------------------------
-  # Caddy — SEUL point d'entrée public (02 §4.1). Domaine UNIQUE : c'est ce qui
-  # supprime toute la classe de bugs CORS (11 §2).
+  # Caddy — SEUL point d’entrée public du VPS (02 §4.1). Domaine unique par
+  # pile : c’est ce qui supprime toute la classe de bugs CORS (11 §2).
+  #
+  # UN SEUL CADDY POUR LES DEUX PILES — arbitrage A01, DECISIONS.md 2026-08-27
+  # « Cohabitation staging/prod : qui écoute sur 443 ? » (option 2). Ce service vit
+  # dans la pile de DÉV en local et dans la pile de PROD sur le VPS ; il sert AUSSI
+  # le sous-domaine de staging par un SECOND bloc de site (voir caddy/Caddyfile).
+  # La surcharge staging DÉSACTIVE ce service : la pile staging n’a plus de Caddy,
+  # ne publie plus aucun port, et n’est plus joignable par tunnel SSH mais par son
+  # vrai sous-domaine.
   # ---------------------------------------------------------------------------
   caddy:
     <<: [*restart, *logging]
@@ -486,10 +517,35 @@ services:
     environment:
       CADDY_SITE_ADDRESS: ${CADDY_SITE_ADDRESS}
       CADDY_ACME_EMAIL: ${CADDY_ACME_EMAIL}
+      # Adresse du SECOND bloc de site (staging). OBLIGATOIRE : une adresse de
+      # site vide empêcherait Caddy de démarrer. Fournie par le .env.example §14 :
+      # `:8081` en local — port NON publié, le bloc est inerte et ses upstreams
+      # `staging-*` n’existent pas.
+      # En PROD : le vrai sous-domaine (l’enregistrement DNS doit exister AVANT
+      # le premier démarrage, sinon ACME échoue et Caddy retente en boucle).
+      CADDY_STAGING_SITE_ADDRESS: ${CADDY_STAGING_SITE_ADDRESS}
+      # Le port interne de l’API est le MÊME dans les deux environnements : les deux
+      # blocs du Caddyfile utilisent API_PORT. Ce port n’est jamais publié (06 §10.3),
+      # il n’a aucune raison de différer, et une variable à tenir en double dans deux
+      # `.env` serait une panne en attente (arbitrage A01 du 2026-08-27).
       API_PORT: ${API_PORT}
+      # MODE DE SERVICE DES FRONTS (B-7). En DEV : `reverse_proxy` vers les
+      # serveurs Vite — le rechargement à chaud est tout l’intérêt du mode dev.
+      # Les surcharges staging/prod IMPOSENT `fronts.static.caddy` : là-bas,
+      # `field` et `hq` sont des jobs one-shot qui déposent un build dans un
+      # volume et sortent — aucun serveur Vite n’écoute.
+      # Le repli ci-dessous est la valeur de DEV : il ne rend pas la variable
+      # facultative sur le VPS, où la surcharge la fixe elle-même.
+      CADDY_FRONT_CONFIG: ${CADDY_FRONT_CONFIG:-/etc/caddy/fronts.dev.caddy}
       TZ: ${TZ}
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # LES DEUX variantes sont montées dans TOUS les environnements : c’est
+      # {$CADDY_FRONT_CONFIG} qui choisit laquelle est importée. Monter la
+      # seule variante « utile » ferait échouer Caddy au démarrage sur une
+      # erreur d’import si la variable était mal renseignée, au lieu de servir.
+      - ./caddy/fronts.dev.caddy:/etc/caddy/fronts.dev.caddy:ro
+      - ./caddy/fronts.static.caddy:/etc/caddy/fronts.static.caddy:ro
       - caddy_data:/data # certificats ACME — à sauvegarder (PRA)
       - caddy_config:/config
     ports:
