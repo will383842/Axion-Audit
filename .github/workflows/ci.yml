@@ -437,6 +437,15 @@ jobs:
           MINIO_ACCESS_KEY: ci_factice_minio
           MINIO_SECRET_KEY: ci_factice_minio_secret
           APP_ENV: dev
+          # Le seed du lot L1 crée le compte fondateur et REFUSE de démarrer si ces
+          # deux variables manquent — c'est voulu (11 §5, §34.4 : sans
+          # `habilitated_at` posé, le premier utilisateur ne peut pas s'affecter sa
+          # propre première mission). En local elles viennent du `.env` ; en CI il
+          # faut les fournir, sinon les tests d'intégration échouent sur un défaut
+          # d'ENVIRONNEMENT et non de code. Valeurs FACTICES, comme le reste.
+          SEED_ADMIN_EMAIL: ci-factice@example.invalid
+          SEED_ADMIN_PASSWORD: ci_factice_mot_de_passe_admin_12
+          SEED_ADMIN_FULL_NAME: Administrateur de CI
           TZ: UTC
         run: pnpm test:integration
 
