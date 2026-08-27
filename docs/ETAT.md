@@ -95,3 +95,17 @@ Toutes les réserves de la 1ʳᵉ passe sont traitées : 4 bloquants (comparateu
 Prochaine action : recevoir le verdict de la 2ᵉ passe ; si CONFORME, clore l'étape 4, puis lancer le **gardien A02 pour l'étape 6** (matrice E1-E47 dans les DEUX sens + DoD transverse), rédiger le journal du lot et compléter `docs/portes/PORTE_A_*.md` (critères L1 n° 5 à 8, aujourd'hui non cochés).
 Tests rouges connus : aucun en local. **La CI distante n'a pas encore été observée sur ce commit.**
 Réserve hors périmètre logiciel, inchangée : la DoD « migrations up/down exécutées sur staging » reste incochable tant que le VPS n'existe pas. Porte P-A en attente de Williams.
+
+---
+
+## 2026-08-27 22h40 — [lot L1 / schéma & migrations] — étape pipeline 4/7 (2ᵉ série de corrections livrée, 3ᵉ passe lancée)
+
+Dernier commit vert : d832e30 (fix(l1): 2ᵉ passe de revue — 6 mutations de plus passaient, et l'une bloquait toute collecte) · Branche : lot/l0-infra · Poussé : **oui**
+Tâche en cours : attente du verdict de la **3ᵉ passe de vérification**. Le réviseur est le même qu'à la 2ᵉ passe (contexte conservé), et sa consigne n'est PAS de rejouer ses 15 mutations — elles sont désormais dans le méta-test — mais de **chercher ce qui reste** et de juger si l'approche du comparateur est saine.
+Ce que la 2ᵉ passe avait trouvé : verdict **NON CONFORME**, 4 bloquants + 6 majeurs, sur 15 mutations neuves dont **6 non détectées**. La plus grave : `.toLowerCase()` sur la définition entière, littéraux compris, alors que PostgreSQL compare les chaînes en respectant la casse — `'NON_DEMARRE'` au lieu de `'non_demarre'` donnait ZÉRO ÉCART pendant qu'**aucune session de collecte ne pouvait plus être créée**.
+État vérifié PAR EXÉCUTION : `pnpm verify` **code 0** — 95 unitaires · **58** d'intégration (méta-test porté de 12 à 16 classes) · 8 Playwright · `schema:diff` zéro écart · chaîne up 12 → down 12 → up 12 · seed ×2 identiques.
+Recoupements indépendants d'A01 : les **23 colonnes d'identité déclarées par T13 sont toutes NOT NULL en base** (requête directe, aucune ligne nullable) · 23 + 20 = 43 tables, l'inventaire couvre le schéma entier · les deux branches d'échec du contrôle 4 réécrit sont **prouvées par injection**.
+**RISQUE À REMONTER À LA PORTE :** le comparateur a nécessité **deux** séries de corrections, chacune trouvant de nouvelles façons de le tromper. Si la 3ᵉ passe trouve encore des bloquants de la même famille, la limite de 3 tentatives (09 §5.5) est atteinte et la question devient une question de **conception** — comparer des définitions SQL sous forme de texte normalisé est fragile par nature — à arbitrer par Williams, pas par A01.
+Prochaine action : verdict de la 3ᵉ passe. Si conforme → clore l'étape 4, lancer le **gardien A02 (étape 6)**, compléter `docs/portes/PORTE_A_*.md`. Sinon → escalade Williams.
+Tests rouges connus : aucun en local. CI du commit `d832e30` non encore observée.
+Réserve hors périmètre logiciel, inchangée : DoD « migrations up/down sur staging » incochable sans VPS. Le runbook de cohabitation avec axion-ia.com est écrit (`infra/COHABITATION_AXIONIA_WEB.md`) et attend trois commandes en lecture seule de Williams.
