@@ -5,20 +5,24 @@
 // Deux trous que le garde-fou anti-skip (09 §5.7) ne peut pas voir, parce qu'ils ne
 // passent pas par un `.skip()` :
 //
-//   1. UN FICHIER DE TEST QUE PERSONNE N'EXÉCUTE. `vitest.config.ts` capte
-//      `{apps,packages}/*/src/**/*.test.ts` et `*/tests/**/*.integration.test.ts`.
-//      Un fichier `apps/api/tests/sante.test.ts` n'est capté par AUCUN projet :
-//      `check-no-skipped-tests.mjs` le valide (il ne contient aucun `.skip`) et
-//      vitest ne l'exécute jamais. Le résultat est pire qu'un test skippé — un test
-//      skippé se voit, un test orphelin donne l'illusion de la couverture.
+//   1. UN FICHIER DE TEST QUE PERSONNE N'EXÉCUTE. Un fichier hors des `include`
+//      d'un projet vitest — ou inclus puis EXCLU — est vert en permanence sans
+//      jamais s'exécuter. C'est pire qu'un test skippé : le skip se voit, l'orphelin
+//      donne l'illusion de la couverture.
 //
 //   2. `--passWithNoTests` QUI SURVIT À SA RAISON D'ÊTRE. Au lot L0 il n'existe
-//      aucun test d'intégration, et c'est légitime : il n'y a ni base, ni route
-//      métier, ni rien à intégrer. Le drapeau est donc honnête AUJOURD'HUI. Il
-//      cesserait de l'être le jour où le schéma existe. Ce contrôle le rend
-//      auto-péremptoire : dès que `apps/api/drizzle/` apparaît (le marqueur du lot
-//      L1), l'absence de test d'intégration devient une ERREUR. Même mécanique
-//      auto-durcissante que `scripts/schema-diff.mjs`.
+//      aucun test d'intégration, et c'est légitime : rien à intégrer. Le drapeau est
+//      honnête AUJOURD'HUI. Ce contrôle le rend auto-péremptoire : dès que
+//      `apps/api/drizzle/` apparaît (marqueur du lot L1), l'absence de test
+//      d'intégration devient une ERREUR.
+//
+// CORRECTION APRÈS REVUE (défaut N-1, seconde passe A17). La première version
+// extrayait les `include:` par une regex lâche sur le TEXTE de `vitest.config.ts` :
+// elle capturait aussi `coverage.include` (`apps/*/src/**/*.ts`), qui absorbe
+// n'importe quel `.ts` sous `src/`. Trois formes d'orphelins passaient donc au vert,
+// dont un test d'intégration mal placé sous `src/` — le cas réel du lot L1. Et les
+// `exclude:` n'étaient jamais lus. Un garde-fou qui ment est le pire défaut possible
+// dans ce dépôt : la lecture se fait désormais PAR PROJET, `include` ET `exclude`.
 //
 // Traçabilité : E36, E43 · DoD transverse (« tous les tests verts, AUCUN test skippé »).
 // =============================================================================
@@ -43,10 +47,10 @@ function fichiersDeTest() {
 }
 
 /**
- * Traduit un motif glob de `include` vitest en expression régulière.
+ * Traduit un motif glob en expression régulière.
  * Volontairement minimal : il ne couvre que les formes réellement employées
  * (`**`, `*`, `{a,b}`). Un moteur glob complet serait une dépendance de plus pour
- * un besoin de vingt lignes.
+ * un besoin de trente lignes.
  */
 function globVersRegex(glob) {
   let re = '';
@@ -54,9 +58,8 @@ function globVersRegex(glob) {
     const c = glob[i];
     if (c === '*') {
       if (glob[i + 1] === '*') {
-        // `**/` traverse zéro ou plusieurs répertoires.
         if (glob[i + 2] === '/') {
-          re += '(?:[^/]+/)*';
+          re += '(?:[^/]+/)*'; // `**/` traverse zéro ou plusieurs répertoires
           i += 2;
         } else {
           re += '.*';
@@ -81,46 +84,102 @@ function globVersRegex(glob) {
   return new RegExp(`^${re}$`);
 }
 
-// --- Motifs d'inclusion, lus dans la configuration réelle -------------------
-// On les extrait du fichier plutôt que de les recopier : deux copies divergeraient,
-// et c'est exactement le genre de divergence que ce script existe pour attraper.
-const config = readFileSync(resolve(RACINE, 'vitest.config.ts'), 'utf8');
-const inclusVitest = [...config.matchAll(/include:\s*\[([\s\S]*?)\]/g)].flatMap((m) =>
-  [...(m[1] ?? '').matchAll(/'([^']+)'/g)].map((g) => g[1] ?? ''),
-);
+/** Extrait le texte d'un tableau `cle: [ … ]` en équilibrant les crochets. */
+function tableauApres(texte, cle, depuis = 0) {
+  const debut = texte.indexOf(`${cle}:`, depuis);
+  if (debut < 0) return null;
+  const ouvrant = texte.indexOf('[', debut);
+  if (ouvrant < 0) return null;
+  let profondeur = 0;
+  for (let i = ouvrant; i < texte.length; i += 1) {
+    if (texte[i] === '[') profondeur += 1;
+    else if (texte[i] === ']') {
+      profondeur -= 1;
+      if (profondeur === 0) return { texte: texte.slice(ouvrant + 1, i), fin: i };
+    }
+  }
+  return null;
+}
 
+function motifsDe(texte, cle) {
+  const bloc = tableauApres(texte, cle);
+  if (!bloc) return [];
+  return [...bloc.texte.matchAll(/'([^']+)'/g)].map((m) => m[1] ?? '');
+}
+
+// --- Lecture des projets vitest : include ET exclude, PAR PROJET ------------
+const configVitest = readFileSync(resolve(RACINE, 'vitest.config.ts'), 'utf8');
+const blocProjets = tableauApres(configVitest, 'projects');
+
+if (!blocProjets) {
+  console.error(
+    `${ROUGE}✗ aucun bloc \`projects\` trouvé dans vitest.config.ts.${RAZ}\n` +
+      "  Ce contrôle lit la configuration RÉELLE plutôt que d'en recopier les motifs :\n" +
+      '  deux copies divergeraient, et c\'est le genre de divergence qu\'il traque.\n',
+  );
+  process.exit(1);
+}
+
+/**
+ * Un projet par occurrence de `name:`. On découpe sur ces bornes pour que les
+ * `include`/`exclude` d'un projet ne soient jamais attribués à un autre — et
+ * surtout pour ne PAS descendre dans `coverage`, qui vit hors de ce bloc.
+ */
+const projets = [];
+const bornes = [...blocProjets.texte.matchAll(/name:\s*'([^']+)'/g)];
+for (const [i, borne] of bornes.entries()) {
+  const debut = borne.index ?? 0;
+  const fin = i + 1 < bornes.length ? (bornes[i + 1]?.index ?? blocProjets.texte.length) : blocProjets.texte.length;
+  const morceau = blocProjets.texte.slice(debut, fin);
+  projets.push({
+    nom: borne[1] ?? '',
+    include: motifsDe(morceau, 'include').map(globVersRegex),
+    exclude: motifsDe(morceau, 'exclude').map(globVersRegex),
+  });
+}
+
+// --- Playwright -------------------------------------------------------------
 const configPw = readFileSync(resolve(RACINE, 'playwright.config.ts'), 'utf8');
 const dossierPw = /testDir:\s*'([^']+)'/.exec(configPw)?.[1]?.replace(/^\.\//, '') ?? 'e2e';
 const motifPw = /testMatch:\s*'([^']+)'/.exec(configPw)?.[1] ?? '**/*.e2e.ts';
-const inclusPlaywright = [`${dossierPw}/${motifPw}`];
+projets.push({
+  nom: 'playwright',
+  include: [globVersRegex(`${dossierPw}/${motifPw}`)],
+  exclude: [],
+});
 
-const motifs = [...inclusVitest, ...inclusPlaywright].map(globVersRegex);
-
-if (inclusVitest.length === 0) {
-  console.error(`${ROUGE}✗ aucun motif d'inclusion trouvé dans vitest.config.ts.${RAZ}`);
+if (projets.length < 2) {
+  console.error(`${ROUGE}✗ aucun projet de test identifié — le contrôle serait sans objet.${RAZ}`);
   process.exit(1);
+}
+
+/** Un fichier est couvert s'il est inclus ET non exclu par AU MOINS un projet. */
+function couvertPar(fichier) {
+  return projets.find(
+    (p) => p.include.some((re) => re.test(fichier)) && !p.exclude.some((re) => re.test(fichier)),
+  );
 }
 
 // --- Contrôle 1 : aucun fichier de test orphelin ----------------------------
 const tests = fichiersDeTest();
-const orphelins = tests.filter((f) => !motifs.some((re) => re.test(f)));
+const orphelins = tests.filter((f) => !couvertPar(f));
 
 if (orphelins.length > 0) {
   console.error(`${ROUGE}✗ FICHIERS DE TEST QUE PERSONNE N'EXÉCUTE${RAZ}\n`);
   for (const f of orphelins) console.error(`  ${f}`);
   console.error(
-    '\n  Ces fichiers ne correspondent à aucun `include` de vitest.config.ts ni au\n' +
-      '  `testDir`/`testMatch` de playwright.config.ts. Ils sont donc verts en\n' +
-      "  permanence sans jamais s'exécuter — une illusion de couverture, pire qu'un\n" +
-      '  test visiblement désactivé.\n' +
-      '  Corrige : déplace le fichier dans un emplacement capté, ou élargis le motif.\n',
+    '\n  Ces fichiers ne sont captés par aucun projet — soit hors de tout `include`,\n' +
+      '  soit inclus PUIS exclus. Ils sont donc verts en permanence sans jamais\n' +
+      "  s'exécuter : une illusion de couverture, pire qu'un test visiblement désactivé.\n" +
+      `  Projets déclarés : ${projets.map((p) => p.nom).join(', ')}.\n` +
+      "  Corrige : déplace le fichier dans un emplacement capté, ou élargis le motif.\n",
   );
   process.exit(1);
 }
 
 // --- Contrôle 2 : `--passWithNoTests` a-t-il dépassé sa date ? --------------
 const l1Livre = existsSync(resolve(RACINE, 'apps/api/drizzle'));
-const testsIntegration = tests.filter((f) => f.includes('.integration.test.'));
+const testsIntegration = tests.filter((f) => couvertPar(f)?.nom === 'integration');
 
 if (l1Livre && testsIntegration.length === 0) {
   console.error(
@@ -138,7 +197,10 @@ if (l1Livre && testsIntegration.length === 0) {
   process.exit(1);
 }
 
+const detail = projets
+  .map((p) => `${p.nom}:${String(tests.filter((f) => couvertPar(f)?.nom === p.nom).length)}`)
+  .join(' · ');
 console.log(
-  `${VERT}✓${RAZ} projets de test : ${String(tests.length)} fichier(s) de test, tous captés par un projet.` +
+  `${VERT}✓${RAZ} projets de test : ${String(tests.length)} fichier(s), tous captés (${detail}).` +
     (l1Livre ? '' : "\n  (`--passWithNoTests` encore légitime : le lot L1 n'est pas livré.)"),
 );

@@ -72,9 +72,14 @@ function fichiersSources() {
     .split('\n')
     .filter((f) => f.trim() !== '')
     .filter((f) =>
-      /\.(ts|tsx|js|jsx|mjs|css|scss|html|sql|json|yml|yaml|sh|conf)$|Dockerfile$|Caddyfile$/.test(
-        f,
-      ),
+      // `.env.example` et les fichiers Caddy figurent NOMMÉMENT : la version
+      // précédente les laissait hors périmètre alors que le commentaire ci-dessus
+      // désignait `.env.example` comme le fichier le plus exposé au collage
+      // accidentel d'un secret. Un garde-fou dont le commentaire promet plus que le
+      // code ne tient est exactement ce que ce script existe pour empêcher — la
+      // revue croisée l'a relevé (défaut N-3).
+      /\.(ts|tsx|js|jsx|mjs|css|scss|html|sql|json|yml|yaml|sh|conf|caddy)$/.test(f) ||
+      /(?:^|\/)(?:Dockerfile|Caddyfile|\.env\.example|\.gitleaks\.toml|pre-commit)$/.test(f),
     )
     .filter((f) => !FICHIERS_HORS_ANALYSE.some((re) => re.test(f)));
 }
@@ -190,7 +195,12 @@ const controles = [
         `[A-Za-z0-9+/=_-]{16,}`,
       'g',
     ),
-    fichiersInclus: [/(\.env|\.sh|\.ya?ml|\.conf|Dockerfile|Caddyfile)$/],
+    // `\.env(\.example)?` couvre nommément le fichier modèle : c'est celui que le
+    // provisionnement copie sur le serveur, donc celui où un secret collé par
+    // mégarde voyagerait le plus loin.
+    fichiersInclus: [
+      /(\.env(\.example)?|\.sh|\.ya?ml|\.conf|\.caddy)$|(?:^|\/)(?:Dockerfile|Caddyfile|pre-commit)$/,
+    ],
     fichiersExclus: [],
   },
 ];
@@ -232,7 +242,7 @@ for (const c of controles) {
       // Le marqueur vaut pour SA ligne ou celle qui la précède : un bloc JSDoc se
       // marque naturellement au-dessus, pas au milieu.
       const ligneAvant = lignes[numero - 2] ?? '';
-      if (/invariant-oks*:/.test(ligne) || /invariant-oks*:/.test(ligneAvant)) continue;
+      if (/invariant-ok\s*:/.test(ligne) || /invariant-ok\s*:/.test(ligneAvant)) continue;
       // Un placeholder n'est pas un secret : c'est même l'inverse, il signale l'absence.
       if (/__CHANGEME__/.test(ligne)) continue;
       trouvailles.push({ fichier, ligne: numero, extrait: ligne.slice(0, 120) });
