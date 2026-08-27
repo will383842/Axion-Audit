@@ -1636,3 +1636,48 @@ l'écart est un défaut à corriger — comme celui-ci.
 
 **Décideur :** A01
 **Impact spec :** aucun · rectifie l'entrée « Amendement de la convention de typage T8 » du même jour
+
+---
+
+## 2026-08-27 — [L1] Toute description SUPPLÉMENTAIRE du schéma doit être gardée par un test
+
+**Constat.** Le fichier 04 est la source unique du DDL, et les migrations SQL en sont la
+transcription littérale — le diff schéma-vs-04 garde ce lien. Mais le dépôt contient une
+**troisième** description du même schéma : `apps/api/src/db/schema.ts`, le modèle Drizzle qui typera
+**toutes les requêtes des lots L2 à L13**. Vérifié : **rien ne la gardait.**
+
+Son en-tête affirme que « le diff schéma-vs-04 révélerait aussitôt » une divergence. C'est vrai dans
+un seul sens — si l'on fabriquait une migration **depuis** ce fichier. **Le sens inverse n'était
+couvert par personne** : une migration qui ajoute une colonne que ce fichier ignore, ou qui impose un
+`NOT NULL` qu'il déclare nullable, laisse `pnpm typecheck` vert et `schema:diff` vert, pendant que
+**TypeScript ment en silence** à tout le code appelant. Les migrations `0010`, `0011` et `0012` ont
+justement modifié nullabilité et défauts sur plusieurs colonnes.
+
+**Options :**
+
+1. S'en remettre à la discipline de l'agent qui met les deux à jour.
+2. Garder mécaniquement toute description supplémentaire.
+
+**Arbitrage : option 2.** Règle de précédence **sans objet**. La discipline a déjà échoué deux fois
+sur ce lot, dans les deux revues croisées, et sur des points que leurs auteurs croyaient tenir. La
+leçon constante de ce dépôt est qu'**un lien non vérifié mécaniquement finit par se défaire** —
+c'est ce qui a produit le comparateur trompable, les trois textes de garde-fou périmés, et les deux
+copies divergentes de la politique de masquage des journaux au lot L0.
+
+**Règle posée, valable pour tous les lots suivants :** _toute description du schéma qui s'ajoute au
+fichier 04 et aux migrations est un ARTEFACT DÉRIVÉ ; elle doit être comparée mécaniquement à la base
+réelle par un test, faute de quoi elle n'est pas livrable._
+
+**Application immédiate (L1) :** un test d'intégration `@critique` compare `schema.ts` à la base après
+migrations — tables, colonnes dans les deux sens, et **nullabilité**, celle-ci étant la plus utile
+puisqu'elle décide si TypeScript rend `string` ou `string | null`. Le type SQL exact est
+volontairement hors périmètre : la correspondance Drizzle↔PostgreSQL est indirecte et un contrôle
+approximatif ferait plus de bruit que de bien.
+
+**Application annoncée (L2) :** `packages/shared` ne décrit aujourd'hui **aucune entité** — seulement
+environnement, erreurs, pagination, masquage et dates. Les schémas **Zod des routes** y arriveront au
+lot L2 et constitueront une **quatrième** description. La même règle s'y appliquera, et elle est
+portée au brief du L2 dès maintenant plutôt que découverte à sa revue croisée.
+
+**Décideur :** A01
+**Impact spec :** aucun · règle d'exécution opposable aux lots suivants
