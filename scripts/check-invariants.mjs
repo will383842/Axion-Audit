@@ -91,8 +91,6 @@ const NOMS_DE_CLIENTS =
     : null;
 
 /** Noms des secrets du §30.3, pour les contrôles SEC-30.4a et SEC-30.4b. */
-
-/** Noms des secrets du §30.3, pour les contrôles SEC-30.4a et SEC-30.4b. */
 const NOMS_DE_SECRETS = [
   'JWT_(?:ACCESS|REFRESH)_SECRET',
   'APP_ENCRYPTION_KEY',
