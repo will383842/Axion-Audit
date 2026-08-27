@@ -553,6 +553,22 @@ jobs:
           TZ: UTC
         run: pnpm schema:diff
 
+      # Second verrou, INDÉPENDANT du comparateur. `schema:diff` est une liste
+      # BLANCHE : il vérifie ce qu'il sait nommer, et déclare conforme tout ce que
+      # le 11 §7 ne lui demande pas de regarder. Trois passes de revue croisée ont
+      # montré que le territoire hors liste contient des objets qui font
+      # DISPARAÎTRE des données en silence — une RULE `DO INSTEAD NOTHING` sur
+      # `answers` fait RÉUSSIR l'insertion sans rien écrire, et la synchronisation
+      # terrain rapporte un succès. Ce contrôle-ci est une liste NOIRE : il exige
+      # que rien d'autre n'existe. Les deux échouent pour des raisons opposées, ce
+      # qui est exactement le but.
+      - name: pnpm check:schema-inventaire (aucun objet hors du fichier 04)
+        env:
+          DATABASE_URL: postgresql://axion:ci_factice_postgres@127.0.0.1:5432/axion_audit_test
+          APP_ENV: dev
+          TZ: UTC
+        run: pnpm check:schema-inventaire
+
   # ---------------------------------------------------------------------------
   # COUVERTURE — DoD transverse 09 §3 : « ≥ 90 % sur les modules critiques
   # (sync, crypto locale, scoring, RBAC/propriété) — MESURÉE, PAS DÉCLARÉE »

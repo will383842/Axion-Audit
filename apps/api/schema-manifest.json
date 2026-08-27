@@ -2943,5 +2943,20 @@
       "sansIdentite": 20,
       "aligneesParLaMigration0012": 5
     }
+  },
+  "notNullHorsIdentite": {
+    "$lecture": "Colonnes NOT NULL qui ne relevent NI de T8 (PK, FK non marquee NULL, colonne a DEFAULT, code de referentiel, enum structurant) NI de T13 (identite lisible). Elles etaient contraintes sans convention ecrite -- defaut D-1 de la 3e revue croisee. Les contraintes etaient bonnes ; c'est leur ECRITURE qui manquait. Les conventions sont desormais en tete de la migration 0001.",
+    "T14 — secret d’authentification et duree de vie": {
+      "regle": "un secret d'authentification, et l'expiration qui le borne, sont NOT NULL",
+      "colonnes": ["users.password_hash", "refresh_tokens.token_hash", "refresh_tokens.expires_at"],
+      "motif": "Une ligne d'authentification SANS SECRET est un compte ou un jeton dont on ne peut rien verifier ; selon le code appelant, cela va du compte inutilisable a la comparaison qui reussit contre NULL. Et un jeton sans expiration est un jeton ETERNEL, alors que le 06 §10.1 impose 30 j rotatifs avec detection de reutilisation."
+    },
+    "T15 — obligation ecrite en toutes lettres par le 04": {
+      "regle": "une colonne que le fichier 04 declare obligatoire DANS SON TEXTE est NOT NULL, meme sans DEFAULT, meme sans etre FK ni identite",
+      "colonnes": ["findings.sources"],
+      "motif": "Le 04 §7 ecrit sur cette colonne meme : « ≥ 1 source obligatoire ». NULL y serait « zero source » tout autant que le '{}' retire par la migration 0012. La convention ne s'applique QUE la ou le 04 emploie les mots « obligatoire » ou « ≥ 1 » : elle n'autorise rien a deviner."
+    },
+    "$couverture": "Verifie : les 216 colonnes NOT NULL du schema sont couvertes par une convention ecrite (PK, FK, DEFAULT, enum, code de referentiel, booleen d'etat/version T8, identite T13, T14, T15). Aucune orpheline.",
+    "$regleDeRelecture": "Le retrait d'un DEFAULT oblige a reverifier la justification NOT NULL de la colonne : T8 justifie NOT NULL par « les colonnes portant un DEFAULT », donc retirer le defaut retire la justification sans toucher la contrainte. L'enchainement s'est produit trois fois (0011, puis 0012 sur findings.sources). Toute migration contenant un DROP DEFAULT doit rouvrir le bloc T8."
   }
 }

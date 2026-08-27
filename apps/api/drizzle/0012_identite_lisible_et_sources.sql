@@ -23,13 +23,21 @@
 -- elle apparaît vide dans toute liste, tout rapport et tout export. »
 -- UNE SEULE colonne par table : l'identité, jamais ses attributs descriptifs.
 --
--- Les 43 tables ont été passées en revue une par une. 24 portaient déjà leur
--- identité en NOT NULL (users.name, companies.name, missions.title, org_units.name,
--- blocks.label_fr, questions.text_fr, use_cases.title, alerts.type, activity_log.action,
--- document_requests.label, tools_inventory.name, ai_systems.name, report_templates.name,
--- les label_fr/label/code des référentiels…). CINQ y entrent ici. QUATORZE n'ont
--- PAS d'identité lisible et n'en reçoivent donc aucune — la liste et ses motifs
--- vivent dans `schema-manifest.json`, section `identiteLisibleT13`.
+-- Les 43 tables ont été passées en revue une par une :
+--   · 18 portaient DÉJÀ leur identité en NOT NULL (users.name, companies.name,
+--     missions.title, org_units.name, blocks.label_fr, questions.text_fr,
+--     use_cases.title, alerts.type, activity_log.action, document_requests.label,
+--     tools_inventory.name, ai_systems.name, report_templates.name,
+--     step_validations.step_code, et les label_fr/label des référentiels) ;
+--   ·  5 y entrent par cette migration (ci-dessous) ;
+--   · 20 n'ont PAS d'identité lisible et n'en reçoivent donc aucune.
+--   → 18 + 5 = 23 tables avec identité, + 20 sans = 43. La liste nominative et
+--     le motif de CHAQUE table vivent dans `schema-manifest.json`, section
+--     `identiteLisibleT13`, qui refuse d'être écrite si une identité déclarée
+--     n'est pas NOT NULL.
+-- (Ces comptes annonçaient « 24 » et « quatorze » à la rédaction : faux, relevé
+--  par la 3e revue croisée — défaut D-2. C'est ce texte qui INSTITUE la
+--  convention et que Williams relit à la porte ; il devait être juste.)
 --
 -- CE QUI RESTE NULLABLE, ET C'EST VOULU : `alerts.severity` et `alerts.message`,
 -- `ai_systems.usage_description`, `blocks.description`, `use_cases.description`,
@@ -73,6 +81,14 @@ ALTER TABLE integration_events ALTER COLUMN event_type SET NOT NULL;
 -- V2.9, figeage COMPLET : le pull terrain lit CE snapshot, jamais la banque
 -- vivante. C'est le texte affiché à l'auditeur hors ligne — l'identité de la
 -- question figée dans la mission.
+--
+-- ⚠ SIGNALÉ AU LOT L3 (défaut D-3, 3e revue croisée) : le fichier 04 ne DEMANDE
+--   pas ce NOT NULL. Il se déduit de T13 et du figeage V2.9, et il est défendable
+--   — une question figée sans texte est vide sur l'iPad, hors ligne, sans recours.
+--   Mais il CONTRAINT LE CHEMIN D'ÉCRITURE DU LOT L3 : si le figeage du
+--   questionnaire s'y fait en DEUX TEMPS (créer les lignes, puis remplir les
+--   snapshots), cette contrainte le refusera. Le figeage devra être atomique.
+--   A01 le porte au brief du L3, avec `interviews.org_unit_id`.
 ALTER TABLE mission_questions ALTER COLUMN text_snapshot SET NOT NULL;
 
 COMMENT ON COLUMN findings.title IS

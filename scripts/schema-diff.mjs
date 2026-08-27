@@ -321,11 +321,25 @@ function analyserIndexdef(indexdef) {
 // Introspection
 // ---------------------------------------------------------------------------
 async function introspecter(client) {
+  // DÉFAUT R-1 (3e revue croisée) : cette requête lisait `information_schema.tables`
+  // (qui COMPTE les tables partitionnées) tandis que celle des colonnes lisait
+  // `pg_attribute … relkind = 'r'` (qui les EXCLUT). Une table recréée
+  // PARTITIONNÉE passait donc le contrôle de présence, puis toutes ses colonnes
+  // sortaient du contrôle sans une ligne de sortie. Éprouvé sur
+  // `estimation_params` : `value` passée de numeric à text, plus une colonne
+  // inventée, et le diff sortait à ZÉRO ÉCART — pendant que les seuils du scoring
+  // §32.1 se comparaient LEXICOGRAPHIQUEMENT (« 10 réponses » cessant d'atteindre
+  // le seuil de 3, sans qu'aucune erreur ne soit levée).
+  // Les deux requêtes partagent désormais LA MÊME SOURCE, `pg_class`, et le même
+  // filtre `relkind IN ('r','p')` : table ordinaire ou partitionnée, jamais l'une
+  // sans l'autre.
   const tables = await client.query(`
-    SELECT table_name
-      FROM information_schema.tables
-     WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
-     ORDER BY table_name
+    SELECT rel.relname AS table_name
+      FROM pg_class rel
+      JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+     WHERE nsp.nspname = 'public'
+       AND rel.relkind IN ('r', 'p')
+     ORDER BY rel.relname
   `);
 
   // format_type() rend le type AVEC son modificateur — `numeric(4,1)`,
@@ -344,7 +358,7 @@ async function introspecter(client) {
       JOIN pg_namespace nsp  ON nsp.oid = rel.relnamespace
       LEFT JOIN pg_attrdef def ON def.adrelid = att.attrelid AND def.adnum = att.attnum
      WHERE nsp.nspname = 'public'
-       AND rel.relkind = 'r'
+       AND rel.relkind IN ('r', 'p')
        AND att.attnum > 0
        AND NOT att.attisdropped
      ORDER BY rel.relname, att.attname
@@ -360,7 +374,14 @@ async function introspecter(client) {
       JOIN pg_class rel      ON rel.oid = c.conrelid
       JOIN pg_namespace nsp  ON nsp.oid = rel.relnamespace
      WHERE nsp.nspname = 'public'
-       AND c.contype IN ('p', 'f', 'u', 'c')
+       -- DEFAUT R-2 (3e revue croisee) : 'x' (EXCLUDE) manquait, donc une
+       -- contrainte d'exclusion n'etait lue NI comme attendue NI comme en trop.
+       -- Un EXCLUDE USING gist (mission_question_id WITH =) sur answers sortait a
+       -- ZERO ECART tout en interdisant qu'une meme question soit repondue dans
+       -- DEUX SESSIONS -- mot pour mot la consequence du bloquant B-3 de la 1re
+       -- passe, obtenue par un type de contrainte que le filtre ecartait.
+       -- Un EXCLUDE avec l'operateur = EST de l'unicite : meme arbitrage.
+       AND c.contype IN ('p', 'f', 'u', 'c', 'x')
      ORDER BY rel.relname, c.conname
   `);
 
@@ -440,7 +461,24 @@ function comparer(manifeste, base) {
 
   for (const [table, def] of Object.entries(manifeste.tables)) {
     const reelles = colonnesParTable.get(table);
-    if (!reelles) continue; // table manquante : déjà signalée
+    if (!reelles) {
+      // DÉFAUT R-1, VOLET PRINCIPE. Ici se trouvait `continue; // table manquante :
+      // déjà signalée`. Le commentaire ÉTAIT FAUX : une table partitionnée passait
+      // le contrôle de présence puis arrivait ici sans colonnes, et le `continue`
+      // la faisait sortir du contrôle EN SILENCE.
+      // C'est exactement le principe posé pour l'analyseur d'index avec
+      // `{illisible: true}` — un comparateur qui ne trouve pas ce qu'il cherche ne
+      // conclut PAS au conforme — qui n'avait pas été appliqué aux colonnes.
+      // Si la table est réellement absente, l'écart est signalé deux fois : c'est
+      // le bon sens de l'erreur.
+      ecart(
+        'colonne',
+        `${table} : AUCUNE colonne introspectable. La table est soit absente, soit ` +
+          "d'une nature que l'introspection ne couvre pas — dans les deux cas, ses " +
+          'colonnes ne sont PAS vérifiées et rien ne peut être déclaré conforme.',
+      );
+      continue;
+    }
     for (const [col, declaration] of Object.entries(def.columns)) {
       const reelle = reelles.get(col);
       if (reelle === undefined) {

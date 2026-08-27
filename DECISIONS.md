@@ -1681,3 +1681,63 @@ portée au brief du L2 dès maintenant plutôt que découverte à sa revue crois
 
 **Décideur :** A01
 **Impact spec :** aucun · règle d'exécution opposable aux lots suivants
+
+---
+
+## 2026-08-27 — [L1] Inventaire fermé du schéma : un second verrou, en liste NOIRE
+
+**Constat (3ᵉ passe de revue croisée).** Le réviseur a montré que le territoire non couvert par
+`pnpm schema:diff` n'était plus un défaut d'implémentation mais **une limite du périmètre que le
+11 §7 lui assigne**. Six familles d'objets, **toutes hors de ce périmètre**, toutes prouvées en
+données, toutes avec « ZÉRO ÉCART » annoncé :
+
+| Objet injecté                                         | Conséquence prouvée                                                                           |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `RULE … ON INSERT DO INSTEAD NOTHING` sur `answers`   | l'insertion **RÉUSSIT, zéro ligne écrite** — la réponse disparaît, la sync rapporte un succès |
+| `TRIGGER BEFORE INSERT` réécrivant `answers.value`    | l'auditeur répond « non », la base contient « oui » — **falsification silencieuse**           |
+| `ENABLE ROW LEVEL SECURITY` sans politique            | lecture vide, écriture refusée                                                                |
+| `questions.version` en `GENERATED ALWAYS AS IDENTITY` | le versionnement de la banque (§36.4) devient impossible                                      |
+| `users.email` recollationnée en ICU non déterministe  | le sens de `=` et de l'UNIQUE change sans que le type `text` bouge                            |
+| `activity_log` passée en `UNLOGGED`                   | journal vidé au premier crash — rétention RGPD 12 mois (§10.4), **invariant 8**               |
+
+**A12 n'a rien manqué : le contrat ne les lui demandait pas.**
+
+**Options :**
+
+1. Ne rien faire, le 11 §7 étant respecté à la lettre.
+2. Élargir `schema-diff.mjs` à ces familles.
+3. Ajouter un **second contrôle, indépendant, en liste NOIRE**.
+4. Remplacer le mécanisme par un **schéma doré** comparé intégralement (`pg_dump`).
+
+**Arbitrage : option 3 maintenant, option 4 PROPOSÉE à Williams** (fiche AMELIORATIONS **A-003**). Règle de précédence **sans objet** : le pack ne se contredit pas ici — le 11 §7 borne le diff, et il ne dit rien de ce qui vit HORS de cette borne. Il fallait donc décider, et le tracer.
+
+**Pourquoi pas 1.** Un contrôle qui respecte son contrat tout en laissant disparaître des réponses
+d'auditeur ne protège pas ce que la porte P-A croit signer.
+
+**Pourquoi pas 2.** `schema-diff.mjs` est une **liste blanche** : son mode d'échec par défaut est le
+**faux négatif silencieux**. L'élargir ajoute des cases à cocher sans changer cette propriété — c'est
+ce que les trois passes ont fait, et chacune a trouvé du territoire neuf.
+
+**Pourquoi 3.** Le nouveau contrôle est l'**inverse** : il n'énumère pas ce qui doit exister, il exige
+que **rien d'autre** n'existe. Son mode d'échec est le **faux positif — bruyant, visible,
+corrigeable**. Les deux se complètent : le diff dit « tout ce que le 04 décrit est là et conforme » ;
+l'inventaire dit « et rien d'autre ne s'y est glissé ». Deux mécanismes qui échouent pour des raisons
+**opposées** valent mieux qu'un seul élargi.
+
+**Ce n'est pas un élargissement du contrat**, c'est l'application d'un principe déjà en vigueur ici :
+`schema-diff.mjs` refuse une table que le fichier 04 n'a jamais autorisée, au même titre qu'une table
+manquante. Un trigger que le 04 n'a jamais autorisé n'est pas d'une autre nature — il est seulement
+**plus dangereux, parce qu'il change le comportement sans changer la structure**.
+
+**Livré :** `scripts/check-schema-inventaire.mjs`, huit familles surveillées, câblé dans le job
+`schema-diff` de la CI. **Prouvé par injection des huit familles sur base jetable : 10 objets
+détectés, aucun manqué.** Chaque famille affiche **ce que l'objet coûterait** — un contrôle qui
+signale sans expliquer se fait contourner par la première personne pressée. Un objet volontairement
+souhaité ne se supprime pas en silence : il s'écrit dans le fichier 04 et se trace ici.
+
+**Limite assumée et écrite dans l'en-tête du script :** sa liste noire doit être **maintenue**. C'est
+précisément le défaut que l'option 4 supprime, et c'est pourquoi elle est proposée plutôt qu'enterrée.
+
+**Décideur :** A01
+**Impact spec :** aucun · l'option 4, qui remplacerait un mécanisme nommé par le 11 §7, relève de
+Williams à la porte P-A

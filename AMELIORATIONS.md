@@ -294,3 +294,65 @@ porté deux copies, celle du worker ayant **dix champs de moins**, dont `passwor
 vérifiées par `tokens.test.ts` et non déclarées.
 
 **Coût :** ~0,05 j.
+
+---
+
+### FICHE A-003 — Schéma doré (`pg_dump`) à la place du manifeste comme base de comparaison
+
+**Étage 2 — PROPOSÉE, NON IMPLÉMENTÉE.** Elle remplacerait un mécanisme que le contrat **11 §7 nomme
+explicitement** (`schema-manifest.json`). Le 11 §8.2 réserve à Williams toute modification d'une
+convention du contrat. **Proposer est un devoir, anticiper serait une faute.**
+
+**Constat terrain — trois passes de revue croisée, trois territoires neufs.**
+
+| Passe | Ce qu'elle a trouvé                                                    | Non détectées |
+| ----- | ---------------------------------------------------------------------- | ------------- |
+| 1ʳᵉ   | opérateur inversé, parenthèses supprimées, index UNIQUE non gardé      | 8 / 25        |
+| 2ᵉ    | casse des littéraux, contrainte cherchée par nom seul, analyse d'index | 6 / 15        |
+| 3ᵉ    | règles, triggers, RLS, EXCLUDE, IDENTITY, collation, partitionnement   | 8 / 13        |
+
+**Ce n'est pas une série de négligences.** C'est la propriété d'une **liste blanche** : elle vérifie
+ce qu'elle sait nommer, et son mode d'échec par défaut est le **faux négatif silencieux**. Chaque
+correctif rétrécit un trou **sans dire s'il en reste**. La question « en reste-t-il ? » n'est
+aujourd'hui répondable que par une passe de revue de plus.
+
+**S'y ajoute une fragilité structurelle plus grave : rien ne compare mécaniquement le manifeste au
+fichier 04.** Le manifeste est la RÉFÉRENCE — une erreur qui s'y loge est invisible pour toujours.
+Ce n'est pas théorique : c'est exactement le bloquant B-4 de la 2ᵉ passe, **11 `NOT NULL` inventés**
+que le diff imposait comme s'ils étaient la spécification.
+
+**La proposition.** Committer un **schéma doré** produit par
+`pg_dump --schema-only --no-owner --no-privileges`, et faire du contrôle un **diff textuel** entre ce
+fichier et le dump de la base migrée, normalisé uniquement sur le volatile.
+
+**Ce que ça change, et c'est le cœur :** le mode d'échec s'**inverse**. Faux positifs **bruyants et
+visibles** au lieu de faux négatifs silencieux. Le réviseur a confronté ce mécanisme à ses propres
+attaques : il **attrape les 6 mutations de la 2ᵉ passe et les 8 de la 3ᵉ**, règles, triggers,
+politiques, EXCLUDE, identity, collation et partitionnement compris — **sans une ligne de logique de
+comparaison**, parce qu'un dump montre tout ce que la base contient.
+
+**Le manifeste n'est pas jeté, il est remis à sa place.** Il parle la langue du fichier 04, il porte
+les **motifs** (`fkNonIndexees`, `identiteLisibleT13`, `defauts`) et il rend la revue **humaine**
+possible. C'est un excellent **document de revue** et un mauvais **périmètre de contrôle**. Manifeste
+= ce que Williams relit à la porte contre le 04 ; dump doré = ce que la machine garde. **Les deux, pas
+l'un à la place de l'autre.** Le fichier doré étant **généré**, il ne peut pas dériver des migrations,
+et ce que la porte relit devient son **diff à chaque changement** — objet de revue bien plus honnête
+qu'un manifeste de 2 700 lignes.
+
+**Valeur pour l'auditeur :** aucune, directement. Valeur pour la **fiabilité de ses données** :
+décisive. Les six familles de la 3ᵉ passe incluent la disparition silencieuse d'une réponse et la
+falsification d'une valeur.
+
+**Coût estimé :** ~0,5 j (génération, normalisation du volatile, câblage CI, épreuve par injection).
+
+**Impact schéma / API :** **aucun**. Impact **contrat** : le 11 §7 désigne `schema-manifest.json`
+comme base de comparaison — l'adopter demande un amendement horodaté du contrat.
+
+**Ce qui a été fait en attendant, et qui ne préjuge de rien.** Un **inventaire fermé** en liste noire
+(`pnpm check:schema-inventaire`, DECISIONS du même jour) ferme les huit familles connues, dont les six
+de la 3ᵉ passe. Il est **prouvé par injection**. Sa limite est écrite dans son en-tête : **sa liste
+doit être maintenue** — c'est exactement le défaut que cette fiche propose de supprimer.
+
+**Arbitrage attendu :** ABSORBÉE (0,5 j sur la marge) · **PHASE 2** (le défaut) · REFUSÉE.
+**Recommandation d'A01 :** ABSORBÉE si la marge le permet — c'est le seul changement qui rende la
+question « en reste-t-il ? » répondable autrement que par une quatrième passe de revue.

@@ -112,6 +112,33 @@
 --        §27.1, `attachments.filename` pour kind='note'). L'inventaire complet,
 --        avec le motif de chaque table, vit au manifeste (`identiteLisibleT13`).
 --        Arbitrage A01 après la 2e revue croisée ; appliquée par la migration 0012.
+--   T14. SECRET D'AUTHENTIFICATION ET DURÉE DE VIE → `NOT NULL`. Ni un libellé
+--        d'identité (T13), ni une FK, ni un enum : ces colonnes méritaient leur
+--        propre ligne, et ne l'avaient pas (défaut D-1, 3e revue croisée).
+--          · `users.password_hash`, `refresh_tokens.token_hash` — une ligne
+--            d'authentification SANS SECRET est un compte ou un jeton dont on ne
+--            peut RIEN vérifier ; selon le code appelant, cela va du compte
+--            inutilisable à la comparaison qui réussit contre NULL. C'est la
+--            colonne dont l'absence est une faille, pas une gêne.
+--          · `refresh_tokens.expires_at` — un jeton sans expiration est un jeton
+--            ÉTERNEL. Le 06 §10.1 impose 30 j rotatifs avec détection de
+--            réutilisation : une durée de vie nulle vide la règle de son sens.
+--   T15. OBLIGATION ÉCRITE EN TOUTES LETTRES PAR LE FICHIER 04 → `NOT NULL`,
+--        même sans DEFAULT, même sans être FK ni identité. Un seul cas :
+--          · `findings.sources` — le 04 §7 écrit sur cette colonne même
+--            « ≥ 1 source obligatoire ». NULL y serait « zéro source » tout autant
+--            que le `'{}'` que la migration 0012 a retiré : la colonne reste
+--            NOT NULL, sans défaut, et l'insertion doit fournir ses sources.
+--        Cette convention n'autorise RIEN à deviner : elle ne s'applique que là où
+--        le 04 emploie les mots « obligatoire » ou « ≥ 1 ».
+--
+--   ⚠ RÈGLE DE RELECTURE (T8/T12) — LE RETRAIT D'UN `DEFAULT` OBLIGE À REVÉRIFIER
+--     LA JUSTIFICATION `NOT NULL` DE LA COLONNE. T8 justifie `NOT NULL` par « les
+--     colonnes portant un DEFAULT » : retirer le défaut retire la justification,
+--     sans toucher à la contrainte. L'enchaînement s'est produit TROIS fois —
+--     0011 (cinq colonnes, T8 amendée), 0012 (`findings.sources`, T8 NON amendée,
+--     défaut D-1). Trois occurrences du même motif ne sont pas trois accidents.
+--     Toute migration qui contient un `DROP DEFAULT` doit donc rouvrir ce bloc.
 -- =============================================================================
 
 -- @UP
