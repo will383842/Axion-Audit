@@ -9,33 +9,44 @@
 // suite : c'est le dispositif, pas un accident.
 //
 // -----------------------------------------------------------------------------
-// TESTCONTAINERS : REPLI ASSUMÉ ET DOCUMENTÉ
+// TESTCONTAINERS — LA SUITE EST AUTOPORTANTE (11 §1), AVEC UN REPLI DOCUMENTÉ
 // -----------------------------------------------------------------------------
-// Le contrat 11 §1 épingle « Vitest 3 + Testcontainers ». Au moment d'écrire ces
-// tests, AUCUN paquet `testcontainers` n'est installé dans le dépôt (absent de
-// `pnpm-lock.yaml`), et l'ajouter supposerait de modifier `package.json` — hors
-// du périmètre d'écriture d'A16 (`apps/api/tests/**`) et soumis au garde-fou
-// 11 §8.1 (ajout de dépendance = décision humaine).
+// Le contrat 11 §1 épingle « Vitest 3 + **Testcontainers** » : la suite démarre
+// SON PROPRE PostgreSQL 16 et ne dépend d'aucun état extérieur au dépôt. Sur un
+// clone neuf, `pnpm test:integration` suffit — il n'y a rien à lancer avant.
+// C'est le point qui compte : une suite qui exige une pile Compose déjà démarrée
+// rougit sur la machine du suivant sans que personne comprenne pourquoi.
 //
-// Repli retenu, conforme à la consigne « replier sur la base de la pile Compose
-// est acceptable si c'est documenté et si chaque test nettoie derrière lui » :
-//   • on se connecte au Postgres 16 de la pile `infra/docker-compose.yml`
-//     (publié sur 127.0.0.1:5432), via `DATABASE_URL_TEST` du `.env` racine ;
-//   • CHAQUE FICHIER de test crée sa PROPRE base éphémère `axion_l1_<suffixe>`
-//     et la SUPPRIME en fin de fichier (`DROP DATABASE ... WITH (FORCE)`).
-//     Aucune écriture ne touche jamais la base de développement.
-// Le jour où `testcontainers` entre dans les dépendances, seules les fonctions
-// `creerBaseEphemere` / `supprimerBaseEphemere` changent : les tests, eux, ne
-// bougent pas.
+// Le conteneur est démarré UNE SEULE FOIS pour toute l'exécution du projet
+// `integration` (mémoïsé ci-dessous) : `poolOptions.forks.singleFork` sérialise
+// les fichiers dans un unique processus, on ne paie donc qu'un démarrage. Chaque
+// FICHIER de test garde malgré tout sa PROPRE base `axion_l1_<suffixe>`, créée
+// puis SUPPRIMÉE en `afterAll` : l'isolement ne dépend pas du conteneur, il est
+// explicite. Le conteneur lui-même est retiré par le reaper de Testcontainers à
+// la fin du processus.
 //
-// Aucun secret n'est écrit ici : les identifiants sont LUS à l'exécution depuis
-// le `.env` racine (non versionné) ou l'environnement (11 §2, 30.4-5).
+// REPLI, si Testcontainers ne peut pas fonctionner sur un poste (Docker absent,
+// socket non exposé, politique d'entreprise) : poser `AXION_TESTS_SANS_CONTENEUR=1`
+// et démarrer la pile (`pnpm infra:up`). La suite se rabat alors sur le Postgres
+// de `infra/docker-compose.yml` via `DATABASE_URL_TEST`, avec exactement la même
+// discipline de bases éphémères. C'est un repli, pas un contournement : on ne
+// désactive JAMAIS la suite (09 §5.7).
+//
+// CI (11 §7) : le job `integration` tourne sur `ubuntu-latest`, un runner qui
+// expose le démon Docker de l'hôte — Testcontainers y fonctionne, et publie ses
+// ports sur des ports libres tirés au hasard. Aucun conflit avec les `services:`
+// postgres/redis/minio du workflow, qui gardent leurs ports fixes.
+//
+// Aucun secret n'est écrit ici : les identifiants du conteneur sont fabriqués à
+// la volée, ceux du repli sont LUS à l'exécution depuis le `.env` racine (non
+// versionné) ou l'environnement (11 §2, 30.4-5).
 // =============================================================================
 import { execFile } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { Client } from 'pg';
 import { uuidv7 } from 'uuidv7';
 
@@ -79,20 +90,63 @@ function lireEnvRacine(): Record<string, string> {
 const ENV_RACINE = lireEnvRacine();
 
 /**
- * URL de référence vers le Postgres de la pile Compose. `DATABASE_URL_TEST`
- * pointe sur `localhost` (le port publié), contrairement à `DATABASE_URL` qui
- * pointe sur le nom de service Docker `postgres`, injoignable depuis l'hôte.
+ * Image du conteneur de test. PostgreSQL **16** : la version épinglée au 11 §1.
+ * Tester sur une autre version reviendrait à valider un schéma qui ne tournera
+ * jamais en production — les index partiels et `NULLS NOT DISTINCT` ne se
+ * comportent pas de la même façon d'une majeure à l'autre.
  */
-function urlDeReference(): string {
+const IMAGE_POSTGRES = 'postgres:16-alpine';
+
+/** Le repli sur la pile Compose est explicite, jamais implicite. */
+function repliDemande(): boolean {
+  const drapeau = process.env.AXION_TESTS_SANS_CONTENEUR;
+  return drapeau !== undefined && drapeau !== '' && drapeau !== '0';
+}
+
+/**
+ * Conteneur PostgreSQL partagé par toute l'exécution du projet `integration`.
+ * Mémoïsé sur la PROMESSE : deux fichiers qui l'appelleraient en parallèle
+ * obtiennent le même conteneur au lieu d'en démarrer deux.
+ */
+let promesseConteneur: Promise<StartedPostgreSqlContainer> | undefined;
+
+async function conteneurPostgres(): Promise<StartedPostgreSqlContainer> {
+  promesseConteneur ??= new PostgreSqlContainer(IMAGE_POSTGRES).start();
+  return promesseConteneur;
+}
+
+/** URL du Postgres de la pile Compose — utilisée UNIQUEMENT en mode repli. */
+function urlDuRepli(): string {
   const url = process.env.DATABASE_URL_TEST ?? ENV_RACINE.DATABASE_URL_TEST;
   if (url === undefined || url === '') {
     throw new Error(
-      "DATABASE_URL_TEST est introuvable (ni dans l'environnement, ni dans le .env racine).\n" +
-        "Les tests d'intégration du lot L1 exigent un Postgres 16 joignable : démarrer la\n" +
-        'pile avec `pnpm infra:up` (11 §7 : « docker compose up suffit pour tout lancer »).',
+      'Repli demandé (AXION_TESTS_SANS_CONTENEUR) mais DATABASE_URL_TEST est introuvable,\n' +
+        "ni dans l'environnement, ni dans le .env racine. Démarrer la pile avec\n" +
+        '`pnpm infra:up` (11 §7), ou retirer le drapeau pour laisser Testcontainers\n' +
+        'fournir lui-même un PostgreSQL 16 (11 §1).',
     );
   }
   return url;
+}
+
+/**
+ * URL de référence vers le serveur PostgreSQL des tests : celui du conteneur
+ * démarré par la suite, ou celui de la pile Compose en mode repli.
+ */
+async function urlDeReference(): Promise<string> {
+  if (repliDemande()) return urlDuRepli();
+  try {
+    return (await conteneurPostgres()).getConnectionUri();
+  } catch (erreur) {
+    const details = erreur instanceof Error ? erreur.message : String(erreur);
+    throw new Error(
+      `Testcontainers n'a pas pu démarrer ${IMAGE_POSTGRES}.\n` +
+        `Le contrat 11 §1 prévoit cette pile ; si Docker n'est pas disponible sur ce\n` +
+        `poste, poser AXION_TESTS_SANS_CONTENEUR=1 et démarrer \`pnpm infra:up\` pour se\n` +
+        `rabattre sur le Postgres de la pile Compose. On ne désactive JAMAIS la suite\n` +
+        `(09 §5.7 : « tests désactivés = build rouge »).\n\nCause : ${details}`,
+    );
+  }
 }
 
 /** Remplace le nom de base d'une URL de connexion. */
@@ -103,8 +157,8 @@ function avecBase(url: string, nomBase: string): string {
 }
 
 /** URL vers la base de maintenance `postgres` (CREATE/DROP DATABASE). */
-function urlMaintenance(): string {
-  return avecBase(urlDeReference(), 'postgres');
+async function urlMaintenance(): Promise<string> {
+  return avecBase(await urlDeReference(), 'postgres');
 }
 
 // -----------------------------------------------------------------------------
@@ -121,7 +175,7 @@ export async function creerBaseEphemere(suffixe: string): Promise<{
   url: string;
 }> {
   const nom = `axion_l1_${suffixe}`.toLowerCase().replace(/[^a-z0-9_]/g, '_');
-  const maintenance = new Client({ connectionString: urlMaintenance() });
+  const maintenance = new Client({ connectionString: await urlMaintenance() });
   await maintenance.connect();
   try {
     await maintenance.query(`DROP DATABASE IF EXISTS ${nom} WITH (FORCE)`);
@@ -129,12 +183,16 @@ export async function creerBaseEphemere(suffixe: string): Promise<{
   } finally {
     await maintenance.end();
   }
-  return { nom, url: avecBase(urlDeReference(), nom) };
+  return { nom, url: avecBase(await urlDeReference(), nom) };
 }
 
-/** Supprime la base éphémère. Appelé systématiquement en `afterAll`. */
+/**
+ * Supprime la base éphémère. Appelé systématiquement en `afterAll`, y compris
+ * derrière le conteneur : l'isolement entre fichiers ne repose pas sur le fait
+ * que le conteneur disparaîtra un jour.
+ */
 export async function supprimerBaseEphemere(nom: string): Promise<void> {
-  const maintenance = new Client({ connectionString: urlMaintenance() });
+  const maintenance = new Client({ connectionString: await urlMaintenance() });
   await maintenance.connect();
   try {
     await maintenance.query(`DROP DATABASE IF EXISTS ${nom} WITH (FORCE)`);
@@ -244,7 +302,10 @@ export async function appliquerDescente(urlBase: string): Promise<string> {
  * c'est donc lui qui doit être éprouvé, pas une réimplémentation.
  */
 export async function executerSeed(urlBase: string, nomBase: string): Promise<string> {
-  const analysee = new URL(urlDeReference());
+  // Tout est dérivé de `urlBase` : le conteneur tire un port et des identifiants
+  // à la volée, et les `POSTGRES_*` du `.env` racine désignent, eux, la pile
+  // Compose. Les laisser passer enverrait le seed peupler la mauvaise base.
+  const analysee = new URL(urlBase);
   const environnement: NodeJS.ProcessEnv = {
     ...process.env,
     ...ENV_RACINE,
@@ -253,6 +314,8 @@ export async function executerSeed(urlBase: string, nomBase: string): Promise<st
     POSTGRES_HOST: analysee.hostname,
     POSTGRES_PORT: analysee.port === '' ? '5432' : analysee.port,
     POSTGRES_DB: nomBase,
+    POSTGRES_USER: decodeURIComponent(analysee.username),
+    POSTGRES_PASSWORD: decodeURIComponent(analysee.password),
     APP_ENV: 'test',
     NODE_ENV: 'test',
   };

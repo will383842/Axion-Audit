@@ -64,7 +64,7 @@ afterAll(async () => {
 });
 
 describe('@filrouge parcours de bout en bout disponible au lot L1 (09 §4bis)', () => {
-  it("@filrouge @critique la mission FIL-TPE tient à l'échelle micro : 8 personnes, 1 unité, 1 entretien, 30 réponses", async () => {
+  it("@filrouge la mission FIL-TPE tient à l'échelle micro : 8 personnes, 1 unité, 1 entretien, 30 réponses", async () => {
     expect(tpe.unites, `FIL-TPE doit compter UNE unité (micro mono-site, 01 §2.3).`).toBe(1);
     expect(tpe.entretiens, `FIL-TPE : ${String(FIL_TPE.entretiens)} entretien dirigeant.`).toBe(
       FIL_TPE.entretiens,
@@ -84,7 +84,7 @@ describe('@filrouge parcours de bout en bout disponible au lot L1 (09 §4bis)', 
     ).toBe(FIL_TPE.effectif);
   });
 
-  it("@filrouge @critique la mission FIL-GC tient à l'échelle grand compte : 150 unités sur 4 niveaux, 60 sessions, ~8 000 réponses", async () => {
+  it("@filrouge la mission FIL-GC tient à l'échelle grand compte : 150 unités sur 4 niveaux, 60 sessions, ~8 000 réponses", async () => {
     expect(
       gc.unites,
       `FIL-GC doit compter ${String(FIL_GC.unites)} unités (09 §4bis : arbre 150 unités).`,
@@ -133,7 +133,7 @@ describe('@filrouge parcours de bout en bout disponible au lot L1 (09 §4bis)', 
     ).toBe(FIL_GC.niveaux);
   });
 
-  it("@filrouge @critique l'unicité answers(interview_id, mission_question_id) tient sur les deux missions", async () => {
+  it("@filrouge l'unicité answers(interview_id, mission_question_id) tient sur les deux missions", async () => {
     const doublons = await bd().query<{ n: string }>(
       `SELECT count(*)::text AS n FROM (
          SELECT interview_id, mission_question_id

@@ -1249,3 +1249,112 @@ la difficulté ressentie du test.
 
 **Décideur :** A01
 **Impact spec :** aucun
+
+---
+
+## 2026-08-27 — [L0-b] Dimensionnement du VPS : CX33 à Nuremberg, sans volume
+
+**Constat :** le 02 §11.1 dimensionne la V1 à « CX32/CPX31 (4 vCPU, 8-16 Go) — **~15-25 €/mois** ».
+Deux choses ont changé depuis la rédaction du pack : les gammes Hetzner ont été renommées, et les
+prix ont augmenté. A01 avait recommandé un **CPX32 à 35,49 €** — recommandation **fausse**, non par
+erreur de raisonnement mais par **jeu d'options incomplet** : la comparaison n'a porté que sur la
+gamme CPX, celle qui figurait dans la liste transmise.
+
+**Williams a corrigé, et le travail lui revient entièrement** : il a identifié la gamme
+« Cost-Optimized » (CX) — environ **4× moins chère à caractéristiques égales** — puis testé la
+disponibilité réelle datacenter par datacenter, Hetzner affichant « Limited availability of cloud
+instances » depuis le 26/06. Résultat : `CX43` (le choix évident sur le papier) est **introuvable
+partout en Europe**, la gamme Arm est épuisée, et **`CX33` n'est disponible qu'à Nuremberg**.
+
+**Options :**
+
+1. **CPX32**, 4 vCPU / 8 Go / 160 Go — **35,49 €**.
+2. **CX33 à Nuremberg**, 4 vCPU / 8 Go / 80 Go — **8,49 €**.
+3. CX33 + volume Hetzner 100 Go (attachable à chaud) — **~12,90 €** pour 180 Go.
+
+**Arbitrage : option 2.** Règle de précédence **sans objet** (contrainte de marché, aucune divergence
+interne au pack). Mêmes CPU et RAM que l'option 1 pour **27 € de moins par mois**. Nuremberg est en
+Allemagne : le 06 §10.4 (« hébergement Hetzner Allemagne, aucun transfert hors UE ») est respecté.
+
+**Pourquoi PAS le volume tout de suite.** Estimation pour **deux** environnements en V1 : Postgres
+~1 Go (le pack annonce < 100 000 réponses), MinIO quelques centaines de Mo (photos compressées côté
+client, R2), dépôt pgBackRest à 30 jours quelques Go, images Docker et OS ~15 Go. On est loin des
+80 Go pour la première année. Et le `.env` porte déjà `ALERT_DISK_USAGE_PERCENT=80` : **l'alerte
+existe, et un volume Hetzner s'attache à chaud**. Le prendre est donc une RÉACTION possible, pas une
+anticipation nécessaire.
+**Si le volume est pris plus tard**, une règle d'exploitation s'impose : n'y placer que les volumes de
+DONNÉES (`pgdata`, MinIO, dépôt pgBackRest), jamais tout `/var/lib/docker`. Un volume qui se détache
+arrête alors la base — diagnostic immédiat — au lieu de rendre le serveur muet.
+
+**Les deux réserves de Williams, pesées :**
+
+- **Performance des CPU de génération antérieure.** Réelle et non levée. Mais le critère `p95 < 500 ms`
+  est un livrable du **lot L6** : on le découvrirait en semaine 3, au pire moment. **Deux mesures de
+  dix minutes** sont ajoutées à la recette du VPS (L0-b) : un `pgbench` de charge, et surtout le
+  chronométrage de `seed:demo` sur FIL-GC — **8 100 réponses insérées**, c'est-à-dire NOTRE charge
+  d'écriture réelle plutôt qu'un banc synthétique. Si le seuil ne passe pas, CX33 → CPX32 est une
+  commande, sans perte tarifaire puisque le serveur serait neuf de toute façon.
+- **« Limited availability » et recréation d'urgence.** Juste pour la **disponibilité**, plus faible
+  pour le **PRA** : notre reprise ne dépend pas du type de serveur. `provision-vps.sh` s'exécute sur
+  n'importe quel Ubuntu et `restore-test.sh` restaure depuis pgBackRest et le miroir MinIO — ce que
+  le test nocturne prouve chaque nuit. Un snapshot fait gagner du **temps de reprise**, pas la
+  possibilité de reprendre. Recommandé, non vital.
+
+**Ce que l'épisode enseigne à l'autopilote :** une recommandation n'est bonne que si l'espace des
+options l'est. A01 a comparé rigoureusement à l'intérieur d'une liste qu'il n'avait pas vérifiée —
+une rigueur locale sur un périmètre faux. À l'avenir, sur un choix externe au dépôt, énoncer
+explicitement quel espace d'options a été considéré, pour que l'interlocuteur puisse le contester.
+
+**Décideur :** **Williams** (choix du serveur et recherche de disponibilité) · A01 (analyse du volume
+et de la recette de performance)
+**Impact spec :** **amendement horodaté du 02 §11.1** — les gabarits et prix qui y figurent sont
+obsolètes ; la référence devient CX33 (4 vCPU, 8 Go, 80 Go, Nuremberg) pour la V1, le reste du §11.1
+(paliers V2 et cible) étant inchangé.
+
+---
+
+## 2026-08-27 — [L0-b] Le CX33 s'est évaporé : retour au CPX32, et pourquoi ce n'est pas un enfermement
+
+**Constat :** vingt minutes après l'arbitrage précédent, Williams a revérifié les trois datacenters :
+le **CX33 n'est plus disponible nulle part**, Falkenstein est vide sur toute la gamme CX, seul le CX23
+subsiste à Nuremberg et Helsinki. Le risque « Limited availability » qu'il avait lui-même signalé
+s'est matérialisé **en vingt minutes** au lieu de six mois.
+
+**Options :**
+
+1. Attendre et surveiller la réapparition du CX33 — coût nul, échéance inconnue.
+2. **CPX32** (4 vCPU / 8 Go / 160 Go, 35,49 €), disponible immédiatement.
+3. CX23 (2 vCPU / 4 Go / 40 Go, 5,49 €) — **exclu** : sous le nécessaire. Mesure relevée le jour même :
+   une pile au repos consomme **1,03 Go**, il en faut **deux** (prod + staging cohabitant, 02 §11.2),
+   et 40 Go ne portent pas deux Postgres, deux MinIO et deux dépôts pgBackRest à 30 jours.
+
+**Arbitrage : option 2.** Règle de précédence **sans objet** (contrainte de marché).
+
+**Ce qui tranche, et ce n'est pas le confort :**
+
+- Le **07 §14 classe le délai d'un mois comme risque n°1** du projet, pas le budget. 324 €/an contre
+  une collecte qui glisse n'est pas un arbitrage équilibré. Attendre un stock qui bouge d'heure en
+  heure, c'est parier des jours sur une échéance que le pack qualifie déjà de trop courte.
+- Les **160 Go** font disparaître la question du volume Hetzner et sa complexité d'exploitation
+  (quels volumes déplacer, comportement au détachement).
+- Le **matériel récent lève l'inconnue de performance** sur `p95 < 500 ms`, qui est un critère
+  d'acceptation **dur** du lot L6. Sur CX, il aurait fallu mesurer et peut-être migrer **pendant la
+  semaine que le 09 §5.3 réserve exclusivement au moteur de sync** (« L6 se développe SEUL »).
+  C'est la pire semaine du projet pour toucher à l'infrastructure.
+
+**La réserve d'irréversibilité, pesée honnêtement.** Elle est fondée techniquement : Hetzner refuse de
+réduire un disque, donc **CPX32 → CX33 par redimensionnement est impossible**. Mais nous ne dépendons
+pas du redimensionnement : `provision-vps.sh` s'exécute sur n'importe quel Ubuntu et `restore-test.sh`
+restaure depuis pgBackRest et le miroir MinIO — restauration **éprouvée chaque nuit**. Si un CX33
+réapparaît et que l'écart compte, on en provisionne un et on migre en une soirée, avec la procédure
+qu'on répète toutes les nuits. **Ce n'est pas un rachat, c'est un déménagement, et l'outil du
+déménagement est déjà livré** (le 07 §14 promet d'ailleurs « bascule Scaleway/OVH en < 1 j »).
+
+**Ce que l'épisode enseigne :** la valeur du lot L0 ne se mesure pas au jour où on l'écrit. C'est
+parce que le PRA existe et qu'il est testé que ce choix cesse d'être un engagement. Une infrastructure
+qu'on sait reconstruire transforme une décision d'achat en décision réversible.
+
+**Décideur :** **Williams** (constat de disponibilité et arbitrage final) · A01 (analyse)
+**Impact spec :** amende l'entrée précédente du même jour — la référence de dimensionnement V1
+redevient **CPX32** (4 vCPU, 8 Go, 160 Go), Nuremberg ou Falkenstein, les deux étant en Allemagne et
+satisfaisant le 06 §10.4.

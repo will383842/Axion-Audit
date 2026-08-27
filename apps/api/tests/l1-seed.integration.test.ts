@@ -81,7 +81,7 @@ afterAll(async () => {
 });
 
 describe('L1 — seed rejouable (07 §12, critère 2)', () => {
-  it('@critique rejouer le seed une seconde fois ne change AUCUN compte de table', () => {
+  it('rejouer le seed une seconde fois ne change AUCUN compte de table', () => {
     const ecarts = TABLES_ATTENDUES_L1.filter(
       (table) => comptesApres1[table] !== comptesApres2[table],
     ).map(
@@ -272,7 +272,7 @@ describe('L1 — estimation_params normées (11 §5, 04 §7)', () => {
 });
 
 describe('L1 — compte fondateur habilité (07 §12 critère 4, §34.4)', () => {
-  it('@critique le seed crée un compte admin dont habilitated_at est NON NULL', async () => {
+  it('le seed crée un compte admin dont habilitated_at est NON NULL', async () => {
     if (client === undefined) throw new Error('connexion absente');
     const resultat = await client.query<{ email: string; habilitated_at: Date | null }>(
       `SELECT email, habilitated_at FROM users WHERE role = 'admin' ORDER BY created_at`,

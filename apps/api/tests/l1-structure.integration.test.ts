@@ -188,7 +188,7 @@ describe('L1 — cloison scoping_estimates / scoping_financials (04 §7, P1-3, E
 // -----------------------------------------------------------------------------
 
 describe("L1 — aucune fabrication SQL d'UUID v7 (11 §2)", () => {
-  it("@critique aucune fonction SQL de génération d'UUID v7 n'existe en base", async () => {
+  it("aucune fonction SQL de génération d'UUID v7 n'existe en base", async () => {
     const fonctions = await bd().query<{ nom: string }>(
       `SELECT n.nspname || '.' || p.proname AS nom
        FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -223,7 +223,7 @@ describe("L1 — aucune fabrication SQL d'UUID v7 (11 §2)", () => {
     ).toEqual([]);
   });
 
-  it("@critique les tables à UUID client (P1-4) n'ont pas de DEFAULT gen_random_uuid() sur leur clé", async () => {
+  it("les tables à UUID client (P1-4) n'ont pas de DEFAULT gen_random_uuid() sur leur clé", async () => {
     const colonnes = await bd().query<{ table_name: string; column_name: string; defaut: string }>(
       `SELECT table_name, column_name, column_default AS defaut
        FROM information_schema.columns

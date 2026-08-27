@@ -60,7 +60,7 @@ afterAll(async () => {
 });
 
 describe('L1 — migrations up/down (07 §12, critère 1)', () => {
-  it('@critique la montée crée les 43 tables du fichier 04 exigées au lot L1', () => {
+  it('@critique la montée crée les 43 tables du fichier 04 exigées au lot L1 — conformité schéma-vs-04', () => {
     const presentes = new Set(apresMontee1.tables);
     const manquantes = TABLES_ATTENDUES_L1.filter((t) => !presentes.has(t));
 
@@ -120,7 +120,7 @@ describe('L1 — migrations up/down (07 §12, critère 1)', () => {
     ).toEqual([]);
   });
 
-  it('@critique la descente ne laisse AUCUN reliquat en base', () => {
+  it('la descente ne laisse AUCUN reliquat en base', () => {
     const restes = reliquats(apresDescente);
 
     expect(
@@ -133,7 +133,7 @@ describe('L1 — migrations up/down (07 §12, critère 1)', () => {
     ).toEqual([]);
   });
 
-  it('@critique la remontée après descente reproduit EXACTEMENT le même schéma', () => {
+  it('la remontée après descente reproduit EXACTEMENT le même schéma', () => {
     expect(
       apresMontee2.tables,
       `Les tables diffèrent entre la 1re et la 2e montée : une migration n'est pas\n` +

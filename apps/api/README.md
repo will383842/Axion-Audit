@@ -6,7 +6,7 @@ la PWA terrain et la console consomment la même API.
 ## État au lot L1
 
 Le **schéma** est livré : 43 tables, transcrites LITTÉRALEMENT de `docs/04_MODELE_DE_DONNEES.md` en
-SQL brut versionné (`drizzle/0001` → `0008`), plus le seed des référentiels et le compte fondateur.
+SQL brut versionné (`drizzle/0001` → `0009`), plus le seed des référentiels et le compte fondateur.
 Toujours **aucune route métier** (L2/L3) : l'API n'expose que ses deux sondes de santé.
 
 ## Routes exposées

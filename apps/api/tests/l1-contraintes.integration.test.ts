@@ -65,7 +65,7 @@ describe('L1 — unicité answers(interview_id, mission_question_id) (04 §7 V2.
                                         client_created_at, client_updated_at, created_at, updated_at)
                    VALUES ($1, $2, $3, $4::jsonb, 'entretien', now(), now(), now(), now())`;
 
-  it('@critique une seconde réponse à la MÊME question dans la MÊME session est refusée', async () => {
+  it('une seconde réponse à la MÊME question dans la MÊME session est refusée', async () => {
     await attendreAcceptation(
       bd(),
       inserer,
@@ -121,7 +121,7 @@ describe('L1 — unicité partielle companies(siren) WHERE siren IS NOT NULL (04
   const inserer = `INSERT INTO companies (id, name, siren, created_at, updated_at)
                    VALUES ($1, $2, $3, now(), now())`;
 
-  it('@critique deux entreprises au MÊME siren sont refusées', async () => {
+  it('deux entreprises au MÊME siren sont refusées', async () => {
     const siren = '000000001';
     await attendreAcceptation(
       bd(),
@@ -146,7 +146,7 @@ describe('L1 — unicité partielle companies(siren) WHERE siren IS NOT NULL (04
     ).toBe('23505');
   });
 
-  it("@critique deux entreprises à siren NULL sont ACCEPTÉES — c'est ce qui distingue l'index PARTIEL", async () => {
+  it("deux entreprises à siren NULL sont ACCEPTÉES — c'est ce qui distingue l'index PARTIEL", async () => {
     await attendreAcceptation(
       bd(),
       inserer,
@@ -179,7 +179,7 @@ describe('L1 — unicité partielle questions(code, version) WHERE code IS NOT N
                                           answer_type, origin, created_at, updated_at)
                    VALUES ($1, $2, $3, $4, 'active', $5, 'yes_no', $6, now(), now())`;
 
-  it('@critique deux questions de banque au même couple (code, version) sont refusées', async () => {
+  it('deux questions de banque au même couple (code, version) sont refusées', async () => {
     await attendreAcceptation(
       bd(),
       inserer,
@@ -215,7 +215,7 @@ describe('L1 — unicité partielle questions(code, version) WHERE code IS NOT N
     );
   });
 
-  it('@critique deux questions ad hoc à code NULL sont ACCEPTÉES — le cas que rate une transcription naïve', async () => {
+  it('deux questions ad hoc à code NULL sont ACCEPTÉES — le cas que rate une transcription naïve', async () => {
     await attendreAcceptation(
       bd(),
       inserer,

@@ -8,18 +8,30 @@
 // SQL ; Drizzle ne sert QU'AUX REQUÊTES TYPÉES ». Le DDL vit EXCLUSIVEMENT dans
 // docs/04_MODELE_DE_DONNEES.md.
 //
-// POURQUOI CE SCRIPT NE LANCE PAS `drizzle-kit generate` (déviation assumée du
-// libellé du garde-fou L0, à valider par A01) :
-//   1. `drizzle-kit` n'est PAS dans la liste des dépendances épinglées du 11 §1 —
-//      l'y ajouter est une décision humaine (11 §8.1), pas un geste d'autopilote ;
-//   2. `drizzle-kit generate` DÉRIVE le SQL de `src/db/schema.ts`. Or ici le
-//      schéma TypeScript REFLÈTE les migrations, il ne les précède pas : inverser
-//      le sens ferait du fichier TS une seconde source de vérité face au 04 —
-//      exactement ce que le 11 §2 interdit, et ce que le diff schéma-vs-04
-//      révélerait au premier passage en CI.
-// Ce script fait donc le seul geste utile et sûr : il pose le SQUELETTE numéroté
-// et horodaté d'une nouvelle migration, avec ses sentinelles @UP / @DOWN, que le
-// DBA remplit à la main depuis le fichier 04.
+// ┌───────────────────────────────────────────────────────────────────────────┐
+// │ L'ABSENCE DE `drizzle-kit` DANS CE DÉPÔT EST DÉLIBÉRÉE. CE N'EST PAS UN    │
+// │ OUBLI. NE L'INSTALLE PAS.                                                 │
+// └───────────────────────────────────────────────────────────────────────────┘
+// Arbitrage A01, lot L1. Deux raisons, la seconde étant la vraie :
+//
+//   1. `drizzle-kit` n'est PAS dans la liste des dépendances épinglées du 11 §1.
+//      L'y ajouter est une décision humaine (11 §8.1), pas un geste d'autopilote.
+//
+//   2. SURTOUT — `drizzle-kit generate` DÉRIVE le SQL depuis `src/db/schema.ts`.
+//      Il fait donc couler le schéma du TypeScript vers la base. Or dans ce
+//      dépôt le sens est l'INVERSE et il est contractuel : le fichier 04 est la
+//      source, les migrations SQL en sont la transcription, et `schema.ts` n'en
+//      est qu'un REFLET pour typer les requêtes. Le brancher ici ferait du
+//      fichier TypeScript une SECONDE SOURCE DE VÉRITÉ face au fichier 04 —
+//      littéralement l'interdit du 11 §2 (« pas d'ORM qui génère le schéma »).
+//      Le diff schéma-vs-04 le révélerait au premier passage en CI, mais après
+//      coup : le mal serait déjà dans une migration commitée.
+//
+// Si tu es arrivé ici parce que `pnpm db:generate` ne fait « pas ce qu'il devrait
+// faire » : c'est qu'il fait exactement ce qu'il doit faire. Il pose le SQUELETTE
+// numéroté d'une migration, sentinelles @UP / @DOWN comprises, que le DBA
+// remplit À LA MAIN depuis `docs/04_MODELE_DE_DONNEES.md`. Le DDL ne se génère
+// pas dans ce projet : il se transcrit.
 // Traçabilité : E17, E36, E43.
 // =============================================================================
 import { existsSync, readdirSync, writeFileSync } from 'node:fs';
@@ -27,6 +39,7 @@ import { resolve } from 'node:path';
 
 const ROUGE = '[31m';
 const VERT = '[32m';
+const JAUNE = '[33m';
 const GRIS = '[90m';
 const RAZ = '[0m';
 
@@ -104,6 +117,16 @@ writeFileSync(
 
 console.log(
   `${VERT}✓${RAZ} squelette créé : apps/api/drizzle/${version}_${sujet}.sql\n` +
-    `  ${GRIS}Remplis @UP et @DOWN depuis le fichier 04, puis mets à jour le manifeste\n` +
-    `  et src/db/schema.ts. Le DDL ne se génère pas : il se transcrit.${RAZ}`,
+    `\n` +
+    `  ${JAUNE}Ce script ne lance PAS \`drizzle-kit generate\`, et c'est voulu.${RAZ}\n` +
+    `  ${GRIS}\`drizzle-kit\` dérive le SQL depuis src/db/schema.ts : il ferait couler le\n` +
+    `  schéma du TypeScript vers la base. Ici le sens est l'INVERSE et il est\n` +
+    `  contractuel — docs/04_MODELE_DE_DONNEES.md est la source, les migrations en\n` +
+    `  sont la transcription, schema.ts n'en est qu'un reflet pour typer les\n` +
+    `  requêtes. Le brancher ferait du fichier TS une SECONDE SOURCE DE VÉRITÉ,\n` +
+    `  ce qu'interdit le 11 §2. Son absence du dépôt n'est pas un oubli.${RAZ}\n` +
+    `\n` +
+    `  ${GRIS}Suite : remplis @UP et @DOWN depuis le fichier 04, mets à jour\n` +
+    `  apps/api/schema-manifest.json ET src/db/schema.ts, puis prouve la descente\n` +
+    `  (\`--down\` suivi d'un \`db:migrate\`) et vérifie \`pnpm schema:diff\`.${RAZ}`,
 );

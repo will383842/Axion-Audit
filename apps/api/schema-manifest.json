@@ -8,12 +8,13 @@
       "tables (présence, et aucune table de trop)",
       "colonnes (présence + type normalisé)",
       "contraintes PRIMARY KEY / FOREIGN KEY / UNIQUE / CHECK, par nom et par contenu",
-      "index nommément énumérés au §7.1"
+      "index DÉCLARÉS ci-dessous : ceux du §7.1 (indexCritiques) et ceux posés par la convention « FK indexées » du §7 (indexEtablisParConvention)"
     ],
     "horsPerimetreAssume": [
       "nullabilité (le 11 §7 ne la cite pas ; le 04 ne la spécifie que par le suffixe NULL)",
       "valeurs par défaut",
-      "commentaires, ordre des colonnes, privilèges"
+      "commentaires, ordre des colonnes, privilèges",
+      "index NON déclarés ici : le 11 §7 borne le diff aux « index du §7.1 », et le §7.1 s'intitule « Index CRITIQUES » — un sous-ensemble désigné, pas une liste exhaustive. Un index supplémentaire trouvé en base est donc SIGNALÉ (ligne informative), jamais compté comme écart. Un index déclaré ici et manquant en base reste bloquant."
     ],
     "tablesIgnorees": [
       "schema_migrations (journal de l'exécuteur, absent du fichier 04)",
@@ -2191,7 +2192,7 @@
       "checks": []
     }
   },
-  "indexes": [
+  "indexCritiques": [
     {
       "name": "idx_answers_interview_id",
       "table": "answers",
@@ -2389,5 +2390,223 @@
       "columns": ["user_id", "started_at"],
       "source": "04 §7.1"
     }
-  ]
+  ],
+  "indexEtablisParConvention": [
+    {
+      "name": "idx_refresh_tokens_user_id",
+      "table": "refresh_tokens",
+      "columns": ["user_id"],
+      "source": "conventions 04 §7 (« FK indexées »)",
+      "$motif": "§10.1 — révocation de TOUTE la famille de jetons d'un utilisateur à la détection de réutilisation."
+    },
+    {
+      "name": "idx_mission_users_user_id",
+      "table": "mission_users",
+      "columns": ["user_id"],
+      "source": "conventions 04 §7 (« FK indexées »)",
+      "$motif": "« Mes missions », écran d'accueil de chaque consultant. La PK est (mission_id, user_id) : user_id seul n'en est pas un préfixe."
+    },
+    {
+      "name": "idx_work_assignments_user_id",
+      "table": "work_assignments",
+      "columns": ["user_id"],
+      "source": "conventions 04 §7 (« FK indexées »)",
+      "$motif": "§34 plan de charge — « mes affectations » par auditeur."
+    },
+    {
+      "name": "idx_activity_log_user_id",
+      "table": "activity_log",
+      "columns": ["user_id"],
+      "source": "conventions 04 §7 (« FK indexées »)",
+      "$motif": "§10.4 — purge RGPD à 12 mois et export des données d'un utilisateur ; table volumineuse."
+    },
+    {
+      "name": "idx_questions_block_id",
+      "table": "questions",
+      "columns": ["block_id"],
+      "source": "conventions 04 §7 (« FK indexées »)",
+      "$motif": "Back-office de la banque (L9) : parcours par bloc. L'index du §7.1 est (status, block_id) — block_id seul n'en est pas un préfixe."
+    },
+    {
+      "name": "idx_mission_questions_mission_id",
+      "table": "mission_questions",
+      "columns": ["mission_id"],
+      "source": "conventions 04 §7 (« FK indexées »)",
+      "$motif": "Le pull terrain lit TOUT le questionnaire figé de la mission : la requête la plus volumineuse du chargement hors ligne."
+    },
+    {
+      "name": "idx_mission_questions_question_id",
+      "table": "mission_questions",
+      "columns": ["question_id"],
+      "source": "conventions 04 §7 (« FK indexées »)",
+      "$motif": "§36.4 ré-import / versionnage — « où cette question de banque est-elle figée ? »."
+    },
+    {
+      "name": "idx_answer_revisions_answer_id",
+      "table": "answer_revisions",
+      "columns": ["answer_id"],
+      "source": "conventions 04 §7 (« FK indexées »)",
+      "$motif": "Invariant 7 — l'historique de révision est le SEUL chemin d'accès de la table."
+    },
+    {
+      "name": "idx_attachments_interview_id",
+      "table": "attachments",
+      "columns": ["interview_id"],
+      "source": "conventions 04 §7 (« FK indexées »)",
+      "$motif": "Photos et notes d'une session ; table volumineuse (les photos dominent)."
+    },
+    {
+      "name": "idx_attachments_answer_id",
+      "table": "attachments",
+      "columns": ["answer_id"],
+      "source": "conventions 04 §7 (« FK indexées »)",
+      "$motif": "§27.2 — les `sources` d'un finding citent des attachment_ids ; l'écran de réponse affiche ses pièces."
+    },
+    {
+      "name": "idx_interviews_linked_review_answer_id",
+      "table": "interviews",
+      "columns": ["linked_review_answer_id"],
+      "where": "linked_review_answer_id IS NOT NULL",
+      "source": "conventions 04 §7 (« FK indexées »)",
+      "$motif": "§25.6 — « quel entretien complémentaire lève cet à-revoir ? ». PARTIEL : la colonne est NULL sur la quasi-totalité des sessions, donc une session ordinaire n'écrit rien dans cet index (coût de sync ≈ 0)."
+    },
+    {
+      "name": "idx_interviews_document_request_id",
+      "table": "interviews",
+      "columns": ["document_request_id"],
+      "where": "document_request_id IS NOT NULL",
+      "source": "conventions 04 §7 (« FK indexées »)",
+      "$motif": "§27.1 — « quelle session traite cette demande de document ? ». PARTIEL, même raison."
+    },
+    {
+      "name": "idx_org_units_service_ref_id",
+      "table": "org_units",
+      "columns": ["service_ref_id"],
+      "source": "conventions 04 §7 (« FK indexées »)",
+      "$motif": "§16.3 — le moteur M2 ne génère les paquets « logistique » que si l'arbre contient une unité logistique : lecture des unités PAR fonction."
+    },
+    {
+      "name": "idx_unit_scores_org_unit_id",
+      "table": "unit_scores",
+      "columns": ["org_unit_id"],
+      "source": "conventions 04 §7 (« FK indexées »)",
+      "$motif": "§32.1-4 roll-up — agréger les scores des unités ENFANTS. La PK (mission_id, org_unit_id, block_id) n'est qu'à moitié utilisable pour cet accès."
+    },
+    {
+      "name": "idx_tools_inventory_mission_id",
+      "table": "tools_inventory",
+      "columns": ["mission_id"],
+      "source": "conventions 04 §7 (« FK indexées »)",
+      "$motif": "§27.3 — inventaire des outils de la mission."
+    },
+    {
+      "name": "idx_ai_systems_mission_id",
+      "table": "ai_systems",
+      "columns": ["mission_id"],
+      "source": "conventions 04 §7 (« FK indexées »)",
+      "$motif": "Bloc 9 — registre des usages IA de la mission."
+    },
+    {
+      "name": "idx_report_sections_mission_id",
+      "table": "report_sections",
+      "columns": ["mission_id"],
+      "source": "conventions 04 §7 (« FK indexées »)",
+      "$motif": "Assemblage du rapport, section par section."
+    },
+    {
+      "name": "idx_report_files_mission_id",
+      "table": "report_files",
+      "columns": ["mission_id"],
+      "source": "conventions 04 §7 (« FK indexées »)",
+      "$motif": "Livrables générés d'une mission."
+    },
+    {
+      "name": "idx_mission_rebaselines_mission_id",
+      "table": "mission_rebaselines",
+      "columns": ["mission_id"],
+      "source": "conventions 04 §7 (« FK indexées »)",
+      "$motif": "§25.1 — historique de recalage de la mission."
+    },
+    {
+      "name": "idx_llm_calls_mission_id",
+      "table": "llm_calls",
+      "columns": ["mission_id"],
+      "source": "conventions 04 §7 (« FK indexées »)",
+      "$motif": "L11 — journal des coûts LLM par mission."
+    },
+    {
+      "name": "idx_scoping_estimates_company_id",
+      "table": "scoping_estimates",
+      "columns": ["company_id"],
+      "source": "conventions 04 §7 (« FK indexées »)",
+      "$motif": "§26 fiche entreprise 360° — tous les chiffrages d'un client."
+    },
+    {
+      "name": "idx_scoping_estimates_mission_id",
+      "table": "scoping_estimates",
+      "columns": ["mission_id"],
+      "source": "conventions 04 §7 (« FK indexées »)",
+      "$motif": "Chiffrage rattaché à une mission."
+    }
+  ],
+  "fkNonIndexees": {
+    "$lecture": "DOCUMENTATION, non vérifiée par le diff. Le pack demande des FK indexées, pas un index par colonne : le moteur de sync (L6) est massivement en écriture et chaque index coûte à l'insertion. Ces 40 FK sont laissées nues DÉLIBÉRÉMENT. Si un lot ultérieur ouvre l'un de ces chemins de lecture, l'index se pose alors — avec sa ligne dans indexEtablisParConvention.",
+    "motifs": [
+      {
+        "motif": "Colonne d'AUTEUR ou d'ACTEUR : aucun écran du pack ne liste par auteur.",
+        "fk": [
+          "missions.created_by",
+          "questions.created_by",
+          "findings.created_by",
+          "org_units.proposed_by",
+          "answer_revisions.changed_by",
+          "step_validations.validated_by",
+          "report_sections.validated_by",
+          "report_files.generated_by",
+          "scoping_estimates.created_by",
+          "scoping_financials.updated_by",
+          "estimation_params.updated_by",
+          "mission_rebaselines.decided_by",
+          "alerts.ack_by",
+          "alerts.user_id"
+        ]
+      },
+      {
+        "motif": "Lecture DÉJÀ réduite par un index existant (mission_id le plus souvent) sur un ensemble qui reste petit à l'échelle FIL-GC.",
+        "fk": [
+          "findings.org_unit_id",
+          "findings.block_id",
+          "use_cases.org_unit_id",
+          "use_cases.service_id",
+          "roadmap_items.use_case_id",
+          "report_sections.block_id",
+          "report_files.template_id",
+          "document_requests.org_unit_id",
+          "alerts.org_unit_id",
+          "tools_inventory.org_unit_id",
+          "ai_systems.org_unit_id",
+          "ai_systems.service_id",
+          "work_assignments.org_unit_id",
+          "block_scores.block_id",
+          "unit_scores.block_id",
+          "org_units.sector_id",
+          "org_units.merged_into_id",
+          "llm_calls.section_id",
+          "missions.size_tier_id"
+        ]
+      },
+      {
+        "motif": "Référentiel de petite taille, ou lecture qui va dans l'AUTRE sens (enfant → parent par clé primaire).",
+        "fk": [
+          "companies.sector_id",
+          "naf_sector_map.sector_id",
+          "interviews.person_service_id",
+          "questions.origin_mission_id",
+          "document_requests.attachment_id",
+          "tools_inventory.source_session_id",
+          "use_cases.baseline_source_session_id"
+        ]
+      }
+    ]
+  }
 }

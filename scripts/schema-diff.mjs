@@ -206,9 +206,21 @@ async function introspecter(client) {
 // ---------------------------------------------------------------------------
 // Comparaison
 // ---------------------------------------------------------------------------
+/**
+ * Les index que le manifeste DÉCLARE, toutes provenances confondues :
+ * `indexCritiques` (04 §7.1) + `indexEtablisParConvention` (« FK indexées », §7).
+ * Les deux sections sont séparées dans le fichier pour que la porte P-A voie
+ * d'où vient chaque ligne ; elles sont vérifiées de la même façon.
+ */
+function indexDeclares(manifeste) {
+  return [...(manifeste.indexCritiques ?? []), ...(manifeste.indexEtablisParConvention ?? [])];
+}
+
 function comparer(manifeste, base) {
   /** @type {{categorie: string, message: string}[]} */
   const ecarts = [];
+  /** Index présents en base mais non déclarés : information de revue, jamais un échec. */
+  const signalements = [];
   const ecart = (categorie, message) => ecarts.push({ categorie, message });
 
   const tablesBase = new Set(
@@ -353,7 +365,23 @@ function comparer(manifeste, base) {
     }
   }
 
-  // --- 4. INDEX DU §7.1 ----------------------------------------------------
+  // --- 4. INDEX DÉCLARÉS ---------------------------------------------------
+  //
+  // DEUX SECTIONS, DEUX PROVENANCES, MÊME EXIGENCE :
+  //   · `indexCritiques`            → énumérés nommément au 04 §7.1 ;
+  //   · `indexEtablisParConvention` → posés par la convention « FK indexées »
+  //                                   des conventions en tête du 04 §7.
+  // Les deux sont VÉRIFIÉES : ce qui est déclaré est tenu. Un index déclaré et
+  // manquant, ou dont la forme a changé, reste un écart bloquant.
+  //
+  // EN REVANCHE, UN INDEX NON DÉCLARÉ N'EST PLUS UN ÉCART (correction A01,
+  // retour d'étape 2). Le 11 §7 borne le diff aux « index du §7.1 », et le §7.1
+  // s'intitule « Index CRITIQUES » : c'est un sous-ensemble DÉSIGNÉ, pas une
+  // liste exhaustive. Le contrat ne dit nulle part qu'aucun autre index ne peut
+  // exister — et refuser tout index supplémentaire interdirait à un lot
+  // ultérieur d'optimiser une requête sans amender un manifeste censé être
+  // l'extrait d'un fichier scellé. Ces index sont donc SIGNALÉS, pas condamnés :
+  // le relecteur de la porte P-A les voit, la CI ne rougit pas.
   const indexParNom = new Map();
   for (const i of base.index) {
     if (TABLES_HORS_PERIMETRE.has(i.table_name)) continue;
@@ -365,7 +393,7 @@ function comparer(manifeste, base) {
   }
 
   const indexAttendus = new Set();
-  for (const idx of manifeste.indexes) {
+  for (const idx of indexDeclares(manifeste)) {
     indexAttendus.add(idx.name);
     const reel = indexParNom.get(idx.name);
     if (!reel) {
@@ -401,15 +429,16 @@ function comparer(manifeste, base) {
     }
   }
 
-  // 4b. Index en trop. Ceux qui matérialisent une PK ou une UNIQUE sont déjà
-  //     contrôlés au point 3 : les signaler ici ferait un doublon de bruit.
+  // 4b. Index NON DÉCLARÉS : information, pas écart (voir le motif ci-dessus).
+  //     Ceux qui matérialisent une PK ou une UNIQUE sont déjà contrôlés au
+  //     point 3 : les répéter ici ne serait que du bruit.
   for (const [nom, reel] of indexParNom) {
     if (indexAttendus.has(nom)) continue;
     if (attendues.has(nom)) continue; // index porté par une contrainte déclarée
-    ecart('index', `index EN TROP en base : ${nom} sur ${reel.table} (${reel.brut})`);
+    signalements.push(`${nom} sur ${reel.table} — ${reel.brut}`);
   }
 
-  return ecarts;
+  return { ecarts, signalements };
 }
 
 // ---------------------------------------------------------------------------
@@ -425,8 +454,9 @@ try {
 }
 
 let ecarts;
+let signalements;
 try {
-  ecarts = comparer(manifeste, await introspecter(client));
+  ({ ecarts, signalements } = comparer(manifeste, await introspecter(client)));
 } finally {
   await client.end();
 }
@@ -446,14 +476,35 @@ const nbContraintes = Object.values(manifeste.tables).reduce(
   0,
 );
 
+const nbCritiques = manifeste.indexCritiques?.length ?? 0;
+const nbConvention = manifeste.indexEtablisParConvention?.length ?? 0;
+
+/**
+ * Les index non déclarés sont imprimés QUELLE QUE SOIT l'issue du diff : leur
+ * intérêt est d'être vus en revue, pas de faire échouer un build.
+ */
+function imprimerSignalements(sortie) {
+  if (signalements.length === 0) return;
+  sortie(
+    `  ${JAUNE}${String(signalements.length)} index présent(s) en base et non déclaré(s) au manifeste${RAZ}\n` +
+      `  ${GRIS}Information, PAS un écart : le 11 §7 borne le diff aux « index du §7.1 »,\n` +
+      `  qui est un sous-ensemble « critique », pas une liste exhaustive.${RAZ}`,
+  );
+  for (const s of signalements) sortie(`    ${GRIS}${s}${RAZ}`);
+}
+
 if (ecarts.length === 0) {
   console.log(
     `${VERT}✓${RAZ} diff schéma-vs-04 : ZÉRO ÉCART.\n` +
       `  ${GRIS}${String(nbTables)} tables · ${String(nbColonnes)} colonnes · ` +
       `${String(nbContraintes)} contraintes PK/FK/UNIQUE/CHECK · ` +
-      `${String(manifeste.indexes.length)} index du §7.1${RAZ}\n` +
+      `${String(nbCritiques)} index du §7.1 · ` +
+      `${String(nbConvention)} index de convention (« FK indexées », §7)${RAZ}\n` +
       `  ${GRIS}manifeste : apps/api/schema-manifest.json (extrait de ${manifeste.source})${RAZ}`,
   );
+  imprimerSignalements((l) => {
+    console.log(l);
+  });
   process.exit(0);
 }
 
@@ -465,6 +516,10 @@ for (const categorie of ['table', 'colonne', 'contrainte', 'index']) {
   for (const e of lot) console.error(`    ${e.message}`);
   console.error('');
 }
+imprimerSignalements((l) => {
+  console.error(l);
+});
+console.error('');
 console.error(
   '  La DoD transverse exige ZÉRO écart. Deux corrections possibles, jamais une troisième :\n' +
     '    · le schéma diverge du fichier 04  → corriger la MIGRATION ;\n' +
