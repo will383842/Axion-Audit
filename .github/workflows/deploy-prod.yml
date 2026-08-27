@@ -11,12 +11,12 @@
 #   · 02 §30.4-4 — séparation stricte staging/prod : bases, buckets, clés JWT et
 #     clés API DISTINCTES. Un secret de staging ne peut RIEN sur la prod.
 #
-# ⚠️ L'APPROBATION MANUELLE N'EST PAS DANS CE FICHIER : elle n'est PAS
-# versionnable. Elle se pose à la main dans GitHub → Settings → Environments →
-# prod → « Required reviewers » = Williams. Sans ce réglage, ce workflow
-# déploierait sans garde-fou. Voir .github/workflows/README.md, section
-# « Réglages à poser à la main » — c'est le PREMIER réglage à poser, avant même
-# le premier tag `v*`.
+# ⚠️ ÉTAT RÉEL AU 2026-08-27 : l'approbation d'Environment est INDISPONIBLE.
+# « Required reviewers » exige un plan GitHub payant sur un dépôt privé — vérifié,
+# l'API la refuse. Une barrière compensatoire (confirmation TAPÉE) la remplace ;
+# voir le bandeau `on:` plus bas. Dès que le plan le permettra, poser le réglage
+# dans GitHub → Settings → Environments → prod → « Required reviewers » = Williams,
+# puis restaurer le déclencheur par tag et retirer le job `confirmation`.
 #
 # ------------------------------- ROLLBACK ------------------------------------
 # (02 §30.6 + §11.2) — identique au staging, à exécuter à la main :
@@ -44,16 +44,48 @@
 
 name: Déploiement production
 
+# ⚠️ LE DÉCLENCHEUR PAR TAG A ÉTÉ RETIRÉ — ce n'est pas un oubli.
+#
+# Le 02 §30.4-3 exige que « l'environnement prod EXIGE UNE APPROBATION MANUELLE avant
+# tout déploiement ». Cette approbation se pose normalement sur l'Environment GitHub
+# (« Required reviewers »). Or ce réglage EXIGE UN PLAN GITHUB PAYANT sur un dépôt
+# privé : l'API répond « Failed to create the environment protection rule. Please
+# ensure the billing plan supports the required reviewers protection rule ».
+# Vérifié le 2026-08-27 ; la protection de branche et les rulesets sont refusés pour
+# la même raison, sur le même plan.
+#
+# Conséquence si l'on ne faisait rien : un `git push --tags` déploierait en PRODUCTION
+# sans aucune barrière humaine — l'exact inverse de ce que le §30.4-3 demande, et un
+# geste qu'on fait sans y penser.
+#
+# GARDE-FOU COMPENSATOIRE, en attendant le plan payant : le déploiement de production
+# devient MANUEL et exige une confirmation TAPÉE. Un humain doit ouvrir l'onglet
+# Actions, choisir le tag et écrire le mot exact. C'est plus lourd qu'un clic
+# d'approbation — c'est le prix, et il est assumé plutôt que masqué.
+#
+# À RÉTABLIR dès que l'Environment `prod` porte un « Required reviewer » : remettre
+# le bloc `push: tags: ['v*']` ci-dessous en commentaire (11 §9bis : « tag v0.<lot>
+# à chaque porte franchie ») et retirer le job de confirmation.
+# Trace : DECISIONS.md 2026-08-27 « Protections GitHub indisponibles sur le plan actuel ».
 on:
-  push:
-    tags:
-      - 'v*' # 11 §9bis : « Tag v0.<lot> à chaque porte franchie ».
+  # push:
+  #   tags:
+  #     - 'v*'   ← à remettre quand l'Environment prod aura son relecteur obligatoire
   workflow_dispatch:
     inputs:
       tag_image:
-        description: "Tag d'image à (re)déployer en production — ex. rejeu ou rollback assisté."
+        description: "Tag d'image à déployer en production (ex. v0.1, sha-1a2b3c4)."
         required: true
         type: string
+      confirmation:
+        description: 'Tapez exactement : DEPLOYER-EN-PRODUCTION'
+        required: true
+        type: string
+      reconstruire:
+        description: 'Reconstruire les images ? Décochez pour REDÉPLOYER un tag déjà publié (rollback).'
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -66,19 +98,47 @@ concurrency:
 
 jobs:
   # ---------------------------------------------------------------------------
+  # 0 — BARRIÈRE HUMAINE. Remplace l'approbation d'Environment, indisponible sur
+  # le plan GitHub actuel (voir le bandeau `on:` ci-dessus). Un tag ne suffit
+  # plus : il faut avoir TAPÉ la confirmation, et tous les jobs en dépendent.
+  # ---------------------------------------------------------------------------
+  confirmation:
+    name: 0 · confirmation humaine (remplace l'approbation d'Environment)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Vérifier la confirmation tapée
+        env:
+          SAISI: ${{ inputs.confirmation }}
+          TAG: ${{ inputs.tag_image }}
+          AUTEUR: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          attendu='DEPLOYER-EN-PRODUCTION'
+          if [ "${SAISI}" != "${attendu}" ]; then
+            echo "::error::Confirmation invalide. Tapez EXACTEMENT « ${attendu} » pour déployer en production."
+            exit 1
+          fi
+          echo "Confirmation valide — déploiement de « ${TAG} » autorisé par ${AUTEUR}."
+
+  # ---------------------------------------------------------------------------
   # 1 — Construction des 4 images taguées par la VERSION du tag git + le SHA.
   # (02 §30.6 : « idem » — le flux prod reprend le flux staging.)
   # ---------------------------------------------------------------------------
   build:
-    name: Build des 4 images (tag ${{ github.ref_name }})
-    if: github.event_name == 'push'
+    name: Build des 4 images (tag ${{ inputs.tag_image }})
+    needs: [confirmation]
+    # Le déclencheur par tag ayant disparu, une condition sur `event_name == 'push'`
+    # serait TOUJOURS fausse : le job ne s'exécuterait jamais et l'on déploierait une
+    # image jamais construite. On s'appuie donc sur une entrée explicite, qui couvre
+    # aussi le rollback vers un tag déjà publié.
+    if: inputs.reconstruire
     uses: ./.github/workflows/build-images.yml
     permissions:
       contents: read
       packages: write
     with:
       pousser: true
-      tag_version: ${{ github.ref_name }}
+      tag_version: ${{ inputs.tag_image }}
     secrets: inherit
 
   # ---------------------------------------------------------------------------
@@ -93,7 +153,11 @@ jobs:
     # mais on refuse explicitement de déployer si un build a ÉCHOUÉ.
     if: always() && needs.build.result != 'failure' && needs.build.result != 'cancelled'
     environment:
-      name: prod # ← porte l'approbation manuelle (02 §30.4-3)
+      # L'Environment `prod` NE PORTE PAS d'approbation : « Required reviewers »
+      # exige un plan GitHub payant sur dépôt privé (vérifié le 2026-08-27). Il ne
+      # sert ici qu'à PORTER LES SECRETS, séparés de ceux de staging (§30.4-3/4).
+      # La barrière humaine est le job `confirmation` en tête de ce fichier.
+      name: prod
       url: ${{ vars.PROD_BASE_URL }}
     steps:
       - uses: actions/checkout@v4
@@ -228,7 +292,7 @@ jobs:
             exit 1
           fi
           texte="Axion Audit — déploiement PRODUCTION : ${{ job.status }}
-          Tag git : ${{ github.ref_name }}
+          Tag git : ${{ inputs.tag_image }}
           Image : ${{ steps.cible.outputs.tag }}
           Approuvé et lancé par : ${{ github.actor }}
           Run : ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

@@ -939,3 +939,59 @@ ce qui n'a pas tourné » sert à provoquer.
 
 **Décideur :** A01
 **Impact spec :** aucun
+
+---
+
+## 2026-08-27 — [L0-b] Protections GitHub indisponibles sur le plan actuel
+
+**Constat, vérifié par appel d'API le 2026-08-27 :** sur un dépôt **privé** au plan gratuit, GitHub
+refuse **les trois** mécanismes de protection que le pack exige :
+
+| Mécanisme                                      | Exigé par          | Réponse de l'API                                                                                                                            |
+| ---------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Relecteur obligatoire sur l'Environment `prod` | 02 §30.4-3, §30.5  | « Failed to create the environment protection rule. Please ensure the billing plan supports the required reviewers protection rule. » (422) |
+| Protection de branche sur `main`               | 02 §30.5           | « Upgrade to GitHub Pro or make this repository public. » (403)                                                                             |
+| Rulesets de dépôt                              | idem, voie moderne | même refus (403)                                                                                                                            |
+
+Le dépôt a par ailleurs été **basculé de public à privé** avant tout push : il était public à sa
+création, et le 02 §30.5 impose « repo **privé** ». Y pousser le CDC maître et la méthodologie
+d'audit aurait publié le cœur du produit.
+
+**Options :**
+
+1. Rendre le dépôt public pour retrouver les protections gratuitement — **exclu, sans discussion** :
+   le pack impose le privé, et le dépôt contient la méthodologie d'audit, le CDC maître et la
+   configuration d'infrastructure.
+2. Ne rien faire et documenter le manque — **exclu** : la conséquence concrète serait qu'un
+   `git push --tags` déploie en **production** sans aucune barrière humaine. C'est l'inverse exact
+   du §30.4-3, et c'est un geste qu'on fait sans y penser.
+3. Poser des **garde-fous compensatoires** dans ce qui EST versionnable, et nommer précisément ce
+   qui reste découvert.
+
+**Arbitrage :** option 3. Règle de précédence **sans objet** (contrainte de plateforme, aucune
+divergence interne au pack).
+
+**Ce qui est compensé — le déploiement de production.** Le déclencheur par tag `v*` est retiré de
+`deploy-prod.yml`. Le déploiement devient **manuel** et exige une **confirmation tapée**
+(`DEPLOYER-EN-PRODUCTION`), vérifiée par un job dont tous les autres dépendent. C'est plus lourd
+qu'un clic d'approbation — c'est le prix, et il est assumé plutôt que masqué. Une entrée
+`reconstruire` distingue le déploiement d'une nouvelle version du redéploiement d'un tag existant
+(rollback). Tout est réversible en trois lignes le jour où le plan change : le bloc `push: tags:` est
+laissé en commentaire à sa place, avec la marche à suivre.
+
+**Ce qui reste DÉCOUVERT, dit sans détour** — rien dans un fichier versionné ne peut le combler :
+
+- **`main` n'est pas protégée.** Rien n'empêche techniquement un `git push` direct, un force-push ou
+  une suppression de branche. La règle « jamais de commit direct sur `main` » (11 §9bis) redevient
+  une discipline, pas une barrière. C'est la garantie la plus précieuse que le lot perd.
+- **La CI n'est pas requise avant merge.** Elle s'exécute et elle est bloquante _dans son propre
+  verdict_, mais GitHub ne peut pas refuser un merge sur cette base.
+
+**Recommandation :** **GitHub Pro** (~4 $/mois) rétablit les trois mécanismes d'un coup. Rapporté à
+un outil qui portera des données d'audit de grands comptes — et dont le §10.5 promet un journal
+d'audit et une réversibilité contrôlée —, c'est le meilleur rapport coût/protection du projet.
+**À porter au dossier de la porte P-A comme point d'arbitrage de Williams.**
+
+**Décideur :** A01 pour les compensations · **Williams** pour le plan GitHub
+**Impact spec :** aucun — les exigences du §30.4-3 et du §30.5 restent inchangées et non tenues en
+l'état ; elles sont désormais tracées comme telles plutôt que réputées satisfaites.
