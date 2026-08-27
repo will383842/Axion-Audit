@@ -45,13 +45,18 @@ const RAZ = '[0m';
  * documentaient un câblage qui n'a jamais existé, et c'est ainsi qu'une croyance
  * devient une preuve pour le lecteur pressé.
  *
- * CE QUI A CHANGÉ. Le secret est désormais réellement câblé dans `ci.yml`
- * (job `invariants`). Tant que Williams ne l'a pas créé dans les réglages du
- * dépôt, la variable arrive VIDE — et dans ce cas **le contrôle ÉCHOUE EN CI**
- * au lieu de sortir en 0. C'est la règle appliquée partout ailleurs ici : un
- * contrôle qui n'a RIEN vérifié ne sort jamais vert. Hors CI, il continue
- * d'annoncer « NON APPLIQUÉ » sans faire échouer : un poste de développement
- * n'a pas à porter la liste des clients pour lancer `pnpm lint`.
+ * CE QUI A CHANGÉ. Le secret EXISTAIT DÉJÀ — créé le 2026-08-27 à 16h53, vérifié
+ * par `gh secret list`. Ce qui manquait était le CÂBLAGE : aucun workflow ne le
+ * lisait. Le job `invariants` de `ci.yml` le lit désormais, et le contrôle tourne
+ * réellement en CI. (A01 avait d'abord conclu « le secret n'existe pas » en
+ * n'ayant vérifié que son absence dans `.github/` — conclure d'un contrôle sur ce
+ * qu'il n'a PAS regardé, le défaut même que ce lot poursuit.)
+ * Si la variable arrivait vide — secret supprimé, ou exécution depuis un fork,
+ * qui ne reçoit pas les secrets — **le contrôle ÉCHOUE EN CI** au lieu de sortir
+ * en 0. C'est la règle appliquée partout ailleurs ici : un contrôle qui n'a RIEN
+ * vérifié ne sort jamais vert. Hors CI, il continue d'annoncer « NON APPLIQUÉ »
+ * sans faire échouer : un poste de développement n'a pas à porter la liste des
+ * clients pour lancer `pnpm lint`.
  *
  * Si AUCUNE source n'est disponible, le contrôle ne prétend pas être vert : il
  * annonce explicitement qu'il n'a PAS été appliqué. Un garde-fou muet serait pire

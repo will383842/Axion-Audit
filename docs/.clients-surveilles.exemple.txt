@@ -17,8 +17,9 @@
 # APPLIQUÉ ». L'invariant 2 — l'un des HUIT non négociables — n'a donc jamais été
 # vérifié par la CI, y compris dans les runs annoncés tout verts.
 #
-# Le câblage existe désormais. Mais TANT QUE LE SECRET N'EST PAS CRÉÉ dans les
-# réglages du dépôt (Settings → Secrets and variables → Actions), le job
+# Le câblage existe désormais. Le secret, lui, EXISTAIT DÉJÀ depuis le 27/08 —
+# c'est le fil qui manquait, pas la valeur. Si la variable arrivait vide (secret
+# supprimé, ou exécution depuis un fork, qui ne reçoit pas les secrets), le job
 # `invariants` ÉCHOUE — délibérément. Un contrôle qui n'a rien vérifié ne doit
 # jamais sortir vert : c'est la règle appliquée partout ailleurs dans ce dépôt.
 #
