@@ -1,0 +1,6 @@
+# Monorepo pnpm — périmètre imposé par le fichier 07 §12 et le 02 §30.2 :
+# apps/api · apps/field (PWA terrain) · apps/hq (console siège) · apps/worker (BullMQ)
+# packages/shared (schémas Zod partagés) · packages/ui (design system, tokens)
+packages:
+  - 'apps/*'
+  - 'packages/*'

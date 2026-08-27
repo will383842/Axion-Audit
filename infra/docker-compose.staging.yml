@@ -1,0 +1,142 @@
+# =============================================================================
+# infra/docker-compose.staging.yml — SURCHARGE STAGING (lot L0)
+# Applique : 02 §11.2 (staging COHABITE avec la prod sur le même VPS — décision
+# V2.2 : limites CPU/RAM + gel des déploiements pendant les jours de collecte),
+# 02 §30.4-4 (séparation stricte staging/prod), 02 §30.6 (images GHCR),
+# 06 §10.3 + 11 §2 (aucune base ni MinIO exposés : seul Caddy publie).
+# =============================================================================
+#
+# USAGE :
+#   docker compose --env-file /opt/axion-audit/staging/.env \
+#     -f infra/docker-compose.yml -f infra/docker-compose.staging.yml up -d
+#
+# ⚠️ GEL DES DÉPLOIEMENTS STAGING PENDANT LES JOURS DE COLLECTE CLIENT (02 §11.2).
+#    Staging et prod partagent le CPU/la RAM du même VPS : un build ou une montée
+#    de version staging pendant une collecte terrain met la prod en risque.
+#    Les limites `deploy.resources.limits` ci-dessous plafonnent ce risque, elles
+#    ne le suppriment pas.
+#
+# ⚠️ SÉPARATION STRICTE (02 §30.4-4) : ce fichier n'a de sens qu'avec un `.env`
+#    staging DISTINCT — base, buckets, clés JWT et clés API distincts. Le nom de
+#    projet, le réseau et les volumes ci-dessous sont eux aussi distincts de la prod.
+#
+# Nécessite Docker Compose >= 2.24 (balises YAML `!reset` / `!override`).
+#
+# VARIABLES SUPPLÉMENTAIRES attendues dans le .env staging (non secrètes) :
+#   GHCR_OWNER = compte/organisation GitHub propriétaire des images
+#   IMAGE_TAG  = tag d'image déployé (SHA ou version), posé par la CI (02 §30.5)
+
+name: axion-audit-staging
+
+services:
+  # --- Données : plus AUCUN port publié sur l'hôte (06 §10.3) -----------------
+  postgres:
+    ports: !reset []
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1536M
+
+  redis:
+    ports: !reset []
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 384M
+
+  minio:
+    ports: !reset []
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  createbuckets:
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+
+  # --- Applications : images GHCR, plus de build ni de code monté -------------
+  api:
+    build: !reset null
+    image: ghcr.io/${GHCR_OWNER}/axion-audit-api:${IMAGE_TAG}
+    pull_policy: always
+    volumes: !reset []
+    ports: !reset []
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 768M
+
+  worker:
+    build: !reset null
+    image: ghcr.io/${GHCR_OWNER}/axion-audit-worker:${IMAGE_TAG}
+    pull_policy: always
+    volumes: !reset []
+    ports: !reset []
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1024M
+
+  field:
+    build: !reset null
+    image: ghcr.io/${GHCR_OWNER}/axion-audit-field:${IMAGE_TAG}
+    pull_policy: always
+    volumes: !reset []
+    ports: !reset []
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+  hq:
+    build: !reset null
+    image: ghcr.io/${GHCR_OWNER}/axion-audit-hq:${IMAGE_TAG}
+    pull_policy: always
+    volumes: !reset []
+    ports: !reset []
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+  # --- Caddy : SEUL service exposé, TLS automatique ---------------------------
+  #
+  # ⚠️ POINT OUVERT (remonté à A01, cf. rapport L0 / DECISIONS.md) : sur un VPS
+  #    partagé staging+prod (02 §11.2), UN SEUL processus peut lier 80/443.
+  #    Tant que l'arbitrage n'est pas rendu (Caddy unique partagé entre les deux
+  #    piles / VPS staging dédié dès la V2 / staging derrière le Caddy de prod),
+  #    la pile staging NE PUBLIE PAS 80/443 : elle écoute en LOOPBACK et n'est
+  #    joignable que par tunnel SSH. Un `docker compose up` des deux piles ne
+  #    provoque donc AUCUN conflit de port.
+  #    Sur un VPS staging DÉDIÉ, remplacer le bloc ci-dessous par 80/443.
+  caddy:
+    ports: !override
+      - '127.0.0.1:8081:8080' # tunnel SSH : ssh -L 8081:127.0.0.1:8081 …
+    environment:
+      # Pas d'ACME tant que staging n'est pas publiquement lié à 80/443 :
+      # le .env staging doit poser CADDY_SITE_ADDRESS=:8080.
+      CADDY_SITE_ADDRESS: ${CADDY_SITE_ADDRESS}
+      CADDY_ACME_EMAIL: ${CADDY_ACME_EMAIL}
+      API_PORT: ${API_PORT}
+      TZ: ${TZ}
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+# Réseau DISTINCT de celui de la prod (02 §30.4-4).
+networks:
+  axion:
+    name: axion-audit-staging

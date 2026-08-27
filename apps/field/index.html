@@ -1,0 +1,19 @@
+<!doctype html>
+<!-- Invariant 5 : interface 100 % en français — la langue du document aussi.
+     Elle pilote la césure, la synthèse vocale et les lecteurs d'écran. -->
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- Couleur de thème : INJECTÉE À LA CONSTRUCTION depuis packages/ui (voir
+         vite.config.ts). Le HTML statique ne peut pas lire une variable CSS, mais
+         ce n'est pas une raison pour dupliquer la charte : invariant 4, une
+         couleur n'a qu'une seule source de vérité. -->
+    <meta name="theme-color" content="%COULEUR_THEME%" />
+    <title>Axion Audit — Terrain</title>
+  </head>
+  <body>
+    <div id="racine"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

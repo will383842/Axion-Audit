@@ -1,0 +1,557 @@
+# =============================================================================
+# CI — LE WORKFLOW BLOQUANT (contrat 11 §7 · 02 §30.4-5 · 02 §30.5 · 09 §3)
+# =============================================================================
+# Applique littéralement :
+#   · 11 §7 — « jobs dans cet ORDRE : lint → typecheck → unit → integration
+#     (postgres, redis, minio) → e2e (chromium) → diff schéma-vs-04 → build
+#     images → (tag) déploiement staging. Merge bloqué sans tout vert. »
+#   · 11 §1 — Node 22 LTS, pnpm 9, versions épinglées, Dependabot désactivé.
+#   · 11 §2 / 09 §5.7 — « Tests désactivés/skippés = build rouge » ;
+#     `@critique` et `@filrouge` ne sont JAMAIS skippables.
+#   · 09 §3 (DoD transverse) — couverture ≥ 90 % sur les modules critiques,
+#     MESURÉE, pas déclarée.
+#   · 02 §30.4-5 — gitleaks à chaque push, BLOQUANT.
+#   · 02 §30.5 — protection de `main` : CI verte obligatoire.
+#
+# RÈGLE FONDATRICE DE CE FICHIER (09 §5.7) : un workflow ne doit JAMAIS pouvoir
+# passer au vert en masquant un échec. Aucun `|| true`, aucun `continue-on-error`
+# de confort. Une CI qui ment est pire que pas de CI.
+#
+# Traçabilité E36/E43 — livrable du lot L0 (07 §12), agent A52 (09 §1).
+# =============================================================================
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches:
+      - main
+      - 'lot/**' # 11 §9bis : une branche par incrément, `lot/<code>`.
+
+# Permissions MINIMALES par défaut (02 §30.4-7 « moindre accès »).
+# `packages: write` n'est accordé QUE dans le job qui pousse sur GHCR.
+permissions:
+  contents: read
+
+# Un seul run utile par branche : les runs obsolètes sont annulés.
+# Exception : jamais d'annulation sur `main` (un run sur main peut déclencher un
+# déploiement staging — on n'annule pas un déploiement en vol).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  # Images de service — alignées sur la stack figée 02 §30.2 / 11 §1.
+  POSTGRES_IMAGE: postgres:16-alpine
+  REDIS_IMAGE: redis:7-alpine
+  # 11 §1 : « MinIO, dernière release stable au démarrage, FIGÉE ensuite ».
+  # Tag ALIGNÉ sur `infra/docker-compose.yml` (A11) — les deux doivent rester
+  # identiques : une CI qui teste une autre version que la prod ne teste pas la prod.
+  MINIO_IMAGE: minio/minio:RELEASE.2025-04-22T22-12-26Z
+  # gitleaks épinglé (11 §1, gel des dépendances Phase 1).
+  GITLEAKS_IMAGE: zricethezav/gitleaks:v8.18.4
+  # Secrets FACTICES pour la CI (11 §2 : « les tests utilisent des secrets
+  # factices » ; aucune valeur réelle ne transite ici).
+  POSTGRES_USER: axion
+  POSTGRES_PASSWORD: ci_factice_postgres
+  POSTGRES_DB: axion_audit_test
+  MINIO_ROOT_USER: ci_factice_minio
+  MINIO_ROOT_PASSWORD: ci_factice_minio_secret
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # GARDE-FOU 1 — DÉTECTION DE FUITE DE SECRET (02 §30.4-5, BLOQUANT)
+  # ---------------------------------------------------------------------------
+  # En PR : historique COMPLET (fetch-depth: 0) — un secret introduit puis
+  # « retiré » dans un commit ultérieur reste dans l'historique et doit être vu.
+  # ---------------------------------------------------------------------------
+  gitleaks:
+    name: gitleaks (bloquant — 02 §30.4-5)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer le dépôt (historique complet)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Vérifier la présence de la configuration gitleaks
+        run: |
+          set -euo pipefail
+          if [ ! -f .gitleaks.toml ]; then
+            echo "::error::.gitleaks.toml absent à la racine — configuration obligatoire (02 §30.4-5)."
+            exit 1
+          fi
+
+      - name: Analyser l'historique complet
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "${GITHUB_WORKSPACE}:/repo" \
+            -w /repo \
+            "${GITLEAKS_IMAGE}" \
+            detect --source=/repo --config=/repo/.gitleaks.toml \
+                   --redact --verbose --exit-code 1
+          # --exit-code 1 : toute fuite fait ROUGIR le build. Pas de tolérance.
+
+  # ---------------------------------------------------------------------------
+  # GARDE-FOU 2 — SCRIPTS SHELL D'INFRA (11 §7, scripts livrés par A11)
+  # ---------------------------------------------------------------------------
+  shellcheck:
+    name: shellcheck (infra/scripts/*.sh)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-node-pnpm
+
+      - name: Analyser les scripts d'exploitation
+        run: |
+          set -euo pipefail
+          # shellcheck est préinstallé sur les runners ubuntu-latest.
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            echo "::error::shellcheck introuvable sur le runner."
+            exit 1
+          fi
+          # Les scripts d'infra sont un livrable du MÊME lot L0 (agent A11 :
+          # deploy.sh, restore-test.sh, backup…). Leur absence est un échec de
+          # lot, pas une situation normale : on échoue avec un message lisible.
+          mapfile -t scripts < <(git ls-files 'infra/scripts/*.sh' 'infra/scripts/**/*.sh')
+          if [ "${#scripts[@]}" -eq 0 ]; then
+            echo "::error::Aucun script dans infra/scripts/ — livrable du lot L0 (agent A11 : deploy.sh, restore-test.sh). La CI n'a rien à vérifier : échec explicite plutôt que faux vert."
+            exit 1
+          fi
+          printf 'Scripts analysés :\n%s\n' "${scripts[*]}"
+          shellcheck --severity=warning --shell=bash "${scripts[@]}"
+
+      # Le fichier compose EST de l'infrastructure exécutable : une faute de
+      # syntaxe s'y découvre en CI, pas au moment du déploiement.
+      - name: Valider la syntaxe des fichiers docker compose
+        run: |
+          set -euo pipefail
+          # `.env` est gitignoré (02 §30.4-1) : on fabrique un .env ÉPHÉMÈRE à
+          # partir de .env.example. Ses valeurs sont les placeholders
+          # `__CHANGEME__` — des secrets factices, comme l'exige 11 §2.
+          cp .env.example .env
+          pnpm infra:config
+          rm -f .env
+
+  # ---------------------------------------------------------------------------
+  # GARDE-FOU 3 — ANTI-SKIP (11 §2 · 09 §5.7 · DoD transverse 09 §3)
+  # ---------------------------------------------------------------------------
+  # « Tests désactivés/skippés = build rouge » · « AUCUN test skippé » ·
+  # `@critique` et `@filrouge` ne sont JAMAIS skippables.
+  #
+  # La détection elle-même vit dans `scripts/check-no-skipped-tests.mjs` (livré
+  # par A01) : motifs `.skip( .only( .todo( .failing( xit( xdescribe( fit(
+  # test.fixme( skipIf( this.skip(`, sur les fichiers de test suivis par git,
+  # avec une **liste d'exceptions VIDE**. La CI l'APPELLE au lieu de réimplémenter
+  # les mêmes motifs : deux détecteurs concurrents finissent toujours par diverger,
+  # et c'est par l'écart entre les deux qu'un test critique disparaîtrait.
+  #
+  # LISTE D'EXCEPTIONS : VIDE, et elle doit le rester — une exception est une
+  # décision humaine tracée dans DECISIONS.md (11 §8-5), pas une ligne de config.
+  # ---------------------------------------------------------------------------
+  anti-skip:
+    name: aucun test désactivé (11 §2 / 09 §5.7)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-node-pnpm
+
+      - name: pnpm check:no-skipped-tests
+        run: pnpm check:no-skipped-tests
+
+      # Garde-fou du garde-fou : si la liste d'exceptions du script cessait
+      # d'être vide, le contrôle ci-dessus deviendrait perméable en silence.
+      - name: Vérifier que la liste d'exceptions est restée vide
+        run: |
+          set -euo pipefail
+          if ! grep -qE '^const EXCEPTIONS = \[\];' scripts/check-no-skipped-tests.mjs; then
+            echo "::error title=Liste d'exceptions non vide::scripts/check-no-skipped-tests.mjs ne déclare plus « const EXCEPTIONS = []; ». Ajouter une exception au garde-fou anti-skip exige une entrée DECISIONS.md signée par Williams (11 §8-5) — et la levée explicite de ce contrôle-ci."
+            exit 1
+          fi
+
+  # ---------------------------------------------------------------------------
+  # GARDE-FOU 4 — INVARIANTS DU DÉPÔT (CLAUDE.md §1 · 09 §3 étape 3)
+  # ---------------------------------------------------------------------------
+  # 09 §3 étape 3 : l'auto-revue s'appuie sur une « checklist AUTOMATISÉE (pas de
+  # couleur en dur, pas de référence client, UUID client sur les entités
+  # offline…) ». Automatisée signifie : exécutée par la CI, pas par la bonne
+  # volonté de l'agent qui vient de coder.
+  # ---------------------------------------------------------------------------
+  invariants:
+    name: invariants du dépôt (CLAUDE.md §1)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-node-pnpm
+      - name: pnpm check:invariants
+        run: pnpm check:invariants
+
+  # ---------------------------------------------------------------------------
+  # 1/8 — LINT (11 §7)
+  # ---------------------------------------------------------------------------
+  lint:
+    name: 1 · lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-node-pnpm
+      - name: pnpm lint
+        run: pnpm lint
+      # Le formatage est vérifié, jamais réécrit par la CI : un job qui corrige
+      # le dépôt à la place de l'auteur masque le défaut au lieu de le signaler.
+      - name: pnpm format:check
+        run: pnpm format:check
+
+  # ---------------------------------------------------------------------------
+  # 2/8 — TYPECHECK (11 §7 · 11 §1 « TypeScript 5 strict », DoD : 0 erreur)
+  # ---------------------------------------------------------------------------
+  typecheck:
+    name: 2 · typecheck
+    runs-on: ubuntu-latest
+    needs: [lint]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-node-pnpm
+      - name: pnpm typecheck
+        run: pnpm typecheck
+
+  # ---------------------------------------------------------------------------
+  # 3/8 — TESTS UNITAIRES (11 §7 · 07 §13 « Unitaires (Vitest) »)
+  # ---------------------------------------------------------------------------
+  unit:
+    name: 3 · unit
+    runs-on: ubuntu-latest
+    needs: [typecheck, anti-skip]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-node-pnpm
+      - name: pnpm test:unit
+        run: pnpm test:unit
+
+  # ---------------------------------------------------------------------------
+  # 4/8 — TESTS D'INTÉGRATION (11 §7 : services postgres, redis, minio)
+  # ---------------------------------------------------------------------------
+  # 07 §13 : « Intégration API (Vitest + Postgres testcontainers) ».
+  # Les services ci-dessous couvrent le cas où la suite se branche sur des
+  # services fournis par la CI ; Testcontainers reste utilisable dans le même
+  # job (le socket Docker du runner est disponible). Voir « Doutes de spec ».
+  # ---------------------------------------------------------------------------
+  integration:
+    name: 4 · integration (postgres, redis, minio)
+    runs-on: ubuntu-latest
+    needs: [unit]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: axion
+          POSTGRES_PASSWORD: ci_factice_postgres
+          POSTGRES_DB: axion_audit_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U axion -d axion_audit_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-node-pnpm
+
+      # MinIO ne peut PAS être déclaré en `services:` : son entrypoint exige
+      # l'argument `server /data`, que la clé `services` de GitHub Actions ne
+      # permet pas de passer (elle n'expose que `options`, pas `command`).
+      # On le démarre donc explicitement, avec un healthcheck réel — et non un
+      # `sleep` optimiste.
+      - name: Démarrer MinIO (11 §7 — service d'intégration)
+        run: |
+          set -euo pipefail
+          docker run -d --name minio \
+            -p 9000:9000 -p 9001:9001 \
+            -e "MINIO_ROOT_USER=${MINIO_ROOT_USER}" \
+            -e "MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}" \
+            --health-cmd "mc ready local || curl -fsS http://localhost:9000/minio/health/live" \
+            --health-interval 5s --health-timeout 5s --health-retries 20 \
+            "${MINIO_IMAGE}" server /data --console-address ":9001"
+
+      - name: Attendre que MinIO soit vivant (échec explicite après 60 s)
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null 2>&1; then
+              echo "MinIO prêt après ${i} tentative(s)."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::MinIO n'a pas démarré en 60 s — journal du conteneur ci-dessous."
+          docker logs minio || true
+          exit 1
+
+      - name: pnpm test:integration
+        env:
+          # 11 §2 : MinIO n'est jamais exposé publiquement ; ici il s'agit d'un
+          # conteneur éphémère de CI avec des identifiants FACTICES.
+          DATABASE_URL: postgresql://axion:ci_factice_postgres@127.0.0.1:5432/axion_audit_test
+          DATABASE_URL_TEST: postgresql://axion:ci_factice_postgres@127.0.0.1:5432/axion_audit_test
+          REDIS_URL: redis://127.0.0.1:6379
+          MINIO_ENDPOINT: 127.0.0.1
+          MINIO_PORT: '9000'
+          MINIO_USE_SSL: 'false'
+          MINIO_ACCESS_KEY: ci_factice_minio
+          MINIO_SECRET_KEY: ci_factice_minio_secret
+          APP_ENV: dev
+          TZ: UTC
+        run: pnpm test:integration
+
+      - name: Arrêter MinIO
+        if: always()
+        run: docker rm -f minio || true
+
+  # ---------------------------------------------------------------------------
+  # 5/8 — TESTS E2E (11 §7 : Playwright, chromium)
+  # ---------------------------------------------------------------------------
+  # LIMITE ASSUMÉE — CONTRAT 11 §7, CITÉE MOT POUR MOT :
+  #   « `context.setOffline(true)` couvre les scénarios réseau ; LES SERVICE
+  #   WORKERS SOUS iOS NE SONT PAS COUVERTS PAR PLAYWRIGHT — le mode avion RÉEL
+  #   sur iPad se rejoue À LA MAIN aux portes P-C et P-E (checklist 07 §15).
+  #   Documenté, pas contourné. »
+  # Conséquence opératoire : un vert sur ce job ne vaut PAS preuve du mode avion
+  # iPad. La preuve est humaine, tracée dans le fichier de porte (11 §9bis).
+  # ---------------------------------------------------------------------------
+  e2e:
+    name: 5 · e2e (chromium)
+    runs-on: ubuntu-latest
+    needs: [integration]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-node-pnpm
+
+      - name: Installer le navigateur chromium (Playwright)
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: pnpm test:e2e
+        env:
+          APP_ENV: dev
+          TZ: UTC
+        run: pnpm test:e2e
+
+      - name: Conserver le rapport Playwright
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapport-playwright
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # 6/8 — DIFF SCHÉMA-vs-04 (11 §7 · critère L1 07 §12 : « zéro écart »)
+  # ---------------------------------------------------------------------------
+  # 11 §7 : « le diff porte sur tables, colonnes, contraintes PK/FK/UNIQUE/CHECK
+  # et index du §7.1, comparés à un manifeste `schema-manifest.json` EXTRAIT du
+  # fichier 04, commité AU LOT L1 et relu ligne à ligne à la porte P-A ».
+  #
+  # ⚠️ CONTOURNEMENT TEMPORAIRE — DISPARAÎT AU LOT L1 ⚠️
+  # Le manifeste `apps/api/schema-manifest.json` n'existe pas encore (livrable
+  # L1, agent A12). Faire « passer » ce job au vert sans manifeste serait un
+  # MENSONGE DE CI. La logique de décision vit dans `scripts/schema-diff.mjs`
+  # (livré par A01) et se durcit TOUTE SEULE :
+  #   · pas de manifeste ET pas de `apps/api/drizzle/` → L1 non livré : le script
+  #     sort en 0 avec un avertissement explicite (« rien n'est déclaré conforme :
+  #     le contrôle est sans objet ») ;
+  #   · `apps/api/drizzle/` existe MAIS pas de manifeste → ÉCHEC BLOQUANT ;
+  #   · manifeste présent → comparaison réelle, tout écart = build rouge.
+  # Aucun `continue-on-error` et aucun `|| true` dans ce job : la tolérance est
+  # une CONDITION D'EXISTENCE explicite, écrite dans un fichier relu en revue, et
+  # elle s'éteint d'elle-même dès que L1 pose ses migrations.
+  # Critère L1 (07 §12) : « diff automatisé schéma réel vs fichier 04 = ZÉRO ÉCART ».
+  # ---------------------------------------------------------------------------
+  schema-diff:
+    name: 6 · schema-diff (vs fichier 04)
+    runs-on: ubuntu-latest
+    needs: [e2e]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: axion
+          POSTGRES_PASSWORD: ci_factice_postgres
+          POSTGRES_DB: axion_audit_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U axion -d axion_audit_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-node-pnpm
+
+      - name: Signaler l'état du contrôle (visible dans le résumé du run)
+        run: |
+          set -euo pipefail
+          if [ ! -d apps/api/drizzle ] && [ ! -f apps/api/schema-manifest.json ]; then
+            echo "::warning title=schema-diff sans objet (lot L0)::Le manifeste apps/api/schema-manifest.json et les migrations apps/api/drizzle/ sont des LIVRABLES DU LOT L1 (11 §7, agent A12). Le contrôle ne peut rien comparer et ne déclare RIEN conforme. Il devient bloquant automatiquement dès que apps/api/drizzle/ existe. CONTOURNEMENT À FAIRE DISPARAÎTRE AU L1."
+          fi
+
+      - name: Appliquer les migrations (dès que le lot L1 les a livrées)
+        env:
+          DATABASE_URL: postgresql://axion:ci_factice_postgres@127.0.0.1:5432/axion_audit_test
+          APP_ENV: dev
+          TZ: UTC
+        run: |
+          set -euo pipefail
+          if [ -d apps/api/drizzle ]; then
+            pnpm db:migrate
+          else
+            echo "Aucune migration à appliquer (lot L1 non livré)."
+          fi
+
+      - name: pnpm schema:diff (tout écart = build rouge)
+        env:
+          DATABASE_URL: postgresql://axion:ci_factice_postgres@127.0.0.1:5432/axion_audit_test
+          APP_ENV: dev
+          TZ: UTC
+        run: pnpm schema:diff
+
+  # ---------------------------------------------------------------------------
+  # COUVERTURE — DoD transverse 09 §3 : « ≥ 90 % sur les modules critiques
+  # (sync, crypto locale, scoring, RBAC/propriété) — MESURÉE, PAS DÉCLARÉE »
+  # ---------------------------------------------------------------------------
+  # Les modules critiques n'existent pas encore au L0 : leur liste est un
+  # fichier de configuration VERSIONNÉ (.github/coverage-critical-paths.json),
+  # vide au L0, alimenté lot par lot. Le job ci-dessous refuse deux mensonges :
+  #   · un chemin déclaré qui ne correspond à aucun fichier (config périmée) ;
+  #   · une liste vide alors qu'un lot critique a déjà livré son code (config
+  #     non alimentée = seuil silencieusement contourné).
+  # ---------------------------------------------------------------------------
+  coverage:
+    name: couverture ≥ 90 % (modules critiques — 09 §3)
+    runs-on: ubuntu-latest
+    needs: [unit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-node-pnpm
+
+      - name: Contrôler la cohérence de la liste des modules critiques
+        id: config
+        run: |
+          set -euo pipefail
+          config=.github/coverage-critical-paths.json
+          if [ ! -f "$config" ]; then
+            echo "::error::${config} absent — la DoD transverse (09 §3) exige une couverture MESURÉE sur une liste de modules versionnée."
+            exit 1
+          fi
+
+          seuil="$(jq -r '.seuilMinimalPourcent' "$config")"
+          nb="$(jq -r '.cheminsCritiques | length' "$config")"
+          echo "seuil=${seuil}" >> "$GITHUB_OUTPUT"
+          echo "nb=${nb}" >> "$GITHUB_OUTPUT"
+
+          if [ "$seuil" != "90" ]; then
+            echo "::error::Le seuil déclaré (${seuil} %) diffère de la DoD transverse (90 %). Abaisser ce seuil est une décision humaine tracée dans DECISIONS.md, pas une modification de configuration."
+            exit 1
+          fi
+
+          # Ceinture 1 — un chemin déclaré doit correspondre à du code réel.
+          echec=0
+          while IFS= read -r motif; do
+            [ -z "$motif" ] && continue
+            if [ -z "$(git ls-files -- "$motif")" ]; then
+              echo "::error::Chemin critique déclaré mais introuvable : ${motif} (configuration périmée dans ${config})."
+              echec=1
+            fi
+          done < <(jq -r '.cheminsCritiques[].glob' "$config")
+
+          # Ceinture 2 — un lot critique livré doit avoir alimenté la liste.
+          while IFS= read -r ligne; do
+            [ -z "$ligne" ] && continue
+            lot="$(printf '%s' "$ligne" | cut -f1)"
+            motif="$(printf '%s' "$ligne" | cut -f2)"
+            if [ -n "$(git ls-files -- "$motif")" ] && [ "$nb" -eq 0 ]; then
+              echo "::error::Du code correspondant à ${motif} (lot ${lot}) existe alors que .cheminsCritiques est encore VIDE. La DoD transverse serait contournée en silence. Action : alimenter ${config} avec le module livré."
+              echec=1
+            fi
+          done < <(jq -r '.cheminsAttendus[] | [.lot, .glob] | @tsv' "$config")
+
+          exit "$echec"
+
+      - name: Aucun module critique encore livré (L0) — mesure sans seuil
+        if: steps.config.outputs.nb == '0'
+        run: |
+          echo "::warning title=Seuil de couverture non applicable::La liste .cheminsCritiques est vide : aucun module critique (sync, crypto locale, scoring, RBAC/propriété) n'est encore livré. Le seuil de 90 % s'activera automatiquement dès la première entrée — voir .github/coverage-critical-paths.json (colonne « lot qui alimente »). Contrôle de cohérence passé : aucun code critique livré hors liste."
+
+      - name: Mesurer la couverture et appliquer le seuil de 90 %
+        if: steps.config.outputs.nb != '0'
+        run: |
+          set -euo pipefail
+          pnpm test:coverage
+          # `pnpm test:coverage` doit produire un rapport `coverage/coverage-summary.json`
+          # (reporter `json-summary` de Vitest 3). La CI ne fait PAS confiance au
+          # code de sortie seul : elle relit les chiffres et tranche elle-même.
+          if [ ! -f coverage/coverage-summary.json ]; then
+            echo "::error::coverage/coverage-summary.json absent — la couverture doit être MESURÉE (09 §3), pas déclarée. Configurer le reporter 'json-summary' de Vitest."
+            exit 1
+          fi
+          node .github/scripts/check-coverage.mjs
+
+      - name: Conserver le rapport de couverture
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapport-couverture
+          path: coverage/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # 7/8 — BUILD DES 4 IMAGES (02 §30.5 / §30.6)
+  # ---------------------------------------------------------------------------
+  # Le build proprement dit vit dans le workflow réutilisable build-images.yml
+  # (source de vérité UNIQUE, partagée avec deploy-prod.yml — pas de copie).
+  # Il dépend de TOUS les garde-fous : rien ne se construit sur une base non
+  # vérifiée.
+  # ---------------------------------------------------------------------------
+  build:
+    name: 7 · build (4 images GHCR)
+    needs: [schema-diff, coverage, gitleaks, shellcheck, invariants, anti-skip]
+    uses: ./.github/workflows/build-images.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      pousser: ${{ github.event_name == 'push' }}
+    secrets: inherit
+
+  # ---------------------------------------------------------------------------
+  # 8/8 — DÉPLOIEMENT STAGING (11 §7 « (tag) déploiement staging » · 02 §30.6)
+  # ---------------------------------------------------------------------------
+  # « PR mergée → … → job deploy-staging ». Donc : AU MERGE SUR `main`
+  # UNIQUEMENT. Jamais sur une PR (le code n'est pas encore accepté), jamais sur
+  # une branche `lot/**`.
+  # ---------------------------------------------------------------------------
+  deploy-staging:
+    name: 8 · deploy-staging (merge sur main uniquement)
+    needs: [build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/deploy-staging.yml
+    permissions:
+      contents: read
+      packages: read
+    with:
+      tag_image: ${{ needs.build.outputs.tag_sha }}
+    secrets: inherit

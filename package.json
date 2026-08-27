@@ -1,0 +1,63 @@
+{
+  "name": "axion-audit",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Axion Audit — outil d'audit IA d'Axion-IA SAS. Monorepo pnpm (07 §12, 02 §30.2).",
+  "license": "UNLICENSED",
+  "type": "module",
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=22.11.0 <23",
+    "pnpm": ">=9.0.0 <10"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter \"./apps/**\" dev",
+    "build": "pnpm --recursive --filter \"./packages/**\" build && pnpm --recursive --filter \"./apps/**\" build",
+    "lint": "eslint . --max-warnings=0",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "pnpm --recursive --stream typecheck",
+    "test": "pnpm test:unit && pnpm test:integration",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:e2e": "playwright test",
+    "test:e2e:filrouge": "playwright test --grep @filrouge",
+    "test:critique": "vitest run --project unit --project integration -t @critique && playwright test --grep @critique",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest",
+    "check:no-skipped-tests": "node scripts/check-no-skipped-tests.mjs",
+    "check:invariants": "node scripts/check-invariants.mjs",
+    "schema:diff": "node scripts/schema-diff.mjs",
+    "db:generate": "pnpm --filter @axion/api db:generate",
+    "db:migrate": "pnpm --filter @axion/api db:migrate",
+    "db:migrate:check": "pnpm --filter @axion/api db:migrate:check",
+    "seed": "pnpm --filter @axion/api seed",
+    "seed:demo": "pnpm --filter @axion/api seed:demo",
+    "infra:up": "docker compose -f infra/docker-compose.yml up -d --wait",
+    "infra:down": "docker compose -f infra/docker-compose.yml down",
+    "infra:logs": "docker compose -f infra/docker-compose.yml logs -f",
+    "infra:reset": "docker compose -f infra/docker-compose.yml down -v",
+    "infra:config": "docker compose -f infra/docker-compose.yml config -q && echo 'compose dev : syntaxe OK'",
+    "infra:restore-test": "bash infra/scripts/restore-test.sh",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "@vitest/coverage-v8": "3.2.7",
+    "eslint": "9.39.5",
+    "eslint-config-prettier": "10.1.8",
+    "globals": "16.5.0",
+    "husky": "9.1.7",
+    "lint-staged": "16.4.0",
+    "prettier": "3.9.6",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.68.0",
+    "vitest": "3.2.7"
+  },
+  "pnpm": {
+    "peerDependencyRules": {
+      "allowedVersions": {}
+    }
+  }
+}

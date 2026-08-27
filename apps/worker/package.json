@@ -1,0 +1,22 @@
+{
+  "name": "@axion/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Worker BullMQ — jobs asynchrones (DOCX, LLM, exports, purges RGPD, webhooks). Jamais dans le cycle requête (02 §11.1).",
+  "scripts": {
+    "dev": "node --watch --experimental-strip-types src/worker.ts",
+    "build": "tsc --project tsconfig.build.json",
+    "start": "node dist/worker.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@axion/shared": "workspace:*",
+    "bullmq": "5.81.3",
+    "pino": "9.14.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1"
+  }
+}

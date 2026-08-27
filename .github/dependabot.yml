@@ -1,0 +1,104 @@
+# =============================================================================
+# DEPENDABOT — CONFIGURÉ AU LOT L0, **DÉSACTIVÉ PENDANT TOUTE LA PHASE 1**
+# =============================================================================
+# ┌───────────────────────────────────────────────────────────────────────────┐
+# │  CONTRADICTION LEVÉE EN V2.9 — LIRE AVANT DE TOUCHER À CE FICHIER         │
+# │                                                                           │
+# │  02 §30.5 : « Dependabot (npm + actions + docker) : CONFIGURÉ au lot L0   │
+# │  mais DÉSACTIVÉ pendant toute la Phase 1 (gel des dépendances, contrat    │
+# │  11 §1 — V2.9 : contradiction levée) ; ACTIVATION HEBDOMADAIRE EN         │
+# │  PHASE 2 AVEC MERGE MANUEL. »                                             │
+# │                                                                           │
+# │  11 §1 : « Règle Renovate/Dependabot : DÉSACTIVÉS pendant la Phase 1      │
+# │  (zéro dérive de dépendances en plein sprint) ; réactivés en Phase 2      │
+# │  avec merge manuel. »                                                     │
+# │                                                                           │
+# │  Motif : la Phase 1 est un sprint de 4 semaines à échéance dure (fin      │
+# │  septembre 2026, 07 §12). Une montée de dépendance non sollicitée en      │
+# │  plein sprint coûte plus cher qu'elle ne protège. Les versions sont       │
+# │  épinglées `save-exact` (11 §1).                                          │
+# │                                                                           │
+# │  RÉACTIVATION : **PHASE 2** (octobre-novembre 2026, 07 §12), rythme       │
+# │  HEBDOMADAIRE, **MERGE MANUEL** — jamais d'automerge.                     │
+# │  Geste exact : décommenter les trois lignes `schedule:` / `interval:`     │
+# │  ci-dessous et remonter `open-pull-requests-limit` à 5.                   │
+# │  Toute réactivation ANTICIPÉE est une montée de version majeure           │
+# │  potentielle → escalade DECISIONS.md (11 §8-1 et §8-3).                   │
+# └───────────────────────────────────────────────────────────────────────────┘
+#
+# `open-pull-requests-limit: 0` est le mécanisme d'extinction officiel de
+# Dependabot : la configuration reste complète et relue, mais AUCUNE pull request
+# n'est jamais ouverte. La configuration existe donc (exigence 02 §30.5
+# « CONFIGURÉ au lot L0 ») sans produire le moindre effet (exigence 11 §1
+# « DÉSACTIVÉS pendant la Phase 1 »).
+#
+# Traçabilité E36/E43 — lot L0 (07 §12), agent A52.
+# =============================================================================
+
+version: 2
+
+updates:
+  # ---------------------------------------------------------------------------
+  # 1. npm — monorepo pnpm (02 §30.2 : apps/api, apps/field, apps/hq,
+  #    packages/shared, packages/ui). `directory: "/"` + `pnpm-workspace.yaml`
+  #    suffit : Dependabot suit les espaces de travail depuis la racine.
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: npm
+    directory: '/'
+    # schedule:
+    #   interval: weekly          # ← PHASE 2 uniquement
+    #   day: monday
+    #   time: "06:00"
+    #   timezone: "Europe/Paris"
+    schedule:
+      interval:
+        weekly # champ OBLIGATOIRE par le schéma Dependabot ;
+        # rendu INOPÉRANT par la limite à 0 ci-dessous.
+    open-pull-requests-limit: 0 # ← DÉSACTIVATION EFFECTIVE (Phase 1)
+    versioning-strategy: increase
+    commit-message:
+      prefix: 'chore(deps)' # 11 §9bis : commits conventionnels.
+    labels:
+      - dependances
+      - phase-2
+    # Phase 2 : les montées MAJEURES restent une décision humaine (11 §8-3),
+    # même une fois Dependabot rallumé.
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+
+  # ---------------------------------------------------------------------------
+  # 2. GitHub Actions — les actions utilisées par .github/workflows/*.yml
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: github-actions
+    directory: '/'
+    # schedule:
+    #   interval: weekly          # ← PHASE 2 uniquement
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0 # ← DÉSACTIVATION EFFECTIVE (Phase 1)
+    commit-message:
+      prefix: 'chore(ci)'
+    labels:
+      - dependances
+      - ci
+      - phase-2
+
+  # ---------------------------------------------------------------------------
+  # 3. Docker — images de base des 4 Dockerfiles + services de docker-compose
+  #    (chemins alignés sur les livrables A11 ; à ajuster si l'arborescence
+  #    d'infra retenue diffère — voir « Doutes de spec » du rapport A52).
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: docker
+    directory: '/infra/docker'
+    # schedule:
+    #   interval: weekly          # ← PHASE 2 uniquement
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0 # ← DÉSACTIVATION EFFECTIVE (Phase 1)
+    commit-message:
+      prefix: 'chore(docker)'
+    labels:
+      - dependances
+      - infra
+      - phase-2

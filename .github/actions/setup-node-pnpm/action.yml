@@ -1,0 +1,57 @@
+# =============================================================================
+# ACTION COMPOSITE — Mise en place Node 22 + pnpm 9 (contrat 11 §1 et 11 §7)
+# =============================================================================
+# Applique : 11 §1 (versions ÉPINGLÉES — Node 22 LTS, pnpm 9, aucune montée
+# majeure sans décision humaine) · 11 §7 (« CI GitHub Actions »).
+# Raison d'être : cette séquence est identique dans ~8 jobs ; la factoriser ici
+# garantit qu'AUCUN job ne tourne par accident sur une autre version de Node.
+# Traçabilité E36/E43 — code d'outillage rattaché au lot L0 (07 §12).
+# =============================================================================
+name: 'Socle Node 22 + pnpm 9'
+description: 'Active corepack, épingle pnpm 9, installe Node 22 avec cache pnpm, installe les dépendances.'
+
+inputs:
+  install:
+    description: 'Installer les dépendances du workspace (pnpm install --frozen-lockfile).'
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    # corepack est fourni par le Node préinstallé du runner ; il sert UNIQUEMENT
+    # à activer pnpm 9 AVANT setup-node (dont le cache `pnpm` a besoin du binaire).
+    - name: Activer corepack et épingler pnpm 9 (11 §1)
+      shell: bash
+      run: |
+        corepack enable
+        corepack prepare pnpm@9 --activate
+        echo "pnpm activé : $(pnpm --version)"
+
+    - name: Installer Node 22 LTS (11 §1 — JAMAIS Node 24)
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: 'pnpm'
+
+    # Garde-fou : une dérive de version majeure doit casser la CI, pas passer
+    # inaperçue (11 §8-3 : « monter une version majeure » = escalade humaine).
+    - name: Vérifier les versions épinglées (11 §1)
+      shell: bash
+      run: |
+        set -euo pipefail
+        node_major="$(node --version | sed -E 's/^v([0-9]+).*/\1/')"
+        pnpm_major="$(pnpm --version | cut -d. -f1)"
+        if [ "$node_major" != "22" ]; then
+          echo "::error::Node ${node_major} détecté — le contrat 11 §1 épingle Node 22 LTS."
+          exit 1
+        fi
+        if [ "$pnpm_major" != "9" ]; then
+          echo "::error::pnpm ${pnpm_major} détecté — le contrat 11 §1 épingle pnpm 9."
+          exit 1
+        fi
+
+    - name: Installer les dépendances (lockfile gelé — Phase 1, 11 §1)
+      if: inputs.install == 'true'
+      shell: bash
+      run: pnpm install --frozen-lockfile

@@ -1,0 +1,88 @@
+{
+  "_bandeau": [
+    "MODULES CRITIQUES SOUMIS AU SEUIL DE COUVERTURE — DoD transverse 09 §3.",
+    "Applique : « couverture >= 90 % sur les modules critiques (moteur de sync,",
+    "crypto locale, scoring, RBAC/propriete) — MESUREE, PAS DECLAREE ».",
+    "Consomme par le job `coverage` de .github/workflows/ci.yml via",
+    ".github/scripts/check-coverage.mjs.",
+    "",
+    "ETAT AU LOT L0 : `cheminsCritiques` est VIDE parce qu'AUCUN de ces modules",
+    "n'existe encore. Ce n'est pas une derogation : la CI verifie a chaque run",
+    "que la liste est alimentee des que le code correspondant apparait (voir",
+    "`cheminsAttendus`), et echoue sinon. Le seuil ne peut donc pas etre",
+    "contourne en silence.",
+    "",
+    "REGLE : abaisser `seuilMinimalPourcent` est une decision humaine tracee",
+    "dans DECISIONS.md (11 §8-5), jamais une modification de configuration ; la",
+    "CI refuse toute valeur differente de 90.",
+    "",
+    "Tracabilite E36/E43 — lot L0 (07 §12), agent A52."
+  ],
+
+  "seuilMinimalPourcent": 90,
+
+  "metriquesControlees": ["lines", "statements", "functions", "branches"],
+
+  "cheminsCritiques": [],
+
+  "_cheminsAttendus_mode_emploi": [
+    "Chaque entree ci-dessous decrit un module critique NON ENCORE LIVRE, le lot",
+    "qui l'alimente, et le glob attendu. Quand le lot livre son code, l'agent du",
+    "lot DEPLACE l'entree dans `cheminsCritiques` (en corrigeant le glob si",
+    "l'arborescence reelle differe). La CI echoue si du code correspondant a un",
+    "glob attendu existe alors que `cheminsCritiques` est encore vide.",
+    "Les globs sont au format `git ls-files` (pathspec)."
+  ],
+
+  "cheminsAttendus": [
+    {
+      "lot": "L2",
+      "module": "RBAC / propriete de session",
+      "glob": "apps/api/src/rbac/**",
+      "reference": "07 §12 lot L2 · 05 §9.9 · 09 §3 (« RBAC/propriete »)",
+      "statut": "non livre"
+    },
+    {
+      "lot": "L2",
+      "module": "Authentification JWT (rotation, detection de reutilisation)",
+      "glob": "apps/api/src/auth/**",
+      "reference": "07 §12 lot L2 · 11 §3 · 06 §10.1",
+      "statut": "non livre"
+    },
+    {
+      "lot": "L5a",
+      "module": "Crypto locale terrain (DEK/KEK, WebCrypto, Argon2id)",
+      "glob": "apps/field/src/crypto/**",
+      "reference": "11 §6 (L5a) · 11 §4 (« Crypto navigateur ») · 09 §3 (« crypto locale »)",
+      "statut": "non livre"
+    },
+    {
+      "lot": "L5c",
+      "module": "Export de secours chiffre (.axionbackup)",
+      "glob": "apps/field/src/backup/**",
+      "reference": "11 §4 (format de fichier) · 07 §12 lot L5 · invariant 8",
+      "statut": "non livre"
+    },
+    {
+      "lot": "L6a",
+      "module": "Moteur de sync — outbox et push idempotent (cote terrain)",
+      "glob": "apps/field/src/sync/**",
+      "reference": "07 §12 lot L6 · 05 §9 · 09 §3 (« moteur de sync »)",
+      "statut": "non livre"
+    },
+    {
+      "lot": "L6a",
+      "module": "Moteur de sync — reception serveur, processed_ops, propriete §9.9",
+      "glob": "apps/api/src/sync/**",
+      "reference": "07 §12 lot L6 · 11 §4 · 05 §9.3 et §9.9",
+      "statut": "non livre"
+    },
+    {
+      "lot": "L8",
+      "module": "Scoring (bareme §32.1, agregation, completude, drapeaux rouges)",
+      "glob": "apps/api/src/scoring/**",
+      "reference": "07 §12 lot L8 · 03 §32.1 · 09 §3 (« scoring »)",
+      "statut": "non livre (lot DIFFERABLE — 07 §12)"
+    }
+  ]
+}

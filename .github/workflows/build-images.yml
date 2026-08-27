@@ -1,0 +1,157 @@
+# =============================================================================
+# BUILD DES 4 IMAGES → GHCR (02 §30.5 et §30.6)
+# =============================================================================
+# Applique :
+#   · 02 §30.5 — « GHCR comme registre d'images
+#     (ghcr.io/<compte>/axion-audit-{api,field,hq,worker}), images taguées par
+#     SHA + VERSION ».
+#   · 02 §30.6 — « build des 4 images → push GHCR ».
+#   · 11 §1 — Node 22 / pnpm 9 (les Dockerfiles d'A11 doivent s'y conformer).
+#
+# Pourquoi un workflow RÉUTILISABLE : ci.yml (job `build`) et deploy-prod.yml
+# construisent les MÊMES images. Dupliquer la recette, c'est accepter qu'elles
+# divergent un jour. Source de vérité unique.
+#
+# Traçabilité E36/E43 — lot L0 (07 §12), agent A52.
+# =============================================================================
+
+name: Build images
+
+on:
+  workflow_call:
+    inputs:
+      pousser:
+        description: 'Pousser les images sur GHCR (false = build de vérification seul, cas des PR).'
+        required: false
+        type: boolean
+        default: false
+      tag_version:
+        description: 'Tag de version explicite (ex. v0.l0). Vide = déduit de package.json / du run.'
+        required: false
+        type: string
+        default: ''
+    outputs:
+      tag_sha:
+        description: 'Tag SHA appliqué aux 4 images (sha-<7 caractères>).'
+        value: ${{ jobs.metadonnees.outputs.tag_sha }}
+      tag_version:
+        description: 'Tag de version appliqué aux 4 images.'
+        value: ${{ jobs.metadonnees.outputs.tag_version }}
+
+permissions:
+  contents: read
+
+jobs:
+  metadonnees:
+    name: Métadonnées de build (tags SHA + version)
+    runs-on: ubuntu-latest
+    outputs:
+      tag_sha: ${{ steps.calcul.outputs.tag_sha }}
+      tag_version: ${{ steps.calcul.outputs.tag_version }}
+      prefixe: ${{ steps.calcul.outputs.prefixe }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Calculer les tags (SHA + version — 02 §30.5)
+        id: calcul
+        run: |
+          set -euo pipefail
+          tag_sha="sha-$(git rev-parse --short=7 HEAD)"
+
+          # Tag de VERSION (02 §30.5 : « images taguées par SHA + version ») :
+          #   · déploiement de production → le tag git `v*` (11 §9bis :
+          #     « Tag v0.<lot> à chaque porte franchie ») ;
+          #   · build sur `main` → `main-<numéro de run>`.
+          # On NE fabrique PAS un faux numéro sémantique depuis package.json :
+          # la version y vaut 0.0.0 tant qu'aucune porte n'est franchie, et
+          # republier « v0.0.0 » à chaque merge écraserait un tag censé désigner
+          # un état figé. Un tag de version doit désigner une chose, une seule.
+          tag_version='${{ inputs.tag_version }}'
+          if [ -z "$tag_version" ]; then
+            tag_version="main-${GITHUB_RUN_NUMBER}"
+          fi
+
+          # GHCR n'accepte que des minuscules dans le chemin de dépôt.
+          prefixe="ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/axion-audit"
+
+          echo "tag_sha=${tag_sha}"       >> "$GITHUB_OUTPUT"
+          echo "tag_version=${tag_version}" >> "$GITHUB_OUTPUT"
+          echo "prefixe=${prefixe}"       >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Tags d'images"
+            echo "- SHA : \`${tag_sha}\`"
+            echo "- Version : \`${tag_version}\`"
+            echo "- Préfixe GHCR : \`${prefixe}-{api,worker,field,hq}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  images:
+    name: ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    needs: [metadonnees]
+    permissions:
+      contents: read
+      packages: write # 02 §30.4-7 (moindre accès) : SEUL ce job écrit sur GHCR.
+    strategy:
+      fail-fast: false
+      matrix:
+        # LES 4 IMAGES DU §30.5, ni plus ni moins.
+        image: [api, worker, field, hq]
+    steps:
+      - uses: actions/checkout@v4
+
+      # Emplacement ALIGNÉ sur `infra/docker-compose.yml` (A11), qui déclare pour
+      # chacun des 4 services : `context: ..` (racine du dépôt) et
+      # `dockerfile: apps/<nom>/Dockerfile`. Le monorepo contient bien
+      # `apps/worker` — le worker a donc son propre espace de travail.
+      # Le fichier compose et ce workflow doivent construire la MÊME chose :
+      # si l'un des deux dérive, la CI ne teste plus ce que la prod exécute.
+      - name: Localiser le Dockerfile de l'image
+        id: reperage
+        run: |
+          set -euo pipefail
+          img='${{ matrix.image }}'
+          attendu="apps/${img}/Dockerfile"
+
+          if [ -f "$attendu" ]; then
+            echo "dockerfile=${attendu}" >> "$GITHUB_OUTPUT"
+            echo "Dockerfile retenu : ${attendu}"
+            exit 0
+          fi
+
+          echo "::error title=Dockerfile introuvable::Aucun Dockerfile pour l'image « ${img} » à l'emplacement ${attendu}, alors que infra/docker-compose.yml le déclare. Les 4 Dockerfiles (api, worker, field, hq) sont un livrable du lot L0 (agent A11, 09 §1) et le §30.5 exige 4 images. La CI échoue explicitement plutôt que de « sauter » l'image — une image non construite ne doit jamais ressembler à un build réussi."
+          exit 1
+
+      - name: Préparer buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Authentification GHCR
+        if: inputs.pousser
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          # 02 §30.3 : « GHCR_TOKEN (ou GITHUB_TOKEN) ». Le GITHUB_TOKEN du run
+          # suffit et est à durée de vie limitée : c'est le moindre accès.
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Construire (et pousser) l'image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ steps.reperage.outputs.dockerfile }}
+          push: ${{ inputs.pousser }}
+          # 02 §30.5 : taguées par SHA **et** par version.
+          tags: |
+            ${{ needs.metadonnees.outputs.prefixe }}-${{ matrix.image }}:${{ needs.metadonnees.outputs.tag_sha }}
+            ${{ needs.metadonnees.outputs.prefixe }}-${{ matrix.image }}:${{ needs.metadonnees.outputs.tag_version }}
+          build-args: |
+            APP_VERSION=${{ needs.metadonnees.outputs.tag_sha }}
+            VITE_APP_VERSION=${{ needs.metadonnees.outputs.tag_sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ needs.metadonnees.outputs.tag_version }}
+          provenance: false
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}

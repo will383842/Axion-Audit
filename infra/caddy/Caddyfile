@@ -1,0 +1,118 @@
+# =============================================================================
+# infra/caddy/Caddyfile — reverse proxy, DOMAINE UNIQUE (lot L0)
+# Applique : 11 §2 « Pas de CORS » (field, hq et l'API sous le MÊME domaine —
+# c'est la raison d'être de ce fichier), 06 §10.2 (en-têtes de sécurité : HSTS,
+# CSP stricte, nosniff…), 11 §1 (police AUTO-HÉBERGÉE, jamais de CDN),
+# 02 §11.3 (logs JSON), §31 (mise à jour applicative : SW jamais mis en cache).
+# =============================================================================
+#
+# ROUTAGE (contrat de ports rappelé dans infra/docker-compose.yml) :
+#   /api/*  → api:{$API_PORT}  (le préfixe /api est RETIRÉ : l'API voit /v1/…)
+#   /hq*    → hq:5173          (préfixe CONSERVÉ : la console est buildée en base /hq/)
+#   /*      → field:5173       (PWA terrain à la racine)
+#
+# ADRESSE : {$CADDY_SITE_ADDRESS} — `:8080` en local (aucun ACME), le vrai
+# domaine en staging/prod (TLS automatique via {$CADDY_ACME_EMAIL}).
+
+{
+	# Adresse ACME Let's Encrypt. Le défaut n'est qu'un repli syntaxique : en
+	# staging/prod, CADDY_ACME_EMAIL est OBLIGATOIRE (alertes d'expiration).
+	email {$CADDY_ACME_EMAIL:ops@example.invalid}
+
+	# API d'administration en loopback uniquement (jamais exposée) — sert de sonde.
+	admin 127.0.0.1:2019
+
+	# Journalisation structurée JSON, centralisable (02 §11.3).
+	log {
+		output stdout
+		format json
+		level INFO
+	}
+}
+
+{$CADDY_SITE_ADDRESS} {
+
+	# --- Journal d'accès JSON ------------------------------------------------
+	log {
+		output stdout
+		format json
+	}
+
+	# --- Compression ---------------------------------------------------------
+	encode zstd gzip
+
+	# -------------------------------------------------------------------------
+	# EN-TÊTES DE SÉCURITÉ (06 §10.2) — une ligne de commentaire par directive.
+	# -------------------------------------------------------------------------
+	header {
+		# Force HTTPS pendant 1 an, sous-domaines inclus (sans effet en local sur :8080).
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		# Interdit au navigateur de deviner un type MIME (uploads : contrôle MIME réel, 06 §10.2).
+		X-Content-Type-Options "nosniff"
+		# Aucune mise en cadre : l'outil n'est jamais embarqué dans un iframe tiers.
+		X-Frame-Options "DENY"
+		# Ne fuit jamais le chemin complet vers un tiers (chemins = identifiants de mission).
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Capteurs : caméra/micro/géoloc autorisés à l'app elle-même (photos, audios
+		# d'entretien, géoloc de site) ; tout le reste refusé.
+		Permissions-Policy "camera=(self), microphone=(self), geolocation=(self), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=(), interest-cohort=()"
+		# Masque la version du serveur.
+		-Server
+
+		# --- CSP STRICTE (point délicat : PWA + WebAssembly, 11 §4) ------------
+		# Tout est same-origin par défaut : AUCUN CDN nulle part (11 §1).
+		# script-src : 'wasm-unsafe-eval' est requis par hash-wasm (Argon2id navigateur, 11 §4).
+		# worker-src : le service worker Workbox (offline-first, invariant 1) est same-origin.
+		# style-src  : 'unsafe-inline' couvre les attributs style posés par Radix/shadcn ;
+		#              aucune feuille externe n'est autorisée pour autant.
+		# img-src    : data: (icônes inline) et blob: (photos terrain avant upload).
+		# media-src  : blob: pour la relecture des audios d'entretien hors ligne.
+		# font-src   : 'self' uniquement — police @fontsource-variable/inter AUTO-HÉBERGÉE (11 §1).
+		# connect-src: 'self' — API sur le même domaine (11 §2, pas de CORS) ; couvre le WS de HMR en dev.
+		# manifest-src / frame-ancestors / object-src / base-uri / form-action : verrouillage PWA.
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+	}
+
+	# -------------------------------------------------------------------------
+	# MISE EN CACHE (§31 — mise à jour applicative)
+	# -------------------------------------------------------------------------
+	# Le service worker et le manifeste ne sont JAMAIS mis en cache par le proxy :
+	# sans cela une version de l'app resterait figée sur les tablettes terrain.
+	@sw path /sw.js /service-worker.js /manifest.webmanifest /hq/sw.js /hq/manifest.webmanifest
+	header @sw Cache-Control "no-cache, no-store, must-revalidate"
+
+	# Les assets fingerprintés (nom = hash de contenu) sont immuables : cache agressif.
+	@fingerprinted path /assets/* /hq/assets/*
+	header @fingerprinted Cache-Control "public, max-age=31536000, immutable"
+
+	# -------------------------------------------------------------------------
+	# ROUTAGE — un seul domaine, aucun CORS (11 §2)
+	# -------------------------------------------------------------------------
+
+	# API : `handle_path` RETIRE le préfixe /api → l'API reçoit /v1/…
+	handle_path /api/* {
+		reverse_proxy api:{$API_PORT} {
+			# En-têtes d'origine conservés (rate limiting par IP, 11 §3).
+			header_up X-Real-IP {remote_host}
+			# Uploads par chunks (§9.6) : pas de tampon, flux direct.
+			flush_interval -1
+		}
+	}
+
+	# Console siège : préfixe CONSERVÉ (build Vite en base /hq/).
+	# Matcher explicite : `/hq` et `/hq/**` uniquement — surtout pas `/hqautre`.
+	@hq path /hq /hq/*
+	handle @hq {
+		reverse_proxy hq:5173
+	}
+
+	# PWA terrain : tout le reste, à la racine.
+	handle {
+		reverse_proxy field:5173
+	}
+
+	# Page d'erreur neutre : aucune fuite d'implémentation.
+	handle_errors {
+		respond "Erreur {err.status_code}" {err.status_code}
+	}
+}

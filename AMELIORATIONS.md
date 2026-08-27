@@ -1,8 +1,8 @@
 # AMELIORATIONS.md — Registre du canal d'amélioration (09 §5.9)
 
 > **Fichier APPEND-ONLY**, même format que `DECISIONS.md`.
-> Autorisation explicite de Williams : *si l'implémentation révèle un manque pour que l'outil soit
-> extrêmement professionnel, l'autopilote PEUT l'ajouter — dans CE cadre, jamais en dehors.*
+> Autorisation explicite de Williams : _si l'implémentation révèle un manque pour que l'outil soit
+> extrêmement professionnel, l'autopilote PEUT l'ajouter — dans CE cadre, jamais en dehors._
 >
 > **Étage 1 — micro-améliorations, autorisées D'OFFICE.** Confort et robustesse évidents (libellé
 > plus clair, état vide manquant, tri par défaut, message d'erreur, raccourci, focus) qui ne touchent
@@ -22,23 +22,23 @@
 ## Compteur du plafond étage 1
 
 | Lot | Consommé | Plafond | Reste |
-|---|---|---|---|
-| L0 | 0 j | 0,5 j | 0,5 j |
+| --- | -------- | ------- | ----- |
+| L0  | 0 j      | 0,5 j   | 0,5 j |
 
 ---
 
 ## ÉTAGE 1 — micro-améliorations appliquées
 
-*(aucune à ce jour — lot L0 en cours)*
+_(aucune à ce jour — lot L0 en cours)_
 
 ---
 
 ## ÉTAGE 2 — fiches en attente d'arbitrage
 
-*(aucune à ce jour — lot L0 en cours)*
+_(aucune à ce jour — lot L0 en cours)_
 
 ---
 
 ## ÉTAGE 2 — fiches arbitrées
 
-*(aucune à ce jour)*
+_(aucune à ce jour)_

@@ -9,7 +9,8 @@
 ---
 
 ## 2026-08-27 14h30 — [lot L0 / incrément L0-a] — étape pipeline 2/7
-Dernier commit vert : (aucun — dépôt initialisé cette session)   ·   Branche : lot/l0-infra   ·   Poussé : non (origin absent — voir DECISIONS 2026-08-27)
+
+Dernier commit vert : (aucun — dépôt initialisé cette session) · Branche : lot/l0-infra · Poussé : non (origin absent — voir DECISIONS 2026-08-27)
 Tâche en cours : création du cadre de gouvernance (CLAUDE.md, DECISIONS.md, AMELIORATIONS.md, arborescence docs/) puis squelette du monorepo.
 Prochaine action : créer le squelette monorepo pnpm (package.json racine, pnpm-workspace.yaml, tsconfig.base.json, eslint/prettier, .npmrc, .nvmrc, .gitignore) puis les 5 espaces de travail minimaux.
 Tests rouges connus : aucun (aucune suite de tests n'existe encore)

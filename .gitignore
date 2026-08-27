@@ -1,0 +1,63 @@
+# ---------------------------------------------------------------------------
+# SECRETS — règle 02 §30.4-1 : « Jamais dans Git ». gitleaks est bloquant en CI.
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+!**/testdata/**/*.key
+id_ed25519*
+id_rsa*
+secrets/
+*.age
+*.gpg
+
+# ---------------------------------------------------------------------------
+# Dépendances et artefacts de construction
+# ---------------------------------------------------------------------------
+node_modules/
+dist/
+build/
+.turbo/
+*.tsbuildinfo
+.vite/
+dev-dist/
+
+# ---------------------------------------------------------------------------
+# Tests et couverture
+# ---------------------------------------------------------------------------
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+blob-report/
+.playwright/
+
+# ---------------------------------------------------------------------------
+# Données locales d'infrastructure (volumes Docker montés en bind, sauvegardes)
+# ---------------------------------------------------------------------------
+infra/data/
+infra/backups/
+infra/caddy/data/
+infra/caddy/config/
+*.dump
+*.sql.gz
+
+# ---------------------------------------------------------------------------
+# Export de secours terrain (format 11 §4) — chiffré, mais JAMAIS versionné :
+# il contient des données de mission réelles.
+# ---------------------------------------------------------------------------
+*.axionbackup
+
+# ---------------------------------------------------------------------------
+# Outils et systèmes
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+*.log
+logs/
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.recommended.json

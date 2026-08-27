@@ -1,0 +1,11 @@
+{
+  "//": "Emission réelle : les paquets partagés sont consommés en JavaScript par Node (apps/api, apps/worker) et par Vite. Les livrer en sources TypeScript obligerait chaque consommateur à savoir les compiler — c est le rôle du paquet, pas de ses appelants.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"]
+}

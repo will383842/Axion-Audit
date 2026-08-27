@@ -1,0 +1,73 @@
+# =============================================================================
+# infra/docker-compose.prod.yml — SURCHARGE PRODUCTION (lot L0)
+# Applique : 02 §30.6 (images GHCR taguées, déploiement SSH), 02 §30.4-4
+# (séparation stricte staging/prod), 06 §10.3 (Postgres/Redis/MinIO JAMAIS
+# exposés — seul Caddy publie 80/443), 02 §11.2 (cohabitation staging/prod).
+# =============================================================================
+#
+# USAGE :
+#   docker compose --env-file /opt/axion-audit/prod/.env \
+#     -f infra/docker-compose.yml -f infra/docker-compose.prod.yml up -d
+#
+# La prod est le SEUL point d'entrée public du VPS : elle lie 80/443 (02 §11.2).
+# Nécessite Docker Compose >= 2.24 (balises YAML `!reset` / `!override`).
+#
+# VARIABLES SUPPLÉMENTAIRES attendues dans le .env prod (non secrètes) :
+#   GHCR_OWNER = compte/organisation GitHub propriétaire des images
+#   IMAGE_TAG  = tag d'image déployé (`v*`), posé par la CI après approbation
+
+name: axion-audit-prod
+
+services:
+  # --- Données : réseau Docker interne strict, AUCUN port publié (06 §10.3) ----
+  postgres:
+    ports: !reset []
+
+  redis:
+    ports: !reset []
+
+  minio:
+    # INTERDICTION 11 §2 : MinIO n'est JAMAIS exposé publiquement.
+    ports: !reset []
+
+  # --- Applications : images GHCR immuables, aucun code monté -----------------
+  api:
+    build: !reset null
+    image: ghcr.io/${GHCR_OWNER}/axion-audit-api:${IMAGE_TAG}
+    pull_policy: always
+    volumes: !reset []
+    ports: !reset []
+
+  worker:
+    build: !reset null
+    image: ghcr.io/${GHCR_OWNER}/axion-audit-worker:${IMAGE_TAG}
+    pull_policy: always
+    volumes: !reset []
+    ports: !reset []
+
+  field:
+    build: !reset null
+    image: ghcr.io/${GHCR_OWNER}/axion-audit-field:${IMAGE_TAG}
+    pull_policy: always
+    volumes: !reset []
+    ports: !reset []
+
+  hq:
+    build: !reset null
+    image: ghcr.io/${GHCR_OWNER}/axion-audit-hq:${IMAGE_TAG}
+    pull_policy: always
+    volumes: !reset []
+    ports: !reset []
+
+  # --- Caddy : UNIQUE point d'entrée public, TLS automatique ------------------
+  caddy:
+    ports: !override
+      - '80:80'
+      - '443:443'
+      - '443:443/udp' # HTTP/3
+
+# Réseau DISTINCT de celui du staging (02 §30.4-4). Les volumes nommés sont
+# préfixés par le nom de projet `axion-audit-prod` : bases et buckets distincts.
+networks:
+  axion:
+    name: axion-audit-prod

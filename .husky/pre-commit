@@ -1,0 +1,45 @@
+#!/usr/bin/env sh
+# =============================================================================
+# HOOK PRE-COMMIT (contrat 11 §7)
+# =============================================================================
+# Applique : 11 §7 — « Pre-commit : lint-staged (lint + typecheck rapide) ;
+# gitleaks en CI (bloquant, §30) ».
+#
+# Ce que fait ce hook, dans l'ordre :
+#   1. `lint-staged` — eslint --fix sur les seuls fichiers INDEXÉS
+#      (configuration : `.lintstagedrc.json` à la racine) ;
+#   2. `pnpm typecheck` — TYPECHECK RAPIDE sur le projet. Il porte volontairement
+#      sur l'ensemble et non sur les fichiers indexés : un typecheck TypeScript
+#      partiel est faux par construction (les erreurs de types naissent aux
+#      frontières entre fichiers). C'est le prix d'un pre-commit qui ne ment pas.
+#
+# CE QUE CE HOOK N'EST PAS : un substitut à la CI. Il attrape les fautes
+# évidentes avant qu'elles ne coûtent un aller-retour ; la vérité BLOQUANTE vit
+# dans `.github/workflows/ci.yml` (09 §5.7 : une CI qui ment est pire que pas
+# de CI — un hook local contournable l'est encore plus).
+#
+# ⚠️ CONTOURNEMENT : `git commit --no-verify` saute ce hook. C'est ACCEPTABLE
+# pour un commit intermédiaire `wip:` sur une branche `lot/**` (11 §9ter : les
+# commits non verts sont autorisés sur la branche du lot, le squash les efface).
+# Ce n'est JAMAIS acceptable pour un commit destiné à `main` — la CI le
+# rattraperait de toute façon, mais plus tard et plus cher.
+#
+# PRÉREQUIS (à câbler par A01 dans le `package.json` racine) :
+#   · devDependencies : `husky` et `lint-staged` ;
+#   · script `"prepare": "husky"` (installe les hooks après `pnpm install`) ;
+#   · scripts `lint` et `typecheck` (voir .github/workflows/README.md).
+#   Ces deux outils ne figurent pas dans la liste des versions épinglées 11 §1 —
+#   doute tracé par A52 (rapport → DECISIONS.md).
+#
+# Traçabilité E36/E43 — lot L0 (07 §12), agent A52.
+# =============================================================================
+
+set -e
+
+echo "[pre-commit] lint des fichiers indexés (lint-staged)…"
+pnpm exec lint-staged
+
+echo "[pre-commit] typecheck rapide (TypeScript strict — 11 §1)…"
+pnpm typecheck
+
+echo "[pre-commit] OK. Rappel : la CI reste seule juge (09 §5.7)."

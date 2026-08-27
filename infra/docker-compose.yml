@@ -1,0 +1,514 @@
+# =============================================================================
+# infra/docker-compose.yml — PILE DE DÉVELOPPEMENT LOCAL (lot L0)
+# Applique : 02 §4.1/§4.2 (les 4 briques + MinIO/Redis), 02 §30.2 (stack fixée),
+# 11 §1 (versions épinglées), 11 §7 (« docker compose up suffit pour tout lancer »),
+# 07 ligne L0 (critère « docker compose up = stack complète »), 06 §10.3 (réseau interne).
+# AUCUN secret, AUCUNE valeur en dur : toute variable vient du .env (02 §30.4-1).
+# =============================================================================
+#
+# LANCEMENT (toujours depuis la RACINE du dépôt, cf. infra/README.md) :
+#   docker compose --env-file .env -f infra/docker-compose.yml up -d --build
+#
+# Le répertoire de projet Compose est `infra/` (dossier du premier fichier), d'où
+# les chemins `../` vers la racine du monorepo.
+#
+# CONTRAT DE PORTS INTERNES (à respecter par les Dockerfiles des apps, A01) :
+#   - api    : écoute API_PORT (défaut 3000), route de santé GET /v1/health
+#   - worker : aucun port (BullMQ), un unique processus `node`
+#   - field  : cibles `dev` ET `runtime` → HTTP sur 5173, avec --host 0.0.0.0
+#   - hq     : cibles `dev` ET `runtime` → HTTP sur 5173, base publique /hq/
+# Ce contrat est ce que le Caddyfile route ; il est rappelé dans infra/README.md.
+
+name: axion-audit-dev
+
+# -----------------------------------------------------------------------------
+# Fragments réutilisables
+# -----------------------------------------------------------------------------
+x-restart: &restart
+  restart: unless-stopped
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: '10m'
+      max-file: '5'
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16 — source unique de vérité (02 §4.1). Image construite localement
+  # pour embarquer pgBackRest (WAL archiving + restauration, 02 §11.4).
+  # ---------------------------------------------------------------------------
+  postgres:
+    <<: [*restart, *logging]
+    build:
+      context: ./postgres
+      dockerfile: Dockerfile
+    image: axion-audit-postgres:16
+    # Config personnalisée hors PGDATA : hba_file/ident_file doivent alors être
+    # désignés explicitement (ils ne sont plus déduits du répertoire de données).
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.custom.conf
+      - -c
+      - hba_file=/var/lib/postgresql/data/pg_hba.conf
+      - -c
+      - ident_file=/var/lib/postgresql/data/pg_ident.conf
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: ${TZ}
+      # Horodatages UTC en base (invariant 5).
+      PGTZ: ${TZ}
+      # pgBackRest lit ses options dans l'environnement (PGBACKREST_<OPTION>) :
+      # la passphrase du dépôt n'apparaît JAMAIS dans un fichier versionné (02 §30.4-1/5).
+      PGBACKREST_STANZA: ${PGBACKREST_STANZA}
+      PGBACKREST_REPO1_PATH: ${PGBACKREST_REPO_PATH}
+      PGBACKREST_REPO1_CIPHER_PASS: ${PGBACKREST_CIPHER_PASS}
+      # Rétention dérivée du contrat .env (02 §11.4 : 30 j).
+      PGBACKREST_REPO1_RETENTION_FULL_TYPE: time
+      PGBACKREST_REPO1_RETENTION_FULL: ${BACKUP_RETENTION_DAYS}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - pgbackrest_repo:${PGBACKREST_REPO_PATH}
+      - ./postgres/postgresql.custom.conf:/etc/postgresql/postgresql.custom.conf:ro
+      - ./pgbackrest/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
+    ports:
+      # DEV UNIQUEMENT, JAMAIS EN STAGING/PROD (06 §10.3 : « Postgres/Redis/MinIO
+      # jamais exposés publiquement ; l'admin passe par un tunnel SSH »).
+      # Les surcharges staging/prod suppriment ce bloc (`ports: !reset []`).
+      - '127.0.0.1:${POSTGRES_PORT}:5432'
+    healthcheck:
+      # Vraie sonde applicative : le serveur accepte des connexions sur la base cible.
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks: [axion]
+
+  # ---------------------------------------------------------------------------
+  # Redis 7 — files BullMQ (02 §4.2). Mot de passe passé par l'environnement,
+  # jamais en argument littéral de ce fichier.
+  # ---------------------------------------------------------------------------
+  redis:
+    <<: [*restart, *logging]
+    image: redis:7-alpine
+    command:
+      [
+        'sh',
+        '-c',
+        'exec redis-server --requirepass "$$REDIS_PASSWORD" --appendonly yes --appendfsync everysec',
+      ]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      TZ: ${TZ}
+    volumes:
+      - redis_data:/data
+    ports:
+      # DEV UNIQUEMENT, JAMAIS EN STAGING/PROD (06 §10.3).
+      - '127.0.0.1:${REDIS_PORT}:6379'
+    healthcheck:
+      # Vraie sonde : PING authentifié, réponse PONG exigée.
+      test: ['CMD-SHELL', 'redis-cli --no-auth-warning -a "$$REDIS_PASSWORD" ping | grep -q PONG']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks: [axion]
+
+  # ---------------------------------------------------------------------------
+  # MinIO — stockage S3 auto-hébergé (02 §4.2). INTERDICTION 11 §2 : jamais exposé
+  # publiquement ; Caddy ne le route pas, tout download passe par l'API.
+  # Release stable FIGÉE (11 §1) — toute montée = décision humaine.
+  # ---------------------------------------------------------------------------
+  minio:
+    <<: [*restart, *logging]
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      TZ: ${TZ}
+    volumes:
+      - minio_data:/data
+    ports:
+      # DEV UNIQUEMENT, JAMAIS EN STAGING/PROD (06 §10.3 + 11 §2).
+      - '127.0.0.1:${MINIO_PORT}:9000'
+      - '127.0.0.1:9001:9001' # console MinIO, confort de debug local uniquement
+    healthcheck:
+      # Vraie sonde : `mc ready` interroge l'état de service du cluster.
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [axion]
+
+  # ---------------------------------------------------------------------------
+  # createbuckets — job `mc` ONE-SHOT et IDEMPOTENT : crée les 3 buckets (un par
+  # nature de contenu, rétentions RGPD distinctes 06 §10.4) et l'utilisateur
+  # applicatif RESTREINT (moindre accès 02 §30.4-7 : l'app n'utilise JAMAIS root).
+  # `$$` = échappement de l'interpolation Compose → la valeur reste dans le
+  # conteneur, jamais dans ce fichier ni dans la ligne de commande.
+  # ---------------------------------------------------------------------------
+  createbuckets:
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    restart: 'no' # exception assumée : job one-shot, pas un service
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET_ATTACHMENTS: ${MINIO_BUCKET_ATTACHMENTS}
+      MINIO_BUCKET_REPORTS: ${MINIO_BUCKET_REPORTS}
+      MINIO_BUCKET_TEMPLATES: ${MINIO_BUCKET_TEMPLATES}
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - |
+        set -eu
+        mc alias set local "http://minio:9000" "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
+
+        # 1. Les 3 buckets, privés (aucun accès anonyme).
+        for b in "$$MINIO_BUCKET_ATTACHMENTS" "$$MINIO_BUCKET_REPORTS" "$$MINIO_BUCKET_TEMPLATES"; do
+          mc mb --ignore-existing "local/$$b"
+          mc anonymous set none "local/$$b"
+        done
+
+        # 2. Politique de moindre accès, limitée à ces 3 buckets.
+        cat > /tmp/axion-app-policy.json <<JSON
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": ["s3:GetBucketLocation", "s3:ListBucket", "s3:ListBucketMultipartUploads"],
+              "Resource": [
+                "arn:aws:s3:::$$MINIO_BUCKET_ATTACHMENTS",
+                "arn:aws:s3:::$$MINIO_BUCKET_REPORTS",
+                "arn:aws:s3:::$$MINIO_BUCKET_TEMPLATES"
+              ]
+            },
+            {
+              "Effect": "Allow",
+              "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListMultipartUploadParts", "s3:AbortMultipartUpload"],
+              "Resource": [
+                "arn:aws:s3:::$$MINIO_BUCKET_ATTACHMENTS/*",
+                "arn:aws:s3:::$$MINIO_BUCKET_REPORTS/*",
+                "arn:aws:s3:::$$MINIO_BUCKET_TEMPLATES/*"
+              ]
+            }
+          ]
+        }
+        JSON
+
+        # 3. Utilisateur applicatif + politique (rejouable sans dégât).
+        mc admin user info local "$$MINIO_ACCESS_KEY" >/dev/null 2>&1 \
+          || mc admin user add local "$$MINIO_ACCESS_KEY" "$$MINIO_SECRET_KEY"
+        mc admin policy rm local axion-app >/dev/null 2>&1 || true
+        mc admin policy create local axion-app /tmp/axion-app-policy.json
+        mc admin policy attach local axion-app --user "$$MINIO_ACCESS_KEY" >/dev/null 2>&1 || true
+        rm -f /tmp/axion-app-policy.json
+
+        echo "createbuckets: buckets et utilisateur applicatif restreint prets."
+    networks: [axion]
+
+  # ---------------------------------------------------------------------------
+  # API Fastify (apps/api) — cible `dev` : code monté, rechargement à chaud.
+  # Moindre accès (02 §30.4-7) : PAS d'ANTHROPIC_API_KEY ici, elle n'existe que
+  # dans le worker.
+  # ---------------------------------------------------------------------------
+  api:
+    <<: [*restart, *logging]
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+      target: dev
+    image: axion-audit-api:dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      createbuckets:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      APP_ENV: ${APP_ENV}
+      LOG_LEVEL: ${LOG_LEVEL}
+      TZ: ${TZ}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+      API_HOST: ${API_HOST}
+      API_PORT: ${API_PORT}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_URL: ${REDIS_URL}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_PORT: ${MINIO_PORT}
+      MINIO_USE_SSL: ${MINIO_USE_SSL}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET_ATTACHMENTS: ${MINIO_BUCKET_ATTACHMENTS}
+      MINIO_BUCKET_REPORTS: ${MINIO_BUCKET_REPORTS}
+      MINIO_BUCKET_TEMPLATES: ${MINIO_BUCKET_TEMPLATES}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY}
+      CONSOLE_BASE_URL: ${CONSOLE_BASE_URL}
+      CONSOLE_WEBHOOK_SECRET: ${CONSOLE_WEBHOOK_SECRET}
+      CONSOLE_WEBHOOK_SECRET_PREVIOUS: ${CONSOLE_WEBHOOK_SECRET_PREVIOUS}
+      CONSOLE_WEBHOOK_TOLERANCE_SECONDS: ${CONSOLE_WEBHOOK_TOLERANCE_SECONDS}
+      ALERT_SYNC_SILENT_HOURS: ${ALERT_SYNC_SILENT_HOURS}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD}
+      SEED_ADMIN_FULL_NAME: ${SEED_ADMIN_FULL_NAME}
+    volumes:
+      # DEV UNIQUEMENT : monorepo monté pour le rechargement à chaud.
+      - ../:/app
+      - api_node_modules:/app/node_modules
+      - api_app_node_modules:/app/apps/api/node_modules
+    healthcheck:
+      # Vraie sonde HTTP sur la route de santé, sans outil externe (Node 22 = fetch natif).
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:'+(process.env.API_PORT||'3000')+'/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    networks: [axion]
+
+  # ---------------------------------------------------------------------------
+  # Worker BullMQ (apps/worker) — seul conteneur à détenir ANTHROPIC_API_KEY
+  # (02 §30.4-7). Porte aussi les canaux d'alerte (02 §11.3).
+  # ---------------------------------------------------------------------------
+  worker:
+    <<: [*restart, *logging]
+    build:
+      context: ..
+      dockerfile: apps/worker/Dockerfile
+      target: dev
+    image: axion-audit-worker:dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      createbuckets:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      APP_ENV: ${APP_ENV}
+      LOG_LEVEL: ${LOG_LEVEL}
+      TZ: ${TZ}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_URL: ${REDIS_URL}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_PORT: ${MINIO_PORT}
+      MINIO_USE_SSL: ${MINIO_USE_SSL}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET_ATTACHMENTS: ${MINIO_BUCKET_ATTACHMENTS}
+      MINIO_BUCKET_REPORTS: ${MINIO_BUCKET_REPORTS}
+      MINIO_BUCKET_TEMPLATES: ${MINIO_BUCKET_TEMPLATES}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      LLM_COST_CAP_PER_MISSION_EUR: ${LLM_COST_CAP_PER_MISSION_EUR}
+      DOCXTEMPLATER_LICENSE: ${DOCXTEMPLATER_LICENSE}
+      CONSOLE_BASE_URL: ${CONSOLE_BASE_URL}
+      CONSOLE_WEBHOOK_SECRET: ${CONSOLE_WEBHOOK_SECRET}
+      CONSOLE_WEBHOOK_SECRET_PREVIOUS: ${CONSOLE_WEBHOOK_SECRET_PREVIOUS}
+      CONSOLE_WEBHOOK_TOLERANCE_SECONDS: ${CONSOLE_WEBHOOK_TOLERANCE_SECONDS}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_FROM: ${SMTP_FROM}
+      ALERT_DISK_USAGE_PERCENT: ${ALERT_DISK_USAGE_PERCENT}
+      ALERT_LLM_JOB_MAX_MINUTES: ${ALERT_LLM_JOB_MAX_MINUTES}
+      ALERT_CERT_EXPIRY_DAYS: ${ALERT_CERT_EXPIRY_DAYS}
+      ALERT_SYNC_SILENT_HOURS: ${ALERT_SYNC_SILENT_HOURS}
+    volumes:
+      # DEV UNIQUEMENT : monorepo monté pour le rechargement à chaud.
+      - ../:/app
+      - worker_node_modules:/app/node_modules
+      - worker_app_node_modules:/app/apps/worker/node_modules
+    healthcheck:
+      # Le worker n'expose pas d'HTTP (BullMQ) : sonde de vivacité du processus.
+      # Une sonde de santé applicative sera ajoutée avec les files réelles (L11).
+      test: ['CMD-SHELL', 'pgrep -f node >/dev/null || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
+    networks: [axion]
+
+  # ---------------------------------------------------------------------------
+  # PWA terrain (apps/field) — servie à la RACINE du domaine unique (11 §2, pas de CORS).
+  # ---------------------------------------------------------------------------
+  field:
+    <<: [*restart, *logging]
+    build:
+      context: ..
+      dockerfile: apps/field/Dockerfile
+      target: dev
+    image: axion-audit-field:dev
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      APP_ENV: ${APP_ENV}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+      TZ: ${TZ}
+      # Variables PUBLIQUES embarquées dans le bundle Vite (jamais de secret).
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+      VITE_APP_ENV: ${VITE_APP_ENV}
+      VITE_APP_VERSION: ${VITE_APP_VERSION}
+    volumes:
+      - ../:/app
+      - field_node_modules:/app/node_modules
+      - field_app_node_modules:/app/apps/field/node_modules
+    ports:
+      # DEV UNIQUEMENT : accès direct au serveur Vite pour déboguer le HMR
+      # (le HMR passe aussi par Caddy, mais la CSP stricte peut le gêner en dev).
+      - '127.0.0.1:5173:5173'
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:5173/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 60s
+    networks: [axion]
+
+  # ---------------------------------------------------------------------------
+  # Console siège (apps/hq) — servie sous /hq du MÊME domaine (11 §2).
+  # ---------------------------------------------------------------------------
+  hq:
+    <<: [*restart, *logging]
+    build:
+      context: ..
+      dockerfile: apps/hq/Dockerfile
+      target: dev
+    image: axion-audit-hq:dev
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      APP_ENV: ${APP_ENV}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+      TZ: ${TZ}
+      # Variables PUBLIQUES embarquées dans le bundle Vite (jamais de secret).
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+      VITE_APP_ENV: ${VITE_APP_ENV}
+      VITE_APP_VERSION: ${VITE_APP_VERSION}
+    volumes:
+      - ../:/app
+      - hq_node_modules:/app/node_modules
+      - hq_app_node_modules:/app/apps/hq/node_modules
+    ports:
+      # DEV UNIQUEMENT (voir field).
+      - '127.0.0.1:5174:5173'
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:5173/hq/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 60s
+    networks: [axion]
+
+  # ---------------------------------------------------------------------------
+  # Caddy — SEUL point d'entrée public (02 §4.1). Domaine UNIQUE : c'est ce qui
+  # supprime toute la classe de bugs CORS (11 §2).
+  # ---------------------------------------------------------------------------
+  caddy:
+    <<: [*restart, *logging]
+    image: caddy:2-alpine
+    depends_on:
+      api:
+        condition: service_healthy
+      field:
+        condition: service_healthy
+      hq:
+        condition: service_healthy
+    environment:
+      CADDY_SITE_ADDRESS: ${CADDY_SITE_ADDRESS}
+      CADDY_ACME_EMAIL: ${CADDY_ACME_EMAIL}
+      API_PORT: ${API_PORT}
+      TZ: ${TZ}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data # certificats ACME — à sauvegarder (PRA)
+      - caddy_config:/config
+    ports:
+      # En dev, CADDY_SITE_ADDRESS vaut `:8080` (aucun ACME).
+      - '8080:8080'
+    healthcheck:
+      # Vraie sonde : l'API d'administration Caddy répond avec la config chargée.
+      test: ['CMD', 'wget', '--quiet', '--tries=1', '--spider', 'http://127.0.0.1:2019/config/']
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    networks: [axion]
+
+# -----------------------------------------------------------------------------
+# Réseau unique et INTERNE : seul Caddy publie des ports en staging/prod (06 §10.3).
+# -----------------------------------------------------------------------------
+networks:
+  axion:
+    name: axion-audit-dev
+    driver: bridge
+
+# -----------------------------------------------------------------------------
+# Volumes NOMMÉS = persistance (et périmètre de sauvegarde, 02 §11.4).
+# -----------------------------------------------------------------------------
+volumes:
+  postgres_data:
+  pgbackrest_repo:
+  redis_data:
+  minio_data:
+  caddy_data:
+  caddy_config:
+  api_node_modules:
+  api_app_node_modules:
+  worker_node_modules:
+  worker_app_node_modules:
+  field_node_modules:
+  field_app_node_modules:
+  hq_node_modules:
+  hq_app_node_modules:

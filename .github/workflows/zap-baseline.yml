@@ -1,0 +1,139 @@
+# =============================================================================
+# ZAP BASELINE (09 §1 rôle A51 · 07 §13 « Sécurité : ZAP baseline en CI »)
+# =============================================================================
+# Applique :
+#   · 09 §1 — « A51 sécurité offensive : ZAP BASELINE À CHAQUE BUILD, revue
+#     OWASP ASVS L2 avant recette ».
+#   · 07 §13 — « Sécurité : ZAP baseline en CI ».
+#   · 02 §30.6 — exécuté contre l'environnement STAGING, APRÈS déploiement
+#     (appelé en fin de deploy-staging.yml).
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# STATUT BLOQUANT — LE POINT IMPORTANT DE CE FICHIER
+# ─────────────────────────────────────────────────────────────────────────────
+# AU LOT L0 : NON BLOQUANT. Motif factuel : il n'y a AUCUNE surface applicative
+# réelle à scanner (ni auth, ni route métier, ni formulaire) — seulement Caddy et
+# une éventuelle route de santé. Un scan sur du vide produirait soit un vert
+# creux, soit du bruit ; dans les deux cas une information fausse.
+#
+# ➜ IL DEVIENT BLOQUANT AU **LOT L2**, dès qu'il existe de l'AUTHENTIFICATION
+#   (07 §12, L2 : « Auth JWT (login/refresh rotatif…), RBAC middleware,
+#   étanchéité financière »). C'est à partir de là qu'un en-tête de sécurité
+#   manquant, un cookie sans `Secure`/`HttpOnly`/`SameSite` ou une page d'erreur
+#   bavarde deviennent des défauts RÉELS — et le pack exige déjà @fastify/helmet
+#   (11 §3) et des cookies httpOnly SameSite=Lax.
+#
+# COMMENT LE RENDRE BLOQUANT AU L2 : passer `ZAP_BLOQUANT` ci-dessous à 'true'
+# (une ligne, versionnée, revue en PR). Il n'y a volontairement AUCUN
+# `continue-on-error` dans ce fichier : le caractère non bloquant est une
+# CONSTANTE EXPLICITE et lisible, pas un masquage d'échec (09 §5.7).
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Traçabilité E36/E43 — lot L0 (outillage), exploité par A51 dès L2.
+# =============================================================================
+
+name: ZAP baseline
+
+on:
+  workflow_call:
+    inputs:
+      cible:
+        description: 'URL de base à scanner (staging après déploiement).'
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      cible:
+        description: 'URL de base à scanner.'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zap-${{ inputs.cible }}
+  cancel-in-progress: true
+
+env:
+  # ⚠️ PASSER À 'true' AU LOT L2 (voir bandeau). Une seule ligne à changer.
+  ZAP_BLOQUANT: 'false'
+  # Image ZAP officielle, épinglée (11 §1 — gel des dépendances Phase 1).
+  ZAP_IMAGE: ghcr.io/zaproxy/zaproxy:stable
+
+jobs:
+  baseline:
+    name: Scan passif (baseline)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Vérifier la cible
+        run: |
+          set -euo pipefail
+          cible='${{ inputs.cible }}'
+          if [ -z "$cible" ]; then
+            echo "::error title=Cible ZAP absente::Aucune URL fournie. Renseigner la variable d'environment vars.STAGING_BASE_URL (GitHub → Settings → Environments → staging → Variables)."
+            exit 1
+          fi
+          echo "Cible du scan : ${cible}"
+
+      - name: Lancer zap-baseline.py
+        id: scan
+        run: |
+          # `set +e` volontaire : le shell par défaut de GitHub Actions active
+          # `-e`, or le code de retour de ZAP est ici une DONNÉE, exploitée
+          # explicitement à l'étape « Verdict ». Ce n'est pas un masquage
+          # d'échec — rien n'est perdu, tout est tranché plus bas (09 §5.7).
+          set +e
+          set -uo pipefail
+          mkdir -p rapport-zap && chmod 777 rapport-zap
+          docker run --rm \
+            -v "${GITHUB_WORKSPACE}/rapport-zap:/zap/wrk:rw" \
+            -t "${ZAP_IMAGE}" \
+            zap-baseline.py \
+              -t '${{ inputs.cible }}' \
+              -r rapport-zap.html \
+              -J rapport-zap.json \
+              -a \
+              -I
+          code=$?
+          # Codes zap-baseline.py : 0 = rien · 1 = alertes en ÉCHEC ·
+          # 2 = avertissements (avec -I) · 3 = erreur d'exécution.
+          echo "code=${code}" >> "$GITHUB_OUTPUT"
+          echo "ZAP a rendu le code ${code}."
+
+      - name: Conserver le rapport ZAP
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapport-zap-${{ github.run_id }}
+          path: rapport-zap/
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Verdict
+        run: |
+          set -euo pipefail
+          code='${{ steps.scan.outputs.code }}'
+
+          if [ "$code" = "3" ]; then
+            # Une ERREUR D'EXÉCUTION du scanner n'est jamais tolérée, même au L0 :
+            # un scanner qui ne tourne pas n'est pas un scan « non bloquant »,
+            # c'est une absence de scan déguisée en scan.
+            echo "::error title=ZAP n'a pas pu s'exécuter::Code 3 — cible injoignable ou erreur interne. Le scan n'a PAS eu lieu ; ce n'est pas un résultat, c'est une panne."
+            exit 1
+          fi
+
+          if [ "$code" = "0" ]; then
+            echo "Aucune alerte ZAP."
+            exit 0
+          fi
+
+          if [ "${ZAP_BLOQUANT}" = "true" ]; then
+            echo "::error title=Alertes ZAP::Le scan a remonté des alertes (code ${code}) et ZAP_BLOQUANT=true (lot ≥ L2). Rapport dans l'artefact « rapport-zap-${{ github.run_id }} ». Traitement par A51 (09 §1) avant merge."
+            exit 1
+          fi
+
+          echo "::warning title=Alertes ZAP (non bloquant au lot L0/L1)::Le scan a remonté des alertes (code ${code}). NON BLOQUANT tant que ZAP_BLOQUANT='false' — statut assumé et daté : il DOIT passer à 'true' au LOT L2, dès l'arrivée de l'authentification (07 §12). Rapport dans l'artefact « rapport-zap-${{ github.run_id }} » : à lire, pas à ignorer."

@@ -1,0 +1,59 @@
+# =============================================================================
+# GITLEAKS — détection de fuite de secret (02 §30.4-5, BLOQUANT en CI)
+# =============================================================================
+# Applique :
+#   · 02 §30.4-5 — « Détection de fuite en CI : gitleaks à chaque push
+#     (BLOQUANT) + secret scanning GitHub activé + garde-fou dans CLAUDE.md :
+#     l'autopilote a interdiction d'écrire une valeur de secret dans un fichier
+#     versionné, les tests utilisent des secrets factices. »
+#   · 02 §30.4-1 — « Jamais dans Git : .env gitignoré ; un .env.example documente
+#     CHAQUE variable SANS AUCUNE VALEUR RÉELLE. »
+#   · 11 §2 — « Aucune valeur de secret dans un fichier versionné. »
+#
+# EMPLACEMENT : racine du dépôt (emplacement conventionnel de gitleaks, lu par
+# défaut). Consommé par le job `gitleaks` de .github/workflows/ci.yml, qui
+# analyse l'HISTORIQUE COMPLET en pull request (fetch-depth: 0) — un secret
+# introduit puis « retiré » reste dans l'historique et doit être détecté.
+#
+# Traçabilité E36/E43 — lot L0 (07 §12 : « secrets §30.3 provisionnés »),
+# agent A52.
+# =============================================================================
+
+title = "Axion Audit — configuration gitleaks"
+
+# Toutes les règles par défaut de gitleaks sont ACTIVES (clés AWS/GCP, jetons
+# GitHub/Slack/Telegram, clés privées, chaînes de connexion, JWT, etc.).
+# Aucune règle n'est retirée : le pack ne prévoit aucune exemption.
+[extend]
+useDefault = true
+
+# -----------------------------------------------------------------------------
+# ALLOWLIST — VOLONTAIREMENT MINIMALE
+# -----------------------------------------------------------------------------
+# UNE SEULE exception : le marqueur littéral `__CHANGEME__` utilisé par
+# `.env.example` (02 §30.4-1) pour dire « ici vit un secret, voici comment le
+# générer » — sans jamais en porter la valeur.
+#
+# Pourquoi ce ciblage et rien d'autre :
+#   · on N'ALLOWLISTE PAS le fichier `.env.example` en entier : un vrai secret
+#     collé par erreur dans ce fichier DOIT continuer à faire rougir le build.
+#     Exempter le fichier reviendrait à créer le seul endroit du dépôt où l'on
+#     peut fuiter tranquillement — exactement l'inverse du but ;
+#   · on allowliste la LIGNE contenant `__CHANGEME__`, ce qui couvre aussi les
+#     valeurs composées (`postgresql://axion:__CHANGEME__@postgres:5432/...`,
+#     `redis://:__CHANGEME__@redis:6379`) que les règles « chaîne de connexion »
+#     signaleraient sinon ;
+#   · une ligne portant un secret réel ne contient pas ce marqueur : la porte
+#     reste fermée.
+#
+# ⚠️ TOUTE AUTRE ENTRÉE dans cette allowlist est une décision humaine tracée
+# dans DECISIONS.md (11 §8-4 : « toucher à la sécurité autrement que spécifié »).
+# Ajouter un chemin ici pour « faire passer la CI » est la définition même d'une
+# CI qui ment (09 §5.7).
+# -----------------------------------------------------------------------------
+[allowlist]
+description = "Placeholders __CHANGEME__ de .env.example (02 §30.4-1) — et rien d'autre."
+regexTarget = "line"
+regexes = [
+  '''__CHANGEME__''',
+]

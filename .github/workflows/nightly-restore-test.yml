@@ -1,0 +1,154 @@
+# =============================================================================
+# TEST DE RESTAURATION NOCTURNE (02 §11.4 · critère d'acceptation du lot L0)
+# =============================================================================
+# Applique :
+#   · 02 §11.4 — « TEST DE RESTAURATION AUTOMATIQUE NOCTURNE (même standard que
+#     le site axion-ia.com) : restore dans un conteneur jetable + requêtes de
+#     contrôle + ALERTE SI ÉCHEC. »
+#   · 07 §12, critère L0 — « restauration Postgres ET MinIO testée depuis zéro ».
+#   · 07 §13 — « test de restauration de sauvegarde automatique chaque nuit
+#     (Postgres + MinIO) ».
+#   · .env.example §12 — `RESTORE_TEST_CRON=0 3 * * *` (heure cron UTC).
+#
+# Pendant CI du critère L0 : la sauvegarde qui n'a jamais été restaurée n'est pas
+# une sauvegarde. Ce workflow ne restaure rien lui-même — il DÉCLENCHE et
+# SURVEILLE `infra/scripts/restore-test.sh` (livrable A11) sur le serveur, et
+# alerte si le script échoue. C'est le rôle A53 (09 §1), outillé par A52.
+#
+# ⚠️ GitHub Actions n'accepte PAS de variable dans une expression `cron` : la
+# valeur ci-dessous DUPLIQUE `RESTORE_TEST_CRON` de `.env.example` §12
+# (`0 3 * * *`, UTC). Les deux doivent rester synchronisées à la main ; toute
+# modification de l'une exige la modification de l'autre.
+#
+# Traçabilité E36/E43 — lot L0 (07 §12), agents A52 (CI) et A53 (observabilité).
+# =============================================================================
+
+name: Test de restauration nocturne
+
+on:
+  schedule:
+    # RESTORE_TEST_CRON — 03:00 UTC, chaque nuit (.env.example §12, 02 §11.4).
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      motif:
+        description: 'Motif du déclenchement manuel (ex. « veille de porte P-A », checklist 07 §15).'
+        required: false
+        type: string
+        default: 'vérification à la demande'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: restore-test
+  cancel-in-progress: false
+
+jobs:
+  restauration:
+    name: SSH → infra/scripts/restore-test.sh
+    runs-on: ubuntu-latest
+    # Environment `ops` — PAS `prod`. L'approbation manuelle de `prod`
+    # (02 §30.4-3) protège les DÉPLOIEMENTS ; l'appliquer ici bloquerait un job
+    # nocturne planifié en attente d'un humain endormi, c'est-à-dire supprimerait
+    # de fait le test de restauration. `ops` porte donc une clé SSH DISTINCTE et
+    # RESTREINTE au seul `restore-test.sh` (02 §30.4-7, moindre accès).
+    # ⚠️ Choix non tranché par le pack — voir « Doutes de spec » du rapport A52
+    # et .github/workflows/README.md.
+    environment: ops
+    # Le job entier a 60 min : une restauration qui traîne indéfiniment est un
+    # échec de PRA (RTO cible 4 h, 02 §11.4), pas un job « encore en cours ».
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Contrôler la présence des réglages non versionnables
+        env:
+          A_DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          A_DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+          A_DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          A_DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          A_DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          A_TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          A_TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set -euo pipefail
+          manquants=""
+          for nom in A_DEPLOY_SSH_KEY A_DEPLOY_SSH_KNOWN_HOSTS A_DEPLOY_HOST \
+                     A_DEPLOY_USER A_DEPLOY_PATH A_TELEGRAM_BOT_TOKEN A_TELEGRAM_CHAT_ID; do
+            if [ -z "${!nom:-}" ]; then
+              manquants="${manquants} ${nom#A_}"
+            fi
+          done
+          if [ -n "$manquants" ]; then
+            echo "::error title=Environment ops incomplet::Éléments manquants :${manquants}. À poser dans GitHub → Settings → Environments → ops. Sans canal Telegram, un échec de restauration passerait INAPERÇU — c'est exactement le scénario que 02 §11.4 interdit."
+            exit 1
+          fi
+
+      - name: Préparer l'accès SSH (clé restreinte à restore-test.sh)
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/restore_key
+          chmod 600 ~/.ssh/restore_key
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Restaurer Postgres + MinIO dans un conteneur jetable
+        id: restore
+        env:
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          # restore-test.sh (A11) : restore pgBackRest dans un conteneur jetable
+          # + `mc mirror` de contrôle MinIO + requêtes de contrôle. Code de
+          # retour ≠ 0 = échec de PRA. Aucun masquage, aucun `|| true`.
+          ssh -i ~/.ssh/restore_key \
+              -o StrictHostKeyChecking=yes \
+              -o UserKnownHostsFile=~/.ssh/known_hosts \
+              -o ConnectTimeout=20 \
+              "${DEPLOY_USER}@${DEPLOY_HOST}" \
+              "set -euo pipefail; cd '${DEPLOY_PATH}'; ./infra/scripts/restore-test.sh" \
+              | tee restore-test.log
+
+      - name: Conserver le journal de restauration (preuve pour la porte)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          # Ce journal est la PREUVE attendue par le critère L0 (07 §12) et par
+          # la checklist 07 §15 (« sauvegardes vérifiées, test de restauration
+          # OK la veille ») — à référencer dans le fichier de porte (11 §9bis).
+          name: journal-restauration-${{ github.run_id }}
+          path: restore-test.log
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Effacer la clé SSH du runner
+        if: always()
+        run: rm -f ~/.ssh/restore_key ~/.ssh/known_hosts
+
+      # ALERTE SI ÉCHEC (02 §11.4). On notifie AUSSI le succès : une alerte qui
+      # ne parle jamais est indiscernable d'une alerte cassée.
+      - name: Alerter Telegram
+        if: always()
+        env:
+          JETON: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          SALON: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set -euo pipefail
+          statut='${{ job.status }}'
+          if [ "$statut" = "success" ]; then
+            entete="Axion Audit — test de restauration nocturne : OK"
+          else
+            entete="ALERTE Axion Audit — TEST DE RESTAURATION EN ECHEC (${statut})"
+          fi
+          texte="${entete}
+          Declencheur : ${{ github.event_name }}
+          Run : ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          Rappel 02 §11.4 : RPO <= 6 h cote siege, RTO cible 4 h. Un echec ici invalide le PRA jusqu'a correction."
+          curl -fsS -X POST "https://api.telegram.org/bot${JETON}/sendMessage" \
+            --data-urlencode "chat_id=${SALON}" \
+            --data-urlencode "text=${texte}" >/dev/null

@@ -1,0 +1,28 @@
+{
+  "name": "@axion/ui",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Design system Axion — tokens de la charte (invariant 4 : aucune couleur en dur ailleurs).",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./tokens.css": "./src/tokens.css"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "dev": "tsc --project tsconfig.build.json --watch --preserveWatchOutput",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1"
+  },
+  "files": [
+    "dist",
+    "src"
+  ]
+}

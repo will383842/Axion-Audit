@@ -1,0 +1,21 @@
+# Contexte de construction minimal : moins on envoie au démon, plus vite l'image
+# se construit — et surtout, aucun secret ni artefact local ne peut s'y glisser.
+node_modules
+**/node_modules
+dist
+**/dist
+coverage
+**/coverage
+.git
+.github
+docs
+.claude
+infra/data
+infra/backups
+playwright-report
+test-results
+*.log
+.env
+.env.*
+!.env.example
+*.axionbackup

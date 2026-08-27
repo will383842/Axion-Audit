@@ -1,0 +1,40 @@
+# =============================================================================
+# CODEOWNERS — minimal (02 §30.5 : « CODEOWNERS minimal »)
+# =============================================================================
+# Applique : 02 §30.5 · 09 §1 (chaîne de signature : agent de lot → chef
+# d'équipe → A01 → Williams) · 11 §9bis (jamais de commit direct sur `main`).
+#
+# ⚠️ À COMPLÉTER À LA MAIN — le pack ne contient PAS le compte GitHub de
+# Williams. Remplacer `@REMPLACER-COMPTE-GITHUB-WILLIAMS` par le vrai identifiant
+# (ou une équipe d'organisation `@orga/equipe`) AVANT d'activer « Require review
+# from Code Owners » dans la protection de branche : un propriétaire
+# non résoluble rendrait toute PR immergeable.
+# Doute tracé dans le rapport A52 → DECISIONS.md.
+#
+# Le projet est mené par un seul humain (Williams) assisté de l'autopilote :
+# un CODEOWNERS « minimal » signifie ici « un seul propriétaire, sur tout ».
+# La revue croisée réelle est assurée par le pipeline 09 §3 (étape 4, réviseur
+# croisé), pas par ce fichier.
+#
+# Traçabilité E36/E43 — lot L0 (07 §12), agent A52.
+# =============================================================================
+
+# Tout le dépôt.
+*                       @REMPLACER-COMPTE-GITHUB-WILLIAMS
+
+# Le pack d'implémentation est la SOURCE D'EXÉCUTION (CLAUDE.md, préambule) :
+# toute modification est un amendement de spécification horodaté (09 §5.2),
+# jamais un ajustement de confort.
+/docs/                  @REMPLACER-COMPTE-GITHUB-WILLIAMS
+
+# Gouvernance de l'autopilote : règles permanentes, décisions, état de reprise.
+/CLAUDE.md              @REMPLACER-COMPTE-GITHUB-WILLIAMS
+/DECISIONS.md           @REMPLACER-COMPTE-GITHUB-WILLIAMS
+/AMELIORATIONS.md       @REMPLACER-COMPTE-GITHUB-WILLIAMS
+
+# Chaîne de livraison et secrets : toute modification touche à la sécurité
+# (02 §30.4) ou au caractère bloquant de la CI (09 §5.7).
+/.github/               @REMPLACER-COMPTE-GITHUB-WILLIAMS
+/.gitleaks.toml         @REMPLACER-COMPTE-GITHUB-WILLIAMS
+/infra/                 @REMPLACER-COMPTE-GITHUB-WILLIAMS
+/.env.example           @REMPLACER-COMPTE-GITHUB-WILLIAMS

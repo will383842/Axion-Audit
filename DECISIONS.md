@@ -13,6 +13,7 @@
 ## 2026-08-27 — [L0] Emplacement du pack d'implémentation dans le dépôt
 
 **Options :**
+
 1. Laisser les 12 fichiers dans `pack_implementation/` (état reçu).
 2. Les déplacer dans `/docs` à la racine du dépôt.
 
@@ -36,6 +37,7 @@ d'exécution. Sous-dossiers créés au même moment, imposés par le pack : `doc
 Le 11 §8.3 (« monter une version majeure ») réserve explicitement ce choix à l'humain.
 
 **Options :**
+
 1. Adopter Node 24 / pnpm 10 (aligner le contrat sur la machine) — **exclu** : 11 §8.3 l'interdit à
    l'autopilote, et Node 24 n'était pas LTS au moment de la rédaction du contrat.
 2. Épingler le contrat partout où l'autopilote décide (images Docker, CI, `packageManager`, `.nvmrc`)
@@ -64,6 +66,7 @@ sur la machine : un commit non poussé n'existe pas. » La création du dépôt 
 elle-même un livrable L0 (02 §30.5), mais elle exige un compte et des droits que l'autopilote n'a pas.
 
 **Options :**
+
 1. Créer le dépôt distant depuis l'autopilote via `gh repo create` — **exclu** : action extérieure
    irréversible sur le compte de Williams, hors du périmètre d'autonomie (11 §8, esprit du §30.4).
 2. Travailler en local et pousser dès qu'`origin` existe.
@@ -94,6 +97,7 @@ Le critère d'acceptation L0 du fichier 07 exige `docker compose up` = stack com
 restauration Postgres **et** MinIO testée depuis zéro.
 
 **Options :**
+
 1. Déclarer le critère satisfait sur la seule foi de la revue des fichiers — **exclu** : « la vérité
    terrain, ce sont les tests » (11 §9ter) ; un critère non exécuté n'est pas un critère coché.
 2. Écrire l'intégralité de l'infrastructure, la valider par ce qui est vérifiable **sans démon**
@@ -123,6 +127,7 @@ provisionnés », « déploiement staging par la CI OK »). Le 02 §30.4-2 est e
 serveur est « provisionné à la main par SSH au lot L0 (**pas par la CI**) ».
 
 **Options :**
+
 1. Considérer L0 terminé sans l'infrastructure réelle — **exclu** : trois critères d'acceptation
    resteraient faux.
 2. Scinder L0 en **L0-a (dépôt : tout ce qui est versionné)** et **L0-b (opérations : ce qui exige
@@ -151,6 +156,7 @@ déploiement staging suivi de **smoke tests** (« santé API, login, une écritu
 Un `docker compose up` qui ne démarre aucune application ne satisfait pas « stack complète ».
 
 **Options :**
+
 1. Ne créer que les fichiers de configuration du monorepo — la CI construirait des images vides.
 2. Scaffolder un **squelette minimal et non métier** : API Fastify avec `/v1/health` (+ format
    d'erreur, logger pino redacté, validation d'environnement Zod), worker BullMQ inerte,
@@ -159,7 +165,7 @@ Un `docker compose up` qui ne démarre aucune application ne satisfait pas « st
    fonctionnelle, ni écran — L1 et L2 restent intacts.
 
 **Arbitrage :** option 2. Le squelette est le strict nécessaire pour que les critères L0 soient
-*testables* (images qui démarrent, healthcheck Compose, smoke test de déploiement). La règle
+_testables_ (images qui démarrent, healthcheck Compose, smoke test de déploiement). La règle
 anti-code-orphelin (09 §3.6) est respectée : ce squelette se rattache à **E17** (stack imposée),
 **E35** (exploitation/sauvegardes), **E36** (exécutable par lots), **E43** (exécutabilité autopilote),
 **E33** (sécurité : redaction, secrets hors code) et **E44** (tokens du design system).

@@ -1,0 +1,197 @@
+# =============================================================================
+# DÉPLOIEMENT STAGING (02 §30.6 · 02 §30.4-3 · 02 §11.2)
+# =============================================================================
+# Applique littéralement 02 §30.6 :
+#   « PR mergée → Actions : tests → build des 4 images → push GHCR →
+#     job deploy-staging : SSH (clé dédiée) → docker compose pull &&
+#     docker compose up -d + migration avec garde-fou (dry-run puis apply)
+#     + smoke tests (santé API, login, une écriture/lecture) →
+#     notification Telegram. »
+# Les trois étapes serveur (pull/up, migration garde-fou, smoke tests) sont
+# portées par `infra/scripts/deploy.sh` (livrable A11) : la CI ORCHESTRE, elle
+# ne réimplémente pas l'exploitation.
+#
+# SECRETS (02 §30.4-3) : tous portés par l'ENVIRONMENT `staging`, JAMAIS par des
+# secrets de dépôt globaux. Aucune valeur n'apparaît en clair ici (02 §30.4-1).
+# Séparation stricte staging/prod (02 §30.4-4) : les secrets de cet environment
+# ne peuvent RIEN sur la prod.
+#
+# ------------------------------- ROLLBACK ------------------------------------
+# Procédure (02 §30.6 + §11.2), à exécuter à la main sur le serveur :
+#   1. Identifier le tag précédent : `docker image ls | grep axion-audit-api`
+#      ou l'historique des runs de ce workflow (tag `sha-xxxxxxx`).
+#   2. Sur le serveur : `IMAGE_TAG=sha-<précédent> ./infra/scripts/deploy.sh`
+#      → docker compose est re-pointé sur le tag précédent.
+#   3. Les images sont CONSERVÉES 90 JOURS sur GHCR (02 §30.6) : la fenêtre de
+#      retour arrière est garantie sur 90 j, pas au-delà.
+#   4. AUCUNE migration inverse n'est jouée : les migrations sont
+#      RÉTROCOMPATIBLES N-1 (02 §11.2), donc la version N-1 du code fonctionne
+#      sur le schéma N. C'est cette règle — et elle seule — qui rend le rollback
+#      applicatif sûr sans toucher à la base.
+# -----------------------------------------------------------------------------
+#
+# Traçabilité E36/E43 — lot L0 (07 §12 : « déploiement staging par la CI OK »).
+# =============================================================================
+
+name: Déploiement staging
+
+on:
+  workflow_call:
+    inputs:
+      tag_image:
+        description: "Tag d'image à déployer (sha-xxxxxxx). Fourni par le job build de ci.yml."
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag_image:
+        description: "Tag d'image à déployer (sha-xxxxxxx) — ex. pour rejouer un déploiement."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# Un déploiement staging à la fois, et JAMAIS d'annulation d'un déploiement en
+# vol (une coupure au milieu d'un `compose up` laisserait la stack incohérente).
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  deployer:
+    name: SSH → infra/scripts/deploy.sh
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: ${{ vars.STAGING_BASE_URL }}
+    outputs:
+      # Exposée pour le job `securite` : les variables d'ENVIRONMENT ne sont
+      # lisibles que par un job qui déclare cet environment — le job ZAP, lui,
+      # n'en déclare aucun. On la fait donc transiter explicitement.
+      url_base: ${{ steps.bilan.outputs.url_base }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Contrôler la présence des réglages non versionnables
+        env:
+          # Les secrets ne sont jamais AFFICHÉS : on ne teste que leur présence.
+          A_DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          A_DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+          A_DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          A_DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          A_DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          A_STAGING_BASE_URL: ${{ vars.STAGING_BASE_URL }}
+        run: |
+          set -euo pipefail
+          manquants=""
+          for nom in A_DEPLOY_SSH_KEY A_DEPLOY_SSH_KNOWN_HOSTS A_DEPLOY_HOST \
+                     A_DEPLOY_USER A_DEPLOY_PATH A_STAGING_BASE_URL; do
+            if [ -z "${!nom:-}" ]; then
+              manquants="${manquants} ${nom#A_}"
+            fi
+          done
+          if [ -n "$manquants" ]; then
+            echo "::error title=Environment staging incomplet::Éléments manquants :${manquants}. Ils se posent À LA MAIN dans GitHub → Settings → Environments → staging (02 §30.4-3). Voir .github/workflows/README.md."
+            exit 1
+          fi
+
+      # Clé SSH DÉDIÉE et RESTREINTE (02 §30.3). Écrite avec umask 077, jamais
+      # affichée, supprimée en fin de job.
+      - name: Préparer l'accès SSH (clé dédiée, hôte vérifié)
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          # StrictHostKeyChecking reste ACTIF : accepter aveuglément une clé
+          # d'hôte reviendrait à accepter un homme du milieu sur le canal qui
+          # porte nos déploiements.
+
+      - name: Déployer (pull/up + migration garde-fou + smoke tests)
+        id: deploiement
+        env:
+          # `IMAGE_TAG` et `GHCR_OWNER` sont les DEUX variables que
+          # `infra/docker-compose.staging.yml` (A11) interpole pour résoudre
+          # `ghcr.io/${GHCR_OWNER}/axion-audit-<app>:${IMAGE_TAG}`.
+          IMAGE_TAG: ${{ inputs.tag_image }}
+          GHCR_OWNER: ${{ github.repository_owner }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/deploy_key \
+              -o StrictHostKeyChecking=yes \
+              -o UserKnownHostsFile=~/.ssh/known_hosts \
+              -o ConnectTimeout=20 \
+              "${DEPLOY_USER}@${DEPLOY_HOST}" \
+              "set -euo pipefail; cd '${DEPLOY_PATH}'; \
+               APP_ENV=staging GHCR_OWNER='${GHCR_OWNER}' IMAGE_TAG='${IMAGE_TAG}' ./infra/scripts/deploy.sh"
+          # deploy.sh (A11) enchaîne : docker compose pull && up -d →
+          # migration DRY-RUN puis APPLY (garde-fou 02 §30.6) → smoke tests
+          # (santé API, login, une écriture/lecture). Un code de retour ≠ 0
+          # fait ÉCHOUER ce job : aucun `|| true`, aucun masquage.
+
+      # Seconde ceinture, exécutée depuis l'extérieur du serveur : ce que le
+      # serveur se dit à lui-même ne prouve pas que le service est joignable.
+      - name: Contrôle de santé public (hors serveur)
+        run: |
+          set -euo pipefail
+          url="${{ vars.STAGING_BASE_URL }}"
+          for i in $(seq 1 10); do
+            if curl -fsS --max-time 10 "${url%/}/api/health" >/dev/null; then
+              echo "Santé API OK sur ${url%/}/api/health (tentative ${i})."
+              exit 0
+            fi
+            sleep 6
+          done
+          echo "::error title=Staging injoignable::${url%/}/api/health ne répond pas après 60 s. Le déploiement est considéré comme ÉCHOUÉ (rollback : voir le bandeau de ce fichier)."
+          exit 1
+
+      - name: Bilan
+        id: bilan
+        if: always()
+        run: |
+          set -euo pipefail
+          echo "url_base=${{ vars.STAGING_BASE_URL }}" >> "$GITHUB_OUTPUT"
+
+      - name: Effacer la clé SSH du runner
+        if: always()
+        run: rm -f ~/.ssh/deploy_key ~/.ssh/known_hosts
+
+      # Notification Telegram — canal interne Axion-IA (02 §11.3 et §30.6).
+      - name: Notifier Telegram
+        if: always()
+        env:
+          JETON: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          SALON: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "${JETON}" ] || [ -z "${SALON}" ]; then
+            echo "::error title=Alerte impossible::TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID absents de l'environment staging. Un déploiement sans canal d'alerte est un déploiement aveugle (02 §11.3)."
+            exit 1
+          fi
+          statut='${{ job.status }}'
+          texte="Axion Audit — déploiement STAGING : ${statut}
+          Tag : ${{ inputs.tag_image }}
+          Commit : ${{ github.sha }}
+          Run : ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          curl -fsS -X POST "https://api.telegram.org/bot${JETON}/sendMessage" \
+            --data-urlencode "chat_id=${SALON}" \
+            --data-urlencode "text=${texte}" >/dev/null
+
+  # ---------------------------------------------------------------------------
+  # ZAP baseline « à chaque build » (09 §1 rôle A51 · 07 §13 « ZAP baseline en
+  # CI ») — exécuté APRÈS le déploiement, contre l'environnement staging.
+  # ---------------------------------------------------------------------------
+  securite:
+    name: ZAP baseline (staging)
+    needs: [deployer]
+    uses: ./.github/workflows/zap-baseline.yml
+    with:
+      cible: ${{ needs.deployer.outputs.url_base }}
+    secrets: inherit

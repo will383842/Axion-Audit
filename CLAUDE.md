@@ -12,17 +12,17 @@
 
 **TOUS les lots : `/docs/11_CONTRAT_TECHNIQUE.md` EN PREMIER**, puis l'ordre du `00_INDEX` :
 
-| Lot | Ordre de lecture |
-|---|---|
-| L0 infra | 02 → 06 (§10.3) → 07 |
-| L1 schéma | **04 EN ENTIER** → 03 (§32.1-32.2) → 01 (§2) |
-| L2 auth/RBAC | 06 → 04 → 05 (§8.1, §9.7, §9.9) → 03 (§34.1, §34.4) |
-| L3 missions/arbre/questionnaire | 01 → 03 (M1-M2, §16, §18.1, §32.2, §32.4, §35.2) → 04 → 05 |
-| L4 import banque | 03 (M1.1, §32.1, §32.4, §36.4) → 04 (§7.3) |
-| L5 PWA terrain | 03 (M3, §17, §19, §22.1, §25, §27, §32.5, §33, §34.2) → 01 (§20.4) → 05 (§9 + §31) → 06 (§10) |
-| L6 sync | 05 (§9 INTÉGRAL + 8 scénarios §9.8 + §9.9) → 04 |
-| L7-L8 console/scoring | 03 (§18, §22.3, M5, §27.1, §32.1, §33.4, §36.3) → 04 |
-| L10-L11 rapports/LLM | 03 (M6, §26.2, §36.6) → 01 (§20.3) → 04 → 06 (pseudonymisation 2 passes) |
+| Lot                             | Ordre de lecture                                                                              |
+| ------------------------------- | --------------------------------------------------------------------------------------------- |
+| L0 infra                        | 02 → 06 (§10.3) → 07                                                                          |
+| L1 schéma                       | **04 EN ENTIER** → 03 (§32.1-32.2) → 01 (§2)                                                  |
+| L2 auth/RBAC                    | 06 → 04 → 05 (§8.1, §9.7, §9.9) → 03 (§34.1, §34.4)                                           |
+| L3 missions/arbre/questionnaire | 01 → 03 (M1-M2, §16, §18.1, §32.2, §32.4, §35.2) → 04 → 05                                    |
+| L4 import banque                | 03 (M1.1, §32.1, §32.4, §36.4) → 04 (§7.3)                                                    |
+| L5 PWA terrain                  | 03 (M3, §17, §19, §22.1, §25, §27, §32.5, §33, §34.2) → 01 (§20.4) → 05 (§9 + §31) → 06 (§10) |
+| L6 sync                         | 05 (§9 INTÉGRAL + 8 scénarios §9.8 + §9.9) → 04                                               |
+| L7-L8 console/scoring           | 03 (§18, §22.3, M5, §27.1, §32.1, §33.4, §36.3) → 04                                          |
+| L10-L11 rapports/LLM            | 03 (M6, §26.2, §36.6) → 01 (§20.3) → 04 → 06 (pseudonymisation 2 passes)                      |
 
 **Le brief d'un lot vient EXCLUSIVEMENT de la table du fichier 07** (contenu + critères d'acceptation).
 Interdiction de charger le pack entier dans un sous-agent (09 §5.8).
@@ -201,7 +201,7 @@ date-fns · `@fontsource-variable/inter` (**police AUTO-HÉBERGÉE — jamais de
 ## 9. CONVENTIONS D'API (11 §3 — s'appliquent à toutes les routes)
 
 - **Erreurs** : `{ "error": { "code": "SNAKE_CASE", "message": "message en français", "details"?: [...] } }`
-  + statut HTTP cohérent. Les codes vivent dans `packages/shared` (`ERROR_CODES`) — **jamais de littéral libre**.
+  - statut HTTP cohérent. Les codes vivent dans `packages/shared` (`ERROR_CODES`) — **jamais de littéral libre**.
 - **Pagination : keyset** partout (`?limit=50&after=<curseur>`), **jamais d'offset**.
 - **Dates** : ISO 8601 UTC en API, `TIMESTAMPTZ` en base ; fuseau de mission à l'affichage uniquement.
 - **Validation** : chaque route déclare son schéma Zod in/out depuis `packages/shared` ;
@@ -218,13 +218,13 @@ date-fns · `@fontsource-variable/inter` (**police AUTO-HÉBERGÉE — jamais de
 
 agent de lot → chef d'équipe (A10/A20/A30/A40/A50) → **A01** directeur technique → **Williams**.
 
-| Étape | Signataire |
-|---|---|
-| Auto-revue (3) | l'agent qui a codé |
-| Revue croisée (4) | le réviseur croisé |
-| Fin d'incrément (11 §6) | le chef d'équipe |
+| Étape                        | Signataire         |
+| ---------------------------- | ------------------ |
+| Auto-revue (3)               | l'agent qui a codé |
+| Revue croisée (4)            | le réviseur croisé |
+| Fin d'incrément (11 §6)      | le chef d'équipe   |
 | Conformité + traçabilité (6) | le gardien **A02** |
-| Passage en porte | **A01** |
-| **La porte** | **Williams** |
+| Passage en porte             | **A01**            |
+| **La porte**                 | **Williams**       |
 
 Toute signature est une ligne dans le fichier de porte ou dans `DECISIONS.md`.

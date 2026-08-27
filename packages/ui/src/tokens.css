@@ -1,0 +1,111 @@
+/* ===========================================================================
+   TOKENS CSS — miroir de tokens.ts (invariant 4).
+   Généré à la main et VÉRIFIÉ par un test (tokens.test.ts) : si les deux
+   fichiers divergent, la suite est rouge. Un design system à deux vérités n'en
+   est pas un.
+   §33 : respect de prefers-reduced-motion et de prefers-contrast.
+   =========================================================================== */
+
+:root {
+  /* --- Surfaces --- */
+  --couleur-surface-fond: #faf8f3;
+  --couleur-surface-carte: #ffffff;
+  --couleur-surface-enfoncee: #f2eee5;
+  --couleur-surface-inverse: #2a2520;
+
+  /* --- Texte --- */
+  --couleur-texte-principal: #2a2520;
+  --couleur-texte-secondaire: #5c534b;
+  --couleur-texte-tertiaire: #756b62;
+  --couleur-texte-sur-action: #ffffff;
+  --couleur-texte-sur-inverse: #faf8f3;
+
+  /* --- Action (terracotta, charte) --- */
+  --couleur-action-fond: #c24a1b;
+  --couleur-action-fond-survol: #a83e16;
+  --couleur-action-fond-actif: #8d3412;
+  --couleur-action-texte: #c24a1b;
+  --couleur-action-bordure: #c24a1b;
+
+  /* --- Information (bleu, charte) --- */
+  --couleur-info-fond: #e8eefc;
+  --couleur-info-bordure: #1a4dd9;
+  --couleur-info-texte: #12369b;
+
+  /* --- Alerte (rouge distinct — DECISIONS.md 2026-08-27) --- */
+  --couleur-alerte-fond: #fdeaf0;
+  --couleur-alerte-bordure: #8c0a33;
+  --couleur-alerte-texte: #6d0728;
+
+  /* --- Succès / avertissement (dérivés, règle des 4 états §33.2) --- */
+  --couleur-succes-fond: #e7f4ec;
+  --couleur-succes-bordure: #1e7a45;
+  --couleur-succes-texte: #155c33;
+  --couleur-avertissement-fond: #fdf3e2;
+  --couleur-avertissement-bordure: #a8650a;
+  --couleur-avertissement-texte: #7a4a07;
+
+  /* --- Structure --- */
+  --couleur-bordure-discrete: #e4ded2;
+  --couleur-bordure-nette: #c9c0b1;
+  --couleur-focus-anneau: #c24a1b;
+
+  /* --- Espacement (base 4 px) --- */
+  --espacement-0: 0;
+  --espacement-1: 0.25rem;
+  --espacement-2: 0.5rem;
+  --espacement-3: 0.75rem;
+  --espacement-4: 1rem;
+  --espacement-5: 1.25rem;
+  --espacement-6: 1.5rem;
+  --espacement-8: 2rem;
+  --espacement-10: 2.5rem;
+  --espacement-12: 3rem;
+  --espacement-16: 4rem;
+
+  /* --- Tailles (A27 : cible tactile ≥ 44 px) --- */
+  --taille-cible-tactile-min: 44px;
+  --taille-controle-hauteur: 2.75rem;
+  --taille-rayon-petit: 0.25rem;
+  --taille-rayon-moyen: 0.5rem;
+  --taille-rayon-grand: 0.75rem;
+
+  /* --- Typographie (Inter variable AUTO-HÉBERGÉE — jamais de CDN, 11 §1) --- */
+  --typo-police-corps: 'Inter Variable', 'Inter', system-ui, -apple-system, sans-serif;
+  --typo-police-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
+  --typo-taille-xs: 0.75rem;
+  --typo-taille-sm: 0.875rem;
+  --typo-taille-base: 1rem;
+  --typo-taille-lg: 1.125rem;
+  --typo-taille-xl: 1.375rem;
+  --typo-taille-2xl: 1.75rem;
+  --typo-taille-3xl: 2.25rem;
+  --typo-graisse-normale: 400;
+  --typo-graisse-moyenne: 500;
+  --typo-graisse-semi: 600;
+  --typo-graisse-grasse: 700;
+  --typo-interligne-serre: 1.25;
+  --typo-interligne-normal: 1.5;
+  --typo-interligne-large: 1.7;
+
+  /* --- Mouvement --- */
+  --mouvement-duree-instant: 0ms;
+  --mouvement-duree-rapide: 120ms;
+  --mouvement-duree-normale: 200ms;
+  --mouvement-courbe-standard: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* §33 — accessibilité : l'animation est un confort, jamais une condition d'usage. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --mouvement-duree-rapide: 0ms;
+    --mouvement-duree-normale: 0ms;
+  }
+}
+
+/* Le focus est TOUJOURS visible : un auditeur navigue au clavier entre deux questions
+   (raccourcis complets, §33). Ne jamais poser `outline: none` sans remplacement. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid var(--couleur-focus-anneau);
+  outline-offset: 2px;
+}

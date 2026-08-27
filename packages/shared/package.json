@@ -1,0 +1,30 @@
+{
+  "name": "@axion/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Schémas Zod, codes d'erreur et types partagés API ↔ fronts (contrat 11 §3).",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "dev": "tsc --project tsconfig.build.json --watch --preserveWatchOutput",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1"
+  },
+  "files": [
+    "dist",
+    "src"
+  ]
+}

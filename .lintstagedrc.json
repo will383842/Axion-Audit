@@ -1,0 +1,14 @@
+{
+  "_bandeau_documentaire_ne_correspond_a_aucun_fichier": [
+    "PRE-COMMIT — lint-staged. Applique le contrat 11 §7 : « Pre-commit :",
+    "lint-staged (lint + typecheck rapide) ; gitleaks en CI (bloquant, §30) ».",
+    "Cette cle est un BANDEAU : le format .json n'accepte pas de commentaire, et",
+    "ce motif ne correspond a aucun fichier du depot — il n'execute donc jamais",
+    "rien. Le bandeau complet et les prerequis sont dans .husky/pre-commit.",
+    "Tracabilite E36/E43 — lot L0 (07 §12), agent A52."
+  ],
+
+  "*.{ts,tsx,mts,cts}": ["eslint --fix --max-warnings=0"],
+
+  "*.{js,jsx,mjs,cjs}": ["eslint --fix --max-warnings=0"]
+}
