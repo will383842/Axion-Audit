@@ -34,10 +34,17 @@
 --       colonnes NUMERIC explicites (`gain_low`, `gain_high`, `baseline_value`,
 --       `target_value`) précisément pour la valeur chiffrée — l'asymétrie est
 --       délibérée, ces colonnes-là sont des descriptions libres.
---   T8. NULLABILITÉ (hors périmètre du diff 11 §7, qui ne porte que sur
---       PK/FK/UNIQUE/CHECK) : NOT NULL sur les clés primaires, les FK que le 04
---       ne marque pas `NULL`, les colonnes portant un DEFAULT, les codes/libellés
---       de référentiel et les enums structurants. Tout le reste reste nullable.
+--   T8. NULLABILITÉ — DANS le périmètre du diff, et vérifiée colonne par colonne.
+--       (Le 11 §7 borne le diff aux « tables, COLONNES, contraintes… » sans rien
+--       exclure nommément ; une lecture antérieure l'en excluait, les méta-tests
+--       d'A16 ont montré ce que cette hypothèse coûtait — un `NOT NULL` retiré de
+--       `answers.interview_id` désarme l'UNIQUE du lot sans qu'aucune contrainte
+--       ne disparaisse. Arbitrage A01 : elle est comparée.)
+--       NOT NULL sur : les clés primaires · les FK que le 04 ne marque pas `NULL`
+--       · les colonnes portant un DEFAULT · les codes de référentiel · les enums
+--       structurants · le LIBELLÉ D'IDENTITÉ (T13 ci-dessous). Tout le reste est
+--       nullable, et le 04 marque explicitement `NULL` ce qu'il veut nullable —
+--       son absence de marqueur est donc une information, pas un silence.
 --       S'y ajoutent, depuis le retrait des défauts non prescrits (0011) :
 --         · BOOLÉEN D'ÉTAT STRUCTUREL (`is_active`, `is_default`, `in_scope`) et
 --           COMPTEUR DE VERSION (`questions.version`) → NOT NULL, avec ou SANS
@@ -47,11 +54,9 @@
 --           (true / false / NULL) est un piège : `WHERE is_active` fait
 --           silencieusement disparaître les lignes à NULL. Sans défaut, l'insertion
 --           devient explicite — c'est plus sûr, pas moins.
---       ATTENTION — la nullabilité n'était vérifiée par AUCUN contrôle automatique
---       tant que le 11 §7 était lu comme l'excluant du diff. Elle y est entrée
---       après les méta-tests d'A16 : le comparateur la compare désormais colonne
---       par colonne. La revue croisée A17 avait auparavant trouvé quatre colonnes
---       de TRAÇABILITÉ où la règle n'était pas appliquée — corrigées en 0010.
+--       La revue croisée a trouvé quatre colonnes de TRAÇABILITÉ où la règle
+--       n'était pas appliquée (corrigées en 0010), puis onze libellés traités de
+--       façon incohérente (corrigés en 0012 via T13).
 --   T9. UUID v7 : AUCUN DEFAULT SQL (PostgreSQL 16 n'a pas `uuidv7()` — PG18
 --       seulement ; 11 §2). Les identifiants viennent du code (lib `uuidv7`),
 --       client ET serveur. `DEFAULT gen_random_uuid()` (v4) n'apparaît QUE sur
@@ -73,9 +78,16 @@
 --        posés). Le fichier 04 SAIT écrire `DEFAULT 'a_planifier'` : là où il
 --        n'écrit rien, le choix appartient au lot qui implémentera la règle, pas
 --        à la transcription. Les seuls défauts conventionnels admis sont :
---          · `created_at` / `updated_at` → `now()` (§7 : « TIMESTAMPTZ partout ») ;
+--          · TOUT HORODATAGE D'ÉCRITURE → `now()` (§7 : « TIMESTAMPTZ partout »).
+--            La règle vaut pour tout horodatage posé à l'écriture, PAS pour les
+--            seuls noms `created_at`/`updated_at` : `answer_revisions.changed_at`
+--            sans défaut enregistrerait l'heure de SYNCHRONISATION au lieu de
+--            l'heure de la correction, dans la table même que 0010 durcit au
+--            titre de l'invariant 7. 37 colonnes ; la liste vit au manifeste.
 --          · JSONB de collection → `'[]'` / `'{}'` — le 04 écrit « [] = universelle »,
---            « [] = transverse » : le tableau vide EST une valeur signifiante ;
+--            « [] = transverse » : le tableau vide EST une valeur signifiante.
+--            NE S'APPLIQUE PAS à `findings.sources`, où le 04 écrit l'INVERSE
+--            (« ≥ 1 source obligatoire ») : défaut retiré par 0012.
 --          · `id` des tables PUREMENT SERVEUR → `gen_random_uuid()` (11 §2, T9) ;
 --          · COMPTEUR entier incrémenté par le serveur → `0`. Un compteur qui
 --            démarre à zéro n'exprime aucun choix fonctionnel, c'est de
@@ -83,6 +95,23 @@
 --            Ne s'applique JAMAIS à une quantité métier collectée sur le terrain
 --            (`headcount`, `users_count`, `answers_count`, `items_count`…), pour
 --            laquelle NULL — « non renseigné » — et 0 sont deux faits distincts.
+--        Le manifeste liste NOMMÉMENT les colonnes de chaque provenance, et le
+--        diff refuse tout DEFAULT qu'aucune ne couvre : la liste ne peut plus
+--        prétendre être exhaustive sans l'être.
+--   T13. IDENTITÉ LISIBLE — la colonne qui porte le LIBELLÉ HUMAIN IDENTIFIANT
+--        l'entité, celle qu'un opérateur lit pour savoir de quelle ligne il
+--        s'agit, est `NOT NULL`. Une entité sans identité lisible n'est pas
+--        exploitable : elle apparaît VIDE dans toute liste, tout rapport et tout
+--        export. UNE SEULE colonne par table — l'identité, jamais ses attributs
+--        descriptifs : `alerts.type` est l'identité d'une alerte, `alerts.message`
+--        et `alerts.severity` la décrivent et restent nullables ; de même
+--        `ai_systems.name` contre `ai_systems.usage_description`.
+--        Quatorze tables n'ont PAS d'identité lisible et n'en reçoivent aucune
+--        (junctions, tables de score à clé composite, journaux techniques, et les
+--        cas où le 04 rend le libellé nullable À DESSEIN : `interviews.person_name`
+--        §27.1, `attachments.filename` pour kind='note'). L'inventaire complet,
+--        avec le motif de chaque table, vit au manifeste (`identiteLisibleT13`).
+--        Arbitrage A01 après la 2e revue croisée ; appliquée par la migration 0012.
 -- =============================================================================
 
 -- @UP

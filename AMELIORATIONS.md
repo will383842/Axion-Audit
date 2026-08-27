@@ -232,6 +232,24 @@ sortirait en 0 sans rien exécuter.
 `apps/api/drizzle/` existe, au moins un test doit porter `@critique`. **Prouvé par injection** —
 marqueur retiré → code 1 avec le message qui explique quoi faire ; marqueur remis → vert.
 
+**RÉÉCRIT le même jour, après la 2ᵉ passe de revue (réserve M-4).** La première version de ce
+contrôle **annonçait plus qu'elle ne faisait** — exactement le défaut qu'elle prétendait empêcher.
+Elle imputait la permissivité au seul `--pass-with-no-tests` de Playwright, et se contentait de
+chercher la chaîne `@critique` **quelque part** dans les fichiers de test. Le réviseur l'a mise en
+défaut **par exécution** :
+
+```
+npx vitest run --project unit -t "@filtre_qui_ne_matche_rien"
+Test Files  1 skipped (1) · Tests  95 skipped (95) · EXIT = 0
+```
+
+Le segment **Vitest** est donc permissif lui aussi, et depuis toujours. Déplacer le marqueur vers un
+test Playwright rendait `pnpm test:critique` vert **sans rien exécuter du tout** — et ce contrôle
+vert avec lui. Il exige désormais que le marqueur vive dans un projet que le segment Vitest exécute
+(`unit` ou `integration`). **Les deux branches d'échec sont prouvées par injection** : marqueur
+absent, et marqueur présent mais hors des projets exécutés — cette seconde branche nomme les
+fichiers fautifs, pour que le message dise quoi faire et pas seulement que c'est faux.
+
 **Pourquoi c'est étage 1.** Ne touche ni le schéma 04, ni l'API, ni la crypto, ni le périmètre
 fonctionnel. C'est un drapeau permissif payé de son garde-fou, selon le principe déjà appliqué au
 lot L0 pour `--passWithNoTests`.

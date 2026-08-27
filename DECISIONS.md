@@ -1574,3 +1574,65 @@ interdit à l'auteur du schéma d'ajuster une fixture pour faire passer son prop
 
 **Décideur :** A12 (proposition motivée) · A01 (confirmation)
 **Impact spec :** aucun · amende l'entrée « Conventions de typage T1-T11 » du même jour
+
+---
+
+## 2026-08-27 — [L1] T13 « libellé d'identité », et rectification de l'entrée d'amendement T8
+
+**Constat (2ᵉ passe de revue croisée, bloquant B-4 et majeur M-5).** Deux défauts liés, tous deux
+imputables à A01.
+
+**Le premier est une règle appliquée sans être écrite.** Sur les 211 colonnes `NOT NULL` du schéma,
+**onze n'avaient aucune source** — ni marqueur du fichier 04, ni convention T1-T12 — et elles étaient
+appliquées de façon **incohérente pour une notation identique du 04** : `use_cases.title` obligatoire
+mais `findings.title` facultatif ; `alerts.type` obligatoire mais `alerts.severity` et
+`alerts.message` facultatifs ; `blocks.label_fr` obligatoire mais `sectors.label_en` facultatif.
+Conséquence en données : **un constat pouvait être enregistré sans titre, un cas d'usage non.** Le
+diff, ayant intégré la nullabilité à son périmètre, gravait ce déséquilibre **comme s'il était la
+spécification**.
+
+**Le second est une entrée de ce registre plus étroite que le code.** L'entrée « Amendement de la
+convention de typage T8 » énonçait « T8 devient : NOT NULL sur les FK que le 04 ne marque pas `NULL`,
+et sur les booléens d'état structurel et compteurs de version ». La T8 réellement appliquée en compte
+**cinq catégories de plus**. Un lot ultérieur lisant l'entrée d'amendement — présentée comme faisant
+foi — aurait appliqué une autre règle que le schéma.
+
+**Options pour B-4 :**
+
+1. Relâcher les onze `NOT NULL` — aucune invention, mais l'incohérence subsiste : `blocks.label_fr`
+   resterait obligatoire par T8 pendant que `findings.title` ne le serait pas.
+2. Écrire la règle et l'appliquer **uniformément** à toutes les tables.
+
+**Arbitrage : option 2.** Règle de précédence **sans objet** : la ligne 10 du fichier 04, celle qui
+énonce ses conventions (`id` UUID v7, horodatages, suppression logique, FK indexées, CHECK sur les
+enums, colonnes sans type = TEXT), **ne dit rien de la nullabilité**. Il n'y a donc pas divergence
+entre deux règles, mais une règle réelle jamais formulée.
+
+**Le remède à une règle non écrite est de l'écrire.** L'effacer là où elle dépasse laisserait
+l'incohérence intacte et ferait perdre des contraintes justes.
+
+**Convention T13 :** _« la colonne qui porte le LIBELLÉ HUMAIN IDENTIFIANT l'entité — celle qu'un
+opérateur lit pour savoir de quelle ligne il s'agit — est `NOT NULL`. Une entité sans identité
+lisible n'est pas exploitable : elle apparaît vide dans toute liste, tout rapport et tout export. »_
+**Une seule colonne par table**, celle de l'identité, jamais ses attributs descriptifs :
+`alerts.message` et `ai_systems.usage_description` restent nullables. Et T13 **ne prime jamais sur un
+marqueur `NULL` du 04** : `interviews.person_name` (§27.1) et `attachments.filename` (P1-5) restent
+nullables parce que le 04 le veut.
+
+**Application :** les 43 tables passées en revue — 23 ont une identité lisible (18 l'avaient déjà,
+**5 alignées** par la migration `0012` : `findings.title`, `roadmap_items.description`,
+`report_sections.section_code`, `integration_events.event_type`, `mission_questions.text_snapshot`),
+20 n'en ont pas et n'en reçoivent aucune. L'inventaire **table par table avec son motif** vit dans
+`schema-manifest.json` → `identiteLisibleT13`, et un contrôle refuse d'écrire cette section si une
+identité déclarée n'est pas `NOT NULL`.
+
+**Rectification pour M-5 — le texte qui FAIT FOI est l'en-tête de la migration `0001`**, pas une
+entrée de ce registre. T8 y liste **six** catégories `NOT NULL` : clés primaires · FK que le 04 ne
+marque pas `NULL` · colonnes portant un DEFAULT · codes de référentiel · enums structurants ·
+libellé d'identité (T13) — auxquelles s'ajoutent les booléens d'état structurel et compteurs de
+version, **avec ou sans DEFAULT**. Toute entrée de ce registre qui résume une convention est un
+**commentaire de la règle, jamais la règle** ; en cas d'écart, l'en-tête de `0001` l'emporte, et
+l'écart est un défaut à corriger — comme celui-ci.
+
+**Décideur :** A01
+**Impact spec :** aucun · rectifie l'entrée « Amendement de la convention de typage T8 » du même jour

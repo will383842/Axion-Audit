@@ -510,7 +510,8 @@ export const missionQuestions = pgTable('mission_questions', {
   missionId: uuid('mission_id').notNull(),
   questionId: uuid('question_id').notNull(),
   questionVersion: integer('question_version'),
-  textSnapshot: text('text_snapshot'),
+  /** T13 (0012) — texte figé rendu HORS LIGNE : identité de la question dans la mission. */
+  textSnapshot: text('text_snapshot').notNull(),
   optionsSnapshot: jsonb('options_snapshot'),
   weightSnapshot: numeric('weight_snapshot'),
   scoringSnapshot: jsonb('scoring_snapshot'),
@@ -695,7 +696,8 @@ export const findings = pgTable('findings', {
   orgUnitId: uuid('org_unit_id'),
   blockId: uuid('block_id'),
   severity: text('severity').$type<SeveriteConstat>().notNull(),
-  title: text('title'),
+  /** T13 (0012) — identité lisible du constat : NOT NULL (§16.5). */
+  title: text('title').notNull(),
   statement: text('statement'),
   /** §27.2 — {answer_ids[], session_ids[], attachment_ids[]} : ≥ 1 source obligatoire. */
   sources: jsonb('sources').notNull(),
@@ -753,7 +755,8 @@ export const roadmapItems = pgTable('roadmap_items', {
   palier: integer('palier'),
   monthStart: integer('month_start'),
   monthEnd: integer('month_end'),
-  description: text('description'),
+  /** T13 (0012) — libellé de l'action de la feuille de route (§20.3). */
+  description: text('description').notNull(),
   expectedGain: text('expected_gain'),
   kpi: text('kpi'),
   assimilationWeeks: integer('assimilation_weeks'),
@@ -774,7 +777,8 @@ export const reportSections = pgTable('report_sections', {
   id: uuid('id').primaryKey(),
   missionId: uuid('mission_id').notNull(),
   blockId: uuid('block_id'),
-  sectionCode: text('section_code'),
+  /** T13 (0012) — identifie le chapitre du rapport porté par la ligne. */
+  sectionCode: text('section_code').notNull(),
   position: integer('position'),
   rawData: jsonb('raw_data'),
   generatedText: text('generated_text'),
@@ -970,7 +974,8 @@ export const integrationEvents = pgTable('integration_events', {
   id: uuid('id').primaryKey(),
   direction: text('direction').$type<DirectionIntegration>().notNull(),
   system: text('system').$type<SystemeIntegre>().notNull(),
-  eventType: text('event_type'),
+  /** T13 (0012) — ce qu'on lit au journal pour savoir de quel échange il s'agit. */
+  eventType: text('event_type').notNull(),
   payload: jsonb('payload'),
   /** V2.2 §8.6 — anti-rejeu (nonce + horodatage d'événement). */
   nonce: text('nonce'),

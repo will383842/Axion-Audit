@@ -31,7 +31,7 @@
       "valeursParDefaut": "T12 — un défaut qui exprime un ÉTAT MÉTIER vient du fichier 04, ou n'existe pas ; seul un défaut purement TECHNIQUE peut venir d'une convention écrite (T2 collections JSONB, T3 horodatages, T9 UUID v4 serveur, T12 compteur). Voir la section `defauts`."
     },
     "uuidV7": "AUCUN DEFAULT SQL de génération v7 (PostgreSQL 16 n'a pas uuidv7(), PG18 seulement — 11 §2). DEFAULT gen_random_uuid() (v4) uniquement sur les quatre tables purement serveur sync_log, activity_log, integration_events, llm_calls. processed_ops.op_id n'a délibérément aucun défaut : cet id EST l'op_id de l'outbox du client (11 §4).",
-    "$declarationDeColonne": "Chaque colonne est décrite par une chaîne qui se lit comme du DDL : « <type>[ NOT NULL][ DEFAULT <expr>] ». Le diff compare les TROIS attributs. La nullabilité suit la règle T8 des migrations : NOT NULL sur les PK, les FK que le 04 ne marque pas NULL, les colonnes à DEFAULT, les codes/libellés de référentiel, les enums structurants, et — depuis le retrait des défauts non prescrits (migration 0011) — les booléens d'état structurel (is_active, is_default, in_scope) et le compteur questions.version, qui restent NOT NULL SANS défaut : un drapeau d'activation à trois valeurs (true/false/NULL) fait silencieusement disparaître des lignes d'un WHERE is_active. Le 04 marque explicitement « NULL » les colonnes nullables, ce qui rend la règle vérifiable à l'œil, colonne par colonne, à la porte P-A — contre-vérifiée par parcours du DDL du §7 : 100 colonnes marquées NULL, aucune NOT NULL ici."
+    "$declarationDeColonne": "Chaque colonne est décrite par une chaîne qui se lit comme du DDL : « <type>[ NOT NULL][ DEFAULT <expr>] ». Le diff compare les TROIS attributs. La nullabilité suit la règle T8 des migrations (NOT NULL sur les PK, les FK que le 04 ne marque pas NULL, les colonnes à DEFAULT, les codes/libellés de référentiel et les enums structurants) ; le 04 marque explicitement « NULL » les colonnes nullables, ce qui rend la règle vérifiable à l'œil, colonne par colonne, à la porte P-A."
   },
   "tables": {
     "users": {
@@ -656,7 +656,7 @@
         "mission_id": "uuid NOT NULL",
         "question_id": "uuid NOT NULL",
         "question_version": "integer",
-        "text_snapshot": "text",
+        "text_snapshot": "text NOT NULL",
         "options_snapshot": "jsonb",
         "weight_snapshot": "numeric",
         "scoring_snapshot": "jsonb",
@@ -1226,9 +1226,9 @@
         "org_unit_id": "uuid",
         "block_id": "uuid",
         "severity": "text NOT NULL",
-        "title": "text",
+        "title": "text NOT NULL",
         "statement": "text",
-        "sources": "jsonb NOT NULL DEFAULT '{}'",
+        "sources": "jsonb NOT NULL",
         "recommendation": "text",
         "owner_suggested": "text",
         "remediation_status": "text NOT NULL DEFAULT 'a_traiter'",
@@ -1424,7 +1424,7 @@
         "palier": "integer",
         "month_start": "integer",
         "month_end": "integer",
-        "description": "text",
+        "description": "text NOT NULL",
         "expected_gain": "text",
         "kpi": "text",
         "assimilation_weeks": "integer",
@@ -1474,7 +1474,7 @@
         "id": "uuid NOT NULL",
         "mission_id": "uuid NOT NULL",
         "block_id": "uuid",
-        "section_code": "text",
+        "section_code": "text NOT NULL",
         "position": "integer",
         "raw_data": "jsonb",
         "generated_text": "text",
@@ -2071,7 +2071,7 @@
         "id": "uuid NOT NULL DEFAULT gen_random_uuid()",
         "direction": "text NOT NULL",
         "system": "text NOT NULL",
-        "event_type": "text",
+        "event_type": "text NOT NULL",
         "payload": "jsonb",
         "nonce": "text",
         "event_timestamp": "timestamptz",
@@ -2612,58 +2612,193 @@
   "defauts": {
     "$lecture": "PROVENANCE des valeurs par défaut — DEUX provenances, et deux seulement : le fichier 04, ou une convention ÉCRITE du fichier 04. Le diff les vérifie toutes (un DEFAULT qui change est un écart) ; cette section dit d'où vient chacune, pour que la relecture ligne à ligne de la porte P-A n'ait rien à deviner. Règle (convention T12, arbitrage A01) : un défaut qui exprime un ÉTAT MÉTIER vient du 04, ou n'existe pas ; seul un défaut purement TECHNIQUE peut venir d'une convention. Dix défauts non prescrits, posés par erreur à la première transcription, ont été RETIRÉS par la migration 0011.",
     "prescritsParLeFichier04": {
-      "$lecture": "28 défauts écrits noir sur blanc au §7 du fichier 04. Vérifiés un à un contre le texte : tous présents en base, à l'identique, aucun inventé, aucun omis.",
-      "liste": [
-        "users.usage_profile = 'guide_strict'",
-        "missions.timezone = 'Europe/Paris'",
-        "missions.llm_provider = 'anthropic'",
-        "org_units.in_scope = true",
-        "org_units.status = 'active'",
-        "questions.allow_range = false",
-        "questions.weight = 1",
-        "questions.criticality = 'important'",
-        "questions.geo = 'tous'",
-        "mission_questions.added_ad_hoc = false",
-        "interviews.kind = 'entretien'",
-        "interviews.schedule_status = 'a_planifier'",
-        "interviews.status = 'non_demarre'",
-        "answers.source = 'entretien'",
-        "answers.withheld = false",
-        "answers.hors_parcours = false",
+      "$lecture": "Défauts écrits noir sur blanc au §7 du fichier 04, vérifiés un à un contre le texte. `colonnes` est la liste VÉRIFIÉE PAR LE DIFF : toute colonne portant un DEFAULT en base doit figurer ici ou dans `etablisParConvention`, sinon le manifeste ment sur sa propre exhaustivité (défaut M-2).",
+      "colonnes": [
+        "answer_revisions.change_origin",
+        "answers.flag_review",
+        "answers.hors_parcours",
+        "answers.not_applicable",
+        "answers.revision",
+        "answers.source",
+        "answers.withheld",
+        "block_scores.is_indicative",
+        "findings.remediation_status",
+        "findings.status",
+        "interviews.kind",
+        "interviews.schedule_status",
+        "interviews.status",
+        "mission_questions.added_ad_hoc",
+        "missions.llm_provider",
+        "missions.timezone",
+        "org_units.in_scope",
+        "org_units.status",
+        "questions.allow_range",
+        "questions.criticality",
+        "questions.geo",
+        "questions.weight",
+        "report_templates.kind",
+        "roadmap_items.scenario",
+        "scoping_financials.currency",
+        "step_validations.was_override",
+        "use_cases.status",
+        "users.usage_profile"
+      ],
+      "valeurs": [
+        "answer_revisions.change_origin = 'terrain'",
         "answers.flag_review = false",
+        "answers.hors_parcours = false",
         "answers.not_applicable = false",
         "answers.revision = 1",
-        "answer_revisions.change_origin = 'terrain'",
+        "answers.source = 'entretien'",
+        "answers.withheld = false",
         "block_scores.is_indicative = false",
         "findings.remediation_status = 'a_traiter'",
         "findings.status = 'brouillon'",
-        "use_cases.status = 'candidate'",
-        "roadmap_items.scenario = 'standard'",
+        "interviews.kind = 'entretien'",
+        "interviews.schedule_status = 'a_planifier'",
+        "interviews.status = 'non_demarre'",
+        "mission_questions.added_ad_hoc = false",
+        "missions.llm_provider = 'anthropic'",
+        "missions.timezone = 'Europe/Paris'",
+        "org_units.in_scope = true",
+        "org_units.status = 'active'",
+        "questions.allow_range = false",
+        "questions.criticality = 'important'",
+        "questions.geo = 'tous'",
+        "questions.weight = 1",
         "report_templates.kind = 'rapport'",
+        "roadmap_items.scenario = 'standard'",
         "scoping_financials.currency = 'EUR'",
-        "step_validations.was_override = false"
+        "step_validations.was_override = false",
+        "use_cases.status = 'candidate'",
+        "users.usage_profile = 'guide_strict'"
       ]
     },
     "etablisParConvention": {
-      "$lecture": "Défauts purement TECHNIQUES, chacun couvert par une convention écrite en tête de la migration 0001 (T1-T12). Aucun n'exprime un choix fonctionnel.",
+      "$lecture": "Défauts purement TECHNIQUES, chacun couvert par une convention écrite en tête de la migration 0001. Aucun n'exprime un choix fonctionnel. `colonnes` est la liste vérifiée par le diff.",
+      "colonnes": [
+        "activity_log.created_at",
+        "activity_log.id",
+        "ai_systems.created_at",
+        "ai_systems.data_categories",
+        "ai_systems.obligations",
+        "ai_systems.updated_at",
+        "alerts.created_at",
+        "answer_revisions.changed_at",
+        "answers.created_at",
+        "answers.updated_at",
+        "attachments.created_at",
+        "companies.countries",
+        "companies.created_at",
+        "companies.updated_at",
+        "estimation_params.updated_at",
+        "findings.created_at",
+        "findings.updated_at",
+        "integration_events.attempts",
+        "integration_events.created_at",
+        "integration_events.id",
+        "interviews.created_at",
+        "interviews.updated_at",
+        "llm_calls.created_at",
+        "llm_calls.id",
+        "missions.active_blocks",
+        "missions.active_sectors",
+        "missions.created_at",
+        "missions.updated_at",
+        "org_units.created_at",
+        "org_units.updated_at",
+        "processed_ops.processed_at",
+        "questions.created_at",
+        "questions.levels",
+        "questions.profiles",
+        "questions.sectors",
+        "questions.target_services",
+        "questions.updated_at",
+        "report_files.generated_at",
+        "report_templates.created_at",
+        "roadmap_items.created_at",
+        "roadmap_items.updated_at",
+        "scoping_estimates.created_at",
+        "scoping_estimates.updated_at",
+        "scoping_financials.updated_at",
+        "step_validations.validated_at",
+        "sync_log.id",
+        "tools_inventory.created_at",
+        "use_cases.created_at",
+        "use_cases.updated_at",
+        "users.created_at",
+        "users.updated_at"
+      ],
       "T3 — horodatages": {
-        "regle": "created_at / updated_at → now()",
-        "motif": "Le §7 pose « created_at/updated_at TIMESTAMPTZ partout ». Sans défaut, chaque INSERT devrait répéter now(), et un oubli produirait une ligne sans date de création. Inclut step_validations.validated_at (migration 0010)."
+        "regle": "toute colonne d’horodatage alimentée à l’écriture → now()",
+        "motif": "Le §7 pose « created_at/updated_at TIMESTAMPTZ partout ». La règle vaut pour TOUT horodatage d’écriture, et non pour ces deux noms seulement : `answer_revisions.changed_at` sans défaut enregistrerait l’heure de SYNCHRONISATION au lieu de l’heure de la correction, dans la table même que 0010 durcit au titre de l’invariant 7. Inclut aussi processed_ops.processed_at, report_files.generated_at et step_validations.validated_at.",
+        "colonnes": [
+          "activity_log.created_at",
+          "ai_systems.created_at",
+          "ai_systems.updated_at",
+          "alerts.created_at",
+          "answer_revisions.changed_at",
+          "answers.created_at",
+          "answers.updated_at",
+          "attachments.created_at",
+          "companies.created_at",
+          "companies.updated_at",
+          "estimation_params.updated_at",
+          "findings.created_at",
+          "findings.updated_at",
+          "integration_events.created_at",
+          "interviews.created_at",
+          "interviews.updated_at",
+          "llm_calls.created_at",
+          "missions.created_at",
+          "missions.updated_at",
+          "org_units.created_at",
+          "org_units.updated_at",
+          "processed_ops.processed_at",
+          "questions.created_at",
+          "questions.updated_at",
+          "report_files.generated_at",
+          "report_templates.created_at",
+          "roadmap_items.created_at",
+          "roadmap_items.updated_at",
+          "scoping_estimates.created_at",
+          "scoping_estimates.updated_at",
+          "scoping_financials.updated_at",
+          "step_validations.validated_at",
+          "tools_inventory.created_at",
+          "use_cases.created_at",
+          "use_cases.updated_at",
+          "users.created_at",
+          "users.updated_at"
+        ]
       },
       "T2 — collections JSONB": {
-        "regle": "sectors · target_services · levels · profiles · countries · active_sectors · active_blocks · data_categories · obligations · use_case_tags · missions_used · findings.sources → '[]' ou '{}'",
-        "motif": "Le 04 écrit « [] = universelle » et « [] = transverse » : le tableau vide EST une valeur signifiante, distincte de l'absence de valeur."
+        "regle": "collection JSONB → '[]' (ou '{}')",
+        "motif": "Le 04 écrit « [] = universelle » et « [] = transverse » : le tableau vide EST une valeur signifiante. NE S'APPLIQUE PAS à `findings.sources`, où le 04 écrit l'inverse (« ≥ 1 source obligatoire ») — son défaut a été retiré par la migration 0012.",
+        "colonnes": [
+          "ai_systems.data_categories",
+          "ai_systems.obligations",
+          "companies.countries",
+          "missions.active_blocks",
+          "missions.active_sectors",
+          "questions.levels",
+          "questions.profiles",
+          "questions.sectors",
+          "questions.target_services"
+        ]
       },
       "T9 — UUID v4 des tables serveur": {
-        "regle": "sync_log.id · activity_log.id · integration_events.id · llm_calls.id → gen_random_uuid()",
-        "motif": "Toléré par le 11 §2 sur les tables PUREMENT SERVEUR uniquement. Jamais sur une entité créable hors ligne, qui porte un UUID v7 applicatif (PostgreSQL 16 n'a pas uuidv7())."
+        "regle": "id des tables PUREMENT SERVEUR → gen_random_uuid()",
+        "motif": "Toléré par le 11 §2 sur les tables purement serveur uniquement. Jamais sur une entité créable hors ligne, qui porte un UUID v7 applicatif (PostgreSQL 16 n'a pas uuidv7()). `processed_ops.op_id` en est exclu : cet id EST l'op_id de l'outbox du client (11 §4).",
+        "colonnes": ["activity_log.id", "integration_events.id", "llm_calls.id", "sync_log.id"]
       },
       "T12 — compteur incrémenté par le serveur": {
-        "regle": "integration_events.attempts → 0",
-        "motif": "Un compteur de tentatives qui démarre à zéro n'exprime aucun choix fonctionnel, c'est de l'arithmétique. SEUL cas du schéma. Ne s'applique jamais à une quantité métier collectée sur le terrain (headcount, users_count, answers_count, items_count…), pour laquelle NULL — « non renseigné » — et 0 sont deux faits distincts."
+        "regle": "compteur entier incrémenté par le serveur → 0",
+        "motif": "Un compteur qui démarre à zéro n'exprime aucun choix fonctionnel, c'est de l'arithmétique. Ne s'applique JAMAIS à une quantité métier collectée sur le terrain (headcount, users_count, answers_count, items_count…), pour laquelle NULL — « non renseigné » — et 0 sont deux faits distincts.",
+        "colonnes": ["integration_events.attempts"]
       }
     },
-    "retiresParLaMigration0011": {
+    "retiresParLesMigrations0011et0012": {
       "$lecture": "TRACE de l'arbitrage A01, conservée pour que la porte P-A voie la correction et non seulement son résultat. Ces 10 colonnes restent NOT NULL : sans défaut, l'insertion devient EXPLICITE, et une ligne qui omet son état échoue à l'écriture au lieu d'hériter d'un choix que personne n'a fait. Le lot qui écrira chaque machine à états choisira son état d'entrée en connaissance de cause.",
       "liste": [
         "alerts.status — était 'active' (états et transitions : lot L7/L8)",
@@ -2675,12 +2810,138 @@
         "blocks.is_default — était true (décision fonctionnelle)",
         "sectors.is_active — était true (décision fonctionnelle)",
         "users.is_active — était true (décision fonctionnelle)",
-        "report_templates.is_active — était true (décision fonctionnelle)"
+        "report_templates.is_active — était true (décision fonctionnelle)",
+        "findings.sources — était '{}' (migration 0012) : le 04 §7 écrit « ≥ 1 source obligatoire », donc le tableau vide y est l'inverse d'une valeur signifiante. La colonne reste NOT NULL, sans défaut."
       ]
     },
     "defautsAPPLICATIFS": {
       "$lecture": "PIÈGE SIGNALÉ PAR LE 04 LUI-MÊME, et seul cas du schéma. Une colonne à défaut APPLICATIF doit n'avoir AUCUN DEFAULT SQL ; le diff l'exige, puisqu'il compare le défaut réel au défaut déclaré (ici : aucun).",
       "interviews.mode": "04 §7 : « défaut APPLICATIF (V2.8) : 'sur_site' si kind='entretien', NULL sinon (un DEFAULT SQL conditionnel n'existe pas) ». La colonne est donc NULLABLE et SANS DEFAULT ; la règle est portée par le code (L3/L5), et aucun trigger ne la compense — le 04 ne le demande pas, et un trigger serait une seconde source de vérité pour une règle métier."
+    }
+  },
+  "identiteLisibleT13": {
+    "$lecture": "Convention T13 (en tête de la migration 0001, arbitrage A01 après la 2e revue croisée) : la colonne qui porte le LIBELLÉ HUMAIN IDENTIFIANT l'entité est NOT NULL — une entité sans identité lisible apparaît vide dans toute liste, tout rapport et tout export. UNE SEULE colonne par table : l'identité, jamais ses attributs descriptifs. Les 43 tables ont été passées en revue une par une ; cet inventaire est la trace de cette revue, et c'est lui que la porte P-A relit.",
+    "tablesAvecIdentite": {
+      "users": {
+        "colonne": "name",
+        "motif": "Le nom de l'auditeur, lu partout où une session est attribuée."
+      },
+      "sectors": {
+        "colonne": "label_fr",
+        "motif": "Libellé du secteur ; `code` est la clé de référentiel (T8)."
+      },
+      "services": {
+        "colonne": "label_fr",
+        "motif": "Libellé de la fonction métier (§16.3)."
+      },
+      "interlocutor_profiles": {
+        "colonne": "label_fr",
+        "motif": "Libellé du profil d'interlocuteur."
+      },
+      "size_tiers": {
+        "colonne": "label",
+        "motif": "Libellé du palier (Micro, PME, ETI, Grand compte)."
+      },
+      "companies": {
+        "colonne": "name",
+        "motif": "Raison sociale : l'identité même du client."
+      },
+      "missions": {
+        "colonne": "title",
+        "motif": "Titre de la mission, repris sur tout livrable."
+      },
+      "org_units": {
+        "colonne": "name",
+        "motif": "Nom de l'unité dans l'arbre (§26.3)."
+      },
+      "blocks": {
+        "colonne": "label_fr",
+        "motif": "Libellé du bloc ; `description` reste nullable, elle décrit."
+      },
+      "questions": {
+        "colonne": "text_fr",
+        "motif": "Le texte de la question EST la question. `code` reste nullable : le 04 le veut NULL pour les ad hoc non versées."
+      },
+      "mission_questions": {
+        "colonne": "text_snapshot",
+        "motif": "V2.9 figeage complet : le texte rendu HORS LIGNE au terrain — sans lui, la question est vide sur iPad."
+      },
+      "tools_inventory": {
+        "colonne": "name",
+        "motif": "Nom de l'outil inventorié (§27.3)."
+      },
+      "ai_systems": {
+        "colonne": "name",
+        "motif": "Nom du système d'IA au registre AI Act ; `usage_description` le décrit."
+      },
+      "findings": {
+        "colonne": "title",
+        "motif": "AJOUTÉ EN 0012 — le titre du constat, lu dans la liste des findings et repris au chapitre 5 du rapport (§16.5). C’est le déséquilibre relevé par la revue : `use_cases.title` était obligatoire, celui-ci non."
+      },
+      "use_cases": {
+        "colonne": "title",
+        "motif": "Titre du cas d'usage ; `description` reste nullable."
+      },
+      "roadmap_items": {
+        "colonne": "description",
+        "motif": "AJOUTÉ EN 0012 — le libellé de l'action de la feuille de route (§20.3) : sans lui, une ligne de planning n'a que des mois et un palier."
+      },
+      "report_sections": {
+        "colonne": "section_code",
+        "motif": "AJOUTÉ EN 0012 — identifie le chapitre du rapport que porte la ligne."
+      },
+      "report_templates": {
+        "colonne": "name",
+        "motif": "Nom du gabarit."
+      },
+      "document_requests": {
+        "colonne": "label",
+        "motif": "Libellé de la demande de document (§27.1)."
+      },
+      "step_validations": {
+        "colonne": "step_code",
+        "motif": "Le code d'étape identifie la validation (§32.2) ; déjà NOT NULL par CHECK."
+      },
+      "alerts": {
+        "colonne": "type",
+        "motif": "Le type d'alerte est ce qui l'identifie (§20.4) ; `severity` et `message` la décrivent et restent nullables."
+      },
+      "integration_events": {
+        "colonne": "event_type",
+        "motif": "AJOUTÉ EN 0012 — ce qu'on lit dans le journal d'intégration pour savoir de quel échange il s'agit (§8.6)."
+      },
+      "activity_log": {
+        "colonne": "action",
+        "motif": "L'action journalisée est ce qui identifie la ligne (§10.4)."
+      }
+    },
+    "tablesSansIdentiteLisible": {
+      "refresh_tokens": "Jeton technique. `device_label` est un confort d'affichage, pas une identité.",
+      "naf_sector_map": "Table de correspondance : la clé primaire `naf_code` EST son identité.",
+      "mission_users": "Table de jonction : identifiée par son couple (mission, utilisateur).",
+      "question_translations": "Identifiée par (question, langue). `text` et `guidance` sont DEUX charges utiles de même rang : T13 impose une seule colonne d'identité, aucune ne s'impose.",
+      "interviews": "Le 04 rend `person_name` nullable À DESSEIN (§27.1 : champs personne optionnels si kind ≠ entretien). Aucune colonne n'est donc toujours présente.",
+      "answers": "Identifiée par (session, question). `question_text_snapshot` est une redondance volontaire, pas l'identité de la réponse.",
+      "answer_revisions": "Identifiée par (réponse, date de changement) ; aucun libellé.",
+      "attachments": "Le 04 marque `filename` NULL pour kind='note' — une note volante n'a pas de fichier (P1-5).",
+      "block_scores": "Clé composite (mission, bloc) ; valeurs calculées, aucun libellé.",
+      "unit_scores": "Clé composite (mission, unité, bloc) ; valeurs calculées.",
+      "report_files": "Fichier généré, identifié par (mission, format, date). `storage_key` est une clé technique, pas un libellé humain.",
+      "scoping_estimates": "`scenario_label` nomme un SCÉNARIO, pas le chiffrage : un chiffrage sans variante nommée reste valide.",
+      "scoping_financials": "Extension 1-1 de scoping_estimates ; identifiée par sa clé primaire.",
+      "estimation_params": "La clé primaire `key` EST son identité (T8) ; `description` la commente.",
+      "work_assignments": "Affectation identifiée par (mission, utilisateur, unité) ; aucun libellé.",
+      "mission_rebaselines": "Recalage identifié par (mission, date). `note` est une justification, pas une identité.",
+      "processed_ops": "La clé primaire `op_id` EST son identité — l'op_id de l'outbox du client (11 §4).",
+      "sync_log": "Journal identifié par (utilisateur, date, direction) ; aucun libellé.",
+      "llm_calls": "`provider` et `model` sont deux attributs de même rang ; l'appel est identifié par (mission, section, date).",
+      "app_settings": "La clé primaire `key` EST son identité."
+    },
+    "comptes": {
+      "total": 43,
+      "avecIdentite": 23,
+      "sansIdentite": 20,
+      "aligneesParLaMigration0012": 5
     }
   }
 }

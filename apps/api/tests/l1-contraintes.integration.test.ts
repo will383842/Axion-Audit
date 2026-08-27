@@ -321,10 +321,25 @@ function requeteEnumeration(
                       '{"type":"yes_no","v":"oui"}'::jsonb, ${echappe(valeur)},
                       now(), now(), now(), now())`;
     case 'findings.severity':
-      return `INSERT INTO findings (id, mission_id, severity, title, statement, created_by,
-                                    created_at, updated_at)
+      // `sources` est RENSEIGNÉE avec une source réelle, jamais laissée vide :
+      // 04 §7 écrit « sources JSONB — {answer_ids[], session_ids[],
+      // attachment_ids[]} : ≥ 1 SOURCE OBLIGATOIRE ». Un constat sans source est
+      // une affirmation sans preuve — exactement ce qu'un rapport d'audit ne peut
+      // pas se permettre. La colonne étant NOT NULL et sans DEFAULT, l'omettre
+      // ferait lever un 23502 (not-null) AVANT le 23514 (check) que ce test
+      // éprouve : l'insertion serait refusée pour la mauvaise raison, et le test
+      // passerait au vert sans rien prouver sur l'énumération `severity`.
+      return `INSERT INTO findings (id, mission_id, severity, title, statement, sources,
+                                    created_by, created_at, updated_at)
               VALUES (${id}, ${echappe(essai.missionId)}, ${echappe(valeur)},
                       'Constat hors énumération', 'Énoncé de test',
+                      ${echappe(
+                        JSON.stringify({
+                          answer_ids: [],
+                          session_ids: [essai.entretienId],
+                          attachment_ids: [],
+                        }),
+                      )}::jsonb,
                       ${echappe(essai.utilisateurId)}, now(), now())`;
     case 'users.role':
       return `INSERT INTO users (id, name, email, password_hash, role, usage_profile,

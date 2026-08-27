@@ -47,10 +47,11 @@
 // échec — une table en trop dans la base est aussi grave qu'une table manquante :
 // c'est du schéma que le fichier 04 n'a jamais autorisé.
 //
-// ÉTAT AU LOT L0 : le manifeste était un livrable à venir ; le script sortait en 0
-// avec un avertissement tant que `apps/api/drizzle/` n'existait pas. Ce garde-fou
-// est CONSERVÉ tel quel ci-dessous — il protège toujours un dépôt fraîchement
-// cloné dont on aurait retiré les migrations.
+// ÉCHAPPATOIRE DU LOT L0 : RETIRÉE. Tant que le manifeste et `apps/api/drizzle/`
+// n'existaient pas, ce script sortait en 0 avec un avertissement. Les deux
+// existent désormais, et un contrôle qui n'a RIEN COMPARÉ ne doit jamais sortir
+// vert — c'est le « échec DÉLIBÉRÉ plutôt qu'un zéro écart non vérifié » que le
+// lot L0 s'était lui-même fixé. Manifeste ou migrations manquants = exit 1.
 // Traçabilité : E17, E36, E43 · critère L1 du fichier 07.
 // =============================================================================
 import { existsSync, readFileSync } from 'node:fs';
@@ -75,30 +76,31 @@ const DOSSIER_MIGRATIONS = resolve(RACINE, 'apps/api/drizzle');
 /** Table du journal de migrations : outillage, absente du fichier 04 par nature. */
 const TABLES_HORS_PERIMETRE = new Set(['schema_migrations']);
 
-const l1Livre = existsSync(DOSSIER_MIGRATIONS);
-
+// L'ÉCHAPPATOIRE DU LOT L0 A ÉTÉ RETIRÉE (mineur de la seconde passe de revue).
+// Tant que ni le manifeste ni `apps/api/drizzle/` n'existaient, ce script sortait
+// en 0 avec un avertissement. Le lot L1 est livré : les deux existent, et un
+// contrôle qui n'a RIEN COMPARÉ ne doit jamais sortir vert — c'est précisément le
+// « échec DÉLIBÉRÉ plutôt qu'un zéro écart non vérifié » que le L0 s'était fixé.
+// La CI ne l'utilisait déjà plus ; en local elle survivait.
 if (!existsSync(MANIFESTE)) {
-  if (l1Livre) {
-    console.error(
-      `${ROUGE}✗ diff schéma-vs-04 : manifeste introuvable alors que L1 est livré.${RAZ}`,
-    );
-    console.error(`  Attendu : apps/api/schema-manifest.json`);
-    console.error(
-      '  Le manifeste est EXTRAIT du fichier 04 (docs/04_MODELE_DE_DONNEES.md), commité au\n' +
-        '  lot L1 et relu LIGNE À LIGNE à la porte P-A (11 §7). Sans lui, le critère\n' +
-        '  « diff schéma-vs-04 = zéro écart » ne peut pas être coché — et un critère\n' +
-        '  non vérifiable n’est pas un critère coché.\n',
-    );
-    process.exit(1);
-  }
-  console.log(
-    `${JAUNE}⚠ diff schéma-vs-04 : NON APPLICABLE — le lot L1 n’est pas livré.${RAZ}\n` +
-      '  Le manifeste `apps/api/schema-manifest.json` est un livrable du lot L1 (11 §7).\n' +
-      '  Ce contournement disparaît AUTOMATIQUEMENT dès que `apps/api/drizzle/` existe :\n' +
-      '  à partir de là, un manifeste manquant est une erreur bloquante.\n' +
-      '  Rien n’est ici déclaré conforme : le contrôle est simplement sans objet.\n',
+  console.error(`${ROUGE}✗ diff schéma-vs-04 : manifeste introuvable.${RAZ}`);
+  console.error(`  Attendu : apps/api/schema-manifest.json`);
+  console.error(
+    '  Le manifeste est EXTRAIT du fichier 04 (docs/04_MODELE_DE_DONNEES.md), commité au\n' +
+      '  lot L1 et relu LIGNE À LIGNE à la porte P-A (11 §7). Sans lui, le critère\n' +
+      '  « diff schéma-vs-04 = zéro écart » ne peut pas être coché — et un critère\n' +
+      '  non vérifiable n’est pas un critère coché.\n',
   );
-  process.exit(0);
+  process.exit(1);
+}
+
+if (!existsSync(DOSSIER_MIGRATIONS)) {
+  console.error(`${ROUGE}✗ diff schéma-vs-04 : apps/api/drizzle/ introuvable.${RAZ}`);
+  console.error(
+    '  Le manifeste existe mais les migrations qui produisent le schéma ont disparu :\n' +
+      '  comparer la base à ce manifeste ne prouverait plus rien sur le dépôt.\n',
+  );
+  process.exit(1);
 }
 
 const manifeste = JSON.parse(readFileSync(MANIFESTE, 'utf8'));
@@ -185,8 +187,12 @@ function analyserDeclarationColonne(declaration) {
  */
 function defautNormalise(expression) {
   if (expression === null || expression === undefined) return '';
+  // PAS de .toLowerCase() : voir expressionNormalisee ci-dessous. `'Entretien'` et
+  // `'entretien'` sont DEUX VALEURS DIFFÉRENTES pour PostgreSQL, et seule la
+  // seconde satisfait la CHECK de `answers.source`. Avec la minusculisation, un
+  // `SET DEFAULT 'Entretien'` passait à ZÉRO ÉCART — et plus aucune réponse ne
+  // pouvait être enregistrée sans que le client précise sa provenance (§27.1).
   return String(expression)
-    .toLowerCase()
     .replace(/::[a-z_ ]+(\[\])?/g, '')
     .replace(/\s/g, '');
 }
@@ -203,13 +209,24 @@ function defautNormalise(expression) {
  * le diff sortait à ZÉRO ÉCART. Un `A AND B OR C` et un `A AND (B OR C)` ne sont
  * pas la même règle, et un comparateur qui les confond ne compare rien.
  *
- * On ne neutralise donc QUE ce que PostgreSQL ajoute de son propre chef et qui
- * ne change aucune sémantique : la casse, les espaces, les casts explicites et
- * les guillemets d'identifiant.
+ * DÉFAUT B-1 DE LA SECONDE PASSE : cette fonction appelait aussi `.toLowerCase()`,
+ * ce qui écrasait la casse DES LITTÉRAUX. PostgreSQL, lui, compare les chaînes
+ * SENSIBLEMENT À LA CASSE. Une CHECK réécrite en
+ * `status = ANY (ARRAY['NON_DEMARRE', 'en_cours', 'termine'])` sortait donc à
+ * ZÉRO ÉCART — alors qu'en base PLUS AUCUNE SESSION DE COLLECTE ne pouvait être
+ * créée (le DEFAULT 'non_demarre' du 04 violait sa propre CHECK) et qu'une
+ * valeur absente du 04 était acceptée.
+ *
+ * La minusculisation ne rapportait rien qu'elle ne coûtait :
+ * `pg_get_constraintdef` produit déjà une forme canonique stable, et le
+ * manifeste est écrit dans cette même forme. Elle est retirée sans remplacement.
+ *
+ * On ne neutralise QUE ce que PostgreSQL ajoute de son propre chef et qui ne
+ * change aucune sémantique : les espaces, les casts explicites et les guillemets
+ * d'identifiant. NI LA CASSE, NI LES PARENTHÈSES.
  */
 function expressionNormalisee(sql) {
   return String(sql ?? '')
-    .toLowerCase()
     .replace(/::[a-z_ ]+(\[\])?/g, '') // casts explicites ajoutés par le catalogue
     .replace(/[\s"]/g, ''); // espaces et guillemets d'identifiant — PAS les parenthèses
 }
@@ -241,16 +258,62 @@ function definitionEnumAttendue(check) {
  * stable, contrairement au SQL que nous avons écrit à la main.
  */
 function analyserIndexdef(indexdef) {
-  const re =
-    /^CREATE\s+(UNIQUE\s+)?INDEX\s+(\S+)\s+ON\s+\S+\s+USING\s+(\w+)\s+\((.+?)\)(?:\s+WHERE\s+(.+))?$/i;
-  const m = re.exec(indexdef);
-  if (!m) return null;
+  // La liste de colonnes est délimitée par la PREMIÈRE parenthèse ouvrante après
+  // `USING <methode>` et sa fermante appariée : les expressions indexées peuvent
+  // contenir leurs propres parenthèses (`lower(name)`), qu'un `.+?` paresseux
+  // couperait au mauvais endroit.
+  const tete = /^CREATE\s+(UNIQUE\s+)?INDEX\s+(\S+)\s+ON\s+\S+\s+USING\s+(\w+)\s*\(/i.exec(
+    indexdef,
+  );
+  if (!tete) return { illisible: true };
+
+  const debut = tete[0].length - 1;
+  let profondeur = 0;
+  let fin = -1;
+  for (let i = debut; i < indexdef.length; i += 1) {
+    if (indexdef[i] === '(') profondeur += 1;
+    else if (indexdef[i] === ')') {
+      profondeur -= 1;
+      if (profondeur === 0) {
+        fin = i;
+        break;
+      }
+    }
+  }
+  if (fin < 0) return { illisible: true };
+
+  const listeColonnes = indexdef.slice(debut + 1, fin);
+  let queue = indexdef.slice(fin + 1).trim();
+
+  // `NULLS NOT DISTINCT` (PG15+) CHANGE la sémantique d'un index unique : deux
+  // lignes à NULL cessent d'être distinctes. Il est donc capté explicitement, et
+  // jamais avalé en silence.
+  const nullsNotDistinct = /^NULLS\s+NOT\s+DISTINCT\b/i.test(queue);
+  if (nullsNotDistinct) queue = queue.replace(/^NULLS\s+NOT\s+DISTINCT\b/i, '').trim();
+
+  let predicat = null;
+  const où = /^WHERE\s+([\s\S]+)$/i.exec(queue);
+  if (où) {
+    predicat = où[1];
+    queue = '';
+  }
+
+  // Tout ce qui reste est une clause que cet analyseur ne connaît pas
+  // (`WITH (…)`, `TABLESPACE …`, `INCLUDE (…)`…). On ne devine pas : on le dit.
+  if (queue !== '') return { illisible: true, queue };
+
   return {
-    unique: Boolean(m[1]),
-    nom: m[2],
-    methode: m[3].toLowerCase(),
-    colonnes: m[4].split(',').map((c) => c.trim().replace(/\s+.*$/, '')),
-    predicat: m[5] ?? null,
+    unique: Boolean(tete[1]),
+    nom: tete[2],
+    methode: tete[3].toLowerCase(),
+    // M-1 : les qualificatifs de colonne sont CONSERVÉS. Un `.replace(/\s+.*$/,'')`
+    // effaçait `DESC`, `NULLS LAST`, `COLLATE` et surtout la CLASSE D'OPÉRATEURS :
+    // `idx_questions_sectors_gin` recréé en `jsonb_path_ops` passait inaperçu,
+    // alors que cette classe RETIRE le support de l'opérateur `?` et désindexe le
+    // filtrage des questions par secteur (§16.3).
+    colonnes: listeColonnes.split(',').map((c) => c.trim().replace(/\s+/g, ' ')),
+    predicat,
+    nullsNotDistinct,
   };
 }
 
@@ -408,16 +471,54 @@ function comparer(manifeste, base) {
     }
   }
 
+  // --- 2b. PROVENANCE DES DÉFAUTS : la liste du manifeste doit être EXHAUSTIVE
+  //
+  // DÉFAUT M-2 DE LA SECONDE PASSE : le manifeste se disait exhaustif sur la
+  // provenance des valeurs par défaut et ne l'était pas — trois `now()`
+  // manquaient à ses listes, dont `answer_revisions.changed_at`, dans la table
+  // même que la migration 0010 durcit au titre de l'invariant 7.
+  // Le remède n'est pas de compléter la liste à la main une fois de plus : c'est
+  // de la rendre VÉRIFIABLE. Toute colonne portant un DEFAULT en base doit être
+  // couverte par une provenance déclarée, sans quoi le manifeste ment sur
+  // lui-même — et c'est le document que la porte P-A relit ligne à ligne.
+  const provenances = new Set([
+    ...(manifeste.defauts?.prescritsParLeFichier04?.colonnes ?? []),
+    ...(manifeste.defauts?.etablisParConvention?.colonnes ?? []),
+  ]);
+  for (const [table, colonnes] of colonnesParTable) {
+    if (TABLES_HORS_PERIMETRE.has(table)) continue;
+    for (const [col, reelle] of colonnes) {
+      if (reelle.defaut === null || reelle.defaut === undefined) continue;
+      if (!provenances.has(`${table}.${col}`)) {
+        ecart(
+          'colonne',
+          `${table}.${col} porte un DEFAULT (${reelle.defaut}) qu'aucune provenance du ` +
+            'manifeste ne couvre — ni « prescrit par le fichier 04 », ni « établi par ' +
+            'convention T1-T13 ».',
+        );
+      }
+    }
+  }
+
   // --- 3. CONTRAINTES PK / FK / UNIQUE / CHECK ------------------------------
-  const contraintesParNom = new Map(base.contraintes.map((c) => [c.nom, c]));
+  // DÉFAUT B-2 DE LA SECONDE PASSE : la clé était le NOM SEUL, cherché dans TOUTE
+  // la base. Une contrainte pouvait donc CHANGER DE TABLE sans écart — le réviseur
+  // a déplacé `findings_wave_check` de `findings` vers `use_cases` et obtenu
+  // ZÉRO ÉCART, pendant que `findings.wave = 'pirate'` devenait ACCEPTÉ. La clé
+  // est désormais le COUPLE (table, nom), qui est ce qui identifie réellement une
+  // contrainte : PostgreSQL autorise le même nom sur deux tables différentes.
+  const cleContrainte = (table, nom) => `${table}.${nom}`;
+  const contraintesParNom = new Map(
+    base.contraintes.map((c) => [cleContrainte(c.table_name, c.nom), c]),
+  );
   const attendues = new Set();
 
   for (const [table, def] of Object.entries(manifeste.tables)) {
     // 3a. PK
     const pk = def.primaryKey;
     if (pk) {
-      attendues.add(pk.name);
-      const reelle = contraintesParNom.get(pk.name);
+      attendues.add(cleContrainte(table, pk.name));
+      const reelle = contraintesParNom.get(cleContrainte(table, pk.name));
       if (!reelle || reelle.type !== 'p') {
         ecart('contrainte', `PK MANQUANTE : ${pk.name} sur ${table}`);
       } else if (
@@ -433,8 +534,8 @@ function comparer(manifeste, base) {
 
     // 3b. UNIQUE
     for (const u of def.unique ?? []) {
-      attendues.add(u.name);
-      const reelle = contraintesParNom.get(u.name);
+      attendues.add(cleContrainte(table, u.name));
+      const reelle = contraintesParNom.get(cleContrainte(table, u.name));
       if (!reelle || reelle.type !== 'u') {
         ecart('contrainte', `UNIQUE MANQUANTE : ${u.name} sur ${table}`);
       } else if (
@@ -450,8 +551,8 @@ function comparer(manifeste, base) {
 
     // 3c. FK
     for (const f of def.foreignKeys ?? []) {
-      attendues.add(f.name);
-      const reelle = contraintesParNom.get(f.name);
+      attendues.add(cleContrainte(table, f.name));
+      const reelle = contraintesParNom.get(cleContrainte(table, f.name));
       if (!reelle || reelle.type !== 'f') {
         ecart('contrainte', `FK MANQUANTE : ${f.name} sur ${table}`);
         continue;
@@ -464,8 +565,8 @@ function comparer(manifeste, base) {
 
     // 3d. CHECK
     for (const k of def.checks ?? []) {
-      attendues.add(k.name);
-      const reelle = contraintesParNom.get(k.name);
+      attendues.add(cleContrainte(table, k.name));
+      const reelle = contraintesParNom.get(cleContrainte(table, k.name));
       if (!reelle || reelle.type !== 'c') {
         ecart('contrainte', `CHECK MANQUANTE : ${k.name} sur ${table}`);
         continue;
@@ -495,7 +596,7 @@ function comparer(manifeste, base) {
   // explicite existe pour DIRE ce qui ne va pas plutôt que de faire deviner.
   for (const c of base.contraintes) {
     if (TABLES_HORS_PERIMETRE.has(c.table_name)) continue;
-    if (!attendues.has(c.nom)) continue;
+    if (!attendues.has(cleContrainte(c.table_name, c.nom))) continue;
     if (c.validee === false) {
       ecart(
         'contrainte',
@@ -510,7 +611,7 @@ function comparer(manifeste, base) {
   //     rien n'est donc signalé à tort ici, la nullabilité restant hors périmètre.
   for (const c of base.contraintes) {
     if (TABLES_HORS_PERIMETRE.has(c.table_name)) continue;
-    if (!attendues.has(c.nom)) {
+    if (!attendues.has(cleContrainte(c.table_name, c.nom))) {
       ecart(
         'contrainte',
         `contrainte EN TROP en base : ${c.nom} sur ${c.table_name} (${c.definition})`,
@@ -552,6 +653,25 @@ function comparer(manifeste, base) {
     if (!reel) {
       ecart('index', `index MANQUANT : ${idx.name} sur ${idx.table} (${idx.source})`);
       continue;
+    }
+    if (reel.illisible) {
+      ecart(
+        'index',
+        `index ILLISIBLE : ${idx.name} sur ${reel.table}\n      ${reel.brut}\n` +
+          "      L'analyseur n'a pas su décomposer cette définition ; il ne peut donc rien\n" +
+          '      en affirmer. Un index déclaré doit rester analysable.',
+      );
+      continue;
+    }
+    if (reel.nullsNotDistinct) {
+      // Aucun index du manifeste ne le déclare. `NULLS NOT DISTINCT` rend deux
+      // lignes à NULL mutuellement exclusives : c'est un durcissement silencieux
+      // du modèle, jamais une optimisation.
+      ecart(
+        'index',
+        `index ${idx.name} : porte NULLS NOT DISTINCT, que le manifeste ne déclare pas — ` +
+          'deux lignes à NULL cesseraient d’être distinctes.',
+      );
     }
     if (reel.table !== idx.table) {
       ecart('index', `index ${idx.name} : porté par ${reel.table}, attendu sur ${idx.table}`);
@@ -602,7 +722,27 @@ function comparer(manifeste, base) {
   // point 3 : les répéter ici ne serait que du bruit.
   for (const [nom, reel] of indexParNom) {
     if (indexAttendus.has(nom)) continue;
-    if (attendues.has(nom)) continue; // index porté par une contrainte déclarée
+    // Index porté par une contrainte déclarée — clé (table, nom), comme au point 3.
+    if (attendues.has(cleContrainte(reel.table, nom))) continue;
+    if (reel.illisible) {
+      // DÉFAUT B-3 DE LA SECONDE PASSE : `analyserIndexdef` rendait `null` sur une
+      // syntaxe qu'elle ne connaissait pas (`NULLS NOT DISTINCT`, PG15+), et
+      // l'appelant étalait ce `null` en objet vide — `unique` devenait `undefined`,
+      // donc faux, donc l'index UNIQUE repartait en simple signalement. Un
+      // `CREATE UNIQUE INDEX … NULLS NOT DISTINCT` sur `answers(mission_question_id)`
+      // sortait à ZÉRO ÉCART tout en interdisant qu'une même question soit répondue
+      // dans deux sessions — l'inverse exact du 04 §7 (V2.2 §32.6).
+      // Un analyseur qui ne comprend pas ce qu'il lit ne conclut PAS au conforme.
+      ecart(
+        'index',
+        `index ILLISIBLE : ${nom} sur ${reel.table}\n` +
+          `      ${reel.brut}\n` +
+          "      L'analyseur n'a pas su décomposer cette définition. Il ne peut donc ni\n" +
+          "      affirmer que cet index est inoffensif, ni qu'il est unique. Complète\n" +
+          '      `analyserIndexdef`, ou déclare cet index au manifeste.',
+      );
+      continue;
+    }
     if (reel.unique) {
       ecart(
         'index',

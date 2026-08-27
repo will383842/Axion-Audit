@@ -411,3 +411,167 @@ describe('@critique méta-test du comparateur schéma-vs-04 (07 §12, 11 §7)', 
     );
   }, 120_000);
 });
+
+// =============================================================================
+// SECONDE VAGUE — LES FAMILLES QUE LA REVUE CROISÉE A VUES PASSER
+//
+// Les douze classes ci-dessus ont été écrites POUR PROUVER QUE ÇA MARCHE, et
+// c'est leur limite : elles couvrent mal ce que leur auteur n'a pas imaginé. Le
+// réviseur a écrit 15 mutations DIFFÉRENTES et 6 sont passées. Les quatre
+// familles qu'il a mises au jour sont donc reprises ici — non pas parce qu'elles
+// échouent aujourd'hui, mais parce que rien, sinon, ne les empêcherait de
+// redevenir invisibles à la prochaine refonte du comparateur.
+//
+// Elles partagent un trait : aucune ne modifie la LISTE des objets. Chacune
+// altère la façon dont un objet est LU. C'est précisément l'angle mort d'un
+// comparateur — il vérifie qu'on retrouve ce qu'il cherche, rarement qu'il l'a
+// bien compris.
+// =============================================================================
+describe('@critique méta-test — angles morts relevés en revue croisée', () => {
+  // --- Classe 13 : seule la CASSE d'un littéral change -----------------------
+  it("détecte un littéral d'énumération dont seule la CASSE change", async () => {
+    const origine = await trouverContrainte(bd(), 'missions', /status/);
+    const mutee = origine.definition.replace(
+      /'([a-z])([a-z_]*)'/,
+      (_tout, premiere: string, reste: string) => `'${premiere.toUpperCase()}${reste}'`,
+    );
+    expect(
+      mutee,
+      `La mutation de casse n'a rien changé à la définition de missions.status :\n` +
+        `${origine.definition}\nLe test ne prouverait rien — il faut l'adapter plutôt que\n` +
+        `le laisser passer au vert à vide.`,
+    ).not.toBe(origine.definition);
+
+    await prouverDetection(
+      `missions.status : un littéral passe en capitale initiale`,
+      `'Preparation' n'est pas 'preparation'. La machine à états (§32.2) refuse\n` +
+        `désormais le statut initial de toute mission, et en accepte un qui n'existe\n` +
+        `nulle part dans le code. Un comparateur qui normalise la casse avant de\n` +
+        `comparer — un .toLowerCase() posé pour « lisser les différences de\n` +
+        `formatage » — rend les deux définitions identiques et ne voit rien. Les\n` +
+        `identifiants SQL sont insensibles à la casse, les LITTÉRAUX ne le sont pas :\n` +
+        `normaliser les deux ensemble est le raccourci qui coûte cher.`,
+      async () => {
+        await remplacerContrainte(bd(), 'missions', origine.nom, mutee);
+      },
+      async () => {
+        await remplacerContrainte(bd(), 'missions', origine.nom, origine.definition);
+      },
+    );
+  }, 120_000);
+
+  // --- Classe 14 : contrainte déplacée d'une table à l'autre ----------------
+  it('détecte une contrainte déplacée sur une AUTRE table sous le même nom', async () => {
+    const origine = await trouverContrainte(bd(), 'answers', /source/);
+    await prouverDetection(
+      `${origine.nom} : retirée d'answers, recréée sur attachments`,
+      `la contrainte existe toujours dans la base, avec le MÊME NOM — mais plus sur\n` +
+        `la table qu'elle protégeait. answers.source n'a plus d'énumération, et la\n` +
+        `provenance d'une réponse (§27.1) accepte n'importe quoi. Un comparateur qui\n` +
+        `indexe les contraintes par leur seul nom, sans la table qui les porte, coche\n` +
+        `la case : il a bien retrouvé « ce » nom quelque part.`,
+      async () => {
+        await bd().query(`ALTER TABLE answers DROP CONSTRAINT "${origine.nom}"`);
+        await bd().query(
+          `ALTER TABLE attachments ADD CONSTRAINT "${origine.nom}" CHECK (kind IS NOT NULL)`,
+        );
+      },
+      async () => {
+        await bd().query(`ALTER TABLE attachments DROP CONSTRAINT "${origine.nom}"`);
+        await bd().query(
+          `ALTER TABLE answers ADD CONSTRAINT "${origine.nom}" ${origine.definition}`,
+        );
+      },
+    );
+  }, 120_000);
+
+  // --- Classe 15 : index unique portant NULLS NOT DISTINCT ------------------
+  it('détecte un index unique passé en NULLS NOT DISTINCT', async () => {
+    const cible = await bd().query<{ indexname: string; indexdef: string }>(
+      `SELECT indexname, indexdef FROM pg_indexes
+        WHERE schemaname = 'public' AND tablename = 'companies'
+          AND indexdef ILIKE '%UNIQUE%' AND indexdef ILIKE '%siren%'
+        LIMIT 1`,
+    );
+    const index = cible.rows[0];
+    expect(
+      index,
+      `Aucun index UNIQUE sur companies(siren) : le 04 §7.1 l'exige (partiel,\n` +
+        `WHERE siren IS NOT NULL). Son absence est déjà un écart.`,
+    ).toBeDefined();
+    const nom = index?.indexname ?? '';
+    const definition = index?.indexdef ?? '';
+
+    await prouverDetection(
+      `${nom} : index partiel remplacé par un UNIQUE … NULLS NOT DISTINCT`,
+      `deux filiales étrangères SANS SIREN deviennent impossibles à enregistrer —\n` +
+        `Postgres cesse de considérer deux NULL comme distincts. C'est très exactement\n` +
+        `la régression que la décision V2.2 interdit (04 §7 : « siren NULL autorisé,\n` +
+        `filiales étrangères »), et le cas que mes propres tests de contraintes\n` +
+        `attrapent côté comportement. Le comparateur, lui, doit l'attraper côté\n` +
+        `structure : la clause NULLS NOT DISTINCT (PG15+) est récente, et un analyseur\n` +
+        `d'index écrit avant elle la traverse sans la voir.`,
+      async () => {
+        await bd().query(`DROP INDEX "${nom}"`);
+        await bd().query(`CREATE UNIQUE INDEX "${nom}" ON companies (siren) NULLS NOT DISTINCT`);
+      },
+      async () => {
+        await bd().query(`DROP INDEX "${nom}"`);
+        await bd().query(definition);
+      },
+    );
+  }, 120_000);
+
+  // --- Classe 16 : index dont la syntaxe dépasse l'analyseur ----------------
+  it('signale un index à la syntaxe non comprise plutôt que de le lire comme vide', async () => {
+    const cible = await bd().query<{ indexname: string; indexdef: string }>(
+      `SELECT indexname, indexdef FROM pg_indexes
+        WHERE schemaname = 'public' AND tablename = 'answers'
+          AND indexdef NOT ILIKE '%UNIQUE%' AND indexdef ILIKE '%(interview_id)%'
+        LIMIT 1`,
+    );
+    const index = cible.rows[0];
+    expect(index, `Aucun index simple sur answers(interview_id) — voir 04 §7.1.`).toBeDefined();
+    const nom = index?.indexname ?? '';
+    const definition = index?.indexdef ?? '';
+
+    await bd().query(`DROP INDEX "${nom}"`);
+    await bd().query(
+      `CREATE INDEX "${nom}" ON answers (interview_id) INCLUDE (mission_question_id) WITH (fillfactor = 70)`,
+    );
+
+    try {
+      const resultat = await lancerSchemaDiff(urlBase);
+
+      expect(
+        resultat.code,
+        `Index à syntaxe étendue NON SIGNALÉ.\n\n` +
+          `L'index porte désormais INCLUDE (…) et WITH (fillfactor = …), deux clauses\n` +
+          `absentes du 04 §7.1. Le risque ici n'est pas la clause elle-même : c'est le\n` +
+          `COMPORTEMENT DE L'ANALYSEUR devant une syntaxe qu'il ne connaît pas. S'il\n` +
+          `échoue en silence et rend un objet vide, l'index est comparé à « rien » et\n` +
+          `déclaré conforme — et la même indulgence couvrira demain une VRAIE\n` +
+          `divergence écrite dans une syntaxe qu'il ne sait pas lire.\n` +
+          `Un analyseur doit signaler ce qu'il ne comprend pas, jamais l'ignorer.\n\n` +
+          `Sortie :\n${resultat.sortie}`,
+      ).not.toBe(0);
+
+      expect(
+        resultat.sortie,
+        `Le comparateur sort en erreur mais ne NOMME pas l'index en cause.\n` +
+          `Un écart qu'on ne peut pas localiser coûte une heure à chaque fois : le\n` +
+          `rapport doit citer « ${nom} », que ce soit comme index divergent ou comme\n` +
+          `index illisible.\n\nSortie :\n${resultat.sortie}`,
+      ).toContain(nom);
+    } finally {
+      await bd().query(`DROP INDEX "${nom}"`);
+      await bd().query(definition);
+    }
+
+    const apresReparation = await lancerSchemaDiff(urlBase);
+    expect(
+      apresReparation.code,
+      `Après réparation, le comparateur reste rouge :\n${apresReparation.sortie}`,
+    ).toBe(0);
+  }, 120_000);
+});

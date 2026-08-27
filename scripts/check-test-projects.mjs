@@ -251,36 +251,52 @@ if (l1Livre) {
   }
 }
 
-// --- Contrôle 4 : `@critique` existe-t-il dès qu'il est exigible ? ----------
+// --- Contrôle 4 : `@critique` est-il exigible ET RÉELLEMENT EXÉCUTÉ ? -------
 //
-// POURQUOI CE CONTRÔLE EST NÉ. `pnpm test:critique` enchaîne un segment Vitest et un
-// segment Playwright. Le second sortait en CODE 1 au lot L1 : aucun test Playwright
-// ne porte `@critique`, et Playwright échoue quand son filtre ne trouve rien. La
-// commande d'urgence du pack était donc INUTILISABLE — relevé en revue croisée
-// (réserve M-1).
+// POURQUOI CE CONTRÔLE EST NÉ. `pnpm test:critique` enchaîne un segment Vitest et
+// un segment Playwright. Le second sortait en CODE 1 au lot L1 : aucun test
+// Playwright ne porte `@critique`, et Playwright échoue quand son filtre ne trouve
+// rien. La commande d'urgence du pack était INUTILISABLE (réserve M-1, 1ʳᵉ passe).
 //
-// Le correctif est `--pass-with-no-tests` sur le segment Playwright, et il est
-// légitime : `@critique` est réservé aux trois familles que le pack nomme (09 §2),
-// dont une seule s'applique au L1 — le diff schéma-vs-04, qui vit en intégration.
-// Les 8 scénarios offline et les tests RBAC arriveront à leurs lots.
+// POURQUOI IL A DÛ ÊTRE RÉÉCRIT. Sa première version disait que la permissivité
+// venait du seul `--pass-with-no-tests` de Playwright, et se contentait de chercher
+// la chaîne `@critique` **quelque part** dans les fichiers de test. La 2ᵉ passe de
+// revue l'a mis en défaut PAR EXÉCUTION :
 //
-// MAIS ce drapeau a un prix : `test:critique` ne peut plus échouer par ABSENCE. Si
-// le test `@critique` disparaissait, la commande sortirait en 0 sans rien exécuter —
-// un vert qui ne prouve rien, ce que le 09 §5.7 refuse et ce que le contrôle 2
-// ci-dessus empêche déjà pour `--passWithNoTests`.
-// Un drapeau permissif se paie d'un garde-fou. C'est celui-ci.
+//     npx vitest run --project unit -t "@zzz_nexiste_pas"
+//     Test Files  1 skipped (1) · Tests  95 skipped (95) · EXIT = 0
+//
+// Le segment **Vitest** est donc permissif LUI AUSSI, et depuis toujours. Déplacer
+// le marqueur du méta-test vers un test Playwright rendait `pnpm test:critique`
+// vert avec ZÉRO exécution du méta-test — et ce contrôle vert avec lui. Un
+// garde-fou qui annonce plus qu'il ne fait est le défaut que ce dépôt traque
+// partout ailleurs ; il n'avait pas à y échapper.
+//
+// CE QU'IL EXIGE DÉSORMAIS : le marqueur doit vivre dans un fichier couvert par un
+// projet que le segment Vitest EXÉCUTE (`unit` ou `integration`). C'est la seule
+// formulation qui garantisse qu'au moins un test critique tourne vraiment.
 if (l1Livre) {
-  const sources = tests
-    .map((f) => sansCommentaires(readFileSync(resolve(RACINE, f), 'utf8')))
-    .join('\n');
-  if (!/@critique/.test(sources)) {
+  const PROJETS_VITEST_CRITIQUE = ['unit', 'integration'];
+  const porteurs = tests.filter((f) => {
+    const projet = couvertPar(f)?.nom;
+    if (!PROJETS_VITEST_CRITIQUE.includes(projet)) return false;
+    return /@critique/.test(sansCommentaires(readFileSync(resolve(RACINE, f), 'utf8')));
+  });
+
+  if (porteurs.length === 0) {
+    const ailleurs = tests.filter((f) =>
+      /@critique/.test(sansCommentaires(readFileSync(resolve(RACINE, f), 'utf8'))),
+    );
     console.error(
-      `${ROUGE}✗ AUCUN TEST MARQUÉ \`@critique\` alors que le lot L1 est livré.${RAZ}\n\n` +
+      `${ROUGE}✗ AUCUN TEST \`@critique\` EXÉCUTÉ par \`pnpm test:critique\`.${RAZ}\n\n` +
+        (ailleurs.length > 0
+          ? `  Le marqueur existe (${ailleurs.join(', ')}) mais dans aucun projet que le\n` +
+            '  segment Vitest exécute. Les deux segments de la commande passent au vert\n' +
+            '  quand leur filtre ne trouve rien : la commande ne prouverait RIEN.\n\n'
+          : '  Aucun test ne porte le marqueur.\n\n') +
         '  Le 09 §2 et le 11 §7 désignent nommément le **diff schéma-vs-04** comme\n' +
-        "  famille critique, et c'est la seule des trois applicable au lot L1.\n\n" +
-        '  `pnpm test:critique` porte `--pass-with-no-tests` sur son segment Playwright :\n' +
-        '  sans ce contrôle, la disparition du test sortirait en 0 sans rien exécuter.\n' +
-        '  Marque `@critique` le test qui éprouve le diff schéma-vs-04.\n',
+        "  famille critique, et c'est la seule des trois applicable au lot L1.\n" +
+        `  Marque \`@critique\` un test d'un projet ${PROJETS_VITEST_CRITIQUE.join(' ou ')}.\n`,
     );
     process.exit(1);
   }
