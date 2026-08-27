@@ -30,6 +30,7 @@
     "check:invariants": "node scripts/check-invariants.mjs",
     "check:jonction": "node scripts/check-jonction.mjs",
     "check:pack": "node scripts/check-pack-integrity.mjs",
+    "check:decisions": "node scripts/check-decisions.mjs",
     "schema:diff": "node scripts/schema-diff.mjs",
     "db:generate": "pnpm --filter @axion/api db:generate",
     "db:migrate": "pnpm --filter @axion/api db:migrate",
@@ -44,7 +45,7 @@
     "infra:restore-test": "bash infra/scripts/restore-test.sh /opt/axion-audit/prod/.env",
     "prepare": "husky",
     "check:test-projects": "node scripts/check-test-projects.mjs",
-    "verify": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm check:pack && pnpm check:invariants && pnpm check:jonction && pnpm check:no-skipped-tests && pnpm check:test-projects && pnpm build && pnpm test:unit && pnpm test:integration && pnpm test:e2e"
+    "verify": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm check:pack && pnpm check:decisions && pnpm check:invariants && pnpm check:jonction && pnpm check:no-skipped-tests && pnpm check:test-projects && pnpm build && pnpm test:unit && pnpm test:integration && pnpm test:e2e"
   },
   "devDependencies": {
     "@axion/ui": "workspace:*",

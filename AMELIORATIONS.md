@@ -21,9 +21,9 @@
 
 ## Compteur du plafond étage 1
 
-| Lot | Consommé | Plafond | Reste  |
-| --- | -------- | ------- | ------ |
-| L0  | ~0,3 j   | 0,5 j   | ~0,2 j |
+| Lot | Consommé | Plafond | Reste                     |
+| --- | -------- | ------- | ------------------------- |
+| L0  | ~0,5 j   | 0,5 j   | 0 j (**plafond atteint**) |
 
 ---
 
@@ -132,3 +132,46 @@ contrôle qu'on finit par désactiver.
 
 **Relu par :** revue croisée du lot L0 (étape 4, seconde passe) · **Trace :** DECISIONS.md 2026-08-27
 « Verdict de la revue croisée : NON CONFORME — et pourquoi c'est le système qui fonctionne »
+
+### 2026-08-27 — [L0] Contrôle mécanique du format de `DECISIONS.md` (`pnpm check:decisions`)
+
+**Constat terrain (gardien A02) :** il a mesuré à la main que **4 entrées sur 23** respectaient le
+format 11 §9bis — dont celle au nom de laquelle `infra/scripts/backup-caddy.sh` existe dans le dépôt.
+Appliqué à la lettre, le §9bis (« une décision non tracée dans ce format n'existe pas ») effaçait donc
+une décision dont du code dépend. Et il a fait l'observation décisive : **la gouvernance de
+`DECISIONS.md` était la seule règle du dépôt à reposer sur la seule discipline**, dans un lot dont la
+revue croisée avait trouvé « trois garde-fous qui mentaient ou n'étaient branchés nulle part ».
+
+**Ajout :** `scripts/check-decisions.mjs`, câblé en `pnpm check:decisions` et intégré à `pnpm verify`.
+Il contrôle l'en-tête, les quatre champs, et la déclaration de précédence. Son exemption pour les
+entrées antérieures est **lue dans `DECISIONS.md` lui-même** (section « Entrées régularisées »), pas
+codée dans le script : une exemption invisible au lecteur du registre serait précisément le trou que
+ce lot a passé sa journée à boucher ailleurs.
+
+**Pourquoi c'est de l'étage 1 :** robustesse d'outillage, ne touche NI le schéma 04, NI l'API, NI la
+crypto, NI le périmètre fonctionnel. **Le pack ne l'exige nulle part** — c'est une recommandation
+d'A02, reprise parce que l'argument vaut partout ici. Coût : ~0,1 j.
+
+**Relu par :** gardien A02 (recommandation) · **Trace :** DECISIONS.md 2026-08-27 « Régularisation de
+format et mécanisation du contrôle »
+
+### 2026-08-27 — [L0] Garde-fou d'exigibilité du fil rouge `@filrouge`
+
+**Constat terrain (gardien A02) :** le lot a inventé l'auto-péremption pour le schéma, les tests
+d'intégration et la couverture — chacun devient exigible mécaniquement au lot qui le concerne.
+**`@filrouge` était le seul membre de cette famille sans garde-fou**, alors que le 09 §4bis dit
+« toute porte l'exige vert » **dès L1**. Le mot n'apparaissait que dans des commentaires.
+
+**Ajout :** troisième contrôle dans `check-test-projects.mjs` — dès que `apps/api/drizzle/` existe,
+l'absence d'un test `@filrouge` couvrant **FIL-TPE et FIL-GC** devient bloquante.
+
+**Éprouvé, et il s'est fait prendre à son propre piège** : à la première écriture, il se satisfaisait
+de l'en-tête de `e2e/socle.e2e.ts`, qui annonce « L1 → fil rouge @filrouge sur FIL-TPE et FIL-GC »
+pour documenter ce qui viendra. Un contrôle satisfait par de la **prose**. Les commentaires sont
+désormais retirés avant l'analyse ; vérifié dans les deux sens (commentaire seul → rouge ; vrai test
+marqué → vert).
+
+**Pourquoi c'est de l'étage 1 :** robustesse d'outillage, aucun impact schéma/API/crypto/périmètre.
+Coût : ~0,1 j.
+
+**Relu par :** gardien A02 (recommandation) · **Trace :** dossier de porte `PORTE_A_2026-08-27.md` §5

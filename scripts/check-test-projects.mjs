@@ -200,6 +200,56 @@ if (l1Livre && testsIntegration.length === 0) {
   process.exit(1);
 }
 
+// --- Contrôle 3 : le fil rouge existe-t-il dès qu'il est exigible ? ---------
+//
+// 09 §4bis : « Deux missions canoniques vivent en FIXTURES de test DÈS L1 et
+// GRANDISSENT à chaque lot : FIL-TPE et FIL-GC. Un test Playwright unique marqué
+// `@filrouge` rejoue à CHAQUE merge le parcours de bout en bout disponible à date…
+// **Toute porte exige `@filrouge` vert sur LES DEUX missions.** »
+//
+// Le gardien A02 a relevé que `@filrouge` était le SEUL membre de la famille
+// auto-péremptoire de ce dépôt sans garde-fou : le schéma, les tests d'intégration
+// et la couverture deviennent tous exigibles mécaniquement au lot qui les concerne,
+// pas le fil rouge — dont le mot n'apparaissait que dans des commentaires. Or c'est
+// celui dont le pack dit qu'il conditionne TOUTES les portes.
+// PIÈGE ÉVITÉ, et il s'est refermé sur ce contrôle lui-même à la première
+// écriture : les COMMENTAIRES sont retirés avant l'analyse. L'en-tête de
+// `e2e/socle.e2e.ts` annonce « L1 → fil rouge @filrouge sur FIL-TPE et FIL-GC »
+// pour documenter ce qui viendra — et cette phrase suffisait à rendre le garde-fou
+// vert. Un contrôle satisfait par de la prose est précisément ce que ce dépôt
+// refuse partout ailleurs.
+function sansCommentaires(source) {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+}
+
+if (l1Livre) {
+  const contenus = tests
+    .map((f) => sansCommentaires(readFileSync(resolve(RACINE, f), 'utf8')))
+    .join('\n');
+  const aFilRouge = /@filrouge/.test(contenus);
+  const missions = ['FIL-TPE', 'FIL-GC'].filter((m) => !contenus.includes(m));
+
+  if (!aFilRouge || missions.length > 0) {
+    console.error(
+      `${ROUGE}✗ FIL ROUGE MANQUANT alors que le lot L1 est livré.${RAZ}\n\n` +
+        (aFilRouge
+          ? `  Le test \`@filrouge\` existe mais ne couvre pas : ${missions.join(', ')}.\n`
+          : "  Aucun test marqué `@filrouge` n'existe.\n") +
+        '\n  09 §4bis : les deux missions canoniques vivent en FIXTURES **dès L1** —\n' +
+        '  FIL-TPE (micro fictive, 8 personnes, 1 entretien, ~30 questions) et FIL-GC\n' +
+        '  (grand compte fictif : arbre de 150 unités sur 4 niveaux, 60 sessions,\n' +
+        '  ~8 000 réponses générées par script — le générateur est un outillage de\n' +
+        '  test livré au L1).\n\n' +
+        '  Un test unique `@filrouge` rejoue à CHAQUE merge le parcours de bout en bout\n' +
+        '  DISPONIBLE À DATE ; chaque lot ne fait que l’ALLONGER, jamais le réécrire.\n' +
+        "  **Toute porte l'exige vert sur LES DEUX missions** — c'est aussi la preuve\n" +
+        '  continue du « de la TPE au grand groupe » : la même app, le même parcours,\n' +
+        '  aux deux échelles.\n',
+    );
+    process.exit(1);
+  }
+}
+
 const detail = projets
   .map((p) => `${p.nom}:${String(tests.filter((f) => couvertPar(f)?.nom === p.nom).length)}`)
   .join(' · ');

@@ -34,14 +34,18 @@
 # A. SENS 1 — EXIGENCES → CODE
 
 **Date d'établissement : 2026-08-27** · **Lot évalué : L0 (incrément L0-a, dépôt)** ·
-**Gardien : A02** · **Commit de référence : `ce5b912`.**
+**Gardien : A02**
 
-> **Avertissement de méthode.** Le contrôle s'est tenu sur un arbre de travail **en cours de
-> modification** : 2 fichiers modifiés à l'ouverture, **9 à la clôture**, plus une 17ᵉ entrée
-> `DECISIONS.md` et un `docs/journal/` encore non suivi par git. `docs/ETAT.md` situe le lot à
-> l'**étape 3/7**. Le présent contrôle porte donc sur `ce5b912` — le seul état durable — et signale
-> l'écart avec l'arbre vivant. **Un contrôle d'acceptation ne peut pas être rejoué à chaque
-> sauvegarde de fichier : il se tient sur un état figé.** Voir §D.3 et §D.6.
+| Passe | Commit | Arbre | Verdict |
+| --- | --- | --- | --- |
+| **1ʳᵉ** | `ce5b912` | **en cours de modification** (2 fichiers à l'ouverture, 9 à la clôture) ; pipeline à l'**étape 3/7**, revue croisée non rendue | **VETO** — 4 écarts (V1-V4) |
+| **2ᵉ** | **`fdd5f59`** | **propre** (`git status` vide) ; revue croisée rendue **deux fois** (NON CONFORME → CONFORME AVEC RÉSERVES, réserves fermées) | voir §D |
+
+> **Ce que la 1ʳᵉ passe a appris, et qui vaut règle.** Un contrôle d'acceptation ne se tient pas sur
+> un arbre qui bouge, ni avant la revue croisée. Les deux conditions sont réunies pour la 2ᵉ passe.
+> **Et une annotation `// Traçabilité : E__` n'est une preuve que si quelqu'un ouvre la section
+> citée** — c'est ce qui a fait tomber `axion:sauvegardes` (§B.3), et c'est la méthode réappliquée
+> à chaque artefact nouveau en §B.8.
 
 **L0 est un lot d'infrastructure : il ne porte aucune exigence fonctionnelle.** La quasi-totalité
 des 47 exigences est donc légitimement `non commencée`. Ce qui se vérifie ici est l'inverse :
@@ -84,7 +88,7 @@ qu'**aucune exigence dont L0 avait la charge n'a été oubliée**.
 | E33 | **Sécurité / RGPD**                        | **partiellement amorcée** | gitleaks bloquant (`.gitleaks.toml`, job CI `gitleaks`) · **SEC-30.4a/b verts** (aucun secret en dur) · redaction pino (`apps/api/src/logger.ts`) · helmet + CSP + rate-limit (`apps/api/src/app.ts`) · durcissement §10.3 scripté (`infra/scripts/provision-vps.sh`) · ZAP baseline (`.github/workflows/zap-baseline.yml`) · **12/12 familles de secrets §30.3 documentées dans `.env.example`** | Chiffrement local → L5 · consentements/purges → L1/L11 · **durcissement réellement appliqué → L0-b** |
 | E34 | Conformité AI Act                          | non commencée             | —                                                                                                                 | L12                           |
 | E35 | **Scalabilité + sauvegardes 3-2-1 testées chaque nuit** | **partiellement amorcée** | Livrés : `infra/pgbackrest/pgbackrest.conf`, `infra/postgres/Dockerfile` (pgBackRest dans le conteneur qui archive), `infra/scripts/backup-postgres.sh` (127 l.), `backup-minio.sh` (105 l.), **`restore-test.sh` (362 l., Postgres ET MinIO)**, `install-cron.sh`, `.github/workflows/nightly-restore-test.yml` | **Le test de restauration n'a JAMAIS été exécuté** — c'est le cœur de E35. → L0-b / porte P-A |
-| E36 | **Exécutable par lots avec critères**      | **partiellement amorcée** | Pipeline outillé : CI 8 jobs (`.github/workflows/ci.yml`), `pull_request_template.md` avec la case « code → exigences », `scripts/check-no-skipped-tests.mjs` vert, `check-pack-integrity.mjs` vert (12/12) | **Réserve : la CI ne peut pas passer au vert en l'état — voir §D.1** |
+| E36 | **Exécutable par lots avec critères**      | **partiellement amorcée** | Pipeline outillé : CI 8 jobs (`.github/workflows/ci.yml`), `pull_request_template.md` avec la case « code → exigences ». **2ᵉ passe : `pnpm verify` → RC=0, 12 contrôles enchaînés, exécutés par le gardien** ; 3 garde-fous auto-périmés **éprouvés par échec provoqué** (§D.1) | Exécution réelle de la CI → **L0-b** (dépôt distant absent) |
 | E37 | Scoring intégralement spécifié             | non commencée             | —                                                                                                                 | L8 (+ contrôle bloquant L4)   |
 | E38 | Sauvegarde terrain (sync ≥ 1×/j + export)  | non commencée             | —                                                                                                                 | L5c (export) · L6 (sync)      |
 | E39 | Machine à états mission                    | non commencée             | —                                                                                                                 | L1 (codes) · L3 (transitions) |
@@ -212,17 +216,39 @@ comme existantes et pertinentes.
 | `check-pack-integrity.mjs`   | **E36, E43, E47**     | `pnpm check:pack` → **vert**, 12/12 · rattaché à `AMELIORATIONS.md` étage 1 (~0,1 j) |
 | `schema-diff.mjs`            | **E17, E36, E43**     | `pnpm schema:diff` → « NON APPLICABLE — le lot L1 n'est pas livré », auto-désactivation qui **disparaît dès que `apps/api/drizzle/` existe**. Rien n'est déclaré conforme. |
 
-## B.7 — VERDICT ANTI-ORPHELIN DU LOT L0
+## B.7 — VERDICT ANTI-ORPHELIN DU LOT L0 (1ʳᵉ passe, `ce5b912`)
 
 **Code orphelin : 1 élément.** Le nom de file `axion:sauvegardes` (§B.3) invoque une section du pack
 qui ne le porte pas. Tout le reste des 161 fichiers se rattache à une exigence E1-E47 vérifiée, ou
 à la fiche A-001 d'`AMELIORATIONS.md`.
 
+**→ RÉSOLU en 2ᵉ passe** : la file a été **supprimée**. Vérifié : `NOMS_DE_FILES` n'en compte plus
+que 5 (`rapports`, `llm`, `exports`, `purges`, `webhooks`), toutes rattachées. Le commentaire
+expliquant le retrait est resté dans le code — la leçon vaut au-delà de cette ligne.
+
 C'est un résultat solide : le dépôt a été construit avec la traçabilité en tête et non reconstituée
 après coup. La discipline à tenir aux lots suivants est de **ne jamais laisser une annotation
 `// Traçabilité : E__` tenir lieu de preuve** — l'annotation dit où l'auteur croyait rattacher son
-code ; le gardien vérifie que la section citée dit bien ce qu'on lui fait dire. C'est exactement ce
-qui a fait tomber `axion:sauvegardes`.
+code ; le gardien vérifie que la section citée dit bien ce qu'on lui fait dire.
+
+## B.8 — Inventaire du code NOUVEAU (2ᵉ passe, `ce5b912` → `fdd5f59`)
+
+**175 fichiers suivis** (+14). Méthode inchangée : pour chaque artefact, **la section citée a été
+ouverte** et confrontée à ce qu'on lui fait dire.
+
+| Artefact nouveau | Rattachement | Vérification du gardien (section ouverte) | Verdict |
+| --- | --- | --- | --- |
+| `packages/shared/src/redaction.ts` | **E33, E42** · 06 §10.4 · 11 §2 | **06 §10.4 ouvert** : base légale, minimisation, pseudonymisation 2 passes — soutient la politique. **Et le module est réellement CÂBLÉ** : importé par `apps/api/src/logger.ts` **et** `apps/worker/src/worker.ts`, exporté par `shared/index.ts`. Il supprime une duplication où les deux listes pouvaient diverger | **rattaché** |
+| `e2e/socle.e2e.ts` + `playwright.config.ts` | **E36, E43** · DoD « tous les tests verts » · amorce E6/E17 | **8 tests exécutés par moi, verts.** Ils ne sont pas décoratifs : ils vérifient à l'exécution l'**invariant 4** (tokens, aucune couleur en dur), l'**invariant 5** (français), et **11 §1/§2** (« ne contacte AUCUN domaine extérieur ») — ce qu'aucun contrôle statique ne peut prouver. `forbidOnly` en CI empêche qu'un `.only` oublié verdisse la suite | **rattaché** |
+| `scripts/check-jonction.mjs` | **E36, E43** · 02 §30.4-1 · fiche `AMELIORATIONS.md` étage 1 | Fiche présente, plafond respecté (**~0,3 j / 0,5 j**). **Éprouvé par moi** : variable fantôme injectée dans un clone → **RC=1** avec le bon message | **rattaché** |
+| `scripts/check-test-projects.mjs` | **E36, E43** · 09 §5.7 · 07 §13 | **Éprouvé par moi** : `apps/api/drizzle/` créé dans un clone → **RC=1**, et le message énumère les tests du 07 §13 attendus. La péremption de `--passWithNoTests` est **réelle**, pas déclarée | **rattaché** |
+| `apps/api/scripts/{migrations,seed,db-generate}.mjs` | **E17, E36, E43** · 11 §5 · 02 §30.6 | Vérifié qu'il s'agit de **souches auto-périmées**, non d'une implémentation L1 : `exit 0` + « SANS OBJET » tant que L1 n'est pas livré, `exit 1` ensuite. **Aucun empiètement sur le périmètre d'A12** | **rattaché** |
+| `infra/scripts/backup-caddy.sh` | **E35** · 02 §11.4 | Attention : c'est la section qui avait fait tomber `axion:sauvegardes`. **Ouverte à nouveau** — elle tient ici, car il s'agit d'un **script d'infrastructure** (comme `backup-minio.sh`), pas d'un job applicatif. Arbitré en propre dans `DECISIONS.md` (« un PRA qui dépend d'un quota Let's Encrypt n'est pas un PRA ») | **rattaché** |
+| `infra/caddy/fronts.static.caddy` | **E17, E6** · invariant 1 · 05 §31 | **05 §31 ouvert** : règle 1 (mise à jour applicative, service worker) — la maîtrise du `Cache-Control` de `sw.js` en dépend réellement. Arbitré dans `DECISIONS.md` « Comment les fronts sont servis en production (défaut B-7) », entrée **vérifiée présente** | **rattaché** |
+| `infra/caddy/fronts.dev.caddy` | **E17** (sœur du précédent) | Rattachement évident par construction, mais **seul fichier du dépôt sans aucune annotation ni référence de section** (§D.5) | **rattaché** (remarque) |
+| Volumes `field_dist`, `hq_dist` (+ `staging_*_dist`) | **E17, E6** | **4 racines distinctes** montées `:ro` dans Caddy ; la bascule `CADDY_FRONT_CONFIG` est **imposée en dur** en prod (l. 147), non lue du `.env` — un staging ne peut pas servir la prod | **rattachés** |
+
+**Code orphelin en 2ᵉ passe : aucun.**
 
 ---
 
@@ -231,11 +257,15 @@ qui a fait tomber `axion:sauvegardes`.
 Une DoD dont on ne sait pas quand elle s'applique ne s'applique jamais. Ce tableau est le
 calendrier d'exigibilité, à relire au brief de chaque lot.
 
+Statuts **recochés sur `fdd5f59`**, par exécution du gardien (`pnpm verify` → **RC=0**, 12 contrôles
+enchaînés : lint · format:check · typecheck · check:pack · check:invariants · check:jonction ·
+check:no-skipped-tests · check:test-projects · build · test:unit · test:integration · test:e2e).
+
 | Ligne de la DoD (09 §3)                        | Statut au L0            | Devient exigible à…                                              |
 | ---------------------------------------------- | ----------------------- | ------------------------------------------------------------------ |
 | lint + typecheck stricts = 0 erreur            | **COCHÉ**               | dès L0, à chaque lot                                               |
-| tous les tests verts, aucun skippé             | **NON TENU** (§D.1)     | dès L0, à chaque lot                                               |
-| couverture ≥ 90 % sur les modules critiques    | **sans objet**          | **L2** (RBAC, auth) — premier module critique livré ; puis L5a/L5c (crypto, export), L6a (sync), L8 (scoring) |
+| tous les tests verts, aucun skippé             | **COCHÉ** (2ᵉ passe)    | dès L0. 91 unitaires + **8 E2E** verts, exécutés par moi ; anti-skip vert (2 fichiers) ; `check:test-projects` vert (aucun test hors projet) |
+| couverture ≥ 90 % sur les modules critiques    | **sans objet**          | **L2** (RBAC, auth) — premier module critique livré ; puis L5a/L5c (crypto, export), L6a (sync), L8 (scoring). **Mesurée à nouveau : 15,13 % global** — aucun module critique n'existe, le chiffre global n'a donc aucun sens ici |
 | migrations up/down exécutées sur staging       | **sans objet**          | **L1** (premières migrations) — porte P-A                          |
 | tout écran livré avec ses 4 états (§33.2)      | **sans objet**          | **L5** (PWA terrain) puis **L7-min** (console) — porte P-C          |
 | axe-core vert                                  | **sans objet**          | **L5** — premier écran réel ; A28                                  |
@@ -248,7 +278,31 @@ calendrier d'exigibilité, à relire au brief de chaque lot.
 
 # D. RÉSERVES ET POINTS OUVERTS DU LOT L0
 
-## D.1 — La CI ne peut pas passer au vert (réserve bloquante)
+## D.0 — STATUT DES QUATRE ÉCARTS, APRÈS 2ᵉ PASSE (`fdd5f59`)
+
+| Écart | Statut | Preuve — **exécutée** sauf mention contraire |
+| --- | --- | --- |
+| **V1** — la CI ne peut pas passer au vert | **LEVÉ** | `@playwright/test` **1.62.1** épinglé (`save-exact`, 11 §1), `playwright.config.ts` avec `webServer`, `forbidOnly` en CI. **8 tests E2E exécutés, verts.** `test:integration` porte `--passWithNoTests`, **rendu auto-péremptoire et éprouvé** (§D.1) |
+| **V2** — le HEAD commité ne démarre pas | **LEVÉ** | `CADDY_STAGING_SITE_ADDRESS` documentée au `.env.example` et fournie par les Compose. `docker compose config -q` → **RC=0 sur les 3 combinaisons** (dev · +prod · +prod+staging). `check:jonction` : **76 variables, 0 anomalie**, et **éprouvé** (§D.1) |
+| **V3** — pipeline hors séquence | **LEVÉ** | Revue croisée rendue **deux fois** avant cette passe ; `git status` **vide** ; faute d'orchestration tracée en `DECISIONS.md` et au dossier de porte. Le contrôle se tient enfin sur un état figé, après l'étape 4 |
+| **V4** — gouvernance `DECISIONS.md` | **PARTIELLEMENT LEVÉ** | Les 12 sous-décisions groupées sont réémises une par une avec `Options :` et **le motif de rejet de l'alternative** — remède juste, et le refus de réécrire l'historique append-only est **le bon raisonnement**. **Mais 4 entrées du jour restent sans `Options :` et 19 sans citation de la précédence** (§D.4) |
+
+## D.1 — V1 : levé, et les garde-fous ont été ÉPROUVÉS, pas lus
+
+La leçon de ce lot est qu'un garde-fou non branché — ou qui ment — est pire que pas de garde-fou.
+Je ne me suis donc pas contenté de lire les trois nouveaux contrôles : **je les ai fait échouer**,
+dans un **clone jetable du dépôt** (scratchpad), sans jamais toucher au dépôt réel.
+
+| Garde-fou | Épreuve menée | Résultat |
+| --- | --- | --- |
+| `check:test-projects` | création de `apps/api/drizzle/` (marqueur L1) dans le clone | **RC=1** — « le drapeau ferait passer au vert une suite VIDE », et le message énumère les tests du 07 §13 attendus |
+| `schema:diff` | même clone, L1 simulé sans manifeste | **RC=1** — « manifeste introuvable alors que L1 est livré » |
+| `check:jonction` | injection d'une variable `AXION_VARIABLE_FANTOME` non documentée | **RC=1** — anomalie localisée au fichier et à la ligne, avec le motif 02 §30.4-1 |
+
+Les trois péremptions sont **réelles**. C'est ce qui permet d'accepter `--passWithNoTests` au L0 :
+le drapeau est honnête aujourd'hui et **cesse mécaniquement de l'être** au L1.
+
+## D.1bis — Trace de la réserve initiale (1ʳᵉ passe, `ce5b912`)
 
 `pnpm test:integration` → **RC=1** (« No test files found, exiting with code 1 ») ; `pnpm test:e2e`
 → Playwright n'est déclaré dans **aucun** `package.json` et il n'existe aucun `playwright.config.*`.
@@ -299,7 +353,39 @@ pas un PRA. **Contre-vérification du gardien**, sur l'arbre vivant :
 `docker compose --env-file .env.example config -q` → **RC=0** sur les trois combinaisons
 (dev · dev+prod · dev+prod+staging). **Rien de tout cela n'est commité.**
 
-## D.4 — Gouvernance : format des entrées `DECISIONS.md`
+## D.4bis — V4 : ce qui est réparé, et le trou qui reste (2ᵉ passe, 23 entrées)
+
+**Contrôle mécanique du gardien sur les 23 entrées : 4 conformes, 19 non conformes.**
+
+Ce que je valide : le refus de réécrire les entrées en place est **le bon raisonnement** —
+`DECISIONS.md` est append-only, et le réécrire pour se mettre en conformité serait exactement le
+changement silencieux que le format existe pour empêcher. Les 12 sous-décisions réémises portent
+désormais chacune son alternative **et le motif de son rejet** : c'est plus informatif que l'original.
+
+**Le trou qui reste — et il porte sur du code vivant :**
+
+| Entrée | Manque | Pourquoi ça compte |
+| --- | --- | --- |
+| « Nomenclature des lots L9 à L13 » | `Options :` | Corrige une erreur réelle (L12 = AI Act) qui s'était propagée dans 6 gabarits d'agents |
+| « Suites de l'arbitrage Caddy » | `Options :` (et groupe **4** décisions) | C'est elle qui justifie **`infra/scripts/backup-caddy.sh`**, fichier bien présent dans le dépôt |
+| « Nom de l'outil de délégation » | `Options :` | Portée mineure |
+| « Verdict de la revue croisée » | `Options :`, `Arbitrage :` | Cas limite : un verdict n'est pas une décision — mais il porte une « Suite donnée » qui en est une |
+| **19 des 23** | citation de la précédence dans l'`Arbitrage :` | La règle de conduite ne vaut que **« dès L1 »** |
+
+Appliqué à la lettre, le §9bis efface encore l'entrée qui justifie `backup-caddy.sh`. **Ce n'est pas
+de la pédanterie** : du code est dans le dépôt au nom d'une décision qui, selon la règle du projet,
+n'existe pas. La reprise a couvert les 12 points ; elle n'a pas couvert ces quatre entrées-là.
+
+**Réponse à la question posée par A01 — la règle de conduite est-elle suffisante ?** Sur le fond,
+oui : « précédence citée ou déclarée sans objet » + « une entrée = une décision » ferment la cause.
+**Sur la forme, il manque ce que ce lot a inventé partout ailleurs : le contrôle mécanique.**
+`check:pack`, `check:jonction`, `check:test-projects`, `check:invariants`, `check-coverage` — la
+gouvernance `DECISIONS.md` est désormais **la seule règle du dépôt qui repose sur la seule
+discipline**, dans un lot dont la revue croisée a précisément trouvé « trois garde-fous qui mentaient
+ou n'étaient branchés nulle part ». **Le pack n'exige nulle part cette mécanisation : c'est donc une
+RECOMMANDATION, pas un écart** — je ne peux pas exiger ce qui n'est écrit nulle part.
+
+## D.4 — Gouvernance : format des entrées `DECISIONS.md` (constat de 1ʳᵉ passe)
 
 16 entrées, toutes au format d'en-tête `## AAAA-MM-JJ — [L0] Question`, toutes pourvues de
 `Décideur :` et `Impact spec :`. Écarts au format imposé 11 §9bis :
@@ -356,6 +442,23 @@ journal de lot et le burn-down du 09 §5.4 n'existent donc pas au sens du 11 §9
 
 ---
 
+# D.7 — CE QUI MANQUE AU DOSSIER DE PORTE `docs/portes/PORTE_A_2026-08-27.md`
+
+Le fichier existe, il est honnête, et sa section 7 assume la faute d'orchestration au lieu de la
+lisser. Ce qui suit est ce qu'il lui manque **pour être une trace d'audit au moment où Williams
+signera** — pas une critique de son état « en préparation », qui est légitime.
+
+| # | Manque | Pourquoi |
+| --- | --- | --- |
+| 1 | **Une affirmation inexacte à corriger** : §6 dit `DECISIONS.md` « **23 entrées, toutes horodatées et au format** », puis reconnaît dans la phrase suivante que l'écart de forme n'a pas été réparé en place. Mesure du gardien : **4 conformes / 19 non conformes** | C'est le motif exact que le fichier reproche lui-même à l'auto-revue en §7 : « elle a conclu au-delà de ce qu'elle avait mesuré ». Formulation juste : « 23 entrées ; 4 au format complet ; les 19 antérieures relèvent de l'entrée de reprise, la règle s'applique dès L1 » |
+| 2 | **Aucune colonne « sortie constatée / date / opérateur »** | 11 §9bis exige la preuve « lien CI, capture, **commande** ». Une commande *à exécuter* n'est pas une preuve : il faut l'endroit où coller sa **sortie**, avec qui l'a lancée et quand. Sans cette colonne, les ⬜ deviendront des ✅ sans trace |
+| 3 | **Pas de verdict A51 (sécurité)** | 09 §3 étape 6 : « la sécurité (A51) et l'UX novice (A54) rendent leur verdict **quand le lot les concerne** ». A54 est sans objet (aucun écran). **A51 concerne L0** : durcissement 06 §10.3, 12 familles de secrets, CSP, gitleaks, ZAP rendu non bloquant jusqu'à L2. Une ligne « A51 — sans objet » serait déjà mieux que le silence |
+| 4 | **La DoD « migrations up/down » y est notée « sur staging » sans dire que staging dépend de L0-b** | Le critère L1 n°5 dit « migrations up/down propres » ; la DoD exige **sur staging**. Tant que L0-b n'est pas fait, il n'y a pas de staging : la porte ne peut pas cocher cette ligne même avec L1 livré. À rendre explicite pour ne pas le découvrir le jour de la signature |
+| 5 | **Aucun garde-fou ne rendra `@filrouge` exigible au L1** | Vérifié : `filrouge` n'apparaît que dans des **commentaires** (`playwright.config.ts`, `e2e/socle.e2e.ts`, `check-no-skipped-tests`). 09 §4bis dit « toute porte l'exige vert » dès L1. Le lot a inventé l'auto-péremption pour l'intégration, le schéma et la couverture — **`@filrouge` est le seul membre de cette famille sans garde-fou.** Recommandation, pas écart |
+| 6 | **Le tableau des invariants n'y figure pas** | Les invariants 3, 5, 6, 7 ne sont pas mécanisables et sont contrôlés à la main. La porte est l'endroit où cette vérification humaine se trace. Le présent fichier la porte (§5 du rapport) ; un renvoi suffirait |
+
+---
+
 # E. TRAVAUX PORTÉS À LA PORTE P-A
 
 Reportés au fichier `docs/portes/PORTE_A_<date>.md` (11 §9bis), à cocher avec preuve :
@@ -373,3 +476,16 @@ Reportés au fichier `docs/portes/PORTE_A_<date>.md` (11 §9bis), à cocher avec
    (`DECISIONS.md`, point 5).
 7. Arbitrage Williams de la **fiche A-001** (`AMELIORATIONS.md`) : ABSORBÉE / PHASE 2 / REFUSÉE.
 8. **Les réserves §D.1 à §D.4 du présent fichier, levées et prouvées.**
+   → **V1, V2, V3 levés en 2ᵉ passe** (§D.0). Reste **V4 partiel** (§D.4bis) et les six manques du
+   dossier de porte (§D.7).
+9. **Retour d'A51 (sécurité) sur le périmètre L0** — durcissement 06 §10.3, secrets, CSP, ZAP.
+10. Corriger l'affirmation « 23 entrées toutes au format » du dossier de porte (§D.7, ligne 1).
+
+---
+
+## Journal des passes de contrôle
+
+| Date | Passe | Commit | Verdict du gardien |
+| --- | --- | --- | --- |
+| 2026-08-27 | 1ʳᵉ | `ce5b912` | **VETO** — V1 CI rouge · V2 HEAD ne démarre pas · V3 pipeline hors séquence · V4 gouvernance. 1 code orphelin (`axion:sauvegardes`) |
+| 2026-08-27 | 2ᵉ | `fdd5f59` | **ACCEPTÉ SOUS RÉSERVE** — V1/V2/V3 levés et éprouvés · **0 code orphelin** · V4 partiel · 6 manques au dossier de porte |

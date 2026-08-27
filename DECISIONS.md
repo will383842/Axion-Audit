@@ -771,3 +771,106 @@ reproductible.
 
 **Décideur :** A01
 **Impact spec :** aucun
+
+---
+
+## 2026-08-27 — [L0] Régularisation de format et mécanisation du contrôle (réserve R1 du gardien)
+
+**Constat :** le gardien A02 a mesuré, entrée par entrée, que **4 des 23 entrées** respectaient
+intégralement le format 11 §9bis. Ma « Reprise de format » précédente couvrait les 12 sous-décisions
+groupées mais **pas** quatre entrées à part entière — dont « Suites de l'arbitrage Caddy », **au nom
+de laquelle `infra/scripts/backup-caddy.sh` existe dans le dépôt**. Appliqué à la lettre, le §9bis
+(« une décision non tracée dans ce format n'existe pas ») effaçait donc une décision dont du code
+dépend. A02 ajoute l'observation décisive : **la gouvernance de `DECISIONS.md` était la seule règle
+du dépôt à reposer sur la seule discipline**, dans un lot dont la revue croisée a trouvé « trois
+garde-fous qui mentaient ou n'étaient branchés nulle part ».
+
+**Options :**
+
+1. Réécrire les entrées fautives en place — **exclu**, pour la même raison qu'à la reprise
+   précédente : `DECISIONS.md` est append-only, et le réécrire pour se mettre en conformité serait
+   exactement le changement silencieux que le format existe pour empêcher.
+2. Réémettre chacune des 19 entrées concernées — **exclu** : dix-neuf doublons rendraient le fichier
+   moins lisible, donc moins auditable. Le remède serait pire que le défaut.
+3. **Une entrée de régularisation** qui comble ce qui manque et déclare, pour chaque entrée
+   antérieure, le statut de la règle de précédence — et **un contrôle mécanique** qui lit cette
+   régularisation **dans le fichier lui-même**.
+
+**Arbitrage :** option 3. **Règle de précédence : sans objet** (question de forme, aucune divergence
+interne au pack).
+Le point important est le troisième : `scripts/check-decisions.mjs` vérifie désormais le format des
+entrées à chaque `pnpm verify`, et son exemption **n'est pas une liste cachée dans le script** — il
+lit la section « Entrées régularisées » ci-dessous, visible de tout lecteur du fichier de
+gouvernance. Une exemption qu'on ne peut pas voir en lisant le registre serait le trou que ce lot a
+passé sa journée à boucher ailleurs.
+La recommandation d'A02 est reprise telle quelle : **le pack ne l'exige nulle part**, mais l'argument
+est celui qu'on applique partout ici — ce qu'une machine peut vérifier ne doit pas dépendre de la
+vigilance d'un agent.
+
+### Ce qui manquait aux quatre entrées, comblé ici
+
+**« Points d'infrastructure actés sans réserve »** — _Options :_ (a) grouper douze arbitrages
+d'exécution sans alternative défendable en une entrée · (b) douze entrées séparées.
+_Arbitrage :_ (a) au moment de l'écriture, pour la lisibilité ; **c'était une erreur**, corrigée par
+la reprise du même jour qui réémet les douze avec leurs options et le motif de rejet de l'alternative.
+La règle « une entrée = une décision » en découle.
+
+**« Nomenclature des lots L9 à L13 »** — _Options :_ (a) déduire la nomenclature du contenu des
+rôles (ce qu'avait fait A55, en le signalant) · (b) la **lire** au fichier 07 §12, section Phase 2.
+_Arbitrage :_ (b). Ce n'était pas un arbitrage mais une lecture — et la déduction s'était trompée
+sur L12 (module AI Act, et non intégrations).
+
+**« Nom de l'outil de délégation »** — _Options :_ (a) `Agent` · (b) `Task`, selon la version de
+Claude Code. _Arbitrage :_ (a), **vérifié par exécution** : les délégations du lot L0 ont été lancées
+et rendues avec cet outil. Observation, pas lecture de documentation.
+
+**« Suites de l'arbitrage Caddy »** — _Options :_ pour chacun des quatre points, l'entrée expose déjà
+l'alternative et le motif de son rejet (variable de port supprimée contre variable conservée ;
+`caddy_data` sauvegardé contre régénéré par ACME ; règle de runbook contre contrainte de CI ; réseau
+`external` contre réseau possédé par une pile). Il manquait l'**en-tête** `Options :`, pas le
+raisonnement.
+
+**« Verdict de la revue croisée »** — _Options :_ (a) corriger les défauts sans en tirer de règle ·
+(b) corriger **et** poser trois règles de conduite pour L1. _Arbitrage :_ (b) — sans quoi la même
+cause reproduirait les mêmes sept défauts au lot suivant. C'est d'ailleurs ce qui est arrivé à
+l'échelle réduite des garde-fous, et la seconde passe l'a attrapé.
+
+### Entrées régularisées
+
+Pour toutes les entrées ci-dessous, antérieures à la mise en place du contrôle mécanique :
+**règle de précédence sans objet — aucune ne tranche une divergence interne au pack.** Chacune comble
+un point que le pack laisse ouvert, ou constate un fait d'environnement. Les deux seules décisions du
+lot qui auraient pu mobiliser la précédence — « Cohabitation staging/prod » et « Nomenclature
+L9-L13 » — ont été tranchées par **lecture littérale** du pack, ce qui rend la précédence sans objet
+par construction : il n'y avait pas deux sections en conflit, il y avait une section qu'on n'avait
+pas ouverte.
+
+- Emplacement du pack d'implémentation dans le dépôt
+- Versions Node/pnpm de la machine de développement vs contrat §1
+- Absence de dépôt distant : l'invariant « un commit non poussé n'existe pas » est inapplicable
+- Démon Docker arrêté : le critère « `docker compose up` = stack complète » n'est pas vérifiable en séance
+- Périmètre exact de L0 : quels critères sont codables et lesquels dépendent d'infrastructure réelle
+- Squelette applicatif minimal des 5 espaces de travail dès L0
+- Cohabitation staging/prod : qui écoute sur 443 ?
+- CSP : la concession `style-src 'unsafe-inline'`
+- Dépendances d'outillage absentes de la liste 11 §1
+- Environment GitHub `ops` pour le test de restauration nocturne
+- Points d'infrastructure actés sans réserve
+- Prettier ne touche pas au pack — et le pack est désormais scellé
+- Qui est le réviseur croisé de l'équipe 4 ?
+- Nomenclature des lots L9 à L13 : le pack la donne, il ne fallait pas la déduire
+- Les restrictions d'outils des gabarits sont contractuelles, pas mécaniques
+- Nom de l'outil de délégation
+- Suites de l'arbitrage Caddy : port interne unique et sauvegarde des certificats
+- Verdict de la revue croisée : NON CONFORME — et pourquoi c'est le système qui fonctionne
+- Comment les fronts sont servis en production (défaut B-7)
+- Valeur du rouge d'alerte (#8c0a33)
+- Reprise de format des entrées du jour (écart V4 relevé par le gardien A02)
+- ZAP baseline non bloquant jusqu'au lot L2
+- Le tag d'image du scanner ZAP reste mobile, délibérément
+
+**À partir de cette entrée, le contrôle est mécanique : plus aucune régularisation ne sera
+nécessaire, parce que `pnpm verify` refusera l'entrée hors format avant le commit.**
+
+**Décideur :** A01
+**Impact spec :** aucun
