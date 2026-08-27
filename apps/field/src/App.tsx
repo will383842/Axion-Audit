@@ -25,7 +25,7 @@ export function App(): React.JSX.Element {
         fontFamily: 'var(--typo-police-corps)',
       }}
     >
-      <div style={{ maxWidth: '32rem', textAlign: 'center' }}>
+      <div style={{ maxWidth: 'var(--taille-largeur-contenu-etroit)', textAlign: 'center' }}>
         <h1
           style={{
             fontSize: 'var(--typo-taille-2xl)',

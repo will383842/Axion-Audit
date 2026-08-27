@@ -20,9 +20,15 @@
 #
 # ------------------------------- ROLLBACK ------------------------------------
 # (02 §30.6 + §11.2) — identique au staging, à exécuter à la main :
-#   1. Retrouver le tag précédent (`sha-xxxxxxx` ou `vX.Y`) dans l'historique
-#      des runs de ce workflow ou sur GHCR.
-#   2. Sur le serveur : `IMAGE_TAG=<tag précédent> ./infra/scripts/deploy.sh`
+#   1. Le tag précédent est JOURNALISÉ par `deploy.sh` dans
+#      `/opt/axion-audit/prod.deployed-tags` (deploy.sh l.58 et l.155) :
+#        cat /opt/axion-audit/prod.deployed-tags
+#      À défaut : l'historique des runs de ce workflow, ou GHCR.
+#   2. Sur le serveur, depuis la copie du dépôt (`/opt/axion-audit/repo`) :
+#        ./infra/scripts/deploy.sh --rollback --env prod
+#      (le script relit lui-même l'avant-dernier tag du journal), ou pour viser
+#      un tag précis :
+#        ./infra/scripts/deploy.sh --env prod --tag <tag précédent>
 #      → `docker compose` est re-pointé sur le tag précédent.
 #   3. Images conservées 90 JOURS sur GHCR : au-delà, plus de retour arrière
 #      possible sans reconstruire depuis le tag git.
@@ -142,37 +148,68 @@ jobs:
           printf '%s\n' "${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
+      # -----------------------------------------------------------------------
+      # CONTRAT D'APPEL DE `infra/scripts/deploy.sh` (A11) — LU DANS LE SCRIPT
+      # -----------------------------------------------------------------------
+      #   ./deploy.sh --env <staging|prod> --tag <IMAGE_TAG> [--env-file <chemin>]
+      #
+      # `--env` (l.40) et `--tag` (l.70) sont OBLIGATOIRES : sans eux le script
+      # meurt avant toute action. Il ne lit JAMAIS `IMAGE_TAG` depuis
+      # l'environnement — il l'EXPORTE depuis `--tag` (l.72).
+      # `APP_ENV` n'est PAS passé : `deploy.sh` le lit dans le `.env` du serveur
+      # et le CONFRONTE à `--env` (l.49-50). C'est ce garde-fou qui empêche un
+      # déploiement de production sur la pile de staging, et réciproquement —
+      # forcer `APP_ENV` depuis la CI reviendrait à vouloir désarmer la seule
+      # protection qui distingue les deux environnements (02 §30.4-4).
+      # `--env-file` n'est pas passé : `deploy.sh` résout par défaut
+      # `/opt/axion-audit/prod/.env` (l.43), la convention du runbook
+      # (`infra/README.md` §4 et §5).
+      # -----------------------------------------------------------------------
       - name: Déployer (pull/up + migration garde-fou dry-run puis apply + smoke tests)
         env:
-          # Variables interpolées par `infra/docker-compose.prod.yml` (A11) :
-          # `ghcr.io/${GHCR_OWNER}/axion-audit-<app>:${IMAGE_TAG}`.
           IMAGE_TAG: ${{ steps.cible.outputs.tag }}
+          # Interpolée par `infra/docker-compose.prod.yml` (A11) :
+          # `ghcr.io/${GHCR_OWNER}/axion-audit-<app>:${IMAGE_TAG}`. Le `.env` du
+          # serveur (§18) reste prioritaire — cette valeur n'est qu'un repli.
           GHCR_OWNER: ${{ github.repository_owner }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          # ⚠️ `DEPLOY_PATH` = LA COPIE DU DÉPÔT, soit `/opt/axion-audit/repo`
+          # (`infra/README.md` §3 : `git clone … /opt/axion-audit/repo`), et NON
+          # `/opt/axion-audit`, qui est la racine d'EXPLOITATION (`.env`,
+          # `<env>/.env`, `*.deployed-tags`).
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           set -euo pipefail
+          # GHCR n'accepte que des minuscules dans le chemin de dépôt — même
+          # normalisation que `build-images.yml`.
+          ghcr_owner="$(printf '%s' "${GHCR_OWNER}" | tr '[:upper:]' '[:lower:]')"
           ssh -i ~/.ssh/deploy_key \
               -o StrictHostKeyChecking=yes \
               -o UserKnownHostsFile=~/.ssh/known_hosts \
               -o ConnectTimeout=20 \
               "${DEPLOY_USER}@${DEPLOY_HOST}" \
               "set -euo pipefail; cd '${DEPLOY_PATH}'; \
-               APP_ENV=prod GHCR_OWNER='${GHCR_OWNER}' IMAGE_TAG='${IMAGE_TAG}' ./infra/scripts/deploy.sh"
+               test -x ./infra/scripts/deploy.sh || { echo 'ERREUR : ./infra/scripts/deploy.sh introuvable ou non exécutable sous '\''${DEPLOY_PATH}'\''. Le secret DEPLOY_PATH doit désigner la COPIE DU DÉPÔT (/opt/axion-audit/repo — infra/README.md §3), pas la racine d exploitation /opt/axion-audit.' >&2; exit 1; }; \
+               GHCR_OWNER='${ghcr_owner}' ./infra/scripts/deploy.sh --env prod --tag '${IMAGE_TAG}'"
 
+      # ROUTE : `/api/v1/health`, et non `/api/health`. Le `Caddyfile` (A11)
+      # utilise `handle_path /api/*`, qui RETIRE le préfixe : l'API reçoit
+      # `/v1/…`. Et `apps/api/src/app.ts` (A01) enregistre les routes de santé
+      # sous `prefix: '/v1'`. C'est l'URL qu'interroge déjà
+      # `infra/scripts/smoke-test.sh` (l.44).
       - name: Contrôle de santé public (hors serveur)
         run: |
           set -euo pipefail
           url="${{ vars.PROD_BASE_URL }}"
           for i in $(seq 1 10); do
-            if curl -fsS --max-time 10 "${url%/}/api/health" >/dev/null; then
-              echo "Santé API OK sur ${url%/}/api/health (tentative ${i})."
+            if curl -fsS --max-time 10 "${url%/}/api/v1/health" >/dev/null; then
+              echo "Santé API OK sur ${url%/}/api/v1/health (tentative ${i})."
               exit 0
             fi
             sleep 6
           done
-          echo "::error title=Production injoignable::${url%/}/api/health ne répond pas après 60 s. ROLLBACK IMMÉDIAT — procédure dans le bandeau de ce fichier."
+          echo "::error title=Production injoignable::${url%/}/api/v1/health ne répond pas après 60 s. ROLLBACK IMMÉDIAT — procédure dans le bandeau de ce fichier."
           exit 1
 
       - name: Effacer la clé SSH du runner
@@ -195,7 +232,7 @@ jobs:
           Image : ${{ steps.cible.outputs.tag }}
           Approuvé et lancé par : ${{ github.actor }}
           Run : ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          Rollback : IMAGE_TAG=<tag precedent> ./infra/scripts/deploy.sh (images GHCR conservees 90 j)"
+          Rollback : ./infra/scripts/deploy.sh --rollback --env prod (images GHCR conservees 90 j)"
           curl -fsS -X POST "https://api.telegram.org/bot${JETON}/sendMessage" \
             --data-urlencode "chat_id=${SALON}" \
             --data-urlencode "text=${texte}" >/dev/null

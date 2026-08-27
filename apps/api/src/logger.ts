@@ -12,71 +12,15 @@
 // =============================================================================
 import { pino, type Logger } from 'pino';
 import type { FastifyBaseLogger } from 'fastify';
+import { OPTIONS_REDACTION_JOURNAL } from '@axion/shared';
 import { config, estDev } from './config.js';
-
-/**
- * Chemins masqués. La liste couvre les trois familles de fuite :
- *   1. identités des interviewés (person_name, email, téléphone) ;
- *   2. contenus de réponse et verbatims (le cœur de la collecte) ;
- *   3. secrets d'authentification (jetons, mots de passe, en-têtes).
- * `*` traverse un niveau, `[*]` un tableau : les chemins profonds sont couverts
- * explicitement parce que pino ne fait PAS de correspondance récursive.
- */
-const CHEMINS_MASQUES = [
-  // 1 — identités
-  'person_name',
-  'personName',
-  '*.person_name',
-  '*.personName',
-  'email',
-  '*.email',
-  '*.*.email',
-  'phone',
-  '*.phone',
-  'interviewee',
-  '*.interviewee',
-
-  // 2 — contenus de collecte
-  'answer',
-  '*.answer',
-  'answers',
-  '*.answers',
-  'value_text',
-  '*.value_text',
-  'valueText',
-  '*.valueText',
-  'note',
-  '*.note',
-  'notes',
-  '*.notes',
-  'verbatim',
-  '*.verbatim',
-  'payload',
-  '*.payload',
-
-  // 3 — secrets
-  'req.headers.authorization',
-  'req.headers.cookie',
-  'res.headers["set-cookie"]',
-  'password',
-  '*.password',
-  'token',
-  '*.token',
-  'refreshToken',
-  '*.refreshToken',
-  'accessToken',
-  '*.accessToken',
-  'secret',
-  '*.secret',
-];
 
 export const logger: Logger = pino({
   level: config.LOG_LEVEL,
-  redact: {
-    paths: CHEMINS_MASQUES,
-    censor: '[masqué:rgpd]',
-    remove: false,
-  },
+  // Politique de redaction PARTAGÉE avec le worker (packages/shared/src/redaction.ts).
+  // Elle est posée ici, sur l'instance RACINE : aucun appelant ne peut l'oublier.
+  // Compter sur la discipline de chaque `log.info()` ne tiendrait pas.
+  redact: { ...OPTIONS_REDACTION_JOURNAL, paths: [...OPTIONS_REDACTION_JOURNAL.paths] },
   base: {
     service: 'api',
     env: config.APP_ENV,

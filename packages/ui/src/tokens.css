@@ -69,6 +69,10 @@
   --taille-rayon-petit: 0.25rem;
   --taille-rayon-moyen: 0.5rem;
   --taille-rayon-grand: 0.75rem;
+  --taille-largeur-contenu-etroit: 32rem;
+  --taille-largeur-contenu-large: 64rem;
+  --taille-focus-epaisseur: 3px;
+  --taille-focus-decalage: 2px;
 
   /* --- Typographie (Inter variable AUTO-HÉBERGÉE — jamais de CDN, 11 §1) --- */
   --typo-police-corps: 'Inter Variable', 'Inter', system-ui, -apple-system, sans-serif;
@@ -106,6 +110,6 @@
 /* Le focus est TOUJOURS visible : un auditeur navigue au clavier entre deux questions
    (raccourcis complets, §33). Ne jamais poser `outline: none` sans remplacement. */
 :where(a, button, input, select, textarea, [tabindex]):focus-visible {
-  outline: 3px solid var(--couleur-focus-anneau);
-  outline-offset: 2px;
+  outline: var(--taille-focus-epaisseur) solid var(--couleur-focus-anneau);
+  outline-offset: var(--taille-focus-decalage);
 }

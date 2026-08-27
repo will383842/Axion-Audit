@@ -479,3 +479,295 @@ une observation d'exécution. Aucune modification à apporter. À revérifier si
 
 **Décideur :** A01
 **Impact spec :** aucun
+
+---
+
+## 2026-08-27 — [L0] Suites de l'arbitrage Caddy : port interne unique et sauvegarde des certificats
+
+Quatre doutes remontés par A11 après application de l'arbitrage « Cohabitation staging/prod ».
+Deux entraînent une modification, deux sont actés tels que livrés.
+
+### 1. `CADDY_STAGING_API_PORT` — supprimée
+
+**Constat :** le Caddy de prod devant joindre l'API de staging, A11 avait introduit une variable pour
+le port de cette dernière. Sa cohérence avec l'`API_PORT` du `.env` de staging serait **manuelle**,
+entre deux fichiers, sur deux environnements.
+
+**Arbitrage :** supprimer la variable ; `API_PORT=3000` devient une **convention interne des deux
+environnements**. Le port de l'API est interne au réseau Docker et **n'est jamais publié**
+(06 §10.3, 11 §2) : il n'existe aucun scénario où il devrait différer. Une variable dont deux copies
+doivent coïncider à la main est une panne en attente — et la panne tomberait sur la **production**,
+qui rendrait des 502 à cause d'une valeur de staging. Convention écrite dans le Caddyfile et au
+runbook. Seule `CADDY_STAGING_SITE_ADDRESS` est ajoutée au `.env.example` (section 14).
+
+### 2. `caddy_data` entre dans le périmètre de sauvegarde
+
+**Constat :** depuis le passage au frontal unique, `caddy_data` détient les certificats TLS des
+**deux** domaines et vit dans la pile de prod. Les scripts de sauvegarde couvrent Postgres et MinIO,
+pas lui. A11 proposait de l'acter comme « régénérable par ACME ».
+
+**Arbitrage : l'ajouter à la sauvegarde.** Le raisonnement « ACME régénère » ne tient pas dans le
+seul moment où la question se pose — un PRA. Le RTO cible est de **4 h** (02 §11.4) et la procédure
+en consomme déjà ~3 h 35. Une régénération sous plafond Let's Encrypt (5 certificats par domaine et
+par semaine) peut échouer ; si elle échoue, **les deux environnements sont injoignables en HTTPS**,
+y compris celui qui devrait servir à vérifier que la restauration a réussi. **Un PRA qui dépend d'un
+service tiers à quota n'est pas un PRA.** Même chiffrement, même Storage Box, même rétention — et
+**restauration vérifiée par `restore-test.sh`**, puisque le principe de tout ce lot est qu'une
+sauvegarde jamais restaurée n'est pas une sauvegarde.
+
+### 3. Ordre de déploiement prod → staging : règle de runbook, pas contrainte de CI
+
+La dépendance est réelle (le frontal appartient à la prod) mais ne mord qu'**une fois** : au premier
+démarrage, geste manuel de L0-b. En régime établi, un déploiement staging ne recrée pas le frontal.
+Coder ce couplage entre deux workflows pour un cas unique coûterait plus qu'il ne protège. La
+checklist de premier démarrage du runbook suffit, à condition d'être en tête de section.
+
+### 4. Réseau `axion-edge-staging` en `external` : acté tel que livré
+
+Déterministe, survit aux `down`, indépendant de l'ordre de démarrage, créé par `provision-vps.sh`
+donc reproductible. Meilleur choix que de le faire posséder par l'une des deux piles.
+
+**Décideur :** A01
+**Impact spec :** aucun
+
+---
+
+## 2026-08-27 — [L0] Verdict de la revue croisée : NON CONFORME — et pourquoi c'est le système qui fonctionne
+
+**Constat :** A17, réviseur croisé qui n'a produit aucune ligne du lot, rend **NON CONFORME** :
+7 défauts bloquants, 12 majeurs. `git status` prouve qu'il n'a modifié aucun fichier — il a rendu un
+verdict, pas un correctif (09 §1, §5.6).
+
+**Le fil conducteur des 7 bloquants est unique** et mérite d'être nommé, parce qu'il se reproduira à
+chaque lot mené par plusieurs agents : **A01, A11 et A52 ont livré en parallèle trois moitiés
+d'interface qui ne se rejoignent pas.** Chacun a écrit un contrat propre et cohérent dans ses
+commentaires ; aucun des trois n'est celui des autres. Exemples : la CI appelle `deploy.sh` sans les
+arguments que le script exige · elle sonde `/api/health` là où la route est `/api/v1/health` · elle
+`cd` dans `/opt/axion-audit` quand le dépôt est cloné dans `/opt/axion-audit/repo` · la console
+écoute 5174 côté application et 5173 dans toute l'infrastructure · les images de fronts déposent des
+fichiers dans un volume qui n'existe pas, pendant que Caddy les proxifie comme des serveurs HTTP.
+
+**Ce que l'auto-revue (étape 3) a manqué et pourquoi.** Elle a vérifié ce qui s'exécute : lint,
+typecheck, 91 tests, garde-fous, build, API à l'exécution. Tout était vert — et tout l'est resté.
+**Aucun des 7 bloquants n'était atteignable par ces contrôles**, parce que ni Docker ni la CI n'ont
+jamais tourné : le démon est arrêté et `origin` n'existe pas. L'auto-revue a donc mesuré ce qu'elle
+pouvait mesurer et **conclu au-delà**. C'est la faute d'A01, pas celle des garde-fous.
+
+**Décision de conduite — trois règles, applicables dès L1 :**
+
+1. **Interface d'abord, implémentations ensuite.** Quand plusieurs agents travaillent en parallèle,
+   A01 fige et écrit le contrat d'interface AVANT de déléguer — noms de scripts, chemins, ports,
+   variables, routes — au lieu de le reconstituer après coup. Le `.env.example` a joué ce rôle pour
+   les variables et **aucun bloquant ne porte sur elles** : la méthode marche, elle n'a simplement
+   pas été appliquée aux ports, aux chemins et aux commandes.
+2. **Une passe de jonction obligatoire** avant l'auto-revue, quand un lot a plusieurs producteurs :
+   croiser systématiquement appelant → appelé (scripts `pnpm` invoqués par la CI, variables, ports,
+   noms de services, chemins de déploiement). A17 l'a fait en quelques heures ; c'est reproductible.
+3. **Ne jamais déclarer vert ce qui n'a pas tourné.** Un livrable non exécuté est « non vérifié »,
+   jamais « livré ». Cette règle existait déjà (11 §9ter, « la vérité terrain, ce sont les tests ») —
+   elle a été appliquée aux critères d'acceptation et oubliée pour le code lui-même.
+
+**Suite donnée :** correction intégrale des 7 bloquants et des 12 majeurs avant toute ouverture du
+lot L1, avec **exécution réelle** d'au moins `docker compose up` en local et de la suite E2E. Le
+verdict d'A17 est repris tel quel au fichier de porte `docs/portes/PORTE_A_2026-08-27.md`.
+
+**Décideur :** A01
+**Impact spec :** aucun
+
+---
+
+## 2026-08-27 — [L0] Comment les fronts sont servis en production (défaut B-7)
+
+**Constat (A17) :** le lot décrit l'architecture de service des fronts de **deux façons
+incompatibles**. Les images `field` et `hq` ont une cible `runtime` qui copie le build dans `/sortie`
+puis s'arrête (« Caddy sert les fichiers statiques depuis un volume partagé ») — mais aucun volume
+`/sortie` n'existe, `docker-compose.prod.yml` vide même les volumes par `!reset []`, le `Caddyfile`
+ne contient aucune directive `root`/`file_server` et fait `reverse_proxy axion-field:5173`, et les
+healthchecks interrogent du HTTP. En staging et en prod, les conteneurs échoueraient sur `cp`,
+redémarreraient en boucle, ne seraient jamais `healthy`, et **Caddy ne démarrerait pas**.
+
+**Options :**
+
+1. Une image runtime qui sert réellement du HTTP (nginx ou équivalent embarqué).
+2. **Volume partagé + `root` / `file_server` dans les deux blocs de site de Caddy.**
+
+**Arbitrage : option 2**, qui est celle que les Dockerfiles décrivaient déjà — il manquait la moitié
+Caddy et le volume. Trois raisons, dont une décisive :
+
+- **Décisive (PWA)** : Caddy doit contrôler lui-même le `Cache-Control` du service worker et le
+  repli SPA (`try_files {path} /index.html`). Le `Caddyfile` porte DÉJÀ ces règles de cache — elles
+  sont sans effet derrière un `reverse_proxy`. Or la mise à jour applicative §31 et le démarrage
+  hors ligne dépendent exactement de ces en-têtes : les déléguer à un serveur intermédiaire, c'est
+  perdre la maîtrise du seul mécanisme qui fait qu'un iPad en clientèle voit la bonne version.
+- Un composant de moins à sécuriser et à mettre à jour — le raisonnement même qui a écarté Coolify
+  au 02 §30.1.
+- Caddy est déjà là et sait le faire.
+
+**Mise en œuvre (A11) :** volumes nommés `field_dist` et `hq_dist` ; les conteneurs de front
+deviennent des jobs one-shot (`restart: "no"`, dépendance `service_completed_successfully`) ; Caddy
+les monte en lecture seule et sert `root` + `file_server` + repli SPA ; les healthchecks HTTP de ces
+deux services disparaissent (un job one-shot n'a pas de vivacité à sonder).
+**En développement, on garde `reverse_proxy` vers le serveur Vite** — le rechargement à chaud est le
+seul intérêt du mode dev. La bascule se fait par un `import {$CADDY_FRONT_CONFIG}` désignant
+`fronts.dev.caddy` ou `fronts.static.caddy` : explicite, lisible, et **le même snippet de sécurité
+s'applique aux deux** — un dev plus permissif ne validerait rien.
+
+**Décideur :** A01
+**Impact spec :** aucun
+
+---
+
+## 2026-08-27 — [L0] Valeur du rouge d'alerte (#8c0a33)
+
+**Constat :** l'invariant 4 énonce « l'alerte est un rouge **distinct** » sans fixer de valeur, là où
+il fixe littéralement les quatre autres couleurs de la charte. Le fichier `packages/ui/src/tokens.ts`
+renvoyait à une entrée `DECISIONS.md` de ce titre — **qui n'existait pas**. La revue croisée l'a
+relevé (M-6) : le fichier annonçait lui-même la règle qu'il enfreignait. Entrée créée ici pour que la
+référence dise vrai.
+
+**Options :**
+
+1. `#8a0e14` — un rouge pur (teinte 357°). **Écarté par la mesure** : 19,8° d'écart de teinte
+   seulement avec le terracotta (16,9°), et un contraste mutuel de 1,99.
+2. `#8c0a33` — un carmin (teinte 341°) : **35,8° d'écart de teinte** et **1,94 de contraste mutuel**.
+3. `#d92d20` — un rouge vif. Écarté : 4,55 seulement sur l'ivoire (limite AA) et surtout **1,01 de
+   contraste mutuel** avec le terracotta, c'est-à-dire deux couleurs de luminance identique.
+
+**Arbitrage :** option 2. Règle de précédence **sans objet** (aucune divergence interne au pack :
+le pack délègue explicitement le choix). Le mot « distinct » n'est pas traité comme une impression
+mais mesuré sur les **deux** axes qui permettent de séparer deux rouges : la teinte **et** la
+luminance. La teinte seule ne suffit pas pour un protanope ; la luminance seule ne suffit pas pour
+distinguer deux rouges voisins. L'option 1, pourtant plus « rouge » à l'œil, échoue sur le premier
+axe — et c'est un test qui l'a démontré, pas un avis.
+Le carmin conserve par ailleurs 8,97 de contraste sur l'ivoire (AA très large) et 9,52 sur blanc.
+Conformément au §33, le rouge n'est de toute façon **jamais le seul porteur de sens** : une alerte
+porte toujours une icône et un libellé.
+Les seuils (≥ 30° de teinte, ≥ 1,8 de contraste mutuel) sont **verrouillés par `tokens.test.ts`** :
+une future modification de la charte qui les violerait rendrait la suite rouge.
+
+**Décideur :** A01
+**Impact spec :** aucun
+
+---
+
+## 2026-08-27 — [L0] Reprise de format des entrées du jour (écart V4 relevé par le gardien A02)
+
+**Constat :** le gardien relève un écart au 11 §9bis, dont la sanction est sévère — « une décision non
+tracée dans ce format n'existe pas ». Deux défauts :
+
+1. l'entrée « Points d'infrastructure actés sans réserve » porte **12 sous-décisions** sans en-têtes
+   `Options :` ni `Arbitrage :`. Appliqué à la lettre, le §9bis efface donc **douze arbitrages
+   d'infrastructure** ;
+2. **aucune** des entrées ne cite la règle de précédence **dans son arbitrage** — elle ne figure
+   qu'en en-tête de fichier.
+
+**Options :**
+
+1. Réécrire les entrées fautives en place — **exclu** : `DECISIONS.md` est append-only, et le
+   réécrire pour se mettre en conformité serait précisément le changement silencieux que le format
+   existe pour empêcher.
+2. Réémettre le contenu manquant dans une entrée nouvelle, et poser une règle de conduite pour la
+   suite.
+
+**Arbitrage :** option 2. Règle de précédence **sans objet** (question de forme, aucune divergence
+interne au pack). Les 12 points sont réémis ci-dessous au format imposé ; l'entrée d'origine reste en
+place, telle qu'écrite, et vaut désormais exposé des motifs.
+
+**Règle de conduite, applicable dès L1 :** chaque entrée cite la règle de précédence **dans son
+`Arbitrage :`** — soit en l'appliquant (« §32-36 prévaut sur §1-15, donc… »), soit en écrivant
+« règle de précédence **sans objet** (aucune divergence interne) ». La mention en en-tête de fichier
+ne dispense pas : c'est dans l'arbitrage qu'on doit voir que la question a été posée. Et **une entrée
+= une décision** : un regroupement fait perdre à chaque point son `Options :`.
+
+### Les 12 points, au format
+
+Pour chacun : l'option retenue, puis l'alternative et **la raison précise de son rejet**. Règle de
+précédence sans objet pour les douze — aucun ne porte sur une divergence interne au pack, tous
+comblent un point que le pack laisse ouvert.
+
+| #   | Objet                                | Options                                                                                          | Arbitrage                                                                                                                                                                                                                                       |
+| --- | ------------------------------------ | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `DEPLOY_SSH_KNOWN_HOSTS`             | (a) empreinte en secret d'Environment · (b) `StrictHostKeyChecking=no`                           | **(a)**. (b) revient à accepter un homme du milieu sur le canal même qui porte nos déploiements.                                                                                                                                                |
+| 2   | `GHCR_OWNER`, `IMAGE_TAG`            | (a) au `.env.example` · (b) en dur dans les Compose                                              | **(a)**. Non secrètes, mais sans elles `docker compose config` échoue en staging et en prod ; (b) figerait le compte GitHub dans le code.                                                                                                       |
+| 3   | Remappage pgBackRest                 | (a) dériver `PGBACKREST_REPO1_*` des variables du contrat · (b) ajouter des variables au contrat | **(a)**. pgBackRest impose ses propres noms d'options ; (b) enfreindrait 11 §8.2 sans rien gagner.                                                                                                                                              |
+| 4   | Image Postgres construite sur le VPS | (a) build local · (b) image publique + pgBackRest en second conteneur                            | **(a)**. pgBackRest doit vivre dans le conteneur qui exécute `archive_command` ; (b) rendrait le WAL archiving impossible. Écart assumé au « pull-only » du §30.6, seul build sur le serveur.                                                   |
+| 5   | Tags MinIO / `mc` / Caddy            | (a) figer maintenant, reconfirmer au provisionnement · (b) `:latest`                             | **(a)**. 11 §1 dit « dernière release stable au démarrage, **figée ensuite** » ; (b) est une dérive de dépendances en pleine Phase 1.                                                                                                           |
+| 6   | Actions GitHub par tag majeur        | (a) tag majeur · (b) SHA                                                                         | **(a)** pour la Phase 1. Inventer un SHA non vérifiable serait une fausse rigueur ; (b) part en Phase 2 avec Dependabot.                                                                                                                        |
+| 7   | Tag d'image `main-<run>`             | (a) `main-<run>` · (b) version du `package.json`                                                 | **(a)**. (b) republierait « v0.0.0 » à chaque merge, écrasant un tag censé désigner un état figé.                                                                                                                                               |
+| 8   | Cron `0 3 * * *` en dur              | (a) en dur + synchronisation manuelle signalée · (b) variable                                    | **(a)**. GitHub Actions n'accepte aucune variable dans une expression cron ; (b) est techniquement impossible.                                                                                                                                  |
+| 9   | Ports internes des fronts            | (a) 5173 `field` / 5174 `hq` · (b) port unique                                                   | **(a)**. Deux serveurs de développement sur la même machine ont besoin de deux ports ; (b) empêcherait `pnpm dev`. _(La revue croisée a montré que l'infra ne respectait pas cette décision — correction en cours, la décision est confirmée.)_ |
+| 10  | Commandes de migration               | (a) `db:migrate:check` puis `db:migrate` · (b) une seule commande                                | **(a)**. Le §30.6 impose « dry-run **puis** apply » ; (b) supprimerait le garde-fou.                                                                                                                                                            |
+| 11  | Sonde du worker                      | (a) `pgrep -f node` · (b) exposer un port de santé                                               | **(a)** au L0. Le worker n'expose aucun port et le contrat ne lui en donne pas ; (b) créerait une surface réseau pour une sonde. Une vraie sonde de files arrive avec les premiers jobs (L10/L11).                                              |
+| 12  | `archive_mode=on` dès le départ      | (a) activé + `stanza-create` manuel documenté · (b) activer après le premier démarrage           | **(a)**. (b) laisserait une fenêtre sans archivage WAL au moment le plus fragile. Le `stanza-create` devient le **point de contrôle n°1 de la porte P-A** côté sauvegardes.                                                                     |
+
+**Décideur :** A01
+**Impact spec :** aucun
+
+---
+
+## 2026-08-27 — [L0] ZAP baseline non bloquant jusqu'au lot L2
+
+**Constat (remonté par A52, défaut M-7 de la revue croisée) :** `.github/workflows/zap-baseline.yml`
+porte `ZAP_BLOQUANT: 'false'`. Le scan tourne, produit un rapport, mais ne peut pas faire rougir un
+build. Le 11 §8-5 réserve à l'humain « désactiver ou skipper un test » ; un scan de sécurité non
+bloquant en est un. Le fichier plaidait honnêtement sa cause dans son bandeau — mais un bandeau n'est
+pas une décision. C'est le lot qui soutient qu'« un contrôle non exécuté n'est pas un contrôle » :
+l'argument vaut aussi contre lui.
+
+**Options :**
+
+1. Rendre ZAP bloquant dès L0 — **exclu** : il n'existe au L0 aucune surface à scanner (ni
+   authentification, ni route métier, ni formulaire), seulement Caddy et une route de santé. Un scan
+   sur du vide produit soit un vert creux, soit du bruit — dans les deux cas une information fausse.
+2. Retirer ZAP du lot L0 et l'introduire au L2 — **exclu** : l'outillage se câble à froid.
+   Introduire un scanner le jour où il doit bloquer, c'est découvrir ses faux positifs au pire
+   moment et arbitrer sous la pression de la première PR d'authentification.
+3. Le garder non bloquant jusqu'au L2, comme **constante explicite versionnée**, avec une date de
+   bascule nommée et tracée ici.
+
+**Arbitrage :** option 3. Règle de précédence **sans objet** (aucune divergence interne au pack).
+La bascule est datée : **lot L2**, dès l'arrivée de l'authentification (07 §12). C'est à partir de là
+qu'un en-tête manquant, un cookie sans `Secure`/`HttpOnly`/`SameSite` ou une page d'erreur bavarde
+deviennent des défauts réels. **Sans cette date écrite ici, la ligne resterait à `'false'` par simple
+inertie** : personne ne rouvre un fichier pour durcir un contrôle qui ne le gêne pas.
+Trois garde-fous entourent la dérogation : elle est une **constante lisible** et non un
+`continue-on-error` (09 §5.7) ; le **code 3 de ZAP reste bloquant même au L0** — un scanner qui ne
+tourne pas n'est pas un scan non bloquant, c'est une absence de scan déguisée ; le rapport est
+archivé 30 j en artefact.
+
+**Point de contrôle à la porte du lot L2 :** passer `ZAP_BLOQUANT` à `'true'` **et** remplacer
+`ZAP_IMAGE: ghcr.io/zaproxy/zaproxy:stable` — qui est un **tag mobile**, le fichier le dit désormais
+au lieu de prétendre l'inverse — par le digest relevé dans le résumé des runs. Une porte bloquante
+doit être reproductible : sinon une PR devient rouge parce que le scanner a changé pendant la nuit,
+et personne ne peut le démontrer.
+
+**Décideur :** A01
+**Impact spec :** aucun
+
+---
+
+## 2026-08-27 — [L0] Le tag d'image du scanner ZAP reste mobile, délibérément
+
+**Constat (A52, défaut M-8) :** `ZAP_IMAGE: ghcr.io/zaproxy/zaproxy:stable` était commenté
+« épinglée (11 §1 — gel des dépendances Phase 1) ». `:stable` est un **tag mobile** : le commentaire
+affirmait le contraire de ce que faisait la ligne.
+
+**Options :**
+
+1. Inventer un numéro de version pour « épingler » — **exclu** : un tag non vérifiable serait un
+   mensonge de plus, ajouté pour faire taire le premier.
+2. Figer sur un digest relevé à l'exécution.
+3. Assumer le tag mobile, dire pourquoi, et rendre le résultat traçable après coup.
+
+**Arbitrage :** option 3 pour la Phase 1, option 2 au lot L2. Règle de précédence **sans objet**.
+Le gel du 11 §1 vise **ce qui entre dans le produit** ; ZAP l'inspecte de l'extérieur et n'est
+embarqué nulle part. Or les règles passives d'un scanner **sont la matière même du contrôle** : un
+scanner figé cesse silencieusement de détecter les défauts apparus après son gel — il devient vert
+pour de mauvaises raisons, ce qui est exactement le défaut que ce lot pourchasse partout ailleurs.
+Le coût du tag mobile est rendu récupérable : une étape journalise le **digest réellement utilisé**
+dans le résumé du run. On sait toujours après coup ce qui a tourné.
+**Au L2**, quand le scan devient bloquant, ce digest remplace le tag : une porte bloquante doit être
+reproductible.
+
+**Décideur :** A01
+**Impact spec :** aucun

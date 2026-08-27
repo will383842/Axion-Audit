@@ -5,6 +5,15 @@
     "Cette cle est un BANDEAU : le format .json n'accepte pas de commentaire, et",
     "ce motif ne correspond a aucun fichier du depot — il n'execute donc jamais",
     "rien. Le bandeau complet et les prerequis sont dans .husky/pre-commit.",
+    "",
+    "REGLE ABSOLUE : n'ajouter JAMAIS ici de motif couvrant `docs/**`, et jamais",
+    "de commande qui REECRIT un fichier (`prettier --write`, `--fix` elargi) sur",
+    "ce chemin. Les 12 fichiers du pack sont immuables (00_INDEX) ; un `pnpm",
+    "format` les a deja tous reecrits au lot L0. Le hook `.husky/pre-commit`",
+    "lance `pnpm check:pack` AVANT lint-staged et refuserait le commit — mais un",
+    "garde-fou n'excuse pas de pointer un formateur sur la specification.",
+    "Voir aussi .prettierignore (`docs/`) et DECISIONS.md 2026-08-27",
+    "« Prettier ne touche pas au pack ».",
     "Tracabilite E36/E43 — lot L0 (07 §12), agent A52."
   ],
 

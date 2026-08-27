@@ -221,6 +221,12 @@ describe('contraintes d’usage terrain', () => {
   it('garde un anneau de focus visible (jamais `outline: none` sans remplacement)', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'tokens.css'), 'utf8');
     expect(css).toMatch(/:focus-visible/);
-    expect(css).toMatch(/outline:\s*3px solid var\(--couleur-focus-anneau\)/);
+    // L'épaisseur et le décalage sont eux aussi des tokens : l'invariant 4 dit
+    // « aucune couleur OU TAILLE en dur », et cette règle vaut aussi pour le CSS
+    // du design system dès lors que la valeur est réutilisable ailleurs.
+    expect(css).toMatch(
+      /outline:\s*var\(--taille-focus-epaisseur\) solid var\(--couleur-focus-anneau\)/,
+    );
+    expect(css).toMatch(/outline-offset:\s*var\(--taille-focus-decalage\)/);
   });
 });

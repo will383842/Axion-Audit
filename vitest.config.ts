@@ -37,9 +37,13 @@ export default defineConfig({
           // Testcontainers démarre Postgres/Redis/MinIO : la marge est nécessaire.
           testTimeout: 60_000,
           hookTimeout: 120_000,
-          // Ces tests touchent une base réelle : jamais en parallèle sans isolation
-          // explicite (unicité `answers`, idempotence du push — 07 §13).
-          fileParallelism: false,
+          // Ces tests touchent une base RÉELLE : jamais en parallèle sans isolation
+          // explicite (unicité `answers(interview_id, mission_question_id)`,
+          // idempotence du push — 07 §13). Deux suites qui écrivent dans la même base
+          // produiraient des échecs intermittents, c'est-à-dire des tests qui mentent.
+          // `singleFork` sérialise les fichiers DANS ce projet seulement : les tests
+          // unitaires, eux, gardent tout leur parallélisme.
+          poolOptions: { forks: { singleFork: true } },
         },
       },
     ],

@@ -68,6 +68,9 @@ jobs:
           A_DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
           A_DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           A_DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          # `DEPLOY_PATH` = la COPIE DU DÉPÔT (`/opt/axion-audit/repo`), pas la
+          # racine d'exploitation `/opt/axion-audit` : `infra/scripts/` n'existe
+          # que sous `repo/` (`infra/README.md` §3).
           A_DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           A_TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           A_TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -95,14 +98,37 @@ jobs:
           printf '%s\n' "${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
+      # -----------------------------------------------------------------------
+      # FICHIER D'ENVIRONNEMENT — DEUX CONVENTIONS COEXISTAIENT, EN VOICI UNE
+      # -----------------------------------------------------------------------
+      # `restore-test.sh` prend le `.env` en PREMIER ARGUMENT et retombe sinon
+      # sur `$AXION_ROOT/.env`, soit `/opt/axion-audit/.env` (restore-test.sh
+      # l.43, lib/common.sh l.10). Appelé SANS argument, il visait donc le
+      # fichier PLAT, alors que le runbook prescrit un fichier PAR
+      # ENVIRONNEMENT (`infra/README.md` §4 : `/opt/axion-audit/prod/.env` et
+      # `/opt/axion-audit/staging/.env`), que `deploy.sh` résout la même forme
+      # par défaut (l.43), et que le runbook lance ce test précisément ainsi
+      # (§5.6 : `infra/scripts/restore-test.sh /opt/axion-audit/prod/.env`).
+      # C'est la forme PAR ENVIRONNEMENT qui fait foi : c'est elle qui porte la
+      # séparation stricte staging/prod du 02 §30.4-4.
+      #
+      # PROD, et non staging : ce sont les sauvegardes de PRODUCTION dont la
+      # restauration conditionne le PRA (02 §11.4, critère L0). Le chemin reste
+      # surchargeable par la variable d'environment `RESTORE_TEST_ENV_FILE` si
+      # l'arborescence du serveur venait à différer ; aucun repli silencieux :
+      # `axion_load_env` refuse de démarrer sur un fichier illisible.
+      # -----------------------------------------------------------------------
       - name: Restaurer Postgres + MinIO dans un conteneur jetable
         id: restore
         env:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          RESTORE_TEST_ENV_FILE: ${{ vars.RESTORE_TEST_ENV_FILE }}
         run: |
           set -euo pipefail
+          fichier_env="${RESTORE_TEST_ENV_FILE:-/opt/axion-audit/prod/.env}"
+          echo "Fichier d'environnement visé sur le serveur : ${fichier_env}"
           # restore-test.sh (A11) : restore pgBackRest dans un conteneur jetable
           # + `mc mirror` de contrôle MinIO + requêtes de contrôle. Code de
           # retour ≠ 0 = échec de PRA. Aucun masquage, aucun `|| true`.
@@ -111,7 +137,9 @@ jobs:
               -o UserKnownHostsFile=~/.ssh/known_hosts \
               -o ConnectTimeout=20 \
               "${DEPLOY_USER}@${DEPLOY_HOST}" \
-              "set -euo pipefail; cd '${DEPLOY_PATH}'; ./infra/scripts/restore-test.sh" \
+              "set -euo pipefail; cd '${DEPLOY_PATH}'; \
+               test -x ./infra/scripts/restore-test.sh || { echo 'ERREUR : ./infra/scripts/restore-test.sh introuvable ou non exécutable sous '\''${DEPLOY_PATH}'\''. Le secret DEPLOY_PATH doit désigner la COPIE DU DÉPÔT (/opt/axion-audit/repo — infra/README.md §3).' >&2; exit 1; }; \
+               ./infra/scripts/restore-test.sh '${fichier_env}'" \
               | tee restore-test.log
 
       - name: Conserver le journal de restauration (preuve pour la porte)

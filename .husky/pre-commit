@@ -6,9 +6,18 @@
 # gitleaks en CI (bloquant, §30) ».
 #
 # Ce que fait ce hook, dans l'ordre :
-#   1. `lint-staged` — eslint --fix sur les seuls fichiers INDEXÉS
+#   1. `pnpm check:pack` — INTÉGRITÉ DES 12 FICHIERS DU PACK. Instantané
+#      (12 SHA-256), et placé EN PREMIER pour une raison précise : ce contrôle
+#      existe parce qu'un `pnpm format` a réécrit tout le pack au lot L0 sans
+#      que personne ne le demande. Un tel accident se produit sur le poste de
+#      travail, entre deux commits — c'est-à-dire ICI. Ne l'avoir qu'en CI
+#      reviendrait à le découvrir après coup, quand la comparaison avec
+#      l'original (qui fait toute la valeur de la revue de spec de la porte
+#      P-D, 09 §4) est déjà perdue. Voir DECISIONS.md 2026-08-27 « Prettier ne
+#      touche pas au pack ».
+#   2. `lint-staged` — eslint --fix sur les seuls fichiers INDEXÉS
 #      (configuration : `.lintstagedrc.json` à la racine) ;
-#   2. `pnpm typecheck` — TYPECHECK RAPIDE sur le projet. Il porte volontairement
+#   3. `pnpm typecheck` — TYPECHECK RAPIDE sur le projet. Il porte volontairement
 #      sur l'ensemble et non sur les fichiers indexés : un typecheck TypeScript
 #      partiel est faux par construction (les erreurs de types naissent aux
 #      frontières entre fichiers). C'est le prix d'un pre-commit qui ne ment pas.
@@ -27,7 +36,9 @@
 # PRÉREQUIS (à câbler par A01 dans le `package.json` racine) :
 #   · devDependencies : `husky` et `lint-staged` ;
 #   · script `"prepare": "husky"` (installe les hooks après `pnpm install`) ;
-#   · scripts `lint` et `typecheck` (voir .github/workflows/README.md).
+#   · scripts `lint`, `typecheck` et `check:pack` (voir
+#     .github/workflows/README.md) — les trois existent dans le package.json
+#     racine.
 #   Ces deux outils ne figurent pas dans la liste des versions épinglées 11 §1 —
 #   doute tracé par A52 (rapport → DECISIONS.md).
 #
@@ -35,6 +46,9 @@
 # =============================================================================
 
 set -e
+
+echo "[pre-commit] intégrité du pack (12 fichiers de docs/)…"
+pnpm check:pack
 
 echo "[pre-commit] lint des fichiers indexés (lint-staged)…"
 pnpm exec lint-staged

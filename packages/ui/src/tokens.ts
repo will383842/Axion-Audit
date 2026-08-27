@@ -25,7 +25,8 @@ export const COULEURS_CHARTE = {
   mocha: '#2a2520',
   /**
    * DÉRIVÉE — ALERTE. Le pack impose « un rouge DISTINCT » sans en fixer la valeur.
-   * Voir DECISIONS.md 2026-08-27 « Valeur du rouge d'alerte ».
+   * Voir DECISIONS.md 2026-08-27 « Valeur du rouge d'alerte (#8c0a33) », qui expose
+   * les trois candidats mesurés et la raison du rejet des deux autres.
    * Distinct du terracotta sur DEUX axes, mesurés par `tokens.test.ts` :
    *   · teinte 341° contre 16,9° → 35,8° d'écart angulaire ;
    *   · luminance → contraste mutuel 1,94.
@@ -119,6 +120,16 @@ export const TOKENS_TAILLE = {
   'rayon-petit': '0.25rem',
   'rayon-moyen': '0.5rem',
   'rayon-grand': '0.75rem',
+  /**
+   * Largeur maximale d'une colonne de texte. ~65 caractères : au-delà, l'œil perd
+   * la ligne en revenant à la marge. Vaut autant pour un écran d'entretien que
+   * pour un état vide.
+   */
+  'largeur-contenu-etroit': '32rem',
+  'largeur-contenu-large': '64rem',
+  /** Anneau de focus — épaisseur et décalage. Jamais supprimé (accessibilité A28). */
+  'focus-epaisseur': '3px',
+  'focus-decalage': '2px',
 } as const;
 
 /**

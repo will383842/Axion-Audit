@@ -14,8 +14,16 @@
 #   · 02 §30.5 — protection de `main` : CI verte obligatoire.
 #
 # RÈGLE FONDATRICE DE CE FICHIER (09 §5.7) : un workflow ne doit JAMAIS pouvoir
-# passer au vert en masquant un échec. Aucun `|| true`, aucun `continue-on-error`
-# de confort. Une CI qui ment est pire que pas de CI.
+# passer au vert en masquant un échec. Aucun `continue-on-error`, et aucun
+# `|| true` sur un CONTRÔLE. Une CI qui ment est pire que pas de CI.
+#
+# Deux `|| true` subsistent dans ce fichier, et il faut dire lesquels plutôt que
+# de laisser croire qu'il n'y en a aucun : `docker logs minio || true` (l. ~351)
+# et `docker rm -f minio || true` (l. ~372). Tous deux portent sur du DIAGNOSTIC
+# et du NETTOYAGE, jamais sur un verdict — l'un s'exécute alors que l'étape a
+# DÉJÀ échoué (il ne peut donc rien masquer), l'autre est un teardown
+# `if: always()` dont l'échec ne dit rien sur le code testé. Les retirer rendrait
+# la CI rouge pour des raisons étrangères au code : c'est l'inverse du but.
 #
 # Traçabilité E36/E43 — livrable du lot L0 (07 §12), agent A52 (09 §1).
 # =============================================================================
@@ -198,6 +206,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-node-pnpm
+
+      # ---------------------------------------------------------------------
+      # INTÉGRITÉ DU PACK — EN PREMIER, parce que c'est instantané et que c'est
+      # le contrôle qui protège tous les autres.
+      # ---------------------------------------------------------------------
+      # `scripts/check-pack-integrity.mjs` (A01) compare les 12 fichiers de
+      # `docs/` à leur sceau SHA-256. Il a été écrit après un incident réel du
+      # lot L0 : un `pnpm format` a réécrit tout le pack (724 insertions,
+      # 468 suppressions) sans que personne ne le demande. Il n'était appelé
+      # NULLE PART — ni ici, ni dans `.husky/pre-commit`, ni dans
+      # `.lintstagedrc.json`. Un contrôle qui ne s'exécute pas n'est pas un
+      # contrôle : c'est le même défaut, une couche plus haut.
+      # Placé AVANT `pnpm lint` : si un formateur a touché à la spécification,
+      # on le sait en 200 ms, pas après huit minutes de CI.
+      # Voir DECISIONS.md 2026-08-27 « Prettier ne touche pas au pack ».
+      - name: pnpm check:pack (intégrité des 12 fichiers de docs/)
+        run: pnpm check:pack
+
       - name: pnpm lint
         run: pnpm lint
       # Le formatage est vérifié, jamais réécrit par la CI : un job qui corrige
@@ -219,12 +245,47 @@ jobs:
         run: pnpm typecheck
 
   # ---------------------------------------------------------------------------
+  # 2bis/8 — COMPILATION DES SOURCES (`pnpm build`)
+  # ---------------------------------------------------------------------------
+  # Ce job ne figure pas tel quel dans la liste 11 §7 (« lint → typecheck →
+  # unit → … »), et il est pourtant indispensable : sans lui, une PR pouvait
+  # être VERTE avec une compilation cassée. Le seul `pnpm build` du dépôt vivait
+  # dans les Dockerfiles, construits par le job `build` (images), qui dépend de
+  # `e2e` et ne tourne PAS sur les pull requests. Autrement dit : la seule chose
+  # qui prouvait que le code compile ne s'exécutait jamais au moment où ça
+  # servait.
+  #
+  # `typecheck` ne le remplace pas : il fait `tsc --noEmit` par espace de
+  # travail, sans résoudre les dépendances entre paquets construits
+  # (`packages/*` produisent des `dist/` que `apps/*` consomment), sans passer
+  # par les `tsconfig.build.json`, et sans exécuter les builds Vite de `field`
+  # et `hq`. Un `tsc --noEmit` vert et un `vite build` rouge cohabitent très
+  # bien.
+  #
+  # Position : APRÈS `typecheck` (une erreur de types se lit mieux dans le
+  # message de tsc que dans une trace de bundler), AVANT `unit` (rien ne sert de
+  # tester du code qui ne se construit pas).
+  # ---------------------------------------------------------------------------
+  build-sources:
+    name: 2bis · build (sources)
+    runs-on: ubuntu-latest
+    needs: [typecheck]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-node-pnpm
+      - name: pnpm build
+        env:
+          APP_ENV: dev
+          TZ: UTC
+        run: pnpm build
+
+  # ---------------------------------------------------------------------------
   # 3/8 — TESTS UNITAIRES (11 §7 · 07 §13 « Unitaires (Vitest) »)
   # ---------------------------------------------------------------------------
   unit:
     name: 3 · unit
     runs-on: ubuntu-latest
-    needs: [typecheck, anti-skip]
+    needs: [build-sources, anti-skip]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-node-pnpm
@@ -436,8 +497,10 @@ jobs:
   # fichier de configuration VERSIONNÉ (.github/coverage-critical-paths.json),
   # vide au L0, alimenté lot par lot. Le job ci-dessous refuse deux mensonges :
   #   · un chemin déclaré qui ne correspond à aucun fichier (config périmée) ;
-  #   · une liste vide alors qu'un lot critique a déjà livré son code (config
-  #     non alimentée = seuil silencieusement contourné).
+  #   · un module critique DÉJÀ LIVRÉ qui n'est couvert par aucune entrée de
+  #     `cheminsCritiques` (config non alimentée = seuil silencieusement
+  #     contourné). Le contrôle est fait module par module : une liste
+  #     PARTIELLEMENT alimentée est un mensonge aussi efficace qu'une liste vide.
   # ---------------------------------------------------------------------------
   coverage:
     name: couverture ≥ 90 % (modules critiques — 09 §3)
@@ -477,17 +540,46 @@ jobs:
             fi
           done < <(jq -r '.cheminsCritiques[].glob' "$config")
 
-          # Ceinture 2 — un lot critique livré doit avoir alimenté la liste.
+          # -------------------------------------------------------------------
+          # Ceinture 2 — CHAQUE module attendu est testé INDIVIDUELLEMENT.
+          # -------------------------------------------------------------------
+          # La forme initiale (`code existe ET nb == 0`) devenait INERTE dès la
+          # PREMIÈRE entrée de `cheminsCritiques` : `nb` valant alors 1 ou plus,
+          # la condition ne pouvait plus jamais être vraie. Au lot L2, déclarer
+          # `apps/api/src/rbac/**` en oubliant `apps/api/src/auth/**` aurait fait
+          # échapper l'AUTHENTIFICATION au seuil de 90 % — en silence, c'est-à-
+          # dire exactement le scénario que cette ceinture existe pour empêcher.
+          #
+          # On compare des FICHIERS, pas des chaînes de globs : le mode d'emploi
+          # de `${config}` autorise explicitement l'agent du lot à corriger le
+          # glob quand l'arborescence réelle diffère. Un contrôle qui exigerait
+          # le glob mot pour mot serait faux au premier renommage ; celui-ci
+          # reste juste, et il répond à la seule question qui compte : « ce
+          # fichier critique est-il soumis au seuil, oui ou non ? »
+          couverts="$(mktemp)"
+          attendus="$(mktemp)"
+          restants="$(mktemp)"
+          while IFS= read -r glob_critique; do
+            [ -z "$glob_critique" ] && continue
+            git ls-files -- "$glob_critique" >>"$couverts"
+          done < <(jq -r '.cheminsCritiques[].glob' "$config")
+          sort -u -o "$couverts" "$couverts"
+
           while IFS= read -r ligne; do
             [ -z "$ligne" ] && continue
             lot="$(printf '%s' "$ligne" | cut -f1)"
             motif="$(printf '%s' "$ligne" | cut -f2)"
-            if [ -n "$(git ls-files -- "$motif")" ] && [ "$nb" -eq 0 ]; then
-              echo "::error::Du code correspondant à ${motif} (lot ${lot}) existe alors que .cheminsCritiques est encore VIDE. La DoD transverse serait contournée en silence. Action : alimenter ${config} avec le module livré."
+            git ls-files -- "$motif" | sort -u >"$attendus"
+            # Module non encore livré : rien à exiger.
+            [ -s "$attendus" ] || continue
+            comm -23 "$attendus" "$couverts" >"$restants"
+            if [ -s "$restants" ]; then
+              echo "::error::Module critique LIVRÉ mais NON SOUMIS AU SEUIL : ${motif} (lot ${lot}). Fichiers hors de .cheminsCritiques : $(tr '\n' ' ' <"$restants"). La DoD transverse (09 §3, ≥ 90 % sur les modules critiques) serait contournée en silence. Action : déplacer l'entrée du lot ${lot} de .cheminsAttendus vers .cheminsCritiques dans ${config} (en corrigeant le glob si l'arborescence réelle diffère)."
               echec=1
             fi
           done < <(jq -r '.cheminsAttendus[] | [.lot, .glob] | @tsv' "$config")
 
+          rm -f "$couverts" "$attendus" "$restants"
           exit "$echec"
 
       - name: Aucun module critique encore livré (L0) — mesure sans seuil

@@ -27,6 +27,14 @@
 # (une ligne, versionnée, revue en PR). Il n'y a volontairement AUCUN
 # `continue-on-error` dans ce fichier : le caractère non bloquant est une
 # CONSTANTE EXPLICITE et lisible, pas un masquage d'échec (09 §5.7).
+#
+# ⚖️ CETTE DÉROGATION EST UN ARBITRAGE HUMAIN, PAS UN CHOIX D'OUTILLAGE.
+# Le 11 §8-5 réserve à Williams « désactiver ou skipper un test » ; un scan de
+# sécurité non bloquant en est un. Elle est donc tracée dans `DECISIONS.md`,
+# entrée « [L0] ZAP baseline non bloquant jusqu'au lot L2 » (rédigée par A52,
+# portée par A01) — avec sa DATE DE BASCULE. Sans cette entrée datée, la ligne
+# `ZAP_BLOQUANT: 'false'` resterait à `false` par simple inertie, et l'échéance
+# « L2 » écrite ci-dessus ne serait qu'une bonne intention.
 # ─────────────────────────────────────────────────────────────────────────────
 #
 # Traçabilité E36/E43 — lot L0 (outillage), exploité par A51 dès L2.
@@ -57,8 +65,38 @@ concurrency:
 
 env:
   # ⚠️ PASSER À 'true' AU LOT L2 (voir bandeau). Une seule ligne à changer.
+  # Dérogation tracée : DECISIONS.md, « [L0] ZAP baseline non bloquant jusqu'au
+  # lot L2 » (11 §8-5).
   ZAP_BLOQUANT: 'false'
-  # Image ZAP officielle, épinglée (11 §1 — gel des dépendances Phase 1).
+  # ---------------------------------------------------------------------------
+  # IMAGE ZAP — `:stable` EST UN TAG MOBILE. Ce n'est PAS un épinglage.
+  # ---------------------------------------------------------------------------
+  # Le commentaire précédent affirmait « épinglée (11 §1) » : c'était faux, et un
+  # commentaire faux est pire que pas de commentaire — il fait passer un contrôle
+  # pour acquis. `ghcr.io/zaproxy/zaproxy:stable` est repoussé à chaque release
+  # de ZAP : deux runs du même commit peuvent scanner avec deux scanners
+  # différents.
+  #
+  # POURQUOI ON LE GARDE MOBILE AU L0/L1 : les règles PASSIVES de ZAP sont la
+  # matière même du contrôle. Un scanner figé cesse silencieusement de détecter
+  # les classes de défaut apparues après son gel — c'est-à-dire qu'il devient
+  # vert pour de mauvaises raisons. Le gel du 11 §1 vise les dépendances qui
+  # ENTRENT dans le produit livré ; ZAP n'entre pas dans le produit, il
+  # l'inspecte depuis l'extérieur.
+  #
+  # CE QUE ÇA COÛTE, ET COMMENT C'EST COMPENSÉ :
+  #   · le run n'est pas reproductible à l'identique → l'étape « Identifier
+  #     l'image réellement utilisée » ci-dessous journalise le DIGEST tiré, qui
+  #     est archivé avec le rapport : on sait toujours APRÈS COUP ce qui a
+  #     tourné ;
+  #   · une régression de l'image casserait le scan → code 3, échec dur, jamais
+  #     silencieux (étape « Verdict »).
+  #
+  # ⚠️ AU LOT L2, quand `ZAP_BLOQUANT` passera à 'true' : REMPLACER ce tag par le
+  # DIGEST relevé dans les journaux (`ghcr.io/zaproxy/zaproxy@sha256:…`). Une
+  # porte bloquante doit être reproductible — sinon une PR devient rouge parce
+  # que le scanner a changé pendant la nuit, et personne ne peut le démontrer.
+  # ---------------------------------------------------------------------------
   ZAP_IMAGE: ghcr.io/zaproxy/zaproxy:stable
 
 jobs:
@@ -78,6 +116,22 @@ jobs:
             exit 1
           fi
           echo "Cible du scan : ${cible}"
+
+      # `:stable` étant un tag MOBILE (voir bloc `env:`), on relève le digest
+      # RÉELLEMENT tiré : c'est la seule trace qui rende le run analysable après
+      # coup, et c'est la valeur à épingler au lot L2.
+      - name: Identifier l'image ZAP réellement utilisée (digest)
+        run: |
+          set -euo pipefail
+          docker pull "${ZAP_IMAGE}" >/dev/null
+          digest="$(docker image inspect --format '{{index .RepoDigests 0}}' "${ZAP_IMAGE}")"
+          echo "Image ZAP tirée : ${digest}"
+          {
+            echo "### Image ZAP de ce run"
+            echo "- Tag demandé : \`${ZAP_IMAGE}\` (**tag mobile**, pas un épinglage)"
+            echo "- Digest réellement tiré : \`${digest}\`"
+            echo "- Au lot L2 (\`ZAP_BLOQUANT: 'true'\`) : épingler ce digest."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Lancer zap-baseline.py
         id: scan

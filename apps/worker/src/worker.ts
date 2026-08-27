@@ -14,7 +14,7 @@
 // =============================================================================
 import { Queue, Worker, type Processor } from 'bullmq';
 import { pino } from 'pino';
-import { chargerEnv, envServeurSchema } from '@axion/shared';
+import { chargerEnv, envServeurSchema, OPTIONS_REDACTION_JOURNAL } from '@axion/shared';
 
 const config = chargerEnv(envServeurSchema, process.env);
 
@@ -22,30 +22,12 @@ const logger = pino({
   level: config.LOG_LEVEL,
   base: { service: 'worker', env: config.APP_ENV },
   timestamp: pino.stdTimeFunctions.isoTime,
-  // Même exigence que l'API (11 §2) : aucune donnée personnelle dans les journaux.
-  // Le worker manipule des réponses d'entretien pour la génération : c'est le
-  // processus où une fuite de journal serait la plus fournie.
-  redact: {
-    paths: [
-      'person_name',
-      '*.person_name',
-      'email',
-      '*.email',
-      'answer',
-      '*.answer',
-      'answers',
-      '*.answers',
-      'note',
-      '*.note',
-      'verbatim',
-      '*.verbatim',
-      'payload',
-      '*.payload',
-      'prompt',
-      '*.prompt',
-    ],
-    censor: '[masqué:rgpd]',
-  },
+  // Politique de redaction PARTAGÉE avec l'API (packages/shared/src/redaction.ts).
+  // Elle a d'abord été dupliquée ici, et la copie du worker était plus COURTE de dix
+  // champs — dont `password`, `token` et `phone`. Or c'est le worker qui manipule les
+  // réponses d'entretien pour la génération et les appels LLM : la fuite y aurait été
+  // la plus fournie. Deux copies d'une même politique RGPD divergent toujours.
+  redact: { ...OPTIONS_REDACTION_JOURNAL, paths: [...OPTIONS_REDACTION_JOURNAL.paths] },
 });
 
 /**
@@ -64,9 +46,18 @@ export const NOMS_DE_FILES = {
   purges: 'axion:purges',
   /** L13 — webhooks console axion-ia.com (HMAC + anti-rejeu). */
   webhooks: 'axion:webhooks',
-  /** 02 §11.4 — sauvegardes MinIO pilotées depuis l'application. */
-  sauvegardes: 'axion:sauvegardes',
 } as const;
+
+// Une file `axion:sauvegardes` a existé ici, annotée « 02 §11.4 ». Le gardien A02 est
+// allé LIRE le §11.4 : il décrit pgBackRest, l'archivage WAL, la copie chiffrée et le
+// test de restauration nocturne — du cron et des scripts d'infrastructure, jamais un
+// job applicatif. Aucun lot du pack ne prévoit de sauvegarde pilotée par l'application,
+// et la ligne L0 confie explicitement celle de MinIO à `mc mirror`
+// (`infra/scripts/backup-minio.sh`). C'était donc du code ORPHELIN, refusé par la règle
+// 09 §3.6 : « toute route, table, écran ou job livré se rattache à une exigence E1-E47
+// OU à une fiche AMELIORATIONS.md ». Supprimée.
+// La leçon vaut au-delà de cette ligne : une annotation de traçabilité qui CITE une
+// section n'est une preuve que si quelqu'un ouvre la section.
 
 const connexionRedis = { url: config.REDIS_URL };
 

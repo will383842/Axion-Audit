@@ -18,9 +18,15 @@
 #
 # ------------------------------- ROLLBACK ------------------------------------
 # Procédure (02 §30.6 + §11.2), à exécuter à la main sur le serveur :
-#   1. Identifier le tag précédent : `docker image ls | grep axion-audit-api`
-#      ou l'historique des runs de ce workflow (tag `sha-xxxxxxx`).
-#   2. Sur le serveur : `IMAGE_TAG=sha-<précédent> ./infra/scripts/deploy.sh`
+#   1. Le tag précédent est JOURNALISÉ par `deploy.sh` lui-même dans
+#      `/opt/axion-audit/staging.deployed-tags` (deploy.sh l.58 et l.155) :
+#        cat /opt/axion-audit/staging.deployed-tags
+#      À défaut, l'historique des runs de ce workflow (tag `sha-xxxxxxx`).
+#   2. Sur le serveur, depuis la copie du dépôt (`/opt/axion-audit/repo`) :
+#        ./infra/scripts/deploy.sh --rollback --env staging
+#      (le script relit lui-même l'avant-dernier tag du journal), ou pour viser
+#      un tag précis :
+#        ./infra/scripts/deploy.sh --env staging --tag sha-<précédent>
 #      → docker compose est re-pointé sur le tag précédent.
 #   3. Les images sont CONSERVÉES 90 JOURS sur GHCR (02 §30.6) : la fenêtre de
 #      retour arrière est garantie sur 90 j, pas au-delà.
@@ -111,45 +117,88 @@ jobs:
           # d'hôte reviendrait à accepter un homme du milieu sur le canal qui
           # porte nos déploiements.
 
+      # -----------------------------------------------------------------------
+      # CONTRAT D'APPEL DE `infra/scripts/deploy.sh` (A11) — LU DANS LE SCRIPT
+      # -----------------------------------------------------------------------
+      #   ./deploy.sh --env <staging|prod> --tag <IMAGE_TAG> [--env-file <chemin>]
+      #   ./deploy.sh --rollback --env <staging|prod>
+      #
+      # · `--env` est OBLIGATOIRE (deploy.sh l.40) et `--tag` l'est aussi
+      #   (l.70) : sans eux le script meurt avant toute action. La forme
+      #   `IMAGE_TAG=… ./deploy.sh` utilisée jusqu'ici NE POUVAIT PAS
+      #   FONCTIONNER — le script ne lit JAMAIS `IMAGE_TAG` depuis
+      #   l'environnement, il l'EXPORTE depuis `--tag` (l.72). C'est l'appel qui
+      #   était faux, pas le script.
+      # · `APP_ENV` n'est PAS passé ici, volontairement : `deploy.sh` le lit dans
+      #   le `.env` du serveur et le CONFRONTE à `--env` (l.49-50, garde-fou
+      #   anti-déploiement-sur-le-mauvais-environnement). Le passer depuis la CI
+      #   serait sans effet — `axion_load_env` fait `set -a; . "$env_file"`, le
+      #   fichier gagne — et surtout cela donnerait l'illusion que la CI choisit
+      #   l'environnement, alors que c'est le serveur qui l'atteste.
+      # · `--env-file` n'est pas passé non plus : par défaut `deploy.sh` résout
+      #   `/opt/axion-audit/<env>/.env` (l.43), qui EST la convention du runbook
+      #   (`infra/README.md` §4 et §5). Fournir le chemin depuis GitHub
+      #   dupliquerait cette convention dans un secret, où elle dériverait.
+      # -----------------------------------------------------------------------
       - name: Déployer (pull/up + migration garde-fou + smoke tests)
         id: deploiement
         env:
-          # `IMAGE_TAG` et `GHCR_OWNER` sont les DEUX variables que
-          # `infra/docker-compose.staging.yml` (A11) interpole pour résoudre
-          # `ghcr.io/${GHCR_OWNER}/axion-audit-<app>:${IMAGE_TAG}`.
           IMAGE_TAG: ${{ inputs.tag_image }}
+          # `GHCR_OWNER` est la seconde variable que
+          # `infra/docker-compose.staging.yml` (A11) interpole pour résoudre
+          # `ghcr.io/${GHCR_OWNER}/axion-audit-<app>:${IMAGE_TAG}`. Le `.env` du
+          # serveur (§18) reste prioritaire — cette valeur n'est qu'un repli.
           GHCR_OWNER: ${{ github.repository_owner }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          # ⚠️ `DEPLOY_PATH` = LA COPIE DU DÉPÔT, soit `/opt/axion-audit/repo`
+          # (`infra/README.md` §3 : `git clone … /opt/axion-audit/repo`), et NON
+          # `/opt/axion-audit`, qui est la racine d'EXPLOITATION (`.env`,
+          # `<env>/.env`, `*.deployed-tags`). Les deux ne contiennent pas les
+          # mêmes choses : `infra/scripts/` n'existe que sous `repo/`.
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           set -euo pipefail
+          # GHCR n'accepte que des minuscules dans le chemin de dépôt — même
+          # normalisation que `build-images.yml`, sinon un compte GitHub écrit
+          # avec des majuscules produirait une référence d'image invalide.
+          ghcr_owner="$(printf '%s' "${GHCR_OWNER}" | tr '[:upper:]' '[:lower:]')"
           ssh -i ~/.ssh/deploy_key \
               -o StrictHostKeyChecking=yes \
               -o UserKnownHostsFile=~/.ssh/known_hosts \
               -o ConnectTimeout=20 \
               "${DEPLOY_USER}@${DEPLOY_HOST}" \
               "set -euo pipefail; cd '${DEPLOY_PATH}'; \
-               APP_ENV=staging GHCR_OWNER='${GHCR_OWNER}' IMAGE_TAG='${IMAGE_TAG}' ./infra/scripts/deploy.sh"
+               test -x ./infra/scripts/deploy.sh || { echo 'ERREUR : ./infra/scripts/deploy.sh introuvable ou non exécutable sous '\''${DEPLOY_PATH}'\''. Le secret DEPLOY_PATH doit désigner la COPIE DU DÉPÔT (/opt/axion-audit/repo — infra/README.md §3), pas la racine d exploitation /opt/axion-audit.' >&2; exit 1; }; \
+               GHCR_OWNER='${ghcr_owner}' ./infra/scripts/deploy.sh --env staging --tag '${IMAGE_TAG}'"
           # deploy.sh (A11) enchaîne : docker compose pull && up -d →
           # migration DRY-RUN puis APPLY (garde-fou 02 §30.6) → smoke tests
-          # (santé API, login, une écriture/lecture). Un code de retour ≠ 0
-          # fait ÉCHOUER ce job : aucun `|| true`, aucun masquage.
+          # (santé API, écriture/lecture Postgres/MinIO/Redis) → rollback
+          # automatique vers le tag précédent si les smoke tests sont rouges.
+          # Un code de retour ≠ 0 fait ÉCHOUER ce job : aucun `|| true`, aucun
+          # masquage.
 
       # Seconde ceinture, exécutée depuis l'extérieur du serveur : ce que le
       # serveur se dit à lui-même ne prouve pas que le service est joignable.
+      #
+      # ROUTE : `/api/v1/health`, et non `/api/health`. Le `Caddyfile` (A11)
+      # utilise `handle_path /api/*`, qui RETIRE le préfixe : l'API reçoit
+      # `/v1/…`. Et `apps/api/src/app.ts` (A01) enregistre les routes de santé
+      # sous `prefix: '/v1'`. `/api/health` arriverait donc à l'API comme
+      # `/health` — 404. C'est exactement l'URL qu'interroge déjà
+      # `infra/scripts/smoke-test.sh` (l.44) : une seule vérité, trois fichiers.
       - name: Contrôle de santé public (hors serveur)
         run: |
           set -euo pipefail
           url="${{ vars.STAGING_BASE_URL }}"
           for i in $(seq 1 10); do
-            if curl -fsS --max-time 10 "${url%/}/api/health" >/dev/null; then
-              echo "Santé API OK sur ${url%/}/api/health (tentative ${i})."
+            if curl -fsS --max-time 10 "${url%/}/api/v1/health" >/dev/null; then
+              echo "Santé API OK sur ${url%/}/api/v1/health (tentative ${i})."
               exit 0
             fi
             sleep 6
           done
-          echo "::error title=Staging injoignable::${url%/}/api/health ne répond pas après 60 s. Le déploiement est considéré comme ÉCHOUÉ (rollback : voir le bandeau de ce fichier)."
+          echo "::error title=Staging injoignable::${url%/}/api/v1/health ne répond pas après 60 s. Le déploiement est considéré comme ÉCHOUÉ (rollback : voir le bandeau de ce fichier)."
           exit 1
 
       - name: Bilan

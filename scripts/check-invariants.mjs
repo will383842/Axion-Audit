@@ -42,15 +42,32 @@ const NOMS_DE_SECRETS = [
  * que pas de contrôle du tout. Il reste couvert par gitleaks (secrets) et par
  * ESLint (le reste), qui appliquent les mêmes règles sans les citer.
  */
-const FICHIERS_HORS_ANALYSE = [/^scripts\/check-invariants\.mjs$/];
+const FICHIERS_HORS_ANALYSE = [
+  // Ce script ÉNONCE les motifs interdits dans ses propres expressions régulières.
+  /^scripts\/check-invariants\.mjs$/,
+  // eslint.config.js porte les mêmes interdictions dans ses sélecteurs et ses
+  // messages : il est la défense, pas l'attaque.
+  /^eslint\.config\.js$/,
+  // Le pack n'est pas du code, et son intégrité est contrôlée séparément, à
+  // l'octet près, par `pnpm check:pack`.
+  /^docs\//,
+  // Les 40 gabarits d'agents CITENT les invariants : c'est leur raison d'être.
+  /^\.claude\//,
+  // Le verrou de dépendances contient des empreintes hexadécimales que le
+  // détecteur de couleurs prendrait pour des `#rrggbb`, et des noms de paquets
+  // (`@prisma/client` en pair optionnel de Drizzle) qui ne sont pas des imports.
+  /^pnpm-lock\.yaml$/,
+];
 
 /** Fichiers de code suivis par git, hors pack documentaire et hors fixtures. */
 function fichiersSources() {
-  const sortie = execFileSync(
-    'git',
-    ['ls-files', 'apps/**', 'packages/**', 'scripts/**', 'infra/**'],
-    { encoding: 'utf8' },
-  );
+  // Périmètre : TOUT le dépôt sauf le pack documentaire et les archives.
+  // Il était d'abord limité à apps/packages/scripts/infra, ce qui laissait
+  // 19 fichiers suivis hors contrôle — dont l'INTÉGRALITÉ de .github/ et le
+  // .env.example de la racine, c'est-à-dire précisément le fichier le plus
+  // exposé au collage accidentel d'un secret. Un garde-fou qui ne couvre pas
+  // ce qu'il annonce est un garde-fou qui ment.
+  const sortie = execFileSync('git', ['ls-files'], { encoding: 'utf8' });
   return sortie
     .split('\n')
     .filter((f) => f.trim() !== '')
@@ -86,7 +103,13 @@ const controles = [
       '  composant est une dette de charte : elle survit aux changements de token et casse\n' +
       '  le contraste AA (§33.1, E27/E44). Charte : terracotta #c24a1b · ivoire #faf8f3 ·\n' +
       '  bleu #1a4dd9 · mocha #2a2520 — définis UNE FOIS dans packages/ui/src/tokens.css.',
-    motif: /#[0-9a-fA-F]{3,8}\b|\brgba?\s*\(|\bhsla?\s*\(/g,
+    // Couvre les notations héritées ET modernes. `oklch()` et `lab()` sont la façon
+    // dont on écrira les couleurs en 2027 : ne pas les détecter reviendrait à
+    // désarmer le contrôle exactement au moment où il commencerait à servir.
+    // Les noms CSS sont inclus parce qu'ils échappent à toute détection numérique —
+    // `color: crimson` est une couleur en dur au même titre que `#dc143c`.
+    motif:
+      /#[0-9a-fA-F]{3,8}\b|\brgba?\s*\(|\bhsla?\s*\(|\bokl(?:ch|ab)\s*\(|\bl(?:ch|ab)\s*\(|\bhwb\s*\(|\bcolor(?:-mix)?\s*\(|(?<=[:\s'"`])(?:crimson|tomato|firebrick|salmon|coral|gold|khaki|teal|navy|maroon|olive|indigo|orchid|plum|beige|ivory|silver|fuchsia|aqua|magenta|cyan)(?=[;\s'"`,)])/g,
     // La définition des tokens est le SEUL endroit où une couleur littérale est légitime.
     fichiersExclus: [/^packages\/ui\/src\/tokens\./, /^packages\/ui\/src\/charte\./],
   },
@@ -154,9 +177,17 @@ const controles = [
       'Dans un .env, un script shell ou un manifeste YAML, la forme normale est\n' +
       '  `CLE=valeur` sans guillemets : on accepte donc la valeur nue, mais elle doit\n' +
       '  être vide, un placeholder `__CHANGEME__`, ou une référence de variable.\n' +
-      '  Une valeur en clair ici partirait telle quelle sur le serveur.',
+      '  Une valeur en clair ici partirait telle quelle sur le serveur.\n' +
+      "  EXCEPTION : une valeur qui s'ANNONCE factice (factice/fake/dummy/exemple/\n" +
+      '  example/placeholder/ci_) est acceptée — 02 §30.4-5 : « les tests utilisent\n' +
+      "  des secrets factices ». Un secret qui dit qu'il n'en est pas un ne trompe\n" +
+      "  personne ; l'interdire pousserait à écrire des valeurs CRÉDIBLES dans la CI,\n" +
+      '  ce qui est exactement le contraire du but recherché.',
     motif: new RegExp(
-      `(?:${NOMS_DE_SECRETS})\\s*[:=]\\s*(?!__CHANGEME__|\\$|["'\`]?\\s*$)["'\`]?[A-Za-z0-9+/=_-]{16,}`,
+      `(?:${NOMS_DE_SECRETS})\\s*[:=]\\s*` +
+        `(?!__CHANGEME__|\\$|["'\`]?\\s*$)` +
+        `["'\`]?(?![\\w+/=-]*(?:factice|fake|dummy|exemple|example|placeholder))` +
+        `[A-Za-z0-9+/=_-]{16,}`,
       'g',
     ),
     fichiersInclus: [/(\.env|\.sh|\.ya?ml|\.conf|Dockerfile|Caddyfile)$/],
@@ -193,9 +224,17 @@ for (const c of controles) {
     while ((m = c.motif.exec(contenu)) !== null) {
       const numero = contenu.slice(0, m.index).split('\n').length;
       const ligne = (lignes[numero - 1] ?? '').trim();
-      // Une ligne qui CITE l'interdiction (message d'erreur ESLint, commentaire de
-      // garde-fou) n'est pas une infraction : elle est la défense, pas l'attaque.
-      if (/interdit|invariant|contrat 11|jamais|garde-fou|__CHANGEME__/i.test(ligne)) continue;
+      // EXEMPTION EXPLICITE, et elle seule. La version précédente exemptait toute
+      // ligne contenant « interdit », « invariant », « jamais » ou « garde-fou » —
+      // dans un dépôt intégralement commenté en français, c'était un passe-partout :
+      // `background: '#ff0000' // ne jamais changer` passait au vert.
+      // Désormais il faut un marqueur délibéré, qui laisse une trace lisible en revue.
+      // Le marqueur vaut pour SA ligne ou celle qui la précède : un bloc JSDoc se
+      // marque naturellement au-dessus, pas au milieu.
+      const ligneAvant = lignes[numero - 2] ?? '';
+      if (/invariant-oks*:/.test(ligne) || /invariant-oks*:/.test(ligneAvant)) continue;
+      // Un placeholder n'est pas un secret : c'est même l'inverse, il signale l'absence.
+      if (/__CHANGEME__/.test(ligne)) continue;
       trouvailles.push({ fichier, ligne: numero, extrait: ligne.slice(0, 120) });
     }
   }

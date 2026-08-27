@@ -8,7 +8,9 @@
     "dev": "node --watch --experimental-strip-types src/server.ts",
     "build": "tsc --project tsconfig.build.json",
     "start": "node dist/server.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "node scripts/migrations.mjs",
+    "db:migrate:check": "node scripts/migrations.mjs --check"
   },
   "dependencies": {
     "@axion/shared": "workspace:*",

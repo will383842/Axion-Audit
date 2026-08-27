@@ -1,12 +1,13 @@
 {
   "//": [
     "tsconfig RACINE — ne compile rien : il ne sert qu'à donner un projet aux",
-    "fichiers de configuration TypeScript de la racine (vitest.config.ts,",
-    "vitest.workspace.ts, eslint.config.js), pour qu'ESLint puisse les analyser",
-    "avec les règles TYPÉES au lieu de les rejeter comme « hors projet ».",
+    "fichiers TypeScript de la RACINE — configurations (vitest, playwright) et suite",
+    "E2E — pour qu'ESLint les analyse avec les règles TYPÉES au lieu de les rejeter",
+    "comme « hors projet ».",
     "Le code applicatif est couvert par les tsconfig de chaque espace de travail."
   ],
   "extends": "./tsconfig.base.json",
-  "compilerOptions": { "types": ["node"], "lib": ["ES2023"] },
-  "include": ["vitest.config.ts", "vitest.workspace.ts", "scripts/**/*.ts"]
+  "// lib": "DOM est nécessaire : le code passé à page.evaluate() s'exécute DANS LE NAVIGATEUR, pas dans Node.",
+  "compilerOptions": { "types": ["node"], "lib": ["ES2023", "DOM"] },
+  "include": ["vitest.config.ts", "playwright.config.ts", "scripts/**/*.ts", "e2e/**/*.ts"]
 }
