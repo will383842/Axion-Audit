@@ -57,3 +57,32 @@ regexTarget = "line"
 regexes = [
   '''__CHANGEME__''',
 ]
+
+# SECONDE ENTRÉE — ajoutée après la PREMIÈRE EXÉCUTION RÉELLE de la CI, qui a
+# bloqué sur `docs/.pack-integrity.json`.
+#
+# Ce que gitleaks a détecté : une chaîne hexadécimale de 64 caractères, classée
+# `generic-api-key`. C'est une EMPREINTE SHA-256 d'un des 12 fichiers du pack,
+# posée par `pnpm check:pack` pour détecter toute dérive de la spécification.
+#
+# Pourquoi ce n'est pas un secret : une empreinte est la sortie d'une fonction de
+# hachage appliquée à un fichier VERSIONNÉ dans ce même dépôt. Quiconque lit le
+# dépôt peut la recalculer en une commande. Elle ne donne accès à rien.
+#
+# CE QUE CETTE ENTRÉE COÛTE, dit sans enjoliver : gitleaks n'expose pas de moyen
+# propre d'exempter UNE règle par défaut sur UN chemin — redéfinir la règle sans
+# fournir sa regex la viderait sur tout le dépôt, ce qui serait bien pire. Ce
+# fichier est donc exempté de TOUTES les règles. Le risque résiduel est qu'un
+# secret y soit collé sans être détecté.
+#
+# Ce qui rend ce risque acceptable, et lui seul : le fichier est ENTIÈREMENT
+# GÉNÉRÉ par `check-pack-integrity.mjs --sceller` — il ne contient que 12 chemins,
+# 12 empreintes et une phrase d'explication. Personne ne l'édite à la main, et
+# `pnpm check:pack` échoue si son contenu ne correspond plus au pack. Un secret
+# n'y survivrait pas au prochain scellement.
+#
+# Trace : DECISIONS.md 2026-08-27 « Faux positif gitleaks sur le sceau du pack ».
+paths = [
+  '''^docs/.pack-integrity.json
+'',
+]

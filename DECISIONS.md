@@ -874,3 +874,68 @@ nécessaire, parce que `pnpm verify` refusera l'entrée hors format avant le com
 
 **Décideur :** A01
 **Impact spec :** aucun
+
+---
+
+## 2026-08-27 — [L0-b] Faux positif gitleaks sur le sceau du pack
+
+**Constat :** à la **première exécution réelle de la CI**, gitleaks a bloqué sur
+`docs/.pack-integrity.json`, ligne 9, règle `generic-api-key`. La chaîne détectée est une **empreinte
+SHA-256** d'un des 12 fichiers du pack, posée par `pnpm check:pack`.
+
+**Options :**
+
+1. Ne rien exempter et supprimer le sceau — **exclu** : le sceau existe parce que Prettier a réécrit
+   les 12 fichiers du pack en silence ce matin. Le retirer pour faire taire un scanner rouvrirait le
+   trou qu'il a été écrit pour fermer.
+2. Exempter la RÈGLE `generic-api-key` sur ce seul chemin — **techniquement impossible proprement** :
+   gitleaks n'offre pas de moyen d'exempter une règle par défaut sur un chemin sans redéfinir la
+   règle, or la redéfinir sans fournir sa regex la viderait **sur tout le dépôt**. Le remède serait
+   bien pire que le mal.
+3. Exempter le CHEMIN dans l'allowlist globale, en disant exactement ce que cela coûte.
+
+**Arbitrage :** option 3. Règle de précédence **sans objet** (aucune divergence interne au pack).
+Une empreinte est la sortie d'une fonction de hachage appliquée à un fichier **versionné dans ce même
+dépôt** : quiconque le lit peut la recalculer. Elle ne donne accès à rien.
+**Le coût, sans l'enjoliver :** ce fichier est désormais exempté de **toutes** les règles, pas
+seulement de celle qui a levé l'alerte. Le risque résiduel est qu'un secret y soit collé sans être
+détecté.
+**Ce qui rend ce risque acceptable, et lui seul :** le fichier est **entièrement généré** par
+`check-pack-integrity.mjs --sceller` — 12 chemins, 12 empreintes, une phrase. Personne ne l'édite à
+la main, et `pnpm check:pack` échoue si son contenu ne correspond plus au pack : un secret n'y
+survivrait pas au prochain scellement.
+Le 11 §8-4 réserve à l'humain de « toucher à la sécurité autrement que spécifié » — d'où cette entrée
+plutôt qu'une ligne ajoutée en silence. **À relire à la porte P-A** : c'est la seule concession de
+sécurité du lot avec la CSP.
+
+**Décideur :** A01
+**Impact spec :** aucun
+
+---
+
+## 2026-08-27 — [L0-b] Ordre d'activation de corepack dans la CI
+
+**Constat :** à la première exécution réelle, **cinq jobs sur quinze** sont tombés avant leur première
+commande utile. `.github/actions/setup-node-pnpm` activait corepack et préparait pnpm 9 **avant**
+`actions/setup-node`, parce que cette action a besoin de pnpm sur le `PATH` pour résoudre son cache.
+Mais `setup-node` **remplace ensuite l'installation de Node** : le shim pnpm préparé sous le Node du
+runner disparaît avec elle, et `pnpm --version` échouait — sous `set -euo pipefail`, le garde-fou de
+versions mourait donc avant même de pouvoir dire pourquoi.
+
+**Options :**
+
+1. Déplacer corepack après `setup-node` — **exclu** : le cache pnpm de `setup-node` ne serait plus
+   résolu, et chaque job réinstallerait tout.
+2. Activer corepack **deux fois** : avant pour le cache, après pour le shim.
+3. Renoncer au cache pnpm — exclu : quinze jobs qui réinstallent les dépendances, pour rien.
+
+**Arbitrage :** option 2. Règle de précédence **sans objet**. Les deux activations ne font pas double
+emploi : elles répondent à deux besoins différents, et le fichier le dit en toutes lettres pour que
+personne ne « nettoie » la seconde en croyant à une redondance.
+**Ce que l'épisode confirme :** ce défaut était invisible à la lecture — le fichier était correct
+pour qui ne connaît pas le comportement de remplacement de `setup-node`. **Seule la première
+exécution réelle pouvait le montrer**, et c'est précisément ce que la règle « ne jamais déclarer vert
+ce qui n'a pas tourné » sert à provoquer.
+
+**Décideur :** A01
+**Impact spec :** aucun

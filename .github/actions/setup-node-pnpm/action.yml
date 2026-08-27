@@ -36,6 +36,18 @@ runs:
 
     # Garde-fou : une dérive de version majeure doit casser la CI, pas passer
     # inaperçue (11 §8-3 : « monter une version majeure » = escalade humaine).
+    # RÉACTIVATION APRÈS setup-node — trouvée à la PREMIÈRE EXÉCUTION RÉELLE de la CI.
+    # corepack est activé plus haut parce que `actions/setup-node` a besoin de pnpm sur
+    # le PATH pour résoudre son cache. Mais setup-node REMPLACE ensuite l'installation
+    # de Node : le shim pnpm préparé sous le Node du runner disparaît avec elle, et
+    # `pnpm --version` échouait — faisant tomber les cinq premiers jobs de la chaîne.
+    # Les deux activations sont donc nécessaires, et pour deux raisons différentes.
+    - name: Réactiver corepack sous Node 22
+      shell: bash
+      run: |
+        corepack enable
+        corepack prepare pnpm@9 --activate
+
     - name: Vérifier les versions épinglées (11 §1)
       shell: bash
       run: |
