@@ -82,3 +82,16 @@ Fait par A01 depuis le dernier commit : 3 entrées `DECISIONS.md` (sémantique d
 Prochaine action : recevoir les rapports d'A12 et d'A16, exécuter `pnpm verify` complet, commiter, PUIS rejouer le contrôle d'acceptation du gardien A02 (étape 6) — **dans l'ordre**, l'écart V3 du lot L0 étant précisément d'avoir mené l'étape 6 en parallèle de l'étape 4.
 Tests rouges connus : aucun à cet instant, mais la suite n'a pas été rejouée depuis les corrections d'A12 — le vert n'est donc PAS acquis.
 Réserve non refermée, hors périmètre logiciel : la DoD « migrations up/down exécutées sur staging » reste incochable tant que le VPS n'existe pas. Porte P-A en attente de Williams.
+
+---
+
+## 2026-08-27 21h35 — [lot L1 / schéma & migrations] — étape pipeline 4/7 (corrections livrées, 2ᵉ passe de revue en cours)
+
+Dernier commit vert : a1b82fa (fix(l1): réserves de la revue croisée — le comparateur schéma-vs-04 était trompable) · Branche : lot/l0-infra · Poussé : **oui**
+Tâche en cours : attente du verdict de la **deuxième passe de revue croisée**. Le réviseur de la première passe n'existait plus (session éteinte) — un réviseur NEUF a été lancé, ce qui renforce l'indépendance.
+État vérifié PAR EXÉCUTION, pas par rapport d'agent : `pnpm verify` **code 0** — 95 tests unitaires · 54 d'intégration · 8 Playwright · les 6 garde-fous verts · `schema:diff` **zéro écart**.
+Recoupements indépendants faits par A01 sur la base et sur le texte du 04, sans passer par le manifeste d'A12 : 11 migrations · 43 tables · 472 colonnes · 193 contraintes · **100 colonnes marquées `NULL`** au 04 (comptage séparé, identique) · **28 `DEFAULT` prescrits** (comptage séparé, identique) · aucune fonction SQL `uuidv7()` · `gen_random_uuid()` cantonné aux 4 tables purement serveur.
+Toutes les réserves de la 1ʳᵉ passe sont traitées : 4 bloquants (comparateur trompable sur la logique des CHECK, parenthèses supprimées, index UNIQUE non gardé, arbitrages non tracés) et 6 majeurs. Un bloquant NOUVEAU a été trouvé en cours de route par le méta-test — le comparateur ignorait nullabilité, DEFAULT et précision — arbitré, corrigé, et gardé par 12 classes de mutation testées.
+Prochaine action : recevoir le verdict de la 2ᵉ passe ; si CONFORME, clore l'étape 4, puis lancer le **gardien A02 pour l'étape 6** (matrice E1-E47 dans les DEUX sens + DoD transverse), rédiger le journal du lot et compléter `docs/portes/PORTE_A_*.md` (critères L1 n° 5 à 8, aujourd'hui non cochés).
+Tests rouges connus : aucun en local. **La CI distante n'a pas encore été observée sur ce commit.**
+Réserve hors périmètre logiciel, inchangée : la DoD « migrations up/down exécutées sur staging » reste incochable tant que le VPS n'existe pas. Porte P-A en attente de Williams.
