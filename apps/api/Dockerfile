@@ -65,7 +65,7 @@ COPY apps/api ./apps/api
 RUN pnpm --filter @axion/api... build
 # Après compilation, on ne garde que les dépendances de production : les outils de
 # build (TypeScript, ESLint, Vitest) n'ont rien à faire dans une image exposée.
-RUN pnpm --filter @axion/api --prod deploy --legacy /paquet
+RUN pnpm --filter @axion/api --prod deploy /paquet
 
 # -----------------------------------------------------------------------------
 # Cible runtime — image finale.

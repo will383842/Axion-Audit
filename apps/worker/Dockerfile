@@ -65,7 +65,7 @@ COPY apps/worker ./apps/worker
 RUN pnpm --filter @axion/worker... build
 # Après compilation, on ne garde que les dépendances de production : les outils de
 # build (TypeScript, ESLint, Vitest) n'ont rien à faire dans une image exposée.
-RUN pnpm --filter @axion/worker --prod deploy --legacy /paquet
+RUN pnpm --filter @axion/worker --prod deploy /paquet
 
 # -----------------------------------------------------------------------------
 # Cible runtime — image finale.
