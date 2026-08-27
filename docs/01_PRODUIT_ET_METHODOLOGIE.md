@@ -101,7 +101,7 @@ Paramètre de mission dès la V1 : **France seule** ou **multi-pays**. En multi-
 
 ## 2.5 Stratégie de remplissage de la banque (V1)
 
-Architecture universelle dès le jour 1, mais contenu rempli **uniquement** pour la mission le client pilote : socle universel + palier grand compte multi-pays ≈ **200 questions**. Réutiliser les acquis existants d'Axion-IA :
+Architecture universelle dès le jour 1, mais contenu rempli **uniquement** pour la mission du client pilote : socle universel + palier grand compte multi-pays ≈ **200 questions**. Réutiliser les acquis existants d'Axion-IA :
 - La **taxonomie des ~50 cas d'usage IA sur 11 fonctions métier** (travaux page audit du site, mai 2026) → nourrit le bloc 6 et les étiquettes de service.
 - Le **formulaire TPE en 8 étapes** (audit à distance TPE) → base du pré-audit en ligne (§6.3) et du palier Micro.
 - Le **questionnaire de cadrage amont** (appel pré-session 30-45 min) → checklist de la phase « préparation » d'une mission.
@@ -180,7 +180,7 @@ L'audit cherche systématiquement, pour CHAQUE service : tout ce qui peut être 
 Le dispositif de formation Axion-IA prévoit un **questionnaire de positionnement** individuel avant chaque session (niveau IA + tâches réelles du quotidien). L'export M8.4 pré-remplit désormais, par population identifiée à l'audit : niveau initial estimé (bloc 5), tâches dominantes (bloc 2), outils en place (bloc 3-4), cas d'usage retenus les concernant (bloc 6) → la console génère des questionnaires de positionnement pré-contextualisés et des propositions de formation adaptées au cœur de métier (la promesse « à l'issue de l'audit, des formations parfaitement adaptées »). L'évaluation à froid à 30 jours (dispositif formation) pourra être rapprochée des KPIs du plan d'action lors du ré-audit.
 
 ## 20.7 Impacts planning
-`audit_level` + étiquette `levels` + statuts use_cases + `roadmap_items` + centre d'alertes minimal : +1,5 j (chiffrage historique — la référence de charge unique est dans le 00_INDEX du pack). Toujours jouable pour une collecte le client pilote en octobre : le RDV du 1er septembre est un rendez-vous de découverte (présentation des 3 niveaux + proposition ensuite), la signature puis la collecte suivront — le calendrier réel du client donne l'air nécessaire. Priorité de développement inchangée : L0-L6 (terrain + sync) d'abord.
+`audit_level` + étiquette `levels` + statuts use_cases + `roadmap_items` + centre d'alertes minimal : +1,5 j (chiffrage historique — la référence de charge unique est dans le 00_INDEX du pack). Toujours jouable pour une collecte du client pilote en octobre : le RDV du 1er septembre est un rendez-vous de découverte (présentation des 3 niveaux + proposition ensuite), la signature puis la collecte suivront — le calendrier réel du client donne l'air nécessaire. Priorité de développement inchangée : L0-L6 (terrain + sync) d'abord.
 
 ---
 

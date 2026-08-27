@@ -121,7 +121,7 @@ Schéma : + `users.habilitated_at`, note d'immuabilité `conducted_by`. Charge :
 ---
 
 # V2.6 — MARCHE À BLANC DE BOUT EN BOUT (27/08/2026)
-Méthode : déroulé chronologique complet de la mission le client pilote (avant-vente → cadrage → préparation → collecte → analyse → livraison → après), chaque geste confronté à « quel outil, quel écran, quel chantier, quelle date ? ». Constat : le CODE était planifié à la journée près, les livrables NON-CODE étaient cités partout mais datés nulle part.
+Méthode : déroulé chronologique complet de la mission du client pilote (avant-vente → cadrage → préparation → collecte → analyse → livraison → après), chaque geste confronté à « quel outil, quel écran, quel chantier, quelle date ? ». Constat : le CODE était planifié à la journée près, les livrables NON-CODE étaient cités partout mais datés nulle part.
 | # | Trou | Correction |
 |---|---|---|
 | Z1 | Aucun calendrier consolidé des chantiers non-code (banque, AIPD, notice, gabarit Word, devis sur tableur, arbre, plan d'entretiens) — dispersés sans dates ni responsable | Calendrier semaine par semaine sept→déc, colonne code / colonne Williams (§35.1) |
@@ -157,7 +157,7 @@ Cible : les dérives INTERNES introduites par 7 passes d'ajouts successifs — l
 |---|---|---|
 | A1 | **Règle de précédence périmée dans 11 fichiers** : « §32 > §24-31… » alors que §33-36 sont POSTÉRIEURES à §32 — un agent aurait fait prévaloir §32 sur §36 | Chaîne actualisée partout : §32-36 (le plus récent prévaut) > §24-31 > §16-22 > §1-15 |
 | A2 | Sommaire du CDC arrêté à §32 alors que §33-36 y sont annexées | ToC complétée |
-| A3 | **AUTO-VERROUILLAGE** : la règle d'habilitation (V2.5) refuse toute affectation si `habilitated_at` NULL — or l'admin fondateur naît NULL → Williams n'aurait pas pu créer SA PROPRE mission le client pilote | Seed L1 pose `habilitated_at` sur le compte fondateur (04, 07 L1, 11 §5) |
+| A3 | **AUTO-VERROUILLAGE** : la règle d'habilitation (V2.5) refuse toute affectation si `habilitated_at` NULL — or l'admin fondateur naît NULL → Williams n'aurait pas pu créer SA PROPRE mission du client pilote | Seed L1 pose `habilitated_at` sur le compte fondateur (04, 07 L1, 11 §5) |
 | A4 | Export §36.3 ambigu : les réponses des unités sorties du périmètre (§25.1) dans `reponses.csv` ou dans l'annexe ? Deux agents = deux exports différents | Tranché : TOUTES les réponses dans `reponses.csv` + colonne `unite_in_scope` ; l'annexe ne liste que les unités et motifs |
 | A5 | Raccourcis à une touche (O/N/A/R/E, 1-5, /) : rien n'empêchait leur déclenchement PENDANT la frappe d'une note (« Rien à signaler » = chaos) | Règle : raccourcis inactifs sous focus d'un champ ; Échap rend le focus (§33.3) |
 | A6 | Description du fichier 10 dans l'index figée à V2.3 ; butoir L8 (§35.3) absent de la ligne « différable » de l'index | Les deux actualisés |

@@ -26,7 +26,7 @@ VPS Hetzner durci : SSH clés uniquement + port non standard + fail2ban · UFW (
 - **AIPD COMPLÈTE (V2.2 — pas « légère »)** à rédiger avant la première mission grand compte : collecte systématique de données de salariés (opinions, craintes, usages individuellement attribuables) à l'échelle d'un groupe international. le client pilote la demandera.
 - Hébergement : Hetzner Allemagne (UE). Aucun transfert hors UE sauf appel LLM (couvert par DPA + clauses).
 
-## 10.5 Exigences achats grands comptes (anticipation le client pilote)
+## 10.5 Exigences achats grands comptes (anticipation du client pilote)
 Chiffrement en transit (TLS 1.3) et au repos (disques chiffrés + IndexedDB chiffré) · journal d'audit (§6.6) · réversibilité (export complet mission en JSON/CSV sur demande — **V2.9 : l'export remis au CLIENT est une VARIANTE de l'export §36.3 EXPURGÉE des notes internes du consultant et des flags de travail (à-revoir, hors-parcours, motifs internes) ; seuls les éléments factuels et constats validés sont restituables**) · plan de continuité (§11.4) · fiche sécurité prête à envoyer (à rédiger en lot L10).
 
 ---

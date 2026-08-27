@@ -209,7 +209,7 @@ org_units(id, mission_id FK, parent_id FK NULL,
 ```
 
 - **Cas simple** : boulanger 5 personnes → 1 seule unité racine. Zéro friction (l'arbre est optionnel en pratique : une racine est créée par défaut).
-- **Cas le client pilote** : groupe → filiales par pays → établissements → directions → services. L'arbre se saisit au cadrage (bloc 1 : l'organigramme collecté SERT à construire l'arbre) ou s'importe (CSV).
+- **Cas du client pilote** : groupe → filiales par pays → établissements → directions → services. L'arbre se saisit au cadrage (bloc 1 : l'organigramme collecté SERT à construire l'arbre) ou s'importe (CSV).
 - `interviews.org_unit_id FK` **remplace** `site_label` : chaque entretien est rattaché à une unité précise de l'arbre (+ le profil de l'interlocuteur). `ai_systems.org_unit_id` et `use_cases.org_unit_id` ajoutés de même.
 - Les missions filles par pays (§2.4) restent pour les grands périmètres multi-pays ; pour une structure nationale à filiales, l'arbre suffit (pas besoin de missions filles). Règle : missions filles = quand des équipes différentes auditent en parallèle des périmètres autonomes ; arbre = structure interne d'un périmètre.
 
@@ -217,7 +217,7 @@ org_units(id, mission_id FK, parent_id FK NULL,
 
 - Nouvelle étiquette sur les questions : `target_services JSONB` ([] = transverse). La banque comporte désormais, au-dessus du socle : **des paquets par fonction métier** (RH, finance/compta, commercial/ventes, marketing/contenu, service client, logistique/opérations, production, juridique/conformité, DSI/data, direction générale, support/admin — la taxonomie Axion-IA des 11 fonctions), chacun sondant en profondeur : processus détaillés du service, volumes, outils spécifiques, données produites/consommées, irritants, cas d'usage IA propres au service.
 - Le moteur M2 croise désormais : palier × secteur × périmètre × **unités in_scope de l'arbre** (les paquets « logistique » ne sont générés que si l'arbre contient une unité logistique) × interlocuteur.
-- Objectif de contenu (cible fin 2026) : socle ~150 + 11 paquets service de 25-40 questions + paquets sectoriels. Pour le client pilote (phase 1) : socle + paquets des services réellement présents chez eux.
+- Objectif de contenu (cible fin 2026) : socle ~150 + 11 paquets service de 25-40 questions + paquets sectoriels. pour le client pilote (phase 1) : socle + paquets des services réellement présents chez eux.
 
 ## 16.4 Scoring par unité et heatmap — MODIFIE M5.2 et M6.1
 
@@ -750,13 +750,13 @@ L'espace 3 pilote l'ACTIVITÉ, pas les personnes : granularité = sessions réal
 À la planification d'une session, avertissement NON bloquant si la même unité ou la même personne a déjà une session sur un créneau chevauchant par un AUTRE auditeur (données déjà disponibles au pull). La résolution se fait au calendrier d'équipe (espace 3) ; le terrain n'est jamais bloqué par le planning d'un collègue.
 
 ## 34.7 Phasage (réaliste)
-Phase 1 (le client pilote, toi seul) : cockpit §34.2 (absorbé L5), habilitation §34.4 (colonne + règle serveur, absorbé L2), route reassign (absorbée L3), matrice §34.1 réduite à « console = admin ». **L'espace 3 complet passe EN TÊTE de Phase 2, déclenché par le premier recrutement d'auditeur** — c'est lui qui conditionne le passage à plusieurs, pas la collecte le client pilote.
+Phase 1 (le client pilote, toi seul) : cockpit §34.2 (absorbé L5), habilitation §34.4 (colonne + règle serveur, absorbé L2), route reassign (absorbée L3), matrice §34.1 réduite à « console = admin ». **L'espace 3 complet passe EN TÊTE de Phase 2, déclenché par le premier recrutement d'auditeur** — c'est lui qui conditionne le passage à plusieurs, pas la collecte du client pilote.
 
 
 ---
 
 # 35. MARCHE À BLANC DE BOUT EN BOUT V2.6 — CALENDRIER CONSOLIDÉ CODE + NON-CODE (27/08/2026) — APPLIQUÉ
-*(Dernière vérification qui avait du sens : dérouler la mission le client pilote jour par jour, de l'avant-vente à la livraison, et vérifier que CHAQUE geste a son outil OU son chantier daté. Constat : le code était planifié (07/09), les livrables NON-code étaient cités mais jamais datés ni rassemblés. Corrigé ici.)*
+*(Dernière vérification qui avait du sens : dérouler la mission du client pilote jour par jour, de l'avant-vente à la livraison, et vérifier que CHAQUE geste a son outil OU son chantier daté. Constat : le code était planifié (07/09), les livrables NON-code étaient cités mais jamais datés ni rassemblés. Corrigé ici.)*
 
 ## 35.1 Calendrier consolidé (hypothèse de travail — recalé à la signature du devis)
 | Semaine | CODE (autopilote, fichier 09) | NON-CODE (Williams — c'est TOI le chemin critique ici) |

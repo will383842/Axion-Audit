@@ -995,3 +995,59 @@ d'audit et une réversibilité contrôlée —, c'est le meilleur rapport coût/
 **Décideur :** A01 pour les compensations · **Williams** pour le plan GitHub
 **Impact spec :** aucun — les exigences du §30.4-3 et du §30.5 restent inchangées et non tenues en
 l'état ; elles sont désormais tracées comme telles plutôt que réputées satisfaites.
+
+---
+
+## 2026-08-27 — [L0-b] Dépôt PUBLIC : pseudonymisation du client pilote et retrait du CDC
+
+**Constat :** Williams veut le dépôt **public**. Deux conséquences s'opposaient :
+
+- **Favorable** — sur un dépôt public, GitHub rend **gratuites** la protection de branche, les
+  rulesets et les relecteurs obligatoires d'environnement, tous refusés sur un dépôt privé au plan
+  gratuit. Le passage en public **rétablit donc les trois protections** que le 02 §30.5 exige, et
+  rend GitHub Pro inutile.
+- **Défavorable** — le dépôt portait **47 mentions nominatives du client pilote** réparties dans
+  9 fichiers du pack, plus **36 dans le CDC maître** : le fait qu'un tiers nommé est audité, le
+  calendrier de sa mission, le plan de repli si le multi-pays n'est pas tranché. Plus la
+  méthodologie complète et les paramètres de chiffrage (taux horaires).
+
+**Options :**
+
+1. Rester privé et payer GitHub Pro (~4 $/mois) — conforme au 02 §30.5, qui impose le privé.
+2. Passer public tel quel — publie le nom d'un tiers et son calendrier d'audit. **La confidentialité
+   d'un client n'appartient pas à celui qui l'audite**, et la publication est irréversible : indexée
+   et clonée en minutes, elle survit à toute suppression.
+3. **Pseudonymiser puis passer public.**
+
+**Arbitrage : option 3, choisie par Williams.** Règle de précédence **sans objet** (le pack impose le
+privé au §30.5 ; le passage en public est un **amendement assumé**, tracé ci-dessous — pas une
+divergence interne à arbitrer).
+Le nom du client n'est **jamais nécessaire au fonctionnement** — c'est exactement l'invariant 2
+(« aucune référence client : tout ce qui varie est une donnée de mission »). Le retirer du pack ne
+lui fait donc rien perdre d'opérationnel, et **renforce** l'invariant au lieu de l'affaiblir.
+
+**Exécution :**
+
+1. « le client pilote » → « le client pilote » dans les 9 fichiers du pack, avec des règles ordonnées du
+   plus spécifique au plus général pour que la grammaire tienne (« mission le client pilote » → « mission
+   **du** client pilote », et non « mission le client pilote »). 47 mentions, relues.
+2. `docs/archive/` (CDC maître) **retiré du dépôt** et gitignoré. C'est une archive qui « ne prévaut
+   plus » (00_INDEX) et qui ne sert à aucun lot ; elle reste sur la machine de Williams.
+3. **Réécriture de l'historique** — le point décisif, et celui qu'on oublie : supprimer un fichier
+   dans un nouveau commit **ne l'efface pas de l'historique**. Le CDC était dans le premier commit et
+   les 47 mentions dans tous. Passer le dépôt en public les aurait exposés via `git log -p`. L'ancien
+   historique est donc purgé et remplacé, et l'ancien état **n'a jamais été public** — il n'a existé
+   que sur un dépôt privé.
+4. Sceau du pack régénéré (les empreintes changent avec le contenu), puis passage en public, puis
+   pose des protections désormais gratuites.
+
+**Amendement de spec assumé :** le 02 §30.5 dit « Repo **privé** ». Le dépôt est public à compter de
+cette entrée, sur décision de Williams, la confidentialité étant assurée par la pseudonymisation et
+le retrait de l'archive plutôt que par la visibilité du dépôt. **Ce qui reste public et l'était
+déjà par nature** : la méthodologie d'audit et les paramètres de chiffrage par défaut. C'est le
+véritable coût de cette décision, et il est assumé en connaissance de cause.
+
+**Décideur :** **Williams** (visibilité) · A01 (mise en œuvre de la pseudonymisation)
+**Impact spec :** **amendement horodaté du 02 §30.5** — « repo privé » devient « repo public,
+pseudonymisé ». Le reste du §30.5 (protections, Environments, GHCR) est inchangé et devient enfin
+applicable.

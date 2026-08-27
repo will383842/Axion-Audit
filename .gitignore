@@ -61,3 +61,11 @@ logs/
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.recommended.json
+
+# ---------------------------------------------------------------------------
+# ARCHIVE DE RÉFÉRENCE — hors du dépôt depuis son passage en PUBLIC.
+# Le CDC maître est une archive qui « ne prévaut plus » (00_INDEX) : il ne sert à
+# aucun lot, mais il porte 36 mentions nominatives du client pilote et le détail
+# commercial. Il reste sur la machine de Williams, il ne part pas sur GitHub.
+# ---------------------------------------------------------------------------
+docs/archive/

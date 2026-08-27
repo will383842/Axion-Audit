@@ -13,7 +13,7 @@ Le présent pack (12 fichiers) est **LA source d'exécution unique**. En cas de 
 | 04_MODELE_DE_DONNEES.md | **Schéma PostgreSQL V2.2 INTÉGRAL — source UNIQUE du DDL** (lot L1) : toutes tables et colonnes des §1-32 |
 | 05_API_ET_SYNC.md | API REST /v1 + moteur de sync hors ligne V2.2 : contrat d'opérations, LWW par ligne, protocole de chunks, propriété des écritures (§9.9), DEK/KEK, export de secours |
 | 06_SECURITE_RGPD.md | Auth, OWASP, RGPD V2.2 (base légale précisée, AIPD complète, notice versionnée, NER), AI Act post-Omnibus, exigences grands comptes |
-| 07_PLAN_TESTS_RISQUES.md | Lots V2.2 (contenus, durées, critères À JOUR des §24-32), 8 scénarios de sync, risques, jalon de descope 15/09, checklist le client pilote |
+| 07_PLAN_TESTS_RISQUES.md | Lots V2.2 (contenus, durées, critères À JOUR des §24-32), 8 scénarios de sync, risques, jalon de descope 15/09, checklist du client pilote |
 | 08_TRACABILITE.md | 47 exigences → sections (contrôle de complétude à chaque livraison) |
 | 09_PLAN_EXECUTION_AUTOPILOTE.md | Rôles d'agents, pipeline 7 étapes par lot, portes P-A à P-F + P-DESCOPE, règles d'autopilotage, calendrier |
 | 10_CHANGELOG_V2.2.md | Journal cumulatif des passes de revue V2.2 → V2.12 (nom de fichier historique conservé) : constat → correction → localisation |
@@ -32,7 +32,7 @@ Le présent pack (12 fichiers) est **LA source d'exécution unique**. En cas de 
 - **L10-L11 (rapports/LLM)** : 03 (M6, §26.2, §36.6) → 01 (**§20.3** — structure du rapport, vit au fichier 01) → 04 (report_sections, roadmap_items) → 06 (pseudonymisation 2 passes)
 
 ## RÉFÉRENCE DE CHARGE UNIQUE (V2.2 — remplace tout autre chiffre du pack et du CDC)
-**Noyau strict : 26 j-h** (détail par lot : fichier 07 V2.2) — condition de la collecte le client pilote, échéance fin septembre 2026 : L0, L1, L2, L3, L4, L5, L6, L7-min, marge de recette.
+**Noyau strict : 26 j-h** (détail par lot : fichier 07 V2.2) — condition de la collecte du client pilote, échéance fin septembre 2026 : L0, L1, L2, L3, L4, L5, L6, L7-min, marge de recette.
 **Différable 2-4 semaines : ~11 j-h**, à livrer pendant la collecte : L8 scoring/radar (exécuté en semaine 4 UNIQUEMENT si la porte P-D est passée à l'heure ; **butoir dur : en production le dernier jour de collecte, §35.3**), heatmap, centre d'alertes complet, avance/retard, console espaces 3-7, simulateur de chiffrage complet.
 **Phase 1 complète : ~37 j-h.** Règle : n'est prioritaire que ce qui conditionne une COLLECTE terrain fiable. **Jalon de descope : 15/09** (fichier 07 §14 et fichier 09 porte P-DESCOPE).
 Tout chiffrage figurant dans les sections historiques (§16.8, §17.7, §18.5, §19.3, §20.7, §22.4, §24.5, §25.8, §26.5, §27.6, §28.4, §29) est **historique et remplacé** par la présente référence.
