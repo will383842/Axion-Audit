@@ -225,11 +225,24 @@ function sansCommentaires(source) {
 }
 
 if (l1Livre) {
-  const contenus = tests
+  // LA MOITIÉ « LES DEUX MISSIONS » ÉTAIT DÉCORATIVE, et c'est le gardien A02 qui
+  // l'a prouvé : elle cherchait `FIL-TPE`/`FIL-GC` dans la CONCATÉNATION de tous
+  // les fichiers de test. Il a effacé `FIL-GC` du test `@filrouge` — le contrôle
+  // est resté VERT, parce que la chaîne figure dans un message d'assertion d'un
+  // AUTRE fichier. Le contrôle avait fermé le trou des commentaires et laissé
+  // celui de la prose : n'importe quelle phrase, n'importe où, le satisfaisait.
+  //
+  // Les deux missions doivent être couvertes PAR LE TEST QUI PORTE LE MARQUEUR,
+  // pas quelque part dans le dépôt. C'est la seule lecture qui corresponde au
+  // 09 §4bis : « toute porte exige `@filrouge` vert sur LES DEUX missions ».
+  const fichiersFilRouge = tests.filter((f) =>
+    /@filrouge/.test(sansCommentaires(readFileSync(resolve(RACINE, f), 'utf8'))),
+  );
+  const contenuFilRouge = fichiersFilRouge
     .map((f) => sansCommentaires(readFileSync(resolve(RACINE, f), 'utf8')))
     .join('\n');
-  const aFilRouge = /@filrouge/.test(contenus);
-  const missions = ['FIL-TPE', 'FIL-GC'].filter((m) => !contenus.includes(m));
+  const aFilRouge = fichiersFilRouge.length > 0;
+  const missions = ['FIL-TPE', 'FIL-GC'].filter((m) => !contenuFilRouge.includes(m));
 
   if (!aFilRouge || missions.length > 0) {
     console.error(

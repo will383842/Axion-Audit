@@ -109,3 +109,19 @@ Recoupements indépendants d'A01 : les **23 colonnes d'identité déclarées par
 Prochaine action : verdict de la 3ᵉ passe. Si conforme → clore l'étape 4, lancer le **gardien A02 (étape 6)**, compléter `docs/portes/PORTE_A_*.md`. Sinon → escalade Williams.
 Tests rouges connus : aucun en local. CI du commit `d832e30` non encore observée.
 Réserve hors périmètre logiciel, inchangée : DoD « migrations up/down sur staging » incochable sans VPS. Le runbook de cohabitation avec axion-ia.com est écrit (`infra/COHABITATION_AXIONIA_WEB.md`) et attend trois commandes en lecture seule de Williams.
+
+---
+
+## 2026-08-27 23h50 — [lot L1 / schéma & migrations] — étape pipeline **6/7** (étape 4 CLOSE, gardien A02 lancé)
+
+Dernier commit vert : bf7f6ca (fix(l1): 3ᵉ passe — et un second verrou, parce qu'une liste blanche ne peut pas être exhaustive) · Branche : lot/l0-infra · Poussé : **oui**
+**ÉTAPE 4 CLOSE.** Trois passes de revue croisée, par deux réviseurs différents dont aucun n'avait produit de code. Verdict final : **`CONFORME AVEC RÉSERVES`**, et le réviseur écrit qu'il **ne recommande pas une quatrième passe de correctifs**. Ses deux dernières réserves (R-1 colonnes des tables partitionnées jamais comparées, R-2 contraintes EXCLUDE hors introspection) sont corrigées avec preuve.
+**Bilan des trois passes : 43 mutations injectées dans le schéma, 22 non détectées au moment de leur découverte, toutes gardées aujourd'hui par un test.** Le motif constant n'était pas l'erreur de code mais **le contrôle qui annonce plus qu'il ne fait**.
+**Décision de conception prise ce soir (tracée) :** un **second verrou en liste NOIRE**, `pnpm check:schema-inventaire`, indépendant du comparateur. Le diff dit « tout ce que le 04 décrit est là » ; l'inventaire dit « et rien d'autre ne s'y est glissé ». Les deux échouent pour des raisons opposées. Prouvé par injection des 8 familles : 10 objets détectés, aucun manqué. Motif : la 3ᵉ passe a montré que le territoire restant n'était plus un oubli d'implémentation mais **une limite du périmètre du 11 §7 lui-même** — une `RULE … DO INSTEAD NOTHING` fait RÉUSSIR l'insertion d'une réponse sans rien écrire, et la synchronisation terrain rapporte un succès.
+**ESCALADE OUVERTE — fiche AMELIORATIONS A-003, PROPOSÉE et NON IMPLÉMENTÉE :** remplacer le manifeste par un **schéma doré** (`pg_dump`) comparé textuellement. Elle remplacerait un mécanisme que le contrat 11 §7 nomme → **arbitrage de Williams à la porte P-A**. Recommandation d'A01 : ABSORBÉE (~0,5 j).
+État vérifié PAR EXÉCUTION : `pnpm verify` **code 0** — 95 unitaires · **66** d'intégration · 8 Playwright = **169 tests** · `schema:diff` ZÉRO ÉCART · `check:schema-inventaire` vert · chaîne up 12 → down 12 → up 12 · seed et seed:demo ×2 identiques.
+Tâche en cours : **gardien A02, étape 6** — critères du fichier 07, matrice E1-E47 **dans les deux sens** (le code orphelin est refusé), DoD transverse. Consigne donnée : appliquer à la production d'A01 la même méfiance qu'aux autres, recompter tous les chiffres, et **éprouver au moins deux garde-fous par injection**.
+Prochaine action : recevoir le verdict du gardien. Si ACCEPTÉ → compléter le dossier de porte et rendre le lot à Williams. Sinon → traiter ses refus avant toute porte.
+Tests rouges connus : aucun.
+**Piège de machine, à savoir pour toute reprise :** `pnpm verify` a échoué DEUX FOIS en `0xC0000142` (épuisement de ressources Windows — 3,3 Go libres sur 15,8 avec Docker Desktop), sur quatre compilations parallèles. Reprendre avec `npm_config_workspace_concurrency=1` et **rien d'autre en parallèle**. Ce n'est pas un défaut du dépôt : la CI passe.
+Réserve hors périmètre logiciel, inchangée : DoD « migrations up/down sur staging » incochable sans VPS. `infra/COHABITATION_AXIONIA_WEB.md` écrit, en attente de trois commandes en lecture seule de Williams.

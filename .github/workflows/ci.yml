@@ -215,7 +215,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-node-pnpm
+      # INVARIANT 2 — « aucune référence client dans le code ». La liste des noms
+      # surveillés ne vit PAS dans le dépôt : il est public, et le garde-fou
+      # publierait lui-même ce qu'il traque. Elle arrive par ce secret.
+      #
+      # CE CÂBLAGE A MANQUÉ JUSQU'AU LOT L1, alors que le script ET le fichier
+      # d'exemple affirmaient tous deux qu'il existait. Le contrôle sortait donc
+      # en 0 sans rien vérifier, et le job passait au vert : l'un des HUIT
+      # invariants non négociables était décoratif. Relevé par le gardien A02.
+      #
+      # Tant que le secret n'est pas créé (Settings → Secrets and variables →
+      # Actions), ce job ÉCHOUE volontairement — un contrôle qui n'a rien vérifié
+      # ne sort jamais vert. C'est la même règle que l'échappatoire retirée de
+      # `schema-diff.mjs`.
       - name: pnpm check:invariants
+        env:
+          AXION_CLIENTS_SURVEILLES: ${{ secrets.AXION_CLIENTS_SURVEILLES }}
         run: pnpm check:invariants
 
   # ---------------------------------------------------------------------------

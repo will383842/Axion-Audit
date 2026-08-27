@@ -30,9 +30,28 @@ const RAZ = '[0m';
  *
  * Deux sources, dans cet ordre :
  *   1. la variable d'environnement `AXION_CLIENTS_SURVEILLES` (noms séparés par
- *      des virgules) — c'est ainsi que la CI la reçoit, par un secret de dépôt ;
+ *      des virgules) ;
  *   2. le fichier `docs/.clients-surveilles.txt`, gitignoré, un nom par ligne —
  *      c'est ainsi qu'un poste de développement la reçoit.
+ *
+ * ÉTAT DU CÂBLAGE EN CI — À LIRE AVANT DE CROIRE UN JOB VERT.
+ * Ce commentaire affirmait « c'est ainsi que la CI la reçoit, par un secret de
+ * dépôt ». **C'ÉTAIT FAUX.** Le gardien A02 l'a établi par recherche : la variable
+ * n'apparaît NULLE PART dans `.github/`, `ci.yml` n'utilise aucun `secrets.`, et le
+ * fichier de repli est gitignoré donc absent d'un clone de CI. L'invariant 2 —
+ * l'un des HUIT invariants non négociables — n'a donc JAMAIS été vérifié par la
+ * CI, y compris dans les runs annoncés « tout vert ». La même phrase fausse
+ * figurait dans `docs/.clients-surveilles.exemple.txt` : deux fichiers
+ * documentaient un câblage qui n'a jamais existé, et c'est ainsi qu'une croyance
+ * devient une preuve pour le lecteur pressé.
+ *
+ * CE QUI A CHANGÉ. Le secret est désormais réellement câblé dans `ci.yml`
+ * (job `invariants`). Tant que Williams ne l'a pas créé dans les réglages du
+ * dépôt, la variable arrive VIDE — et dans ce cas **le contrôle ÉCHOUE EN CI**
+ * au lieu de sortir en 0. C'est la règle appliquée partout ailleurs ici : un
+ * contrôle qui n'a RIEN vérifié ne sort jamais vert. Hors CI, il continue
+ * d'annoncer « NON APPLIQUÉ » sans faire échouer : un poste de développement
+ * n'a pas à porter la liste des clients pour lancer `pnpm lint`.
  *
  * Si AUCUNE source n'est disponible, le contrôle ne prétend pas être vert : il
  * annonce explicitement qu'il n'a PAS été appliqué. Un garde-fou muet serait pire
@@ -282,15 +301,31 @@ console.log(`\nChecklist des invariants — ${fichiers.length} fichier(s) analys
 for (const c of controles) {
   // Un contrôle sans motif n'a pas été appliqué : il le DIT, il ne se tait pas.
   if (c.motif === null) {
-    console.log(
-      `${JAUNE}⚠${RAZ} ${c.id}  ${c.titre} — NON APPLIQUÉ` +
-        `
-  Aucune liste de noms fournie. Renseigne AXION_CLIENTS_SURVEILLES (la CI la` +
-        `
-  reçoit par un secret de dépôt) ou docs/.clients-surveilles.txt (gitignoré).` +
-        `
-  Voir docs/.clients-surveilles.exemple.txt.`,
-    );
+    // EN CI, un contrôle non appliqué est un ÉCHEC. C'est la règle de ce dépôt :
+    // un garde-fou qui n'a RIEN vérifié ne sort jamais vert (même principe que
+    // l'échappatoire retirée de `schema-diff.mjs`). Sur un poste de développement,
+    // il se contente d'avertir : personne n'a besoin de la liste des clients pour
+    // lancer `pnpm lint`.
+    const enCI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
+    const explication =
+      `\n  Aucune liste de noms fournie.` +
+      `\n  · en CI : le secret de dépôt \`AXION_CLIENTS_SURVEILLES\` doit être créé` +
+      `\n    (Settings → Secrets and variables → Actions), le job \`invariants\` le lit déjà ;` +
+      `\n  · en local : \`docs/.clients-surveilles.txt\` (gitignoré) ou la variable d'environnement.` +
+      `\n  Voir docs/.clients-surveilles.exemple.txt.`;
+
+    if (enCI) {
+      console.error(`${ROUGE}✗${RAZ} ${c.id}  ${c.titre} — NON APPLIQUÉ EN CI` + explication);
+      console.error(
+        `\n  L'invariant 2 est l'un des HUIT invariants non négociables. Le laisser` +
+          `\n  passer au vert sans l'avoir vérifié rendrait le job \`invariants\` menteur` +
+          `\n  — ce qu'il a été jusqu'à ce lot, sans que personne le sache.\n`,
+      );
+      echecs += 1;
+      continue;
+    }
+
+    console.log(`${JAUNE}⚠${RAZ} ${c.id}  ${c.titre} — NON APPLIQUÉ` + explication);
     continue;
   }
   const trouvailles = [];

@@ -1741,3 +1741,38 @@ précisément le défaut que l'option 4 supprime, et c'est pourquoi elle est pro
 **Décideur :** A01
 **Impact spec :** aucun · l'option 4, qui remplacerait un mécanisme nommé par le 11 §7, relève de
 Williams à la porte P-A
+
+---
+
+## 2026-08-27 — [L1] Le lot L1 se développe sur la branche `lot/l0-infra`
+
+**Constat (réserve F-7 du gardien A02) :** `CLAUDE.md` §7 impose « une branche par incrément :
+`lot/<code>` ». Le lot L1 a été développé sur `lot/l0-infra`, **sans que la raison soit tracée**. Le
+gardien le juge défendable et non tracé — il a raison sur les deux points.
+
+**Options :**
+
+1. Créer `lot/l1` maintenant et y basculer.
+2. Conserver `lot/l0-infra` jusqu'à la porte P-A, et l'écrire.
+
+**Arbitrage : option 2.** Règle de précédence **sans objet**.
+
+Le fichier 09 place la porte **P-A à la « Fin L0-L1 »**, pas à la fin de L0, et ses quatre critères le
+confirment : restauration de sauvegarde, migrations up/down, seed rejouable, diff schéma-vs-04 — les
+trois derniers sont du L1. **Un seul historique menant à une seule porte est donc cohérent avec le
+pack**, et développer L1 avant de franchir P-A n'est pas un écart : c'est ce que le pack prescrit.
+
+Ce qui reste inexact, c'est le **nom** : `lot/l0-infra` porte aujourd'hui deux lots. Renommer casserait
+le suivi distant pour un gain cosmétique, et perdrait les références des trois passes de revue déjà
+poussées.
+
+**Conséquence assumée et compensée :** un relecteur découvrant « l0-infra » en tête d'un historique
+contenant douze migrations SQL pourrait croire à un mélange accidentel. Le dossier de porte
+`PORTE_A_*.md` le dit explicitement, et cette entrée existe pour que la question ait une réponse
+écrite plutôt qu'une justification improvisée le jour de la signature.
+
+**Règle pour la suite :** dès la porte P-A franchie, **une branche par incrément, sans exception** —
+`lot/l2`, `lot/l3a`… Le cas présent est le seul où deux lots partagent une porte.
+
+**Décideur :** A01
+**Impact spec :** aucun · régularisation d'un écart de nommage, relevé par A02
