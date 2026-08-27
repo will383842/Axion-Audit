@@ -36,7 +36,7 @@ ALPINE_IMAGE="${ALPINE_IMAGE:-$AXION_ALPINE_IMAGE}"
 ARCHIVE_DIR="${CADDY_ARCHIVE_DIR:-/var/backups/axion/caddy/archives}"
 TS="$(date -u +'%Y%m%dT%H%M%SZ')"
 
-axion_load_env "${1:-$AXION_ROOT/.env}"
+axion_load_env "${1:-$(axion_env_file_default)}"
 axion_require_cmd docker rsync gpg tar sha256sum ssh
 axion_require_env APP_ENV BACKUP_RETENTION_DAYS BACKUP_ENCRYPTION_PASSPHRASE
 

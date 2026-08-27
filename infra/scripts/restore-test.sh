@@ -40,7 +40,7 @@ RESTORE_PREFIX="axion-restore-test"
 RESTORE_ID="${RESTORE_PREFIX}-${TS}"
 WORK_DIR="/var/tmp/${RESTORE_ID}"
 
-axion_load_env "${1:-$AXION_ROOT/.env}"
+axion_load_env "${1:-$(axion_env_file_default)}"
 axion_require_cmd docker gpg curl sha256sum openssl
 axion_require_env APP_ENV PGBACKREST_STANZA PGBACKREST_REPO_PATH PGBACKREST_CIPHER_PASS \
                   POSTGRES_DB POSTGRES_USER BACKUP_ENCRYPTION_PASSPHRASE \

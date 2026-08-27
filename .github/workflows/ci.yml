@@ -72,8 +72,10 @@ jobs:
   # ---------------------------------------------------------------------------
   # GARDE-FOU 1 — DÉTECTION DE FUITE DE SECRET (02 §30.4-5, BLOQUANT)
   # ---------------------------------------------------------------------------
-  # En PR : historique COMPLET (fetch-depth: 0) — un secret introduit puis
-  # « retiré » dans un commit ultérieur reste dans l'historique et doit être vu.
+  # Historique COMPLET (fetch-depth: 0), sur TOUS les déclencheurs — pas
+  # seulement en PR : un secret introduit puis « retiré » dans un commit
+  # ultérieur reste dans l'historique et doit être vu, quel que soit le chemin
+  # par lequel ce commit arrive.
   # ---------------------------------------------------------------------------
   gitleaks:
     name: gitleaks (bloquant — 02 §30.4-5)
@@ -124,7 +126,9 @@ jobs:
           # Les scripts d'infra sont un livrable du MÊME lot L0 (agent A11 :
           # deploy.sh, restore-test.sh, backup…). Leur absence est un échec de
           # lot, pas une situation normale : on échoue avec un message lisible.
-          mapfile -t scripts < <(git ls-files 'infra/scripts/*.sh' 'infra/scripts/**/*.sh')
+          # Un seul pathspec suffit : en pathspec git, `*` traverse `/` — il
+          # couvre donc aussi `infra/scripts/lib/common.sh`.
+          mapfile -t scripts < <(git ls-files 'infra/scripts/*.sh')
           if [ "${#scripts[@]}" -eq 0 ]; then
             echo "::error::Aucun script dans infra/scripts/ — livrable du lot L0 (agent A11 : deploy.sh, restore-test.sh). La CI n'a rien à vérifier : échec explicite plutôt que faux vert."
             exit 1
@@ -145,10 +149,19 @@ jobs:
           rm -f .env
 
   # ---------------------------------------------------------------------------
-  # GARDE-FOU 3 — ANTI-SKIP (11 §2 · 09 §5.7 · DoD transverse 09 §3)
+  # GARDE-FOU 3 — AUCUN TEST NE DORT (11 §2 · 09 §5.7 · DoD transverse 09 §3)
   # ---------------------------------------------------------------------------
   # « Tests désactivés/skippés = build rouge » · « AUCUN test skippé » ·
   # `@critique` et `@filrouge` ne sont JAMAIS skippables.
+  #
+  # DEUX CONTRÔLES, UNE SEULE PROPRIÉTÉ. `check:no-skipped-tests` attrape le test
+  # ÉTEINT (`.skip(`, `xit(`, `test.fixme(`…). `check:test-projects` attrape le
+  # test ORPHELIN : un fichier hors des `include` d'un projet vitest, ou inclus
+  # puis EXCLU, qui n'est jamais exécuté par personne. Le second est PIRE que le
+  # premier — un skip se voit dans le rapport, un orphelin donne l'illusion de la
+  # couverture — et aucun des deux détecteurs ne peut voir le trou de l'autre.
+  # Ils vivent donc dans le MÊME job : la question qu'ils posent est la même, et
+  # les séparer ferait croire qu'y répondre à moitié suffit.
   #
   # La détection elle-même vit dans `scripts/check-no-skipped-tests.mjs` (livré
   # par A01) : motifs `.skip( .only( .todo( .failing( xit( xdescribe( fit(
@@ -161,7 +174,7 @@ jobs:
   # décision humaine tracée dans DECISIONS.md (11 §8-5), pas une ligne de config.
   # ---------------------------------------------------------------------------
   anti-skip:
-    name: aucun test désactivé (11 §2 / 09 §5.7)
+    name: aucun test désactivé ni orphelin (11 §2 / 09 §5.7)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -169,6 +182,14 @@ jobs:
 
       - name: pnpm check:no-skipped-tests
         run: pnpm check:no-skipped-tests
+
+      # Le test que personne n'exécute — et la péremption de
+      # `--passWithNoTests`, qui devient une ERREUR dès que `apps/api/drizzle/`
+      # apparaît (marqueur du lot L1). Comme `check:jonction`, ce script était
+      # déclaré dans `package.json` sans être branché sur aucune porte bloquante
+      # (défaut N-2). Il l'est désormais.
+      - name: pnpm check:test-projects
+        run: pnpm check:test-projects
 
       # Garde-fou du garde-fou : si la liste d'exceptions du script cessait
       # d'être vide, le contrôle ci-dessus deviendrait perméable en silence.
@@ -198,11 +219,49 @@ jobs:
         run: pnpm check:invariants
 
   # ---------------------------------------------------------------------------
+  # GARDE-FOU 0 — JONCTIONS APPELANT → APPELÉ (avant tout le reste)
+  # ---------------------------------------------------------------------------
+  # `scripts/check-jonction.mjs` (A01) croise ce que la CI APPELLE avec ce que
+  # les fichiers appelés DÉCLARENT : scripts `pnpm` résolus par paquet,
+  # variables interpolées par l'infra vs `.env.example`, et scripts
+  # `infra/scripts/*.sh` invoqués avec les drapeaux qu'ils déclarent
+  # OBLIGATOIRES. C'est le contrôle qui mécanise la cause racine des sept
+  # bloquants de la revue croisée : trois agents, trois moitiés d'interface,
+  # chacune cohérente dans ses propres commentaires et dans celles de personne
+  # d'autre. Aucun de ces défauts n'était visible depuis un seul fichier ; tous
+  # étaient évidents en croisant deux fichiers.
+  #
+  # POURQUOI UN JOB DÉDIÉ QUI PRÉCÈDE `lint`, et non une étape parallèle :
+  # il s'exécute en 0,2 s, et il répond à la question « les fichiers de ce dépôt
+  # se parlent-ils encore ? ». Tant que la réponse est non, tout ce qui suit
+  # échouerait de façon confuse (un `pnpm <script>` inexistant fait rougir un
+  # job de fin de chaîne sans jamais nommer la vraie cause). Payer huit minutes
+  # de CI pour l'apprendre en fin de course serait exactement le gaspillage que
+  # ce contrôle existe pour supprimer.
+  #
+  # ⚠️ Ce script était déclaré dans `package.json` et n'était appelé PAR AUCUNE
+  # PORTE BLOQUANTE — il ne tournait que si quelqu'un lançait `pnpm verify` à la
+  # main, c'est-à-dire dans la situation même qui a produit les sept bloquants.
+  # C'était le défaut M-1 reproduit dans le commit qui corrigeait M-1. Un
+  # contrôle non exécuté n'est pas un contrôle, et le répéter une couche plus
+  # haut ne le rend pas moins vrai (défaut N-2, seconde passe de la revue).
+  # ---------------------------------------------------------------------------
+  jonction:
+    name: 0 · jonction (appelant → appelé)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-node-pnpm
+      - name: pnpm check:jonction
+        run: pnpm check:jonction
+
+  # ---------------------------------------------------------------------------
   # 1/8 — LINT (11 §7)
   # ---------------------------------------------------------------------------
   lint:
     name: 1 · lint
     runs-on: ubuntu-latest
+    needs: [jonction]
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-node-pnpm

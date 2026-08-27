@@ -18,7 +18,7 @@ BACKUP_DIR="${BACKUP_DIR:-/var/backups/axion/postgres}"
 PGBR_EXPORT_DIR="${PGBR_EXPORT_DIR:-/var/backups/axion/pgbackrest-export}"
 TS="$(date -u +'%Y%m%dT%H%M%SZ')"
 
-axion_load_env "${1:-$AXION_ROOT/.env}"
+axion_load_env "${1:-$(axion_env_file_default)}"
 axion_require_cmd docker rsync gpg curl
 axion_require_env POSTGRES_USER POSTGRES_DB PGBACKREST_STANZA BACKUP_RETENTION_DAYS \
                   BACKUP_ENCRYPTION_PASSPHRASE

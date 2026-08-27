@@ -115,7 +115,7 @@ if (!blocProjets) {
   console.error(
     `${ROUGE}✗ aucun bloc \`projects\` trouvé dans vitest.config.ts.${RAZ}\n` +
       "  Ce contrôle lit la configuration RÉELLE plutôt que d'en recopier les motifs :\n" +
-      '  deux copies divergeraient, et c\'est le genre de divergence qu\'il traque.\n',
+      "  deux copies divergeraient, et c'est le genre de divergence qu'il traque.\n",
   );
   process.exit(1);
 }
@@ -129,7 +129,10 @@ const projets = [];
 const bornes = [...blocProjets.texte.matchAll(/name:\s*'([^']+)'/g)];
 for (const [i, borne] of bornes.entries()) {
   const debut = borne.index ?? 0;
-  const fin = i + 1 < bornes.length ? (bornes[i + 1]?.index ?? blocProjets.texte.length) : blocProjets.texte.length;
+  const fin =
+    i + 1 < bornes.length
+      ? (bornes[i + 1]?.index ?? blocProjets.texte.length)
+      : blocProjets.texte.length;
   const morceau = blocProjets.texte.slice(debut, fin);
   projets.push({
     nom: borne[1] ?? '',
@@ -172,7 +175,7 @@ if (orphelins.length > 0) {
       '  soit inclus PUIS exclus. Ils sont donc verts en permanence sans jamais\n' +
       "  s'exécuter : une illusion de couverture, pire qu'un test visiblement désactivé.\n" +
       `  Projets déclarés : ${projets.map((p) => p.nom).join(', ')}.\n` +
-      "  Corrige : déplace le fichier dans un emplacement capté, ou élargis le motif.\n",
+      '  Corrige : déplace le fichier dans un emplacement capté, ou élargis le motif.\n',
   );
   process.exit(1);
 }

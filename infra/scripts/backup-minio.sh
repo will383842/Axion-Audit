@@ -19,7 +19,7 @@ MIRROR_DIR="${MIRROR_DIR:-/var/backups/axion/minio/mirror}"
 ARCHIVE_DIR="${ARCHIVE_DIR:-/var/backups/axion/minio/archives}"
 TS="$(date -u +'%Y%m%dT%H%M%SZ')"
 
-axion_load_env "${1:-$AXION_ROOT/.env}"
+axion_load_env "${1:-$(axion_env_file_default)}"
 axion_require_cmd docker rsync gpg curl tar sha256sum
 axion_require_env MINIO_ACCESS_KEY MINIO_SECRET_KEY MINIO_BUCKET_ATTACHMENTS \
                   MINIO_BUCKET_REPORTS MINIO_BUCKET_TEMPLATES \

@@ -83,8 +83,16 @@ axion_require_env() {
 # -----------------------------------------------------------------------------
 # Chargement du .env serveur (root, chmod 600 — 02 §30.4-2)
 # -----------------------------------------------------------------------------
+# Chemin utilisé quand un script est appelé SANS argument. Il ne peut PAS exister
+# (les chevrons ne sont pas un nom de répertoire valide) : c’est délibéré. La
+# convention est $AXION_ROOT/<env>/.env, et un appel sans argument doit ÉCHOUER en
+# affichant cette convention — pas réussir en silence sur un modèle à __CHANGEME__.
+axion_env_file_default() {
+  echo "$AXION_ROOT/<env>/.env"
+}
+
 axion_load_env() {
-  local env_file="${1:-$AXION_ROOT/.env}"
+  local env_file="${1:-$(axion_env_file_default)}"
   # M-11 : la convention est /opt/axion-audit/<env>/.env, JAMAIS un .env unique
   # à la racine — le 02 §30.4-4 impose des valeurs distinctes par environnement.
   # Le message le dit, pour qu’un appel sans argument échoue en expliquant.
@@ -121,7 +129,7 @@ axion_compose() {
     prod)    files+=(-f "$AXION_INFRA_DIR/docker-compose.prod.yml") ;;
     *) axion_die "APP_ENV invalide : $APP_ENV (attendu dev|staging|prod)" ;;
   esac
-  docker compose --env-file "${AXION_ENV_FILE:-$AXION_ROOT/.env}" "${files[@]}" "$@"
+  docker compose --env-file "${AXION_ENV_FILE:-$(axion_env_file_default)}" "${files[@]}" "$@"
 }
 
 # Nom de projet Compose correspondant à APP_ENV (sert aux garde-fous anti-prod).

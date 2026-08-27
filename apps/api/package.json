@@ -10,7 +10,10 @@
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
     "db:migrate": "node scripts/migrations.mjs",
-    "db:migrate:check": "node scripts/migrations.mjs --check"
+    "db:migrate:check": "node scripts/migrations.mjs --check",
+    "db:generate": "node scripts/db-generate.mjs",
+    "seed": "node scripts/seed.mjs",
+    "seed:demo": "node scripts/seed.mjs --demo"
   },
   "dependencies": {
     "@axion/shared": "workspace:*",

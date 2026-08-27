@@ -3,14 +3,15 @@
 # infra/scripts/provision-vps.sh — durcissement et préparation du VPS (lot L0-b)
 # Applique : 06 §10.3 INTÉGRALEMENT (SSH par clés uniquement + port non standard
 # + fail2ban · UFW 80/443 + SSH · Docker user namespaces · unattended-upgrades ·
-# réseau Docker interne), 02 §30.4-2 (« /opt/axion-audit/.env, root, chmod 600,
-# provisionné À LA MAIN par SSH au lot L0, PAS par la CI »), 02 §11.4 (arborescence
-# de sauvegarde). IDEMPOTENT : rejouable sans dégât.
+# réseau Docker interne), 02 §30.4-2 (« .env root, chmod 600, provisionné À LA MAIN
+# par SSH au lot L0, PAS par la CI » — UN FICHIER PAR ENVIRONNEMENT, voir plus bas),
+# 02 §11.4 (arborescence de sauvegarde). IDEMPOTENT : rejouable sans dégât.
 # =============================================================================
 #
 # CE SCRIPT NE GÉNÈRE ET NE POSE AUCUNE VALEUR DE SECRET (02 §30.4-1/2/5).
-# Il crée /opt/axion-audit/.env à partir de .env.example, en root:600, puis
-# S'ARRÊTE en demandant à l'opérateur de le remplir à la main.
+# Il crée /opt/axion-audit/staging/.env ET /opt/axion-audit/prod/.env à partir de
+# .env.example, en root:600 (répertoires en 700), puis S’ARRÊTE en demandant à
+# l’opérateur de les remplir à la main — avec des valeurs DISTINCTES (02 §30.4-4).
 #
 # USAGE (en root, sur un Ubuntu LTS fraîchement loué) :
 #   ./provision-vps.sh --ssh-port 2222 --admin-user axionops
@@ -20,6 +21,11 @@
 #   --no-userns-remap   n'active pas l'isolation par user namespaces (à n'utiliser
 #                       que si un incident de permissions de volume l'impose ;
 #                       à tracer dans DECISIONS.md car cela déroge à 06 §10.3)
+#
+# CONVENTION DE CHEMIN DU .env — UNE SEULE, sans exception (revue croisée M-11) :
+#     /opt/axion-audit/<env>/.env      avec <env> ∈ { staging, prod }
+# Il n’existe PAS de /opt/axion-audit/.env : le 02 §30.4-4 impose des valeurs
+# DISTINCTES par environnement, qu’un fichier unique ne peut pas porter.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -49,7 +55,7 @@ while [[ $# -gt 0 ]]; do
     --ssh-port) SSH_PORT="$2"; shift 2 ;;
     --admin-user) ADMIN_USER="$2"; shift 2 ;;
     --no-userns-remap) USERNS_REMAP="no"; shift ;;
-    -h|--help) sed -n '1,30p' "$0"; exit 0 ;;
+    -h|--help) sed -n '1,28p' "$0"; exit 0 ;;
     *) axion_die "Option inconnue : $1" ;;
   esac
 done
@@ -301,7 +307,9 @@ done
 
 # Reliquat d’une version antérieure du script : on ne le SUPPRIME pas (il peut
 # contenir des secrets posés à la main), mais on le signale fort — tant qu’il
-# existe, un script appelé sans argument le chargera au lieu d’échouer.
+# existe, il invite à l’erreur : quelqu’un finira par le passer en argument, et déploiera
+# la prod avec des valeurs de modèle. (Le repli automatique vers ce chemin, lui, a été
+# supprimé de tous les scripts : un appel sans argument échoue désormais.)
 if [[ -e "$AXION_ROOT/.env" ]]; then
   chown root:root "$AXION_ROOT/.env"
   chmod 600 "$AXION_ROOT/.env"

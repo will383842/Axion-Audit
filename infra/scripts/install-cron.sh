@@ -12,7 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SCRIPT_DIR/lib/common.sh"
 
 CRON_FILE="/etc/cron.d/axion-audit"
-ENV_FILE="${1:-$AXION_ROOT/.env}"
+ENV_FILE="${1:-$(axion_env_file_default)}"
 
 [[ "$(id -u)" -eq 0 ]] || axion_die "Ce script doit être exécuté en root (écriture dans /etc/cron.d)."
 

@@ -41,7 +41,10 @@ done
 case "$TARGET_ENV" in staging|prod) : ;; *) axion_die "--env invalide : $TARGET_ENV" ;; esac
 
 ENV_FILE="${ENV_FILE:-$AXION_ROOT/$TARGET_ENV/.env}"
-[[ -r "$ENV_FILE" ]] || ENV_FILE="$AXION_ROOT/.env"
+# Aucun repli vers un chemin plat : il n’existe pas (convention M-11), et un repli
+# silencieux ferait déployer avec le mauvais fichier plutôt que d’échouer.
+[[ -r "$ENV_FILE" ]] \
+  || axion_die "Fichier d’environnement illisible : $ENV_FILE (convention : $AXION_ROOT/<staging|prod>/.env)."
 axion_load_env "$ENV_FILE"
 axion_require_cmd docker curl
 axion_require_env APP_ENV GHCR_OWNER

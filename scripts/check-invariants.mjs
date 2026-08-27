@@ -71,15 +71,16 @@ function fichiersSources() {
   return sortie
     .split('\n')
     .filter((f) => f.trim() !== '')
-    .filter((f) =>
-      // `.env.example` et les fichiers Caddy figurent NOMMÉMENT : la version
-      // précédente les laissait hors périmètre alors que le commentaire ci-dessus
-      // désignait `.env.example` comme le fichier le plus exposé au collage
-      // accidentel d'un secret. Un garde-fou dont le commentaire promet plus que le
-      // code ne tient est exactement ce que ce script existe pour empêcher — la
-      // revue croisée l'a relevé (défaut N-3).
-      /\.(ts|tsx|js|jsx|mjs|css|scss|html|sql|json|yml|yaml|sh|conf|caddy)$/.test(f) ||
-      /(?:^|\/)(?:Dockerfile|Caddyfile|\.env\.example|\.gitleaks\.toml|pre-commit)$/.test(f),
+    .filter(
+      (f) =>
+        // `.env.example` et les fichiers Caddy figurent NOMMÉMENT : la version
+        // précédente les laissait hors périmètre alors que le commentaire ci-dessus
+        // désignait `.env.example` comme le fichier le plus exposé au collage
+        // accidentel d'un secret. Un garde-fou dont le commentaire promet plus que le
+        // code ne tient est exactement ce que ce script existe pour empêcher — la
+        // revue croisée l'a relevé (défaut N-3).
+        /\.(ts|tsx|js|jsx|mjs|css|scss|html|sql|json|yml|yaml|sh|conf|caddy)$/.test(f) ||
+        /(?:^|\/)(?:Dockerfile|Caddyfile|\.env\.example|\.gitleaks\.toml|pre-commit)$/.test(f),
     )
     .filter((f) => !FICHIERS_HORS_ANALYSE.some((re) => re.test(f)));
 }

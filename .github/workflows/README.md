@@ -27,14 +27,14 @@ mensonge de CI ; une CI qui ment est pire que pas de CI.
 
 ## 1. Quel workflow fait quoi
 
-| Fichier                        | Déclencheur                                                                  | Rôle                                                                                                                                                                                                                                 | Secrets consommés                                                          |
-| ------------------------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
-| **`ci.yml`**                   | PR vers `main` · push sur `main` et `lot/**`                                 | **LE workflow bloquant.** lint (+ `check:pack`) → typecheck → **build des sources** → unit → integration → e2e → schema-diff → build des images → deploy-staging, plus les garde-fous gitleaks / shellcheck / anti-skip / couverture | `GITHUB_TOKEN` (implicite) ; hérite des Environments pour les jobs appelés |
-| **`build-images.yml`**         | `workflow_call` uniquement                                                   | Construit et pousse les **4 images** (`api`, `worker`, `field`, `hq`) sur GHCR, taguées **par SHA et par version** (02 §30.5)                                                                                                        | `GITHUB_TOKEN` (`packages: write`)                                         |
-| **`deploy-staging.yml`**       | `workflow_call` (depuis `ci.yml`, au merge sur `main`) · `workflow_dispatch` | SSH → `infra/scripts/deploy.sh` → contrôle de santé public → Telegram → ZAP baseline                                                                                                                                                 | Environment **`staging`**                                                  |
-| **`deploy-prod.yml`**          | push d'un tag `v*` · `workflow_dispatch`                                     | Build des 4 images taguées par la version, puis déploiement **après approbation manuelle**                                                                                                                                           | Environment **`prod`**                                                     |
-| **`nightly-restore-test.yml`** | cron `0 3 * * *` (UTC) · `workflow_dispatch`                                 | SSH → `infra/scripts/restore-test.sh` (Postgres + MinIO), journal conservé 90 j, **alerte Telegram si échec**                                                                                                                        | Environment **`ops`**                                                      |
-| **`zap-baseline.yml`**         | `workflow_call` (fin de `deploy-staging`) · `workflow_dispatch`              | ZAP baseline contre staging. **Non bloquant au L0/L1, BLOQUANT au L2**                                                                                                                                                               | Environment hérité de l'appelant                                           |
+| Fichier                        | Déclencheur                                                                  | Rôle                                                                                                                                                                                                                                                          | Secrets consommés                                                          |
+| ------------------------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| **`ci.yml`**                   | PR vers `main` · push sur `main` et `lot/**`                                 | **LE workflow bloquant.** jonction → lint (+ `check:pack`) → typecheck → **build des sources** → unit → integration → e2e → schema-diff → build des images → deploy-staging, plus les garde-fous gitleaks / shellcheck / anti-skip (+ orphelins) / couverture | `GITHUB_TOKEN` (implicite) ; hérite des Environments pour les jobs appelés |
+| **`build-images.yml`**         | `workflow_call` uniquement                                                   | Construit et pousse les **4 images** (`api`, `worker`, `field`, `hq`) sur GHCR, taguées **par SHA et par version** (02 §30.5)                                                                                                                                 | `GITHUB_TOKEN` (`packages: write`)                                         |
+| **`deploy-staging.yml`**       | `workflow_call` (depuis `ci.yml`, au merge sur `main`) · `workflow_dispatch` | SSH → `infra/scripts/deploy.sh` → contrôle de santé public → Telegram → ZAP baseline                                                                                                                                                                          | Environment **`staging`**                                                  |
+| **`deploy-prod.yml`**          | push d'un tag `v*` · `workflow_dispatch`                                     | Build des 4 images taguées par la version, puis déploiement **après approbation manuelle**                                                                                                                                                                    | Environment **`prod`**                                                     |
+| **`nightly-restore-test.yml`** | cron `0 3 * * *` (UTC) · `workflow_dispatch`                                 | SSH → `infra/scripts/restore-test.sh` (Postgres + MinIO), journal conservé 90 j, **alerte Telegram si échec**                                                                                                                                                 | Environment **`ops`**                                                      |
+| **`zap-baseline.yml`**         | `workflow_call` (fin de `deploy-staging`) · `workflow_dispatch`              | ZAP baseline contre staging. **Non bloquant au L0/L1, BLOQUANT au L2**                                                                                                                                                                                        | Environment hérité de l'appelant                                           |
 
 **Fichiers de configuration associés :**
 
@@ -47,7 +47,7 @@ mensonge de CI ; une CI qui ment est pire que pas de CI.
 | `.github/CODEOWNERS`                                  | Propriétaire unique. **À compléter à la main** : le compte GitHub de Williams n'est pas dans le pack                               |
 | `.github/pull_request_template.md`                    | DoD transverse + pipeline 7 étapes en cases à cocher                                                                               |
 | `.gitleaks.toml` _(racine)_                           | Règles par défaut + **une seule** exception : le marqueur `__CHANGEME__` de `.env.example`                                         |
-| `.lintstagedrc.json` + `.husky/pre-commit` _(racine)_ | Pre-commit 11 §7 : **intégrité du pack** + lint des fichiers indexés + typecheck rapide                                            |
+| `.lintstagedrc.json` + `.husky/pre-commit` _(racine)_ | Pre-commit 11 §7 : **pack + jonctions + orphelins** puis lint des fichiers indexés et typecheck rapide                             |
 
 ### Ordre des jobs de `ci.yml` (imposé par 11 §7)
 
@@ -65,10 +65,13 @@ AJOUT HORS 11 §7, ASSUMÉ :
 GARDE-FOUS EN PARALLÈLE (tous exigés par `build`) :
   gitleaks      02 §30.4-5   historique complet en PR
   shellcheck    11 §7        infra/scripts/*.sh + syntaxe docker compose
-  anti-skip     11 §2/09 §5.7  pnpm check:no-skipped-tests, exceptions vides
+  anti-skip     11 §2/09 §5.7  pnpm check:no-skipped-tests + pnpm check:test-projects
   invariants    09 §3 ét. 3  pnpm check:invariants
   coverage      09 §3        ≥ 90 % sur les modules critiques (après `unit`)
   check:pack    09 §5.2      1re étape du job `lint` — intégrité des 12 fichiers du pack
+
+EN TÊTE DE CHAÎNE (gate de `lint`) :
+  jonction      09 §5.1      pnpm check:jonction — les fichiers du dépôt se parlent-ils ?
 ```
 
 `build` a pour `needs` : `schema-diff`, `coverage`, `gitleaks`, `shellcheck`, `invariants`,
@@ -83,22 +86,24 @@ Les workflows appellent ces scripts. **Tous existent déjà dans le `package.jso
 A01 — ce tableau est le point de jonction : renommer l'un d'eux casse la CI, et c'est le
 comportement voulu (un script manquant est un trou de vérification, pas une étape optionnelle).
 
-| Script                        | Appelé par                                                 | Attendu                                                                                     |
-| ----------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `pnpm lint`                   | `ci.yml` job `lint`, `.husky/pre-commit` (via lint-staged) | ESLint sur tout le workspace, **0 avertissement toléré**                                    |
-| `pnpm format:check`           | `ci.yml` job `lint`                                        | Prettier en **vérification seule** — la CI ne réécrit jamais le dépôt                       |
-| `pnpm typecheck`              | `ci.yml` job `typecheck`, `.husky/pre-commit`              | `tsc --noEmit` strict sur tout le workspace                                                 |
-| `pnpm test:unit`              | `ci.yml` job `unit`                                        | Vitest 3, projet `unit`                                                                     |
-| `pnpm test:integration`       | `ci.yml` job `integration`                                 | Vitest 3, projet `integration` (services de CI + Testcontainers)                            |
-| `pnpm test:e2e`               | `ci.yml` job `e2e`                                         | Playwright, **chromium**                                                                    |
-| `pnpm test:coverage`          | `ci.yml` job `coverage`                                    | Vitest `--coverage`, reporter **`json-summary`** → `coverage/coverage-summary.json`         |
-| `pnpm check:no-skipped-tests` | `ci.yml` job `anti-skip`                                   | Garde-fou anti-skip, **liste d'exceptions vide** (`scripts/check-no-skipped-tests.mjs`)     |
-| `pnpm check:invariants`       | `ci.yml` job `invariants`                                  | Checklist automatisée des invariants (09 §3 étape 3)                                        |
-| `pnpm check:pack`             | `ci.yml` job `lint` (1re étape), `.husky/pre-commit`       | Intégrité SHA-256 des 12 fichiers de `docs/` (09 §5.2) — **instantané**                     |
-| `pnpm build`                  | `ci.yml` job `build-sources`                               | Construit `packages/*` puis `apps/*` — une PR ne peut plus être verte avec un build cassé   |
-| `pnpm infra:config`           | `ci.yml` job `shellcheck`                                  | `docker compose config -q` sur `infra/docker-compose.yml` (avec un `.env` éphémère)         |
-| `pnpm db:migrate`             | `ci.yml` job `schema-diff`                                 | Applique les migrations sur `DATABASE_URL` — exécuté **si `apps/api/drizzle/` existe** (L1) |
-| `pnpm schema:diff`            | `ci.yml` job `schema-diff`                                 | Compare le schéma réel au manifeste ; **code ≠ 0 au premier écart**                         |
+| Script                        | Appelé par                                                  | Attendu                                                                                                                           |
+| ----------------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm lint`                   | `ci.yml` job `lint`, `.husky/pre-commit` (via lint-staged)  | ESLint sur tout le workspace, **0 avertissement toléré**                                                                          |
+| `pnpm format:check`           | `ci.yml` job `lint`                                         | Prettier en **vérification seule** — la CI ne réécrit jamais le dépôt                                                             |
+| `pnpm typecheck`              | `ci.yml` job `typecheck`, `.husky/pre-commit`               | `tsc --noEmit` strict sur tout le workspace                                                                                       |
+| `pnpm test:unit`              | `ci.yml` job `unit`                                         | Vitest 3, projet `unit`                                                                                                           |
+| `pnpm test:integration`       | `ci.yml` job `integration`                                  | Vitest 3, projet `integration` (services de CI + Testcontainers)                                                                  |
+| `pnpm test:e2e`               | `ci.yml` job `e2e`                                          | Playwright, **chromium**                                                                                                          |
+| `pnpm test:coverage`          | `ci.yml` job `coverage`                                     | Vitest `--coverage`, reporter **`json-summary`** → `coverage/coverage-summary.json`                                               |
+| `pnpm check:no-skipped-tests` | `ci.yml` job `anti-skip`                                    | Garde-fou anti-skip, **liste d'exceptions vide** (`scripts/check-no-skipped-tests.mjs`)                                           |
+| `pnpm check:invariants`       | `ci.yml` job `invariants`                                   | Checklist automatisée des invariants (09 §3 étape 3)                                                                              |
+| `pnpm check:pack`             | `ci.yml` job `lint` (1re étape), `.husky/pre-commit`        | Intégrité SHA-256 des 12 fichiers de `docs/` (09 §5.2) — **instantané**                                                           |
+| `pnpm check:jonction`         | `ci.yml` job `jonction` (avant `lint`), `.husky/pre-commit` | Croise appelant → appelé : scripts `pnpm` par paquet, variables vs `.env.example`, drapeaux obligatoires des `infra/scripts/*.sh` |
+| `pnpm check:test-projects`    | `ci.yml` job `anti-skip`, `.husky/pre-commit`               | Aucun test **orphelin** (hors `include`/dans `exclude` d'un projet vitest) ; `--passWithNoTests` auto-péremptoire au L1           |
+| `pnpm build`                  | `ci.yml` job `build-sources`                                | Construit `packages/*` puis `apps/*` — une PR ne peut plus être verte avec un build cassé                                         |
+| `pnpm infra:config`           | `ci.yml` job `shellcheck`                                   | `docker compose config -q` sur `infra/docker-compose.yml` (avec un `.env` éphémère)                                               |
+| `pnpm db:migrate`             | `ci.yml` job `schema-diff`                                  | Applique les migrations sur `DATABASE_URL` — exécuté **si `apps/api/drizzle/` existe** (L1)                                       |
+| `pnpm schema:diff`            | `ci.yml` job `schema-diff`                                  | Compare le schéma réel au manifeste ; **code ≠ 0 au premier écart**                                                               |
 
 Ne devinez rien sur les noms : ce tableau **est** le contrat.
 
@@ -331,6 +336,25 @@ fichier appelé** et à s'y aligner.
 | M-8  | `ZAP_IMAGE: …:stable` commentée « épinglée » alors que `:stable` est **mobile**                                 | commentaire rectifié + digest journalisé à chaque run                             |
 | M-10 | `pnpm build` exercé par **aucun** job de CI : une PR pouvait être verte avec une compilation cassée             | nouveau job `build-sources` entre `typecheck` et `unit`                           |
 | M-11 | `restore-test.sh` appelé sans argument → `/opt/axion-audit/.env`, alors que le runbook prescrit `<env>/.env`    | `infra/README.md` §4 et §5.6 · `deploy.sh` l.43                                   |
+
+### Seconde passe — défaut N-2 : le même défaut, une couche plus haut
+
+`check:jonction` et `check:test-projects` ont été écrits **pour corriger** la revue, puis déclarés
+dans `package.json` sans être branchés sur **aucune porte bloquante** : ils ne tournaient que si
+quelqu'un lançait `pnpm verify` à la main — c'est-à-dire dans la situation exacte qui avait produit
+les sept bloquants. C'était **M-1 reproduit dans le commit qui corrigeait M-1**.
+
+Un contrôle non exécuté n'est pas un contrôle, et l'écrire une couche plus haut ne le rend pas moins
+vrai. Les deux sont désormais branchés :
+
+| Script                     | Point d'ancrage CI                                              | Pourquoi là                                                                                                                                    |
+| -------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm check:jonction`      | job **`jonction`**, `needs` de `lint` — donc de toute la chaîne | 0,2 s pour répondre à « les fichiers se parlent-ils encore ? ». Tant que non, tout ce qui suit échoue de façon confuse, huit minutes plus tard |
+| `pnpm check:test-projects` | job **`anti-skip`**, juste après `check:no-skipped-tests`       | Même propriété : aucun test ne dort. L'un attrape le test **éteint**, l'autre le test **orphelin** — et aucun ne voit le trou de l'autre       |
+
+**`pnpm verify` n'est volontairement appelé nulle part dans `.github/`** : la CI enchaîne des étapes
+individuelles, dont chacune nomme sa propre défaillance. Un `verify` monolithique en CI ferait tenir
+douze contrôles dans un seul verdict rouge.
 
 **Écart d'infrastructure signalé à A11** (hors périmètre A52) : `provision-vps.sh` ne crée que le
 fichier **plat** `/opt/axion-audit/.env` (l.256-266) et ne clone pas le dépôt, alors que le runbook

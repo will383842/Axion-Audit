@@ -18,7 +18,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=infra/scripts/lib/common.sh
 . "$SCRIPT_DIR/lib/common.sh"
 
-axion_load_env "${1:-$AXION_ROOT/.env}"
+axion_load_env "${1:-$(axion_env_file_default)}"
 axion_require_cmd docker curl
 axion_require_env PUBLIC_BASE_URL POSTGRES_DB POSTGRES_USER MINIO_BUCKET_TEMPLATES
 

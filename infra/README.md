@@ -5,7 +5,9 @@
 > **06 §10.2/§10.3**, **11 §1/§2/§7**. Des commandes et des sorties attendues, rien d'autre.
 >
 > **Règle absolue : aucune valeur de secret n'entre jamais dans un fichier versionné**
-> (02 §30.4-1/5, gitleaks est bloquant en CI). Tout passe par `/opt/axion-audit/.env`,
+> (02 §30.4-1/5, gitleaks est bloquant en CI). Tout passe par
+> **`/opt/axion-audit/<env>/.env`** (`<env>` = `staging` ou `prod` — il n’existe PAS de
+> `.env` à la racine, voir l’encadré du §4),
 > `root:root`, `chmod 600`, **posé à la main par SSH** (02 §30.4-2).
 
 ---
@@ -206,8 +208,10 @@ git clone git@github.com:<compte>/axion-audit.git /opt/axion-audit/repo
 Ce que le script fait, dans l'ordre : paquets · **refus de continuer si aucune clé SSH n'est
 installée** · SSH clés uniquement sur le port choisi · fail2ban · UFW (SSH + 80 + 443, tout le
 reste refusé) · Docker CE + Compose · `userns-remap` · `unattended-upgrades` (sans redémarrage
-automatique) · `/opt/axion-audit` + `/var/log/axion` + `/var/backups/axion` · `.env` créé depuis
-`.env.example` en `root:600`.
+automatique) · réseau et volumes partagés (7bis) · `/opt/axion-audit` + `/var/log/axion`
+
+- `/var/backups/axion` · **deux** fichiers `.env` (`prod/` et `staging/`) créés depuis
+  `.env.example` en `root:600` — et **aucun** à la racine.
 
 Il **s'arrête ensuite volontairement** : il ne pose **aucun secret** (02 §30.4-2).
 
@@ -265,23 +269,6 @@ HTML/JS/CSS publiquement servi — aucune donnée, aucun secret.
 
 ## 4. Pose des secrets (à la main, 02 §30.4-2)
 
-```bash
-ssh -p 2222 root@<IP>
-nano /opt/axion-audit/.env          # déjà en root:600
-```
-
-| Secret (02 §30.3)                                                                    | Génération                                  |
-| ------------------------------------------------------------------------------------ | ------------------------------------------- |
-| `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `MINIO_*_PASSWORD`, `MINIO_SECRET_KEY`        | `openssl rand -base64 32`                   |
-| `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` (**deux valeurs distinctes**)              | `openssl rand -hex 64`                      |
-| `APP_ENCRYPTION_KEY`                                                                 | `openssl rand -hex 32`                      |
-| `BACKUP_ENCRYPTION_PASSPHRASE`, `PGBACKREST_CIPHER_PASS`                             | `openssl rand -base64 48`                   |
-| `ANTHROPIC_API_KEY`, `DOCXTEMPLATER_LICENSE`, `TELEGRAM_*`, `CONSOLE_WEBHOOK_SECRET` | fournis par le service concerné             |
-| `GHCR_OWNER`, `IMAGE_TAG`                                                            | non secrets : compte GitHub et tag d'images |
-
-Puis, en cohérence avec `DATABASE_URL` et `REDIS_URL`, **répercuter les mots de passe dans les
-deux URL** (elles sont construites à partir des variables du dessus).
-
 > ### Convention de chemin du `.env` — une seule, sans exception
 >
 > ```
@@ -299,6 +286,26 @@ deux URL** (elles sont construites à partir des variables du dessus).
 > **Tout appelant passe le chemin explicitement** — `deploy.sh --env-file …`, les scripts de
 > sauvegarde en premier argument, `install-cron.sh` qui l'inscrit dans `/etc/cron.d/axion-audit`,
 > et les workflows GitHub. (Revue croisée M-11.)
+
+```bash
+ssh -p 2222 root@<IP>
+# DEUX fichiers, un par environnement — déjà créés par provision-vps.sh en root:600,
+# dans des répertoires en 700. N’en créez AUCUN autre, surtout pas à la racine.
+nano /opt/axion-audit/prod/.env
+nano /opt/axion-audit/staging/.env    # VALEURS DISTINCTES (02 §30.4-4)
+```
+
+| Secret (02 §30.3)                                                                    | Génération                                  |
+| ------------------------------------------------------------------------------------ | ------------------------------------------- |
+| `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `MINIO_*_PASSWORD`, `MINIO_SECRET_KEY`        | `openssl rand -base64 32`                   |
+| `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` (**deux valeurs distinctes**)              | `openssl rand -hex 64`                      |
+| `APP_ENCRYPTION_KEY`                                                                 | `openssl rand -hex 32`                      |
+| `BACKUP_ENCRYPTION_PASSPHRASE`, `PGBACKREST_CIPHER_PASS`                             | `openssl rand -base64 48`                   |
+| `ANTHROPIC_API_KEY`, `DOCXTEMPLATER_LICENSE`, `TELEGRAM_*`, `CONSOLE_WEBHOOK_SECRET` | fournis par le service concerné             |
+| `GHCR_OWNER`, `IMAGE_TAG`                                                            | non secrets : compte GitHub et tag d'images |
+
+Puis, en cohérence avec `DATABASE_URL` et `REDIS_URL`, **répercuter les mots de passe dans les
+deux URL** (elles sont construites à partir des variables du dessus).
 
 **Séparation stricte staging/prod (02 §30.4-4)** : deux fichiers, deux jeux de valeurs.
 

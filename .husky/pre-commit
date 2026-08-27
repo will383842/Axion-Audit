@@ -15,9 +15,20 @@
 #      l'original (qui fait toute la valeur de la revue de spec de la porte
 #      P-D, 09 §4) est déjà perdue. Voir DECISIONS.md 2026-08-27 « Prettier ne
 #      touche pas au pack ».
-#   2. `lint-staged` — eslint --fix sur les seuls fichiers INDEXÉS
+#   2. `pnpm check:jonction` — LES FICHIERS DE CE DÉPÔT SE PARLENT-ILS ENCORE ?
+#      Croise ce que la CI appelle avec ce que les fichiers appelés déclarent :
+#      scripts `pnpm` résolus par paquet, variables interpolées par l'infra vs
+#      `.env.example`, scripts `infra/scripts/*.sh` invoqués avec les drapeaux
+#      qu'ils déclarent OBLIGATOIRES. C'est le contrôle qui mécanise la cause
+#      racine des sept bloquants de la revue croisée du L0 — trois agents, trois
+#      moitiés d'interface qui ne se rejoignaient pas.
+#   3. `pnpm check:test-projects` — AUCUN TEST N'EST ORPHELIN : un fichier hors
+#      des `include` d'un projet vitest (ou inclus puis exclu) est vert en
+#      permanence sans jamais s'exécuter. Pire qu'un test skippé : le skip se
+#      voit, l'orphelin donne l'illusion de la couverture.
+#   4. `lint-staged` — eslint --fix sur les seuls fichiers INDEXÉS
 #      (configuration : `.lintstagedrc.json` à la racine) ;
-#   3. `pnpm typecheck` — TYPECHECK RAPIDE sur le projet. Il porte volontairement
+#   5. `pnpm typecheck` — TYPECHECK RAPIDE sur le projet. Il porte volontairement
 #      sur l'ensemble et non sur les fichiers indexés : un typecheck TypeScript
 #      partiel est faux par construction (les erreurs de types naissent aux
 #      frontières entre fichiers). C'est le prix d'un pre-commit qui ne ment pas.
@@ -36,9 +47,9 @@
 # PRÉREQUIS (à câbler par A01 dans le `package.json` racine) :
 #   · devDependencies : `husky` et `lint-staged` ;
 #   · script `"prepare": "husky"` (installe les hooks après `pnpm install`) ;
-#   · scripts `lint`, `typecheck` et `check:pack` (voir
-#     .github/workflows/README.md) — les trois existent dans le package.json
-#     racine.
+#   · scripts `lint`, `typecheck`, `check:pack`, `check:jonction` et
+#     `check:test-projects` (voir .github/workflows/README.md) — tous existent
+#     dans le package.json racine.
 #   Ces deux outils ne figurent pas dans la liste des versions épinglées 11 §1 —
 #   doute tracé par A52 (rapport → DECISIONS.md).
 #
@@ -47,8 +58,17 @@
 
 set -e
 
+# Les trois contrôles ci-dessous coûtent ~0,2 s chacun et attrapent, sur le
+# POSTE, les défauts qui coûteraient sinon un aller-retour de CI complet. C'est
+# ici que l'accident se produit — entre deux commits, pas sur le runner.
 echo "[pre-commit] intégrité du pack (12 fichiers de docs/)…"
 pnpm check:pack
+
+echo "[pre-commit] jonctions appelant → appelé…"
+pnpm check:jonction
+
+echo "[pre-commit] aucun test orphelin (projets vitest)…"
+pnpm check:test-projects
 
 echo "[pre-commit] lint des fichiers indexés (lint-staged)…"
 pnpm exec lint-staged
