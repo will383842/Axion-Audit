@@ -26,12 +26,13 @@
 //
 // Traçabilité : E36, E43 · DoD transverse (« tous les tests verts, AUCUN test skippé »).
 // =============================================================================
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, globSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
 const ROUGE = '[31m';
 const VERT = '[32m';
+const JAUNE = '[33m';
 const RAZ = '[0m';
 
 const RACINE = resolve(import.meta.dirname, '..');
@@ -300,6 +301,44 @@ if (l1Livre) {
     );
     process.exit(1);
   }
+}
+
+// --- Contrôle 5 : un test présent sur le disque mais INVISIBLE à git ---------
+//
+// POURQUOI. Ce script, comme `check-no-skipped-tests`, énumère les fichiers via
+// `git ls-files`. C'est le bon choix — il ignore `node_modules`, les artefacts de
+// construction et les brouillons — mais il a une conséquence que personne n'avait
+// vue : **un fichier de test NON SUIVI est exécuté par Vitest et ignoré par les
+// garde-fous**. Pendant tout le temps où il reste non indexé, il peut contenir un
+// `it.skip`, ne relever d'aucun projet, ou disparaître à un `git clean` — et les
+// deux contrôles annoncent « tout va bien » sur un périmètre amputé.
+//
+// Le cas s'est produit au lot L1, sur le test qui garde `apps/api/src/db/schema.ts` :
+// l'agent qui l'a écrit n'avait pas le droit d'indexer (règle de croisement), le
+// contrôle comptait « integration:6 » au lieu de 7, et le fichier serait passé sous
+// le radar **au moment même où il devenait utile**. C'est l'agent qui l'a signalé,
+// pas le garde-fou. Un contrôle qui dépend de la vigilance humaine pour connaître
+// son propre périmètre n'est pas un contrôle.
+//
+// Ce n'est PAS une erreur en soi : un test en cours d'écriture est légitimement non
+// suivi. C'est un AVERTISSEMENT visible — la seule chose inacceptable serait le
+// silence.
+const suivis = new Set(tests);
+const surDisque = globSync('**/*.{test,spec}.{ts,tsx,mts,cts}', {
+  cwd: RACINE,
+  ignore: ['**/node_modules/**', '**/dist/**', '**/.git/**'],
+})
+  .map((f) => f.replaceAll(String.fromCharCode(92), '/'))
+  .filter((f) => !suivis.has(f));
+
+if (surDisque.length > 0) {
+  console.warn(
+    `${JAUNE}⚠ ${String(surDisque.length)} fichier(s) de test NON SUIVI(S) par git :${RAZ}\n` +
+      surDisque.map((f) => `    ${f}`).join('\n') +
+      '\n  Vitest les exécute ; ce contrôle et `check-no-skipped-tests` ne les voient PAS\n' +
+      '  (ils énumèrent via `git ls-files`). Indexe-les — sinon ils échappent aux\n' +
+      '  garde-fous au moment même où ils deviennent utiles.\n',
+  );
 }
 
 const detail = projets
