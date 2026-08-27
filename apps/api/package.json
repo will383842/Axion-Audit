@@ -5,7 +5,7 @@
   "type": "module",
   "description": "API REST /v1 (Fastify 5) — seul point d'entrée aux données (02 §4.3-2).",
   "scripts": {
-    "dev": "node --watch --experimental-strip-types src/server.ts",
+    "dev": "node ../../scripts/dev-node.mjs dist/server.js",
     "build": "tsc --project tsconfig.build.json",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",

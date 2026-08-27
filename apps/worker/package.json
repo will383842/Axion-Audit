@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Worker BullMQ — jobs asynchrones (DOCX, LLM, exports, purges RGPD, webhooks). Jamais dans le cycle requête (02 §11.1).",
   "scripts": {
-    "dev": "node --watch --experimental-strip-types src/worker.ts",
+    "dev": "node ../../scripts/dev-node.mjs dist/worker.js",
     "build": "tsc --project tsconfig.build.json",
     "start": "node dist/worker.js",
     "typecheck": "tsc --noEmit"
