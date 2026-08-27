@@ -69,3 +69,16 @@ Tâche en cours : **LOT L1 OUVERT** après reprise conforme au 11 §9ter — ETA
 État de l'infrastructure : dépôt PUBLIC, `main` protégée (11 contrôles de CI requis), relecteur obligatoire sur `prod`, squash merge seul. Mesure réelle relevée pour dimensionner le VPS : une pile au repos consomme **1,03 Go** ; il en faut deux (prod + staging cohabitant, 02 §11.2) → **cpx32 recommandé** (4 vCPU, 8 Go, 160 Go).
 Prochaine action : à la livraison d'A12 et A16, confronter les deux lectures, puis livrer les fixtures **FIL-TPE et FIL-GC** + le générateur FIL-GC (09 §4bis, outillage de test du L1) et le premier test `@filrouge` — trois garde-fous se durcissent dès l'apparition de `apps/api/drizzle/` et l'exigeront.
 Tests rouges connus : aucun à l'ouverture du lot. Attendus rouges pendant L1 : `schema:diff` (manifeste à produire), `test:integration` (suite à écrire), `check:test-projects` (fil rouge à écrire) — c'est l'auto-durcissement prévu au L0, pas une régression.
+
+---
+
+## 2026-08-27 20h50 — [lot L1 / schéma & migrations] — étape pipeline 4/7 (revue croisée rendue, corrections en cours)
+
+Dernier commit vert : 99ed12b (fix(l1): le job d'intégration de la CI ne fournissait pas les variables du seed) · Branche : lot/l0-infra · Poussé : oui
+Tâche en cours : traitement des réserves de la revue croisée L1 (A17 — verdict **CONFORME AVEC RÉSERVES**, 4 bloquants, 6 majeurs).
+Le SCHÉMA est jugé bon : A17 a comparé la base au fichier 04 sans passer par le manifeste d'A12 (juge et partie), a relu les 57 CHECK valeur par valeur, et n'a trouvé aucune table, colonne ni valeur d'énumération manquante. **Ce sont les GARDE-FOUS qui étaient faux** : 25 mutations injectées dans le schéma, **8 non détectées** par `schema:diff` — dont l'inversion de `users_role_check` (`= ANY` → `<> ALL`) qui fait ACCEPTER `role='pirate'` et REFUSER `role='admin'` avec ZÉRO ÉCART annoncé.
+Répartition en cours : A12 (comparateur B-1/B-2/B-3, colonnes de traçabilité NOT NULL, migration 0010) · A16 (méta-test des mutations `@critique`, empreinte de contenu du seed) · A01 (entrées DECISIONS manquantes, scripts).
+Fait par A01 depuis le dernier commit : 3 entrées `DECISIONS.md` (sémantique du comparateur + index de FK ; conventions de typage T1-T11 ; `interviews.org_unit_id` reste NOT NULL) — les deux premières sont des **régularisations tardives assumées**, l'arbitrage avait été appliqué au code sans être tracé, et l'entrée le dit ; `test:critique` corrigé (sortait en code 1, réserve M-1) ; **contrôle 4** ajouté à `check-test-projects.mjs` (au moins un test `@critique` une fois `apps/api/drizzle/` présent), prouvé par injection.
+Prochaine action : recevoir les rapports d'A12 et d'A16, exécuter `pnpm verify` complet, commiter, PUIS rejouer le contrôle d'acceptation du gardien A02 (étape 6) — **dans l'ordre**, l'écart V3 du lot L0 étant précisément d'avoir mené l'étape 6 en parallèle de l'étape 4.
+Tests rouges connus : aucun à cet instant, mais la suite n'a pas été rejouée depuis les corrections d'A12 — le vert n'est donc PAS acquis.
+Réserve non refermée, hors périmètre logiciel : la DoD « migrations up/down exécutées sur staging » reste incochable tant que le VPS n'existe pas. Porte P-A en attente de Williams.

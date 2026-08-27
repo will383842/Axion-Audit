@@ -187,15 +187,16 @@ const testsIntegration = tests.filter((f) => couvertPar(f)?.nom === 'integration
 if (l1Livre && testsIntegration.length === 0) {
   console.error(
     `${ROUGE}✗ AUCUN TEST D'INTÉGRATION alors que le lot L1 est livré.${RAZ}\n\n` +
-      '  `pnpm test:integration` porte `--passWithNoTests`. Ce drapeau était honnête\n' +
-      "  au lot L0 : il n'y avait ni base, ni route métier, ni rien à intégrer.\n" +
-      '  Le schéma existe désormais (apps/api/drizzle/) : le drapeau ferait passer\n' +
-      '  au vert une suite VIDE, ce que le 09 §5.7 interdit.\n\n' +
+      '  Au lot L0, `pnpm test:integration` portait `--passWithNoTests`, et le drapeau\n' +
+      "  était honnête : il n'y avait ni base, ni route métier, ni rien à intégrer.\n" +
+      '  Le drapeau a été RETIRÉ à la livraison du lot L1. Ce contrôle lui survit et\n' +
+      '  garde la même exigence : le schéma existe (apps/api/drizzle/), donc une suite\n' +
+      "  d'intégration VIDE serait un vert qui ne prouve rien (09 §5.7).\n\n" +
       '  Le fichier 07 §13 énumère ce qui est attendu ici : RBAC exhaustif (chaque\n' +
       '  rôle × chaque route), propriété de session §9.9, idempotence du push,\n' +
       '  unicité `answers(interview_id, mission_question_id)`, anti-rejeu des webhooks,\n' +
       '  garde-fou de reset de mot de passe.\n\n' +
-      '  Écris ces tests, puis RETIRE `--passWithNoTests` du script.\n',
+      "  Écris ces tests : ils sont la raison d'être du lot.\n",
   );
   process.exit(1);
 }
@@ -245,6 +246,41 @@ if (l1Livre) {
         "  **Toute porte l'exige vert sur LES DEUX missions** — c'est aussi la preuve\n" +
         '  continue du « de la TPE au grand groupe » : la même app, le même parcours,\n' +
         '  aux deux échelles.\n',
+    );
+    process.exit(1);
+  }
+}
+
+// --- Contrôle 4 : `@critique` existe-t-il dès qu'il est exigible ? ----------
+//
+// POURQUOI CE CONTRÔLE EST NÉ. `pnpm test:critique` enchaîne un segment Vitest et un
+// segment Playwright. Le second sortait en CODE 1 au lot L1 : aucun test Playwright
+// ne porte `@critique`, et Playwright échoue quand son filtre ne trouve rien. La
+// commande d'urgence du pack était donc INUTILISABLE — relevé en revue croisée
+// (réserve M-1).
+//
+// Le correctif est `--pass-with-no-tests` sur le segment Playwright, et il est
+// légitime : `@critique` est réservé aux trois familles que le pack nomme (09 §2),
+// dont une seule s'applique au L1 — le diff schéma-vs-04, qui vit en intégration.
+// Les 8 scénarios offline et les tests RBAC arriveront à leurs lots.
+//
+// MAIS ce drapeau a un prix : `test:critique` ne peut plus échouer par ABSENCE. Si
+// le test `@critique` disparaissait, la commande sortirait en 0 sans rien exécuter —
+// un vert qui ne prouve rien, ce que le 09 §5.7 refuse et ce que le contrôle 2
+// ci-dessus empêche déjà pour `--passWithNoTests`.
+// Un drapeau permissif se paie d'un garde-fou. C'est celui-ci.
+if (l1Livre) {
+  const sources = tests
+    .map((f) => sansCommentaires(readFileSync(resolve(RACINE, f), 'utf8')))
+    .join('\n');
+  if (!/@critique/.test(sources)) {
+    console.error(
+      `${ROUGE}✗ AUCUN TEST MARQUÉ \`@critique\` alors que le lot L1 est livré.${RAZ}\n\n` +
+        '  Le 09 §2 et le 11 §7 désignent nommément le **diff schéma-vs-04** comme\n' +
+        "  famille critique, et c'est la seule des trois applicable au lot L1.\n\n" +
+        '  `pnpm test:critique` porte `--pass-with-no-tests` sur son segment Playwright :\n' +
+        '  sans ce contrôle, la disparition du test sortirait en 0 sans rien exécuter.\n' +
+        '  Marque `@critique` le test qui éprouve le diff schéma-vs-04.\n',
     );
     process.exit(1);
   }

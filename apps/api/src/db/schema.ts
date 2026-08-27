@@ -589,7 +589,8 @@ export const answerRevisions = pgTable('answer_revisions', {
   id: uuid('id').primaryKey(),
   answerId: uuid('answer_id').notNull(),
   previousValue: jsonb('previous_value'),
-  changedBy: uuid('changed_by'),
+  /** NOT NULL (0010) — invariant 7 : une révision sans auteur n'est pas tracée. */
+  changedBy: uuid('changed_by').notNull(),
   changedAt: horodatage('changed_at').notNull(),
   changeOrigin: text('change_origin').$type<OrigineRevision>().notNull(),
 });
@@ -703,7 +704,8 @@ export const findings = pgTable('findings', {
   remediationStatus: text('remediation_status').$type<StatutRemediation>().notNull(),
   wave: text('wave').$type<Vague>(),
   status: text('status').$type<StatutConstat>().notNull(),
-  createdBy: uuid('created_by'),
+  /** NOT NULL (0010) — §16.5 : un drapeau rouge exige une validation humaine identifiable. */
+  createdBy: uuid('created_by').notNull(),
   createdAt: horodatage('created_at').notNull(),
   updatedAt: horodatage('updated_at').notNull(),
 });
@@ -899,8 +901,9 @@ export const stepValidations = pgTable('step_validations', {
   stepCode: text('step_code').$type<CodeEtape>().notNull(),
   scope: text('scope').$type<PorteeValidation>().notNull(),
   scopeId: uuid('scope_id'),
-  validatedBy: uuid('validated_by'),
-  validatedAt: horodatage('validated_at'),
+  /** NOT NULL (0010) — la validation d'étape conditionne les transitions §32.2. */
+  validatedBy: uuid('validated_by').notNull(),
+  validatedAt: horodatage('validated_at').notNull(),
   wasOverride: boolean('was_override').notNull(),
   overrideReason: text('override_reason'),
 });

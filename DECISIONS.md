@@ -1358,3 +1358,219 @@ qu'on sait reconstruire transforme une décision d'achat en décision réversibl
 **Impact spec :** amende l'entrée précédente du même jour — la référence de dimensionnement V1
 redevient **CPX32** (4 vCPU, 8 Go, 160 Go), Nuremberg ou Falkenstein, les deux étant en Allemagne et
 satisfaisant le 06 §10.4.
+
+---
+
+## 2026-08-27 — [L1] Sémantique du comparateur : ce qui est un écart, ce qui est un signalement
+
+**Constat :** arbitrage rendu à A12 pendant le lot L1, **appliqué au code sans être tracé ici**.
+Relevé par la revue croisée (A17) : « une décision non tracée dans ce format n'existe pas ». La
+régularisation ci-dessous est donc écrite APRÈS application — c'est un écart de méthode, imputable à
+A01, et l'entrée le dit plutôt que de faire croire à un ordre correct.
+
+Le 11 §7 borne le diff aux « tables, colonnes, contraintes PK/FK/UNIQUE/CHECK et index du §7.1 ». Il
+ne dit pas ce qu'il faut faire de ce que la base contient **en plus** du manifeste.
+
+**Options :**
+
+1. Tout objet non déclaré est un écart — lecture stricte, symétrique du principe « une table en trop
+   est aussi grave qu'une table manquante ».
+2. Tout objet non déclaré est une information — lecture souple.
+3. Départager selon que l'objet **contraint** ou seulement **accélère**.
+
+**Arbitrage : option 3.** Règle de précédence **sans objet** (aucune divergence interne : le pack est
+muet, il faut donc trancher et tracer).
+
+- Un **index de lecture** non déclaré ne change aucun comportement observable : il rend une requête
+  plus rapide. Le refuser interdirait à tout lot ultérieur d'optimiser sans rouvrir un manifeste
+  extrait du fichier 04 et relu ligne à ligne à la porte P-A — on paierait une lourdeur permanente
+  pour un risque nul. **Signalement**, pas écart.
+- Un **index UNIQUE** non déclaré est une **contrainte** : il interdit des lignes que la spécification
+  autorise. Il entre donc dans « contraintes … UNIQUE » du 11 §7, et l'exception ci-dessus ne le
+  couvre pas. **Écart.**
+
+**Ce qui a rendu la distinction nécessaire :** ma première formulation ne disait que « index non
+déclaré = information », sans distinguer. A17 l'a mise en défaut par l'exécution —
+`CREATE UNIQUE INDEX zz_uq_answers_mq ON answers (mission_question_id)` passait en **code 0** alors
+qu'il interdit silencieusement de répondre à une même question dans deux sessions différentes,
+l'inverse exact de la règle du 04 §7 (V2.2 §32.6). Le raisonnement était juste, sa portée trop large.
+
+**Corollaire tranché en même temps — la convention « FK indexées ».** Le fichier 04 §7.1 énumère 31
+index ; les conventions en tête du §7 imposent en outre d'indexer les clés étrangères. Ces index de
+convention ne figurent pas au §7.1 mais ne sont pas « non déclarés » pour autant : ils sont **déclarés
+par une règle** au lieu de l'être par une liste. Ils entrent donc au manifeste, dans une section
+`indexEtablisParConvention` **séparée** de `indexCritiques`, chacune portant sa source (« 04 §7.1 » /
+« conventions 04 §7 »). Les 40 FK volontairement non indexées sont listées avec leur motif en
+`fkNonIndexees` : une convention dont on s'écarte sans l'écrire est une convention morte.
+
+**Décideur :** A01
+**Impact spec :** aucun · **Régularisation tardive assumée**
+
+---
+
+## 2026-08-27 — [L1] Conventions de typage T1-T11 : elles précisent « types non précisés = TEXT »
+
+**Constat :** arbitrage rendu à A12 pendant le lot L1 (sa question n°1), **appliqué sans être tracé
+ici**. Même régularisation tardive que l'entrée précédente, même imputation.
+
+Le 11 §7 pose « types non précisés par le 04 = TEXT, conventions en tête du 04 ». Pris seul, le
+premier membre typerait en TEXT des colonnes que le fichier 04 nomme `created_at`, `is_active` ou
+`sort_order` — soit une base où les dates ne se comparent pas et où les booléens acceptent
+« peut-être ». Le second membre existe précisément pour l'empêcher.
+
+**Options :**
+
+1. TEXT partout où le 04 ne donne pas de type — lecture littérale du premier membre.
+2. Appliquer les conventions du 04, TEXT en dernier recours seulement.
+
+**Arbitrage : option 2.** Règle de précédence **sans objet** : les deux membres appartiennent à la
+même phrase du 11 §7 et se lisent ensemble — « types non précisés » signifie « ni par un type
+explicite, **ni par une convention** ». TEXT est le défaut résiduel, pas la règle générale.
+
+Les conventions retenues sont consignées **en tête de la migration `0001`** (T1 à T11) plutôt que
+dans ce registre seul, pour qu'un relecteur du SQL les ait sous les yeux : suffixes `_at` →
+`TIMESTAMPTZ`, `is_`/`has_` → `BOOLEAN`, `_id` → `UUID`, `count`/`_min`/`sort_order` → `INTEGER`,
+NUMERIC quand le 04 le type ainsi ou quand la colonne **miroite** une colonne que le 04 type NUMERIC
+(T7 élargie après revue : `llm_calls.cost_eur` et `mission_questions.weight_snapshot` sont dans ce
+cas), `NOT NULL` sur les FK que le 04 ne marque pas `NULL` (T8), et TEXT pour le reste.
+
+**Portée :** ~25 colonnes. Ces conventions sont **normatives pour tous les lots suivants** — un lot
+qui ajoute une colonne `validated_at` la type `TIMESTAMPTZ`, sans redemander.
+
+**Décideur :** A01
+**Impact spec :** aucun · **Régularisation tardive assumée**
+
+---
+
+## 2026-08-27 — [L1] `interviews.org_unit_id` reste NOT NULL
+
+**Constat (réserve M-5 de la revue croisée) :** A17 signale un risque — si le lot L5c doit rattacher
+une session à une **demande de document** (§27.1, analyse documentaire) sans unité connue,
+`org_unit_id NOT NULL` bloquerait.
+
+**Options :**
+
+1. Rendre la colonne nullable par anticipation.
+2. La conserver `NOT NULL`.
+
+**Arbitrage : option 2.** Règle de précédence **sans objet** : le fichier 04 tranche explicitement.
+Sur la table `interviews`, il pose `org_unit_id FK org_units,` **et**, à la ligne suivante,
+`document_request_id FK document_requests NULL`. Le marqueur `NULL` est présent sur l'une et absent
+sur l'autre, à une ligne d'écart : la distinction est délibérée, pas un oubli. Le commentaire P2-1 du
+même bloc la scelle — « **l'unité d'audit est TOUJOURS `org_unit_id`** ». Une session d'analyse
+documentaire porte donc les deux : la demande de document ET son unité.
+
+**Ce qui serait perdu à rendre la colonne nullable :** l'agrégation par unité (`unit_scores`,
+PRIMARY KEY `(mission_id, org_unit_id, block_id)`) laisserait échapper les sessions orphelines, et
+les scores d'unité seraient faux sans que rien ne s'allume.
+
+**Suite à donner :** porté au brief du **lot L5c**. Si l'implémentation y démontre un cas réel de
+session sans unité, c'est une question de spécification à arbitrer à ce moment — pas un relâchement
+de contrainte décidé aujourd'hui « au cas où ».
+
+**Décideur :** A01
+**Impact spec :** aucun · à revoir au lot L5c
+
+---
+
+## 2026-08-27 — [L1] Nullabilité, DEFAULT et précision numérique entrent dans le diff schéma-vs-04
+
+**Constat :** A12 avait écrit en tête de `scripts/schema-diff.mjs` : « Hors périmètre **ASSUMÉ** (le
+11 §7 ne les cite pas) : nullabilité, valeurs par défaut, commentaires, ordre des colonnes,
+privilèges ». Le mot « assumé » est exact — c'était une **hypothèse déclarée**, pas une citation du
+pack, et c'est parce qu'elle était écrite qu'elle a pu être discutée.
+
+Le méta-test d'A16 (13 classes de mutation) l'a mise en défaut par l'exécution. Trois mutations
+sortent en **ZÉRO ÉCART** :
+
+| Mutation                                                 | Conséquence réelle en base                          |
+| -------------------------------------------------------- | --------------------------------------------------- |
+| `answers.interview_id` : `NOT NULL` retiré               | une réponse orpheline, rattachée à aucune session   |
+| `missions.timezone` : `DEFAULT 'Europe/Paris'` → `'UTC'` | tous les créneaux d'entretien décalés à l'affichage |
+| `block_scores.score` : `numeric` → `numeric(4,1)`        | scores arrondis et plafonnés, sans erreur levée     |
+
+**Options :**
+
+1. Maintenir l'exclusion — lecture étroite de « colonnes » au 11 §7 : présence et type de base.
+2. Étendre le diff à tout attribut de colonne, y compris commentaires et ordre.
+3. Étendre aux seuls attributs **que le fichier 04 fige explicitement**.
+
+**Arbitrage : option 3.** Règle de précédence **sans objet** : le 11 §7 borne le diff aux « tables,
+**colonnes**, contraintes PK/FK/UNIQUE/CHECK et index du §7.1 » et **n'exclut rien nommément**. Il
+fallait donc décider ce que « comparer une colonne » signifie, et le tracer.
+
+**Le critère retenu, applicable sans jugement au cas par cas : _si le fichier 04 le fige, le diff le
+vérifie_.** Or le 04 fige les trois attributs en cause :
+
+- il **marque `NULL`** là où le NULL est voulu (`siren TEXT NULL`, `org_unit_id FK NULL`) —
+  l'absence de marqueur est donc une information délibérée, pas un silence ;
+- il **écrit** `DEFAULT 'Europe/Paris'`, `DEFAULT 'a_planifier'`, `DEFAULT 'entretien'` ;
+- il **type `NUMERIC` sans précision**, ce qui est un choix (un score que le stockage ne borne pas),
+  pas un oubli.
+
+Un attribut écrit dans le document de référence et vérifié par personne est exactement ce que ce
+dépôt refuse partout ailleurs.
+
+**Ce qui a rendu la décision urgente plutôt que théorique :** la migration `0010` pose des `NOT NULL`
+**délibérés** sur `answer_revisions.changed_by`, `step_validations.validated_by`/`validated_at` et
+`findings.created_by`, pour satisfaire l'invariant 7 (« toute correction de donnée = révision
+**tracée** »). Sous l'exclusion, **rien ne les gardait** : un lot ultérieur pouvait les relâcher, la
+CI restait verte, et une révision sans auteur redevenait possible. On aurait corrigé la traçabilité
+en laissant intact le moyen de la défaire en silence.
+
+**Restent hors périmètre, définitivement :** commentaires, ordre des colonnes, privilèges — le
+fichier 04 ne les fixe pas, il n'y a rien à comparer. L'en-tête du script est corrigé pour ne plus
+présenter cette liste comme une seule famille.
+
+**Piège identifié et transmis :** le 04 distingue les défauts **SQL** des défauts **APPLICATIFS** —
+sur `interviews.mode` il écrit « défaut APPLICATIF (V2.8) : `'sur_site'` si `kind='entretien'`, NULL
+sinon — **un DEFAULT SQL conditionnel n'existe pas** ». Une colonne à défaut applicatif se déclare
+**sans DEFAULT SQL**, et le diff exige alors qu'il n'y en ait aucun. Confondre les deux familles
+produirait des dizaines de faux écarts et discréditerait le contrôle.
+
+**Décideur :** A01
+**Impact spec :** aucun — précise l'application du 11 §7, sans l'amender
+
+---
+
+## 2026-08-27 — [L1] Amendement de la convention de typage T8, et naissance de T12
+
+**Constat :** l'entrée « Conventions de typage T1-T11 » de ce jour décrit T8 comme « `NOT NULL` sur
+les FK que le 04 ne marque pas `NULL` ». Cette formulation était incomplète, et le retrait des 10
+défauts non prescrits (entrée précédente) l'a révélé : **cinq colonnes tenaient leur `NOT NULL` de la
+clause « colonnes portant un DEFAULT »** — `blocks.is_default`, `sectors.is_active`,
+`users.is_active`, `report_templates.is_active`, `questions.version`. En retirant le défaut, on
+retirait la justification de la contrainte sans le voir.
+
+**Options :**
+
+1. Relâcher les cinq `NOT NULL`, la règle écrite ne les couvrant plus.
+2. Réécrire la règle, la contrainte étant juste et la règle incomplète.
+
+**Arbitrage : option 2**, rendu par A12 et confirmé ici. Règle de précédence **sans objet**.
+Un drapeau d'activation à trois valeurs (`true` / `false` / **NULL**) fait **silencieusement
+disparaître des lignes** d'un `WHERE is_active` : NULL n'est ni vrai ni faux, la ligne sort du
+résultat sans erreur ni trace. Un compteur de version nullable rend le versionnement des questions
+(§32) indécidable. Ces `NOT NULL` ne dépendaient pas du défaut — c'est la règle qui les justifiait
+par le mauvais chemin.
+
+**T8 devient :** `NOT NULL` sur les FK que le 04 ne marque pas `NULL`, **et** sur les booléens d'état
+structurel et compteurs de version, **avec ou sans DEFAULT**.
+
+**T12, née de l'arbitrage sur les défauts :** « un défaut qui exprime un ÉTAT MÉTIER vient du fichier
+04, ou n'existe pas ; seul un défaut purement TECHNIQUE peut venir d'une convention, et alors il est
+écrit ici. » Quatre conventions admises, et quatre seulement : horodatages `now()`, collections JSONB
+`'[]'`, UUID v4 des 4 tables purement serveur, **compteur entier incrémenté par le serveur → `0`**.
+
+Cette dernière porte sa propre limite, et c'est ce qui la rend sûre : elle **ne s'applique jamais à
+une quantité métier collectée sur le terrain** (`headcount`, `users_count`, `answers_count`,
+`items_count`…), pour laquelle **NULL — non renseigné — et 0 sont deux faits distincts**. Confondre
+les deux ferait entrer des zéros inventés dans le scoring (§32.1) sans qu'aucun contrôle ne s'allume.
+Un seul cas du schéma relève de T12 : `integration_events.attempts`.
+
+**Conséquence de test :** `blocks.is_default` étant désormais `NOT NULL` sans défaut, une fixture qui
+l'omettait échoue. Elle est corrigée par A16 — **pas par A12** : la règle de croisement (09 §5.6)
+interdit à l'auteur du schéma d'ajuster une fixture pour faire passer son propre code.
+
+**Décideur :** A12 (proposition motivée) · A01 (confirmation)
+**Impact spec :** aucun · amende l'entrée « Conventions de typage T1-T11 » du même jour

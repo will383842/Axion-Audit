@@ -22,15 +22,36 @@
 --       `tokens_*`, `duration_ms`, `*_months`, `*_weeks`, `attempts`,
 --       `revision`, `palier`, `month_*`) → INTEGER ; `size_bytes` → BIGINT.
 --   T6. `is_*` → BOOLEAN.
---   T7. Montants/scores → NUMERIC quand le 04 les type ainsi. Les colonnes
---       `estimated_gain`, `estimated_cost`, `expected_gain`, `indicative_cost`
---       restent TEXT (règle T2) : le 04 fournit à côté des colonnes NUMERIC
---       explicites (`gain_low`, `gain_high`, `baseline_value`, `target_value`)
---       précisément pour la valeur chiffrée.
+--   T7. Montants/scores → NUMERIC quand le 04 les type ainsi, ET quand la colonne
+--       MIROITE une colonne que le 04 type NUMERIC ailleurs (précision ajoutée
+--       après la revue croisée A17, qui a relevé que la règle écrite ne couvrait
+--       pas deux cas pourtant traités) : `llm_calls.cost_eur` miroite
+--       `report_sections.llm_cost_eur`, et `mission_questions.weight_snapshot`
+--       miroite `questions.weight` — un snapshot doit pouvoir contenir exactement
+--       ce qu'il fige, sans conversion.
+--       En revanche `estimated_gain`, `estimated_cost`, `expected_gain` et
+--       `indicative_cost` restent TEXT (règle T2) : le 04 fournit à côté des
+--       colonnes NUMERIC explicites (`gain_low`, `gain_high`, `baseline_value`,
+--       `target_value`) précisément pour la valeur chiffrée — l'asymétrie est
+--       délibérée, ces colonnes-là sont des descriptions libres.
 --   T8. NULLABILITÉ (hors périmètre du diff 11 §7, qui ne porte que sur
 --       PK/FK/UNIQUE/CHECK) : NOT NULL sur les clés primaires, les FK que le 04
 --       ne marque pas `NULL`, les colonnes portant un DEFAULT, les codes/libellés
 --       de référentiel et les enums structurants. Tout le reste reste nullable.
+--       S'y ajoutent, depuis le retrait des défauts non prescrits (0011) :
+--         · BOOLÉEN D'ÉTAT STRUCTUREL (`is_active`, `is_default`, `in_scope`) et
+--           COMPTEUR DE VERSION (`questions.version`) → NOT NULL, avec ou SANS
+--           DEFAULT. Ces colonnes tenaient leur NOT NULL du défaut que 0011 a
+--           retiré ; la justification aurait disparu avec lui si elle n'était pas
+--           réécrite ici. Et un drapeau d'activation à TROIS valeurs
+--           (true / false / NULL) est un piège : `WHERE is_active` fait
+--           silencieusement disparaître les lignes à NULL. Sans défaut, l'insertion
+--           devient explicite — c'est plus sûr, pas moins.
+--       ATTENTION — la nullabilité n'était vérifiée par AUCUN contrôle automatique
+--       tant que le 11 §7 était lu comme l'excluant du diff. Elle y est entrée
+--       après les méta-tests d'A16 : le comparateur la compare désormais colonne
+--       par colonne. La revue croisée A17 avait auparavant trouvé quatre colonnes
+--       de TRAÇABILITÉ où la règle n'était pas appliquée — corrigées en 0010.
 --   T9. UUID v7 : AUCUN DEFAULT SQL (PostgreSQL 16 n'a pas `uuidv7()` — PG18
 --       seulement ; 11 §2). Les identifiants viennent du code (lib `uuidv7`),
 --       client ET serveur. `DEFAULT gen_random_uuid()` (v4) n'apparaît QUE sur
@@ -45,6 +66,23 @@
 --   T11. FK sans ON DELETE : la suppression est LOGIQUE (`deleted_at`,
 --        invariant 7 « rien n'est jamais silencieusement supprimé »). NO ACTION
 --        est donc le comportement voulu ; le 04 ne spécifie aucun CASCADE.
+--   T12. VALEURS PAR DÉFAUT — un défaut qui exprime un ÉTAT MÉTIER vient du
+--        fichier 04, ou n'existe pas ; seul un défaut purement TECHNIQUE peut
+--        venir d'une convention, et alors il est écrit ici (arbitrage A01, lot
+--        L1 ; migration 0011 qui retire les 10 défauts non prescrits que j'avais
+--        posés). Le fichier 04 SAIT écrire `DEFAULT 'a_planifier'` : là où il
+--        n'écrit rien, le choix appartient au lot qui implémentera la règle, pas
+--        à la transcription. Les seuls défauts conventionnels admis sont :
+--          · `created_at` / `updated_at` → `now()` (§7 : « TIMESTAMPTZ partout ») ;
+--          · JSONB de collection → `'[]'` / `'{}'` — le 04 écrit « [] = universelle »,
+--            « [] = transverse » : le tableau vide EST une valeur signifiante ;
+--          · `id` des tables PUREMENT SERVEUR → `gen_random_uuid()` (11 §2, T9) ;
+--          · COMPTEUR entier incrémenté par le serveur → `0`. Un compteur qui
+--            démarre à zéro n'exprime aucun choix fonctionnel, c'est de
+--            l'arithmétique. Un seul dans le schéma : `integration_events.attempts`.
+--            Ne s'applique JAMAIS à une quantité métier collectée sur le terrain
+--            (`headcount`, `users_count`, `answers_count`, `items_count`…), pour
+--            laquelle NULL — « non renseigné » — et 0 sont deux faits distincts.
 -- =============================================================================
 
 -- @UP

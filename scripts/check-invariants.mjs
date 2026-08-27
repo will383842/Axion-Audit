@@ -350,7 +350,13 @@ console.log(
     '  · Invariant 3 : requêtes filtrées par mission, RBAC serveur systématique,\n' +
     '    étanchéité de scoping_financials (routes admin exclusivement).\n' +
     '  · 05 §9.9 : écritures de sync réservées au PROPRIÉTAIRE de la session.\n' +
-    '  · Invariant 7 : toute correction = révision tracée, jamais d’écrasement silencieux.\n' +
+    '  · Invariant 7 : jamais d’écrasement silencieux — la RÈGLE reste à la revue.\n' +
+    '    (Depuis le lot L1, une PARTIE est mécanisée : la migration 0010 impose\n' +
+    '    NOT NULL sur changed_by, validated_by, validated_at et created_by — une\n' +
+    '    révision sans auteur est refusée par la base — et le diff schéma-vs-04\n' +
+    '    garde ces NOT NULL, qu’une migration ultérieure ne peut plus relâcher en\n' +
+    '    silence. Ce qui reste non mécanisable : qu’une correction PASSE bien par\n' +
+    '    une révision au lieu d’un UPDATE en place.)\n' +
     '  · Invariant 5 : interface 100 % en français (relecture humaine des libellés).\n' +
     '  · Invariant 6 : aucune génération lourde sur la machine terrain.\n' +
     '  Ces points sont couverts par les tests RBAC exhaustifs (07 §13) et la porte P-B.\n',

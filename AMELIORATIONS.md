@@ -24,6 +24,7 @@
 | Lot | Consommé | Plafond | Reste                     |
 | --- | -------- | ------- | ------------------------- |
 | L0  | ~0,5 j   | 0,5 j   | 0 j (**plafond atteint**) |
+| L1  | ~0,2 j   | 0,5 j   | ~0,3 j                    |
 
 ---
 
@@ -216,3 +217,62 @@ d'écriture, et la troisième copie doit de toute façon exister avant la premi�
 Sinon **PHASE 2**.
 
 **Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-A_
+
+---
+
+### 2026-08-27 — [L1] Garde-fou d'exigibilité du marqueur `@critique` (contrôle 4)
+
+**Constat.** La commande d'urgence du pack, `pnpm test:critique`, sortait en **code 1** : son segment
+Playwright échoue quand son filtre ne trouve rien, et aucun test Playwright ne porte `@critique` au
+lot L1. Relevé en revue croisée (réserve M-1). Le correctif évident — `--pass-with-no-tests` — a un
+prix caché : la commande ne peut plus échouer **par absence**, donc la disparition du test critique
+sortirait en 0 sans rien exécuter.
+
+**Ce qui a été ajouté.** Un contrôle 4 dans `scripts/check-test-projects.mjs` : dès que
+`apps/api/drizzle/` existe, au moins un test doit porter `@critique`. **Prouvé par injection** —
+marqueur retiré → code 1 avec le message qui explique quoi faire ; marqueur remis → vert.
+
+**Pourquoi c'est étage 1.** Ne touche ni le schéma 04, ni l'API, ni la crypto, ni le périmètre
+fonctionnel. C'est un drapeau permissif payé de son garde-fou, selon le principe déjà appliqué au
+lot L0 pour `--passWithNoTests`.
+
+**Coût :** ~0,1 j.
+
+---
+
+### 2026-08-27 — [L1] Trois textes de garde-fou rendus exacts
+
+**Constat.** Trois messages décrivaient un état révolu — le défaut exact que la revue croisée a
+débusqué dans le comparateur, appliqué cette fois à la documentation des contrôles :
+
+1. `scripts/check-test-projects.mjs` (contrôle 2) expliquait qu'il protégeait le drapeau
+   `--passWithNoTests` de `pnpm test:integration` — **drapeau retiré depuis la livraison du L1**.
+2. `scripts/check-invariants.mjs` annonçait l'invariant 7 comme « non mécanisable ». C'est désormais
+   **partiellement faux** : la migration `0010` impose `NOT NULL` sur `changed_by`, `validated_by`,
+   `validated_at` et `created_by` — une révision sans auteur est refusée par la base — et le diff
+   schéma-vs-04 garde ces contraintes. Le texte distingue maintenant ce qui est mécanisé de ce qui
+   reste à la revue.
+3. `.github/workflows/ci.yml` gardait dans le job `schema-diff` une étape entière dont le commentaire
+   ordonnait lui-même « **contournement à faire disparaître au L1** », plus une condition
+   `if [ -d apps/api/drizzle ]` devenue toujours vraie. Retirées.
+
+**Pourquoi cela compte.** Un contrôle vert dont l'explication est fausse enseigne au lecteur suivant
+une règle qui n'existe plus. C'est le premier pas vers un garde-fou qui ment sur ce qu'il couvre.
+
+**Coût :** ~0,05 j.
+
+---
+
+### 2026-08-27 — [L1] README de `packages/shared` et `packages/ui`
+
+**Constat.** Les six espaces de travail avaient un README, sauf les deux paquets partagés — ceux dont
+la mauvaise utilisation coûte le plus cher, précisément parce qu'ils sont partagés.
+
+**Ce qui a été écrit.** `packages/shared/README.md` : la règle « une seule définition de chaque
+chose », et l'avertissement que `redaction.ts` doit rester unique — l'API et le worker en ont un jour
+porté deux copies, celle du worker ayant **dix champs de moins**, dont `password`, `token` et
+`phone`. `packages/ui/README.md` : la charte, et **pourquoi** le rouge d'alerte est un carmin —
+écart de teinte **mesuré** de 35,8° contre 19,8° pour le rouge écarté, contraste mutuel 1,94, valeurs
+vérifiées par `tokens.test.ts` et non déclarées.
+
+**Coût :** ~0,05 j.

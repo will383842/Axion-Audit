@@ -10,12 +10,37 @@
 //
 // CE QUE CE SCRIPT COMPARE — et rien d'autre, exactement le périmètre du 11 §7 :
 //   1. TABLES              présence, et AUCUNE table de trop ;
-//   2. COLONNES            présence, type normalisé, et aucune colonne de trop ;
-//   3. CONTRAINTES         PK / FK / UNIQUE / CHECK, par NOM, avec leur contenu
-//                          (colonnes, cible de FK, ensemble de valeurs d'un enum) ;
-//   4. INDEX du §7.1       nom, table, méthode, colonnes, unicité, prédicat partiel.
-// Hors périmètre ASSUMÉ (le 11 §7 ne les cite pas) : nullabilité, valeurs par
-// défaut, commentaires, ordre des colonnes, privilèges.
+//   2. COLONNES            présence, TYPE avec son modificateur (numeric(4,1) ne
+//                          se confond pas avec numeric), NULLABILITÉ, valeur par
+//                          DÉFAUT, et aucune colonne de trop ;
+//   3. CONTRAINTES         PK / FK / UNIQUE / CHECK, par NOM, avec leur DÉFINITION
+//                          ENTIÈRE normalisée (opérateur et parenthèses compris),
+//                          et refus de toute contrainte posée NOT VALID ;
+//   4. INDEX               ceux que le manifeste déclare — §7.1 et convention
+//                          « FK indexées » — nom, table, méthode, colonnes,
+//                          unicité, prédicat partiel. Un index de lecture non
+//                          déclaré est signalé ; un index UNIQUE non déclaré est
+//                          un ÉCART (l'unicité est une contrainte, 11 §7).
+// CE QUI RESTE HORS PÉRIMÈTRE, et cette fois pour de bon : commentaires, ordre
+// des colonnes, privilèges. Le fichier 04 ne les fixe pas — il n'y a rien à
+// comparer.
+//
+// (Une version antérieure y rangeait aussi la NULLABILITÉ et les VALEURS PAR
+// DÉFAUT, « puisque le 11 §7 ne les cite pas ». C'était une hypothèse, et elle
+// était fausse : le 11 §7 borne le diff aux « tables, COLONNES, contraintes… »
+// sans rien exclure nommément, et il restait à décider ce que « comparer une
+// colonne » veut dire. Arbitrage A01 : ce qui la DÉFINIT, quand le fichier 04
+// l'écrit — et le 04 écrit les trois. Il marque `NULL` là où le NULL est voulu
+// (`siren TEXT NULL`), donc l'absence de marqueur est une information ; il écrit
+// `DEFAULT 'Europe/Paris'`, `DEFAULT 'a_planifier'` ; il type `NUMERIC` sans
+// précision, ce qui est un choix — un score que le stockage ne borne pas.
+// A16 avait prouvé le coût de l'hypothèse : un `NOT NULL` retiré de
+// `answers.interview_id` désarme l'UNIQUE du lot, un `DEFAULT 'UTC'` sur
+// `missions.timezone` décale l'affichage de tous les créneaux d'entretien, et un
+// `numeric(4,1)` arrondit les scores sans jamais lever d'erreur — les trois
+// passaient à ZÉRO ÉCART. C'est aussi ce qui GARDE la migration 0010 : sans ce
+// contrôle, les NOT NULL de traçabilité pourraient être relâchés plus tard sans
+// que la CI bronche, et une révision sans auteur redeviendrait possible.)
 //
 // DIRECTION DU CONTRÔLE : le manifeste est la RÉFÉRENCE (il est extrait du fichier
 // 04) ; la base est le SUJET. Un écart dans un sens comme dans l'autre est un
@@ -101,41 +126,113 @@ if (!process.env.DATABASE_URL) {
 // ---------------------------------------------------------------------------
 
 /**
- * Type PostgreSQL interne (`udt_name`) → vocabulaire du manifeste.
+ * Type rendu par `format_type()` → vocabulaire du manifeste.
  * Le manifeste parle la langue du fichier 04 (« TEXT », « TIMESTAMPTZ »,
- * « JSONB »…), pas celle du catalogue système.
+ * « JSONB »…), pas celle du catalogue système. On ne traduit QUE les noms ;
+ * le MODIFICATEUR est conservé tel quel : `numeric(4,1)` reste
+ * `numeric(4,1)` et ne se confond donc jamais avec `numeric`, de même que
+ * `varchar(50)` ne se confond pas avec `text`. Le 04 ne prescrit jamais de
+ * précision ni de longueur bornée : toute apparition d'un modificateur est un
+ * écart, pas un synonyme.
  */
 const TYPES = new Map([
-  ['uuid', 'uuid'],
-  ['text', 'text'],
-  // `varchar` n'est PAS un alias de `text` : le 04 ne prescrit jamais de longueur
-  // bornée, et une colonne passée en varchar(n) est un écart, pas un synonyme.
-  ['varchar', 'varchar'],
-  ['int4', 'integer'],
-  ['int8', 'bigint'],
-  ['numeric', 'numeric'],
-  ['bool', 'boolean'],
-  ['jsonb', 'jsonb'],
-  ['timestamptz', 'timestamptz'],
-  ['timestamp', 'timestamp'],
-  ['date', 'date'],
+  ['timestamp with time zone', 'timestamptz'],
+  ['timestamp without time zone', 'timestamp'],
+  ['character varying', 'varchar'],
+  ['character', 'char'],
+  ['double precision', 'float8'],
 ]);
 
-function typeNormalise(udtName) {
-  return TYPES.get(udtName) ?? udtName;
+function typeNormalise(typeComplet) {
+  const brut = String(typeComplet);
+  // Le modificateur est la parenthèse FINALE : « (4,1) » de numeric(4,1),
+  // « (50) » de character varying(50). Il est conservé tel quel — c'est lui qui
+  // empêche numeric(4,1) de se confondre avec numeric.
+  const modificateur = /\([^()]*\)$/.exec(brut)?.[0] ?? '';
+  const nom = modificateur === '' ? brut : brut.slice(0, -modificateur.length);
+  return (TYPES.get(nom) ?? nom) + modificateur;
 }
 
-/** Comparaison d'expressions SQL : la mise en forme du catalogue n'est pas un écart. */
+/**
+ * Déclaration de colonne du manifeste → { type, nonNul, defaut }.
+ *
+ * Le manifeste décrit chaque colonne par une CHAÎNE qui se lit comme du DDL :
+ *     "uuid NOT NULL"
+ *     "text"
+ *     "timestamptz NOT NULL DEFAULT now()"
+ *     "text NOT NULL DEFAULT 'Europe/Paris'"
+ * C'est délibéré : le manifeste est relu LIGNE À LIGNE par un humain à la porte
+ * P-A (11 §7). Une forme qui ressemble à la colonne du fichier 04 se vérifie à
+ * l'œil ; un objet JSON à trois champs par colonne ferait 1 400 lignes illisibles.
+ */
+function analyserDeclarationColonne(declaration) {
+  let reste = String(declaration).trim();
+  let defaut = null;
+  const iDefaut = reste.indexOf(' DEFAULT ');
+  if (iDefaut >= 0) {
+    defaut = reste.slice(iDefaut + ' DEFAULT '.length).trim();
+    reste = reste.slice(0, iDefaut).trim();
+  }
+  const nonNul = reste.endsWith(' NOT NULL');
+  if (nonNul) reste = reste.slice(0, -' NOT NULL'.length).trim();
+  return { type: reste, nonNul, defaut };
+}
+
+/**
+ * Comparaison des valeurs par défaut : PostgreSQL réécrit `'EUR'` en
+ * `'EUR'::text` et `0` en `0`. On neutralise les casts et les espaces, rien
+ * d'autre — un `now()` remplacé par un `'2026-01-01'` doit se voir.
+ */
+function defautNormalise(expression) {
+  if (expression === null || expression === undefined) return '';
+  return String(expression)
+    .toLowerCase()
+    .replace(/::[a-z_ ]+(\[\])?/g, '')
+    .replace(/\s/g, '');
+}
+
+/**
+ * Comparaison d'expressions SQL : la mise en forme du catalogue n'est pas un écart,
+ * mais LA STRUCTURE EN EST UN.
+ *
+ * DÉFAUT B-2 CORRIGÉ (revue croisée A17) : cette fonction supprimait les
+ * PARENTHÈSES. Or les parenthèses portent le sens. A17 a reparenthésé
+ * `step_validations_scope_coherence_check` — la seule CHECK non-enum du schéma,
+ * celle que ce lot met en avant — de sorte que `(cadrage, mission)` et
+ * `(unite, org_unit)` devenaient REFUSÉS, à l'inverse de ce qu'exige le 04 §7 ;
+ * le diff sortait à ZÉRO ÉCART. Un `A AND B OR C` et un `A AND (B OR C)` ne sont
+ * pas la même règle, et un comparateur qui les confond ne compare rien.
+ *
+ * On ne neutralise donc QUE ce que PostgreSQL ajoute de son propre chef et qui
+ * ne change aucune sémantique : la casse, les espaces, les casts explicites et
+ * les guillemets d'identifiant.
+ */
 function expressionNormalisee(sql) {
   return String(sql ?? '')
     .toLowerCase()
     .replace(/::[a-z_ ]+(\[\])?/g, '') // casts explicites ajoutés par le catalogue
-    .replace(/[\s()"]/g, '');
+    .replace(/[\s"]/g, ''); // espaces et guillemets d'identifiant — PAS les parenthèses
 }
 
-/** Extrait l'ensemble des littéraux d'une définition de CHECK enum. */
-function litterauxDe(definition) {
-  return new Set([...String(definition).matchAll(/'([^']*)'/g)].map((m) => m[1]));
+/**
+ * Définition CANONIQUE attendue pour une CHECK d'énumération, dans la forme
+ * exacte que `pg_get_constraintdef` produit pour un `col IN (…)`.
+ *
+ * DÉFAUT B-1 CORRIGÉ (revue croisée A17) : le contrôle se réduisait à
+ * « l'ensemble des chaînes entre quotes est-il le bon ? » plus « le nom de la
+ * colonne apparaît-il ? ». Ni l'opérateur ni la structure booléenne n'étaient
+ * comparés. Quatre mutations passaient à ZÉRO ÉCART, dont un `= ANY` retourné en
+ * `<> ALL` — qui REFUSE 'admin' et ACCEPTE 'pirate' — et un `OR true` qui
+ * neutralise la contrainte tout en conservant ses littéraux.
+ *
+ * On compare désormais la définition ENTIÈRE, comme le fait la branche
+ * `kind: 'expression'` : l'outillage existait, il n'était pas appliqué ici.
+ * L'ORDRE des valeurs devient significatif — c'est voulu : il y a une seule
+ * forme canonique, celle du fichier 04, et toute réécriture doit se voir.
+ */
+function definitionEnumAttendue(check) {
+  const valeurs = check.values.map((v) => `'${v}'`).join(', ');
+  return `CHECK ((${check.column} = ANY (ARRAY[${valeurs}])))`;
 }
 
 /**
@@ -168,16 +265,32 @@ async function introspecter(client) {
      ORDER BY table_name
   `);
 
+  // format_type() rend le type AVEC son modificateur — `numeric(4,1)`,
+  // `character varying(50)` — là où information_schema.columns.udt_name les
+  // aplatit tous les deux en `numeric` / `varchar`. A16 a prouvé qu'un
+  // numeric(4,1) substitué à un numeric passait inaperçu : même famille de
+  // défaut que le text→varchar trouvé plus tôt, même correctif.
   const colonnes = await client.query(`
-    SELECT table_name, column_name, udt_name
-      FROM information_schema.columns
-     WHERE table_schema = 'public'
-     ORDER BY table_name, column_name
+    SELECT rel.relname                                        AS table_name,
+           att.attname                                        AS column_name,
+           format_type(att.atttypid, att.atttypmod)           AS type_complet,
+           att.attnotnull                                     AS non_nul,
+           pg_get_expr(def.adbin, def.adrelid)                AS defaut
+      FROM pg_attribute att
+      JOIN pg_class rel      ON rel.oid = att.attrelid
+      JOIN pg_namespace nsp  ON nsp.oid = rel.relnamespace
+      LEFT JOIN pg_attrdef def ON def.adrelid = att.attrelid AND def.adnum = att.attnum
+     WHERE nsp.nspname = 'public'
+       AND rel.relkind = 'r'
+       AND att.attnum > 0
+       AND NOT att.attisdropped
+     ORDER BY rel.relname, att.attname
   `);
 
   const contraintes = await client.query(`
     SELECT c.conname                                   AS nom,
            c.contype                                   AS type,
+           c.convalidated                              AS validee,
            rel.relname                                 AS table_name,
            pg_get_constraintdef(c.oid)                 AS definition
       FROM pg_constraint c
@@ -238,22 +351,56 @@ function comparer(manifeste, base) {
     }
   }
 
-  // --- 2. COLONNES ---------------------------------------------------------
+  // --- 2. COLONNES : type, NULLABILITÉ et DÉFAUT ---------------------------
+  //
+  // ÉLARGISSEMENT après la seconde passe d'A16 (méta-tests du comparateur).
+  // Le 11 §7 dit « colonnes » sans préciser ce qu'on en compare, et j'avais lu
+  // « le type, et rien d'autre ». Trois mutations passaient : un NOT NULL retiré,
+  // un DEFAULT changé, un numeric(4,1) substitué à un numeric.
+  // Deux d'entre elles touchent des règles du pack, pas des détails de forme :
+  //   · `answers.interview_id` rendu nullable désarme l'UNIQUE partiel — deux
+  //     lignes à interview_id NULL ne s'opposent plus, et le critère
+  //     d'acceptation du lot tombe sans qu'une seule contrainte ait disparu ;
+  //   · `missions.timezone` par défaut à 'UTC' au lieu de 'Europe/Paris' change
+  //     l'heure affichée de toutes les sessions d'une mission (§22.2).
+  // La nullabilité EST une contrainte SQL ; le 11 §7 met les contraintes dans le
+  // périmètre. Elle y entre donc, et le manifeste la déclare colonne par colonne.
   const colonnesParTable = new Map();
   for (const c of base.colonnes) {
     if (!colonnesParTable.has(c.table_name)) colonnesParTable.set(c.table_name, new Map());
-    colonnesParTable.get(c.table_name).set(c.column_name, typeNormalise(c.udt_name));
+    colonnesParTable.get(c.table_name).set(c.column_name, {
+      type: typeNormalise(c.type_complet),
+      nonNul: c.non_nul,
+      defaut: c.defaut,
+    });
   }
 
   for (const [table, def] of Object.entries(manifeste.tables)) {
     const reelles = colonnesParTable.get(table);
     if (!reelles) continue; // table manquante : déjà signalée
-    for (const [col, typeAttendu] of Object.entries(def.columns)) {
-      const typeReel = reelles.get(col);
-      if (typeReel === undefined) {
+    for (const [col, declaration] of Object.entries(def.columns)) {
+      const reelle = reelles.get(col);
+      if (reelle === undefined) {
         ecart('colonne', `${table}.${col} MANQUANTE en base`);
-      } else if (typeReel !== typeAttendu) {
-        ecart('colonne', `${table}.${col} : type ${typeReel} en base, ${typeAttendu} au 04`);
+        continue;
+      }
+      const attendue = analyserDeclarationColonne(declaration);
+      if (reelle.type !== attendue.type) {
+        ecart('colonne', `${table}.${col} : type ${reelle.type} en base, ${attendue.type} au 04`);
+      }
+      if (reelle.nonNul !== attendue.nonNul) {
+        ecart(
+          'colonne',
+          `${table}.${col} : ${reelle.nonNul ? 'NOT NULL' : 'nullable'} en base, ` +
+            `${attendue.nonNul ? 'NOT NULL' : 'nullable'} attendu`,
+        );
+      }
+      if (defautNormalise(reelle.defaut) !== defautNormalise(attendue.defaut)) {
+        ecart(
+          'colonne',
+          `${table}.${col} : DEFAULT ${reelle.defaut ?? '(aucun)'} en base, ` +
+            `${attendue.defaut ?? '(aucun)'} attendu`,
+        );
       }
     }
     for (const col of reelles.keys()) {
@@ -323,32 +470,38 @@ function comparer(manifeste, base) {
         ecart('contrainte', `CHECK MANQUANTE : ${k.name} sur ${table}`);
         continue;
       }
-      if (k.kind === 'enum') {
-        const attendues2 = new Set(k.values);
-        const reelles = litterauxDe(reelle.definition);
-        const manquantes = [...attendues2].filter((v) => !reelles.has(v));
-        const enTrop = [...reelles].filter((v) => !attendues2.has(v));
-        if (!expressionNormalisee(reelle.definition).includes(k.column.toLowerCase())) {
-          ecart('contrainte', `CHECK ${k.name} ne porte pas sur la colonne ${k.column}`);
-        }
-        if (manquantes.length > 0) {
-          ecart('contrainte', `CHECK ${k.name} : valeurs manquantes ${manquantes.join(', ')}`);
-        }
-        if (enTrop.length > 0) {
-          ecart('contrainte', `CHECK ${k.name} : valeurs en trop ${enTrop.join(', ')}`);
-        }
-      } else if (k.kind === 'expression') {
-        // Cohérence composite (ex. step_validations step_code ↔ scope) : on compare
-        // l'expression normalisée, littéral par littéral et opérateur par opérateur.
-        if (
-          expressionNormalisee(reelle.definition) !== expressionNormalisee(`CHECK ${k.expression}`)
-        ) {
-          ecart(
-            'contrainte',
-            `CHECK ${k.name} : expression divergente.\n      base : ${reelle.definition}\n      04   : CHECK ${k.expression}`,
-          );
-        }
+      // Enum comme composite : on compare la DÉFINITION ENTIÈRE. Comparer un
+      // ensemble de littéraux laissait passer l'opérateur et la structure (B-1).
+      const attendue = k.kind === 'enum' ? definitionEnumAttendue(k) : `CHECK ${k.expression}`;
+      if (expressionNormalisee(reelle.definition) !== expressionNormalisee(attendue)) {
+        ecart(
+          'contrainte',
+          `CHECK ${k.name} : définition divergente.\n` +
+            `      base : ${reelle.definition}\n` +
+            `      04   : ${attendue}`,
+        );
       }
+    }
+  }
+
+  // 3d-bis. CONTRAINTES `NOT VALID` — défaut B-1 (A17), volet « NOT VALID ».
+  //
+  // Une CHECK ou une FK posée `NOT VALID` existe, porte le bon nom et la bonne
+  // définition : elle passait donc tous les contrôles ci-dessus. Mais PostgreSQL
+  // ne l'a JAMAIS vérifiée contre les lignes DÉJÀ PRÉSENTES. Le schéma déclare
+  // une règle que les données existantes peuvent violer — c'est-à-dire tout ce
+  // que ce diff est censé empêcher. `pg_get_constraintdef` suffixe bien
+  // « NOT VALID », donc la comparaison de définition l'attrape aussi ; ce contrôle
+  // explicite existe pour DIRE ce qui ne va pas plutôt que de faire deviner.
+  for (const c of base.contraintes) {
+    if (TABLES_HORS_PERIMETRE.has(c.table_name)) continue;
+    if (!attendues.has(c.nom)) continue;
+    if (c.validee === false) {
+      ecart(
+        'contrainte',
+        `contrainte NON VALIDÉE : ${c.nom} sur ${c.table_name} est posée NOT VALID — ` +
+          'les lignes déjà présentes ne sont pas contrôlées.',
+      );
     }
   }
 
@@ -429,12 +582,37 @@ function comparer(manifeste, base) {
     }
   }
 
-  // 4b. Index NON DÉCLARÉS : information, pas écart (voir le motif ci-dessus).
-  //     Ceux qui matérialisent une PK ou une UNIQUE sont déjà contrôlés au
-  //     point 3 : les répéter ici ne serait que du bruit.
+  // 4b. Index NON DÉCLARÉS — et la ligne de partage est l'UNICITÉ.
+  //
+  // Un index de LECTURE non déclaré reste une information : le 11 §7 borne le
+  // diff aux « index du §7.1 », et refuser tout index supplémentaire interdirait
+  // à un lot ultérieur d'optimiser une requête sans amender un manifeste extrait
+  // d'un fichier scellé.
+  //
+  // DÉFAUT B-3 CORRIGÉ (revue croisée A17, arbitrage A01 révisé) : cette
+  // tolérance ne peut PAS s'étendre aux index UNIQUES. Un index unique n'est pas
+  // une optimisation, c'est une CONTRAINTE — et le 11 §7 met explicitement
+  // « PK/FK/UNIQUE/CHECK » dans le périmètre du diff. A17 a posé
+  // `CREATE UNIQUE INDEX zz_uq_answers_mq ON answers (mission_question_id)` et
+  // obtenu code 0 : cet index interdit silencieusement qu'une même question soit
+  // répondue dans DEUX SESSIONS différentes, l'exact inverse de la règle du
+  // 04 §7 (V2.2 §32.6) que ce lot a pour critère d'acceptation.
+  //
+  // Ceux qui matérialisent une PK ou une UNIQUE déclarée sont déjà contrôlés au
+  // point 3 : les répéter ici ne serait que du bruit.
   for (const [nom, reel] of indexParNom) {
     if (indexAttendus.has(nom)) continue;
     if (attendues.has(nom)) continue; // index porté par une contrainte déclarée
+    if (reel.unique) {
+      ecart(
+        'index',
+        `index UNIQUE non déclaré : ${nom} sur ${reel.table} (${reel.brut})\n` +
+          "      L'unicité est une CONTRAINTE, pas une optimisation : elle entre dans le\n" +
+          '      périmètre « PK/FK/UNIQUE/CHECK » du 11 §7. Un index unique de trop RESTREINT\n' +
+          '      silencieusement le modèle. Déclare-le au manifeste, ou retire-le.',
+      );
+      continue;
+    }
     signalements.push(`${nom} sur ${reel.table} — ${reel.brut}`);
   }
 

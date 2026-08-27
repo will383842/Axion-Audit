@@ -39,6 +39,9 @@ let client: Client | undefined;
 
 let comptesApres1: Record<string, number> = {};
 let comptesApres2: Record<string, number> = {};
+let empreintesApres1: Record<string, string> = {};
+let empreintesApres2: Record<string, string> = {};
+let sortieEmpreinte = '';
 
 /** Compte les lignes de chaque table du fichier 04 exigée au lot L1. */
 async function compterToutesLesTables(connexion: Client): Promise<Record<string, number>> {
@@ -50,6 +53,31 @@ async function compterToutesLesTables(connexion: Client): Promise<Record<string,
     comptes[table] = Number(resultat.rows[0]?.n ?? '0');
   }
   return comptes;
+}
+
+/**
+ * Empreinte de CONTENU par table : md5 de toutes les lignes, ordre normalisé.
+ *
+ * Les comptes ne suffisent pas, et la revue croisée (A17) l'a dit précisément :
+ * un seed qui METTRAIT À JOUR une ligne à chaque passage rendrait des comptes
+ * rigoureusement identiques tout en modifiant les données. Le critère du 07 §12
+ * n'est pas « rejouable 2× sans erreur », c'est « rejouable 2× À L'IDENTIQUE ».
+ *
+ * L'empreinte est recalculée ici plutôt que lue depuis `seed.mjs --empreinte` :
+ * la règle de croisement (09 §5.6) interdit de prouver le code testé AVEC le
+ * code testé. Un bug dans le calcul d'empreinte du seed rendrait deux passages
+ * « identiques » quoi qu'il arrive.
+ */
+async function empreindreToutesLesTables(connexion: Client): Promise<Record<string, string>> {
+  const empreintes: Record<string, string> = {};
+  for (const table of TABLES_ATTENDUES_L1) {
+    const resultat = await connexion.query<{ md5: string }>(
+      `SELECT coalesce(md5(string_agg(t::text, '|' ORDER BY t::text)), 'vide') AS md5
+         FROM "${table}" t`,
+    );
+    empreintes[table] = resultat.rows[0]?.md5 ?? 'illisible';
+  }
+  return empreintes;
 }
 
 async function codesDe(connexion: Client, table: string): Promise<string[]> {
@@ -70,9 +98,11 @@ beforeAll(async () => {
   // Le seed est joué DEUX fois : c'est le critère d'acceptation lui-même.
   await executerSeed(base.url, base.nom);
   comptesApres1 = await compterToutesLesTables(client);
+  empreintesApres1 = await empreindreToutesLesTables(client);
 
-  await executerSeed(base.url, base.nom);
+  sortieEmpreinte = await executerSeed(base.url, base.nom, ['--empreinte']);
   comptesApres2 = await compterToutesLesTables(client);
+  empreintesApres2 = await empreindreToutesLesTables(client);
 }, 180_000);
 
 afterAll(async () => {
@@ -96,6 +126,48 @@ describe('L1 — seed rejouable (07 §12, critère 2)', () => {
         `duplique silencieusement des codes et fausse tout ce qui compte des lignes\n` +
         `(complétude, divergence direction/terrain, assemblage du questionnaire).\n` +
         `Remède attendu : INSERT … ON CONFLICT (code) DO NOTHING/UPDATE, jamais un INSERT nu.`,
+    ).toEqual([]);
+  });
+
+  it("@critique rejouer le seed ne change AUCUNE EMPREINTE DE CONTENU — c'est le critère « à l'identique »", () => {
+    const derives = TABLES_ATTENDUES_L1.filter(
+      (table) => empreintesApres1[table] !== empreintesApres2[table],
+    ).map(
+      (table) => `${table} : ${empreintesApres1[table] ?? '?'} → ${empreintesApres2[table] ?? '?'}`,
+    );
+
+    expect(
+      derives,
+      `Le CONTENU de ${String(derives.length)} table(s) a changé au second passage du seed,\n` +
+        `alors que les comptes de lignes, eux, sont restés identiques :\n  ${derives.join('\n  ')}\n\n` +
+        `Attendu (07 §12 ligne L1) : « seed rejouable 2× À L'IDENTIQUE ». Compter les\n` +
+        `lignes ne suffit pas — un ON CONFLICT DO UPDATE qui réécrit une valeur, ou qui\n` +
+        `touche un updated_at, laisse les comptes intacts et modifie les données.\n` +
+        `Le seed peuple des RÉFÉRENTIELS dont les identifiants sont déjà référencés par\n` +
+        `les missions en base. Une valeur qui dérive à chaque déploiement fait dériver\n` +
+        `avec elle l'assemblage du questionnaire et le calcul de divergence\n` +
+        `direction/terrain, sans qu'aucune erreur ne soit jamais levée.\n` +
+        `(Empreintes recalculées ici indépendamment de « seed.mjs --empreinte » : on ne\n` +
+        `prouve pas le code testé avec le code testé — 09 §5.6.)`,
+    ).toEqual([]);
+  });
+
+  it("le seed expose son empreinte par table (« --empreinte ») — l'outil de preuve reste câblé", () => {
+    expect(
+      sortieEmpreinte,
+      `« seed.mjs --empreinte » n'imprime pas le tableau d'empreintes attendu.\n` +
+        `C'est l'outil que la revue et les portes utilisent pour PROUVER la rejouabilité\n` +
+        `à la main, sans écrire de test. S'il cesse d'être câblé, cette vérification\n` +
+        `disparaît du dépôt en silence.\n\nSortie obtenue :\n${sortieEmpreinte}`,
+    ).toMatch(/empreinte/i);
+
+    const absentes = ['blocks', 'services', 'interlocutor_profiles', 'size_tiers'].filter(
+      (table) => !sortieEmpreinte.includes(table),
+    );
+    expect(
+      absentes,
+      `Tables absentes du rapport d'empreinte : ${absentes.join(', ')}.\n` +
+        `Une empreinte qui ne couvre pas les référentiels du 11 §5 ne prouve rien sur eux.`,
     ).toEqual([]);
   });
 

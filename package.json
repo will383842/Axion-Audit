@@ -23,7 +23,7 @@
     "test:integration": "vitest run --project integration",
     "test:e2e": "pnpm build && playwright test",
     "test:e2e:filrouge": "pnpm build && playwright test --grep @filrouge",
-    "test:critique": "vitest run --project unit --project integration -t @critique && playwright test --grep @critique",
+    "test:critique": "vitest run --project unit --project integration -t @critique && playwright test --grep @critique --pass-with-no-tests",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "check:no-skipped-tests": "node scripts/check-no-skipped-tests.mjs",

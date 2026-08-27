@@ -130,7 +130,12 @@ export function lireMigrations() {
       fichier,
       up,
       down,
-      empreinte: createHash('sha256').update(up).digest('hex'),
+      // Empreinte du FICHIER ENTIER, pas de la seule section @UP (défaut mineur
+      // relevé par la revue croisée A17). Ne hacher que la montée laissait
+      // modifier après coup la DESCENTE d'une migration déjà appliquée sans que
+      // rien ne le signale — et une descente altérée ne se découvre qu'au moment
+      // où l'on en a besoin, c'est-à-dire pendant un incident.
+      empreinte: createHash('sha256').update(contenu).digest('hex'),
     };
   });
 }

@@ -301,7 +301,11 @@ export async function appliquerDescente(urlBase: string): Promise<string> {
  * vers l'hôte : le script est le point d'entrée public du seed (`pnpm seed`),
  * c'est donc lui qui doit être éprouvé, pas une réimplémentation.
  */
-export async function executerSeed(urlBase: string, nomBase: string): Promise<string> {
+export async function executerSeed(
+  urlBase: string,
+  nomBase: string,
+  arguments_: readonly string[] = [],
+): Promise<string> {
   // Tout est dérivé de `urlBase` : le conteneur tire un port et des identifiants
   // à la volée, et les `POSTGRES_*` du `.env` racine désignent, eux, la pile
   // Compose. Les laisser passer enverrait le seed peupler la mauvaise base.
@@ -322,7 +326,7 @@ export async function executerSeed(urlBase: string, nomBase: string): Promise<st
   try {
     const { stdout, stderr } = await executerFichier(
       process.execPath,
-      [resolve(RACINE_API, 'scripts', 'seed.mjs')],
+      [resolve(RACINE_API, 'scripts', 'seed.mjs'), ...arguments_],
       { cwd: RACINE_DEPOT, env: environnement, maxBuffer: 16 * 1024 * 1024 },
     );
     return `${stdout}${stderr}`;
@@ -542,11 +546,19 @@ export async function creerJeuDEssai(client: Client, marqueur: string): Promise<
   );
 
   const blocId = uuidv7();
-  await client.query(`INSERT INTO blocks (id, code, label_fr, position) VALUES ($1, $2, $3, 1)`, [
-    blocId,
-    `essai_${marqueur}`,
-    `Bloc d'essai ${marqueur}`,
-  ]);
+  // `is_default` est RENSEIGNÉ, jamais laissé à un défaut SQL : le 04 §7 écrit
+  // `blocks(… is_default BOOL …)` sans marqueur NULL ni DEFAULT — la colonne est
+  // donc obligatoire et sans valeur implicite.
+  // La valeur est `false` À DESSEIN : `is_default` marque les blocs de la
+  // méthodologie 8+1 qui s'appliquent par défaut à toute mission (E1, 01 §2).
+  // Ce bloc-ci est un support technique de fixture, au code arbitraire
+  // (`essai_<marqueur>`), qui n'appartient pas au référentiel des 9 blocs et ne
+  // doit surtout pas se retrouver activé d'office sur une mission. Le poser à
+  // `true` ferait mentir la fixture sur ce qu'elle représente.
+  await client.query(
+    `INSERT INTO blocks (id, code, label_fr, position, is_default) VALUES ($1, $2, $3, 1, false)`,
+    [blocId, `essai_${marqueur}`, `Bloc d'essai ${marqueur}`],
+  );
 
   const questionId = uuidv7();
   await client.query(
@@ -586,3 +598,78 @@ export async function creerJeuDEssai(client: Client, marqueur: string): Promise<
 
 /** Identifiant v7 côté client — réexporté pour que les tests n'importent qu'un module. */
 export { uuidv7 };
+
+// -----------------------------------------------------------------------------
+// Comparateur schéma-vs-04 — exécuté, jamais réimplémenté
+// -----------------------------------------------------------------------------
+
+/**
+ * Lance `scripts/schema-diff.mjs` contre une base et rend son CODE DE SORTIE.
+ * Contrairement aux autres lanceurs de ce fichier, celui-ci ne lève PAS sur un
+ * code non nul : pour le méta-test du comparateur, l'échec EST le résultat
+ * attendu la moitié du temps.
+ */
+export async function lancerSchemaDiff(urlBase: string): Promise<{ code: number; sortie: string }> {
+  const script = resolve(RACINE_DEPOT, 'scripts', 'schema-diff.mjs');
+  try {
+    const { stdout, stderr } = await executerFichier(process.execPath, [script], {
+      cwd: RACINE_DEPOT,
+      env: { ...process.env, DATABASE_URL: urlBase },
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    return { code: 0, sortie: `${stdout}${stderr}` };
+  } catch (erreur) {
+    const details = erreur as { code?: unknown; stdout?: unknown; stderr?: unknown };
+    const stdout = typeof details.stdout === 'string' ? details.stdout : '';
+    const stderr = typeof details.stderr === 'string' ? details.stderr : '';
+    return {
+      code: typeof details.code === 'number' ? details.code : 1,
+      sortie: `${stdout}${stderr}`,
+    };
+  }
+}
+
+/**
+ * Définition courante d'une contrainte, retrouvée PAR SA FORME et non par son
+ * nom : le pack ne normalise pas les noms de contraintes, et un test qui les
+ * codait en dur casserait au premier renommage sans rien prouver.
+ */
+export async function trouverContrainte(
+  client: Client,
+  table: string,
+  motif: RegExp,
+): Promise<{ nom: string; definition: string }> {
+  const resultat = await client.query<{ nom: string; definition: string }>(
+    `SELECT conname AS nom, pg_get_constraintdef(oid) AS definition
+       FROM pg_constraint WHERE conrelid = $1::regclass`,
+    [table],
+  );
+  const trouvee = resultat.rows.find((l) => motif.test(l.definition));
+  if (trouvee === undefined) {
+    throw new Error(
+      `Aucune contrainte de ${table} ne correspond à ${motif.source}.\n` +
+        `Contraintes présentes :\n  ` +
+        resultat.rows.map((l) => `${l.nom} → ${l.definition}`).join('\n  '),
+    );
+  }
+  return trouvee;
+}
+
+/** Corps d'une contrainte CHECK, sans le mot-clé ni le suffixe NOT VALID. */
+export function expressionCheck(definition: string): string {
+  return definition
+    .replace(/^CHECK\s*/i, '')
+    .replace(/\s+NOT VALID$/i, '')
+    .trim();
+}
+
+/** Remplace une contrainte par une définition mutée (puis par l'originale). */
+export async function remplacerContrainte(
+  client: Client,
+  table: string,
+  nom: string,
+  definition: string,
+): Promise<void> {
+  await client.query(`ALTER TABLE ${table} DROP CONSTRAINT "${nom}"`);
+  await client.query(`ALTER TABLE ${table} ADD CONSTRAINT "${nom}" ${definition}`);
+}

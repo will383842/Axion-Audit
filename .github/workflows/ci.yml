@@ -536,25 +536,15 @@ jobs:
 
       - uses: ./.github/actions/setup-node-pnpm
 
-      - name: Signaler l'état du contrôle (visible dans le résumé du run)
-        run: |
-          set -euo pipefail
-          if [ ! -d apps/api/drizzle ] && [ ! -f apps/api/schema-manifest.json ]; then
-            echo "::warning title=schema-diff sans objet (lot L0)::Le manifeste apps/api/schema-manifest.json et les migrations apps/api/drizzle/ sont des LIVRABLES DU LOT L1 (11 §7, agent A12). Le contrôle ne peut rien comparer et ne déclare RIEN conforme. Il devient bloquant automatiquement dès que apps/api/drizzle/ existe. CONTOURNEMENT À FAIRE DISPARAÎTRE AU L1."
-          fi
-
-      - name: Appliquer les migrations (dès que le lot L1 les a livrées)
+      # Le lot L1 a livré les migrations : plus de garde conditionnelle ici. Si
+      # `apps/api/drizzle/` venait à disparaître, `pnpm db:migrate` échoue — et
+      # c'est le comportement voulu, pas un cas à contourner.
+      - name: Appliquer les migrations
         env:
           DATABASE_URL: postgresql://axion:ci_factice_postgres@127.0.0.1:5432/axion_audit_test
           APP_ENV: dev
           TZ: UTC
-        run: |
-          set -euo pipefail
-          if [ -d apps/api/drizzle ]; then
-            pnpm db:migrate
-          else
-            echo "Aucune migration à appliquer (lot L1 non livré)."
-          fi
+        run: pnpm db:migrate
 
       - name: pnpm schema:diff (tout écart = build rouge)
         env:
