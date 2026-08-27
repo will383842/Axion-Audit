@@ -125,3 +125,24 @@ Prochaine action : recevoir le verdict du gardien. Si ACCEPTÉ → compléter le
 Tests rouges connus : aucun.
 **Piège de machine, à savoir pour toute reprise :** `pnpm verify` a échoué DEUX FOIS en `0xC0000142` (épuisement de ressources Windows — 3,3 Go libres sur 15,8 avec Docker Desktop), sur quatre compilations parallèles. Reprendre avec `npm_config_workspace_concurrency=1` et **rien d'autre en parallèle**. Ce n'est pas un défaut du dépôt : la CI passe.
 Réserve hors périmètre logiciel, inchangée : DoD « migrations up/down sur staging » incochable sans VPS. `infra/COHABITATION_AXIONIA_WEB.md` écrit, en attente de trois commandes en lecture seule de Williams.
+
+---
+
+## 2026-08-28 00h40 — [lot L1] — étape pipeline **6/7 TERMINÉE** — le lot attend la porte de Williams
+
+Dernier commit vert : 0ff6997 (fix(l1): étape 6 — l'invariant 2 n'avait JAMAIS été vérifié par la CI) · Branche : lot/l0-infra · Poussé : **oui**
+**Contrôle d'acceptation du gardien A02 : `ACCEPTÉ SOUS RÉSERVE`.** Les 4 critères du fichier 07 cochés avec SA preuve exécutée. **Verdict anti-orphelin : 43 tables livrées, 43 rattachées, 0 orpheline** — rattachement établi contre le TEXTE du 04, jamais contre le commentaire de la migration. Contrôle fait aussi dans l'autre sens : le 04 décrit 46 tables, 3 ne sont pas créées, omission délibérée, tracée et vérifiée absente en base.
+Tous les chiffres recomptés par le gardien : **exacts** (43 tables · 472 colonnes · 193 contraintes · 53 index · 216 NOT NULL · 100 marqueurs NULL · 28 DEFAULT · 23 identités T13 · 169 tests).
+Ses 4 réserves sont traitées et commitées : **F-1** (l'invariant 2 jamais vérifié par la CI, affirmation fausse dans DEUX fichiers — corrigé, secret câblé, contrôle rendu bloquant en CI) · **F-2** (garde-fou du fil rouge à moitié décoratif — corrigé, prouvé par l'injection exacte du gardien) · **F-3** (`test:e2e:filrouge` en code 1) · **F-7** (branche non tracée — entrée DECISIONS écrite).
+**Erreur d'A01 corrigée AVEC sa mention** : le §3bis du dossier de porte annonçait « 40 mutations, onze non détectées ». Le vrai total est **53 injectées, 22 non détectées** (25+15+13 et 8+6+8). Le chiffre faux avait été transmis à Williams.
+
+### CE QUI ATTEND WILLIAMS — par ordre de blocage
+
+1. **Créer le secret `AXION_CLIENTS_SURVEILLES`** (Settings → Secrets and variables → Actions), noms séparés par des virgules. **Tant qu'il n'existe pas, le job `invariants` de la CI est ROUGE — délibérément.** Une CI rouge et honnête vaut mieux qu'une CI verte qui prétend vérifier un invariant non négociable sans le faire.
+2. **Le VPS.** La DoD « migrations up/down exécutées sur staging » reste incochable. `infra/COHABITATION_AXIONIA_WEB.md` est écrit et attend trois commandes en LECTURE SEULE (`free -h`, `df -h /`, `docker stats --no-stream`) pour calibrer les plafonds de conteneurs.
+3. **Arbitrer la fiche A-003** (schéma doré `pg_dump` à la place du manifeste comme base de comparaison). Recommandation d'A01 : ABSORBÉE (~0,5 j). Également en attente : **A-001** (hooks PreToolUse) et **A-002** (Cloudflare R2, juridiction UE impérative).
+4. **Valider ou ajuster les 29 `estimation_params`** avant la porte (11 §5) — le gardien rappelle que leur JUSTESSE lui est réservée.
+
+Prochaine action : **la porte P-A elle-même** — démonstration à Williams, checklist signée, merge, tag `v0.1`. Aucun lot suivant ne s'ouvre avant (11 §9bis : les portes arrêtent tout).
+Tests rouges connus : aucun en local. **La CI sera rouge sur `invariants` jusqu'à la création du secret — c'est le comportement voulu, pas une régression.**
+Piège de machine, pour toute reprise : `pnpm verify` sature ce poste (3,3 Go libres sur 15,8 avec Docker). Lancer avec `npm_config_workspace_concurrency=1`, rien d'autre en parallèle.
