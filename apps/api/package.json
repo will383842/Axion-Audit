@@ -13,7 +13,8 @@
     "db:migrate:check": "node scripts/migrations.mjs --check",
     "db:generate": "node scripts/db-generate.mjs",
     "seed": "node scripts/seed.mjs",
-    "seed:demo": "node scripts/seed.mjs --demo"
+    "seed:demo": "node scripts/seed.mjs --demo",
+    "seed:empreinte": "node scripts/empreinte-seed.mjs"
   },
   "dependencies": {
     "@axion/shared": "workspace:*",

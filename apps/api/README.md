@@ -54,10 +54,35 @@ requêtes. Ni l'un ni l'autre n'est une source de vérité, et rien n'est jamais
 | `pnpm db:generate <sujet>`                            | crée le squelette numéroté d'une nouvelle migration (@UP / @DOWN à remplir)            |
 | `pnpm seed`                                           | référentiels + compte fondateur — **rejouable à l'identique**                          |
 | `pnpm seed:demo`                                      | fixtures de démo déterministes — **refusé si `APP_ENV=prod`**                          |
+| `pnpm seed:empreinte`                                 | **lecture seule** : empreinte reproductible du jeu de référence                        |
 | `pnpm schema:diff`                                    | compare la base RÉELLE au manifeste extrait du 04 — **zéro écart exigé**               |
 
-`--empreinte` sur le seed imprime, par table, le nombre de lignes et un md5 du contenu : c'est ce
-qui PROUVE la rejouabilité au lieu de l'affirmer.
+### Prouver le jeu de référence — deux instruments, deux questions
+
+`seed.mjs --empreinte` répond à « **rejouer le seed sur CETTE base change-t-il quelque chose ?** »
+(critère L1 du fichier 07). Il seede, puis imprime par table le nombre de lignes et un md5 de la
+ligne entière — `id` et `updated_at` compris. C'est ce qu'il faut pour l'idempotence, et c'est
+précisément ce qui l'empêche de répondre à l'autre question : sur deux bases fraîches, la même
+graine donne huit empreintes différentes.
+
+`pnpm seed:empreinte` répond à « **le jeu de référence est-il bien celui qu'on croit ?** ». Il
+n'écrit rien (transaction `READ ONLY`), ne mesure que le contenu métier — FK résolues en codes, ni
+identifiants alloués ni horodatages — et imprime **une empreinte globale de 32 caractères** en plus
+du détail par table. La même graine sur n'importe quelle base fraîche donne la même empreinte :
+c'est le chiffre qu'un dossier de porte peut citer et qu'un tiers peut rejouer.
+
+```bash
+pnpm seed:empreinte                                  # tableau + empreinte globale
+pnpm seed:empreinte -- --json                        # sortie machine (CI)
+pnpm seed:empreinte -- --attendue <hex>              # sort en code 1 si le jeu a dérivé
+```
+
+**Périmètre — 7 + 1, et les deux ensembles sont nommés.** L'empreinte globale couvre les **7
+référentiels** du 11 §5 : `blocks`, `sectors`, `services`, `interlocutor_profiles`, `size_tiers`,
+`naf_sector_map`, `estimation_params`. La table `users` est **applicative**, pas un référentiel : le
+compte fondateur est mesuré à part, par sa FORME (rôle, profil d'usage, actif, habilitation posée)
+et jamais par son identité — son e-mail dépend de l'environnement, son `password_hash` porte un sel
+aléatoire, et une empreinte finit copiée dans un dossier de porte versionné.
 
 **Format des migrations** : un fichier `NNNN_sujet.sql`, deux sentinelles `-- @UP` et `-- @DOWN`.
 Les deux sont obligatoires — l'exécuteur refuse un fichier sans descente. Les FK circulaires de
