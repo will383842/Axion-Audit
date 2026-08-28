@@ -2222,3 +2222,57 @@ nominative des 12 familles de secrets du 02 §30.3, qui appartient à Williams.
 **Impact spec :** aucun sur le pack. **Amendement de fait au commentaire d'architecture du compose**,
 et point à porter au brief L2 (authentification) : **toute variable ajoutée à cette pile est visible
 par tous ses conteneurs.**
+
+## 2026-08-28 — [l0] Le `.env` du staging est en 644 : faut-il le corriger, et est-ce seulement un défaut ?
+
+**Options :**
+
+1. `chmod 600` manuel sur le serveur.
+2. Mécaniser un `chmod` à chaque déploiement, pour qu'il survive à Coolify qui repose le fichier.
+3. **Mesurer l'accès réellement possible avant de corriger un chiffre**, et statuer sur la mesure.
+
+**Arbitrage : option 3, et la mesure retourne le verdict.**
+Règle de précédence **appliquée** : 02 §30.4-2 (sécurité, étage §16-22) exige le **moindre accès** —
+c'est l'accès effectif qui est l'exigence, jamais le nombre inscrit dans un `stat`.
+
+**Ce qui a été mesuré, et par tentative réelle, pas par lecture de permissions :**
+
+```
+755 root:root  /
+755 root:root  /data
+700 9999:0     /data/coolify              ← non traversable
+700 9999:0     /data/coolify/applications ← non traversable
+755 root:root  /data/coolify/applications/wrunr…/
+644 root:root  /data/coolify/applications/wrunr…/.env
+
+Épreuve : lecture du fichier en tant que `nobody` → REFUSÉ.
+Utilisateurs humains avec un shell réel sur la machine : AUCUN hormis root.
+```
+
+**Le `644` est inatteignable.** Deux répertoires parents en `700` rendent le chemin non traversable ;
+un non-root ne peut pas ouvrir ce fichier, et l'épreuve le confirme plutôt que de le déduire. La
+lecture reste donc **réservée à root**, ce qu'un `600` aurait produit exactement.
+
+**Conclusion : la réserve du critère n° 3 est matériellement sans objet.** Elle reposait sur un
+chiffre lu isolément — _exactement l'erreur que ce lot passe la journée à corriger ailleurs : une
+affirmation vraie sur ce qu'elle mesure, et sans rapport avec la question posée._ Un `stat` sur un
+fichier ne dit rien de l'accès tant qu'on n'a pas remonté le chemin.
+
+**Les options 1 et 2 sont écartées, et pas seulement parce qu'elles seraient inutiles.** L'option 1
+serait effacée au déploiement suivant. L'option 2 ajouterait un mécanisme permanent, invisible dans
+l'interface de Coolify, qui casserait à sa prochaine version — **pour ramener un droit d'accès
+exactement au même point qu'aujourd'hui**. On n'ajoute pas de mécanique pour un gain nul.
+
+**Ce qui reste vrai et n'est pas résolu par cette entrée :** les quatre applications de la machine,
+la nôtre **et celles du voisin**, ont le même `644` — c'est le comportement de Coolify, pas notre
+configuration. Si un jour un utilisateur non-root est créé sur cette machine, ou si les permissions
+de `/data/coolify` changent, **la conclusion ci-dessus tombe**. Elle est donc datée et adossée à une
+épreuve rejouable, pas énoncée comme une propriété permanente.
+
+**Reste dû, et cela n'appartient pas à un agent :** la **vérification nominative des 12 familles de
+secrets** du 02 §30.3, et la **sauvegarde chiffrée du `.env`** lui-même.
+
+**Décideur :** A01, sur mesure
+**Impact spec :** aucun. Le 02 §30.4-2 est satisfait sur le fond ; la mention « `chmod 600` » du
+runbook décrit un moyen, l'exigence est l'accès. À reformuler dans `infra/README.md` au prochain
+passage.
