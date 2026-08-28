@@ -1599,8 +1599,26 @@ Périmètre inchangé par ailleurs : **2 routes** dans tout le dépôt (`GET /v1
    vu passer reste un renouvellement qu'on n'a pas vu passer.
 
 **Signature du gardien de la spécification :** A02 — **2026-08-28, sur `1c56759` : 🟡 ACCEPTÉ SOUS
-RÉSERVE.** Étape 6 du pipeline **franchie sous réserve**. Les réserves **R-1 (staging en retard de
-9 commits, §H.4)** et **R-2 (chaîne de sauvegarde absente du chemin de production, §H.3)** se lèvent
-par un **redéploiement suivi d'une remesure** — pas par une réécriture de texte. Le détail du
+RÉSERVE.** Étape 6 du pipeline **franchie sous réserve**.
+
+> **MISE À JOUR DU 2026-08-28, APRÈS REDÉPLOIEMENT — R-1 EST LEVÉE, ET UN DE MES CHIFFRES ÉTAIT FAUX.**
+> Le staging a été redéployé sur `1eeaff2` pendant ma passe. **Revérifié par moi, par empreinte de
+> fichier et non par numéro de commit** — le seul instrument qui ne se laisse pas raconter d'histoire :
+> `redaction.ts` **932cf7b40aa0…**, `sauvegarde.sh` **549daad7dce5…**,
+> `sauvegarde-healthcheck.sh` **3b581097e965…** — **identiques entre le dépôt et l'image en service**.
+> Images reconstruites à **14:52 UTC** (commit à 14:50:48). Le coffre **parle enfin** et refuse
+> correctement de retomber sur la passphrase des données. Pile revérifiée : `reinitializing` **0**,
+> `archived_count=32 / failed_count=0`, staging **200** ×4, production du tiers **301**.
+> **Correction de MON chiffre : j'avais écrit « 9 commits de retard » ; `git rev-list --count` en rend
+> **11**. Le fond était exact, le comptage ne l'était pas.**
+> **Contrepartie que je m'applique à moi-même** : le redémarrage a **remis ma fenêtre d'observation à
+> 30 minutes** (elle était de ~3 h). C'est la réserve même que j'opposais à la mesure de 25 min d'A60.
+> **Ce que R-1 laisse derrière elle et que le redéploiement ne répare pas : rien ne vérifie qu'un
+> correctif poussé atteint la machine.** Contrôle d'empreinte image-vs-dépôt **toujours dû**.
+
+Reste **R-2 (chaîne de sauvegarde absente du chemin de production, §H.3)**, qui ne se lève **ni par
+un redéploiement ni par une réécriture de texte** : il faut soit **porter le service `sauvegarde` sur
+le compose de base ou la surcharge `prod`**, soit **écrire noir sur blanc que la production n'aura pas
+cette chaîne** — et en tirer la conséquence sur E35 et l'invariant 8. Le détail du
 verdict, ce qui est réservé et ce qui ne l'est pas, et les six points qui attendent Williams hors du
 dossier, sont dans `docs/portes/PORTE_A_2026-08-27.md` **§9-10**.
