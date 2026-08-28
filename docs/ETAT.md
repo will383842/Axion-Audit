@@ -236,3 +236,48 @@ Cause lue dans la base de Coolify, pas devinée : `Invalid volume target: contai
 Prochaine action : **suivre le 2ᵉ déploiement** (`ylnic2kl7ou5e00cgchrjq4m`), puis exécuter **migrations up/down sur staging** — la dernière ligne de DoD qui manque à la porte P-A — et vérifier par la photographie de référence d'A54 que `axion-ia.com` n'a pas bougé.
 Tests rouges connus : aucun en local.
 Domaine : le premier déploiement vise l'adresse automatique de Coolify (`*.sslip.io`), **pas** `audit-staging.axion-ia.com` — la zone DNS est chez Cloudflare, partagée avec la production, et A01 n'y a pas accès. Le vrai sous-domaine se posera par un simple enregistrement.
+
+---
+
+## 2026-08-28 07h25 — [lot L0-b] — **STAGING DÉPLOYÉ ET FONCTIONNEL** — la dernière ligne de DoD est prouvée
+
+Dernier commit vert : f42c5b3 (fix(l0b): l'image de l'API déclarait des migrations qu'elle ne contenait pas) · Branche : lot/l0-infra · Poussé : **oui**
+
+### La preuve que la porte P-A attendait
+
+Exécutée sur `axionia-web`, dans le conteneur d'API du staging :
+
+| Critère | Preuve |
+| --- | --- |
+| Pile complète | 9 services, **tous sains** — postgres, redis, minio, api, worker, caddy + 3 jobs sortis en 0 |
+| API **prête** (pas seulement vivante) | `GET /v1/health/ready` → **200 `{"status":"ready"}`** |
+| Routage interne | `GET /api/v1/health` **à travers Caddy** → `{"status":"ok"}` |
+| **Migrations up/down SUR STAGING** | montée 12 → **44 tables** · `--down-to 0` → 12 annulées, **1 table restante** (le journal) · remontée 12 → **44 tables** |
+| Seed rejouable à l'identique | empreinte de contenu **`e6fe311a275472187e2d5115577543c2`** sur deux passages consécutifs |
+| Migrations en attente | **0** |
+| Voisin intact | `axion-ia.com` → 301 en 0,27 s · `docuseal` → 200 · tous conteneurs sains · **9 Go libres sur 15** |
+
+### Dix déploiements, et ce qu'ils ont révélé
+
+**Six causes distinctes, aucune inventée.** Quatre sont des règles de la plateforme qu'aucune
+documentation ne donnait ; **trois sont des défauts DORMANTS de notre dépôt depuis le lot L0**, et ce
+sont les plus graves :
+
+1. **Interpolation dans un volume** — Coolify refuse tout `${` (garde-fou anti-injection), et rejette AVANT le clone : l'échec est muet côté serveur. → gardé par `check:compose-coolify`.
+2. **Chemins relatifs depuis la racine** — Coolify fixe `--project-directory` sur la racine, l'inverse de nos trois autres piles. → gardé.
+3. **`NODE_ENV=production` à la construction** — pnpm saute toutes les `devDependencies`. D'abord vu comme « husky manquant », c'était en réalité **l'outillage de compilation entier** : `tsc` est aussi une devDependency. Corrigé par `--prod=false` : on déclare ce dont l'étage a besoin plutôt que de dépendre d'une variable. **Défaut dormant depuis L0** — la CI ne posait pas cette variable.
+4. **Aucun fichier du dépôt n'est monté** — Coolify réécrit toute source relative vers son répertoire persistant, où Docker **crée un répertoire vide**. PostgreSQL recevait un dossier au lieu de sa configuration. → configuration embarquée dans les images, et gardé par `check:compose-coolify`.
+5. **LE WORKER N'AVAIT JAMAIS DÉMARRÉ** — `Queue name cannot contain ':'` : BullMQ 5 interdit les deux-points, dont il se sert comme séparateur de clés. Et **sa sonde le disait sain** : `pgrep -f node` voyait le compilateur `tsc --watch` du lanceur de développement. `docker ps` annonçait « Up 13 hours (healthy) » sur un worker mort, **et le critère L0 « docker compose up = stack complète » a été coché là-dessus**. → noms corrigés par `prefix: 'axion'`, sonde honnête (battement Redis + attachement aux 5 files, avec identité de conteneur).
+6. **L'image de l'API déclarait des migrations qu'elle ne contenait pas** — son `package.json` annonce `db:migrate` → `node scripts/migrations.mjs`, et l'image ne contenait ni `scripts/` ni `drizzle/`. Or `deploy.sh` appelle exactement cette commande à son étape 2/5 : **l'étape de migration du déploiement n'aurait jamais pu fonctionner, ni en staging ni en production.** → migrations, seed et manifeste embarqués.
+
+**Un onzième obstacle, non logiciel :** le volume PostgreSQL avait été initialisé pendant un déploiement raté, sans les bonnes variables — pas de base `axion_audit`, pas de rôle, `pg_hba.conf` sans règle réseau. Et PostgreSQL **saute l'initialisation quand le répertoire existe** : le volume corrompu empoisonnait tous les démarrages suivants. Supprimé (le seul du staging ; volume du voisin vérifié intact avant et après).
+
+### Ce que cette séquence établit, et qui vaut pour la porte
+
+**Le lot L1 avait 169 tests verts, trois passes de revue croisée et 53 mutations injectées — et n'a rien vu de tout cela.** Ce n'est pas un défaut de sa suite : le worker n'était dans son périmètre à aucun titre, et aucun test d'intégration ne pouvait révéler qu'une image ne contient pas ce que son `package.json` promet. **C'est la démonstration la plus nette de ce que sert un déploiement réel**, et pourquoi la DoD exige « sur staging » et non « en local ».
+
+**RÉSERVE À PORTER À LA PORTE, et elle appartient à Williams :** le critère du lot L0 « `docker compose up` = stack complète » **a été coché à tort** — le worker était mort. Se recoche-t-il maintenant qu'il fonctionne, ou le lot L0 porte-t-il une réserve datée ? A01 ne tranche pas cela seul.
+
+Prochaine action : compléter `docs/portes/PORTE_A_*.md` avec ces preuves, recevoir les tests d'A16 sur le worker et sa sonde, puis rendre le lot.
+Tests rouges connus : aucun. CI verte sur les trois derniers commits.
+Reste non fait : le sous-domaine `audit-staging.axion-ia.com` (zone Cloudflare, partagée avec la production — A01 n'y a pas accès). Le staging vit sur l'adresse automatique de Coolify, ce qui n'empêche aucune vérification.
