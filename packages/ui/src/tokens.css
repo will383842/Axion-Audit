@@ -6,6 +6,13 @@
    §33 : respect de prefers-reduced-motion et de prefers-contrast.
    =========================================================================== */
 
+/* Inter variable auto-hébergée (11 §1). CET IMPORT EST SOLIDAIRE DU JETON
+   `--typo-police-corps` ci-dessous : déclarer la police sans la charger est ce
+   qui a produit le défaut relevé en recette (jeton pointant sur Inter, zéro
+   `@font-face` et zéro `.woff2` dans le build, rendu en police système).
+   Un `@import` DOIT précéder toute règle. Voir polices.css pour les octets. */
+@import './polices.css';
+
 :root {
   /* --- Surfaces --- */
   --couleur-surface-fond: #faf8f3;

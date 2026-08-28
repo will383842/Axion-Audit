@@ -1,0 +1,86 @@
+/* ===========================================================================
+   POLICES — Inter variable AUTO-HÉBERGÉE (contrat 11 §1, §33.1).
+   « JAMAIS de CDN : la PWA doit rendre parfaitement en mode avion. »
+
+   POURQUOI CE FICHIER EXISTE.
+   Le jeton `--typo-police-corps` DÉCLARAIT Inter depuis le lot L0, et rien ne la
+   CHARGEAIT : le build ne sortait aucun `@font-face` ni aucun `.woff2`, et c'est
+   la police système de repli qui s'affichait. La directive `font-src 'self'` de
+   la CSP passait donc trivialement — elle ne gardait rien, faute de police à
+   garder. Un vert qui ne prouve rien. Ce fichier est ce qui fait exister la
+   chose que la règle est censée garder.
+
+   Il est importé par `tokens.css` et NON par les applications : le jeton et la
+   police sont une seule et même promesse du design system. Deux imports à ne pas
+   oublier dans deux `main.tsx`, c'est exactement l'oubli qui a produit le défaut.
+
+   ---------------------------------------------------------------------------
+   CE QUI EST EMBARQUÉ, ET CE QUI NE L'EST PAS — le poids est un choix, pas un
+   reste. L'app terrain démarre depuis le cache du service worker sur un iPad en
+   zone blanche (invariant 1) : chaque octet précaché est un octet payé une fois
+   sur l'appareil, sans réseau pour le rattraper.
+
+   Le paquet `@fontsource-variable/inter` pèse 1,9 Mo (5 sous-ensembles × 3 jeux
+   d'axes × romain/italique). On en embarque DEUX fichiers, soit ~131 Ko :
+
+     · axe `wght` SEUL (100→900 en un fichier) plutôt que `standard` ou `opsz` :
+       48 Ko contre 72 Ko pour la même plage de graisses. Les quatre graisses des
+       jetons (400/500/600/700) sortent toutes de CE fichier — c'est la raison
+       d'être d'une police VARIABLE, et l'inverse exact du chargement de quatre
+       fichiers statiques.
+     · `latin` (48 Ko) — le français en entier, y compris œ, Ÿ, € et les guillemets.
+     · `latin-ext` (83 Ko) — les diacritiques d'Europe centrale et orientale.
+       `unicode-range` le rend GRATUIT à l'exécution (le navigateur ne le
+       télécharge que si un glyphe l'exige) ; il n'est payé qu'une fois dans le
+       précache. On l'embarque pour une raison métier : un nom d'interlocuteur
+       (« Wojciech Szczęsny », « Ștefan ») rendu moitié Inter moitié police
+       système se lit comme un défaut dans un livrable d'audit.
+
+   ÉCARTÉS DÉLIBÉRÉMENT (à rouvrir si le besoin apparaît, jamais par défaut) :
+     · cyrillique, cyrillique étendu, grec, grec étendu, vietnamien (~140 Ko) —
+       l'interface est 100 % en français (invariant 5) et la Phase 1 est France.
+     · TOUS les italiques (~144 Ko) — le navigateur synthétise une oblique
+       acceptable, et l'interface d'audit n'appuie aucune information sur
+       l'italique (§33 : « aucune information portée par la couleur seule »
+       vaut aussi pour la graisse et la pente).
+   =========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   `font-display: swap` — le texte est lisible IMMÉDIATEMENT, avec la police de
+   repli, puis bascule sur Inter. Un auditeur en entretien ne regarde jamais un
+   écran vide en attendant une police. Une fois l'app installée, la police sort
+   du précache : la bascule n'est visible qu'au tout premier chargement en ligne.
+
+   `format('woff2')` sans `tech(variations)` : c'est ce que servent Google Fonts
+   et les navigateurs cibles (iPad Safari ≥ 16.4, la cible la plus dure §33 /
+   03 §29) chargent parfaitement un woff2 variable ainsi déclaré. L'ancien
+   `format('woff2-variations')` est déprécié.
+
+   `font-weight: 100 900` déclare la PLAGE de l'axe variable : un seul fichier
+   répond à `--typo-graisse-normale` (400) comme à `--typo-graisse-grasse` (700).
+   --------------------------------------------------------------------------- */
+
+/* Latin étendu — chargé UNIQUEMENT si un glyphe de cette plage est rencontré. */
+@font-face {
+  font-family: 'Inter Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('@fontsource-variable/inter/files/inter-latin-ext-wght-normal.woff2') format('woff2');
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+
+/* Latin — le français en entier. C'est CE fichier qui rend l'interface. */
+@font-face {
+  font-family: 'Inter Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('@fontsource-variable/inter/files/inter-latin-wght-normal.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}

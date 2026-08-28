@@ -1889,3 +1889,85 @@ Coolify sur `docker-compose.staging.yml`. Rien d'autre n'aura changé.
 **Décideur :** A01, sur signalement d'A11
 **Impact spec :** écart assumé au 02 §30.6 **pour le staging uniquement** · à ratifier à la porte P-A
 avec l'entrée du même jour sur Traefik
+
+---
+
+## 2026-08-28 — [l0] `/sw.js` et `/manifest.webmanifest` rendent `index.html` : que doit répondre le serveur tant que la PWA n'existe pas ?
+
+Recette du staging déployé : `GET /sw.js` → **200, `Content-Type: text/html`, 939 octets** ;
+`GET /manifest.webmanifest` → **200, même Etag**. Les deux sont servis par le repli SPA
+(`try_files {path} {path}/ /index.html`, `infra/caddy/fronts.static.caddy`). La règle `@sw` du
+`Caddyfile` pose déjà correctement `no-cache, no-store, must-revalidate` sur ces chemins, et la CSP
+déclare déjà `manifest-src 'self'` : **les deux garde-fous existent et ne gardent rien.** Un
+`navigator.serviceWorker.register('/sw.js')` recevrait du HTML ; un `<link rel="manifest">`
+échouerait **silencieusement**. C'est la même famille de défaut que la police auto-hébergée traitée
+le même jour : un vert qui ne prouve rien.
+
+**Options :**
+
+1. **404 sur les deux chemins** tant que le service worker et le manifeste ne sont pas livrés
+   (L5a / L5c). Honnête : rien n'est là, le serveur le dit.
+2. **Livrer un service worker minimal maintenant** pour que `/sw.js` réponde du JavaScript.
+3. **404 sur `/sw.js`, mais livrer le manifeste maintenant**, au motif que la PWA en a besoin dès L5.
+4. Statu quo (repli SPA) — écarté d'emblée : c'est le défaut lui-même.
+
+**Ce qui a été lu avant de trancher** (ordre de lecture L5, CLAUDE.md §0) :
+
+- **11 §6** découpe L5 en incréments et place « shell PWA offline (Workbox) + Dexie + DEK/KEK +
+  verrouillage + pull mission + `storage.persist()` » en **L5a**, et « mise à jour SW §31 » en
+  **L5c**. Le service worker est donc nommément un livrable de L5a, pas de L0.
+- **05 §31.1** (texte normatif unique de §31) : le SW « télécharge les nouvelles versions en arrière-plan
+  mais ne les active JAMAIS pendant un entretien en cours » + bandeau « Nouvelle version disponible ».
+  Un SW porte donc une **logique de cycle de vie**, pas un fichier de remplissage.
+- **05 §31.2** : `navigator.storage.persist()` au premier chargement de mission ; **si la persistance
+  est refusée, la mission N'EST PAS embarquée** et l'écran guide vers « installation sur l'écran
+  d'accueil ».
+- **03 §29** (l. 453-455) : l'iPad/Safari ≥ 16.4 est **volontairement la cible la plus dure** ; sur
+  iPad, « l'installation _Sur l'écran d'accueil_ est **requise** pour la persistance longue durée
+  d'IndexedDB », avec **procédure d'installation guidée fournie dans l'outil**.
+- **07 §12** : le critère d'acceptation de L0 est « `docker compose up` = stack complète » — aucune
+  mention de PWA ; les critères PWA (« mode avion complet sur iPad ET PC », « police rendue en mode
+  avion ») sont ceux de **L5**.
+- **11 §8-7 / 09 §5.9** : anticiper un livrable non arbitré est une faute, au même titre que l'oublier.
+
+**Arbitrage : option 1 — les DEUX chemins répondent 404 tant que L5a/L5c ne les ont pas livrés.**
+Règle de précédence **sans objet** : aucune divergence interne du pack ; le pack ne dit simplement
+rien de ce que doivent répondre ces chemins AVANT L5, et il fallait trancher et tracer.
+
+Motifs, dans l'ordre où ils pèsent :
+
+1. **Un service worker de remplissage serait plus dangereux que l'absence.** Un SW enregistré prend
+   le contrôle de la portée `/` et **survit au déploiement suivant** : il faudrait ensuite le
+   remplacer sur des iPads réels, en clientèle, hors ligne — exactement le scénario que 05 §31.1
+   entoure de précautions. On n'installe pas sur un appareil terrain un artefact qu'on sait devoir
+   révoquer. **Option 2 écartée.**
+2. **Le manifeste n'est pas un fichier, c'est un ensemble de livraison** : manifeste, icônes 192/512,
+   icône _maskable_, `apple-touch-icon` PNG (iOS ne lit pas les icônes SVG d'un manifeste), l'écran
+   d'installation guidé qu'exige 03 §29, et le garde-fou `storage.persist()` de 05 §31.2.
+   Livrer le JSON seul rendrait `/manifest.webmanifest` → **200 `application/manifest+json`**, tout
+   le monde cocherait la case, et l'ajout à l'écran d'accueil sur iPad continuerait de produire une
+   **capture d'écran de la page en guise d'icône**. Ce serait reproduire à l'identique le défaut
+   qu'on corrige : un 200 qui ne prouve rien. **Option 3 écartée** — un demi-manifeste est pire
+   qu'un 404, parce qu'il est vert.
+3. **404 est le seul état qui ne ment pas.** `register('/sw.js')` échoue bruyamment ; un
+   `<link rel="manifest">` — qu'aucun des deux `index.html` ne porte aujourd'hui — échouerait
+   bruyamment. Et le jour où L5a livre le SW, la règle `@sw` du `Caddyfile` et la directive
+   `manifest-src 'self'` de la CSP se mettront à garder quelque chose de réel, sans avoir bougé.
+4. **Ce que L5a hérite, écrit ici plutôt que redécouvert :** le manifeste devra déclarer
+   `background_color` / `theme_color` **depuis les jetons**, par le plugin `injecterCouleurTheme()`
+   déjà présent dans les deux `vite.config.ts` — jamais deux exemplaires de la charte (invariant 4).
+   Et l'icône de l'application est une décision de **charte**, donc de Williams, pas d'A21.
+
+**Ce que cet arbitrage NE fait PAS, et qui appartient à un autre agent :** rendre 404 exige une règle
+Caddy AVANT le repli SPA, dans `(fronts_principal)` et `(fronts_staging)` de
+`infra/caddy/fronts.static.caddy` (une seule forme, les deux snippets, les deux environnements) —
+p. ex. `handle /sw.js /service-worker.js /manifest.webmanifest { respond 404 }` placé avant
+`handle { … try_files … }`, et l'équivalent sous `/hq/*`. **A21 n'écrit pas dans `infra/`** :
+la demande est transmise, non exécutée. **Tant qu'elle n'est pas appliquée, le défaut de recette
+subsiste** — la présente entrée arbitre, elle ne corrige pas.
+
+**Décideur :** A21, sur constat de la recette du staging déployé — **à ratifier par A01 à la porte P-A**
+(le critère L0 « stack complète » porte déjà une réserve ouverte au sujet du worker)
+**Impact spec :** aucun. Le pack ne prescrit ni SW ni manifeste avant L5 ; cette entrée fixe l'état
+intermédiaire qu'il laissait indéfini. À reprendre au brief de **L5a** (SW + manifeste + icônes +
+écran d'installation guidé) et à cocher à la porte **P-C**.

@@ -25,7 +25,34 @@ respecter l'écart fait échouer la suite.
 
 - `tokens.ts` — la source unique, typée.
 - `tokens.css` — les mêmes valeurs en variables CSS, pour Tailwind et les feuilles de style.
+  Il **importe `polices.css` en tête** : le jeton et la police qu'il nomme sont une seule promesse.
+- `polices.css` — les `@font-face` d'Inter variable auto-hébergée.
 - `tokens.test.ts` — les contrôles d'écart de teinte et de contraste.
+
+## La police est AUTO-HÉBERGÉE, et c'est vérifiable
+
+Contrat 11 §1 et §33.1 : `@fontsource-variable/inter`, **jamais de CDN** — la PWA doit rendre son
+texte en mode avion. Un seul import (`@axion/ui/tokens.css`) suffit à l'obtenir : `polices.css`
+n'est **pas** à importer séparément dans les applications, précisément parce qu'un second import à
+ne pas oublier dans deux `main.tsx` est ce qui a produit le défaut relevé en recette (le jeton
+`--typo-police-corps` déclarait Inter, le build ne sortait aucun `@font-face` ni aucun `.woff2`, et
+c'est la police système qui s'affichait — pendant que `font-src 'self'` passait « vert » faute de
+police à garder).
+
+**Ce qui est embarqué : 2 fichiers, ~131 Ko** sur les 1,9 Mo du paquet — axe `wght` seul (une seule
+police variable couvre les graisses 400/500/600/700), sous-ensembles `latin` (48 Ko, tout le
+français) et `latin-ext` (83 Ko, rendu gratuit à l'exécution par `unicode-range`). Écartés :
+cyrillique, grec, vietnamien et **tous les italiques** (le navigateur synthétise l'oblique).
+Le raisonnement complet, y compris ce qui rouvrirait ces choix, est en tête de `polices.css`.
+
+**Vérifier après un build** (ces commandes sont celles de la recette, avec le résultat attendu) :
+
+```bash
+pnpm --filter @axion/field build
+grep -o '@font-face' apps/field/dist/assets/index-*.css | wc -l   # → 2  (et non 0)
+ls apps/field/dist/assets/*.woff2                                 # → 2 fichiers
+grep -o 'url([^)]*woff2)' apps/field/dist/assets/index-*.css      # → /assets/… , jamais https://
+```
 
 ## Commandes
 
