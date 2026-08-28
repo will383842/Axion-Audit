@@ -27,14 +27,36 @@ mensonge de CI ; une CI qui ment est pire que pas de CI.
 
 ## 1. Quel workflow fait quoi
 
-| Fichier                        | Déclencheur                                                                  | Rôle                                                                                                                                                                                                                                                          | Secrets consommés                                                          |
-| ------------------------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| **`ci.yml`**                   | PR vers `main` · push sur `main` et `lot/**`                                 | **LE workflow bloquant.** jonction → lint (+ `check:pack`) → typecheck → **build des sources** → unit → integration → e2e → schema-diff → build des images → deploy-staging, plus les garde-fous gitleaks / shellcheck / anti-skip (+ orphelins) / couverture | `GITHUB_TOKEN` (implicite) ; hérite des Environments pour les jobs appelés |
-| **`build-images.yml`**         | `workflow_call` uniquement                                                   | Construit et pousse les **4 images** (`api`, `worker`, `field`, `hq`) sur GHCR, taguées **par SHA et par version** (02 §30.5)                                                                                                                                 | `GITHUB_TOKEN` (`packages: write`)                                         |
-| **`deploy-staging.yml`**       | `workflow_call` (depuis `ci.yml`, au merge sur `main`) · `workflow_dispatch` | SSH → `infra/scripts/deploy.sh` → contrôle de santé public → Telegram → ZAP baseline                                                                                                                                                                          | Environment **`staging`**                                                  |
-| **`deploy-prod.yml`**          | push d'un tag `v*` · `workflow_dispatch`                                     | Build des 4 images taguées par la version, puis déploiement **après approbation manuelle**                                                                                                                                                                    | Environment **`prod`**                                                     |
-| **`nightly-restore-test.yml`** | cron `0 3 * * *` (UTC) · `workflow_dispatch`                                 | SSH → `infra/scripts/restore-test.sh` (Postgres + MinIO), journal conservé 90 j, **alerte Telegram si échec**                                                                                                                                                 | Environment **`ops`**                                                      |
-| **`zap-baseline.yml`**         | `workflow_call` (fin de `deploy-staging`) · `workflow_dispatch`              | ZAP baseline contre staging. **Non bloquant au L0/L1, BLOQUANT au L2**                                                                                                                                                                                        | Environment hérité de l'appelant                                           |
+| Fichier                        | Déclencheur                                                                  | Rôle                                                                                                                                                                                                                                                                                                            | Secrets consommés                                                          |
+| ------------------------------ | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| **`ci.yml`**                   | PR vers `main` · push sur `main` et `lot/**`                                 | **LE workflow bloquant.** jonction → **build des sources** → lint (+ `check:pack`) → typecheck, et en parallèle unit → integration → e2e → schema-diff → build des images → deploy-staging, plus les garde-fous gitleaks / shellcheck / anti-skip (+ orphelins, isolation réseau, compose Coolify) / couverture | `GITHUB_TOKEN` (implicite) ; hérite des Environments pour les jobs appelés |
+| **`build-images.yml`**         | `workflow_call` uniquement                                                   | Construit et pousse les **4 images** (`api`, `worker`, `field`, `hq`) sur GHCR, taguées **par SHA et par version** (02 §30.5)                                                                                                                                                                                   | `GITHUB_TOKEN` (`packages: write`)                                         |
+| **`deploy-staging.yml`**       | `workflow_call` (depuis `ci.yml`, au merge sur `main`) · `workflow_dispatch` | **API Coolify** : déclenchement par uuid → **attente de l'issue** → contrôle de santé public → Telegram → ZAP baseline. **Aucun SSH, aucun `deploy.sh`** (voir l'encadré ci-dessous)                                                                                                                            | Environment **`staging`**                                                  |
+| **`deploy-prod.yml`**          | push d'un tag `v*` · `workflow_dispatch`                                     | Build des 4 images taguées par la version, puis déploiement **après approbation manuelle**                                                                                                                                                                                                                      | Environment **`prod`**                                                     |
+| **`nightly-restore-test.yml`** | cron `0 3 * * *` (UTC) · `workflow_dispatch`                                 | SSH → `infra/scripts/restore-test.sh` (Postgres + MinIO), journal conservé 90 j, **alerte Telegram si échec**                                                                                                                                                                                                   | Environment **`ops`**                                                      |
+| **`zap-baseline.yml`**         | `workflow_call` (fin de `deploy-staging`) · `workflow_dispatch`              | ZAP baseline contre staging. **Non bloquant au L0/L1, BLOQUANT au L2**                                                                                                                                                                                                                                          | Environment hérité de l'appelant                                           |
+
+> ### ⚠️ Le staging ne se déploie plus par SSH — et la production, si
+>
+> `DECISIONS.md`, entrée du **2026-08-28** « Le staging s'insère derrière le Traefik de Coolify » :
+> la machine `axionia-web` n'est pas un serveur nu. Elle fait tourner **Coolify v4**, qui y déploie
+> déjà `axion-ia.com` et **possède les ports 80/443** via son propre Traefik. Coolify est le seul
+> ordonnanceur de cette machine ; un `docker compose up` posé à côté de lui par SSH serait un second
+> maître sur les mêmes conteneurs. `deploy-staging.yml` appelle donc `POST /api/v1/deploy`, **attend
+> le statut final du déploiement** et échoue si celui-ci échoue — déclencher sans constater serait
+> un vert qui ne vérifie rien (§0).
+>
+> **`infra/scripts/deploy.sh` reste le chemin de la PRODUCTION** (`deploy-prod.yml`) et
+> `restore-test.sh` celui du test nocturne (`nightly-restore-test.yml`) : ces deux-là font toujours
+> du SSH, et les secrets `DEPLOY_*` leur restent nécessaires (§3).
+>
+> **Conséquence sur `tag_image`.** Le staging **construit ses images sur le serveur** depuis le
+> dépôt public cloné par Coolify (`DECISIONS.md` 2026-08-28, second amendement : les paquets GHCR
+> sont privés et le tirage anonyme est refusé). Le workflow ne modifie aucune configuration
+> Coolify : `tag_image` est **journalisé et notifié pour traçabilité**, il ne pilote pas encore
+> l'image servie. La production, elle, reste sur GHCR.
+>
+> Ces deux amendements au 02 §11 / §30.6 sont **à ratifier à la porte P-A**.
 
 **Fichiers de configuration associés :**
 
@@ -52,25 +74,50 @@ mensonge de CI ; une CI qui ment est pire que pas de CI.
 ### Ordre des jobs de `ci.yml` (imposé par 11 §7)
 
 ```
-CHAÎNE IMPOSÉE (11 §7) :
-  lint → typecheck → unit → integration → e2e → schema-diff → build → deploy-staging
-                                                                          (main seulement)
+ORDRE RÉEL DES `needs:` — lu dans ci.yml, pas déduit du 11 §7 :
 
-AJOUT HORS 11 §7, ASSUMÉ :
-  build-sources entre `typecheck` et `unit` — `pnpm build`. Sans lui, une PR
-                pouvait être VERTE avec une compilation cassée : le seul
-                `pnpm build` du dépôt vivait dans les Dockerfiles, construits
-                par un job qui ne tourne pas sur les pull requests.
+  jonction → build-sources → lint → typecheck
+                   └────────────────────────────→ unit → integration → e2e
+                                                    ↑                    ↓
+                                            anti-skip            schema-diff
+                                                                        ↓
+                                                        build → deploy-staging
+                                                                (main seulement)
+
+ORDRE PRESCRIT PAR LE 11 §7 :
+  lint → typecheck → unit → integration → e2e → schema-diff → build → deploy-staging
+
+DEUX ÉCARTS ASSUMÉS, ET LEUR RAISON :
+  build-sources   AJOUT hors 11 §7 — `pnpm build`. Sans lui, une PR pouvait être
+                  VERTE avec une compilation cassée : le seul `pnpm build` du dépôt
+                  vivait dans les Dockerfiles, construits par un job qui ne tourne
+                  pas sur les pull requests.
+  build-sources   PLACÉ AVANT `lint`, et non entre `typecheck` et `unit` comme
+  AVANT lint      prévu à l'origine. Les règles typées d'ESLint résolvent
+                  `@axion/shared` et `@axion/ui` par leurs déclarations de types,
+                  qui n'existent qu'une fois `packages/*/dist` produit : sur un
+                  clone neuf, linter d'abord donnait 55 erreurs « type cannot be
+                  resolved ». Trouvé à la PREMIÈRE EXÉCUTION RÉELLE — en local, un
+                  `dist` résiduel masquait le défaut. `unit` dépend donc de
+                  `build-sources` et de `anti-skip`, pas de `typecheck`.
+                  (Le commentaire « Position : APRÈS typecheck » resté dans ci.yml
+                   décrit l'intention initiale, pas le graphe en vigueur.)
 
 GARDE-FOUS EN PARALLÈLE (tous exigés par `build`) :
   gitleaks      02 §30.4-5   historique complet en PR
   shellcheck    11 §7        infra/scripts/*.sh + syntaxe docker compose
-  anti-skip     11 §2/09 §5.7  pnpm check:no-skipped-tests + pnpm check:test-projects
+  anti-skip     11 §2/09 §5.7  check:no-skipped-tests + check:test-projects
+                             + check:isolation-reseau + check:compose-coolify
+                             + vérification que la liste d'exceptions est restée vide
   invariants    09 §3 ét. 3  pnpm check:invariants
   coverage      09 §3        ≥ 90 % sur les modules critiques (après `unit`)
   check:pack    09 §5.2      1re étape du job `lint` — intégrité des 12 fichiers du pack
 
-EN TÊTE DE CHAÎNE (gate de `lint`) :
+DANS LE JOB `schema-diff`, APRÈS `pnpm schema:diff` :
+  check:schema-inventaire    liste NOIRE (DECISIONS.md 2026-08-27) — aucun objet
+                             que le fichier 04 n'autorise (triggers, règles, vues…)
+
+EN TÊTE DE CHAÎNE (gate de `build-sources`, donc de tout) :
   jonction      09 §5.1      pnpm check:jonction — les fichiers du dépôt se parlent-ils ?
 ```
 
@@ -86,24 +133,27 @@ Les workflows appellent ces scripts. **Tous existent déjà dans le `package.jso
 A01 — ce tableau est le point de jonction : renommer l'un d'eux casse la CI, et c'est le
 comportement voulu (un script manquant est un trou de vérification, pas une étape optionnelle).
 
-| Script                        | Appelé par                                                  | Attendu                                                                                                                                                       |
-| ----------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm lint`                   | `ci.yml` job `lint`, `.husky/pre-commit` (via lint-staged)  | ESLint sur tout le workspace, **0 avertissement toléré**                                                                                                      |
-| `pnpm format:check`           | `ci.yml` job `lint`                                         | Prettier en **vérification seule** — la CI ne réécrit jamais le dépôt                                                                                         |
-| `pnpm typecheck`              | `ci.yml` job `typecheck`, `.husky/pre-commit`               | `tsc --noEmit` strict sur tout le workspace                                                                                                                   |
-| `pnpm test:unit`              | `ci.yml` job `unit`                                         | Vitest 3, projet `unit`                                                                                                                                       |
-| `pnpm test:integration`       | `ci.yml` job `integration`                                  | Vitest 3, projet `integration` (services de CI + Testcontainers)                                                                                              |
-| `pnpm test:e2e`               | `ci.yml` job `e2e`                                          | Playwright, **chromium**                                                                                                                                      |
-| `pnpm test:coverage`          | `ci.yml` job `coverage`                                     | Vitest `--coverage`, reporter **`json-summary`** → `coverage/coverage-summary.json`                                                                           |
-| `pnpm check:no-skipped-tests` | `ci.yml` job `anti-skip`                                    | Garde-fou anti-skip, **liste d'exceptions vide** (`scripts/check-no-skipped-tests.mjs`)                                                                       |
-| `pnpm check:invariants`       | `ci.yml` job `invariants`                                   | Checklist automatisée des invariants (09 §3 étape 3)                                                                                                          |
-| `pnpm check:pack`             | `ci.yml` job `lint` (1re étape), `.husky/pre-commit`        | Intégrité SHA-256 des 12 fichiers de `docs/` (09 §5.2) — **instantané**                                                                                       |
-| `pnpm check:jonction`         | `ci.yml` job `jonction` (avant `lint`), `.husky/pre-commit` | Croise appelant → appelé : scripts `pnpm` par paquet, variables vs `.env.example`, drapeaux obligatoires des `infra/scripts/*.sh`                             |
-| `pnpm check:test-projects`    | `ci.yml` job `anti-skip`, `.husky/pre-commit`               | Aucun test **orphelin** (hors `include`/dans `exclude` d’un projet vitest) ; suite d’intégration NON VIDE, `@filrouge` et `@critique` exigés depuis le lot L1 |
-| `pnpm build`                  | `ci.yml` job `build-sources`                                | Construit `packages/*` puis `apps/*` — une PR ne peut plus être verte avec un build cassé                                                                     |
-| `pnpm infra:config`           | `ci.yml` job `shellcheck`                                   | `docker compose config -q` sur `infra/docker-compose.yml` (avec un `.env` éphémère)                                                                           |
-| `pnpm db:migrate`             | `ci.yml` job `schema-diff`                                  | Applique les migrations sur `DATABASE_URL` — exécuté **si `apps/api/drizzle/` existe** (L1)                                                                   |
-| `pnpm schema:diff`            | `ci.yml` job `schema-diff`                                  | Compare le schéma réel au manifeste ; **code ≠ 0 au premier écart**                                                                                           |
+| Script                         | Appelé par                                                  | Attendu                                                                                                                                                       |
+| ------------------------------ | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm lint`                    | `ci.yml` job `lint`, `.husky/pre-commit` (via lint-staged)  | ESLint sur tout le workspace, **0 avertissement toléré**                                                                                                      |
+| `pnpm format:check`            | `ci.yml` job `lint`                                         | Prettier en **vérification seule** — la CI ne réécrit jamais le dépôt                                                                                         |
+| `pnpm typecheck`               | `ci.yml` job `typecheck`, `.husky/pre-commit`               | `tsc --noEmit` strict sur tout le workspace                                                                                                                   |
+| `pnpm test:unit`               | `ci.yml` job `unit`                                         | Vitest 3, projet `unit`                                                                                                                                       |
+| `pnpm test:integration`        | `ci.yml` job `integration`                                  | Vitest 3, projet `integration` (services de CI + Testcontainers)                                                                                              |
+| `pnpm test:e2e`                | `ci.yml` job `e2e`                                          | Playwright, **chromium**                                                                                                                                      |
+| `pnpm test:coverage`           | `ci.yml` job `coverage`                                     | Vitest `--coverage`, reporter **`json-summary`** → `coverage/coverage-summary.json`                                                                           |
+| `pnpm check:no-skipped-tests`  | `ci.yml` job `anti-skip`                                    | Garde-fou anti-skip, **liste d'exceptions vide** (`scripts/check-no-skipped-tests.mjs`)                                                                       |
+| `pnpm check:invariants`        | `ci.yml` job `invariants`                                   | Checklist automatisée des invariants (09 §3 étape 3)                                                                                                          |
+| `pnpm check:pack`              | `ci.yml` job `lint` (1re étape), `.husky/pre-commit`        | Intégrité SHA-256 des 12 fichiers de `docs/` (09 §5.2) — **instantané**                                                                                       |
+| `pnpm check:jonction`          | `ci.yml` job `jonction` (avant `lint`), `.husky/pre-commit` | Croise appelant → appelé : scripts `pnpm` par paquet, variables vs `.env.example`, drapeaux obligatoires des `infra/scripts/*.sh`                             |
+| `pnpm check:test-projects`     | `ci.yml` job `anti-skip`, `.husky/pre-commit`               | Aucun test **orphelin** (hors `include`/dans `exclude` d’un projet vitest) ; suite d’intégration NON VIDE, `@filrouge` et `@critique` exigés depuis le lot L1 |
+| `pnpm build`                   | `ci.yml` job `build-sources`                                | Construit `packages/*` puis `apps/*` — une PR ne peut plus être verte avec un build cassé                                                                     |
+| `pnpm infra:config`            | `ci.yml` job `shellcheck`                                   | `docker compose config -q` sur `infra/docker-compose.yml` (avec un `.env` éphémère)                                                                           |
+| `pnpm db:migrate`              | `ci.yml` job `schema-diff`                                  | Applique les migrations sur `DATABASE_URL` — exécuté **si `apps/api/drizzle/` existe** (L1)                                                                   |
+| `pnpm schema:diff`             | `ci.yml` job `schema-diff`                                  | Compare le schéma réel au manifeste ; **code ≠ 0 au premier écart**                                                                                           |
+| `pnpm check:schema-inventaire` | `ci.yml` job `schema-diff`                                  | Liste **noire** complémentaire du diff : aucun objet que le fichier 04 n'autorise (`DECISIONS.md` 2026-08-27)                                                 |
+| `pnpm check:isolation-reseau`  | `ci.yml` job `anti-skip`                                    | Seul le frontal rejoint le réseau du proxy de l'hôte — l'ICC y est activé, tout autre conteneur atteindrait la base du voisin (mesure A54)                    |
+| `pnpm check:compose-coolify`   | `ci.yml` job `anti-skip`                                    | Deux conventions de la pile Coolify, chacune ayant coûté un déploiement : aucune interpolation dans un volume, chemins relatifs depuis la **racine**          |
 
 Ne devinez rien sur les noms : ce tableau **est** le contrat.
 
@@ -113,19 +163,43 @@ Ne devinez rien sur les noms : ce tableau **est** le contrat.
 
 **Règle 02 §30.4-3 : ces secrets vivent dans les _Environments_, JAMAIS en secrets de dépôt
 globaux.** Règle 02 §30.4-4 : **séparation stricte** — les valeurs de `staging` et de `prod` sont
-DIFFÉRENTES (clés SSH, hôtes, chemins). Un secret de staging ne peut rien sur la prod.
+DIFFÉRENTES, et depuis le 2026-08-28 elles ne sont même plus de même **nature** : le staging porte
+des réglages Coolify, la prod des accès SSH. Un secret de staging ne peut rien sur la prod.
 
-### Environment `staging`
+### Environment `staging` — **réglages Coolify, plus aucun `DEPLOY_*`**
 
-| Secret                   | Contenu                                                                   | Source                        |
-| ------------------------ | ------------------------------------------------------------------------- | ----------------------------- |
-| `DEPLOY_SSH_KEY`         | Clé privée SSH **dédiée et restreinte** (Actions → serveur staging)       | `.env.example` §17 · 02 §30.3 |
-| `DEPLOY_SSH_KNOWN_HOSTS` | Ligne `known_hosts` de l'hôte staging (`ssh-keyscan -t ed25519 <hôte>`)   | Ajout A52 — voir §6           |
-| `DEPLOY_HOST`            | Hôte SSH de staging                                                       | `.env.example` §17            |
-| `DEPLOY_USER`            | Utilisateur de déploiement **non-root**                                   | `.env.example` §17            |
-| `DEPLOY_PATH`            | **`/opt/axion-audit/repo`** — la COPIE DU DÉPÔT (voir encadré ci-dessous) | `infra/README.md` §3          |
-| `TELEGRAM_BOT_TOKEN`     | Jeton du bot d'alerte                                                     | 02 §11.3 · `.env.example` §10 |
-| `TELEGRAM_CHAT_ID`       | Salon d'alerte                                                            | 02 §11.3 · `.env.example` §10 |
+Depuis la réécriture du 2026-08-28 (encadré du §1), `deploy-staging.yml` ne fait plus de SSH. Il
+**refuse de partir** en nommant le réglage manquant plutôt que d'échouer obscurément trois étapes
+plus loin.
+
+| Réglage              | Type                     | Contenu                                                                                      | Source                        |
+| -------------------- | ------------------------ | -------------------------------------------------------------------------------------------- | ----------------------------- |
+| `COOLIFY_API_TOKEN`  | **secret**               | Jeton Sanctum `<id>\|<clair>` (`read`+`write`+`deploy` ; `root` et `read:sensitive` écartés) | Coolify → API tokens          |
+| `COOLIFY_URL`        | **secret**               | Origine de l'instance Coolify, **avec son schéma** (`http://…` ou `https://…`)               | `DECISIONS.md` 2026-08-28     |
+| `COOLIFY_APP_UUID`   | **variable** _ou_ secret | uuid de l'application staging. **Non secret** — publié : `wrunr6mwq2oxqq392i4myzjn`          | `DECISIONS.md` 2026-08-28     |
+| `TELEGRAM_BOT_TOKEN` | secret                   | Jeton du bot d'alerte                                                                        | 02 §11.3 · `.env.example` §10 |
+| `TELEGRAM_CHAT_ID`   | secret                   | Salon d'alerte                                                                               | 02 §11.3 · `.env.example` §10 |
+
+Le workflow lit `COOLIFY_APP_UUID` **d'abord en variable, puis en secret** : le premier renseigné
+gagne, aucun des deux ne rend l'autre obligatoire. Une variable est préférable — l'uuid n'est pas un
+secret et se lit alors dans les journaux.
+
+**Contrôle de forme appliqué au départ** : un `COOLIFY_URL` sans schéma (`178.105.55.15:8000` au
+lieu de `http://178.105.55.15:8000`) est l'erreur de saisie la plus probable ; elle est refusée en
+une ligne, au lieu de se lire comme une panne de Coolify.
+
+> **Les secrets `DEPLOY_*` ne concernent PLUS le staging** — ne les y posez pas, ils n'y servent
+> plus à rien. Ils **restent obligatoires** pour `prod` (`deploy-prod.yml` → SSH →
+> `infra/scripts/deploy.sh`) et pour `ops` (`nightly-restore-test.yml` → SSH →
+> `infra/scripts/restore-test.sh`) : voir les deux environments ci-dessous.
+>
+> | Secret `DEPLOY_*`        | Contenu                                                                   | Source                        |
+> | ------------------------ | ------------------------------------------------------------------------- | ----------------------------- |
+> | `DEPLOY_SSH_KEY`         | Clé privée SSH **dédiée et restreinte**                                   | `.env.example` §17 · 02 §30.3 |
+> | `DEPLOY_SSH_KNOWN_HOSTS` | Ligne `known_hosts` de l'hôte (`ssh-keyscan -t ed25519 <hôte>`)           | Ajout A52 — voir §6           |
+> | `DEPLOY_HOST`            | Hôte SSH                                                                  | `.env.example` §17            |
+> | `DEPLOY_USER`            | Utilisateur de déploiement **non-root**                                   | `.env.example` §17            |
+> | `DEPLOY_PATH`            | **`/opt/axion-audit/repo`** — la COPIE DU DÉPÔT (voir encadré ci-dessous) | `infra/README.md` §3          |
 
 > ### ⚠️ `DEPLOY_PATH` désigne le DÉPÔT, pas la racine d'exploitation
 >
@@ -136,24 +210,30 @@ DIFFÉRENTES (clés SSH, hôtes, chemins). Un secret de staging ne peut rien sur
 > | `/opt/axion-audit`      | Racine d'**exploitation** : `<env>/.env`, `<env>.deployed-tags`       |
 > | `/opt/axion-audit/repo` | La **copie du dépôt** : `infra/scripts/`, `infra/docker-compose*.yml` |
 >
-> `infra/README.md` §3 clone le dépôt dans `/opt/axion-audit/repo` ; les workflows font
-> `cd "$DEPLOY_PATH" && ./infra/scripts/deploy.sh`. `DEPLOY_PATH` vaut donc **`/opt/axion-audit/repo`**.
+> `infra/README.md` §3 clone le dépôt dans `/opt/axion-audit/repo` ; les deux workflows SSH font
+> `cd "$DEPLOY_PATH" && ./infra/scripts/<script>.sh`. `DEPLOY_PATH` vaut donc **`/opt/axion-audit/repo`**.
 > `.env.example` documente encore `DEPLOY_PATH=/opt/axion-audit` : **c'est cette ligne qui est
-> fausse** (correction demandée à A01). Les trois workflows de déploiement vérifient désormais la
-> présence de `./infra/scripts/*.sh` avant d'exécuter quoi que ce soit, et échouent avec un message
-> qui nomme la bonne valeur — plutôt qu'un `No such file or directory` illisible à 3 h du matin.
+> fausse** (correction demandée à A01). Les **deux** workflows SSH (`deploy-prod.yml`,
+> `nightly-restore-test.yml`) vérifient la présence de `./infra/scripts/*.sh` avant d'exécuter quoi
+> que ce soit, et échouent avec un message qui nomme la bonne valeur — plutôt qu'un `No such file or
+directory` illisible à 3 h du matin. `deploy-staging.yml` ne fait plus de SSH et n'est donc plus
+> concerné.
 
-**Variable** (pas un secret) : `STAGING_BASE_URL` = URL publique de staging (contrôle de santé + cible ZAP).
+**Variable** (pas un secret) : `STAGING_BASE_URL` = origine publique du staging (contrôle de santé
+public + cible ZAP + URL affichée par l'Environment). **Elle reste obligatoire** — le workflow
+refuse de partir sans elle. Tant que le sous-domaine `audit-staging.axion-ia.com` n'est pas posé
+(zone DNS Cloudflare, partagée avec la production), elle porte l'adresse automatique attribuée par
+Coolify (`*.sslip.io`) : voir `docs/ETAT.md` et `docs/portes/PORTE_A_2026-08-27.md` §2ter.
 
-### Environment `prod`
+### Environment `prod` — SSH, `deploy.sh`, `DEPLOY_*`
 
-Mêmes noms, **valeurs distinctes** :
+Mêmes noms que le tableau `DEPLOY_*` ci-dessus, **valeurs distinctes** :
 `DEPLOY_SSH_KEY` · `DEPLOY_SSH_KNOWN_HOSTS` · `DEPLOY_HOST` · `DEPLOY_USER` · `DEPLOY_PATH` ·
 `TELEGRAM_BOT_TOKEN` · `TELEGRAM_CHAT_ID`.
 **Variable** : `PROD_BASE_URL`.
 **Réglage obligatoire : approbation manuelle** (voir §4).
 
-### Environment `ops` (test de restauration nocturne)
+### Environment `ops` (test de restauration nocturne) — SSH, `restore-test.sh`, `DEPLOY_*`
 
 `DEPLOY_SSH_KEY` (clé **restreinte au seul `restore-test.sh`**) · `DEPLOY_SSH_KNOWN_HOSTS` ·
 `DEPLOY_HOST` · `DEPLOY_USER` · `DEPLOY_PATH` · `TELEGRAM_BOT_TOKEN` · `TELEGRAM_CHAT_ID`.
@@ -212,7 +292,9 @@ et certains garde-fous du pack ne s'appliquent tout simplement pas.
 
 ### 4.3 Environments (Settings → Environments)
 
-- [ ] Créer **`staging`** — secrets et variable du §3. Branche déployable : `main` uniquement.
+- [ ] Créer **`staging`** — réglages **Coolify** du §3 (`COOLIFY_API_TOKEN`, `COOLIFY_URL`,
+      `COOLIFY_APP_UUID`, Telegram) + variable `STAGING_BASE_URL`. **Aucun `DEPLOY_*`.** Branche
+      déployable : `main` uniquement.
 - [ ] Créer **`prod`** — secrets et variable du §3, **+ « Required reviewers » = Williams**
       (02 §30.4-3 : « l'environnement prod exige une approbation manuelle avant tout
       déploiement »). **C'est le réglage le plus important de cette page** : sans lui,
@@ -280,8 +362,9 @@ réversible**. Ils doivent recevoir une entrée `DECISIONS.md` (09 §5.1 : un do
    contrat d'appel supposé par A52 (`APP_ENV=… GHCR_OWNER=… IMAGE_TAG=… ./deploy.sh`) **n'était pas
    celui du script** et ne pouvait pas fonctionner : `deploy.sh` exige `--env` (l.40) et `--tag`
    (l.70), meurt sinon, et ne lit **jamais** `IMAGE_TAG` depuis l'environnement — il l'exporte
-   depuis `--tag` (l.72). Les deux workflows ont été alignés sur le script, qui fait foi.
-   Contrat d'appel **réel** :
+   depuis `--tag` (l.72). Les workflows ont été alignés sur le script, qui fait foi.
+   **Depuis le 2026-08-28, ce contrat ne vaut plus que pour `deploy-prod.yml`** : le staging passe
+   par l'API Coolify (§1). Contrat d'appel **réel** :
 
    ```bash
    ./infra/scripts/deploy.sh --env <staging|prod> --tag <IMAGE_TAG> [--env-file <chemin>]
@@ -311,7 +394,8 @@ réversible**. Ils doivent recevoir une entrée `DECISIONS.md` (09 §5.1 : un do
   `infra/docker-compose.yml`. `apps/worker` est bien un espace de travail du monorepo.
 - **Image MinIO** : `minio/minio:RELEASE.2025-04-22T22-12-26Z`, alignée sur le compose.
 - **Nommage GHCR** : `ghcr.io/${GHCR_OWNER}/axion-audit-<app>:${IMAGE_TAG}` — les deux variables
-  sont passées au serveur par les workflows de déploiement.
+  sont passées au serveur par `deploy-prod.yml`. **Le staging ne tire plus d'image de GHCR** : les
+  paquets y sont privés et il construit sur le serveur (`DECISIONS.md` 2026-08-28).
 - **Manifeste de schéma** : `apps/api/schema-manifest.json`, marqueur de livraison du L1 =
   `apps/api/drizzle/` (logique portée par `scripts/schema-diff.mjs`).
 

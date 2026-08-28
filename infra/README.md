@@ -12,6 +12,38 @@
 
 ---
 
+## ⛔ AVANT TOUTE CHOSE — CE RUNBOOK NE DÉCRIT PAS LE STAGING D'AUJOURD'HUI
+
+**Ce fichier décrit l'installation d'une pile Axion Audit sur un VPS NEUF ET VIDE, provisionné par
+SSH.** C'est le chemin de la **production**. **Ce n'est pas celui du staging.**
+
+Le staging tourne sur `axionia-web`, une machine **qui héberge déjà le site de production
+`axion-ia.com`** et qui fait tourner **Coolify v4** — dont le proxy Traefik possède les ports
+80/443. Il n'y a donc ni notre Caddy en frontal, ni `provision-vps.sh`, ni `deploy.sh`, ni SSH dans
+la chaîne de déploiement : c'est **l'API Coolify** qui déploie, et **Coolify construit les images
+sur le serveur** au lieu de les tirer de GHCR.
+
+| Si vous cherchez…                                            | Lisez                                                                                               |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| **Les conditions de la cohabitation avec `axion-ia.com`**    | **`infra/COHABITATION_AXIONIA_WEB.md`** — les quatre conditions, les plafonds, ce qu'on ne fait PAS |
+| **La pile réellement déployée en staging**                   | **`infra/docker-compose.coolify.yml`** — autoportante, 9 services, aucun port publié                |
+| Le déclenchement du déploiement staging par la CI            | `.github/workflows/deploy-staging.yml` + `.github/workflows/README.md` §1 et §3                     |
+| Les deux amendements au contrat d'ops, **à ratifier en P-A** | `DECISIONS.md`, entrées du **2026-08-28**                                                           |
+| Ce qui a été prouvé sur le serveur                           | `docs/portes/PORTE_A_2026-08-27.md` §2ter                                                           |
+
+**Concrètement, pour le staging, ne suivez PAS** : le §3 (provisionnement, et surtout §3.3 —
+`provision-vps.sh` couperait l'accès SSH et redémarrerait Docker **sur le serveur de production** du
+voisin), le §5 (premier déploiement par `deploy.sh`) ni le §5 bis (frontal Caddy unique).
+Le reste — développement local (§2, §2 bis), pose des secrets (§4), PRA (§6), rotation (§7),
+diagnostic du test de restauration (§9) — **reste valable**.
+
+**Nom retenu pour le sous-domaine de staging : `audit-staging.axion-ia.com`**, en une seule forme
+(`DECISIONS.md` du 2026-08-28). Il n'est **pas encore posé** — la zone DNS est chez Cloudflare,
+partagée avec la production ; le staging vit en attendant sur l'adresse automatique de Coolify
+(`*.sslip.io`). Dans ce fichier, il s'écrit `audit-staging.<domaine>`.
+
+---
+
 ## 0. Arborescence
 
 ```
@@ -19,7 +51,13 @@ infra/
 ├── docker-compose.yml            pile de DÉV local (build local, hot reload)
 ├── docker-compose.staging.yml    surcharge staging (images GHCR, limites CPU/RAM, SANS frontal)
 ├── docker-compose.prod.yml       surcharge prod    (images GHCR, 80/443, frontal des 2 piles)
+├── docker-compose.coolify.yml    ← LA PILE RÉELLEMENT DÉPLOYÉE EN STAGING. AUTOPORTANTE
+│                                   (Coolify ne prend qu'un seul `-f`, aucune surcharge),
+│                                   chemins relatifs depuis la RACINE du dépôt, images
+│                                   CONSTRUITES sur le serveur, zéro port publié
+├── COHABITATION_AXIONIA_WEB.md   ← les 4 conditions de la cohabitation avec axion-ia.com
 ├── caddy/Caddyfile               2 blocs de site (prod + staging), sécurité, CSP
+├── caddy/Dockerfile              image Caddy du projet
 ├── caddy/fronts.dev.caddy        fronts en DEV    : reverse_proxy vers Vite
 ├── caddy/fronts.static.caddy     fronts en PROD   : root + file_server + repli SPA
 ├── postgres/Dockerfile           PostgreSQL 16 + pgBackRest
@@ -78,17 +116,17 @@ docker compose --env-file .env -f infra/docker-compose.yml up -d --build
 docker compose --env-file .env -f infra/docker-compose.yml ps
 ```
 
-| Service         | État attendu   | Contrôle                                                   |
-| --------------- | -------------- | ---------------------------------------------------------- |
-| `postgres`      | `Up (healthy)` | `pg_isready` répond sur la base `axion_audit`              |
-| `redis`         | `Up (healthy)` | `redis-cli ping` → `PONG` (authentifié)                    |
-| `minio`         | `Up (healthy)` | `mc ready local` → OK                                      |
-| `createbuckets` | `Exited (0)`   | log : `buckets et utilisateur applicatif restreint prets.` |
-| `api`           | `Up (healthy)` | `GET /v1/health` → 200                                     |
-| `worker`        | `Up (healthy)` | processus `node` vivant                                    |
-| `field`         | `Up (healthy)` | Vite sert `/`                                              |
-| `hq`            | `Up (healthy)` | Vite sert `/hq/`                                           |
-| `caddy`         | `Up (healthy)` | API d'admin locale répond                                  |
+| Service         | État attendu   | Contrôle                                                                         |
+| --------------- | -------------- | -------------------------------------------------------------------------------- |
+| `postgres`      | `Up (healthy)` | `pg_isready` répond sur la base `axion_audit`                                    |
+| `redis`         | `Up (healthy)` | `redis-cli ping` → `PONG` (authentifié)                                          |
+| `minio`         | `Up (healthy)` | `mc ready local` → OK                                                            |
+| `createbuckets` | `Exited (0)`   | log : `buckets et utilisateur applicatif restreint prets.`                       |
+| `api`           | `Up (healthy)` | `GET /v1/health` → 200                                                           |
+| `worker`        | `Up (healthy)` | **battement Redis frais + un travailleur attaché aux 5 files** (voir ci-dessous) |
+| `field`         | `Up (healthy)` | Vite sert `/`                                                                    |
+| `hq`            | `Up (healthy)` | Vite sert `/hq/`                                                                 |
+| `caddy`         | `Up (healthy)` | API d'admin locale répond                                                        |
 
 Contrôles fonctionnels :
 
@@ -98,6 +136,21 @@ curl -i http://localhost:8080/                # 200, PWA terrain
 curl -i http://localhost:8080/hq/             # 200, console siège
 curl -sI http://localhost:8080/ | grep -i content-security-policy   # CSP présente
 ```
+
+> **`Up (healthy)` sur le `worker` n'a pas toujours voulu dire quelque chose.** Jusqu'au
+> 2026-08-28, sa sonde était `pgrep -f node` : elle voyait le `tsc --watch` du lanceur de
+> développement et restait verte pendant que le worker était **mort au démarrage** — il ne démarrait
+> pas du tout depuis le lot L0. `docker ps` a affiché « Up 13 hours (healthy) » sur un conteneur dont
+> la première ligne de journal était une pile d'exception, et le critère L0 « `docker compose up` =
+> stack complète » a été coché sur cette apparence. La sonde actuelle
+> (`apps/worker/src/sonde-sante.ts`) vérifie un **battement écrit par le processus lui-même** dans
+> Redis et **l'attachement d'un travailleur de CE conteneur à chacune des cinq files**. Ce qu'elle
+> ne prouve pas est écrit noir sur blanc dans `apps/worker/README.md` — lisez-le avant de vous
+> appuyer dessus. En cas de rouge :
+>
+> ```bash
+> docker inspect --format '{{json .State.Health}}' <conteneur worker>   # la sortie de la sonde
+> ```
 
 > **Le second bloc de site (staging) est INERTE en local.** Le `Caddyfile` porte deux blocs
 > depuis l'arbitrage du 2026-08-27 (`DECISIONS.md`, « Cohabitation staging/prod : qui écoute
@@ -258,15 +311,20 @@ certificats ACME.
 | Nom                       | Type | Valeur     |
 | ------------------------- | ---- | ---------- |
 | `audit.<domaine>`         | A    | `<IP VPS>` |
-| `staging.audit.<domaine>` | A    | `<IP VPS>` |
+| `audit-staging.<domaine>` | A    | `<IP VPS>` |
 
 Si un enregistrement manque, la validation HTTP-01 échoue, **Caddy retente en boucle** (backoff
 croissant, le conteneur reste « up » mais le site est inaccessible) et Let's Encrypt plafonne
 les échecs répétés — on se retrouve bloqué pour des heures. Vérifier AVANT de démarrer :
 
 ```bash
-dig +short audit.<domaine> staging.audit.<domaine>   # DEUX fois l'IP du VPS
+dig +short audit.<domaine> audit-staging.<domaine>   # DEUX fois l'IP du VPS
 ```
+
+> **Sur `axionia-web`, ACME n'est pas de notre ressort** (`DECISIONS.md` 2026-08-28) : c'est le
+> Traefik de Coolify qui obtient et renouvelle le certificat de `audit-staging.axion-ia.com`, et
+> l'enregistrement DNS pointe l'IP de cette machine. Le tableau ci-dessus décrit le montage à
+> **deux certificats servis par notre Caddy**, qui reste celui de la production sur un VPS dédié.
 
 **b. Réseau de liaison ET volumes partagés des fronts.** `provision-vps.sh` les crée
 (étape 7bis) : un réseau (l’API de staging, joignable par le Caddy de prod) et deux volumes
@@ -337,7 +395,7 @@ deux URL** (elles sont construites à partir des variables du dessus).
 ```
 /opt/axion-audit/prod/.env       APP_ENV=prod
                                  CADDY_SITE_ADDRESS=audit.<domaine>
-                                 CADDY_STAGING_SITE_ADDRESS=staging.audit.<domaine>
+                                 CADDY_STAGING_SITE_ADDRESS=audit-staging.<domaine>
                                  API_PORT=3000
 /opt/axion-audit/staging/.env    APP_ENV=staging
                                  API_PORT=3000     ← MÊME VALEUR, obligatoire
@@ -457,6 +515,14 @@ Tâches installées (`cat /etc/cron.d/axion-audit`) :
 
 ## 5 bis. Accéder au staging — il n'y a plus de tunnel SSH
 
+> **⚠️ Cette section décrit le montage « deux piles sur un VPS dédié », PAS le staging
+> d'aujourd'hui.** Sur `axionia-web`, le frontal n'est pas notre Caddy mais le **Traefik de
+> Coolify**, qui termine TLS pour `audit-staging.axion-ia.com` puis passe la main à notre routeur
+> interne — le domaine reste unique et l'absence de CORS (11 §2) est préservée. Voir l'encadré en
+> tête de fichier, `DECISIONS.md` du 2026-08-28 et `infra/docker-compose.coolify.yml`. Les
+> vérifications de non-croisement en fin de section restent, elles, pertinentes dans les deux
+> montages.
+
 Arbitrage A01 du 2026-08-27 (`DECISIONS.md`, « Cohabitation staging/prod : qui écoute sur
 443 ? », option 2), en application littérale du 02 §11.2 (« `staging` (même VPS, **sous-domaine**,
 DB séparée) ») : **un seul Caddy**, celui de la pile de prod, lie 80/443 et sert les deux
@@ -467,7 +533,7 @@ pas faire.
 | Environnement | Adresse publique                  | Frontal                              | Ports publiés    |
 | ------------- | --------------------------------- | ------------------------------------ | ---------------- |
 | prod          | `https://audit.<domaine>`         | `caddy` du projet `axion-audit-prod` | 80, 443, 443/udp |
-| staging       | `https://staging.audit.<domaine>` | **le MÊME conteneur `caddy`**        | aucun            |
+| staging       | `https://audit-staging.<domaine>` | **le MÊME conteneur `caddy`**        | aucun            |
 
 Ce qui reste STRICTEMENT séparé (02 §30.4-4) : base PostgreSQL, buckets MinIO, Redis, volumes
 de DONNÉES,
@@ -478,13 +544,13 @@ vers les données de la prod.
 Contrôles après déploiement :
 
 ```bash
-curl -i  https://staging.audit.<domaine>/api/v1/health          # 200 + JSON de santé
-curl -i  https://staging.audit.<domaine>/                       # 200, PWA terrain (staging)
-curl -i  https://staging.audit.<domaine>/hq/                    # 200, console siège (staging)
-curl -sI https://staging.audit.<domaine>/ | grep -i x-robots-tag
+curl -i  https://audit-staging.<domaine>/api/v1/health          # 200 + JSON de santé
+curl -i  https://audit-staging.<domaine>/                       # 200, PWA terrain (staging)
+curl -i  https://audit-staging.<domaine>/hq/                    # 200, console siège (staging)
+curl -sI https://audit-staging.<domaine>/ | grep -i x-robots-tag
 # attendu : x-robots-tag: noindex, nofollow  ← un sous-domaine avec un vrai certificat est
 #           indexable, et l'outil est confidentiel.
-curl -sI https://staging.audit.<domaine>/ | grep -i content-security-policy
+curl -sI https://audit-staging.<domaine>/ | grep -i content-security-policy
 curl -sI https://audit.<domaine>/          | grep -i content-security-policy
 # attendu : les DEUX lignes sont IDENTIQUES. Les en-têtes de sécurité viennent du même
 #           snippet Caddy `(securite)` : un staging plus permissif ne validerait rien.
