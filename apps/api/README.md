@@ -11,10 +11,10 @@ Toujours **aucune route métier** (L2/L3) : l'API n'expose que ses deux sondes d
 
 ## Routes exposées
 
-| Route                  | Rôle                                                                                      |
-| ---------------------- | ----------------------------------------------------------------------------------------- |
-| `GET /v1/health`       | **Vivacité** — ne touche aucune dépendance. Docker redémarre le conteneur si elle échoue. |
-| `GET /v1/health/ready` | **Préparation** — vérifie PostgreSQL. `503` si une dépendance manque.                     |
+| Route                  | Rôle                                                                                                                                     |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /v1/health`       | **Vivacité** — ne touche aucune dépendance. Docker redémarre le conteneur si elle échoue.                                                |
+| `GET /v1/health/ready` | **Préparation** — PostgreSQL (**critique**, `503` si absent), Redis et MinIO (**dégradants**, `200 degraded`). Exemptée du quota global. |
 
 Ces deux routes ne figurent pas aux §8/§24.2 du pack (qui décrivent les routes métier) : elles sont
 documentées ici au titre du 11 §8.6. Elles n'exposent ni version, ni nom d'hôte, ni détail d'erreur.

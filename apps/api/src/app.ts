@@ -12,7 +12,6 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
-import { ERROR_CODES } from '@axion/shared';
 import { loggerFastify } from './logger.js';
 import { enregistrerGestionErreurs } from './erreurs.js';
 import { routesSante } from './routes/sante.js';
@@ -58,12 +57,38 @@ export async function construireApp(): Promise<FastifyInstance> {
     // devient le sujet du jeton — sinon plusieurs consultants derrière le même NAT
     // client partageraient un quota, ce qui bloquerait une équipe en pleine mission.
     keyGenerator: (requete) => requete.ip,
-    errorResponseBuilder: () => ({
-      error: {
-        code: ERROR_CODES.RATE_LIMITED,
-        message: 'Trop de requêtes. Réessayez dans un instant.',
-      },
-    }),
+    //
+    // PAS D'`errorResponseBuilder` ICI — ET C'EST UN CORRECTIF, PAS UN OUBLI.
+    //
+    // Le plugin ne RETOURNE pas ce que construit `errorResponseBuilder` : il le
+    // `throw`. L'objet part donc au gestionnaire d'erreurs (erreurs.ts), qui décide
+    // du statut à partir de `erreur.statusCode`.
+    //
+    // Un `errorResponseBuilder` qui rendait l'enveloppe nue `{ error: { code,
+    // message } }` — sans `statusCode` — faisait donc rendre **500 au lieu de 429** :
+    // aucune branche de erreurs.ts ne reconnaissait cet objet, il tombait dans
+    // « Erreur interne non gérée ». Mesuré en recette : rafale de 340 requêtes,
+    // 44 réponses 500.
+    //
+    // Le constructeur PAR DÉFAUT du plugin lève une vraie `Error` portant
+    // `statusCode = 429` ; la branche 3 de erreurs.ts la reconnaît et rend
+    // l'enveloppe française `RATE_LIMITED`. Le builder personnalisé était donc
+    // REDONDANT avec cette branche — et c'est lui qui la neutralisait.
+    // Les en-têtes `retry-after` et `x-ratelimit-*` sont posés par le plugin AVANT
+    // la levée : ils survivent au passage par le gestionnaire d'erreurs, et la PWA
+    // terrain peut caler son réessai dessus au lieu de marteler.
+    //
+    // Contre-indication à connaître avant de « rétablir » un builder : tout objet
+    // qu'il rendrait DOIT porter `statusCode`, sans quoi le défaut revient.
+    //
+    // Un dépassement de quota reste un ÉVÉNEMENT D'EXPLOITATION : sans cette ligne,
+    // il ne laisserait aucune trace (le 429 ne passe par aucun `log.error`) et un
+    // abus deviendrait invisible — la correction ci-dessus aurait alors remplacé un
+    // faux 500 bruyant par un vrai 429 muet. On journalise en `warn`, sans clé ni
+    // adresse IP (donnée personnelle — 11 §2, 06 §10.4).
+    onExceeded: (requete) => {
+      requete.log.warn({ url: requete.url }, 'Quota dépassé — requête refusée (429)');
+    },
   });
 
   // --- Format d'erreur unique (11 §3) ---------------------------------------
