@@ -296,6 +296,35 @@ x-logging: &logging
       max-size: '10m'
       max-file: '5'
 
+# Image PostgreSQL de cette pile — DEUX services la partagent : le serveur
+# lui-même et le job `createstanza`, qui a besoin du binaire `pgbackrest` et de
+# `/etc/pgbackrest/pgbackrest.conf` embarqué dedans. L'ancre existe pour qu'ils
+# ne puissent pas diverger : une stanza créée avec une configuration pgBackRest
+# différente de celle qu'utilise `archive_command` serait une stanza inutilisable,
+# et rien ne le dirait avant le jour de la restauration.
+#
+# Chemins relatifs à la RACINE DU DÉPÔT (encadré « RÉPERTOIRE DE PROJET »).
+#
+# CONTEXTE `./infra` ET NON `./infra/postgres` — ce n'est pas un excès de portée.
+# L'étape `config-embarquee` doit copier des fichiers qui ne vivent pas dans le
+# même dossier : `postgres/postgresql.custom.conf`, `postgres/*.sh` et
+# `pgbackrest/pgbackrest.conf`. Le dernier est hors de `infra/postgres/`, donc le
+# contexte doit remonter d'un cran.
+#
+# `target:` OBLIGATOIRE : l'étape par défaut du Dockerfile est l'image NUE
+# qu'utilisent les piles lancées à la main, celles qui montent leur configuration.
+# Sans cette cible, le conteneur démarrerait sans aucun fichier de configuration
+# et sans les deux scripts d'exploitation.
+#
+# Tag DISTINCT de `axion-audit-postgres:16` (piles à la main) : ces deux images
+# n'ont pas le même contenu, elles ne doivent pas partager un nom.
+x-postgres-image: &image-postgres
+  build:
+    context: ./infra
+    dockerfile: postgres/Dockerfile
+    target: config-embarquee
+  image: axion-audit-postgres:16-coolify
+
 services:
   # ---------------------------------------------------------------------------
   # PostgreSQL 16 — image CONSTRUITE localement (infra/postgres/Dockerfile) pour
@@ -304,26 +333,7 @@ services:
   # l'hôte (06 §10.3).
   # ---------------------------------------------------------------------------
   postgres:
-    <<: [*restart, *logging]
-    build:
-      # Chemins relatifs à la RACINE DU DÉPÔT (encadré « RÉPERTOIRE DE PROJET »).
-      #
-      # CONTEXTE `./infra` ET NON `./infra/postgres` — ce n'est pas un excès de
-      # portée. L'étape `config-embarquee` doit copier DEUX fichiers qui ne
-      # vivent pas dans le même dossier : `postgres/postgresql.custom.conf` et
-      # `pgbackrest/pgbackrest.conf`. Le second est hors de `infra/postgres/`,
-      # donc le contexte doit remonter d'un cran.
-      #
-      # `target:` OBLIGATOIRE : l'étape par défaut du Dockerfile est l'image NUE
-      # qu'utilisent les piles lancées à la main, celles qui montent leur
-      # configuration. Sans cette cible, le conteneur démarrerait sans aucun
-      # fichier de configuration.
-      context: ./infra
-      dockerfile: postgres/Dockerfile
-      target: config-embarquee
-    # Tag DISTINCT de `axion-audit-postgres:16` (piles à la main) : ces deux
-    # images n'ont pas le même contenu, elles ne doivent pas partager un nom.
-    image: axion-audit-postgres:16-coolify
+    <<: [*restart, *logging, *image-postgres]
     # Config personnalisée hors PGDATA : hba_file/ident_file doivent alors être
     # désignés explicitement (ils ne sont plus déduits du répertoire de données).
     command:
@@ -372,12 +382,36 @@ services:
       # « CONFIGURATION EMBARQUÉE » en tête de fichier.
     # AUCUNE clé `ports:` — voir l'en-tête. La base n'est joignable que par le
     # réseau interne `axion`.
+    # ┌─────────────────────────────────────────────────────────────────────────┐
+    # │ SONDE — CE N'EST PLUS `pg_isready`, ET C'EST LE CŒUR DU CORRECTIF.      │
+    # │                                                                         │
+    # │ `pg_isready` a affiché `Up 46 minutes (healthy)` et `RestartCount = 0`  │
+    # │ pendant que ce cluster se RÉINITIALISAIT 275 FOIS (2026-08-28). Il ne   │
+    # │ mentait pas sur ce qu'il mesure — il mesurait « la base accepte-t-elle  │
+    # │ une connexion À CET INSTANT », ce qui reste vrai entre deux             │
+    # │ réinitialisations espacées de dix secondes. Le postmaster (PID 1) ne    │
+    # │ meurt jamais : Docker n'a donc rien à redémarrer et rien à signaler.    │
+    # │                                                                         │
+    # │ `axion-healthcheck` vérifie trois propriétés — la stanza existe, le     │
+    # │ checkpointer (tué à CHAQUE réinitialisation) est vieux d'au moins 60 s, │
+    # │ l'archivage WAL n'est pas en échec. CE QU'ELLE NE DÉTECTE PAS est écrit │
+    # │ en toutes lettres en tête de infra/postgres/healthcheck.sh : lisez-le   │
+    # │ avant de vous y fier. Elle est embarquée dans l'image (Coolify ne monte │
+    # │ rien) — la MODIFIER N'A AUCUN EFFET SANS RECONSTRUCTION DE L'IMAGE.     │
+    # │                                                                         │
+    # │ `start_period: 150s` N'EST PAS UN DÉLAI DE 150 s AVANT LE DÉMARRAGE DE  │
+    # │ L'API : le conteneur passe `healthy` dès la PREMIÈRE réponse OK, soit   │
+    # │ ~60-70 s après le démarrage (le temps que le checkpointer atteigne le   │
+    # │ seuil d'âge). La fenêtre couvre ce délai plus la marge d'un `initdb` sur│
+    # │ une machine chargée — sans elle, un premier démarrage lent compterait   │
+    # │ ses échecs et le conteneur naîtrait `unhealthy`.                        │
+    # └─────────────────────────────────────────────────────────────────────────┘
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      test: ['CMD', 'axion-healthcheck']
       interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 30s
+      timeout: 10s
+      retries: 6
+      start_period: 150s
     networks: [axion]
     # Swap NEUTRALISÉ (memswap_limit == mem_limit) : voir l'encadré « DEUX
     # MÉCANISMES DE PLAFOND » en tête de fichier. Les trois valeurs mémoire
@@ -391,18 +425,93 @@ services:
           memory: 1024M
 
   # ---------------------------------------------------------------------------
+  # createstanza — job ONE-SHOT et IDEMPOTENT : la stanza pgBackRest, sans
+  # laquelle `archive_command` échoue à chaque segment WAL. Même forme et même
+  # garantie que `createbuckets` ci-dessous.
+  #
+  # ┌─────────────────────────────────────────────────────────────────────────┐
+  # │ POURQUOI CE SERVICE EXISTE. `stanza-create` était une ÉTAPE MANUELLE     │
+  # │ (infra/README.md §5.3). Elle n'a jamais été exécutée sur ce staging, et  │
+  # │ rien ne pouvait le montrer : la base s'affichait `healthy`. Mesuré le    │
+  # │ 2026-08-28 : dépôt pgBackRest VIDE, 0 WAL archivé, `archive-push` en     │
+  # │ 103, et 275 réinitialisations complètes du cluster en 46 minutes — la    │
+  # │ première SIX SECONDES après le démarrage du conteneur.                   │
+  # │ Une étape manuelle oubliée sur un staging sera oubliée en production ;   │
+  # │ c'est la conception qui était fautive, pas son exécution.                │
+  # └─────────────────────────────────────────────────────────────────────────┘
+  #
+  # POURQUOI `service_started` ET NON `service_healthy`. La sonde de `postgres`
+  # exige désormais que la stanza EXISTE : attendre `service_healthy` ici
+  # verrouillerait les deux services l'un sur l'autre pour toujours. Le job
+  # démarre donc avec le conteneur et attend lui-même le seul fichier dont il a
+  # besoin — `global/pg_control`, écrit par `initdb` (voir stanza-create.sh).
+  #
+  # POURQUOI IL MONTE LE VOLUME DE DONNÉES. `pgbackrest stanza-create --no-online`
+  # lit la version et l'identifiant système du cluster dans `global/pg_control`.
+  # C'est aussi ce qui lui évite d'avoir à parler au serveur : pgBackRest ne se
+  # connecte à PostgreSQL que par SOCKET UNIX, ce qu'un conteneur séparé ne peut
+  # pas faire sans partager `/var/run/postgresql` — un volume de plus, et un
+  # socket persistant. Le détail et les limites de ce choix sont en tête de
+  # infra/postgres/stanza-create.sh.
+  #
+  # `user: postgres` : le volume de données est en 0700 postgres, et le dépôt
+  # doit rester écrit par le MÊME utilisateur que celui qui exécute
+  # `archive-push` — sinon la première poussée échouerait sur les permissions.
+  # ---------------------------------------------------------------------------
+  createstanza:
+    <<: [*logging, *image-postgres]
+    restart: 'no' # exception assumée : job one-shot, pas un service
+    user: postgres
+    depends_on:
+      postgres:
+        condition: service_started
+    environment:
+      TZ: ${TZ:-UTC}
+      # Les MÊMES valeurs que le serveur : la stanza est créée pour le dépôt et
+      # le cluster que `archive_command` utilisera. Une divergence ici produirait
+      # une stanza valide et pourtant inutilisable.
+      PGDATA: /var/lib/postgresql/data
+      PGBACKREST_STANZA: ${PGBACKREST_STANZA:-axion}
+      PGBACKREST_REPO1_PATH: ${PGBACKREST_REPO_PATH:-/var/lib/pgbackrest}
+      PGBACKREST_REPO1_CIPHER_PASS: ${PGBACKREST_CIPHER_PASS:?variable obligatoire, passphrase du depot pgBackRest}
+      PGBACKREST_PG1_USER: ${POSTGRES_USER:-axion}
+      PGBACKREST_PG1_DATABASE: ${POSTGRES_DB:-axion_audit}
+    entrypoint: ['/usr/local/bin/axion-stanza-create']
+    # `command: []` NEUTRALISE le `CMD ["postgres"]` hérité de l'image officielle :
+    # sans lui, le script recevrait `postgres` en argument. Il l'ignorerait —
+    # mais un argument que personne n'a voulu finit toujours par être lu.
+    command: []
+    volumes:
+      # CIBLES LITTÉRALES, PAS INTERPOLÉES — Coolify refuse tout `${` dans une
+      # définition de volume (voir le volume homologue du service `postgres`).
+      - postgres_data:/var/lib/postgresql/data
+      - pgbackrest_repo:/var/lib/pgbackrest
+    networks: [axion]
+    # Swap neutralisé — encadré « DEUX MÉCANISMES DE PLAFOND ».
+    mem_limit: 128M
+    memswap_limit: 128M
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+
+  # ---------------------------------------------------------------------------
   # Redis 7 — files BullMQ. Mot de passe par l'environnement, jamais en argument
   # littéral (il apparaîtrait dans `docker inspect` et dans la ligne de commande).
   # ---------------------------------------------------------------------------
   redis:
     <<: [*restart, *logging]
     image: redis:7-alpine
+    # Séquence de BLOC, pas de collection en flux multi-lignes : `check:compose-coolify`
+    # et `check:isolation-reseau` embarquent un lecteur YAML qui est un sous-ensemble
+    # écrit à la main (11 §1 fige les dépendances, aucun analyseur YAML n'y figure) et
+    # qui refuse un `[` ouvert sur une ligne et fermé sur une autre. La forme ci-dessous
+    # est STRICTEMENT équivalente pour Compose, et c'est celle que Prettier conserve.
     command:
-      [
-        'sh',
-        '-c',
-        'exec redis-server --requirepass "$$REDIS_PASSWORD" --appendonly yes --appendfsync everysec',
-      ]
+      - 'sh'
+      - '-c'
+      - 'exec redis-server --requirepass "$$REDIS_PASSWORD" --appendonly yes --appendfsync everysec'
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?variable obligatoire, mot de passe Redis}
       TZ: ${TZ:-UTC}
@@ -573,6 +682,12 @@ services:
         condition: service_healthy
       createbuckets:
         condition: service_completed_successfully
+      # Redondant avec `postgres: service_healthy` — la sonde de la base exige
+      # déjà que la stanza existe — et gardé EXPRÈS, pour le diagnostic. Sans
+      # lui, une stanza qui échoue se lit « postgres unhealthy, délai dépassé » ;
+      # avec lui, « createstanza exited with code 1 » et le message du script.
+      createstanza:
+        condition: service_completed_successfully
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       APP_ENV: ${APP_ENV:-staging}
@@ -667,6 +782,9 @@ services:
       minio:
         condition: service_healthy
       createbuckets:
+        condition: service_completed_successfully
+      # Voir le même bloc dans `api` : redondance de DIAGNOSTIC, volontaire.
+      createstanza:
         condition: service_completed_successfully
     environment:
       NODE_ENV: ${NODE_ENV:-production}
@@ -926,6 +1044,33 @@ services:
         # nom de service `caddy`, qui est générique : c'est CET alias-ci qu'il
         # faut viser si une règle Traefik doit être écrite à la main un jour.
         aliases: [axion-audit-staging-caddy]
+    # -------------------------------------------------------------------------
+    # POURQUOI CETTE ÉTIQUETTE — MESURÉE, PAS SUPPOSÉE (A01, 2026-08-28)
+    #
+    # Ce conteneur vit sur TROIS réseaux : `axion-audit-coolify-interne` (le
+    # nôtre), `coolify` (le réseau partagé du proxy) et `wrunr…` (celui que
+    # Coolify injecte par application). Traefik, laissé libre, choisissait
+    # l'IP du réseau INTERNE — sur lequel `coolify-proxy` n'est pas attaché.
+    # Les paquets partaient dans le vide : le symptôme n'était pas un refus
+    # mais un BLOCAGE (curl à 000 après 15 s), ce qui est bien plus trompeur.
+    #
+    # La mesure, depuis `coolify-proxy` lui-même — seul point de vue qui compte :
+    #   10.0.4.7  (axion-audit-coolify-interne)  → injoignable
+    #   10.0.1.12 (coolify)                      → HTTP/1.1 200 OK
+    #   10.0.3.8  (wrunr…)                       → HTTP/1.1 200 OK
+    #
+    # `coolify` est retenu plutôt que `wrunr…` parce que ce dernier porte l'uuid
+    # de l'application Coolify : il CHANGE si l'application est recréée, et une
+    # étiquette qui pointe un réseau disparu rendrait la panne au premier
+    # recreate — sans rien dire. `coolify` est stable.
+    #
+    # Ce que cette étiquette N'EST PAS : une entorse à l'isolement. Le service
+    # `caddy` est déjà le SEUL à rejoindre `edge` (garde-fou
+    # `pnpm check:isolation-reseau`) ; on ne fait ici que dire à Traefik LEQUEL
+    # des trois réseaux de ce conteneur il doit emprunter.
+    # -------------------------------------------------------------------------
+    labels:
+      traefik.docker.network: coolify
     # Swap neutralisé — encadré « DEUX MÉCANISMES DE PLAFOND ».
     mem_limit: 128M
     memswap_limit: 128M

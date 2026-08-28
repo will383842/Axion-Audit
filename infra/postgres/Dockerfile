@@ -80,6 +80,46 @@ RUN set -eux; \
     chmod 0644 /etc/postgresql/postgresql.custom.conf /etc/pgbackrest/pgbackrest.conf
 
 # -----------------------------------------------------------------------------
+# DEUX SCRIPTS D'EXPLOITATION — ils voyagent DANS L'IMAGE pour la même raison que
+# les deux fichiers de configuration ci-dessus : Coolify ne monte RIEN depuis le
+# dépôt (encadré « CONFIGURATION EMBARQUÉE » du compose). Un `command:` inline
+# dans le compose aurait fait l'affaire pour le premier — c'est la forme retenue
+# par `createbuckets` — mais pas pour le second : un `healthcheck.test` inline
+# tenant une requête SQL de vingt lignes serait illisible, et la façon dont
+# Compose échappe `$` y transformerait la moindre correction en piège.
+#
+#   stanza-create.sh  exécuté UNE FOIS par le job `pgbackrest-stanza` du compose,
+#                     avant que l'API et le worker n'aient le droit de démarrer.
+#   healthcheck.sh    sonde de santé du conteneur PostgreSQL — elle REMPLACE
+#                     `pg_isready`, qui déclarait `healthy` un cluster en train de
+#                     se réinitialiser 275 fois en 46 minutes (2026-08-28).
+#
+# ILS NE SONT PAS DANS L'ÉTAPE `socle` — ET CE N'EST PAS UN CHOIX DE CONFORT.
+# `socle` est construite avec DEUX contextes différents selon la pile (`infra/`
+# ici, `infra/postgres/` pour les piles lancées à la main, voir l'encadré du
+# haut). Aucun chemin de `COPY` n'est valide dans les deux à la fois. Conséquence
+# à connaître : les piles `docker-compose.yml`, `.staging.yml` et `.prod.yml`
+# N'ONT PAS ces scripts et gardent donc leur `stanza-create` manuel et leur
+# `pg_isready` menteur. Leurs composes ne relèvent pas de ce correctif ; le jour
+# où ils devront en bénéficier, la voie est de leur donner le même contexte
+# `infra/`, PAS de dupliquer les scripts.
+COPY postgres/stanza-create.sh /usr/local/bin/axion-stanza-create
+COPY postgres/healthcheck.sh /usr/local/bin/axion-healthcheck
+
+# Exécutables par tous, modifiables par personne : le job tourne sous `postgres`
+# et la sonde sous l'utilisateur du conteneur. `chmod` explicite — le bit +x d'un
+# fichier versionné sous Windows ne survit pas au clone (core.filemode=false).
+#
+# `sh -n` : contrôle de SYNTAXE à la construction. Il ne prouve pas que les
+# scripts font ce qu'ils annoncent — seule l'exécution le prouve, et elle est
+# faite sur base jetable — mais il empêche une faute de frappe de n'apparaître
+# qu'au démarrage du conteneur, là où elle ressemble à une panne de la base.
+RUN set -eux; \
+    chmod 0755 /usr/local/bin/axion-stanza-create /usr/local/bin/axion-healthcheck; \
+    sh -n /usr/local/bin/axion-stanza-create; \
+    sh -n /usr/local/bin/axion-healthcheck
+
+# -----------------------------------------------------------------------------
 # Cible PAR DÉFAUT (la dernière) — image NUE, sans configuration embarquée.
 # C'est elle que construisent docker-compose.yml, .staging.yml et .prod.yml,
 # avec le contexte `infra/postgres/` et sans `target:`. Ces piles montent

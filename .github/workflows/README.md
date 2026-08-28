@@ -271,7 +271,24 @@ et certains garde-fous du pack ne s'appliquent tout simplement pas.
 - [ ] Dépôt **PRIVÉ** nommé `axion-audit` (02 §30.5).
 - [ ] **Secret scanning** activé + **push protection** (02 §30.4-5 : gitleaks _et_ secret scanning).
 - [ ] Actions autorisées à créer des packages ; **GHCR** lié au dépôt.
-- [ ] Rétention des images GHCR : **90 jours minimum** — c'est la fenêtre de rollback (02 §30.6).
+- [ ] Rétention des images GHCR : **90 jours minimum** — fenêtre de retour arrière **en PRODUCTION
+      uniquement** (02 §30.6).
+
+> **⚠️ Rectifié le 2026-08-28 (A56).** Cette ligne disait « c'est la fenêtre de rollback », sans
+> réserve. **C'est faux pour le staging**, et le staging est le seul environnement qui existe
+> aujourd'hui : depuis l'arbitrage « construction sur le serveur plutôt que GHCR », **le staging ne
+> tire rien de GHCR**. Ses images portent des tags **constants** (`axion-audit-caddy:coolify`,
+> `axion-audit-postgres:16-coolify`…), réécrits à chaque construction — **il n'existe donc aucune
+> image précédente vers laquelle revenir**, et l'onglet « Rollback » de Coolify est vide pour cette
+> application (il ne liste que les images dont le nom contient l'uuid de l'application).
+>
+> **Sur le staging, on ne revient pas à une image : on revient à un commit.**
+> `PATCH /api/v1/applications/{uuid}` avec `git_commit_sha`, puis `POST /api/v1/deploy`.
+> Reconstruction mesurée : **66 à 83 s**.
+>
+> **Piège documenté, et il est sérieux :** `git_commit_sha` est **persistant**. Laissé épinglé, tous
+> les déploiements suivants rejouent le vieux commit **en annonçant un succès**. Le dépingler fait
+> partie de la procédure, pas de son épilogue.
 
 ### 4.2 Protection de la branche `main` (02 §30.5)
 
