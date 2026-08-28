@@ -24,7 +24,7 @@
 | Lot | Consommé | Plafond | Reste                     |
 | --- | -------- | ------- | ------------------------- |
 | L0  | ~0,5 j   | 0,5 j   | 0 j (**plafond atteint**) |
-| L1  | ~0,2 j   | 0,5 j   | ~0,3 j                    |
+| L1  | ~0,3 j   | 0,5 j   | ~0,2 j                    |
 
 ---
 
@@ -294,6 +294,57 @@ porté deux copies, celle du worker ayant **dix champs de moins**, dont `passwor
 vérifiées par `tokens.test.ts` et non déclarées.
 
 **Coût :** ~0,05 j.
+
+---
+
+### 2026-08-28 — [L1] `pnpm verify` cesse de dépendre de l'état de la machine
+
+**Constat.** La suite E2E est sortie à **4 échecs sur 8** (front terrain,
+`ERR_CONNECTION_REFUSED` sur 4173), puis **verte deux fois de suite, sans qu'une ligne ait
+changé**. Un test intermittent est un test qui ment, et celui-ci mentait sur la commande qui sert de
+vérité terrain à tout le pipeline (11 §9ter).
+
+**Cause.** `playwright.config.ts` portait `reuseExistingServer: !enCI` — donc `true` en local.
+Playwright sondait l'URL avant de démarrer son serveur et réutilisait tout ce qui répondait. Le
+verdict de `pnpm verify` dépendait ainsi de ce qui traînait sur le port, pas du code. Signature
+cohérente avec l'observation : les tests démarrent **sans attendre** — donc la sonde a répondu — puis
+ne trouvent plus personne. Un `vite preview` résiduel, vivant à la sonde et mort pendant la course,
+suffit.
+
+**Ce qui a été changé.** `reuseExistingServer: false` sur les deux serveurs, en local comme en CI.
+
+**Prouvé par injection, DANS LES DEUX SENS** — un serveur parasite occupant 4173 :
+
+| Réglage           | Comportement observé                                                                 |
+| ----------------- | ------------------------------------------------------------------------------------ |
+| `false` (nouveau) | `Error: http://127.0.0.1:4173/ is already used` · **code retour 1**, avant tout test |
+| `!enCI` (ancien)  | parasite **réutilisé en silence** · 3 échecs **et 1 SUCCÈS**                         |
+
+La ligne qui compte est la seconde. Le test « ne contacte AUCUN domaine extérieur » est passé **au
+vert contre une page qui n'était pas l'application** — il a affirmé une propriété du produit en
+regardant autre chose que le produit. Le faux positif n'est donc pas une crainte théorique : il est
+reproduit.
+
+**Pourquoi c'est le même défaut que la fiche A-003.** Réutiliser un serveur ambiant, c'est choisir le
+**faux négatif silencieux** : `verify` peut aussi passer au vert servi par un `dist/` périmé, et
+personne ne le saura. `--strictPort` sans réutilisation échoue **bruyamment**. Le sens de l'échec
+s'inverse, exactement comme le schéma doré l'inverse pour le diff de schéma.
+
+**Le prix, assumé.** Le développeur qui a un `pnpm dev` ouvert sur 4173 verra désormais la suite
+refuser de partir. Trois secondes de gêne contre un verdict qui ne ment plus.
+
+**Pourquoi c'est étage 1.** Ne touche ni le schéma 04, ni l'API, ni la crypto, ni le périmètre
+fonctionnel : une clé de configuration de test.
+
+**RÉSERVE DE GOUVERNANCE, à porter à la porte P-A.** Ce correctif est postérieur au contrôle
+d'acceptation du gardien A02 (étape 6, verdict `ACCEPTÉ SOUS RÉSERVE` du 2026-08-28 00h40).
+L'artefact accepté a donc bougé d'une ligne après son acceptation. Le défaut n'affecte que la
+vérification LOCALE — la CI posait déjà `reuseExistingServer: false` via `!enCI` — donc le produit
+livré est inchangé et aucun critère du fichier 07 n'est concerné. **Mention explicite est faite ici
+pour que le gardien recoche s'il l'estime nécessaire ; ce n'est pas à l'agent qui corrige d'en
+décider.**
+
+**Coût :** ~0,1 j.
 
 ---
 

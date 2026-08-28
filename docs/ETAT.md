@@ -176,3 +176,21 @@ poursuit depuis trois passes — **conclure d'un contrôle sur ce qu'il n'a pas 
 coûtait une commande.
 
 Tests rouges connus : aucun. CI verte.
+
+---
+
+## 2026-08-28 04h26 — [lot L1] — étape pipeline **7/7, toujours en attente de la porte** — un défaut d'outillage fermé
+
+Dernier commit vert : 3135c56 (docs(l1): rectifier les deux textes de l'invariant 2) · Branche : lot/l0-infra · Poussé : oui
+Tâche en cours : **aucune ouverture de lot.** 11 §9bis : les portes arrêtent tout, et la porte P-A appartient à Williams. Session parallèle `axion-audit-v2-12-complet-22` observée idle depuis 23h27 ; travail repris sans écriture concurrente.
+Reprise conforme 11 §9ter : dernier bloc relu, `git status` propre, **suite complète rejouée — `pnpm verify` code retour 0** (95 unitaires · 7 fichiers d'intégration · 8 E2E).
+
+**Ce que cette session a trouvé, et que personne d'autre n'avait vu.** La suite E2E est sortie une fois à **4 échecs sur 8** (front terrain, `ERR_CONNECTION_REFUSED` sur 4173) puis **verte deux fois de suite, code inchangé**. Cause : `reuseExistingServer: !enCI` dans `playwright.config.ts` autorisait EN LOCAL la réutilisation d'un serveur ambiant — le verdict de `pnpm verify`, qui est la vérité terrain de tout le pipeline, dépendait de l'état de la machine et non du code.
+Corrigé en étage 1 (`reuseExistingServer: false` partout) et **prouvé par injection dans les deux sens** avec un serveur parasite sur 4173 : réglage neuf → `Error: … is already used`, code 1 avant tout test ; ancien réglage → parasite réutilisé en silence, 3 échecs **et 1 SUCCÈS**. Le test « ne contacte AUCUN domaine extérieur » a affirmé une propriété du produit **en regardant une page qui n'était pas le produit**. Le faux positif est reproduit, pas supposé.
+Registre : fiche du 2026-08-28 dans `AMELIORATIONS.md`, plafond étage 1 du lot L1 porté à **~0,3 j / 0,5 j**.
+
+**RÉSERVE DE GOUVERNANCE, à porter à la porte.** Ce correctif est POSTÉRIEUR au contrôle d'acceptation du gardien A02 (bloc de 00h40). L'artefact accepté a bougé d'une ligne après son acceptation. Le produit livré est inchangé — la CI posait déjà `reuseExistingServer: false` via `!enCI`, seule la vérification locale était affectée — et aucun critère du fichier 07 n'est touché. La mention est faite pour que **le gardien décide** s'il recoche : ce n'est pas à l'agent qui corrige d'en juger.
+
+Prochaine action : **la porte P-A, par Williams** — rien d'autre ne s'ouvre. En attente de lui, par ordre de blocage : (1) le VPS, seul moyen de cocher la DoD « migrations up/down sur staging » ; (2) l'arbitrage des fiches A-001, A-002 et A-003 ; (3) la validation des 29 `estimation_params`, dont la JUSTESSE lui est réservée (11 §5).
+Tests rouges connus : aucun. `pnpm verify` code 0, code retour vérifié sans masquage.
+Piège de machine, inchangé : ce poste sature (3,3 Go libres sur 15,8 avec Docker). En cas de `0xC0000142`, relancer avec `npm_config_workspace_concurrency=1`, rien d'autre en parallèle.
