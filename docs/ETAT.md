@@ -829,3 +829,55 @@ ouvert** : exactement le motif de sonde menteuse que ce lot a démonté plusieur
 `coolify-proxy` sur 80/443, donc la production du voisin. Le §5quater porte désormais la voie sûre
 (`APP_PORT=127.0.0.1:8000` + tunnel SSH sur 8000, 6001 et 6002) et la liste réelle des ports ouverts
 — 8000, mais aussi **6001, 6002 et 32769**.
+
+---
+
+## 2026-08-28 20h30 — [lot L0-b] — la preuve du coffre, et un conseil de ce fichier qui a cassé la console
+Dernier commit vert : 2a5c072 (docs(l0b): le coffre existe — et « fermer le port au pare-feu » était un conseil faux)   ·   Branche : lot/l0-infra   ·   Poussé : oui
+Tâche en cours : retrait d'une seconde recommandation fausse écrite ce soir dans `COHABITATION_AXIONIA_WEB.md` §5quater.
+Prochaine action : **jouer le déchiffrement du coffre de PRODUCTION `secrets-20260828T175324Z.coffre.gpg`** — il n'a jamais été joué que sur un coffre de test, et il exige la passphrase de Williams. Sans lui, on a prouvé qu'un coffre existe, pas qu'il sauve.
+Tests rouges connus : aucun.
+
+**LE COFFRE EXISTE — preuve brute, `docker exec … ls -la /sauvegarde` :**
+
+```
+-rw------- 1 postgres postgres 6666 Aug 28 17:53 secrets-20260828T175324Z.coffre.gpg
+-rw------- 1 postgres postgres  102 Aug 28 17:53 secrets-20260828T175324Z.coffre.gpg.sha256
+-rw------- 1 postgres postgres 9028 Aug 28 17:53 minio-20260828T175321Z.tar.zst.gpg
+-rw------- 1 postgres postgres  101 Aug 28 17:53 minio-20260828T175321Z.tar.zst.gpg.sha256
+-rw------- 1 postgres postgres  116 Aug 28 17:58 .derniere-verification
+```
+
+⚠️ **CE QUE CETTE PREUVE NE PROUVE PAS, ET QUI DOIT ÊTRE DIT À LA PORTE :** elle établit qu'un coffre
+**existe** et qu'il est **parti** (relecture R2 conforme, `e9634b5fbc00487a…`). Elle n'établit **pas
+qu'il se DÉCHIFFRE**. Ce contrôle-là n'a jamais été joué que sur un coffre de **test** ; il ne l'a
+jamais été sur celui de production, et il exige la passphrase que **seul Williams** détient. Un
+coffre qui existe et ne s'ouvre pas ne protège de rien — c'est exactement la classe de faux positif
+que ce lot démonte depuis le début.
+
+**UN SECOND CONSEIL FAUX ÉCRIT CE SOIR DANS CE DÉPÔT, ET IL A CAUSÉ UNE PANNE.** Après l'étape `ufw`
+déjà corrigée, `COHABITATION_AXIONIA_WEB.md` §5quater proposait `APP_PORT=127.0.0.1:8000`. **Williams
+l'a exécutée. Elle a échoué.** Deux défauts :
+
+1. **Syntaxe** — `docker-compose.prod.yml` interpole `${APP_PORT:-8000}` à **deux** endroits, `ports:`
+   **et** `expose:`, et `expose` n'accepte qu'un numéro nu → `invalid start port '127.0.0.1:8000'`.
+   Origine : une lecture de `grep` sans vérifier le contexte de la seconde occurrence.
+2. **Et même corrigée, elle n'aurait pas tenu 24 h** : `upgrade-*.log` datés des 26, 27 et 28 août à
+   00:00 montrent que **Coolify se met à jour seul chaque nuit et réécrit ce fichier**. Le port se
+   serait rouvert en silence.
+
+**Dégâts** : `coolify-redis` et `coolify-realtime` laissés en état `Created` (arrêtés) ; le conteneur
+`coolify` n'a jamais cessé de tourner. **Restauré** (`cp .env.avant-8000 .env` + `up -d`) : 5
+conteneurs `healthy`, `axion-ia.com` 301, `audit-staging` 200, console 302. **`axion-ia.com` n'a
+jamais été interrompu**, vérifié pendant la panne.
+
+**Trois recommandations fausses en une soirée, toutes du même motif** : `ufw` (filtre une chaîne que
+le trafic ne traverse pas), `APP_PORT` (édite un fichier qu'un automate réécrit), et avant elles
+« coffre ACTIF = coffre existe ». **Un correctif qui s'affiche appliqué et se défait tout seul est
+pire que pas de correctif** : il consomme la vigilance qui aurait servi ailleurs.
+
+**LA VOIE QUI TIENT — pare-feu Cloud Hetzner**, désormais dans le §5quater : il agit **au réseau, en
+amont de la machine**, donc il ignore le problème DNAT/`DOCKER-USER`, **aucune mise à jour de Coolify
+ne peut le défaire**, et il ne touche pas au réseau Docker. Entrant : `22/tcp`, `80/tcp`, `443/tcp`
+**et `443/udp`** (HTTP/3 — l'oublier dégrade le site sans le casser, donc sans qu'on le voie). 8000,
+6001, 6002 et 32769 tombent ensemble. **Reste hors du périmètre du lot Audit.**

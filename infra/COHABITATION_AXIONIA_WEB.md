@@ -381,11 +381,45 @@ de Williams.
 > **Ce n'est pas non plus le seul port ouvert** : outre 8000, sont joignables en clair depuis
 > Internet **6001 et 6002** (`coolify-realtime`) et **32769** (Plausible, HTTP 200).
 >
-> **La voie sûre, bornée et réversible** : `/data/coolify/source/docker-compose.prod.yml` publie
-> `"${APP_PORT:-8000}:8080"`. Poser `APP_PORT=127.0.0.1:8000` et relancer ce compose ne republie
-> plus le port que sur la boucle locale ; l'accès se fait ensuite par tunnel SSH — **en redirigeant
-> aussi 6001 et 6002**, sans quoi le temps réel du tableau de bord casse. Seul le conteneur
-> `coolify` est recréé : les applications déployées ne bougent pas, SSH n'est pas touché.
+> ### ❌ CE QUI A ÉTÉ TENTÉ ET QUI NE MARCHE PAS — `APP_PORT=127.0.0.1:8000`
+>
+> **Cette voie a été écrite ici, exécutée par Williams, et elle a ÉCHOUÉ. Elle est conservée en
+> négatif pour que personne ne la retente.** Deux défauts, dont le second condamne l'approche entière.
+>
+> **a) Erreur de syntaxe.** `/data/coolify/source/docker-compose.prod.yml` interpole
+> `${APP_PORT:-8000}` à **deux** endroits : `ports: - "${APP_PORT:-8000}:8080"` **et**
+> `expose: - "${APP_PORT:-8000}"`. `expose` n'accepte qu'un numéro nu → `invalid start port
+'127.0.0.1:8000': invalid syntax`. La faute d'origine est une lecture de `grep` sans vérification
+> du contexte de la seconde occurrence.
+>
+> **b) Et même corrigée, elle ne tiendrait pas 24 h.** `ls /data/coolify/source/upgrade-*.log` montre
+> des journaux **du 26, du 27 et du 28 août à 00:00:0X** : **Coolify se met à jour seul chaque nuit et
+> réécrit `docker-compose.prod.yml`.** Toute édition de ce fichier serait annulée en silence la nuit
+> suivante, et le port se rouvrirait sans que personne ne le voie. **C'est le même motif que `ufw`
+> ci-dessus** : un correctif qui s'affiche appliqué et se défait tout seul.
+>
+> **Dégâts et remise en état** (tracés parce qu'un incident tu est un incident qui se répète) : le
+> remplacement a échoué **avant** d'arrêter l'ancien conteneur `coolify`, qui n'a jamais cessé de
+> tourner ; `coolify-redis` et `coolify-realtime` sont restés en état `Created`, donc arrêtés.
+> Restauration par `cp .env.avant-8000 .env` + `up -d` : 5 conteneurs `healthy`, `.env` sans
+> `APP_PORT`, `axion-ia.com` 301, `audit-staging` 200, console 302. **`axion-ia.com` n'a jamais été
+> interrompu**, vérifié pendant la panne.
+>
+> ### ✅ LA VOIE QUI TIENT — le pare-feu Cloud de Hetzner
+>
+> Il s'applique **au réseau, en amont de la machine**. Il ignore donc complètement le problème
+> DNAT/`DOCKER-USER` décrit plus haut, **ne peut pas être défait par une mise à jour de Coolify**, et
+> ne peut pas casser le réseau Docker puisqu'il n'y touche pas.
+>
+> Règles entrantes : `22/tcp`, `80/tcp`, `443/tcp` **et `443/udp`** — l'UDP n'est pas un détail,
+> `coolify-proxy` publie HTTP/3, et l'oublier **dégraderait le site sans le casser**, donc sans qu'on
+> s'en aperçoive. Tout le reste refusé : 8000, 6001, 6002 et 32769 tombent d'un coup.
+>
+> Accès au tableau de bord ensuite par tunnel SSH sur 8000, 6001 et 6002 (les deux derniers portent
+> le temps réel). Plausible reste joignable par son domaine, à travers le proxy.
+>
+> **Ce geste reste hors du périmètre du lot Audit** : il s'applique à la machine du voisin, et le §2
+> réserve ces décisions à qui la connaît.
 >
 > **Bonne nouvelle du même relevé** : `axion-ia.com` répond bien en **HTTPS** (301 http → https), et
 > **notre Caddy n'est pas exposé** — le `8080` public appartient à `coolify-proxy`, le nôtre n'a
