@@ -47,7 +47,14 @@ COPY packages/ui/package.json ./packages/ui/
 # `--frozen-lockfile` : un lockfile divergent fait ÉCHOUER la construction plutôt
 # que de résoudre silencieusement une autre version. C'est la traduction du
 # « versions épinglées » du 11 §1 au niveau de l'image.
-RUN pnpm install --frozen-lockfile
+# `--prod=false` : cet étage a besoin des dépendances de DÉVELOPPEMENT — c'est
+# lui qui compile. Sans ce drapeau, pnpm les saute dès que `NODE_ENV=production`
+# est présent dans l'environnement de construction, et la compilation meurt sur
+# `sh: tsc: not found`. La CI ne posait pas cette variable, Coolify si : le
+# défaut est resté invisible jusqu'au premier déploiement réel (jjfbgjsvp27r…).
+# On ne dépend donc PAS de la valeur de NODE_ENV : on dit ce dont on a besoin.
+# L'étage `runtime` ne reprend que le résultat compilé, jamais ces dépendances.
+RUN pnpm install --frozen-lockfile --prod=false
 
 # -----------------------------------------------------------------------------
 # Cible dev — le code est monté par Compose, pas copié.
