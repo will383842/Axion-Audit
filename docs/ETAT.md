@@ -523,3 +523,41 @@ jamais deux changements à la fois sur la chaîne TLS partagée avec la producti
 Tests rouges connus : `lint` et `format:check` **rouges** sur les deux fichiers de tests
 d'intégration non suivis, laissés par un agent interrompu. Leur auteur y travaille. **La DoD est
 rouge tant qu'ils le sont.**
+
+## 2026-08-28 12h50 — [lot L0-b] — étape pipeline 6/7 — LA CHAÎNE DE SAUVEGARDE EST COMPLÈTE ET SURVEILLÉE
+
+Dernier commit vert : 64b5aa2 (feat(l0b): le service de sauvegarde n'avait aucune sonde) · Branche :
+lot/l0-infra · Poussé : oui
+
+**Déployé et vérifié sur la machine** (`uezvfow40p7zr6ixv1tdfhaq`, `finished`) :
+
+```
+sauvegarde-…   Up 56 seconds (healthy)      ← il n'avait AUCUNE parenthèse avant
+sonde à la main : « OK — sauvegarde locale il y a 3 h, copie hors serveur verifiee il y a 0 h »
+journal         : « NOTIFICATION SORTANTE INACTIVE — … PERSONNE NE SERA PRÉVENU en cas d'échec »
+extérieur       : https://audit-staging.axion-ia.com  /health 200 · /hq/ 200
+production      : axion-ia.com → 301 en 0,222 s
+```
+
+**Le staging est désormais en HTTPS sur son vrai nom**, certificat Let's Encrypt valide jusqu'au
+26/11, HSTS `preload`, redirection HTTP→HTTPS. L'opération a été menée **seule**, après la chaîne de
+sauvegarde, avec sonde de la production **à chaque tour** de la boucle — le résolveur ACME est
+partagé avec `axion-ia.com` et une erreur aurait pu l'empêcher de renouveler son certificat.
+
+**Le `.env` en 644 : le défaut n'existait pas.** Mesuré **et éprouvé par tentative** :
+`/data/coolify` et `/data/coolify/applications` sont en `700`, le chemin n'est pas traversable, la
+lecture en `nobody` est **REFUSÉE**, et la machine n'a aucun utilisateur humain avec un shell hormis
+root. *Une permission lue isolément ne dit rien de l'accès* — c'est l'erreur de `pg_isready`, commise
+par A01 dans le dossier qui la dénonce. Le point (2) de la saisine A51 est retiré.
+
+**Le runbook porte maintenant la démonstration du piège des noms de volumes**, et pas seulement
+l'avertissement : monter un volume au nom du compose **ne provoque aucune erreur** — Docker crée un
+volume vide et le monte, la commande rend 0. *Une restauration qui « réussit » sur des données
+absentes, un jour de panne, sous pression.*
+
+Prochaine action : intégrer le rendu de l'agent de tests croisés — **`lint` et `format:check` sont
+rouges sur ses deux fichiers, la DoD l'est donc aussi** — puis représenter la porte P-A au gardien
+A02, **rejouée en entier** (09 §4bis).
+
+Tests rouges connus : `lint` (4 erreurs `no-unnecessary-condition`) et `format:check` sur
+`apps/api/tests/l0-sauvegarde.integration.test.ts` et `l0-restauration.integration.test.ts`.

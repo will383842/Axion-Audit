@@ -368,6 +368,26 @@ du 2026-08-28. Ce tableau ne les remplace pas, il les rassemble pour l'exploitan
 >
 > **Le `name:` que nous écrivons ne fait donc PAS autorité sur le staging.** Ne construisez aucune
 > procédure de sauvegarde ou de restauration sur les noms `axion-coolify-*` : ils n'existent pas.
+>
+> **⚠️ CE N'EST PAS UNE ERREUR QUI ÉCHOUE — C'EST UNE ERREUR QUI RÉUSSIT, ET C'EST PIRE.**
+> Démonstration faite involontairement le 2026-08-28 par l'agent A62, qui a monté un volume au nom
+> du compose au lieu du nom réel : Docker **n'a pas refusé**. Il a **créé un volume vide** de ce nom
+> et l'a monté. La commande a rendu 0, le conteneur a démarré, et la sonde a lu un répertoire
+> d'archives parfaitement vide. Le volume parasite a été supprimé après coup (créé à 11h19m31 UTC,
+> vide, sans conteneur).
+>
+> **Transposé à une restauration en situation réelle, cela donne : une restauration qui « réussit »
+> sur des données absentes, un jour de panne, sous pression.** C'est la raison pour laquelle ce
+> paragraphe existe, et pourquoi il vaut mieux le lire deux fois qu'une.
+>
+> **Toujours résoudre le nom, jamais le supposer :**
+>
+> ```bash
+> ssh axionia-web 'docker volume ls --format "{{.Name}}" | grep wrunr6mwq2oxqq392i4myzjn'
+> ```
+>
+> _(L'uuid change si l'application Coolify est recréée — c'est pourquoi on le résout au lieu de
+> l'écrire en dur, ici comme ailleurs.)_
 
 ### 4.4 Regarder le staging — commandes vérifiées
 
