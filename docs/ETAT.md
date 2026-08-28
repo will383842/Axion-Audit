@@ -363,3 +363,38 @@ prise depuis l'extérieur** ; puis ouvrir la sauvegarde complète (invariant 8) 
 la porte P-A, au même rang que les points 19-20 qui, eux, sont désormais traités.
 
 Tests rouges connus : aucun en local.
+
+## 2026-08-28 09h35 — [lot L0-b] — étape pipeline 6/7 — LISTE DU GARDIEN PURGÉE, SAUF UN POINT
+
+Dernier commit vert : b1edf9b (test(l0b): la règle 404 arbitrée était inapplicable, et
+`fonts.check()` ment) · Branche : lot/l0-infra · Poussé : oui · **Arbre de travail propre**
+
+Sept commits poussés depuis le dernier bloc. Points du gardien A02 traités :
+
+| Point | État | Preuve |
+| ----- | ---- | ------ |
+| 19 — stanza pgBackRest mécanisée | ✅ | service ponctuel `createstanza`, idempotence mesurée, échec bloquant le déploiement |
+| 20 — sonde PostgreSQL honnête | ✅ | prouvée **dans les deux sens**, au même instant et dans le même conteneur : `pg_isready` exit 0 « accepting connections » / nouvelle sonde exit 1 « cluster réinitialisé il y a 1 s » |
+| 21 — revue croisée des garde-fous | ✅ | **six bloquants trouvés** où les scripts sortaient en 0 sur des écritures YAML légales ; 45 tests, dont 16 lignes PASSE→ECHEC contre le script de HEAD |
+| 21bis — asserter au lieu d'afficher | ✅ | second comptage indépendant confronté à l'arbre ; refus si divergence |
+| 22 — fiche AMELIORATIONS « deux formes » | ✅ | rectifiée : il y en avait **cinq**, dont trois passaient |
+| 24 — empreinte de seed reproductible | ✅ | `65929446c5c682592befc43c033229b6`, identique dans **quatre environnements indépendants** |
+| 25 — `infra/README.md` conforme à la machine | ✅ | 24 affirmations confrontées une par une ; trois marques exclusives MESURÉ / JAMAIS JOUÉE / NON VÉRIFIÉ |
+| 26 — capacité de la machine | ✅ | empreinte mesurée à ~6,5 Go ; script d'élagage en lecture seule par défaut |
+| 27 — chiffres périmés du dossier | ✅ | corrigés, y compris les cinq qui étaient miens |
+| 23 — secrets en `chmod 600` | ⏸️ | **appartient à Williams** ; le `.env` reste en 644, et un chmod manuel serait effacé au déploiement suivant |
+| 18 — migrations up/down sur staging | ⏸️ | **à REJOUER** : la mesure d'origine a été prise sur un cluster qui crashait, elle ne se recycle pas |
+
+**Le staging est joignable depuis l'extérieur** (les quatre routes en 200, `ready` rend `ready`), et la
+production `axion-ia.com` est restée intacte à chaque étape — sondée systématiquement, jamais supposée.
+
+**SEUL POINT BLOQUANT RESTANT : il n'existe aucune sauvegarde restaurable.** `pgbackrest info` →
+`status: error (no valid backups)`. L'agent A59 travaille dessus : sauvegarde complète mécanisée,
+restauration **jouée** sur base jetable et vérifiée par l'empreinte de seed, MinIO au même niveau
+d'exigence, et la copie hors serveur préparée jusqu'au point où elle devient une décision de Williams.
+
+Prochaine action : intégrer le rendu d'A59, puis **rejouer la chaîne de migrations up/down sur le socle
+assaini** — c'est la dernière ligne de DoD qui manque avant que la porte P-A puisse être représentée.
+
+Tests rouges connus : aucun. lint 0 · typecheck 0 · format:check vert · unit 140 · playwright 36 ·
+intégration 79 · 15 fichiers de test tous captés, aucun skip.
