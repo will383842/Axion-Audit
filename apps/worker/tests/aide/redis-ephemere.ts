@@ -18,8 +18,8 @@
 // suite est autoportante, elle ne suppose aucun `docker compose up` préalable et
 // n'écrit jamais dans le Redis de développement.
 // =============================================================================
-import { execFile, spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { exec, execFile, spawn, type ChildProcess } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -51,6 +51,10 @@ export async function clientBrut(file: Queue): Promise<ClientRedisBrut> {
 }
 
 const executerFichier = promisify(execFile);
+// `pnpm` est un script de plateforme (pnpm.cmd sous Windows) : il passe par le shell,
+// là où `execFile` exigerait un binaire. C'est la même commande que la CI et les
+// Dockerfiles invoquent.
+const executerCommande = promisify(exec);
 
 const ICI = dirname(fileURLToPath(import.meta.url));
 /** Racine de l'application worker (apps/worker/tests/aide → ../..). */
@@ -146,43 +150,62 @@ export async function arreterRedis(): Promise<void> {
 // Construction — la sonde éprouvée doit être la sonde COMPILÉE, et à jour
 // -----------------------------------------------------------------------------
 
-function plusRecenteModificationSource(): number {
-  const dossier = resolve(RACINE_WORKER, 'src');
-  return readdirSync(dossier)
-    .filter((f) => f.endsWith('.ts'))
-    .map((f) => statSync(resolve(dossier, f)).mtimeMs)
-    .reduce((a, b) => Math.max(a, b), 0);
-}
-
 /**
- * Garantit que `dist/` reflète `src/`. Docker exécute la sonde COMPILÉE : éprouver
- * un `dist/` périmé validerait une version que plus personne ne déploie — et ce
- * serait, encore une fois, un contrôle vert sur un artefact mort.
+ * Construit le worker AVEC ses dépendances d'espace de travail, puis vérifie que
+ * les deux artefacts attendus existent.
+ *
+ * POURQUOI CETTE COMMANDE, ET PAS UN `tsc` DIRECT. Le suffixe `...` de
+ * `--filter "@axion/worker..."` demande à pnpm de construire d'abord les paquets
+ * dont le worker dépend — aujourd'hui `packages/shared` — dans l'ordre déduit du
+ * graphe, puis le worker. On ne nomme pas ces paquets ici : pnpm les déduit, et une
+ * liste écrite à la main deviendrait fausse au premier ajout de dépendance. C'est la
+ * commande qu'emploient déjà les Dockerfiles.
+ *
+ * La première version de cette aide lançait `tsc --project tsconfig.build.json`
+ * sur le seul worker, et ne le lançait QUE si `dist/` semblait périmé face à
+ * `src/`. Verte sur un poste de développement — où `dist/` traîne depuis des
+ * heures — et ROUGE en CI : chaque job de la chaîne
+ * `jonction → build-sources → lint → typecheck → unit → integration` a son propre
+ * exécuteur et NE PARTAGE RIEN. Quand ce fichier démarre en CI, ni
+ * `apps/worker/dist`, ni `packages/shared/dist`, ni `packages/ui/dist` n'existent :
+ * le `tsc` isolé ne trouvait pas les types de ses dépendances d'espace de travail.
+ *
+ * D'où deux changements : on construit le GRAPHE, et on le construit
+ * INCONDITIONNELLEMENT. L'heuristique de fraîcheur comparait `dist/` à `src/` du
+ * seul worker — elle était aveugle à une modification de `packages/shared`, et
+ * c'est précisément le genre d'angle mort qui produit un vert trompeur. `tsc` est
+ * incrémental : reconstruire quand tout est à jour coûte quelques secondes, très
+ * en dessous du prix d'un artefact périmé validé par erreur.
  */
 export async function assurerConstruction(): Promise<void> {
-  const sonde = resolve(RACINE_WORKER, 'dist', 'sonde-sante.js');
-  const worker = resolve(RACINE_WORKER, 'dist', 'worker.js');
-  const aJour =
-    existsSync(sonde) &&
-    existsSync(worker) &&
-    Math.min(statSync(sonde).mtimeMs, statSync(worker).mtimeMs) >= plusRecenteModificationSource();
-  if (aJour) return;
-
-  await executerFichier(process.execPath, [resolve(RACINE_WORKER, 'node_modules', '.bin', 'tsc')], {
-    cwd: RACINE_WORKER,
-  }).catch(async () => {
-    // `.bin/tsc` n'est pas toujours un script Node exécutable tel quel selon la
-    // plateforme : on retombe sur le point d'entrée du paquet, qui l'est toujours.
-    await executerFichier(
-      process.execPath,
-      [
-        resolve(RACINE_DEPOT, 'node_modules', 'typescript', 'lib', 'tsc.js'),
-        '--project',
-        'tsconfig.build.json',
-      ],
-      { cwd: RACINE_WORKER },
+  try {
+    await executerCommande('pnpm --filter "@axion/worker..." build', {
+      cwd: RACINE_DEPOT,
+      maxBuffer: 16 * 1024 * 1024,
+    });
+  } catch (erreur) {
+    const details = erreur instanceof Error ? erreur.message : String(erreur);
+    throw new Error(
+      `La CONSTRUCTION du worker a échoué — les tests de la sonde ne peuvent pas commencer.\n\n` +
+        `La sonde éprouvée est l'artefact COMPILÉ (dist/sonde-sante.js), celui que le\n` +
+        `HEALTHCHECK Docker exécute. Sans construction réussie, il n'y a rien à éprouver :\n` +
+        `mieux vaut échouer ici, en le disant, que trois assertions plus loin sur une\n` +
+        `erreur obscure.\n\n` +
+        `Commande : pnpm --filter "@axion/worker..." build (worker + dépendances d'espace\n` +
+        `de travail, ordre déduit du graphe).\n\nSortie :\n${details}`,
     );
-  });
+  }
+
+  const attendus = ['sonde-sante.js', 'worker.js'].map((f) => resolve(RACINE_WORKER, 'dist', f));
+  const manquants = attendus.filter((chemin) => !existsSync(chemin));
+  if (manquants.length > 0) {
+    throw new Error(
+      `La construction a rendu 0 mais n'a pas produit :\n  ${manquants.join('\n  ')}\n\n` +
+        `Un « build » qui réussit sans émettre est le défaut que le dépôt connaît déjà\n` +
+        `(cache d'incrémentalité hors de dist/ — voir apps/worker/tsconfig.build.json).\n` +
+        `On le refuse ici plutôt que de laisser la sonde échouer sur un fichier absent.`,
+    );
+  }
 }
 
 // -----------------------------------------------------------------------------
