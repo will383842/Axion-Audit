@@ -1971,3 +1971,107 @@ subsiste** — la présente entrée arbitre, elle ne corrige pas.
 **Impact spec :** aucun. Le pack ne prescrit ni SW ni manifeste avant L5 ; cette entrée fixe l'état
 intermédiaire qu'il laissait indéfini. À reprendre au brief de **L5a** (SW + manifeste + icônes +
 écran d'installation guidé) et à cocher à la porte **P-C**.
+
+## 2026-08-28 — [l0] Le jeton `--typo-police-mono` nomme « JetBrains Mono », qui n'est épinglée nulle part
+
+**Options :**
+
+1. Ajouter `@fontsource-variable/jetbrains-mono` aux versions épinglées du 11 §1 — le jeton dirait
+   alors la vérité, au prix d'une police de plus dans chaque build et d'un amendement au contrat.
+2. Retirer le nom fantôme et laisser le jeton reposer sur la pile système
+   (`ui-monospace, SFMono-Regular, Menlo, monospace`), qui rend déjà un monospace correct partout.
+3. Ne rien faire, et laisser un jeton promettre une police que personne ne livre.
+
+**Arbitrage : option 2** — règle de précédence **sans objet** (aucune divergence interne au pack : le 11 §1 ne mentionne simplement pas cette police). Le nom est retiré, la pile système reste.
+
+Trois raisons, et la première suffit. **C'est exactement le défaut qu'on vient de corriger sur Inter :**
+un jeton qui nomme une police que rien ne charge. La différence est que sur Inter, le contrat 11 §1
+l'épinglait — la corriger était appliquer le contrat. Ici **le contrat ne dit rien**, donc l'ajouter
+serait un amendement, et le 11 §8-1 range l'ajout d'une dépendance hors de la liste §1 parmi ce qui
+ne se décide pas seul.
+
+Ensuite : **où le monospace sert-il réellement ?** Dans un outil d'audit, il sert à des identifiants
+techniques et des empreintes. Aucun écran de la Phase 1 ne repose sur une graisse ou une chasse
+particulière de JetBrains Mono. Le coût (une police de plus dans chaque build, sur un terrain iPad
+hors ligne) est réel, le bénéfice est esthétique.
+
+Enfin, l'option 3 est écartée sans hésitation : _un jeton qui annonce plus qu'il ne livre est de la
+même famille que le garde-fou qui annonce plus qu'il ne fait_, et cette famille est précisément celle
+que le lot L0-b passe sa journée à éliminer. **Le retrait n'est pas une modification de charte** :
+il ne change rien à ce que l'utilisateur voit aujourd'hui, puisque la police n'a jamais été servie.
+Il rend le jeton exact.
+
+**Réouverture prévue :** si un écran de Phase 2 justifie une chasse fixe dessinée, la question
+revient à Williams sous forme d'amendement du 11 §1 — avec un écran à l'appui, pas une préférence.
+
+**Décideur :** A01
+**Impact spec :** aucun. Le 11 §1 n'a jamais épinglé JetBrains Mono ; cette entrée aligne le jeton
+sur le contrat, elle ne modifie pas le contrat.
+
+## 2026-08-28 — [l0] Inter est sous OFL-1.1 : faut-il embarquer la licence dans le build ?
+
+**Options :**
+
+1. Embarquer le texte de la licence dans `dist` (fichier servi, ou en-tête du CSS de polices).
+2. Ne rien embarquer, la provenance étant traçable par la dépendance déclarée et le `LICENSE` du
+   paquet.
+3. Retirer la police pour éviter la question.
+
+**Arbitrage : option 1**, dans sa forme la plus légère — le texte de licence accompagne les fichiers
+de police dans le build. Règle de précédence **sans objet** : le pack ne traite nulle part des
+licences des dépendances, il n’y a donc aucune divergence à départager.
+
+L'OFL-1.1 demande que la licence accompagne les fichiers **redistribués**, et nous redistribuons bien
+deux `.woff2` dans un build servi publiquement. L'option 2 raisonne sur ce qui est vrai dans le
+dépôt ; la question porte sur ce qui **quitte** le dépôt. L'option 3 est absurde : la police est une
+exigence du contrat.
+
+**Ce qui pèse le plus ici n'est pas le risque juridique, il est faible : c'est la cohérence.** Nous
+construisons un outil d'audit, dont le métier est de vérifier que les obligations d'autrui sont
+tenues et documentées. Un manquement de conformité chez nous, si petit soit-il, est le mauvais
+exemple à donner — et le coût de le lever est de quelques kilo-octets.
+
+**Ce que cette entrée ne tranche pas** : la forme exacte (fichier `LICENSES/` servi, ou bandeau de
+commentaire dans le CSS émis) est un détail d'implémentation laissé à l'agent qui l'appliquera, à
+condition que **le texte parte réellement dans `dist`** — une mention qui reste dans le dépôt ne
+satisfait pas la clause.
+
+**Décideur :** A01, sur signalement d'A21
+**Impact spec :** aucun. Amélioration d'étage 1 (n'affecte ni le schéma 04, ni l'API, ni la crypto,
+ni le périmètre fonctionnel) ; à porter au registre `AMELIORATIONS.md` et à appliquer au prochain
+passage sur `packages/ui`.
+
+## 2026-08-28 — [l0] Redis classé « dégradant » et non « critique » dans la sonde de préparation
+
+**Options :**
+
+1. Redis **critique** : son absence rend `/v1/health/ready` en 503, l'instance sort du trafic.
+2. Redis **dégradant** : son absence rend 200 avec `status: degraded`, l'instance reste en service.
+
+**Arbitrage : option 2 pour le périmètre actuel, avec réouverture obligatoire au lot L2.** Règle de
+précédence appliquée : le 05 §9 (sync, étage §24-31) et le 03 §17 (terrain) priment sur la lecture
+stricte du 06 §10.2 (exploitation, étage §1-15) qui voudrait qu’une dépendance absente sorte
+l’instance du trafic — **l’invariant 6 « le terrain collecte » l’emporte sur le confort d’exploitation**.
+
+Aujourd'hui Redis ne porte que des files de travaux différés. Une API privée de Redis peut encore
+authentifier, lire, écrire, et **collecter** — c'est-à-dire tout ce que l'invariant 6 protège. La
+retirer du trafic pour cela sacrifierait la collecte terrain pour un traitement différé, et surtout
+**toutes les instances voyant la même dépendance absente rougiraient ensemble** : la panne d'une
+pièce se transformerait en panne totale. C'est la cascade qu'on refuse.
+
+**La réouverture n'est pas facultative.** Si le lot L2 fait vivre dans Redis la révocation de jetons
+ou le compteur de quota, **Redis devient critique** : une API qui ne peut plus vérifier qu'un jeton
+est révoqué n'est pas dégradée, elle est dangereuse. Le commentaire est déjà inscrit dans
+`apps/api/src/dependances.ts` pour que la question se pose d'elle-même au brief L2 — _une décision
+qui dépend d'un lot futur doit laisser sa trace dans le code que ce lot touchera, pas seulement dans
+un registre._
+
+Même raisonnement pour MinIO (dégradant : une pièce jointe indisponible n'empêche pas de collecter)
+et pour le worker, délibérément **non sondé** : s'il faisait rougir l'API, un simple déploiement du
+worker retirerait l'API du trafic.
+
+**Décideur :** A01, sur proposition d'A32
+**Impact spec :** ajout de la valeur `degraded` au contrat de `/v1/health/ready`, qui ne connaissait
+que `ready` et `unavailable`. Le smoke test de `deploy-staging.yml` utilise `curl -fsS` et ne teste
+que le statut HTTP : `degraded` (200) le passe — **comportement voulu et vérifié**, une instance
+dégradée doit être déployable.

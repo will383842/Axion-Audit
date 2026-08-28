@@ -83,7 +83,11 @@
 
   /* --- Typographie (Inter variable AUTO-HÉBERGÉE — jamais de CDN, 11 §1) --- */
   --typo-police-corps: 'Inter Variable', 'Inter', system-ui, -apple-system, sans-serif;
-  --typo-police-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
+  /* Nom fantôme « JetBrains Mono » RETIRÉ le 2026-08-28 (DECISIONS.md) : cette police
+     n'est épinglée nulle part au 11 §1, donc rien ne l'a jamais servie — le jeton
+     promettait ce que personne ne livrait, exactement le défaut corrigé sur Inter.
+     Le rendu ne change pas : la pile système prenait déjà le relais. */
+  --typo-police-mono: ui-monospace, 'SFMono-Regular', Menlo, monospace;
   --typo-taille-xs: 0.75rem;
   --typo-taille-sm: 0.875rem;
   --typo-taille-base: 1rem;

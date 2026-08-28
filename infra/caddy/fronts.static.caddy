@@ -48,6 +48,58 @@
 	# de la page seraient résolus depuis la racine et la console ne chargerait rien.
 	redir /hq /hq/ 308
 
+	# ┌───────────────────────────────────────────────────────────────────────────┐
+	# │ AUCUNE PWA N'EST LIVRÉE AVANT LE LOT L5c : /sw.js ET /manifest.webmanifest │
+	# │ RENDENT 404. Arbitrage A21 tracé dans DECISIONS.md (2026-08-28).          │
+	# └───────────────────────────────────────────────────────────────────────────┘
+	#
+	# CE QUE CETTE RÈGLE GARDE, ET CONTRE QUOI.
+	#
+	#  · UN SERVICE WORKER. Enregistré depuis `/`, il prend la portée de TOUT le
+	#    domaine et SURVIT au déploiement suivant : le révoquer demanderait
+	#    d'atteindre des iPads réels, en clientèle, hors ligne. Un `sw.js` servi
+	#    « pour voir » n'est pas un essai, c'est une décision irréversible prise
+	#    sur les tablettes de quelqu'un d'autre.
+	#
+	#  · UN DEMI-MANIFESTE, ET C'EST LE CAS LE PLUS TRAÎTRE. Sans icônes 192/512,
+	#    sans `maskable`, sans `apple-touch-icon` PNG, sans l'écran d'installation
+	#    guidé qu'exige 03 §29 et sans le garde-fou `storage.persist()`, un
+	#    manifeste rendrait quand même 200 `application/manifest+json` : tout le
+	#    monde cocherait la case « PWA installable », et l'ajout à l'écran d'accueil
+	#    sur iPad continuerait de produire une CAPTURE D'ÉCRAN en guise d'icône.
+	#    Un demi-manifeste est pire qu'un 404 PARCE QU'IL EST VERT.
+	#
+	# POURQUOI LA RÈGLE EST ICI, ET SURTOUT PAS DANS LES BLOCS `handle` CI-DESSOUS
+	# — mesuré sur `caddy:2-alpine` le 2026-08-28, pas supposé :
+	#
+	#  1. `handle` n'accepte QU'UN SEUL jeton de matcher. `handle /sw.js /sw2.js {…}`
+	#     ne s'analyse même pas (« wrong argument count »). D'où le matcher NOMMÉ.
+	#
+	#  2. L'ordre des directives de Caddy place `try_files` AVANT `handle`. Écrite
+	#     à côté du repli SPA — l'endroit où l'on pense spontanément la mettre —
+	#     la règle est évaluée APRÈS que `try_files` a déjà réécrit `/sw.js` en
+	#     `/index.html` : le matcher ne correspond plus à rien, et le front répond
+	#     **200 text/html**. Constaté par exécution, les deux placements côte à côte :
+	#         imbriquée près de `try_files` → /sw.js  200  text/html  (939 octets)
+	#         ici, avant les `handle`       → /sw.js  404  aucun Content-Type
+	#     Une règle qui s'analyse, se relit bien et ne garde rien est exactement le
+	#     défaut que ce dépôt traque partout ailleurs.
+	#
+	#  3. LE `Content-Type` FAIT PARTIE DE LA GARANTIE. `respond` n'est pas une
+	#     erreur : le `handle_errors` du snippet `(securite)` ne l'intercepte pas,
+	#     le corps est vide et AUCUN `Content-Type` n'est émis. C'est le point : un
+	#     repli SPA qui rendrait `index.html` ferait croire au navigateur qu'il
+	#     tient un manifeste — le 404 doit rester muet.
+	#
+	# Le matcher `@sw` du Caddyfile (`Cache-Control: no-cache…`) RESTE en place : il
+	# redeviendra utile au lot L5c. Nom distinct obligatoire — `(securite)` est
+	# importé dans le MÊME bloc de site, deux matchers homonymes se télescoperaient.
+	# LE JOUR OÙ L5c LIVRE LA PWA : SUPPRIMER CE BLOC, jamais l'affaiblir.
+	@pwa_non_livree path /sw.js /service-worker.js /manifest.webmanifest /hq/sw.js /hq/service-worker.js /hq/manifest.webmanifest
+	handle @pwa_non_livree {
+		respond 404
+	}
+
 	# Console siège : `handle_path` RETIRE le préfixe /hq. Le build Vite est en
 	# base /hq/, donc ses URL d'assets sont `/hq/assets/…` → après retrait,
 	# `/assets/…` sous la racine de la console. `try_files … /index.html` est le
@@ -69,6 +121,18 @@
 # --- Pile STAGING ------------------------------------------------------------
 (fronts_staging) {
 	redir /hq /hq/ 308
+
+	# MÊME règle que la pile principale, et pour la MÊME raison — voir l'encadré
+	# du snippet ci-dessus. Elle est RECOPIÉE et non factorisée parce qu'un snippet
+	# ne peut pas en importer un autre à cet endroit sans imposer son ordre aux
+	# `handle` du site : la duplication est ici le moindre mal, et le test
+	# `l0-pwa-404` interroge les DEUX piles pour qu'aucune ne dérive de l'autre.
+	# Staging plus permissif que la prod = staging qui ne valide plus rien : c'est
+	# exactement l'argument du snippet `(securite)`, appliqué aux fronts.
+	@pwa_non_livree path /sw.js /service-worker.js /manifest.webmanifest /hq/sw.js /hq/service-worker.js /hq/manifest.webmanifest
+	handle @pwa_non_livree {
+		respond 404
+	}
 
 	handle_path /hq/* {
 		root * /srv/staging/hq

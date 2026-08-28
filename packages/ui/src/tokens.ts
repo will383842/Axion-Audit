@@ -138,7 +138,7 @@ export const TOKENS_TAILLE = {
  */
 export const TOKENS_TYPOGRAPHIE = {
   'police-corps': "'Inter Variable', 'Inter', system-ui, -apple-system, sans-serif",
-  'police-mono': "'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace",
+  'police-mono': "ui-monospace, 'SFMono-Regular', Menlo, monospace",
   'taille-xs': '0.75rem',
   'taille-sm': '0.875rem',
   'taille-base': '1rem',
