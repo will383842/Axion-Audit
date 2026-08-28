@@ -843,6 +843,41 @@ services:
       # et compare leur SHA-256 à la source. « L'envoi a réussi » ne prouve rien.
       # L'egress R2 est facturé zéro ; seul le temps se paie.
       AXION_R2_VERIFIER_RELECTURE: ${AXION_R2_VERIFIER_RELECTURE:-oui}
+      # ┌───────────────────────────────────────────────────────────────────┐
+      # │ ALERTE SORTANTE — ET C'EST LE SEUL BLOC DE CE SERVICE EN `:-`.    │
+      # │                                                                   │
+      # │ `${VAR:-}` ET NON `${VAR:?}`, contrairement aux quatre variables  │
+      # │ R2 juste au-dessus, et la différence est un ARBITRAGE, pas une    │
+      # │ inattention. Sans destination R2, le service ne peut pas faire son│
+      # │ travail : il DOIT empêcher le déploiement. Sans canal d'alerte,   │
+      # │ il fait son travail entièrement — il le fait seulement sans       │
+      # │ prévenir. Bloquer le déploiement pour ça reviendrait à arrêter la │
+      # │ sauvegarde faute de pouvoir annoncer qu'elle a échoué.            │
+      # │                                                                   │
+      # │ LE BOT N'EXISTE PAS ENCORE (02 §11.3). Ces deux variables sont    │
+      # │ donc VIDES aujourd'hui, et c'est le cas nominal : le service      │
+      # │ démarre, sauvegarde, expédie, et ÉCRIT AU JOURNAL que la          │
+      # │ notification est INACTIVE. Il ne fait pas semblant d'alerter.     │
+      # │ Tant qu'elles sont vides, l'invariant 8 (« alerte automatique »)  │
+      # │ n'est tenu que par sa moitié VISIBLE : la sonde ci-dessous.       │
+      # │                                                                   │
+      # │ AUCUNE VALEUR ICI (02 §30.4-1/5). Le script ne les journalise     │
+      # │ jamais, pas même tronquées : il les vérifie par leur présence et  │
+      # │ par la forme de leur contenu, et il refuse une forme absurde en   │
+      # │ nommant la variable, jamais la valeur.                            │
+      # └───────────────────────────────────────────────────────────────────┘
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      # Anti-harcèlement : au plus un message par catégorie et par N heures. Une
+      # panne de trois nuits doit produire trois messages, pas trois cents — un
+      # canal qui hurle est un canal qu'on met en sourdine, et une sourdine
+      # n'alerte plus personne.
+      AXION_ALERTE_INTERVALLE_H: ${AXION_ALERTE_INTERVALLE_H:-24}
+      # Seuil de fraîcheur de la SONDE (voir l'encadré `healthcheck` ci-dessous).
+      # 30 h = 24 h de période nominale + 2 h de tolérance de rattrapage + 4 h de
+      # marge de durée d'une passe. Le détail de la somme est en tête de
+      # infra/postgres/sauvegarde-healthcheck.sh.
+      AXION_SAUVEGARDE_SEUIL_ALERTE_H: ${AXION_SAUVEGARDE_SEUIL_ALERTE_H:-30}
     entrypoint: ['/usr/local/bin/axion-sauvegarde']
     # PAS DE `command:` — SEPTIÈME CONVENTION COOLIFY, voir l'encadré du service
     # `createstanza`. `command: []` est du Compose valide mais Coolify le réécrit
@@ -865,6 +900,60 @@ services:
       # 2026-08-28 ; le raisonnement complet est en tête de sauvegarde.sh.
       - minio_data:/minio-donnees:ro
       - sauvegarde_archives:/sauvegarde
+    # ┌─────────────────────────────────────────────────────────────────────────┐
+    # │ SONDE — CE SERVICE N'EN AVAIT AUCUNE, ET C'EST LE DÉFAUT QUE CE BLOC    │
+    # │ CORRIGE. Relevé le 2026-08-28, `docker ps` :                            │
+    # │                                                                         │
+    # │     postgres-…      Up 27 minutes (healthy)                             │
+    # │     minio-…         Up 27 minutes (healthy)                             │
+    # │     sauvegarde-…    Up 26 minutes            ← RIEN                     │
+    # │                                                                         │
+    # │ `Up` ne dit pas « la copie hors serveur est sortie cette nuit » : il dit │
+    # │ « le PID 1 n'est pas mort ». Or ce service dort 23 h sur 24 — il est    │
+    # │ donc `Up` et inutile la plupart du temps, et les deux états se           │
+    # │ ressemblent trop pour être distingués par quelqu'un de pressé.          │
+    # │                                                                         │
+    # │ CE QUE LA SONDE AJOUTE, ET CE QU'ELLE N'AJOUTE PAS. Une passe qui       │
+    # │ ÉCHOUE fait déjà sortir le service en code non nul : Docker le           │
+    # │ redémarre et `Restarting` est un vrai signal — que la sonde ne remplace │
+    # │ pas, Docker n'exécutant pas de sonde sur un conteneur en redémarrage.   │
+    # │ Ce que la sonde attrape est l'autre panne, la SILENCIEUSE : la passe    │
+    # │ qui ne revient JAMAIS (un `mc` bloqué sur une socket à moitié ouverte,  │
+    # │ un `pgbackrest` en attente de verrou). Le processus est vivant, le code │
+    # │ de sortie n'arrive pas, Docker n'a rien à redémarrer, et `docker ps`    │
+    # │ affiche `Up 6 days` — pendant que plus rien ne sort de la machine.      │
+    # │                                                                         │
+    # │ ELLE LIT DEUX MARQUEURS, RIEN D'AUTRE : `.derniere-passe` et            │
+    # │ `.derniere-expedition`, écrits chacun APRÈS vérification de sa moitié.  │
+    # │ Aucun réseau, aucune connexion à la base, aucun appel à `mc` : une      │
+    # │ sonde qui interroge un service distant peut pendre, et une sonde qui    │
+    # │ pend ment par omission. CE QU'ELLE NE PROUVE PAS — et notamment         │
+    # │ qu'elle est MUETTE si la machine entière est morte — est écrit en       │
+    # │ toutes lettres en tête de infra/postgres/sauvegarde-healthcheck.sh :    │
+    # │ lisez-le avant de vous y fier. Elle est embarquée dans l'image (Coolify │
+    # │ ne monte rien) — LA MODIFIER N'A AUCUN EFFET SANS RECONSTRUCTION.       │
+    # │                                                                         │
+    # │ `interval: 5m` : la question posée est quotidienne, la sonder toutes    │
+    # │ les dix secondes n'apprendrait rien et remplirait le journal.           │
+    # │ `start_period: 30m` : au PREMIER démarrage il n'existe aucun marqueur   │
+    # │ et le service lance aussitôt une passe. Le conteneur reste `starting`   │
+    # │ le temps qu'elle aboutisse. Passé ce délai, il devient `unhealthy` avec │
+    # │ le message « AUCUNE expédition n'a JAMAIS réussi » — qui est alors      │
+    # │ EXACT, et volontairement distinct de « l'expédition a CESSÉ ».          │
+    # └─────────────────────────────────────────────────────────────────────────┘
+    #
+    # DURÉES EN SECONDES, comme partout dans ce fichier. `5m` et `30m` sont du
+    # Compose valide, mais Coolify RÉÉCRIT ce fichier avant de le déployer et ce
+    # lot a déjà perdu trois déploiements sur une forme que sa réécriture ne
+    # rendait pas à l'identique (voir l'encadré `command:` du service
+    # `createstanza`). On n'introduit pas une notation nouvelle sur le chemin
+    # d'un composant qui reformate — on écrit la forme déjà éprouvée ici.
+    healthcheck:
+      test: ['CMD', 'axion-sauvegarde-healthcheck']
+      interval: 300s
+      timeout: 10s
+      retries: 3
+      start_period: 1800s
     networks: [axion]
     # Swap neutralisé — encadré « DEUX MÉCANISMES DE PLAFOND ».
     # 512 Mo : `pgbackrest` avec `process-max=2` et compression zstd, plus le

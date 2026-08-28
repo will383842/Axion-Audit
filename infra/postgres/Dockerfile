@@ -107,9 +107,17 @@ RUN set -eux; \
 # `pg_isready` menteur. Leurs composes ne relèvent pas de ce correctif ; le jour
 # où ils devront en bénéficier, la voie est de leur donner le même contexte
 # `infra/`, PAS de dupliquer les scripts.
+#   sauvegarde-healthcheck.sh
+#                     sonde de santé du SERVICE `sauvegarde` — à ne pas
+#                     confondre avec `healthcheck.sh`, qui sonde la BASE. Elle
+#                     comble le défaut relevé le 2026-08-28 : `docker ps`
+#                     affichait `sauvegarde-… Up 26 minutes`, SANS parenthèse de
+#                     santé, c'est-à-dire « le PID 1 n'est pas mort » et rien de
+#                     plus — alors que le service passe 23 h sur 24 à dormir.
 COPY postgres/stanza-create.sh /usr/local/bin/axion-stanza-create
 COPY postgres/healthcheck.sh /usr/local/bin/axion-healthcheck
 COPY postgres/sauvegarde.sh /usr/local/bin/axion-sauvegarde
+COPY postgres/sauvegarde-healthcheck.sh /usr/local/bin/axion-sauvegarde-healthcheck
 
 # -----------------------------------------------------------------------------
 # `mc` — LE CLIENT S3 DE L'EXPÉDITION HORS SERVEUR, ET CE N'EST PAS UNE
@@ -212,11 +220,17 @@ RUN set -eux; \
 # échoue en tête de `tar | zstd | gpg` laisse `gpg` produire une archive
 # parfaitement valide d'un contenu TRONQUÉ, en sortant 0. Le raisonnement complet
 # est en tête de sauvegarde.sh.
+#
+# `axion-sauvegarde-healthcheck` est contrôlé par `sh -n` : elle ne fait que
+# deux lectures de fichiers et des comparaisons d'entiers — aucun tube à
+# protéger, donc aucune raison d'exiger `bash`. Une sonde doit être la chose la
+# plus simple du conteneur.
 RUN set -eux; \
     chmod 0755 /usr/local/bin/axion-stanza-create /usr/local/bin/axion-healthcheck \
-               /usr/local/bin/axion-sauvegarde; \
+               /usr/local/bin/axion-sauvegarde /usr/local/bin/axion-sauvegarde-healthcheck; \
     sh -n /usr/local/bin/axion-stanza-create; \
     sh -n /usr/local/bin/axion-healthcheck; \
+    sh -n /usr/local/bin/axion-sauvegarde-healthcheck; \
     bash -n /usr/local/bin/axion-sauvegarde
 
 # -----------------------------------------------------------------------------

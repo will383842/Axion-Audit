@@ -60,11 +60,38 @@
 # -----------------------------------------------------------------------------
 #   · PILE ARRÊTÉE = AUCUNE SAUVEGARDE. Un conteneur ne se réveille pas seul.
 #
-#   · AUCUNE ALERTE SORTANTE. Ni Telegram, ni courriel, ni page d'état. Un échec
-#     — local ou d'expédition — se lit dans `docker ps` (état `Restarting`,
-#     `RestartCount` qui monte) et dans `docker logs`. PERSONNE N'EST PRÉVENU.
-#     02 §11.3 prévoit Uptime Kuma ; il n'est pas déployé. Conséquence directe et
-#     assumée : la découverte d'une panne dépend d'un humain qui regarde.
+#   · LA SURVEILLANCE EXTERNE MANQUE, ET C'EST DÉSORMAIS LE TROU PRINCIPAL.
+#     Depuis ce lot, la panne est VISIBLE (sonde de santé
+#     `sauvegarde-healthcheck.sh` → `docker ps`, Coolify, toute supervision qui
+#     lit l'état Docker) et AUDIBLE (alerte Telegram, plus bas, dès que le canal
+#     existe). Ces deux pièces ont la MÊME limite, et elle est totale : ELLES
+#     S'EXÉCUTENT SUR LA MACHINE QU'ELLES SURVEILLENT. VPS éteint, disque mort,
+#     noyau bloqué, hébergeur qui coupe : plus de conteneur, donc plus de sonde,
+#     donc plus de rouge — et plus d'alerte, puisque c'est ce script qui l'émet.
+#     UN SYSTÈME NE PEUT PAS SIGNALER SA PROPRE ABSENCE. Or c'est EXACTEMENT le
+#     scénario contre lequel la copie hors serveur existe : le jour où l'on en
+#     aura besoin est le jour où rien de tout cela ne parlera.
+#     Seule une sonde EXTERNE, hébergée ailleurs, qui s'inquiète du SILENCE (un
+#     « heartbeat » que ce service cesserait d'émettre) ferme ce trou. 02 §11.3
+#     cite Uptime Kuma ; IL N'EST PAS DÉPLOYÉ, et rien dans ce fichier ne le
+#     remplace. C'est le premier point à ouvrir après ce lot.
+#
+#   · L'ALERTE SORTANTE DÉPEND D'UN CANAL QUI PEUT NE PAS EXISTER. Sans
+#     `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`, le service démarre, sauvegarde et
+#     expédie normalement — et écrit au journal, en toutes lettres, que la
+#     notification est INACTIVE. Il ne fait pas semblant d'alerter, mais dans cet
+#     état la découverte d'une panne dépend à nouveau d'un humain qui regarde
+#     `docker ps`. L'invariant 8 (« alerte automatique ») n'est alors tenu qu'à
+#     moitié — la moitié visible.
+#     Elle ne couvre pas non plus ce que Telegram ne délivre pas : un salon muet,
+#     un bot supprimé, un destinataire qui a coupé les notifications. AUCUN
+#     ACCUSÉ DE LECTURE N'EXISTE ICI — seul le `"ok":true` de l'API est vérifié,
+#     et il prouve la remise à Telegram, pas la lecture par un humain.
+#
+#   · LA SONDE DE SANTÉ NE PROUVE PAS UNE RESTAURATION. Elle lit deux
+#     horodatages écrits après vérification ; elle ne rejoue rien. Ses limites
+#     complètes sont en tête de `sauvegarde-healthcheck.sh` — à lire avant de
+#     s'y fier.
 #
 #   · R2 INJOIGNABLE TROIS NUITS DE SUITE. Ce qui se passe, précisément : chaque
 #     passe se termine en code 2, Docker redémarre le service, et au démarrage
@@ -217,6 +244,351 @@ R2_ALIAS='axionr2'
 
 journal() { printf 'sauvegarde: %s\n' "$*"; }
 
+# =============================================================================
+# NOTIFICATION SORTANTE — LA MOITIÉ QUE `docker ps` NE PEUT PAS FAIRE
+#
+# -----------------------------------------------------------------------------
+# POURQUOI ELLE EXISTE, ET POURQUOI ELLE EST ARRIVÉE EN DERNIER
+# -----------------------------------------------------------------------------
+# Ce fichier a longtemps porté, quelques dizaines de lignes plus haut, l'aveu
+# suivant : « AUCUNE ALERTE SORTANTE. […] PERSONNE N'EST PRÉVENU. » La chaîne
+# était complète — sauvegarde locale vérifiée, expédition vers R2, relecture
+# comparée, restauration jouée — et il lui manquait la seule pièce qui décide de
+# toutes les autres : quelqu'un qui apprend la panne sans avoir eu l'idée de
+# regarder. L'invariant 8 demande littéralement une « alerte automatique » ; il
+# était à moitié tenu pour cette seule raison.
+#
+# DEUX PIÈCES, PAS UNE. La sonde `sauvegarde-healthcheck.sh` rend la panne
+# VISIBLE (docker ps, Coolify, toute supervision qui lit l'état Docker) sans
+# dépendre de personne ni d'aucun secret. Ce bloc-ci la rend AUDIBLE, et il
+# dépend, lui, d'un canal que Williams doit créer. Les deux sont indépendants :
+# sans jeton Telegram, la sonde fonctionne quand même.
+#
+# -----------------------------------------------------------------------------
+# POURQUOI `openssl s_client`, ALORS QUE CE MÊME FICHIER L'A ÉCARTÉ PLUS BAS
+# -----------------------------------------------------------------------------
+# L'encadré « POURQUOI `mc` » écarte explicitement `openssl s_client` comme
+# client HTTP. LA CONTRADICTION EST APPARENTE, ET ELLE MÉRITE D'ÊTRE LEVÉE ICI
+# PLUTÔT QUE DEVINÉE : ce qui était écarté, c'était `openssl s_client` PLUS UNE
+# SIGNATURE SigV4 ÉCRITE À LA MAIN, pour téléverser des GIGAOCTETS vers S3, avec
+# reprise, découpage en plusieurs parties au-delà de 5 Go et gestion d'erreurs
+# HTTP. C'est un client S3 complet réécrit en shell — et une chaîne de
+# sauvegarde ne se fonde pas là-dessus.
+#
+# Ici, le problème n'a rien à voir : UNE requête, ~300 octets, aucun protocole
+# d'authentification à implémenter (le jeton est dans le chemin), aucun
+# découpage, aucune reprise — et surtout, un échec de cet envoi N'EST PAS UN
+# ÉCHEC DE SAUVEGARDE. Le pire cas de ce code est « le message n'est pas parti,
+# et le journal le dit ». Le pire cas du client S3 écrit à la main aurait été
+# « la copie hors serveur est corrompue et personne ne le sait ». Deux problèmes
+# de tailles incomparables, deux réponses différentes.
+#
+# CE QUI A ÉTÉ RELEVÉ DANS L'IMAGE AVANT DE CHOISIR (2026-08-28, `docker exec`
+# sur le service en vie, base postgres:16-bookworm) :
+#     PRÉSENTS : openssl 3.0.20 · mc · gpg · zstd · tar · perl 5.36 · timeout
+#     ABSENTS  : curl · wget · python3 · nc · socat · busybox
+#     ca-certificates : présent depuis ce lot (3 697 lignes), sans quoi AUCUN
+#                       client TLS ne fonctionnerait dans cette image.
+# Les voies écartées, mesurées et non supposées :
+#   · `curl`/`wget` : ABSENTS, et les ajouter est une escalade 11 §8-1 ;
+#   · `perl` : présent, mais `perl-base` seul — `IO::Socket::SSL` est absent
+#     (`Can't locate IO/Socket/SSL.pm in @INC`, relevé). Pas de TLS ;
+#   · `/dev/tcp` de bash : pas de TLS. L'API Telegram est en HTTPS uniquement ;
+#   · `mc` : c'est un client S3, pas un client HTTP générique. Il ne sait pas
+#     POSTer un formulaire vers un hôte quelconque ;
+#   · faire porter l'envoi par le service `worker` (qui a déjà TELEGRAM_* et un
+#     runtime Node) : il faudrait joindre le worker — donc un client HTTP, donc
+#     le problème initial — ou inventer une file de messages sur un volume
+#     partagé. On échangerait une notification contre un couplage nouveau entre
+#     la sauvegarde et le code applicatif, exactement ce que l'encadré « pourquoi
+#     un side-car » refuse.
+# `openssl s_client` reste, ET IL A ÉTÉ ÉPROUVÉ AVANT D'ÊTRE ÉCRIT :
+#   · POST vers api.telegram.org avec un jeton FACTICE → `HTTP/1.1 401
+#     Unauthorized`, `{"ok":false,…}`. Le transport fonctionne de bout en bout ;
+#   · certificat expiré / auto-signé / mauvais nom d'hôte → poignée de main
+#     INTERROMPUE, code 1, aucune réponse. Le corps de la requête — donc le
+#     jeton — n'est JAMAIS écrit sur une socket dont le pair n'est pas vérifié.
+#     C'est `-verify_return_error` + `-verify_hostname` qui l'obtiennent ; sans
+#     eux, `s_client` se serait contenté de se plaindre dans son journal.
+#
+# -----------------------------------------------------------------------------
+# CE QUE LE MESSAGE CONTIENT, ET CE QU'IL NE CONTIENDRA JAMAIS (11 §2, 02 §30.4-5)
+# -----------------------------------------------------------------------------
+# Il dit QUOI et DEPUIS QUAND : « la copie hors serveur n'est plus sortie depuis
+# 51 h ». Il ne dit ni avec quelles clés, ni vers quel endpoint, ni dans quel
+# bucket. Aucun secret, aucune donnée personnelle, aucun nom de client — il n'y
+# en a pas ici, mais la règle vaut d'avance. Le seul élément d'identification
+# est le PRÉFIXE D'ENVIRONNEMENT (`staging`, `prod`), qui est déjà le nom d'un
+# répertoire d'objets et n'apprend rien à personne.
+#
+# LE JETON N'APPARAÎT SUR AUCUNE LIGNE DE COMMANDE. `/proc/<pid>/cmdline` est
+# lisible par tous les utilisateurs de l'hôte — c'est déjà pourquoi le masquage
+# de l'endpoint se fait en bash pur et non avec `sed`, plus bas. La requête est
+# construite en mémoire par `printf` et poussée sur l'ENTRÉE STANDARD de
+# `openssl` ; les arguments de `openssl` ne portent que `api.telegram.org`.
+# La contrepartie honnête : le jeton reste dans l'ENVIRONNEMENT du processus,
+# comme `BACKUP_ENCRYPTION_PASSPHRASE` et les identifiants R2. C'est lisible par
+# root et par le même utilisateur, pas par les autres. On n'aggrave rien.
+#
+# LE TEXTE EST APLATI SUR UN ALPHABET SÛR avant d'entrer dans le corps de la
+# requête. Ce n'est pas de la cosmétique : un retour chariot dans un message
+# permettrait d'injecter des en-têtes HTTP, et un `&` ou un `=` de fabriquer un
+# second paramètre. Tout ce qui sort de `[A-Za-z0-9 .,:;()_-]` devient un
+# espace. Conséquence assumée : LES MESSAGES SONT SANS ACCENTS. Le journal
+# `docker logs`, lui, les garde — c'est le même choix que les verdicts SQL de
+# `healthcheck.sh`.
+#
+# -----------------------------------------------------------------------------
+# DÉGRADATION — SANS SECRET, LE SERVICE DÉMARRE, FONCTIONNE, ET LE DIT
+# -----------------------------------------------------------------------------
+# `TELEGRAM_BOT_TOKEN` et `TELEGRAM_CHAT_ID` N'EXISTENT PAS ENCORE : le bot
+# reste à créer (02 §11.3). Le service NE DOIT PAS échouer pour autant — une
+# sauvegarde qui s'arrête faute de canal d'alerte est un remède pire que le mal.
+# Il démarre donc, sauvegarde, expédie, et ÉCRIT AU JOURNAL, en toutes lettres,
+# que la notification est inactive et pourquoi. Ce qu'il ne fait surtout pas :
+# faire semblant d'alerter. Les deux variables sont déclarées `${VAR:-}` dans le
+# compose (et non `${VAR:?}` comme les quatre variables R2) précisément pour ça.
+#
+# UNE CONFIGURATION À MOITIÉ POSÉE EST TRAITÉE COMME UNE ABSENCE, PAS COMME UNE
+# PRÉSENCE : un jeton sans salon, ou un jeton dont la forme est absurde, rend la
+# notification inactive avec un message qui NOMME LA VARIABLE fautive et
+# n'affiche JAMAIS sa valeur. Un canal à moitié configuré qui échouerait
+# silencieusement chaque nuit serait le garde-fou menteur que ce lot démonte
+# depuis ce matin.
+#
+# -----------------------------------------------------------------------------
+# ANTI-HARCÈLEMENT — LA RÈGLE, EN UNE PHRASE
+# -----------------------------------------------------------------------------
+# AU PLUS UN MESSAGE PAR CATÉGORIE ET PAR ${AXION_ALERTE_INTERVALLE_H} HEURES
+# (24 par défaut), PLUS UN MESSAGE IMMÉDIAT SI LA GRAVITÉ CHANGE, PLUS UN
+# MESSAGE UNIQUE DE RÉTABLISSEMENT.
+# Concrètement, sur le scénario « R2 injoignable trois nuits » : le conteneur
+# redémarre en boucle et retente l'expédition des dizaines de fois, mais il
+# envoie TROIS messages — un par 24 h — puis un quatrième quand la copie repart.
+# Sans cette règle, la même panne produirait un message par redémarrage, soit
+# plusieurs centaines : un canal qui hurle est un canal qu'on coupe, et un canal
+# coupé n'alerte plus personne. Le changement de catégorie (`expedition` →
+# `sauvegarde`) passe outre le délai : une aggravation mérite d'être dite tout
+# de suite.
+#
+# L'ÉTAT ANTI-HARCÈLEMENT VIT DANS `$ARCHIVES/.derniere-alerte`, donc sur le
+# volume, donc il SURVIT AUX REDÉMARRAGES — c'est toute la question. Il est
+# exclu du miroir R2 par le `--exclude '.derniere-*'` déjà en place : il décrit
+# l'état de CETTE machine, il n'a rien à faire dans une copie de secours.
+# S'IL NE PEUT PAS ÊTRE ÉCRIT (volume non monté, disque plein), LA NOTIFICATION
+# EST DÉSACTIVÉE et le journal le dit. Choix assumé, et il faut en connaître le
+# revers : cette panne-là ne produira aucun message. La raison est qu'une alerte
+# sans mémoire est une alerte qui inonde, qu'un canal inondé est mis en sourdine
+# par son destinataire, et qu'un canal en sourdine vaut strictement moins que
+# pas de canal du tout. Cette panne-là reste visible par la sortie non nulle du
+# service et par la boucle de redémarrage.
+# =============================================================================
+TELEGRAM_JETON="${TELEGRAM_BOT_TOKEN:-}"
+TELEGRAM_SALON="${TELEGRAM_CHAT_ID:-}"
+# Constantes, jamais lues depuis l'environnement : ce ne sont pas des réglages.
+TELEGRAM_HOTE='api.telegram.org'
+MAGASIN_CA='/etc/ssl/certs/ca-certificates.crt'
+# Délai minimal entre deux messages de MÊME catégorie. 24 h : la sauvegarde est
+# un événement quotidien, une panne qui dure mérite un rappel par jour, pas un
+# rappel par tentative.
+ALERTE_INTERVALLE_H="${AXION_ALERTE_INTERVALLE_H:-24}"
+ALERTE_MARQUEUR="$ARCHIVES/.derniere-alerte"
+NOTIFICATION_ACTIVE='non'
+
+# Le répertoire d'archives est créé ICI et non plus bas : le marqueur
+# anti-harcèlement doit exister avant le PREMIER `echouer` possible, sinon une
+# panne de démarrage enverrait un message à chaque redémarrage.
+mkdir -p "$ARCHIVES" 2>/dev/null || true
+
+evaluer_notification() {
+  if [ -z "$TELEGRAM_JETON" ] && [ -z "$TELEGRAM_SALON" ]; then
+    journal "NOTIFICATION SORTANTE INACTIVE — TELEGRAM_BOT_TOKEN et TELEGRAM_CHAT_ID ne sont pas posés. Le service sauvegarde et expédie normalement ; PERSONNE NE SERA PRÉVENU en cas d'échec. La panne reste visible par la sonde de santé (docker ps) et par la boucle de redémarrage. Invariant 8 (« alerte automatique ») à moitié tenu tant que ce canal n'existe pas."
+    return 0
+  fi
+  if [ -z "$TELEGRAM_JETON" ] || [ -z "$TELEGRAM_SALON" ]; then
+    journal 'NOTIFICATION SORTANTE INACTIVE — une seule des deux variables TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID est posée. Une configuration à moitié faite est traitée comme une absence : mieux vaut un canal déclaré mort qu un canal qui échoue en silence.'
+    return 0
+  fi
+  # FORME DU JETON. Le jeton entre dans le CHEMIN de la requête HTTP : une
+  # valeur contenant un retour chariot ou un espace permettrait d'y injecter une
+  # requête. On la refuse sans jamais l'afficher — un message d'erreur qui cite
+  # un secret est une fuite, même quand il veut aider.
+  case "$TELEGRAM_JETON" in
+    *[!A-Za-z0-9:_-]* | *:*:* | :* | *:)
+      journal 'NOTIFICATION SORTANTE INACTIVE — TELEGRAM_BOT_TOKEN n a pas la forme d un jeton Telegram (<identifiant>:<secret>, caractères non réservés). Valeur volontairement non affichée.'
+      return 0
+      ;;
+  esac
+  case "$TELEGRAM_JETON" in
+    *:*) : ;;
+    *)
+      journal 'NOTIFICATION SORTANTE INACTIVE — TELEGRAM_BOT_TOKEN ne contient pas le séparateur `:` attendu. Valeur volontairement non affichée.'
+      return 0
+      ;;
+  esac
+  # FORME DU SALON. Numérique (éventuellement négatif pour un groupe) ou
+  # `@nom_de_canal`. Il entre dans le CORPS de la requête, mêmes conséquences.
+  case "$TELEGRAM_SALON" in
+    '-'[0-9]* | [0-9]*)
+      case "${TELEGRAM_SALON#-}" in
+        *[!0-9]*)
+          journal 'NOTIFICATION SORTANTE INACTIVE — TELEGRAM_CHAT_ID n est ni un identifiant numérique ni un @canal. Valeur volontairement non affichée.'
+          return 0
+          ;;
+      esac
+      ;;
+    '@'*)
+      case "${TELEGRAM_SALON#@}" in
+        '' | *[!A-Za-z0-9_]*)
+          journal 'NOTIFICATION SORTANTE INACTIVE — TELEGRAM_CHAT_ID ressemble à un @canal mais contient un caractère inattendu. Valeur volontairement non affichée.'
+          return 0
+          ;;
+      esac
+      ;;
+    *)
+      journal 'NOTIFICATION SORTANTE INACTIVE — TELEGRAM_CHAT_ID n est ni un identifiant numérique ni un @canal. Valeur volontairement non affichée.'
+      return 0
+      ;;
+  esac
+  case "$ALERTE_INTERVALLE_H" in
+    '' | *[!0-9]*)
+      journal "NOTIFICATION SORTANTE INACTIVE — AXION_ALERTE_INTERVALLE_H='$ALERTE_INTERVALLE_H' n est pas un entier d heures : la règle anti-harcèlement serait inapplicable."
+      return 0
+      ;;
+  esac
+  # Le transport. Sans magasin de certificats, un client TLS ne peut pas vérifier
+  # son pair — et on n'envoie pas un jeton à un pair non vérifié.
+  command -v openssl >/dev/null 2>&1 || {
+    journal 'NOTIFICATION SORTANTE INACTIVE — `openssl` est absent de cette image : aucun client TLS disponible.'
+    return 0
+  }
+  [ -s "$MAGASIN_CA" ] || {
+    journal "NOTIFICATION SORTANTE INACTIVE — magasin de certificats $MAGASIN_CA absent ou vide : le pair TLS ne pourrait pas être vérifié, le jeton ne sera pas envoyé."
+    return 0
+  }
+  # La mémoire anti-harcèlement. Voir l'encadré : pas de mémoire, pas d'alerte.
+  if [ ! -d "$ARCHIVES" ] || [ ! -w "$ARCHIVES" ]; then
+    journal "NOTIFICATION SORTANTE INACTIVE — $ARCHIVES non inscriptible : l état anti-harcèlement ne peut pas survivre à un redémarrage, et un canal sans mémoire inonderait. Cette panne reste visible par la sortie non nulle du service."
+    return 0
+  fi
+  NOTIFICATION_ACTIVE='oui'
+  journal "notification sortante ACTIVE (Telegram, un message au plus par catégorie et par ${ALERTE_INTERVALLE_H} h, plus un message de rétablissement)."
+}
+
+# Aplatissement sur un alphabet sûr, EN BASH PUR — aucune valeur ne transite par
+# une ligne de commande (`sed`, `tr`) que `/proc/<pid>/cmdline` exposerait.
+# Tout ce qui n'est pas `[A-Za-z0-9 .,:;()_-]` devient un espace : plus de
+# retour chariot (injection d'en-tête HTTP), plus de `&` ni de `=` (injection de
+# paramètre), plus d'octet multi-octets à percent-encoder. Les espaces
+# deviennent `+`, la forme attendue d'un `application/x-www-form-urlencoded`.
+texte_sur() {
+  local t="${1//[^A-Za-z0-9 .,:;()_-]/ }"
+  printf '%s' "${t// /+}"
+}
+
+# Envoi. Rend 0 si et seulement si Telegram a répondu `"ok":true`.
+# Ne journalise JAMAIS la réponse brute : elle contient l'écho de la requête sur
+# certaines erreurs.
+envoyer_telegram() {
+  local texte="$1" corps reponse
+  corps="chat_id=$(texte_sur "$TELEGRAM_SALON")&text=$(texte_sur "$texte")"
+  # Le jeton n'est écrit QUE dans cette chaîne, en mémoire, poussée sur l'entrée
+  # standard de `openssl`. Les arguments d'`openssl` ne portent que l'hôte.
+  reponse="$(
+    printf 'POST /bot%s/sendMessage HTTP/1.1\r\nHost: %s\r\nUser-Agent: axion-sauvegarde\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s' \
+      "$TELEGRAM_JETON" "$TELEGRAM_HOTE" "${#corps}" "$corps" \
+      | timeout 20 openssl s_client -connect "${TELEGRAM_HOTE}:443" \
+          -servername "$TELEGRAM_HOTE" -CAfile "$MAGASIN_CA" \
+          -verify_return_error -verify 5 -verify_hostname "$TELEGRAM_HOTE" \
+          -quiet -ign_eof 2>/dev/null
+  )" || return 1
+  case "$reponse" in
+    *'"ok":true'*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Âge d'un marqueur en heures, ou `inconnu`. Sert à dire DEPUIS QUAND.
+age_marqueur_h() {
+  local fichier="$ARCHIVES/$1" valeur ecart
+  [ -r "$fichier" ] || {
+    printf 'inconnu'
+    return 0
+  }
+  valeur="$(cat "$fichier" 2>/dev/null || true)"
+  case "$valeur" in
+    '' | *[!0-9]*)
+      printf 'inconnu'
+      return 0
+      ;;
+  esac
+  ecart=$(($(date -u +%s) - valeur))
+  [ "$ecart" -ge 0 ] || {
+    printf 'inconnu (horloge reculee)'
+    return 0
+  }
+  printf '%s h' $((ecart / 3600))
+}
+
+# Faut-il taire ce message ? Rend 0 pour « oui, on se tait ».
+alerte_etouffee() {
+  local categorie="$1" precedente ts age
+  [ -r "$ALERTE_MARQUEUR" ] || return 1
+  precedente=''
+  ts=''
+  read -r precedente ts <"$ALERTE_MARQUEUR" 2>/dev/null || true
+  # Catégorie différente = aggravation ou changement de nature : on parle.
+  [ "$precedente" = "$categorie" ] || return 1
+  case "$ts" in
+    '' | *[!0-9]*) return 1 ;;
+  esac
+  age=$(($(date -u +%s) - ts))
+  # Un marqueur daté dans le futur (horloge reculée) ne doit pas étouffer
+  # indéfiniment : on parle plutôt que de se taire pour une mauvaise raison.
+  [ "$age" -ge 0 ] || return 1
+  [ "$age" -lt $((ALERTE_INTERVALLE_H * 3600)) ]
+}
+
+# NOTIFIER NE FAIT JAMAIS ÉCHOUER SON APPELANT. Il est appelé depuis les deux
+# fonctions de sortie en erreur : une alerte qui n'est pas partie ne doit ni
+# masquer, ni aggraver, ni retarder l'échec d'origine.
+notifier() {
+  local categorie="$1" texte="$2"
+  if [ "$NOTIFICATION_ACTIVE" != 'oui' ]; then
+    journal "alerte NON transmise (notification inactive) — $texte"
+    return 0
+  fi
+  if alerte_etouffee "$categorie"; then
+    journal "alerte '$categorie' déjà transmise il y a moins de ${ALERTE_INTERVALLE_H} h — message étouffé (anti-harcèlement), l'échec reste dans ce journal."
+    return 0
+  fi
+  if envoyer_telegram "$texte"; then
+    printf '%s %s\n' "$categorie" "$(date -u +%s)" >"$ALERTE_MARQUEUR" 2>/dev/null || true
+    journal "alerte '$categorie' transmise."
+  else
+    # Pas de marqueur écrit : un envoi raté n'a pas droit au silence des 24 h
+    # suivantes. La prochaine passe réessaiera.
+    journal "ÉCHEC DE L'ENVOI DE L'ALERTE '$categorie' (réseau, jeton, ou Telegram indisponible). Le message n'est PAS parti ; l'échec d'origine reste dans ce journal."
+  fi
+  return 0
+}
+
+# Rétablissement : UN message, et seulement si une alerte était en cours.
+notifier_retablissement() {
+  local precedente='' ts=''
+  [ "$NOTIFICATION_ACTIVE" = 'oui' ] || return 0
+  [ -r "$ALERTE_MARQUEUR" ] || return 0
+  read -r precedente ts <"$ALERTE_MARQUEUR" 2>/dev/null || true
+  if envoyer_telegram "Axion Audit ($R2_PREFIXE) RETABLI : la sauvegarde locale et la copie hors serveur sont a nouveau completes et verifiees. Alerte precedente : $precedente."; then
+    journal 'rétablissement transmis.'
+  else
+    journal "ÉCHEC DE L'ENVOI DU MESSAGE DE RÉTABLISSEMENT — la sauvegarde, elle, est bien repartie."
+  fi
+  # Le marqueur est retiré DANS TOUS LES CAS : la panne est finie, et garder
+  # l'état étoufferait la prochaine alerte de même catégorie.
+  rm -f "$ALERTE_MARQUEUR"
+}
+
 # DEUX MODES D'ÉCHEC, DEUX CODES DE SORTIE — LA DISTINCTION EST LE POINT.
 #   1 = LA SAUVEGARDE N'A PAS ÉTÉ FAITE. Il n'y a rien de neuf à restaurer.
 #   2 = LA SAUVEGARDE EST FAITE ET VÉRIFIÉE EN LOCAL, MAIS ELLE N'EST PAS SORTIE
@@ -225,13 +597,38 @@ journal() { printf 'sauvegarde: %s\n' "$*"; }
 #       les deux, c'est reconstruire le garde-fou menteur que ce service a été
 #       écrit pour démonter.
 # Les deux font sortir le service en code non nul, donc redémarrer Docker.
-echouer() { printf 'sauvegarde: ECHEC SAUVEGARDE — %s\n' "$*" >&2; exit 1; }
+#
+# CHACUNE ALERTE AVANT DE SORTIR, dans SA catégorie — c'est la même distinction
+# de gravité, portée jusqu'au destinataire. Le message dit QUOI et DEPUIS QUAND ;
+# le détail technique (message de `mc`, de `pgbackrest`, de `gpg`) reste dans le
+# journal, où il ne risque pas de publier un endpoint dans un salon.
+echouer() {
+  printf 'sauvegarde: ECHEC SAUVEGARDE — %s\n' "$*" >&2
+  notifier sauvegarde "Axion Audit ($R2_PREFIXE) ECHEC SAUVEGARDE : la passe locale n a pas abouti. Derniere sauvegarde locale reussie : $(age_marqueur_h .derniere-passe). Il n y a rien de neuf a restaurer depuis. Detail dans docker logs." || true
+  exit 1
+}
 echouer_expedition() {
   printf 'sauvegarde: ECHEC EXPEDITION — %s\n' "$*" >&2
   printf "sauvegarde: la sauvegarde LOCALE de cette passe est faite et vérifiée ; elle N'A PAS QUITTÉ LA MACHINE.\n" >&2
   printf "sauvegarde: tant que ce message revient, la règle 3-2-1 (02 §11.4) est rompue : la perte du VPS emporterait tout.\n" >&2
+  # LES IDENTIFIANTS R2 SORTENT DE L'ENVIRONNEMENT AVANT D'APPELER `openssl`.
+  # `nettoyer_mc` dit d'elle-même que « les fonctions appelées ensuite n'ont
+  # aucune raison de porter les identifiants R2 » ; l'envoi de l'alerte est
+  # justement une fonction appelée ensuite, et elle lance un processus tiers qui
+  # hériterait de l'environnement. Aucune fuite connue par ce chemin —
+  # `/proc/<pid>/environ` n'est lisible que par le même utilisateur et par root,
+  # comme pour le processus parent — mais on ne relâche pas une propriété qu'on
+  # s'est donné la peine d'écrire. Appel idempotent : le `trap` EXIT le refera.
+  nettoyer_mc
+  notifier expedition "Axion Audit ($R2_PREFIXE) ECHEC COPIE HORS SERVEUR : la sauvegarde locale est faite et verifiee, elle n est PAS sortie de la machine. Derniere copie hors serveur reussie : $(age_marqueur_h .derniere-expedition). Regle 3-2-1 rompue : perdre le serveur maintenant, c est tout perdre depuis cette date. Detail dans docker logs." || true
   exit 2
 }
+
+# ÉTAT DU CANAL D'ALERTE — décidé ICI, avant le premier `echouer` possible, pour
+# qu'une panne de démarrage puisse elle aussi être annoncée. Cette fonction
+# n'échoue jamais : elle rend le canal actif, ou elle explique au journal
+# pourquoi il ne l'est pas.
+evaluer_notification
 
 # -----------------------------------------------------------------------------
 # Contrôles d'entrée — un paramètre absurde doit se voir au DÉMARRAGE, pas à
@@ -711,6 +1108,11 @@ passe() {
   expedier_r2
   date -u +%s > "$ARCHIVES/.derniere-expedition"
   journal '=== passe terminée avec succès (locale ET hors serveur) ==='
+  # Le rétablissement se dit UNE FOIS, et seulement si une alerte était ouverte.
+  # Sans cette ligne, la panne aurait un début annoncé et pas de fin : le
+  # destinataire resterait inquiet, ou — pire — prendrait l'habitude de ne plus
+  # y croire.
+  notifier_retablissement
 }
 
 # -----------------------------------------------------------------------------
@@ -766,6 +1168,10 @@ elif doit_rattraper_expedition; then
   expedier_r2
   date -u +%s > "$ARCHIVES/.derniere-expedition"
   journal 'expédition de rattrapage terminée avec succès.'
+  # Même geste qu'en fin de `passe` : c'est précisément par ce chemin que sort
+  # une panne R2 qui se résorbe — la boucle de redémarrage finit par réussir son
+  # expédition, sans refaire de sauvegarde.
+  notifier_retablissement
 fi
 
 # ÉCHEC = SORTIE NON NULLE, sans filet. Aucun `|| true`, aucune reprise
