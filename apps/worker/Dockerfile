@@ -62,6 +62,14 @@ RUN pnpm install --frozen-lockfile --prod=false
 FROM deps AS dev
 ENV NODE_ENV=development
 
+# Sonde de santé — MÊME sonde qu'en production, seul le chemin change : ici le WORKDIR
+# est la racine du monorepo monté, là-bas le paquet déployé. Ce que la sonde prouve (et
+# ce qu'elle ne prouve pas) est écrit en tête de `apps/worker/src/sonde-sante.ts`.
+# `start-period` est plus long qu'en production : en développement, `dist/` n'existe
+# qu'après la première passe de `tsc --watch`.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=90s --retries=6 \
+  CMD ["node", "apps/worker/dist/sonde-sante.js"]
+
 ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["pnpm", "--filter", "@axion/worker", "dev"]
 
@@ -100,10 +108,17 @@ COPY --from=build --chown=node:node /paquet/package.json ./package.json
 USER node
 
 
-# Pas de sonde HTTP : le worker n'expose aucun port (02 §4.1 — il consomme des
-# files, il ne sert pas de trafic). Sa vivacité est celle de son processus, et
-# BullMQ signale ses pannes par le journal (voir les gestionnaires `failed` et
-# `error` de worker.ts). Une sonde factice donnerait une fausse assurance.
+# Pas de sonde HTTP : le worker n'expose aucun port (02 §4.1 — il consomme des files,
+# il ne sert pas de trafic). Sa santé se lit donc DANS REDIS, pas dans une table de
+# processus : `sonde-sante.ts` vérifie le battement de cœur de CETTE instance et son
+# attachement à chacune des files. Le raisonnement complet — y compris la liste de ce
+# que la sonde NE couvre PAS — est en tête de `apps/worker/src/sonde-sante.ts`.
+#
+# Ce qui était écrit ici avant (« sa vivacité est celle de son processus ») a coûté
+# treize heures de `healthy` sur un worker mort : la sonde comptait les processus node,
+# et `tsc --watch` en est un. Un voisin du sujet n'est jamais une preuve sur le sujet.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=6 \
+  CMD ["node", "dist/sonde-sante.js"]
 
 ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["node", "dist/worker.js"]

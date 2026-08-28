@@ -712,13 +712,25 @@ services:
       ALERT_LLM_JOB_MAX_MINUTES: ${ALERT_LLM_JOB_MAX_MINUTES:-5}
       ALERT_CERT_EXPIRY_DAYS: ${ALERT_CERT_EXPIRY_DAYS:-15}
       ALERT_SYNC_SILENT_HOURS: ${ALERT_SYNC_SILENT_HOURS:-24}
-    healthcheck:
-      # Le worker n'expose pas d'HTTP (BullMQ) : sonde de vivacité du processus.
-      test: ['CMD-SHELL', 'pgrep -f node >/dev/null || exit 1']
-      interval: 15s
-      timeout: 5s
-      retries: 6
-      start_period: 60s
+    # PAS DE `healthcheck:` ICI — ET C'EST DÉLIBÉRÉ.
+    #
+    # Une clé `healthcheck` dans le compose ÉCRASE le `HEALTHCHECK` de l'image.
+    # Celui du Dockerfile est la sonde honnête (`dist/sonde-sante.js`) : battement
+    # écrit dans Redis toutes les 5 s avec expiration à 20 s, PLUS vérification que
+    # ce conteneur-ci est attaché aux CINQ files. On la laisse gouverner.
+    #
+    # CE QU'IL Y AVAIT ICI, ET POURQUOI IL A DISPARU :
+    #     test: ['CMD-SHELL', 'pgrep -f node >/dev/null || exit 1']
+    # Cette sonde vérifiait qu'UN processus node existe. Or le lanceur de
+    # développement fait tourner `tsc --watch` à côté du serveur — et `tsc` EST un
+    # processus node. Elle était donc verte parce que le COMPILATEUR tournait,
+    # pendant que le worker était mort. `docker ps` a annoncé « Up 13 hours
+    # (healthy) » sur un worker qui n'avait JAMAIS démarré, depuis le lot L0 — et
+    # le critère « docker compose up = stack complète » a été coché là-dessus.
+    #
+    # Le chemin de la sonde DIFFÈRE selon la cible (`apps/worker/dist/…` en dev,
+    # `dist/…` en runtime) : le Dockerfile le sait, un copier-coller ici serait
+    # faux. Raison de plus pour ne pas la redéclarer.
     networks: [axion]
     # Swap neutralisé — encadré « DEUX MÉCANISMES DE PLAFOND ».
     mem_limit: 768M
