@@ -30,6 +30,45 @@
 # │ c'est ce qui est fait ci-dessous, sur tous les services sans exception.   │
 # └───────────────────────────────────────────────────────────────────────────┘
 #
+# ┌───────────────────────────────────────────────────────────────────────────┐
+# │ ⚠️ RÉPERTOIRE DE PROJET — TOUS LES CHEMINS RELATIFS DE CE FICHIER PARTENT │
+# │    DE LA RACINE DU DÉPÔT, PAS DE `infra/`.                                │
+# │                                                                           │
+# │ C'EST L'INVERSE DES TROIS AUTRES FICHIERS COMPOSE DU DÉPÔT. Ne « corrigez │
+# │ pas » cette divergence : elle est la CONDITION du déploiement.            │
+# │                                                                           │
+# │ POURQUOI. Compose résout les chemins relatifs depuis le RÉPERTOIRE DE     │
+# │ PROJET. Par défaut c'est le dossier du fichier `-f` — d'où le `context:   │
+# │ ..` de infra/docker-compose.yml. Mais Coolify FIXE ce répertoire lui-même │
+# │ et le met à la racine du dépôt cloné :                                    │
+# │                                                                           │
+# │   docker compose --project-directory /artifacts/<uuid> \                  │
+# │     -f /artifacts/<uuid>/infra/docker-compose.coolify.yml build …         │
+# │                                                                           │
+# │ Avec `context: ..`, Compose remontait alors AU-DESSUS de la racine et     │
+# │ cherchait `/artifacts/apps` au lieu de `/artifacts/<uuid>/apps` :         │
+# │   « resolve : lstat /artifacts/apps: no such file or directory »          │
+# │ (échec du déploiement wrunr6mwq2oxqq392i4myzjn, 2026-08-28).              │
+# │ Ce fichier suit donc LA CONVENTION DE COOLIFY. `docker-compose.yml`,      │
+# │ `.staging.yml` et `.prod.yml` gardent la leur et restent INCHANGÉS : ils  │
+# │ sont lancés à la main, avec le répertoire de projet par défaut.           │
+# │                                                                           │
+# │ CONSÉQUENCE À CONNAÎTRE — LA VALIDATION LOCALE CHANGE DE COMMANDE.        │
+# │ La commande habituelle prendrait `infra/` comme répertoire de projet et   │
+# │ casserait tous les chemins, soit exactement le bug corrigé ici, à         │
+# │ l'envers. Depuis la RACINE du dépôt, valider avec :                       │
+# │                                                                           │
+# │   docker compose --project-directory . \                                  │
+# │     -f infra/docker-compose.coolify.yml config -q                         │
+# │                                                                           │
+# │ `--project-directory .` reproduit ce que fait Coolify. Sans ce drapeau,   │
+# │ un échec de validation ne prouve RIEN sur le déploiement réel — et un     │
+# │ succès non plus.                                                          │
+# │                                                                           │
+# │ `dockerfile:` reste relatif au `context:` et n'est donc PAS concerné :    │
+# │ `apps/api/Dockerfile` s'écrit à l'identique dans les quatre fichiers.     │
+# └───────────────────────────────────────────────────────────────────────────┘
+#
 # -----------------------------------------------------------------------------
 # CE QUE CE FICHIER FAIT, ET CE QU'IL NE FAIT PAS
 # -----------------------------------------------------------------------------
@@ -207,7 +246,7 @@ x-logging: &logging
 
 services:
   # ---------------------------------------------------------------------------
-  # PostgreSQL 16 — image CONSTRUITE localement (Dockerfile ./postgres) pour
+  # PostgreSQL 16 — image CONSTRUITE localement (infra/postgres/Dockerfile) pour
   # embarquer pgBackRest (02 §11.4). Identique à infra/docker-compose.yml, sans
   # la publication de port : en staging la base n'est jamais joignable depuis
   # l'hôte (06 §10.3).
@@ -215,7 +254,9 @@ services:
   postgres:
     <<: [*restart, *logging]
     build:
-      context: ./postgres
+      # Chemin relatif à la RACINE DU DÉPÔT, pas à `infra/` — voir l'encadré
+      # « RÉPERTOIRE DE PROJET » en tête de fichier.
+      context: ./infra/postgres
       dockerfile: Dockerfile
     image: axion-audit-postgres:16
     # Config personnalisée hors PGDATA : hba_file/ident_file doivent alors être
@@ -259,8 +300,9 @@ services:
       # figé. Si l'on change l'un, il faut changer l'autre : ils ne sont plus liés
       # par le fichier, et rien ne le vérifie.
       - pgbackrest_repo:/var/lib/pgbackrest
-      - ./postgres/postgresql.custom.conf:/etc/postgresql/postgresql.custom.conf:ro
-      - ./pgbackrest/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
+      # Montages relatifs à la RACINE DU DÉPÔT (encadré « RÉPERTOIRE DE PROJET »).
+      - ./infra/postgres/postgresql.custom.conf:/etc/postgresql/postgresql.custom.conf:ro
+      - ./infra/pgbackrest/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
     # AUCUNE clé `ports:` — voir l'en-tête. La base n'est joignable que par le
     # réseau interne `axion`.
     healthcheck:
@@ -449,7 +491,9 @@ services:
   api:
     <<: [*restart, *logging]
     build:
-      context: ..
+      # `.` = RACINE DU DÉPÔT, pas `infra/..` (encadré « RÉPERTOIRE DE PROJET »).
+      # `dockerfile:` reste, lui, relatif au `context:` — donc inchangé.
+      context: .
       dockerfile: apps/api/Dockerfile
       target: runtime
     image: axion-audit-api:coolify
@@ -543,7 +587,8 @@ services:
   worker:
     <<: [*restart, *logging]
     build:
-      context: ..
+      # `.` = RACINE DU DÉPÔT (encadré « RÉPERTOIRE DE PROJET »).
+      context: .
       dockerfile: apps/worker/Dockerfile
       target: runtime
     image: axion-audit-worker:coolify
@@ -630,7 +675,8 @@ services:
   field:
     <<: [*logging]
     build:
-      context: ..
+      # `.` = RACINE DU DÉPÔT (encadré « RÉPERTOIRE DE PROJET »).
+      context: .
       dockerfile: apps/field/Dockerfile
       target: runtime
       args:
@@ -659,7 +705,8 @@ services:
   hq:
     <<: [*logging]
     build:
-      context: ..
+      # `.` = RACINE DU DÉPÔT (encadré « RÉPERTOIRE DE PROJET »).
+      context: .
       dockerfile: apps/hq/Dockerfile
       target: runtime
       args:
@@ -753,13 +800,14 @@ services:
     expose:
       - '8080'
     volumes:
-      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Montages relatifs à la RACINE DU DÉPÔT (encadré « RÉPERTOIRE DE PROJET »).
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       # LES DEUX variantes sont montées, comme partout ailleurs : c'est
       # {$CADDY_FRONT_CONFIG} qui choisit laquelle est importée. Ne monter que
       # la variante « utile » ferait échouer Caddy sur une erreur d'import si la
       # variable était mal renseignée, au lieu de servir.
-      - ./caddy/fronts.dev.caddy:/etc/caddy/fronts.dev.caddy:ro
-      - ./caddy/fronts.static.caddy:/etc/caddy/fronts.static.caddy:ro
+      - ./infra/caddy/fronts.dev.caddy:/etc/caddy/fronts.dev.caddy:ro
+      - ./infra/caddy/fronts.static.caddy:/etc/caddy/fronts.static.caddy:ro
       # Racines du snippet (fronts_principal) de fronts.static.caddy, montées en
       # LECTURE SEULE : Caddy sert des fichiers, il n'en écrit aucun.
       # Les racines /srv/staging/* du second bloc ne sont volontairement PAS
