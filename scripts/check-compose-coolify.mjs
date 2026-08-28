@@ -118,6 +118,42 @@ for (const [i, ligne] of lignes.entries()) {
   }
 }
 
+// --- Règle 3 : AUCUN montage de fichier depuis le dépôt ----------------------
+//
+// C'est la convention dont la violation est la PLUS DISCRÈTE, et elle a coûté le
+// sixième déploiement. Coolify ne monte jamais depuis le dépôt cloné : il
+// réécrit toute source relative vers son répertoire persistant
+// `/data/coolify/applications/<uuid>/`, où il ne dépose que `docker-compose.yaml`
+// et `.env`. La source n'existant pas, **Docker crée un RÉPERTOIRE VIDE** — et
+// le conteneur reçoit un dossier là où il attend un fichier :
+//
+//     bind /data/coolify/applications/<uuid>/infra/postgres/postgresql.custom.conf
+//       -> /etc/postgresql/postgresql.custom.conf
+//     drwxr-xr-x 2 root root 4096 …   ← un répertoire, pas le fichier attendu
+//
+//     LOG:   input in flex scanner failed at file "…custom.conf" line 1
+//     FATAL: configuration file "…custom.conf" contains errors
+//
+// Rien ne le signale avant l'exécution : `docker compose config` est content, le
+// build passe, et c'est au démarrage que la base refuse de vivre. D'où ce
+// contrôle — c'est A11 qui l'a réclamé en livrant, ayant constaté que les trois
+// autres conventions étaient gardées et pas celle-ci.
+//
+// La configuration voyage donc DANS LES IMAGES (voir les Dockerfiles de
+// `infra/postgres` et `infra/caddy`). Les VOLUMES NOMMÉS ne sont pas concernés :
+// Coolify les gère normalement, et eux seuls doivent apparaître ici.
+for (const [i, ligne] of lignes.entries()) {
+  const mont = /^\s*-\s+(\.{1,2}\/[^:]+):/.exec(ligne);
+  if (!mont) continue;
+  ecarts.push({
+    regle: 'MONTAGE DE FICHIER DEPUIS LE DÉPÔT',
+    ligne: i + 1,
+    extrait: ligne.trim(),
+    pourquoi:
+      "Coolify ne monte JAMAIS depuis le dépôt cloné : il réécrit la source vers son\n    répertoire persistant, et Docker y crée un RÉPERTOIRE VIDE. Le conteneur reçoit\n    un dossier au lieu du fichier, et meurt au démarrage — sans que rien ne l'ait\n    signalé avant. Embarque ce fichier dans l'image (voir infra/*/Dockerfile).",
+  });
+}
+
 // --- Règle 2bis : les Dockerfiles désignés existent sous leur contexte --------
 // `dockerfile:` reste relatif au `context:` — c'est la seule chose qui ne change
 // pas entre les quatre piles, et c'est aussi ce qu'on oublie en corrigeant.

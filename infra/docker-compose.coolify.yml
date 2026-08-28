@@ -69,12 +69,64 @@
 # │ `apps/api/Dockerfile` s'écrit à l'identique dans les quatre fichiers.     │
 # └───────────────────────────────────────────────────────────────────────────┘
 #
+# ┌───────────────────────────────────────────────────────────────────────────┐
+# │ ⚠️ CONFIGURATION EMBARQUÉE — AUCUN FICHIER DU DÉPÔT N'EST MONTÉ.          │
+# │    QUATRIÈME convention propre à Coolify, et la plus lourde : elle change │
+# │    la façon dont la configuration VOYAGE.                                 │
+# │                                                                           │
+# │ CE QUI EST INTERDIT ICI, ET QUI MARCHE PARTOUT AILLEURS :                 │
+# │     - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro                     │
+# │ N'ÉCRIVEZ JAMAIS CELA DANS CE FICHIER. Ce n'est pas une préférence.       │
+# │                                                                           │
+# │ POURQUOI. Coolify ne monte PAS depuis le dépôt cloné : il réécrit tout    │
+# │ montage relatif vers son propre dossier persistant                        │
+# │ `/data/coolify/applications/<uuid>/`, où il ne dépose que                 │
+# │ `docker-compose.yaml` et `.env` — jamais les fichiers du dépôt.           │
+# │                                                                           │
+# │ PREUVE, relevée sur le serveur (déploiement wrunr6mwq2oxqq392i4myzjn,     │
+# │ 2026-08-28). Le montage réel :                                            │
+# │   bind /data/coolify/applications/<uuid>/infra/postgres/                  │
+# │        postgresql.custom.conf  ->  /etc/postgresql/postgresql.custom.conf │
+# │ et, à cette source, sur l'hôte :                                          │
+# │   drwxr-xr-x 2 root root 4096 …  .        ← un RÉPERTOIRE VIDE            │
+# │ Quand la source n'existe pas, Docker CRÉE UN RÉPERTOIRE à sa place. Le    │
+# │ conteneur ne voit donc pas un fichier vide — il voit un DOSSIER :         │
+# │   LOG:   input in flex scanner failed at file "…custom.conf" line 1       │
+# │   FATAL: configuration file "…custom.conf" contains errors                │
+# │ postgres bouclait en `Restarting (1)`. Les quatre fichiers de config      │
+# │ auraient subi le même sort.                                               │
+# │                                                                           │
+# │ CE QUI EST FAIT À LA PLACE — la config entre dans les IMAGES :            │
+# │   postgresql.custom.conf ─┐                                               │
+# │   pgbackrest.conf        ─┴→ infra/postgres/Dockerfile, cible             │
+# │                              `config-embarquee` (contexte `infra/`)       │
+# │   Caddyfile              ─┐                                               │
+# │   fronts.static.caddy    ─┴→ infra/caddy/Dockerfile (contexte             │
+# │                              `infra/caddy/`, base `caddy:2-alpine`)       │
+# │   fronts.dev.caddy       ─→  VOLONTAIREMENT ABSENT (serveurs Vite         │
+# │                              inexistants ici — il ne servirait qu'à       │
+# │                              mettre le site en 502).                      │
+# │                                                                           │
+# │ CE QUI N'EST PAS CONCERNÉ : les VOLUMES NOMMÉS (données PostgreSQL,       │
+# │ MinIO, Redis, `dist` des fronts, état de Caddy). Coolify les gère         │
+# │ normalement. Seuls les montages de FICHIERS DU DÉPÔT sont impossibles.    │
+# │                                                                           │
+# │ ⚠️ CE QUE ÇA COÛTE, À SAVOIR AVANT D'EN AVOIR BESOIN EN URGENCE :         │
+# │ LA CONFIGURATION N'EST PLUS MODIFIABLE SANS RECONSTRUIRE L'IMAGE. Il n'y  │
+# │ a plus de « je corrige le Caddyfile et je redémarre le conteneur » : tout │
+# │ changement de ces quatre fichiers exige un redéploiement complet, donc    │
+# │ une reconstruction des images (plusieurs minutes, CPU du serveur de       │
+# │ production). Un correctif de configuration en pleine démo n'est plus une  │
+# │ manœuvre de trente secondes.                                              │
+# └───────────────────────────────────────────────────────────────────────────┘
+#
 # -----------------------------------------------------------------------------
 # CE QUE CE FICHIER FAIT, ET CE QU'IL NE FAIT PAS
 # -----------------------------------------------------------------------------
 # IL FAIT :
 #   · construire toutes les images DEPUIS LE DÉPÔT (aucune image tirée d'un
-#     registre privé) ;
+#     registre privé), CONFIGURATION COMPRISE (encadré « CONFIGURATION
+#     EMBARQUÉE ») ;
 #   · ne publier AUCUN port sur l'hôte, pour AUCUN service ;
 #   · exposer notre Caddy au seul Traefik de Coolify, par un réseau Docker
 #     partagé, en HTTP simple sur 8080 ;
@@ -254,11 +306,24 @@ services:
   postgres:
     <<: [*restart, *logging]
     build:
-      # Chemin relatif à la RACINE DU DÉPÔT, pas à `infra/` — voir l'encadré
-      # « RÉPERTOIRE DE PROJET » en tête de fichier.
-      context: ./infra/postgres
-      dockerfile: Dockerfile
-    image: axion-audit-postgres:16
+      # Chemins relatifs à la RACINE DU DÉPÔT (encadré « RÉPERTOIRE DE PROJET »).
+      #
+      # CONTEXTE `./infra` ET NON `./infra/postgres` — ce n'est pas un excès de
+      # portée. L'étape `config-embarquee` doit copier DEUX fichiers qui ne
+      # vivent pas dans le même dossier : `postgres/postgresql.custom.conf` et
+      # `pgbackrest/pgbackrest.conf`. Le second est hors de `infra/postgres/`,
+      # donc le contexte doit remonter d'un cran.
+      #
+      # `target:` OBLIGATOIRE : l'étape par défaut du Dockerfile est l'image NUE
+      # qu'utilisent les piles lancées à la main, celles qui montent leur
+      # configuration. Sans cette cible, le conteneur démarrerait sans aucun
+      # fichier de configuration.
+      context: ./infra
+      dockerfile: postgres/Dockerfile
+      target: config-embarquee
+    # Tag DISTINCT de `axion-audit-postgres:16` (piles à la main) : ces deux
+    # images n'ont pas le même contenu, elles ne doivent pas partager un nom.
+    image: axion-audit-postgres:16-coolify
     # Config personnalisée hors PGDATA : hba_file/ident_file doivent alors être
     # désignés explicitement (ils ne sont plus déduits du répertoire de données).
     command:
@@ -300,9 +365,11 @@ services:
       # figé. Si l'on change l'un, il faut changer l'autre : ils ne sont plus liés
       # par le fichier, et rien ne le vérifie.
       - pgbackrest_repo:/var/lib/pgbackrest
-      # Montages relatifs à la RACINE DU DÉPÔT (encadré « RÉPERTOIRE DE PROJET »).
-      - ./infra/postgres/postgresql.custom.conf:/etc/postgresql/postgresql.custom.conf:ro
-      - ./infra/pgbackrest/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
+      # `postgresql.custom.conf` et `pgbackrest.conf` NE SONT PLUS MONTÉS ICI :
+      # ils sont EMBARQUÉS DANS L'IMAGE (cible `config-embarquee`). Remettre un
+      # `- ./infra/postgres/postgresql.custom.conf:/etc/postgresql/...` redonnerait
+      # un RÉPERTOIRE VIDE et rouvrirait la panne du 2026-08-28 — voir l'encadré
+      # « CONFIGURATION EMBARQUÉE » en tête de fichier.
     # AUCUNE clé `ports:` — voir l'en-tête. La base n'est joignable que par le
     # réseau interne `axion`.
     healthcheck:
@@ -771,7 +838,14 @@ services:
   # ---------------------------------------------------------------------------
   caddy:
     <<: [*restart, *logging]
-    image: caddy:2-alpine
+    # CONSTRUIT, et non `caddy:2-alpine` tel quel : le Caddyfile et
+    # fronts.static.caddy doivent voyager DANS l'image (encadré « CONFIGURATION
+    # EMBARQUÉE »). Le Dockerfile part bien de `caddy:2-alpine` (11 §1) et se
+    # borne à y déposer ces deux fichiers, en validant la config au build.
+    build:
+      context: ./infra/caddy
+      dockerfile: Dockerfile
+    image: axion-audit-caddy:coolify
     depends_on:
       api:
         condition: service_healthy
@@ -792,7 +866,8 @@ services:
       # IMPOSÉE, jamais lue dans l'environnement : le mode de service découle de
       # la FORME du déploiement (jobs one-shot + volumes), pas d'un réglage
       # d'exploitant. Une valeur `dev` mettrait tout le site en 502, car aucun
-      # serveur Vite n'écoute ici.
+      # serveur Vite n'écoute ici. C'est en outre le SEUL fichier de fronts
+      # présent dans l'image : aucune autre valeur ne pourrait s'importer.
       CADDY_FRONT_CONFIG: /etc/caddy/fronts.static.caddy
       TZ: ${TZ:-UTC}
     # Documentaire : le port que Traefik doit viser. `expose` ne publie rien sur
@@ -800,14 +875,19 @@ services:
     expose:
       - '8080'
     volumes:
-      # Montages relatifs à la RACINE DU DÉPÔT (encadré « RÉPERTOIRE DE PROJET »).
-      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-      # LES DEUX variantes sont montées, comme partout ailleurs : c'est
-      # {$CADDY_FRONT_CONFIG} qui choisit laquelle est importée. Ne monter que
-      # la variante « utile » ferait échouer Caddy sur une erreur d'import si la
-      # variable était mal renseignée, au lieu de servir.
-      - ./infra/caddy/fronts.dev.caddy:/etc/caddy/fronts.dev.caddy:ro
-      - ./infra/caddy/fronts.static.caddy:/etc/caddy/fronts.static.caddy:ro
+      # `Caddyfile` et `fronts.static.caddy` NE SONT PLUS MONTÉS : ils sont
+      # EMBARQUÉS DANS L'IMAGE (infra/caddy/Dockerfile). Les remonter ici
+      # redonnerait deux RÉPERTOIRES VIDES et Caddy ne démarrerait pas — voir
+      # l'encadré « CONFIGURATION EMBARQUÉE » en tête de fichier.
+      # `fronts.dev.caddy` n'est PAS embarqué non plus : il proxie des serveurs
+      # Vite qui n'existent pas ici. La raison qui justifiait de monter les deux
+      # variantes ailleurs — se prémunir d'un {$CADDY_FRONT_CONFIG} mal
+      # renseigné — ne vaut plus : cette variable est FIGÉE ci-dessus, elle ne
+      # peut pas désigner autre chose que fronts.static.caddy.
+      #
+      # Seuls des VOLUMES NOMMÉS subsistent : Coolify les gère normalement, ce
+      # sont les montages de FICHIERS DU DÉPÔT qui sont impossibles.
+      #
       # Racines du snippet (fronts_principal) de fronts.static.caddy, montées en
       # LECTURE SEULE : Caddy sert des fichiers, il n'en écrit aucun.
       # Les racines /srv/staging/* du second bloc ne sont volontairement PAS
