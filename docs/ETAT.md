@@ -735,3 +735,59 @@ n'ont pas été relus par un agent qui n'a rien produit. La note est aussi dans 
 **DEUX SESSIONS EN PARALLÈLE SUR LE MÊME ARBRE.** `.claude/settings.json` et `infra/README.md`
 appartiennent à la session `…-42` (correctif Prettier) et **ne sont pas dans ce commit** ;
 `DECISIONS.md` porte les deux travaux et est commité ici d'un commun accord.
+
+---
+
+## 2026-08-28 19h50 — [lot L0-b] — étape pipeline 6/7 — CI VERTE, gouvernance verrouillée
+Dernier commit vert : edace85 (feat(l0b): D-2 rétention à trois étages, D-3 coffre éprouvé — R-3 levée par mesure)   ·   Branche : lot/l0-infra   ·   Poussé : oui
+Tâche en cours : aucune — fin de session propre côté gouvernance et secrets.
+Prochaine action : **après 02h30 UTC, vérifier qu'un `secrets-*.coffre.gpg` existe dans `/sauvegarde` et qu'il est parti vers R2** — c'est le contrôle qui clôt réellement D-3, et lui seul.
+Tests rouges connus : aucun.
+
+**CI `edace85` : `conclusion=success`.** 14 jobs, tous verts ; seul `8 · deploy-staging` est `skipped`
+(merge sur `main` uniquement, par conception).
+
+**CE QUI EST CLOS**
+
+| | Preuve |
+| --- | --- |
+| Canal Telegram | message de test reçu · journal « notification sortante ACTIVE » |
+| 3 variables Coolify + 2 secrets GitHub | posées, valeurs relues aux deux extrémités |
+| `enforce_admins` sur `main` | `false → true`, 11 checks et historique linéaire intacts |
+| 26 actions épinglées + `sha_pinning_required: true` | `gh api …/actions/permissions` le confirme |
+| Hook de pré-commit aligné sur la CI | `check:decisions` + `prettier --check` sur `.md`/`.json` — **exécutés** au commit |
+| IP hors de la doc versionnée | 19 occurrences → `<IP_AXIONIA_WEB>`, placeholder documenté |
+| Risque Coolify/HTTP | tracé en `COHABITATION_AXIONIA_WEB.md` §5quater + `DECISIONS.md` |
+
+**CE QUI RESTE — AUCUN NE SE RÉSOUT PAR L'AVANCEMENT, ET AUCUN N'APPARTIENT À UN AGENT**
+
+1. **Le coffre des secrets n'existe pas encore.** « ACTIF » au journal est la **configuration**, pas
+   l'existence : `/sauvegarde` ne contient aucun `secrets-*.coffre.gpg`, et le journal annonçait
+   « prochaine passe dans 36125 s » — donc aucune passe au redéploiement. **Premier coffre à 02h30
+   UTC.** D'ici là, un sinistre rendrait les données sans permettre de redémarrer un conteneur.
+   Forcer la passe plus tôt a été **refusé par le classificateur de permissions de deux sessions** :
+   c'est une mutation sur `axionia-web`, qui héberge la production d'un tiers. **Le geste appartient
+   à Williams.**
+2. **La chaîne d'alerte n'est prouvée qu'à moitié** : le transport oui (message reçu), « échec réel
+   → alerte reçue » non. Même échéance.
+3. **Le test de restauration nocturne est bloqué par bien plus que des secrets.** Le workflow exige
+   `DEPLOY_PATH` = `/opt/axion-audit/repo`, or `infra/README.md` §4.5 a **mesuré** qu'**aucune copie
+   du dépôt n'existe sur le serveur** — Coolify range tout sous `/data/coolify/applications/<uuid>/`.
+   Poser les 5 secrets ne suffirait pas : le job échouerait plus tard, c'est tout. **Conséquence
+   directe : la sauvegarde qu'on vient d'activer n'est toujours jamais vérifiée.**
+4. **La passphrase du coffre a transité par une conversation d'agent**, contre la règle que
+   `.env.example` écrit lui-même (« *ni dans un ticket, ni dans une conversation avec un agent* »).
+   **À régénérer par Williams seul.** La pose dans Coolify peut se faire sans qu'un agent la voie.
+5. **La console Coolify reste en HTTP clair.** Hors périmètre du lot Audit (§5quater) — le geste
+   appartient au côté Axion-IA.
+6. **La porte P-A n'est pas signée** et bloque toujours l'ouverture du lot suivant (09 §4bis).
+7. **Le hook de pré-commit reste plus permissif que la CI** : `check:invariants`,
+   `check:no-skipped-tests`, `check:compose-coolify`, `check:isolation-reseau`, le `lint` complet et
+   les trois suites de tests en sont absents. Il est **moins faux, pas exact**.
+
+**UNE LEÇON DE MÉTHODE, PAYÉE AUJOURD'HUI.** Deux sessions ont travaillé en parallèle sur le même
+dépôt, ce que le CLAUDE.md §4 interdit. Aucun travail n'a été perdu, mais `edace85` porte les deux
+sous un seul message. Les deux sessions avaient pourtant stagé **explicitement** leurs chemins : un
+`git add` ciblé ne protège de rien quand un `git commit` d'une autre session s'intercale. **Seul
+`git commit -- <chemins>` isole vraiment**, parce qu'il ignore l'index partagé. C'est la règle à
+retenir pour tout travail croisé.
