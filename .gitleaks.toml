@@ -53,7 +53,34 @@ useDefault = true
 # -----------------------------------------------------------------------------
 [allowlist]
 description = "Placeholders __CHANGEME__ de .env.example (02 §30.4-1) — et rien d'autre."
-regexTarget = "line"
+# regexTarget = "match" ET NON "line" — corrigé le 2026-08-28 après ÉPREUVE.
+#
+# CE QUE « line » FAISAIT, ET QUE PERSONNE N’AVAIT VU : la regex était comparée à la
+# LIGNE ENTIÈRE, sans aucune contrainte de chemin. Toute ligne, DANS N’IMPORTE QUEL
+# FICHIER, contenant `__CHANGEME__` était donc exemptée de TOUTES les règles
+# gitleaks. Quatorze fichiers suivis portent ce marqueur, dont quatre scripts
+# shell d’infrastructure qui manipulent des secrets. La description ci-dessus
+# disait « et rien d’autre » ; l’implémentation créait la faculté partout.
+#
+# ÉPREUVE, avec témoin — et le témoin a compté : une première tentative avait
+# conclu à tort, faute de sonde valide (les règles par défaut ne détectaient pas
+# le motif choisi, marqueur ou non). Sonde refaite avec un jeton réellement
+# détecté, présent DEUX fois : une ligne nue, une ligne portant le marqueur.
+#
+#   regexTarget = "line"   ->  leaks found: 1   (le marqueur exempte le .sh)
+#   regexTarget = "match"  ->  leaks found: 2   (les deux sont attrapés)
+#
+# Et le cas légitime tient : `.env.example` avec ses marqueurs, Y COMPRIS dans
+# les chaînes composées (`postgresql://axion:__CHANGEME__@postgres:5432/...`),
+# n’est pas signalé. La raison est simple : avec « match », la regex est comparée
+# au SECRET DÉTECTÉ. Une chaîne de connexion qui contient le marqueur le contient
+# encore ; un vrai secret sur la même ligne, non.
+#
+# Ce choix a une seconde vertu : il ne dépend d’aucune version. La syntaxe des
+# listes multiples (`[[allowlists]]`) aurait été plus explicite, mais la CI épingle
+# gitleaks v8.18.4, qui ne la connaît pas — elle aurait été ignorée en silence,
+# c’est-à-dire le pire des deux mondes.
+regexTarget = "match"
 regexes = [
   '''__CHANGEME__''',
 ]
