@@ -477,10 +477,31 @@ services:
       PGBACKREST_PG1_USER: ${POSTGRES_USER:-axion}
       PGBACKREST_PG1_DATABASE: ${POSTGRES_DB:-axion_audit}
     entrypoint: ['/usr/local/bin/axion-stanza-create']
-    # `command: []` NEUTRALISE le `CMD ["postgres"]` hérité de l'image officielle :
-    # sans lui, le script recevrait `postgres` en argument. Il l'ignorerait —
-    # mais un argument que personne n'a voulu finit toujours par être lu.
-    command: []
+    # -------------------------------------------------------------------------
+    # PAS DE `command:` ICI — ET C'EST UNE CONVENTION COOLIFY, PAS UN OUBLI.
+    #
+    # La version précédente écrivait `command: []` pour NEUTRALISER le
+    # `CMD ["postgres"]` hérité de l'image officielle. C'est du Compose
+    # parfaitement valide : `docker compose config` l'accepte en local.
+    #
+    # Mais Coolify NE DÉPLOIE PAS CE FICHIER, IL LE RÉÉCRIT — et sa réécriture
+    # transforme la séquence vide en TABLE vide. Lu dans sa base
+    # (`applications.docker_compose`) :
+    #
+    #     command: {  }
+    #
+    # que le schéma refuse, avec un message qui n'aide personne :
+    # « services.createstanza.command must be a null ». TROIS DÉPLOIEMENTS ONT
+    # ÉCHOUÉ LÀ-DESSUS, chacun en 14 secondes, pendant que la pile précédente
+    # continuait de tourner et de répondre 200 — c'est-à-dire dans les
+    # conditions exactes où l'on croit avoir déployé.
+    #
+    # Le `CMD ["postgres"]` hérité est donc simplement passé en argument à notre
+    # point d'entrée. `stanza-create.sh` NE LIT AUCUN ARGUMENT (ni `$@`, ni `$1`,
+    # ni `$#`) : l'argument est inerte. On échange une neutralisation explicite
+    # contre une propriété du script — moins élégant, mais c'est la seule des
+    # deux formes qui survit au déploiement.
+    # -------------------------------------------------------------------------
     volumes:
       # CIBLES LITTÉRALES, PAS INTERPOLÉES — Coolify refuse tout `${` dans une
       # définition de volume (voir le volume homologue du service `postgres`).
