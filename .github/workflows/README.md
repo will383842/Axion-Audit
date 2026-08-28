@@ -184,8 +184,8 @@ Le workflow lit `COOLIFY_APP_UUID` **d'abord en variable, puis en secret** : le 
 gagne, aucun des deux ne rend l'autre obligatoire. Une variable est préférable — l'uuid n'est pas un
 secret et se lit alors dans les journaux.
 
-**Contrôle de forme appliqué au départ** : un `COOLIFY_URL` sans schéma (`178.105.55.15:8000` au
-lieu de `http://178.105.55.15:8000`) est l'erreur de saisie la plus probable ; elle est refusée en
+**Contrôle de forme appliqué au départ** : un `COOLIFY_URL` sans schéma (`<IP_AXIONIA_WEB>:8000` au
+lieu de `http://<IP_AXIONIA_WEB>:8000`) est l'erreur de saisie la plus probable ; elle est refusée en
 une ligne, au lieu de se lire comme une panne de Coolify.
 
 > **Les secrets `DEPLOY_*` ne concernent PLUS le staging** — ne les y posez pas, ils n'y servent

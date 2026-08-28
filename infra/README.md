@@ -49,10 +49,10 @@
 ## 1. CONFRONTATION À LA MACHINE — affirmation, mesure, verdict
 
 Méthode : `ssh axionia-web '<commande>'` depuis le poste de développement, 2026-08-28 ~06h40 UTC.
-**Attention à la forme de la commande SSH** : `ssh root@178.105.55.15` échoue
+**Attention à la forme de la commande SSH** : `ssh root@<IP_AXIONIA_WEB>` échoue
 (`Permission denied (publickey)`) ; c'est l'alias `axionia-web` de `~/.ssh/config` qui porte la clé
 `~/.ssh/axion_audit_ed25519`. Équivalent explicite :
-`ssh -i ~/.ssh/axion_audit_ed25519 -o IdentitiesOnly=yes root@178.105.55.15`.
+`ssh -i ~/.ssh/axion_audit_ed25519 -o IdentitiesOnly=yes root@<IP_AXIONIA_WEB>`.
 
 | Ce que ce fichier affirmait                                                          | Commande                                                                                 | Ce que dit la machine                                                                                              | Verdict                                                    |
 | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- |
@@ -70,7 +70,7 @@ Méthode : `ssh axionia-web '<commande>'` depuis le poste de développement, 202
 | `provision-vps.sh` a créé l'arborescence et les deux `.env`                          | `ls /opt` (ci-dessus)                                                                    | rien de tout cela ; le script n'a **jamais** tourné sur cette machine                                              | **VRAI mais trompeur** — il **ne doit pas** y tourner, §7  |
 | L'unique Caddy de prod sert les deux environnements sur 80/443                       | `docker ps` (colonne `PORTS`)                                                            | 80/443 appartiennent à `coolify-proxy` (Traefik). Notre Caddy **ne publie aucun port**                             | **FAUX pour le staging**                                   |
 | `https://audit-staging.<domaine>/api/v1/health` → 200                                | `getent hosts audit-staging.axion-ia.com`                                                | **non résolu** — l'enregistrement DNS n'existe pas                                                                 | **FAUX** — §4.6                                            |
-| Le staging est joignable publiquement                                                | `curl -o /dev/null -w '%{http_code}' http://<uuid>.178.105.55.15.sslip.io/api/v1/health` | **404** à 06h41, **504** à 06h47 (redéploiement en cours par un autre agent)                                       | **FAUX à l'heure du relevé** — §4.6                        |
+| Le staging est joignable publiquement                                                | `curl -o /dev/null -w '%{http_code}' http://<uuid>.<IP_AXIONIA_WEB>.sslip.io/api/v1/health` | **404** à 06h41, **504** à 06h47 (redéploiement en cours par un autre agent)                                       | **FAUX à l'heure du relevé** — §4.6                        |
 | §5.3 : `pgbackrest --stanza=axion stanza-create` puis `check` réussissent            | `docker exec --user postgres <pg> pgbackrest --stanza=axion info`                        | la stanza **existe**, mais `status: error (no valid backups)` **à 06h40** — `status: ok` depuis 07h24 (§5.1)       | **PARTIELLEMENT VRAI au relevé, CORRIGÉ depuis** — §5.1    |
 | L'archivage WAL fonctionne réellement (`failed_count = 0`)                           | `psql -U axion -d axion_audit -c 'SELECT … FROM pg_stat_archiver;'`                      | `archived_count=3`, `failed_count=0`, `last_archived_wal=000000010000000000000003`                                 | **VRAI — et c'est le seul point de sauvegarde qui tienne** |
 | §5.3 : la commande de contrôle s'écrit `psql` sans `-U`                              | même commande                                                                            | `FATAL: role "postgres" does not exist` — le rôle est **`axion`**                                                  | **FAUX** — corrigé §4.4                                    |
@@ -225,13 +225,24 @@ en supprimant le volume et en redéployant, jamais pendant une journée de colle
 
 ## 4. LE STAGING TEL QU'IL EST — tout ce qui suit est MESURÉ
 
-Hôte : `axionia-web` / `178.105.55.15`, Ubuntu, noyau `6.8.0-124-generic`
+> **`<IP_AXIONIA_WEB>` — placeholder, pas une valeur perdue.** Le dépôt est **public** (décision du
+> 2026-08-27, qui débloque la protection de branche gratuitement). L'adresse IPv4 d'`axionia-web` a
+> donc été retirée de la documentation versionnée le 2026-08-28 et remplacée partout par ce marqueur.
+> **Où lire la valeur réelle** : secret GitHub `COOLIFY_URL`, variable GitHub `STAGING_BASE_URL`, ou
+> `ssh axionia-web 'hostname -I'`.
+> **Ce que ce retrait ne fait PAS** : l'URL de staging est en `sslip.io`, forme qui **encode l'IP par
+> construction** — l'adresse reste déductible de toute machine qui atteint le staging. C'est de
+> l'hygiène de dépôt, pas une mesure de sécurité. La mesure qui compte est de mettre la console
+> Coolify du port 8000 derrière TLS et une restriction d'accès ; elle est **ouverte sur Internet en
+> HTTP non chiffré** à la date de ce commit.
+
+Hôte : `axionia-web` / `<IP_AXIONIA_WEB>`, Ubuntu, noyau `6.8.0-124-generic`
 (`ssh axionia-web 'hostname; uname -a'`).
 Cette machine héberge **aussi la production `axion-ia.com`**. Voir
 `infra/COHABITATION_AXIONIA_WEB.md` avant toute manœuvre.
 
 Identifiants Coolify (non secrets, déjà tracés dans `DECISIONS.md` 2026-08-28) :
-console `http://178.105.55.15:8000` · serveur `l877luxxpv1mx96sss7tc6zj` · projet `axion-audit` ·
+console `http://<IP_AXIONIA_WEB>:8000` · serveur `l877luxxpv1mx96sss7tc6zj` · projet `axion-audit` ·
 ressource `axion-audit-staging` · **uuid d'application `wrunr6mwq2oxqq392i4myzjn`**.
 
 **Cet uuid est le préfixe de tout.** Il apparaît ci-dessous dans les noms de conteneurs, de volumes
@@ -440,7 +451,7 @@ ssh axionia-web "docker logs --tail 100 $PG"
 | ------------------------------------------------ | ---------------------------------------------------------------- |
 | `PUBLIC_BASE_URL` du `.env`                      | `https://audit-staging.axion-ia.com`                             |
 | DNS de ce nom                                    | `getent hosts audit-staging.axion-ia.com` → **non résolu**       |
-| Domaine réellement posé sur la ressource Coolify | `COOLIFY_FQDN=wrunr6mwq2oxqq392i4myzjn.178.105.55.15.sslip.io`   |
+| Domaine réellement posé sur la ressource Coolify | `COOLIFY_FQDN=wrunr6mwq2oxqq392i4myzjn.<IP_AXIONIA_WEB>.sslip.io`   |
 | Réponse publique                                 | **404** à 06h41 UTC (aucun routeur Traefik), **504** à 06h47 UTC |
 
 **Le staging n'était joignable de l'extérieur à aucun des deux relevés.** À 06h41 le conteneur

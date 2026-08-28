@@ -310,8 +310,8 @@ Fait par A01 depuis le dernier bloc :
   `infra/caddy/Dockerfile` l. 64) et Coolify déclarait `ports_exposes = 80` — c'est ce champ qui
   engendre l'étiquette `traefik…loadbalancer.server.port`. Le champ est passé à `8080`, redéploiement
   `rqd9z8dio3b1598gl9sidhoy` déclenché. **Sixième convention propre à Coolify.**
-- **Un accès que je croyais avoir n'existe pas** : `ssh root@178.105.55.15` répond `Permission denied
-  (publickey)`. Le seul canal vers `axionia-web` est l'API Coolify (`http://178.105.55.15:8000`), qui
+- **Un accès que je croyais avoir n'existe pas** : `ssh root@<IP_AXIONIA_WEB>` répond `Permission denied
+  (publickey)`. Le seul canal vers `axionia-web` est l'API Coolify (`http://<IP_AXIONIA_WEB>:8000`), qui
   **n'offre pas d'exécution de commande arbitraire**. J'avais briefé A57 sur une voie fausse ; corrigé
   par message. À retenir : `python` n'existe pas non plus dans ce shell — un `curl | python` rend une
   sortie **vide sans erreur**, ce qui est exactement le genre de silence qui fabrique un faux constat.
@@ -329,18 +329,18 @@ Dernier commit vert : 9d205a4 (fix(l0b): la stanza se crée seule, la sonde Post
 Traefik vise le bon réseau) · Branche : lot/l0-infra · Poussé : oui
 
 **⚠️ LE BLOC DE 08h45 CONTIENT UNE AFFIRMATION FAUSSE, ÉCRITE PAR MOI.** J'y ai écrit : « un accès que
-je croyais avoir n'existe pas : `ssh root@178.105.55.15` répond `Permission denied (publickey)`. Le seul
+je croyais avoir n'existe pas : `ssh root@<IP_AXIONIA_WEB>` répond `Permission denied (publickey)`. Le seul
 canal vers `axionia-web` est l'API Coolify. » **C'est faux. L'accès shell root existe.**
 
 ```
-ssh root@178.105.55.15 'hostname'   → Permission denied (publickey)   [code 255]
+ssh root@<IP_AXIONIA_WEB> 'hostname'   → Permission denied (publickey)   [code 255]
 ssh axionia-web       'hostname'    → axionia-web                     [code 0]
 ```
 
 La cause : `~/.ssh/config` porte un `Host axionia-web` avec `IdentityFile ~/.ssh/axion_audit_ed25519`
 et `IdentitiesOnly yes`. La forme `root@IP` n'offre que les **noms de clés par défaut** (`id_rsa`,
 `id_ed25519`…) et ne présente donc **jamais** une clé au nom non standard. Sans alias :
-`ssh -i ~/.ssh/axion_audit_ed25519 -o IdentitiesOnly=yes root@178.105.55.15`.
+`ssh -i ~/.ssh/axion_audit_ed25519 -o IdentitiesOnly=yes root@<IP_AXIONIA_WEB>`.
 
 **CE QUE CETTE ERREUR A COÛTÉ, et c'est la partie qui compte :** j'ai briefé l'agent A57 sur ce constat
 et **je lui ai fait renoncer à des vérifications qu'il pouvait faire**. C'est exactement le défaut que
@@ -607,3 +607,53 @@ Prochaine action : **faire rejouer la porte P-A EN ENTIER par le gardien A02** (
 refusée se rejoue, elle ne se reprend pas là où elle s'était arrêtée), puis la présenter à Williams.
 
 Tests rouges connus : aucun.
+
+---
+
+## 2026-08-28 16h47 — [lot L0-b] — étape pipeline 7/7 (porte P-A, levée de points bloquants)
+Dernier commit vert : 643b3ed (docs(infra): R-2 — la prémisse du gardien était fausse sur un tiers, et le correctif aurait nui)   ·   Branche : lot/l0-infra   ·   Poussé : oui
+Tâche en cours : levée de W-1 (secrets Telegram) et durcissement de la gouvernance GitHub.
+Prochaine action : **vérifier après 02:30 UTC que la passe de sauvegarde a tourné et, en cas d'échec, qu'une alerte Telegram est réellement arrivée** — c'est la seule preuve manquante de l'invariant 8.
+Tests rouges connus : aucun.
+
+**CE QUI A ÉTÉ FAIT, ET COMMENT C'EST PROUVÉ**
+
+| Fait | Preuve |
+| --- | --- |
+| Bot Telegram `@Axion_audit_alertes_bot` | `getMe` → id `8818415138` |
+| `chat_id` `7560535072` | `getUpdates` après un message envoyé au bot |
+| Le bot sait joindre Williams | `sendMessage` → `ok: true`, message reçu sur le téléphone |
+| `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` dans Coolify | « Success » ×2, valeurs relues aux deux extrémités avant enregistrement |
+| `BACKUP_SECRETS_PASSPHRASE` dans Coolify | générée par `openssl rand -base64 48`, **rangée par Williams dans Bitwarden AVANT la pose** — jamais écrite dans un fichier |
+| Les trois variables sont dans les conteneurs | redéploiement Coolify `Finished`, pile `Running (healthy)`, commit `643b3ed`, 16:25:37 → 16:28 UTC |
+| **La moitié manquante de l'invariant 8 est tenue** | journal de démarrage du conteneur `sauvegarde` : « *notification sortante ACTIVE* » et « *coffre des secrets ACTIF* ». Zéro occurrence de « PERSONNE NE SERA PRÉVENU », zéro de « INACTIVE », aucun avertissement d'égalité des deux passphrases |
+| Secrets GitHub `TELEGRAM_*` | posés au niveau **dépôt** (16:36:44 et 16:37:15 UTC) — pas au niveau environnement, pour n'avoir qu'un seul endroit à maintenir |
+| `main` : `enforce_admins` | `false → true` ; 11 checks, historique linéaire et blocage du force-push conservés |
+
+**TROIS PRÉMISSES DU DOSSIER QUI ÉTAIENT FAUSSES, MESURÉES CE JOUR**
+
+1. **W-2 n'a jamais été un manquant** : `AXION_CLIENTS_SURVEILLES` est posé depuis le **2026-08-27
+   16:53:55 UTC** et la CI est verte. Le point avait été ouvert sans mesure.
+2. **`COOLIFY_APP_UUID` n'était pas « À CRÉER »** : il existe comme **variable** de dépôt
+   (`wrunr6mwq2oxqq392i4myzjn`), aux côtés de `STAGING_BASE_URL`.
+3. **GitHub Pro n'est pas nécessaire** : le dépôt est **public** depuis le 2026-08-27 et `main` était
+   **déjà protégée** (11 checks, `strict`, historique linéaire, force-push et suppression bloqués).
+   Le raisonnement « dépôt privé au plan gratuit → protection impossible → 4 $/mois » portait sur une
+   visibilité qui n'était plus la bonne. **Économie : l'abonnement entier.**
+
+**CE QUI RESTE OUVERT — par ordre de gravité réelle, pas d'ordre d'apparition**
+
+- ⚠️ **La console Coolify (port 8000) est ouverte sur Internet en HTTP non chiffré.** Le mot de passe
+  d'administration circule en clair. **C'est le point le plus grave de l'état actuel**, et il est sans
+  rapport avec le dépôt.
+- ⚠️ **5 actions tierces sur tags mobiles**, `allowed_actions: all`, `sha_pinning_required: false`.
+- **Le test de restauration nocturne ne tourne pas** : `nightly-restore-test.yml` (environnement
+  `ops`) réclame `DEPLOY_SSH_KEY`, `DEPLOY_SSH_KNOWN_HOSTS`, `DEPLOY_HOST`, `DEPLOY_USER`,
+  `DEPLOY_PATH` et la variable `RESTORE_TEST_ENV_FILE`, tous absents. **Conséquence directe : la
+  sauvegarde qu'on vient d'activer n'est jamais vérifiée.**
+- **Environnement `prod`** : mêmes `DEPLOY_*` plus `PROD_BASE_URL`. Sans objet tant que la production
+  n'existe pas.
+- **Relecture approuvée sur `main`** : impossible tant que Williams est seul collaborateur (voir
+  `DECISIONS.md` 2026-08-28).
+- **Critère 3 de la porte** (contrôle nominatif des 12 familles §30.3) : toujours **Williams**.
+- **La porte P-A n'est pas signée** et bloque toujours l'ouverture du lot suivant (09 §4bis).

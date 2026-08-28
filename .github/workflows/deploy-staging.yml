@@ -27,7 +27,7 @@
 # les secrets de dépôt. Aucune valeur n'apparaît en clair ici (02 §30.4-1), et
 # aucune n'est affichée : on ne teste que leur PRÉSENCE.
 #   · secret `COOLIFY_API_TOKEN`  jeton Sanctum `<id>|<clair>`               (existe)
-#   · secret `COOLIFY_URL`        ex. `http://178.105.55.15:8000`            (existe)
+#   · secret `COOLIFY_URL`        ex. `http://<IP_AXIONIA_WEB>:8000`            (existe)
 #   · secret ou variable `COOLIFY_APP_UUID`  uuid de l'application staging   (À CRÉER)
 #     Valeur documentée, NON SECRÈTE, dans `DECISIONS.md` (2026-08-28) :
 #     `wrunr6mwq2oxqq392i4myzjn` — projet `Axion-Audit`, serveur `localhost`.
@@ -200,7 +200,7 @@ jobs:
           fi
 
           # Un `COOLIFY_URL` sans schéma est l'erreur de saisie la plus probable
-          # (« 178.105.55.15:8000 » au lieu de « http://178.105.55.15:8000 »).
+          # (« <IP_AXIONIA_WEB>:8000 » au lieu de « http://<IP_AXIONIA_WEB>:8000 »).
           # Elle se voit ici en une ligne ; trois étapes plus loin, elle se lit
           # comme une panne de Coolify.
           case "${A_COOLIFY_URL}" in

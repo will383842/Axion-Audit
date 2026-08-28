@@ -1833,7 +1833,7 @@ porte P-A** — c'est un amendement horodaté du 02 §11, pas une décision d'ag
 - **La production reste une décision ouverte**, à prendre à l'AIPD (06 §10.4). Le staging ne porte que
   les deux missions fictives FIL-TPE et FIL-GC : aucune donnée personnelle, donc aucune question RGPD.
 
-**Identifiants de l'environnement, non secrets :** Coolify `http://178.105.55.15:8000` · serveur
+**Identifiants de l'environnement, non secrets :** Coolify `http://<IP_AXIONIA_WEB>:8000` · serveur
 `localhost` (`l877luxxpv1mx96sss7tc6zj`) · projet `Axion-Audit` (`tahbm502728xuxu5wgry04s7`) · projet
 voisin `Axion-IA` (`wfm03z4asw5yf5mro2fk6gp9`), auquel on ne touche pas.
 
@@ -2325,3 +2325,52 @@ déjà ouverte). Ces deux points sont des **conséquences** de l'option 1, pas d
 V2. À ratifier formellement à la porte P-A, avec les trois autres amendements (Traefik, construction
 sur le serveur, stockage distant). La note d'architecture est à reprendre en conséquence : ses
 questions Q2 à Q6 restent ouvertes, Q1 est close.
+
+## 2026-08-28 — [L0-b] Exige-t-on une relecture approuvée sur `main` (`required_approving_review_count` 1) ?
+Options :
+1. Passer le compteur à **1** et activer `enforce_admins` — la demande initiale.
+2. Activer `enforce_admins` seul et **laisser le compteur à 0**.
+3. Ne rien changer.
+
+**Mesure préalable qui a réorienté la question** : `gh api repos/:owner/:repo/collaborators` ne
+renvoie **qu'un compte, `will383842`**. GitHub interdisant d'approuver sa propre PR, l'option 1
+n'aurait pas resserré la règle : elle aurait rendu le dépôt **définitivement infusionnable**, toute
+PR restant bloquée faute d'un approbateur possible.
+
+Arbitrage : **option 2, appliquée.** `enforce_admins: false → true` (les 11 checks obligatoires,
+l'historique linéaire et le blocage du force-push sont conservés à l'identique). Le compteur reste à
+**0**. Règle de précédence : **CLAUDE.md §7** — « jamais de commit direct sur `main` », que
+`enforce_admins` fait désormais respecter **y compris par l'administrateur** ; la relecture humaine
+exigée par **§10** reste portée par la porte du pipeline, non par GitHub.
+
+**Ce que cette décision NE tranche PAS — point OUVERT :** l'exigence d'un approbateur distinct
+redevient applicable dès qu'un second compte existe (collaborateur invité, ou transfert vers une
+organisation gratuite à deux membres). Aucune des deux voies ne coûte d'abonnement.
+
+Décideur : Williams (demande) · réorientée sur mesure d'A01
+Impact spec : aucun
+
+## 2026-08-28 — [L0-b] L'IPv4 d'`axionia-web` doit-elle rester dans la documentation d'un dépôt PUBLIC ?
+Options :
+1. Passer le dépôt en privé. **Écartée d'emblée** : Williams exige le dépôt public, et c'est ce qui
+   débloque la protection de branche sans abonnement (décision du 2026-08-27).
+2. Laisser l'adresse en clair — 19 occurrences dans 6 fichiers.
+3. La remplacer par un placeholder documenté.
+
+Arbitrage : **option 3, appliquée** — `<IP_AXIONIA_WEB>` partout, avec un encadré explicatif en tête
+d'`infra/README.md` §4 indiquant où lire la valeur réelle (secret `COOLIFY_URL`, variable
+`STAGING_BASE_URL`, `ssh axionia-web 'hostname -I'`).
+
+**Portée honnête de la mesure, écrite dans le dépôt pour qu'elle ne soit pas surestimée :** l'URL de
+staging est en `sslip.io`, forme qui **encode l'IP par construction** — l'adresse reste déductible de
+toute machine qui atteint le staging. C'est de l'**hygiène de dépôt, pas une mesure de sécurité**.
+
+**Ce que cette décision NE tranche PAS — deux points OUVERTS, l'un et l'autre plus lourds :**
+1. La **console Coolify du port 8000 est ouverte sur Internet en HTTP non chiffré** (atteinte depuis
+   un navigateur sans VPN le 2026-08-28) : le mot de passe d'administration circule en clair.
+2. Les workflows utilisent **5 actions tierces épinglées sur des tags mobiles**, avec
+   `allowed_actions: all` et `sha_pinning_required: false`. Sur un dépôt public porteur de secrets,
+   un tag d'action compromis vaut les secrets. Correctif : `sha_pinning_required: true`.
+
+Décideur : Williams (demande) · constats de sécurité relevés par A01
+Impact spec : aucun
