@@ -111,6 +111,78 @@ COPY postgres/stanza-create.sh /usr/local/bin/axion-stanza-create
 COPY postgres/healthcheck.sh /usr/local/bin/axion-healthcheck
 COPY postgres/sauvegarde.sh /usr/local/bin/axion-sauvegarde
 
+# -----------------------------------------------------------------------------
+# `mc` — LE CLIENT S3 DE L'EXPÉDITION HORS SERVEUR, ET CE N'EST PAS UNE
+# DÉPENDANCE NOUVELLE.
+#
+# CE QUI A ÉTÉ RELEVÉ DANS CETTE IMAGE AVANT DE CHOISIR (2026-08-28, `docker exec`
+# sur le service `sauvegarde` en vie) :
+#     base réelle : postgres:16-BOOKWORM — Debian 12, PAS une Alpine
+#     présents    : openssl 3.0.20 · gpg · zstd · tar · sha256sum · pgbackrest 2.59.1
+#     ABSENTS     : curl · wget · python/python3 · jq · rclone · aws · s3cmd
+# L'IMAGE N'A AUCUN CLIENT HTTP. Sans client HTTP, il n'y a pas d'expédition —
+# et pgBackRest 2.59.1, lui, expose `repo-get`/`repo-ls` mais NI `repo-put` NI
+# `repo-rm` : il sait lire un dépôt distant, pas y écrire un fichier quelconque.
+# Le raisonnement complet, y compris pourquoi `repo2` natif et `aws-cli` installé
+# au vol ont été écartés, est en tête de `sauvegarde.sh`.
+#
+# POURQUOI CETTE FORME-LÀ. `minio/mc` AU TAG CI-DESSOUS EST DÉJÀ UNE IMAGE DE LA
+# PILE : le service `createbuckets` de `docker-compose.coolify.yml` l'utilise, au
+# MÊME tag, écrit dans le même dépôt. On ne fige donc pas une version de plus, on
+# réemploie celle qui est déjà figée. `mc` est un binaire Go STATIQUE (30 Mo,
+# aucune bibliothèque partagée) : il fonctionne tel quel sur Debian.
+#
+# CE QU'ON ÉVITE EN LE COPIANT AU BUILD PLUTÔT QU'EN L'INSTALLANT AU RUN : une
+# chaîne de sauvegarde qui, à 02h30, aurait besoin qu'un dépôt de paquets réponde
+# pour pouvoir sortir la copie de la machine. Une dépendance réseau au moment
+# précis où l'on sauvegarde est une dépendance qui tombera pour cette raison-là.
+#
+# CE QUE ÇA COÛTE : +30 Mo sur cette image, et une reconstruction qui exige que
+# `minio/mc` soit tirable au tag épinglé.
+#
+# ⚠️ SI CE TAG CHANGE DANS LE COMPOSE, IL CHANGE ICI — deux endroits, aucune
+# vérification automatique aujourd'hui. C'est la même dette que la duplication
+# assumée entre les composes (voir leur en-tête).
+COPY --from=minio/mc:RELEASE.2025-04-16T18-13-26Z /usr/bin/mc /usr/local/bin/mc
+
+# -----------------------------------------------------------------------------
+# ⚠️ LE MAGASIN DE CERTIFICATS — MESURÉ, ET IL MANQUAIT.
+#
+# `postgres:16-bookworm` N'EMBARQUE AUCUNE AUTORITÉ DE CERTIFICATION. Relevé le
+# 2026-08-28 sur l'image de la pile :
+#     /etc/ssl/certs/  →  ssl-cert-snakeoil.pem  ET RIEN D'AUTRE
+#     dpkg -l | grep ca-certificates  →  aucune ligne
+#     /usr/share/ca-certificates      →  n'existe pas
+# Conséquence, si on ne corrige rien : `mc` (Go utilise le magasin du système sur
+# Linux) refuserait le certificat de Cloudflare R2, TOUTES les nuits, avec une
+# erreur TLS qui ne nomme pas la cause. La chaîne aurait été branchée et
+# n'aurait jamais rien expédié. Ce défaut a été attrapé par le `test -s`
+# ci-dessous — au BUILD, pas la première nuit. C'est exactement pour cela que la
+# vérification est écrite ici.
+#
+# CE QUE CETTE LIGNE EST, ET CE QU'ELLE N'EST PAS. `ca-certificates` est le
+# MAGASIN DE CONFIANCE du système d'exploitation, pas une dépendance du projet :
+# elle n'entre pas dans la liste 11 §1, au même titre que les bibliothèques que
+# `pgbackrest` tire déjà de PGDG à l'étape `socle`. Aucun outil nouveau, aucune
+# version applicative à suivre. Sans elle, AUCUN client TLS ne peut fonctionner
+# dans cette image — le choix n'est pas « avec ou sans », c'est « HTTPS ou rien ».
+# Elle est posée dans `config-embarquee` et NON dans `socle` : seules les piles
+# Coolify expédient hors serveur ; les trois autres restent inchangées.
+#
+# Le magasin est FIGÉ À LA CONSTRUCTION. Une autorité révoquée après le build
+# reste dans l'image jusqu'à la reconstruction suivante — c'est vrai de toutes
+# les images, il faut le savoir plutôt que le supposer.
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends ca-certificates; \
+    rm -rf /var/lib/apt/lists/*
+
+# Contrôles à la CONSTRUCTION : le binaire s'exécute, et le magasin existe.
+RUN set -eux; \
+    chmod 0755 /usr/local/bin/mc; \
+    mc --version; \
+    test -s /etc/ssl/certs/ca-certificates.crt
+
 # POINT DE MONTAGE DES ARCHIVES — ET C'EST LE `chown` QUI COMPTE, PAS LE `mkdir`.
 # Docker initialise un volume nommé VIDE à partir du répertoire que l'image
 # porte au point de montage : propriétaire et permissions COMPRIS. Sans cette

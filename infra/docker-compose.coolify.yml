@@ -230,6 +230,20 @@
 #   PGBACKREST_CIPHER_PASS       passphrase de chiffrement du dépôt de sauvegarde
 #   SEED_ADMIN_EMAIL             compte administrateur initial du staging
 #   SEED_ADMIN_PASSWORD          mot de passe de ce compte
+#   BACKUP_R2_BUCKET             bucket Cloudflare R2 DÉDIÉ aux sauvegardes
+#   BACKUP_R2_ENDPOINT           endpoint S3 du compte R2 (schéma facultatif)
+#   BACKUP_R2_ACCESS_KEY         identifiant du jeton R2, limité à ce seul bucket
+#   BACKUP_R2_SECRET_KEY         secret de ce jeton
+#
+#   ⚠️ LES QUATRE BACKUP_R2_* NE SONT DÉCLARÉES QUE POUR LE SERVICE
+#      `sauvegarde` — c'est là que la dépendance est vraie, et c'est ce que ce
+#      fichier documente. Ce N'EST PAS un cloisonnement : Coolify injecte le
+#      `.env` entier dans tous les conteneurs (mesuré le 2026-08-28 — elles sont
+#      lisibles dans `api`). Ce qui limite ce jeton est sa PORTÉE (un seul
+#      bucket, lecture/écriture d'objets), pas ce fichier.
+#      Elles sont déclarées `:?` — sans elles le déploiement s'arrête en les
+#      nommant, plutôt que de démarrer un service de sauvegarde qui n'expédierait
+#      rien.
 #
 #   ⚠️ DATABASE_URL et REDIS_URL sont fournies TELLES QUELLES et ne sont pas
 #      recomposées ici : un mot de passe contenant `@`, `:` ou `/` doit être
@@ -252,6 +266,8 @@
 #   CONSOLE_WEBHOOK_TOLERANCE_SECONDS (300)
 #   PGBACKREST_STANZA (axion) · PGBACKREST_REPO_PATH (/var/lib/pgbackrest)
 #   BACKUP_RETENTION_DAYS (30)
+#   AXION_R2_PREFIXE (staging)           préfixe d'objets dans le bucket R2
+#   AXION_R2_VERIFIER_RELECTURE (oui)    relire depuis R2 et comparer le SHA-256
 #   LLM_COST_CAP_PER_MISSION_EUR (50)
 #   ALERT_DISK_USAGE_PERCENT (80) · ALERT_LLM_JOB_MAX_MINUTES (5)
 #   ALERT_CERT_EXPIRY_DAYS (15) · ALERT_SYNC_SILENT_HOURS (24)
@@ -714,12 +730,24 @@ services:
   #    défaut que ce lot vient de corriger deux fois.
   # Le conteneur, lui, part avec la pile et se lit dans le dépôt.
   #
+  # LA COPIE HORS SERVEUR EST BRANCHÉE (Cloudflare R2, bucket dédié, jeton limité
+  # à ce seul bucket). Le dépôt pgBackRest et les archives MinIO — DÉJÀ chiffrés
+  # au repos, rien n'est rechiffré — partent par `mc mirror` après chaque passe,
+  # et deux objets sont RELUS depuis R2 et comparés au SHA-256 de la source :
+  # « l'envoi a réussi » ne prouve rien. La rétention distante est portée par le
+  # miroir (`--remove` reproduit l'expiration locale), PAS par une règle de cycle
+  # de vie Cloudflare — qui vivrait hors de `git`, exactement le défaut que ce lot
+  # a corrigé deux fois.
+  #
   # CE QU'IL NE COUVRE PAS — écrit ici pour que personne ne s'y fie :
   #  · pile arrêtée = aucune sauvegarde ;
-  #  · AUCUNE COPIE HORS SERVEUR : dépôt et archives vivent sur le disque
-  #    qu'ils protègent. La règle 3-2-1 du 02 §11.4 n'est PAS tenue — la
-  #    destination est une décision humaine (infra/README.md §5.6) ;
-  #  · aucune alerte sortante : l'échec se lit dans `docker ps` et les journaux ;
+  #  · UN SEUL SITE DISTANT : la seconde copie « hors fournisseur » du 02 §11.4
+  #    n'existe pas. R2 indisponible = il ne reste que le VPS ;
+  #  · aucune alerte sortante : un échec se lit dans `docker ps` et les journaux,
+  #    PAS dans une notification. Personne n'est prévenu aujourd'hui ;
+  #  · DEUX CODES DE SORTIE À SAVOIR LIRE — 1 = la sauvegarde n'a pas eu lieu ;
+  #    2 = elle a eu lieu et vérifiée, mais elle n'est pas sortie de la machine.
+  #    `docker inspect --format '{{.State.ExitCode}}' <conteneur>` ;
   #  · il ne teste pas la restauration (geste distinct, joué à la main, §5.4).
   #
   # `restart: unless-stopped` ET NON `'no'` : contrairement à `createstanza` et
@@ -767,6 +795,54 @@ services:
       # Plafond du volume d'archives. La machine est PARTAGÉE : au-delà, le
       # service échoue bruyamment plutôt que de remplir le disque du voisin.
       AXION_ARCHIVES_MAX_MO: ${AXION_ARCHIVES_MAX_MO:-20480}
+      # ┌───────────────────────────────────────────────────────────────────┐
+      # │ COPIE HORS SERVEUR — LE DERNIER POINT ROUGE DE LA PORTE L0.       │
+      # │                                                                   │
+      # │ Sans ces quatre variables, le dépôt pgBackRest et les archives    │
+      # │ MinIO vivent sur le disque qu'ils protègent : perdre le VPS,      │
+      # │ c'est perdre les données ET leurs sauvegardes. La règle 3-2-1 du  │
+      # │ 02 §11.4 et l'invariant 8 ne sont alors pas tenus.                │
+      # │                                                                   │
+      # │ ELLES SONT DÉCLARÉES ICI, SERVICE PAR SERVICE : ce fichier dit    │
+      # │ quel service a besoin de quoi, et un conteneur lancé hors de      │
+      # │ Coolify (pile à la main, test jetable) ne reçoit que ce qui est   │
+      # │ écrit ici. C'est aussi la seule trace, dans `git`, du fait que le │
+      # │ service `sauvegarde` dépend de ces quatre valeurs.                │
+      # │                                                                   │
+      # │ ⚠️ CE QUE CETTE DÉCLARATION N'OBTIENT PAS — MESURÉ, PAS SUPPOSÉ   │
+      # │ (2026-08-28, après le redéploiement de 10h02) : sous Coolify,     │
+      # │ CE N'EST PAS UN CLOISONNEMENT. Coolify injecte le `.env` ENTIER   │
+      # │ de l'application dans TOUS les conteneurs, indépendamment de ce   │
+      # │ que ce fichier déclare — relevé : les quatre `BACKUP_R2_*` sont   │
+      # │ lisibles dans le conteneur `api`, qui ne les demande pas. Le      │
+      # │ moindre accès sur ce jeton n'existe donc PAS aujourd'hui ; ce qui │
+      # │ le limite est la portée du jeton lui-même (un seul bucket,        │
+      # │ lecture/écriture d'objets), pas la topologie de la pile.          │
+      # │                                                                   │
+      # │ `:?` PLUTÔT QU'UNE VALEUR PAR DÉFAUT — délibéré. Une variable     │
+      # │ manquante fait ÉCHOUER LE DÉPLOIEMENT en nommant la variable,     │
+      # │ pendant que la pile précédente continue de tourner. C'est très    │
+      # │ préférable à un service de sauvegarde qui démarre et n'expédie    │
+      # │ rien : la première panne serait alors invisible jusqu'au jour où  │
+      # │ l'on cherche la copie distante.                                   │
+      # │                                                                   │
+      # │ AUCUNE VALEUR N'EST ÉCRITE ICI (02 §30.4-1/5), et le script ne    │
+      # │ les journalise jamais : il les vérifie PAR LEUR NOM et par la     │
+      # │ forme de leur contenu.                                            │
+      # └───────────────────────────────────────────────────────────────────┘
+      BACKUP_R2_BUCKET: ${BACKUP_R2_BUCKET:?variable obligatoire, bucket R2 dedie aux sauvegardes}
+      BACKUP_R2_ENDPOINT: ${BACKUP_R2_ENDPOINT:?variable obligatoire, endpoint S3 du compte R2}
+      BACKUP_R2_ACCESS_KEY: ${BACKUP_R2_ACCESS_KEY:?variable obligatoire, identifiant du jeton R2}
+      BACKUP_R2_SECRET_KEY: ${BACKUP_R2_SECRET_KEY:?variable obligatoire, secret du jeton R2}
+      # Préfixe d'objets dans le bucket : il sépare les environnements qui
+      # partageraient la même destination. Sans lui, deux piles expédiant côte à
+      # côte se mirroiteraient l'une l'autre, et le `--remove` du miroir
+      # transformerait la collision en suppression.
+      AXION_R2_PREFIXE: ${AXION_R2_PREFIXE:-staging}
+      # Relecture de contrôle : chaque passe retélécharge deux objets depuis R2
+      # et compare leur SHA-256 à la source. « L'envoi a réussi » ne prouve rien.
+      # L'egress R2 est facturé zéro ; seul le temps se paie.
+      AXION_R2_VERIFIER_RELECTURE: ${AXION_R2_VERIFIER_RELECTURE:-oui}
     entrypoint: ['/usr/local/bin/axion-sauvegarde']
     # PAS DE `command:` — SEPTIÈME CONVENTION COOLIFY, voir l'encadré du service
     # `createstanza`. `command: []` est du Compose valide mais Coolify le réécrit
@@ -1276,9 +1352,12 @@ volumes:
     name: axion-coolify-postgres-socket
   # Archives CHIFFRÉES du volume MinIO (tar + zstd + gpg AES256), écrites par le
   # service `sauvegarde`. Rétention alignée sur ${BACKUP_RETENTION_DAYS}.
-  # ⚠️ Ce volume vit sur LE DISQUE QU'IL PROTÈGE : il défend contre la perte
-  # logique (suppression, corruption applicative), PAS contre la perte du
-  # serveur. La copie hors serveur reste à trancher — infra/README.md §5.6.
+  # ⚠️ Ce volume vit sur LE DISQUE QU'IL PROTÈGE : à lui seul, il ne défend que
+  # contre la perte logique (suppression, corruption applicative). Ce qui défend
+  # contre la perte du SERVEUR est la copie expédiée vers R2 par le même service,
+  # dont ce volume n'est que la source. Le vider ici ne vide pas R2 — mais le
+  # vider PUIS laisser tourner une passe propagerait la suppression à distance,
+  # sauf si le garde-fou `depot_local_sain()` de sauvegarde.sh l'attrape.
   sauvegarde_archives:
     name: axion-coolify-sauvegarde-archives
   redis_data:
