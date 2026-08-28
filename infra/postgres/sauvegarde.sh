@@ -226,12 +226,44 @@ TOLERANCE_H="${AXION_SAUVEGARDE_TOLERANCE_H:-26}"
 # RÉTENTION — DÉCIDÉE, PAS SUBIE.
 # PostgreSQL : portée par pgBackRest lui-même (PGBACKREST_REPO1_RETENTION_FULL,
 # type `time`), valeur ${BACKUP_RETENTION_DAYS} — 30 jours (02 §11.4).
-# MinIO : le MÊME horizon, exprimé en NOMBRE d'archives puisqu'il y en a une par
-# jour. L'alignement n'est pas cosmétique : une restauration PostgreSQL de J-25
-# désignerait des pièces jointes qu'aucune archive MinIO ne contiendrait plus si
-# MinIO était gardé moins longtemps. Deux rétentions différentes, c'est une
-# restauration à moitié possible.
-MINIO_ARCHIVES_GARDEES="${AXION_MINIO_ARCHIVES_GARDEES:-${BACKUP_RETENTION_DAYS:-30}}"
+#
+# MinIO : DÉCISION D-2 DE WILLIAMS (porte P-A, `DECISIONS.md` 2026-08-28) —
+# 7 QUOTIDIENNES + 4 HEBDOMADAIRES + 3 MENSUELLES, à la place des 30 archives
+# quotidiennes plates. CE QUI L'A MOTIVÉE EST UN COÛT, PAS UN CONFORT : une
+# archive MinIO est une copie COMPLÈTE du volume, donc 30 archives pèsent
+# ≈ 30 × la taille des pièces jointes, SUR UNE MACHINE PARTAGÉE avec la
+# production d'un tiers. À 1 Go de pièces jointes, 30 Go. Le nouveau plan en
+# garde au plus 14 tout en couvrant ~90 jours au lieu de 30.
+#
+# ⚠️ CE QUE LE CHANGEMENT COÛTE — écrit ici pour que personne ne le découvre un
+# jour de sinistre : entre J-7 et J-30, les points de restauration MinIO passent
+# du quotidien à l'hebdomadaire, alors que PostgreSQL garde sa granularité PITR
+# sur 30 jours. L'ancien commentaire en tirait la conclusion qu'une restauration
+# serait « à moitié possible » ; CETTE CONCLUSION EST FAUSSE ICI, et il faut
+# dire pourquoi plutôt que de recopier l'inquiétude : une archive MinIO est un
+# MIROIR COMPLET ET CUMULATIF, et l'invariant 7 interdit toute suppression
+# silencieuse. Une archive plus RÉCENTE contient donc tout ce que contenait une
+# plus ancienne : restaurer la base à J-20 avec l'archive MinIO la plus récente
+# rend l'intégralité des pièces jointes que cette base désigne. Le seul cas
+# résiduel — une pièce jointe RÉELLEMENT effacée entre les deux dates — est
+# précisément celui que l'invariant 7 rend impossible. Et la couverture MinIO
+# (~90 j) reste SUPÉRIEURE à celle de PostgreSQL (30 j) : le sens de l'écart
+# est le bon, ce qui n'était pas évident et a été vérifié plutôt que supposé.
+#
+# LES TROIS ÉTAGES NE SE CHEVAUCHENT PAS : chaque étage ne réclame que des
+# SEMAINES ou des MOIS que les étages du dessus n'ont pas déjà pris. Sans cette
+# règle, 7 archives d'une même semaine consommeraient les 4 places
+# hebdomadaires et le plan ne remonterait pas plus loin que les quotidiennes.
+#
+# `AXION_MINIO_ARCHIVES_GARDEES` reste accepté et désigne DÉSORMAIS l'étage
+# quotidien : c'est le nom qui vit dans le compose et dans les tests, et le
+# renommer en silence casserait une preuve pour un gain d'esthétique.
+RETENTION_QUOTIDIENNES="${AXION_RETENTION_QUOTIDIENNES:-${AXION_MINIO_ARCHIVES_GARDEES:-7}}"
+RETENTION_HEBDOMADAIRES="${AXION_RETENTION_HEBDOMADAIRES:-4}"
+RETENTION_MENSUELLES="${AXION_RETENTION_MENSUELLES:-3}"
+# Conservé : il porte les messages d'exploitation et le contrôle d'entrée « au
+# moins une archive gardée », qui reste vrai de l'étage quotidien.
+MINIO_ARCHIVES_GARDEES="$RETENTION_QUOTIDIENNES"
 
 # GARDE-FOU DE DISQUE — la machine est PARTAGÉE (02 §11.3 : alerte disque > 80 %).
 # Les archives MinIO sont des copies COMPLÈTES : leur empreinte croît linéairement

@@ -60,7 +60,7 @@ jobs:
     # échec de PRA (RTO cible 4 h, 02 §11.4), pas un job « encore en cours ».
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Contrôler la présence des réglages non versionnables
         env:
@@ -144,7 +144,7 @@ jobs:
 
       - name: Conserver le journal de restauration (preuve pour la porte)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           # Ce journal est la PREUVE attendue par le critère L0 (07 §12) et par
           # la checklist 07 §15 (« sauvegardes vérifiées, test de restauration

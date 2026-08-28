@@ -2374,3 +2374,33 @@ toute machine qui atteint le staging. C'est de l'**hygiène de dépôt, pas une 
 
 Décideur : Williams (demande) · constats de sécurité relevés par A01
 Impact spec : aucun
+
+## 2026-08-28 — [L0-b] Épinglage des actions GitHub — clôture du point OUVERT n° 2 de l'entrée précédente
+Options :
+1. Activer `sha_pinning_required: true` d'abord. **Écartée** : le réglage refuse d'exécuter toute
+   action non épinglée — l'activer avant d'épingler aurait cassé la CI au commit suivant.
+2. Épingler les actions aux empreintes de commit, **puis** activer le réglage.
+
+Arbitrage : **option 2**, dans cet ordre. 26 occurrences épinglées sur 6 fichiers
+(`.github/workflows/*.yml` + `.github/actions/setup-node-pnpm/action.yml`), le tag d'origine
+conservé en commentaire pour rester lisible et pour que les montées de version restent délibérées :
+
+| Action | Empreinte |
+| --- | --- |
+| `actions/checkout` | `11d5960a326750d5838078e36cf38b85af677262` (v4) |
+| `actions/setup-node` | `49933ea5288caeca8642d1e84afbd3f7d6820020` (v4) |
+| `actions/upload-artifact` | `ea165f8d65b6e75b540449e92b4886f43607fa02` (v4) |
+| `docker/build-push-action` | `10e90e3645eae34f1e60eeb005ba3a3d33f178e8` (v6) |
+| `docker/login-action` | `c94ce9fb468520275223c153574b00df6fe4bcc9` (v3) |
+| `docker/setup-buildx-action` | `8d2750c68a42422c14e847fe6c8ac0403b4cbd6f` (v3) |
+
+`actions/setup-node` avait échappé au premier relevé : il ne vit pas dans `.github/workflows/` mais
+dans l'action composite. **Un inventaire limité au dossier des workflows est incomplet par
+construction** — la commande de contrôle est `grep -rn "uses:" .github/`.
+
+Règle de précédence : **CLAUDE.md §2bis** — versions épinglées, aucune montée sans décision humaine.
+Le principe valait déjà pour les dépendances applicatives ; il s'applique désormais à la chaîne de
+construction, qui a accès aux secrets.
+
+Décideur : Williams (demande) · séquencement par A01
+Impact spec : aucun
