@@ -32,7 +32,9 @@ import { resolve } from 'node:path';
 
 const ROUGE = '[31m';
 const VERT = '[32m';
-const JAUNE = '[33m';
+// Plus de jaune ici depuis le 2026-08-28 : ce contrôle n’avertit plus, il refuse.
+// Le seul avertissement qu’il portait — un fichier de test non suivi par git —
+// masquait 51 tests, dont 35 `@critique`, absents de la CI (contrôle 5).
 const RAZ = '[0m';
 
 const RACINE = resolve(import.meta.dirname, '..');
@@ -333,9 +335,36 @@ if (l1Livre) {
 // pas le garde-fou. Un contrôle qui dépend de la vigilance humaine pour connaître
 // son propre périmètre n'est pas un contrôle.
 //
-// Ce n'est PAS une erreur en soi : un test en cours d'écriture est légitimement non
-// suivi. C'est un AVERTISSEMENT visible — la seule chose inacceptable serait le
-// silence.
+// Ce n'était PAS traité comme une erreur, au motif qu'un test en cours d'écriture
+// est légitimement non suivi. **Ce raisonnement a été renversé par la mesure le
+// 2026-08-28, et le renversement mérite d'être écrit plutôt que corrigé en
+// silence.**
+//
+// Le gardien A70 a mesuré la conséquence réelle de l'avertissement sans échec :
+//
+//     tests d'intégration exécutés en local ......... 141   (12 fichiers)
+//     tests d'intégration exécutés en CI ............  90   (10 fichiers)
+//     dont NON exécutés : 51 tests, **35 marqués @critique**
+//
+// Ces 35 tests gardent la chaîne de sauvegarde — chiffrement effectif, `pipefail`,
+// rotation, disque plein, horloge qui recule, permissions 0600. Ils ne tournaient
+// nulle part sauf sur un poste, et n'étaient dans **aucune sauvegarde**. Le dépôt
+// qui grave « aucune donnée ne vit sur un seul appareil plus de 24 h » laissait
+// vivre 51 tests critiques sur un seul disque dur.
+//
+// Et le job d'intégration durait **1 min 15 s** en CI là où un seul de ces fichiers
+// met 70 s en local. L'arithmétique était impossible ; personne ne l'a relevé.
+//
+// **Le pire n'est pas le trou, c'est que ce contrôle l'avait DIAGNOSTIQUÉ.** Il
+// imprimait le bon diagnostic, dans le bon vocabulaire, en nommant les deux
+// fichiers — et sortait en 0. Un garde-fou qui décrit exactement la panne sans la
+// bloquer est pire qu'un garde-fou muet : **il consomme la vigilance qu'il ne
+// rembourse pas**, et le vert de `pnpm verify` recouvre son propre avertissement.
+//
+// ÉCHEC DÉSORMAIS — et le cas légitime reste ouvert : indexer suffit, aucun commit
+// n'est requis. Un agent qui n'a pas le droit de commiter (règle de croisement
+// 09 §5.6) peut indexer son fichier ; c'est même la seule façon de le faire entrer
+// dans le périmètre des garde-fous au moment où il devient utile.
 const suivis = new Set(tests);
 const surDisque = globSync('**/*.{test,spec}.{ts,tsx,mts,cts}', {
   cwd: RACINE,
@@ -345,13 +374,16 @@ const surDisque = globSync('**/*.{test,spec}.{ts,tsx,mts,cts}', {
   .filter((f) => !suivis.has(f));
 
 if (surDisque.length > 0) {
-  console.warn(
-    `${JAUNE}⚠ ${String(surDisque.length)} fichier(s) de test NON SUIVI(S) par git :${RAZ}\n` +
+  console.error(
+    `${ROUGE}✗ ${String(surDisque.length)} fichier(s) de test NON SUIVI(S) par git :${RAZ}\n` +
       surDisque.map((f) => `    ${f}`).join('\n') +
-      '\n  Vitest les exécute ; ce contrôle et `check-no-skipped-tests` ne les voient PAS\n' +
-      '  (ils énumèrent via `git ls-files`). Indexe-les — sinon ils échappent aux\n' +
-      '  garde-fous au moment même où ils deviennent utiles.\n',
+      '\n  Vitest les exécute ICI ; ce contrôle et `check-no-skipped-tests` ne les voient PAS,\n' +
+      '  et la CI NE LES EXÉCUTE PAS DU TOUT (elle part de git). Un test qui ne tourne que\n' +
+      "  sur un poste ne protège personne, et n'est dans aucune sauvegarde.\n" +
+      '  → `git add` sur ces fichiers SUFFIT. Aucun commit n’est requis : un agent soumis\n' +
+      '    à la règle de croisement (09 §5.6) peut indexer sans commiter.\n',
   );
+  process.exit(1);
 }
 
 const detail = projets
