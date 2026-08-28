@@ -512,3 +512,139 @@ seed, qui **écrit avant de mesurer**. Les deux outils répondent à deux questi
 doivent coexister — c'est écrit dans `apps/api/README.md`.
 
 **Impact schéma / API :** aucun. **Étage 1** — outillage de test uniquement.
+
+---
+
+## 2026-08-29 — [L0-b] Étage 1 — la rectification du burn-down ne descendait pas jusqu'à la phrase qui le lit
+
+**Constat, mesuré.** `docs/journal/2026-08-28.md` porte une rectification encadrée du gardien A70 :
+la ligne « L8 (scoring) » du burn-down était fausse, L8 étant **différable** hors des 26 j-h, et « le
+noyau strict compte **huit lots + 2 j de marge de recette**, pas neuf lots ». **Deux lignes plus
+bas**, la phrase de lecture disait encore « **Deux lots sur neuf** » — le comptage que la
+rectification déclare faux, dans le même fichier, sous la rectification elle-même.
+
+**Ajout :** phrase corrigée en « Deux lots sur huit », avec une seconde note encadrée qui dit ce qui
+a été rectifié et quand. **Second défaut, trouvé en corrigeant le premier :** la note du 28 était
+insérée **entre deux lignes du tableau**, ce qui en interrompt la syntaxe Markdown — la ligne
+« Total | 26 j | ~4 j | ~22 j » ne s'affichait pas comme une ligne de tableau. Note déplacée après le
+tableau. **Une seule modification de son texte, et elle est rendue nécessaire par le déplacement :**
+« Cette ligne portait L8 » devient « **L'avant-dernière ligne** portait L8 » — la note n'étant plus
+accolée à la ligne visée, « cette ligne » ne désignait plus rien. Tout le reste est inchangé au mot
+près (le fichier est un journal : on ne réécrit pas son contenu).
+
+**Valeur.** _Une correction qui répare le tableau et laisse debout la phrase qui le résume n'a corrigé
+que la moitié de ce qui trompe_ : personne ne relit une colonne, tout le monde retient « deux sur
+neuf ». C'est la famille traquée par ce dépôt, appliquée à une rectification.
+
+**Coût :** ~0,05 j, documentaire. Le compteur du plafond étage 1 n'est pas modifié : ce n'est ni du
+code ni de l'outillage, et le fichier est append-only.
+
+**Impact schéma / API :** aucun. **Étage 1.**
+
+---
+
+## 2026-08-29 — [L0] Étage 2 — L'OBSERVABILITÉ (02 §11.3) N'EXISTE PAS, et aucun registre ne le disait
+
+> **FICHE ÉTAGE 2 — PROPOSÉE, JAMAIS IMPLÉMENTÉE AVANT ARBITRAGE** (11 §8-7, `CLAUDE.md` §3-7 :
+> « la proposer est un devoir, l'anticiper est une faute »). Rien de ce qui suit n'est codé.
+> Arbitrage attendu de Williams à la porte suivante : **ABSORBÉE** / **PHASE 2** / **REFUSÉE**.
+
+### Ce que le pack promet — 02 §11.3, cité intégralement
+
+> _« Logs structurés JSON (pino) **centralisés** · **métriques** (latence API, profondeur des files,
+> taille outbox moyenne remontée par les clients, échecs de sync, coûts LLM) · **Uptime Kuma** (ou
+> équivalent) pour l'alerting (Telegram — canal interne Axion-IA existant) · **page d'état interne**
+> · alertes : disque > 80 %, échecs webhooks console, job LLM > 5 min, certificat < 15 j. »_
+
+**C'est le seul chapitre ENTIER du pack dont aucun registre ne disait qu'il n'est pas tenu.** Ni
+`DECISIONS.md` (67 entrées), ni ce fichier, ni un dossier de porte n'en portait la trace.
+
+### Constat terrain — cinq mesures, toutes datées du 2026-08-29
+
+| #   | Ce que le §11.3 exige      | Ce qui est mesuré dans le dépôt                                                                                                                                                                                                                                                                                                                                                                                     |
+| --- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Outil de supervision       | **Aucun**, parmi les **11 services** déclarés par `infra/docker-compose.coolify.yml` — la seule pile déployée (`postgres`, `createstanza`, `redis`, `minio`, `createbuckets`, `sauvegarde`, `api`, `worker`, `field`, `hq`, `caddy`). Zéro occurrence de `uptime-kuma`, `prometheus`, `grafana`, `loki`, `promtail`, `netdata`, `sentry` ou `glitchtip` dans un fichier exécutable du dépôt                         |
+| 2   | Les quatre seuils d'alerte | **Zéro occurrence dans une ligne de code.** `ALERT_DISK_USAGE_PERCENT`, `ALERT_LLM_JOB_MAX_MINUTES` et `ALERT_CERT_EXPIRY_DAYS` n'apparaissent dans **aucun** `.ts`, `.tsx` ni `.mjs` — seulement dans `.env.example`, dans deux fichiers de composition, et dans **un commentaire** de `infra/scripts/install-cron.sh`. Le **quatrième** seuil du §11.3, « échecs webhooks console », **n'a même pas de variable** |
+| 3   | Point de métriques         | **Aucun.** L'API n'expose que deux routes : `GET /health` et `GET /health/ready` (`apps/api/src/routes/sante.ts`). Pas de `/metrics`, aucun client de métriques dans les dépendances                                                                                                                                                                                                                                |
+| 4   | Page d'état interne        | **Aucune.** Rien dans `apps/hq` ni `apps/field`                                                                                                                                                                                                                                                                                                                                                                     |
+| 5   | Journaux centralisés       | **Non.** `apps/api/src/logger.ts` produit bien du JSON structuré, et son commentaire dit « pour l'agrégation (02 §11.3) » — **l'agrégateur n'existe pas**. Les journaux vivent dans `docker logs`, sur la machine qu'ils sont censés surveiller. Le canal Telegram existe, mais **uniquement** dans la chaîne de sauvegarde (`infra/postgres/sauvegarde.sh`) : **zéro** occurrence dans `apps/`                     |
+
+**Conséquence opératoire, en une phrase :** aujourd'hui, un incident de production se découvre en
+tapant `docker ps` — et l'API elle-même n'a **aucun moyen** de signaler quoi que ce soit.
+
+### Pourquoi personne ne l'avait vu — et c'est la partie qui a de la valeur
+
+**Parce que les variables existent.** Elles sont dans `.env.example`, elles portent leur valeur du
+pack (`80`, `5`, `15`), elles sont câblées dans **les deux** fichiers de composition, et elles
+portent **le bon numéro de section en commentaire** :
+
+```
+# Seuils d'alerte (02 §11.3) : disque, durée d'un job LLM, expiration de certificat.
+ALERT_DISK_USAGE_PERCENT=80
+ALERT_LLM_JOB_MAX_MINUTES=5
+ALERT_CERT_EXPIRY_DAYS=15
+```
+
+**Toute revue qui cherche « le §11.3 est-il traité ? » par mot-clé trouve ces quatre lignes conformes
+et passe.** Elles sont injectées dans le service `worker` des deux piles — donc présentes dans
+l'environnement d'un processus qui ne les lit jamais. C'est le membre le plus discret de la famille
+que ce dépôt traque depuis deux jours (« un garde-fou qui annonce plus qu'il ne fait ») : ici, le
+garde-fou n'annonce même rien — **c'est la trace de sa configuration qui tient lieu de preuve de son
+existence**, et la trace est authentique.
+
+Trois fichiers disent d'ailleurs la vérité, en toutes lettres, depuis le lot L0 :
+`infra/postgres/sauvegarde.sh` (« _02 §11.3 cite Uptime Kuma ; IL N'EST PAS DÉPLOYÉ_ »),
+`infra/postgres/sauvegarde-healthcheck.sh` et `infra/README.md`. **Aucune de ces trois phrases n'a
+jamais atteint un registre**, donc aucune n'a jamais atteint une porte. _Un constat exact qui ne
+quitte pas le fichier où il est né ne devient jamais une décision._
+
+### Valeur pour l'auditeur — pourquoi ce n'est pas du confort d'exploitant
+
+1. **L'invariant 8 en dépend directement.** « Aucune donnée ne vit sur un seul appareil > 24 h
+   ouvrées ; **alerte automatique au-delà**. » `ALERT_SYNC_SILENT_HOURS=24` est la variable de cette
+   alerte : elle n'est lue nulle part. Un iPad qui cesse de synchroniser en pleine mission ne
+   déclenche **rien** — et c'est l'appareil qui porte les seules copies des entretiens du jour.
+2. **Le terrain ne rappelle pas le siège.** Un auditeur en mission ne diagnostique pas un serveur ; il
+   constate que « ça ne marche pas » devant le client. La détection doit précéder l'appel.
+3. **Le §11.4 est déjà borgne au même endroit.** La chaîne de sauvegarde alerte sur **échec** ; rien
+   n'alerte sur le **silence** (constat déjà écrit dans `infra/docker-compose.prod.yml`, trou « B »).
+   Une supervision externe est la seule chose qui voie l'absence d'un signal.
+4. **Les métriques du §11.3 ne sont pas décoratives** : profondeur des files, taille d'outbox
+   remontée par les clients, échecs de sync et coûts LLM sont **les indicateurs du lot L6 et du lot
+   L11**. Les poser après coup, c'est instrumenter un code déjà écrit — plus cher, et sans les
+   mesures de la période où l'on en avait le plus besoin.
+
+### Coût estimé
+
+| Incrément                                                                                                                                                  | Coût     |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| **O-1** Supervision externe + alerting Telegram : Uptime Kuma (ou équivalent), sondes sur `/health/ready` des deux fronts et de l'API, certificats, disque | ~0,5 j   |
+| **O-2** Les quatre seuils deviennent du code : une sonde périodique qui LIT `ALERT_*` et notifie sur le canal existant                                     | ~0,5 j   |
+| **O-3** Point `/metrics` sur l'API et le worker (latence, files, échecs de sync, coûts LLM)                                                                | ~0,5 j   |
+| **O-4** Page d'état interne dans `apps/hq`                                                                                                                 | ~0,5 j   |
+| **O-5** Centralisation des journaux                                                                                                                        | ~1 j     |
+| **Total**                                                                                                                                                  | **~3 j** |
+
+**O-1 et O-2 sont le cœur** (~1 j) : ils ferment l'invariant 8 et le trou « silence » de la
+sauvegarde. O-3 gagne à être posé **avant** le lot L6, dont il mesure précisément les objets. O-4 et
+O-5 sont du confort de siège et se différeraient sans dommage.
+
+**Le budget de Phase 1 est de 26 j-h dont ~22 j restants et 2 j de marge de recette** : ~3 j n'y
+entrent pas sans arbitrage, et **2 j est le plafond d'une fiche ABSORBÉE**. C'est pourquoi cette
+fiche est découpée : elle peut être absorbée **en partie**.
+
+### Impact schéma / API
+
+- **Schéma (fichier 04) : aucun** pour O-1, O-2, O-4 et O-5. **O-3 : aucun non plus** — les métriques
+  se calculent, elles ne se stockent pas.
+- **API : O-3 ajoute une route** (`GET /metrics`) qui n'est listée ni au §8 ni au §24.2 → **création
+  de route non listée**, escalade `CLAUDE.md` §3-6 à documenter si O-3 est retenue. RBAC serveur
+  obligatoire, ou exposition sur le réseau Docker interne uniquement.
+- **Dépendances : O-1, O-3 et O-5 sortent de la liste épinglée du 11 §1** → escalade `CLAUDE.md`
+  §3-1. O-2 n'en demande aucune (le canal Telegram existe déjà, `curl` suffit).
+- **Sécurité :** une page d'état et un point de métriques exposent la topologie interne. Aucune donnée
+  personnelle ne doit y transiter (11 §2, redaction déjà posée dans `packages/shared/src/redaction.ts`).
+
+**Ce que cette fiche NE propose PAS :** aucun code. `.claude/agents/a53-observabilite.md` existe dans
+le dépôt — l'agent est défini, il n'a jamais rien livré. C'est un choix à faire, pas un oubli à
+rattraper au jugé.

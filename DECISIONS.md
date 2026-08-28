@@ -2691,3 +2691,117 @@ n'est pas clos.**
 
 Décideur : Williams
 Impact spec : aucun — le 02 §11.4 est appliqué, pas amendé.
+
+## 2026-08-29 — [L1] `drizzle-kit` est nommé par le contrat 11 §1 et délibérément ABSENT du dépôt : que fait-on de l'écart ?
+
+Options :
+
+1. **Installer `drizzle-kit`** pour se conformer à la lettre du 11 §1. **Écartée**, et c'est le fond
+   de cette entrée : `drizzle-kit generate` **dérive** le SQL depuis `apps/api/src/db/schema.ts`. Il
+   fait couler le schéma du TypeScript vers la base, alors que dans ce dépôt le sens est l'INVERSE et
+   qu'il est contractuel. Le brancher ferait du fichier TypeScript une **seconde source de vérité
+   face au fichier 04** — littéralement l'interdit du 11 §2 (« pas d'ORM qui _génère_ le schéma »).
+2. **Ne rien écrire** et laisser la raison vivre dans le commentaire de tête d'
+   `apps/api/scripts/db-generate.mjs`, où elle se trouve depuis le lot L1. **Écartée** : le 11 §9bis
+   dit qu'« une décision non tracée dans ce format **n'existe pas** ». Une décision structurante qui
+   ne vit que dans un commentaire de code est invisible à toute revue qui ne lit pas ce fichier-là, et
+   le premier agent qui verra `pnpm db:generate` « ne pas faire ce qu'il devrait faire » l'installera.
+3. **Tracer l'exclusion ici**, et porter l'écart au 11 §1 comme un amendement horodaté à ratifier.
+
+Arbitrage : **option 3**, qui entérine la pratique du lot L1 sans la modifier.
+
+**Règle de précédence — la divergence est INTERNE au fichier 11**, entre la parenthèse d'outillage du
+§1 (« migrations **SQL brut versionné** (drizzle-kit generate → fichiers .sql relus) ») et
+l'interdiction du §2 (« pas d'ORM qui "génère" le schéma : le fichier 04 se transcrit littéralement
+en migrations SQL, Drizzle ne sert qu'aux requêtes typées »). L'échelle **§32-36 > §24-31 > §16-22 >
+§1-15** ordonne les sections du pack fonctionnel et **ne tranche pas** une contradiction interne au
+contrat technique ; on applique donc la clause de tête de `CLAUDE.md` — « **le DDL vit EXCLUSIVEMENT
+dans `/docs/04_MODELE_DE_DONNEES.md`** » — et le §2, qui est une **interdiction nommée**, l'emporte
+sur une parenthèse d'outillage du §1. _Une interdiction ne se contourne pas par une mention
+incidente._
+
+**Mesuré le 2026-08-29, avant d'écrire cette entrée** : `drizzle-kit` n'apparaît dans **aucun**
+`package.json` du dépôt (racine, `apps/*`, `packages/*`) et compte **zéro occurrence** dans
+`pnpm-lock.yaml`. L'exclusion est réelle, elle n'est pas seulement documentée.
+
+**Ce que `pnpm db:generate` fait à la place, et pourquoi ce n'est pas un pis-aller :** il pose le
+squelette numéroté d'une migration, sentinelles `@UP` / `@DOWN` comprises, que le DBA remplit **à la
+main** depuis le fichier 04. Deux verrous indépendants attrapent une transcription infidèle —
+`pnpm schema:diff` (liste blanche : ce qui est déclaré doit exister) et `pnpm check:schema-inventaire`
+(liste noire : rien d'autre ne doit exister). Le SQL n'est donc pas moins vérifié qu'un SQL généré :
+il est vérifié **contre la spécification** au lieu de l'être contre un fichier TypeScript qu'aurait
+écrit la même main.
+
+Décideur : A01 (arbitrage du lot L1, tracé rétroactivement au format 11 §9bis sur constat mesuré
+d'A83)
+Impact spec : **amendement horodaté au 11 §1** — la parenthèse « drizzle-kit generate → fichiers .sql
+relus » est retirée du contrat ; les migrations restent du SQL brut versionné, transcrit du fichier 04. Le pack n'est PAS modifié (il est scellé, escalade `CLAUDE.md` §3-2) : **à ratifier par Williams
+à la porte P-A**, au même titre que les amendements Traefik, construction-sur-le-serveur et R2.
+
+## 2026-08-29 — [L0] Deux entrées du 2026-08-28 se contredisent sur la destination hors serveur : laquelle fait foi ?
+
+Options :
+
+1. **Réécrire l'une des deux entrées** pour les rendre cohérentes. **Écartée** : le fichier est
+   **append-only**, et `scripts/check-decisions.mjs` le dit lui-même — « ne réécris pas une entrée
+   passée pour la mettre en conformité, ce serait le changement silencieux que le format empêche ».
+2. **Laisser le registre en l'état.** **Écartée** : les deux entrées portent des `Impact spec`
+   incompatibles, donc **le pack ne peut être amendé depuis ce registre en l'état** — un lecteur qui
+   cherche « le 02 §11.4 est-il amendé ? » trouve deux réponses opposées, du même jour, et aucune ne
+   révise l'autre.
+3. **Une entrée de réconciliation** qui dit laquelle gouverne quoi, sans toucher aux précédentes.
+
+Arbitrage : **option 3.** Les deux entrées en cause sont, dans l'ordre du fichier :
+
+- **(E1)** _« Où part la copie hors serveur : le pack dit Hetzner + Scaleway, la machine a déjà
+  Cloudflare R2 »_ — `Impact spec : **amendement au 02 §11.4**, horodaté […] la troisième copie est
+**différée hors Phase 1**. À RATIFIER par Williams à la porte P-A.`
+- **(E2)** _« D-1 : quelle SECONDE destination hors serveur, et par quel moyen l'atteindre ? »_,
+  **postérieure** dans le fichier — option (A), Hetzner Storage Box, `Impact spec : aucun — le 02 §11.4 est **appliqué, pas amendé**.`
+
+**Ce qui fait foi, point par point :**
+
+1. **Sur la destination et l'existence d'un amendement : E1 fait foi.** Le 02 §11.4 assigne des
+   RÔLES nommés — « copie chiffrée **quotidienne** vers Hetzner Storage Box (site distinct) + **2ᵉ
+   copie hebdo hors Hetzner** ». Le dépôt inverse ces rôles : R2 (hors Hetzner) tient la copie
+   quotidienne, la Storage Box est reléguée au second rang. **Un échange de rôles est un amendement,
+   pas une application** : la phrase « appliqué, pas amendé » d'E2 est inexacte prise à la lettre, et
+   la lire ainsi effacerait l'amendement d'E1.
+2. **Sur le calendrier : E2 fait foi**, parce qu'elle est postérieure et décidée par Williams. E1
+   différait la troisième copie « hors Phase 1 » ; E2 la ramène **dans** la Phase 1 (option A,
+   ~0,5 j). E2 **révise donc E1 sur ce point**, et c'est ce qu'aucune des deux ne disait.
+3. **E2 ne restaure pas le §11.4** : elle choisit le NOM que le pack proposait (la Storage Box) pour
+   le rang que le cadre amendé laissait libre. Il reste **un** amendement à ratifier, celui d'E1, et
+   non deux `Impact spec` concurrents.
+
+**Règle de précédence : sans objet** — aucune divergence interne au pack n'est tranchée ici. La
+contradiction est **entre deux entrées du registre**, pas entre deux sections du pack ; l'échelle
+§32-36 > §24-31 > §16-22 > §1-15 n'a rien à y arbitrer. Le critère appliqué est celui du 11 §9bis :
+le fichier est append-only, et **la plus récente révise la précédente sur le point qu'elle traite**,
+à condition que la révision soit écrite — c'est l'objet de cette entrée.
+
+**L'ÉTAT RÉEL, MESURÉ LE 2026-08-29, ET IL N'EST NI CELUI D'E1 NI CELUI D'E2 :**
+
+| Destination             | Ce que le registre laisse croire | Ce qui est mesuré                                                                                                                                                                                                                                                                                                                                                        |
+| ----------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Cloudflare R2**       | en service                       | **en service et PROUVÉ par aller-retour** — `docs/ETAT.md` : 1 539 objets expédiés en 16 s, **relecture depuis R2 vérifiée sur deux témoins**, empreinte du coffre `e9634b5fbc00487a…` recomparée après retéléchargement                                                                                                                                                 |
+| **Hetzner Storage Box** | « seconde destination », décidée | **implémentée et NON ÉPROUVÉE** — `expedier_storagebox()` existe dans `infra/postgres/sauvegarde.sh`, six tests couvrent ses **contrôles d'entrée** et aucun l'expédition elle-même ; `BACKUP_STORAGEBOX_HOST`, `_USER` et `_SSH_KEY_B64` sont **vides** dans `.env.example` ; **aucune clé SSH n'est générée** ; le service journalise « **TROISIÈME COPIE INACTIVE** » |
+
+**Conséquence à écrire plutôt qu'à arrondir :** il existe aujourd'hui **deux copies, une seule hors
+serveur**. La règle 3-2-1 du 02 §11.4 **n'est pas tenue**, et elle ne le sera qu'après une expédition
+réelle mesurée vers la Box — relecture d'un objet témoin et comparaison d'empreinte, exactement comme
+pour R2. E2 le disait déjà : « tant que cette mesure n'est pas prise, **D-1 n'est pas clos** ».
+La correction du 2026-08-29 apportée à `infra/pgbackrest/pgbackrest.conf` retire les deux phrases de
+ce fichier qui affirmaient le contraire.
+
+**Ce que cette entrée NE tranche PAS, et qui appartient à Williams :** la **ratification** de
+l'amendement d'E1 à la porte P-A · la destination définitive de la **production** (E1 ne vaut que
+pour le staging Coolify, et le `.env.example` interdit d'en déduire la prod) · la **juridiction UE**
+du stockage distant, condition impérative de la fiche A-002, jamais vérifiée · et la question annexe
+de D-3, le dépôt de la passphrase du coffre ailleurs que chez un unique détenteur.
+
+Décideur : A01 (arbitrage de lecture du registre, sur constat mesuré d'A83) — la ratification reste
+à **Williams**, porte P-A.
+Impact spec : aucun **de plus**. Cette entrée ne crée aucun amendement : elle établit qu'il n'y en a
+**qu'un** en attente sur le 02 §11.4, celui d'E1, et que le calendrier de la troisième copie est
+celui d'E2.

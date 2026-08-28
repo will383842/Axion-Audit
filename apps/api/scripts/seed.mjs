@@ -8,7 +8,8 @@
 //                      COMPTE FONDATEUR avec `habilitated_at` POSÉ.
 //   pnpm seed:demo   → mission fictive DÉTERMINISTE (2 unités, 12 questions
 //                      couvrant TOUS les answer_types, 2 sessions, 1 pièce
-//                      jointe). REFUSÉE si APP_ENV=prod.
+//                      jointe). REFUSÉE SAUF si APP_ENV vaut explicitement
+//                      dev, staging ou test (garde-fou qui échoue FERMÉ).
 //
 // CRITÈRE DUR DU LOT L1 : « seed REJOUABLE 2× À L'IDENTIQUE ». Chaque écriture
 // est donc un `INSERT … ON CONFLICT` :
@@ -73,13 +74,49 @@ function abandon(titre, detail) {
   process.exit(1);
 }
 
-// GARDE-FOU D'ENVIRONNEMENT (11 §5 : « jamais exécutable en prod »).
-if (mode === 'demo' && process.env.APP_ENV === 'prod') {
+// ---------------------------------------------------------------------------
+// GARDE-FOU D'ENVIRONNEMENT (11 §5 : « jamais exécutable en prod »)
+// ---------------------------------------------------------------------------
+// LISTE BLANCHE, ET NON LISTE NOIRE — le sens du test a été INVERSÉ le
+// 2026-08-29 (voir DECISIONS.md, entrée du jour). La forme précédente était
+// `APP_ENV === 'prod'` → refus : un opt-in. APP_ENV NON DÉFINIE laissait donc
+// le seed de démonstration s'exécuter contre le `DATABASE_URL` fourni, QUEL
+// QU'IL SOIT — mesuré : variable retirée, le script passait le contrôle et
+// tentait la connexion. Or l'oubli d'une variable est le cas NORMAL d'un shell
+// d'exploitation, d'un `docker exec` à la main ou d'un cron dépouillé, et c'est
+// précisément la situation où l'on est branché sur la production.
+//
+// Un garde-fou doit exiger la PREUVE QU'ON PEUT AGIR, jamais la preuve qu'on ne
+// peut pas : tout ce qui n'est pas explicitement un environnement de
+// non-production est traité comme la production. Les trois valeurs acceptées
+// sont celles qui existent réellement dans ce dépôt — `dev` et `staging` du
+// `appEnvSchema` (packages/shared/src/env.ts, qui énumère dev|staging|prod),
+// et `test`, posée par le harnais d'intégration (apps/api/tests/aide/base-l1.ts,
+// `executerSeed`). Ajouter une valeur ici est une décision, pas un réflexe.
+//
+// Le contrôle ne porte QUE sur `--demo` : le seed des référentiels, lui, DOIT
+// pouvoir tourner en production — c'est lui qui crée le compte fondateur (11 §5).
+// ---------------------------------------------------------------------------
+const ENVIRONNEMENTS_DE_DEMO = ['dev', 'staging', 'test'];
+const appEnv = process.env.APP_ENV;
+
+if (mode === 'demo' && !ENVIRONNEMENTS_DE_DEMO.includes(appEnv ?? '')) {
+  const constate =
+    appEnv === undefined || appEnv === ''
+      ? 'APP_ENV est ABSENTE (ou vide)'
+      : `APP_ENV vaut « ${appEnv} »`;
   abandon(
-    'REFUSÉ en production.',
+    'REFUSÉ — environnement de non-production non prouvé.',
     '  Les fixtures de démo sont des données FICTIVES destinées aux E2E et à la\n' +
       "  recette P-E. Les injecter en production polluerait des données d'audit\n" +
-      '  réelles, sur lesquelles un client signe un livrable. APP_ENV=prod → refus.\n',
+      '  réelles, sur lesquelles un client signe un livrable.\n\n' +
+      `  Constaté : ${constate}.\n` +
+      `  Attendu  : APP_ENV parmi ${ENVIRONNEMENTS_DE_DEMO.join(', ')}.\n\n` +
+      "  Ce refus n'est PAS une panne : le garde-fou échoue FERMÉ. Une variable\n" +
+      "  absente ne prouve pas qu'on est hors production — elle prouve seulement\n" +
+      "  qu'on n'en sait rien, et « on n'en sait rien » ne suffit pas pour écrire\n" +
+      '  dans une base. Renseigne APP_ENV dans le .env, ou en variable :\n' +
+      '      APP_ENV=dev pnpm seed:demo\n',
   );
 }
 
