@@ -2075,3 +2075,57 @@ worker retirerait l'API du trafic.
 que `ready` et `unavailable`. Le smoke test de `deploy-staging.yml` utilise `curl -fsS` et ne teste
 que le statut HTTP : `degraded` (200) le passe — **comportement voulu et vérifié**, une instance
 dégradée doit être déployable.
+
+## 2026-08-28 — [l0] Où part la copie hors serveur : le pack dit Hetzner + Scaleway, la machine a déjà Cloudflare R2
+
+**Options :**
+
+1. **Appliquer le pack à la lettre** — Storage Box Hetzner quotidienne + 2ᵉ copie hebdomadaire hors
+   Hetzner (Scaleway). Deux comptes à créer, deux mécaniques à exploiter, deux factures.
+2. **Réutiliser Cloudflare R2**, déjà en service sur cette machine pour `axion-ia.com`, avec un
+   **bucket dédié** et un **jeton limité à ce seul bucket**.
+3. Renoncer à la copie hors serveur en Phase 1 et l'écrire dans la porte.
+
+**Arbitrage : option 2.** Règle de précédence **appliquée** : 02 §11.4 (architecture, étage §1-15)
+est amendé par un constat de terrain, et l'**invariant 8 du 00_INDEX** — « aucune donnée ne vit sur
+un seul support » — **prime sur le NOM du fournisseur choisi pour le tenir**. C'est l'invariant qui
+est l'exigence ; Hetzner et Scaleway n'en étaient qu'une mise en œuvre proposée.
+
+**Ce qui a déclenché la révision, et il fallait aller regarder pour le savoir :** A01 s'apprêtait à
+faire créer deux comptes à Williams. La machine porte déjà une chaîne de sauvegarde hors site
+complète et fonctionnelle — `/opt/axion-ia/run-r2-backup.sh`, cron quotidien à 3 h, plus hebdomadaire
+et mensuel, avec passphrase de chiffrement, en service depuis juillet — **vers Cloudflare R2**.
+_Proposer de bâtir ce qui existe déjà est une faute d'inventaire, pas une prudence._
+
+**Ce que l'option 2 tient, et qui est l'essentiel :** R2 **n'est pas Hetzner**, donc la clause « 2ᵉ
+copie hors Hetzner » du §11.4 est satisfaite **par la destination elle-même**. La copie quitte la
+machine qu'elle protège, chiffrée, chez un second fournisseur. L'invariant 8 est tenu sur le fond.
+
+**Ce que l'option 2 NE tient PAS, et il faut le dire plutôt que de l'arrondir :** le §11.4 demande
+**deux** destinations distinctes (3-2-1 : trois copies, deux supports, une hors site). Nous en aurons
+**une** — serveur + R2 = deux copies, une hors site. **La troisième copie n'existe pas.** C'est un
+écart assumé au pack, proportionné à la Phase 1, et il devra être rouvert avant la mise en
+production réelle. Il est écrit ici pour qu'on ne le redécouvre pas comme une surprise.
+
+**Cloisonnement, qui n'est pas un détail :** le jeton est **limité au seul bucket
+`axion-audit-backups`**, en lecture/écriture d'objets, jamais Admin. Motif : le `.env` du staging est
+en **644** sur une machine partagée ; si ce jeton fuitait avec les droits du voisin, la fuite
+donnerait accès **aux sauvegardes de la production d'un tiers**. Un jeton cloisonné transforme un
+incident grave en incident sans conséquence.
+
+**Rétention :** 30 jours des deux côtés, comme le §11.4 le fixe pour la base — **alignée
+volontairement** avec les archives MinIO, faute de quoi une restauration de J-25 désignerait des
+pièces jointes qu'aucune archive ne contiendrait plus. La rétention _réglementaire_ des pièces
+jointes d'audit reste à trancher avant la première mission ; elle est de nature contractuelle, pas
+technique.
+
+**Ce que cet arbitrage ne tranche pas et qui reste ouvert :** il n'existe **aucune alerte sortante**.
+Un échec d'expédition trois nuits de suite se lira dans `docker ps`, pas dans une notification. _Une
+sauvegarde qu'on ne surveille pas est une sauvegarde qu'on découvre absente le jour où on en a
+besoin._
+
+**Décideur :** Williams (destination et jeton fournis le 2026-08-28), sur proposition d'A01
+**Impact spec :** **amendement au 02 §11.4**, horodaté — la destination hors site devient Cloudflare
+R2 au lieu de Hetzner Storage Box, et la troisième copie est **différée hors Phase 1**.
+**À RATIFIER par Williams à la porte P-A**, au même titre que les amendements Traefik et
+construction-sur-le-serveur.
