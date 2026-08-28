@@ -20,6 +20,13 @@ WORKDIR /app
 
 FROM socle AS deps
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc ./
+# `scripts/prepare-husky.mjs` est référencé par le script `prepare` de la racine,
+# que pnpm exécute après CHAQUE installation — donc ici. Sans ce fichier,
+# l'installation meurt sur « Cannot find module ». Le script, lui, constate
+# l'absence de dépôt git dans l'image et s'abstient d'installer des hooks : c'est
+# la seule ligne de `scripts/` dont une image a besoin, et elle n'ajoute rien au
+# contexte de cache utile.
+COPY scripts/prepare-husky.mjs ./scripts/
 COPY apps/api/package.json ./apps/api/
 COPY apps/worker/package.json ./apps/worker/
 COPY apps/field/package.json ./apps/field/

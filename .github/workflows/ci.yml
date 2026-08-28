@@ -198,6 +198,13 @@ jobs:
       - name: pnpm check:isolation-reseau
         run: pnpm check:isolation-reseau
 
+      # Deux conventions propres a la pile Coolify, chacune ayant coute un
+      # deploiement rate : aucune interpolation dans un volume, et des chemins
+      # relatifs resolus depuis la RACINE. `docker compose config -q` ne les voit
+      # pas — il rend 0 dans les deux conventions.
+      - name: pnpm check:compose-coolify
+        run: pnpm check:compose-coolify
+
       # Garde-fou du garde-fou : si la liste d'exceptions du script cessait
       # d'être vide, le contrôle ci-dessus deviendrait perméable en silence.
       - name: Vérifier que la liste d'exceptions est restée vide
