@@ -9,13 +9,28 @@
 // =============================================================================
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
-import { AppError, ERROR_CODES, HTTP_STATUS_BY_ERROR_CODE, type ApiError } from '@axion/shared';
+import {
+  AppError,
+  ERROR_CODES,
+  HTTP_STATUS_BY_ERROR_CODE,
+  appliquerLocaleFrancaiseZod,
+  messageValidationFrancais,
+  type ApiError,
+} from '@axion/shared';
 
 function enveloppe(code: keyof typeof ERROR_CODES, message: string): ApiError {
   return { error: { code: ERROR_CODES[code], message } };
 }
 
 export function enregistrerGestionErreurs(app: FastifyInstance): void {
+  // Invariant 5 — « Interface 100 % en français ». `details[].message` est recopié de
+  // Zod et affiché TEL QUEL par la PWA terrain : sans cet appel, l'auditeur lisait
+  // « Too small: expected number to be >=1 ». La locale `fr` est fournie par Zod 4
+  // lui-même (aucune dépendance ajoutée). Elle est déjà posée par l'import de
+  // `@axion/shared` ; on l'appelle ICI parce que c'est ce fichier qui produit les
+  // messages, et qu'un effet de bord d'import survit mal à une réorganisation.
+  appliquerLocaleFrancaiseZod();
+
   // --- 404 : ressource inconnue --------------------------------------------
   app.setNotFoundHandler((_requete: FastifyRequest, reponse: FastifyReply) => {
     return reponse
@@ -40,11 +55,14 @@ export function enregistrerGestionErreurs(app: FastifyInstance): void {
       );
       return reponse.code(HTTP_STATUS_BY_ERROR_CODE.VALIDATION_FAILED).send({
         error: {
+          // Le CODE ne se traduit jamais : c'est lui que le front teste (11 §3).
           code: ERROR_CODES.VALIDATION_FAILED,
           message: 'Les données envoyées sont invalides.',
           details: erreur.issues.map((i) => ({
             path: i.path.join('.'),
-            message: i.message,
+            // Le MESSAGE, lui, est de l'interface (invariant 5) : locale `fr` de Zod,
+            // plus le filet `messageValidationFrancais` pour un littéral resté anglais.
+            message: messageValidationFrancais(i.message),
           })),
         },
       } satisfies ApiError);

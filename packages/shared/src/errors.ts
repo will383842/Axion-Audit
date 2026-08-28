@@ -8,6 +8,42 @@
 // =============================================================================
 import { z } from 'zod';
 
+// =============================================================================
+// LOCALE DE VALIDATION — invariant 5 : « Interface 100 % en français ».
+//
+// `error.details[].message` est recopié depuis Zod et affiché TEL QUEL par la PWA
+// terrain (voir `apiErrorSchema.message` ci-dessous). Avec la locale par défaut, un
+// auditeur en clientèle lisait « Too small: expected number to be >=1 » et
+// « Invalid ISO datetime ». Un message d'erreur d'API affiché tel quel EST de
+// l'interface : l'invariant 5 s'y applique sans exception.
+//
+// Zod 4 EMBARQUE la locale française (`z.locales.fr`, présent dans le paquet épinglé
+// 4.4.3 — vérifié avant d'écrire une ligne). AUCUNE dépendance ajoutée : l'escalade
+// 11 §8-1 ne s'applique pas.
+//
+// `z.config()` est GLOBAL au module `zod` du processus. `apps/api`, `apps/worker`,
+// `apps/field`, `apps/hq` et `packages/shared` résolvent tous zod@4.4.3 vers le MÊME
+// répertoire pnpm : un seul appel suffit, et il est posé ICI parce que c'est le module
+// que tout consommateur de `@axion/shared` charge (index.ts le réexporte en premier).
+// Il est aussi APPELÉ explicitement par le gestionnaire d'erreurs de l'API : un effet
+// de bord d'import est vrai tant que personne ne réorganise les imports, un appel
+// nommé reste vrai après.
+//
+// CE QUI N'EST PAS TRADUIT, ET NE DOIT PAS L'ÊTRE : le CODE. `ERROR_CODES` est ce que
+// le front teste (11 §3 : « jamais de littéral libre ») ; seul le MESSAGE est localisé.
+// =============================================================================
+
+let localeAppliquee = false;
+
+/** Applique la locale française de Zod au processus. Idempotent. */
+export function appliquerLocaleFrancaiseZod(): void {
+  if (localeAppliquee) return;
+  z.config(z.locales.fr());
+  localeAppliquee = true;
+}
+
+appliquerLocaleFrancaiseZod();
+
 /**
  * Codes d'erreur du produit. Un code = une cause, jamais une reformulation.
  * Ajouter un code est une décision d'API : elle passe par une entrée DECISIONS.md
@@ -47,6 +83,44 @@ export const ERROR_CODES = {
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
+
+/**
+ * FILET DE L'INVARIANT 5 — dernier recours, pas mécanisme principal.
+ *
+ * La locale ci-dessus couvre les messages produits par Zod. Elle ne couvre PAS un
+ * `message:` littéral écrit en anglais par un auteur de schéma, ni un éventuel trou de
+ * la locale. Ce garde-fou attrape ces cas-là et rend un message français générique
+ * plutôt qu'un message anglais : mieux vaut un message pauvre en français qu'un message
+ * riche dans la mauvaise langue, sur un écran d'auditeur en clientèle.
+ *
+ * Aucun message français de la locale `fr` de Zod ne commence par l'un de ces
+ * préfixes (« Entrée invalide », « Trop petit », « Trop grand », « Chaîne invalide »,
+ * « Nombre invalide », « Clé non reconnue », « Valeur invalide ») : le filet ne peut
+ * pas dégrader un message déjà correct.
+ */
+const PREFIXES_ANGLAIS = [
+  'Invalid',
+  'Too small',
+  'Too big',
+  'Unrecognized',
+  'Required',
+  'Expected',
+  'Must be',
+  'Not a',
+  'String must',
+  'Number must',
+  'Array must',
+] as const;
+
+/** Message rendu quand un message de validation est resté en anglais. */
+export const MESSAGE_VALIDATION_GENERIQUE = 'Valeur invalide.';
+
+/** Rend `message` s'il est en français, le message générique français sinon. */
+export function messageValidationFrancais(message: string): string {
+  return PREFIXES_ANGLAIS.some((prefixe) => message.startsWith(prefixe))
+    ? MESSAGE_VALIDATION_GENERIQUE
+    : message;
+}
 
 /** Détail d'erreur : sert à pointer le champ fautif d'une validation Zod. */
 export const errorDetailSchema = z.object({

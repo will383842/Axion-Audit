@@ -20,6 +20,16 @@ export const logger: Logger = pino({
   // Politique de redaction PARTAGÉE avec le worker (packages/shared/src/redaction.ts).
   // Elle est posée ici, sur l'instance RACINE : aucun appelant ne peut l'oublier.
   // Compter sur la discipline de chaque `log.info()` ne tiendrait pas.
+  //
+  // La politique n'est PAS une liste de chemins `*.champ` : son `censor` est une
+  // fonction, appelée par pino une fois par clé racine ET sur `msg`, qui parcourt le
+  // sous-arbre. Deux conséquences à connaître avant d'y toucher :
+  //   · la couverture ne dépend plus de la profondeur déclarée — `{a:{b:{c:{email}}}}`
+  //     est masqué comme `{email}` ;
+  //   · toute chaîne journalisée est nettoyée de ses e-mails, jetons porteurs, numéros
+  //     de téléphone et paramètres de requête sensibles, `req.url` et `err.message`
+  //     compris — sans être masquée, pour rester diagnosticable (06 §10.2).
+  // Les détails et l'arbitrage sont en tête de packages/shared/src/redaction.ts.
   redact: { ...OPTIONS_REDACTION_JOURNAL, paths: [...OPTIONS_REDACTION_JOURNAL.paths] },
   base: {
     service: 'api',
