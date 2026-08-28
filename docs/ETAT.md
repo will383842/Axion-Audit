@@ -435,3 +435,48 @@ Prochaine action : intégrer le rendu d'A59 (sauvegarde restaurable — **seul p
 puis rejouer la chaîne de migrations up/down sur ce socle assaini.
 
 Tests rouges connus : aucun.
+
+## 2026-08-28 10h12 — [lot L0-b] — étape pipeline 6/7 — PLUS AUCUN POINT BLOQUANT
+
+Dernier commit vert : d092343 (docs(porte): le dernier point bloquant est levé, deux décisions
+remontent à Williams) · Branche : lot/l0-infra · Poussé : oui · **Arbre propre**
+
+**La sauvegarde restaure, et la mécanisation tourne toute seule sur le staging.** Déploiement
+`l863jcaxg1r42yv93asx9byu` (commit `1ca36cd`), `finished` — vérifié **dans la file**, pas via l'API.
+
+Le service `sauvegarde` a exécuté **une passe complète sans intervention** dès son démarrage :
+incrémentale PostgreSQL, `expire` (rétention temporelle non atteinte, donc rien de supprimé — le bon
+comportement), archive MinIO chiffrée, **vérification aller-retour de l'archive**, rotation, puis
+« prochaine passe dans 66 070 s (créneau 02:30 UTC) ».
+
+```
+pgbackrest info : status: ok   cipher: aes-256-cbc
+  full backup 20260828-072358F                     32,1 Mo → 3,8 Mo (ratio 8,4)
+  incr backup 20260828-072358F_20260828-080846I    ← produite par le service, seul
+  wal archive min/max : 000000010000000000000001 / 00000001000000000000000F
+
+sonde postgres  : « cluster stable depuis 94 s, archivage sans echec en cours »
+disque          : 46 Go / 150 Go — 32 % (le « au-delà de 80 % » était faux)
+extérieur       : /health 200 · /ready 200 · / 200 · /hq/ 200 · /sw.js 404
+production      : axion-ia.com → 301 en 0,115 s
+```
+
+**La preuve de restauration est l'empreinte, pas le code de retour :** base d'origine et base
+restaurée rendent `65929446c5c682592befc43c033229b6`, sept empreintes par table identiques une à une.
+*« Le restore a réussi » ne prouve rien ; « les données sont les mêmes » prouve tout.*
+
+**Deux défauts attrapés par nos propres garde-fous avant le commit** — c'est la meilleure nouvelle du
+lot, parce que c'est la mécanique qui a travaillé à ma place : `check:jonction` a refusé trois
+variables interpolées et non documentées ; et le nouveau service portait `command: []`, **réintroduit
+par recopie du modèle tel qu'il était AVANT mon correctif du matin**. Le déploiement serait mort de
+la même façon, en quatorze secondes, sur le même message inutile. *Un correctif qu'on n'explique pas
+se fait recopier à l'envers* — d'où le renvoi explicite ajouté dans le fichier.
+
+**Ce qui reste, et qui n'appartient plus à un agent :** aucune copie hors serveur (D-1, quatre options
+chiffrées dans le dossier de porte) · aucune alerte sortante · test de restauration manuel · le `.env`
+du staging en 644 · les migrations up/down à **rejouer** sur le socle assaini.
+
+Prochaine action : rejouer la chaîne de migrations up/down sur le socle assaini — dernière ligne de
+DoD manquante — puis représenter la porte P-A au gardien A02.
+
+Tests rouges connus : aucun.
