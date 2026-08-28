@@ -27,21 +27,21 @@
 | Frontal / TLS            | Traefik (`coolify-proxy`), qui possède 80/443                 | notre Caddy                                         |
 | Fichier compose          | `infra/docker-compose.coolify.yml` (autoportant)              | `docker-compose.yml` + `.staging.yml` / `.prod.yml` |
 | Scripts `infra/scripts/` | **AUCUN ne s'applique** (§6)                                  | ce sont les leurs                                   |
-| Sauvegardes              | **AUCUNE** (§5)                                               | décrites, **JAMAIS JOUÉES**                         |
+| Sauvegardes              | **complète + restauration JOUÉES le 2026-08-28** (§5)         | décrites, **JAMAIS JOUÉES**                         |
 
 **Sections à lire selon ce que vous cherchez :**
 
-| Vous cherchez…                                             | Allez au…                                     |
-| ---------------------------------------------------------- | --------------------------------------------- |
-| La confrontation « ce que disait ce fichier » ↔ la machine | **§1**                                        |
-| Le staging réel : chemins, noms, réseaux, conventions      | **§4** (tout est MESURÉ)                      |
-| L'état de la sauvegarde et de la restauration              | **§5** — réponse courte : **il n'y en a pas** |
-| Ce que valent les scripts `infra/scripts/*.sh`             | **§6**                                        |
-| Le développement local                                     | **§3**                                        |
-| Le chemin « VPS dédié » (prod future)                      | **§7** — intégralement **JAMAIS JOUÉ**        |
-| Les conditions de cohabitation avec `axion-ia.com`         | `infra/COHABITATION_AXIONIA_WEB.md`           |
-| Les arbitrages Coolify (Traefik, build serveur)            | `DECISIONS.md`, entrées du **2026-08-28**     |
-| Les garde-fous nés des déploiements ratés                  | `AMELIORATIONS.md`, fiche du **2026-08-28**   |
+| Vous cherchez…                                             | Allez au…                                                                |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------ |
+| La confrontation « ce que disait ce fichier » ↔ la machine | **§1**                                                                   |
+| Le staging réel : chemins, noms, réseaux, conventions      | **§4** (tout est MESURÉ)                                                 |
+| L'état de la sauvegarde et de la restauration              | **§5** — sauvegarde ✅, restauration **jouée** ✅, copie hors serveur 🔴 |
+| Ce que valent les scripts `infra/scripts/*.sh`             | **§6**                                                                   |
+| Le développement local                                     | **§3**                                                                   |
+| Le chemin « VPS dédié » (prod future)                      | **§7** — intégralement **JAMAIS JOUÉ**                                   |
+| Les conditions de cohabitation avec `axion-ia.com`         | `infra/COHABITATION_AXIONIA_WEB.md`                                      |
+| Les arbitrages Coolify (Traefik, build serveur)            | `DECISIONS.md`, entrées du **2026-08-28**                                |
+| Les garde-fous nés des déploiements ratés                  | `AMELIORATIONS.md`, fiche du **2026-08-28**                              |
 
 ---
 
@@ -70,7 +70,7 @@ Méthode : `ssh axionia-web '<commande>'` depuis le poste de développement, 202
 | L'unique Caddy de prod sert les deux environnements sur 80/443                       | `docker ps` (colonne `PORTS`)                                                            | 80/443 appartiennent à `coolify-proxy` (Traefik). Notre Caddy **ne publie aucun port**                             | **FAUX pour le staging**                                   |
 | `https://audit-staging.<domaine>/api/v1/health` → 200                                | `getent hosts audit-staging.axion-ia.com`                                                | **non résolu** — l'enregistrement DNS n'existe pas                                                                 | **FAUX** — §4.6                                            |
 | Le staging est joignable publiquement                                                | `curl -o /dev/null -w '%{http_code}' http://<uuid>.178.105.55.15.sslip.io/api/v1/health` | **404** à 06h41, **504** à 06h47 (redéploiement en cours par un autre agent)                                       | **FAUX à l'heure du relevé** — §4.6                        |
-| §5.3 : `pgbackrest --stanza=axion stanza-create` puis `check` réussissent            | `docker exec --user postgres <pg> pgbackrest --stanza=axion info`                        | la stanza **existe**, mais `status: error (no valid backups)`                                                      | **PARTIELLEMENT VRAI** — §5                                |
+| §5.3 : `pgbackrest --stanza=axion stanza-create` puis `check` réussissent            | `docker exec --user postgres <pg> pgbackrest --stanza=axion info`                        | la stanza **existe**, mais `status: error (no valid backups)` **à 06h40** — `status: ok` depuis 07h24 (§5.1)       | **PARTIELLEMENT VRAI au relevé, CORRIGÉ depuis** — §5.1    |
 | L'archivage WAL fonctionne réellement (`failed_count = 0`)                           | `psql -U axion -d axion_audit -c 'SELECT … FROM pg_stat_archiver;'`                      | `archived_count=3`, `failed_count=0`, `last_archived_wal=000000010000000000000003`                                 | **VRAI — et c'est le seul point de sauvegarde qui tienne** |
 | §5.3 : la commande de contrôle s'écrit `psql` sans `-U`                              | même commande                                                                            | `FATAL: role "postgres" does not exist` — le rôle est **`axion`**                                                  | **FAUX** — corrigé §4.4                                    |
 | §2 bis : les fronts sont des jobs one-shot qui sortent en 0, Caddy sert les fichiers | `docker ps -a --filter label=coolify.resourceName=axion-audit-staging`                   | `field` et `hq` : `Exited (0)` ; `caddy` : `Up (healthy)` ; montages `…_field-dist:/srv/principal/field`           | **VRAI — le README avait raison**                          |
@@ -107,6 +107,7 @@ infra/
 ├── postgres/postgresql.custom.conf  archive_mode, wal_level, UTC
 ├── postgres/healthcheck.sh       sonde du conteneur postgres
 ├── postgres/stanza-create.sh     création de la stanza pgBackRest
+├── postgres/sauvegarde.sh        service PLANIFIÉ : pgbackrest backup + archive MinIO chiffrée (§5.3)
 ├── pgbackrest/pgbackrest.conf    dépôt chiffré, rétention
 ├── README.md                     ← ce runbook
 └── scripts/                      ← TOUS écrits pour le montage « VPS dédié ». Voir §6.
@@ -435,52 +436,353 @@ notre Caddy écoute sur **8080**, d'où le 504.
 
 ---
 
-## 5. SAUVEGARDE ET RESTAURATION — L'ÉTAT RÉEL, SANS ENJOLIVEMENT
+## 5. SAUVEGARDE ET RESTAURATION — MESURÉ ET JOUÉ LE 2026-08-28
 
-### 🔴 Y a-t-il une sauvegarde restaurable du staging aujourd'hui ? **NON.**
+> Cette section a été **entièrement rejouée** entre 07h20 et 08h00 UTC (A59). Tout chiffre qui y
+> figure a été relevé sur `axionia-web` ; rien n'y est extrapolé sans le dire.
 
-```bash
-ssh axionia-web "docker exec --user postgres $PG pgbackrest --stanza=axion info"
+### 5.0 ⚠️ « LE STAGING EST SAIN » NE DIT RIEN DE LA MÉCANISATION — la matinée du 2026-08-28
+
+Entre 07h20 et 07h35, le staging **en service** datait du déploiement de **06h51**, donc
+**antérieur à la mécanisation de la stanza**. Mesuré alors :
+
+| Contrôle                                                | Résultat à 07h31                                     |
+| ------------------------------------------------------- | ---------------------------------------------------- |
+| Le compose **rendu** sur disque contient `createstanza` | **oui** (rendu à 07h26)                              |
+| Un conteneur `createstanza` avait-il jamais tourné ?    | **AUCUN** — seul `createbuckets` existait            |
+| L'image portait-elle `axion-stanza-create` ?            | **non** : `stat …: no such file or directory`        |
+| La sonde de `postgres` était-elle `axion-healthcheck` ? | **non** : encore `pg_isready`, la sonde « menteuse » |
+
+**La stanza du staging avait donc été créée À LA MAIN, pas par le mécanisme** — et rien ne le
+montrait, puisque la pile affichait `healthy`.
+
+**Le déploiement de 07h39 a levé ce point**, et c'est un fait, pas une intention :
+
 ```
+createstanza-<uuid>-073945266402   Exited (0)     ← PREMIÈRE exécution réelle du job
+docker inspect …Healthcheck.Test → ["CMD","axion-healthcheck"]
+docker exec <pg> ls /usr/local/bin/axion-*  → axion-healthcheck, axion-stanza-create
+```
+
+**Ce que cette séquence enseigne, et qu'il faut garder :** un compose rendu sur le disque du serveur
+**n'est pas** ce qui tourne, et une pile `healthy` **ne prouve pas** que ses garde-fous ont été
+exécutés une seule fois. Les deux seules preuves qui valent sont le conteneur `Exited (0)` du job et
+la sonde lue dans `docker inspect`.
+
+> **Le service `sauvegarde` de §5.2 n'est PAS encore dans cette image** : il a été écrit et joué
+> après ce déploiement, et il n'est pas poussé. `docker run --entrypoint
+/usr/local/bin/axion-sauvegarde axion-audit-postgres:16-coolify` échouera tant que l'image n'aura
+> pas été reconstruite. Ce n'est pas un défaut du script, c'est l'image qui est en retard.
+
+### 5.1 Sauvegarde complète — AVANT et APRÈS
+
+**AVANT** (07h22 UTC) :
 
 ```
 stanza: axion
-    status: error (no valid backups)
+    status: error (no valid backups)          ← rien de restaurable
     cipher: aes-256-cbc
-
     db (current)
-        wal archive min/max (16): 000000010000000000000001/000000010000000000000003
+        wal archive min/max (16): 000000010000000000000001/000000010000000000000006
 ```
 
-**Décomposition honnête de ce résultat :**
+`pg_stat_archiver` : `archived_count=5`, `failed_count=0`. Taille de `axion_audit` : **10 Mo**.
 
-| Élément                            | État                                                                      |
-| ---------------------------------- | ------------------------------------------------------------------------- |
-| Stanza pgBackRest `axion`          | ✅ **existe**, chiffrement `aes-256-cbc` actif                            |
-| Archivage WAL                      | ✅ **fonctionne** : `archived_count=3`, `failed_count=0`                  |
-| **Sauvegarde complète (`backup`)** | 🔴 **AUCUNE** — `no valid backups`. `pgbackrest backup` n'a jamais tourné |
-| Sauvegarde MinIO                   | 🔴 aucune (`/var/backups/axion` absent)                                   |
-| Sauvegarde du magasin TLS          | 🔴 sans objet **et** absente (le TLS est chez Traefik)                    |
-| Copie hors serveur                 | 🔴 aucune (ni clé Storage Box, ni `rclone`)                               |
-| Planification                      | 🔴 aucune (`/etc/cron.d/axion-audit` absent)                              |
-| Test de restauration               | 🔴 **JAMAIS JOUÉ** (`/var/log/axion` absent)                              |
+**Commande jouée** (07h23:58 UTC) :
 
-**Conclusion, en une phrase : sans sauvegarde complète, les WAL archivés ne se rejouent sur rien.**
-Un `restore` aujourd'hui échouerait faute de point de départ. **L'invariant 8 n'est pas tenu sur le
-staging**, et le critère d'acceptation L0 « restauration Postgres ET MinIO testée depuis zéro » est
-**non satisfait**.
+```bash
+PG=$(ssh axionia-web 'docker ps --format "{{.Names}}" | grep "^postgres-wrunr" | head -1')
+ssh axionia-web "docker exec --user postgres $PG \
+  pgbackrest --stanza=axion --type=full --log-level-console=info backup"
+```
 
-> La création de la stanza et la première sauvegarde sont en cours de traitement par un autre agent
-> (A11c) à la date de ce relevé. **Ce runbook constate, il n'agit pas** de ce côté. Le jour où une
-> sauvegarde valide existera, `pgbackrest info` affichera un bloc `full backup:` au lieu de
-> `status: error` : c'est le seul contrôle qui vaille, et il tient en une commande.
+**APRÈS** (07h24 UTC) :
 
-### Ce qui manque encore avant qu'une restauration soit jouable sur le staging
+```
+stanza: axion
+    status: ok                                ← LE MOT QUI CHANGE TOUT
+    cipher: aes-256-cbc
+    db (current)
+        wal archive min/max (16): 000000010000000000000001/000000010000000000000008
+        full backup: 20260828-072358F
+            timestamp start/stop: 2026-08-28 07:23:58+00 / 2026-08-28 07:24:00+00
+            wal start/stop: 000000010000000000000008 / 000000010000000000000008
+            database size: 32.1MB, database backup size: 32.1MB
+            repo1: backup set size: 3.8MB, backup size: 3.8MB
+```
 
-1. Une **sauvegarde complète** (`pgbackrest --stanza=axion backup`) — sans elle, rien.
-2. Une **planification** : il n'y a ni cron ni timer systemd pour Axion Audit sur la machine.
-3. Une **copie hors serveur** : ni clé Storage Box, ni `rclone`.
-4. Un **test de restauration exécutable**, ce que `restore-test.sh` n'est pas ici (§6.2).
+| Mesure                                 | Valeur                                         |
+| -------------------------------------- | ---------------------------------------------- |
+| Durée de la sauvegarde complète        | **2,58 s** (1502 fichiers, 32,1 Mo)            |
+| Empreinte dans le dépôt                | **3,8 Mo** — compression zstd-3, ratio **8,4** |
+| Volume `…_pgbackrest-repo` avant/après | 4,3 Mo → **15 Mo**                             |
+| Disque de l'hôte                       | 44 Go / 150 Go — **31 %**                      |
+
+> **Le disque n'est PAS au-delà de 80 %.** Il est à 31 %, avec 101 Go libres (`df -h /`). Le seuil
+> du 02 §11.3 n'est pas franchi. Ce point avait été rapporté à l'envers ; il est corrigé ici.
+
+### 5.2 La mécanisation — service `sauvegarde` du compose
+
+Une commande tapée une fois ne vaut rien : elle sera oubliée en production comme
+`stanza-create` l'a été ici. La sauvegarde est donc devenue un **service versionné de la pile** —
+`infra/postgres/sauvegarde.sh` + le service `sauvegarde` de `docker-compose.coolify.yml` :
+
+- **une passe = les deux moitiés du critère L0** : `pgbackrest backup` **et** archive chiffrée du
+  volume MinIO ; si l'une échoue, la passe échoue ;
+- **complète le dimanche, incrémentale les autres jours**, à `02:30` UTC (02 §11.4) ;
+- **rattrapage au démarrage** : si aucune passe réussie n'a moins de 26 h, une sauvegarde part
+  immédiatement — une pile fraîchement déployée n'attend pas la nuit pour avoir un point de départ ;
+- **échec = sortie non nulle**, aucun `|| true`. Docker redémarre le service ; `Restarting` dans
+  `docker ps` **est** le signal.
+
+**Le choix du conteneur de planification est argumenté, pas subi.** BullMQ a été écarté (le worker
+n'a ni `pgbackrest`, ni le répertoire de données, ni le socket : les lui donner serait une élévation
+de privilège pour aucun gain). Les tâches planifiées de Coolify ont été écartées (leur définition
+vit dans la base de Coolify, pas dans `git` — invisible à une revue, absente d'une reconstruction).
+
+**CE QU'ELLE NE COUVRE PAS**, et il faut le lire :
+
+| Non couvert                             | Conséquence                                                                          |
+| --------------------------------------- | ------------------------------------------------------------------------------------ |
+| **Pile arrêtée**                        | aucune sauvegarde ; un conteneur ne se réveille pas seul                             |
+| **Copie hors serveur**                  | **la règle 3-2-1 n'est PAS tenue** — §5.6                                            |
+| **Alerte sortante**                     | ni Telegram ni courriel : l'échec se lit dans `docker ps`, pas dans une notification |
+| **Test de restauration automatique**    | geste distinct, joué **à la main** (§5.4) ; l'automatiser suppose l'arbitrage §6.2   |
+| **Les trois autres piles du dépôt**     | `docker-compose.yml`, `.staging.yml`, `.prod.yml` n'ont pas ce service               |
+| **Le staging en service à cette heure** | le service n'y tourne pas : il exige un redéploiement (§5.0)                         |
+
+> **ÉTAT : ÉCRIT ET JOUÉ SUR BASE JETABLE, PAS ENCORE DÉPLOYÉ.** Le déploiement se fait par Coolify
+> depuis `git` ; cet incrément n'est pas poussé. Le service n'existera sur le staging qu'au prochain
+> déploiement, et c'est là seulement que `docker ps` montrera `sauvegarde-<uuid>`.
+
+Ce qui a été **joué** sur des conteneurs jetables, avec le script tel qu'il est versionné :
+
+| Épreuve                                                       | Résultat                                                                      |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Passe complète (rattrapage au démarrage)                      | ✅ `pgbackrest` + archive MinIO vérifiée + marqueur écrit                     |
+| Sauvegarde depuis un conteneur **séparé**, via socket partagé | ✅ **3,7 s** — c'est le point dur du design, il tient                         |
+| `stanza-create` depuis un conteneur séparé, **deux fois**     | ✅ idempotent (`already exists on repo1 and is valid`)                        |
+| Rotation à 2 archives sur 3 passes                            | ✅ la plus ancienne supprimée, avec son `.sha256`                             |
+| Passphrase vide / heure `25:99` / jour `9`                    | ✅ refus au démarrage, code 1, message en français                            |
+| Marge disque non tenue                                        | ✅ code 1, **aucune archive écrite**                                          |
+| Plafond d'archives dépassé                                    | ✅ code 1, message qui **nomme la décision** à prendre                        |
+| Volume d'archives en `root:root`                              | ✅ **a échoué bruyamment** (`Permission denied`) → corrigé dans le Dockerfile |
+
+**Volume de socket partagé — le point dur, mesuré et non supposé.** `pgbackrest backup` doit
+appeler `pg_backup_start()`, et pgBackRest ne joint PostgreSQL que par **socket UNIX**. Un
+conteneur séparé exige donc de partager `/var/run/postgresql` par un volume nommé — donc
+persistant, donc susceptible de garder un socket et un verrou périmés nommant le PID 1. Les trois
+cas ont été joués sur base jetable :
+
+| Cas                                | Contenu du volume après         | Redémarrage |
+| ---------------------------------- | ------------------------------- | ----------- |
+| Arrêt propre (`docker stop`)       | **vide** (PostgreSQL nettoie)   | ✅ OK       |
+| Arrêt brutal (`docker kill -KILL`) | socket **et** verrou survivants | ✅ OK       |
+| Troisième démarrage d'affilée      | —                               | ✅ OK       |
+
+### 5.3 Rétention — décidée, chiffrée, et son coût disque
+
+| Quoi                 | Règle                                          | D'où elle vient                         |
+| -------------------- | ---------------------------------------------- | --------------------------------------- |
+| Complètes PostgreSQL | `repo1-retention-full-type=time`, **30 jours** | 02 §11.4, `${BACKUP_RETENTION_DAYS}`    |
+| Incrémentales        | suivent la complète dont elles dépendent       | `pgbackrest`                            |
+| WAL archivés         | `repo1-retention-archive-type=full`            | conservés pour toute complète retenue   |
+| **Archives MinIO**   | **30 archives** (une par jour)                 | **alignées sur les 30 j de PostgreSQL** |
+
+**Pourquoi l'alignement n'est pas cosmétique.** Une restauration PostgreSQL de J-25 désigne des
+pièces jointes ; si MinIO n'était gardé que 14 jours, ces pièces n'existeraient dans aucune archive.
+Deux rétentions différentes, c'est une restauration à moitié possible.
+
+**Ce que ça coûte, à partir des mesures du jour :**
+
+| Poste                     | Mesuré                         | Règle d'extrapolation                                            |
+| ------------------------- | ------------------------------ | ---------------------------------------------------------------- |
+| Une complète PostgreSQL   | 3,8 Mo pour 32,1 Mo de cluster | **≈ taille du cluster ÷ 8,4** (zstd-3)                           |
+| Une incrémentale (à vide) | 8,3 Ko                         | proportionnelle aux blocs modifiés du jour                       |
+| Dépôt pgBackRest complet  | **15 Mo** après une complète   | ≈ 5 complètes (30 j ÷ 7) + 30 incr. + WAL                        |
+| Une archive MinIO         | 1,3 Mo pour 1,26 Mo d'objets   | **≈ taille de MinIO** (les pièces jointes sont déjà compressées) |
+| **Archives MinIO à 30 j** | —                              | **30 × la taille de MinIO** — le poste qui pèse                  |
+
+> **C'est le poste MinIO qui décide.** Les archives sont des copies **complètes** : à 1 Go de pièces
+> jointes, la rétention à 30 jours réclame **≈ 30 Go**. Sur un disque de 150 Go partagé avec la
+> production d'un tiers, ce n'est pas soutenable longtemps. Le script **refuse d'écrire** au-delà de
+> `AXION_ARCHIVES_MAX_MO` (20 Go par défaut) et nomme la décision à prendre plutôt que de remplir le
+> disque du voisin. **Une sauvegarde MinIO incrémentale, ou une destination externe, devra être
+> tranchée avant que les premières missions produisent des pièces jointes.**
+
+### 5.4 LA RESTAURATION POSTGRESQL — JOUÉE, PAS DÉCRITE
+
+**Base jetable, jamais le staging.** Le dépôt pgBackRest est monté **en lecture seule** : le test ne
+peut pas abîmer ce qu'il vérifie.
+
+```bash
+# 0. Empreinte de la base d'ORIGINE (lecture seule, transaction READ ONLY)
+docker run --rm --network axion-audit-coolify-interne \
+  -v /chemin/empreinte-seed.mjs:/app/scripts/empreinte-seed.mjs:ro \
+  -e DATABASE_URL="postgresql://axion:<mdp>@postgres:5432/axion_audit" \
+  axion-audit-api:coolify node /app/scripts/empreinte-seed.mjs --json
+
+# 1. Volume jetable
+docker volume create axion-restore-test-data
+
+# 2. Restauration — AUCUN RÉSEAU, dépôt en LECTURE SEULE
+docker run --rm --network none --user postgres \
+  -v wrunr6mwq2oxqq392i4myzjn_pgbackrest-repo:/var/lib/pgbackrest:ro \
+  -v axion-restore-test-data:/var/lib/postgresql/data \
+  -e PGBACKREST_REPO1_CIPHER_PASS="<passphrase>" \
+  --entrypoint pgbackrest axion-audit-postgres:16-coolify \
+  --stanza=axion --archive-mode=off --log-level-console=info restore
+
+# 3. Démarrage du cluster restauré (toujours --network none)
+docker run -d --network none --user postgres --name axion-restore-test-pg \
+  -v wrunr6mwq2oxqq392i4myzjn_pgbackrest-repo:/var/lib/pgbackrest:ro \
+  -v axion-restore-test-data:/var/lib/postgresql/data \
+  -e PGBACKREST_REPO1_CIPHER_PASS="<passphrase>" \
+  --entrypoint /usr/lib/postgresql/16/bin/postgres \
+  axion-audit-postgres:16-coolify -D /var/lib/postgresql/data
+```
+
+> **`--archive-mode=off` N'EST PAS UN DÉTAIL.** Sans lui, le cluster restauré hériterait
+> d'`archive_mode = on` et pousserait ses propres WAL **dans le dépôt de production**. Le montage
+> `:ro` ferait échouer la poussée — mais la bonne réponse est de ne pas essayer. Vérifié après
+> restauration : `SHOW archive_mode` → `off`.
+
+**Chronométrage réel (2026-08-28, cluster de 32,1 Mo) :**
+
+| Étape                                            | Durée mesurée |
+| ------------------------------------------------ | ------------- |
+| `pgbackrest restore` (1502 fichiers, 32,1 Mo)    | **2,03 s**    |
+| Démarrage + reprise WAL + promotion (timeline 2) | **1,59 s**    |
+| **Total, dépôt → base ouverte en écriture**      | **≈ 3,6 s**   |
+
+**Ce que la base restaurée contient — et c'est là que ça se joue :**
+
+| Contrôle                                      | Origine                            | Restaurée                              |
+| --------------------------------------------- | ---------------------------------- | -------------------------------------- |
+| Tables du schéma `public`                     | 44                                 | **44**                                 |
+| `schema_migrations`                           | 12                                 | **12**                                 |
+| blocks / sectors / services                   | 9 / 8 / 11                         | **9 / 8 / 11**                         |
+| interlocutor_profiles / size_tiers            | 9 / 4                              | **9 / 4**                              |
+| naf_sector_map / estimation_params            | 88 / 29                            | **88 / 29**                            |
+| **EMPREINTE GLOBALE (`pnpm seed:empreinte`)** | `65929446c5c682592befc43c033229b6` | **`65929446c5c682592befc43c033229b6`** |
+| Forme du compte fondateur                     | `f9e811b5b172`                     | **`f9e811b5b172`**                     |
+
+```
+✓ empreinte conforme à l'attendue (65929446c5c682592befc43c033229b6).   (code de sortie 0)
+```
+
+**Les sept empreintes par table sont identiques une à une**, pas seulement la globale. C'est
+infiniment plus fort qu'un `count(*)` : l'outil compare le CONTENU MÉTIER canonisé — codes,
+libellés, valeurs numériques canoniques, FK résolues en codes — hors identifiants et hors
+horodatages. La même empreinte des deux côtés signifie que le jeu de référence a traversé la
+sauvegarde **à la valeur près**.
+
+> **Une précision sur le mode opératoire.** Les étapes 2 et 3 tournent bien en `--network none`.
+> L'étape de MESURE, elle, exige que l'outil d'empreinte joigne la base : le conteneur a donc été
+> arrêté puis relancé sur un réseau **jetable et `--internal`** (aucune route sortante) portant
+> **exactement deux conteneurs**, le temps de la mesure, puis supprimé. Docker refuse
+> `network connect` sur un conteneur en mode `none` — c'est le seul écart au mode opératoire, et il
+> est nommé plutôt que caché.
+
+**Ce que ce chronomètre dit du RTO de 4 h.** Il dit **une chose, et une seule** : l'étape « dépôt →
+base ouverte » n'est pas le facteur limitant. À 20 Mo/s mesurés (compression comprise), un cluster
+de 10 Go se restaure en **≈ 8 à 9 minutes**. Le RTO de 4 h est donc dominé par tout le reste —
+reconstruction du serveur, redéploiement, DNS, TLS — **et ce reste n'a toujours jamais été joué**
+(§7.3). Le chiffre de 4 h n'engage toujours personne ; il est simplement **moins suspect du côté de
+la base**.
+
+### 5.5 LA RESTAURATION MINIO — JOUÉE AUSSI, ET ENTIÈREMENT
+
+**Le MinIO du staging est VIDE** (`mc du` : 3 buckets, **0 objet**, 0 B). Y jouer une restauration
+n'aurait rien prouvé. Le test a donc été mené sur des instances **jetables** portant un jeu
+d'objets connu — 1 Mo binaire, un texte, 256 Ko binaire, répartis sur les trois buckets, plus le
+versioning activé sur `axion-attachments` pour voir si un réglage de sécurité survit.
+
+**Les DEUX voies ont été jouées, et la comparaison a décidé du design :**
+
+| &nbsp;                       | **`tar` du volume** (retenue) | `mc mirror` par l'API S3                |
+| ---------------------------- | ----------------------------- | --------------------------------------- |
+| Objets restaurés (sha256)    | **3 / 3 identiques**          | **3 / 3 identiques**                    |
+| Buckets                      | **restitués**                 | à **recréer à la main**                 |
+| Politique `anonymous = none` | **restituée**                 | à **réappliquer à la main**             |
+| Versioning                   | **restitué**                  | **PERDU**                               |
+| Comptes / politiques MinIO   | **restitués** (`.minio.sys`)  | perdus                                  |
+| Nombre de conteneurs         | **1**                         | 2 (l'image `mc` n'a ni `tar`, ni `gpg`) |
+| Copie en clair sur le disque | **aucune**                    | **oui**, un répertoire intermédiaire    |
+| Durée archive / restauration | **1,73 s** / **6,42 s**       | 0,52 + 1,86 s / 0,69 + 6,75 s           |
+
+**La voie retenue est le `tar` chiffré du volume**, parce qu'une sauvegarde qui oblige à se souvenir
+d'un réglage de sécurité est une sauvegarde qui le perdra. Ce qu'elle coûte, dit franchement : la
+copie est **cohérente au crash**, pas transactionnelle — un objet en cours d'écriture peut être
+capturé à moitié, et MinIO le traite au redémarrage comme après une coupure de courant. `mc mirror`
+ne faisait pas mieux : il lit lui aussi une cible qui bouge.
+
+**Chaîne complète, jouée de bout en bout :**
+
+```
+tar -C /minio-donnees -cf - .  |  zstd -3  |  gpg --symmetric --cipher-algo AES256   →  archive
+gpg --decrypt  |  zstd -d  |  tar -x       →  volume neuf  →  MinIO neuf par-dessus  →  3/3 sha256 identiques
+```
+
+Le script **vérifie chaque archive avant de la publier** : l'empreinte SHA-256 du flux lu est
+capturée au vol, l'archive est aussitôt redéchiffrée et redécompressée, et les deux empreintes sont
+comparées. Tant que la comparaison n'a pas réussi, le fichier porte l'extension `.partiel` et
+**aucune rotation ne peut le prendre pour une sauvegarde**.
+
+> **Une archive MinIO n'est PAS reproductible à l'octet** — deux passes successives sur le même
+> contenu donnent deux empreintes différentes (`4474c45a…`, puis `c8093501…`). C'est normal :
+> `.minio.sys` porte des compteurs d'usage et des horodatages qui bougent. Ce qui est garanti, c'est
+> la **restitution du contenu**, pas l'égalité des archives.
+
+### 5.6 COPIE HORS SERVEUR — CE QUI EST PRÊT, ET CE QUI RESTE À DÉCIDER
+
+**Une sauvegarde qui vit sur la machine qu'elle protège ne protège de rien.** Aujourd'hui, le dépôt
+pgBackRest et les archives MinIO sont sur `/var/lib/docker/volumes` de `axionia-web` : ils défendent
+contre la perte **logique** (suppression, corruption applicative, mauvaise migration), **pas** contre
+la perte du serveur. **La règle 3-2-1 du 02 §11.4 n'est pas tenue.**
+
+**Ce qui est prêt, et qui ne demande aucune décision :**
+
+| Brique                                      | État                                                                                                                                                                                 |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Chiffrement du dépôt PostgreSQL             | ✅ `aes-256-cbc`, passphrase déjà provisionnée (`PGBACKREST_CIPHER_PASS`)                                                                                                            |
+| Chiffrement des archives MinIO              | ✅ gpg AES256, `BACKUP_ENCRYPTION_PASSPHRASE` **déjà présente** dans le `.env` du staging                                                                                            |
+| Vérification de l'archive avant publication | ✅ round-trip déchiffrement + comparaison d'empreinte                                                                                                                                |
+| Empreinte SHA-256 à côté de chaque archive  | ✅ `<archive>.sha256`, chemin relatif, rejouable après copie                                                                                                                         |
+| Outils présents dans l'image du projet      | ✅ `tar`, `zstd`, `gpg`, `openssl`, `sha256sum`, `rsync` (hôte)                                                                                                                      |
+| **Point d'insertion dans le script**        | ✅ une passe réussie laisse `\$ARCHIVES/.derniere-passe` et des fichiers immuables : l'expédition est une étape à ajouter **après** `faire_tourner_minio`, sans rien changer d'autre |
+
+**Ce qui manque est une décision, pas du code :**
+
+> **ESCALADE — à instruire par Williams, formulée pour être tranchable :**
+>
+> _« [L0-b] Où part la copie hors serveur des sauvegardes Axion Audit, et à quel coût ?_
+> _Options : (a) **Hetzner Storage Box** — même fournisseur, site distinct ; ~4 €/mo pour 1 To ;_
+> _accès par `rsync`/SSH, déjà installé sur l'hôte ; ne satisfait PAS le « hors Hetzner » du 02 §11.4._
+> _(b) **Storage Box + second dépôt hebdomadaire hors Hetzner** (Scaleway/OVH) — satisfait 3-2-1 en_
+> _entier, deux fournisseurs à contractualiser, deux jeux d'identifiants à faire tourner._
+> _(c) **`repo2` pgBackRest natif** (S3 ou SFTP) pour PostgreSQL + `rsync` pour MinIO — pgBackRest_
+> _gère alors lui-même la rétention distante et le chiffrement ; c'est la voie la plus propre pour_
+> _la base, elle ne dit rien pour MinIO._
+> _(d) **Renoncer explicitement pendant la Phase 1** et l'écrire dans la porte, la donnée de_
+> _staging étant reconstructible par `pnpm db:migrate && pnpm seed`._
+>
+> _Ce que la décision doit fournir, et qu'aucun agent ne peut produire : la destination, le budget,_
+> _les identifiants, et la durée de rétention réglementaire des pièces jointes d'audit._
+> _Ce qu'elle débloque immédiatement : l'étape d'expédition du script, ~0,5 j. »_
+
+**Aucun identifiant n'a été demandé, créé ni manipulé pour préparer ce point.**
+
+### 5.7 Ce qui reste ouvert côté sauvegarde
+
+1. **Le service `sauvegarde` n'est pas déployé** — il le sera au prochain déploiement Coolify (§5.0).
+2. **Aucune copie hors serveur** — §5.6, décision Williams.
+3. **Aucune alerte** : un échec se voit dans `docker ps`, pas dans une notification (02 §11.3 prévoit
+   Uptime Kuma ; il n'est pas déployé).
+4. **Le test de restauration reste MANUEL.** L'automatiser suppose de trancher §6.2 (nom de projet
+   Compose imposé par l'orchestrateur). La procédure de §5.4 est reproductible telle quelle.
+5. **La rétention MinIO à 30 archives complètes ne passera pas l'échelle** dès que les missions
+   produiront des pièces jointes (§5.3).
 
 ---
 
@@ -665,20 +967,24 @@ et la preuve de son exécution. En attendant, la source d'exécution reste le pa
 
 Écrit ici plutôt que tu, pour que la porte P-A puisse le relire point par point.
 
-| #   | Point                                                                                 | Statut                                                                                                     |
-| --- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| 1   | `.env` du staging en `644` dans un répertoire `755`                                   | **ÉCART DE SÉCURITÉ OUVERT** — posé par Coolify à chaque déploiement, non corrigeable à la main            |
-| 2   | Aucune sauvegarde restaurable du staging                                              | **OUVERT** — A11c en cours ; §5                                                                            |
-| 3   | `restore-test.sh` ne sait pas parler à un projet Compose imposé par un orchestrateur  | **ESCALADE À OUVRIR** — §6.2                                                                               |
-| 4   | `PUBLIC_BASE_URL` désigne `audit-staging.axion-ia.com`, qui **ne résout pas**         | **OUVERT** — le domaine réel est l'adresse `sslip.io` de Coolify                                           |
-| 5   | Routage Traefik → Caddy : port cible non déclaré, 504 au relevé                       | **EN COURS** par un autre agent — ne pas figer                                                             |
-| 6   | Duplication `docker-compose.coolify.yml` ↔ `docker-compose.yml` non gardée            | **OUVERT** — `AMELIORATIONS.md` 2026-08-28, « la troisième convention d'A11 »                              |
-| 7   | Tags MinIO / `mc` / Caddy figés : « dernière release stable au démarrage » (11 §1)    | à confirmer au provisionnement réel de la production, puis à geler                                         |
-| 8   | `deploy.sh` appelle `pnpm db:migrate:check` puis `pnpm db:migrate` dans l'image `api` | les deux scripts existent à la racine (`package.json`) ; **leur présence dans l'image n'est pas vérifiée** |
-| 9   | Le PRA (§7.3) et la rotation des secrets                                              | **JAMAIS JOUÉS** — RTO 4 h non chronométré                                                                 |
-| 10  | `docker image prune -af` toutes les 6 h par le crontab du voisin                      | **NON VÉRIFIÉ** : effet réel sur nos images entre deux déploiements                                        |
-| 11  | Contrôle nominatif des 12 familles de secrets §30.3 dans le `.env` du staging         | **NON VÉRIFIÉ** — appartient à Williams, pas à un agent (porte P-A, §G.6-1)                                |
-| 12  | Consommation CPU/RAM réelle du staging en cohabitation                                | **NON VÉRIFIÉ** dans cette passe — seules les marges d'avant déploiement sont tracées (`DECISIONS.md`)     |
+| #   | Point                                                                                 | Statut                                                                                                                         |
+| --- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | `.env` du staging en `644` dans un répertoire `755`                                   | **ÉCART DE SÉCURITÉ OUVERT** — posé par Coolify à chaque déploiement, non corrigeable à la main                                |
+| 2   | Sauvegarde restaurable du staging                                                     | **FERMÉ le 2026-08-28** — complète `status: ok`, restauration Postgres ET MinIO jouées, empreinte identique ; §5.1, §5.4, §5.5 |
+| 2b  | `createstanza` et la sonde honnête n'avaient JAMAIS tourné (stanza créée à la main)   | **FERMÉ au déploiement de 07h39** — `createstanza … Exited (0)`, sonde `axion-healthcheck` ; §5.0                              |
+| 2c  | Le service `sauvegarde` est écrit et joué, **pas déployé**                            | **OUVERT** — exige un déploiement ; §5.2                                                                                       |
+| 2d  | Aucune copie hors serveur : la règle 3-2-1 du 02 §11.4 n'est pas tenue                | **ESCALADE OUVERTE — décision Williams** ; §5.6                                                                                |
+| 2e  | Rétention MinIO = 30 archives COMPLÈTES : ne passera pas l'échelle des pièces jointes | **OUVERT** — garde-fou de plafond en place, décision à prendre avant les premières missions ; §5.3                             |
+| 3   | `restore-test.sh` ne sait pas parler à un projet Compose imposé par un orchestrateur  | **ESCALADE À OUVRIR** — §6.2                                                                                                   |
+| 4   | `PUBLIC_BASE_URL` désigne `audit-staging.axion-ia.com`, qui **ne résout pas**         | **OUVERT** — le domaine réel est l'adresse `sslip.io` de Coolify                                                               |
+| 5   | Routage Traefik → Caddy : port cible non déclaré, 504 au relevé                       | **EN COURS** par un autre agent — ne pas figer                                                                                 |
+| 6   | Duplication `docker-compose.coolify.yml` ↔ `docker-compose.yml` non gardée            | **OUVERT** — `AMELIORATIONS.md` 2026-08-28, « la troisième convention d'A11 »                                                  |
+| 7   | Tags MinIO / `mc` / Caddy figés : « dernière release stable au démarrage » (11 §1)    | à confirmer au provisionnement réel de la production, puis à geler                                                             |
+| 8   | `deploy.sh` appelle `pnpm db:migrate:check` puis `pnpm db:migrate` dans l'image `api` | les deux scripts existent à la racine (`package.json`) ; **leur présence dans l'image n'est pas vérifiée**                     |
+| 9   | Le PRA (§7.3) et la rotation des secrets                                              | **JAMAIS JOUÉS** — RTO 4 h non chronométré                                                                                     |
+| 10  | `docker image prune -af` toutes les 6 h par le crontab du voisin                      | **NON VÉRIFIÉ** : effet réel sur nos images entre deux déploiements                                                            |
+| 11  | Contrôle nominatif des 12 familles de secrets §30.3 dans le `.env` du staging         | **NON VÉRIFIÉ** — appartient à Williams, pas à un agent (porte P-A, §G.6-1)                                                    |
+| 12  | Consommation CPU/RAM réelle du staging en cohabitation                                | **NON VÉRIFIÉ** dans cette passe — seules les marges d'avant déploiement sont tracées (`DECISIONS.md`)                         |
 
 ### Ce qui a été mesuré, et qu'il ne faut pas re-suspecter
 
@@ -686,5 +992,7 @@ Pour éviter qu'une prochaine revue reparte à zéro : **la pile de staging fonc
 services se comportent comme le fichier compose le décrit (six `Up (healthy)`, trois `Exited (0)`
 attendus), aucun port de données n'est publié, l'API répond `{"status":"ok"}` derrière notre Caddy
 avec l'intégralité des en-têtes de sécurité, l'isolement réseau est celui qui a été arbitré, et
-l'archivage WAL de PostgreSQL tourne sans échec. **Ce qui manque est autour : la sauvegarde, le
-routage public, et l'outillage d'exploitation.**
+l'archivage WAL de PostgreSQL tourne sans échec. Depuis le 2026-08-28 07h24, **une sauvegarde
+complète valide existe** et **la restauration a été jouée**, Postgres comme MinIO, empreinte du jeu
+de référence identique des deux côtés (§5.1, §5.4, §5.5). **Ce qui manque est autour : la copie hors
+serveur, le routage public, et l'outillage d'exploitation.**

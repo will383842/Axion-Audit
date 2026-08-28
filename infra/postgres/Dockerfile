@@ -93,6 +93,10 @@ RUN set -eux; \
 #   healthcheck.sh    sonde de santé du conteneur PostgreSQL — elle REMPLACE
 #                     `pg_isready`, qui déclarait `healthy` un cluster en train de
 #                     se réinitialiser 275 fois en 46 minutes (2026-08-28).
+#   sauvegarde.sh     service PLANIFIÉ du compose : `pgbackrest backup` + archive
+#                     chiffrée du volume MinIO. Sans lui, la pile n'avait qu'une
+#                     stanza et des WAL — c'est-à-dire rien de restaurable
+#                     (mesuré le 2026-08-28 : `status: error (no valid backups)`).
 #
 # ILS NE SONT PAS DANS L'ÉTAPE `socle` — ET CE N'EST PAS UN CHOIX DE CONFORT.
 # `socle` est construite avec DEUX contextes différents selon la pile (`infra/`
@@ -105,6 +109,22 @@ RUN set -eux; \
 # `infra/`, PAS de dupliquer les scripts.
 COPY postgres/stanza-create.sh /usr/local/bin/axion-stanza-create
 COPY postgres/healthcheck.sh /usr/local/bin/axion-healthcheck
+COPY postgres/sauvegarde.sh /usr/local/bin/axion-sauvegarde
+
+# POINT DE MONTAGE DES ARCHIVES — ET C'EST LE `chown` QUI COMPTE, PAS LE `mkdir`.
+# Docker initialise un volume nommé VIDE à partir du répertoire que l'image
+# porte au point de montage : propriétaire et permissions COMPRIS. Sans cette
+# ligne, `axion-coolify-sauvegarde-archives` naîtrait en `root:root`, et le
+# service `sauvegarde` — qui tourne en `postgres`, comme `archive-push` — ne
+# pourrait rien y écrire. MESURÉ le 2026-08-28 sur volume jetable :
+#   gpg: can't create '/sauvegarde/minio-….tar.zst.gpg.partiel': Permission denied
+# C'est exactement le mécanisme qui fait déjà fonctionner /var/lib/pgbackrest
+# (étape `socle`). Cette ligne vit ici et non dans `socle` : seule la pile
+# Coolify porte le service `sauvegarde`, les trois autres n'ont rien à monter là.
+RUN set -eux; \
+    mkdir -p /sauvegarde; \
+    chown postgres:postgres /sauvegarde; \
+    chmod 700 /sauvegarde
 
 # Exécutables par tous, modifiables par personne : le job tourne sous `postgres`
 # et la sonde sous l'utilisateur du conteneur. `chmod` explicite — le bit +x d'un
@@ -114,10 +134,18 @@ COPY postgres/healthcheck.sh /usr/local/bin/axion-healthcheck
 # scripts font ce qu'ils annoncent — seule l'exécution le prouve, et elle est
 # faite sur base jetable — mais il empêche une faute de frappe de n'apparaître
 # qu'au démarrage du conteneur, là où elle ressemble à une panne de la base.
+#
+# `axion-sauvegarde` est contrôlé par `bash -n` et NON `sh -n` : c'est un script
+# bash assumé. `set -o pipefail` n'existe pas en POSIX, et sans lui un `tar` qui
+# échoue en tête de `tar | zstd | gpg` laisse `gpg` produire une archive
+# parfaitement valide d'un contenu TRONQUÉ, en sortant 0. Le raisonnement complet
+# est en tête de sauvegarde.sh.
 RUN set -eux; \
-    chmod 0755 /usr/local/bin/axion-stanza-create /usr/local/bin/axion-healthcheck; \
+    chmod 0755 /usr/local/bin/axion-stanza-create /usr/local/bin/axion-healthcheck \
+               /usr/local/bin/axion-sauvegarde; \
     sh -n /usr/local/bin/axion-stanza-create; \
-    sh -n /usr/local/bin/axion-healthcheck
+    sh -n /usr/local/bin/axion-healthcheck; \
+    bash -n /usr/local/bin/axion-sauvegarde
 
 # -----------------------------------------------------------------------------
 # Cible PAR DÉFAUT (la dernière) — image NUE, sans configuration embarquée.

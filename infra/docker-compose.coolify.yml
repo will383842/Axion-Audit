@@ -375,6 +375,25 @@ services:
       # figé. Si l'on change l'un, il faut changer l'autre : ils ne sont plus liés
       # par le fichier, et rien ne le vérifie.
       - pgbackrest_repo:/var/lib/pgbackrest
+      # SOCKET UNIX DE POSTGRESQL, PARTAGÉ AVEC LE SERVICE `sauvegarde`.
+      #
+      # POURQUOI. `pgbackrest backup` doit parler au serveur (`pg_backup_start` /
+      # `pg_backup_stop`), et pgBackRest ne sait le joindre QUE par socket UNIX :
+      # aucune option ne lui fait ouvrir une connexion TCP vers un autre hôte
+      # (`pg1-host` suppose SSH ou TLS). Un conteneur de sauvegarde séparé n'a
+      # donc qu'une voie : ce répertoire. C'est la différence avec `createstanza`,
+      # qui s'en passe grâce à `--no-online` (voir stanza-create.sh).
+      #
+      # CE QUE ÇA COÛTE, MESURÉ PLUTÔT QUE SUPPOSÉ (2026-08-28, base jetable).
+      # Un volume nommé PERSISTE, donc le socket et son fichier de verrou peuvent
+      # survivre à la mort du conteneur — et le verrou nomme le PID 1, qui existe
+      # toujours dans le conteneur suivant. Les trois cas ont été joués :
+      #   arrêt propre  → PostgreSQL retire socket et verrou   → redémarrage OK
+      #   `docker kill` → socket et verrou SURVIVENT dans le volume → redémarrage OK
+      #   3e démarrage consécutif sur le même volume            → OK
+      # PostgreSQL 16 reconnaît le verrou périmé et le remplace. Le risque
+      # théorique est réel, il a été vérifié nul ici.
+      - postgres_socket:/var/run/postgresql
       # `postgresql.custom.conf` et `pgbackrest.conf` NE SONT PLUS MONTÉS ICI :
       # ils sont EMBARQUÉS DANS L'IMAGE (cible `config-embarquee`). Remettre un
       # `- ./infra/postgres/postgresql.custom.conf:/etc/postgresql/...` redonnerait
@@ -664,6 +683,124 @@ services:
         limits:
           cpus: '0.25'
           memory: 128M
+
+  # ---------------------------------------------------------------------------
+  # sauvegarde — LES DEUX MOITIÉS DU CRITÈRE L0, PLANIFIÉES.
+  #
+  # ┌─────────────────────────────────────────────────────────────────────────┐
+  # │ POURQUOI CE SERVICE EXISTE. Le 2026-08-28, ce staging avait une stanza   │
+  # │ pgBackRest valide, un dépôt chiffré, un archivage WAL sans un seul       │
+  # │ échec — et AUCUNE sauvegarde complète : `status: error (no valid         │
+  # │ backups)`. SANS SAUVEGARDE COMPLÈTE, LES WAL ARCHIVÉS NE SE REJOUENT SUR │
+  # │ RIEN : la chaîne avait toutes les apparences d'une chaîne de sauvegarde  │
+  # │ et rien de restaurable au bout. Côté MinIO, il n'y avait pas même        │
+  # │ d'apparence : aucune sauvegarde du tout.                                 │
+  # │                                                                          │
+  # │ `pgbackrest backup` n'était appelé par RIEN. Une commande qu'un humain   │
+  # │ doit taper sera oubliée — c'est ce qui venait d'arriver à                │
+  # │ `stanza-create`, mécanisé par le job `createstanza` ci-dessus. Même      │
+  # │ geste ici, un cran plus loin : la sauvegarde devient un service de la    │
+  # │ pile, versionné, planifié, dont l'échec se voit.                         │
+  # └─────────────────────────────────────────────────────────────────────────┘
+  #
+  # POURQUOI UN CONTENEUR DE PLANIFICATION, ET PAS LES DEUX AUTRES VOIES.
+  #  · BullMQ (déjà dans la pile) : le worker est un runtime Node qui n'a ni
+  #    `pgbackrest`, ni le répertoire de données, ni le socket de PostgreSQL. Les
+  #    lui donner ouvrirait au code applicatif un accès brut aux fichiers de la
+  #    base — une élévation de privilège pour aucun gain.
+  #  · Tâches planifiées de Coolify : leur définition vit dans la base de
+  #    Coolify, pas dans ce dépôt. Invisible à `git`, absente d'une
+  #    reconstruction, et personne ne verrait qu'elle a disparu — exactement le
+  #    défaut que ce lot vient de corriger deux fois.
+  # Le conteneur, lui, part avec la pile et se lit dans le dépôt.
+  #
+  # CE QU'IL NE COUVRE PAS — écrit ici pour que personne ne s'y fie :
+  #  · pile arrêtée = aucune sauvegarde ;
+  #  · AUCUNE COPIE HORS SERVEUR : dépôt et archives vivent sur le disque
+  #    qu'ils protègent. La règle 3-2-1 du 02 §11.4 n'est PAS tenue — la
+  #    destination est une décision humaine (infra/README.md §5.6) ;
+  #  · aucune alerte sortante : l'échec se lit dans `docker ps` et les journaux ;
+  #  · il ne teste pas la restauration (geste distinct, joué à la main, §5.4).
+  #
+  # `restart: unless-stopped` ET NON `'no'` : contrairement à `createstanza` et
+  # `createbuckets`, ce n'est pas un job one-shot mais un service de longue vie.
+  # Son échec le fait SORTIR EN CODE NON NUL — Docker le redémarre avec son
+  # recul exponentiel, et l'état `Restarting` devient le signal. Un service qui
+  # resterait `Up` en échouant chaque nuit serait le garde-fou menteur que ce lot
+  # a passé sa journée à démonter.
+  # ---------------------------------------------------------------------------
+  sauvegarde:
+    <<: [*restart, *logging, *image-postgres]
+    # Le dépôt pgBackRest et le volume d'archives appartiennent à `postgres` :
+    # c'est le même utilisateur que celui qui exécute `archive-push` depuis le
+    # serveur. Deux propriétaires sur un même dépôt seraient une panne de
+    # permissions différée jusqu'à la nuit.
+    user: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      TZ: ${TZ:-UTC}
+      # LES MÊMES VALEURS QUE LE SERVEUR. Une divergence produirait des
+      # sauvegardes valides dans un dépôt que `archive_command` n'alimente pas.
+      PGBACKREST_STANZA: ${PGBACKREST_STANZA:-axion}
+      PGBACKREST_REPO1_PATH: ${PGBACKREST_REPO_PATH:-/var/lib/pgbackrest}
+      PGBACKREST_REPO1_CIPHER_PASS: ${PGBACKREST_CIPHER_PASS:?variable obligatoire, passphrase du depot pgBackRest}
+      PGBACKREST_REPO1_RETENTION_FULL_TYPE: time
+      PGBACKREST_REPO1_RETENTION_FULL: ${BACKUP_RETENTION_DAYS:-30}
+      PGBACKREST_PG1_USER: ${POSTGRES_USER:-axion}
+      PGBACKREST_PG1_DATABASE: ${POSTGRES_DB:-axion_audit}
+      # Chiffrement des archives MinIO. Sans passphrase le script REFUSE de
+      # démarrer : une archive de pièces jointes d'audit en clair sur un disque
+      # partagé ne se rattrape pas après coup.
+      BACKUP_ENCRYPTION_PASSPHRASE: ${BACKUP_ENCRYPTION_PASSPHRASE:?variable obligatoire, passphrase des archives chiffrees}
+      # RÉTENTION MinIO alignée sur celle de PostgreSQL, et ce n'est pas
+      # cosmétique : une restauration PostgreSQL de J-25 désignerait des pièces
+      # jointes qu'aucune archive MinIO ne contiendrait plus si MinIO était gardé
+      # moins longtemps. Deux rétentions, c'est une restauration à moitié possible.
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+      # Créneau quotidien en UTC (invariant 5) et jour de la complète
+      # (`date +%w`, 0 = dimanche) : complète hebdomadaire + incrémentale
+      # quotidienne, comme le demande 02 §11.4.
+      AXION_SAUVEGARDE_HEURE: ${AXION_SAUVEGARDE_HEURE:-02:30}
+      AXION_SAUVEGARDE_JOUR_COMPLETE: ${AXION_SAUVEGARDE_JOUR_COMPLETE:-0}
+      # Plafond du volume d'archives. La machine est PARTAGÉE : au-delà, le
+      # service échoue bruyamment plutôt que de remplir le disque du voisin.
+      AXION_ARCHIVES_MAX_MO: ${AXION_ARCHIVES_MAX_MO:-20480}
+    entrypoint: ['/usr/local/bin/axion-sauvegarde']
+    # PAS DE `command:` — SEPTIÈME CONVENTION COOLIFY, voir l'encadré du service
+    # `createstanza`. `command: []` est du Compose valide mais Coolify le réécrit
+    # en table vide `command: {  }`, et le déploiement meurt en 14 secondes sur
+    # « must be a null ». Le `CMD ["postgres"]` hérité est passé en argument à
+    # notre point d'entrée, qui ne lit aucun argument : il est inerte.
+    volumes:
+      # CIBLES LITTÉRALES, PAS INTERPOLÉES (convention 3, voir l'en-tête).
+      # Le répertoire de données EN LECTURE SEULE : pgBackRest lit les fichiers
+      # du cluster, il n'a aucune raison de pouvoir les écrire.
+      - postgres_data:/var/lib/postgresql/data:ro
+      - pgbackrest_repo:/var/lib/pgbackrest
+      # Le socket du serveur — la seule voie de pgBackRest vers PostgreSQL.
+      - postgres_socket:/var/run/postgresql
+      # Les données MinIO EN LECTURE SEULE. On archive le VOLUME et non un
+      # `mc mirror` : cette voie restitue aussi `.minio.sys` (politiques d'accès,
+      # versioning, comptes), tient dans un seul conteneur — l'image `minio/mc`
+      # n'a ni `tar`, ni `gpg`, ni `openssl` (mesuré) — et n'écrit jamais de
+      # copie EN CLAIR sur le disque. Les deux voies ont été jouées le
+      # 2026-08-28 ; le raisonnement complet est en tête de sauvegarde.sh.
+      - minio_data:/minio-donnees:ro
+      - sauvegarde_archives:/sauvegarde
+    networks: [axion]
+    # Swap neutralisé — encadré « DEUX MÉCANISMES DE PLAFOND ».
+    # 512 Mo : `pgbackrest` avec `process-max=2` et compression zstd, plus le
+    # tube `tar | zstd | gpg` de l'archive MinIO. Au-dessus des 128 Mo des jobs
+    # one-shot, très en dessous du serveur lui-même.
+    mem_limit: 512M
+    memswap_limit: 512M
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
 
   # ---------------------------------------------------------------------------
   # API Fastify — CONSTRUITE DEPUIS LE DÉPÔT, cible `runtime`.
@@ -1132,6 +1269,18 @@ volumes:
     name: axion-coolify-postgres-data
   pgbackrest_repo:
     name: axion-coolify-pgbackrest-repo
+  # Socket UNIX de PostgreSQL, partagé avec le service `sauvegarde` — la SEULE
+  # voie par laquelle pgBackRest sait joindre le serveur (voir le montage
+  # homologue du service `postgres`). Il ne contient jamais de données.
+  postgres_socket:
+    name: axion-coolify-postgres-socket
+  # Archives CHIFFRÉES du volume MinIO (tar + zstd + gpg AES256), écrites par le
+  # service `sauvegarde`. Rétention alignée sur ${BACKUP_RETENTION_DAYS}.
+  # ⚠️ Ce volume vit sur LE DISQUE QU'IL PROTÈGE : il défend contre la perte
+  # logique (suppression, corruption applicative), PAS contre la perte du
+  # serveur. La copie hors serveur reste à trancher — infra/README.md §5.6.
+  sauvegarde_archives:
+    name: axion-coolify-sauvegarde-archives
   redis_data:
     name: axion-coolify-redis-data
   minio_data:
