@@ -259,11 +259,42 @@ beforeAll(async () => {
     );
   }
 
-  // L'image est construite si elle manque : la suite doit être autoportante sur
-  // un clone neuf (11 §1), exactement comme les tests Testcontainers du lot L1.
-  // Contexte `infra/` et cible `config-embarquee` — les deux conventions de
-  // construction que le Dockerfile documente et qu'il ne faut pas confondre.
-  if (docker(['image', 'inspect', IMAGE], 60_000).code !== 0) {
+  // ---------------------------------------------------------------------------
+  // L'IMAGE EST CONSTRUITE SI ELLE MANQUE **OU SI ELLE EST PÉRIMÉE**.
+  //
+  // CE QUI EXISTAIT DÉJÀ, ET QU'IL FAUT DIRE POUR NE PAS S'EN ATTRIBUER LE
+  // MÉRITE : le cas « le script embarqué est le fichier du dépôt, à l'octet
+  // près » (§ Dockerfile, plus bas) compare déjà les deux empreintes et fait
+  // ROUGIR la suite sur une image périmée. La suite ne pouvait donc PAS être
+  // verte sur un script périmé, et l'affirmer serait une fausse accusation.
+  //
+  // CE QUI MANQUAIT, ET QUE CE BLOC AJOUTE : ce cas est le DERNIER du fichier.
+  // Il constate après coup, quand les cinquante autres ont déjà mesuré le
+  // mauvais script — et il exige alors une reconstruction À LA MAIN avant de
+  // rejouer. Mesuré le 2026-08-28 : une modification de `sauvegarde.sh` a été
+  // éprouvée contre l'image précédente, et c'est le JOURNAL du service qui a
+  // trahi la péremption, pas la suite. Ici la vérification passe AVANT le
+  // premier cas et RÉPARE au lieu de constater.
+  //
+  // Le contrôle est une COMPARAISON, pas une présence : empreinte du script
+  // livré dans l'image contre empreinte du fichier du dépôt. Aucune
+  // heuristique de date, aucun cache : deux empreintes.
+  // ---------------------------------------------------------------------------
+  const scriptDuDepot = createHash('sha256')
+    .update(readFileSync(resolve(RACINE_DEPOT, 'infra', 'postgres', 'sauvegarde.sh')))
+    .digest('hex');
+  const imagePresente = docker(['image', 'inspect', IMAGE], 60_000).code === 0;
+  let scriptDeLImage = '';
+  if (imagePresente) {
+    const releve = docker(
+      ['run', '--rm', '--entrypoint', 'sha256sum', IMAGE, '/usr/local/bin/axion-sauvegarde'],
+      120_000,
+    );
+    scriptDeLImage = releve.code === 0 ? (releve.sortie.trim().split(/\s+/)[0] ?? '') : '';
+  }
+  if (!imagePresente || scriptDeLImage !== scriptDuDepot) {
+    // Contexte `infra/` et cible `config-embarquee` — les deux conventions de
+    // construction que le Dockerfile documente et qu'il ne faut pas confondre.
     const construction = await dockerLong([
       'build',
       '-f',
@@ -278,6 +309,20 @@ beforeAll(async () => {
       construction.code,
       `La construction de ${IMAGE} a échoué :\n${construction.sortie}`,
     ).toBe(0);
+
+    // ET ON REVÉRIFIE. Une reconstruction qui laisserait l'ancienne empreinte
+    // (cache de couche mal invalidé, mauvais contexte, mauvaise cible)
+    // rendrait ce garde-fou aussi menteur que celui qu'il remplace.
+    const apres = docker(
+      ['run', '--rm', '--entrypoint', 'sha256sum', IMAGE, '/usr/local/bin/axion-sauvegarde'],
+      120_000,
+    );
+    expect(
+      apres.code === 0 ? (apres.sortie.trim().split(/\s+/)[0] ?? '') : '',
+      `L'image reconstruite ne porte TOUJOURS PAS le script du dépôt.\n` +
+        `Tant que ces deux empreintes diffèrent, cette suite éprouve un autre\n` +
+        `fichier que celui qui est versionné, et son vert ne vaut rien.`,
+    ).toBe(scriptDuDepot);
   }
 
   docker(['rm', '-f', CONTENEUR], 60_000);
@@ -499,6 +544,164 @@ describe('sauvegarde.sh — rotation des archives MinIO', () => {
 });
 
 // =============================================================================
+// 2bis. RÉTENTION À TROIS ÉTAGES — décision D-2 de Williams (2026-08-28)
+//
+// 7 quotidiennes + 4 hebdomadaires + 3 mensuelles, à la place de 30 archives
+// quotidiennes plates. Le plan ne se prouve PAS en jouant 120 passes : une passe
+// écrit une archive complète du volume MinIO, et 120 passes coûteraient des
+// heures pour éprouver une règle qui ne regarde QUE des noms de fichiers.
+//
+// Le banc pose donc 119 noms d'archives datés — la rotation ne lit rien d'autre
+// que le nom, c'est une propriété revendiquée par le script (« jamais par date
+// de fichier ») — puis joue UNE passe réelle. La 120ᵉ archive est donc vraie,
+// et c'est elle qui déclenche la rotation qu'on mesure.
+//
+// ⚠️ CROISEMENT 09 §5.6 — À DIRE PLUTÔT QU'À TAIRE : ces tests ont été écrits
+// dans la même session que la modification de `sauvegarde.sh` qu'ils éprouvent.
+// La règle du dépôt veut qu'un test ne soit pas écrit par l'auteur du code
+// testé. La revue croisée (étape 4) reste donc DUE sur cet incrément, et cette
+// note est là pour qu'elle ne se perde pas.
+// =============================================================================
+describe('sauvegarde.sh — rétention à trois étages (D-2)', () => {
+  /** Pose des archives factices datées, du plus récent au plus ancien. */
+  function poserArchivesDatees(archives: string, jours: readonly string[]): void {
+    const commandes = jours
+      .map(
+        (j) =>
+          `: > ${archives}/minio-${j}T023000Z.tar.zst.gpg && ` +
+          `: > ${archives}/minio-${j}T023000Z.tar.zst.gpg.sha256`,
+      )
+      .join(' && ');
+    expect(dansConteneur(commandes).code).toBe(0);
+  }
+
+  /** Les `n` jours qui précèdent `depart` (inclus), au format AAAAMMJJ. */
+  function joursAvant(depart: string, n: number): string[] {
+    const { sortie } = dansConteneur(
+      `for i in $(seq 0 ${String(n - 1)}); do date -u -d "${depart} -$i days" +%Y%m%d; done`,
+    );
+    const jours = sortie
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => /^\d{8}$/.test(l));
+    expect(jours).toHaveLength(n);
+    return jours;
+  }
+
+  it('@critique 120 archives quotidiennes se réduisent à 7 + 4 + 3, et pas au hasard', () => {
+    const archives = repertoireNeuf();
+    // 119 jours qui s'arrêtent la VEILLE : la 120ᵉ archive sera celle que la
+    // passe réelle va écrire aujourd'hui.
+    poserArchivesDatees(archives, joursAvant('yesterday', 119));
+
+    const journal = jouerUnePasse(archives, {
+      AXION_RETENTION_QUOTIDIENNES: '7',
+      AXION_RETENTION_HEBDOMADAIRES: '4',
+      AXION_RETENTION_MENSUELLES: '3',
+    });
+    expect(journal.sortie).toContain('passe terminée avec succès');
+
+    const gpg = contenu(archives).filter((f) => f.endsWith('.tar.zst.gpg'));
+    expect(gpg, `archives restantes :\n${gpg.join('\n')}`).toHaveLength(14);
+
+    // Les 7 plus récentes sont 7 jours CONSÉCUTIFS : l'étage quotidien ne doit
+    // pas laisser de trou, sans quoi ce ne serait plus un étage quotidien.
+    const septRecentes = [...gpg]
+      .sort()
+      .slice(-7)
+      .map((f) => f.slice(6, 14));
+    expect(septRecentes).toEqual(joursAvant('today', 7).reverse());
+
+    // Les 7 autres tombent chacune dans une SEMAINE ISO ou un MOIS distinct :
+    // c'est la propriété qui distingue un vrai plan à étages d'un simple
+    // « garder 14 ». Elle est vérifiée par le calendrier du conteneur, pas par
+    // une liste de dates recopiées à la main dans ce test.
+    const anciennes = [...gpg]
+      .sort()
+      .slice(0, 7)
+      .map((f) => f.slice(6, 14));
+    const periodesDe = (jours: readonly string[]): string[] => {
+      const { sortie } = dansConteneur(
+        jours.map((j) => `date -u -d "${j}" +%G%V:%Y%m`).join(' && '),
+      );
+      const p = sortie
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l !== '');
+      expect(p).toHaveLength(jours.length);
+      return p;
+    };
+    const perAnciennes = periodesDe(anciennes);
+    const semaines = new Set(perAnciennes.map((p) => p.split(':')[0] ?? ''));
+    const mois = new Set(perAnciennes.map((p) => p.split(':')[1] ?? ''));
+    // Au moins 4 semaines ISO distinctes (l'étage hebdomadaire) et au moins
+    // 3 mois distincts (le mensuel) : c'est la propriété qui distingue un vrai
+    // plan à étages d'un simple « garder 14 ».
+    expect(semaines.size).toBeGreaterThanOrEqual(4);
+    expect(mois.size).toBeGreaterThanOrEqual(3);
+
+    // LE NON-CHEVAUCHEMENT, qui est le cœur de la règle : aucune archive des
+    // étages du dessous ne tombe dans une semaine déjà couverte par l'étage
+    // quotidien. Sans lui, les 7 quotidiennes mangeraient les places
+    // hebdomadaires et le plan ne remonterait jamais au-delà d'une semaine.
+    const semainesQuotidiennes = new Set(
+      periodesDe(septRecentes).map((p) => p.split(':')[0] ?? ''),
+    );
+    for (const s of semaines) {
+      expect(
+        semainesQuotidiennes.has(s),
+        `La semaine ISO ${s} est couverte À LA FOIS par l'étage quotidien et par ` +
+          `un étage inférieur : une place hebdomadaire a été gaspillée.`,
+      ).toBe(false);
+    }
+
+    // Chaque archive gardée a gardé son empreinte : une `.sha256` orpheline ou
+    // manquante signerait une suppression à moitié faite.
+    const empreintes = contenu(archives).filter((f) => f.endsWith('.tar.zst.gpg.sha256'));
+    expect(empreintes.map((f) => f.replace(/\.sha256$/, '')).sort()).toEqual([...gpg].sort());
+  }, 300_000);
+
+  it('@critique une archive dont la date est ILLISIBLE n’est JAMAIS supprimée', () => {
+    const archives = repertoireNeuf();
+    // `20250145` passe le motif (8 chiffres) et n'est pas une date. Elle est
+    // posée ANCIENNE — donc au-delà de l'étage quotidien — pour que ce soit bien
+    // la branche « par précaution » qui décide, et pas le rang.
+    poserArchivesDatees(archives, [...joursAvant('yesterday', 3), '20250145']);
+
+    const journal = jouerUnePasse(archives, {
+      AXION_RETENTION_QUOTIDIENNES: '2',
+      AXION_RETENTION_HEBDOMADAIRES: '0',
+      AXION_RETENTION_MENSUELLES: '0',
+    });
+    expect(journal.sortie).toContain('passe terminée avec succès');
+    expect(journal.sortie).toContain('date illisible dans le nom');
+
+    const restantes = contenu(archives);
+    expect(
+      restantes,
+      `Le coût d'une archive gardée en trop est de quelques mégaoctets ; celui\n` +
+        `d'une archive supprimée à tort est une restauration impossible.\n` +
+        `Restantes :\n${restantes.join('\n')}`,
+    ).toContain('minio-20250145T023000Z.tar.zst.gpg');
+  }, 300_000);
+
+  it('la semaine ISO d’une archive du 31 décembre n’est pas celle de son année civile', () => {
+    // `%Y%W` rangerait le 31/12/2026 et le 01/01/2027 dans deux seaux
+    // différents alors qu'ils sont dans la MÊME semaine ISO. Le script utilise
+    // `%G%V` ; ce test le prouve sur le calendrier du conteneur lui-même.
+    const { sortie } = dansConteneur(
+      'date -u -d 20261231 +%G%V; date -u -d 20270101 +%G%V; date -u -d 20261231 +%Y%W; date -u -d 20270101 +%Y%W',
+    );
+    const [isoDec, isoJan, civilDec, civilJan] = sortie
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l !== '');
+    expect(isoDec).toBe(isoJan);
+    expect(civilDec).not.toBe(civilJan);
+  });
+});
+
+// =============================================================================
 // 3. INTÉGRITÉ — l'archive est RELUE avant d'être publiée
 //
 // Deux injections, parce qu'il y a deux façons pour une archive de mentir :
@@ -580,6 +783,167 @@ describe('sauvegarde.sh — vérification de bout en bout avant publication', ()
     } finally {
       dansConteneur(`rm -f ${FAUX}/zstd`, {}, 'root');
     }
+  }, 300_000);
+});
+
+// =============================================================================
+// 3bis. LE COFFRE DES SECRETS — LE CHEMIN QUI LE PRODUIT (décision D-3)
+//
+// POURQUOI CES TESTS EXISTENT, ET CE QU'ILS RÉPARENT. La réserve R-3 du gardien
+// A02 (porte P-A, 2026-08-28) est mesurée et exacte : le commit qui a introduit
+// le coffre ajoutait +528 lignes à `sauvegarde.sh` et NE TOUCHAIT AUCUN FICHIER
+// DE TEST. Aucun des 18 fichiers de test du dépôt ne mentionnait le coffre ni
+// `BACKUP_SECRETS_PASSPHRASE`. Ce qui était éprouvé, c'était le REFUS — pas de
+// passphrase, pas de coffre — et le dossier de porte a dû retirer le mot
+// « éprouvé » de la fiche D-3.
+//
+// Williams a tranché D-3 le 2026-08-28 : OPTION A, une valeur NOUVELLE, gardée
+// hors de la machine. Le chemin qui PRODUIT le coffre devient donc un chemin de
+// production, et il doit être éprouvé comme tel — ici, avec une passphrase de
+// test, dans un conteneur jetable.
+//
+// LA PASSPHRASE RÉELLE N'APPARAÎT NULLE PART, ni ici ni dans le dépôt : elle
+// n'existe que chez Williams. Ces tests éprouvent le MÉCANISME.
+// =============================================================================
+describe('sauvegarde.sh — coffre des secrets (D-3, option A)', () => {
+  // ≥ 20 caractères (SECRETS_LONGUEUR_MIN), et DIFFÉRENTE de celle des données :
+  // c'est exactement la forme que l'option A impose en production.
+  const COFFRE_PASSPHRASE = 'passphrase-de-coffre-factice-pour-les-tests';
+
+  it('@critique le coffre EST PRODUIT quand la passphrase est posée, et il se relit', () => {
+    const archives = repertoireNeuf();
+    const journal = jouerUnePasse(archives, {
+      BACKUP_SECRETS_PASSPHRASE: COFFRE_PASSPHRASE,
+      // Une variable applicative témoin : elle doit ressortir du coffre.
+      AXION_TEMOIN_DE_COFFRE: 'valeur-temoin-du-test',
+    });
+    expect(journal.sortie).toContain('passe terminée avec succès');
+    expect(journal.sortie).toContain('coffre des secrets ACTIF');
+
+    const coffres = contenu(archives).filter((f) => f.endsWith('.coffre.gpg'));
+    expect(coffres, `Aucun coffre produit. Journal :\n${journal.sortie}`).toHaveLength(1);
+    const coffre = coffres[0] ?? '';
+    expect(contenu(archives)).toContain(`${coffre}.sha256`);
+
+    // OUVERTURE RÉELLE, avec la procédure que le LISEZ-MOI du coffre décrit —
+    // si cette commande ne marche pas, le mode d'emploi livré au sinistré est
+    // faux, et c'est le seul moment où l'on peut s'en apercevoir.
+    const ouverture = dansConteneur(
+      `cd ${archives} && printf %s '${COFFRE_PASSPHRASE}' > /tmp/pp-coffre && ` +
+        `gpg --batch --quiet --decrypt --pinentry-mode loopback ` +
+        `--passphrase-file /tmp/pp-coffre '${coffre}' | zstd -d -q | tar -t; ` +
+        `rm -f /tmp/pp-coffre`,
+    );
+    expect(ouverture.code).toBe(0);
+    for (const attendu of [
+      './application.env',
+      './manifeste.txt',
+      './contexte-coolify.txt',
+      './LISEZ-MOI.txt',
+      './environnement-conteneur.brut',
+    ]) {
+      expect(ouverture.sortie, `manque dans le coffre : ${attendu}`).toContain(attendu);
+    }
+  }, 300_000);
+
+  it('@critique le coffre NE S’OUVRE PAS avec la passphrase des DONNÉES', () => {
+    // C'est la raison d'être de l'option A, et elle ne vaut que si elle est
+    // mesurée : si le coffre s'ouvrait avec `BACKUP_ENCRYPTION_PASSPHRASE`, une
+    // fuite du stockage distant plus cette seule valeur donnerait les données
+    // ET toutes les clés de la pile. Deux niveaux de garde, deux clés.
+    const archives = repertoireNeuf();
+    expect(
+      jouerUnePasse(archives, { BACKUP_SECRETS_PASSPHRASE: COFFRE_PASSPHRASE }).sortie,
+    ).toContain('passe terminée avec succès');
+    const coffre = contenu(archives).find((f) => f.endsWith('.coffre.gpg'));
+    expect(coffre).toBeDefined();
+
+    const tentative = dansConteneur(
+      `cd ${archives} && printf %s '${PASSPHRASE}' > /tmp/pp-donnees && ` +
+        `gpg --batch --quiet --decrypt --pinentry-mode loopback ` +
+        `--passphrase-file /tmp/pp-donnees '${String(coffre)}' > /dev/null 2>&1; ` +
+        `echo "code=$?"; rm -f /tmp/pp-donnees`,
+    );
+    expect(tentative.sortie).toContain('code=2');
+  }, 300_000);
+
+  it('le manifeste donne les NOMS et les LONGUEURS, et JAMAIS une valeur', () => {
+    const archives = repertoireNeuf();
+    const temoin = 'valeur-temoin-qui-ne-doit-pas-fuiter';
+    expect(
+      jouerUnePasse(archives, {
+        BACKUP_SECRETS_PASSPHRASE: COFFRE_PASSPHRASE,
+        AXION_TEMOIN_DE_COFFRE: temoin,
+      }).sortie,
+    ).toContain('passe terminée avec succès');
+    const coffre = contenu(archives).find((f) => f.endsWith('.coffre.gpg'));
+
+    const extrait = dansConteneur(
+      `cd ${archives} && printf %s '${COFFRE_PASSPHRASE}' > /tmp/pp && ` +
+        `gpg --batch --quiet --decrypt --pinentry-mode loopback --passphrase-file /tmp/pp ` +
+        `'${String(coffre)}' | zstd -d -q | tar -xO ./manifeste.txt; rm -f /tmp/pp`,
+    );
+    expect(extrait.code).toBe(0);
+    // La clé témoin est nommée…
+    expect(extrait.sortie).toContain('AXION_TEMOIN_DE_COFFRE');
+    // …sa longueur est publiée…
+    expect(extrait.sortie).toContain(String(temoin.length));
+    // …et sa valeur ne l'est PAS. Un manifeste qui fuit est pire qu'absent :
+    // il circule en clair auprès de gens à qui l'on refuse le coffre.
+    expect(extrait.sortie).not.toContain(temoin);
+  }, 300_000);
+
+  it('une passphrase de coffre ÉGALE à celle des données est acceptée, mais DITE', () => {
+    // Le script ne refuse pas — Williams peut avoir tranché ainsi — mais il ne
+    // laisse pas la confusion s'installer en silence. C'est la seule façon de
+    // distinguer une valeur recopiée par commodité d'une valeur choisie.
+    const archives = repertoireNeuf();
+    const journal = jouerUnePasse(archives, { BACKUP_SECRETS_PASSPHRASE: PASSPHRASE });
+    expect(journal.sortie).toContain('passe terminée avec succès');
+    expect(journal.sortie).toContain('ÉGALE à BACKUP_ENCRYPTION_PASSPHRASE');
+  }, 300_000);
+
+  it('une passphrase trop courte est traitée comme une ABSENCE, et le journal la nomme', () => {
+    const archives = repertoireNeuf();
+    const journal = jouerUnePasse(archives, { BACKUP_SECRETS_PASSPHRASE: 'trop-court' });
+    expect(journal.sortie).toContain('passe terminée avec succès');
+    expect(journal.sortie).toContain('COFFRE DES SECRETS INACTIF');
+    expect(journal.sortie).toContain('BACKUP_SECRETS_PASSPHRASE');
+    // La valeur refusée ne doit pas se retrouver au journal : un message
+    // d'erreur qui cite un secret pour « aider » est une fuite.
+    expect(journal.sortie).not.toContain('trop-court');
+    expect(contenu(archives).filter((f) => f.endsWith('.coffre.gpg'))).toHaveLength(0);
+  }, 300_000);
+
+  it('les coffres suivent la MÊME rétention que les archives qu’ils rouvrent', () => {
+    // Un coffre gardé moins longtemps que l'archive qu'il permet de déchiffrer
+    // rendrait cette archive illisible : le PRA restituerait un coffre-fort
+    // sans sa clé.
+    const archives = repertoireNeuf();
+    const commandes = ['20250101', '20250102', '20250103']
+      .map(
+        (j) =>
+          `: > ${archives}/secrets-${j}T023000Z.coffre.gpg && ` +
+          `: > ${archives}/secrets-${j}T023000Z.coffre.gpg.sha256`,
+      )
+      .join(' && ');
+    expect(dansConteneur(commandes).code).toBe(0);
+
+    const journal = jouerUnePasse(archives, {
+      BACKUP_SECRETS_PASSPHRASE: COFFRE_PASSPHRASE,
+      AXION_RETENTION_QUOTIDIENNES: '1',
+      AXION_RETENTION_HEBDOMADAIRES: '1',
+      AXION_RETENTION_MENSUELLES: '1',
+    });
+    expect(journal.sortie).toContain('passe terminée avec succès');
+    expect(journal.sortie).toContain('plan 1 quotidien(s) / 1 hebdomadaire(s) / 1 mensuel(s)');
+
+    const coffres = contenu(archives).filter((f) => f.endsWith('.coffre.gpg'));
+    // Le coffre du jour (quotidien), plus au plus une semaine et un mois pris
+    // dans les trois posés — qui sont tous du même mois de janvier 2025 et de
+    // deux semaines ISO au plus.
+    expect(coffres.length).toBeGreaterThanOrEqual(2);
+    expect(coffres.length).toBeLessThanOrEqual(3);
   }, 300_000);
 });
 

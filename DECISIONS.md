@@ -872,6 +872,28 @@ pas ouverte.
 **À partir de cette entrée, le contrôle est mécanique : plus aucune régularisation ne sera
 nécessaire, parce que `pnpm verify` refusera l'entrée hors format avant le commit.**
 
+**AMENDEMENT DU 2026-08-28 — la phrase ci-dessus est FAUSSE, et l'entrée suivante le prouve.**
+Une régularisation a bien été nécessaire après cette date, pour une entrée écrite **le 2026-08-28,
+donc POSTÉRIEURE au contrôle mécanique** — elle sort explicitement du périmètre annoncé en tête de
+cette liste, et il fallait le dire plutôt que de la glisser parmi les autres.
+
+**Pourquoi la garantie n'a pas tenu :** `check:decisions` est un contrôle bloquant de la **CI**,
+mais il n'est **pas dans le hook de pré-commit** — le hook exécute `check:pack`, `check:jonction`,
+`check:test-projects`, `lint-staged` et `typecheck`, pas `pnpm verify`. L'entrée hors format est
+donc passée en local **et** a été poussée (`c36763e`), et c'est la CI qui l'a arrêtée. « Refusera
+avant le commit » supposait un hook qui exécute ce contrôle ; ce hook ne l'exécute pas.
+
+C'est le **second** écart du même genre relevé le même jour : `lint-staged` ne couvre ni `.md` ni
+`.json` là où la CI fait `prettier --check .`. **Le hook de pré-commit est plus permissif que la
+CI**, donc il donne une assurance qu'il ne peut pas tenir. Tant que les deux périmètres ne sont pas
+alignés, aucune promesse de la forme « le contrôle est mécanique avant le commit » n'est vraie.
+
+Régularisée à ce titre, avec sa déclaration portée par l'entrée « Règle de précédence manquante à
+l'entrée … » du 2026-08-28 en fin de fichier — **règle de précédence sans objet, aucune divergence
+interne au pack** :
+
+- L'IPv4 d'`axionia-web` doit-elle rester dans la documentation d'un dépôt PUBLIC ?
+
 **Décideur :** A01
 **Impact spec :** aucun
 
@@ -2327,7 +2349,9 @@ sur le serveur, stockage distant). La note d'architecture est à reprendre en co
 questions Q2 à Q6 restent ouvertes, Q1 est close.
 
 ## 2026-08-28 — [L0-b] Exige-t-on une relecture approuvée sur `main` (`required_approving_review_count` 1) ?
+
 Options :
+
 1. Passer le compteur à **1** et activer `enforce_admins` — la demande initiale.
 2. Activer `enforce_admins` seul et **laisser le compteur à 0**.
 3. Ne rien changer.
@@ -2351,7 +2375,9 @@ Décideur : Williams (demande) · réorientée sur mesure d'A01
 Impact spec : aucun
 
 ## 2026-08-28 — [L0-b] L'IPv4 d'`axionia-web` doit-elle rester dans la documentation d'un dépôt PUBLIC ?
+
 Options :
+
 1. Passer le dépôt en privé. **Écartée d'emblée** : Williams exige le dépôt public, et c'est ce qui
    débloque la protection de branche sans abonnement (décision du 2026-08-27).
 2. Laisser l'adresse en clair — 19 occurrences dans 6 fichiers.
@@ -2366,6 +2392,7 @@ staging est en `sslip.io`, forme qui **encode l'IP par construction** — l'adre
 toute machine qui atteint le staging. C'est de l'**hygiène de dépôt, pas une mesure de sécurité**.
 
 **Ce que cette décision NE tranche PAS — deux points OUVERTS, l'un et l'autre plus lourds :**
+
 1. La **console Coolify du port 8000 est ouverte sur Internet en HTTP non chiffré** (atteinte depuis
    un navigateur sans VPN le 2026-08-28) : le mot de passe d'administration circule en clair.
 2. Les workflows utilisent **5 actions tierces épinglées sur des tags mobiles**, avec
@@ -2376,7 +2403,9 @@ Décideur : Williams (demande) · constats de sécurité relevés par A01
 Impact spec : aucun
 
 ## 2026-08-28 — [L0-b] Épinglage des actions GitHub — clôture du point OUVERT n° 2 de l'entrée précédente
+
 Options :
+
 1. Activer `sha_pinning_required: true` d'abord. **Écartée** : le réglage refuse d'exécuter toute
    action non épinglée — l'activer avant d'épingler aurait cassé la CI au commit suivant.
 2. Épingler les actions aux empreintes de commit, **puis** activer le réglage.
@@ -2385,13 +2414,13 @@ Arbitrage : **option 2**, dans cet ordre. 26 occurrences épinglées sur 6 fichi
 (`.github/workflows/*.yml` + `.github/actions/setup-node-pnpm/action.yml`), le tag d'origine
 conservé en commentaire pour rester lisible et pour que les montées de version restent délibérées :
 
-| Action | Empreinte |
-| --- | --- |
-| `actions/checkout` | `11d5960a326750d5838078e36cf38b85af677262` (v4) |
-| `actions/setup-node` | `49933ea5288caeca8642d1e84afbd3f7d6820020` (v4) |
-| `actions/upload-artifact` | `ea165f8d65b6e75b540449e92b4886f43607fa02` (v4) |
-| `docker/build-push-action` | `10e90e3645eae34f1e60eeb005ba3a3d33f178e8` (v6) |
-| `docker/login-action` | `c94ce9fb468520275223c153574b00df6fe4bcc9` (v3) |
+| Action                       | Empreinte                                       |
+| ---------------------------- | ----------------------------------------------- |
+| `actions/checkout`           | `11d5960a326750d5838078e36cf38b85af677262` (v4) |
+| `actions/setup-node`         | `49933ea5288caeca8642d1e84afbd3f7d6820020` (v4) |
+| `actions/upload-artifact`    | `ea165f8d65b6e75b540449e92b4886f43607fa02` (v4) |
+| `docker/build-push-action`   | `10e90e3645eae34f1e60eeb005ba3a3d33f178e8` (v6) |
+| `docker/login-action`        | `c94ce9fb468520275223c153574b00df6fe4bcc9` (v3) |
 | `docker/setup-buildx-action` | `8d2750c68a42422c14e847fe6c8ac0403b4cbd6f` (v3) |
 
 `actions/setup-node` avait échappé au premier relevé : il ne vit pas dans `.github/workflows/` mais
@@ -2403,4 +2432,197 @@ Le principe valait déjà pour les dépendances applicatives ; il s'applique dé
 construction, qui a accès aux secrets.
 
 Décideur : Williams (demande) · séquencement par A01
+Impact spec : aucun
+
+## 2026-08-28 — [L0] D-2 : la rétention MinIO à 30 archives complètes ne passe pas l'échelle — quel plan la remplace ?
+
+Options :
+
+- **(a)** Rester à 30 archives quotidiennes plates. Granularité quotidienne sur 30 jours, alignée sur
+  le PITR de PostgreSQL — mais ≈ 30 × la taille des pièces jointes sur une machine **partagée** avec
+  la production d'un tiers. À 1 Go de pièces jointes : 30 Go. Le garde-fou `AXION_ARCHIVES_MAX_MO`
+  fait alors échouer le service bruyamment, ce qui achète du temps sans décider.
+- **(b)** Baisser le nombre plat (ex. 14). Moins de volume, mais l'horizon tombe à 14 jours, c'est-à-dire
+  **sous** celui de PostgreSQL — une restauration de J-25 désignerait des pièces jointes qu'aucune
+  archive ne porterait plus.
+- **(c)** Plan à trois étages 7 quotidiennes / 4 hebdomadaires / 3 mensuelles. Au plus 14 archives,
+  et une couverture de ~90 jours, donc **supérieure** aux 30 jours de PostgreSQL.
+
+Arbitrage : **option (c)**, décidée par Williams le 2026-08-28 sur proposition d'A01.
+
+Le coût de l'option (c) a été cherché avant d'être accepté, et il est réel mais borné : entre J-7 et
+J-30, les points de restauration MinIO passent du quotidien à l'hebdomadaire. **La conclusion qu'en
+tirait le commentaire d'origine du compose — « deux rétentions, c'est une restauration à moitié
+possible » — ne s'applique PAS ici, et il fallait le vérifier plutôt que de recopier l'inquiétude :**
+une archive MinIO est un **miroir complet et cumulatif** du volume, et l'**invariant 7** interdit
+toute suppression silencieuse de pièce jointe. Une archive plus récente contient donc tout ce que
+contenait une plus ancienne ; restaurer la base à J-20 avec l'archive MinIO la plus récente rend
+l'intégralité des pièces jointes que cette base désigne. Le seul cas résiduel — une pièce jointe
+réellement effacée entre les deux dates — est précisément celui que l'invariant 7 rend impossible.
+
+Règle de précédence : **CLAUDE.md §1 invariant 8** (« aucune donnée ne vit sur un seul appareil ») et
+**§1 invariant 7** (rien n'est jamais silencieusement supprimé), qui est ce qui rend l'écart de
+granularité acceptable. Le 02 §11.4 fixe la rétention PostgreSQL à 30 jours et ne prescrit rien pour
+le volume applicatif : il n'y a donc pas de contradiction de pack à trancher, mais une décision à
+prendre et à tracer.
+
+Mise en œuvre : `infra/postgres/sauvegarde.sh` (`cle_periode`, `faire_tourner_par_rang` réécrite en
+plan à étages), `infra/docker-compose.coolify.yml`, `.env.example`. Trois variables :
+`AXION_RETENTION_QUOTIDIENNES=7`, `AXION_RETENTION_HEBDOMADAIRES=4`, `AXION_RETENTION_MENSUELLES=3`.
+`AXION_MINIO_ARCHIVES_GARDEES` reste accepté et désigne désormais l'étage quotidien — le renommer en
+silence aurait cassé une preuve existante pour un gain d'esthétique.
+
+Deux propriétés ont été jugées assez faciles à rater pour mériter leur propre cas de test :
+**le non-chevauchement** des étages (sans lui, 7 quotidiennes d'une même semaine mangent les 4 places
+hebdomadaires et le plan ne remonte jamais), et **le refus de supprimer un fichier dont la date est
+illisible** — le motif accepte `20250145`, qui est syntaxiquement conforme et n'est pas une date. Le
+coût d'une archive gardée en trop est de quelques mégaoctets ; celui d'une archive supprimée à tort
+est une restauration impossible.
+
+Preuve : `apps/api/tests/l0-sauvegarde.integration.test.ts`, section « rétention à trois étages
+(D-2) » — 3 cas dont 2 `@critique`, verts (120 archives → exactement 14, étages vérifiés par le
+calendrier du conteneur et non par une liste recopiée). Suite complète du fichier : **52/52 verts**.
+
+Décideur : Williams
+Impact spec : aucun — le 02 §11.4 ne prescrit pas la rétention du volume applicatif.
+
+## 2026-08-28 — [L0] D-3 : d'où vient la passphrase du coffre de secrets, et où vit-elle hors de la machine ?
+
+Options :
+
+- **(A)** Une valeur **nouvelle**, conservée **uniquement** dans le gestionnaire de mots de passe de
+  Williams. Une fuite du stockage distant **plus** la passphrase des données ne donne que les
+  données, jamais les clés. Coût : un secret de plus à garder.
+- **(B)** Réutiliser `BACKUP_ENCRYPTION_PASSPHRASE`. Rien de neuf à garder, mais **une seule fuite
+  fait basculer une compromission de données en compromission totale** — jetons, clés de tiers, mots
+  de passe.
+- **(C)** Ne rien poser. Le coffre n'est pas produit, le 02 §30.4-2 reste non tenu, et une
+  restauration rendrait les données sans faire redémarrer un seul conteneur.
+
+Arbitrage : **option (A)**, décidée par Williams le 2026-08-28, conforme à la recommandation d'A01.
+
+Règle de précédence : **CLAUDE.md §3-4** (« toucher à la sécurité/crypto autrement que spécifié » est
+réservé à l'humain) et **02 §30.4-2** (« sauvegardé CHIFFRÉ […] sinon un PRA restaure une infra sans
+ses clés »). Le code acceptait déjà les trois options **sans modification** : c'est une variable, pas
+une ligne de logique.
+
+Ce que cette décision a rendu **dû**, et qui est fait : la **réserve R-3 du gardien A02** — « le
+coffre est dit _éprouvé_ ; il n'est éprouvé par rien » — était mesurée et exacte. Le commit qui
+introduisait le coffre ajoutait +528 lignes à `sauvegarde.sh` et ne touchait aucun fichier de test ;
+seul le **refus** était éprouvé, jamais le chemin qui **produit** le coffre. Six cas de test le
+couvrent désormais, dont deux `@critique` : le coffre est produit et se relit **par la procédure
+exacte de son propre `LISEZ-MOI.txt`** (si cette commande échoue, le mode d'emploi livré au sinistré
+est faux, et c'est le seul moment où l'on peut s'en apercevoir) ; il **ne s'ouvre pas** avec la
+passphrase des données — c'est la raison d'être de l'option A, et elle ne vaut que mesurée ; le
+manifeste nomme les clés et publie leur longueur **sans jamais divulguer une valeur** ; une
+passphrase trop courte est traitée comme une absence sans être recopiée au journal ; les coffres
+suivent la rétention des archives qu'ils rouvrent. **R-3 est levée par mesure, pas par déclaration.**
+
+**La variable a été posée sur le staging le jour même** (session parallèle, W-1), et je l'ai vérifié
+plutôt que de le croire : le journal du conteneur `sauvegarde` porte **1** occurrence de « coffre des
+secrets ACTIF », **0** de « COFFRE DES SECRETS INACTIF » et **0** de « PERSONNE NE SERA PRÉVENU ». La
+valeur elle-même n'a transité ni par ce dépôt, ni par un ticket, ni par une conversation avec un
+agent — c'est la condition qui donne sa valeur à l'option A.
+
+⚠️ **Et « ACTIF » ne veut pas dire « un coffre existe » : au même relevé, `/sauvegarde` ne contenait
+AUCUN `secrets-*.coffre.gpg`.** La dernière passe datait de 08h08, donc d'AVANT la pose, et la
+tolérance de rattrapage (26 h) n'en a pas déclenché de nouvelle. Le premier coffre naîtra à la passe
+de 02h30 UTC ; d'ici là, la copie hors serveur ne porte **toujours aucun secret**, et un sinistre
+cette nuit rendrait encore les données sans faire redémarrer un conteneur. **Le contrôle qui clôt
+vraiment D-3 sur la machine est donc à rejouer après cette passe** — dire « c'est actif » et s'arrêter
+là serait exactement la sonde menteuse que ce lot a démontée trois fois.
+
+**Point encore ouvert, appartenant à la même décision** : la question annexe de D-3 — cette
+passphrase doit-elle être déposée **ailleurs** que dans un seul gestionnaire (enveloppe scellée,
+second détenteur) ? Une clé unique détenue par une seule personne est un point de défaillance unique
+**de la même famille que celui que ce coffre vient de fermer**. Non tranchée à ce jour.
+
+Décideur : Williams
+Impact spec : aucun — 02 §30.4-2 est appliqué, pas amendé.
+
+## 2026-08-28 — [L0-b] Règle de précédence manquante à l'entrée « L'IPv4 d'`axionia-web` … dépôt PUBLIC ? »
+
+Options :
+
+1. Réécrire l'entrée du même jour pour y glisser la règle. **Écartée** : le fichier est
+   **append-only**, et `scripts/check-decisions.mjs` le dit lui-même — « _ne réécris pas une entrée
+   passée pour la mettre en conformité, ce serait le changement silencieux que le format empêche_ ».
+2. Réémettre le contenu manquant dans une entrée nouvelle et datée.
+
+Arbitrage : **option 2.** La règle de précédence manquante à l'entrée visée est : **règle de
+précédence sans objet (aucune divergence interne du pack)**. Retirer une adresse IP de la
+documentation versionnée ne tranche aucun conflit entre sections du pack ; c'est une mesure
+d'hygiène sur un dépôt public, sans équivalent normatif dans les §1-36.
+
+**Ce que cet incident apprend, et qui vaut plus que le correctif :** `check:decisions` est un contrôle
+bloquant de la CI, et il **n'est pas dans le hook de pré-commit**. Mes deux commits `c36763e` et
+`82194bf` sont passés au vert en local en portant cette faute. C'est le **second** écart du même
+genre relevé aujourd'hui, après `lint-staged` qui ne couvre ni `.md` ni `.json` là où la CI fait
+`prettier --check .`. **Le hook de pré-commit et la CI ne contrôlent pas le même périmètre**, et
+c'est le hook qui est le plus permissif — donc celui qui donne une fausse assurance. À aligner.
+
+Décideur : A01, sur signalement mesuré de la session `axion-audit-v2-12-complet-2a`
+Impact spec : aucun
+
+## 2026-08-28 — [L0-b] Le hook de pré-commit est plus permissif que la CI : que fait-on ?
+
+Options :
+
+1. Laisser en l'état et compter sur la vigilance. **Écartée** : elle a déjà échoué deux fois le même
+   jour, sur deux contrôles différents, avec le même effet — vert en local, rouge en CI, après push.
+2. Aligner le hook sur la CI **en entier** (y compris `lint`, les trois suites de tests, `e2e`).
+   Écartée : le hook deviendrait plus lent qu'une exécution de CI et serait contourné.
+3. Aligner **les deux contrôles qui ont mordu**, et écrire le reste de l'écart plutôt que de le taire.
+
+Arbitrage : **option 3, appliquée.**
+
+- `.husky/pre-commit` : ajout de `pnpm check:decisions` avant `lint-staged`.
+- `.lintstagedrc.json` : ajout du motif `*.{md,json,jsonc,yml,yaml}` → **`prettier --check`**.
+
+**`--check` et NON `--write`, délibérément.** Le bandeau de `.lintstagedrc.json` pose une règle
+absolue : « _n'ajouter JAMAIS ici de motif couvrant `docs/**`, et jamais de commande qui RÉÉCRIT un
+fichier sur ce chemin_ » — les 12 fichiers du pack sont scellés, et `check:pack` s'exécute AVANT
+`lint-staged`, donc il ne rattraperait pas une réécriture faite après lui. Un motif en lecture seule
+respecte la règle sans exception ni négation fragile. Le prix est connu et assumé : le commit
+**échoue** au lieu de corriger, et il faut lancer `pnpm format`. C'est le comportement de la CI, donc
+la parité est exacte.
+
+**Ce que cette décision NE corrige PAS, et qu'il faut savoir :** restent absents du hook
+`check:invariants`, `check:no-skipped-tests`, `check:compose-coolify`, `check:isolation-reseau`, le
+`lint` complet et les trois suites de tests. **Le hook reste plus permissif que la CI** — il est
+désormais moins faux, pas exact. Aucune promesse du type « le contrôle est mécanique avant le
+commit » ne doit être écrite ailleurs dans ce dépôt tant que ce n'est pas vrai.
+
+Règle de précédence : **sans objet** (aucune divergence interne au pack ; le contrat 11 §7 demande un
+pre-commit, il n'en fixe pas le périmètre exact).
+Décideur : A01
+Impact spec : aucun
+
+## 2026-08-28 — [L0-b] Console Coolify joignable en HTTP clair : corriger, ou tracer et sortir ?
+
+Options :
+
+1. Corriger depuis le lot Audit : enregistrement DNS dans la zone `axion-ia.com`, domaine d'instance
+   Coolify, fermeture du port 8000.
+2. Tracer le risque, la marche à suivre et la frontière — et **ne pas y toucher**.
+
+**Fait mesuré le 2026-08-28 :** le tableau de bord Coolify s'ouvre depuis un navigateur ordinaire, en
+`http://`, sans VPN. Le mot de passe d'administration circule donc en clair. Qui l'obtient obtient
+les deux projets de la machine, `axion-ia.com` compris.
+
+Arbitrage : **option 2.** L'option 1 a été **commencée puis annulée** : la fenêtre de création de
+l'enregistrement DNS a été ouverte dans Cloudflare, puis fermée sans rien créer, sur rappel de
+Williams — la zone `axion-ia.com` compte toujours ses 24 enregistrements d'origine. Motif :
+`infra/COHABITATION_AXIONIA_WEB.md` §2 pose que « _le durcissement SSH et le pare-feu sont des
+décisions qui appartiennent à celui qui connaît la machine_ ». Coolify n'est pas une pièce d'Axion
+Audit : c'est le plan de contrôle de la machine du voisin. **Un agent du lot Audit n'a pas à le
+reconfigurer.**
+
+La marche à suivre, l'ordre des opérations et le piège du nuage orange sont écrits en
+`infra/COHABITATION_AXIONIA_WEB.md` **§5quater**, pour le jour où la correction sera décidée côté
+Axion-IA.
+
+Règle de précédence : **sans objet** (question de frontière de périmètre, aucune divergence interne
+au pack).
+Décideur : Williams (arrêt du geste) · constat et traçage par A01
 Impact spec : aucun

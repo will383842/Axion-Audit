@@ -839,19 +839,43 @@ services:
       # │ sont lues ; la même fuite sur un coffre chiffré par la MÊME       │
       # │ valeur donnerait EN PLUS toutes les clés de la pile. Deux niveaux │
       # │ de garde, deux clés. D'OÙ VIENT CELLE-CI ET OÙ ELLE VIT EST UNE   │
-      # │ DÉCISION DE GARDE DE CLÉ (11 §8-4) : elle appartient à Williams,  │
-      # │ elle est ESCALADÉE, et tant qu'elle n'est pas tranchée ce coffre  │
-      # │ est écrit, éprouvé et INACTIF — ce qui se voit dans le journal.   │
+      # │ DÉCISION DE GARDE DE CLÉ (11 §8-4), et elle est TRANCHÉE :        │
+      # │ DÉCISION D-3 DE WILLIAMS, 2026-08-28 — **OPTION A**, une valeur   │
+      # │ NOUVELLE gardée uniquement dans son gestionnaire de mots de       │
+      # │ passe. ✅ POSÉE sur le staging le 2026-08-28 : le journal du       │
+      # │ service porte « coffre des secrets ACTIF », zéro « INACTIF ».     │
+      # │ ⚠️ « ACTIF » ne dit PAS qu'un coffre existe : au relevé, aucun     │
+      # │ `secrets-*.coffre.gpg` n'était encore écrit — la dernière passe   │
+      # │ précédait la pose. Le premier coffre naît à la passe de 02h30.    │
+      # │ Le chemin qui PRODUIT le coffre est désormais éprouvé par six cas │
+      # │ de `l0-sauvegarde.integration.test.ts` (réserve R-3 levée).       │
       # │                                                                   │
       # │ AUCUNE VALEUR ICI (02 §30.4-1/5) : le script la vérifie par sa    │
       # │ présence et par sa longueur, jamais par son contenu.              │
       # └───────────────────────────────────────────────────────────────────┘
       BACKUP_SECRETS_PASSPHRASE: ${BACKUP_SECRETS_PASSPHRASE:-}
-      # RÉTENTION MinIO alignée sur celle de PostgreSQL, et ce n'est pas
-      # cosmétique : une restauration PostgreSQL de J-25 désignerait des pièces
-      # jointes qu'aucune archive MinIO ne contiendrait plus si MinIO était gardé
-      # moins longtemps. Deux rétentions, c'est une restauration à moitié possible.
+      # RÉTENTION PostgreSQL — 30 jours, portée par pgBackRest (02 §11.4).
       BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+      # ┌───────────────────────────────────────────────────────────────────┐
+      # │ RÉTENTION MinIO — DÉCISION D-2 DE WILLIAMS, 2026-08-28.           │
+      # │                                                                   │
+      # │ Trois étages (7 quotidiennes / 4 hebdomadaires / 3 mensuelles) au │
+      # │ lieu des 30 quotidiennes plates. Une archive MinIO est une copie   │
+      # │ COMPLÈTE du volume : 30 archives pèsent ≈ 30 × les pièces jointes, │
+      # │ sur une machine PARTAGÉE avec la production d'un tiers. Le plan    │
+      # │ en garde au plus 14 et couvre ~90 jours au lieu de 30.             │
+      # │                                                                   │
+      # │ CE QU'IL FAUT SAVOIR AVANT DE S'EN SERVIR : entre J-7 et J-30, la │
+      # │ granularité MinIO passe du jour à la semaine, alors que PostgreSQL │
+      # │ garde son PITR au jour. Ce n'est PAS une restauration à moitié     │
+      # │ possible — le raisonnement complet est en tête de `sauvegarde.sh`  │
+      # │ (une archive MinIO est un miroir CUMULATIF, et l'invariant 7       │
+      # │ interdit toute suppression silencieuse) — mais c'est une propriété │
+      # │ du système, et elle se lit ici avant d'être découverte de nuit.    │
+      # └───────────────────────────────────────────────────────────────────┘
+      AXION_RETENTION_QUOTIDIENNES: ${AXION_RETENTION_QUOTIDIENNES:-7}
+      AXION_RETENTION_HEBDOMADAIRES: ${AXION_RETENTION_HEBDOMADAIRES:-4}
+      AXION_RETENTION_MENSUELLES: ${AXION_RETENTION_MENSUELLES:-3}
       # Créneau quotidien en UTC (invariant 5) et jour de la complète
       # (`date +%w`, 0 = dimanche) : complète hebdomadaire + incrémentale
       # quotidienne, comme le demande 02 §11.4.

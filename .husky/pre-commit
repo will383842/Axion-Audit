@@ -70,6 +70,8 @@ pnpm check:jonction
 echo "[pre-commit] aucun test orphelin (projets vitest)…"
 pnpm check:test-projects
 
+echo "[pre-commit] format des décisions (11 §9bis)…"
+pnpm check:decisions
 echo "[pre-commit] lint des fichiers indexés (lint-staged)…"
 pnpm exec lint-staged
 

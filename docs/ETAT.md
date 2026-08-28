@@ -657,3 +657,81 @@ Tests rouges connus : aucun.
   `DECISIONS.md` 2026-08-28).
 - **Critère 3 de la porte** (contrôle nominatif des 12 familles §30.3) : toujours **Williams**.
 - **La porte P-A n'est pas signée** et bloque toujours l'ouverture du lot suivant (09 §4bis).
+
+## 2026-08-28 18h00 — [lot L0-b] — étape pipeline 2/7 (implémentation D-2 et D-3, arbitrages de Williams)
+Dernier commit vert : 82194bf (chore(l0b): épingle les 6 actions GitHub aux empreintes de commit)   ·   Branche : lot/l0-infra   ·   Poussé : oui
+Tâche en cours : arbitrages D-1, D-2 et D-3 rendus par Williams — vérification Hetzner, rétention à trois étages, et levée de la réserve R-3 sur le coffre.
+Prochaine action : **après 02h30 UTC, vérifier sur le staging que `/sauvegarde` contient un `secrets-*.coffre.gpg` ET qu'il est parti vers R2** — c'est le seul contrôle qui clôt D-3 ; « coffre ACTIF » est une configuration, pas une existence.
+Tests rouges connus : aucun.
+
+**LES TROIS ARBITRAGES, ET CE QU'ILS ONT PRODUIT**
+
+| Décision | Verdict de Williams | État |
+| --- | --- | --- |
+| **D-1** — seconde destination de sauvegarde | Storage Box Hetzner en copie hebdomadaire, **sous réserve de vérification** | 🟡 **débloqué, pas clos** — la Storage Box **n'existe pas** (voir ci-dessous) |
+| **D-2** — rétention MinIO | **7 quotidiennes + 4 hebdomadaires + 3 mensuelles** | ✅ implémentée, 3 tests dont 2 `@critique` |
+| **D-3** — passphrase du coffre | **option A** — valeur nouvelle, hors machine | ✅ variable posée ; réserve **R-3 levée**, 6 tests dont 2 `@critique` |
+
+**D-1 — LA VÉRIFICATION DEMANDÉE PAR WILLIAMS (« j'en ai déjà une ») A RENDU L'INVERSE, ET C'EST
+IMPORTANT.** Cinq contrôles indépendants sur `axionia-web`, tous négatifs : `/root/.ssh/` ne porte
+que `authorized_keys` (**aucune** clé `storagebox_ed25519`), `/root/.ssh/known_hosts` **n'existe
+pas**, `/etc/fstab` et les montages actifs ne portent ni CIFS ni SSHFS ni NFS, `rclone` et `sshfs`
+sont **absents** de la machine, et `STORAGE_BOX_HOST`/`STORAGE_BOX_USER` sont **présents mais vides**
+dans le `.env`. **Il n'y a pas de Storage Box.** Ce qui existe est la chaîne de `axion-ia.com`
+(`/opt/axion-ia/`, 10 tâches cron) qui part vers **Cloudflare R2** — ses propres scripts la nomment
+« off-Hetzner » — plus une mention de « snapshot Hetzner », qui est la sauvegarde d'instance du VPS
+et **pas** une Storage Box. Le digest de la nuit : `ok=7 warn=0 ko=0`.
+**Portée honnête de cette mesure** : elle porte sur la MACHINE. Le compte Hetzner n'a pas pu être
+inspecté — ni jeton `HCLOUD_TOKEN`, ni CLI `hcloud`, ni identifiants Robot nulle part. **Ce qui
+manque pour finir D-1 appartient donc à Williams** : commander la Storage Box, puis fournir l'ID
+`uXXXXXX` et l'hôte.
+**Deux découvertes utiles** : `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` existaient **déjà** dans le
+conteneur `axion-ia` (W-1 était une recopie, pas une création) ; et la chaîne voisine utilise déjà
+une rétention `daily/weekly/monthly`, la même forme que D-2.
+
+**D-2 — CE QUE LA RÉTENTION À ÉTAGES COÛTE, DIT AVANT D'ÊTRE DÉCOUVERT.** Entre J-7 et J-30, la
+granularité MinIO passe du jour à la semaine, alors que PostgreSQL garde son PITR au jour. Le
+commentaire d'origine en concluait « une restauration à moitié possible » ; **cette conclusion est
+fausse ici, et elle a été vérifiée plutôt que recopiée** : une archive MinIO est un miroir COMPLET et
+CUMULATIF, et l'invariant 7 interdit toute suppression silencieuse — l'archive la plus récente
+contient donc tout ce que contenaient les anciennes. Couverture : ~90 jours au lieu de 30, pour 14
+archives au lieu de 30. Deux propriétés ont mérité leur propre cas de test : le **non-chevauchement**
+des étages, et le **refus de supprimer un fichier dont la date est illisible** (le motif accepte
+`20250145`, qui est conforme et n'est pas une date).
+
+**D-3 — CE QUI MANQUAIT N'ÉTAIT PAS LA VARIABLE.** Le code acceptait déjà les trois options sans
+modification. Ce qui manquait était la réserve **R-3 du gardien** : le commit qui introduisait le
+coffre ajoutait 528 lignes et **ne touchait aucun fichier de test** ; seul le REFUS était éprouvé, le
+chemin qui PRODUIT le coffre n'avait jamais tourné nulle part. Six cas le couvrent maintenant, dont
+celui qui ouvre le coffre **par la procédure exacte de son propre `LISEZ-MOI.txt`** — si cette
+commande échoue, le mode d'emploi livré au sinistré est faux, et c'est le seul moment où l'on peut
+s'en apercevoir. **R-3 est levée par mesure, pas par déclaration.**
+
+**⚠️ LA NUANCE QUI EMPÊCHE DE DÉCLARER D-3 CLOS.** Le journal du service porte bien « coffre des
+secrets ACTIF » (1 occurrence, 0 « INACTIF », 0 « PERSONNE NE SERA PRÉVENU »). **Mais `/sauvegarde`
+ne contient AUCUN `secrets-*.coffre.gpg`** : `.derniere-passe` datait de 08h08, donc d'AVANT la pose
+de 16h27, et la tolérance de rattrapage (26 h) n'a relancé aucune passe. Corroboré par la session
+parallèle : le journal annonçait « prochaine passe dans 36125 s », soit 10 h 02 plus tard. **Jusqu'à
+02h30 UTC, la copie hors serveur ne porte aucun secret**, et un sinistre cette nuit rendrait encore
+les données sans faire redémarrer un conteneur. Déclarer D-3 clos sur « ACTIF » serait la quatrième
+sonde menteuse du lot : celle qui confond une CONFIGURATION avec une EXISTENCE.
+
+**UN DÉFAUT DU BANC DE TEST, FERMÉ.** Le script est embarqué dans l'image à la construction, et le
+`beforeAll` ne reconstruisait que si l'image était ABSENTE. Le cas byte-à-byte de fin de fichier
+existait déjà et aurait viré au rouge — **il ne faut pas s'attribuer sa découverte** — mais il
+constate APRÈS que les 50 autres cas aient mesuré l'ancien script, et il exige alors une
+reconstruction à la main. La comparaison d'empreintes passe désormais AVANT le premier cas et
+RÉPARE. Prouvé en direct : la suite a reconstruit l'image seule, empreinte passée de `26673bda…` à
+`b09cefcd…`.
+
+**⚠️ DETTE DE PIPELINE À NE PAS PERDRE — L'ÉTAPE 4 EST DUE.** Le code de production et ses tests ont
+été écrits dans la même session, ce que le **09 §5.6 interdit**. Les 9 nouveaux cas sont verts ; ils
+n'ont pas été relus par un agent qui n'a rien produit. La note est aussi dans le fichier de test.
+
+**TESTS** — suite complète rejouée : **179 unitaires + 150 d'intégration, tous verts, aucun skippé**.
+`l0-sauvegarde` : **52/52**. lint, typecheck, format:check, `check:decisions`, `check:jonction`,
+`check:compose-coolify`, `check:invariants`, `check:pack`, `check:no-skipped-tests` : verts.
+
+**DEUX SESSIONS EN PARALLÈLE SUR LE MÊME ARBRE.** `.claude/settings.json` et `infra/README.md`
+appartiennent à la session `…-42` (correctif Prettier) et **ne sont pas dans ce commit** ;
+`DECISIONS.md` porte les deux travaux et est commité ici d'un commun accord.

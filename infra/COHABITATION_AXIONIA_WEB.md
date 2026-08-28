@@ -328,6 +328,52 @@ cherche pas ce genre d'erreur.
 
 ---
 
+## 5quater. Un risque HÉRITÉ de la cohabitation, et qui n'appartient pas à ce projet
+
+> **Constaté et mesuré le 2026-08-28.** Écrit ici parce qu'un risque qu'on ne trace pas est un risque
+> qu'on oublie — pas parce qu'Axion Audit aurait à le corriger. **Il ne l'a pas.**
+
+**La console d'administration de Coolify est joignable depuis Internet en HTTP non chiffré**, sur le
+port 8000 de la machine. Mesure : la page d'accueil du tableau de bord s'ouvre depuis un navigateur
+ordinaire, sans VPN ni tunnel, en `http://` — donc **le mot de passe d'administration circule en
+clair** à chaque connexion.
+
+**Pourquoi cela nous concerne sans nous appartenir.** Coolify n'est pas une pièce d'Axion Audit :
+c'est le **plan de contrôle de la machine entière**, celle qui sert `axion-ia.com` en production.
+Qui l'obtient obtient les deux projets — nos variables d'environnement comprises, dont les secrets
+que le §5bis décrit déjà comme lisibles par l'orchestrateur. Notre étanchéité s'arrête donc au
+niveau au-dessus de nous, et ce niveau est celui du voisin.
+
+**Ce que ce document interdit d'en faire, et qui vaut toujours.** Le §2 pose que « _le durcissement
+SSH et le pare-feu sont des décisions qui appartiennent à celui qui connaît la machine_ ». La
+correction — enregistrement DNS dans la zone `axion-ia.com`, domaine d'instance Coolify, fermeture du
+port 8000 — tombe entière de ce côté-là de la frontière. **Un agent du lot Audit ne doit pas la
+faire**, et celui qui écrit ces lignes s'est arrêté au moment de créer l'enregistrement, sur rappel
+de Williams.
+
+**Marche à suivre, pour le jour où elle sera décidée — l'ORDRE est la seule chose dangereuse :**
+
+1. créer l'enregistrement `A` du sous-domaine choisi vers l'IP, **nuage GRIS (DNS only)**. En orange,
+   le proxy Cloudflare intercepte le défi ACME et le certificat n'est jamais émis — leçon déjà payée,
+   tracée dans `docs/portes/PORTE_A_2026-08-27.md` ;
+2. **vérifier que le nom résout** avant de toucher à Coolify ;
+3. seulement ensuite, poser le domaine d'instance dans Coolify, qui demandera un certificat
+   Let's Encrypt. **Les enregistrements CAA de la zone autorisent déjà `letsencrypt.org`** — vérifié
+   le 2026-08-28, aux côtés de `sectigo.com`, `ssl.com` et `pki.goog` ;
+4. fermer le port 8000 au pare-feu, ou le restreindre, une fois le nom en service.
+
+**Inverser 1 et 3 vous enferme dehors de votre propre tableau de bord.** C'est la seule manœuvre de
+cette liste qui peut coûter l'accès au serveur.
+
+**Ce que le retrait de l'IP de la documentation NE corrige PAS.** Le même jour, l'adresse a été
+remplacée par `<IP_AXIONIA_WEB>` dans les fichiers versionnés (dépôt public). C'est de l'hygiène, pas
+une mesure de sécurité : trois enregistrements DNS-only de la zone — `docuseal`, `plausible`,
+`audit-staging` — pointent déjà cette IP en clair, et Cloudflare l'affiche lui-même en
+recommandation (« _Votre adresse IP d'origine est partiellement exposée_ »). L'adresse est publique
+avec ou sans le dépôt ; ce qui ne l'est pas, c'est le chiffrement de la session d'administration.
+
+---
+
 ## 6. Ce que le staging ne recevra JAMAIS
 
 **Aucune donnée réelle.** Le staging tourne sur les deux missions canoniques de test — FIL-TPE et

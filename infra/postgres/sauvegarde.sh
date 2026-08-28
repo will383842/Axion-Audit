@@ -354,9 +354,45 @@ PASSPHRASE="${BACKUP_ENCRYPTION_PASSPHRASE:-}"
 #   · la sauvegarde des DONNÉES continue normalement dans cet état : arrêter
 #     une chaîne qui marche parce qu'une décision manque serait un remède pire
 #     que le mal.
-# La question posée à Williams, et les deux réponses acceptables, sont écrites
-# dans le `LISEZ-MOI.txt` du coffre et au `.env.example`. Tant qu'elle n'est pas
-# tranchée, ce mécanisme est écrit, éprouvé, et INACTIF — et ça se voit.
+# ┌───────────────────────────────────────────────────────────────────────────┐
+# │ ✅ TRANCHÉ LE 2026-08-28 — DÉCISION D-3 DE WILLIAMS : **OPTION A**.        │
+# │                                                                           │
+# │ Une valeur NOUVELLE, distincte de `BACKUP_ENCRYPTION_PASSPHRASE`, gardée   │
+# │ UNIQUEMENT dans le gestionnaire de mots de passe de Williams. Le code      │
+# │ acceptait déjà les trois options sans modification : ce qui change ici     │
+# │ n'est pas une ligne de logique, c'est une variable à poser dans Coolify —  │
+# │ et le fait que ce bloc ne mente plus en se disant « non tranché ».         │
+# │                                                                           │
+# │ ✅ VARIABLE POSÉE SUR LE STAGING LE 2026-08-28 : le journal du service     │
+# │ porte « coffre des secrets ACTIF », zéro « COFFRE DES SECRETS INACTIF ».  │
+# │ ⚠️ ET « ACTIF » NE VEUT PAS DIRE « UN COFFRE EXISTE » — c'est la nuance   │
+# │ qui compte le soir d'un sinistre. Au relevé, `/sauvegarde` ne portait     │
+# │ AUCUN `secrets-*.coffre.gpg` : la dernière passe précédait la pose, et la │
+# │ tolérance de rattrapage n'en a pas déclenché de nouvelle. Le premier      │
+# │ coffre naît à la passe suivante ; d'ici là la copie hors serveur ne porte │
+# │ toujours aucun secret.                                                    │
+# │                                                                           │
+# │ ⚠️ LE MOT « ÉPROUVÉ » AVAIT ÉTÉ RETIRÉ PAR LE GARDIEN A02 (réserve R-3),  │
+# │ ET IL EST REMIS ICI PARCE QU'IL EST REDEVENU VRAI — pas parce qu'il était  │
+# │ agréable. Ce qui était mesuré tenait : aucun des 18 fichiers de test ne    │
+# │ mentionnait le coffre, et le chemin qui le PRODUIT n'avait jamais été      │
+# │ exécuté nulle part. Ce n'est plus le cas : six cas de                      │
+# │ `l0-sauvegarde.integration.test.ts` (§ « coffre des secrets (D-3, option   │
+# │ A) ») éprouvent la PRODUCTION du coffre — il est écrit, il se relit par la │
+# │ procédure du LISEZ-MOI, il NE s'ouvre PAS avec la passphrase des données,  │
+# │ son manifeste nomme sans divulguer, la passphrase courte est traitée comme │
+# │ une absence, et les coffres suivent la rétention des archives qu'ils       │
+# │ rouvrent. Dont deux `@critique`.                                          │
+# │                                                                           │
+# │ CE QUI RESTE HORS DU CODE, ET NE S'Y METTRA JAMAIS : la valeur elle-même,  │
+# │ et la question annexe de D-3 — cette passphrase est-elle déposée AILLEURS  │
+# │ que dans un seul gestionnaire (enveloppe scellée, second détenteur) ? Une  │
+# │ clé unique détenue par une seule personne est un point de défaillance      │
+# │ unique de la même famille que celui que ce coffre vient de fermer.        │
+# └───────────────────────────────────────────────────────────────────────────┘
+# Les deux réponses acceptables restent écrites dans le `LISEZ-MOI.txt` du
+# coffre et au `.env.example`. Tant que la variable n'est pas POSÉE sur la
+# machine, le mécanisme reste INACTIF — et ça se voit au journal.
 #
 # POURQUOI UNE PASSPHRASE DISTINCTE, ET PAS CELLE DES ARCHIVES MinIO. La portée
 # du dommage n'est pas la même. Aujourd'hui, bucket R2 compromis +
@@ -849,6 +885,9 @@ esac
 for _couple in \
   "AXION_SAUVEGARDE_TOLERANCE_H=$TOLERANCE_H" \
   "AXION_MINIO_ARCHIVES_GARDEES=$MINIO_ARCHIVES_GARDEES" \
+  "AXION_RETENTION_QUOTIDIENNES=$RETENTION_QUOTIDIENNES" \
+  "AXION_RETENTION_HEBDOMADAIRES=$RETENTION_HEBDOMADAIRES" \
+  "AXION_RETENTION_MENSUELLES=$RETENTION_MENSUELLES" \
   "AXION_ARCHIVES_MAX_MO=$ARCHIVES_MAX_MO" \
   "AXION_ARCHIVES_MARGE_MO=$ARCHIVES_MARGE_MO"; do
   _nom="${_couple%%=*}"
@@ -1080,24 +1119,116 @@ cle_applicative() {
   return 0
 }
 
-# Rotation par RANG d'une série de `$ARCHIVES`. Le nombre conservé sort par une
-# variable et NON par la sortie standard : cette fonction journalise, et un
-# `$( … )` autour d'elle avalerait ses messages en même temps que son résultat.
+# -----------------------------------------------------------------------------
+# LA CLÉ DE PÉRIODE D'UNE ARCHIVE — LUE DANS SON NOM, JAMAIS SUR LE DISQUE
+#
+# Les noms portent leur date : `minio-20260828T023000Z…`, `secrets-2026…`. Le
+# mois se lit par découpe pure. La semaine ISO exige un calcul de calendrier, et
+# `date -u -d` de l'image (Debian bookworm, GNU coreutils) le fait ; c'est le
+# SEUL appel externe de la rotation.
+#
+# ⚠️ EN CAS D'ÉCHEC DU CALCUL, LA FONCTION REND UNE CHAÎNE VIDE, ET L'APPELANT
+# GARDE LE FICHIER. Une rotation qui ne sait pas dater un fichier ne doit
+# JAMAIS trancher en faveur de la suppression : le coût d'une archive gardée en
+# trop est quelques mégaoctets, celui d'une archive supprimée à tort est une
+# restauration impossible. Ce n'est pas une précaution théorique — le motif
+# accepte `20261345`, qui est syntaxiquement conforme et n'est pas une date.
+# -----------------------------------------------------------------------------
+cle_periode() {
+  local nom="$1" niveau="$2" ymd
+  # `minio-20260828T023000Z.tar.zst.gpg` → `20260828`
+  ymd="${nom#*-}"
+  ymd="${ymd%%T*}"
+  case "$ymd" in
+    [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]) : ;;
+    *) printf '' ; return 0 ;;
+  esac
+  case "$niveau" in
+    mois) printf '%s' "${ymd%??}" ;;
+    # `%G%V` et NON `%Y%W` : l'année ISO d'une semaine à cheval sur deux années
+    # civiles n'est pas l'année civile, et `%Y%W` mettrait le 31 décembre et le
+    # 1er janvier de la même semaine dans deux seaux différents.
+    semaine) date -u -d "$ymd" +%G%V 2>/dev/null || printf '' ;;
+    *) printf '' ;;
+  esac
+}
+
+# -----------------------------------------------------------------------------
+# ROTATION À TROIS ÉTAGES (grand-père / père / fils) — décision D-2.
+#
+# L'ordre est le seul qui donne un plan lisible : on descend du plus récent au
+# plus ancien, l'étage quotidien se sert le premier, puis l'hebdomadaire ne
+# réclame que des semaines encore libres, puis le mensuel que des mois encore
+# libres. Une archive gardée par un étage RÉSERVE sa semaine ET son mois : sans
+# cela, les 7 quotidiennes d'une même semaine laisseraient l'étage hebdomadaire
+# se resservir dans cette même semaine, et le plan ne remonterait jamais.
+#
+# LA DÉCISION DE GARDER OU DE SUPPRIMER EST PRISE POUR TOUTE LA SÉRIE AVANT LE
+# PREMIER `rm`. Une boucle qui supprimerait en même temps qu'elle décide
+# laisserait, si elle échouait au milieu, un état que personne ne saurait
+# décrire — et c'est de nuit que ça arriverait.
+#
+# Le nombre conservé sort par une variable et NON par la sortie standard : cette
+# fonction journalise, et un `$( … )` autour d'elle avalerait ses messages en
+# même temps que son résultat.
+# -----------------------------------------------------------------------------
 ROTATION_CONSERVEES=0
 faire_tourner_par_rang() {
-  local motif="$1" gardees="$2" rang=0 supprimes=0 f
+  local motif="$1" quotidiennes="$2" hebdomadaires="${3:-0}" mensuelles="${4:-0}"
+  local rang=0 gardes=0 supprimes=0 f raison
+  local semaine mois semaines_prises=' ' mois_pris=' ' nb_semaines=0 nb_mois=0
+  local a_garder=''
+
   # Les noms sont produits par ce script seul, sans espace ni caractère exotique :
   # le tri de `ls` est sûr ici, et l'horodatage se trie lexicographiquement comme
   # chronologiquement.
   for f in $(ls -1 "$ARCHIVES" 2>/dev/null | grep -E "$motif" | sort -r); do
     rang=$((rang + 1))
-    if [ "$rang" -gt "$gardees" ]; then
-      journal "rotation : suppression de $f (au-delà des $gardees gardées)"
-      rm -f "$ARCHIVES/$f" "$ARCHIVES/$f.sha256"
-      supprimes=$((supprimes + 1))
+    semaine="$(cle_periode "$f" semaine)"
+    mois="$(cle_periode "$f" mois)"
+    raison=''
+
+    if [ "$rang" -le "$quotidiennes" ]; then
+      raison="quotidienne ${rang}/${quotidiennes}"
+    elif [ -z "$semaine" ] || [ -z "$mois" ]; then
+      # Date illisible : on garde, et on le DIT. Un fichier gardé sans raison
+      # connue qui ne se signalerait pas finirait par passer pour une fuite de
+      # la rotation.
+      raison='date illisible dans le nom — gardée par précaution'
+    elif [ "$nb_semaines" -lt "$hebdomadaires" ] &&
+         [ "${semaines_prises#* "$semaine" }" = "$semaines_prises" ]; then
+      nb_semaines=$((nb_semaines + 1))
+      raison="hebdomadaire ${nb_semaines}/${hebdomadaires} (semaine ISO ${semaine})"
+    elif [ "$nb_mois" -lt "$mensuelles" ] &&
+         [ "${mois_pris#* "$mois" }" = "$mois_pris" ]; then
+      nb_mois=$((nb_mois + 1))
+      raison="mensuelle ${nb_mois}/${mensuelles} (mois ${mois})"
+    fi
+
+    if [ -n "$raison" ]; then
+      gardes=$((gardes + 1))
+      a_garder="$a_garder $f"
+      journal "rotation : $f gardée — $raison"
+      # Toute archive gardée, quel que soit l'étage, RÉSERVE sa semaine et son
+      # mois pour les étages du dessous.
+      [ -n "$semaine" ] && semaines_prises="$semaines_prises$semaine "
+      [ -n "$mois" ] && mois_pris="$mois_pris$mois "
     fi
   done
-  ROTATION_CONSERVEES=$((rang - supprimes))
+
+  # Second passage : on ne supprime qu'après avoir arrêté le plan complet.
+  for f in $(ls -1 "$ARCHIVES" 2>/dev/null | grep -E "$motif" | sort -r); do
+    case " $a_garder " in
+      *" $f "*) continue ;;
+    esac
+    journal "rotation : suppression de $f (hors plan ${quotidiennes}/${hebdomadaires}/${mensuelles})"
+    rm -f "$ARCHIVES/$f" "$ARCHIVES/$f.sha256"
+    supprimes=$((supprimes + 1))
+  done
+
+  ROTATION_CONSERVEES=$gardes
+  [ "$((rang - supprimes))" -eq "$gardes" ] || journal \
+    "ATTENTION — rotation incohérente : ${rang} vue(s), ${supprimes} supprimée(s), ${gardes} annoncée(s) comme gardées. Aucune donnée n'est perdue (la suppression est la seule action destructrice et elle a déjà eu lieu), mais ce compte doit être expliqué avant la prochaine passe."
 }
 
 archiver_secrets() {
@@ -1312,22 +1443,28 @@ FIN_LISEZMOI
 }
 
 faire_tourner_secrets() {
-  faire_tourner_par_rang "$MOTIF_COFFRE" "$MINIO_ARCHIVES_GARDEES"
-  journal "coffres de secrets : ${ROTATION_CONSERVEES} fichier(s) conservé(s) sur les $MINIO_ARCHIVES_GARDEES gardés."
+  # LE COFFRE SUIT LE MÊME PLAN QUE LES DONNÉES, ET CE N'EST PAS UN ALIGNEMENT
+  # DE CONFORT : un coffre gardé moins longtemps que l'archive qu'il permet de
+  # rouvrir rendrait cette archive illisible. Deux rétentions différentes ici,
+  # c'est un PRA qui restitue un coffre-fort sans sa clé.
+  faire_tourner_par_rang "$MOTIF_COFFRE" \
+    "$RETENTION_QUOTIDIENNES" "$RETENTION_HEBDOMADAIRES" "$RETENTION_MENSUELLES"
+  journal "coffres de secrets : ${ROTATION_CONSERVEES} fichier(s) conservé(s) — plan ${RETENTION_QUOTIDIENNES} quotidien(s) / ${RETENTION_HEBDOMADAIRES} hebdomadaire(s) / ${RETENTION_MENSUELLES} mensuel(s)."
 }
 
 # -----------------------------------------------------------------------------
-# Rotation des archives MinIO — par NOMBRE, jamais par date de fichier.
-# Une règle « plus vieux que N jours » se fie à un horodatage de système de
-# fichiers, qu'une copie, une restauration ou un `touch` déplacent. Le rang, lui,
-# ne ment pas : on garde les N plus récentes, point.
+# Rotation des archives MinIO — par RANG ET PAR PÉRIODE, jamais par date de
+# fichier. Une règle « plus vieux que N jours » se fie à un horodatage de
+# système de fichiers, qu'une copie, une restauration ou un `touch` déplacent.
+# Le nom, lui, ne ment pas : il porte sa propre date, et c'est elle qui décide.
 # -----------------------------------------------------------------------------
 faire_tourner_minio() {
   local total
   # La boucle de rang vit dans `faire_tourner_par_rang` : elle sert AUSSI aux
   # coffres de secrets, et deux copies d'une règle de rétention finiraient par
   # diverger — c'est-à-dire par garder trop d'un côté et effacer trop de l'autre.
-  faire_tourner_par_rang "$MOTIF_MINIO" "$MINIO_ARCHIVES_GARDEES"
+  faire_tourner_par_rang "$MOTIF_MINIO" \
+    "$RETENTION_QUOTIDIENNES" "$RETENTION_HEBDOMADAIRES" "$RETENTION_MENSUELLES"
   # Les `.partiel` d'une passe interrompue ne sont pas des archives : ils ne
   # doivent ni compter dans la rétention, ni s'accumuler. Le nettoyage vaut pour
   # les deux séries — le motif ne regarde que l'extension.
@@ -1348,7 +1485,8 @@ faire_tourner_minio() {
         Cette passe est terminée et vérifiée ; la PROCHAINE sera REFUSÉE avant
         d'écrire quoi que ce soit. Ce n'est PAS un incident technique : c'est la
         rétention qui n'est plus soutenable sur ce disque. À trancher (Williams) :
-        baisser AXION_MINIO_ARCHIVES_GARDEES, augmenter AXION_ARCHIVES_MAX_MO,
+        baisser AXION_RETENTION_QUOTIDIENNES / _HEBDOMADAIRES / _MENSUELLES,
+        augmenter AXION_ARCHIVES_MAX_MO,
         ou — la seule vraie réponse — sortir les archives du serveur (02 §11.4)."
   fi
 }
@@ -1785,7 +1923,7 @@ marqueur_perime() {
 doit_rattraper() { marqueur_perime '.derniere-passe'; }
 doit_rattraper_expedition() { marqueur_perime '.derniere-expedition'; }
 
-journal "service de sauvegarde démarré — créneau ${HEURE} UTC, complète le jour ${JOUR_COMPLETE}, rétention MinIO ${MINIO_ARCHIVES_GARDEES} archives, copie hors serveur vers ${R2_BUCKET}/${R2_PREFIXE}."
+journal "service de sauvegarde démarré — créneau ${HEURE} UTC, complète le jour ${JOUR_COMPLETE}, rétention MinIO ${RETENTION_QUOTIDIENNES} quotidienne(s) + ${RETENTION_HEBDOMADAIRES} hebdomadaire(s) + ${RETENTION_MENSUELLES} mensuelle(s) (au plus $((RETENTION_QUOTIDIENNES + RETENTION_HEBDOMADAIRES + RETENTION_MENSUELLES)) archives, décision D-2), copie hors serveur vers ${R2_BUCKET}/${R2_PREFIXE}."
 
 # RATTRAPAGE. C'est le point qui fait qu'une pile fraîchement déployée n'attend
 # pas la nuit pour avoir sa première sauvegarde — le défaut mesuré le 2026-08-28
