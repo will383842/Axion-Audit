@@ -76,16 +76,100 @@
 # serait réinitialisé en boucle en affichant `healthy` — reproduit sur conteneur
 # jetable le 2026-08-28 (10 réinitialisations en 90 s, sonde verte, RestartCount
 # à zéro).
+# =============================================================================
+
+# =============================================================================
+# ⚠️ LA SAUVEGARDE DE CETTE PILE — CE FICHIER N'EN PORTE AUCUNE LIGNE, ET CE
+# N'EST PAS LA MÊME CHOSE QUE « CETTE PRODUCTION N'EST PAS SAUVEGARDÉE »
+# -----------------------------------------------------------------------------
+# La version précédente de cet encadré écrivait : « ELLE N'A AUCUN SERVICE DE
+# SAUVEGARDE […] aucune sauvegarde complète, aucune archive du volume MinIO,
+# aucune copie hors serveur. » C'ÉTAIT FAUX, et faux du défaut exact que ce lot
+# traque : une propriété vérifiée sur UN artefact — ce fichier — énoncée comme
+# une propriété de LA CIBLE. Ce fichier n'a pas de service de sauvegarde ; la
+# production, elle, en a une chaîne entière, et elle vit AILLEURS QUE DANS LE
+# COMPOSE. Relevé ligne à ligne dans `infra/scripts/` :
 #
-# ⚠️ CE QUI RESTE MANQUANT, ET IL FAUT LE SAVOIR AVANT DE DÉPLOYER CETTE PILE :
-# ELLE N'A AUCUN SERVICE DE SAUVEGARDE. Il y a `archive_command` — donc des WAL
-# archivés — et RIEN QUI LES REJOUE SUR QUOI QUE CE SOIT : aucune sauvegarde
-# complète, aucune archive du volume MinIO, aucune copie hors serveur. C'est
-# exactement l'état trouvé sur le staging le 2026-08-28 (`pgbackrest info` →
-# `status: error (no valid backups)`), et il ne se voit pas : il faut le savoir.
-# Seule `docker-compose.coolify.yml` porte le service `sauvegarde`. Le combler
-# ici est une décision d'arbitrage (09 §5.9, étage 2), pas une ligne de code à
-# écrire au jugé dans une pile jamais jouée — c'est signalé comme telle à A01.
+#   install-cron.sh    pose /etc/cron.d/axion-audit, quatre tâches :
+#   backup-postgres.sh toutes les 6 h — `pg_dump -Fc` chiffré GPG, PUIS
+#                      `pgbackrest backup` (full le dimanche, incr sinon, et
+#                      bascule d'office en `full` si aucune complète n'existe),
+#                      PUIS `pgbackrest check`, PUIS `rsync` du dépôt et des
+#                      dumps vers la STORAGE BOX HETZNER, PUIS `rclone` hebdo
+#                      HORS Hetzner. La copie hors serveur EXISTE sur ce chemin.
+#   backup-minio.sh    quotidien — `mc mirror` des trois buckets, manifeste
+#                      SHA-256, archive chiffrée, Storage Box + rclone hebdo.
+#   backup-caddy.sh    quotidien — magasin TLS (clés privées des DEUX domaines).
+#   restore-test.sh    NOCTURNE — le test de restauration, que le chemin Coolify
+#                      n'a justement pas (il y est manuel, README §5.4-5.5).
+#
+# CONCLUSION QUI EN DÉCOULE, ET QUI EST L'INVERSE DE L'ANCIEN ENCADRÉ : AJOUTER
+# LE SERVICE `sauvegarde` ICI SERAIT UNE FAUTE, pas un correctif. Quatre raisons,
+# vérifiées et non supposées :
+#
+#   1. DEUX ÉCRIVAINS SUR LA MÊME STANZA. `backup-postgres.sh` lance
+#      `pgbackrest backup` toutes les 6 h depuis l'hôte ; le service en lancerait
+#      un autre chaque nuit. pgBackRest pose un verrou de stanza : le perdant
+#      sort en erreur. Côté conteneur c'est un code 1, donc une boucle de
+#      redémarrage et une alerte ; côté cron c'est le piège ERR, donc une
+#      seconde alerte. Deux chaînes, deux fausses alertes, une rétention pilotée
+#      depuis deux endroits.
+#   2. DEUX COPIES COMPLÈTES DE MinIO PAR NUIT, sur le même disque :
+#      `backup-minio.sh` écrit dans /var/backups/axion/minio et tourne par
+#      `-mtime`, `archiver_minio` écrit dans un volume Docker et tourne par rang.
+#   3. DEUX DESTINATIONS HORS SERVEUR, alors que LAQUELLE n'est pas tranchée.
+#      Le chemin VPS vise la Storage Box ; le service vise Cloudflare R2, choisi
+#      SOUS CONTRAINTE pour le staging Coolify (pas d'accès hôte, donc pas de
+#      cron, donc un side-car — voir l'encadré « pourquoi un side-car » de
+#      sauvegarde.sh). L'escalade « où part la copie hors serveur, et à quel
+#      coût ? » est OUVERTE (README §5.6, quatre options, décision Williams) :
+#      la trancher en écrivant R2 dans ce fichier serait exactement ce qu'un
+#      agent ne décide jamais seul (11 §8, CLAUDE.md §3-1/§3-2).
+#   4. ÇA CASSERAIT LE PREMIER `up` D'UN SERVEUR NEUF. Les quatre `BACKUP_R2_*`
+#      sont en `${…:?}` : Compose interpole AVANT tout le reste, et le `.env`
+#      d'un VPS fraîchement provisionné est une copie de `.env.example`, où
+#      `BACKUP_R2_ENDPOINT=__CHANGEME__`. Non vide, donc `:?` est satisfait, donc
+#      la pile démarre — et le contrôle de forme du script refuse `_` dans un
+#      hôte, sort en 1, et le service part en boucle de redémarrage le jour de la
+#      mise en production. Un service qui empêche une pile de démarrer parce que
+#      la sauvegarde n'est pas encore configurée est un remède pire que le mal.
+#      (Le chemin Coolify n'a pas ce problème : les variables y sont posées dans
+#      l'interface AVANT le déploiement, et `:?` y est le garde-fou voulu.)
+#
+# S'AJOUTE UN COÛT DE PLOMBERIE QUI DIT À LUI SEUL QUE LA GREFFE EST MAUVAISE :
+# `sauvegarde` a besoin du socket de PostgreSQL (`postgres_socket`), qui
+# N'EXISTE DANS AUCUNE DES TROIS PILES DE CE FICHIER DE BASE — `stanza-create.sh`
+# utilise `--no-online` PRÉCISÉMENT pour ne jamais avoir à l'ajouter. Le poser
+# ici obligerait à modifier `docker-compose.yml`, donc la pile de DÉV, pour
+# servir une pile que personne n'exécute.
+#
+# ⚠️ CE QUI MANQUE VRAIMENT À CETTE CIBLE — DEUX TROUS RÉELS, ET CE NE SONT PAS
+# CEUX QU'ON CROYAIT :
+#
+#   A. LE COFFRE DES SECRETS N'EXISTE PAS ICI. Aucun des quatre scripts ne
+#      sauvegarde `/opt/axion-audit/<env>/.env`. Ce que `provision-vps.sh`
+#      prévoit est une COMMANDE AFFICHÉE UNE FOIS dans son message de fin
+#      (étape 4 : `gpg --symmetric … -o /tmp/env.gpg`), à taper à la main, qui
+#      n'est rejouée à aucune rotation de secret et dont le résultat reste dans
+#      `/tmp`. C'est la leçon d'ouverture de `sauvegarde.sh` — « une commande
+#      qu'un humain doit taper sera oubliée » — non appliquée à l'objet le plus
+#      cher : sans ces clés, une restauration rend des octets chiffrés et pas
+#      une pile (02 §30.4-2). ⚠️ `infra/pgbackrest/pgbackrest.conf` affirme
+#      pourtant, en toutes lettres, que la passphrase « est elle-même
+#      sauvegardée chiffrée dans la Storage Box avec le .env ». RIEN NE LE FAIT.
+#      Hors périmètre d'écriture de cet encadré ; signalé à A01.
+#   B. RIEN NE DÉTECTE LE SILENCE DE LA CHAÎNE. Les quatre tâches alertent sur
+#      ÉCHEC (`axion_notify`, piège ERR) ; AUCUNE n'alerte sur l'ABSENCE. Or
+#      `install-cron.sh` est une étape MANUELLE — `provision-vps.sh` l'affiche
+#      en étape 5, il ne l'exécute pas. Une production peut donc vivre sans une
+#      seule sauvegarde et sans une seule alerte : c'est le mode de panne que
+#      `sauvegarde-healthcheck.sh` attrape sur le chemin Coolify (fraîcheur de
+#      deux marqueurs + artefacts), et il n'a pas d'équivalent ici.
+#
+# Ces deux trous sont des fiches d'AMÉLIORATION à arbitrer (09 §5.9, étage 2),
+# pas des lignes de code à écrire au jugé dans une pile JAMAIS JOUÉE
+# (infra/README.md §7). Ce fichier ne les comble pas ; il cesse de mentir sur
+# leur nature. Voir README §7.4 pour l'état complet et la porte à franchir.
 # =============================================================================
 
 name: axion-audit-prod

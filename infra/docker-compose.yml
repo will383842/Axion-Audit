@@ -728,6 +728,42 @@ networks:
 # -----------------------------------------------------------------------------
 volumes:
   postgres_data:
+  # ---------------------------------------------------------------------------
+  # ⚠️ EN DÉV, CE DÉPÔT NE SE PURGE JAMAIS — ET C'EST UN CHOIX, PAS UN OUBLI.
+  #
+  # QUESTION POSÉE, ET SA RÉPONSE MESURABLE : que devient ce volume si un
+  # développeur laisse sa pile tourner une semaine ? `postgresql.custom.conf`
+  # pose `archive_mode = on` et `archive_timeout = 300s` : PostgreSQL force donc
+  # un changement de segment WAL toutes les 5 minutes, MÊME SUR UNE BASE
+  # INACTIVE, et `archive_command` le pousse ici. Or pgBackRest n'expire les
+  # archives qu'à la FIN d'un `backup` (ou d'un `expire` explicite), et
+  # `repo1-retention-archive-type=full` fait dépendre cette expiration de
+  # l'existence d'une sauvegarde COMPLÈTE. AUCUNE des deux commandes n'est
+  # jamais lancée dans cette pile : rien ne supprime, jamais. Le dépôt croît
+  # donc de façon monotone tant que la pile tourne — au moins 288 segments
+  # archivés par jour, compressés en zstd-3. ⚠️ NON MESURÉ SUR CE POSTE : seul
+  # le MÉCANISME est établi ici, pas le nombre de mégaoctets par semaine.
+  # Les deux remèdes honnêtes, à la main : `pnpm infra:reset` (qui détruit les
+  # volumes, y compris les données) ou un `pgbackrest … backup` une fois, qui
+  # donne au dépôt le point de départ à partir duquel l'expiration s'applique.
+  #
+  # POURQUOI ON NE MET PAS LE SERVICE `sauvegarde` ICI POUR RÉGLER ÇA. Il
+  # RÉGLERAIT le symptôme et créerait trois problèmes plus grands :
+  #   · `sauvegarde.sh` REFUSE de démarrer sans les quatre `BACKUP_R2_*` (ses
+  #     contrôles d'entrée le disent en toutes lettres) : le service tomberait en
+  #     boucle de redémarrage sur le poste de CHAQUE développeur ;
+  #   · pire s'ils étaient posés. `AXION_R2_PREFIXE` vaut `staging` par défaut
+  #     (`.env.example`) et l'expédition est un `mc mirror --remove` : un poste
+  #     de développement recopierait ses volumes locaux SUR le préfixe distant du
+  #     staging, ET Y PROPAGERAIT SES SUPPRESSIONS. La copie hors serveur serait
+  #     détruite PAR la pile de dév. Une sauvegarde de base de démonstration vers
+  #     un stockage distant payant n'a par ailleurs aucune valeur ;
+  #   · il exige le socket de PostgreSQL (`postgres_socket`), qui n'existe dans
+  #     aucune des trois piles de ce fichier — `stanza-create.sh` utilise
+  #     `--no-online` PRÉCISÉMENT pour ne jamais avoir à l'ajouter.
+  # Le raisonnement complet, y compris pour la production, est dans l'encadré
+  # « LA SAUVEGARDE DE CETTE PILE » de `docker-compose.prod.yml` et au README §7.4.
+  # ---------------------------------------------------------------------------
   pgbackrest_repo:
   redis_data:
   minio_data:

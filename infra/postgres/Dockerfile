@@ -176,9 +176,21 @@ RUN set -eux; \
 #     JOUÉ dans infra/README.md §7. Livrer un service de sauvegarde non éprouvé
 #     dans une pile que personne n'exécute produirait une ligne verte dans une
 #     revue et zéro sauvegarde réelle.
-# Le manque est RÉEL et il est signalé à A01 : la pile de production « VPS dédié »
-# n'a aujourd'hui aucun service de sauvegarde. C'est une fiche d'amélioration à
-# arbitrer, pas une ligne de code à écrire au jugé (09 §5.9, étage 2).
+#
+# ⚠️ CE QUE CET ENCADRÉ LAISSAIT CROIRE, ET QUI ÉTAIT FAUX (corrigé 2026-08-28).
+# Il concluait : « la pile de production VPS dédié n'a aujourd'hui AUCUN SERVICE
+# DE SAUVEGARDE » — vrai du COMPOSE, et lu par tout le monde comme « cette
+# production n'est pas sauvegardée ». Elle l'est : sur un VPS dédié on a l'HÔTE,
+# donc `cron`, et `infra/scripts/install-cron.sh` y pose QUATRE tâches —
+# `pgbackrest backup` toutes les 6 h AVEC copie vers la Storage Box, archive
+# MinIO quotidienne, magasin TLS, et un TEST DE RESTAURATION NOCTURNE que le
+# chemin Coolify n'a même pas. Le side-car existe ici PARCE QUE Coolify ne donne
+# pas accès à l'hôte, pas parce qu'un service vaudrait mieux qu'un `cron`.
+# Ce qui manque VRAIMENT à ce chemin est ailleurs, et c'est écrit là où on le
+# cherchera : pas de coffre des secrets, et rien qui détecte le SILENCE de la
+# chaîne (infra/README.md §7.4, points A et B ; encadré équivalent de
+# `infra/docker-compose.prod.yml`). Deux fiches d'amélioration à arbitrer
+# (09 §5.9, étage 2), pas des lignes de code à écrire au jugé.
 COPY postgres/sauvegarde.sh /usr/local/bin/axion-sauvegarde
 COPY postgres/sauvegarde-healthcheck.sh /usr/local/bin/axion-sauvegarde-healthcheck
 

@@ -81,14 +81,36 @@
 # s'y serait réinitialisé en boucle en affichant `healthy` — reproduit sur
 # conteneur jetable le 2026-08-28 (10 réinitialisations en 90 s, sonde verte).
 #
-# ⚠️ CE QUI RESTE MANQUANT, ET QUI N'EST PAS COMBLÉ ICI : CETTE PILE N'A AUCUN
-# SERVICE DE SAUVEGARDE. Seule `docker-compose.coolify.yml` porte `sauvegarde`
-# (pgbackrest backup + archive MinIO chiffrée + copie hors serveur R2). Ce n'est
-# pas un oubli d'écriture, c'est un refus assumé : le chemin « VPS dédié » est
-# marqué JAMAIS JOUÉ (infra/README.md §7), et livrer une chaîne de sauvegarde
-# non éprouvée dans une pile que personne n'exécute produirait une ligne verte
-# en revue et zéro sauvegarde réelle. Le manque est signalé à A01 comme fiche
-# d'amélioration à arbitrer (09 §5.9, étage 2) — pas comme code à écrire au jugé.
+# =============================================================================
+
+# =============================================================================
+# ⚠️ LA SAUVEGARDE DE CETTE PILE — LE RAISONNEMENT COMPLET EST DANS
+# `docker-compose.prod.yml`, ET IL N'EST PAS CELUI QU'ON LISAIT ICI
+# -----------------------------------------------------------------------------
+# Cet encadré affirmait : « CETTE PILE N'A AUCUN SERVICE DE SAUVEGARDE ». C'est
+# vrai DE CE FICHIER et faux DE LA CIBLE — le défaut exact que ce lot traque :
+# une propriété vérifiée sur un artefact, énoncée comme une propriété du système.
+# Un staging « VPS dédié » suivrait `install-cron.sh`, qui pose QUATRE tâches :
+# `backup-postgres.sh` (toutes les 6 h, avec copie vers la Storage Box et copie
+# hebdo hors Hetzner), `backup-minio.sh`, `backup-caddy.sh` (sans objet ici : ce
+# staging n'a pas de frontal) et `restore-test.sh` NOCTURNE. La copie hors
+# serveur existe sur ce chemin ; elle ne vit simplement pas dans le compose.
+#
+# ON N'AJOUTE DONC PAS LE SERVICE `sauvegarde` ICI, et c'est un refus argumenté,
+# pas un silence : il ferait DEUX écrivains sur la même stanza pgBackRest, DEUX
+# copies complètes de MinIO par nuit, et DEUX destinations hors serveur alors que
+# LAQUELLE est une escalade OUVERTE (README §5.6, décision Williams). Le détail,
+# avec les quatre raisons et les deux trous réels de ce chemin — pas de coffre
+# des secrets, rien qui détecte le SILENCE de la chaîne cron — est écrit une
+# seule fois, dans l'encadré équivalent de `docker-compose.prod.yml`, et repris
+# dans `infra/README.md` §7.4. On ne le duplique pas : deux copies d'un
+# raisonnement finissent par diverger, et c'est alors la mauvaise qu'on lit.
+#
+# CE QUI EST PROPRE À CE FICHIER-CI, et qui ne s'écrit qu'ici : ce staging n'est
+# PAS le staging d'aujourd'hui. Le staging réel tourne sous Coolify, avec le
+# service `sauvegarde`, éprouvé et mesuré (README §5). La pile décrite par ce
+# fichier est JAMAIS JOUÉE (README §7) — y livrer une chaîne de sauvegarde non
+# éprouvée produirait une ligne verte en revue et zéro sauvegarde réelle.
 # =============================================================================
 
 name: axion-audit-staging

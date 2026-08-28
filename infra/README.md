@@ -27,7 +27,8 @@
 | Frontal / TLS            | Traefik (`coolify-proxy`), qui possède 80/443                 | notre Caddy                                         |
 | Fichier compose          | `infra/docker-compose.coolify.yml` (autoportant)              | `docker-compose.yml` + `.staging.yml` / `.prod.yml` |
 | Scripts `infra/scripts/` | **AUCUN ne s'applique** (§6)                                  | ce sont les leurs                                   |
-| Sauvegardes              | **complète + restauration JOUÉES le 2026-08-28** (§5)         | décrites, **JAMAIS JOUÉES**                         |
+| Sauvegardes              | **complète + restauration JOUÉES le 2026-08-28** (§5)         | 4 tâches `cron` **décrites, JAMAIS JOUÉES** (§7.4)  |
+| Où vit la sauvegarde     | service `sauvegarde` DANS le compose (pas d'accès hôte)       | `install-cron.sh` sur l'HÔTE, hors compose (§7.4)   |
 
 **Sections à lire selon ce que vous cherchez :**
 
@@ -981,30 +982,113 @@ et la preuve de son exécution. En attendant, la source d'exécution reste le pa
 > pas, `archive_command` échoue à chaque WAL et les journaux s'entassent dans `pg_wal`. Sur le
 > staging, la stanza existe et `failed_count = 0` (§5) : **cette partie-là a marché.**
 
+### 7.4 LA SAUVEGARDE SUR CE CHEMIN — ce qui existe, ce qui manque, et pourquoi on n'y greffe pas le service `sauvegarde`
+
+**Ce qui suit corrige une phrase fausse que trois fichiers de ce dépôt portaient jusqu'au
+2026-08-28**, chacun sous une forme différente : « la pile de production n'a AUCUN service de
+sauvegarde » — donc, sous-entendu, aucune sauvegarde. **Vrai du fichier compose ; faux de la cible.**
+C'est le défaut que ce lot traque depuis deux jours, appliqué à lui-même : une propriété vérifiée sur
+un artefact, énoncée comme une propriété du système.
+
+**CE QUI EXISTE SUR CE CHEMIN, ET QUI NE VIT PAS DANS LE COMPOSE.** `install-cron.sh` pose
+`/etc/cron.d/axion-audit` et quatre tâches, lues ligne à ligne :
+
+| Tâche                | Fréquence            | Ce qu'elle fait réellement                                                                                                                                   |
+| -------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `backup-postgres.sh` | toutes les 6 h       | `pg_dump -Fc` chiffré GPG · `pgbackrest backup` (full le dimanche, bascule d'office en full si aucune n'existe) · `pgbackrest check` · **rsync Storage Box** |
+| `backup-minio.sh`    | 01h30                | `mc mirror` des 3 buckets · manifeste SHA-256 · archive chiffrée · **rsync Storage Box** · `rclone` hebdo hors Hetzner                                       |
+| `backup-caddy.sh`    | 01h45                | magasin TLS (clés privées des DEUX domaines) chiffré · relecture + comptage des certificats · Storage Box                                                    |
+| `restore-test.sh`    | `$RESTORE_TEST_CRON` | **le test de restauration NOCTURNE** — que le chemin Coolify n'a justement pas (il y est manuel, §5.4-5.5)                                                   |
+
+**La copie hors serveur EXISTE donc sur ce chemin** (Storage Box + copie hebdomadaire hors Hetzner,
+règle 3-2-1), et la restauration y est **automatisée**, ce qui n'est pas le cas sous Coolify. Ce que
+ce chemin n'a pas, c'est un service de sauvegarde **dans le compose** — parce que sur un VPS dédié on
+a l'hôte, donc `cron`, ce qui est exactement ce que le side-car de la pile Coolify remplace faute de
+pouvoir y accéder (voir l'encadré « pourquoi un side-car » de `infra/postgres/sauvegarde.sh`).
+
+**POURQUOI ON N'AJOUTE PAS LE SERVICE `sauvegarde` À `.prod.yml` NI À `.staging.yml`** — décision de
+l'agent d'infrastructure, tracée dans l'encadré « LA SAUVEGARDE DE CETTE PILE » de
+`infra/docker-compose.prod.yml`, quatre raisons vérifiées :
+
+1. **Deux écrivains sur la même stanza pgBackRest** (cron toutes les 6 h + conteneur chaque nuit) :
+   verrou de stanza, le perdant sort en erreur → boucle de redémarrage d'un côté, piège `ERR` et
+   alerte Telegram de l'autre. Deux fausses alertes par nuit, et une rétention pilotée de deux
+   endroits.
+2. **Deux copies complètes du volume MinIO par nuit**, sur le même disque, avec deux rotations
+   différentes (`-mtime` côté script d'hôte, par rang côté conteneur).
+3. **Deux destinations hors serveur, alors que laquelle n'est pas tranchée.** L'escalade §5.6 (« où
+   part la copie hors serveur, et à quel coût ? », quatre options) est **OUVERTE et appartient à
+   Williams**. Écrire R2 dans `.prod.yml` la trancherait par la main d'un agent — interdit (11 §8,
+   `CLAUDE.md` §3).
+4. **Ça casserait le premier `up` d'un serveur neuf.** Les quatre `BACKUP_R2_*` sont en `${…:?}` ;
+   Compose interpole avant tout le reste ; le `.env` d'un VPS fraîchement provisionné est une copie
+   de `.env.example`, où `BACKUP_R2_ENDPOINT=__CHANGEME__`. Non vide → `:?` satisfait → la pile
+   démarre, puis le contrôle de forme du script refuse le `_`, sort en 1, et le service part en
+   boucle de redémarrage **le jour de la mise en production**. Un service qui empêche une pile de
+   démarrer parce que la sauvegarde n'est pas configurée est un remède pire que le mal.
+
+S'y ajoute un coût de plomberie qui suffirait à lui seul : `sauvegarde` a besoin du socket de
+PostgreSQL (`postgres_socket`), **qui n'existe dans aucune des trois piles de `docker-compose.yml`**
+— `stanza-create.sh` utilise `--no-online` précisément pour ne jamais avoir à l'ajouter. Le poser
+obligerait à modifier la pile de **dév** pour servir une pile que personne n'exécute.
+
+> **⚠️ CE PARAGRAPHE NE REND RIEN « COUVERT ». `JAMAIS JOUÉ` RESTE VRAI, INTÉGRALEMENT.** Aucune des
+> quatre tâches ci-dessus n'a jamais tourné nulle part (§6 : les scripts ne peuvent pas s'exécuter
+> sur `axionia-web`, et aucun autre VPS n'existe). `/var/log/axion` n'existe pas ; aucun rapport de
+> `restore-test.sh` n'a jamais été produit. **Un service déclaré n'est pas un service qui tourne, et
+> une tâche cron décrite n'est pas une tâche cron installée.** Ce que cette section change est le
+> DIAGNOSTIC, pas l'état : on cesse de croire qu'il manque une chaîne, on voit qu'il manque deux
+> pièces à une chaîne écrite et jamais éprouvée.
+
+**LES DEUX TROUS RÉELS DE CE CHEMIN — et ce ne sont pas ceux qu'on croyait :**
+
+**A. Le coffre des secrets n'existe pas.** Aucun des quatre scripts ne sauvegarde
+`/opt/axion-audit/<env>/.env`. Ce que le dépôt prévoit est **une commande affichée une fois** dans le
+message de fin de `provision-vps.sh` (étape 4 : `gpg --symmetric … -o /tmp/env.gpg`), à taper à la
+main, jamais rejouée à une rotation de secret, et dont le résultat reste dans `/tmp`. C'est la leçon
+d'ouverture de `sauvegarde.sh` — « une commande qu'un humain doit taper sera oubliée » — non
+appliquée à l'objet le plus cher : sans ces clés, une restauration rend des octets chiffrés et pas
+une pile (02 §30.4-2). **Aggravant :** `infra/pgbackrest/pgbackrest.conf` affirme en toutes lettres
+que la passphrase du dépôt « est elle-même sauvegardée chiffrée dans la Storage Box avec le .env ».
+**Rien ne le fait.** Un garde-fou menteur de plus, dans un fichier versionné.
+
+**B. Rien ne détecte le SILENCE de la chaîne.** Les quatre tâches alertent sur **échec**
+(`axion_notify` depuis un piège `ERR`) ; **aucune n'alerte sur l'absence**. Or `install-cron.sh` est
+une étape **manuelle** — `provision-vps.sh` l'affiche en étape 5, il ne l'exécute pas. Une production
+peut donc vivre sans une seule sauvegarde **et sans une seule alerte**. C'est exactement le mode de
+panne que `sauvegarde-healthcheck.sh` attrape sur le chemin Coolify (fraîcheur de deux marqueurs +
+existence et empreinte des artefacts) ; **il n'a aucun équivalent ici.**
+
+Ces deux points sont des **fiches d'amélioration à arbitrer** (09 §5.9, étage 2), pas du code à
+écrire au jugé dans une pile jamais jouée. Ils sont reportés au tableau §8 (lignes 2f et 2g).
+
 ---
 
 ## 8. CE QUI RESTE FAUX, INCERTAIN OU OUVERT
 
 Écrit ici plutôt que tu, pour que la porte P-A puisse le relire point par point.
 
-| #   | Point                                                                                 | Statut                                                                                                                         |
-| --- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| 1   | `.env` du staging en `644` dans un répertoire `755`                                   | **ÉCART DE SÉCURITÉ OUVERT** — posé par Coolify à chaque déploiement, non corrigeable à la main                                |
-| 2   | Sauvegarde restaurable du staging                                                     | **FERMÉ le 2026-08-28** — complète `status: ok`, restauration Postgres ET MinIO jouées, empreinte identique ; §5.1, §5.4, §5.5 |
-| 2b  | `createstanza` et la sonde honnête n'avaient JAMAIS tourné (stanza créée à la main)   | **FERMÉ au déploiement de 07h39** — `createstanza … Exited (0)`, sonde `axion-healthcheck` ; §5.0                              |
-| 2c  | Le service `sauvegarde` est écrit et joué, **pas déployé**                            | **OUVERT** — exige un déploiement ; §5.2                                                                                       |
-| 2d  | Aucune copie hors serveur : la règle 3-2-1 du 02 §11.4 n'est pas tenue                | **ESCALADE OUVERTE — décision Williams** ; §5.6                                                                                |
-| 2e  | Rétention MinIO = 30 archives COMPLÈTES : ne passera pas l'échelle des pièces jointes | **OUVERT** — garde-fou de plafond en place, décision à prendre avant les premières missions ; §5.3                             |
-| 3   | `restore-test.sh` ne sait pas parler à un projet Compose imposé par un orchestrateur  | **ESCALADE À OUVRIR** — §6.2                                                                                                   |
-| 4   | `PUBLIC_BASE_URL` désigne `audit-staging.axion-ia.com`, qui **ne résout pas**         | **OUVERT** — le domaine réel est l'adresse `sslip.io` de Coolify                                                               |
-| 5   | Routage Traefik → Caddy : port cible non déclaré, 504 au relevé                       | **EN COURS** par un autre agent — ne pas figer                                                                                 |
-| 6   | Duplication `docker-compose.coolify.yml` ↔ `docker-compose.yml` non gardée            | **OUVERT** — `AMELIORATIONS.md` 2026-08-28, « la troisième convention d'A11 »                                                  |
-| 7   | Tags MinIO / `mc` / Caddy figés : « dernière release stable au démarrage » (11 §1)    | à confirmer au provisionnement réel de la production, puis à geler                                                             |
-| 8   | `deploy.sh` appelle `pnpm db:migrate:check` puis `pnpm db:migrate` dans l'image `api` | les deux scripts existent à la racine (`package.json`) ; **leur présence dans l'image n'est pas vérifiée**                     |
-| 9   | Le PRA (§7.3) et la rotation des secrets                                              | **JAMAIS JOUÉS** — RTO 4 h non chronométré                                                                                     |
-| 10  | `docker image prune -af` toutes les 6 h par le crontab du voisin                      | **NON VÉRIFIÉ** : effet réel sur nos images entre deux déploiements                                                            |
-| 11  | Contrôle nominatif des 12 familles de secrets §30.3 dans le `.env` du staging         | **NON VÉRIFIÉ** — appartient à Williams, pas à un agent (porte P-A, §G.6-1)                                                    |
-| 12  | Consommation CPU/RAM réelle du staging en cohabitation                                | **NON VÉRIFIÉ** dans cette passe — seules les marges d'avant déploiement sont tracées (`DECISIONS.md`)                         |
+| #   | Point                                                                                        | Statut                                                                                                                         |
+| --- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | `.env` du staging en `644` dans un répertoire `755`                                          | **ÉCART DE SÉCURITÉ OUVERT** — posé par Coolify à chaque déploiement, non corrigeable à la main                                |
+| 2   | Sauvegarde restaurable du staging                                                            | **FERMÉ le 2026-08-28** — complète `status: ok`, restauration Postgres ET MinIO jouées, empreinte identique ; §5.1, §5.4, §5.5 |
+| 2b  | `createstanza` et la sonde honnête n'avaient JAMAIS tourné (stanza créée à la main)          | **FERMÉ au déploiement de 07h39** — `createstanza … Exited (0)`, sonde `axion-healthcheck` ; §5.0                              |
+| 2c  | Le service `sauvegarde` est écrit et joué, **pas déployé**                                   | **OUVERT** — exige un déploiement ; §5.2                                                                                       |
+| 2d  | Aucune copie hors serveur : la règle 3-2-1 du 02 §11.4 n'est pas tenue                       | **ESCALADE OUVERTE — décision Williams** ; §5.6                                                                                |
+| 2e  | Rétention MinIO = 30 archives COMPLÈTES : ne passera pas l'échelle des pièces jointes        | **OUVERT** — garde-fou de plafond en place, décision à prendre avant les premières missions ; §5.3                             |
+| 2f  | Chemin VPS dédié : le `.env` n'est sauvegardé par AUCUN script (coffre des secrets absent)   | **OUVERT — fiche d'amélioration** ; §7.4-A. Aggravant : `pgbackrest.conf` affirme le contraire                                 |
+| 2g  | Chemin VPS dédié : rien ne détecte le SILENCE de la chaîne cron (alerte sur échec seulement) | **OUVERT — fiche d'amélioration** ; §7.4-B. `install-cron.sh` est une étape MANUELLE                                           |
+| 2h  | « La pile de prod n'a AUCUNE sauvegarde » (3 fichiers l'écrivaient)                          | **CORRIGÉ le 2026-08-28** — vrai du compose, FAUX de la cible : `install-cron.sh` pose 4 tâches ; §7.4                         |
+| 3   | `restore-test.sh` ne sait pas parler à un projet Compose imposé par un orchestrateur         | **ESCALADE À OUVRIR** — §6.2                                                                                                   |
+| 4   | `PUBLIC_BASE_URL` désigne `audit-staging.axion-ia.com`, qui **ne résout pas**                | **OUVERT** — le domaine réel est l'adresse `sslip.io` de Coolify                                                               |
+| 5   | Routage Traefik → Caddy : port cible non déclaré, 504 au relevé                              | **EN COURS** par un autre agent — ne pas figer                                                                                 |
+| 6   | Duplication `docker-compose.coolify.yml` ↔ `docker-compose.yml` non gardée                   | **OUVERT** — `AMELIORATIONS.md` 2026-08-28, « la troisième convention d'A11 »                                                  |
+| 7   | Tags MinIO / `mc` / Caddy figés : « dernière release stable au démarrage » (11 §1)           | à confirmer au provisionnement réel de la production, puis à geler                                                             |
+| 8   | `deploy.sh` appelle `pnpm db:migrate:check` puis `pnpm db:migrate` dans l'image `api`        | les deux scripts existent à la racine (`package.json`) ; **leur présence dans l'image n'est pas vérifiée**                     |
+| 9   | Le PRA (§7.3) et la rotation des secrets                                                     | **JAMAIS JOUÉS** — RTO 4 h non chronométré                                                                                     |
+| 10  | `docker image prune -af` toutes les 6 h par le crontab du voisin                             | **NON VÉRIFIÉ** : effet réel sur nos images entre deux déploiements                                                            |
+| 11  | Contrôle nominatif des 12 familles de secrets §30.3 dans le `.env` du staging                | **NON VÉRIFIÉ** — appartient à Williams, pas à un agent (porte P-A, §G.6-1)                                                    |
+| 12  | Consommation CPU/RAM réelle du staging en cohabitation                                       | **NON VÉRIFIÉ** dans cette passe — seules les marges d'avant déploiement sont tracées (`DECISIONS.md`)                         |
 
 ### Ce qui a été mesuré, et qu'il ne faut pas re-suspecter
 
