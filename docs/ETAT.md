@@ -561,3 +561,49 @@ A02, **rejouée en entier** (09 §4bis).
 
 Tests rouges connus : `lint` (4 erreurs `no-unnecessary-condition`) et `format:check` sur
 `apps/api/tests/l0-sauvegarde.integration.test.ts` et `l0-restauration.integration.test.ts`.
+
+## 2026-08-28 16h25 — [lot L0-b] — étape pipeline 6/7 — PRÊT POUR LE REJEU DE LA PORTE
+
+Dernier commit vert : e235a88 (docs(porte): D-3 — la clé du coffre de secrets) · Branche :
+lot/l0-infra · Poussé : oui · **Arbre propre**
+
+**CI VERTE SUR LES 19 JOBS** du commit `7d415fe`, et la mesure qui compte :
+
+```
+4 · integration (postgres, redis, minio)   12 fichiers · 141 tests    ← c'était 10 et 90 ce matin
+3 · unit                                    3 fichiers · 179 tests
+```
+
+Les **51 tests dont 35 `@critique`** qui ne tournaient que sur un disque dur sont enfin exécutés en
+ligne. C'était le défaut le plus coûteux de la journée.
+
+**Ce qui a été fermé depuis le dernier bloc :**
+
+| Défaut | État |
+| ------ | ---- |
+| Le correctif de la boucle câblé sur 1 cible / 4 — **le dev bouclait aussi**, 10 réinitialisations en 90 s sous `healthy` | ✅ propagé, contexte de build unifié |
+| La sonde de sauvegarde satisfaite par **deux entiers** | ✅ elle exige archive, taille, empreinte — prouvée rouge sur le même volume |
+| La redaction laissait fuir les mots de passe, protégeait des colonnes **inexistantes** | ✅ reconstruite depuis le fichier 04 ; **la version correcte est 5,8× plus rapide** que la trouée |
+| Messages de validation **en anglais** (invariant 5) | ✅ locale française, **le code d'erreur ne bouge pas** |
+| **Huit défauts fabriqués passaient au vert** dans `check:invariants` | ✅ contrôles reformulés : ils gardent une **propriété**, plus une liste |
+| Les compteurs des garde-fous compose non assertés — **récidive du défaut d'origine** | ✅ double verrou + 8 cas ; 45 → 53 |
+| `test:e2e:filrouge` **vert sur zéro test** | ✅ renommé et rebranché sur les 5 vrais tests |
+| **`pnpm test:integration` ne se terminait pas** | ✅ **12 fichiers / 141 tests / RC=0 en 350 s**, en un bloc |
+| Aucune sauvegarde des secrets | ✅ coffre chiffré, aller-retour joué, **empreinte identique** — mais **inactif** tant que D-3 n'est pas tranché |
+| `.env` en 644 | ✅ **le défaut n'existait pas** : chemin non traversable, lecture en `nobody` REFUSÉE. Mon constat était faux |
+
+**CE QUI RESTE, ET AUCUN NE SE RÉSOUDRA SEUL SAUF UN :**
+
+- **La porte n'est pas signée**, et elle **bloque tout** (09 §4bis : aucun lot suivant ne s'ouvre).
+- **Critère 3** : contrôle nominatif des 12 familles §30.3 — **Williams**. Le coffre attend **D-3**.
+- **Critère 4** : déploiement par la CI — **ne PEUT être satisfait qu'après le premier merge**, le
+  workflow n'étant pas sur `main`. Ordre, pas blocage.
+- **Socle applicatif couvert à 0 %** — **le seul point qui se résout par l'avancement**, et il est
+  outillé : la ceinture de couverture rougira d'elle-même au premier module critique non listé.
+- **Personne n'est prévenu** : deux variables Telegram, **Williams**.
+- **La matrice de traçabilité annonce encore un bloquant réparé** — à reprendre au rejeu.
+
+Prochaine action : **faire rejouer la porte P-A EN ENTIER par le gardien A02** (09 §4bis — une porte
+refusée se rejoue, elle ne se reprend pas là où elle s'était arrêtée), puis la présenter à Williams.
+
+Tests rouges connus : aucun.
