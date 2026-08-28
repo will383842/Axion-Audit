@@ -2276,3 +2276,52 @@ secrets** du 02 §30.3, et la **sauvegarde chiffrée du `.env`** lui-même.
 **Impact spec :** aucun. Le 02 §30.4-2 est satisfait sur le fond ; la mention « `chmod 600` » du
 runbook décrit un moyen, l'exigence est l'accès. À reformuler dans `infra/README.md` au prochain
 passage.
+
+## 2026-08-28 — [l0] Garde-t-on Coolify sur le futur serveur dédié, alors que le pack dit non ?
+
+**Options :**
+
+1. **Garder Coolify.** Il est déjà en service, il fonctionne, et le coût d'apprentissage est payé.
+2. **Revenir au chemin du pack** — Docker Compose + GitHub Actions, sans orchestrateur.
+3. Différer la question jusqu'à la migration.
+
+**Arbitrage : option 1, Coolify est conservé.** Règle de précédence **appliquée** : le 02 §30.1
+(architecture, étage §1-15) dit « **pas de Coolify en V1** » mais ajoute lui-même « _Coolify reste une
+option de confort en V2_ » — **le pack prévoit donc son adoption, il n'en fixe que le calendrier**.
+L'écart porte sur la date, pas sur la nature.
+
+**Ce qui a été mesuré et qui fait pencher :** Coolify sur `axionia-web` **n'a jamais été un choix
+d'architecture**, c'était l'orchestrateur préexistant de la machine du voisin. Mais **sept conventions
+propres à Coolify ont été découvertes à la dure**, chacune au prix d'un déploiement échoué ou d'une
+panne silencieuse — dont trois échecs consécutifs en quatorze secondes sur une séquence vide, pendant
+que la pile précédente répondait 200. **Le rejeter maintenant reviendrait à repayer ce prix à
+l'envers**, pour retrouver un montage (`deploy.sh`) qui, lui, **n'a jamais tourné nulle part**.
+
+**LE PRIX DE CETTE DÉCISION, ÉCRIT ICI POUR QU'IL NE SOIT PAS REDÉCOUVERT :**
+
+1. **Le moindre accès sur les secrets n'existe pas.** Coolify injecte le fichier d'environnement
+   **entier** dans **tous** les conteneurs de la pile — mesuré : les variables de sauvegarde distante
+   sont lisibles depuis l'API, qui ne les demande pas. Notre déclaration service par service reste
+   une **documentation d'intention** et ne garde rien. _Le 02 §30.4-7 (« la clé n'existe que dans le
+   conteneur worker ») demeure donc **inapplicable** tant que Coolify est là._ La protection réelle
+   est le **cloisonnement côté fournisseur**, et toute nouvelle intégration devra être cloisonnée
+   là-bas.
+2. **La définition de l'application vit hors de git** — domaine, port cible, variables : tout est
+   dans la base de Coolify. C'est **exactement le motif** pour lequel ses tâches planifiées ont été
+   écartées au profit d'un service versionné : _« invisible à une revue, absente d'une
+   reconstruction »_. La critique vaut contre la définition de l'application elle-même. **Corollaire
+   opérationnel : la base de Coolify entre dans le périmètre de sauvegarde**, sans quoi une
+   restauration rendrait une pile qui ne sait pas comment se publier.
+3. **Un composant de plus à sécuriser, mettre à jour et sauvegarder** — l'argument même du 02 §30.1,
+   qui reste vrai et qu'on accepte en connaissance de cause.
+
+**Ce que cette décision NE tranche PAS :** le retour arrière par image reste impossible (tags
+constants réécrits à chaque construction — on revient à un **commit**, jamais à une image), et le
+test de restauration nocturne reste bloqué par le nom de projet imposé par l'orchestrateur (escalade
+déjà ouverte). Ces deux points sont des **conséquences** de l'option 1, pas des objections nouvelles.
+
+**Décideur :** Williams, sur la note d'architecture `docs/conception/SERVEUR_DEDIE.md` (question Q1)
+**Impact spec :** **amendement au 02 §30.1**, horodaté — Coolify est adopté dès la V1 au lieu de la
+V2. À ratifier formellement à la porte P-A, avec les trois autres amendements (Traefik, construction
+sur le serveur, stockage distant). La note d'architecture est à reprendre en conséquence : ses
+questions Q2 à Q6 restent ouvertes, Q1 est close.
