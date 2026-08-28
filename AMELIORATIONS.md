@@ -423,8 +423,17 @@ n'automatise ».
 A54 a **mesuré** que ce réseau a l'ICC activé : tout conteneur qui le rejoint obtient une route
 directe vers la base PostgreSQL et le Redis d'`axion-ia.com`. Ce n'est donc pas une élégance
 d'architecture mais une **exigence de sécurité** (02 §30.4-4 : un secret de staging ne doit RIEN
-pouvoir sur la production). Prouvé par injection dans les deux formes possibles — `edge: {}` ajouté
-sous `api`, et `[axion, edge]` sur `worker`.
+pouvoir sur la production).
+
+> **Rectifié le 2026-08-28 (gardien A02).** Cette fiche annonçait « _prouvé par injection dans **les
+> deux formes possibles**_ ». **Il y en avait cinq**, et la première version du contrôle **en laissait
+> passer trois** : elle cherchait le mot `edge` dans le texte du fichier, donc un réseau externe
+> déclaré sous **n'importe quel autre nom** — ou hérité par `network_mode: "service:caddy"` — la
+> traversait sans bruit. La propriété réellement gardée aujourd'hui n'est plus « personne n'écrit
+> `edge` » mais : **aucun service autre que `caddy` n'obtient de route vers un réseau que cette pile
+> ne crée pas elle-même**, sous quelque forme que ce soit. Le mot `edge` n'apparaît plus dans le code
+> du contrôle. _Annoncer deux preuves quand on en a une, c'est exactement le garde-fou qui annonce
+> plus qu'il ne fait._
 
 **`pnpm check:compose-coolify`** — aucune interpolation dans un volume, et tous les chemins relatifs
 résolus **depuis la racine** existent réellement. Chacune de ces deux règles a coûté un déploiement.

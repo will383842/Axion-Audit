@@ -283,3 +283,83 @@ Tests rouges connus : aucun. CI verte sur les trois derniers commits.
 Reste non fait : le sous-domaine `audit-staging.axion-ia.com` (zone Cloudflare, partagée avec la production — A01 n'y a pas accès). Le staging vit sur l'adresse automatique de Coolify, ce qui n'empêche aucune vérification.
 
 **RECTIFICATION (2026-08-28, après revue croisée et recette).** Ce bloc affirmait : « Le staging vit sur l'adresse automatique de Coolify, ce qui n'empêche aucune vérification. » **C'ÉTAIT FAUX.** Mesuré depuis l'extérieur : `/`, `/hq/`, `/api/v1/health` et `/api/v1/health/ready` rendent **quatre 404** — la page par défaut de Traefik. Notre Caddy ne portait **aucun label `traefik.*`** : en pile `dockercompose`, Coolify ne les génère qu'à partir de `docker_compose_domains`, **service par service** ; le domaine posé au niveau de l'APPLICATION ne publie rien. Ce n'était donc pas le nom qui manquait, c'était la publication. Toutes les preuves de ce bloc ont été prises **en `docker exec`, à l'intérieur de la pile** : elles restent vraies sur ce qu'elles mesurent, et ne disaient rien de l'accès externe. Le domaine a été publié sur le service `caddy` ; la vérification depuis l'extérieur reste **à refaire** avant toute signature.
+
+## 2026-08-28 08h45 — [lot L0-b] — étape pipeline 6/7 (contrôle d'acceptation REFUSÉ)
+
+Dernier commit vert : c3121ce (docs(porte): contrôle d'acceptation REFUSÉ, et cinq de mes chiffres
+étaient faux) · Branche : lot/l0-infra · Poussé : oui
+
+Tâche en cours : purger la liste de reprises du gardien A02 (points 19 à 27) **avant toute nouvelle
+implémentation** — instruction de Williams : « fixer tous les problèmes en profondeur pour que ce soit
+tout à la perfection ». Sept agents en parallèle sur des périmètres disjoints : A11c (stanza pgBackRest
+mécanisée + sonde Postgres honnête, point 19-20 BLOQUANTS) · A32 (rate-limit 500→429, routes de santé
+hors quota, `/ready` au-delà de Postgres) · A21 (police Inter auto-hébergée, `/sw.js` et le manifeste) ·
+A56 (croissance disque bornée, deux promesses fausses, procédure de retour arrière Coolify réelle) ·
+A17 (revue croisée + tests des deux garde-fous réécrits, point 21 et 21bis) · A57 (`infra/README.md`
+mis en accord avec la machine, point 25) · A58 (empreinte de seed reproductible, point 24).
+
+Fait par A01 depuis le dernier bloc :
+- La **phrase fausse du §2ter est retirée** du dossier de porte (« l'adresse automatique de Coolify
+  n'empêche aucune vérification — seul le nom change »). C'était la seule affirmation factuellement
+  fausse du dossier, et celle sur laquelle Williams se serait appuyé pour signer. Elle ne subsiste que
+  **citée à l'intérieur de sa propre correction**. J'avais manqué cette correction une première fois
+  sur une ancre sans la reprendre ; c'est Williams qui l'a relevé.
+- La fiche `AMELIORATIONS.md` du 2026-08-28 est rectifiée : « les deux formes possibles » → **cinq
+  formes, dont trois passaient**.
+- **CAUSE DES QUATRE 404 TROUVÉE ET CORRIGÉE.** Notre Caddy écoute sur `:8080` (figé à la construction,
+  `infra/caddy/Dockerfile` l. 64) et Coolify déclarait `ports_exposes = 80` — c'est ce champ qui
+  engendre l'étiquette `traefik…loadbalancer.server.port`. Le champ est passé à `8080`, redéploiement
+  `rqd9z8dio3b1598gl9sidhoy` déclenché. **Sixième convention propre à Coolify.**
+- **Un accès que je croyais avoir n'existe pas** : `ssh root@178.105.55.15` répond `Permission denied
+  (publickey)`. Le seul canal vers `axionia-web` est l'API Coolify (`http://178.105.55.15:8000`), qui
+  **n'offre pas d'exécution de commande arbitraire**. J'avais briefé A57 sur une voie fausse ; corrigé
+  par message. À retenir : `python` n'existe pas non plus dans ce shell — un `curl | python` rend une
+  sortie **vide sans erreur**, ce qui est exactement le genre de silence qui fabrique un faux constat.
+
+Prochaine action : quand la sonde HTTP de fond rend son verdict, **re-signer le §2ter du dossier de
+porte avec une preuve prise DEPUIS L'EXTÉRIEUR** — jamais depuis un conteneur — puis intégrer les
+rendus des sept agents dans l'ordre de blocage du gardien (19-20 d'abord).
+
+Tests rouges connus : aucun en local. Ligne de DoD « migrations up/down sur staging » **NON
+SATISFAITE**, dépendante des points 19-20.
+
+## 2026-08-28 09h05 — [lot L0-b] — étape pipeline 6/7 — RECTIFICATION D'UN CONSTAT FAUX DE A01
+
+Dernier commit vert : 9d205a4 (fix(l0b): la stanza se crée seule, la sonde Postgres cesse de mentir,
+Traefik vise le bon réseau) · Branche : lot/l0-infra · Poussé : oui
+
+**⚠️ LE BLOC DE 08h45 CONTIENT UNE AFFIRMATION FAUSSE, ÉCRITE PAR MOI.** J'y ai écrit : « un accès que
+je croyais avoir n'existe pas : `ssh root@178.105.55.15` répond `Permission denied (publickey)`. Le seul
+canal vers `axionia-web` est l'API Coolify. » **C'est faux. L'accès shell root existe.**
+
+```
+ssh root@178.105.55.15 'hostname'   → Permission denied (publickey)   [code 255]
+ssh axionia-web       'hostname'    → axionia-web                     [code 0]
+```
+
+La cause : `~/.ssh/config` porte un `Host axionia-web` avec `IdentityFile ~/.ssh/axion_audit_ed25519`
+et `IdentitiesOnly yes`. La forme `root@IP` n'offre que les **noms de clés par défaut** (`id_rsa`,
+`id_ed25519`…) et ne présente donc **jamais** une clé au nom non standard. Sans alias :
+`ssh -i ~/.ssh/axion_audit_ed25519 -o IdentitiesOnly=yes root@178.105.55.15`.
+
+**CE QUE CETTE ERREUR A COÛTÉ, et c'est la partie qui compte :** j'ai briefé l'agent A57 sur ce constat
+et **je lui ai fait renoncer à des vérifications qu'il pouvait faire**. C'est exactement le défaut que
+ce lot passe son temps à corriger chez les autres — *une conclusion tirée d'une seule mesure, présentée
+comme un fait établi*. Un `Permission denied` prouve qu'**une** forme de commande échoue, jamais
+qu'aucune ne marche. A57 a heureusement retrouvé l'alias de lui-même et a travaillé par mesure réelle.
+
+Deux agents me l'ont signalé indépendamment. **Ils ont eu raison contre moi, et c'est le
+fonctionnement voulu.**
+
+**TROUVAILLE BLOQUANTE DE A57, à porter au dossier de porte :** il n'existe **aucune sauvegarde
+restaurable** sur le staging. `pgbackrest info` → `status: error (no valid backups)`. Stanza ✅,
+chiffrement AES-256-CBC ✅, archivage WAL ✅ (`archived=3, failed=0`) — mais **aucune sauvegarde
+complète**, donc les WAL archivés ne se rejouent sur rien : un `restore` échouerait faute de point de
+départ. **L'invariant 8 n'est pas tenu sur le staging**, et le critère L0 « restauration Postgres ET
+MinIO testée depuis zéro » est **NON SATISFAIT**. À ajouter aux points bloquants du gardien.
+
+Prochaine action : quand la sonde HTTP de fond rend son verdict, **re-signer le §2ter avec une preuve
+prise depuis l'extérieur** ; puis ouvrir la sauvegarde complète (invariant 8) comme point bloquant de
+la porte P-A, au même rang que les points 19-20 qui, eux, sont désormais traités.
+
+Tests rouges connus : aucun en local.
