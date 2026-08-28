@@ -72,8 +72,7 @@ function executer(bac: string, script: Script): Verdict {
  * chemins que la fixture prétend monter ou construire (contenu sans importance :
  * seule leur EXISTENCE est vérifiée par le contrôle des chemins relatifs).
  */
-function lancer(script: Script, compose: string, fichiers: readonly string[] = []): Verdict {
-  const bac = creerBac(script);
+function garnir(bac: string, compose: string, fichiers: readonly string[]): void {
   const cibleCompose = join(bac, CHEMIN_COMPOSE);
   mkdirSync(dirname(cibleCompose), { recursive: true });
   writeFileSync(cibleCompose, compose, 'utf8');
@@ -82,6 +81,47 @@ function lancer(script: Script, compose: string, fichiers: readonly string[] = [
     mkdirSync(dirname(cible), { recursive: true });
     writeFileSync(cible, '# fixture de test\n', 'utf8');
   }
+}
+
+function lancer(script: Script, compose: string, fichiers: readonly string[] = []): Verdict {
+  const bac = creerBac(script);
+  garnir(bac, compose, fichiers);
+  return executer(bac, script);
+}
+
+/**
+ * Exécute une VERSION MUTÉE du script livré sur une fixture SAINE.
+ *
+ * POURQUOI CE SECOND MODE D'ÉPREUVE. Tous les cas ci-dessus fabriquent un fichier
+ * FAUTIF et vérifient que le script le refuse. Ils prouvent que le script sait
+ * dire non — ils ne prouvent RIEN sur ce qu'il a réellement regardé pour dire oui.
+ * La revue adverse du 2026-08-28 l'a démontré en une commande : forcer
+ * `attachementsInspectes += 1` à `+= 0` laissait le script annoncer
+ * « 0 attachement(s) inspecté(s) sur 11 service(s) ; seul « caddy » rejoint un
+ * réseau hors de la pile » et sortir en 0 — les 45 cas de ce fichier restaient
+ * verts, parce qu'ils n'assertaient que le CODE DE SORTIE.
+ *
+ * Muter le script et exiger qu'il MEURE est la seule façon d'attacher un test à un
+ * compteur. `expect(source).toContain(avant)` garantit que la mutation MORD : le
+ * jour où quelqu'un renomme la variable, ce test échoue au lieu de muter dans le
+ * vide et de rester vert pour rien.
+ */
+function lancerMute(
+  script: Script,
+  compose: string,
+  mutations: readonly (readonly [string, string])[],
+  fichiers: readonly string[] = [],
+): Verdict {
+  const bac = mkdtempSync(join(tmpdir(), 'axion-garde-fous-'));
+  bacs.push(bac);
+  mkdirSync(join(bac, 'scripts'), { recursive: true });
+  let source = readFileSync(join(RACINE_DEPOT, 'scripts', script), 'utf8');
+  for (const [avant, apres] of mutations) {
+    expect(source).toContain(avant);
+    source = source.replaceAll(avant, apres);
+  }
+  writeFileSync(join(bac, 'scripts', script), source, 'utf8');
+  garnir(bac, compose, fichiers);
   return executer(bac, script);
 }
 
@@ -729,5 +769,119 @@ volumes:
     const { code, sortie } = executer(bac, COOLIFY);
     expect(sortie).toContain('NON APPLIQUÉ');
     expect(code).toBe(0);
+  });
+});
+
+// =============================================================================
+// LES COMPTEURS — CE QUE LES 45 CAS PRÉCÉDENTS NE TUAIENT PAS
+// -----------------------------------------------------------------------------
+// Les cas ci-dessus tuent la neutralisation du VERDICT (remplacer `process.exit(1)`
+// par `exit(0)` les fait tous tomber). Ils ne tuaient PAS la neutralisation des
+// COMPTEURS : un script réduit à `attachementsInspectes += 0` restait vert chez
+// eux tout en affirmant « seul « caddy » rejoint un réseau hors de la pile » sans
+// avoir regardé un seul attachement. C'est la récidive exacte du défaut qui avait
+// motivé la réécriture de ces deux scripts — le compteur était AFFICHÉ, jamais
+// ASSERTÉ.
+//
+// Deux verrous, posés ensemble parce qu'aucun des deux ne suffit :
+//   · les cas « annonce » ci-dessous lisent le NOMBRE IMPRIMÉ et le comparent à une
+//     vérité connue de la fixture (4 attachements pour 3 services, pas « un
+//     nombre »). Un compteur faux, dans un sens comme dans l'autre, les fait
+//     tomber ;
+//   · les cas « mutation » exécutent le script AMPUTÉ de son incrément sur une
+//     fixture SAINE et exigent EXIT=1. C'est le seul test qui reproduit à
+//     l'identique la commande de la revue adverse.
+// Traçabilité : point 21bis du gardien A02 · revue adverse du 2026-08-28 · 09 §5.6.
+// =============================================================================
+
+/** Un service SANS clé `networks:` : Compose l'attache au `default` implicite. */
+const SAIN_AVEC_DEFAUT_IMPLICITE = `name: axion-coolify
+services:
+${CADDY_LEGITIME}  api:
+    image: axion/api
+${RESEAUX_RESEAU}`;
+
+/** Pile Coolify saine portant DEUX chemins relatifs résolus : contexte + Dockerfile. */
+const SAIN_COOLIFY_AVEC_CHEMINS = pileCoolify(
+  `  postgres:
+    image: axion/postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+  api:
+    build:
+      context: ./infra/api
+      dockerfile: Dockerfile
+`,
+);
+
+describe('les compteurs sont assertés, pas seulement affichés', () => {
+  it('isolation — ANNONCE le nombre exact d’attachements de la fixture (4 sur 3 services)', () => {
+    // caddy → axion + edge (2) · api → axion (1) · worker → axion (1).
+    const { code, sortie } = lancer(ISOLATION, SAIN_RESEAU);
+    expect(code).toBe(0);
+    expect(sortie).toContain('4 attachement(s) inspecté(s) sur 3 service(s)');
+  });
+
+  it('isolation — compte le réseau `default` IMPLICITE du service qui ne déclare rien', () => {
+    // caddy → 2 · api → aucune clé `networks:`, donc 1 attachement implicite.
+    const { code, sortie } = lancer(ISOLATION, SAIN_AVEC_DEFAUT_IMPLICITE);
+    expect(code).toBe(0);
+    expect(sortie).toContain('3 attachement(s) inspecté(s) sur 2 service(s)');
+  });
+
+  it('isolation — `networks: []` ne compte pour AUCUN attachement, et le dit', () => {
+    const compose = pileReseau(
+      `${CADDY_LEGITIME}  api:
+    image: axion/api
+    networks: []
+`,
+    );
+    const { code, sortie } = lancer(ISOLATION, compose);
+    expect(code).toBe(0);
+    expect(sortie).toContain('2 attachement(s) inspecté(s) sur 2 service(s)');
+  });
+
+  it('isolation — MEURT si l’incrément d’attachements est neutralisé (fixture saine)', () => {
+    const { code, sortie } = lancerMute(ISOLATION, SAIN_RESEAU, [
+      ['attachementsInspectes += 1', 'attachementsInspectes += 0'],
+    ]);
+    expect(sortie).toContain("compteur d'attachements est incohérent");
+    expect(sortie).toContain('0 inspecté(s) pour 3 attendu(s)');
+    expect(code).toBe(1);
+  });
+
+  it('coolify — ANNONCE les deux nombres exacts de la fixture (1 montage, 0 chemin)', () => {
+    const { code, sortie } = lancer(COOLIFY, SAIN_COOLIFY);
+    expect(code).toBe(0);
+    expect(sortie).toContain('1 montage(s) inspecté(s) sur 2 service(s)');
+    expect(sortie).toContain('0 chemin(s) relatif(s)');
+  });
+
+  it('coolify — ANNONCE les deux chemins relatifs (contexte + Dockerfile)', () => {
+    const { code, sortie } = lancer(COOLIFY, SAIN_COOLIFY_AVEC_CHEMINS, ['infra/api/Dockerfile']);
+    expect(code).toBe(0);
+    expect(sortie).toContain('1 montage(s) inspecté(s) sur 2 service(s)');
+    expect(sortie).toContain('2 chemin(s) relatif(s)');
+  });
+
+  it('coolify — MEURT si l’incrément de montages est neutralisé (fixture saine)', () => {
+    const { code, sortie } = lancerMute(COOLIFY, SAIN_COOLIFY, [
+      ['montagesInspectes += 1', 'montagesInspectes += 0'],
+    ]);
+    expect(sortie).toContain("compteurs d'inspection sont incohérents");
+    expect(sortie).toContain('montages : 0 inspecté(s)');
+    expect(code).toBe(1);
+  });
+
+  it('coolify — MEURT si l’incrément de chemins est neutralisé (fixture saine)', () => {
+    const { code, sortie } = lancerMute(
+      COOLIFY,
+      SAIN_COOLIFY_AVEC_CHEMINS,
+      [['cheminsInspectes += 1', 'cheminsInspectes += 0']],
+      ['infra/api/Dockerfile'],
+    );
+    expect(sortie).toContain("compteurs d'inspection sont incohérents");
+    expect(sortie).toContain('chemins  : 0 inspecté(s) pour 2 attendu(s)');
+    expect(code).toBe(1);
   });
 });

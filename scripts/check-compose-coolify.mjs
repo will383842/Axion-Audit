@@ -1037,6 +1037,46 @@ for (const c of cheminsARésoudre) {
 }
 
 // =============================================================================
+// LES DEUX COMPTEURS SONT ASSERTÉS, PAS SEULEMENT AFFICHÉS
+// -----------------------------------------------------------------------------
+// LA RÉCIDIVE EXACTE DU DÉFAUT D'ORIGINE, mesurée le 2026-08-28 par une revue
+// adverse. Forcer `montagesInspectes` et `cheminsInspectes` à zéro laissait le
+// script sortir en 0 en annonçant « 0 montage(s) inspecté(s) […] 0 chemin(s) » —
+// et les 45 tests du fichier restaient verts, parce qu'ils n'assertaient que le
+// CODE DE SORTIE. Un compteur à zéro sur un fichier non vide est une panne, pas un
+// succès.
+//
+// Les deux planchers sont RECALCULÉS ICI, par un autre chemin que les boucles :
+//   · un service qui déclare `volumes:` produit au moins un montage — sinon
+//     `montagesDuService` a déjà refusé le fichier ; `[]` et `{}` sont les seules
+//     écritures qui disent vraiment « aucun montage » ;
+//   · tout chemin collecté qui n'est ni vide, ni interpolé, ni absolu est résolu.
+// =============================================================================
+const montagesAttendus = services.filter((service) => {
+  const n = enfant(service, ancres, 'volumes');
+  if (!n) return false;
+  const valeur = valeurEffective(n, ancres);
+  return valeur !== '[]' && valeur !== '{}';
+}).length;
+
+const cheminsAttendus = cheminsARésoudre.filter(
+  (c) => c.rel !== '' && !c.rel.includes('${') && !isAbsolute(c.rel),
+).length;
+
+if (montagesInspectes < montagesAttendus || cheminsInspectes < cheminsAttendus) {
+  console.error(
+    `${ROUGE}✗ CONVENTIONS COOLIFY — les compteurs d'inspection sont incohérents.${RAZ}\n` +
+      `  montages : ${String(montagesInspectes)} inspecté(s) pour au moins ${String(montagesAttendus)} attendu(s)\n` +
+      `  chemins  : ${String(cheminsInspectes)} inspecté(s) pour ${String(cheminsAttendus)} attendu(s)\n` +
+      `  Un compteur en dessous de son plancher signifie que la boucle d'inspection ne\n` +
+      `  s'est pas exécutée, pas que le fichier est conforme. Le verdict qui suit\n` +
+      `  affirmerait « tous volumes nommés et déclarés, sans \`\${\` » sans avoir regardé un\n` +
+      `  seul montage — c'est le défaut que ce lot poursuit, dans le garde-fou lui-même.\n`,
+  );
+  process.exit(1);
+}
+
+// =============================================================================
 // VERDICT
 // =============================================================================
 if (ecarts.length > 0) {

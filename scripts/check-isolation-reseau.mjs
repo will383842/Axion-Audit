@@ -905,6 +905,48 @@ for (const service of services) {
 }
 
 // =============================================================================
+// LE COMPTEUR EST ASSERTÉ, PAS SEULEMENT AFFICHÉ
+// -----------------------------------------------------------------------------
+// LA RÉCIDIVE EXACTE DU DÉFAUT D'ORIGINE, mesurée le 2026-08-28 par une revue
+// adverse. Une seule substitution suffisait :
+//
+//     sed -i "s/attachementsInspectes += 1/attachementsInspectes += 0/" …
+//     ✓ isolation réseau : 0 attachement(s) inspecté(s) sur 11 service(s) ; …
+//     exit=0        ← et les 45 tests du fichier restaient VERTS
+//
+// Le script affirmait « seul `caddy` sort » sans avoir inspecté un seul
+// attachement. Un verdict vert qui énonce une conclusion qu'il n'a rien regardé
+// pour atteindre est exactement ce que ce fichier existe pour empêcher — son
+// en-tête le disait déjà de la LECTURE (`refuserSiIllisible`), il ne le disait pas
+// encore de l'INSPECTION.
+//
+// Le nombre attendu est RECALCULÉ ICI, par un autre chemin que la boucle : chaque
+// service produit au moins un attachement (le réseau `default` implicite quand il
+// n'a pas de clé `networks:`), SAUF celui qui écrit explicitement `[]` ou `{}` —
+// les deux seules écritures qui veulent vraiment dire « aucun réseau ». Un
+// compteur inférieur à ce plancher n'est pas un fichier propre : c'est une panne.
+// =============================================================================
+const attachementsAttendus = services.filter((service) => {
+  const n = enfant(service, ancres, 'networks');
+  if (!n) return true; // pas de clé `networks:` → réseau `default` implicite
+  const valeur = valeurEffective(n, ancres);
+  return valeur !== '[]' && valeur !== '{}';
+}).length;
+
+if (attachementsInspectes < attachementsAttendus) {
+  console.error(
+    `${ROUGE}✗ ISOLATION RÉSEAU — le compteur d'attachements est incohérent : ` +
+      `${String(attachementsInspectes)} inspecté(s) pour ${String(attachementsAttendus)} attendu(s).${RAZ}\n` +
+      `  Chaque service rejoint au moins un réseau — le \`default\` implicite quand il ne\n` +
+      `  déclare rien — sauf s'il écrit explicitement \`[]\` ou \`{}\`. Un compteur en\n` +
+      `  dessous de ce plancher signifie que la boucle d'inspection ne s'est pas exécutée,\n` +
+      `  pas que le fichier est sain. Le verdict qui suit affirmerait « seul « ${SERVICE_AUTORISE} »\n` +
+      `  rejoint un réseau hors de la pile » sans avoir regardé un seul attachement.\n`,
+  );
+  process.exit(1);
+}
+
+// =============================================================================
 // VERDICT
 // =============================================================================
 if (fautifs.length > 0) {

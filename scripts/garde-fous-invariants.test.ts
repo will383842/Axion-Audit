@@ -24,8 +24,11 @@
 // POURQUOI CE FICHIER N'EST PAS EXCLU DE SA PROPRE ANALYSE. `check-invariants.mjs`
 // s'exclut lui-même, à juste titre : il ÉNONCE les motifs interdits. Ce fichier-ci
 // les énonce aussi — mais l'exclure créerait un angle mort permanent dans un `.ts`.
-// Chaque fixture fautive porte donc le marqueur `invariant-ok:` du dépôt, sur la
-// ligne SOURCE qui précède : l'exemption est explicite, locale, et se relit. Les
+// Chaque fixture fautive porte donc le marqueur `invariant-ok:` du dépôt, en
+// COMMENTAIRE DE FIN DE LIGNE sur la fixture elle-même : l'exemption est explicite,
+// locale, et se relit. Le marqueur est de fin de ligne et non au-dessus parce qu'un
+// reformatage Prettier peut insérer un retour à la ligne entre les deux, ce qui
+// détacherait silencieusement le marqueur de ce qu'il exempte — mesuré ici. Les
 // fixtures de l'anti-skip, elles, sont ASSEMBLÉES À L'EXÉCUTION — ce garde-fou-ci
 // n'admet aucune exception (sa liste `EXCEPTIONS` doit rester vide, 11 §8.5), et
 // on ne lui en fabrique pas une pour ses propres tests.
@@ -87,7 +90,7 @@ function executer(script: string, bac: string): Verdict {
       // La liste des clients surveillés vit hors du dépôt ; sans elle, INV-2 échoue
       // EN CI (à dessein). On la fournit pour que ces cas mesurent ce qu'ils
       // prétendent mesurer, et pas la configuration de la machine.
-      AXION_CLIENTS_SURVEILLES: 'EntrepriseFictiveQuiNExistePas',
+      AXION_CLIENTS_SURVEILLES: 'zzz-aucun-client-dans-ce-bac',
     },
   });
   const sortie = `${resultat.stdout}${resultat.stderr}`.replaceAll(CODES_ANSI, '');
@@ -164,8 +167,7 @@ describe('check-invariants.mjs — le témoin sain reste vert', () => {
 describe('check-invariants.mjs — invariant 4, couleurs', () => {
   it('INV-4c refuse un nom CSS de couleur en littéral de chaîne nu', () => {
     const { code, sortie } = lancerInvariants({
-      // invariant-ok: fixture de test — la ligne suivante EST le défaut attendu.
-      'apps/hq/src/theme.ts': "export const c = 'red';\n",
+      'apps/hq/src/theme.ts': "export const c = 'red';\n", // invariant-ok: fixture de test — cette ligne EST le défaut attendu.
     });
     expect(sortie).toContain('INV-4c');
     expect(code).toBe(1);
@@ -174,8 +176,7 @@ describe('check-invariants.mjs — invariant 4, couleurs', () => {
   it('INV-4c connaît les 148 noms de la spécification, pas les vingt les plus connus', () => {
     // `darkslategray` passait au vert : il n'était pas dans la liste de vingt.
     const { code, sortie } = lancerInvariants({
-      // invariant-ok: fixture de test — la ligne suivante EST le défaut attendu.
-      'apps/hq/src/theme.ts': "export const c = 'darkslategray';\n",
+      'apps/hq/src/theme.ts': "export const c = 'darkslategray';\n", // invariant-ok: fixture de test — cette ligne EST le défaut attendu.
     });
     expect(sortie).toContain('INV-4c');
     expect(code).toBe(1);
@@ -186,8 +187,7 @@ describe('check-invariants.mjs — invariant 4, couleurs', () => {
     // n'aurait fait que déplacer le trou jusqu'ici. INV-4a ne le connaît pas ; il
     // refuse tout mot qu'il ne sait pas être SANS couleur.
     const { code, sortie } = lancerInvariants({
-      // invariant-ok: fixture de test — la ligne suivante EST le défaut attendu.
-      'packages/ui/src/carte.css': '.carte {\n  background-color: chartreuse;\n}\n',
+      'packages/ui/src/carte.css': '.carte {\n  background-color: chartreuse;\n}\n', // invariant-ok: fixture de test — cette ligne EST le défaut attendu.
     });
     expect(sortie).toContain('INV-4a');
     expect(code).toBe(1);
@@ -195,9 +195,8 @@ describe('check-invariants.mjs — invariant 4, couleurs', () => {
 
   it('INV-4a descend dans un dégradé pour y trouver la couleur', () => {
     const { code, sortie } = lancerInvariants({
-      // invariant-ok: fixture de test — la ligne suivante EST le défaut attendu.
       'packages/ui/src/carte.css':
-        '.carte {\n  background: linear-gradient(to right, tomato, var(--couleur-action-fond));\n}\n',
+        '.carte {\n  background: linear-gradient(to right, tomato, var(--couleur-action-fond));\n}\n', // invariant-ok: fixture de test — cette ligne EST le défaut attendu.
     });
     expect(sortie).toContain('INV-4a');
     expect(code).toBe(1);
@@ -205,8 +204,7 @@ describe('check-invariants.mjs — invariant 4, couleurs', () => {
 
   it('INV-4b refuse une notation moderne (`oklch`) autant qu’un hexadécimal', () => {
     const { code, sortie } = lancerInvariants({
-      // invariant-ok: fixture de test — la ligne suivante EST le défaut attendu.
-      'packages/ui/src/carte.css': '.carte {\n  color: oklch(0.7 0.15 40);\n}\n',
+      'packages/ui/src/carte.css': '.carte {\n  color: oklch(0.7 0.15 40);\n}\n', // invariant-ok: fixture de test — cette ligne EST le défaut attendu.
     });
     expect(sortie).toContain('INV-4b');
     expect(code).toBe(1);
@@ -219,8 +217,7 @@ describe('check-invariants.mjs — invariant 4, couleurs', () => {
 describe('check-invariants.mjs — invariant 4, tailles (la moitié qui manquait)', () => {
   it('INV-4d refuse une largeur en pixels', () => {
     const { code, sortie } = lancerInvariants({
-      // invariant-ok: fixture de test — la ligne suivante EST le défaut attendu.
-      'packages/ui/src/carte.css': '.carte {\n  width: 320px;\n}\n',
+      'packages/ui/src/carte.css': '.carte {\n  width: 320px;\n}\n', // invariant-ok: fixture de test — cette ligne EST le défaut attendu.
     });
     expect(sortie).toContain('INV-4d');
     expect(code).toBe(1);
@@ -228,8 +225,7 @@ describe('check-invariants.mjs — invariant 4, tailles (la moitié qui manquait
 
   it('INV-4d refuse une taille de police en pixels — celle qui casse le zoom', () => {
     const { code, sortie } = lancerInvariants({
-      // invariant-ok: fixture de test — la ligne suivante EST le défaut attendu.
-      'apps/field/src/App.tsx': "const s = { fontSize: '14px' };\n",
+      'apps/field/src/App.tsx': "const s = { fontSize: '14px' };\n", // invariant-ok: fixture de test — cette ligne EST le défaut attendu.
     });
     expect(sortie).toContain('INV-4d');
     expect(code).toBe(1);
@@ -259,8 +255,7 @@ describe('check-invariants.mjs — invariant 1, génération des UUID', () => {
   it('INV-1b refuse une fonction SQL nommée `uuidv7` — le nom le plus naturel de tous', () => {
     const { code, sortie } = lancerInvariants({
       'apps/api/drizzle/0099_essai.sql':
-        // invariant-ok: fixture de test — la ligne suivante EST le défaut attendu.
-        'CREATE FUNCTION uuidv7() RETURNS uuid LANGUAGE sql AS $$ SELECT NULL::uuid $$;\n',
+        'CREATE FUNCTION uuidv7() RETURNS uuid LANGUAGE sql AS $$ SELECT NULL::uuid $$;\n', // invariant-ok: fixture de test — cette ligne EST le défaut attendu.
     });
     expect(sortie).toContain('INV-1b');
     expect(code).toBe(1);
@@ -269,8 +264,7 @@ describe('check-invariants.mjs — invariant 1, génération des UUID', () => {
   it('INV-1b refuse aussi les deux noms que la version précédente connaissait', () => {
     const { code, sortie } = lancerInvariants({
       'apps/api/drizzle/0099_essai.sql':
-        // invariant-ok: fixture de test — la ligne suivante EST le défaut attendu.
-        'CREATE OR REPLACE FUNCTION public.gen_uuid_v7() RETURNS uuid LANGUAGE sql AS $$ SELECT NULL::uuid $$;\n',
+        'CREATE OR REPLACE FUNCTION public.gen_uuid_v7() RETURNS uuid LANGUAGE sql AS $$ SELECT NULL::uuid $$;\n', // invariant-ok: fixture de test — cette ligne EST le défaut attendu.
     });
     expect(sortie).toContain('INV-1b');
     expect(code).toBe(1);
@@ -279,8 +273,7 @@ describe('check-invariants.mjs — invariant 1, génération des UUID', () => {
   it('INV-1c refuse un DEFAULT d’UUID v4 POSÉ APRÈS COUP sur une table métier', () => {
     const { code, sortie } = lancerInvariants({
       'apps/api/drizzle/0099_essai.sql':
-        // invariant-ok: fixture de test — la ligne suivante EST le défaut attendu.
-        'ALTER TABLE missions ALTER COLUMN id SET DEFAULT gen_random_uuid();\n',
+        'ALTER TABLE missions ALTER COLUMN id SET DEFAULT gen_random_uuid();\n', // invariant-ok: fixture de test — cette ligne EST le défaut attendu.
     });
     expect(sortie).toContain('INV-1c');
     expect(code).toBe(1);
@@ -299,11 +292,10 @@ describe('check-invariants.mjs — invariant 1, génération des UUID', () => {
     expect(code).toBe(0);
   });
 
-  it('INV-1a refuse `randomUUID` importé nommément, sans passer par `crypto.`', () => {
+  it('INV-1a refuse le générateur v4 IMPORTÉ NOMMÉMENT depuis `node:crypto`', () => {
     const { code, sortie } = lancerInvariants({
       'apps/api/src/id.ts':
-        // invariant-ok: fixture de test — la ligne suivante EST le défaut attendu.
-        "import { randomUUID } from 'node:crypto';\nexport const id = () => randomUUID();\n",
+        "import { randomUUID } from 'node:crypto';\nexport const id = () => randomUUID();\n", // invariant-ok: fixture de test — cette ligne EST le défaut attendu.
     });
     expect(sortie).toContain('INV-1a');
     expect(code).toBe(1);
@@ -316,9 +308,8 @@ describe('check-invariants.mjs — invariant 1, génération des UUID', () => {
 describe('check-invariants.mjs — origine externe', () => {
   it('CT-1-CDN-POS refuse un CDN sous un domaine que personne n’a listé', () => {
     const { code, sortie } = lancerInvariants({
-      // invariant-ok: fixture de test — la ligne suivante EST le défaut attendu.
       'apps/hq/index.html':
-        '<script src="https://cdnjs.cloudflare.com/ajax/libs/x/x.js"></script>\n',
+        '<script src="https://cdnjs.cloudflare.com/ajax/libs/x/x.js"></script>\n', // invariant-ok: fixture de test — cette ligne EST le défaut attendu.
     });
     expect(sortie).toContain('CT-1-CDN-POS');
     expect(code).toBe(1);
@@ -326,8 +317,7 @@ describe('check-invariants.mjs — origine externe', () => {
 
   it('CT-1-CDN-POS refuse un import de module distant (`esm.sh`)', () => {
     const { code, sortie } = lancerInvariants({
-      // invariant-ok: fixture de test — la ligne suivante EST le défaut attendu.
-      'apps/hq/src/x.ts': "import { chose } from 'https://esm.sh/chose';\nexport { chose };\n",
+      'apps/hq/src/x.ts': "import { chose } from 'https://esm.sh/chose';\nexport { chose };\n", // invariant-ok: fixture de test — cette ligne EST le défaut attendu.
     });
     expect(sortie).toContain('CT-1-CDN-POS');
     expect(code).toBe(1);
@@ -335,8 +325,7 @@ describe('check-invariants.mjs — origine externe', () => {
 
   it('CT-1-CDN-POS refuse une police chargée par `@import` protocole-relatif', () => {
     const { code, sortie } = lancerInvariants({
-      // invariant-ok: fixture de test — la ligne suivante EST le défaut attendu.
-      'packages/ui/src/polices2.css': "@import url('//exemple-inconnu.test/police.css');\n",
+      'packages/ui/src/polices2.css': "@import url('//exemple-inconnu.test/police.css');\n", // invariant-ok: fixture de test — cette ligne EST le défaut attendu.
     });
     expect(sortie).toContain('CT-1-CDN-POS');
     expect(code).toBe(1);
@@ -429,7 +418,7 @@ describe('check-no-skipped-tests.mjs', () => {
     expect(code).toBe(0);
   });
 
-  it('refuse `test.concurrent.skip(` — une CHAÎNE de modificateurs, pas une forme listée', () => {
+  it('refuse une CHAÎNE de modificateurs terminée par une désactivation, pas une forme listée', () => {
     const { code, sortie } = lancerAntiSkip(
       enveloppe(`${appel('test', 'concurrent', 'skip')}'désactivé', () => {});`),
     );
@@ -438,7 +427,7 @@ describe('check-no-skipped-tests.mjs', () => {
     expect(code).toBe(1);
   });
 
-  it('refuse `it.runIf(false)` — une désactivation CONDITIONNELLE', () => {
+  it('refuse une désactivation CONDITIONNELLE (le modificateur « runIf »)', () => {
     const { code, sortie } = lancerAntiSkip(
       enveloppe(`${appel('it', 'runIf')}false)('jamais exécuté', () => {});`),
     );
@@ -457,7 +446,7 @@ describe('check-no-skipped-tests.mjs', () => {
     expect(code).toBe(1);
   });
 
-  it('refuse la désactivation écrite en OPTION (`{ skip: true }`)', () => {
+  it('refuse la désactivation écrite en OPTION d’objet', () => {
     const { code, sortie } = lancerAntiSkip(
       enveloppe(`it('option', { ${MOT_SKIP}: true }, () => {});`),
     );
