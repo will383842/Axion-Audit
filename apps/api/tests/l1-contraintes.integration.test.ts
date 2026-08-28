@@ -243,6 +243,20 @@ describe('L1 — unicité partielle questions(code, version) WHERE code IS NOT N
 
 describe("L1 — les CHECK d'énumération du fichier 04 sont ACTIVES", () => {
   it('une valeur hors énumération est refusée sur chaque colonne éprouvée', async () => {
+    // Garde de cardinalité. Ce test tire sa couverture d'une LISTE : vidée, la boucle
+    // ne tourne pas, le constat reste vide et le test passe au VERT en n'ayant rien
+    // vérifié. Prouvé par injection le 28/08 — liste mise à zéro, fichier « 10 passed ».
+    // Vitest attrape le fichier qui n'enregistre AUCUN test ; il ne peut rien contre un
+    // test qui s'exécute à vide. La borne est un plancher, pas un gel : la couverture peut croître, jamais se réduire sans le dire.
+    expect(
+      ENUMERATIONS_TESTEES.length,
+      `La liste ENUMERATIONS_TESTEES est tombée sous 6 entrées : ce test perdrait de la
+` +
+        `couverture en silence. Ajouter des cas est souhaitable, en retirer doit être
+` +
+        `un geste conscient — et alors cette borne se met à jour dans le même commit.`,
+    ).toBeGreaterThanOrEqual(6);
+
     const refusManquants: string[] = [];
 
     for (const enumeration of ENUMERATIONS_TESTEES) {

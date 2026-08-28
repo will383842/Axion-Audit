@@ -100,6 +100,20 @@ describe('L1 — index GIN sur les colonnes JSONB de questions (04 §7.1)', () =
     );
     const definitions = resultat.rows.map((l) => l.indexdef);
 
+    // Garde de cardinalité. Ce test tire sa couverture d'une LISTE : vidée, la boucle
+    // ne tourne pas, le constat reste vide et le test passe au VERT en n'ayant rien
+    // vérifié. Prouvé par injection le 28/08 — liste mise à zéro, fichier « 10 passed ».
+    // Vitest attrape le fichier qui n'enregistre AUCUN test ; il ne peut rien contre un
+    // test qui s'exécute à vide. La borne est un plancher, pas un gel : les trois colonnes GIN du 04 §7.1 sont le minimum.
+    expect(
+      COLONNES_GIN_QUESTIONS.length,
+      `La liste COLONNES_GIN_QUESTIONS est tombée sous 3 entrées : ce test perdrait de la
+` +
+        `couverture en silence. Ajouter des cas est souhaitable, en retirer doit être
+` +
+        `un geste conscient — et alors cette borne se met à jour dans le même commit.`,
+    ).toBeGreaterThanOrEqual(3);
+
     const sansGin = COLONNES_GIN_QUESTIONS.filter(
       (colonne) =>
         !definitions.some((d) => /USING\s+gin/i.test(d) && new RegExp(`\\b${colonne}\\b`).test(d)),
@@ -229,6 +243,20 @@ describe("L1 — aucune fabrication SQL d'UUID v7 (11 §2)", () => {
        FROM information_schema.columns
        WHERE table_schema = 'public' AND column_default ILIKE '%gen_random_uuid%'`,
     );
+
+    // Garde de cardinalité. Ce test tire sa couverture d'une LISTE : vidée, la boucle
+    // ne tourne pas, le constat reste vide et le test passe au VERT en n'ayant rien
+    // vérifié. Prouvé par injection le 28/08 — liste mise à zéro, fichier « 10 passed ».
+    // Vitest attrape le fichier qui n'enregistre AUCUN test ; il ne peut rien contre un
+    // test qui s'exécute à vide. La borne est un plancher, pas un gel : les six tables à UUID client (P1-4) sont le minimum.
+    expect(
+      TABLES_UUID_CLIENT.length,
+      `La liste TABLES_UUID_CLIENT est tombée sous 6 entrées : ce test perdrait de la
+` +
+        `couverture en silence. Ajouter des cas est souhaitable, en retirer doit être
+` +
+        `un geste conscient — et alors cette borne se met à jour dans le même commit.`,
+    ).toBeGreaterThanOrEqual(6);
 
     const fautives = colonnes.rows
       .filter((l) => TABLES_UUID_CLIENT.includes(l.table_name))

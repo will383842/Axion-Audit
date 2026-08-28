@@ -270,6 +270,20 @@ describe('L1 — valeurs littérales du seed (11 §5, critère 5)', () => {
 describe('L1 — estimation_params normées (11 §5, 04 §7)', () => {
   it('les trois seuils normés portent leur valeur exacte', async () => {
     if (client === undefined) throw new Error('connexion absente');
+    // Garde de cardinalité. Ce test tire sa couverture d'une LISTE : vidée, la boucle
+    // ne tourne pas, le constat reste vide et le test passe au VERT en n'ayant rien
+    // vérifié. Prouvé par injection le 28/08 — liste mise à zéro, fichier « 10 passed ».
+    // Vitest attrape le fichier qui n'enregistre AUCUN test ; il ne peut rien contre un
+    // test qui s'exécute à vide. La borne est un plancher, pas un gel : les trois seuils normés du 04 §7 sont le minimum.
+    expect(
+      SEUILS_NORMES.length,
+      `La liste SEUILS_NORMES est tombée sous 3 entrées : ce test perdrait de la
+` +
+        `couverture en silence. Ajouter des cas est souhaitable, en retirer doit être
+` +
+        `un geste conscient — et alors cette borne se met à jour dans le même commit.`,
+    ).toBeGreaterThanOrEqual(3);
+
     for (const { cle, valeur } of SEUILS_NORMES) {
       const resultat = await client.query<{ value: string | null }>(
         `SELECT value::text AS value FROM estimation_params WHERE key = $1`,
@@ -299,6 +313,20 @@ describe('L1 — estimation_params normées (11 §5, 04 §7)', () => {
       `SELECT key, value::text AS value FROM estimation_params`,
     );
     const parCle = new Map(resultat.rows.map((l) => [l.key, l.value]));
+
+    // Garde de cardinalité. Ce test tire sa couverture d'une LISTE : vidée, la boucle
+    // ne tourne pas, le constat reste vide et le test passe au VERT en n'ayant rien
+    // vérifié. Prouvé par injection le 28/08 — liste mise à zéro, fichier « 10 passed ».
+    // Vitest attrape le fichier qui n'enregistre AUCUN test ; il ne peut rien contre un
+    // test qui s'exécute à vide. La borne est un plancher, pas un gel : les cinq valeurs citées au contrat 11 §5 sont le minimum.
+    expect(
+      PARAMETRES_PAR_DEFAUT.length,
+      `La liste PARAMETRES_PAR_DEFAUT est tombée sous 5 entrées : ce test perdrait de la
+` +
+        `couverture en silence. Ajouter des cas est souhaitable, en retirer doit être
+` +
+        `un geste conscient — et alors cette borne se met à jour dans le même commit.`,
+    ).toBeGreaterThanOrEqual(5);
 
     const manquants = PARAMETRES_PAR_DEFAUT.filter((p) => !parCle.has(p.cle)).map((p) => p.cle);
     expect(

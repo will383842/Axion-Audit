@@ -62,6 +62,20 @@ afterAll(async () => {
 describe('L1 — migrations up/down (07 §12, critère 1)', () => {
   it('@critique la montée crée les 43 tables du fichier 04 exigées au lot L1 — conformité schéma-vs-04', () => {
     const presentes = new Set(apresMontee1.tables);
+    // Garde de cardinalité. Ce test tire sa couverture d'une LISTE : vidée, la boucle
+    // ne tourne pas, le constat reste vide et le test passe au VERT en n'ayant rien
+    // vérifié. Prouvé par injection le 28/08 — liste mise à zéro, fichier « 10 passed ».
+    // Vitest attrape le fichier qui n'enregistre AUCUN test ; il ne peut rien contre un
+    // test qui s'exécute à vide. La borne est un plancher, pas un gel : les 43 tables exigées au lot L1 sont le minimum.
+    expect(
+      TABLES_ATTENDUES_L1.length,
+      `La liste TABLES_ATTENDUES_L1 est tombée sous 43 entrées : ce test perdrait de la
+` +
+        `couverture en silence. Ajouter des cas est souhaitable, en retirer doit être
+` +
+        `un geste conscient — et alors cette borne se met à jour dans le même commit.`,
+    ).toBeGreaterThanOrEqual(43);
+
     const manquantes = TABLES_ATTENDUES_L1.filter((t) => !presentes.has(t));
 
     expect(

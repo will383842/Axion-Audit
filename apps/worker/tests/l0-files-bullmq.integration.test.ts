@@ -60,6 +60,20 @@ describe('@critique noms de files BullMQ (défaut de production du lot L0)', () 
     const ouvertes: Queue[] = [];
 
     try {
+      // Garde de cardinalité. Ce test tire sa couverture d'une LISTE : vidée, la boucle
+      // ne tourne pas, le constat reste vide et le test passe au VERT en n'ayant rien
+      // vérifié. Prouvé par injection le 28/08 — liste mise à zéro, fichier « 10 passed ».
+      // Vitest attrape le fichier qui n'enregistre AUCUN test ; il ne peut rien contre un
+      // test qui s'exécute à vide. La borne est un plancher, pas un gel : les cinq files déclarées sont le minimum.
+      expect(
+        CLES_DE_FILES.length,
+        `La liste CLES_DE_FILES est tombée sous 5 entrées : ce test perdrait de la
+` +
+          `couverture en silence. Ajouter des cas est souhaitable, en retirer doit être
+` +
+          `un geste conscient — et alors cette borne se met à jour dans le même commit.`,
+      ).toBeGreaterThanOrEqual(5);
+
       for (const cle of CLES_DE_FILES) {
         const nom = NOMS_DE_FILES[cle];
         try {
