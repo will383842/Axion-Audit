@@ -452,3 +452,63 @@ fonctionnel : deux garde-fous d'outillage, dans la lignée directe de `check:jon
 **Ce qui reste NON gardé, écrit plutôt que tu :** la duplication entre `docker-compose.coolify.yml` et
 `docker-compose.yml` se reporte à la main. Un service ajouté à l'un et oublié dans l'autre ne serait
 signalé par rien. C'est la troisième convention d'A11, et elle attend toujours son contrôle.
+
+---
+
+## 2026-08-28 — [L0-b] Étage 1 — La licence OFL-1.1 d'Inter doit partir dans `dist`
+
+**Constat, mesuré.** Nous redistribuons deux fichiers `.woff2` d'Inter dans un build servi
+publiquement. `grep -ril "SIL Open Font\|OFL"` sur `apps/field/dist` et `apps/hq/dist` ne rend
+**rien** : les polices partent sans leur licence. Le texte existe pourtant à côté
+(`node_modules/@fontsource-variable/inter/LICENSE`, 4 477 octets, `"license": "OFL-1.1"`).
+
+**Valeur.** L'OFL-1.1 demande que la licence accompagne les fichiers **redistribués**. Raisonner sur
+ce qui est vrai dans le dépôt ne répond pas à la question, qui porte sur ce qui **quitte** le dépôt.
+
+Et ce qui pèse ici n'est pas le risque juridique, qui est faible : **c'est la cohérence**. Nous
+construisons un outil dont le métier est de vérifier que les obligations d'autrui sont tenues et
+documentées. Un manquement de conformité chez nous, si petit soit-il, est le mauvais exemple.
+
+**Coût estimé :** ~0,1 j. Le texte accompagne les fichiers de police dans le build — fichier servi
+sous un chemin dédié, ou bandeau de commentaire dans le CSS émis. La forme est libre à condition que
+**le texte parte réellement dans `dist`** : une mention qui reste dans le dépôt ne satisfait pas la
+clause. Un test de recette naturel : `grep` de « SIL Open Font » dans chaque `dist`.
+
+**Impact schéma / API :** aucun. **Étage 1** — ne touche ni le schéma 04, ni l'API, ni la crypto, ni
+le périmètre fonctionnel. Arbitré en `DECISIONS.md` le 2026-08-28 (A01, sur signalement d'A21).
+
+---
+
+## 2026-08-28 — [L1] Étage 1 — `seed.mjs --empreinte` dépend de la collation de la base
+
+**Constat, mesuré.** `seed.mjs --empreinte` calcule ses 8 empreintes avec
+`string_agg(t::text, '|' ORDER BY t::text)`. Ce tri suit `datcollate`. Sur **les mêmes six valeurs**,
+deux bases au contenu identique rendent deux chiffres différents :
+
+```
+postgres:16-alpine, locale C   → SERVICE, Service client, _a, elan, service_client, Élan → 70aa736df252…
+image du dépôt,     en_US.utf8 → _a, elan, Élan, SERVICE, service_client, Service client → d9cc81a26715…
+```
+
+**Aujourd'hui c'est inoffensif**, et c'est pourquoi ce n'est pas un correctif urgent : les deux
+mesures de son test `@critique` ont lieu sur **la même base**, donc la propriété qu'il prouve
+(rejouer le seed ne change rien) reste vraie. `apps/api/tests/l1-seed.integration.test.ts` recalcule
+l'empreinte avec la même formule et hérite de la même fragilité, tout aussi inoffensive pour la même
+raison.
+
+**Valeur.** Le piège est **latent et se déclenche précisément là où l'on cherche à prouver quelque
+chose** : le jour où quelqu'un compare l'empreinte d'une base à celle d'une autre — une restauration,
+un environnement neuf, une image de base différente — il obtiendra un écart qui ne veut rien dire, et
+le lira comme une dérive de données. Un instrument de mesure qui fabrique de faux positifs coûte plus
+cher qu'une absence d'instrument.
+
+**Coût estimé :** ~0,2 j. L'outil `apps/api/scripts/empreinte-seed.mjs`, livré le même jour, montre
+déjà la voie : tri **octet par octet en JavaScript** (`Buffer.compare`), hors de toute collation.
+Reste à porter ce tri dans `seed.mjs` et dans le test — et **le test étant `@critique`, il ne peut
+pas être retouché par l'auteur du correctif** (09 §5.6).
+
+**Ce que ça ne corrige pas :** `seed.mjs --empreinte` restera un drapeau d'affichage posé sur le
+seed, qui **écrit avant de mesurer**. Les deux outils répondent à deux questions différentes et
+doivent coexister — c'est écrit dans `apps/api/README.md`.
+
+**Impact schéma / API :** aucun. **Étage 1** — outillage de test uniquement.
