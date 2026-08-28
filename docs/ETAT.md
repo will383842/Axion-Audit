@@ -194,3 +194,45 @@ Registre : fiche du 2026-08-28 dans `AMELIORATIONS.md`, plafond étage 1 du lot 
 Prochaine action : **la porte P-A, par Williams** — rien d'autre ne s'ouvre. En attente de lui, par ordre de blocage : (1) le VPS, seul moyen de cocher la DoD « migrations up/down sur staging » ; (2) l'arbitrage des fiches A-001, A-002 et A-003 ; (3) la validation des 29 `estimation_params`, dont la JUSTESSE lui est réservée (11 §5).
 Tests rouges connus : aucun. `pnpm verify` code 0, code retour vérifié sans masquage.
 Piège de machine, inchangé : ce poste sature (3,3 Go libres sur 15,8 avec Docker). En cas de `0xC0000142`, relancer avec `npm_config_workspace_concurrency=1`, rien d'autre en parallèle.
+
+---
+
+## 2026-08-28 06h20 — [lot L0-b] — déploiement du staging EN COURS sur `axionia-web`
+
+Dernier commit vert : a29ec03 (fix(l0b): cible de volume figée — Coolify refuse toute interpolation dans un volume) · Branche : lot/l0-infra · Poussé : **oui**
+
+### Le déblocage — ce qui a changé depuis le bloc précédent
+
+Le lot L0-b était bloqué faute d'accès serveur. **Il ne l'est plus.** L'accès a été obtenu, et le chemin trouvé n'était pas celui qu'on cherchait : `axionia-web` fait tourner **Coolify v4**, et c'est par son API que le voisin `axion-ia.com` est déployé — jamais par SSH. Williams disait vrai en affirmant « d'habitude tu te connectes tout seul » : ses autres projets tournent **en local sur son poste**, aucun n'a jamais eu de serveur distant. **Axion Audit est le premier.**
+
+Chaîne effectivement en place : jeton d'API Coolify créé (`read`+`write`+`deploy`, expiration 1 an, `root` et `read:sensitive` écartés) · clé SSH posée dans `authorized_keys` par le terminal web de Coolify · secrets GitHub `COOLIFY_API_TOKEN` et `COOLIFY_URL`.
+
+### Ce qui a été livré, par trois agents en parallèle sur des périmètres disjoints
+
+- **A11** — `infra/docker-compose.coolify.yml` : 9 services, **zéro port publié**, 17 variables obligatoires en `${VAR:?}` qui arrêtent le déploiement **en nommant** ce qui manque, plafonds à 4 096 Mio dont 3,4 Go en régime permanent.
+- **A52** — `.github/workflows/deploy-staging.yml` réécrit pour l'API Coolify : il **attend l'issue et échoue si le déploiement échoue**, au lieu de déclencher et rendre la main. Sans `deployment_uuid`, le job échoue au lieu de continuer.
+- **A54** — audit de sécurité en **lecture seule**, verdict `RISQUE SOUS CONDITIONS`, avec trois mesures que personne n'avait faites (voir ci-dessous).
+
+### Les trois mesures d'A54, qui ont changé la conception
+
+1. **L'OOM killer désignerait AUJOURD'HUI `axion-ia.com` comme première victime** — `oom_score` 681, le plus élevé de la machine, `dockerd` étant protégé à −500. Le site de production est déjà premier sur la liste, sans nous. C'est l'argument décisif des plafonds.
+2. **Le swap DOUBLAIT silencieusement chaque plafond** : Docker applique `--memory-swap = 2 × --memory`, et en cgroup v2 `memory.swap.max` **s'ajoute** à `memory.max`. Nos 4 Go annoncés en valaient 8. Corrigé par `memswap_limit` sur les 9 services — `memory.swap.max = 0`, le plafond annoncé est le plafond appliqué.
+3. **La chaîne de sauvegarde du voisin lit ses secrets DEPUIS son conteneur applicatif** — celui qui tomberait. Un incident mémoire ne couperait pas seulement le site, il interromprait aussi ses sauvegardes.
+
+Aucune collision : ni conteneur, ni volume, ni réseau, ni port, ni sous-domaine. Vérifié objet par objet.
+
+### Nouveau garde-fou
+
+`scripts/check-isolation-reseau.mjs` — A54 a mesuré que le réseau du proxy Traefik a **l'ICC activé** : tout conteneur qui le rejoint obtient une route L3 vers la base PostgreSQL et le Redis du voisin. A11 n'y a attaché **que le Caddy**, et a lui-même signalé que cette exigence n'était tenue que par un commentaire. Le contrôle la rend mécanique. **Prouvé par injection dans les deux formes** (`edge: {}` sous `api`, `[axion, edge]` sur `worker`). Câblé dans `verify` et dans la CI.
+
+### Avertissement posé au point d'exécution
+
+`infra/README.md` §3.3 présentait `provision-vps.sh` comme l'étape obligatoire. Un opérateur suivant ce fichier ferait passer SSH du port 22 au 2222 **sur le serveur qui héberge `axion-ia.com`**, activerait un pare-feu inactif et réinstallerait Docker. L'interdiction n'existait que dans un fichier séparé que rien n'obligeait à ouvrir ; elle est désormais **devant la commande**.
+
+### Le premier déploiement a ÉCHOUÉ, et pourquoi
+
+Cause lue dans la base de Coolify, pas devinée : `Invalid volume target: contains forbidden character '${'` (`parsers.php:347`). **Coolify refuse toute interpolation dans une définition de volume** — garde-fou anti-injection, appliqué AVANT le clone, d'où un dossier applicatif vide et un échec muet côté serveur. Une seule ligne en cause, corrigée par `a29ec03`.
+
+Prochaine action : **suivre le 2ᵉ déploiement** (`ylnic2kl7ou5e00cgchrjq4m`), puis exécuter **migrations up/down sur staging** — la dernière ligne de DoD qui manque à la porte P-A — et vérifier par la photographie de référence d'A54 que `axion-ia.com` n'a pas bougé.
+Tests rouges connus : aucun en local.
+Domaine : le premier déploiement vise l'adresse automatique de Coolify (`*.sslip.io`), **pas** `audit-staging.axion-ia.com` — la zone DNS est chez Cloudflare, partagée avec la production, et A01 n'y a pas accès. Le vrai sous-domaine se posera par un simple enregistrement.
