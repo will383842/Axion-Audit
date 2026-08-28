@@ -31,9 +31,15 @@
 #     par l'environnement.
 #  2. MinIO : archive `tar + zstd + gpg AES256` du volume de données, monté en
 #     LECTURE SEULE, puis rotation par nombre.
+#  2bis. COFFRE DES SECRETS : archive `tar + zstd + gpg AES256` de l'ENSEMBLE
+#     `CLÉ=valeur` qui fait vivre la pile, plus le contexte Coolify visible du
+#     conteneur. Sans elle, une restauration rend les DONNÉES et pas les CLÉS
+#     qui les rouvrent : aucun conteneur ne redémarre. Voir l'encadré « LE
+#     COFFRE DES SECRETS » plus bas, et notamment ce qu'il NE contient PAS.
 #  3. EXPÉDITION HORS SERVEUR vers Cloudflare R2 (`mc mirror`) : le dépôt
-#     pgBackRest ET les archives MinIO, tels quels — ils sont DÉJÀ chiffrés au
-#     repos, rien n'est rechiffré et rien de clair ne part.
+#     pgBackRest ET le contenu de `$ARCHIVES` (archives MinIO + coffres de
+#     secrets), tels quels — ils sont DÉJÀ chiffrés au repos, rien n'est
+#     rechiffré et rien de clair ne part.
 #  4. Deux marqueurs distincts (`$ARCHIVES/.derniere-passe` pour la moitié
 #     LOCALE, `$ARCHIVES/.derniere-expedition` pour la moitié HORS SERVEUR), qui
 #     servent au rattrapage au démarrage. Deux marqueurs et non un : une
@@ -140,6 +146,37 @@
 #     copie chez un autre fournisseur. Il n'y en a pas. R2 tombe ou ferme le
 #     compte = il ne reste que le VPS.
 #
+#   · LA DÉFINITION COOLIFY DE L'APPLICATION N'EST SAUVEGARDÉE QU'À MOITIÉ, ET
+#     LA MOITIÉ MANQUANTE EST HORS D'ATTEINTE DE CE CONTENEUR. Ce qui publie la
+#     pile — domaine, port cible de Traefik, dépôt et branche, choix de build —
+#     vit dans la BASE DE COOLIFY, hors de `git`. Le coffre en récupère la part
+#     que le conteneur peut LIRE (l'ensemble `CLÉ=valeur`, qui porte
+#     `COOLIFY_FQDN`, `SERVICE_FQDN_CADDY`, `PUBLIC_BASE_URL`, plus
+#     `COOLIFY_BRANCH`, `COOLIFY_RESOURCE_UUID` et `SOURCE_COMMIT` vus dans son
+#     environnement). Il ne récupère NI le compose RENDU par Coolify
+#     (`/data/coolify/applications/<uuid>/docker-compose.yaml`, qui porte les
+#     étiquettes Traefik donc le PORT CIBLE), NI la liaison au dépôt git.
+#     POURQUOI ON NE VA PAS LES CHERCHER, et ce n'est pas un oubli :
+#       · les atteindre demanderait un montage de `/data/coolify/applications/`
+#         — soit la racine, et le conteneur lirait alors les `.env` DU VOISIN,
+#         soit le sous-répertoire de NOTRE uuid, écrit en dur dans un fichier
+#         versionné. L'uuid change si l'application Coolify est recréée : le
+#         montage désignerait alors une définition PÉRIMÉE et la sauvegarderait
+#         en silence — un garde-fou menteur de plus ;
+#       · `check:compose-coolify` interdit d'ailleurs tout montage qui ne soit
+#         pas un volume nommé, et la convention 3 toute interpolation dans un
+#         chemin de volume. Les deux voies sont donc fermées, l'une par le
+#         jugement, l'autre par l'outil ;
+#       · lire la base de Coolify par le réseau supposerait d'attacher ce
+#         service au réseau `coolify`, qui a l'ICC activé : il obtiendrait une
+#         route directe vers la base et le Redis d'`axion-ia.com` (02 §30.4-4).
+#         C'est exactement ce que `check:isolation-reseau` garde. Non.
+#     CONSÉQUENCE À CONNAÎTRE AVANT D'EN AVOIR BESOIN : depuis le seul stockage
+#     distant, on reconstruit les données, les pièces jointes et toutes les
+#     variables ; il reste à REPOSER À LA MAIN, dans Coolify, le port cible de
+#     Traefik et la liaison au dépôt git. C'est écrit dans le `LISEZ-MOI.txt`
+#     du coffre, à l'endroit exact où quelqu'un le lira.
+#
 #   · IL NE TESTE PAS LA RESTAURATION. Le test de restauration est un geste
 #     distinct, joué à la main (infra/README.md §5.4-5.5) ; l'automatiser suppose
 #     de trancher le nom de projet Compose sous Coolify (README §6.2). Ce script
@@ -205,6 +242,105 @@ ARCHIVES_MAX_MO="${AXION_ARCHIVES_MAX_MO:-20480}"   # plafond du répertoire d'a
 ARCHIVES_MARGE_MO="${AXION_ARCHIVES_MARGE_MO:-2048}" # espace libre exigé avant d'écrire
 
 PASSPHRASE="${BACKUP_ENCRYPTION_PASSPHRASE:-}"
+
+# =============================================================================
+# LE COFFRE DES SECRETS — CE QUI PERMET DE ROUVRIR CE QUE LE RESTE PROTÈGE
+#
+# -----------------------------------------------------------------------------
+# LE MANQUE, EN UNE PHRASE
+# -----------------------------------------------------------------------------
+# La chaîne ci-dessus protège les DONNÉES — la base et les pièces jointes — et
+# RIEN NE PROTÉGEAIT CE QUI PERMET DE LES ROUVRIR. Une restauration parfaite du
+# dépôt pgBackRest et des archives MinIO, sans `PGBACKREST_CIPHER_PASS` ni
+# `BACKUP_ENCRYPTION_PASSPHRASE` ni `DATABASE_URL`, NE FAIT REDÉMARRER AUCUN
+# CONTENEUR : elle rend des octets chiffrés et pas une pile. Le 02 §30.4-2 le
+# demandait déjà en toutes lettres — « sauvegardé CHIFFRÉ (age/gpg) […] sinon un
+# PRA restaure une infra sans ses clés » — et ce n'était pas fait.
+#
+# -----------------------------------------------------------------------------
+# CE QUI EST SAUVEGARDÉ, ET POURQUOI PAS AUTRE CHOSE — TROIS CANDIDATS, DEUX
+# ÉCARTÉS
+# -----------------------------------------------------------------------------
+# 1. RETENU : L'ENSEMBLE `CLÉ=valeur` DE L'APPLICATION. C'est ce qui fait
+#    démarrer la pile, et c'est la seule des trois sources qui soit ENTIÈREMENT
+#    lisible depuis ce conteneur.
+#
+# 2. ÉCARTÉ : LE FICHIER `.env` DE L'HÔTE, à l'octet près. Ce conteneur ne le
+#    voit pas — Coolify ne monte rien (convention 4). Il en reçoit les
+#    VARIABLES, ce qui n'est pas la même chose… sauf qu'ici, MESURÉ, ça l'est
+#    presque exactement. Relevé le 2026-08-28 sur le service en vie :
+#      · `.env` de l'hôte : 3 009 octets, 89 lignes `CLÉ=valeur`,
+#        ZÉRO commentaire, ZÉRO ligne vide, ZÉRO valeur entre guillemets ;
+#      · environnement du conteneur : 107 clés, dont LES 89 du `.env`, avec des
+#        valeurs de longueur identique une à une (89/89) ;
+#      · SHA-256 des lignes `CLÉ=valeur` du fichier, TRIÉES : 81de2b3d56ce8c93…
+#        SHA-256 de la reconstruction faite depuis l'environnement, TRIÉE :
+#        81de2b3d56ce8c93… — ÉGALITÉ À L'OCTET PRÈS.
+#    Ce que la reconstruction PERD est donc, exhaustivement : L'ORDRE DES CLÉS.
+#    Rien d'autre — parce que ce `.env` n'est pas un fichier écrit à la main,
+#    c'est un RENDU que Coolify régénère depuis SA base à chaque déploiement.
+#    Sauvegarder l'ordre d'un rendu n'a aucune valeur de restauration.
+#    ⚠️ CETTE ÉGALITÉ EST UNE MESURE, PAS UNE LOI. Le jour où quelqu'un écrira un
+#    commentaire ou une valeur multiligne dans les variables Coolify, la
+#    reconstruction cessera d'être fidèle — et personne ne le verra. C'est
+#    pourquoi le coffre porte AUSSI l'environnement BRUT et non filtré : si le
+#    filtre se trompe, la source est là pour le corriger.
+#
+# 3. ÉCARTÉ, ET C'EST LE PLUS IMPORTANT : LA BASE DE COOLIFY ENTIÈRE.
+#    Elle ne nous appartient PAS. Cette machine héberge aussi la production
+#    d'un tiers (`axion-ia.com`) : la base de Coolify porte SES applications et
+#    SES secrets. Les expédier dans NOTRE bucket R2 serait une FAUTE, pas une
+#    précaution — nous n'avons ni le droit ni le besoin de détenir les clés du
+#    voisin, et une copie de secours est exactement l'endroit où une donnée
+#    qu'on n'aurait pas dû prendre survit le plus longtemps.
+#    N'EN EXTRAIRE QUE NOTRE PART serait la bonne réponse — elle est HORS
+#    D'ATTEINTE de ce conteneur, et les trois voies sont fermées pour de bonnes
+#    raisons : voir l'encadré « LA DÉFINITION COOLIFY » en tête de fichier.
+#    LA PREUVE QU'ON N'EMPORTE RIEN DU VOISIN EST STRUCTURELLE, pas déclarative :
+#    ce script ne lit QUE l'environnement de son propre processus. Il n'ouvre
+#    aucun fichier de l'hôte, ne joint aucune base, n'a aucun montage vers
+#    `/data/coolify`, et n'est attaché qu'au réseau `axion`. Il n'a pas les
+#    moyens matériels de voir une donnée du voisin — c'est plus fort qu'une
+#    promesse de ne pas la copier.
+#
+# -----------------------------------------------------------------------------
+# LA CLÉ — LA QUESTION QUI REND CE COFFRE DÉLICAT, ET QUI N'EST PAS TRANCHÉE ICI
+# -----------------------------------------------------------------------------
+# La passphrase qui chiffre le coffre est, par construction, DANS le coffre :
+# c'est une variable de la pile comme les autres. Une sauvegarde qu'on ne peut
+# déchiffrer qu'avec ce qu'on a perdu ne protège de rien.
+#
+# CE SCRIPT NE TRANCHE PAS CE POINT — c'est une décision de garde de clé, donc
+# une décision humaine (11 §8-4). Il fait la seule chose honnête à sa place :
+#   · il exige une variable DÉDIÉE, `BACKUP_SECRETS_PASSPHRASE`, et REFUSE de
+#     retomber en silence sur `BACKUP_ENCRYPTION_PASSPHRASE`. Un repli
+#     silencieux aurait donné une chaîne qui a l'air complète et dont la clé de
+#     voûte n'a jamais été décidée par personne ;
+#   · si elle est absente, LE COFFRE N'EST PAS PRODUIT, et le journal le dit en
+#     nommant la variable et la conséquence. Il ne fait pas semblant de
+#     sauvegarder les secrets — même choix que le canal Telegram plus haut ;
+#   · la sauvegarde des DONNÉES continue normalement dans cet état : arrêter
+#     une chaîne qui marche parce qu'une décision manque serait un remède pire
+#     que le mal.
+# La question posée à Williams, et les deux réponses acceptables, sont écrites
+# dans le `LISEZ-MOI.txt` du coffre et au `.env.example`. Tant qu'elle n'est pas
+# tranchée, ce mécanisme est écrit, éprouvé, et INACTIF — et ça se voit.
+#
+# POURQUOI UNE PASSPHRASE DISTINCTE, ET PAS CELLE DES ARCHIVES MinIO. La portée
+# du dommage n'est pas la même. Aujourd'hui, bucket R2 compromis +
+# `BACKUP_ENCRYPTION_PASSPHRASE` fuitée = les données sont lues. Demain, avec un
+# coffre chiffré par la MÊME passphrase, la même fuite donnerait EN PLUS toutes
+# les clés de la pile : jetons JWT, clé Anthropic, mots de passe, licence. Une
+# seule valeur ferait basculer une fuite de données en compromission totale. Ce
+# sont deux niveaux de garde différents, ils méritent deux clés différentes.
+# =============================================================================
+SECRETS_PASSPHRASE="${BACKUP_SECRETS_PASSPHRASE:-}"
+# Longueur minimale exigée. Elle n'existe pas pour juger de la qualité d'un
+# secret — bash ne sait pas faire ça — mais pour attraper le cas réel : le
+# `__CHANGEME__` du `.env.example` recopié tel quel. 20 caractères refusent ce
+# gabarit (12) et acceptent n'importe quel `openssl rand -base64 48`.
+SECRETS_LONGUEUR_MIN=20
+SECRETS_ACTIF='non'
 
 # -----------------------------------------------------------------------------
 # EXPÉDITION HORS SERVEUR — Cloudflare R2, bucket dédié, jeton limité à ce bucket
@@ -635,6 +771,29 @@ evaluer_notification
 # 02h30 du matin dans un journal que personne ne lit.
 # -----------------------------------------------------------------------------
 [ -n "$PASSPHRASE" ] || echouer 'BACKUP_ENCRYPTION_PASSPHRASE est vide : les archives MinIO seraient en clair.'
+
+# ÉTAT DU COFFRE DES SECRETS — décidé au DÉMARRAGE, jamais à 02h30. Cette
+# fonction n'échoue JAMAIS : elle rend le coffre actif, ou elle explique au
+# journal pourquoi il ne l'est pas. Voir l'encadré « LE COFFRE DES SECRETS ».
+evaluer_coffre_secrets() {
+  if [ -z "$SECRETS_PASSPHRASE" ]; then
+    journal "COFFRE DES SECRETS INACTIF — BACKUP_SECRETS_PASSPHRASE n'est pas posée. La sauvegarde des données continue normalement ; CE QUI PERMET DE LES ROUVRIR N'EST PAS SAUVEGARDÉ. Conséquence à connaître d'avance : une restauration depuis le stockage distant rendra la base et les pièces jointes, et AUCUN conteneur ne redémarrera faute de secrets. 02 §30.4-2 n'est pas tenu tant que cette variable n'existe pas. C'est une décision de GARDE DE CLÉ, donc humaine : ce script refuse délibérément de retomber sur BACKUP_ENCRYPTION_PASSPHRASE, qui protège déjà les données et n'a pas la même portée de dommage."
+    return 0
+  fi
+  if [ "${#SECRETS_PASSPHRASE}" -lt "$SECRETS_LONGUEUR_MIN" ]; then
+    journal "COFFRE DES SECRETS INACTIF — BACKUP_SECRETS_PASSPHRASE fait moins de ${SECRETS_LONGUEUR_MIN} caractères : c'est le gabarit __CHANGEME__ recopié, pas une passphrase. Valeur volontairement non affichée. Une configuration à moitié posée est traitée comme une absence."
+    return 0
+  fi
+  if [ "$SECRETS_PASSPHRASE" = "$PASSPHRASE" ]; then
+    # On ne REFUSE pas : Williams peut avoir tranché ainsi en connaissance de
+    # cause, et c'est son arbitrage. On le DIT, parce qu'une valeur recopiée par
+    # commodité et une valeur choisie ne se distinguent pas autrement.
+    journal 'COFFRE DES SECRETS ACTIF, mais BACKUP_SECRETS_PASSPHRASE est ÉGALE à BACKUP_ENCRYPTION_PASSPHRASE. Une seule fuite donnerait alors les données ET toutes les clés de la pile. Si ce n est pas un arbitrage assumé, c est un défaut à corriger.'
+  fi
+  SECRETS_ACTIF='oui'
+  journal 'coffre des secrets ACTIF — un coffre chiffré par passe, aux côtés des archives MinIO, avec la même rétention.'
+}
+evaluer_coffre_secrets
 # ⚠️ `[0-2][0-9]` ACCEPTAIT 20:00 À 29:59, ET LA CONSÉQUENCE ÉTAIT UNE MACHINE
 # QUI BRÛLE. Mesuré le 2026-08-28 avec `AXION_SAUVEGARDE_HEURE=25:00` :
 #     sauvegarde: === passe terminée avec succès (locale ET hors serveur) ===
@@ -823,30 +982,327 @@ archiver_minio() {
 }
 
 # -----------------------------------------------------------------------------
+# COFFRE DES SECRETS — même tube, même vérification, même rotation que MinIO.
+#
+# LA SOURCE EST L'ENVIRONNEMENT DE CE PROCESSUS, ET RIEN D'AUTRE. C'est ce qui
+# rend la propriété « on n'emporte rien du voisin » STRUCTURELLE : aucun fichier
+# de l'hôte n'est ouvert, aucune base n'est jointe, aucun montage ne pointe vers
+# `/data/coolify`. Le raisonnement complet, les mesures et les deux candidats
+# écartés sont dans l'encadré « LE COFFRE DES SECRETS » en tête de fichier.
+#
+# LE NOM DU FICHIER EST DÉLIBÉRÉMENT DIFFÉRENT (`.coffre.gpg` et non
+# `.tar.zst.gpg`), pour deux raisons qui vont dans le même sens :
+#   · à 3 h du matin, dans un `ls`, on doit distinguer d'un coup d'œil une
+#     archive de DONNÉES d'un coffre de CLÉS — ils n'ont ni la même passphrase,
+#     ni la même conséquence en cas de fuite ;
+#   · la rotation des archives MinIO travaille sur un motif : deux séries qui
+#     partagent une extension finiraient par se compter l'une l'autre, et la
+#     rétention effacerait la mauvaise. Le format, lui, est bien
+#     `tar | zstd | gpg AES256` — il est écrit dans le `LISEZ-MOI.txt` du coffre
+#     ET dans la commande de restauration qu'il contient.
+# -----------------------------------------------------------------------------
+MOTIF_MINIO='^minio-[0-9]{8}T[0-9]{6}Z\.tar\.zst\.gpg$'
+MOTIF_COFFRE='^secrets-[0-9]{8}T[0-9]{6}Z\.coffre\.gpg$'
+
+# Une clé de l'environnement est-elle une variable APPLICATIVE (donc à restaurer)
+# ou du décor d'exécution (donc à ne pas réinjecter dans un `.env`) ?
+#
+# C'EST UNE LISTE DE REFUS, PAS UNE LISTE D'AUTORISATION, et le choix se paie
+# dans un sens précis qu'il faut connaître : une variable applicative NOUVELLE
+# est gardée d'office (bien), tandis qu'une variable d'exécution nouvelle
+# passerait à travers (moins bien). L'inverse — une liste d'autorisation — aurait
+# le défaut le plus cher des deux : elle vieillirait en silence et le coffre
+# perdrait des clés sans que personne ne le voie. Une clé de trop dans un `.env`
+# restauré est un désagrément ; une clé manquante est une pile qui ne démarre pas.
+# Et le coffre porte de toute façon l'environnement BRUT, qui tranche le doute.
+#
+# LES 18 CLÉS D'EXÉCUTION ONT ÉTÉ RELEVÉES, PAS DEVINÉES (2026-08-28, `docker
+# exec env` sur le service en vie, comparé au `.env` de l'hôte) : COOLIFY_BRANCH,
+# COOLIFY_CONTAINER_NAME, COOLIFY_RESOURCE_UUID, GOSU_VERSION, HOME, HOSTNAME,
+# LANG, PATH, PGBACKREST_PG1_DATABASE, PGBACKREST_PG1_USER,
+# PGBACKREST_REPO1_CIPHER_PASS, PGBACKREST_REPO1_PATH,
+# PGBACKREST_REPO1_RETENTION_FULL, PGBACKREST_REPO1_RETENTION_FULL_TYPE, PGDATA,
+# PG_MAJOR, PG_VERSION, PWD. Les `PGBACKREST_REPO1_*` et `PGBACKREST_PG1_*` sont
+# posées par le compose (donc dans `git`) et DÉRIVENT de `PGBACKREST_*` du `.env`,
+# qui sont gardées : on ne perd rien. Les trois `COOLIFY_*` sont gardées ailleurs,
+# dans `contexte-coolify.txt`, parce qu'elles décrivent l'application et non son
+# environnement d'exécution — mais elles n'ont rien à faire dans un `.env`.
+#
+# `MC_HOST_*` EST REFUSÉE PAR DÉFENSE EN PROFONDEUR : le coffre est fabriqué
+# AVANT `preparer_mc`, donc cette variable n'existe pas encore. Si l'ordre des
+# appels changeait un jour, l'URL qui porte les identifiants R2 en clair se
+# retrouverait dans un `.env` restauré. Une propriété qui ne tient que par
+# l'ordre des lignes ne tient pas.
+cle_applicative() {
+  case "$1" in
+    PATH | HOME | HOSTNAME | PWD | OLDPWD | SHLVL | TERM | SHELL | USER | LOGNAME | MAIL | \
+      LANG | LANGUAGE | LC_* | IFS | _) return 1 ;;
+    GOSU_VERSION | PG_MAJOR | PG_VERSION | PGDATA) return 1 ;;
+    PGBACKREST_REPO1_* | PGBACKREST_PG1_*) return 1 ;;
+    COOLIFY_BRANCH | COOLIFY_CONTAINER_NAME | COOLIFY_RESOURCE_UUID) return 1 ;;
+    MC_HOST_* | MC_CONFIG_DIR) return 1 ;;
+    BASH_FUNC_* | BASH* | FUNCNAME | GROUPS | DIRSTACK | EUID | UID | PPID | RANDOM | SECONDS | \
+      LINENO | MACHTYPE | HOSTTYPE | OSTYPE | COLUMNS | LINES | OPTIND | OPTERR | PS[0-9] | \
+      HISTFILE* | HISTSIZE | HISTCONTROL) return 1 ;;
+  esac
+  return 0
+}
+
+# Rotation par RANG d'une série de `$ARCHIVES`. Le nombre conservé sort par une
+# variable et NON par la sortie standard : cette fonction journalise, et un
+# `$( … )` autour d'elle avalerait ses messages en même temps que son résultat.
+ROTATION_CONSERVEES=0
+faire_tourner_par_rang() {
+  local motif="$1" gardees="$2" rang=0 supprimes=0 f
+  # Les noms sont produits par ce script seul, sans espace ni caractère exotique :
+  # le tri de `ls` est sûr ici, et l'horodatage se trie lexicographiquement comme
+  # chronologiquement.
+  for f in $(ls -1 "$ARCHIVES" 2>/dev/null | grep -E "$motif" | sort -r); do
+    rang=$((rang + 1))
+    if [ "$rang" -gt "$gardees" ]; then
+      journal "rotation : suppression de $f (au-delà des $gardees gardées)"
+      rm -f "$ARCHIVES/$f" "$ARCHIVES/$f.sha256"
+      supprimes=$((supprimes + 1))
+    fi
+  done
+  ROTATION_CONSERVEES=$((rang - supprimes))
+}
+
+archiver_secrets() {
+  local horodatage cible partiel travail arbre empreinte_source empreinte_relue
+  local paire cle nombre=0 octets=0
+
+  if [ "$SECRETS_ACTIF" != 'oui' ]; then
+    journal 'coffre des secrets NON produit (inactif) — voir le message du démarrage. La sauvegarde des données, elle, est faite.'
+    return 0
+  fi
+
+  horodatage="$(date -u +%Y%m%dT%H%M%SZ)"
+  cible="$ARCHIVES/secrets-$horodatage.coffre.gpg"
+  partiel="$cible.partiel"
+
+  travail="$(mktemp -d)"
+  # shellcheck disable=SC2064  # $travail doit être développé MAINTENANT, pas au piège
+  trap "rm -rf '$travail'" EXIT
+  arbre="$travail/coffre"
+  mkdir -p "$arbre"
+  ( umask 077; printf %s "$SECRETS_PASSPHRASE" > "$travail/pp" )
+
+  journal "secrets : coffre chiffré de l'environnement applicatif → $(basename "$cible")"
+
+  # ------------------------------------------------------------------------
+  # 1. L'ENSEMBLE `CLÉ=valeur`. Trié — l'ordre du rendu Coolify n'a aucune
+  #    valeur de restauration, et un ordre stable rend deux coffres
+  #    comparables par leur empreinte.
+  #    AUCUNE VALEUR NE PASSE PAR UNE LIGNE DE COMMANDE : `printf` est une
+  #    primitive de bash, `sha256sum` ne reçoit que son entrée standard, et
+  #    `/proc/<pid>/cmdline` ne verra jamais autre chose que `env`, `sort` et
+  #    `sha256sum` tout court.
+  # ------------------------------------------------------------------------
+  while IFS= read -r -d '' paire; do
+    # Une entrée sans `=` ou dont la clé est vide n'est pas une variable.
+    case "$paire" in *=*) : ;; *) continue ;; esac
+    cle="${paire%%=*}"
+    [ -n "$cle" ] || continue
+    if cle_applicative "$cle"; then
+      printf '%s\n' "$paire" >> "$travail/brut-applicatif"
+      nombre=$((nombre + 1))
+      octets=$((octets + ${#paire} + 1))
+    fi
+    printf '%s\n' "$paire" >> "$arbre/environnement-conteneur.brut"
+  done < <(env -0)
+
+  [ "$nombre" -gt 0 ] || echouer \
+    "aucune variable applicative trouvée dans l'environnement du service : le coffre serait vide. C'est le signe que ce conteneur ne reçoit plus le \`.env\` de l'application — un coffre vide expédié chaque nuit serait un garde-fou menteur."
+
+  sort "$travail/brut-applicatif" > "$arbre/application.env"
+
+  # ------------------------------------------------------------------------
+  # 2. LE MANIFESTE — vérifier PAR LE NOM ET PAR LA FORME, jamais par la
+  #    valeur. Il vit DANS le coffre (donc chiffré) et permet, après une
+  #    restauration, de contrôler qu'un `.env` reposé à la main correspond
+  #    bien à celui qui a été sauvegardé, sans jamais afficher un secret.
+  # ------------------------------------------------------------------------
+  {
+    printf '# Manifeste du coffre — NOM, LONGUEUR, EMPREINTE. Aucune valeur.\n'
+    printf '# Contrôle : printf %%s "$VALEUR" | sha256sum | cut -c1-16\n'
+    while IFS= read -r paire; do
+      cle="${paire%%=*}"
+      printf '%-40s %6d  %s\n' "$cle" "$((${#paire} - ${#cle} - 1))" \
+        "$(printf '%s' "${paire#*=}" | sha256sum | cut -c1-16)"
+    done < "$arbre/application.env"
+  } > "$arbre/manifeste.txt"
+
+  # ------------------------------------------------------------------------
+  # 3. LE CONTEXTE COOLIFY — la part de la DÉFINITION de l'application que ce
+  #    conteneur peut lire. Elle ne doit PAS repartir dans un `.env` (c'est
+  #    Coolify qui la pose), d'où un fichier à part.
+  # ------------------------------------------------------------------------
+  {
+    printf 'Contexte de la pile au moment du coffre — %s\n\n' "$(date -u '+%Y-%m-%d %H:%M:%SZ')"
+    printf 'application Coolify (uuid) : %s\n' "${COOLIFY_RESOURCE_UUID:-inconnu}"
+    printf 'branche déployée           : %s\n' "${COOLIFY_BRANCH:-inconnue}"
+    printf 'commit source              : %s\n' "${SOURCE_COMMIT:-inconnu}"
+    printf 'conteneur                  : %s\n' "${COOLIFY_CONTAINER_NAME:-inconnu}"
+    printf 'domaine Coolify            : %s\n' "${COOLIFY_FQDN:-inconnu}"
+    printf 'domaine du service Caddy   : %s\n' "${SERVICE_FQDN_CADDY:-inconnu}"
+    printf 'URL publique déclarée      : %s\n' "${PUBLIC_BASE_URL:-inconnue}"
+    printf '\nstanza pgBackRest          : %s\n' "$STANZA"
+    printf 'dépôt pgBackRest (chemin)  : %s\n' "$DEPOT"
+    printf 'répertoire des archives    : %s\n' "$ARCHIVES"
+    printf 'bucket / préfixe R2        : %s / %s\n' "$R2_BUCKET" "$R2_PREFIXE"
+  } > "$arbre/contexte-coolify.txt"
+
+  # ------------------------------------------------------------------------
+  # 4. LE LISEZ-MOI — le vrai livrable du scénario « je n'ai plus que le
+  #    stockage distant ». Il est écrit ICI, dans le coffre, et pas seulement
+  #    dans un runbook : le jour où l'on ouvre ce fichier, le dépôt git peut
+  #    très bien être la chose qu'on a perdue.
+  # ------------------------------------------------------------------------
+  cat > "$arbre/LISEZ-MOI.txt" <<'FIN_LISEZMOI'
+COFFRE DES SECRETS — AXION AUDIT
+================================
+
+CE QUE VOUS TENEZ
+-----------------
+L'ensemble CLÉ=valeur qui fait démarrer la pile, tel que le service de
+sauvegarde le voyait au moment indiqué dans `contexte-coolify.txt`.
+
+  application.env               les variables applicatives, triées, une par
+                                ligne, au format CLÉ=valeur.
+  environnement-conteneur.brut  l'environnement COMPLET et NON FILTRÉ du
+                                service de sauvegarde. Il porte, en plus, le
+                                décor d'exécution (PATH, PGDATA, variables
+                                posées par le compose). Il est là pour trancher
+                                si le filtre s'est trompé.
+  manifeste.txt                 pour chaque clé : longueur et empreinte de la
+                                valeur. Sert à vérifier un `.env` reposé à la
+                                main SANS afficher un seul secret.
+  contexte-coolify.txt          uuid de l'application, branche, commit,
+                                domaines, stanza, bucket.
+
+COMMENT L'OUVRIR
+----------------
+  gpg --decrypt --batch --pinentry-mode loopback \
+      --passphrase-file <fichier-contenant-la-passphrase> \
+      secrets-<horodatage>.coffre.gpg | zstd -d | tar -xv
+
+La passphrase est BACKUP_SECRETS_PASSPHRASE. Elle N'EST PAS dans ce coffre de
+façon utile : elle y figure comme toutes les autres variables, mais il faut
+déjà la détenir pour lire le fichier. Elle vit HORS DE LA MACHINE, chez
+Williams. Si vous ne l'avez pas, ce fichier ne vaut rien — c'est voulu.
+
+CE QUE CE COFFRE NE CONTIENT PAS, ET QU'IL FAUDRA REPOSER À LA MAIN
+-------------------------------------------------------------------
+Ce coffre rend les VARIABLES. Il ne rend pas la DÉFINITION Coolify de
+l'application, qui vit dans la base de Coolify — laquelle porte aussi les
+applications d'un tiers et n'est donc PAS sauvegardée ici (ce serait emporter
+les secrets de quelqu'un d'autre).
+
+Manquent donc, et il faut les reposer dans l'interface Coolify :
+  1. le PORT CIBLE du routeur Traefik. Notre Caddy écoute sur 8080 ; sans ce
+     réglage Traefik choisit le premier port exposé et rend un 504 ;
+  2. la LIAISON AU DÉPÔT GIT (URL du dépôt, branche, clé de déploiement).
+     La branche et le commit sont dans `contexte-coolify.txt` ;
+  3. le domaine, s'il ne correspond plus à celui de `contexte-coolify.txt`.
+
+Tout le reste — la composition de la pile, les images, les volumes, les
+réseaux, les sondes — vit dans `git`, dans `infra/docker-compose.coolify.yml`.
+
+ORDRE DE RESTAURATION DEPUIS LE SEUL STOCKAGE DISTANT
+------------------------------------------------------
+  1. ouvrir ce coffre (ci-dessus) ;
+  2. recréer l'application dans Coolify : dépôt git + branche, puis coller le
+     contenu d'`application.env` dans les variables d'environnement, puis
+     reposer les trois points manquants ci-dessus ;
+  3. déployer une fois — la pile démarre vide ;
+  4. restaurer PostgreSQL depuis le dépôt pgBackRest récupéré du stockage
+     distant (procédure `infra/README.md` §5.4) : elle exige
+     PGBACKREST_CIPHER_PASS, qui est dans `application.env` ;
+  5. restaurer MinIO depuis la dernière archive `minio-*.tar.zst.gpg` : elle
+     exige BACKUP_ENCRYPTION_PASSPHRASE, qui est dans `application.env` ;
+  6. vérifier avec `manifeste.txt` que rien n'a été recopié de travers.
+
+L'ordre compte : sans l'étape 1, les étapes 4 et 5 sont impossibles. C'est
+exactement la raison d'être de ce fichier.
+FIN_LISEZMOI
+
+  # ------------------------------------------------------------------------
+  # 5. LE MÊME TUBE QUE `archiver_minio`, ET LA MÊME VÉRIFICATION DE BOUT EN
+  #    BOUT. `set -o pipefail` porte ici la même propriété : un `tar` qui
+  #    échoue ne doit pas produire un `gpg` parfaitement valide d'un contenu
+  #    tronqué.
+  # ------------------------------------------------------------------------
+  # L'ARBRE EST FIGÉ — nous venons de l'écrire, rien d'autre n'y touche. Il est
+  # donc `tar`é UNE fois vers un fichier, dont l'empreinte est prise. C'est la
+  # DIFFÉRENCE avec `archiver_minio`, et elle est délibérée : là-bas la source
+  # est un volume VIVANT dont les horodatages bougent, ce qui impose de prendre
+  # l'empreinte AU VOL sur le flux lu (`tee >(sha256sum)`). Ici, prendre
+  # l'empreinte au vol n'apporterait rien et introduirait la course connue de ce
+  # motif — bash n'attend pas une substitution de processus.
+  tar -C "$arbre" -cf "$travail/coffre.tar" .
+  empreinte_source="$(sha256sum "$travail/coffre.tar" | cut -d' ' -f1)"
+  zstd -3 -q -c "$travail/coffre.tar" \
+    | gpg --batch --quiet --symmetric --cipher-algo AES256 \
+      --passphrase-file "$travail/pp" --pinentry-mode loopback \
+      -o "$partiel"
+
+  empreinte_relue="$(gpg --batch --quiet --decrypt --passphrase-file "$travail/pp" \
+    --pinentry-mode loopback "$partiel" \
+    | zstd -d -q | sha256sum | cut -d' ' -f1)"
+  if [ "$empreinte_source" != "$empreinte_relue" ]; then
+    rm -f "$partiel"
+    echouer "le coffre des secrets ne se relit pas à l'identique (source $empreinte_source, relu $empreinte_relue)."
+  fi
+
+  # ⚠️ L'ARBRE EN CLAIR EST EFFACÉ TOUT DE SUITE, ET C'EST LE POINT LE PLUS
+  # SENSIBLE DE CETTE FONCTION. `mktemp -d` écrit dans /tmp, c'est-à-dire sur
+  # le disque du conteneur : pendant quelques dizaines de millisecondes, TOUS
+  # les secrets de la pile existent en clair sur un système de fichiers. Le
+  # `umask 077` du script les rend illisibles aux autres utilisateurs, le
+  # `trap` garantit l'effacement sur TOUS les chemins de sortie — y compris
+  # les mauvais — mais on ne laisse pas cette fenêtre ouverte une seconde de
+  # plus que nécessaire. C'est la contrepartie assumée du choix de `tar` :
+  # `tar` lit des fichiers, il ne lit pas une variable de shell.
+  rm -rf "$arbre" "$travail/coffre.tar"
+
+  mv "$partiel" "$cible"
+  ( cd "$ARCHIVES" && sha256sum "$(basename "$cible")" > "$(basename "$cible").sha256" )
+  # LE JOURNAL DIT LE NOMBRE, LA TAILLE ET UNE EMPREINTE — JAMAIS UNE VALEUR.
+  # L'empreinte publiée est celle de l'ARBRE EN CLAIR : c'est un condensat
+  # SHA-256 de 3 ko de données à forte entropie, il n'est pas inversible, et
+  # c'est le seul moyen de comparer DEPUIS L'EXTÉRIEUR ce qui a été sauvegardé
+  # à ce que la pile porte aujourd'hui.
+  journal "secrets : coffre vérifié ($(du -h "$cible" | cut -f1)) — ${nombre} variables applicatives, ${octets} octets en clair, empreinte de l'arbre ${empreinte_source:0:16}…"
+
+  rm -rf "$travail"
+  trap - EXIT
+}
+
+faire_tourner_secrets() {
+  faire_tourner_par_rang "$MOTIF_COFFRE" "$MINIO_ARCHIVES_GARDEES"
+  journal "coffres de secrets : ${ROTATION_CONSERVEES} fichier(s) conservé(s) sur les $MINIO_ARCHIVES_GARDEES gardés."
+}
+
+# -----------------------------------------------------------------------------
 # Rotation des archives MinIO — par NOMBRE, jamais par date de fichier.
 # Une règle « plus vieux que N jours » se fie à un horodatage de système de
 # fichiers, qu'une copie, une restauration ou un `touch` déplacent. Le rang, lui,
 # ne ment pas : on garde les N plus récentes, point.
 # -----------------------------------------------------------------------------
 faire_tourner_minio() {
-  local total garde=0
-  # Les noms sont produits par ce script seul : `minio-<horodatage>.tar.zst.gpg`.
-  # Aucun espace, aucun caractère exotique — le tri de `ls` est donc sûr ici, et
-  # l'horodatage est trié lexicographiquement comme chronologiquement.
-  local f
-  for f in $(ls -1 "$ARCHIVES" 2>/dev/null | grep -E '^minio-[0-9]{8}T[0-9]{6}Z\.tar\.zst\.gpg$' | sort -r); do
-    garde=$((garde + 1))
-    if [ "$garde" -gt "$MINIO_ARCHIVES_GARDEES" ]; then
-      journal "rotation : suppression de $f (au-delà des $MINIO_ARCHIVES_GARDEES gardées)"
-      rm -f "$ARCHIVES/$f" "$ARCHIVES/$f.sha256"
-    fi
-  done
+  local total
+  # La boucle de rang vit dans `faire_tourner_par_rang` : elle sert AUSSI aux
+  # coffres de secrets, et deux copies d'une règle de rétention finiraient par
+  # diverger — c'est-à-dire par garder trop d'un côté et effacer trop de l'autre.
+  faire_tourner_par_rang "$MOTIF_MINIO" "$MINIO_ARCHIVES_GARDEES"
   # Les `.partiel` d'une passe interrompue ne sont pas des archives : ils ne
-  # doivent ni compter dans la rétention, ni s'accumuler.
+  # doivent ni compter dans la rétention, ni s'accumuler. Le nettoyage vaut pour
+  # les deux séries — le motif ne regarde que l'extension.
   find "$ARCHIVES" -maxdepth 1 -name '*.partiel' -mmin +120 -delete
 
   total="$(du -sm "$ARCHIVES" | cut -f1)"
-  journal "archives MinIO : $((garde < MINIO_ARCHIVES_GARDEES ? garde : MINIO_ARCHIVES_GARDEES)) fichier(s), ${total} Mo au total"
+  journal "archives MinIO : ${ROTATION_CONSERVEES} fichier(s), ${total} Mo au total (répertoire d'archives entier, coffres de secrets compris)"
   # ICI, LE PLAFOND N'EST PLUS UN ÉCHEC : IL EST UN AVERTISSEMENT, ET C'EST LE
   # CŒUR DU CORRECTIF. La passe qui vient d'avoir lieu est faite et vérifiée ;
   # la faire échouer à ce stade ferait perdre un marqueur de sauvegarde
@@ -938,9 +1394,20 @@ faire_tourner_minio() {
 #     compris `backup.info`, `archive.info` et les manifestes ; un `grep -r`
 #     binaire sur `axion_audit`, `postgres` et `BEGIN` à travers tout le dépôt ne
 #     rend AUCUN fichier ;
-#   · les ARCHIVES MinIO ($ARCHIVES) — `*.tar.zst.gpg`, chiffrées GPG AES256 par
-#     `archiver_minio` ci-dessus, accompagnées de leur `.sha256` (l'empreinte du
-#     CHIFFRÉ : un condensat, pas une donnée).
+#   · LE RÉPERTOIRE D'ARCHIVES ($ARCHIVES) — deux séries, chiffrées GPG AES256,
+#     chacune accompagnée de son `.sha256` (l'empreinte du CHIFFRÉ : un
+#     condensat, pas une donnée) :
+#       – `minio-*.tar.zst.gpg`   les pièces jointes, par `archiver_minio` ;
+#       – `secrets-*.coffre.gpg`  les clés qui rouvrent tout le reste, par
+#         `archiver_secrets`, sous une passphrase DIFFÉRENTE.
+#     ⚠️ LES DEUX PARTENT SOUS LE PRÉFIXE DISTANT `<env>/minio/`, ce qui est un
+#     nom devenu trompeur : il désigne le RÉPERTOIRE D'ARCHIVES, pas seulement
+#     MinIO. Il est gardé tel quel DÉLIBÉRÉMENT — renommer un préfixe sur une
+#     destination vivante n'y renomme rien : `mc mirror` recopierait tout sous le
+#     nouveau nom et les objets de l'ancien resteraient là, orphelins, facturés,
+#     et indiscernables d'une sauvegarde valide. Le changer est une MIGRATION
+#     (recopie, vérification, suppression de l'ancien préfixe), pas une
+#     correction de nom, et elle se décide à froid.
 #
 # ON NE RECHIFFRE RIEN. Rechiffrer ce qui l'est aurait trois défauts : du CPU
 # pour rien, une seconde passphrase à faire tourner et à perdre, et surtout la
@@ -1029,7 +1496,7 @@ mcx() {
 # -----------------------------------------------------------------------------
 depot_local_sain() {
   pgbackrest --stanza="$STANZA" info 2>/dev/null | grep -q 'status: ok' || return 1
-  ls -1 "$ARCHIVES" 2>/dev/null | grep -qE '^minio-[0-9]{8}T[0-9]{6}Z\.tar\.zst\.gpg$' || return 1
+  ls -1 "$ARCHIVES" 2>/dev/null | grep -qE "$MOTIF_MINIO" || return 1
   return 0
 }
 
@@ -1104,7 +1571,18 @@ expedier_r2() {
       "$(sha256sum "$DEPOT/backup/$STANZA/backup.info" | cut -d' ' -f1)"
 
     derniere="$(ls -1 "$ARCHIVES" 2>/dev/null \
-      | grep -E '^minio-[0-9]{8}T[0-9]{6}Z\.tar\.zst\.gpg$' | sort -r | head -1 || true)"
+      | grep -E "$MOTIF_MINIO" | sort -r | head -1 || true)"
+    if [ -n "$derniere" ]; then
+      empreinte_locale="$(sha256sum "$ARCHIVES/$derniere" | cut -d' ' -f1)"
+      relire_depuis_r2 "${base}/minio/${derniere}" "$empreinte_locale"
+    fi
+
+    # LE COFFRE DES SECRETS EST RELU LUI AUSSI, ET C'EST LE PLUS IMPORTANT DES
+    # TROIS. Sans lui, les deux objets relus ci-dessus ne se rouvrent pas : on
+    # aurait prouvé la conformité de ce qu'on ne peut pas déchiffrer. « La
+    # sauvegarde est faite » ne prouve rien ; ce qui prouve, c'est l'aller-retour.
+    derniere="$(ls -1 "$ARCHIVES" 2>/dev/null \
+      | grep -E "$MOTIF_COFFRE" | sort -r | head -1 || true)"
     if [ -n "$derniere" ]; then
       empreinte_locale="$(sha256sum "$ARCHIVES/$derniere" | cut -d' ' -f1)"
       relire_depuis_r2 "${base}/minio/${derniere}" "$empreinte_locale"
@@ -1160,7 +1638,15 @@ passe() {
   journal "=== passe du $(date -u '+%Y-%m-%d %H:%M:%SZ') ==="
   sauvegarder_postgres
   archiver_minio
+  # LE COFFRE EST FABRIQUÉ AVANT `expedier_r2`, ET CE N'EST PAS UN DÉTAIL
+  # D'ORDONNANCEMENT : `preparer_mc` exporte `MC_HOST_<alias>`, qui porte les
+  # identifiants R2 dans une URL. Les capturer dans un coffre reviendrait à
+  # écrire un secret sous un nom que personne n'attend là. La liste de refus de
+  # `cle_applicative` le rattrape aussi — deux gardes valent mieux qu'une pour
+  # une propriété qui dépend de l'ordre des lignes.
+  archiver_secrets
   faire_tourner_minio
+  faire_tourner_secrets
   date -u +%s > "$ARCHIVES/.derniere-passe"
   journal '=== moitié LOCALE terminée avec succès — reste à sortir de la machine ==='
   expedier_r2

@@ -793,6 +793,60 @@ services:
       # démarrer : une archive de pièces jointes d'audit en clair sur un disque
       # partagé ne se rattrape pas après coup.
       BACKUP_ENCRYPTION_PASSPHRASE: ${BACKUP_ENCRYPTION_PASSPHRASE:?variable obligatoire, passphrase des archives chiffrees}
+      # ┌───────────────────────────────────────────────────────────────────┐
+      # │ COFFRE DES SECRETS — LA CHAÎNE PROTÉGEAIT LES DONNÉES, ET RIEN   │
+      # │ NE PROTÉGEAIT CE QUI PERMET DE LES ROUVRIR.                       │
+      # │                                                                   │
+      # │ Une restauration parfaite du dépôt pgBackRest et des archives     │
+      # │ MinIO, sans les secrets, NE FAIT REDÉMARRER AUCUN CONTENEUR : le  │
+      # │ dépôt ne se déchiffre pas sans PGBACKREST_CIPHER_PASS, les        │
+      # │ archives pas sans BACKUP_ENCRYPTION_PASSPHRASE, l'API ne démarre  │
+      # │ pas sans DATABASE_URL. 02 §30.4-2 le demandait déjà en toutes     │
+      # │ lettres — « sauvegardé CHIFFRÉ (age/gpg) […] sinon un PRA         │
+      # │ restaure une infra sans ses clés » — et ce n'était pas fait.      │
+      # │                                                                   │
+      # │ CE QUE LE SERVICE SAUVEGARDE : l'ensemble CLÉ=valeur qu'il voit   │
+      # │ dans SON PROPRE environnement. Coolify injecte le `.env` entier   │
+      # │ de l'application dans tous les conteneurs (mesuré, voir l'encadré │
+      # │ R2 ci-dessous) : les 89 clés du `.env` du staging y figurent, et  │
+      # │ la reconstruction triée est identique À L'OCTET PRÈS à l'ensemble │
+      # │ CLÉ=valeur du fichier de l'hôte (SHA-256 81de2b3d…, relevé le     │
+      # │ 2026-08-28). Ce qui manque à la copie est l'ORDRE des clés, et    │
+      # │ rien d'autre — ce `.env` est un RENDU que Coolify régénère depuis │
+      # │ SA base, pas un fichier écrit à la main.                          │
+      # │                                                                   │
+      # │ CE QU'IL NE SAUVEGARDE PAS, ET POURQUOI C'EST DÉLIBÉRÉ : la base  │
+      # │ de Coolify. Elle porte AUSSI les applications et les secrets d'un │
+      # │ tiers (`axion-ia.com` vit sur cette machine). Les expédier dans   │
+      # │ NOTRE bucket serait une faute, pas une précaution. Le service n'a │
+      # │ d'ailleurs pas les moyens de les lire : aucun montage vers        │
+      # │ `/data/coolify`, aucun accès au réseau `coolify`. Conséquence à   │
+      # │ connaître : le PORT CIBLE de Traefik et la liaison au dépôt git   │
+      # │ restent à reposer À LA MAIN après un sinistre. C'est écrit dans   │
+      # │ le `LISEZ-MOI.txt` que le coffre contient.                        │
+      # │                                                                   │
+      # │ `:-` ET NON `:?`, COMME TELEGRAM ET NON COMME R2 — arbitrage.     │
+      # │ Sans destination R2 le service ne peut pas faire son travail : il │
+      # │ doit bloquer le déploiement. Sans cette passphrase, il fait tout  │
+      # │ son travail sur les DONNÉES ; il ne fait pas le coffre, et il     │
+      # │ l'écrit au journal en nommant la variable et la conséquence.      │
+      # │ Arrêter une chaîne qui marche parce qu'une décision humaine       │
+      # │ manque serait un remède pire que le mal.                          │
+      # │                                                                   │
+      # │ ⚠️ VARIABLE DÉDIÉE, ET AUCUN REPLI SILENCIEUX SUR                 │
+      # │ BACKUP_ENCRYPTION_PASSPHRASE. La portée du dommage n'est pas la   │
+      # │ même : bucket compromis + passphrase des archives = les données   │
+      # │ sont lues ; la même fuite sur un coffre chiffré par la MÊME       │
+      # │ valeur donnerait EN PLUS toutes les clés de la pile. Deux niveaux │
+      # │ de garde, deux clés. D'OÙ VIENT CELLE-CI ET OÙ ELLE VIT EST UNE   │
+      # │ DÉCISION DE GARDE DE CLÉ (11 §8-4) : elle appartient à Williams,  │
+      # │ elle est ESCALADÉE, et tant qu'elle n'est pas tranchée ce coffre  │
+      # │ est écrit, éprouvé et INACTIF — ce qui se voit dans le journal.   │
+      # │                                                                   │
+      # │ AUCUNE VALEUR ICI (02 §30.4-1/5) : le script la vérifie par sa    │
+      # │ présence et par sa longueur, jamais par son contenu.              │
+      # └───────────────────────────────────────────────────────────────────┘
+      BACKUP_SECRETS_PASSPHRASE: ${BACKUP_SECRETS_PASSPHRASE:-}
       # RÉTENTION MinIO alignée sur celle de PostgreSQL, et ce n'est pas
       # cosmétique : une restauration PostgreSQL de J-25 désignerait des pièces
       # jointes qu'aucune archive MinIO ne contiendrait plus si MinIO était gardé
