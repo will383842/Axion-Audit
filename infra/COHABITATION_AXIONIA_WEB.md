@@ -405,7 +405,40 @@ de Williams.
 > `APP_PORT`, `axion-ia.com` 301, `audit-staging` 200, console 302. **`axion-ia.com` n'a jamais été
 > interrompu**, vérifié pendant la panne.
 >
-> ### ✅ LA VOIE QUI TIENT — le pare-feu Cloud de Hetzner
+> ### ✅ LA VOIE QUI TIENT — le pare-feu Cloud de Hetzner · **POSÉ ET VÉRIFIÉ LE 2026-08-28**
+>
+> **⚠️ SI LA CONSOLE COOLIFY NE RÉPOND PLUS, LE SERVEUR N'EST PAS TOMBÉ — C'EST CECI.** Lisez cette
+> section avant de diagnostiquer quoi que ce soit ; elle a été écrite pour vous épargner vingt
+> minutes de panique.
+>
+> **Mesure de contrôle, 2026-08-28 après application :**
+>
+> | Cible                                                   | Résultat                               |
+> | ------------------------------------------------------- | -------------------------------------- |
+> | `https://axion-ia.com`                                  | **301 en 0,66 s** — production intacte |
+> | staging, port 80                                        | **404 en 0,28 s** — Caddy répond       |
+> | console `:8000` · realtime `:6001` · Plausible `:32769` | **timeout à 12 s**                     |
+>
+> **Le mot qui fait le diagnostic est « timeout », pas « connexion refusée ».** Un service arrêté
+> répond `ECONNREFUSED` instantanément ; un paquet jeté en silence ne revient jamais. Trois ports
+> muets pendant que 22, 80 et 443 vivent : c'est un filtrage réseau, et c'est celui qu'on voulait.
+>
+> **Comment revenir sur le tableau de bord :**
+>
+> ```
+> ssh -L 8000:localhost:8000 -L 6001:localhost:6001 -L 6002:localhost:6002 axionia-web
+> ```
+>
+> puis `http://localhost:8000`. **Les redirections 6001 et 6002 ne sont pas facultatives** : elles
+> portent le temps réel. Sans elles la console s'affiche mais ses états ne se rafraîchissent plus —
+> et on croit à un bug de Coolify.
+>
+> **Depuis un SECOND poste** : le pare-feu bloque tout le monde, et le tunnel exige la clé privée qui
+> vit sur le poste de développement. Deux voies : générer une **seconde** clé propre à ce poste et
+> ajouter sa partie publique aux `authorized_keys` du serveur, ou ouvrir `8000/tcp` à l'IP de ce
+> poste seul (`x.x.x.x/32`) dans la règle Hetzner. **Ne recopiez pas la clé privée d'une machine à
+> l'autre** : une clé qui se déplace est une clé qui se perd, et on ne peut plus en révoquer une sans
+> révoquer l'autre.
 >
 > Il s'applique **au réseau, en amont de la machine**. Il ignore donc complètement le problème
 > DNAT/`DOCKER-USER` décrit plus haut, **ne peut pas être défait par une mise à jour de Coolify**, et

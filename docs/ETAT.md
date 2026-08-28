@@ -881,3 +881,45 @@ amont de la machine**, donc il ignore le problème DNAT/`DOCKER-USER`, **aucune 
 ne peut le défaire**, et il ne touche pas au réseau Docker. Entrant : `22/tcp`, `80/tcp`, `443/tcp`
 **et `443/udp`** (HTTP/3 — l'oublier dégrade le site sans le casser, donc sans qu'on le voie). 8000,
 6001, 6002 et 32769 tombent ensemble. **Reste hors du périmètre du lot Audit.**
+
+---
+
+## 2026-08-28 21h05 — [lot L0-b] — le pare-feu Hetzner est POSÉ : la console n'est plus joignable qu'en tunnel
+Dernier commit vert : 28d27ef (docs(l0b): retire une seconde recommandation fausse — celle-ci avait cassé la console)   ·   Branche : lot/l0-infra   ·   Poussé : oui
+Tâche en cours : traçage du changement d'accès, pour qu'une session neuve ne diagnostique pas une panne.
+Prochaine action : **rejouer la porte P-A sur le commit courant** — le verdict d'A02 porte sur `1c56759`, la branche est une dizaine de commits plus loin.
+Tests rouges connus : aucun.
+
+⚠️ **SI LA CONSOLE COOLIFY NE RÉPOND PLUS, LE SERVEUR N'EST PAS TOMBÉ.** Le pare-feu Cloud Hetzner a
+été appliqué le 2026-08-28. C'est la correction du risque n° 1 (console d'administration exposée en
+HTTP clair sur Internet), et **c'est la seule des trois voies proposées ce soir qui tienne** : elle
+agit au réseau, en amont de la machine, donc ni le DNAT de Docker ni la mise à jour nocturne de
+Coolify ne peuvent la défaire.
+
+**Mesure de contrôle après application :**
+
+| Cible | Résultat |
+| --- | --- |
+| `https://axion-ia.com` | **301 en 0,66 s** — production du voisin intacte |
+| staging, port 80 | **404 en 0,28 s** — Caddy répond |
+| console `:8000` · realtime `:6001` · Plausible `:32769` | **timeout à 12 s** |
+
+**Le mot qui fait le diagnostic est « timeout », pas « connexion refusée ».** Un service arrêté répond
+`ECONNREFUSED` instantanément ; un paquet jeté en silence ne revient jamais. Trois ports muets
+pendant que 22, 80 et 443 vivent : c'est un filtrage réseau, et c'est celui qu'on voulait.
+
+**Accès au tableau de bord, désormais :**
+
+```
+ssh -L 8000:localhost:8000 -L 6001:localhost:6001 -L 6002:localhost:6002 axionia-web
+```
+
+puis `http://localhost:8000`. **Les redirections 6001 et 6002 ne sont pas facultatives** — elles
+portent le temps réel ; sans elles la console s'affiche mais ne se rafraîchit plus, et on croit à un
+bug. Le détail complet, dont l'accès depuis un second poste, est en
+`infra/COHABITATION_AXIONIA_WEB.md` §5quater.
+
+**CONSÉQUENCE IMMÉDIATE SUR LA PORTE :** le critère L0 n° 3 (contrôle nominatif des 12 familles de
+secrets §30.3) se joue dans le **terminal Coolify** — il faut donc ouvrir le tunnel d'abord. La
+commande de relevé est masquée par construction : elle rend `POSÉE (n car.)` / `VIDE` / `GABARIT` /
+`ABSENTE`, **jamais une valeur**, et sa sortie est publiable telle quelle dans le dossier de porte.
