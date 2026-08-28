@@ -248,7 +248,17 @@ services:
       PGBACKREST_PG1_DATABASE: ${POSTGRES_DB:-axion_audit}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - pgbackrest_repo:${PGBACKREST_REPO_PATH:-/var/lib/pgbackrest}
+      # CIBLE LITTÉRALE, PAS INTERPOLÉE — ET CE N'EST PAS UN OUBLI.
+      # Coolify REFUSE toute définition de volume contenant `${` : son analyseur
+      # (`parsers.php:347`) y voit une substitution shell et rejette le
+      # déploiement entier avec « Invalid volume target: contains forbidden
+      # character '${' ». C'est exactement ce qui a fait échouer le premier
+      # déploiement (wzigah3ummdyv47uukgop9lt, 2026-08-28 04h14).
+      # `PGBACKREST_REPO_PATH` reste fournie au PROCESSUS ci-dessus — pgBackRest
+      # en a besoin pour trouver son dépôt — mais le point de montage, lui, est
+      # figé. Si l'on change l'un, il faut changer l'autre : ils ne sont plus liés
+      # par le fichier, et rien ne le vérifie.
+      - pgbackrest_repo:/var/lib/pgbackrest
       - ./postgres/postgresql.custom.conf:/etc/postgresql/postgresql.custom.conf:ro
       - ./pgbackrest/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
     # AUCUNE clé `ports:` — voir l'en-tête. La base n'est joignable que par le
