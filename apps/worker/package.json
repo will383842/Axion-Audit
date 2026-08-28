@@ -17,6 +17,7 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@testcontainers/redis": "12.1.0",
     "@types/node": "22.20.1"
   }
 }

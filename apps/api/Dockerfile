@@ -97,6 +97,27 @@ COPY --from=build --chown=node:node /paquet/node_modules ./node_modules
 COPY --from=build --chown=node:node /paquet/dist ./dist
 COPY --from=build --chown=node:node /paquet/package.json ./package.json
 
+# LES MIGRATIONS VOYAGENT AVEC L'IMAGE QUI PORTE LE SCHÉMA.
+#
+# Sans ces deux copies, le `package.json` de l'image DÉCLARE `db:migrate` →
+# `node scripts/migrations.mjs` ET NE CONTIENT PAS LE FICHIER. Le déploiement
+# échouait donc sur `Cannot find module '/app/scripts/migrations.mjs'` — et
+# `infra/scripts/deploy.sh` fait EXACTEMENT cet appel à son étape 2/5
+# (`axion_compose run --rm --no-deps api pnpm db:migrate`). Cette étape n'aurait
+# jamais pu fonctionner, ni en staging ni en production ; le défaut dormait
+# depuis le lot L0 et n'a été révélé qu'au premier déploiement réel.
+#
+# Un `package.json` qui annonce une commande que l'image ne peut pas exécuter est
+# un mensonge d'image. On copie donc ce qu'il promet :
+#   · `scripts/` — migrations.mjs, seed.mjs et leurs dépendances locales ;
+#   · `drizzle/` — le SQL versionné lui-même, sans quoi migrations.mjs n'a rien
+#     à appliquer ;
+#   · `schema-manifest.json` — la référence du diff schéma-vs-04, pour pouvoir
+#     contrôler un schéma déployé sans rapatrier le dépôt.
+COPY --from=build --chown=node:node /app/apps/api/scripts ./scripts
+COPY --from=build --chown=node:node /app/apps/api/drizzle ./drizzle
+COPY --from=build --chown=node:node /app/apps/api/schema-manifest.json ./schema-manifest.json
+
 USER node
 EXPOSE 3000
 
