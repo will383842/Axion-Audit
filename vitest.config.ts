@@ -18,7 +18,15 @@ export default defineConfig({
       {
         test: {
           name: 'unit',
-          include: ['packages/*/src/**/*.test.ts', 'apps/*/src/**/*.test.ts'],
+          // `scripts/` : les garde-fous de CI sont du code livré comme un autre, et
+          // 09 §5.6 exige qu'ils soient testés par quelqu'un d'autre que leur auteur.
+          // Sans ce motif, leurs tests seraient ORPHELINS — verts en permanence sans
+          // jamais s'exécuter, ce que `check:test-projects` refuse à juste titre.
+          include: [
+            'packages/*/src/**/*.test.ts',
+            'apps/*/src/**/*.test.ts',
+            'scripts/**/*.test.ts',
+          ],
           exclude: ['**/node_modules/**', '**/dist/**', '**/*.integration.test.ts'],
           environment: 'node',
           // Un test unitaire lent est un test d'intégration qui s'ignore.

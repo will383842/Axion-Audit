@@ -65,9 +65,10 @@
 // CE QUE CE CONTRÔLE NE GARDE PAS — LIMITES ASSUMÉES, À LIRE AVANT DE S'Y FIER
 // -----------------------------------------------------------------------------
 //   · Il ne lit QUE `infra/docker-compose.coolify.yml`. Un réseau attaché depuis
-//     l'interface de Coolify, un `docker network connect` passé à la main sur le
-//     serveur, un `include:`/`extends:` lui sont INVISIBLES. L'isolation réelle
-//     se vérifie sur la machine :
+//     l'interface de Coolify ou un `docker network connect` passé à la main sur le
+//     serveur lui sont INVISIBLES. (`include:` et `extends:` l'étaient aussi : ils
+//     sont désormais REFUSÉS plutôt qu'ignorés — ce fichier est autoportant.)
+//     L'isolation réelle se vérifie sur la machine :
 //       docker network inspect coolify --format '{{range .Containers}}{{.Name}}
 //       {{end}}'
 //   · Le critère b) REFUSE une écriture légitime : renommer le réseau interne
@@ -81,18 +82,29 @@
 //   · Le lecteur YAML embarqué plus bas est un SOUS-ENSEMBLE écrit à la main :
 //     11 §1 fige la liste des dépendances et aucun analyseur YAML n'y figure.
 //     Il sait : indentation, séquences (tiret indenté ou aligné), collections en
-//     flux sur une ou plusieurs lignes, guillemets, commentaires de fin de ligne,
-//     scalaires de bloc (`|`, `>`), ancres, alias et fusion `<<:`.
-//     Il NE sait PAS : documents multiples (`---`), balises (`!!str`), clés entre
-//     guillemets, clés complexes (`? :`), alias vers une ancre définie dans un
-//     service. Une écriture qu'il ne sait pas lire est IGNORÉE, pas signalée —
-//     c'est pourquoi il AFFICHE ce qu'il a inspecté : un compte qui s'effondre
-//     est le symptôme à surveiller.
-//   · Ce lecteur est DUPLIQUÉ dans `scripts/check-compose-coolify.mjs`. La
-//     duplication est assumée : factoriser créerait un troisième fichier, et ces
-//     deux garde-fous doivent pouvoir être lus et exécutés seuls.
+//     flux sur une ou plusieurs lignes (y compris un SERVICE ENTIER écrit en
+//     mapping de flux), guillemets, CLÉS ENTRE GUILLEMETS, commentaires de fin de
+//     ligne, scalaires de bloc (`|`, `>`), ancres, alias — vers les enfants comme
+//     vers la VALEUR de l'ancre, où qu'elle soit définie — et fusion `<<:`.
+//     Il NE sait PAS : documents multiples (`---`), balises (`!!str`), clés
+//     complexes (`? :`), scalaires simples multi-lignes.
+//     Ce qu'il ne sait pas lire n'est PLUS ignoré : il REFUSE le fichier (voir
+//     `refuserSiIllisible`). Et son comptage de services est confronté à un
+//     comptage indépendant des clés de `services:` (`refuserSiComptageDivergent`)
+//     — l'ancienne version se contentait d'AFFICHER un compte qui s'effondre.
+//   · Ce lecteur est DUPLIQUÉ dans `scripts/check-compose-coolify.mjs` — à
+//     l'octet près. La duplication est assumée : factoriser créerait un troisième
+//     fichier, et ces deux garde-fous doivent pouvoir être lus et exécutés seuls.
+//     Toute correction de l'un se reporte dans l'autre DANS LE MÊME COMMIT.
+//   · TROU CONNU ET NON FERMÉ : une clé de service indentée PLUS PROFOND que ses
+//     sœurs (`worker:` sous `image:`) devient une sous-clé du service précédent.
+//     Les deux comptages s'accordent alors sur la même erreur et le service passe
+//     inaperçu. C'est un fichier que `docker compose config` REJETTE (propriété
+//     inconnue) — la validation compose reste donc nécessaire, ce script ne la
+//     remplace pas.
 //
-// Traçabilité : invariant 3 (étanchéité) · 02 §30.4-4 · DECISIONS.md 2026-08-28.
+// Traçabilité : invariant 3 (étanchéité) · 02 §30.4-4 · DECISIONS.md 2026-08-28 ·
+// revue croisée A17 du 2026-08-28 (3 contournements mesurés, point 21bis fermé).
 // =============================================================================
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -201,8 +213,134 @@ function rattacher(pile, noeud, estSequence) {
   pile.push(noeud);
 }
 
+// -----------------------------------------------------------------------------
+// UNE CLÉ PEUT ÊTRE ENTRE GUILLEMETS — et l'ignorer était un CONTOURNEMENT.
+// `"networks":` et `'volumes':` sont des clés parfaitement légales, acceptées par
+// `docker compose config`. Le motif précédent (`[^:\s'"[\]{}][^:]*?`) refusait
+// toute clé commençant par un guillemet : la ligne devenait un scalaire anonyme,
+// le bloc indenté dessous s'y accrochait, et le service perdait sa clé. Il était
+// alors réputé « sans réseau » (donc sain) ou « sans volume » (donc sain) — SANS
+// QU'AUCUN COMPTEUR NE BOUGE. Mesuré le 2026-08-28, revue croisée A17.
+// -----------------------------------------------------------------------------
+const CLE_ET_VALEUR =
+  /^(?:"((?:[^"\\]|\\.)*)"|'((?:[^']|'')*)'|([^:\s'"[\]{}][^:]*?))\s*:(?:\s+(.*))?$/;
+
+/** Clé décodée d'une correspondance de `CLE_ET_VALEUR` (guillemets rendus). */
+function decoderCle(m) {
+  if (m[1] !== undefined) return m[1].replace(/\\(.)/g, '$1');
+  if (m[2] !== undefined) return m[2].replaceAll("''", "'");
+  return (m[3] ?? '').trim();
+}
+
+/**
+ * Développe un mapping écrit EN FLUX en nœuds enfants.
+ *
+ * `api: {image: axion/api, networks: [edge]}` est un service complet sur une
+ * ligne. Sans cette expansion, `enfant(service, …)` ne voyait RIEN sous la clé :
+ * le service comptait pour un service, mais aucune de ses clés n'était inspectée
+ * — un contournement invisible aux compteurs. Mesuré le 2026-08-28 (A17).
+ */
+function etendreFlux(noeud) {
+  const paires = pairesFlux(noeud.valeur);
+  if (!paires) return;
+  noeud.valeur = '';
+  for (const [cle, valeur] of paires) {
+    const fils = creerNoeud(
+      'mapping',
+      cle,
+      valeur,
+      noeud.indent + 2,
+      noeud.ligne,
+      `${cle}: ${valeur}`,
+    );
+    extraireAncre(fils);
+    etendreFlux(fils);
+    noeud.enfants.push(fils);
+  }
+}
+
+/**
+ * Toutes les clés d'une section de premier niveau, comptées PAR UNE AUTRE MÉTHODE
+ * que l'arbre : lecture directe des lignes logiques.
+ *
+ * POURQUOI UN SECOND COMPTAGE. L'en-tête de ces deux garde-fous désignait « un
+ * compte qui s'effondre » comme LE symptôme à surveiller — puis se contentait de
+ * l'AFFICHER. Un contrôle qui imprime son propre symptôme de panne et sort en 0
+ * n'est pas un contrôle. Deux méthodes qui divergent font désormais ÉCHOUER le
+ * script : c'est ce contre-comptage qui attrape la réindentation qui escamote un
+ * service. Point 21bis du gardien A02, fermé par A17 le 2026-08-28.
+ */
+function clesDeSection(logiques, section) {
+  const enTete = new RegExp(`^(?:"${section}"|'${section}'|${section})\\s*:\\s*$`);
+  const iSection = logiques.findIndex((l) => enTete.test(l.texte));
+  if (iSection < 0) return null;
+  const cles = new Set();
+  let indentFils = null;
+  for (let i = iSection + 1; i < logiques.length; i += 1) {
+    const t = logiques[i].texte;
+    const ind = t.length - t.trimStart().length;
+    if (ind === 0) break;
+    indentFils ??= ind;
+    if (ind < indentFils) break;
+    if (ind !== indentFils || t.trimStart().startsWith('-')) continue;
+    const m = CLE_ET_VALEUR.exec(t.trim());
+    if (m) cles.add(decoderCle(m));
+  }
+  return cles;
+}
+
+/**
+ * Deux pathologies de structure que ce lecteur ne peut pas arbitrer, et qu'il
+ * refuse donc plutôt que de deviner :
+ *
+ *   · DEUX CLÉS SŒURS À DES INDENTATIONS DIFFÉRENTES. YAML l'interdit, mais ce
+ *     lecteur, lui, rattacherait silencieusement la seconde au mauvais parent :
+ *     un service entier devient une sous-clé de son voisin et disparaît du
+ *     contrôle. C'est LA forme du symptôme « le compteur passe de 10 à 9 ».
+ *   · UNE CLÉ DÉCLARÉE DEUX FOIS SOUS LE MÊME PARENT. `enfant()` rend la
+ *     PREMIÈRE ; les analyseurs YAML gardent la DERNIÈRE. Un second
+ *     `networks:` ou `volumes:` sous le même service serait donc inspecté par
+ *     ce script et IGNORÉ par lui, pendant que Docker fait l'inverse.
+ */
+function verifierStructure(noeud, anomalies) {
+  const soeurs = noeud.enfants.filter((e) => e.type === 'mapping');
+  const reference = soeurs[0]?.indent;
+  const vues = new Set();
+  for (const s of soeurs) {
+    if (s.indent !== reference) {
+      anomalies.push({
+        ligne: s.ligne,
+        texte: s.brut,
+        motif:
+          `clé « ${s.cle} » indentée à ${String(s.indent)} colonne(s) quand ses sœurs le sont ` +
+          `à ${String(reference)} : ce lecteur la rattacherait au mauvais parent`,
+      });
+    }
+    if (s.cle !== '<<') {
+      if (vues.has(s.cle)) {
+        anomalies.push({
+          ligne: s.ligne,
+          texte: s.brut,
+          motif:
+            `clé « ${s.cle} » déclarée deux fois sous le même parent : ce lecteur retient la ` +
+            `PREMIÈRE, un analyseur YAML retient la DERNIÈRE`,
+        });
+      }
+      vues.add(s.cle);
+    }
+  }
+  for (const e of noeud.enfants) verifierStructure(e, anomalies);
+}
+
+/**
+ * Rend `{ racine, anomalies, logiques }`.
+ * Chaque entrée d'`anomalies` est une ligne que le lecteur n'a pas su interpréter
+ * ou une indentation incohérente. Les deux scripts en font une PANNE — voir
+ * `refuserSiIllisible()`.
+ */
 function analyserYaml(texte) {
   const brutes = texte.split('\n');
+  const anomalies = [];
 
   // 1. Neutraliser le CONTENU des scalaires de bloc (`|`, `>`) : ce n'est pas du
   //    YAML, c'est du texte — le script `createbuckets` en est plein.
@@ -241,7 +379,7 @@ function analyserYaml(texte) {
   // 3. Arbre par indentation.
   const racine = creerNoeud('racine', null, '', -1, 0, '');
   const pile = [racine];
-  for (const l of logiques) {
+  for (const [k, l] of logiques.entries()) {
     let indent = l.texte.length - l.texte.trimStart().length;
     let reste = l.texte.trim();
     let dernierItem = null;
@@ -257,27 +395,61 @@ function analyserYaml(texte) {
     }
     if (reste === '') continue;
 
-    const mm = /^([^:\s'"[\]{}][^:]*?)\s*:(?:\s+(.*))?$/.exec(reste);
+    const mm = CLE_ET_VALEUR.exec(reste);
     if (mm) {
       const noeud = creerNoeud(
         'mapping',
-        mm[1].trim(),
-        (mm[2] ?? '').trim(),
+        decoderCle(mm),
+        (mm[4] ?? '').trim(),
         indent,
         l.ligne,
         reste,
       );
       extraireAncre(noeud);
+      etendreFlux(noeud);
       rattacher(pile, noeud, false);
     } else if (dernierItem) {
       dernierItem.valeur = reste;
       extraireAncre(dernierItem);
+      etendreFlux(dernierItem);
     } else {
-      const noeud = creerNoeud('scalaire', null, reste, indent, l.ligne, reste);
-      rattacher(pile, noeud, false);
+      // VALEUR ÉCRITE SOUS SA CLÉ — écriture parfaitement légale et employée par
+      // le fichier réel (`command:` puis, à la ligne, `[ 'sh', '-c', … ]`) :
+      //
+      //     command:
+      //       [ 'sh', '-c', 'exec redis-server …' ]
+      //
+      // La ligne n'est ni une clé ni un élément de séquence : c'est LA VALEUR de
+      // la clé ouverte juste au-dessus. On la lui rend.
+      const sommet = pile[pile.length - 1];
+      const suivante = logiques[k + 1];
+      const indentSuivante =
+        suivante === undefined ? -1 : suivante.texte.length - suivante.texte.trimStart().length;
+      if (
+        sommet.type === 'mapping' &&
+        sommet.valeur === '' &&
+        sommet.enfants.length === 0 &&
+        sommet.indent < indent &&
+        indentSuivante <= indent
+      ) {
+        sommet.valeur = reste;
+        extraireAncre(sommet);
+        etendreFlux(sommet);
+        continue;
+      }
+      // Sinon le lecteur ne sait pas ce qu'est cette ligne (`---`, `!!tag`,
+      // `? clé`, suite d'un scalaire simple multi-lignes, valeur suivie d'un bloc
+      // indenté…). AVANT, il en faisait un nœud anonyme et poursuivait : TOUT ce
+      // qui était indenté dessous disparaissait du contrôle en silence. Une ligne
+      // non interprétée est désormais une PANNE.
+      anomalies.push({ ligne: l.ligne, texte: reste, motif: 'ligne non interprétée' });
+      rattacher(pile, creerNoeud('scalaire', null, reste, indent, l.ligne, reste), false);
     }
   }
-  return racine;
+
+  verifierStructure(racine, anomalies);
+  anomalies.sort((a, b) => a.ligne - b.ligne);
+  return { racine, anomalies, logiques };
 }
 
 /** Registre des ancres, tous niveaux confondus. */
@@ -291,7 +463,7 @@ function collecterAncres(noeud, registre = new Map()) {
 
 /**
  * Enfants d'un nœud, fusion `<<:` et alias direct (`cle: *ancre`) RÉSOLUS.
- * Sans cela, un `networks:` glissé dans une ancre partagée serait invisible.
+ * Sans cela, un `networks:` ou un `volumes:` glissé dans une ancre serait invisible.
  */
 function enfantsEffectifs(noeud, ancres, vus = new Set()) {
   if (!noeud) return [];
@@ -314,6 +486,33 @@ function enfantsEffectifs(noeud, ancres, vus = new Set()) {
     sortie.push(...enfantsEffectifs(ancres.get(alias[1]), ancres, new Set([...vus, alias[1]])));
   }
   return sortie;
+}
+
+/**
+ * Valeur d'un nœud, ALIAS RÉSOLU.
+ *
+ * `enfantsEffectifs` suivait déjà un alias vers les ENFANTS de l'ancre ; il ne
+ * suivait pas sa VALEUR. Or une ancre porte souvent une collection en flux :
+ *
+ *     x-reseaux: &reseaux [axion, edge]
+ *     services:
+ *       api:
+ *         networks: *reseaux
+ *
+ * L'ancre n'a alors aucun enfant — sa liste vit dans sa valeur — et le service
+ * ressortait avec ZÉRO réseau, donc sain. Mesuré le 2026-08-28 (A17) ; même trou
+ * pour `volumes: *ancre`. La position de l'ancre (premier niveau ou dans un
+ * service) n'a jamais eu d'importance : `collecterAncres` est récursif, contrairement
+ * à ce qu'affirmaient les en-têtes des deux scripts.
+ */
+function valeurEffective(noeud, ancres, vus = new Set()) {
+  const v = (noeud?.valeur ?? '').trim();
+  const m = /^\*([^\s[\]{},]+)$/.exec(v);
+  if (!m) return v;
+  const cle = m[1];
+  const cible = ancres.get(cle);
+  if (!cible || vus.has(cle)) return v;
+  return valeurEffective(cible, ancres, new Set([...vus, cle]));
 }
 
 function enfant(noeud, ancres, cle) {
@@ -376,11 +575,112 @@ function pairesFlux(valeur) {
 }
 
 // =============================================================================
+// LES DEUX REFUS QUI FONT DE CE LECTEUR UN CONTRÔLE ET NON UN AFFICHEUR
+// =============================================================================
+
+/** Le lecteur a-t-il su lire ce fichier ? Sinon on n'a RIEN inspecté, et on le dit. */
+function refuserSiIllisible(anomalies, fichier, libelle, ROUGE, RAZ) {
+  if (anomalies.length === 0) return;
+  console.error(
+    `${ROUGE}✗ ${libelle} — ${String(anomalies.length)} anomalie(s) : le lecteur YAML ` +
+      `ne sait pas lire ce fichier de façon sûre, donc il ne l'a PAS inspecté.${RAZ}\n`,
+  );
+  for (const a of anomalies) {
+    console.error(`  ${fichier}:${String(a.ligne)}  ${a.motif}\n    ${a.texte}\n`);
+  }
+  console.error(
+    `  Ce lecteur est un SOUS-ENSEMBLE de YAML écrit à la main (11 §1 fige les\n` +
+      `  dépendances : aucun analyseur YAML n'y figure). Ce qu'il ne savait pas lire, il\n` +
+      `  l'IGNORAIT — et tout ce qui était indenté dessous disparaissait du contrôle sans\n` +
+      `  un mot. Il refuse désormais le fichier : un garde-fou qui n'a pas lu ne rend pas\n` +
+      `  EXIT=0.\n` +
+      `  Formes concernées : documents multiples (\`---\`), balises (\`!!str\`), clés\n` +
+      `  complexes (\`? :\`), suite d'un scalaire simple multi-lignes (mets-le entre\n` +
+      `  guillemets ou en bloc \`|\`), indentation incohérente entre clés sœurs.\n`,
+  );
+  process.exit(1);
+}
+
+/**
+ * `include:` et `extends:` font venir de la définition depuis UN AUTRE FICHIER.
+ *
+ * Les deux garde-fous ne lisent que `infra/docker-compose.coolify.yml` : ce qui
+ * arrive par une de ces deux portes leur est INVISIBLE. Un `extends:` suffisait
+ * donc à faire rejoindre le réseau du voisin à n'importe quel service, ou à
+ * monter n'importe quel fichier du dépôt, sans qu'aucun des deux ne bronche
+ * (mesuré le 2026-08-28, A17).
+ *
+ * Ce fichier est AUTOPORTANT par construction — Coolify ne prend qu'un seul
+ * chemin de compose et n'applique aucune surcharge. Les deux clés y sont donc
+ * refusées : ce n'est pas une limite, c'est une règle.
+ */
+function refuserSiCompositionExterne(racine, services, ancres, fichier, libelle, ROUGE, RAZ) {
+  const coupables = [];
+  const inclusion = enfant(racine, ancres, 'include');
+  if (inclusion) {
+    coupables.push({ ligne: inclusion.ligne, quoi: '`include:` de premier niveau' });
+  }
+  for (const s of services) {
+    const ext = enfant(s, ancres, 'extends');
+    if (ext) coupables.push({ ligne: ext.ligne, quoi: `\`extends:\` du service « ${s.cle} »` });
+  }
+  if (coupables.length === 0) return;
+  console.error(`${ROUGE}✗ ${libelle} — définition importée d'un autre fichier.${RAZ}\n`);
+  for (const c of coupables) console.error(`  ${fichier}:${String(c.ligne)}  ${c.quoi}`);
+  console.error(
+    `\n  Ce contrôle ne lit QUE ${fichier} : réseaux, montages et chemins apportés par\n` +
+      `  une de ces clés lui sont invisibles, et il se déclarerait vert sans les avoir vus.\n` +
+      `  Or Coolify ne prend qu'UN SEUL chemin de compose et n'applique AUCUNE surcharge :\n` +
+      `  ce fichier est autoportant par construction. Recopie ici ce dont tu as besoin.\n`,
+  );
+  process.exit(1);
+}
+
+/**
+ * Les services lus dans l'arbre correspondent-ils, UN À UN, aux clés comptées
+ * directement sous `services:` ? Deux méthodes, un seul verdict.
+ */
+function refuserSiComptageDivergent(services, logiques, fichier, libelle, ROUGE, RAZ) {
+  const attendues = clesDeSection(logiques, 'services');
+  const lues = new Set(services.map((s) => s.cle));
+  const manquantes = attendues === null ? [] : [...attendues].filter((c) => !lues.has(c));
+  const enTrop = attendues === null ? [] : [...lues].filter((c) => !attendues.has(c));
+  if (attendues !== null && manquantes.length === 0 && enTrop.length === 0) return;
+  console.error(
+    `${ROUGE}✗ ${libelle} — le lecteur YAML et le comptage direct des clés de ` +
+      `\`services:\` NE DISENT PAS LA MÊME CHOSE.${RAZ}\n`,
+  );
+  console.error(
+    attendues === null
+      ? `  Aucune ligne \`services:\` de premier niveau en forme de bloc n'a été trouvée.\n`
+      : `  Clés comptées sous \`services:\` : ${String(attendues.size)} — services réellement\n` +
+          `  inspectés : ${String(lues.size)}.\n` +
+          (manquantes.length > 0 ? `  JAMAIS INSPECTÉ(S) : ${manquantes.join(', ')}\n` : '') +
+          (enTrop.length > 0
+            ? `  Inspecté(s) sans clé correspondante : ${enTrop.join(', ')}\n`
+            : ''),
+  );
+  console.error(
+    `  Un service que ce contrôle ne lit pas est un service qu'il déclare sain sans\n` +
+      `  l'avoir regardé. C'était le symptôme que l'en-tête de ce fichier disait\n` +
+      `  « à surveiller » : il est désormais ASSERTÉ, plus seulement affiché.\n` +
+      `  Cause la plus fréquente : une indentation non canonique. \`pnpm format\` la\n` +
+      `  rétablit ; \`docker compose -f ${fichier} config -q\` confirme la syntaxe.\n`,
+  );
+  process.exit(1);
+}
+
+// =============================================================================
 // LECTURE DU FICHIER
 // =============================================================================
-const racine = analyserYaml(readFileSync(chemin, 'utf8'));
+const LIBELLE = 'ISOLATION RÉSEAU';
+const { racine, anomalies, logiques } = analyserYaml(readFileSync(chemin, 'utf8'));
+
+// Rien lu = rien vérifié. Cette ligne DOIT précéder toute inspection.
+refuserSiIllisible(anomalies, FICHIER, LIBELLE, ROUGE, RAZ);
+
 const ancres = collecterAncres(racine);
-const NOM_PROJET = deguillemeter(enfant(racine, ancres, 'name')?.valeur ?? '');
+const NOM_PROJET = deguillemeter(valeurEffective(enfant(racine, ancres, 'name'), ancres));
 const services = enfantsEffectifs(enfant(racine, ancres, 'services'), ancres).filter(
   (n) => n.type === 'mapping' && n.cle,
 );
@@ -391,6 +691,26 @@ if (services.length === 0) {
       `  Le lecteur YAML de ce script n'a rien reconnu : soit le fichier a changé de\n` +
       `  forme, soit le lecteur est cassé. Dans les deux cas il n'a RIEN vérifié —\n` +
       `  et un contrôle qui ne vérifie rien ne rend pas EXIT=0.\n`,
+  );
+  process.exit(1);
+}
+
+// Point 21bis (gardien A02) : le compteur ne se contente plus de s'afficher.
+refuserSiComptageDivergent(services, logiques, FICHIER, LIBELLE, ROUGE, RAZ);
+
+// Ce fichier est AUTOPORTANT : rien ne vient d'un autre fichier compose.
+refuserSiCompositionExterne(racine, services, ancres, FICHIER, LIBELLE, ROUGE, RAZ);
+
+// Sans nom de projet, le critère b) ci-dessous ne s'applique À RIEN : n'importe
+// quel `name:` de réseau passerait pour interne. Effacer la ligne `name:` en tête
+// du fichier désactivait donc silencieusement la moitié de ce contrôle — et c'est
+// une ligne qu'un copier-coller depuis une autre pile oublie facilement.
+if (NOM_PROJET === '') {
+  console.error(
+    `${ROUGE}✗ ISOLATION RÉSEAU — aucun \`name:\` de projet en tête de ${FICHIER}.${RAZ}\n` +
+      `  Le critère « un réseau dont le \`name:\` ne commence pas par le nom de projet est\n` +
+      `  tenu pour partagé » n'a alors plus de référence : TOUT réseau nommé passerait\n` +
+      `  pour interne. Déclare \`name:\` en première clé du fichier.\n`,
   );
   process.exit(1);
 }
@@ -413,11 +733,11 @@ const reseaux = new Map();
 for (const decl of enfantsEffectifs(enfant(racine, ancres, 'networks'), ancres)) {
   if (decl.type !== 'mapping' || !decl.cle) continue;
 
-  const paires = pairesFlux(decl.valeur);
+  const paires = pairesFlux(valeurEffective(decl, ancres));
   const lire = (cle) => {
     if (paires?.has(cle)) return { valeur: paires.get(cle), ligne: decl.ligne, brut: decl.brut };
     const n = enfant(decl, ancres, cle);
-    return n ? { valeur: n.valeur, ligne: n.ligne, brut: n.brut } : null;
+    return n ? { valeur: valeurEffective(n, ancres), ligne: n.ligne, brut: n.brut } : null;
   };
 
   const externe = lire('external');
@@ -478,27 +798,44 @@ function reseauxDuService(service) {
     if (cle !== '') entrees.push({ cle, ligne, extrait });
   };
 
+  // `networks: *ancre` : la liste vit dans la VALEUR de l'ancre, pas dans ses
+  // enfants. Sans cette résolution, le service ressortait avec zéro réseau.
+  const valeur = valeurEffective(n, ancres);
+
   // Formes en flux sur la clé : `networks: [a, b]` et `networks: {a: {}, b: {}}`.
-  for (const el of elementsFlux(n.valeur) ?? []) ajouter(el, n.ligne, n.brut);
-  for (const cle of pairesFlux(n.valeur)?.keys() ?? []) ajouter(cle, n.ligne, n.brut);
+  for (const el of elementsFlux(valeur) ?? []) ajouter(el, n.ligne, n.brut);
+  for (const cle of pairesFlux(valeur)?.keys() ?? []) ajouter(cle, n.ligne, n.brut);
   // Forme scalaire tolérée : `networks: a`.
-  if (
-    n.valeur !== '' &&
-    !n.valeur.startsWith('[') &&
-    !n.valeur.startsWith('{') &&
-    !n.valeur.startsWith('*')
-  ) {
-    ajouter(deguillemeter(n.valeur), n.ligne, n.brut);
+  if (valeur !== '' && !valeur.startsWith('[') && !valeur.startsWith('{')) {
+    ajouter(deguillemeter(valeur), n.ligne, n.brut);
   }
 
   for (const e of enfantsEffectifs(n, ancres)) {
-    // Séquence : `- a` (tiret indenté OU aligné sur la clé).
+    // Séquence : `- a` (tiret indenté OU aligné sur la clé), `- *ancre` compris.
     if (e.type === 'sequence' && e.valeur.trim() !== '') {
-      ajouter(deguillemeter(e.valeur), e.ligne, e.brut);
+      ajouter(deguillemeter(valeurEffective(e, ancres)), e.ligne, e.brut);
       continue;
     }
     // Mapping : `a:` / `a: {}` / `a:` + `aliases:`.
     if (e.type === 'mapping' && e.cle) ajouter(e.cle, e.ligne, e.brut);
+  }
+
+  // UN SERVICE QUI DÉCLARE `networks:` ET DONT ON NE TIRE RIEN N'EST PAS UN SERVICE
+  // SANS RÉSEAU : c'est un service que le lecteur a perdu. Trois contournements
+  // mesurés le 2026-08-28 (clé entre guillemets, service en flux, alias vers une
+  // liste en flux) produisaient exactement cette signature — zéro attachement, et
+  // un EXIT=0. `[]` et `{}` sont les seules écritures qui veulent VRAIMENT dire
+  // « aucun réseau ».
+  if (entrees.length === 0 && valeur !== '[]' && valeur !== '{}') {
+    console.error(
+      `${ROUGE}✗ ISOLATION RÉSEAU — la clé \`networks:\` du service « ${service.cle} » ` +
+        `(${FICHIER}:${String(n.ligne)}) n'a produit AUCUN réseau.${RAZ}\n` +
+        `    ${n.brut}\n` +
+        `  Le lecteur voit la clé mais pas son contenu : il ne peut donc rien affirmer sur\n` +
+        `  ce service, et surtout pas qu'il est sain. Écris la liste en séquence (\`- axion\`)\n` +
+        `  ou en flux (\`[axion]\`) ; \`[]\` dit explicitement « aucun réseau ».\n`,
+    );
+    process.exit(1);
   }
   return entrees;
 }
@@ -514,7 +851,7 @@ for (const service of services) {
   // la pile réseau de sa cible, donc TOUTES ses routes. `host` fait pire encore.
   const mode = enfant(service, ancres, 'network_mode');
   if (mode) {
-    const valeur = deguillemeter(mode.valeur);
+    const valeur = deguillemeter(valeurEffective(mode, ancres));
     if (valeur !== 'none') {
       fautifs.push({
         service: service.cle,
