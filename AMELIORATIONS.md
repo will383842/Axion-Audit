@@ -21,10 +21,11 @@
 
 ## Compteur du plafond étage 1
 
-| Lot | Consommé | Plafond | Reste                     |
-| --- | -------- | ------- | ------------------------- |
-| L0  | ~0,5 j   | 0,5 j   | 0 j (**plafond atteint**) |
-| L1  | ~0,3 j   | 0,5 j   | ~0,2 j                    |
+| Lot  | Consommé | Plafond | Reste                     |
+| ---- | -------- | ------- | ------------------------- |
+| L0   | ~0,5 j   | 0,5 j   | 0 j (**plafond atteint**) |
+| L1   | ~0,3 j   | 0,5 j   | ~0,2 j                    |
+| L0-b | ~0,2 j   | 0,5 j   | ~0,3 j                    |
 
 ---
 
@@ -407,3 +408,38 @@ doit être maintenue** — c'est exactement le défaut que cette fiche propose d
 **Arbitrage attendu :** ABSORBÉE (0,5 j sur la marge) · **PHASE 2** (le défaut) · REFUSÉE.
 **Recommandation d'A01 :** ABSORBÉE si la marge le permet — c'est le seul changement qui rende la
 question « en reste-t-il ? » répondable autrement que par une quatrième passe de revue.
+
+---
+
+### 2026-08-28 — [L0-b] Deux garde-fous nés de déploiements ratés
+
+**Constat.** Le premier déploiement réel du staging a échoué plusieurs fois, pour des causes
+distinctes. Deux d'entre elles sont des **conventions propres à Coolify**, inconnues des trois autres
+piles du dépôt, et qui n'étaient tenues que par des commentaires — A11 l'a signalé de lui-même en
+livrant : « ce fichier a maintenant trois conventions qui divergent des autres piles et que rien
+n'automatise ».
+
+**`pnpm check:isolation-reseau`** — seul le service `caddy` peut rejoindre le réseau du proxy Traefik.
+A54 a **mesuré** que ce réseau a l'ICC activé : tout conteneur qui le rejoint obtient une route
+directe vers la base PostgreSQL et le Redis d'`axion-ia.com`. Ce n'est donc pas une élégance
+d'architecture mais une **exigence de sécurité** (02 §30.4-4 : un secret de staging ne doit RIEN
+pouvoir sur la production). Prouvé par injection dans les deux formes possibles — `edge: {}` ajouté
+sous `api`, et `[axion, edge]` sur `worker`.
+
+**`pnpm check:compose-coolify`** — aucune interpolation dans un volume, et tous les chemins relatifs
+résolus **depuis la racine** existent réellement. Chacune de ces deux règles a coûté un déploiement.
+
+**Ce que ce second contrôle apporte et que Docker n'apporte pas**, et c'est ce qui justifie de
+l'écrire plutôt que de s'en remettre à l'outil : `docker compose config -q` rend **EXIT=0 dans les
+DEUX conventions**. Il valide la syntaxe, jamais l'existence des chemins. A11 l'a établi par la
+contre-épreuve — sans le bon drapeau, le rendu donne `infra/infra/caddy/Caddyfile` **silencieusement**.
+C'est très exactement ce qui a laissé passer le second échec.
+
+**Pourquoi c'est étage 1.** Ne touche ni le schéma 04, ni l'API, ni la crypto, ni le périmètre
+fonctionnel : deux garde-fous d'outillage, dans la lignée directe de `check:jonction` et `check:pack`.
+
+**Coût :** ~0,2 j pour les deux, épreuves par injection comprises.
+
+**Ce qui reste NON gardé, écrit plutôt que tu :** la duplication entre `docker-compose.coolify.yml` et
+`docker-compose.yml` se reporte à la main. Un service ajouté à l'un et oublié dans l'autre ne serait
+signalé par rien. C'est la troisième convention d'A11, et elle attend toujours son contrôle.
