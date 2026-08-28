@@ -14,6 +14,7 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import { loggerFastify } from './logger.js';
 import { enregistrerGestionErreurs } from './erreurs.js';
+import { enregistrerSocleAutorisation } from './auth/politique.js';
 import { routesSante } from './routes/sante.js';
 
 export async function construireApp(): Promise<FastifyInstance> {
@@ -46,49 +47,79 @@ export async function construireApp(): Promise<FastifyInstance> {
     crossOriginResourcePolicy: { policy: 'same-origin' },
   });
 
-  // --- Quotas (11 §3) --------------------------------------------------------
-  // Global : 300 req/min/token. Le quota spécifique `/v1/auth/*` (10 req/min/IP)
-  // est posé par A14 au lot L2, sur les routes d'authentification elles-mêmes.
-  await app.register(rateLimit, {
-    global: true,
-    max: 300,
-    timeWindow: '1 minute',
-    // Tant qu'il n'y a pas d'authentification (L0), la clé est l'IP. Au L2 elle
-    // devient le sujet du jeton — sinon plusieurs consultants derrière le même NAT
-    // client partageraient un quota, ce qui bloquerait une équipe en pleine mission.
-    keyGenerator: (requete) => requete.ip,
-    //
-    // PAS D'`errorResponseBuilder` ICI — ET C'EST UN CORRECTIF, PAS UN OUBLI.
-    //
-    // Le plugin ne RETOURNE pas ce que construit `errorResponseBuilder` : il le
-    // `throw`. L'objet part donc au gestionnaire d'erreurs (erreurs.ts), qui décide
-    // du statut à partir de `erreur.statusCode`.
-    //
-    // Un `errorResponseBuilder` qui rendait l'enveloppe nue `{ error: { code,
-    // message } }` — sans `statusCode` — faisait donc rendre **500 au lieu de 429** :
-    // aucune branche de erreurs.ts ne reconnaissait cet objet, il tombait dans
-    // « Erreur interne non gérée ». Mesuré en recette : rafale de 340 requêtes,
-    // 44 réponses 500.
-    //
-    // Le constructeur PAR DÉFAUT du plugin lève une vraie `Error` portant
-    // `statusCode = 429` ; la branche 3 de erreurs.ts la reconnaît et rend
-    // l'enveloppe française `RATE_LIMITED`. Le builder personnalisé était donc
-    // REDONDANT avec cette branche — et c'est lui qui la neutralisait.
-    // Les en-têtes `retry-after` et `x-ratelimit-*` sont posés par le plugin AVANT
-    // la levée : ils survivent au passage par le gestionnaire d'erreurs, et la PWA
-    // terrain peut caler son réessai dessus au lieu de marteler.
-    //
-    // Contre-indication à connaître avant de « rétablir » un builder : tout objet
-    // qu'il rendrait DOIT porter `statusCode`, sans quoi le défaut revient.
-    //
-    // Un dépassement de quota reste un ÉVÉNEMENT D'EXPLOITATION : sans cette ligne,
-    // il ne laisserait aucune trace (le 429 ne passe par aucun `log.error`) et un
-    // abus deviendrait invisible — la correction ci-dessus aurait alors remplacé un
-    // faux 500 bruyant par un vrai 429 muet. On journalise en `warn`, sans clé ni
-    // adresse IP (donnée personnelle — 11 §2, 06 §10.4).
-    onExceeded: (requete) => {
-      requete.log.warn({ url: requete.url }, 'Quota dépassé — requête refusée (429)');
-    },
+  // --- Socle d'authentification et d'autorisation (invariant 3) --------------
+  //
+  // TOUT L'ORDRE DES CROCHETS VIT DANS CET APPEL, ET C'EST VOULU :
+  //   ① identification (ne refuse JAMAIS) → ② quota → ③ autorisation.
+  // Le quota est passé en ARGUMENT parce que sa position dans la chaîne n'est pas
+  // une convention qu'on pourrait déplacer par mégarde : elle est dans la signature
+  // de `enregistrerSocleAutorisation` (voir l'en-tête de auth/politique.ts, qui
+  // explique pourquoi trois `addHook` successifs ne donneraient PAS cet ordre).
+  //
+  // Conséquence à connaître : à partir d'ici, TOUTE route enregistrée doit déclarer
+  // `config.acces`. Sans quoi l'API NE DÉMARRE PAS — c'est le garde-fou, pas un
+  // effet de bord.
+  await enregistrerSocleAutorisation(app, async (instance) => {
+    // --- Quotas (11 §3) ------------------------------------------------------
+    // Global : 300 req/min/token. Le quota spécifique `/v1/auth/*` (10 req/min/IP)
+    // est posé au lot L2/T2, sur les routes d'authentification elles-mêmes.
+    await instance.register(rateLimit, {
+      global: true,
+      max: 300,
+      timeWindow: '1 minute',
+      //
+      // CLÉ DU QUOTA : LE SUJET DU JETON, L'IP SEULEMENT EN REPLI.
+      //
+      // Le contrat 11 §3 dit « global 300 req/min/**token** » ; le code disait `.ip`.
+      // Ce n'est pas un détail de nommage : derrière le NAT d'un client, une équipe
+      // entière partage UNE adresse. Une synchronisation de fin de journée aurait
+      // consommé le quota de tout le monde, et un auditeur aurait étranglé son
+      // collègue assis à côté de lui.
+      //
+      // L'IP RESTE la clé de repli, et ce n'est pas un compromis mou : sans elle,
+      // les requêtes ANONYMES (login, jetons invalides, sondes non authentifiées)
+      // n'auraient plus aucune clé — donc plus aucun plafond. Basculer « sur le
+      // jeton » sans repli aurait rendu le flot non authentifié ILLIMITÉ, c'est-à-dire
+      // aurait ouvert exactement ce que le quota existe pour fermer.
+      //
+      // Cette ligne IMPOSE l'ordre des crochets : `identite` est posée par ① et
+      // n'est jamais qu'un sujet CRYPTOGRAPHIQUEMENT VÉRIFIÉ. Lire un `sub` non
+      // vérifié laisserait forger un quota illimité en changeant de jeton bidon à
+      // chaque requête.
+      keyGenerator: (requete) => requete.identite?.utilisateurId ?? requete.ip,
+      //
+      // PAS D'`errorResponseBuilder` ICI — ET C'EST UN CORRECTIF, PAS UN OUBLI.
+      //
+      // Le plugin ne RETOURNE pas ce que construit `errorResponseBuilder` : il le
+      // `throw`. L'objet part donc au gestionnaire d'erreurs (erreurs.ts), qui décide
+      // du statut à partir de `erreur.statusCode`.
+      //
+      // Un `errorResponseBuilder` qui rendait l'enveloppe nue `{ error: { code,
+      // message } }` — sans `statusCode` — faisait donc rendre **500 au lieu de 429** :
+      // aucune branche de erreurs.ts ne reconnaissait cet objet, il tombait dans
+      // « Erreur interne non gérée ». Mesuré en recette : rafale de 340 requêtes,
+      // 44 réponses 500.
+      //
+      // Le constructeur PAR DÉFAUT du plugin lève une vraie `Error` portant
+      // `statusCode = 429` ; la branche 3 de erreurs.ts la reconnaît et rend
+      // l'enveloppe française `RATE_LIMITED`. Le builder personnalisé était donc
+      // REDONDANT avec cette branche — et c'est lui qui la neutralisait.
+      // Les en-têtes `retry-after` et `x-ratelimit-*` sont posés par le plugin AVANT
+      // la levée : ils survivent au passage par le gestionnaire d'erreurs, et la PWA
+      // terrain peut caler son réessai dessus au lieu de marteler.
+      //
+      // Contre-indication à connaître avant de « rétablir » un builder : tout objet
+      // qu'il rendrait DOIT porter `statusCode`, sans quoi le défaut revient.
+      //
+      // Un dépassement de quota reste un ÉVÉNEMENT D'EXPLOITATION : sans cette ligne,
+      // il ne laisserait aucune trace (le 429 ne passe par aucun `log.error`) et un
+      // abus deviendrait invisible — la correction ci-dessus aurait alors remplacé un
+      // faux 500 bruyant par un vrai 429 muet. On journalise en `warn`, sans clé ni
+      // adresse IP (donnée personnelle — 11 §2, 06 §10.4).
+      onExceeded: (requete) => {
+        requete.log.warn({ url: requete.url }, 'Quota dépassé — requête refusée (429)');
+      },
+    });
   });
 
   // --- Format d'erreur unique (11 §3) ---------------------------------------

@@ -54,18 +54,33 @@ import { HTTP_STATUS_BY_ERROR_CODE } from '@axion/shared';
 import { evaluerPreparation } from '../dependances.js';
 
 /**
- * Exemption du quota global. `false` est la valeur que `@fastify/rate-limit`
- * reconnaît pour ne poser AUCUN compteur sur la route (toute autre valeur non-objet
- * fait échouer l'enregistrement — c'est un garde-fou du plugin, pas un effet de bord).
+ * Configuration COMMUNE aux deux sondes. Deux choses, et deux raisons distinctes.
+ *
+ * 1. `rateLimit: false` — exemption du quota global. `false` est la valeur que
+ *    `@fastify/rate-limit` reconnaît pour ne poser AUCUN compteur sur la route
+ *    (toute autre valeur non-objet fait échouer l'enregistrement — c'est un
+ *    garde-fou du plugin, pas un effet de bord). Les trois conditions qui rendent
+ *    ces routes-là, et elles seules, éligibles sont énumérées en tête de fichier.
+ *
+ * 2. `acces: { type: 'public' }` — politique d'accès, OBLIGATOIRE depuis le lot L2 :
+ *    une route sans `config.acces` empêche l'API de démarrer (auth/politique.ts).
+ *    « Public » est ici la seule réponse possible : ces sondes sont interrogées par
+ *    l'orchestrateur Docker et par le déploiement, qui n'ont pas de compte.
+ *
+ *    CES DEUX ROUTES SONT AUSSI LES SEULES DISPENSÉES DE SCHÉMA ZOD in/out (11 §3) —
+ *    dispense héritée du lot L0, EXPLICITEMENT NON EXTENSIBLE : aucune route L2 ou
+ *    postérieure n'est acceptée sans ses deux schémas importés de `packages/shared`.
+ *    La liste des routes publiques est figée par un test d'instantané (note L2 §5) :
+ *    en ouvrir une nouvelle exige de modifier cette liste, donc de le justifier.
  */
-const HORS_QUOTA = { rateLimit: false } as const;
+const CONFIG_SONDE = { rateLimit: false, acces: { type: 'public' } } as const;
 
 export const routesSante: FastifyPluginAsync = async (app) => {
   // `logLevel: 'warn'` : les sondes sont interrogées toutes les quelques secondes
   // par Docker. Les journaliser en `info` noierait le journal réel sous le bruit.
 
   /** Vivacité — ne touche AUCUNE dépendance, par construction. */
-  app.get('/health', { logLevel: 'warn', config: HORS_QUOTA }, () => {
+  app.get('/health', { logLevel: 'warn', config: CONFIG_SONDE }, () => {
     return { status: 'ok' as const };
   });
 
@@ -84,24 +99,28 @@ export const routesSante: FastifyPluginAsync = async (app) => {
    * Le corps reste LACONIQUE : trois valeurs, aucune topologie. Le détail par
    * dépendance vit dans le journal (06 §10.2).
    */
-  app.get('/health/ready', { logLevel: 'warn', config: HORS_QUOTA }, async (_requete, reponse) => {
-    const { etat } = await evaluerPreparation();
+  app.get(
+    '/health/ready',
+    { logLevel: 'warn', config: CONFIG_SONDE },
+    async (_requete, reponse) => {
+      const { etat } = await evaluerPreparation();
 
-    if (etat === 'unavailable') {
-      // 503 et non 500 : l'API va bien, c'est une dépendance CRITIQUE qui manque.
-      // Le corps reste laconique — le détail est dans le journal, pas sur le réseau.
-      return reponse
-        .code(HTTP_STATUS_BY_ERROR_CODE.SERVICE_UNAVAILABLE)
-        .send({ status: 'unavailable' as const });
-    }
+      if (etat === 'unavailable') {
+        // 503 et non 500 : l'API va bien, c'est une dépendance CRITIQUE qui manque.
+        // Le corps reste laconique — le détail est dans le journal, pas sur le réseau.
+        return reponse
+          .code(HTTP_STATUS_BY_ERROR_CODE.SERVICE_UNAVAILABLE)
+          .send({ status: 'unavailable' as const });
+      }
 
-    // 200 y compris pour `degraded` : l'API SERT. Un 503 ici retirerait du trafic une
-    // instance capable de collecter et de synchroniser, au prétexte qu'une pièce
-    // jointe serait indisponible — et toutes les instances voyant la même dépendance
-    // absente rougiraient ensemble. L'exploitant est prévenu par le journal et par
-    // ce `status`, pas par une bascule.
-    return { status: etat === 'degraded' ? ('degraded' as const) : ('ready' as const) };
-  });
+      // 200 y compris pour `degraded` : l'API SERT. Un 503 ici retirerait du trafic une
+      // instance capable de collecter et de synchroniser, au prétexte qu'une pièce
+      // jointe serait indisponible — et toutes les instances voyant la même dépendance
+      // absente rougiraient ensemble. L'exploitant est prévenu par le journal et par
+      // ce `status`, pas par une bascule.
+      return { status: etat === 'degraded' ? ('degraded' as const) : ('ready' as const) };
+    },
+  );
 
   await Promise.resolve();
 };
