@@ -33,6 +33,7 @@
     "check:decisions": "node scripts/check-decisions.mjs",
     "schema:diff": "node scripts/schema-diff.mjs",
     "check:schema-inventaire": "node scripts/check-schema-inventaire.mjs",
+    "check:isolation-reseau": "node scripts/check-isolation-reseau.mjs",
     "db:generate": "pnpm --filter @axion/api db:generate",
     "db:migrate": "pnpm --filter @axion/api db:migrate",
     "db:migrate:check": "pnpm --filter @axion/api db:migrate:check",
@@ -46,7 +47,7 @@
     "infra:restore-test": "bash infra/scripts/restore-test.sh /opt/axion-audit/prod/.env",
     "prepare": "husky",
     "check:test-projects": "node scripts/check-test-projects.mjs",
-    "verify": "pnpm build && pnpm lint && pnpm format:check && pnpm typecheck && pnpm check:pack && pnpm check:decisions && pnpm check:invariants && pnpm check:jonction && pnpm check:no-skipped-tests && pnpm check:test-projects && pnpm test:unit && pnpm test:integration && pnpm test:e2e",
+    "verify": "pnpm build && pnpm lint && pnpm format:check && pnpm typecheck && pnpm check:pack && pnpm check:decisions && pnpm check:invariants && pnpm check:jonction && pnpm check:no-skipped-tests && pnpm check:test-projects && pnpm check:isolation-reseau && pnpm test:unit && pnpm test:integration && pnpm test:e2e",
     "build:packages": "pnpm --recursive --filter \"./packages/**\" build"
   },
   "devDependencies": {

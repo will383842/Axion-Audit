@@ -191,6 +191,13 @@ jobs:
       - name: pnpm check:test-projects
         run: pnpm check:test-projects
 
+      # Le staging cohabite avec le site de production sur la meme machine. Le
+      # reseau du proxy Traefik a l ICC active (mesure par A54) : tout conteneur
+      # qui le rejoint atteint la base PostgreSQL du voisin. Seul notre Caddy y a
+      # droit, et ce controle le verifie plutot que de s en remettre a un commentaire.
+      - name: pnpm check:isolation-reseau
+        run: pnpm check:isolation-reseau
+
       # Garde-fou du garde-fou : si la liste d'exceptions du script cessait
       # d'être vide, le contrôle ci-dessus deviendrait perméable en silence.
       - name: Vérifier que la liste d'exceptions est restée vide

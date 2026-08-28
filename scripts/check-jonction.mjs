@@ -214,12 +214,26 @@ const fichiersInfra = execFileSync('git', ['ls-files', 'infra/'], { encoding: 'u
 
 for (const chemin of fichiersInfra) {
   const contenu = lire(chemin);
+  // LES COMMENTAIRES NE SONT PAS DU CODE. Un fichier d'infra bien documenté
+  // CITE ses variables en prose — `infra/docker-compose.coolify.yml` explique en
+  // en-tête que les variables obligatoires sont déclarées `${VAR:?message}`.
+  // Sans ce retrait, le contrôle lisait cette PHRASE et exigeait qu'une variable
+  // nommée « VAR » figure dans .env.example. Un garde-fou qui prend la
+  // documentation pour du code punit ceux qui documentent — et c'est exactement
+  // le défaut corrigé au lot L1 sur `check-test-projects.mjs`, où un commentaire
+  // suffisait à satisfaire le contrôle du fil rouge. Même famille, sens inverse.
+  // On ne retire que les lignes ENTIÈREMENT commentées : un `#` en fin de ligne
+  // suit une vraie interpolation, qui doit rester vue.
+  const codeSeul = contenu
+    .split('\n')
+    .map((l) => (/^\s*#/.test(l) ? '' : l))
+    .join('\n');
   if (!contenu) continue;
   // `${VAR}`, `${VAR:-defaut}` (Compose) et `{$VAR}` (Caddy).
-  for (const m of contenu.matchAll(/\$\{([A-Z][A-Z0-9_]*)|\{\$([A-Z][A-Z0-9_]*)\}/g)) {
+  for (const m of codeSeul.matchAll(/\$\{([A-Z][A-Z0-9_]*)|\{\$([A-Z][A-Z0-9_]*)\}/g)) {
     const nom = m[1] ?? m[2] ?? '';
     if (documentees.has(nom) || PORTEES_PAR_GITHUB.has(nom)) continue;
-    const ligne = contenu.slice(0, m.index).split('\n').length;
+    const ligne = codeSeul.slice(0, m.index).split('\n').length;
     anomalies.push({
       jonction: 'infra → .env.example',
       ou: `${chemin}:${ligne}`,

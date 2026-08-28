@@ -1844,3 +1844,48 @@ cohabitation ne pose aucun problème de dimensionnement — c'était l'inconnue,
 **Décideur :** A01 (constat et proposition) · **Williams doit RATIFIER à la porte P-A**
 **Impact spec :** **amendement proposé du 02 §11** — terminaison TLS déportée sur le frontal de
 l'hôte pour le staging ; le domaine unique et l'absence de CORS sont préservés
+
+---
+
+## 2026-08-28 — [L0-b] Le staging CONSTRUIT ses images sur le serveur au lieu de les tirer de GHCR
+
+**Constat.** Le 02 §30.6 et les piles `docker-compose.staging.yml` / `.prod.yml` reposent sur des
+images **construites par la CI et poussées sur GHCR**, que le serveur se contente de tirer. La CI les
+publie bien — vérifié : `ghcr.io/will383842/axion-audit-api:sha-47851fd` existe. Mais **les paquets
+GHCR sont privés**, et le tirage anonyme depuis le serveur est refusé (testé sur trois tags).
+
+**Options :**
+
+1. Rendre les quatre paquets publics — Williams l'a explicitement autorisé, mais GitHub n'expose
+   **aucune API** pour changer la visibilité d'un paquet, et sa session navigateur n'était pas
+   authentifiée. L'action restait donc suspendue à une manipulation humaine.
+2. Créer un jeton `read:packages` et le confier à Coolify — un secret de plus à gérer et à faire
+   tourner, pour du staging.
+3. **Laisser Coolify cloner le dépôt et construire les images sur le serveur.**
+
+**Arbitrage : option 3.** Règle de précédence **sans objet** : le pack décrit un mode de déploiement,
+il n'interdit pas l'autre ; il fallait trancher et tracer.
+
+**Ce qui rend l'option 3 possible sans rien affaiblir :** le dépôt est **public**, donc aucun secret
+d'accès n'est nécessaire — c'est le point qui distingue ce cas d'un dépôt privé, où construire sur le
+serveur exigerait une clé de déploiement. La machine a **8 cœurs et 11 Go libres** : la construction
+y est confortable. Et cela **supprime deux dépendances** au lieu d'en ajouter — plus de registre à
+authentifier, plus de jeton à faire tourner.
+
+**Ce que ça coûte, écrit plutôt que découvert :**
+
+- **La construction n'est pas plafonnée.** `deploy.resources.limits` ne s'applique qu'à l'exécution ;
+  `pnpm install` et les builds Vite tournent dans le démon Docker, **hors limites, sur la machine qui
+  héberge `axion-ia.com`**. A11 l'a écrit dans le fichier plutôt que de le taire. Le risque est borné
+  par la marge mesurée (11 Go), pas par une garantie.
+- **Le staging ne déploie plus le même artefact que la production**, qui continuera de tirer GHCR.
+  C'est acceptable pour un environnement de recette, et ce le serait beaucoup moins pour la
+  production — **cette entrée ne vaut donc PAS pour la prod**, qui reste sur GHCR (02 §30.6).
+- La reproductibilité repose sur le commit cloné, pas sur un tag d'image immuable.
+
+**Réversible en une ligne :** si les paquets deviennent publics, il suffit de repointer l'application
+Coolify sur `docker-compose.staging.yml`. Rien d'autre n'aura changé.
+
+**Décideur :** A01, sur signalement d'A11
+**Impact spec :** écart assumé au 02 §30.6 **pour le staging uniquement** · à ratifier à la porte P-A
+avec l'entrée du même jour sur Traefik

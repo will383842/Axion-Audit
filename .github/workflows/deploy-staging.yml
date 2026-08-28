@@ -1,33 +1,46 @@
 # =============================================================================
-# DÉPLOIEMENT STAGING (02 §30.6 · 02 §30.4-3 · 02 §11.2)
+# DÉPLOIEMENT STAGING — VIA L'API COOLIFY (02 §30.6 · 02 §30.4-3 · 02 §11.2)
 # =============================================================================
-# Applique littéralement 02 §30.6 :
-#   « PR mergée → Actions : tests → build des 4 images → push GHCR →
-#     job deploy-staging : SSH (clé dédiée) → docker compose pull &&
-#     docker compose up -d + migration avec garde-fou (dry-run puis apply)
-#     + smoke tests (santé API, login, une écriture/lecture) →
-#     notification Telegram. »
-# Les trois étapes serveur (pull/up, migration garde-fou, smoke tests) sont
-# portées par `infra/scripts/deploy.sh` (livrable A11) : la CI ORCHESTRE, elle
-# ne réimplémente pas l'exploitation.
+# POURQUOI CE FICHIER NE FAIT PLUS DE SSH.
+# `DECISIONS.md`, entrée du 2026-08-28 « Le staging s'insère derrière le Traefik
+# de Coolify » : la machine `axionia-web` n'est pas un serveur nu. Elle fait
+# tourner **Coolify v4**, qui y déploie déjà `axion-ia.com` et possède les ports
+# 80/443 via son propre Traefik. Le déploiement du staging est donc DÉCLENCHÉ
+# PAR L'API DE COOLIFY, qui est le seul ordonnanceur de cette machine ; un
+# `docker compose up` posé à côté de lui par SSH serait un second maître sur les
+# mêmes conteneurs. `infra/scripts/deploy.sh` reste le chemin de la PRODUCTION
+# (`deploy-prod.yml`), qui n'est pas soumise à cette contrainte.
 #
-# SECRETS (02 §30.4-3) : tous portés par l'ENVIRONMENT `staging`, JAMAIS par des
-# secrets de dépôt globaux. Aucune valeur n'apparaît en clair ici (02 §30.4-1).
-# Séparation stricte staging/prod (02 §30.4-4) : les secrets de cet environment
-# ne peuvent RIEN sur la prod.
+# CE QUE FAIT CE WORKFLOW, DANS L'ORDRE — et rien de plus :
+#   1. il REFUSE DE PARTIR si un réglage manque, en nommant lequel ;
+#   2. il DÉCLENCHE le déploiement de l'application par son uuid ;
+#   3. il ATTEND la fin et ÉCHOUE si le déploiement échoue ;
+#   4. il VÉRIFIE ENSUITE que le service répond, depuis l'extérieur.
+#
+# L'étape 3 est la raison d'être du fichier. Un workflow qui poste un
+# déclenchement puis rend la main annonce un succès qu'il n'a pas constaté :
+# c'est un vert qui ne vérifie rien, le défaut que ce dépôt traque en premier
+# (`.github/workflows/README.md` §0). D'où la règle appliquée partout ci-dessous :
+# **aucun `|| true` sur une commande dont le résultat décide de quelque chose.**
+#
+# RÉGLAGES (02 §30.4-3) — portés par l'ENVIRONMENT `staging` ou, à défaut, par
+# les secrets de dépôt. Aucune valeur n'apparaît en clair ici (02 §30.4-1), et
+# aucune n'est affichée : on ne teste que leur PRÉSENCE.
+#   · secret `COOLIFY_API_TOKEN`  jeton Sanctum `<id>|<clair>`               (existe)
+#   · secret `COOLIFY_URL`        ex. `http://178.105.55.15:8000`            (existe)
+#   · secret ou variable `COOLIFY_APP_UUID`  uuid de l'application staging   (À CRÉER)
+#     Valeur documentée, NON SECRÈTE, dans `DECISIONS.md` (2026-08-28) :
+#     `wrunr6mwq2oxqq392i4myzjn` — projet `Axion-Audit`, serveur `localhost`.
+#   · variable `STAGING_BASE_URL` origine publique du staging
+#   · secrets `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` (02 §11.3)
 #
 # ------------------------------- ROLLBACK ------------------------------------
-# Procédure (02 §30.6 + §11.2), à exécuter à la main sur le serveur :
-#   1. Le tag précédent est JOURNALISÉ par `deploy.sh` lui-même dans
-#      `/opt/axion-audit/staging.deployed-tags` (deploy.sh l.58 et l.155) :
-#        cat /opt/axion-audit/staging.deployed-tags
-#      À défaut, l'historique des runs de ce workflow (tag `sha-xxxxxxx`).
-#   2. Sur le serveur, depuis la copie du dépôt (`/opt/axion-audit/repo`) :
-#        ./infra/scripts/deploy.sh --rollback --env staging
-#      (le script relit lui-même l'avant-dernier tag du journal), ou pour viser
-#      un tag précis :
-#        ./infra/scripts/deploy.sh --env staging --tag sha-<précédent>
-#      → docker compose est re-pointé sur le tag précédent.
+# Procédure (02 §30.6 + §11.2), adaptée à Coolify — à exécuter à la main :
+#   1. Retrouver le tag précédent : l'historique des runs de ce workflow le
+#      journalise (`sha-xxxxxxx`, entrée « Tag d'image » de chaque exécution).
+#   2. Dans Coolify → application du staging → l'image visée passe au tag
+#      précédent, puis « Redeploy ». Par l'API, c'est le même appel que
+#      l'étape 2 ci-dessous une fois le tag corrigé.
 #   3. Les images sont CONSERVÉES 90 JOURS sur GHCR (02 §30.6) : la fenêtre de
 #      retour arrière est garantie sur 90 j, pas au-delà.
 #   4. AUCUNE migration inverse n'est jouée : les migrations sont
@@ -35,6 +48,15 @@
 #      sur le schéma N. C'est cette règle — et elle seule — qui rend le rollback
 #      applicatif sûr sans toucher à la base.
 # -----------------------------------------------------------------------------
+#
+# POINT DE JONCTION RESTANT, ÉCRIT ICI PLUTÔT QUE DÉCOUVERT PLUS TARD.
+# `tag_image` désigne l'image que le déploiement DOIT servir. C'est la pile
+# déployée (`infra/docker-compose.coolify.yml`) qui l'interpole, depuis la
+# variable d'environnement `IMAGE_TAG` de l'application Coolify. Ce workflow ne
+# l'écrit PAS : il ne modifie aucune configuration Coolify. Le tag est donc
+# journalisé et notifié pour traçabilité, et le `commit` que Coolify rapporte
+# est affiché à chaque interrogation — mais tant que `IMAGE_TAG` n'est pas relié
+# côté Coolify, un redéploiement rejoue l'image configurée, pas celle de ce run.
 #
 # Traçabilité E36/E43 — lot L0 (07 §12 : « déploiement staging par la CI OK »).
 # =============================================================================
@@ -59,15 +81,21 @@ permissions:
   contents: read
 
 # Un déploiement staging à la fois, et JAMAIS d'annulation d'un déploiement en
-# vol (une coupure au milieu d'un `compose up` laisserait la stack incohérente).
+# vol. Coolify ANNULE le déploiement précédent quand un nouveau lui est soumis
+# pour la même application : deux runs concurrents produiraient une cascade de
+# `cancelled-by-user` — l'incident mesuré sur le projet voisin (8 déploiements
+# consécutifs perdus). `cancel-in-progress` reste donc à `false`.
 concurrency:
   group: deploy-staging
   cancel-in-progress: false
 
 jobs:
   deployer:
-    name: SSH → infra/scripts/deploy.sh
+    name: Coolify → déploiement vérifié
     runs-on: ubuntu-latest
+    # Borne dure du job : la somme des bornes des étapes, plus une marge. Un
+    # runner qui tourne une heure sur un déploiement gelé coûte sans rien dire.
+    timeout-minutes: 45
     environment:
       name: staging
       url: ${{ vars.STAGING_BASE_URL }}
@@ -77,140 +105,305 @@ jobs:
       # n'en déclare aucun. On la fait donc transiter explicitement.
       url_base: ${{ steps.bilan.outputs.url_base }}
     steps:
-      - uses: actions/checkout@v4
-
+      # -----------------------------------------------------------------------
+      # 1/4 — REFUSER DE PARTIR PLUTÔT QUE D'ÉCHOUER OBSCURÉMENT PLUS LOIN
+      # -----------------------------------------------------------------------
+      # Sans ce contrôle, un `COOLIFY_URL` absent produit un `curl` sur
+      # `/api/v1/deploy` — une URL relative, donc une erreur de protocole que
+      # personne ne relie au secret manquant. Le diagnostic doit être rendu ici,
+      # avec le NOM de ce qui manque et l'endroit où le poser.
       - name: Contrôler la présence des réglages non versionnables
+        id: reglages
         env:
           # Les secrets ne sont jamais AFFICHÉS : on ne teste que leur présence.
-          A_DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          A_DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
-          A_DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          A_DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          A_DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          A_COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+          A_COOLIFY_URL: ${{ secrets.COOLIFY_URL }}
           A_STAGING_BASE_URL: ${{ vars.STAGING_BASE_URL }}
+          # L'uuid de l'application n'est PAS un secret (DECISIONS.md
+          # 2026-08-28 le publie). On l'accepte donc comme VARIABLE — plus
+          # lisible dans les journaux — tout en tolérant la forme SECRET, qui
+          # est la convention du projet voisin. Le premier des deux qui est
+          # renseigné gagne ; aucun des deux ne rend l'autre obligatoire.
+          A_UUID_VARIABLE: ${{ vars.COOLIFY_APP_UUID }}
+          A_UUID_SECRET: ${{ secrets.COOLIFY_APP_UUID }}
         run: |
           set -euo pipefail
-          manquants=""
-          for nom in A_DEPLOY_SSH_KEY A_DEPLOY_SSH_KNOWN_HOSTS A_DEPLOY_HOST \
-                     A_DEPLOY_USER A_DEPLOY_PATH A_STAGING_BASE_URL; do
+
+          manquants=''
+          for nom in A_COOLIFY_API_TOKEN A_COOLIFY_URL A_STAGING_BASE_URL; do
             if [ -z "${!nom:-}" ]; then
               manquants="${manquants} ${nom#A_}"
             fi
           done
-          if [ -n "$manquants" ]; then
-            echo "::error title=Environment staging incomplet::Éléments manquants :${manquants}. Ils se posent À LA MAIN dans GitHub → Settings → Environments → staging (02 §30.4-3). Voir .github/workflows/README.md."
+
+          uuid_application="${A_UUID_VARIABLE:-}"
+          if [ -z "${uuid_application}" ]; then
+            uuid_application="${A_UUID_SECRET:-}"
+          fi
+          if [ -z "${uuid_application}" ]; then
+            manquants="${manquants} COOLIFY_APP_UUID"
+          fi
+
+          if [ -n "${manquants}" ]; then
+            echo "::error title=Réglages de déploiement incomplets::Éléments manquants :${manquants}. Ils se posent À LA MAIN dans GitHub → Settings (Environments → staging, ou Secrets and variables → Actions). COOLIFY_APP_UUID vaut wrunr6mwq2oxqq392i4myzjn (DECISIONS.md, 2026-08-28) — ce n'est pas un secret, une VARIABLE suffit. Voir .github/workflows/README.md."
             exit 1
           fi
 
-      # Clé SSH DÉDIÉE et RESTREINTE (02 §30.3). Écrite avec umask 077, jamais
-      # affichée, supprimée en fin de job.
-      - name: Préparer l'accès SSH (clé dédiée, hôte vérifié)
-        run: |
-          set -euo pipefail
-          umask 077
-          mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          printf '%s\n' "${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/known_hosts
-          # StrictHostKeyChecking reste ACTIF : accepter aveuglément une clé
-          # d'hôte reviendrait à accepter un homme du milieu sur le canal qui
-          # porte nos déploiements.
+          # Un `COOLIFY_URL` sans schéma est l'erreur de saisie la plus probable
+          # (« 178.105.55.15:8000 » au lieu de « http://178.105.55.15:8000 »).
+          # Elle se voit ici en une ligne ; trois étapes plus loin, elle se lit
+          # comme une panne de Coolify.
+          case "${A_COOLIFY_URL}" in
+            http://* | https://*) ;;
+            *)
+              echo "::error title=COOLIFY_URL mal formé::Le secret COOLIFY_URL doit commencer par http:// ou https:// (sa valeur n'est pas affichée ici). Exemple attendu : http://<ip>:8000."
+              exit 1
+              ;;
+          esac
+
+          echo "uuid_application=${uuid_application}" >> "$GITHUB_OUTPUT"
+          echo 'Réglages présents : jeton, URL Coolify, uuid d application, URL publique du staging.'
 
       # -----------------------------------------------------------------------
-      # CONTRAT D'APPEL DE `infra/scripts/deploy.sh` (A11) — LU DANS LE SCRIPT
+      # 2/4 — DÉCLENCHER LE DÉPLOIEMENT
       # -----------------------------------------------------------------------
-      #   ./deploy.sh --env <staging|prod> --tag <IMAGE_TAG> [--env-file <chemin>]
-      #   ./deploy.sh --rollback --env <staging|prod>
-      #
-      # · `--env` est OBLIGATOIRE (deploy.sh l.40) et `--tag` l'est aussi
-      #   (l.70) : sans eux le script meurt avant toute action. La forme
-      #   `IMAGE_TAG=… ./deploy.sh` utilisée jusqu'ici NE POUVAIT PAS
-      #   FONCTIONNER — le script ne lit JAMAIS `IMAGE_TAG` depuis
-      #   l'environnement, il l'EXPORTE depuis `--tag` (l.72). C'est l'appel qui
-      #   était faux, pas le script.
-      # · `APP_ENV` n'est PAS passé ici, volontairement : `deploy.sh` le lit dans
-      #   le `.env` du serveur et le CONFRONTE à `--env` (l.49-50, garde-fou
-      #   anti-déploiement-sur-le-mauvais-environnement). Le passer depuis la CI
-      #   serait sans effet — `axion_load_env` fait `set -a; . "$env_file"`, le
-      #   fichier gagne — et surtout cela donnerait l'illusion que la CI choisit
-      #   l'environnement, alors que c'est le serveur qui l'atteste.
-      # · `--env-file` n'est pas passé non plus : par défaut `deploy.sh` résout
-      #   `/opt/axion-audit/<env>/.env` (l.43), qui EST la convention du runbook
-      #   (`infra/README.md` §4 et §5). Fournir le chemin depuis GitHub
-      #   dupliquerait cette convention dans un secret, où elle dériverait.
-      # -----------------------------------------------------------------------
-      - name: Déployer (pull/up + migration garde-fou + smoke tests)
-        id: deploiement
+      # `force=true` : on redéploie même si Coolify juge que rien n'a changé.
+      # Sans lui, un run relancé à la main pourrait ne RIEN faire tout en
+      # rendant 200 — un succès sans déploiement.
+      - name: Déclencher le déploiement Coolify
+        id: declenchement
+        timeout-minutes: 5
         env:
-          IMAGE_TAG: ${{ inputs.tag_image }}
-          # `GHCR_OWNER` est la seconde variable que
-          # `infra/docker-compose.staging.yml` (A11) interpole pour résoudre
-          # `ghcr.io/${GHCR_OWNER}/axion-audit-<app>:${IMAGE_TAG}`. Le `.env` du
-          # serveur (§18) reste prioritaire — cette valeur n'est qu'un repli.
-          GHCR_OWNER: ${{ github.repository_owner }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          # ⚠️ `DEPLOY_PATH` = LA COPIE DU DÉPÔT, soit `/opt/axion-audit/repo`
-          # (`infra/README.md` §3 : `git clone … /opt/axion-audit/repo`), et NON
-          # `/opt/axion-audit`, qui est la racine d'EXPLOITATION (`.env`,
-          # `<env>/.env`, `*.deployed-tags`). Les deux ne contiennent pas les
-          # mêmes choses : `infra/scripts/` n'existe que sous `repo/`.
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+          COOLIFY_URL: ${{ secrets.COOLIFY_URL }}
+          UUID_APPLICATION: ${{ steps.reglages.outputs.uuid_application }}
+          TAG_IMAGE: ${{ inputs.tag_image }}
         run: |
           set -euo pipefail
-          # GHCR n'accepte que des minuscules dans le chemin de dépôt — même
-          # normalisation que `build-images.yml`, sinon un compte GitHub écrit
-          # avec des majuscules produirait une référence d'image invalide.
-          ghcr_owner="$(printf '%s' "${GHCR_OWNER}" | tr '[:upper:]' '[:lower:]')"
-          ssh -i ~/.ssh/deploy_key \
-              -o StrictHostKeyChecking=yes \
-              -o UserKnownHostsFile=~/.ssh/known_hosts \
-              -o ConnectTimeout=20 \
-              "${DEPLOY_USER}@${DEPLOY_HOST}" \
-              "set -euo pipefail; cd '${DEPLOY_PATH}'; \
-               test -x ./infra/scripts/deploy.sh || { echo 'ERREUR : ./infra/scripts/deploy.sh introuvable ou non exécutable sous '\''${DEPLOY_PATH}'\''. Le secret DEPLOY_PATH doit désigner la COPIE DU DÉPÔT (/opt/axion-audit/repo — infra/README.md §3), pas la racine d exploitation /opt/axion-audit.' >&2; exit 1; }; \
-               GHCR_OWNER='${ghcr_owner}' ./infra/scripts/deploy.sh --env staging --tag '${IMAGE_TAG}'"
-          # deploy.sh (A11) enchaîne : docker compose pull && up -d →
-          # migration DRY-RUN puis APPLY (garde-fou 02 §30.6) → smoke tests
-          # (santé API, écriture/lecture Postgres/MinIO/Redis) → rollback
-          # automatique vers le tag précédent si les smoke tests sont rouges.
-          # Un code de retour ≠ 0 fait ÉCHOUER ce job : aucun `|| true`, aucun
-          # masquage.
+          base="${COOLIFY_URL%/}"
+          reponse=/tmp/coolify-declenchement.json
 
-      # Seconde ceinture, exécutée depuis l'extérieur du serveur : ce que le
-      # serveur se dit à lui-même ne prouve pas que le service est joignable.
-      #
-      # ROUTE : `/api/v1/health`, et non `/api/health`. Le `Caddyfile` (A11)
-      # utilise `handle_path /api/*`, qui RETIRE le préfixe : l'API reçoit
-      # `/v1/…`. Et `apps/api/src/app.ts` (A01) enregistre les routes de santé
-      # sous `prefix: '/v1'`. `/api/health` arriverait donc à l'API comme
-      # `/health` — 404. C'est exactement l'URL qu'interroge déjà
-      # `infra/scripts/smoke-test.sh` (l.44) : une seule vérité, trois fichiers.
-      - name: Contrôle de santé public (hors serveur)
+          echo "Déclenchement du déploiement de l application ${UUID_APPLICATION} (tag attendu : ${TAG_IMAGE})."
+
+          # Le jeton voyage en EN-TÊTE, jamais dans l'URL : une URL se retrouve
+          # dans les journaux d'accès du serveur, un en-tête non (02 §30.4-1).
+          if ! code_http="$(curl -sS -G \
+                --max-time 60 \
+                -o "${reponse}" \
+                -w '%{http_code}' \
+                -H "Authorization: Bearer ${COOLIFY_API_TOKEN}" \
+                -H 'Accept: application/json' \
+                --data-urlencode "uuid=${UUID_APPLICATION}" \
+                --data-urlencode 'force=true' \
+                "${base}/api/v1/deploy")"; then
+            echo "::error title=Coolify injoignable::L appel à ${base}/api/v1/deploy n a pas abouti (erreur réseau ou délai dépassé). Vérifier que le service Coolify écoute et que COOLIFY_URL est joignable depuis GitHub Actions."
+            exit 1
+          fi
+
+          case "${code_http}" in
+            2??) ;;
+            401 | 403)
+              echo "::error title=Jeton Coolify refusé::HTTP ${code_http} sur /api/v1/deploy. Le secret COOLIFY_API_TOKEN est invalide, expiré, ou son équipe n a pas accès à cette application."
+              exit 1
+              ;;
+            404)
+              echo "::error title=Application Coolify introuvable::HTTP 404 sur /api/v1/deploy pour l uuid ${UUID_APPLICATION}. Vérifier COOLIFY_APP_UUID (DECISIONS.md, 2026-08-28)."
+              exit 1
+              ;;
+            *)
+              echo "::error title=Déclenchement refusé::HTTP ${code_http} sur /api/v1/deploy."
+              echo '──── Réponse de Coolify ────'
+              cat "${reponse}"
+              exit 1
+              ;;
+          esac
+
+          # Coolify v4 rend `{"deployments":[{"deployment_uuid":"…"}]}` ; les
+          # versions antérieures rendaient l'objet à plat. On lit les deux.
+          uuid_deploiement="$(jq -r '(.deployments[0].deployment_uuid // .deployment_uuid) // empty' "${reponse}")"
+
+          # SANS cet uuid, l'étape 3 n'a rien à surveiller — et un workflow qui
+          # « déploie » sans pouvoir constater le résultat est précisément le
+          # vert mensonger que ce dépôt refuse. C'est donc un ÉCHEC, pas un
+          # avertissement : on ne passe pas à la suite en fermant les yeux.
+          if [ -z "${uuid_deploiement}" ]; then
+            echo "::error title=Déploiement non traçable::Coolify a accepté l appel (HTTP ${code_http}) mais n a rendu aucun deployment_uuid. Impossible de vérifier l issue du déploiement — le job échoue plutôt que d annoncer un succès non constaté."
+            echo '──── Réponse de Coolify ────'
+            cat "${reponse}"
+            exit 1
+          fi
+
+          echo "Déploiement mis en file : ${uuid_deploiement}"
+          echo "uuid_deploiement=${uuid_deploiement}" >> "$GITHUB_OUTPUT"
+
+      # -----------------------------------------------------------------------
+      # 3/4 — ATTENDRE LA FIN, ET ÉCHOUER SI LE DÉPLOIEMENT ÉCHOUE
+      # -----------------------------------------------------------------------
+      # L'étape 2 ne prouve qu'une chose : Coolify a ACCEPTÉ la demande. Ce qui
+      # décide du sort du staging, c'est le statut final du déploiement. On le
+      # lit à la source, jusqu'à un état terminal ou une borne de temps.
+      - name: Attendre l issue du déploiement (borne 20 min)
+        id: attente
+        timeout-minutes: 25
+        env:
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+          COOLIFY_URL: ${{ secrets.COOLIFY_URL }}
+          UUID_DEPLOIEMENT: ${{ steps.declenchement.outputs.uuid_deploiement }}
         run: |
           set -euo pipefail
-          url="${{ vars.STAGING_BASE_URL }}"
-          for i in $(seq 1 10); do
-            if curl -fsS --max-time 10 "${url%/}/api/v1/health" >/dev/null; then
-              echo "Santé API OK sur ${url%/}/api/v1/health (tentative ${i})."
+          base="${COOLIFY_URL%/}"
+          reponse=/tmp/coolify-suivi.json
+
+          # 20 min : le déploiement attendu est un `pull` d'images GHCR suivi
+          # d'un redémarrage — quelques minutes. Une borne plus large ne rend
+          # pas le déploiement plus sûr, elle retarde seulement le constat.
+          echeance=$((SECONDS + 1200))
+          intervalle=15
+          # Une file Coolify gelée reste indéfiniment en `queued` (bug connu du
+          # répartiteur Horizon, mesuré sur le projet voisin). Rester bloqué
+          # 20 min pour l'apprendre est une perte sèche : au bout de 5 min sans
+          # avoir jamais vu `in_progress`, on tranche.
+          serie_en_file=0
+          serie_en_file_max=20
+          # Une interrogation qui n'aboutit pas est un incident RÉSEAU, pas un
+          # verdict : on retente. Mais on ne retente pas indéfiniment — sinon
+          # une panne de Coolify se lirait comme un déploiement lent.
+          echecs_interrogation=0
+          echecs_interrogation_max=8
+
+          journaliser_echec() {
+            echo '──── Journal du déploiement Coolify (200 dernières entrées) ────'
+            jq -r '
+              .logs
+              | (fromjson? // .)
+              | if type == "array" then .[-200:] else [] end
+              | .[]
+              | "[\(.order // "?")] \(.type // "?") : \(.output // "")"
+            ' "${reponse}" || echo '(journal illisible — Coolify n a pas rendu de champ `logs` exploitable)'
+            echo '──── Fin du journal ────'
+          }
+
+          while [ "${SECONDS}" -lt "${echeance}" ]; do
+            # Pas de `|| true` : un échec d'interrogation est TRAITÉ (compté,
+            # journalisé, retenté), il n'est pas effacé.
+            if ! curl -fsS --max-time 20 \
+                  -o "${reponse}" \
+                  -H "Authorization: Bearer ${COOLIFY_API_TOKEN}" \
+                  -H 'Accept: application/json' \
+                  "${base}/api/v1/deployments/${UUID_DEPLOIEMENT}"; then
+              echecs_interrogation=$((echecs_interrogation + 1))
+              echo "::warning::Coolify n a pas répondu à l interrogation du déploiement (${echecs_interrogation}/${echecs_interrogation_max})."
+              if [ "${echecs_interrogation}" -ge "${echecs_interrogation_max}" ]; then
+                echo "::error title=Suivi impossible::${echecs_interrogation} interrogations consécutives sans réponse de Coolify. L issue du déploiement ne peut pas être constatée : le job échoue."
+                exit 1
+              fi
+              sleep "${intervalle}"
+              continue
+            fi
+            echecs_interrogation=0
+
+            # Une réponse 200 qui n'est pas du JSON est une anomalie franche
+            # (portail captif, page d'erreur d'un proxy). `jq` s'arrête, donc
+            # le job s'arrête : mieux vaut un échec net qu'un statut deviné.
+            statut="$(jq -r '.status // empty' "${reponse}")"
+            commit="$(jq -r '.commit // empty' "${reponse}")"
+            restant=$((echeance - SECONDS))
+            echo "[$(date -u +%H:%M:%S)] statut=${statut:-<vide>} commit=${commit:-<inconnu>} — ${restant} s avant la borne."
+
+            case "${statut}" in
+              finished)
+                echo "Déploiement TERMINÉ avec succès en ${SECONDS} s."
+                exit 0
+                ;;
+              failed | cancelled | cancelled-by-user)
+                echo "::error title=Déploiement en échec::Coolify rapporte le statut « ${statut} » pour le déploiement ${UUID_DEPLOIEMENT}."
+                journaliser_echec
+                exit 1
+                ;;
+              queued)
+                serie_en_file=$((serie_en_file + 1))
+                if [ "${serie_en_file}" -ge "${serie_en_file_max}" ]; then
+                  echo "::error title=File Coolify gelée::Le déploiement est resté en file ${serie_en_file} interrogations de suite (~5 min) sans jamais démarrer. C est la signature d une file bloquée côté Coolify, pas d un déploiement lent."
+                  journaliser_echec
+                  exit 1
+                fi
+                sleep "${intervalle}"
+                ;;
+              in_progress | running)
+                serie_en_file=0
+                sleep "${intervalle}"
+                ;;
+              '')
+                echo '::warning::Coolify rend un statut vide — nouvelle interrogation.'
+                sleep "${intervalle}"
+                ;;
+              *)
+                echo "::warning::Statut inconnu « ${statut} » — nouvelle interrogation."
+                sleep "${intervalle}"
+                ;;
+            esac
+          done
+
+          echo "::error title=Déploiement hors délai::Le déploiement ${UUID_DEPLOIEMENT} n a pas atteint d état terminal en 20 min. Il est considéré comme ÉCHOUÉ (rollback : voir le bandeau de ce fichier)."
+          journaliser_echec
+          exit 1
+
+      # -----------------------------------------------------------------------
+      # 4/4 — VÉRIFIER QUE LE SERVICE RÉPOND, DEPUIS L'EXTÉRIEUR
+      # -----------------------------------------------------------------------
+      # Seconde ceinture : « déploiement terminé » est ce que Coolify se dit à
+      # lui-même. Ce qui compte est qu'un client joigne le service.
+      #
+      # ROUTE : `/api/v1/health/ready`, et non `/api/health`. Traefik termine
+      # TLS puis passe la main à notre routeur interne, dont le `handle_path
+      # /api/*` RETIRE le préfixe : l'API reçoit `/v1/…`. Et
+      # `apps/api/src/routes/sante.ts` enregistre les sondes sous `prefix:
+      # '/v1'`. `/api/health` arriverait donc à l'API comme `/health` — 404.
+      #
+      # On sonde la PRÉPARATION (`/health/ready`), pas la seule vivacité : après
+      # un déploiement, la question n'est pas « le processus est-il né » mais
+      # « la base répond-elle ». Une API vivante devant une base absente est
+      # exactement le faux vert qu'on cherche à éviter — et cette sonde-là rend
+      # 503 dans ce cas (`sante.ts`).
+      - name: Contrôle de santé public (hors serveur)
+        timeout-minutes: 10
+        env:
+          URL_BASE: ${{ vars.STAGING_BASE_URL }}
+        run: |
+          set -euo pipefail
+          base="${URL_BASE%/}"
+          sonde="${base}/api/v1/health/ready"
+          essais=20
+          intervalle=15
+
+          for i in $(seq 1 "${essais}"); do
+            if curl -fsS --max-time 10 -o /dev/null "${sonde}"; then
+              echo "Santé API OK sur ${sonde} (essai ${i}/${essais})."
               exit 0
             fi
-            sleep 6
+            echo "[$(date -u +%H:%M:%S)] ${sonde} ne répond pas encore (essai ${i}/${essais})."
+            sleep "${intervalle}"
           done
-          echo "::error title=Staging injoignable::${url%/}/api/v1/health ne répond pas après 60 s. Le déploiement est considéré comme ÉCHOUÉ (rollback : voir le bandeau de ce fichier)."
+
+          # Le service n'a pas répondu. Avant de rendre le verdict, on distingue
+          # les deux pannes qui ne se corrigent pas au même endroit : une API
+          # absente (rien ne répond) et une API vivante privée de sa base.
+          echo '──── Discrimination de la panne ────'
+          if curl -fsS --max-time 10 -o /dev/null "${base}/api/v1/health"; then
+            echo "::error title=Dépendances indisponibles::L API répond sur ${base}/api/v1/health mais sa sonde de préparation reste en échec après $((essais * intervalle)) s : une dépendance (PostgreSQL) ne répond pas. Le déploiement est considéré comme ÉCHOUÉ."
+          else
+            echo "::error title=Staging injoignable::Ni ${sonde} ni ${base}/api/v1/health ne répondent après $((essais * intervalle)) s. Le déploiement est considéré comme ÉCHOUÉ (rollback : voir le bandeau de ce fichier)."
+          fi
           exit 1
 
       - name: Bilan
         id: bilan
         if: always()
+        env:
+          URL_BASE: ${{ vars.STAGING_BASE_URL }}
         run: |
           set -euo pipefail
-          echo "url_base=${{ vars.STAGING_BASE_URL }}" >> "$GITHUB_OUTPUT"
-
-      - name: Effacer la clé SSH du runner
-        if: always()
-        run: rm -f ~/.ssh/deploy_key ~/.ssh/known_hosts
+          echo "url_base=${URL_BASE}" >> "$GITHUB_OUTPUT"
 
       # Notification Telegram — canal interne Axion-IA (02 §11.3 et §30.6).
       - name: Notifier Telegram
@@ -218,20 +411,25 @@ jobs:
         env:
           JETON: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           SALON: ${{ secrets.TELEGRAM_CHAT_ID }}
+          STATUT: ${{ job.status }}
+          TAG_IMAGE: ${{ inputs.tag_image }}
+          UUID_DEPLOIEMENT: ${{ steps.declenchement.outputs.uuid_deploiement }}
+          COMMIT: ${{ github.sha }}
+          LIEN_RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
-          if [ -z "${JETON}" ] || [ -z "${SALON}" ]; then
-            echo "::error title=Alerte impossible::TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID absents de l'environment staging. Un déploiement sans canal d'alerte est un déploiement aveugle (02 §11.3)."
+          if [ -z "${JETON:-}" ] || [ -z "${SALON:-}" ]; then
+            echo "::error title=Alerte impossible::TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID absents. Un déploiement sans canal d alerte est un déploiement aveugle (02 §11.3)."
             exit 1
           fi
-          statut='${{ job.status }}'
-          texte="Axion Audit — déploiement STAGING : ${statut}
-          Tag : ${{ inputs.tag_image }}
-          Commit : ${{ github.sha }}
-          Run : ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          curl -fsS -X POST "https://api.telegram.org/bot${JETON}/sendMessage" \
+          texte="Axion Audit — déploiement STAGING : ${STATUT}
+          Tag : ${TAG_IMAGE}
+          Déploiement Coolify : ${UUID_DEPLOIEMENT:-non déclenché}
+          Commit : ${COMMIT}
+          Run : ${LIEN_RUN}"
+          curl -fsS --max-time 30 -o /dev/null -X POST "https://api.telegram.org/bot${JETON}/sendMessage" \
             --data-urlencode "chat_id=${SALON}" \
-            --data-urlencode "text=${texte}" >/dev/null
+            --data-urlencode "text=${texte}"
 
   # ---------------------------------------------------------------------------
   # ZAP baseline « à chaque build » (09 §1 rôle A51 · 07 §13 « ZAP baseline en

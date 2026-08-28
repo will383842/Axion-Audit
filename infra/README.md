@@ -192,6 +192,31 @@ fait en supprimant le volume et en redéployant, jamais pendant une journée de 
 
 > **Ne fermez jamais votre session SSH courante** tant que le nouvel accès n'est pas testé.
 
+> ## ⛔ ARRÊTEZ-VOUS AVANT DE LANCER CETTE COMMANDE SUR UNE MACHINE HABITÉE
+>
+> **Ce script est écrit pour un serveur NEUF ET VIDE.** Sur une machine qui héberge déjà quelque
+> chose — c'est le cas de `axionia-web`, qui sert `axion-ia.com` — il fait au moins trois choses
+> dangereuses, vérifiées ligne à ligne par l'agent sécurité A54 :
+>
+> 1. **il fait passer SSH du port 22 au port 2222** et redémarre le démon. Les sessions ouvertes
+>    survivent, **toute nouvelle connexion sur 22 échoue**. C'est le meilleur moyen de se verrouiller
+>    dehors de son propre serveur ;
+> 2. **il active un pare-feu UFW aujourd'hui inactif**, ce qui coupe l'accès humain à SSH sur 22 —
+>    sans pour autant refermer les ports publiés par Docker, dont les règles sont évaluées AVANT
+>    celles d'UFW ;
+> 3. **il installe Docker CE** alors qu'une autre installation est peut-être déjà là. Le remplacement
+>    redémarre le démon, donc **arrête tous les conteneurs, y compris le site de production**.
+>
+> Un quatrième effet ne se produit pas ici par chance de conception : `userns-remap` n'est écrit que
+> si `/etc/docker/daemon.json` est absent. Si ce fichier venait à disparaître, le remappage des UID
+> s'appliquerait à **tous les volumes existants** — la base PostgreSQL du voisin ne redémarrerait plus.
+>
+> **Sur `axionia-web`, on n'exécute PAS ce script.** On en reprend à la main la seule partie
+> inoffensive : vérifier Docker, créer l'arborescence, créer l'utilisateur de déploiement. Le
+> durcissement SSH et le pare-feu appartiennent à celui qui connaît la machine.
+>
+> Procédure complète : **`infra/COHABITATION_AXIONIA_WEB.md`**.
+
 ```bash
 # 3.1 — Depuis votre poste : déposer votre clé publique AVANT tout durcissement
 ssh-copy-id root@<IP>

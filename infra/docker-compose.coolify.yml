@@ -1,0 +1,833 @@
+# =============================================================================
+# infra/docker-compose.coolify.yml — PILE DE STAGING DÉPLOYÉE PAR COOLIFY
+# sur le serveur `axionia-web`, DERRIÈRE le Traefik de Coolify.
+#
+# Applique : DECISIONS.md 2026-08-28 « Le staging s'insère derrière le Traefik de
+# Coolify » (option 4, à RATIFIER à la porte P-A), 11 §2 (pas de CORS : domaine
+# unique, `/` → terrain, `/hq` → console, `/api` → API, servis par NOTRE Caddy),
+# 06 §10.3 (Postgres/Redis/MinIO jamais exposés), 02 §30.4-4 (séparation stricte),
+# infra/COHABITATION_AXIONIA_WEB.md §5 (les quatre conditions de cohabitation).
+# =============================================================================
+#
+# ┌───────────────────────────────────────────────────────────────────────────┐
+# │ POURQUOI CE FICHIER EXISTE ALORS QUE docker-compose.staging.yml EXISTE    │
+# │ Coolify ne prend qu'UN SEUL chemin de compose et n'applique AUCUNE        │
+# │ surcharge : il n'y a pas de `-f base.yml -f surcharge.yml`. Ce fichier    │
+# │ est donc AUTOPORTANT. Il reprend fidèlement les définitions de            │
+# │ infra/docker-compose.yml (images, commandes, sondes, variables) au lieu   │
+# │ de s'appuyer dessus.                                                      │
+# │                                                                           │
+# │ CONSÉQUENCE ASSUMÉE : c'est une DUPLICATION. Toute modification de        │
+# │ infra/docker-compose.yml qui touche une image, une commande, une sonde ou │
+# │ une variable doit être reportée ICI dans le même commit. Rien dans la     │
+# │ chaîne d'outils ne le vérifie à notre place aujourd'hui.                  │
+# │                                                                           │
+# │ COROLLAIRE : les balises `!reset` / `!override` de docker-compose.staging │
+# │ .yml n'ont PAS d'équivalent ici et n'en ont pas besoin. Elles servent à   │
+# │ EFFACER une clé héritée d'un fichier de base (`ports: !reset []` supprime │
+# │ les publications de ports du fichier de dev). Sans fichier de base, la    │
+# │ bonne façon de ne rien publier est de NE PAS ÉCRIRE de clé `ports:` —     │
+# │ c'est ce qui est fait ci-dessous, sur tous les services sans exception.   │
+# └───────────────────────────────────────────────────────────────────────────┘
+#
+# -----------------------------------------------------------------------------
+# CE QUE CE FICHIER FAIT, ET CE QU'IL NE FAIT PAS
+# -----------------------------------------------------------------------------
+# IL FAIT :
+#   · construire toutes les images DEPUIS LE DÉPÔT (aucune image tirée d'un
+#     registre privé) ;
+#   · ne publier AUCUN port sur l'hôte, pour AUCUN service ;
+#   · exposer notre Caddy au seul Traefik de Coolify, par un réseau Docker
+#     partagé, en HTTP simple sur 8080 ;
+#   · plafonner CPU, mémoire ET SWAP de TOUS les conteneurs (COHABITATION §5.4 ;
+#     voir l'encadré « DEUX MÉCANISMES DE PLAFOND » ci-dessous) ;
+#   · nommer réseau et volumes de façon distincte de la pile de dev, de la pile
+#     `docker-compose.staging.yml` et du projet voisin `Axion-IA`.
+#
+# IL NE FAIT PAS :
+#   · il ne termine PAS TLS et n'obtient AUCUN certificat — c'est Traefik qui le
+#     fait pour le sous-domaine (DECISIONS.md 2026-08-28) ;
+#   · il ne pose AUCUN label Traefik. Le routeur (Host + TLS) est généré par
+#     Coolify à partir du domaine posé sur le service `caddy`. Deux routeurs
+#     concurrents pour le même hôte seraient pires que pas de routeur du tout ;
+#   · les plafonds mémoire s'appliquent aux conteneurs EN EXÉCUTION. Ils ne
+#     plafonnent PAS la CONSTRUCTION des images (pnpm install + build Vite), qui
+#     tourne dans le démon Docker, hors de ces limites. Ne pas déclencher un
+#     déploiement pendant une pointe de trafic sur axion-ia.com ;
+#   · il ne durcit ni SSH ni le pare-feu — `provision-vps.sh` NE DOIT PAS être
+#     exécuté sur cette machine (COHABITATION §2) ;
+#   · il ne crée pas la stanza pgBackRest. L'archivage WAL est actif
+#     (postgresql.custom.conf) mais `stanza-create` reste une commande manuelle
+#     à passer une fois, sinon les WAL s'accumulent dans pg_wal (voir
+#     infra/README.md).
+#
+# ┌───────────────────────────────────────────────────────────────────────────┐
+# │ DEUX MÉCANISMES DE PLAFOND MÉMOIRE — ILS NE FONT PAS LA MÊME CHOSE.       │
+# │ N'EN SUPPRIMEZ AUCUN. Chaque service porte TROIS clés, et il en faut      │
+# │ trois :                                                                   │
+# │                                                                           │
+# │   deploy.resources.limits.cpus     → plafond CPU                          │
+# │   deploy.resources.limits.memory   → plafond de RAM                       │
+# │   mem_limit                        → plafond de RAM (clé de service)      │
+# │   memswap_limit                    → plafond RAM + SWAP CUMULÉS           │
+# │                                                                           │
+# │ POURQUOI `memswap_limit` — MESURE, PAS SUPPOSITION (A54, 2026-08-28).     │
+# │ Lecture des cgroups du seul conteneur plafonné de la machine :            │
+# │     memory.max      = 1073741824   (1 Gio)                                │
+# │     memory.swap.max = 1073741824   (1 Gio)                                │
+# │ Docker applique par défaut `--memory-swap = 2 × --memory`, et en cgroup   │
+# │ v2 `memory.swap.max` S'AJOUTE à `memory.max`. Un service plafonné à       │
+# │ 768 Mio pouvait donc occuper 768 Mio de RAM PLUS 768 Mio de swap : les    │
+# │ 4 096 Mio annoncés par ce fichier étaient en réalité un engagement de     │
+# │ 8 192 Mio de RAM+swap.                                                    │
+# │ Le swap disponible (~7 Go) l'absorberait — mais un staging qui swappe     │
+# │ plusieurs Go SATURE LES ENTRÉES-SORTIES DE /dev/sda1, que le site de      │
+# │ production et ses sauvegardes horaires PARTAGENT. On aurait échangé un    │
+# │ risque d'OOM, que les plafonds maîtrisent, contre un risque de lenteur    │
+# │ du site, qu'ils ne maîtrisent pas.                                        │
+# │ `memswap_limit == mem_limit` met `memory.swap.max` à 0 : le conteneur ne  │
+# │ swappe plus du tout, et le plafond annoncé est le plafond réel.           │
+# │                                                                           │
+# │ POURQUOI PAS SOUS `deploy:` — `deploy.resources.limits` NE SAIT PAS       │
+# │ régler le swap ; il n'existe aucune clé pour cela. `mem_limit` et         │
+# │ `memswap_limit` sont des clés de service de PREMIER NIVEAU. Elles         │
+# │ COHABITENT avec `deploy.resources.limits` sans le remplacer : la première │
+# │ paire porte le swap, la seconde porte le CPU. Supprimer l'une des deux    │
+# │ familles rouvre exactement le trou décrit ci-dessus.                      │
+# │ `mem_limit` est requis pour que `memswap_limit` ait un sens : Docker      │
+# │ refuse un plafond de swap sans plafond de mémoire. Il vaut donc TOUJOURS  │
+# │ la même valeur que `deploy.resources.limits.memory` — trois valeurs à     │
+# │ garder identiques par service.                                            │
+# └───────────────────────────────────────────────────────────────────────────┘
+#
+# -----------------------------------------------------------------------------
+# PRÉREQUIS SUR LE SERVEUR — À VÉRIFIER AVANT LE PREMIER DÉPLOIEMENT
+# -----------------------------------------------------------------------------
+# Le réseau du proxy de Coolify doit exister et le proxy doit y être attaché.
+# Deux commandes de LECTURE, elles ne modifient rien :
+#
+#   docker network inspect coolify --format '{{.Name}}'
+#   docker network inspect coolify --format '{{range .Containers}}{{.Name}} {{end}}'
+#
+# La seconde doit citer `coolify-proxy`. Si le réseau porte un autre nom sur
+# cette installation, posez ce nom dans COOLIFY_PROXY_NETWORK (voir plus bas).
+# Le réseau est déclaré `external` : s'il n'existe pas, le déploiement échoue
+# immédiatement et bruyamment — ce qui vaut mieux qu'une pile démarrée que le
+# proxy ne peut pas joindre.
+#
+# -----------------------------------------------------------------------------
+# VARIABLES D'ENVIRONNEMENT ATTENDUES DE COOLIFY — LISTE EXACTE
+# -----------------------------------------------------------------------------
+# A. OBLIGATOIRES. Déclarées `${VAR:?…}` : si l'une manque ou est vide, le
+#    déploiement S'ARRÊTE avec un message nommant la variable. Aucune ne prend
+#    de valeur par défaut, et AUCUN secret n'est écrit dans ce fichier.
+#
+#   PUBLIC_BASE_URL              URL publique du staging (ex. https://audit-staging.axion-ia.com)
+#   CONSOLE_BASE_URL             URL de la console siège (généralement <PUBLIC_BASE_URL>/hq)
+#   POSTGRES_PASSWORD            mot de passe du rôle applicatif PostgreSQL
+#   DATABASE_URL                 postgresql://<user>:<pass>@postgres:5432/<db>   (hôte = `postgres`)
+#   REDIS_PASSWORD               mot de passe Redis
+#   REDIS_URL                    redis://:<pass>@redis:6379                      (hôte = `redis`)
+#   MINIO_ROOT_USER              compte racine MinIO (jamais utilisé par l'app)
+#   MINIO_ROOT_PASSWORD          mot de passe racine MinIO
+#   MINIO_ACCESS_KEY             compte applicatif RESTREINT créé par `createbuckets`
+#   MINIO_SECRET_KEY             secret du compte applicatif
+#   JWT_ACCESS_SECRET            64 caractères hex MINIMUM (openssl rand -hex 32)
+#   JWT_REFRESH_SECRET           64 caractères hex MINIMUM, DISTINCT du précédent
+#   APP_ENCRYPTION_KEY           clé de chiffrement applicative
+#   CONSOLE_WEBHOOK_SECRET       secret de signature des webhooks console
+#   PGBACKREST_CIPHER_PASS       passphrase de chiffrement du dépôt de sauvegarde
+#   SEED_ADMIN_EMAIL             compte administrateur initial du staging
+#   SEED_ADMIN_PASSWORD          mot de passe de ce compte
+#
+#   ⚠️ DATABASE_URL et REDIS_URL sont fournies TELLES QUELLES et ne sont pas
+#      recomposées ici : un mot de passe contenant `@`, `:` ou `/` doit être
+#      encodé par celui qui écrit l'URL. Leurs identifiants doivent coïncider
+#      avec POSTGRES_* / REDIS_PASSWORD — rien ne le vérifie au démarrage.
+#
+# B. FACULTATIVES, valeur par défaut appliquée ci-dessous entre parenthèses.
+#    Non secrètes : ce sont des conventions de la pile, pas des réglages.
+#
+#   COOLIFY_PROXY_NETWORK (coolify)   réseau Docker du proxy Traefik de Coolify
+#   NODE_ENV (production) · APP_ENV (staging) · LOG_LEVEL (info) · TZ (UTC)
+#   API_HOST (0.0.0.0) · API_PORT (3000)
+#   POSTGRES_HOST (postgres) · POSTGRES_PORT (5432) · POSTGRES_DB (axion_audit)
+#   POSTGRES_USER (axion)
+#   REDIS_HOST (redis) · REDIS_PORT (6379)
+#   MINIO_ENDPOINT (minio) · MINIO_PORT (9000) · MINIO_USE_SSL (false)
+#   MINIO_BUCKET_ATTACHMENTS (axion-attachments) · MINIO_BUCKET_REPORTS (axion-reports)
+#   MINIO_BUCKET_TEMPLATES (axion-templates)
+#   JWT_ACCESS_TTL (15m) · JWT_REFRESH_TTL (30d)
+#   CONSOLE_WEBHOOK_TOLERANCE_SECONDS (300)
+#   PGBACKREST_STANZA (axion) · PGBACKREST_REPO_PATH (/var/lib/pgbackrest)
+#   BACKUP_RETENTION_DAYS (30)
+#   LLM_COST_CAP_PER_MISSION_EUR (50)
+#   ALERT_DISK_USAGE_PERCENT (80) · ALERT_LLM_JOB_MAX_MINUTES (5)
+#   ALERT_CERT_EXPIRY_DAYS (15) · ALERT_SYNC_SILENT_HOURS (24)
+#   SEED_ADMIN_FULL_NAME (Administrateur Axion)
+#   VITE_APP_ENV (staging) · VITE_APP_VERSION (staging)
+#
+#   ⚠️ PGBACKREST_STANZA : si vous la changez, changez AUSSI le nom de section
+#      `[axion]` dans infra/pgbackrest/pgbackrest.conf — un nom de section ne
+#      peut pas venir de l'environnement.
+#
+# C. FACULTATIVES ET VIDES PAR DÉFAUT. Le staging fonctionne sans elles ; les
+#    fonctions correspondantes sont alors inertes.
+#
+#   ANTHROPIC_API_KEY · DOCXTEMPLATER_LICENSE
+#   CONSOLE_WEBHOOK_SECRET_PREVIOUS (rotation de secret)
+#   TELEGRAM_BOT_TOKEN · TELEGRAM_CHAT_ID
+#   SMTP_HOST · SMTP_PORT (587) · SMTP_USER · SMTP_PASSWORD · SMTP_FROM
+#
+# D. VARIABLES QUI NE SONT VOLONTAIREMENT PAS DÉCLARÉES ICI
+#
+#   CADDY_ACME_EMAIL   : aucun ACME dans cette pile (Traefik fait le TLS). Le
+#                        Caddyfile a un repli syntaxique, jamais utilisé.
+#   VITE_API_BASE_URL  : ce N'EST PAS un `ARG` des Dockerfiles de `field`/`hq`.
+#                        La déclarer n'aurait AUCUN effet sur le build. Le front
+#                        appelle l'API sur la même origine (11 §2).
+#   GHCR_OWNER, IMAGE_TAG : aucune image n'est tirée d'un registre (voir `api`).
+#
+# =============================================================================
+
+name: axion-audit-coolify
+
+# -----------------------------------------------------------------------------
+# Fragments réutilisables
+# -----------------------------------------------------------------------------
+x-restart: &restart
+  restart: unless-stopped
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: '10m'
+      max-file: '5'
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16 — image CONSTRUITE localement (Dockerfile ./postgres) pour
+  # embarquer pgBackRest (02 §11.4). Identique à infra/docker-compose.yml, sans
+  # la publication de port : en staging la base n'est jamais joignable depuis
+  # l'hôte (06 §10.3).
+  # ---------------------------------------------------------------------------
+  postgres:
+    <<: [*restart, *logging]
+    build:
+      context: ./postgres
+      dockerfile: Dockerfile
+    image: axion-audit-postgres:16
+    # Config personnalisée hors PGDATA : hba_file/ident_file doivent alors être
+    # désignés explicitement (ils ne sont plus déduits du répertoire de données).
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.custom.conf
+      - -c
+      - hba_file=/var/lib/postgresql/data/pg_hba.conf
+      - -c
+      - ident_file=/var/lib/postgresql/data/pg_ident.conf
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-axion_audit}
+      POSTGRES_USER: ${POSTGRES_USER:-axion}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?variable obligatoire, mot de passe PostgreSQL}
+      TZ: ${TZ:-UTC}
+      # Horodatages UTC en base (invariant 5).
+      PGTZ: ${TZ:-UTC}
+      # pgBackRest lit ses options dans l'environnement (PGBACKREST_<OPTION>) :
+      # la passphrase du dépôt n'apparaît JAMAIS dans un fichier versionné.
+      PGBACKREST_STANZA: ${PGBACKREST_STANZA:-axion}
+      PGBACKREST_REPO1_PATH: ${PGBACKREST_REPO_PATH:-/var/lib/pgbackrest}
+      PGBACKREST_REPO1_CIPHER_PASS: ${PGBACKREST_CIPHER_PASS:?variable obligatoire, passphrase du depot pgBackRest}
+      PGBACKREST_REPO1_RETENTION_FULL_TYPE: time
+      PGBACKREST_REPO1_RETENTION_FULL: ${BACKUP_RETENTION_DAYS:-30}
+      # Rôle et base de connexion : l'image officielle initialise le cluster avec
+      # POSTGRES_USER/POSTGRES_DB, le rôle `postgres` n'existe pas.
+      PGBACKREST_PG1_USER: ${POSTGRES_USER:-axion}
+      PGBACKREST_PG1_DATABASE: ${POSTGRES_DB:-axion_audit}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - pgbackrest_repo:${PGBACKREST_REPO_PATH:-/var/lib/pgbackrest}
+      - ./postgres/postgresql.custom.conf:/etc/postgresql/postgresql.custom.conf:ro
+      - ./pgbackrest/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
+    # AUCUNE clé `ports:` — voir l'en-tête. La base n'est joignable que par le
+    # réseau interne `axion`.
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks: [axion]
+    # Swap NEUTRALISÉ (memswap_limit == mem_limit) : voir l'encadré « DEUX
+    # MÉCANISMES DE PLAFOND » en tête de fichier. Les trois valeurs mémoire
+    # d'un service sont TOUJOURS identiques.
+    mem_limit: 1024M
+    memswap_limit: 1024M
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1024M
+
+  # ---------------------------------------------------------------------------
+  # Redis 7 — files BullMQ. Mot de passe par l'environnement, jamais en argument
+  # littéral (il apparaîtrait dans `docker inspect` et dans la ligne de commande).
+  # ---------------------------------------------------------------------------
+  redis:
+    <<: [*restart, *logging]
+    image: redis:7-alpine
+    command:
+      [
+        'sh',
+        '-c',
+        'exec redis-server --requirepass "$$REDIS_PASSWORD" --appendonly yes --appendfsync everysec',
+      ]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?variable obligatoire, mot de passe Redis}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli --no-auth-warning -a "$$REDIS_PASSWORD" ping | grep -q PONG']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks: [axion]
+    # Swap neutralisé — encadré « DEUX MÉCANISMES DE PLAFOND ».
+    mem_limit: 256M
+    memswap_limit: 256M
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+  # ---------------------------------------------------------------------------
+  # MinIO — INTERDICTION 11 §2 : jamais exposé publiquement. Aucun port publié,
+  # pas même la console d'administration :9001 (confort de debug LOCAL, il n'a
+  # rien à faire sur une machine qui héberge un site de production). Tout
+  # téléchargement passe par l'API, en flux, avec RBAC.
+  # ---------------------------------------------------------------------------
+  minio:
+    <<: [*restart, *logging]
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?variable obligatoire, compte racine MinIO}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?variable obligatoire, mot de passe racine MinIO}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [axion]
+    # Swap neutralisé — encadré « DEUX MÉCANISMES DE PLAFOND ».
+    mem_limit: 512M
+    memswap_limit: 512M
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  # ---------------------------------------------------------------------------
+  # createbuckets — job `mc` ONE-SHOT et IDEMPOTENT : les 3 buckets privés et
+  # l'utilisateur applicatif RESTREINT (moindre accès : l'app n'utilise JAMAIS
+  # root). `$$` = échappement de l'interpolation Compose → la valeur reste dans
+  # le conteneur, jamais dans ce fichier ni dans la ligne de commande.
+  # ---------------------------------------------------------------------------
+  createbuckets:
+    <<: [*logging]
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    restart: 'no' # exception assumée : job one-shot, pas un service
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?variable obligatoire, compte racine MinIO}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?variable obligatoire, mot de passe racine MinIO}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?variable obligatoire, compte applicatif MinIO}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?variable obligatoire, secret du compte applicatif MinIO}
+      MINIO_BUCKET_ATTACHMENTS: ${MINIO_BUCKET_ATTACHMENTS:-axion-attachments}
+      MINIO_BUCKET_REPORTS: ${MINIO_BUCKET_REPORTS:-axion-reports}
+      MINIO_BUCKET_TEMPLATES: ${MINIO_BUCKET_TEMPLATES:-axion-templates}
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - |
+        set -eu
+        mc alias set local "http://minio:9000" "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
+
+        # 1. Les 3 buckets, privés (aucun accès anonyme).
+        for b in "$$MINIO_BUCKET_ATTACHMENTS" "$$MINIO_BUCKET_REPORTS" "$$MINIO_BUCKET_TEMPLATES"; do
+          mc mb --ignore-existing "local/$$b"
+          mc anonymous set none "local/$$b"
+        done
+
+        # 2. Politique de moindre accès, limitée à ces 3 buckets.
+        cat > /tmp/axion-app-policy.json <<JSON
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": ["s3:GetBucketLocation", "s3:ListBucket", "s3:ListBucketMultipartUploads"],
+              "Resource": [
+                "arn:aws:s3:::$$MINIO_BUCKET_ATTACHMENTS",
+                "arn:aws:s3:::$$MINIO_BUCKET_REPORTS",
+                "arn:aws:s3:::$$MINIO_BUCKET_TEMPLATES"
+              ]
+            },
+            {
+              "Effect": "Allow",
+              "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListMultipartUploadParts", "s3:AbortMultipartUpload"],
+              "Resource": [
+                "arn:aws:s3:::$$MINIO_BUCKET_ATTACHMENTS/*",
+                "arn:aws:s3:::$$MINIO_BUCKET_REPORTS/*",
+                "arn:aws:s3:::$$MINIO_BUCKET_TEMPLATES/*"
+              ]
+            }
+          ]
+        }
+        JSON
+
+        # 3. Utilisateur applicatif + politique (rejouable sans dégât).
+        mc admin user info local "$$MINIO_ACCESS_KEY" >/dev/null 2>&1 \
+          || mc admin user add local "$$MINIO_ACCESS_KEY" "$$MINIO_SECRET_KEY"
+        mc admin policy rm local axion-app >/dev/null 2>&1 || true
+        mc admin policy create local axion-app /tmp/axion-app-policy.json
+        mc admin policy attach local axion-app --user "$$MINIO_ACCESS_KEY" >/dev/null 2>&1 || true
+        rm -f /tmp/axion-app-policy.json
+
+        echo "createbuckets: buckets et utilisateur applicatif restreint prets."
+    networks: [axion]
+    # Swap neutralisé — encadré « DEUX MÉCANISMES DE PLAFOND ».
+    mem_limit: 128M
+    memswap_limit: 128M
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+
+  # ---------------------------------------------------------------------------
+  # API Fastify — CONSTRUITE DEPUIS LE DÉPÔT, cible `runtime`.
+  #
+  # ┌─────────────────────────────────────────────────────────────────────────┐
+  # │ POURQUOI ON NE TIRE PAS L'IMAGE DE GHCR — CHOIX ASSUMÉ.                 │
+  # │ docker-compose.staging.yml et .prod.yml tirent `ghcr.io/…` : c'est le   │
+  # │ déploiement par SSH, où la CI a poussé l'image et où le serveur détient │
+  # │ un jeton de lecture du registre. Ici, RIEN DE TOUT CELA :               │
+  # │   · les paquets GHCR du dépôt sont PRIVÉS ;                             │
+  # │   · `axionia-web` n'a pas de `docker login ghcr.io` et Coolify ne lui   │
+  # │     en fournit pas ;                                                    │
+  # │   · un `pull` échouerait donc à chaque déploiement.                     │
+  # │ On construit sur le serveur. Le coût est réel et il faut le connaître : │
+  # │ la construction consomme CPU, RAM et disque HORS des plafonds           │
+  # │ `deploy.resources.limits` ci-dessous, sur la machine qui héberge        │
+  # │ axion-ia.com. Ne pas déployer pendant une pointe de trafic.             │
+  # └─────────────────────────────────────────────────────────────────────────┘
+  #
+  # Moindre accès : PAS d'ANTHROPIC_API_KEY ici, elle n'existe que dans le worker.
+  # ---------------------------------------------------------------------------
+  api:
+    <<: [*restart, *logging]
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+      target: runtime
+    image: axion-audit-api:coolify
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      createbuckets:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      APP_ENV: ${APP_ENV:-staging}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      TZ: ${TZ:-UTC}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?variable obligatoire, URL publique du staging}
+      API_HOST: ${API_HOST:-0.0.0.0}
+      API_PORT: ${API_PORT:-3000}
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-axion_audit}
+      POSTGRES_USER: ${POSTGRES_USER:-axion}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?variable obligatoire, mot de passe PostgreSQL}
+      DATABASE_URL: ${DATABASE_URL:?variable obligatoire, URL PostgreSQL complete}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?variable obligatoire, mot de passe Redis}
+      REDIS_URL: ${REDIS_URL:?variable obligatoire, URL Redis complete}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio}
+      MINIO_PORT: ${MINIO_PORT:-9000}
+      MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?variable obligatoire, compte applicatif MinIO}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?variable obligatoire, secret du compte applicatif MinIO}
+      MINIO_BUCKET_ATTACHMENTS: ${MINIO_BUCKET_ATTACHMENTS:-axion-attachments}
+      MINIO_BUCKET_REPORTS: ${MINIO_BUCKET_REPORTS:-axion-reports}
+      MINIO_BUCKET_TEMPLATES: ${MINIO_BUCKET_TEMPLATES:-axion-templates}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?variable obligatoire, 64 caracteres hex minimum}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?variable obligatoire, distincte de JWT_ACCESS_SECRET}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-30d}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?variable obligatoire, cle de chiffrement applicative}
+      CONSOLE_BASE_URL: ${CONSOLE_BASE_URL:?variable obligatoire, URL de la console siege}
+      CONSOLE_WEBHOOK_SECRET: ${CONSOLE_WEBHOOK_SECRET:?variable obligatoire, secret de signature des webhooks}
+      CONSOLE_WEBHOOK_SECRET_PREVIOUS: ${CONSOLE_WEBHOOK_SECRET_PREVIOUS:-}
+      CONSOLE_WEBHOOK_TOLERANCE_SECONDS: ${CONSOLE_WEBHOOK_TOLERANCE_SECONDS:-300}
+      ALERT_SYNC_SILENT_HOURS: ${ALERT_SYNC_SILENT_HOURS:-24}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:?variable obligatoire, compte administrateur initial}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:?variable obligatoire, mot de passe administrateur initial}
+      SEED_ADMIN_FULL_NAME: ${SEED_ADMIN_FULL_NAME:-Administrateur Axion}
+    # AUCUN volume : l'image `runtime` est autosuffisante (pas de code monté).
+    # AUCUN port publié : Caddy est le seul à joindre l'API, par le réseau interne.
+    healthcheck:
+      # Sonde HTTP sur la route de santé, sans outil externe (Node 22 = fetch natif).
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:'+(process.env.API_PORT||'3000')+'/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    networks:
+      # ┌───────────────────────────────────────────────────────────────────┐
+      # │ ALIAS `axion-api` — OBLIGATOIRE, NE PAS RENOMMER.                 │
+      # │ Le Caddyfile écrit `reverse_proxy axion-api:{$API_PORT}` dans son │
+      # │ PREMIER bloc de site, et son en-tête interdit explicitement le    │
+      # │ nom court `api` : ce nom existe des deux côtés d'un Caddy         │
+      # │ multi-réseaux et résoudrait de façon NON DÉTERMINISTE. Le         │
+      # │ Caddyfile n'est pas modifiable depuis ce fichier — c'est donc à   │
+      # │ l'alias de s'y conformer, pas l'inverse.                          │
+      # └───────────────────────────────────────────────────────────────────┘
+      axion:
+        aliases: [axion-api]
+    # Swap neutralisé — encadré « DEUX MÉCANISMES DE PLAFOND ».
+    mem_limit: 768M
+    memswap_limit: 768M
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 768M
+
+  # ---------------------------------------------------------------------------
+  # Worker BullMQ — CONSTRUIT DEPUIS LE DÉPÔT (même motif que l'API), cible
+  # `runtime`. Seul conteneur à détenir ANTHROPIC_API_KEY ; porte aussi les
+  # canaux d'alerte. Il n'expose AUCUN HTTP et ne touche PAS le réseau du proxy.
+  # ---------------------------------------------------------------------------
+  worker:
+    <<: [*restart, *logging]
+    build:
+      context: ..
+      dockerfile: apps/worker/Dockerfile
+      target: runtime
+    image: axion-audit-worker:coolify
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      createbuckets:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      APP_ENV: ${APP_ENV:-staging}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      TZ: ${TZ:-UTC}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?variable obligatoire, URL publique du staging}
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-axion_audit}
+      POSTGRES_USER: ${POSTGRES_USER:-axion}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?variable obligatoire, mot de passe PostgreSQL}
+      DATABASE_URL: ${DATABASE_URL:?variable obligatoire, URL PostgreSQL complete}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?variable obligatoire, mot de passe Redis}
+      REDIS_URL: ${REDIS_URL:?variable obligatoire, URL Redis complete}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio}
+      MINIO_PORT: ${MINIO_PORT:-9000}
+      MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?variable obligatoire, compte applicatif MinIO}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?variable obligatoire, secret du compte applicatif MinIO}
+      MINIO_BUCKET_ATTACHMENTS: ${MINIO_BUCKET_ATTACHMENTS:-axion-attachments}
+      MINIO_BUCKET_REPORTS: ${MINIO_BUCKET_REPORTS:-axion-reports}
+      MINIO_BUCKET_TEMPLATES: ${MINIO_BUCKET_TEMPLATES:-axion-templates}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?variable obligatoire, cle de chiffrement applicative}
+      # Facultatives : sans elles, les fonctions LLM et rapports restent inertes.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LLM_COST_CAP_PER_MISSION_EUR: ${LLM_COST_CAP_PER_MISSION_EUR:-50}
+      DOCXTEMPLATER_LICENSE: ${DOCXTEMPLATER_LICENSE:-}
+      CONSOLE_BASE_URL: ${CONSOLE_BASE_URL:?variable obligatoire, URL de la console siege}
+      CONSOLE_WEBHOOK_SECRET: ${CONSOLE_WEBHOOK_SECRET:?variable obligatoire, secret de signature des webhooks}
+      CONSOLE_WEBHOOK_SECRET_PREVIOUS: ${CONSOLE_WEBHOOK_SECRET_PREVIOUS:-}
+      CONSOLE_WEBHOOK_TOLERANCE_SECONDS: ${CONSOLE_WEBHOOK_TOLERANCE_SECONDS:-300}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      ALERT_DISK_USAGE_PERCENT: ${ALERT_DISK_USAGE_PERCENT:-80}
+      ALERT_LLM_JOB_MAX_MINUTES: ${ALERT_LLM_JOB_MAX_MINUTES:-5}
+      ALERT_CERT_EXPIRY_DAYS: ${ALERT_CERT_EXPIRY_DAYS:-15}
+      ALERT_SYNC_SILENT_HOURS: ${ALERT_SYNC_SILENT_HOURS:-24}
+    healthcheck:
+      # Le worker n'expose pas d'HTTP (BullMQ) : sonde de vivacité du processus.
+      test: ['CMD-SHELL', 'pgrep -f node >/dev/null || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
+    networks: [axion]
+    # Swap neutralisé — encadré « DEUX MÉCANISMES DE PLAFOND ».
+    mem_limit: 768M
+    memswap_limit: 768M
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 768M
+
+  # ---------------------------------------------------------------------------
+  # PWA terrain — JOB ONE-SHOT, PAS UN SERVEUR.
+  # La cible `runtime` du Dockerfile copie `dist` dans /statique, puis son CMD
+  # déverse /statique dans /sortie et SORT en 0. Trois réglages qui vont
+  # ensemble et qu'il ne faut pas dissocier :
+  #   · `restart: "no"` — redémarrer un job terminé le ferait boucler ;
+  #   · AUCUN healthcheck — un conteneur sorti n'a pas de vivacité à sonder, et
+  #     une sonde qui ne peut pas réussir bloque tout ce qui en dépend ;
+  #   · Caddy en dépend par `service_completed_successfully`, jamais `_healthy`.
+  # ---------------------------------------------------------------------------
+  field:
+    <<: [*logging]
+    build:
+      context: ..
+      dockerfile: apps/field/Dockerfile
+      target: runtime
+      args:
+        # Injectées dans le bundle Vite. Publiques par construction : elles
+        # servent l'écran « À propos » et le diagnostic de version du service
+        # worker (§31). Jamais un secret ici — un bundle est lisible par tous.
+        VITE_APP_VERSION: ${VITE_APP_VERSION:-staging}
+        VITE_APP_ENV: ${VITE_APP_ENV:-staging}
+    image: axion-audit-field:coolify
+    restart: 'no'
+    volumes:
+      - field_dist:/sortie
+    networks: [axion]
+    # Swap neutralisé — encadré « DEUX MÉCANISMES DE PLAFOND ».
+    mem_limit: 256M
+    memswap_limit: 256M
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+  # ---------------------------------------------------------------------------
+  # Console siège — JOB ONE-SHOT, mêmes règles que `field` (build en base /hq/).
+  # ---------------------------------------------------------------------------
+  hq:
+    <<: [*logging]
+    build:
+      context: ..
+      dockerfile: apps/hq/Dockerfile
+      target: runtime
+      args:
+        VITE_APP_VERSION: ${VITE_APP_VERSION:-staging}
+        VITE_APP_ENV: ${VITE_APP_ENV:-staging}
+    image: axion-audit-hq:coolify
+    restart: 'no'
+    volumes:
+      - hq_dist:/sortie
+    networks: [axion]
+    # Swap neutralisé — encadré « DEUX MÉCANISMES DE PLAFOND ».
+    mem_limit: 256M
+    memswap_limit: 256M
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+  # ---------------------------------------------------------------------------
+  # Caddy — NOTRE routeur interne, DERRIÈRE le Traefik de Coolify.
+  #
+  # ┌─────────────────────────────────────────────────────────────────────────┐
+  # │ ADRESSES DE SITE — POURQUOI `:8080` ET `:8081`.                         │
+  # │ Le Caddyfile déclare DEUX blocs, {$CADDY_SITE_ADDRESS} et               │
+  # │ {$CADDY_STAGING_SITE_ADDRESS}, et n'est pas modifiable depuis ce        │
+  # │ fichier. Il faut donc choisir les valeurs, pas la structure.            │
+  # │                                                                         │
+  # │ CADDY_SITE_ADDRESS = `:8080` — une adresse SANS NOM D'HÔTE fait écouter │
+  # │ Caddy en HTTP SIMPLE : il ne tente aucun ACME et ne présente aucun      │
+  # │ certificat. C'est exactement ce qu'il faut ici, puisque TLS est terminé │
+  # │ par Traefik en amont (DECISIONS.md 2026-08-28). Y mettre le vrai        │
+  # │ sous-domaine ferait tenter à Caddy une émission Let's Encrypt qu'il ne  │
+  # │ peut pas réussir (il ne détient ni le port 80 ni le port 443) : il      │
+  # │ retenterait en boucle pendant que Traefik, lui, sert déjà le vrai       │
+  # │ certificat. Un `:8080` nu accepte n'importe quel `Host`, donc le nom de │
+  # │ domaine réel n'a pas besoin d'être connu de cette pile.                 │
+  # │                                                                         │
+  # │ CADDY_STAGING_SITE_ADDRESS = `:8081` — le SECOND bloc route vers        │
+  # │ `staging-api` et les racines /srv/staging/*, qui n'existent PAS dans    │
+  # │ cette pile (ce sont celles de la pile déployée par SSH). On ne peut pas │
+  # │ le supprimer : une adresse de site VIDE empêche Caddy de démarrer. On   │
+  # │ le rend donc INOFFENSIF — `:8081` n'est publié nulle part, aucun réseau │
+  # │ n'y mène, et Traefik ne connaît que 8080. Le bloc existe, il n'est      │
+  # │ jamais atteint. C'est la seule façon de satisfaire le Caddyfile sans le │
+  # │ modifier.                                                               │
+  # └─────────────────────────────────────────────────────────────────────────┘
+  #
+  # ┌─────────────────────────────────────────────────────────────────────────┐
+  # │ COMMENT TRAEFIK ATTEINT CE CONTENEUR — ET POURQUOI AUCUN PORT PUBLIÉ.   │
+  # │ Une publication `127.0.0.1:8080:8080` NE MARCHERAIT PAS : `coolify-     │
+  # │ proxy` est lui-même un conteneur ; il ne voit pas la boucle locale de   │
+  # │ l'hôte. Et publier sur `0.0.0.0` ouvrirait notre staging en clair sur   │
+  # │ Internet, ce que COHABITATION §5.2 refuse.                              │
+  # │ La liaison se fait donc de conteneur à conteneur, par le réseau Docker  │
+  # │ du proxy, déclaré `external` plus bas. AUCUN service de cette pile ne   │
+  # │ publie de port sur l'hôte — pas même celui-ci.                          │
+  # │ Le routeur Traefik (règle Host + certificat) est posé par COOLIFY, à    │
+  # │ partir du domaine configuré sur CE service, port 8080. Ce fichier       │
+  # │ n'écrit aucun label : deux routeurs pour le même hôte se disputeraient. │
+  # └─────────────────────────────────────────────────────────────────────────┘
+  # ---------------------------------------------------------------------------
+  caddy:
+    <<: [*restart, *logging]
+    image: caddy:2-alpine
+    depends_on:
+      api:
+        condition: service_healthy
+      # Les fronts ne deviennent jamais `healthy` : ce sont des jobs. On attend
+      # qu'ils AIENT FINI — seule condition qui ait un sens, et qui garantit que
+      # les volumes contiennent bien un build avant de servir.
+      field:
+        condition: service_completed_successfully
+      hq:
+        condition: service_completed_successfully
+    environment:
+      # HTTP simple, aucun ACME : voir l'encadré « ADRESSES DE SITE » ci-dessus.
+      CADDY_SITE_ADDRESS: ':8080'
+      CADDY_STAGING_SITE_ADDRESS: ':8081'
+      # Le port interne de l'API est une CONVENTION commune aux environnements
+      # (Caddyfile, encadré « PORT INTERNE DE L'API »). Il n'est jamais publié.
+      API_PORT: ${API_PORT:-3000}
+      # IMPOSÉE, jamais lue dans l'environnement : le mode de service découle de
+      # la FORME du déploiement (jobs one-shot + volumes), pas d'un réglage
+      # d'exploitant. Une valeur `dev` mettrait tout le site en 502, car aucun
+      # serveur Vite n'écoute ici.
+      CADDY_FRONT_CONFIG: /etc/caddy/fronts.static.caddy
+      TZ: ${TZ:-UTC}
+    # Documentaire : le port que Traefik doit viser. `expose` ne publie rien sur
+    # l'hôte, il déclare le port au réseau Docker.
+    expose:
+      - '8080'
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # LES DEUX variantes sont montées, comme partout ailleurs : c'est
+      # {$CADDY_FRONT_CONFIG} qui choisit laquelle est importée. Ne monter que
+      # la variante « utile » ferait échouer Caddy sur une erreur d'import si la
+      # variable était mal renseignée, au lieu de servir.
+      - ./caddy/fronts.dev.caddy:/etc/caddy/fronts.dev.caddy:ro
+      - ./caddy/fronts.static.caddy:/etc/caddy/fronts.static.caddy:ro
+      # Racines du snippet (fronts_principal) de fronts.static.caddy, montées en
+      # LECTURE SEULE : Caddy sert des fichiers, il n'en écrit aucun.
+      # Les racines /srv/staging/* du second bloc ne sont volontairement PAS
+      # montées — ce bloc n'est jamais atteint (voir l'encadré ci-dessus).
+      - field_dist:/srv/principal/field:ro
+      - hq_dist:/srv/principal/hq:ro
+      # `caddy_data` ne contient AUCUN certificat dans cette pile (pas d'ACME) ;
+      # il porte l'état interne de Caddy. Il n'est pas dans le périmètre du PRA.
+      - caddy_data:/data
+      - caddy_config:/config
+    healthcheck:
+      # Sonde : l'API d'administration Caddy (loopback, jamais exposée) répond
+      # avec la configuration chargée.
+      test: ['CMD', 'wget', '--quiet', '--tries=1', '--spider', 'http://127.0.0.1:2019/config/']
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    networks:
+      axion: {}
+      edge:
+        # Alias NON AMBIGU sur le réseau PARTAGÉ du proxy, où d'autres piles
+        # vivent (axion-ia.com, Docuseal, Plausible…). Compose y ajoute aussi le
+        # nom de service `caddy`, qui est générique : c'est CET alias-ci qu'il
+        # faut viser si une règle Traefik doit être écrite à la main un jour.
+        aliases: [axion-audit-staging-caddy]
+    # Swap neutralisé — encadré « DEUX MÉCANISMES DE PLAFOND ».
+    mem_limit: 128M
+    memswap_limit: 128M
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+
+# -----------------------------------------------------------------------------
+# RÉSEAUX
+# -----------------------------------------------------------------------------
+networks:
+  # Réseau INTERNE de la pile. Nom DISTINCT de `axion-audit-dev` (pile de dev),
+  # `axion-audit-prod`, `axion-audit-staging` (pile déployée par SSH) et de tout
+  # réseau du projet voisin `Axion-IA` : aucune pile ne peut en joindre une autre.
+  axion:
+    name: axion-audit-coolify-interne
+    driver: bridge
+
+  # Réseau du proxy de Coolify. `external` À DESSEIN : ce fichier ne le crée pas
+  # (le créer produirait un réseau homonyme SANS Traefik dedans, et le staging
+  # serait injoignable sans que rien ne le signale). S'il n'existe pas, le
+  # déploiement échoue immédiatement — voir PRÉREQUIS en tête de fichier.
+  edge:
+    name: ${COOLIFY_PROXY_NETWORK:-coolify}
+    external: true
+
+# -----------------------------------------------------------------------------
+# VOLUMES — tous NOMMÉS EXPLICITEMENT et préfixés `axion-coolify-`.
+# Le préfixe n'est pas décoratif : Coolify impose son propre nom de projet, donc
+# le préfixage automatique de Compose ne peut pas servir de garantie. Ces noms
+# ne collisionnent ni avec la pile de dev, ni avec `axion-staging-*` (pile SSH),
+# ni avec les volumes du projet `Axion-IA`.
+# -----------------------------------------------------------------------------
+volumes:
+  postgres_data:
+    name: axion-coolify-postgres-data
+  pgbackrest_repo:
+    name: axion-coolify-pgbackrest-repo
+  redis_data:
+    name: axion-coolify-redis-data
+  minio_data:
+    name: axion-coolify-minio-data
+  caddy_data:
+    name: axion-coolify-caddy-data
+  caddy_config:
+    name: axion-coolify-caddy-config
+  # Fichiers CONSTRUITS des fronts : déposés par les jobs one-shot, lus en
+  # lecture seule par Caddy. HTML/JS/CSS publiquement servi — aucune donnée,
+  # aucun secret.
+  field_dist:
+    name: axion-coolify-field-dist
+  hq_dist:
+    name: axion-coolify-hq-dist
