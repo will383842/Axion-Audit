@@ -33,14 +33,15 @@
 
 # A. SENS 1 — EXIGENCES → CODE
 
-**Date d'établissement : 2026-08-27** · **Lots évalués : L0 (incrément L0-a) puis L1 (schéma)** ·
-**Gardien : A02**
+**Date d'établissement : 2026-08-27** · **Lots évalués : L0 (incrément L0-a), L1 (schéma), puis
+L0-b (opérations, 2026-08-28)** · **Gardien : A02**
 
 | Passe | Lot | Commit | Arbre | Verdict |
 | --- | --- | --- | --- | --- |
 | **1ʳᵉ** | L0 | `ce5b912` | **en cours de modification** (2 fichiers à l'ouverture, 9 à la clôture) ; pipeline à l'**étape 3/7**, revue croisée non rendue | **VETO** — 4 écarts (V1-V4) |
 | **2ᵉ** | L0 | **`fdd5f59`** | **propre** (`git status` vide) ; revue croisée rendue **deux fois** (NON CONFORME → CONFORME AVEC RÉSERVES, réserves fermées) | voir §D |
 | **1ʳᵉ** | **L1** | **`bf7f6ca`** | **figé côté code** (`git status` : seul `docs/ETAT.md` modifié) ; revue croisée rendue **trois fois** (CONFORME AVEC RÉSERVES, réserves fermées, le réviseur ne recommande pas de 4ᵉ passe) — **étape 4 close, l'étape 6 se tient enfin dans l'ordre** | **ACCEPTÉ SOUS RÉSERVE** — voir §F |
+| **1ʳᵉ** | **L0-b** | **`462ba70`** | **propre** (`git status` vide) ; contrôle mené **sur le dépôt ET sur la machine** `axionia-web`, projet `wrunr6mwq2oxqq392i4myzjn`. ⚠️ Deux README ont été réécrits **pendant la passe** par un agent parallèle (§G.6-4) | **REFUSÉ** — voir **§G** |
 
 > **Ce que la 1ʳᵉ passe a appris, et qui vaut règle.** Un contrôle d'acceptation ne se tient pas sur
 > un arbre qui bouge, ni avant la revue croisée. Les deux conditions sont réunies pour la 2ᵉ passe.
@@ -80,10 +81,10 @@ qu'**aucune exigence dont L0 avait la charge n'a été oubliée**.
 | E12 | Entretiens par interlocuteur, à-revoir     | partiellement amorcée     | `interviews` (`kind`, `status`, `schedule_status`) · `interlocutor_profiles` seedés (**9**, tous avec `group_code` ∈ `direction`/`encadrement`/`terrain` — **vérifié un par un en base**) · `answers.flag_review` (« à revoir ») | Écrans et parcours → L5   |
 | E13 | Écran 3 zones, enregistrement continu      | partiellement amorcée     | Socle de données seul : `0004_collecte.sql` (`answers` UNIQUE `(interview_id, mission_question_id)`, `attachments` avec `kind='note'` P1-5) | Écrans → L5               |
 | E14 | Consolidation, divergences, radar          | partiellement amorcée     | Socle : `block_scores`, `findings` (`severity`, `sources` JSONB **NOT NULL** — convention T15) · `interlocutor_profiles.group_code`, qui est **la** donnée du calcul de divergence direction/terrain (§32.1) | Agrégation → L7-min · calcul → L8 |
-| E15 | Rapport DOCX 12-60 p.                      | partiellement amorcée     | L0 : file `axion:rapports` inerte. L1 : `report_sections`, `report_templates`, `report_files` (`0006_rapport_cadrage_pilotage.sql`) | L10                       |
-| E16 | Rédaction assistée IA par bloc             | partiellement amorcée     | L0 : file `axion:llm` inerte. L1 : `llm_calls` (journal des coûts) · `report_sections` (états brut/généré/validé) | L11                       |
-| E17 | **Stack imposée (Hetzner, Docker, PG, Fastify, Vite/React)** | **partiellement amorcée** | **Apport L1** : PostgreSQL 16 réellement exploité — 12 migrations **SQL brut versionné**, **aucun ORM générateur de schéma** (11 §2 : `check:invariants` CT-2-PRISMA vert) ; Drizzle cantonné aux requêtes typées (`apps/api/src/db/schema.ts`, 1 023 l.) et **confronté à la base par un test dédié** que j'ai éprouvé par 4 mutations (§F.0). **Rappel L0 ci-dessous.** — Compose dev/staging/prod validés : `docker compose --env-file … config -q` → **RC=0** sur les 3 combinaisons · `apps/api` (Fastify 5) · `apps/field`/`apps/hq` (Vite+React) · `apps/worker` (BullMQ) · `packages/shared` (Zod) · `pnpm typecheck` 6/6 vert · `pnpm build` 4 images | Dexie/Workbox → L5 · docxtemplater → L10 |
-| E18 | Liaison console axion-ia.com               | partiellement amorcée     | L0 : file `axion:webhooks` inerte. L1 : `companies.external_ref` (« id client console, NULL si local ») · `integration_events` (anti-rejeu, `attempts`) | L13                           |
+| E15 | Rapport DOCX 12-60 p.                      | partiellement amorcée     | L0 : file **`rapports`** (clés Redis `axion:rapports:…`) inerte — **nom rectifié au L0-b, voir l'encadré du §B.3**. L1 : `report_sections`, `report_templates`, `report_files` (`0006_rapport_cadrage_pilotage.sql`) | L10                       |
+| E16 | Rédaction assistée IA par bloc             | partiellement amorcée     | L0 : file **`llm`** (clés Redis `axion:llm:…`) inerte — **nom rectifié au L0-b, §B.3**. L1 : `llm_calls` (journal des coûts) · `report_sections` (états brut/généré/validé) | L11                       |
+| E17 | **Stack imposée (Hetzner, Docker, PG, Fastify, Vite/React)** | **partiellement amorcée** | **APPORT L0-b — la stack ne s'exécute plus seulement en local.** Cinquième pile Compose livrée, `infra/docker-compose.coolify.yml` (983 l.), déployée sur `axionia-web` : **PostgreSQL 16, Redis 7, MinIO, Fastify 5, BullMQ, Caddy, les deux fronts Vite** tournent réellement, et le chaînage `/` → field · `/hq/` → hq · `/api` → API **est prouvé à travers Caddy** (vérifié par moi depuis le conteneur frontal : `/api/v1/health` **200**, `/api/v1/health/ready` **200**, `/` **200**, `/hq/` **200** servant `Axion Audit — Console`, `/api/v1/nexistepas` **404**). Domaine unique préservé, **zéro CORS** (11 §2). Deux Dockerfiles portent désormais la configuration DANS l'image (`infra/caddy/Dockerfile` nouveau, `infra/postgres/Dockerfile` refondu) parce que Coolify ne monte jamais depuis le dépôt cloné. ⚠️ **Mais le socle n'est pas sain : le PostgreSQL du staging se réinitialise toutes les ~10 s** — voir E35 et §G.2. **Apport L1** : PostgreSQL 16 réellement exploité — 12 migrations **SQL brut versionné**, **aucun ORM générateur de schéma** (11 §2 : `check:invariants` CT-2-PRISMA vert) ; Drizzle cantonné aux requêtes typées (`apps/api/src/db/schema.ts`, 1 023 l.) et **confronté à la base par un test dédié** que j'ai éprouvé par 4 mutations (§F.0). **Rappel L0 ci-dessous.** — Compose dev/staging/prod validés : `docker compose --env-file … config -q` → **RC=0** sur les 3 combinaisons · `apps/api` (Fastify 5) · `apps/field`/`apps/hq` (Vite+React) · `apps/worker` (BullMQ) · `packages/shared` (Zod) · `pnpm typecheck` 6/6 vert · `pnpm build` 4 images | Dexie/Workbox → L5 · docxtemplater → L10 |
+| E18 | Liaison console axion-ia.com               | partiellement amorcée     | L0 : file **`webhooks`** (clés Redis `axion:webhooks:…`) inerte — **nom rectifié au L0-b, §B.3**. L1 : `companies.external_ref` (« id client console, NULL si local ») · `integration_events` (anti-rejeu, `attempts`) | L13                           |
 | E19 | Avant-vente : cadrage → devis              | partiellement amorcée     | `scoping_estimates` · `estimation_params` **seedées (29 clés normées)** — le contrat 11 §5 en réserve la validation à Williams (porté à la porte P-A, point 4) | Simulateur et devis → L2 (étanchéité) · Phase 2 |
 | E20 | Suivi avance/retard temps réel             | partiellement amorcée     | Socle : `mission_rebaselines` (`decision` ∈ `absorbe`/`avenant`/`descope`, §25.1) · `work_assignments.planned_days` | Projection de fin → Phase 2   |
 | E21 | Auditeurs jamais d'accès aux montants      | partiellement amorcée     | La table à cloisonner existe et est **isolée par construction** : `scoping_financials` a pour PK `scoping_estimate_id` (aucune donnée financière dans `missions` ni `scoping_estimates`). **Vérifié par moi en base** : `daily_rates`, `travel_costs`, `total_amount`, `currency` ne vivent que là | **L2** — RBAC serveur, routes admin exclusivement, tentatives d'intrusion croisées (porte **P-B**). **L1 ne prouve rien de l'étanchéité** : il n'y a aucune route |
@@ -98,17 +99,17 @@ qu'**aucune exigence dont L0 avait la charge n'a été oubliée**.
 | E30 | 3 niveaux d'audit                          | partiellement amorcée     | `missions.audit_level` CHECK `('diagnostic_cadrage','operationnel','strategique_groupe')` (§20.1) · `report_templates.kind` (gabarits par niveau §26.2) | Effets fonctionnels → L3 · gabarits → L10 |
 | E31 | **Généricité absolue (aucune réf. client)**| **partiellement amorcée** | Contrôle **manuel** du gardien sur les 43 tables, les 12 migrations, le manifeste, le seed et les 7 suites d'intégration : **aucun nom de client**, les fixtures sont FIL-TPE et FIL-GC (entreprises fictives, 09 §4bis). ⚠️ **Le garde-fou MÉCANIQUE, lui, ne tourne pas en CI — voir la réserve F-1 : c'est un écart, pas une remarque.** | **F-1 à lever** · vérification permanente à chaque lot |
 | E32 | Fuseaux, devises, interface française      | partiellement amorcée     | L0 : `packages/shared/src/temps.ts`, `TZ` du Compose. **L1 : la règle est descendue en base** — `missions.timezone` TEXT DEFAULT `'Europe/Paris'` (§22.2), `scoping_financials.currency` DEFAULT `'EUR'`, `missions.country_code`, `question_translations(question_id, lang)`. **Vérifié par moi** : toute colonne `*_at` est `TIMESTAMPTZ` (convention de typage du manifeste, gardée par `pnpm schema:diff`) — un horodatage sans fuseau ne peut plus entrer en silence | Affichage au fuseau de mission → L3/L5 · i18n EN → L20 |
-| E33 | **Sécurité / RGPD** (+ apport L1)          | **partiellement amorcée** | **Apport L1** : `users.password_hash` et `refresh_tokens.token_hash`/`expires_at` **NOT NULL** (convention T14 — « une ligne d'authentification sans secret ni expiration ne doit pas pouvoir exister ») · `app_settings` (secrets chiffrés AES via `APP_ENCRYPTION_KEY`) · **aucune donnée personnelle n'entre dans un log de migration ou de seed** (relu par moi). **Rappel L0 ci-dessous.** — gitleaks bloquant (`.gitleaks.toml`, job CI `gitleaks`) · **SEC-30.4a/b verts** (aucun secret en dur) · redaction pino (`apps/api/src/logger.ts`) · helmet + CSP + rate-limit (`apps/api/src/app.ts`) · durcissement §10.3 scripté (`infra/scripts/provision-vps.sh`) · ZAP baseline (`.github/workflows/zap-baseline.yml`) · **12/12 familles de secrets §30.3 documentées dans `.env.example`** | Chiffrement local → L5 · consentements/purges → L1/L11 · **durcissement réellement appliqué → L0-b** |
+| E33 | **Sécurité / RGPD** (+ apports L1 et L0-b) | **partiellement amorcée** | **APPORT L0-b, et c'est le plus important du lot : l'étanchéité vis-à-vis du VOISIN DE PRODUCTION.** Le staging cohabite avec `axion-ia.com` sur la même machine ; le réseau du proxy Traefik a l'**ICC activé** (`docker network inspect coolify` → `Options {}`, revérifié par moi). `scripts/check-isolation-reseau.mjs` (145 l., câblé **en CI**, `ci.yml:198`) interdit à tout service autre que `caddy` de le rejoindre. **Et je ne me suis pas contenté du fichier : j'ai mesuré sur la machine.** Les 9 conteneurs du projet sont sur `axion-audit-coolify-interne` ; **seul `caddy` porte en plus le réseau `coolify`**. Épreuve réseau réelle : depuis le conteneur `api`, une connexion TCP vers le PostgreSQL du voisin (`u7zlql3bpb1xy5t4kg6jnvpm:5432`) **n'aboutit pas** ; depuis `caddy`, elle aboutit — le risque résiduel est donc **exactement celui que le script documente**, ni plus ni moins. ⚠️ **Deux réserves.** (a) **La version du lot laissait passer trois façons d'ouvrir cette route** — dont la séquence en bloc `- edge`, la plus courante de toutes ; **elle a été réécrite pendant ma passe et les rattrape désormais** (11 injections, 11 attrapées, §G.3), mais **cette réécriture n'est dans aucun commit** et n'a pas encore de revue croisée. (b) Le `.env` du staging est en **644** et non `600` (§G.5). **Apport L1** : `users.password_hash` et `refresh_tokens.token_hash`/`expires_at` **NOT NULL** (convention T14 — « une ligne d'authentification sans secret ni expiration ne doit pas pouvoir exister ») · `app_settings` (secrets chiffrés AES via `APP_ENCRYPTION_KEY`) · **aucune donnée personnelle n'entre dans un log de migration ou de seed** (relu par moi). **Rappel L0 ci-dessous.** — gitleaks bloquant (`.gitleaks.toml`, job CI `gitleaks`) · **SEC-30.4a/b verts** (aucun secret en dur) · redaction pino (`apps/api/src/logger.ts`) · helmet + CSP + rate-limit (`apps/api/src/app.ts`) · durcissement §10.3 scripté (`infra/scripts/provision-vps.sh`) · ZAP baseline (`.github/workflows/zap-baseline.yml`) · **12/12 familles de secrets §30.3 documentées dans `.env.example`** | Chiffrement local → L5 · consentements/purges → L1/L11 · **durcissement réellement appliqué → L0-b** |
 | E34 | Conformité AI Act                          | partiellement amorcée     | Socle : `ai_systems` (registre, `data_categories`, `obligations`) · `blocks` seedés jusqu'à `bloc_9` — le bloc AI Act **existe en base dès L1** | Registre exploité, chapitre rapport, ISO/IEC 42001 → L12 |
-| E35 | **Scalabilité + sauvegardes 3-2-1 testées chaque nuit** | **partiellement amorcée** | Livrés : `infra/pgbackrest/pgbackrest.conf`, `infra/postgres/Dockerfile` (pgBackRest dans le conteneur qui archive), `infra/scripts/backup-postgres.sh` (127 l.), `backup-minio.sh` (105 l.), **`restore-test.sh` (362 l., Postgres ET MinIO)**, `install-cron.sh`, `.github/workflows/nightly-restore-test.yml` | **Le test de restauration n'a JAMAIS été exécuté** — c'est le cœur de E35. → L0-b / porte P-A |
-| E36 | **Exécutable par lots avec critères**      | **partiellement amorcée** | L0 : CI, `pull_request_template.md`, garde-fous auto-périmés éprouvés (§D.1). **L1 : les quatre critères du lot sont OUTILLÉS, pas seulement déclarés** — `pnpm schema:diff` (886 l.) et le **second verrou en liste noire** `pnpm check:schema-inventaire` (230 l.), les deux **éprouvés par moi par 34 mutations injectées en base, 34 détectées** (§F.0). **169 tests verts exécutés par moi** : 95 unitaires + 66 d'intégration + 8 Playwright | Voir **F-1** (INV-2 non appliqué en CI) et **F-3** (`test:e2e:filrouge` en échec) |
+| E35 | **Scalabilité + sauvegardes 3-2-1 testées chaque nuit** | **partiellement amorcée — ET EN RÉGRESSION SUR STAGING** | **APPORT L0-b, positif** : `apps/worker/src/sonde-sante.ts` (157 l.) remplace la sonde `pgrep -f node` du L0, qui observait un VOISIN du sujet et rendait « healthy » un worker mort ; la nouvelle sonde prouve un **battement de cœur propre à l'instance** (clé Redis à expiration 20 s) **et l'attachement d'un `Worker` BullMQ à CHACUNE des 5 files**. **Éprouvée par moi sur le staging, par injection** : conteneur jetable issu de la MÊME image, autre identité → **RC=1** avec les 6 anomalies nommées ; même conteneur avec l'identité réelle du worker → **RC=0**. La sonde discrimine donc réellement, elle ne se contente pas d'exister. **ET UN CONSTAT NÉGATIF QUI DOMINE TOUT LE RESTE** : sur le staging, `pgbackrest stanza-create` n'a **jamais** été exécuté (`/var/lib/pgbackrest/` **vide**), `archive-push` sort en **103**, et le postmaster **réinitialise le cluster entier** — **275 fois en 46 minutes**, soit une fois toutes les ~10 s, depuis la première minute du déploiement. **L'archivage WAL du staging est à ZÉRO.** Livrés (inchangés) : `infra/pgbackrest/pgbackrest.conf`, `infra/postgres/Dockerfile`, `backup-postgres.sh`, `backup-minio.sh`, **`restore-test.sh`**, `install-cron.sh`, `nightly-restore-test.yml` | **Deux manques distincts, à ne pas confondre.** (a) Le test de restauration a été exécuté **en local** le 2026-08-27 (critère L0 n°2) mais **jamais sur staging** ; (b) sur staging la chaîne d'archivage est **cassée**, pas seulement non prouvée → **§G.2, bloquant de la porte P-A** |
+| E36 | **Exécutable par lots avec critères**      | **partiellement amorcée** | **APPORT L0-b** : deux garde-fous nés de déploiements ratés — `check:compose-coolify` (201 l.) et `check:isolation-reseau` (145 l.) — **et ils sont câblés DANS LA CI** (`ci.yml:198` et `:205`), pas seulement dans `pnpm verify`. **C'est la leçon F-1 du lot L1 appliquée** : au L1, un garde-fou existait et ne tournait nulle part. `check:compose-coolify` apporte ce que `docker compose config -q` n'apporte pas — j'ai revérifié la contre-épreuve : `config -q` rend **0** sur un chemin inexistant, le script rend **1**. **Éprouvés par moi par injection — 8 injections sur les versions du lot : 6 attrapées, 2 MANQUÉES ; puis 11 sur les versions réécrites pendant ma passe : 11 attrapées** (§G.3). `deploy-staging.yml` réécrit (+468 l.) et **11 tests `@critique`** interdisent le retour du worker mort. L0 : CI, `pull_request_template.md`, garde-fous auto-périmés éprouvés (§D.1). **L1 : les quatre critères du lot sont OUTILLÉS, pas seulement déclarés** — `pnpm schema:diff` (886 l.) et le **second verrou en liste noire** `pnpm check:schema-inventaire` (230 l.), les deux **éprouvés par moi par 34 mutations injectées en base, 34 détectées** (§F.0). **169 tests verts exécutés par moi** : 95 unitaires + 66 d'intégration + 8 Playwright | Voir **F-1** (INV-2 non appliqué en CI) et **F-3** (`test:e2e:filrouge` en échec) |
 | E37 | Scoring intégralement spécifié             | partiellement amorcée     | `questions.scoring` JSONB (format normé 04 §7.3) · `questions.weight`, `criticality`, `allow_range` (DEFAULT prescrits) · `block_scores.is_indicative` | Barème, agrégation, drapeaux rouges → L8 · contrôle bloquant à l'import → L4 |
 | E38 | Sauvegarde terrain (sync ≥ 1×/j + export)  | partiellement amorcée     | `sync_log.outbox_remaining` — **la** donnée du garde-fou « sync muette » du §9.7, présente en base dès L1 | Export de secours → L5c · sync → L6 · alerte → L6 |
 | E39 | Machine à états mission                    | **partiellement amorcée** — **c'est la part que le fichier 07 confie explicitement à L1** | Les **codes** sont posés et fermés : `missions.status` (5 valeurs), `step_validations.step_code` (8 codes, énumération fermée P1-1), `interviews.status`/`schedule_status`, `findings.status`/`remediation_status`, `use_cases.status`, `org_units.status`, `document_requests.status`. **Éprouvé par moi en base** : une valeur hors énumération est refusée (`questions_answer_type_check` sur `'pirate'`). **Et le comparateur garde ces énumérations** : mutation injectée par moi — un littéral dont seule la **casse** change (`'PREPARATION'`) → `pnpm schema:diff` **RC=1** | Transitions contrôlées → L3 (§32.2) |
 | E40 | ROI normé, échantillonnage, ancres         | partiellement amorcée     | Socle : `use_cases` (`gain_low`/`gain_high`/`payback_months`/`assumptions`, §28.2-5) · `estimation_params` **29 clés seedées** | Ancres de cotation → L4 · formule ROI → L11 |
 | E41 | Consolidation groupe cadrée                | partiellement amorcée     | `missions.parent_mission_id` FK auto-référente (missions filles §32.3) · `missions.geo_scope` + `country_code` | Agrégation, heatmap filles×blocs, gabarit dédié → L14 |
-| E42 | RGPD renforcé (pseudonymisation, rétention)| partiellement amorcée     | L0 : redaction pino, file `axion:purges`. **L1 : les supports de purge et de rétention existent** — `activity_log` (§10.4), `attachments.purge_after DATE NULL` (purge audio), `processed_ops.processed_at` (rétention 30 j), `llm_calls`. `app_settings` porte les seuils et durées de purge | **Politique de rétention `activity_log` réellement appliquée → L2** (un job, pas une colonne) · pseudonymisation 2 passes → L11 |
-| E43 | **Exécutabilité autopilote**               | **partiellement amorcée** | L0 : versions épinglées, conventions API §3, 40 gabarits, `ETAT.md`. **L1 : les seeds sont codables et rejouables** (`apps/api/scripts/seed.mjs` — **empreinte md5 par table identique aux passages 1, 2 et 3, mesurée par moi**), l'exécuteur de migrations est réversible et transactionnel (`apps/api/scripts/migrations.mjs`, `--check`/`--down`/`--down-to 0`), `processed_ops` (contrat d'ops 11 §4) est en base, et `apps/api/scripts/db-generate.mjs` refuse une migration sans descente | Contrat d'ops exploité → L6 · format export de secours → L5c |
+| E42 | RGPD renforcé (pseudonymisation, rétention)| partiellement amorcée     | L0 : redaction pino, file **`purges`** (clés Redis `axion:purges:…`) — **nom rectifié au L0-b, §B.3**. **L1 : les supports de purge et de rétention existent** — `activity_log` (§10.4), `attachments.purge_after DATE NULL` (purge audio), `processed_ops.processed_at` (rétention 30 j), `llm_calls`. `app_settings` porte les seuils et durées de purge | **Politique de rétention `activity_log` réellement appliquée → L2** (un job, pas une colonne) · pseudonymisation 2 passes → L11 |
+| E43 | **Exécutabilité autopilote**               | **partiellement amorcée** | **APPORT L0-b, et c'est le défaut le plus coûteux du dépôt qui tombe ici.** L'image de l'API **déclarait `db:migrate` sans embarquer ni `scripts/` ni `drizzle/`** ; or `infra/scripts/deploy.sh` appelle exactement cette commande à son étape 2/5 (`deploy.sh:125` en dry-run, `:131` en application) — **l'étape de migration du déploiement n'aurait jamais fonctionné, ni en staging NI EN PRODUCTION**. **Vérifié réparé par moi dans l'image en ligne** : `ls` dans le conteneur `api` du staging montre `scripts/{migrations,seed,db-generate}.mjs` et les **12** fichiers `drizzle/*.sql`. Deuxième apport : `scripts/prepare-husky.mjs` (78 l.) lève l'**hypothèse non écrite** sur l'environnement de construction (Coolify pose `NODE_ENV=production`, pnpm saute alors TOUTES les dépendances de développement — `tsc` compris) ; la CI ne posait pas cette variable, le défaut était donc invisible. Troisième : `check-jonction.mjs` cesse de lire la **prose** comme du code — un garde-fou qui punit ceux qui documentent. L0 : versions épinglées, conventions API §3, 40 gabarits, `ETAT.md`. **L1 : les seeds sont codables et rejouables** (`apps/api/scripts/seed.mjs` — **empreinte md5 par table identique aux passages 1, 2 et 3, mesurée par moi**), l'exécuteur de migrations est réversible et transactionnel (`apps/api/scripts/migrations.mjs`, `--check`/`--down`/`--down-to 0`), `processed_ops` (contrat d'ops 11 §4) est en base, et `apps/api/scripts/db-generate.mjs` refuse une migration sans descente | Contrat d'ops exploité → L6 · format export de secours → L5c |
 | E44 | UX/UI 2026-2027 (tokens, police locale)    | partiellement amorcée     | `packages/ui/src/tokens.ts` (tokens chiffrés) · garde-fou **CT-1-CDN vert** (police auto-hébergée, aucun CDN)      | Grille §33 (4 états, raccourcis, écran partagé) → L5 · desktop-first → L7 |
 | E45 | Pilotage humain (habilitation, cockpit)    | **partiellement amorcée** — **part L1 satisfaite et prouvée** | `users.habilitated_at TIMESTAMPTZ NULL` livré (`0001_referentiels.sql`), et **posé par le seed sur le compte admin fondateur** — l'anti auto-verrouillage du §34.4. **Vérifié par moi après un seed neuf** : `role=admin habilitated_at=2026-08-27 20:47:13+00 is_active=true`. Sans cela, personne n'aurait pu s'affecter la première mission. Aussi : `mission_users.role_on_mission` (`lead`…), `work_assignments` (plan de charge §34) | Refus serveur d'affectation si `habilitated_at` NULL → **L2** · cockpit « Aujourd'hui » → L5 (§34.2) · espace Équipe → Phase 2 |
 | E46 | Bout en bout opérationnel (calendrier, CSV)| partiellement amorcée     | Burn-down tenu (`docs/journal/2026-08-27.md`, **désormais suivi par git** — le défaut relevé en §D.6 est levé) · `org_units` (cible de l'import CSV) | Format CSV d'arbre → L3 · butoir L8 |
@@ -155,6 +156,27 @@ paliers, les `estimation_params` normées, `naf_sector_map`, et le **compte admi
 `habilitated_at` posé**. Les huit sont livrés et **vérifiés un par un par moi sur une base neuve**
 (§B.9.2). Aucune n'est déclarée sur la foi d'un rapport d'agent.
 
+## A.quater — Synthèse chiffrée au 2026-08-28 (fin L0-b, incrément d'opérations)
+
+**Aucune exigence ne change d'ÉTAT au L0-b.** C'est normal et c'est même le bon signe : un incrément
+d'opérations ne livre pas de fonction, il fait passer du code déjà écrit de « existe » à « s'exécute
+ailleurs que sur la machine de son auteur ». Le décompte du §A.ter est donc inchangé : **0 couverte ·
+45 partiellement amorcées · 2 non commencées**.
+
+Ce qui change est ailleurs, et c'est ce que la ligne L0 du fichier 07 engageait :
+
+| Exigence engagée par la ligne L0 | Avant L0-b | Après L0-b, **mesuré par moi** |
+| --- | --- | --- |
+| **E17** — stack imposée | s'exécute en local, `config -q` vert sur 3 piles | **s'exécute sur un serveur**, 5ᵉ pile, chaînage `/` · `/hq/` · `/api` prouvé à travers Caddy |
+| **E33** — sécurité / RGPD | secrets documentés, garde-fous statiques | **étanchéité réseau vis-à-vis d'un voisin de PRODUCTION, mesurée par une connexion TCP réelle** · ⚠️ `.env` en 644 (§G.5) |
+| **E35** — sauvegardes testées | restauration prouvée **en local**, jamais sur serveur | **RÉGRESSION** : archivage WAL du staging **inopérant**, cluster réinitialisé **275 fois en 46 min** (§G.2) |
+| **E36** — exécutable par lots | garde-fous, dont un non câblé (F-1) | 2 garde-fous de plus, **câblés en CI** · versions du lot : 8 injections, **2 manquées** · versions réécrites pendant ma passe : 11 injections, **11 attrapées**, non commitées (§G.3) |
+| **E43** — exécutabilité autopilote | migrations réversibles en local | **l'image d'API contient enfin les migrations qu'elle déclare** — `deploy.sh` étape 2/5 réparé pour staging **et production** |
+
+**Le mouvement net du lot est donc à deux sens, et il faut les nommer tous les deux** : E17, E33, E36
+et E43 avancent réellement et par mesure ; **E35 recule**, parce qu'un déploiement réel a montré que
+la chaîne de sauvegarde, prouvée en bac à sable, ne s'installe pas d'elle-même sur une machine.
+
 ---
 
 # B. SENS 2 — CODE → EXIGENCES (le contrôle anti-orphelin)
@@ -198,6 +220,41 @@ Fichiers : `apps/api/src/routes/sante.ts`, `app.ts`, `server.ts`, `config.ts`, `
 exclusivement au fichier 04) ; il n'empiète donc pas sur L1.
 
 ## B.3 — Détail : les 6 files BullMQ déclarées (`apps/worker/src/worker.ts`)
+
+> ### ⚠️ RECTIFICATION DU 2026-08-28 — LES NOMS DE CE TABLEAU SONT MORTS. NE LES RECOPIEZ PAS.
+>
+> **Ce tableau est conservé tel qu'il a été écrit au L0** (ce fichier ne se réécrit pas en silence),
+> **mais les identifiants qu'il porte ne sont plus valides.** Ils sont remplacés par ceux du tableau
+> suivant, et le fichier qui fait foi est `apps/worker/src/files.ts`.
+>
+> **Pourquoi, et non pas seulement quoi** — sans le motif, un lecteur suppose une préférence de style
+> et « corrige » en sens inverse. **BullMQ 5 refuse au constructeur tout nom de file contenant `:`**
+> (`classes/queue-base.js` : `if (name.includes(':')) throw new Error('Queue name cannot contain :')`),
+> parce qu'il s'en sert **lui-même** comme séparateur de clé Redis. Les noms `axion:rapports`… faisaient
+> donc échouer le **premier** `new Queue()` du module : **le worker n'a JAMAIS démarré, ni en
+> développement, ni en staging, depuis le lot L0** — et sa sonde `pgrep -f node` le déclarait sain.
+>
+> **Le cloisonnement, lui, est intact.** Il est porté par l'option `prefix: 'axion'`, et les clés
+> Redis produites sont **exactement** celles que l'ancien nommage visait : `axion:rapports:…`.
+> *Le cloisonnement était le besoin, le nom n'était que le moyen — on garde le besoin, on change le moyen.*
+>
+> **Un agent de lot L7, L10, L11 ou L13 qui vient chercher SA file ici doit lire le tableau ci-dessous,
+> pas celui du L0.** Reprendre `axion:rapports` referait la panne à l'identique.
+>
+> | File (**nom réel**, `NOMS_DE_FILES`) | Clés Redis produites | Rattachement | Lot |
+> | --- | --- | --- | --- |
+> | **`rapports`** | `axion:rapports:…` | **E15** — génération DOCX | L10 |
+> | **`llm`** | `axion:llm:…` | **E16** — appels LLM par bloc, journal des coûts | L11 |
+> | **`exports`** | `axion:exports:…` | **E47** — export de mission §36.3 | L7-min |
+> | **`purges`** | `axion:purges:…` | **E42** — rétentions RGPD, 06 §10.4 | — (planifié) |
+> | **`webhooks`** | `axion:webhooks:…` | **E18** — console axion-ia.com, HMAC + anti-rejeu | L13 |
+>
+> **Les rattachements du tableau d'origine restent valides** : seul l'identifiant change, jamais
+> l'exigence. **Les mentions d'`axion:sauvegardes` ci-dessous ne sont PAS concernées** : elles racontent
+> le retrait d'un code orphelin, et ce récit doit rester lisible tel quel.
+> **Gardé par un test** : `apps/worker/tests/l0-files-bullmq.integration.test.ts`, 4 tests `@critique`,
+> dont un **test d'ancrage** qui vérifie que BullMQ **lève toujours** sur un nom fautif — sans lui, les
+> trois autres prouveraient que nos noms passent, pas que le garde-fou vit. **Exécutés par moi : verts.**
 
 Aucune n'a de processeur : le worker journalise « Aucun traitement pour… ». **Ce ne sont pas des
 jobs livrés, ce sont des noms réservés.** Contrôlées une par une :
@@ -419,6 +476,84 @@ ni moins, est le cas rare — celui-ci en est un.
 
 ---
 
+# B.10 — INVENTAIRE DU LOT L0-b (`47851fd..462ba70`)
+
+**Périmètre du contrôle : les 31 fichiers de `git diff --name-status 47851fd..HEAD`** — **10 ajoutés**
+(`A`) et **21 modifiés** (`M`). Méthode inchangée depuis le L0 : **l'annotation `// Traçabilité : E__`
+ne vaut pas preuve** ; pour chaque artefact, la section invoquée est ouverte et confrontée à ce qu'on
+lui fait dire, et l'artefact est confronté à son comportement réel quand il en a un.
+
+> **Première remarque du gardien, et elle porte sur l'inventaire lui-même.** Le lot a été annoncé comme
+> « une pile Compose, deux Dockerfiles nouveaux, trois scripts de contrôle, un module de sonde, deux
+> fichiers de test, un workflow réécrit et un runbook » — **onze artefacts**. Recompté sur `git diff`,
+> **il y en a vingt-quatre** (hors gouvernance et documentation). Quatre écarts précis :
+> **(1)** un seul Dockerfile est **nouveau** (`infra/caddy/`) ; `infra/postgres/Dockerfile` est
+> profondément **modifié**, ce qui n'est pas la même chose à relire ;
+> **(2)** sur les « trois scripts de contrôle », **deux** sont des contrôles ; le troisième,
+> `prepare-husky.mjs`, est un **correctif d'environnement de construction** — le ranger avec les
+> garde-fous masque qu'il porte à lui seul la première des trois causes dormantes ;
+> **(3)** il y a **deux** modules de source nouveaux, pas un : `sonde-sante.ts` **et** `files.ts` —
+> et c'est `files.ts` qui porte le nommage des files, donc le défaut d'origine ;
+> **(4)** il y a **trois** fichiers de test nouveaux, pas deux : `tests/aide/redis-ephemere.ts` fait
+> **300 lignes** et fabrique les Redis jetables sans lesquels les onze tests ne prouveraient rien.
+> **Un inventaire qui sous-compte de moitié n'est pas une faute de calcul : c'est la moitié du diff
+> qui échappe au contrôle anti-orphelin.** D'où le tableau ci-dessous, établi sur `git`, pas sur le récit.
+
+## B.10.1 — Les 10 artefacts AJOUTÉS
+
+| Artefact nouveau | Rattachement | Vérification du gardien (section ouverte, comportement éprouvé) | Verdict |
+| --- | --- | --- | --- |
+| `infra/docker-compose.coolify.yml` (983 l.) | **E17** · **E33** (02 §30.4-4) · **E36** | 5ᵉ pile du dépôt. **02 §11 ouvert** : la terminaison TLS passe de notre Caddy au Traefik de l'hôte — c'est un **amendement**, et il est tracé (`DECISIONS.md` 2026-08-28, deux entrées). Ce qui motivait la règle — **domaine unique, aucun CORS** — est préservé, et je l'ai vérifié à l'exécution. Réseau `edge` déclaré `external` **à dessein** : une valeur erronée fait échouer le déploiement au lieu de le dégrader en silence | **rattaché** |
+| `infra/caddy/Dockerfile` (71 l.) | **E17, E43** | Conséquence directe de la règle Coolify n°3 : la configuration **voyage dans l'image** parce que Coolify réécrit toute source relative et que **Docker crée alors un répertoire vide** à la place du fichier. J'ai retrouvé les traces de cette panne sur le serveur : `caddy/`, `infra/`, `postgres/`, `pgbackrest/` subsistent, **vides**, dans `/data/coolify/applications/<uuid>/` — vestiges des déploiements ratés, aujourd'hui sans effet | **rattaché** |
+| `apps/worker/src/files.ts` (96 l.) | **E15, E16, E18, E42, E47** (les 5 files) · **E43** | Module **purement déclaratif** — et le commentaire explique pourquoi : l'importer depuis `worker.ts` ferait démarrer un worker complet **à chaque sonde**, soit un consommateur de plus toutes les 15 s qui volerait des jobs et mourrait. Le raisonnement tient. Porte la rectification des noms de files (§B.3) | **rattaché** |
+| `apps/worker/src/sonde-sante.ts` (157 l.) | **E35** (exploitation) · **E43** | **Éprouvé par injection sur le staging, pas relu** : conteneur jetable issu de la même image, autre identité → **RC=1**, six anomalies nommées ; même conteneur, identité réelle → **RC=0**. Et le fichier **énonce ce qu'il ne prouve pas** (jobs traités, worker qui avance, état de Postgres/MinIO) : *« le dépôt préfère une garantie faible et énoncée à une garantie forte et fausse »* — c'est la phrase que le lot L0 aurait dû écrire | **rattaché** |
+| `apps/worker/tests/aide/redis-ephemere.ts` (300 l.) | **E36, E43** | Outillage de test (Redis jetables via `@testcontainers/redis`). Non annoncé à l'inventaire du lot — **rattaché quand même**, et il le fallait : sans lui les 11 tests ne s'exécutent pas | **rattaché** |
+| `apps/worker/tests/l0-files-bullmq.integration.test.ts` (168 l.) | **E36** · les 5 files | **4 tests `@critique` exécutés par moi, verts**, dont le **test d'ancrage** sur le refus de BullMQ | **rattaché** |
+| `apps/worker/tests/l0-sonde-sante.integration.test.ts` (282 l.) | **E35, E36** | **7 tests `@critique` exécutés par moi, verts** — dont « une SEULE file sur cinq sans travailleur » et « une AUTRE instance en parfaite santé sur le même Redis », qui sont précisément les deux façons dont une sonde naïve rementirait | **rattaché** |
+| `scripts/check-compose-coolify.mjs` (201 l.) | **E17, E36, E43** · fiche `AMELIORATIONS.md` étage 1 du 2026-08-28 | Fiche présente, plafond respecté (**~0,2 j / 0,5 j**, cumul L0-b). **5 injections par moi : 4 attrapées, 1 manquée** (§G.3) | **rattaché** |
+| `scripts/check-isolation-reseau.mjs` (145 l.) | **E33** (invariant 3, 02 §30.4-4) · **E36** · même fiche | **02 §30.4-4 ouvert** : « un secret de staging ne doit RIEN pouvoir sur la production » — la section porte bien ce que le script lui fait dire. **3 injections par moi : 2 attrapées, 1 manquée** (§G.3) | **rattaché** |
+| `scripts/prepare-husky.mjs` (78 l.) | **E43, E47** | Lève la 1ʳᵉ cause dormante : `NODE_ENV=production` posé par Coolify fait sauter à pnpm **toutes** les dépendances de développement — d'abord lu comme « husky manquant », c'était l'outillage de compilation entier. Remplace `"prepare": "husky"` dans `package.json`. **Ce n'est pas un garde-fou**, contrairement à ce que l'inventaire du lot laissait entendre | **rattaché** |
+
+## B.10.2 — Les 14 artefacts MODIFIÉS relevant du contrôle (hors documentation)
+
+| Artefact | Rattachement | Vérification | Verdict |
+| --- | --- | --- | --- |
+| `apps/api/Dockerfile` (+37) | **E43, E17** | **Le correctif le plus important du lot** : l'image embarque désormais `scripts/` et `drizzle/`. **Vérifié dans l'image en ligne**, pas dans le diff : `ls` dans le conteneur `api` du staging → 3 scripts, **12** migrations | **rattaché** |
+| `apps/worker/Dockerfile` (+39) | **E35, E43** | `HEALTHCHECK` passé de `pgrep -f node` à `node dist/sonde-sante.js`. **Vérifié sur la machine** : `Healthcheck.Test = ["CMD","node","dist/sonde-sante.js"]`, `FailingStreak 0`, sorties de sonde lisibles dans `State.Health` | **rattaché** |
+| `apps/field/Dockerfile`, `apps/hq/Dockerfile` (+16 ch.) | **E17, E6, E22** | Jobs ponctuels qui **déposent** leur build dans un volume servi par Caddy. Leur `Exited (0)` est donc **normal et voulu** — je l'ai confirmé par leurs journaux (« PWA terrain déposée dans /sortie », « Console siège déposée dans /sortie ») avant d'en conclure quoi que ce soit | **rattachés** |
+| `infra/postgres/Dockerfile` (+75) | **E35, E17** | `postgresql.custom.conf` embarqué dans l'image (règle Coolify n°3). ⚠️ **L'image embarque la configuration d'archivage sans que le dépôt d'archives existe** — c'est la mécanique de §G.2 | **rattaché** (voir §G.2) |
+| `apps/worker/src/worker.ts` (+90) | **E35, E43** | Battement toutes les 5 s, TTL 20 s, noms de files sans `:`. **Vérifié à l'exécution sur staging** : `Worker Axion Audit démarré`, et la sonde le voit | **rattaché** |
+| `scripts/check-jonction.mjs` (+18) | **E36, E43** | Cesse de lire les lignes **entièrement commentées** comme du code. Le raisonnement est explicite et juste : *« un garde-fou qui prend la documentation pour du code punit ceux qui documentent »*. **Réexécuté par moi** : 41 scripts, 77 variables, 10 fichiers de CI, **RC=0** | **rattaché** |
+| `.github/workflows/ci.yml` (+14) | **E36, E43** | Les deux nouveaux contrôles sont de **vraies étapes de CI** (`:198`, `:205`). **C'est la réserve F-1 du lot L1 qui ne se reproduit pas** — au L1 un garde-fou existait et ne tournait nulle part | **rattaché** |
+| `.github/workflows/deploy-staging.yml` (+468) | **E36** · critère L0 n°4 | Réécrit pour Coolify. **Non exécutable à ce jour, et l'explication est vérifiable** : `git ls-tree origin/main` ne compte que **16 fichiers** (la genèse) et **ne contient pas ce workflow** — GitHub exige qu'un workflow existe sur la branche par défaut pour être déclenché. Le 404 rapporté au dossier de porte **tient** | **rattaché**, non prouvé |
+| `infra/docker-compose.yml` (+27) | **E17, E35** | Pile de développement alignée sur la nouvelle sonde | **rattaché** |
+| `package.json` (+6) | **E36, E43** | 2 scripts, `verify` étendu aux deux contrôles, `prepare` redirigé | **rattaché** |
+| `apps/worker/package.json` (+1) | **E36** | **Dépendance nouvelle : `@testcontainers/redis` 12.1.0.** Contrôle du gardien, parce qu'une dépendance non examinée est exactement ce que le 11 §8.1 réserve à l'escalade : elle est **dans la liste §1** (« Vitest 3 + Testcontainers »), **épinglée exacte** (`save-exact`), et **strictement alignée** sur `@testcontainers/postgresql` **12.1.0** déjà présente au L1 — même famille, même version. **Pas d'escalade requise.** Remarque : elle n'est pas tracée en `DECISIONS.md`, ce qui n'est pas exigé ici mais l'aurait été pour toute autre | **rattachée** |
+| `.env.example` (+8) | **E33, E43** | `COOLIFY_PROXY_NETWORK` documentée, avec son périmètre (« seul `docker-compose.coolify.yml` la lit ») et son mode d'échec | **rattachée** |
+| `infra/README.md` (+25) | **E43** (runbook), **E35** | Runbook complété. ⚠️ **Il décrit un chemin qui n'existe pas sur la machine** : `/opt/axion-audit` est absent d'`axionia-web` (vérifié), le staging vivant sous `/data/coolify/applications/<uuid>/`. `pnpm infra:restore-test` pointe toujours `/opt/axion-audit/prod/.env` | **rattaché** (remarque §G.5) |
+| `.github/workflows/README.md`, `apps/worker/README.md` | **E43** · DoD « README à jour » | Réécrits sur le code au commit `462ba70`, **pendant ma passe et hors de mon périmètre**. Je constate le résultat sur le point qui m'importe : `apps/worker/README.md` porte les **noms réels** et **narre le changement** au lieu de le maquiller. **Je ne les ai pas relus intégralement** (§G.6) | **rattachés** |
+
+## B.10.3 — VERDICT ANTI-ORPHELIN DU LOT L0-b
+
+**Artefacts soumis à la règle (code, infra, tests, CI, garde-fous) : 24.**
+**Rattachés : 24. Orphelins : 0.**
+
+**Hors champ strict, inventoriés quand même** : `AMELIORATIONS.md`, `DECISIONS.md` (+2 entrées,
+**47 au total**, `check:decisions` vert), `docs/ETAT.md`, `docs/portes/PORTE_A_2026-08-27.md`,
+`pnpm-lock.yaml` — gouvernance et documentation, **toutes rattachées**.
+
+**Aucune route, aucune table, aucun écran, aucun job livré** : le lot ne touche ni `apps/api/drizzle/`
+ni `apps/api/src/db/` (**0 fichier au diff**, vérifié) — le contrôle 11 §8.6 et la ligne de DoD
+« diff schéma-vs-04 » sont donc **sans objet pour ce lot**, et non pas « supposés inchangés ».
+
+**Ce que le contrôle anti-orphelin a coûté, et pourquoi il fallait le payer.** Le seul rattachement
+qui a demandé un vrai travail est celui de `prepare-husky.mjs` : rangé parmi « trois scripts de
+contrôle », il se serait rattaché à E36 par contagion avec ses deux voisins. Ouvert, il ne contrôle
+rien — il **répare une hypothèse non écrite**, et son exigence est E43. Un rattachement par contagion
+est un rattachement qui n'a pas eu lieu.
+
+---
+
 # C. DEFINITION OF DONE TRANSVERSE — QUAND CHAQUE LIGNE DEVIENT EXIGIBLE
 
 Une DoD dont on ne sait pas quand elle s'applique ne s'applique jamais. Ce tableau est le
@@ -459,6 +594,36 @@ est la trace détaillée.
 | README de l'app à jour | **COCHÉE** | `apps/api/README.md` porte une section « État au lot L1 » et une section « Schéma et données (lot L1) » ; `packages/shared/README.md`, `packages/ui/README.md` et `.github/workflows/README.md` sont au diff du lot |
 | aucun TODO/FIXME sans entrée DECISIONS/AMELIORATIONS | **COCHÉE SOUS RÉSERVE** | Le dépôt en porte **trois**, non plus un (l'affirmation « un seul TODO » du dossier de porte est périmée). `infra/scripts/smoke-test.sh:141` `TODO(L2)` est adossé à sa décision — **conforme**. Les deux autres, `apps/api/scripts/db-generate.mjs:108` et `:112` `TODO(A12)`, vivent **dans la chaîne de caractères que le générateur écrit dans une migration VIDE** : ce sont des marqueurs de gabarit, pas du travail inachevé. La ligne de DoD étant mécanique, **à régulariser** (§F.5) |
 | diff schéma-vs-04 = zéro écart | **COCHÉE, et éprouvée** | `pnpm schema:diff` → **ZÉRO ÉCART** — 43 tables · 472 colonnes · 193 contraintes · 31 index §7.1 · 22 de convention. Exécuté par moi **deux fois** : sur la base de développement, et sur une base **reconstruite depuis les seules migrations**. Le chiffre n'est pas cru : il est **recompté à la main contre `information_schema`** (§F.0) et le comparateur est **éprouvé par 34 mutations** |
+
+## C.ter — LA DoD RECOCHÉE AU LOT L0-b (`462ba70`), PAR EXÉCUTION DU GARDIEN
+
+**Trois lignes ont bougé, et une seule dans le sens qu'on attendait.** Le tableau qui fait foi pour la
+porte est celui du dossier `PORTE_A` §5 ; celui-ci en est la trace détaillée. Toutes les commandes
+ci-dessous ont été **lancées par moi** le 2026-08-28, en local et sur `axionia-web`.
+
+| Ligne de la DoD | Verdict au **L0-b** | Preuve exécutée par moi, ou motif |
+| --- | --- | --- |
+| lint + typecheck stricts = 0 erreur | **COCHÉE** (inchangée) | `pnpm build:packages` → RC=0. Les 8 contrôles statiques rejoués un par un, **tous RC=0** : `check:pack` (12/12) · `check:decisions` (**47** entrées) · `check:invariants` · `check:jonction` (**41** scripts, **77** variables, 10 fichiers de CI) · `check:no-skipped-tests` · `check:test-projects` · `check:isolation-reseau` · `check:compose-coolify` |
+| tous tests verts, **aucun skippé** | ✅ **COCHÉE — et le chiffre a bougé : 169 → 180** | **180 tests lancés par moi** : `test:unit` **95** · `test:integration` **77** (9 fichiers, **+11 et +2 fichiers** par rapport au L1) · `test:e2e` **8** (chromium). **RC=0 partout.** `check:no-skipped-tests` vert sur **11** fichiers, liste d'exceptions **vide** ; `check:test-projects` vert (unit 1 · integration 9 · playwright 1, **aucun orphelin**). Les 11 tests nouveaux sont **tous `@critique`**, donc **jamais skippables** (11 §2) — c'est le bon marquage : ils gardent une panne qui a vécu treize heures sans être vue |
+| couverture ≥ 90 % sur les modules critiques | ➖ **sans objet — exigible à L2** (inchangée) | Aucun des 4 modules critiques n'est livré. **Vérifié et non supposé** : le lot ne touche ni `apps/api/src/routes/`, ni aucun module de sync, crypto, scoring ou RBAC |
+| migrations up/down **sur staging** | ✅ **SATISFAITE — rejouée par moi, mais lire la réserve** | **Je ne l'ai pas crue, je l'ai refaite.** Sur une base **jetable créée puis supprimée dans le PostgreSQL du staging** (pour ne rien détruire) : montée **0 → 44 tables**, journal à **12** · `--down-to 0` → **« 12 migration(s) annulée(s) »**, **1 table restante**, et je l'ai nommée : `schema_migrations` · remontée → **44**. Sur la base de staging elle-même : **12 migrations au journal, 0 en attente**. **Les trois chiffres d'A01 sont exacts.** ⚠️ **RÉSERVE D'ENVIRONNEMENT** : cette chaîne a été mesurée — par A01 puis par moi — **sur un cluster qui se réinitialise toutes les dix secondes** (§G.2). La chaîne up/down est bonne ; **le socle sur lequel on la mesure ne l'est pas**, et j'ai dû reprendre chacune de mes commandes derrière un crash |
+| tout écran livré avec ses 4 états | ➖ **sans objet — exigible à L5** (inchangée) | Vérifié : les deux `App.tsx` sont absentes du diff du lot |
+| axe-core vert | ➖ **sans objet — exigible à L5** (inchangée) | Même motif |
+| `@filrouge` vert sur FIL-TPE et FIL-GC | ✅ **COCHÉE**, réserve F-2 inchangée | Les 5 tests `@filrouge` sont dans les 77 d'intégration relancés par moi, verts. **F-2 n'est pas levée** |
+| README de l'app à jour | 🟡 **COCHÉE, mais je ne l'ai pas vérifiée moi-même** | `apps/worker/README.md` et `.github/workflows/README.md` ont été réécrits au commit `462ba70` **pendant ma passe**, par un agent travaillant en parallèle. J'ai contrôlé **le seul point qui pouvait rendre la panne** : le README du worker porte les **noms réels** de files et **explique** le changement. Le reste : **non relu** (§G.6). `infra/README.md` décrit un chemin absent de la machine (§G.5) |
+| aucun TODO/FIXME sans entrée DECISIONS/AMELIORATIONS | 🟡 **COCHÉE SOUS RÉSERVE** (inchangée) | **Recompté : toujours 3, ni plus ni moins.** `infra/scripts/smoke-test.sh:141` `TODO(L2)` adossé à sa décision — conforme ; `apps/api/scripts/db-generate.mjs:108` et `:112` `TODO(A12)` **dans la chaîne écrite par le générateur** — marqueurs de gabarit. **Le lot L0-b n'en ajoute aucun.** Reste à régulariser |
+| diff schéma-vs-04 = **zéro écart** | ✅ **COCHÉE — et sans objet pour CE lot** | **Vérifié mécaniquement** : `git diff --name-only 47851fd..HEAD -- apps/api/drizzle apps/api/src/db` → **0 fichier**. Le lot ne peut pas avoir introduit d'écart. Je n'ai **pas relancé** `pnpm schema:diff` (§G.6) : le résultat du L1 vaut, faute de schéma modifié |
+
+**Bilan de la DoD au 2026-08-28 : 6 lignes cochées · 3 cochées sous réserve · 3 sans objet avec leur
+lot · 0 NON SATISFAITE.** La ligne qui manquait au L1 est satisfaite ; **deux autres se sont
+assorties d'une réserve** (README non relu par le gardien, migrations mesurées sur un socle instable).
+
+> **Et une phrase à ne pas écrire.** La version précédente du dossier de porte conclut : « **plus aucune
+> ligne de DoD ne bloque la porte P-A** ». C'est exact **au sens littéral** — aucune ligne n'est NON
+> SATISFAITE — et c'est **trompeur au sens utile**, parce que ce qui bloque la porte n'est pas une ligne
+> de DoD : c'est l'état de la machine sur laquelle ces lignes ont été mesurées (§G.2). Une DoD toute
+> verte au-dessus d'un PostgreSQL qui redémarre toutes les dix secondes est le même genre d'objet que
+> « Up 13 hours (healthy) » au-dessus d'un worker mort.
 
 ---
 
@@ -860,6 +1025,263 @@ l'écrire, parce qu'un lecteur qui additionnerait 193 + 53 se tromperait de un.
 
 ---
 
+# G. LOT L0-b — CE QUE J'AI RECOMPTÉ, CE QUE J'AI ÉPROUVÉ, ET CE QUI EST FAUX
+
+Le lot précédent a livré une leçon que le lot L0-b confirme trois fois : **un contrôle qui annonce
+plus qu'il ne fait est plus dangereux qu'un contrôle absent**, parce qu'il consomme la vigilance qu'il
+ne rembourse pas. J'ai donc appliqué au dossier du L0-b la même méfiance qu'il applique au dépôt : je
+n'ai retenu **aucun chiffre sans le recompter**, et **aucun garde-fou sans l'éprouver par injection**.
+
+## G.0 — Les chiffres en circulation, repris un par un
+
+| Chiffre annoncé | Ce que j'ai mesuré | Verdict |
+| --- | --- | --- |
+| **9 services, tous sains** | **6** conteneurs `Up (healthy)` (postgres, redis, minio, api, worker, caddy) + **3** `Exited (0)` (createbuckets, field, hq). Les trois sorties sont **légitimes** — j'ai lu leurs journaux avant de conclure : ce sont des jobs ponctuels qui déposent leur build ou créent les buckets. **Mais « tous sains » est faux deux fois** : trois d'entre eux ne tournent pas, et **postgres n'est pas sain** (§G.2) | **FAUX** |
+| **migrations 12 → 44 tables** | **44** tables, **12** migrations au journal, **0 en attente**. Rejoué de bout en bout par moi sur une base jetable du staging | **EXACT** |
+| **descente à 1 table** | `--down-to 0` → « **12 migration(s) annulée(s)** », **1** table restante, nommée : `schema_migrations` | **EXACT** |
+| **empreinte de seed `e6fe311a275472187e2d5115577543c2`** | **Aucun outil du dépôt ne produit cette valeur.** `seed.mjs --empreinte` imprime **8 tables** avec un md5 **tronqué à 12 caractères** : `blocks 6709e273865a` · `sectors 001444fbe096` · `services 76f769f5ab62` · `interlocutor_profiles 3ac44eb0ff83` · `size_tiers 4cd05abd8d1e` · `naf_sector_map 28d2ca0fdfcb` · `estimation_params bc0d98c35d42` · `users 95d203bc3cc5`. **La propriété annoncée est vraie** — je l'ai vérifiée sur staging, deux passages consécutifs, **8 empreintes identiques** — mais **pas avec cet artefact** | **NON REPRODUCTIBLE** |
+| **77 tests d'intégration** | **77**, sur **9** fichiers. Et 95 unitaires, 8 e2e : **180 au total, 0 skippé** | **EXACT** |
+| **11 tests interdisent le retour du worker mort** | **11**, tous `@critique` : 7 pour la sonde, 4 pour les noms de files. Exécutés par moi, verts | **EXACT** |
+| **9 Go libres sur 15** | Ne correspond à aucune grandeur mesurable sous ce nom. **Disque : 83 Go libres sur 150** (43 % utilisés). **Mémoire : `free` 1,5 Gi, `available` 10 Gi sur 15, `buff/cache` 9 Gi** — le chiffre semble être `buff/cache`, qui n'est **pas** de la mémoire libre. **Et il masque le vrai risque de capacité**, que personne n'a mesuré : `docker system df` annonce **14,19 Go de cache de construction** (8,86 Go récupérables) et **15,76 Go d'images récupérables**, sur une machine qui construit désormais ses images **sur place** | **FAUX / trompeur** |
+| **`axion-ia.com` → 301 en 0,27 s** | **301 en 0,077 s**, voisin intact, ses 4 conteneurs `Up 8 weeks (healthy)`. Non un faux — une mesure non reproductible portée comme une preuve | **conclusion exacte** |
+| **`DECISIONS.md` 45 entrées** (dossier §6, hérité du L1) | **47**, toutes au format (`check:decisions` RC=0). +2 au L0-b | **périmé** |
+| **`check:jonction` 39 scripts / 76 variables** (dossier §4, hérité) | **41** scripts, **77** variables | **périmé** |
+
+## G.1 — **ÉCART BLOQUANT** : le critère n° 1 ne se recoche pas, et pas pour la raison annoncée
+
+Le dossier de porte pose la question honnêtement : *« se recoche-t-il maintenant qu'il fonctionne
+réellement, ou le lot L0 porte-t-il une réserve datée ? »*. **Ma réponse de gardien : ni l'un ni
+l'autre. Il ne se recoche pas, et il ne s'agit pas d'une réserve d'historique — il s'agit du présent.**
+
+**Le worker, lui, est réparé, et je l'ai prouvé** (§B.10.1) : la sonde discrimine, les onze tests la
+gardent, la panne de treize heures ne peut plus se rejouer sans faire rougir la CI. Sur ce point précis,
+le travail est fait et bien fait.
+
+**Mais le critère n° 1 ne dit pas « le worker vit ». Il dit : « `docker compose up` = stack complète ».**
+Et sur la pile qui compte — celle qui tourne sur un serveur — **la stack n'est pas saine** : son
+PostgreSQL se réinitialise toutes les dix secondes (§G.2). **Recocher le critère aujourd'hui reviendrait
+à refaire, sur la base de données, exactement ce qui a été fait hier sur le worker : cocher une
+apparence de santé rapportée par une sonde qui ne regarde pas au bon endroit.**
+
+**Verdict du gardien : critère n° 1 → ⬜ NON COCHÉ**, et la mention « coché à tort le 2026-08-27 » reste
+inscrite. Il redeviendra cochable quand la pile complète sera saine **sur staging**, sonde de Postgres
+comprise — pas avant. *La signature reste celle de Williams ; l'avis du gardien est celui-ci.*
+
+## G.2 — **ÉCART BLOQUANT** : le PostgreSQL du staging se réinitialise toutes les dix secondes, et Docker le dit sain
+
+**C'est la troisième sonde menteuse du projet, découverte le lendemain du jour où la deuxième a servi
+de leçon.** Elle n'a été trouvée par personne parce que personne n'a regardé les journaux de la base :
+tout ce qui l'entoure était vert.
+
+**Les faits, tous mesurés par moi le 2026-08-28 sur `axionia-web` :**
+
+1. `/var/lib/pgbackrest/` est **VIDE** (répertoire daté du 19 août). **`pgbackrest stanza-create` n'a
+   jamais été exécuté sur le staging.**
+2. `archive-push` échoue donc à chaque segment :
+   `[103]: unable to find a valid repository … unable to open missing file '/var/lib/pgbackrest/archive/axion/archive.info'`,
+   avec l'indice explicite `HINT: has a stanza-create been performed?`
+3. Le postmaster traite cet échec comme un crash de backend : `server process … exited with exit code 103`
+   → `all server processes terminated; reinitializing` → `database system was not properly shut down;
+   automatic recovery in progress`.
+4. **Ce cycle s'est produit 275 fois en 46 minutes** — le premier à `05:17:22`, c'est-à-dire **six
+   secondes après le démarrage du conteneur**, le dernier pendant que j'écrivais cette ligne. Le WAL
+   bloqué est le tout premier : `000000010000000000000001`. **Zéro segment archivé depuis le déploiement.**
+5. **Et Docker annonce `Up 46 minutes (healthy)`, `RestartCount = 0`** : la sonde de Postgres réussit
+   *entre* deux crashs, exactement comme `pgrep -f node` réussissait à côté du worker mort.
+6. **L'application en souffre, et ça se lit** : le journal de l'API porte **390 lignes d'erreur**
+   `Connection terminated unexpectedly` / « Erreur du pool PostgreSQL sur une connexion inactive ».
+   Mes propres commandes de contrôle ont dû être relancées derrière les crashs.
+
+**Ce que cela invalide, précisément :**
+
+- **E35 n'est pas seulement « non prouvée sur staging » : elle est CASSÉE sur staging.** Il n'y a aucune
+  sauvegarde possible, aucun rejeu WAL possible, aucun PRA. L'invariant 8 et le critère L0 n° 2 ne
+  tiennent que par le test **local** du 2026-08-27.
+- Le dossier de porte §8 point 3 **avait prévu ce point** — « *Point de contrôle n°1 côté sauvegardes :
+  `pgbackrest stanza-create` après le premier `up`, sans quoi les WAL s'accumulent sans être archivés* ».
+  **L'étape n'a pas été faite, et l'avertissement SOUS-ESTIME sa propre conséquence** : ce n'est pas
+  « les WAL s'accumulent », c'est « **le cluster redémarre en boucle** ». Un avertissement qui minimise
+  se fait ignorer.
+- **Le risque n'est pas cantonné au staging.** La même image `infra/postgres/Dockerfile` et la même
+  configuration d'archivage partiront en production, où `stanza-create` est **également** une étape
+  manuelle du runbook. Ce qui s'est passé ici se reproduira là-bas, sur des données d'audit réelles.
+
+**Ce que je ne fais pas, et pourquoi.** Je n'exécute pas `stanza-create` : mon périmètre est la lecture
+et le verdict, et un gardien qui répare ce qu'il contrôle ne contrôle plus rien. **La correction et,
+surtout, la mécanisation de ce point (une sonde qui regarde l'archivage, ou une étape de déploiement qui
+crée la stanza) reviennent à A11 et à A01.**
+
+## G.3 — Les garde-fous neufs, éprouvés par injection — **et refaits pendant que je les éprouvais**
+
+> **Lire d'abord ceci, sinon les deux tableaux qui suivent se contredisent.** Les deux garde-fous ont
+> été **réécrits pendant ma passe de contrôle**, chacun à la suite d'une revue croisée :
+> `check-compose-coolify.mjs` **201 → 706 lignes**, `check-isolation-reseau.mjs` **145 → ~600 lignes**.
+> Je rapporte donc **deux mesures**, et non une : celle des versions **commitées au `462ba70`**, qui
+> sont celles du lot que je contrôle (§G.3.1), et celle des versions **de l'arbre de travail**, qui ne
+> sont dans aucun commit au moment où je signe (§G.3.2). **Je crédite les secondes, je ne les coche pas.**
+
+Chaque injection a été faite **sur une copie de travail hors du dépôt**, sur du YAML dont j'ai vérifié
+la validité avec `docker compose config` **avant** de conclure. **Mes trois premières tentatives ont
+produit du YAML invalide** ; les compter aurait fabriqué deux faux positifs et un faux négatif.
+*Une injection non validée est une opinion, pas une preuve.*
+
+### G.3.1 — Les versions du lot (`462ba70`) : 8 injections, **2 manquées**
+
+| # | Injection | YAML valide ? | Attendu | Obtenu |
+| --- | --- | --- | --- | --- |
+| 1 | `networks: [axion, edge]` sur `postgres` (séquence en flux) | oui | RC=1 | **RC=1** ✅ |
+| 2 | `edge:` ajouté dans le bloc `networks:` de `api` (mapping) | oui | RC=1 | **RC=1** ✅ |
+| 3 | `networks:` / `- axion` / `- edge` sur `postgres` (**séquence en bloc**) | oui | RC=1 | **RC=0** ❌ |
+| 4 | `${AXION_DATA}/pg:/…` dans le bloc `volumes:` de `postgres` | oui | RC=1 | **RC=1** ✅ |
+| 5 | `- ./infra/postgres/postgresql.custom.conf:/etc/…` (le défaut du 6ᵉ déploiement) | oui | RC=1 | **RC=1** ✅ |
+| 6 | `context: ../infra` (remontée au-dessus de la racine) | oui | RC=1 | **RC=1** ✅ |
+| 7 | `context: ./infra-disparu` (chemin inexistant) | oui | RC=1 | **RC=1** ✅ |
+| 8 | `volumes: ["${AXION_DATA}/r:/r", …]` sur `redis` (**séquence en flux**) | oui | RC=1 | **RC=0** ❌ |
+
+**Injection 3** est la plus grave : `networks:` suivi de `- edge` est **la syntaxe la plus courante de
+Docker Compose**, et c'est **très exactement le scénario que le script décrivait dans son propre
+en-tête** — « *un `edge: {}` ajouté sous `api`, deux mots, dans un fichier de 750 lignes, par quelqu'un
+qui veut « juste exposer l'API directement »* ». Écrit de la façon la plus naturelle, ce geste passait
+**au vert**, et l'API de staging obtenait une route directe vers la base PostgreSQL d'`axion-ia.com`.
+**Le garde-fou de sécurité laissait passer la forme d'écriture la plus probable de la faute qu'il garde.**
+
+**Injection 8** : la détection de `${` était enfermée dans un bloc ouvert par `^\s{4}volumes:\s*$` ; un
+`volumes: ["${VAR}/x:/x"]` y échappait. Coolify aurait rejeté le déploiement **avant le clone**, donc
+**en silence** — le mode d'échec précis que la règle existe pour empêcher.
+
+**Cause commune, et c'est elle qui compte plus que les deux symptômes** : les deux scripts cherchaient
+**des formes d'écriture** au moyen d'expressions régulières ligne à ligne, là où ils devaient garder
+**une propriété**. Une expression régulière garde l'écriture qu'on avait en tête en l'écrivant.
+
+### G.3.2 — Les versions de l'arbre de travail : 11 injections, **11 attrapées**
+
+Les deux réécritures lisent désormais la **structure** du document et raisonnent sur une propriété.
+**Je ne les ai pas crues : je les ai rejouées**, en ajoutant à mon jeu les deux formes que la revue
+croisée avait trouvées et que **je n'avais pas trouvées moi-même** — un second alias du même réseau
+sous un autre nom, et un `network_mode` qui emprunte la pile réseau de Caddy sans déclarer aucun réseau.
+
+| Injection | `check:isolation-reseau` | `check:compose-coolify` |
+| --- | --- | --- |
+| séquence en flux `[axion, edge]` | **RC=1** ✅ | — |
+| mapping `edge:` sous `api` | **RC=1** ✅ | — |
+| **séquence en bloc `- edge`** (injection 3) | **RC=1** ✅ *(corrigée)* | — |
+| **second alias du même réseau** (`passerelle: {name: coolify, external: true}`) — *le mot « edge » n'apparaît jamais* | **RC=1** ✅ | — |
+| **`network_mode: 'service:caddy'` sur `worker`** — *aucun réseau attaché, mais la route héritée* | **RC=1** ✅ | — |
+| interpolation dans un volume (bloc) | — | **RC=1** ✅ |
+| **interpolation dans un volume en flux** (injection 8) | — | **RC=1** ✅ *(corrigée)* |
+| montage de fichier depuis le dépôt | — | **RC=1** ✅ |
+| `context: ../infra` | — | **RC=1** ✅ |
+| `context: ./infra-disparu` | — | **RC=1** ✅ |
+| fichier **réindenté à 4 espaces** + interpolation dans un volume | — | **RC=1** ✅, la faute nommée **avec son service** |
+
+**Les deux scripts comptent désormais ce qu'ils inspectent et l'affichent** — « *10 attachement(s)
+inspecté(s) sur 9 service(s)* », « *10 montage(s) inspecté(s) sur 9 service(s) ; 12 chemin(s)
+relatif(s)* ». **Et ils énoncent leurs propres limites** (montage ajouté depuis l'interface Coolify,
+`include:`, `extends:`, `docker network connect` passé à la main, documents YAML multiples, ancres
+définies dans un service). C'est la bonne manière : *une garantie faible et énoncée vaut mieux qu'une
+garantie forte et fausse.*
+
+### G.3.3 — **LA RÉSERVE QUI SUBSISTE** : le compteur est affiché, il n'est pas *asserté*
+
+C'est le seul défaut que je trouve encore, et il est réparable en une ligne — mais il est de la famille
+que ce dépôt poursuit depuis trois lots.
+
+**Mesuré** : fichier réindenté à 4 espaces **avec** la faute d'isolation (`- edge` sous `postgres`) →
+`check:isolation-reseau` **sort en 0**, et son compteur passe de **10 attachements à 9**. *Le symptôme
+que l'en-tête du script désigne lui-même comme « le symptôme à surveiller » s'est produit — et le script
+l'a imprimé sans en tirer la moindre conséquence.* **Un nombre que seul un humain remarquerait, dans un
+journal de CI que personne ne lit, n'est pas un garde-fou : c'est une note de bas de page.**
+
+**Ce qui atténue la portée, et je le dis parce qu'un gardien qui ne relativise pas ses trouvailles les
+dévalue toutes** : la chaîne rattrape ce cas. `pnpm format:check` (dans `verify` **et** en CI, **avant**
+ces deux contrôles) **rejette** un compose réindenté — vérifié par moi. **Le scénario est donc couvert
+par la chaîne, pas par le garde-fou** — et le garde-fou ne le dit pas, alors qu'il énonce
+scrupuleusement tout le reste de ce qu'il ne garde pas. Dépendre d'un voisin sans le déclarer est
+précisément ce qui fait qu'on découvre la dépendance le jour où le voisin change.
+
+**Correctif attendu, minimal** : faire échouer le contrôle quand le nombre d'éléments inspectés est nul
+ou inférieur au nombre de services déclarés — ou, à défaut, écrire dans les limites que
+l'indentation canonique est garantie par `format:check`.
+
+### G.3.4 — Et un écart de pipeline, qu'il faut nommer
+
+Le contrôle d'acceptation s'est tenu **sur un arbre qui bouge** : un commit (`d8d6515`) et **deux
+réécritures non commitées** des scripts mêmes que j'auditais sont arrivés pendant la passe.
+**C'est exactement l'écart V3 relevé à la 1ʳᵉ passe du lot L0** — « *un contrôle d'acceptation ne se
+tient pas sur un arbre qui bouge* » — et il se reproduit. Il n'invalide pas mes mesures, qui sont
+datées et rejouables ; **il m'a obligé à toutes les refaire**, ce qui est le coût exact de l'écart.
+
+**Deux conséquences pratiques :**
+
+1. **Les réécritures ne sont dans aucun commit au moment où je signe.** Elles ne peuvent donc porter
+   aucun critère d'acceptation. **Elles devront être revues et testées par quelqu'un qui ne les a pas
+   écrites** (09 §5.6) — mon contrôle par injection ne remplace pas une revue croisée.
+2. **`AMELIORATIONS.md`, entrée du 2026-08-28, est à corriger** : « *Prouvé par injection dans **les
+   deux formes possibles*** ». **Il y en avait cinq**, dont trois passaient. La réécriture le démontre
+   mieux que moi. *Hors de mon périmètre d'écriture : je le signale, je ne le touche pas.*
+
+
+## G.4 — Ce que j'ai éprouvé et qui tient réellement
+
+Pour être juste : la méfiance a aussi confirmé du solide, et par mesure, pas par lecture.
+
+- **Isolation réseau — vraie sur la machine, pas seulement dans le fichier.** Les 9 conteneurs sont sur
+  `axion-audit-coolify-interne` ; **seul `caddy`** porte en plus `coolify`. **Épreuve TCP réelle** :
+  depuis `api`, une connexion vers `u7zlql3bpb1xy5t4kg6jnvpm:5432` (le PostgreSQL du voisin) **n'aboutit
+  pas** ; depuis `caddy`, elle aboutit. **Le risque résiduel documenté est exactement le risque réel** —
+  c'est rare, et ça mérite d'être dit.
+- **La sonde du worker est honnête** (§B.10.1), éprouvée par injection sur la machine.
+- **L'image de l'API contient les migrations qu'elle déclare** — le 3ᵉ défaut dormant est réellement mort.
+- **Les deux garde-fous sont câblés en CI**, pas seulement dans `verify` : `ci.yml:198` et `:205`.
+  **La réserve F-1 du lot L1 ne se reproduit pas.**
+- **`check:compose-coolify` apporte ce que Docker n'apporte pas** : j'ai refait la contre-épreuve,
+  `docker compose config -q` rend **0** là où le script rend **1**.
+- **`deploy-staging.yml` est bien inexécutable pour la raison annoncée** : `origin/main` ne porte que
+  **16 fichiers** et pas ce workflow.
+
+## G.5 — **ÉCART** : critère n° 3 (secrets provisionnés) — ce qui a été fait ne correspond pas à ce que le pack demande
+
+Le critère n° 3 était `⬜ NON VÉRIFIÉ`. Le staging tourne, donc les secrets **existent**. Mais le pack ne
+demande pas qu'ils existent, il demande une **pose** précise (02 §30.4-2), et elle n'est pas tenue :
+
+- Le `.env` du staging, `/data/coolify/applications/<uuid>/.env`, est en **`-rw-r--r--` (644) root:root**,
+  dans un répertoire **755**. Le pack impose **`chmod 600`**. **Tout compte local de la machine peut lire
+  les secrets du staging** — sur une machine qui héberge aussi la production.
+- **Aucune sauvegarde chiffrée du `.env` constatée**, alors que le dossier de porte insiste lui-même :
+  « *sans elle, un PRA restaure une infrastructure sans ses clés* ».
+- `/opt/axion-audit` — le chemin que le runbook et `pnpm infra:restore-test` désignent — **n'existe pas**
+  sur la machine. Le runbook décrit une topologie que Coolify a remplacée.
+
+**Le critère n° 3 reste donc ⬜ NON SATISFAIT**, et pour une raison plus précise qu'avant : ce n'est plus
+« on n'a pas vérifié », c'est « on a vérifié, et la pose n'est pas celle du §30.4-2 ».
+
+## G.6 — Ce que je n'ai PAS pu vérifier, et qui doit être dit
+
+Un contrôle qui tait ses angles morts en fabrique.
+
+1. **Le contenu des secrets.** La lecture du `.env` du staging m'a été refusée par la politique
+   d'exécution, à juste titre. Je n'ai donc **pas** pu contrôler nominativement les **12 familles §30.3**
+   sur la machine. Je n'atteste que les **métadonnées** : le fichier existe, il fait 2 464 octets, il est
+   en 644 (§G.5). **Ce contrôle nominatif reste à faire par Williams, et il n'appartient pas à un agent.**
+2. **La restauration réelle sur staging** (`restore-test.sh`). Je ne l'ai pas lancée : elle écrit, et mon
+   mandat sur `axion-ia.com` est la lecture seule. **De toute façon elle ne peut pas réussir** — il n'y a
+   aucune sauvegarde à restaurer (§G.2). C'est le cœur d'E35, et il reste non prouvé sur serveur.
+3. **`pnpm schema:diff`** n'a pas été relancé. Justification mécanique et non confiance : le lot ne touche
+   **aucun** fichier de `apps/api/drizzle/` ni de `apps/api/src/db/` (0 au diff, vérifié).
+4. **Les deux README réécrits au commit `462ba70`** (`apps/worker/`, `.github/workflows/`) ont été produits
+   **pendant ma passe**, par un agent parallèle. Je n'ai contrôlé que le point qui pouvait refaire la
+   panne — les noms de files — et il est correct. **Le reste n'est pas relu par le gardien.**
+5. **Le déploiement staging PAR LA CI** (critère n° 4) reste indémontrable avant le merge, pour une raison
+   que j'ai vérifiée (§G.4) mais qui reste une **promesse** : le workflow n'a jamais tourné.
+6. **La cause interne exacte** qui fait passer un échec d'`archive_command` en réinitialisation du cluster
+   (plutôt qu'en simple réessai de l'archiveur) n'a pas été instruite. **Je rapporte le fait mesuré —
+   275 cycles corrélés un pour un aux échecs d'`archive-push` — pas le mécanisme.** Le diagnostic revient
+   à A11 ; la cause **proximale** (stanza absente) est, elle, certaine.
+7. **Le comportement de la pile après correction** : je constate un état, pas une trajectoire. Rien de ce
+   que j'écris ne prédit que la pile sera saine une fois la stanza créée — **cela devra être remesuré.**
+
+---
+
 # E. TRAVAUX PORTÉS À LA PORTE P-A
 
 Reportés au fichier `docs/portes/PORTE_A_<date>.md` (11 §9bis), à cocher avec preuve :
@@ -909,6 +1331,50 @@ Reportés au fichier `docs/portes/PORTE_A_<date>.md` (11 §9bis), à cocher avec
     **atténué**, pas éliminé, par un contrôle en liste noire indépendant du comparateur.
 18. **Migrations up/down sur staging** — ligne de DoD **NON SATISFAITE**, dépendante de L0-b.
 
+## E.ter — AJOUTS DU LOT L0-b À LA LISTE DE LA PORTE P-A
+
+Rangés par ordre de blocage, comme le §8 du dossier de porte. **Les points 19 et 20 sont bloquants :
+la porte ne peut pas être signée tant qu'ils tiennent.**
+
+19. 🔴 **BLOQUANT — créer la stanza pgBackRest du staging et remesurer.** `pgbackrest stanza-create`
+    n'a jamais tourné sur `axionia-web` : l'archivage WAL est à zéro et **le cluster se réinitialise
+    toutes les dix secondes** (§G.2). **Et ne pas s'arrêter au correctif** : l'étape est manuelle dans le
+    runbook, donc elle sera oubliée **en production aussi**. Ce qui doit être livré n'est pas une commande
+    tapée une fois, c'est **une mécanisation** — une étape de déploiement qui crée la stanza, ou une sonde
+    de Postgres qui refuse d'être verte quand l'archivage ne l'est pas. → **A11, A01**
+20. 🔴 **BLOQUANT — la sonde de santé de PostgreSQL ment**, exactement comme mentait celle du worker :
+    `Up 46 minutes (healthy)`, `RestartCount = 0`, au-dessus de **275 réinitialisations en 46 minutes**.
+    La leçon tirée du worker n'a été appliquée **qu'au worker**. **Passer les sondes des cinq services en
+    revue avec la même question** : que prouve-t-elle exactement, et que ne prouve-t-elle pas ? → **A11, A53**
+21. 🟠 **Commiter, faire relire et faire tester les DEUX réécritures de garde-fous** —
+    `check-compose-coolify.mjs` (201 → 706 l.) et `check-isolation-reseau.mjs` (145 → ~600 l.) — qui
+    étaient **non commitées** au moment de ma signature (§G.3.4). **Je les ai éprouvées par 11 injections,
+    11 attrapées**, y compris les deux formes que je n'avais pas trouvées moi-même ; **mais un contrôle du
+    gardien ne remplace pas une revue croisée**, et 09 §5.6 interdit que le test vienne de l'auteur.
+    → **A17 ou A11, puis A02**
+21bis. 🟠 **Asserter le compteur au lieu de l'afficher** (§G.3.3) : `check:isolation-reseau` sort en **0**
+    sur un fichier réindenté portant la faute, en imprimant un compteur qui passe de 10 à 9 — le symptôme
+    que son propre en-tête désigne comme celui « à surveiller ». Le faire **échouer** quand le compte
+    s'effondre ; à défaut, **écrire dans ses limites qu'il dépend de `format:check`** pour l'indentation
+    canonique. Même remarque pour son voisin. → **A11**
+22. 🟠 **Corriger l'entrée `AMELIORATIONS.md` du 2026-08-28** : « les deux formes possibles » — il y en a
+    **trois** (§G.3). *Hors de mon périmètre d'écriture.*
+23. 🟠 **Critère n° 3 — reposer les secrets selon 02 §30.4-2** : `.env` du staging en **600** et non 644,
+    **sauvegarde chiffrée du `.env`** effectivement constituée, et **contrôle nominatif des 12 familles
+    §30.3 par Williams** — que je n'ai pas pu faire (§G.5, §G.6-1). → **Williams**
+24. 🟡 **Remplacer, ou justifier, l'empreinte de seed `e6fe311a…`** : aucun outil du dépôt ne la produit
+    (§G.0). L'artefact reproductible est le tableau des **8 empreintes par table** de `seed.mjs --empreinte`.
+    *Une preuve qu'on ne peut pas rejouer n'est pas une preuve.* Corriger aussi « les 7 référentiels » du
+    dossier §3 : l'outil en imprime **8** (`users` incluse). *Hors de mon périmètre.*
+25. 🟡 **Mettre `infra/README.md` en accord avec la machine** : `/opt/axion-audit` n'existe pas, et
+    `pnpm infra:restore-test` pointe toujours `/opt/axion-audit/prod/.env` (§G.5).
+26. 🟡 **Surveiller la capacité de la machine, maintenant qu'elle construit ses images sur place** :
+    **14,19 Go de cache de construction** (8,86 Go récupérables) et 15,76 Go d'images récupérables. Le
+    chiffre « 9 Go libres sur 15 » ne mesure rien de cela (§G.0).
+27. 🟡 **Corriger les chiffres périmés du dossier de porte** §4 et §6 : `DECISIONS.md` **47** entrées (et
+    non 45), `check:jonction` **41** scripts / **77** variables (et non 39/76). *Hors de mon périmètre —
+    ces sections portent les preuves d'A01.*
+
 ---
 
 ## Journal des passes de contrôle
@@ -918,8 +1384,26 @@ Reportés au fichier `docs/portes/PORTE_A_<date>.md` (11 §9bis), à cocher avec
 | 2026-08-27 | 1ʳᵉ | L0 | `ce5b912` | **VETO** — V1 CI rouge · V2 HEAD ne démarre pas · V3 pipeline hors séquence · V4 gouvernance. 1 code orphelin (`axion:sauvegardes`) |
 | 2026-08-27 | 2ᵉ | L0 | `fdd5f59` | **ACCEPTÉ SOUS RÉSERVE** — V1/V2/V3 levés et éprouvés · **0 code orphelin** · V4 partiel · 6 manques au dossier de porte |
 | 2026-08-27 | 1ʳᵉ | **L1** | **`bf7f6ca`** | **ACCEPTÉ SOUS RÉSERVE** — les **4 critères du fichier 07 cochés avec preuve exécutée** · **43 tables livrées, 43 rattachées, 0 orpheline** · tous les chiffres recomptés, **aucun faux** · 38 mutations injectées, **38 détectées** · **3 écarts** : **F-1** (invariant 2 non contrôlé en CI — le plus grave), **F-2** (garde-fou `@filrouge` partiellement décoratif), **F-3** (`test:e2e:filrouge` en échec) · 1 écart de gouvernance **F-7** (branche) · 1 ligne de DoD **NON SATISFAITE** (migrations sur staging, dépend de L0-b) |
+| 2026-08-28 | 1ʳᵉ | **L0-b** | **`462ba70`** | **REFUSÉ** — **24 artefacts livrés, 24 rattachés, 0 orphelin** ; **180 tests verts, 0 skippé** ; migrations up/down **rejouées par moi sur staging** ; isolation réseau et sonde du worker **éprouvées par injection sur la machine** — *le code du lot est bon*. **Mais l'environnement qu'il livre ne l'est pas** : le **PostgreSQL du staging se réinitialise 275 fois en 46 minutes** (stanza pgBackRest jamais créée), **archivage WAL à zéro**, **et Docker le déclare `healthy`** — la troisième sonde menteuse du projet (**§G.2**). Le dossier annonçait « 9 services, tous sains ». **Critère L0 n° 1 NON RECOCHÉ** (§G.1) · **critère n° 3 NON SATISFAIT**, `.env` en 644 (§G.5) · garde-fous neufs : **2 injections sur 8 non détectées** dans les versions du lot, **corrigées par deux réécritures NON COMMITÉES** que j'ai rejouées (11/11) mais qui n'ont pas de revue croisée (§G.3) · 3 chiffres faux ou non reproductibles (§G.0) · **contrôle tenu sur un arbre qui bouge — récidive de l'écart V3** (§G.3.4) |
 
-**Signature du gardien de la spécification :** A02 — 2026-08-27, sur `bf7f6ca`.
+**Signature du gardien de la spécification :** A02 — **2026-08-28, sur `462ba70` : REFUSÉ.**
+
+**Étape 6 du pipeline NON FRANCHIE pour le lot L0-b.** Le refus ne porte pas sur le travail livré — il
+est bon, mesuré, et il répare trois défauts dormants dont un qui aurait cassé la migration en
+production. **Il porte sur ce que le dossier affirme de la machine.** Un staging dont la base de
+données redémarre toutes les dix secondes, présenté comme « 9 services, tous sains », ne peut pas
+franchir un contrôle d'acceptation : ce serait cocher une apparence de santé pour la troisième fois en
+deux jours, après le worker mort et sa sonde, et après le critère n° 1 coché sur cette même apparence.
+
+**Ce qui lève le refus est court et vérifiable** : les points **19, 20 et 21** du §E.ter, puis une
+**remesure de la pile** — pas une déclaration. Les points 22 à 27 sont des réserves qui accompagnent la
+porte sans la bloquer.
+
+*Trace de méthode, pour la passe suivante.* Ce que le lot L1 avait appris — « toutes les réserves
+portaient sur des contrôles qui annoncent plus qu'ils ne font » — s'est vérifié une fois de plus, et
+d'un cran plus haut : cette fois ce n'est pas un script qui annonce trop, c'est **le démon Docker**.
+La règle qui en sort et qui vaut pour tous les lots suivants : **une sonde de santé est un livrable
+comme un autre, elle se rattache à une exigence, et elle s'éprouve par injection — jamais par lecture.**
 Étape 6 du pipeline **franchie sous réserve** : les réserves F-1, F-2, F-3, F-7 sont **portées à la
 porte P-A** et doivent être levées **avant** la signature de Williams. Aucune ne remet en cause le
 schéma lui-même, qui est la substance du lot ; toutes portent sur des **contrôles qui annoncent plus
