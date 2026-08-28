@@ -444,9 +444,34 @@ de Williams.
 > DNAT/`DOCKER-USER` décrit plus haut, **ne peut pas être défait par une mise à jour de Coolify**, et
 > ne peut pas casser le réseau Docker puisqu'il n'y touche pas.
 >
-> Règles entrantes : `22/tcp`, `80/tcp`, `443/tcp` **et `443/udp`** — l'UDP n'est pas un détail,
-> `coolify-proxy` publie HTTP/3, et l'oublier **dégraderait le site sans le casser**, donc sans qu'on
-> s'en aperçoive. Tout le reste refusé : 8000, 6001, 6002 et 32769 tombent d'un coup.
+> **Règle réellement en place — `axionia-web-entrant`, CINQ règles entrantes :**
+>
+> | Protocole | Port    | Pourquoi elle est là                                                                            |
+> | --------- | ------- | ----------------------------------------------------------------------------------------------- |
+> | TCP       | 22      | SSH — sans elle, plus d'accès du tout                                                           |
+> | TCP       | 80      | ACME et redirection vers HTTPS                                                                  |
+> | TCP       | 443     | le site                                                                                         |
+> | **UDP**   | **443** | **HTTP/3.** `coolify-proxy` le publie ; l'omettre **dégraderait le site sans le casser**        |
+> | **ICMP**  | —       | **PMTUD.** Voir l'encadré ci-dessous : l'omettre casse des connexions **sans laisser de trace** |
+>
+> Tout le reste est refusé : **8000, 6001, 6002 et 32769 tombent ensemble**.
+>
+> **Vérifié de l'extérieur APRÈS application** : 8000/6001/6002/32769 fermés · `axion-ia.com` **301**
+> · `audit-staging` **200** · SSH OK · ICMP **3/3**. Et le mot de passe d'administration Coolify a été
+> changé **après** la fermeture, pas avant — dans l'autre ordre, il aurait circulé en clair une
+> dernière fois.
+>
+> > ### ⚠️ NE SUPPRIMEZ PAS LA RÈGLE ICMP — l'erreur a été commise et rattrapée le 2026-08-28
+> >
+> > Une consigne disant « exactement ces quatre règles » a fait **supprimer la règle ICMP** que Hetzner
+> > proposait par défaut. Conséquence : **la découverte de MTU de chemin (PMTUD) casse** — et
+> > **structurellement en IPv6**, où les routeurs ne fragmentent pas et signalent par « Packet Too
+> > Big », un message ICMP. Une connexion se serait figée **à mi-chargement**, sans erreur, **sans
+> > trace dans aucun journal**. Remise le soir même.
+> >
+> > **C'est le même motif que l'UDP 443, et c'est pour cela que les deux sont dans le même tableau :
+> > une dégradation qui ne ressemble pas à une panne.** Personne n'ouvre un ticket pour « le site est
+> > parfois lent chez certains » ; on l'attribue au réseau du visiteur, et on cherche des mois.
 >
 > Accès au tableau de bord ensuite par tunnel SSH sur 8000, 6001 et 6002 (les deux derniers portent
 > le temps réel). Plausible reste joignable par son domaine, à travers le proxy.

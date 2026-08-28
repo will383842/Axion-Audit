@@ -981,3 +981,49 @@ existe, dans le projet `axion-crm-pro`, 10,22 Go/1 To) · le pare-feu de `axion-
 (46.62.248.239, **aucun pare-feu**, sonde TCP externe : seul le 22 répond — **ne rien créer avant
 d'avoir relevé l'UDP**, un nœud « edge » parlant WireGuard serait coupé en silence) · **l'étape 4,
 revue croisée, due sur l'incrément D-2/D-3** (09 §5.6) · la signature de la porte P-A.
+
+---
+
+## 2026-08-28 21h35 — [lot L0-b] — D-3 CLOS DE BOUT EN BOUT : le coffre s'ouvre
+Dernier commit vert : c6e020f (docs(porte): §11 — le dossier rattrape le commit, et A01 dit ce qu'il n'atteste pas)   ·   Branche : lot/l0-infra   ·   Poussé : oui
+Tâche en cours : levée de la dernière réserve technique du dossier de porte.
+Prochaine action : **Williams — relever les 12 familles §30.3 (critère 3) depuis le terminal Coolify derrière le tunnel, puis signer la porte**. Tout le reste de ce qui pouvait être fait sans lui l'est.
+Tests rouges connus : aucun.
+
+**LA RÉSERVE DU §11.3 EST LEVÉE.** Williams a **ouvert le coffre de production** :
+
+```
+./application.env   ./manifeste.txt   ./contexte-coolify.txt   ./LISEZ-MOI.txt   ./environnement-conteneur.brut
+```
+
+**Et le détail qui fait la valeur du test : la passphrase venait de BITWARDEN, pas de Coolify.** La
+prendre dans Coolify n'aurait prouvé que la cohérence de Coolify avec lui-même — or **Coolify aura
+disparu avec le serveur le jour où ce coffre servira**. C'est la copie hors machine qui devait être
+éprouvée.
+
+**Les trois maillons sont prouvés séparément** : le coffre est **produit** (`ls -la`, 6 666 o), il est
+**sorti** (relecture R2 `e9634b5f…`), il **s'ouvre** avec la clé détenue ailleurs. Aucun test du dépôt
+ne pouvait porter le troisième — les six cas de `l0-sauvegarde` éprouvent le mécanisme avec une
+passphrase **factice**. **E35 et l'invariant 8 sont tenus de bout en bout.**
+
+⚠️ **RÉSERVE QUI SURVIT À LA LEVÉE** : cette preuve vaut pour la passphrase **d'aujourd'hui**. Une
+rotation l'invalide et exige de **rejouer le déchiffrement sur un coffre postérieur**. Et une rotation
+est due, puisque la passphrase actuelle a transité par une conversation d'agent. **Séquence
+obligatoire : régénérer → poser → rejouer.** S'arrêter au deuxième pas **retire** la preuve sans la
+remplacer, et personne ne s'en apercevrait.
+
+**PARE-FEU — état définitif, vérifié de l'extérieur APRÈS application.** `axionia-web-entrant`, **cinq**
+règles entrantes : TCP 22, TCP 80, TCP 443, **UDP 443**, **ICMP**. Ports 8000/6001/6002/32769 fermés ·
+`axion-ia.com` 301 · `audit-staging` 200 · SSH OK · ICMP 3/3. Mot de passe d'administration Coolify
+changé **après** la fermeture — dans l'autre ordre il aurait circulé en clair une dernière fois.
+
+**QUATRIÈME ERREUR DE LA SOIRÉE, MÊME MOTIF.** Une consigne « exactement ces quatre règles » a fait
+supprimer la règle **ICMP** proposée par Hetzner. Sans ICMP entrant, la **PMTUD casse** —
+**structurellement en IPv6**, où les routeurs ne fragmentent pas et signalent par « Packet Too Big ».
+Une connexion se serait figée **à mi-chargement, sans trace dans aucun journal**. Remise le soir même.
+**Comme l'UDP 443 : une dégradation qui ne ressemble pas à une panne**, donc que personne ne signale.
+
+**RESTE OUVERT, ET AUCUN N'EST À MOI :** critère 3 (Williams, 5 min) · critère 2, la restauration —
+toujours jamais jouée nulle part · critère 4, non prouvable avant le merge · la rotation de la
+passphrase et son rejeu · la signature de la porte · et, côté session parallèle, **l'étape 4 du
+pipeline — revue croisée de l'incrément D-2/D-3 (09 §5.6)**, qui n'a pas encore eu lieu.
