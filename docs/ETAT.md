@@ -923,3 +923,61 @@ bug. Le détail complet, dont l'accès depuis un second poste, est en
 secrets §30.3) se joue dans le **terminal Coolify** — il faut donc ouvrir le tunnel d'abord. La
 commande de relevé est masquée par construction : elle rend `POSÉE (n car.)` / `VIDE` / `GABARIT` /
 `ABSENTE`, **jamais une valeur**, et sa sortie est publiable telle quelle dans le dossier de porte.
+
+## 2026-08-28 19h30 — [lot L0-b] — D-3 CLOS PAR LA SEULE PREUVE QUI MANQUAIT
+Dernier commit vert : 28d27ef (docs(l0b): retire une seconde recommandation fausse)   ·   Branche : lot/l0-infra   ·   Poussé : oui
+Tâche en cours : aucune — les trois arbitrages du soir sont rendus et leurs preuves sont prises.
+Prochaine action : **obtenir de Williams l'identifiant du sous-compte Storage Box (`u577702-subN`) et son hôte, pour brancher la seconde destination de sauvegarde et clore D-1.**
+Tests rouges connus : aucun.
+
+**D-3 EST CLOS. LA CLÉ DE BITWARDEN OUVRE LE COFFRE DE PRODUCTION — JOUÉ PAR WILLIAMS, PAS DÉDUIT.**
+
+Le contrôle que le bloc de 18h00 déclarait dû (« ce `ls` prouve qu'un coffre EXISTE et qu'il est
+PARTI ; il ne prouve pas qu'il se DÉCHIFFRE ») a été joué. Williams a ouvert
+`secrets-20260828T175324Z.coffre.gpg` avec la passphrase **prise dans Bitwarden — pas dans Coolify**,
+et c'est toute la valeur du test : Coolify aura disparu avec le serveur le jour où ce coffre servira.
+Sortie obtenue :
+
+```
+./application.env
+./manifeste.txt
+./contexte-coolify.txt
+./LISEZ-MOI.txt
+./environnement-conteneur.brut
+```
+
+**Les trois maillons sont désormais prouvés séparément** : le coffre est PRODUIT (`ls -la /sauvegarde`,
+6 666 octets), il est SORTI de la machine (relecture R2 conforme, `e9634b5fbc00487a…`), et il
+S'OUVRE avec la clé détenue hors de la machine. Aucun test du dépôt ne pouvait porter le troisième :
+les six cas de `l0-sauvegarde.integration.test.ts` éprouvent le MÉCANISME avec une passphrase
+factice. Seul un humain détenant la vraie clé pouvait fermer celui-là.
+
+⚠️ **CE QUE CETTE PREUVE NE COUVRE PAS, ET QU'IL FAUDRA REJOUER** : elle vaut pour la passphrase
+d'aujourd'hui. **Toute rotation de `BACKUP_SECRETS_PASSPHRASE` invalide cette preuve** et exige de
+la rejouer sur un coffre postérieur à la rotation. À inscrire dans la procédure de rotation.
+
+**CONSOLE COOLIFY — LE TROU EST FERMÉ, VÉRIFIÉ DE L'EXTÉRIEUR.** Pare-feu Cloud Hetzner
+`axionia-web-entrant`, 5 règles entrantes (TCP 22/80/443, UDP 443, ICMP), appliqué au serveur.
+Mesuré depuis un poste externe APRÈS application : ports **8000, 6001, 6002, 32769 fermés** ;
+`axion-ia.com` 301, `audit-staging` 200, SSH OK, ICMP 3/3 paquets. Mot de passe d'administration
+changé par Williams **après** la fermeture du port, et non avant — l'ordre importait : il circulait
+en clair depuis l'installation de mai.
+
+**POURQUOI CE CORRECTIF-LÀ TIENT ALORS QUE LES DEUX PRÉCÉDENTS ONT ÉCHOUÉ.** `ufw` filtrait une
+chaîne que le trafic Docker ne traverse jamais ; `APP_PORT` éditait un fichier que Coolify réécrit
+chaque nuit (upgrade-*.log des 26, 27 et 28 août à 00:00). Le pare-feu Cloud vit **hors de la
+machine** : ni Coolify, ni Docker, ni une mise à jour ne peuvent le défaire. **Règle à retenir : un
+correctif d'infrastructure ne se juge pas à ce qu'il applique, mais à ce qui peut le défaire.**
+
+⚠️ **UNE RÈGLE A ÉTÉ RETIRÉE PAR ERREUR PUIS REMISE** : la consigne initiale disait « exactement ces
+quatre règles », ce qui a fait supprimer l'ICMP proposé par Hetzner. Sans ICMP entrant, la découverte
+de MTU de chemin casse — structurellement en IPv6, où les routeurs ne fragmentent pas et signalent
+par « Packet Too Big ». Une connexion se serait figée à mi-chargement, sans trace dans aucun journal.
+Corrigé le soir même. **C'est le même motif que l'UDP 443 : une dégradation qui ne ressemble pas à
+une panne.**
+
+**RESTE OUVERT** : D-1 (sous-compte Storage Box à créer sur `axion-crm-backup` #577702 — la Box
+existe, dans le projet `axion-crm-pro`, 10,22 Go/1 To) · le pare-feu de `axion-crm-edge`
+(46.62.248.239, **aucun pare-feu**, sonde TCP externe : seul le 22 répond — **ne rien créer avant
+d'avoir relevé l'UDP**, un nœud « edge » parlant WireGuard serait coupé en silence) · **l'étape 4,
+revue croisée, due sur l'incrément D-2/D-3** (09 §5.6) · la signature de la porte P-A.
