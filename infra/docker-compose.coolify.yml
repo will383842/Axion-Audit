@@ -511,6 +511,17 @@ services:
       PGBACKREST_REPO1_CIPHER_PASS: ${PGBACKREST_CIPHER_PASS:?variable obligatoire, passphrase du depot pgBackRest}
       PGBACKREST_PG1_USER: ${POSTGRES_USER:-axion}
       PGBACKREST_PG1_DATABASE: ${POSTGRES_DB:-axion_audit}
+      # REPRISE SUR VERROU. Ce job porte `restart: 'no'` — obligatoire pour un
+      # one-shot dont les autres services dépendent par
+      # `service_completed_successfully` — et ne se relancera donc JAMAIS seul.
+      # Une seule collision de verrou pgBackRest (`unable to acquire lock`,
+      # code 50) laisserait le cluster SANS STANZA, donc en boucle de
+      # réinitialisation, avec un job mort à côté. Le script réessaie ce cas-là,
+      # et seulement lui : 30 tentatives × 5 s = 150 s au plus. Toute autre
+      # erreur échoue immédiatement — réessayer une erreur de fond ne fait que
+      # retarder l'échec et masquer sa cause.
+      AXION_STANZA_TENTATIVES: ${AXION_STANZA_TENTATIVES:-30}
+      AXION_STANZA_DELAI_S: ${AXION_STANZA_DELAI_S:-5}
     entrypoint: ['/usr/local/bin/axion-stanza-create']
     # -------------------------------------------------------------------------
     # PAS DE `command:` ICI — ET C'EST UNE CONVENTION COOLIFY, PAS UN OUBLI.
@@ -878,6 +889,22 @@ services:
       # marge de durée d'une passe. Le détail de la somme est en tête de
       # infra/postgres/sauvegarde-healthcheck.sh.
       AXION_SAUVEGARDE_SEUIL_ALERTE_H: ${AXION_SAUVEGARDE_SEUIL_ALERTE_H:-30}
+      # ┌───────────────────────────────────────────────────────────────────┐
+      # │ LA SONDE NE LIT PLUS SEULEMENT DEUX ENTIERS (2026-08-28).         │
+      # │ Elle comparait l'âge de deux marqueurs à un seuil, et rien         │
+      # │ d'autre : deux `echo $(date +%s)` dans un volume par ailleurs VIDE │
+      # │ la rendaient VERTE. Elle vérifie désormais les ARTEFACTS — dépôt   │
+      # │ pgBackRest avec point de départ, archive MinIO présente, récente,  │
+      # │ de taille plausible, et d'empreinte conforme à son `.sha256`.      │
+      # │ Ces trois valeurs bornent le seul contrôle qui coûte quelque chose │
+      # │ — parce qu'une sonde qui rougit à tort finit désactivée, et qu'une │
+      # │ sonde désactivée vaut moins que pas de sonde du tout.              │
+      # └───────────────────────────────────────────────────────────────────┘
+      AXION_SAUVEGARDE_ARCHIVE_MIN_O: ${AXION_SAUVEGARDE_ARCHIVE_MIN_O:-1024}
+      AXION_SAUVEGARDE_EMPREINTE_MAX_MO: ${AXION_SAUVEGARDE_EMPREINTE_MAX_MO:-256}
+      # STRICTEMENT inférieur au `timeout` du healthcheck ci-dessous : la sonde
+      # doit rendre un verdict, jamais se faire tuer au milieu d'un calcul.
+      AXION_SAUVEGARDE_EMPREINTE_DELAI_S: ${AXION_SAUVEGARDE_EMPREINTE_DELAI_S:-10}
     entrypoint: ['/usr/local/bin/axion-sauvegarde']
     # PAS DE `command:` — SEPTIÈME CONVENTION COOLIFY, voir l'encadré du service
     # `createstanza`. `command: []` est du Compose valide mais Coolify le réécrit
@@ -951,7 +978,15 @@ services:
     healthcheck:
       test: ['CMD', 'axion-sauvegarde-healthcheck']
       interval: 300s
-      timeout: 10s
+      # 30 s ET NON 10 : depuis qu'elle vérifie l'EMPREINTE de l'archive, la
+      # sonde peut avoir à lire jusqu'à AXION_SAUVEGARDE_EMPREINTE_MAX_MO (256 Mo
+      # par défaut) sur un disque partagé et froid. Son propre `timeout` interne
+      # est de 10 s et reste STRICTEMENT inférieur à celui-ci : elle rend alors
+      # un verdict qui DIT que l'empreinte n'a pas été vérifiée, au lieu de se
+      # faire tuer par Docker et de rendre le conteneur `unhealthy` au hasard.
+      # Une sonde qui rougit à tort finit désactivée, et une sonde désactivée
+      # vaut strictement moins que pas de sonde du tout.
+      timeout: 30s
       retries: 3
       start_period: 1800s
     networks: [axion]

@@ -86,8 +86,94 @@ while [ ! -f "$DONNEES/global/pg_control" ]; do
   attendu=$((attendu + 2))
 done
 
+# =============================================================================
+# REPRISE SUR VERROU — LE POINT QUI REND CE JOB IRRÉPARABLE S'IL MANQUE
+# -----------------------------------------------------------------------------
+# `pgbackrest` sérialise ses opérations par un VERROU DE FICHIER (`lock-path`,
+# `/tmp/pgbackrest` par défaut). Quand il ne peut pas le prendre, il sort en 50
+# avec « unable to acquire lock ». Or ce job porte `restart: 'no'` — c'est
+# obligatoire pour un job one-shot dont les autres services dépendent par
+# `service_completed_successfully` — et il ne se relancera donc JAMAIS tout seul.
+#
+# CE QUE COÛTERAIT UNE SEULE COLLISION, si l'on ne réessayait pas : la stanza
+# n'existe pas, `archive_command` échoue à chaque segment WAL, le postmaster
+# traite la sortie de son enfant asynchrone comme un crash de backend et
+# RÉINITIALISE LE CLUSTER EN BOUCLE — 275 fois en 46 minutes, mesuré le
+# 2026-08-28. Le déploiement, lui, échoue franchement (les services dépendants
+# ne démarrent pas) et la sonde `healthcheck.sh` voit la boucle : la panne n'est
+# plus silencieuse. Mais rien ne la RÉPARE, et une réparation qui exige qu'un
+# humain tape une commande est précisément ce que ce fichier a été écrit pour
+# supprimer.
+#
+# CE QUE CETTE BOUCLE COUVRE, ET CE QU'ELLE NE COUVRE PAS — À LIRE À FROID :
+#  · Elle couvre le verrou détenu par un AUTRE pgBackRest DU MÊME CONTENEUR :
+#    l'archiveur asynchrone (`archive-async=y`) lancé par un `stanza-create`
+#    joué à la main dans le conteneur du serveur (la procédure manuelle que
+#    infra/README.md documente encore), ou deux exécutions concurrentes.
+#  · Elle NE COUVRE PAS, parce qu'il n'existe pas : un verrou partagé ENTRE
+#    conteneurs. `lock-path` est `/tmp/pgbackrest`, propre à chaque conteneur, et
+#    aucun volume ne le partage. Le job `createstanza` du compose et le serveur
+#    ne peuvent donc pas se marcher dessus aujourd'hui. Cette boucle est une
+#    assurance sur une propriété que RIEN ne vérifie et qu'un `lock-path`
+#    déplacé sur un volume ferait tomber sans bruit.
+#  · Elle NE RÉESSAIE QUE LE VERROU. Une stanza « already exists but is not
+#    valid » (montée de version majeure) échoue TOUT DE SUITE, comme avant :
+#    réessayer une erreur de fond, c'est retarder de trois minutes un échec qui
+#    ne se résoudra jamais, et masquer sa vraie cause derrière un délai dépassé.
+# =============================================================================
+TENTATIVES_MAX="${AXION_STANZA_TENTATIVES:-30}"
+DELAI_S="${AXION_STANZA_DELAI_S:-5}"
+case "$TENTATIVES_MAX" in
+  '' | *[!0-9]*) echo "stanza: ECHEC — AXION_STANZA_TENTATIVES n'est pas un entier."; exit 1 ;;
+esac
+case "$DELAI_S" in
+  '' | *[!0-9]*) echo "stanza: ECHEC — AXION_STANZA_DELAI_S n'est pas un entier de secondes."; exit 1 ;;
+esac
+[ "$TENTATIVES_MAX" -gt 0 ] || { echo 'stanza: ECHEC — AXION_STANZA_TENTATIVES vaut 0 : aucune tentative ne serait faite.'; exit 1; }
+
 echo "stanza: cluster initialise, creation de la stanza '$STANZA' dans $DEPOT (idempotent)."
-pgbackrest --stanza="$STANZA" --no-online stanza-create
+
+tentative=1
+while : ; do
+  # La sortie est CAPTURÉE puis réémise : sans cela, `set -e` ferait sortir le
+  # script au premier échec et il n'y aurait aucune reprise. Le `|| code=$?`
+  # neutralise `set -e` pour cette commande, et pour elle seule.
+  code=0
+  journal_pgbackrest="$(pgbackrest --stanza="$STANZA" --no-online stanza-create 2>&1)" || code=$?
+  [ -z "$journal_pgbackrest" ] || echo "$journal_pgbackrest"
+  # `if` et non `[ … ] && …` : sous `set -e`, une liste `&&` dont le test est
+  # faux rend un code non nul et ferait sortir le script au lieu de boucler.
+  # C'est le piège que `sauvegarde.sh` documente déjà deux fois chez lui.
+  if [ "$code" -eq 0 ]; then
+    break
+  fi
+
+  # Reprise UNIQUEMENT sur le verrou. Le code 50 est le verdict de pgBackRest ;
+  # le motif de message est la ceinture, au cas où ce code changerait de valeur
+  # à une montée de version — on ne veut pas qu'un correctif de robustesse
+  # devienne silencieusement inopérant.
+  est_verrou=non
+  if [ "$code" -eq 50 ]; then
+    est_verrou=oui
+  fi
+  case "$journal_pgbackrest" in
+    *'unable to acquire lock'* | *'unable to acquire'*'lock'*) est_verrou=oui ;;
+  esac
+  if [ "$est_verrou" != oui ]; then
+    echo "stanza: ECHEC — pgbackrest stanza-create a rendu $code, et ce n'est PAS un conflit de verrou."
+    echo "stanza: aucune reprise : reessayer une erreur de fond retarderait l'echec sans le resoudre."
+    exit "$code"
+  fi
+  if [ "$tentative" -ge "$TENTATIVES_MAX" ]; then
+    echo "stanza: ECHEC — verrou pgBackRest toujours detenu apres $tentative tentatives espacees de ${DELAI_S}s."
+    echo "stanza: la stanza n'a pas pu etre creee ; sans elle archive_command echoue a chaque segment WAL"
+    echo "stanza: et le cluster se reinitialise en boucle (mesure le 2026-08-28)."
+    exit "$code"
+  fi
+  echo "stanza: verrou pgBackRest detenu (code $code) — nouvelle tentative $((tentative + 1))/$TENTATIVES_MAX dans ${DELAI_S}s."
+  sleep "$DELAI_S"
+  tentative=$((tentative + 1))
+done
 
 # Contrôle de sortie : on ne se fie pas au seul code de retour. C'est ce fichier
 # que `archive-push` ouvre à chaque segment WAL, et c'est son absence qui a

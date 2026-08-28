@@ -635,10 +635,39 @@ evaluer_notification
 # 02h30 du matin dans un journal que personne ne lit.
 # -----------------------------------------------------------------------------
 [ -n "$PASSPHRASE" ] || echouer 'BACKUP_ENCRYPTION_PASSPHRASE est vide : les archives MinIO seraient en clair.'
+# ⚠️ `[0-2][0-9]` ACCEPTAIT 20:00 À 29:59, ET LA CONSÉQUENCE ÉTAIT UNE MACHINE
+# QUI BRÛLE. Mesuré le 2026-08-28 avec `AXION_SAUVEGARDE_HEURE=25:00` :
+#     sauvegarde: === passe terminée avec succès (locale ET hors serveur) ===
+#     date: invalid date 'today 25:00'
+#     axion-sauvegarde: line …: [: : integer expression expected
+#     sauvegarde: prochaine passe dans -1787918488 s (créneau 25:00 UTC).
+#     sleep: invalid option  →  code 1  →  set -e  →  le service meurt
+# Docker redémarre alors le service, qui REJOUE UNE PASSE COMPLÈTE (tar + zstd +
+# gpg de tout le volume MinIO) À CHAQUE REDÉMARRAGE, indéfiniment, sur une
+# machine PARTAGÉE avec la production d'un tiers. Un contrôle d'entrée dont le
+# motif est trop large ne protège de rien : il déplace la panne à 02h30 et la
+# déguise en message anglais qui ne nomme même pas la variable fautive.
+# Les deux motifs ci-dessous couvrent EXACTEMENT 00:00–23:59, et rien d'autre.
 case "$HEURE" in
-  [0-2][0-9]:[0-5][0-9]) : ;;
-  *) echouer "AXION_SAUVEGARDE_HEURE='$HEURE' — format attendu HH:MM (UTC)." ;;
+  [01][0-9]:[0-5][0-9] | 2[0-3]:[0-5][0-9]) : ;;
+  *) echouer "AXION_SAUVEGARDE_HEURE='$HEURE' — format attendu HH:MM en UTC, heure de 00 à 23 et minutes de 00 à 59." ;;
 esac
+# Les autres entiers d'exploitation. `AXION_ALERTE_INTERVALLE_H` est déjà
+# contrôlé par `evaluer_notification` ; ceux-ci ne l'étaient PAS, et une valeur
+# absurde s'y serait vue là où on ne regarde pas — au milieu d'une passe.
+for _couple in \
+  "AXION_SAUVEGARDE_TOLERANCE_H=$TOLERANCE_H" \
+  "AXION_MINIO_ARCHIVES_GARDEES=$MINIO_ARCHIVES_GARDEES" \
+  "AXION_ARCHIVES_MAX_MO=$ARCHIVES_MAX_MO" \
+  "AXION_ARCHIVES_MARGE_MO=$ARCHIVES_MARGE_MO"; do
+  _nom="${_couple%%=*}"
+  _valeur="${_couple#*=}"
+  case "$_valeur" in
+    '' | *[!0-9]*) echouer "$_nom='$_valeur' — attendu un entier positif ou nul." ;;
+  esac
+done
+[ "$MINIO_ARCHIVES_GARDEES" -ge 1 ] || echouer \
+  "AXION_MINIO_ARCHIVES_GARDEES='$MINIO_ARCHIVES_GARDEES' — au moins une archive doit être gardée, sinon la rotation efface ce que la passe vient d'écrire."
 case "$JOUR_COMPLETE" in
   [0-6]) : ;;
   *) echouer "AXION_SAUVEGARDE_JOUR_COMPLETE='$JOUR_COMPLETE' — attendu 0..6 (0 = dimanche)." ;;
@@ -725,6 +754,25 @@ archiver_minio() {
   cible="$ARCHIVES/minio-$horodatage.tar.zst.gpg"
   partiel="$cible.partiel"
 
+  # ⚠️ LE PLAFOND SE CONTRÔLE AVANT D'ÉCRIRE, PAS APRÈS — CORRIGÉ LE 2026-08-28.
+  # Il était vérifié en fin de `faire_tourner_minio`, donc APRÈS que l'archive et
+  # son `.sha256` aient été écrits. Mesuré avec `AXION_ARCHIVES_MAX_MO=0` : code
+  # de sortie 1, ET L'ARCHIVE EST LÀ. Le garde-fou ne protégeait donc jamais le
+  # disque : il consommait, puis refusait. Pire, comme aucun marqueur n'est écrit
+  # sur ce chemin, Docker redémarrait le service, qui RÉÉCRIVAIT une archive
+  # complète avant de rééchouer — le contraire exact de l'intention affichée
+  # (« un refus bruyant vaut mieux qu'un disque plein silencieux »).
+  # La marge disque, elle, était déjà contrôlée AU BON ENDROIT : c'est son modèle
+  # qui est recopié ici, deux lignes plus haut qu'elle.
+  local occupe_mo
+  occupe_mo="$(du -sm "$ARCHIVES" | cut -f1)"
+  [ "$occupe_mo" -lt "$ARCHIVES_MAX_MO" ] || echouer \
+    "le répertoire d'archives pèse déjà ${occupe_mo} Mo, au-delà du plafond ${ARCHIVES_MAX_MO} Mo. Aucune archive écrite.
+        Ce n'est PAS un incident technique : c'est la rétention qui n'est plus
+        soutenable sur ce disque. À trancher (Williams) : baisser
+        AXION_MINIO_ARCHIVES_GARDEES, augmenter AXION_ARCHIVES_MAX_MO, ou —
+        la seule vraie réponse — sortir les archives du serveur (02 §11.4)."
+
   # Espace libre AVANT d'écrire : un `gpg` interrompu par un disque plein laisse
   # un fichier partiel, et un disque plein sur une machine partagée est un
   # incident pour le voisin autant que pour nous.
@@ -799,12 +847,22 @@ faire_tourner_minio() {
 
   total="$(du -sm "$ARCHIVES" | cut -f1)"
   journal "archives MinIO : $((garde < MINIO_ARCHIVES_GARDEES ? garde : MINIO_ARCHIVES_GARDEES)) fichier(s), ${total} Mo au total"
-  [ "$total" -le "$ARCHIVES_MAX_MO" ] || echouer \
-    "le répertoire d'archives pèse ${total} Mo, au-delà du plafond ${ARCHIVES_MAX_MO} Mo.
-        Ce n'est PAS un incident technique : c'est la rétention qui n'est plus
-        soutenable sur ce disque. À trancher (Williams) : baisser
-        AXION_MINIO_ARCHIVES_GARDEES, augmenter AXION_ARCHIVES_MAX_MO, ou —
-        la seule vraie réponse — sortir les archives du serveur (02 §11.4)."
+  # ICI, LE PLAFOND N'EST PLUS UN ÉCHEC : IL EST UN AVERTISSEMENT, ET C'EST LE
+  # CŒUR DU CORRECTIF. La passe qui vient d'avoir lieu est faite et vérifiée ;
+  # la faire échouer à ce stade ferait perdre un marqueur de sauvegarde
+  # PARFAITEMENT VALIDE et déclencherait un redémarrage qui réécrirait une
+  # archive complète. Le refus, lui, est en tête d'`archiver_minio` : la
+  # PROCHAINE passe ne consommera rien tant que le plafond est dépassé. On ne
+  # peut pas connaître la taille d'une archive avant de l'écrire ; on peut, en
+  # revanche, refuser d'en écrire une de plus quand la place manque déjà.
+  if [ "$total" -ge "$ARCHIVES_MAX_MO" ]; then
+    journal "ATTENTION — le répertoire d'archives pèse ${total} Mo, au niveau ou au-delà du plafond ${ARCHIVES_MAX_MO} Mo.
+        Cette passe est terminée et vérifiée ; la PROCHAINE sera REFUSÉE avant
+        d'écrire quoi que ce soit. Ce n'est PAS un incident technique : c'est la
+        rétention qui n'est plus soutenable sur ce disque. À trancher (Williams) :
+        baisser AXION_MINIO_ARCHIVES_GARDEES, augmenter AXION_ARCHIVES_MAX_MO,
+        ou — la seule vraie réponse — sortir les archives du serveur (02 §11.4)."
+  fi
 }
 
 # =============================================================================
@@ -1134,14 +1192,75 @@ secondes_avant_creneau() {
   echo $((cible - maintenant))
 }
 
-# Un marqueur est « trop vieux » (ou absent) au-delà de la tolérance. La même
-# règle sert aux deux moitiés — c'est la seule façon de garantir qu'elles ne
-# dérivent pas l'une par rapport à l'autre.
+# =============================================================================
+# Un marqueur est « trop vieux » (ou absent, ou illisible) au-delà de la
+# tolérance. La même règle sert aux deux moitiés — c'est la seule façon de
+# garantir qu'elles ne dérivent pas l'une par rapport à l'autre.
+#
+# -----------------------------------------------------------------------------
+# TROIS DÉFAUTS CORRIGÉS ICI LE 2026-08-28, ET ILS AVAIENT LA MÊME CAUSE : CE
+# FICHIER FAISAIT CONFIANCE AU CONTENU DU MARQUEUR
+# -----------------------------------------------------------------------------
+# 1. DEUX VÉRITÉS SUR LE MÊME FICHIER. `sauvegarde-healthcheck.sh` valide déjà
+#    le contenu du marqueur (`absent`, `illisible`, `futur`) et refuse de
+#    conclure quand il ne peut plus mesurer. Ce fichier-ci, son voisin immédiat,
+#    lisant LES MÊMES DEUX FICHIERS, n'en validait rien. Deux lectures
+#    contradictoires du même octet dans deux fichiers côte à côte : c'est la
+#    définition d'un garde-fou qu'on ne peut plus croire.
+#
+# 2. L'HORLOGE QUI RECULE FAISAIT DORMIR LE SERVICE POUR TOUJOURS. Un marqueur
+#    daté DANS LE FUTUR (NTP qui corrige une dérive, machine virtuelle restaurée
+#    depuis un instantané, marqueur fabriqué) donne un âge NÉGATIF, toujours
+#    inférieur à la tolérance : `doit_rattraper` répondait « non » et ne
+#    répondait plus jamais « oui ». Mesuré à J+10 : AUCUNE sauvegarde n'est
+#    publiée, le service dort tranquillement, et le conteneur passe `unhealthy`
+#    — la sonde voyait ce que le service refusait de voir.
+#    LA RÉPONSE RETENUE N'EST PAS « rattraper » MAIS « ÉCHOUER BRUYAMMENT », et
+#    c'est un choix : quand l'horloge ment, le script ne peut plus dater ce qu'il
+#    fait. Jouer une passe reviendrait à écrire un marqueur qu'on sait faux.
+#    Sortir en erreur redémarre le service, alerte, et laisse la sonde rouge —
+#    trois signaux cohérents entre eux, et surtout la MÊME conclusion que la
+#    sonde voisine, qui refuse elle aussi de conclure. La tolérance de 300 s
+#    (MARGE_FUTUR_S de la sonde) couvre un ajustement NTP ordinaire sans couvrir
+#    un recul de fuseau.
+#
+# 3. INJECTION ARITHMÉTIQUE, JUSQU'ICI NEUTRALISÉE PAR ACCIDENT. Le contenu du
+#    marqueur entrait tel quel dans `$(( … ))`, et l'arithmétique de bash évalue
+#    les INDICES DE TABLEAU — un indice peut contenir une substitution de
+#    commande. Mesuré : dans un shell SANS `set -u`, un marqueur valant
+#    `x[$(touch …)]` fait exécuter le `touch`. Ce qui protégeait le script livré
+#    n'était AUCUNE validation — il n'y en avait pas — mais le `-u` de son
+#    `set -euo pipefail`. Une protection qui tient par effet de bord tient mal :
+#    elle disparaît le jour où quelqu'un sort une ligne de son contexte. Le
+#    contenu est désormais validé AVANT toute arithmétique, comme dans la sonde.
+#    Le marqueur vit dans un volume que seul ce service écrit : ce n'est pas une
+#    élévation de privilège, c'est de la défense en profondeur — mais « faible »
+#    n'est pas « mesuré ».
+# =============================================================================
 marqueur_perime() {
-  local fichier="$ARCHIVES/$1" derniere age
+  local fichier="$ARCHIVES/$1" derniere ecart age
   [ -r "$fichier" ] || return 0
-  derniere="$(cat "$fichier")"
-  age=$(( ( $(date -u +%s) - derniere ) / 3600 ))
+  derniere="$(cat "$fichier" 2>/dev/null || true)"
+  # VALIDATION AVANT ARITHMÉTIQUE. Un marqueur vide ou non numérique — écriture
+  # interrompue, disque plein, contenu piégé — ne prouve aucune sauvegarde : il
+  # vaut « absent », donc « périmé », donc on rattrape.
+  case "$derniere" in
+    '' | *[!0-9]*)
+      journal "marqueur $1 vide ou non numérique (écriture interrompue, ou contenu inattendu) : traité comme ABSENT, une passe est nécessaire."
+      return 0
+      ;;
+  esac
+  ecart=$(( $(date -u +%s) - derniere ))
+  if [ "$ecart" -lt -300 ]; then
+    echouer "le marqueur $1 est daté DANS LE FUTUR de $(( -ecart )) s (horloge reculée, instantané restauré, ou marqueur fabriqué).
+        Le service ne peut plus dater ce qu'il fait : jouer une passe écrirait un
+        marqueur qu'on sait faux, et se taire l'aurait fait dormir pour toujours.
+        La sonde de santé refuse elle aussi de conclure dans cet état."
+  fi
+  # Une avance inférieure à la marge est du bruit d'horloge, pas de la fraîcheur
+  # négative : on la ramène à zéro, comme le fait la sonde.
+  [ "$ecart" -ge 0 ] || ecart=0
+  age=$(( ecart / 3600 ))
   [ "$age" -ge "$TOLERANCE_H" ]
 }
 
@@ -1189,6 +1308,18 @@ fi
 # lecture qui dit à l'humain s'il doit rouvrir la base ou appeler Cloudflare.
 while true; do
   attente="$(secondes_avant_creneau)"
+  # CEINTURE. Le motif de `AXION_SAUVEGARDE_HEURE` est maintenant strict, donc
+  # `date -u -d "today $HEURE"` ne peut plus échouer — mais c'est exactement ce
+  # qu'on croyait avant le 2026-08-28, où `25:00` a produit une attente de
+  # -1 787 918 488 s, un `sleep: invalid option`, et un service qui rejouait une
+  # passe complète à chaque redémarrage sur une machine partagée. Un contrôle
+  # d'entrée est une promesse ; ce test est la vérification de la promesse, à
+  # l'endroit où son non-respect coûte cher.
+  case "$attente" in
+    '' | *[!0-9]*)
+      echouer "délai avant le prochain créneau incalculable ('$attente') pour AXION_SAUVEGARDE_HEURE='$HEURE'. Le service refuse d'attendre une durée qu'il ne sait pas mesurer plutôt que de boucler sur des passes complètes."
+      ;;
+  esac
   journal "prochaine passe dans ${attente} s (créneau ${HEURE} UTC)."
   sleep "$attente"
   passe

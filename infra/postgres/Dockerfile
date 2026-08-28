@@ -8,35 +8,49 @@
 # =============================================================================
 #
 # ┌───────────────────────────────────────────────────────────────────────────┐
-# │ CE FICHIER SERT DEUX CONVENTIONS DE CONSTRUCTION. NE PAS LES FUSIONNER.   │
+# │ UN SEUL CONTEXTE DE CONSTRUCTION — `infra/` — POUR LES QUATRE PILES.      │
+# │                                                                           │
+# │ CE N'EST PLUS VRAI DEPUIS LE 2026-08-28 (correctif A73) : « les trois     │
+# │ autres piles ne peuvent pas suivre ». Elles suivent. Leur `context:` est  │
+# │ passé de `infra/postgres/` à `infra/`, et les deux scripts d'exploitation │
+# │ sont remontés dans l'étape `socle`, où les QUATRE piles les reçoivent.    │
+# │ C'est la voie que l'ancienne version de cet encadré désignait elle-même : │
+# │ « leur donner le même contexte `infra/`, PAS de dupliquer les scripts ».  │
+# │                                                                           │
+# │ DEUX CIBLES SUBSISTENT, ET ELLES NE PORTENT PLUS QUE LA CONFIGURATION :   │
 # │                                                                           │
 # │  1. PILES LANCÉES À LA MAIN — docker-compose.yml, .staging.yml, .prod.yml │
-# │     contexte `infra/postgres/` · AUCUN `target:` → étape PAR DÉFAUT       │
+# │     contexte `infra/` · AUCUN `target:` → étape PAR DÉFAUT                │
 # │     (la dernière, `config-montee`). Ces piles MONTENT leurs fichiers de   │
 # │     configuration depuis le dépôt ; l'image n'en embarque aucun.          │
+# │     Elles reçoivent en revanche `axion-stanza-create` et                  │
+# │     `axion-healthcheck` — sans quoi elles gardent la panne du             │
+# │     2026-08-28 (voir plus bas).                                           │
 # │                                                                           │
 # │  2. PILE COOLIFY — docker-compose.coolify.yml                             │
 # │     contexte `infra/` · `target: config-embarquee`                        │
 # │     Coolify NE PEUT PAS monter de fichier depuis le dépôt (voir l'encadré │
 # │     « CONFIGURATION EMBARQUÉE » de ce compose) : la configuration doit    │
-# │     donc voyager DANS l'image.                                            │
+# │     donc voyager DANS l'image. Cette cible ajoute aussi `mc`, le magasin  │
+# │     de certificats et les deux scripts de SAUVEGARDE — seule cette pile   │
+# │     porte le service `sauvegarde` (voir la note de non-propagation).      │
 # │                                                                           │
-# │ POURQUOI DEUX CONTEXTES. `postgresql.custom.conf` est ici, mais           │
-# │ `pgbackrest.conf` vit dans `infra/pgbackrest/` — HORS du contexte         │
-# │ `infra/postgres/`. Embarquer les deux impose donc de remonter le contexte │
-# │ à `infra/`. Les trois autres piles ne peuvent pas suivre : leur `context:` │
-# │ est écrit dans des fichiers que ce lot n'a pas le droit de modifier.      │
+# │ POURQUOI LE CONTEXTE EST `infra/` ET NON `infra/postgres/`.               │
+# │ `postgresql.custom.conf` et les scripts sont dans `infra/postgres/`, mais │
+# │ `pgbackrest.conf` vit dans `infra/pgbackrest/` — HORS de ce dossier. Un   │
+# │ seul contexte peut couvrir les deux : `infra/`. Tous les `COPY` de ce     │
+# │ fichier sont donc préfixés par `postgres/` ou `pgbackrest/`.              │
 # │                                                                           │
 # │ ⚠️ CE QUE CE DÉCOUPAGE SUPPOSE — MESURÉ, PAS SUPPOSÉ (2026-08-28).        │
-# │ L'étape `config-embarquee` copie des chemins qui N'EXISTENT PAS dans le   │
-# │ contexte `infra/postgres/`. Les piles à la main ne cassent donc que parce  │
-# │ que BUILDKIT N'ÉVALUE QUE LES ÉTAPES DONT LA CIBLE DÉPEND. Vérifié dans   │
-# │ les deux sens sur ce poste (Docker 29.7.2, buildx 0.36.1) :               │
+# │ L'étape `config-embarquee` reste ÉLAGUÉE quand on construit la cible par  │
+# │ défaut. Vérifié dans les deux sens sur ce poste (Docker 29.7.2,           │
+# │ buildx 0.36.1) :                                                          │
 # │     BuildKit (défaut de Compose v2)  → étape non ciblée ÉLAGUÉE, build OK │
-# │     DOCKER_BUILDKIT=0 (builder legacy) → « COPY failed: … does not exist » │
-# │ Autrement dit : construire ce fichier avec le builder legacy ÉCHOUE. Ce   │
-# │ builder est déprécié et Compose v2 ne l'utilise pas ; si un jour il       │
-# │ fallait le supporter, il faudrait deux Dockerfiles, pas deux étapes.      │
+# │     DOCKER_BUILDKIT=0 (builder legacy) → toutes les étapes évaluées       │
+# │ Depuis que le contexte est commun, plus aucun `COPY` ne vise un chemin    │
+# │ absent : le builder legacy CONSTRUIT désormais ce fichier. Ce n'est pas   │
+# │ une garantie qu'on entretient — Compose v2 n'utilise pas ce builder —     │
+# │ mais ce n'est plus une panne connue.                                      │
 # └───────────────────────────────────────────────────────────────────────────┘
 
 FROM postgres:16-bookworm AS socle
@@ -53,6 +67,53 @@ RUN set -eux; \
     mkdir -p /var/lib/pgbackrest /var/log/pgbackrest /var/spool/pgbackrest /etc/pgbackrest; \
     chown -R postgres:postgres /var/lib/pgbackrest /var/log/pgbackrest /var/spool/pgbackrest; \
     chmod 750 /var/lib/pgbackrest /var/log/pgbackrest /var/spool/pgbackrest
+
+# -----------------------------------------------------------------------------
+# ⚠️ LES DEUX SCRIPTS DU CYCLE DE VIE DU CLUSTER — DANS `socle`, DONC DANS LES
+# QUATRE PILES. C'EST LE CORRECTIF, ET IL SE JOUE ICI.
+#
+# CE QUI ÉTAIT FAUX AVANT (mesuré le 2026-08-28 sur conteneur jetable, pile de
+# DÉVELOPPEMENT, image `axion-audit-postgres:16`, 90 secondes d'exécution) :
+#     docker ps  →  Up About a minute (HEALTHY)   ·   RestartCount = 0
+#     journal    →  16 × « archive command failed with exit code 103 »
+#                   16 × « server process (PID …) exited with exit code 103 »
+#                   10 × « all server processes terminated; reinitializing »
+# C'est la panne du staging, à l'identique, sur le poste de chaque développeur.
+# La cause est présente PARTOUT : `postgresql.custom.conf` (monté par les piles à
+# la main, embarqué pour Coolify) active `archive_command = pgbackrest
+# archive-push %p` dans les QUATRE piles, alors que seule la pile Coolify portait
+# le job `createstanza` qui rend cette commande exécutable. Trois cibles avaient
+# donc la CAUSE sans le job qui la répare NI la sonde qui la voit.
+#
+#   stanza-create.sh  exécuté UNE FOIS par le job `createstanza` du compose,
+#                     avant que l'API et le worker n'aient le droit de démarrer.
+#   healthcheck.sh    sonde de santé du conteneur PostgreSQL — elle REMPLACE
+#                     `pg_isready`, qui déclarait `healthy` un cluster en train de
+#                     se réinitialiser 275 fois en 46 minutes (2026-08-28), et qui
+#                     vient de le refaire sur la pile de dev (ci-dessus).
+#
+# POURQUOI ILS PEUVENT VIVRE DANS `socle` DEPUIS CE CORRECTIF : les quatre piles
+# construisent maintenant avec le MÊME contexte `infra/`, donc `postgres/*.sh`
+# est un chemin valide pour toutes. Ils ne dépendent d'aucun fichier de
+# configuration embarqué — ils lisent leur configuration dans l'ENVIRONNEMENT
+# (`PGBACKREST_*`) et dans `/etc/pgbackrest/pgbackrest.conf`, que la pile
+# concernée MONTE ou EMBARQUE selon sa convention.
+#
+# `sh -n` : contrôle de SYNTAXE à la construction. Il ne prouve pas que les
+# scripts font ce qu'ils annoncent — seule l'exécution le prouve, et elle est
+# faite sur base jetable — mais il empêche une faute de frappe de n'apparaître
+# qu'au démarrage du conteneur, là où elle ressemble à une panne de la base.
+#
+# `chmod` explicite — le bit +x d'un fichier versionné sous Windows ne survit pas
+# au clone (core.filemode=false).
+# -----------------------------------------------------------------------------
+COPY postgres/stanza-create.sh /usr/local/bin/axion-stanza-create
+COPY postgres/healthcheck.sh /usr/local/bin/axion-healthcheck
+
+RUN set -eux; \
+    chmod 0755 /usr/local/bin/axion-stanza-create /usr/local/bin/axion-healthcheck; \
+    sh -n /usr/local/bin/axion-stanza-create; \
+    sh -n /usr/local/bin/axion-healthcheck
 
 # -----------------------------------------------------------------------------
 # Cible `config-embarquee` — POUR LA PILE COOLIFY UNIQUEMENT.
@@ -80,33 +141,20 @@ RUN set -eux; \
     chmod 0644 /etc/postgresql/postgresql.custom.conf /etc/pgbackrest/pgbackrest.conf
 
 # -----------------------------------------------------------------------------
-# DEUX SCRIPTS D'EXPLOITATION — ils voyagent DANS L'IMAGE pour la même raison que
-# les deux fichiers de configuration ci-dessus : Coolify ne monte RIEN depuis le
-# dépôt (encadré « CONFIGURATION EMBARQUÉE » du compose). Un `command:` inline
-# dans le compose aurait fait l'affaire pour le premier — c'est la forme retenue
-# par `createbuckets` — mais pas pour le second : un `healthcheck.test` inline
-# tenant une requête SQL de vingt lignes serait illisible, et la façon dont
-# Compose échappe `$` y transformerait la moindre correction en piège.
+# LES DEUX SCRIPTS DE LA SAUVEGARDE — ILS RESTENT DANS CETTE CIBLE, ET C'EST UNE
+# DÉCISION, PAS UN RESTE.
 #
-#   stanza-create.sh  exécuté UNE FOIS par le job `pgbackrest-stanza` du compose,
-#                     avant que l'API et le worker n'aient le droit de démarrer.
-#   healthcheck.sh    sonde de santé du conteneur PostgreSQL — elle REMPLACE
-#                     `pg_isready`, qui déclarait `healthy` un cluster en train de
-#                     se réinitialiser 275 fois en 46 minutes (2026-08-28).
+# `axion-stanza-create` et `axion-healthcheck` sont remontés dans `socle` : ils
+# décrivent le CYCLE DE VIE DU CLUSTER, que les quatre piles partagent. Les deux
+# scripts ci-dessous décrivent le SERVICE `sauvegarde`, que SEULE la pile Coolify
+# porte, et ils ne fonctionnent pas sans ce que cette cible ajoute plus bas —
+# `mc` et le magasin de certificats.
+#
 #   sauvegarde.sh     service PLANIFIÉ du compose : `pgbackrest backup` + archive
-#                     chiffrée du volume MinIO. Sans lui, la pile n'avait qu'une
-#                     stanza et des WAL — c'est-à-dire rien de restaurable
-#                     (mesuré le 2026-08-28 : `status: error (no valid backups)`).
-#
-# ILS NE SONT PAS DANS L'ÉTAPE `socle` — ET CE N'EST PAS UN CHOIX DE CONFORT.
-# `socle` est construite avec DEUX contextes différents selon la pile (`infra/`
-# ici, `infra/postgres/` pour les piles lancées à la main, voir l'encadré du
-# haut). Aucun chemin de `COPY` n'est valide dans les deux à la fois. Conséquence
-# à connaître : les piles `docker-compose.yml`, `.staging.yml` et `.prod.yml`
-# N'ONT PAS ces scripts et gardent donc leur `stanza-create` manuel et leur
-# `pg_isready` menteur. Leurs composes ne relèvent pas de ce correctif ; le jour
-# où ils devront en bénéficier, la voie est de leur donner le même contexte
-# `infra/`, PAS de dupliquer les scripts.
+#                     chiffrée du volume MinIO + expédition vers R2. Sans lui, la
+#                     pile n'avait qu'une stanza et des WAL — c'est-à-dire rien de
+#                     restaurable (mesuré le 2026-08-28 : `status: error (no valid
+#                     backups)`).
 #   sauvegarde-healthcheck.sh
 #                     sonde de santé du SERVICE `sauvegarde` — à ne pas
 #                     confondre avec `healthcheck.sh`, qui sonde la BASE. Elle
@@ -114,8 +162,23 @@ RUN set -eux; \
 #                     affichait `sauvegarde-… Up 26 minutes`, SANS parenthèse de
 #                     santé, c'est-à-dire « le PID 1 n'est pas mort » et rien de
 #                     plus — alors que le service passe 23 h sur 24 à dormir.
-COPY postgres/stanza-create.sh /usr/local/bin/axion-stanza-create
-COPY postgres/healthcheck.sh /usr/local/bin/axion-healthcheck
+#
+# ⚠️ POURQUOI ILS NE SONT PAS PROPAGÉS AUX TROIS AUTRES PILES, ALORS QUE LE
+# CONTEXTE COMMUN LE PERMETTRAIT MAINTENANT TECHNIQUEMENT :
+#   · `docker-compose.yml` (DÉVELOPPEMENT) — une sauvegarde quotidienne d'une
+#     base de démonstration vers un stockage distant payant n'a aucune valeur, et
+#     `sauvegarde.sh` REFUSE de démarrer sans les quatre `BACKUP_R2_*` (c'est
+#     voulu : voir ses contrôles d'entrée). Le service tomberait donc en boucle de
+#     redémarrage sur le poste de CHAQUE développeur. Embarquer un exécutable qui
+#     ne peut pas s'exécuter est exactement le genre de demi-mesure que ce lot
+#     démonte.
+#   · `.staging.yml` / `.prod.yml` — le chemin « VPS dédié » est marqué JAMAIS
+#     JOUÉ dans infra/README.md §7. Livrer un service de sauvegarde non éprouvé
+#     dans une pile que personne n'exécute produirait une ligne verte dans une
+#     revue et zéro sauvegarde réelle.
+# Le manque est RÉEL et il est signalé à A01 : la pile de production « VPS dédié »
+# n'a aujourd'hui aucun service de sauvegarde. C'est une fiche d'amélioration à
+# arbitrer, pas une ligne de code à écrire au jugé (09 §5.9, étage 2).
 COPY postgres/sauvegarde.sh /usr/local/bin/axion-sauvegarde
 COPY postgres/sauvegarde-healthcheck.sh /usr/local/bin/axion-sauvegarde-healthcheck
 
@@ -206,14 +269,10 @@ RUN set -eux; \
     chown postgres:postgres /sauvegarde; \
     chmod 700 /sauvegarde
 
-# Exécutables par tous, modifiables par personne : le job tourne sous `postgres`
-# et la sonde sous l'utilisateur du conteneur. `chmod` explicite — le bit +x d'un
-# fichier versionné sous Windows ne survit pas au clone (core.filemode=false).
-#
-# `sh -n` : contrôle de SYNTAXE à la construction. Il ne prouve pas que les
-# scripts font ce qu'ils annoncent — seule l'exécution le prouve, et elle est
-# faite sur base jetable — mais il empêche une faute de frappe de n'apparaître
-# qu'au démarrage du conteneur, là où elle ressemble à une panne de la base.
+# Exécutables par tous, modifiables par personne : le service tourne sous
+# `postgres` et la sonde sous l'utilisateur du conteneur. `chmod` explicite — le
+# bit +x d'un fichier versionné sous Windows ne survit pas au clone
+# (core.filemode=false).
 #
 # `axion-sauvegarde` est contrôlé par `bash -n` et NON `sh -n` : c'est un script
 # bash assumé. `set -o pipefail` n'existe pas en POSIX, et sans lui un `tar` qui
@@ -221,25 +280,29 @@ RUN set -eux; \
 # parfaitement valide d'un contenu TRONQUÉ, en sortant 0. Le raisonnement complet
 # est en tête de sauvegarde.sh.
 #
-# `axion-sauvegarde-healthcheck` est contrôlé par `sh -n` : elle ne fait que
-# deux lectures de fichiers et des comparaisons d'entiers — aucun tube à
+# `axion-sauvegarde-healthcheck` est contrôlé par `sh -n` : elle ne lit que des
+# fichiers et ne compare que des entiers et des empreintes — aucun tube à
 # protéger, donc aucune raison d'exiger `bash`. Une sonde doit être la chose la
 # plus simple du conteneur.
 RUN set -eux; \
-    chmod 0755 /usr/local/bin/axion-stanza-create /usr/local/bin/axion-healthcheck \
-               /usr/local/bin/axion-sauvegarde /usr/local/bin/axion-sauvegarde-healthcheck; \
-    sh -n /usr/local/bin/axion-stanza-create; \
-    sh -n /usr/local/bin/axion-healthcheck; \
+    chmod 0755 /usr/local/bin/axion-sauvegarde /usr/local/bin/axion-sauvegarde-healthcheck; \
     sh -n /usr/local/bin/axion-sauvegarde-healthcheck; \
     bash -n /usr/local/bin/axion-sauvegarde
 
 # -----------------------------------------------------------------------------
-# Cible PAR DÉFAUT (la dernière) — image NUE, sans configuration embarquée.
+# Cible PAR DÉFAUT (la dernière) — image sans configuration embarquée.
 # C'est elle que construisent docker-compose.yml, .staging.yml et .prod.yml,
-# avec le contexte `infra/postgres/` et sans `target:`. Ces piles montent
-# `postgresql.custom.conf` et `pgbackrest.conf` depuis le dépôt : embarquer une
-# copie ici créerait une SECONDE source de vérité, masquée par le montage et
-# donc invisible — exactement le défaut que pgbackrest.conf interdit chez lui.
+# avec le contexte `infra/` (commun aux quatre piles depuis le 2026-08-28) et
+# sans `target:`. Ces piles montent `postgresql.custom.conf` et `pgbackrest.conf`
+# depuis le dépôt : embarquer une copie ici créerait une SECONDE source de
+# vérité, masquée par le montage et donc invisible — exactement le défaut que
+# pgbackrest.conf interdit chez lui.
+#
+# ELLE N'EST PLUS « NUE » : elle hérite de `socle` les deux scripts du cycle de
+# vie du cluster (`axion-stanza-create`, `axion-healthcheck`). C'est tout l'objet
+# du correctif — ces trois piles avaient la CAUSE de la boucle de
+# réinitialisation (`archive_command` actif) sans le job qui la répare ni la
+# sonde qui la voit.
 #
 # Elle doit rester la DERNIÈRE étape du fichier : c'est ce qui fait d'elle la
 # cible par défaut, et donc ce qui permet à BuildKit d'élaguer `config-embarquee`

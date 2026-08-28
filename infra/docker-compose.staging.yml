@@ -68,6 +68,29 @@
 #   API_PORT   = MÊME valeur que dans le .env de prod (convention commune)
 # (`CADDY_*` n'est plus utilisé par cette pile : le frontal appartient à la prod.)
 
+# =============================================================================
+# ⚠️ CE QUE CETTE PILE A HÉRITÉ LE 2026-08-28, SANS QU'UNE LIGNE SOIT ÉCRITE ICI
+# -----------------------------------------------------------------------------
+# `infra/docker-compose.yml` porte désormais le job `createstanza` et la sonde
+# `axion-healthcheck` sur `postgres`. Cette surcharge n'en dit rien, donc elle
+# les REÇOIT — c'est le propre d'une surcharge, et c'est ce qui rend le correctif
+# réel ici sans y livrer une ligne de code que personne n'exécuterait.
+#
+# CE QUE ÇA CORRIGE : `postgresql.custom.conf` active `archive_command` dans
+# cette pile comme dans les autres, et rien n'y créait la stanza. Le cluster
+# s'y serait réinitialisé en boucle en affichant `healthy` — reproduit sur
+# conteneur jetable le 2026-08-28 (10 réinitialisations en 90 s, sonde verte).
+#
+# ⚠️ CE QUI RESTE MANQUANT, ET QUI N'EST PAS COMBLÉ ICI : CETTE PILE N'A AUCUN
+# SERVICE DE SAUVEGARDE. Seule `docker-compose.coolify.yml` porte `sauvegarde`
+# (pgbackrest backup + archive MinIO chiffrée + copie hors serveur R2). Ce n'est
+# pas un oubli d'écriture, c'est un refus assumé : le chemin « VPS dédié » est
+# marqué JAMAIS JOUÉ (infra/README.md §7), et livrer une chaîne de sauvegarde
+# non éprouvée dans une pile que personne n'exécute produirait une ligne verte
+# en revue et zéro sauvegarde réelle. Le manque est signalé à A01 comme fiche
+# d'amélioration à arbitrer (09 §5.9, étage 2) — pas comme code à écrire au jugé.
+# =============================================================================
+
 name: axion-audit-staging
 
 services:
@@ -79,6 +102,18 @@ services:
         limits:
           cpus: '1.0'
           memory: 1536M
+
+  # Job one-shot HÉRITÉ du fichier de base (voir l'encadré en tête). Il n'est
+  # redéclaré ici que pour son plafond : dans une pile dont toute la raison
+  # d'être est de cohabiter sans affamer le voisin, un service sans limite est
+  # une exception qui se paie un jour de collecte. Mêmes valeurs que
+  # `createbuckets`, qui est le même genre de job.
+  createstanza:
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
 
   redis:
     ports: !reset []

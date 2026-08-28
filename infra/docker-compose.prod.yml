@@ -63,10 +63,38 @@
 # `CADDY_FRONT_CONFIG` n'est PAS lue depuis le `.env` ici : elle est IMPOSÉE plus
 # bas (voir le service `caddy`).
 
+# =============================================================================
+# ⚠️ CE QUE CETTE PILE A HÉRITÉ LE 2026-08-28, SANS QU'UNE LIGNE SOIT ÉCRITE ICI
+# -----------------------------------------------------------------------------
+# `infra/docker-compose.yml` porte désormais le job `createstanza` et la sonde
+# `axion-healthcheck` sur `postgres`. Cette surcharge n'en dit rien, donc elle
+# les REÇOIT. Le correctif est donc réel ici sans qu'on y livre une ligne de code
+# dans une pile qui n'a jamais été exécutée (infra/README.md §7).
+#
+# CE QUE ÇA CORRIGE : `postgresql.custom.conf` active `archive_command` dans
+# cette pile comme dans les autres, et rien n'y créait la stanza. Le cluster s'y
+# serait réinitialisé en boucle en affichant `healthy` — reproduit sur conteneur
+# jetable le 2026-08-28 (10 réinitialisations en 90 s, sonde verte, RestartCount
+# à zéro).
+#
+# ⚠️ CE QUI RESTE MANQUANT, ET IL FAUT LE SAVOIR AVANT DE DÉPLOYER CETTE PILE :
+# ELLE N'A AUCUN SERVICE DE SAUVEGARDE. Il y a `archive_command` — donc des WAL
+# archivés — et RIEN QUI LES REJOUE SUR QUOI QUE CE SOIT : aucune sauvegarde
+# complète, aucune archive du volume MinIO, aucune copie hors serveur. C'est
+# exactement l'état trouvé sur le staging le 2026-08-28 (`pgbackrest info` →
+# `status: error (no valid backups)`), et il ne se voit pas : il faut le savoir.
+# Seule `docker-compose.coolify.yml` porte le service `sauvegarde`. Le combler
+# ici est une décision d'arbitrage (09 §5.9, étage 2), pas une ligne de code à
+# écrire au jugé dans une pile jamais jouée — c'est signalé comme telle à A01.
+# =============================================================================
+
 name: axion-audit-prod
 
 services:
   # --- Données : réseau Docker interne strict, AUCUN port publié (06 §10.3) ----
+  # Le job `createstanza` est hérité tel quel : voir l'encadré en tête. Cette
+  # pile ne plafonne aucune ressource (contrairement à la surcharge staging),
+  # elle n'a donc rien à redéclarer.
   postgres:
     ports: !reset []
 

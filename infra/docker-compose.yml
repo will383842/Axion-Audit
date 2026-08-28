@@ -56,9 +56,25 @@ services:
   # ---------------------------------------------------------------------------
   postgres:
     <<: [*restart, *logging]
+    # CONTEXTE `.` = `infra/` — le répertoire de projet Compose est celui du
+    # PREMIER fichier `-f`, donc `infra/` (c'est déjà pourquoi `api` écrit `..`).
+    #
+    # ⚠️ IL VALAIT `./postgres` JUSQU'AU 2026-08-28, ET C'EST CE DÉTAIL QUI
+    # PRIVAIT CETTE PILE DU CORRECTIF. Les scripts d'exploitation vivent dans
+    # `infra/postgres/` mais `pgbackrest.conf` vit dans `infra/pgbackrest/` : un
+    # contexte `infra/postgres/` ne peut pas couvrir les deux, et le Dockerfile
+    # rangeait donc ses scripts dans une étape réservée à Coolify. Résultat
+    # mesuré sur conteneur jetable, avec CETTE pile, image `axion-audit-postgres:16` :
+    #     docker ps  →  Up About a minute (HEALTHY)   ·   RestartCount = 0
+    #     journal    →  10 × « all server processes terminated; reinitializing »
+    #                   16 × « archive command failed with exit code 103 »
+    # La panne du staging, à l'identique, sur le poste de chaque développeur —
+    # avec une sonde verte du début à la fin. Le contexte commun corrige la
+    # CAUSE (job `createstanza` ci-dessous) et rend le SYMPTÔME visible (sonde
+    # `axion-healthcheck` plus bas).
     build:
-      context: ./postgres
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: postgres/Dockerfile
     image: axion-audit-postgres:16
     # Config personnalisée hors PGDATA : hba_file/ident_file doivent alors être
     # désignés explicitement (ils ne sont plus déduits du répertoire de données).
@@ -103,13 +119,113 @@ services:
       # jamais exposés publiquement ; l'admin passe par un tunnel SSH »).
       # Les surcharges staging/prod suppriment ce bloc (`ports: !reset []`).
       - '127.0.0.1:${POSTGRES_PORT}:5432'
+    # ┌─────────────────────────────────────────────────────────────────────────┐
+    # │ SONDE — CE N'EST PLUS `pg_isready`, ET LE DÉFAUT ÉTAIT ICI AUSSI.       │
+    # │                                                                         │
+    # │ `pg_isready` ne mentait pas sur ce qu'il mesure : il mesurait « la base │
+    # │ accepte-t-elle une connexion À CET INSTANT », ce qui reste vrai entre   │
+    # │ deux réinitialisations espacées de dix secondes. Le postmaster (PID 1)  │
+    # │ ne meurt jamais : Docker n'a donc rien à redémarrer et rien à signaler. │
+    # │ Reproduit sur CETTE pile le 2026-08-28 : `Up (healthy)`,                │
+    # │ `RestartCount = 0`, et 10 réinitialisations complètes en 90 secondes.   │
+    # │                                                                         │
+    # │ `axion-healthcheck` vérifie trois propriétés — la stanza existe, le     │
+    # │ checkpointer (tué à CHAQUE réinitialisation) est vieux d'au moins 60 s, │
+    # │ l'archivage WAL n'est pas en échec. CE QU'ELLE NE DÉTECTE PAS est écrit │
+    # │ en toutes lettres en tête de infra/postgres/healthcheck.sh : lisez-le   │
+    # │ avant de vous y fier.                                                   │
+    # │                                                                         │
+    # │ `start_period: 150s` N'EST PAS UN DÉLAI DE 150 s AVANT LE DÉMARRAGE DE  │
+    # │ L'API : le conteneur passe `healthy` dès la PREMIÈRE réponse OK, soit   │
+    # │ ~60-70 s après le démarrage (le temps que le checkpointer atteigne le   │
+    # │ seuil d'âge). C'est le prix, en dev comme ailleurs, d'une sonde qui ne  │
+    # │ sait pas distinguer « vient de démarrer » de « vient de boucler ».      │
+    # └─────────────────────────────────────────────────────────────────────────┘
     healthcheck:
-      # Vraie sonde applicative : le serveur accepte des connexions sur la base cible.
-      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      test: ['CMD', 'axion-healthcheck']
       interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 30s
+      timeout: 10s
+      retries: 6
+      start_period: 150s
+    networks: [axion]
+
+  # ---------------------------------------------------------------------------
+  # createstanza — job ONE-SHOT et IDEMPOTENT : la stanza pgBackRest, sans
+  # laquelle `archive_command` échoue à chaque segment WAL. Même forme et même
+  # garantie que `createbuckets` ci-dessous, et STRICTEMENT le même service que
+  # celui de la pile Coolify.
+  #
+  # ┌─────────────────────────────────────────────────────────────────────────┐
+  # │ POURQUOI IL EXISTE DANS LA PILE DE DÉVELOPPEMENT AUSSI.                 │
+  # │ `postgresql.custom.conf` — monté juste au-dessus — active                │
+  # │ `archive_command = 'pgbackrest archive-push %p'` ICI COMME AILLEURS.    │
+  # │ Sans stanza, `archive-push` sort en 103 ; en mode ASYNCHRONE il est un   │
+  # │ ENFANT DIRECT du postmaster, qui traite cette sortie comme le crash d'un │
+  # │ backend et RÉINITIALISE TOUT LE CLUSTER. Mesuré sur cette pile :         │
+  # │     LOG: server process (PID 105) exited with exit code 103              │
+  # │     FATAL: archive command was terminated by signal 3: Quit              │
+  # │     LOG: all server processes terminated; reinitializing                 │
+  # │ La cause vivait dans les quatre piles ; seule celle de Coolify avait le  │
+  # │ job qui la répare. Trois cibles reproduisaient donc la panne à           │
+  # │ l'identique, en affichant `healthy`.                                     │
+  # └─────────────────────────────────────────────────────────────────────────┘
+  #
+  # POURQUOI `service_started` ET NON `service_healthy` : la sonde de `postgres`
+  # exige désormais que la stanza EXISTE — attendre `service_healthy` ici
+  # verrouillerait les deux services l'un sur l'autre pour toujours. Le job
+  # démarre donc avec le conteneur et attend lui-même le seul fichier dont il a
+  # besoin, `global/pg_control`, écrit par `initdb` (voir stanza-create.sh).
+  #
+  # `user: postgres` : le volume de données est en 0700 postgres, et le dépôt
+  # doit rester écrit par le MÊME utilisateur que celui qui exécute
+  # `archive-push` — sinon la première poussée échouerait sur les permissions.
+  #
+  # Il MONTE `pgbackrest.conf`, contrairement à son homologue Coolify qui
+  # l'EMBARQUE : c'est la convention de cette pile (cible par défaut du
+  # Dockerfile, configuration montée depuis le dépôt). La stanza doit être créée
+  # avec la MÊME configuration que celle qu'utilisera `archive_command`, sans
+  # quoi elle serait valide et pourtant inutilisable.
+  # ---------------------------------------------------------------------------
+  createstanza:
+    <<: *logging
+    build:
+      context: .
+      dockerfile: postgres/Dockerfile
+    image: axion-audit-postgres:16
+    restart: 'no' # exception assumée : job one-shot, pas un service
+    user: postgres
+    depends_on:
+      postgres:
+        condition: service_started
+    environment:
+      TZ: ${TZ}
+      # Les MÊMES valeurs que le serveur : la stanza est créée pour le dépôt et
+      # le cluster que `archive_command` utilisera.
+      PGDATA: /var/lib/postgresql/data
+      PGBACKREST_STANZA: ${PGBACKREST_STANZA}
+      PGBACKREST_REPO1_PATH: ${PGBACKREST_REPO_PATH}
+      PGBACKREST_REPO1_CIPHER_PASS: ${PGBACKREST_CIPHER_PASS}
+      PGBACKREST_PG1_USER: ${POSTGRES_USER}
+      PGBACKREST_PG1_DATABASE: ${POSTGRES_DB}
+      # REPRISE SUR VERROU pgBackRest. `restart: 'no'` est obligatoire pour un
+      # job one-shot dont d'autres services dépendent par
+      # `service_completed_successfully` : il ne se relancera JAMAIS seul, et une
+      # seule collision de verrou laisserait le cluster sans stanza, donc en
+      # boucle. Le script réessaie ce cas-là, et seulement lui.
+      AXION_STANZA_TENTATIVES: ${AXION_STANZA_TENTATIVES}
+      AXION_STANZA_DELAI_S: ${AXION_STANZA_DELAI_S}
+    entrypoint: ['/usr/local/bin/axion-stanza-create']
+    # PAS DE `command:` — ni ici ni ailleurs dans les quatre composes. C'est du
+    # Compose valide, mais Coolify réécrit `command: []` en table vide et le
+    # déploiement meurt en 14 s sur « must be a null » (trois déploiements perdus
+    # le 2026-08-28). La forme est tenue IDENTIQUE dans les quatre fichiers pour
+    # qu'un copier-coller entre eux ne réintroduise pas le piège. Le
+    # `CMD ["postgres"]` hérité est passé en argument à notre point d'entrée, qui
+    # ne lit aucun argument : il est inerte.
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - pgbackrest_repo:${PGBACKREST_REPO_PATH}
+      - ./pgbackrest/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
     networks: [axion]
 
   # ---------------------------------------------------------------------------
@@ -262,6 +378,15 @@ services:
         condition: service_healthy
       createbuckets:
         condition: service_completed_successfully
+      # La stanza pgBackRest est un PRÉALABLE, pas un agrément : sans elle,
+      # `archive_command` échoue à chaque segment WAL et le cluster se
+      # réinitialise en boucle. Cette ligne transforme un échec de création en
+      # DÉMARRAGE BLOQUÉ plutôt qu'en base qui tourne sans rien archiver — et
+      # elle donne le bon message : sans elle, une stanza en échec se lit
+      # « postgres unhealthy, délai dépassé » ; avec elle, « createstanza exited
+      # with code 1 » et le message du script.
+      createstanza:
+        condition: service_completed_successfully
     environment:
       NODE_ENV: ${NODE_ENV}
       APP_ENV: ${APP_ENV}
@@ -354,6 +479,9 @@ services:
       minio:
         condition: service_healthy
       createbuckets:
+        condition: service_completed_successfully
+      # Même raison que pour l'API : la stanza est un préalable au démarrage.
+      createstanza:
         condition: service_completed_successfully
     environment:
       NODE_ENV: ${NODE_ENV}
