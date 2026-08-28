@@ -1027,3 +1027,58 @@ Une connexion se serait figée **à mi-chargement, sans trace dans aucun journal
 toujours jamais jouée nulle part · critère 4, non prouvable avant le merge · la rotation de la
 passphrase et son rejeu · la signature de la porte · et, côté session parallèle, **l'étape 4 du
 pipeline — revue croisée de l'incrément D-2/D-3 (09 §5.6)**, qui n'a pas encore eu lieu.
+
+## 2026-08-28 23h35 — [lot L0-b] — étape pipeline 2/7 (D-1 implémenté, NON éprouvé)
+Dernier commit vert : d7a7e50 (docs(l0b): D-3 clos — la clé de Bitwarden ouvre le coffre)   ·   Branche : lot/l0-infra   ·   Poussé : oui
+Tâche en cours : aucune — D-1 est implémenté et la suite complète est verte ; la main passe à la session de consolidation pour le déploiement.
+Prochaine action : **générer la clé SSH du sous-compte Storage Box, la poser (publique côté Hetzner, privée en base64 dans Coolify), puis MESURER une expédition réelle avec relecture d'un objet témoin — sans quoi D-1 reste implémenté et non prouvé.**
+Tests rouges connus : aucun.
+
+**D-1 ARBITRÉ PAR WILLIAMS — OPTION A (Storage Box Hetzner), IMPLÉMENTÉE.**
+
+| Élément | État |
+| --- | --- |
+| `openssh-client` + `rsync` ajoutés à l'image (`config-embarquee`) | ✅ contrôlés à la construction |
+| `expedier_storagebox()` — rsync sur SSH, suppressions propagées, relecture de deux témoins | ✅ écrit sur le patron d'`expedier_r2` |
+| Contrôles d'entrée (4 variables, clé base64, chemin relatif, port) | ✅ 6 tests dont 5 `@critique` |
+| Sous-compte créé par Williams | ✅ `u595329-sub1` @ `u595329.your-storagebox.de`, Helsinki |
+| **Expédition réelle vers la Box** | 🔴 **JAMAIS JOUÉE** |
+
+**L'OBSTACLE A ÉTÉ MESURÉ AVANT D'ÊTRE CONTOURNÉ, ET C'EST CE QUI A FAIT LA DÉCISION.** Relevé par
+`docker exec` sur le service vivant : présents `mc`, `gpg`, `zstd`, `openssl` ; **absents `ssh`,
+`scp`, `sftp`, `rsync`, `borg`**. Une Storage Box parle SFTP/SSH/rsync et **ne parle pas S3** ; `mc`
+ne parle **que** S3. Sans ce relevé, une demi-journée aurait été dépensée à écrire une expédition que
+l'image ne pouvait pas exécuter. *C'est la contre-mesure directe des trois recommandations fausses de
+la soirée : mesurer l'état réel avant de proposer.*
+
+**GÉOGRAPHIE VÉRIFIÉE, PAS SUPPOSÉE** : métadonnées Hetzner du serveur → `availability-zone:
+nbg1-dc3` (**Nuremberg**) ; Box à **Helsinki**. Deux pays, ~1 500 km. Un déplacement futur de la Box
+près du serveur retirerait l'essentiel de la valeur de cette copie **sans qu'aucun contrôle ne le
+signale** — l'hypothèse est donc écrite dans le script, le compose et le `.env.example`.
+
+⚠️ **CE QUE LES SIX TESTS NE PROUVENT PAS, DIT D'EMBLÉE POUR NE PAS REJOUER R-3.** Ils couvrent les
+contrôles d'entrée et le comportement sans destination. **Ils ne touchent aucune Storage Box.**
+L'expédition exige une vraie Box, une vraie clé et un vrai réseau ; sa preuve sera une mesure sur le
+staging — relecture d'un objet témoin et comparaison d'empreinte, exactement comme pour R2.
+**D-1 EST IMPLÉMENTÉ, IL N'EST PAS CLOS.**
+
+⚠️ **UNE RÉSERVE SUR LE BANC LUI-MÊME, TROUVÉE EN LE JOUANT.** Un premier passage de la suite
+d'intégration a rendu **2 fichiers en échec et 15 cas non joués** ; un second passage, identique et
+sans modification du code, a rendu **12/12 fichiers et 156/156 cas verts** (code de sortie vitest 0,
+696 s). La cause probable est la **contention entre conteneurs** — plusieurs fichiers démarrent des
+Testcontainers en parallèle sur le même démon Docker. **Ce n'est pas anodin : une suite intermittente
+finit par être ignorée, et c'est ainsi qu'un vrai échec passe pour du bruit.** À instruire avant la
+porte plutôt qu'à subir.
+
+⚠️ **ET UNE ERREUR DE MESURE À MON PROPRE COMPTE** : le premier verdict a été lu au bout d'un tube
+(`vitest … | grep | tail`), dont le code de sortie est celui du **dernier maillon**, pas de vitest.
+« exit 0 » ne prouvait donc rien. Le second passage écrit dans un fichier et capture le code de
+vitest lui-même. *Un contrôle qui répond à côté de la question posée — le motif de la journée, cette
+fois sur l'instrument de mesure.*
+
+**TROIS SESSIONS ONT TRAVAILLÉ SUR CE DÉPÔT CE SOIR**, dont deux simultanément sur le même arbre de
+travail. La session 42 est fermée (rien d'orphelin vérifié) ; la session 22 mène un audit
+d'alignement en lecture seule et prendra la main pour le déploiement après ce commit. **Leçon
+opérationnelle payée deux fois : `git add` puis `git commit` commite l'INDEX ENTIER, donc le travail
+d'une session voisine qui se serait intercalée. La parade est `git commit -- <chemins>`**, utilisée
+ici.

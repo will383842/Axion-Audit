@@ -410,6 +410,56 @@ SECRETS_PASSPHRASE="${BACKUP_SECRETS_PASSPHRASE:-}"
 SECRETS_LONGUEUR_MIN=20
 SECRETS_ACTIF='non'
 
+# =============================================================================
+# LA TROISIÈME COPIE — HETZNER STORAGE BOX (décision D-1, 2026-08-28)
+#
+# CE QU'ELLE AJOUTE, ET POURQUOI UNE DEUXIÈME DESTINATION N'EST PAS UN LUXE.
+# R2 tourne et est prouvé. Mais R2 est UN fournisseur : un compte suspendu, un
+# jeton révoqué par erreur, une panne de Cloudflare, et il ne reste que le VPS —
+# c'est-à-dire la machine que la sauvegarde est censée protéger. Le 02 §11.4
+# demande DEUX destinations distinctes, et c'est cette règle qui est appliquée
+# ici. Ce n'est pas la première copie : c'est celle qui rend la perte des deux
+# autres survivable.
+#
+# GÉOGRAPHIE — MESURÉE, PAS SUPPOSÉE (2026-08-28). Le serveur se déclare
+# `nbg1-dc3` (Nuremberg) via les métadonnées Hetzner ; la Storage Box est à
+# HELSINKI. Deux pays, ~1 500 km : un sinistre de site n'emporte pas les deux.
+# Si la Box était un jour déplacée au même endroit que le serveur, cette copie
+# perdrait l'essentiel de sa valeur SANS QUE RIEN NE LE SIGNALE — d'où cette
+# ligne, qui est le seul endroit du dépôt où l'hypothèse est écrite.
+#
+# POURQUOI `rsync` ET PAS `mc` : une Storage Box parle SFTP/SSH/rsync, pas S3
+# (relevé du 2026-08-28). Le raisonnement complet est dans le Dockerfile, à
+# l'endroit où les deux paquets sont installés.
+#
+# `:-` ET NON `:?` — MÊME ARBITRAGE QUE LE COFFRE ET TELEGRAM, PAS CELUI DE R2.
+# Sans R2, le service ne peut pas faire son travail : il doit bloquer. Sans la
+# Storage Box, il fait TOUT son travail et il lui manque la TROISIÈME copie : il
+# le dit au journal en nommant les variables, et il continue. Arrêter une chaîne
+# qui marche parce qu'une destination secondaire manque serait un remède pire
+# que le mal. En revanche, une fois configurée, son échec est BRUYANT — même
+# code de sortie 2 que R2 : la sauvegarde locale existe, elle n'est pas
+# entièrement sortie.
+#
+# LA CLÉ PRIVÉE ARRIVE EN BASE64 DANS UNE VARIABLE, ET C'EST DÉLIBÉRÉ. Coolify
+# ne sait poser que des variables d'environnement ; une clé OpenSSH est
+# multiligne, ce qu'une variable supporte mal et ce qu'une interface web mutile
+# silencieusement (retours chariot Windows, espaces ajoutés). Le base64 est une
+# ligne unique, et une mutilation le rend INVALIDE au décodage — donc visible
+# tout de suite, au démarrage, plutôt qu'à 02h30 sous la forme d'un refus
+# d'authentification que personne ne saura interpréter.
+# =============================================================================
+SB_HOTE="${BACKUP_STORAGEBOX_HOST:-}"
+SB_UTILISATEUR="${BACKUP_STORAGEBOX_USER:-}"
+SB_CHEMIN="${BACKUP_STORAGEBOX_PATH:-axion-audit}"
+SB_CLE_B64="${BACKUP_STORAGEBOX_SSH_KEY_B64:-}"
+# Port 23 et non 22 : c'est le port SSH des Storage Box Hetzner, et l'oublier
+# produit un « connection refused » qui ressemble à un pare-feu.
+SB_PORT="${BACKUP_STORAGEBOX_PORT:-23}"
+SB_ACTIF='non'
+# Renseigné par `preparer_storagebox`, effacé par `nettoyer_storagebox`.
+SB_REPERTOIRE=''
+
 # -----------------------------------------------------------------------------
 # EXPÉDITION HORS SERVEUR — Cloudflare R2, bucket dédié, jeton limité à ce bucket
 #
@@ -862,6 +912,50 @@ evaluer_coffre_secrets() {
   journal 'coffre des secrets ACTIF — un coffre chiffré par passe, aux côtés des archives MinIO, avec la même rétention.'
 }
 evaluer_coffre_secrets
+
+# -----------------------------------------------------------------------------
+# LA TROISIÈME COPIE — contrôle d'entrée au DÉMARRAGE, jamais à 02h30.
+#
+# LES QUATRE VALEURS SONT CONTRÔLÉES ENSEMBLE, ET UNE CONFIGURATION À MOITIÉ
+# POSÉE EST REFUSÉE PLUTÔT QU'INTERPRÉTÉE. Trois variables sur quatre, c'est
+# quelqu'un qui a été interrompu — pas quelqu'un qui a choisi de ne pas activer
+# la destination. Traiter ce cas comme une absence silencieuse laisserait croire
+# à une décision là où il y a un oubli. Même principe que le couple Telegram.
+# -----------------------------------------------------------------------------
+evaluer_storagebox() {
+  local posees=0 manquantes=''
+  for _c in "BACKUP_STORAGEBOX_HOST=$SB_HOTE" "BACKUP_STORAGEBOX_USER=$SB_UTILISATEUR" \
+            "BACKUP_STORAGEBOX_SSH_KEY_B64=$SB_CLE_B64"; do
+    if [ -n "${_c#*=}" ]; then posees=$((posees + 1)); else manquantes="$manquantes ${_c%%=*}"; fi
+  done
+
+  if [ "$posees" -eq 0 ]; then
+    journal "TROISIÈME COPIE INACTIVE — BACKUP_STORAGEBOX_* ne sont pas posées. La sauvegarde locale et la copie R2 fonctionnent normalement ; il n'existe qu'UNE destination hors serveur. Le 02 §11.4 en demande DEUX : R2 indisponible (compte suspendu, jeton révoqué, panne du fournisseur) ne laisserait que le VPS, c'est-à-dire la machine que ces sauvegardes protègent."
+    return 0
+  fi
+  if [ -n "$manquantes" ]; then
+    echouer "configuration Storage Box INCOMPLÈTE — manque :${manquantes}. Une destination à moitié posée est un oubli, pas un choix : le service refuse de démarrer plutôt que de faire croire à une troisième copie qui n'existe pas. Posez les trois variables, ou aucune."
+  fi
+
+  # LA CLÉ EST VALIDÉE PAR SA FORME, JAMAIS PAR SON CONTENU (02 §30.4-5). Un
+  # base64 qui ne se décode pas, ou qui ne rend pas un en-tête de clé OpenSSH,
+  # est presque toujours un copier-coller mutilé par une interface web. Le dire
+  # ICI, au démarrage, vaut mieux qu'un « Permission denied (publickey) » à
+  # 02h30 — message qui accuse le serveur distant alors que la faute est locale.
+  if ! printf %s "$SB_CLE_B64" | base64 -d 2>/dev/null | head -1 | grep -q 'BEGIN .*PRIVATE KEY'; then
+    echouer "BACKUP_STORAGEBOX_SSH_KEY_B64 ne décode pas en clé privée OpenSSH. Valeur volontairement non affichée. Cause la plus fréquente : la valeur a été coupée ou reformatée au collage. Recette : base64 -w0 < cle_privee (une seule ligne, sans espace)."
+  fi
+  case "$SB_PORT" in
+    '' | *[!0-9]*) echouer "BACKUP_STORAGEBOX_PORT='$SB_PORT' — attendu un entier (23 pour une Storage Box Hetzner)." ;;
+  esac
+  case "$SB_CHEMIN" in
+    /*| *..*) echouer "BACKUP_STORAGEBOX_PATH='$SB_CHEMIN' — attendu un chemin RELATIF au répertoire du sous-compte, sans '..'. Un chemin absolu écrirait hors du cloisonnement du sous-compte, ou échouerait." ;;
+  esac
+
+  SB_ACTIF='oui'
+  journal "troisième copie ACTIVE — Storage Box ${SB_UTILISATEUR}@${SB_HOTE}:${SB_CHEMIN} (port ${SB_PORT})."
+}
+evaluer_storagebox
 # ⚠️ `[0-2][0-9]` ACCEPTAIT 20:00 À 29:59, ET LA CONSÉQUENCE ÉTAIT UNE MACHINE
 # QUI BRÛLE. Mesuré le 2026-08-28 avec `AXION_SAUVEGARDE_HEURE=25:00` :
 #     sauvegarde: === passe terminée avec succès (locale ET hors serveur) ===
@@ -1775,6 +1869,142 @@ expedier_r2() {
   journal "R2 : expédition terminée — ${objets_distants} objet(s) sous ${base}/, en $((fin - debut)) s."
 }
 
+# =============================================================================
+# LA TROISIÈME COPIE — HETZNER STORAGE BOX, PAR rsync SUR SSH
+#
+# ELLE EST BÂTIE SUR LE MÊME PATRON QUE `expedier_r2`, DÉLIBÉRÉMENT : mêmes
+# étapes, même ordre, même discipline de preuve. Deux expéditions qui se
+# ressemblent se relisent ensemble ; deux qui divergent finissent par diverger
+# aussi dans ce qu'elles garantissent.
+#
+#   1. précondition d'accès — on échoue tout de suite si l'hôte refuse
+#   2. envoi incrémental, suppressions propagées SEULEMENT si le local est sain
+#   3. RELECTURE d'un objet témoin et comparaison d'empreinte
+#
+# L'étape 3 est la seule qui prouve quelque chose. « rsync a rendu 0 » dit que
+# rsync croit avoir réussi ; relire l'octet depuis l'autre bout et retrouver la
+# même empreinte dit que la copie EXISTE et qu'elle est FIDÈLE. C'est la leçon
+# déjà payée sur R2, et elle vaut ici sans changement.
+# =============================================================================
+
+# La clé privée n'existe sur le disque que le temps de l'expédition, dans un
+# répertoire à 0700 et un fichier à 0600. `mktemp -d` respecte l'`umask 077` du
+# script ; on le repose explicitement quand même — une propriété de sécurité qui
+# dépend d'une ligne écrite 1 500 lignes plus haut n'est pas une propriété, c'est
+# un pari.
+preparer_storagebox() {
+  SB_REPERTOIRE="$(mktemp -d)"
+  chmod 700 "$SB_REPERTOIRE"
+  ( umask 077; printf %s "$SB_CLE_B64" | base64 -d > "$SB_REPERTOIRE/cle" )
+  chmod 600 "$SB_REPERTOIRE/cle"
+}
+
+nettoyer_storagebox() {
+  [ -n "$SB_REPERTOIRE" ] || return 0
+  rm -rf "$SB_REPERTOIRE"
+  SB_REPERTOIRE=''
+}
+
+# Options communes. `accept-new` et non `no` : la Storage Box est jointe pour la
+# première fois par un conteneur neuf à chaque redéploiement, et un
+# `known_hosts` figé dans l'image périmerait à la première rotation de clé
+# d'hôte côté Hetzner. CE QUE ÇA COÛTE, ET IL FAUT LE SAVOIR : la toute première
+# connexion fait confiance à ce qu'elle trouve. Le risque résiduel est un
+# détournement actif du DNS ou du réseau AU MOMENT EXACT du premier contact ; ce
+# qui transiterait alors est déjà chiffré (dépôt pgBackRest chiffré, archives
+# GPG), et la clé privée, elle, ne part jamais — c'est le serveur distant qui
+# prouve son identité, pas nous qui livrons un secret.
+sb_ssh_opts() {
+  printf %s "-p ${SB_PORT} -i ${SB_REPERTOIRE}/cle -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o UserKnownHostsFile=${SB_REPERTOIRE}/known_hosts -o ConnectTimeout=20"
+}
+
+# Relit UN objet depuis la Storage Box et compare son empreinte à la locale.
+# Le fichier relu est écrit dans le répertoire temporaire, jamais dans
+# `$ARCHIVES` : une copie de contrôle qui atterrirait parmi les archives serait
+# comptée par la rotation, et pourrait être expédiée au tour suivant.
+relire_depuis_storagebox() {
+  local distant="$1" attendue="$2" obtenue
+  obtenue="$(scp $(sb_ssh_opts) -q \
+      "${SB_UTILISATEUR}@${SB_HOTE}:${SB_CHEMIN}/${distant}" "$SB_REPERTOIRE/relu" 2>/dev/null \
+    && sha256sum "$SB_REPERTOIRE/relu" | cut -d' ' -f1 || true)"
+  rm -f "$SB_REPERTOIRE/relu"
+  if [ -z "$obtenue" ]; then
+    echouer_expedition "Storage Box : ${distant} est INTROUVABLE en relecture alors que rsync s'est déclaré réussi. Un envoi qui réussit sans rien déposer est le pire des deux mondes : il éteint l'alerte sans faire le travail."
+  fi
+  if [ "$obtenue" != "$attendue" ]; then
+    echouer_expedition "Storage Box : ${distant} relu ne correspond PAS à la source (attendu ${attendue}, obtenu ${obtenue})."
+  fi
+  journal "Storage Box : relecture conforme — ${distant} ($(printf %s "$attendue" | cut -c1-16)…)"
+}
+
+expedier_storagebox() {
+  local retirer='' derniere debut fin fichiers
+
+  if [ "$SB_ACTIF" != 'oui' ]; then
+    journal 'troisième copie NON expédiée (inactive) — voir le message du démarrage. La copie R2, elle, est faite.'
+    return 0
+  fi
+
+  debut="$(date -u +%s)"
+  preparer_storagebox
+  # shellcheck disable=SC2064
+  trap nettoyer_storagebox EXIT
+
+  journal "Storage Box : expédition vers ${SB_UTILISATEUR}@${SB_HOTE}:${SB_CHEMIN}"
+
+  # 1. PRÉCONDITION D'ACCÈS — et création du répertoire cible. `mkdir -p` par
+  #    SSH plutôt que de compter sur rsync : un chemin absent produit sinon une
+  #    erreur rsync générique qui n'indique pas laquelle des deux causes
+  #    (répertoire manquant / droits refusés) est en jeu.
+  # shellcheck disable=SC2046  # sb_ssh_opts rend des drapeaux, jamais un chemin
+  ssh $(sb_ssh_opts) "${SB_UTILISATEUR}@${SB_HOTE}" "mkdir -p ${SB_CHEMIN}/pgbackrest ${SB_CHEMIN}/minio" \
+    || echouer_expedition "Storage Box injoignable ou refusée (réseau, clé non autorisée, sous-compte supprimé — ssh ne les distingue pas). Vérifier que la clé PUBLIQUE est bien posée sur le sous-compte."
+
+  # 2. PROPAGATION DES SUPPRESSIONS — même règle que R2, et pour la même raison :
+  #    un dépôt local abîmé ne doit pas propager sa perte à la copie de secours.
+  if depot_local_sain; then
+    retirer='--delete'
+  else
+    journal 'Storage Box : ATTENTION — dépôt local jugé NON SAIN : les suppressions ne seront PAS propagées (rétention distante figée cette nuit).'
+  fi
+
+  # 3. LE DÉPÔT pgBackRest, puis LES ARCHIVES. `-a` conserve les droits et les
+  #    dates ; `--partial` ne laisse pas une coupure réseau détruire ce qui était
+  #    déjà transféré. Les exclusions sont les mêmes que côté R2 : un `.partiel`
+  #    n'est pas une archive, et les marqueurs ne décrivent que CETTE machine.
+  # shellcheck disable=SC2086,SC2046
+  rsync -a --partial $retirer -e "ssh $(sb_ssh_opts)" \
+    "$DEPOT/" "${SB_UTILISATEUR}@${SB_HOTE}:${SB_CHEMIN}/pgbackrest/" \
+    || echouer_expedition "la copie du dépôt pgBackRest vers la Storage Box a échoué."
+  # shellcheck disable=SC2086,SC2046
+  rsync -a --partial $retirer --exclude '*.partiel' --exclude '.derniere-*' \
+    -e "ssh $(sb_ssh_opts)" \
+    "$ARCHIVES/" "${SB_UTILISATEUR}@${SB_HOTE}:${SB_CHEMIN}/minio/" \
+    || echouer_expedition "la copie des archives MinIO vers la Storage Box a échoué."
+
+  # 4. RELECTURE — deux témoins, un par famille, comme pour R2.
+  relire_depuis_storagebox "pgbackrest/backup/${STANZA}/backup.info" \
+    "$(sha256sum "$DEPOT/backup/$STANZA/backup.info" | cut -d' ' -f1)"
+  derniere="$(ls -1 "$ARCHIVES" 2>/dev/null | grep -E "$MOTIF_MINIO" | sort -r | head -1 || true)"
+  if [ -n "$derniere" ]; then
+    relire_depuis_storagebox "minio/${derniere}" \
+      "$(sha256sum "$ARCHIVES/$derniere" | cut -d' ' -f1)"
+  fi
+
+  # 5. LE COMPTE — un envoi qui se déclare réussi sur un répertoire vide est la
+  #    panne la plus traîtresse, parce qu'elle n'a aucun symptôme.
+  # shellcheck disable=SC2046
+  fichiers="$(ssh $(sb_ssh_opts) "${SB_UTILISATEUR}@${SB_HOTE}" \
+    "find ${SB_CHEMIN} -type f | wc -l" 2>/dev/null || echo 0)"
+  [ "$fichiers" -gt 0 ] || echouer_expedition \
+    "la copie s'est déclarée réussie mais ${SB_CHEMIN} ne contient AUCUN fichier."
+
+  nettoyer_storagebox
+  trap - EXIT
+  fin="$(date -u +%s)"
+  journal "Storage Box : expédition terminée — ${fichiers} fichier(s) sous ${SB_CHEMIN}/, en $((fin - debut)) s."
+}
+
 # -----------------------------------------------------------------------------
 # PostgreSQL — sauvegarde pgBackRest
 #
@@ -1820,6 +2050,15 @@ passe() {
   date -u +%s > "$ARCHIVES/.derniere-passe"
   journal '=== moitié LOCALE terminée avec succès — reste à sortir de la machine ==='
   expedier_r2
+  # LA TROISIÈME COPIE PART APRÈS R2, ET SON ÉCHEC EST AUSSI GRAVE QUE CELUI DE
+  # R2 — c'est un arbitrage, pas un oubli. On pourrait la traiter en simple
+  # avertissement, puisque la copie R2 est faite ; ce serait rouvrir la porte que
+  # ce lot a passé sa journée à fermer. Une destination secondaire qui échoue
+  # sans faire de bruit cesse d'exister en quelques semaines, et personne ne s'en
+  # aperçoit avant d'en avoir besoin. Le marqueur d'expédition n'est donc écrit
+  # que lorsque les DEUX destinations ont reçu leur copie ET l'ont prouvée par
+  # relecture. Le rejeu est bon marché : les deux envois sont incrémentaux.
+  expedier_storagebox
   date -u +%s > "$ARCHIVES/.derniere-expedition"
   journal '=== passe terminée avec succès (locale ET hors serveur) ==='
   # Le rétablissement se dit UNE FOIS, et seulement si une alerte était ouverte.
@@ -1923,7 +2162,7 @@ marqueur_perime() {
 doit_rattraper() { marqueur_perime '.derniere-passe'; }
 doit_rattraper_expedition() { marqueur_perime '.derniere-expedition'; }
 
-journal "service de sauvegarde démarré — créneau ${HEURE} UTC, complète le jour ${JOUR_COMPLETE}, rétention MinIO ${RETENTION_QUOTIDIENNES} quotidienne(s) + ${RETENTION_HEBDOMADAIRES} hebdomadaire(s) + ${RETENTION_MENSUELLES} mensuelle(s) (au plus $((RETENTION_QUOTIDIENNES + RETENTION_HEBDOMADAIRES + RETENTION_MENSUELLES)) archives, décision D-2), copie hors serveur vers ${R2_BUCKET}/${R2_PREFIXE}."
+journal "service de sauvegarde démarré — créneau ${HEURE} UTC, complète le jour ${JOUR_COMPLETE}, rétention MinIO ${RETENTION_QUOTIDIENNES} quotidienne(s) + ${RETENTION_HEBDOMADAIRES} hebdomadaire(s) + ${RETENTION_MENSUELLES} mensuelle(s) (au plus $((RETENTION_QUOTIDIENNES + RETENTION_HEBDOMADAIRES + RETENTION_MENSUELLES)) archives, décision D-2), copie hors serveur vers ${R2_BUCKET}/${R2_PREFIXE}, troisième copie ${SB_ACTIF} (Storage Box)."
 
 # RATTRAPAGE. C'est le point qui fait qu'une pile fraîchement déployée n'attend
 # pas la nuit pour avoir sa première sauvegarde — le défaut mesuré le 2026-08-28
@@ -1941,6 +2180,7 @@ if doit_rattraper; then
 elif doit_rattraper_expedition; then
   journal 'sauvegarde locale récente mais copie hors serveur manquante ou périmée — expédition immédiate, sans refaire la sauvegarde.'
   expedier_r2
+  expedier_storagebox
   date -u +%s > "$ARCHIVES/.derniere-expedition"
   journal 'expédition de rattrapage terminée avec succès.'
   # Même geste qu'en fin de `passe` : c'est précisément par ce chemin que sort

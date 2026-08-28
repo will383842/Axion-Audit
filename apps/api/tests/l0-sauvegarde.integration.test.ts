@@ -403,6 +403,110 @@ afterAll(() => {
 });
 
 // =============================================================================
+// 0bis. LA TROISIÈME COPIE — STORAGE BOX (décision D-1)
+//
+// CE QUE CES CAS ÉPROUVENT, ET CE QU'ILS N'ÉPROUVENT PAS — à dire d'emblée,
+// parce que c'est exactement la confusion qui a coûté la réserve R-3 au coffre.
+// Ils éprouvent les CONTRÔLES D'ENTRÉE et le comportement en l'absence de
+// destination. Ils N'ÉPROUVENT PAS l'expédition elle-même : celle-ci exige une
+// vraie Storage Box, une vraie clé, et un vrai réseau. Sa preuve est une mesure
+// sur le staging (relecture d'un objet témoin depuis la Box, comme pour R2),
+// pas un test de ce dépôt. Aucun de ces cas ne doit être lu comme « la
+// troisième copie fonctionne ».
+//
+// Ce qu'ils gardent est néanmoins ce qui casse en pratique : une variable
+// oubliée sur trois, une clé mutilée au collage dans une interface web, un
+// chemin absolu qui sortirait du cloisonnement du sous-compte.
+// =============================================================================
+describe('sauvegarde.sh — troisième copie, contrôles d’entrée (D-1)', () => {
+  // Une vraie clé ed25519 n'est pas nécessaire : le contrôle porte sur la FORME
+  // (le base64 se décode-t-il en clé privée OpenSSH ?), jamais sur le contenu.
+  // Cette valeur est un leurre inoffensif, et le dire évite qu'on la prenne un
+  // jour pour un secret oublié dans le dépôt.
+  const CLE_FACTICE_B64 = Buffer.from(
+    '-----BEGIN OPENSSH PRIVATE KEY-----\nleurre-de-test-sans-valeur\n-----END OPENSSH PRIVATE KEY-----\n',
+  ).toString('base64');
+  const SB_COMPLET: Readonly<Record<string, string>> = {
+    BACKUP_STORAGEBOX_HOST: 'u000000.your-storagebox.de',
+    BACKUP_STORAGEBOX_USER: 'u000000-sub1',
+    BACKUP_STORAGEBOX_SSH_KEY_B64: CLE_FACTICE_B64,
+  };
+
+  it('@critique sans AUCUNE variable, la passe RÉUSSIT et le journal nomme ce qui manque', () => {
+    // C'est l'arbitrage `:-` et non `:?` : l'absence de troisième copie ne doit
+    // pas arrêter une chaîne qui fonctionne. Mais elle ne doit pas non plus
+    // passer inaperçue — sans quoi « deux destinations » resterait une intention.
+    const journal = jouerUnePasse(repertoireNeuf());
+    expect(journal.sortie).toContain('passe terminée avec succès');
+    expect(journal.sortie).toContain('TROISIÈME COPIE INACTIVE');
+    expect(journal.sortie).toContain('02 §11.4');
+    expect(journal.sortie).toContain('troisième copie NON expédiée');
+  }, 300_000);
+
+  it('@critique une configuration à MOITIÉ posée est REFUSÉE, pas interprétée', () => {
+    // Trois variables sur quatre, c'est quelqu'un qui a été interrompu — pas
+    // quelqu'un qui a choisi de ne pas activer la destination. Traiter ce cas
+    // comme une absence laisserait croire à une décision là où il y a un oubli.
+    const { code, sortie } = jouerUnePasse(repertoireNeuf(), {
+      BACKUP_STORAGEBOX_HOST: 'u000000.your-storagebox.de',
+      BACKUP_STORAGEBOX_USER: '',
+      BACKUP_STORAGEBOX_SSH_KEY_B64: CLE_FACTICE_B64,
+    });
+    expect(code).not.toBe(0);
+    expect(sortie).toContain('INCOMPLÈTE');
+    expect(sortie).toContain('BACKUP_STORAGEBOX_USER');
+    expect(sortie).not.toContain('passe terminée avec succès');
+  }, 300_000);
+
+  it('@critique une clé mutilée au collage est refusée AU DÉMARRAGE, sans être affichée', () => {
+    // La panne réelle qu'on cherche à devancer : une interface web qui reformate
+    // une clé multiligne. Sans ce contrôle, elle se manifesterait à 02h30 par un
+    // « Permission denied (publickey) » qui accuse le serveur distant alors que
+    // la faute est locale.
+    const mutilee = 'Y2VjaS1uZXN0LXBhcy11bmUtY2xl'; // base64 valide, pas une clé
+    const { code, sortie } = jouerUnePasse(repertoireNeuf(), {
+      ...SB_COMPLET,
+      BACKUP_STORAGEBOX_SSH_KEY_B64: mutilee,
+    });
+    expect(code).not.toBe(0);
+    expect(sortie).toContain('BACKUP_STORAGEBOX_SSH_KEY_B64');
+    expect(sortie).toContain('base64 -w0');
+    // Un message d'erreur qui cite la valeur pour « aider » est une fuite.
+    expect(sortie).not.toContain(mutilee);
+  }, 300_000);
+
+  it('@critique un chemin ABSOLU est refusé — il sortirait du cloisonnement du sous-compte', () => {
+    const { code, sortie } = jouerUnePasse(repertoireNeuf(), {
+      ...SB_COMPLET,
+      BACKUP_STORAGEBOX_PATH: '/home/autre-client',
+    });
+    expect(code).not.toBe(0);
+    expect(sortie).toContain('BACKUP_STORAGEBOX_PATH');
+    expect(sortie).toContain('RELATIF');
+  }, 300_000);
+
+  it('un port non numérique est refusé, et le message rappelle le 23', () => {
+    const { code, sortie } = jouerUnePasse(repertoireNeuf(), {
+      ...SB_COMPLET,
+      BACKUP_STORAGEBOX_PORT: 'vingt-trois',
+    });
+    expect(code).not.toBe(0);
+    expect(sortie).toContain('BACKUP_STORAGEBOX_PORT');
+    expect(sortie).toContain('23');
+  }, 300_000);
+
+  it('l’image porte les outils que la Storage Box exige — ssh et rsync', () => {
+    // Le relevé qui a motivé la décision D-1 : l'image ne portait que `mc`,
+    // c'est-à-dire S3, et une Storage Box ne parle pas S3. Ce cas empêche que
+    // les deux paquets disparaissent d'un `docker-compose` ou d'un Dockerfile
+    // remanié sans que personne ne voie que la troisième copie est devenue
+    // impossible.
+    const { code, sortie } = dansConteneur('command -v ssh && command -v rsync && command -v scp');
+    expect(code, `ssh/rsync/scp absents de l'image :\n${sortie}`).toBe(0);
+  });
+});
+
+// =============================================================================
 // 1. LES CONTRÔLES D'ENTRÉE — un paramètre absurde sort en 1, EN FRANÇAIS
 //
 // Ce que ces cas gardent n'est pas le message : c'est le fait qu'un paramètre

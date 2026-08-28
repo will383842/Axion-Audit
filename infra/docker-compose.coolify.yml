@@ -876,6 +876,38 @@ services:
       AXION_RETENTION_QUOTIDIENNES: ${AXION_RETENTION_QUOTIDIENNES:-7}
       AXION_RETENTION_HEBDOMADAIRES: ${AXION_RETENTION_HEBDOMADAIRES:-4}
       AXION_RETENTION_MENSUELLES: ${AXION_RETENTION_MENSUELLES:-3}
+      # ┌───────────────────────────────────────────────────────────────────┐
+      # │ LA TROISIÈME COPIE — HETZNER STORAGE BOX (décision D-1).          │
+      # │                                                                   │
+      # │ R2 est UNE destination. Le 02 §11.4 en demande DEUX : un compte   │
+      # │ suspendu, un jeton révoqué par erreur ou une panne du fournisseur │
+      # │ ne laisseraient que le VPS — la machine que ces sauvegardes sont  │
+      # │ censées protéger.                                                 │
+      # │                                                                   │
+      # │ GÉOGRAPHIE MESURÉE, PAS SUPPOSÉE : le serveur se déclare          │
+      # │ `nbg1-dc3` (Nuremberg) dans les métadonnées Hetzner ; la Box est  │
+      # │ à HELSINKI. Deux pays. Si la Box était un jour déplacée près du   │
+      # │ serveur, cette copie perdrait l'essentiel de sa valeur SANS QUE   │
+      # │ RIEN NE LE SIGNALE.                                               │
+      # │                                                                   │
+      # │ `:-` COMME LE COFFRE ET TELEGRAM, PAS `:?` COMME R2 : sans elle,  │
+      # │ le service fait tout son travail et il lui manque la troisième    │
+      # │ copie — il le DIT au journal et continue. Mais une fois posée,    │
+      # │ son échec est bruyant (code 2), parce qu'une destination          │
+      # │ secondaire qui échoue en silence cesse d'exister en quelques      │
+      # │ semaines sans que personne s'en aperçoive.                        │
+      # │                                                                   │
+      # │ LA CLÉ PRIVÉE EST EN BASE64 SUR UNE SEULE LIGNE — une clé         │
+      # │ OpenSSH est multiligne, et une interface web la mutile en         │
+      # │ silence. Mutilée, le base64 devient invalide au décodage : la     │
+      # │ panne se voit AU DÉMARRAGE et non à 02h30. AUCUNE VALEUR ICI      │
+      # │ (02 §30.4-1/5) : le script contrôle la forme, jamais le contenu.  │
+      # └───────────────────────────────────────────────────────────────────┘
+      BACKUP_STORAGEBOX_HOST: ${BACKUP_STORAGEBOX_HOST:-}
+      BACKUP_STORAGEBOX_USER: ${BACKUP_STORAGEBOX_USER:-}
+      BACKUP_STORAGEBOX_PATH: ${BACKUP_STORAGEBOX_PATH:-axion-audit}
+      BACKUP_STORAGEBOX_PORT: ${BACKUP_STORAGEBOX_PORT:-23}
+      BACKUP_STORAGEBOX_SSH_KEY_B64: ${BACKUP_STORAGEBOX_SSH_KEY_B64:-}
       # Créneau quotidien en UTC (invariant 5) et jour de la complète
       # (`date +%w`, 0 = dimanche) : complète hebdomadaire + incrémentale
       # quotidienne, comme le demande 02 §11.4.

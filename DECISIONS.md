@@ -2626,3 +2626,68 @@ Règle de précédence : **sans objet** (question de frontière de périmètre, 
 au pack).
 Décideur : Williams (arrêt du geste) · constat et traçage par A01
 Impact spec : aucun
+
+## 2026-08-28 — [L0] D-1 : quelle SECONDE destination hors serveur, et par quel moyen l'atteindre ?
+
+Options :
+
+- **(A)** **Hetzner Storage Box** en seconde destination, ce qui impose d'ajouter `openssh-client` et
+  `rsync` à l'image du service de sauvegarde. Une Storage Box parle SFTP/SSH/rsync/BorgBackup/WebDAV
+  et **ne parle pas S3** ; `mc`, seul client de transfert de l'image, ne parle **que** S3. Coût
+  ~0,5 j (Dockerfile, clé, expédition, tests). Zéro euro de plus : la Box existe déjà.
+- **(B)** Un **second fournisseur compatible S3** (Scaleway, Backblaze B2, Wasabi). Réutilise la
+  machinerie `mc` déjà éprouvée — coût ~0,2 j, aucune dépendance nouvelle, aucune clé à gérer, mais
+  un compte et une facture de plus, et la Storage Box resterait inutilisée.
+- **(C)** Rester à une seule destination et l'assumer par écrit. Le 02 §11.4 ne serait pas tenu.
+
+Arbitrage : **option (A)**, décidée par Williams le 2026-08-28 sur recommandation d'A01. Motif : la
+Box existe et est payée, elle est **correctement située**, et c'est la solution que le pack nomme
+explicitement. Le demi-jour supplémentaire achète la conformité à la spécification et aucun coût
+récurrent.
+
+Règle de précédence : **02 §11.4** (« copie chiffrée quotidienne vers Hetzner Storage Box — site
+distinct — + 2ᵉ copie hebdo hors Hetzner ») et **CLAUDE.md §1 invariant 8**. Le pack **nomme** la
+Storage Box ; l'option B s'en serait écartée et aurait exigé un amendement. Il n'y a pas de
+divergence interne du pack à trancher ici : la précédence désigne simplement la voie déjà écrite.
+
+**L'obstacle a été MESURÉ avant d'être contourné, et c'est ce qui a fait la décision.** Relevé du
+2026-08-28 par `docker exec` sur le service vivant : présents `mc`, `gpg`, `zstd`, `openssl` ;
+**absents `ssh`, `scp`, `sftp`, `rsync`, `borg`**. Sans ce relevé, une demi-journée aurait été
+dépensée à écrire une expédition que l'image ne pouvait pas exécuter. _C'est la contre-mesure directe
+des trois recommandations fausses de la même soirée : mesurer l'état réel avant de proposer._
+
+**Ajout de deux paquets à l'image — escalade 11 §8-1 assumée et bornée.** Ce sont des paquets Debian
+de l'image de base, **pas** des dépendances applicatives de la liste épinglée du 11 §1 : ils
+n'entrent ni dans `package.json`, ni dans le graphe de `pnpm`, et ne changent aucune version
+épinglée. La distinction est écrite ici pour qu'elle ne soit pas rejouée à chaque revue.
+
+**Géographie — vérifiée, pas supposée.** Les métadonnées Hetzner du serveur rendent
+`availability-zone: nbg1-dc3` (**Nuremberg**) ; la Storage Box est à **Helsinki**. Deux pays,
+~1 500 km : un sinistre de site n'emporte pas les deux copies. _Cette hypothèse est écrite dans le
+script, le compose et le `.env.example`, parce qu'un déplacement futur de la Box près du serveur
+retirerait l'essentiel de la valeur de cette copie **sans qu'aucun contrôle ne le signale**._
+
+**Deux arbitrages de conception, tracés parce qu'ils ne vont pas de soi :**
+
+1. **`:-` et non `:?`** — l'absence de Storage Box ne bloque pas le démarrage (le service fait tout
+   son travail, il lui manque la troisième copie, et il le dit en nommant les variables). **Mais son
+   échec, une fois configurée, est bruyant** (code de sortie 2, comme R2). Une destination
+   secondaire qui échoue en silence cesse d'exister en quelques semaines sans que personne s'en
+   aperçoive. Une configuration **à moitié** posée, elle, est REFUSÉE au démarrage : trois variables
+   sur quatre est un oubli, pas un choix.
+2. **Clé privée en base64 sur une ligne.** Une clé OpenSSH est multiligne ; une interface web la
+   mutile en silence. Mutilée, le base64 devient invalide au décodage — la panne se voit **au
+   démarrage** au lieu d'apparaître à 02h30 sous la forme d'un `Permission denied (publickey)` qui
+   accuse le serveur distant alors que la faute est locale.
+
+**Ce que les tests couvrent, et ce qu'ils NE couvrent PAS — dit d'emblée pour ne pas rejouer la
+réserve R-3.** Six cas éprouvent les contrôles d'entrée et le comportement sans destination
+(configuration partielle refusée, clé mutilée refusée sans être affichée, chemin absolu refusé, port
+non numérique refusé, présence de `ssh`/`rsync`/`scp` dans l'image, passe qui réussit et nomme ce qui
+manque). **Ils n'éprouvent PAS l'expédition elle-même** : elle exige une vraie Box, une vraie clé et
+un vrai réseau. Sa preuve sera une mesure sur le staging — relecture d'un objet témoin depuis la Box
+et comparaison d'empreinte, exactement comme pour R2. **Tant que cette mesure n'est pas prise, D-1
+n'est pas clos.**
+
+Décideur : Williams
+Impact spec : aucun — le 02 §11.4 est appliqué, pas amendé.

@@ -260,10 +260,47 @@ RUN set -eux; \
     apt-get install -y --no-install-recommends ca-certificates; \
     rm -rf /var/lib/apt/lists/*
 
-# Contrôles à la CONSTRUCTION : le binaire s'exécute, et le magasin existe.
+# ┌───────────────────────────────────────────────────────────────────────────┐
+# │ `openssh-client` ET `rsync` — LA TROISIÈME COPIE (D-1, 2026-08-28).       │
+# │                                                                           │
+# │ POURQUOI IL A FALLU AJOUTER DEUX PAQUETS PLUTÔT QUE RÉUTILISER `mc`.      │
+# │ Le 02 §11.4 nomme une Hetzner Storage Box comme copie « site distinct ».  │
+# │ Une Storage Box parle SFTP, SSH, rsync, BorgBackup et WebDAV — elle NE    │
+# │ PARLE PAS S3. `mc`, seul client de transfert de cette image, ne parle QUE │
+# │ S3. Les deux ne se comprennent donc pas, et aucune configuration ne les   │
+# │ réconcilie : il faut un client SSH.                                       │
+# │                                                                           │
+# │ MESURÉ AVANT DE DÉCIDER (2026-08-28, `docker exec` sur le service vif) :  │
+# │   présents : mc · gpg · zstd · openssl                                    │
+# │   ABSENTS  : ssh · scp · sftp · rsync · borg                              │
+# │ Ce relevé est la raison de ces deux lignes. Sans lui, une demi-journée    │
+# │ aurait été dépensée à écrire une expédition que l'image ne pouvait pas    │
+# │ exécuter.                                                                 │
+# │                                                                           │
+# │ POURQUOI `rsync` ET PAS `scp` SEUL : la copie doit être INCRÉMENTALE et   │
+# │ propager les suppressions (`--delete`), sinon la rétention distante       │
+# │ diverge de la locale et la Storage Box se remplit sans fin. C'est la même │
+# │ propriété que le `--remove` du miroir `mc`.                               │
+# │                                                                           │
+# │ ARBITRAGE : ajouter un outil est une escalade (11 §8-1). Tracé dans       │
+# │ `DECISIONS.md` (2026-08-28, D-1), décidé par Williams. Ce sont des        │
+# │ paquets Debian de l'image, pas des dépendances applicatives de la liste   │
+# │ épinglée du 11 §1 — la distinction est écrite dans la décision.           │
+# └───────────────────────────────────────────────────────────────────────────┘
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends openssh-client rsync; \
+    rm -rf /var/lib/apt/lists/*
+
+# Contrôles à la CONSTRUCTION : les binaires s'exécutent, et le magasin existe.
+# `ssh -V` écrit sur la SORTIE D'ERREUR, y compris quand tout va bien : sans la
+# redirection, cette ligne ferait croire à un échec dans un journal de build lu
+# en diagonale.
 RUN set -eux; \
     chmod 0755 /usr/local/bin/mc; \
     mc --version; \
+    ssh -V 2>&1; \
+    rsync --version | head -1; \
     test -s /etc/ssl/certs/ca-certificates.crt
 
 # POINT DE MONTAGE DES ARCHIVES — ET C'EST LE `chown` QUI COMPTE, PAS LE `mkdir`.
