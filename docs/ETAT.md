@@ -398,3 +398,40 @@ assaini** — c'est la dernière ligne de DoD qui manque avant que la porte P-A 
 
 Tests rouges connus : aucun. lint 0 · typecheck 0 · format:check vert · unit 140 · playwright 36 ·
 intégration 79 · 15 fichiers de test tous captés, aucun skip.
+
+## 2026-08-28 09h50 — [lot L0-b] — étape pipeline 6/7 — LE CODE EST EN LIGNE, ET IL NE L'ÉTAIT PAS
+
+Dernier commit vert : 2a9b136 (fix(l0b): trois déploiements échouaient sur une séquence vide, et je
+ne l'avais pas vu) · Branche : lot/l0-infra · Poussé : oui
+
+**⚠️ RECTIFICATION DU BLOC DE 09h35.** J'y écrivais que les correctifs étaient déployés. **Ils ne
+l'étaient pas.** Trois déploiements consécutifs avaient échoué en quatorze secondes chacun, sur la
+**septième convention Coolify** : `command: []` — du Compose valide, accepté par `docker compose
+config` en local — est réécrit par Coolify en **table vide** `command: {  }`, que le schéma refuse.
+
+**Pourquoi je ne l'ai pas vu, et c'est la vraie leçon :** l'API de Coolify rendait `status: finished`
+(la vérité est dans `application_deployment_queues`), et **la pile précédente continuait de répondre
+200 sur les quatre routes**. Mes sondes externes étaient donc **vraies**, et ma conclusion **fausse**.
+*Une sonde applicative verte ne prouve pas qu'un déploiement a eu lieu.* C'est le défaut de la sonde
+`pg_isready` — vraie, et sans rapport avec la question posée — reproduit un étage plus haut, sur moi,
+**le jour même où je le corrigeais chez les autres**.
+
+**MAINTENANT, ET VÉRIFIÉ DANS LA FILE :** déploiement `ib1yjahpzsno66pqgdml3lo3`, commit `2a9b136`,
+`finished`.
+
+- Depuis l'extérieur : les 4 routes en 200 (`ready` rend `ready`), les **6 chemins PWA en 404 sans
+  `Content-Type`**, `axion-ia.com` → 301 en 0,186 s.
+- Sur la machine : sonde configurée = `axion-healthcheck` (**plus `pg_isready`**), qui répond
+  « cluster stable depuis 136 s, archivage sans echec en cours », **0 réinitialisation** (c'était 275
+  en 46 min), archivage WAL `archived=9 failed=0`.
+- `createstanza` a tourné dans un vrai déploiement, sur un volume préexistant, et a pris le **chemin
+  idempotent** : « stanza 'axion' already exists on repo1 and is valid », exit 0.
+
+**CI verte sur les 18 jobs** du commit précédent, dont `shellcheck`, `gitleaks`, `couverture ≥ 90 %`,
+`e2e (chromium)` et `schema-diff` — ce dernier point levant l'incertitude d'A22, qui n'avait pas pu
+confirmer que le job e2e disposait de Docker.
+
+Prochaine action : intégrer le rendu d'A59 (sauvegarde restaurable — **seul point bloquant restant**),
+puis rejouer la chaîne de migrations up/down sur ce socle assaini.
+
+Tests rouges connus : aucun.
