@@ -20,6 +20,19 @@
 #   - Le conteneur jetable est détruit en `trap EXIT`, MÊME EN CAS D'ÉCHEC.
 #   - Sortie NON NULLE + alerte Telegram si échec ; rapport horodaté dans
 #     /var/log/axion/restore-test-*.log.
+#
+# UTILISATION :
+#   infra/scripts/restore-test.sh <chemin du .env>
+#   pnpm infra:restore-test        <chemin du .env>
+# Le chemin est OBLIGATOIRE (convention : $AXION_ROOT/<staging|prod>/.env). Appelé
+# sans argument, le script REFUSE de tourner et affiche la convention — il ne
+# devine aucun chemin (revue croisée M-11).
+#
+# ⚠️ PÉRIMÈTRE — CE SCRIPT S'ADRESSE AU MONTAGE « VPS DÉDIÉ » (docker compose
+# lancé par nous, projet `axion-audit-<env>`). Il NE SAIT PAS parler à la pile de
+# STAGING déployée par Coolify sur `axionia-web`, dont le projet Compose est un
+# uuid imposé et les volumes portent d'autres noms (infra/README.md §4.3 et §6.2).
+# Il n'a JAMAIS été exécuté à ce jour, sur aucune machine.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -111,7 +124,7 @@ guard_not_production() {
   esac
   # 4. Le dépôt pgBackRest de production doit exister ET n'être monté qu'en :ro.
   if ! docker volume inspect "${LIVE_PROJECT}_pgbackrest_repo" >/dev/null 2>&1; then
-    axion_die "GARDE-FOU : dépôt pgBackRest « ${LIVE_PROJECT}_pgbackrest_repo » introuvable — rien à restaurer."
+    axion_die "GARDE-FOU : dépôt pgBackRest « ${LIVE_PROJECT}_pgbackrest_repo » introuvable — rien à restaurer. Le nom est dérivé d'APP_ENV (projet Compose « $LIVE_PROJECT ») : si la pile est déployée par un orchestrateur qui impose son propre nom de projet (Coolify sur le staging), ce volume n'existe pas sous ce nom — voir infra/README.md §6.2, ce cas n'est PAS supporté."
   fi
   axion_log "Garde-fou anti-production : OK (dépôt monté en lecture seule, ressources jetables uniques)."
 }

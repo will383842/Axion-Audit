@@ -35,18 +35,68 @@
 #   · secrets `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` (02 §11.3)
 #
 # ------------------------------- ROLLBACK ------------------------------------
-# Procédure (02 §30.6 + §11.2), adaptée à Coolify — à exécuter à la main :
-#   1. Retrouver le tag précédent : l'historique des runs de ce workflow le
-#      journalise (`sha-xxxxxxx`, entrée « Tag d'image » de chaque exécution).
-#   2. Dans Coolify → application du staging → l'image visée passe au tag
-#      précédent, puis « Redeploy ». Par l'API, c'est le même appel que
-#      l'étape 2 ci-dessous une fois le tag corrigé.
-#   3. Les images sont CONSERVÉES 90 JOURS sur GHCR (02 §30.6) : la fenêtre de
-#      retour arrière est garantie sur 90 j, pas au-delà.
-#   4. AUCUNE migration inverse n'est jouée : les migrations sont
+# CE BANDEAU A ÉTÉ RÉÉCRIT LE 2026-08-28 CONTRE LA MACHINE. Il décrivait une
+# procédure par TAG D'IMAGE conservé 90 jours sur GHCR. Elle n'existe pas pour
+# cet environnement, et un exploitant qui l'appliquerait en pleine panne
+# chercherait des objets qui ne sont pas là. Ce qui l'invalidait :
+#
+#   · le staging NE TIRE RIEN DE GHCR — Coolify CONSTRUIT sur le serveur
+#     (build_pack `dockercompose`). Aucune image ne vient d'un registre ; la
+#     rétention de 90 j sur GHCR ne protège donc rien ici. Elle reste vraie
+#     pour la PRODUCTION (`deploy-prod.yml`), qui, elle, tire des images.
+#   · « l'image visée passe au tag précédent » n'a pas d'objet : le compose fixe
+#     des tags CONSTANTS (`axion-audit-api:coolify`, …). Chaque construction
+#     réécrit le même tag. Il N'Y A PAS d'image précédente à désigner.
+#   · l'onglet « Rollback » de Coolify EST VIDE pour cette application. Il liste
+#     les images dont le dépôt contient l'uuid de l'application
+#     (`wrunr6mwq2oxqq392i4myzjn`) ; les nôtres s'appellent `axion-audit-*` et
+#     n'y figurent donc jamais. Le bouton existe, la liste est vide.
+#
+# LA VRAIE PROCÉDURE — on ne revient pas à une IMAGE, on revient à un COMMIT.
+# Coolify reconstruit depuis git : le levier est le champ `git_commit_sha` de
+# l'application, qui vaut `HEAD` en régime normal.
+#
+#   1. Choisir le commit de repli sur la branche déployée (`lot/l0-infra`) :
+#      le dernier dont ce workflow a rapporté un déploiement `finished`.
+#
+#   2. ÉPINGLER l'application sur ce commit :
+#        curl -fsS -X PATCH "$COOLIFY_URL/api/v1/applications/$COOLIFY_APP_UUID" \
+#          -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
+#          -H 'Content-Type: application/json' \
+#          -d '{"git_commit_sha":"<sha40>"}'
+#
+#   3. DÉPLOYER — exactement l'appel de l'étape 2/4 ci-dessous :
+#        curl -fsS -G "$COOLIFY_URL/api/v1/deploy" \
+#          -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
+#          --data-urlencode "uuid=$COOLIFY_APP_UUID" --data-urlencode 'force=true'
+#      Suivre l'issue sur /api/v1/deployments/<uuid> (même logique qu'en 3/4).
+#      Reconstruction complète mesurée : ~70 s (66–83 s le 2026-08-28).
+#
+#   4. ⚠️ REMETTRE `git_commit_sha` À `HEAD` UNE FOIS LE STAGING SAIN. Ce champ
+#      est PERSISTANT : tant qu'il est épinglé, TOUS les déploiements suivants —
+#      y compris ceux déclenchés par ce workflow — rejoueront le vieux commit en
+#      annonçant un succès. C'est le piège de cette procédure, et il est
+#      silencieux :
+#        curl -fsS -X PATCH … -d '{"git_commit_sha":"HEAD"}'
+#
+#   5. AUCUNE migration inverse n'est jouée : les migrations sont
 #      RÉTROCOMPATIBLES N-1 (02 §11.2), donc la version N-1 du code fonctionne
 #      sur le schéma N. C'est cette règle — et elle seule — qui rend le rollback
-#      applicatif sûr sans toucher à la base.
+#      applicatif sûr sans toucher à la base. Inchangé.
+#
+# FENÊTRE DE RETOUR ARRIÈRE : c'est l'HISTORIQUE GIT, pas une rétention de
+# registre. Elle n'expire pas à 90 jours — mais elle exige que la
+# RECONSTRUCTION ABOUTISSE. Ce retour arrière n'est donc pas instantané et
+# n'est pas hors ligne : il faut le réseau sortant (les images de base peuvent
+# avoir été élaguées entre-temps par le crontab de la machine, cf.
+# `infra/COHABITATION_AXIONIA_WEB.md` §3bis.4) et une construction verte.
+# Un commit de repli dont la construction échoue N'EST PAS un repli.
+#
+# À ARBITRER (`DECISIONS.md`) — le retour arrière rapide se paierait en disque :
+# taguer les images par commit (`axion-audit-api:${IMAGE_TAG}`) rendrait la
+# liste de Coolify non vide et le repli immédiat, au prix d'images qui
+# s'accumulent (~1,1 Go par déploiement conservé). `infra/scripts/
+# empreinte-docker.sh elaguer` implémente déjà la rétention qui bornerait cela.
 # -----------------------------------------------------------------------------
 #
 # POINT DE JONCTION RESTANT, ÉCRIT ICI PLUTÔT QUE DÉCOUVERT PLUS TARD.

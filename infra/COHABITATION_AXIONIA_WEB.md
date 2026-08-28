@@ -11,16 +11,23 @@
 
 ## 1. Ce qui change sur axion-ia.com : presque rien, et c'est le point
 
-| Élément                              | Effet                                             |
-| ------------------------------------ | ------------------------------------------------- |
-| Code d'axion-ia.com                  | **aucune modification**                           |
-| Ses conteneurs, sa base, ses données | **aucune modification**                           |
-| Ses volumes, ses réseaux Docker      | **aucune modification** — les nôtres sont séparés |
-| Sa configuration de reverse proxy    | **un bloc AJOUTÉ** pour `audit.axion-ia.com`      |
-| DNS                                  | **un enregistrement AJOUTÉ**                      |
+| Élément                              | Effet                                        |
+| ------------------------------------ | -------------------------------------------- |
+| Code d'axion-ia.com                  | **aucune modification**                      |
+| Ses conteneurs, sa base, ses données | **aucune modification**                      |
+| Ses volumes, ses réseaux Docker      | **aucune modification** — mais voir §5bis    |
+| Sa configuration de reverse proxy    | **un bloc AJOUTÉ** pour `audit.axion-ia.com` |
+| DNS                                  | **un enregistrement AJOUTÉ**                 |
 
 Deux ajouts, zéro modification. C'est ce qui rend la migration ultérieure simple : retirer un bloc de
 proxy et un enregistrement DNS, et le serveur retrouve exactement son état d'avant.
+
+> **Nuance ajoutée le 2026-08-28, après vérification sur la machine.** « Aucune modification » reste
+> vrai : nous ne changeons la configuration d'aucun objet du voisin. Mais nous ne sommes pas non plus
+> entièrement à part — notre Caddy **rejoint** le réseau Docker `coolify`, où vivent aussi les
+> conteneurs d'axion-ia.com et de Docuseal, et Coolify attache son proxy à tous nos services. Rejoindre
+> n'est pas modifier, et rien de ce qui est promis dans ce tableau n'est démenti ; mais l'étanchéité
+> qu'on pouvait lire entre les lignes n'existe pas. Le détail, chiffré et vérifiable, est en **§5bis**.
 
 ---
 
@@ -64,6 +71,133 @@ réglage, pas une protection magique — d'où les trois commandes ci-dessous.
 
 ---
 
+## 3bis. Le disque : ce que coûte « construire sur le serveur », mesuré
+
+> L'arbitrage tracé dans `DECISIONS.md` (« le staging construit ses images sur le serveur ») a
+> chiffré le risque **mémoire et CPU pendant la construction**. Il n'a pas chiffré l'**empreinte
+> disque**, qui est permanente et croissante. Cette section comble ce trou. Toutes les valeurs
+> ci-dessous sont **mesurées sur `axionia-web` le 2026-08-28**, pas estimées.
+
+### 3bis.1 Ce que notre pile occupe réellement
+
+| Poste                                       | Mesure       | Croissance par déploiement         |
+| ------------------------------------------- | ------------ | ---------------------------------- |
+| Images (6, taguées `axion-audit-*`)         | **1,09 Go**  | **≈ 0** — le tag fixe est réécrit  |
+| Images orphelines retenues par un conteneur | 0,71 Go      | voir 3bis.4                        |
+| Volumes (8)                                 | 89 Mo        | croît avec les données de test     |
+| Couches inscriptibles des conteneurs        | 0,8 Mo       | ≈ 0                                |
+| Journaux de conteneurs                      | 2,5 Mo       | borné : 9 × 5 × 10 Mo = **450 Mo** |
+| **Cache de build**                          | **4,61 Go**  | **≈ 760 Mo par construction**      |
+| **Total**                                   | **≈ 6,5 Go** |                                    |
+
+**Le cache de build est 71 % de notre empreinte, et la seule ligne qui croît vraiment.** Nos images,
+elles, ne s'accumulent pas : le compose fixe `image: axion-audit-api:coolify`, un tag constant que
+chaque construction réécrit. C'est ce qui borne notre empreinte d'images — et c'est exactement ce
+qui rend le retour arrière par image impossible (voir `.github/workflows/deploy-staging.yml`). Le
+même choix paie ici et coûte là-bas ; il faut le savoir dans les deux sens.
+
+Le total de 6,46 Go de cache de build affiché par `docker system df` **n'est pas à nous en entier** :
+4,61 Go nous sont attribuables (141 enregistrements sur 528), le reste appartient au voisin. La
+méthode d'attribution est dans `infra/scripts/empreinte-docker.sh`.
+
+### 3bis.2 Ce que nous ne sommes PAS
+
+La photographie « 105 Go libres → 83 Go, 22 Go en une matinée » est exacte, mais elle ne nous impute
+pas ces 22 Go. Le même matin, le voisin a produit **deux images de 13,6 Go et 1,92 Go**, taguées par
+commit et donc conservées, pour 20 déploiements ; nous en avons fait 11, pour ≈ 5,7 Go tout compris.
+**Notre part est d'environ un quart.** L'écrire n'est pas se dédouaner : c'est éviter de dimensionner
+un correctif sur le mauvais poste.
+
+### 3bis.3 Trois élagueurs tournent déjà, dont aucun n'est le nôtre
+
+| Qui               | Quand                | Quoi                                                                       |
+| ----------------- | -------------------- | -------------------------------------------------------------------------- |
+| crontab du voisin | toutes les 6 h       | `docker image prune -af` · `docker builder prune -af --keep-storage 2GB`   |
+| Coolify (forcé)   | tous les jours 00:00 | `docker image prune -f` · `docker builder prune -af` · `docker rmi` ciblés |
+| Coolify (alerte)  | toutes les 23 h      | notification au-delà de 80 % d'occupation                                  |
+
+**Conséquence pratique n° 1 : le disque n'accumule pas, il oscille.** Les exécutions enregistrées par
+Coolify (`docker_cleanup_executions`) montrent un dent-de-scie quotidien entre 26–36 % après
+nettoyage et 40–82 % avant.
+
+**Conséquence pratique n° 2 : le seuil de 80 % n'est pas une échéance future — il a déjà été franchi.**
+Le 2026-08-22, l'occupation a atteint **82 %** avant le nettoyage de minuit, **six jours avant notre
+premier déploiement**. Nous n'en sommes pas la cause ; nous en réduisons la marge d'environ 5 points
+par jour au rythme actuel.
+
+**Échéance si tous les élagages s'arrêtaient** (le seul scénario que nous ayons à borner) : à partir
+du plancher post-nettoyage, il reste ≈ 76 Go avant 80 %. À 5 déploiements/jour × 760 Mo, **≈ 20
+jours** pour notre seule croissance ; à 11 déploiements/jour comme le 28 août, **≈ 9 jours**. Avec le
+voisin, l'accumulation combinée observée (15 à 56 Go/jour) ramène cela à **1,5 à 5 jours**.
+`infra/scripts/empreinte-docker.sh mesurer` recalcule cette échéance sur les valeurs du jour.
+
+### 3bis.4 Nos images ne sont protégées par rien — et une image a déjà disparu
+
+Le nettoyage de Coolify n'épargne une image que si elle correspond à l'un de ces trois cas :
+son dépôt porte l'uuid d'une application Coolify, c'est une image d'infrastructure Coolify, ou elle
+porte le label **`coolify.managed=true`**. Nos six images s'appellent `axion-audit-*` et **ne portent
+pas ce label** (vérifié : `coolify.managed` y est vide). Aux yeux des deux élagueurs, elles sont des
+images étrangères : elles ne survivent que parce qu'un conteneur les utilise, ce qui fait échouer
+silencieusement le `docker rmi`.
+
+Ce n'est pas une hypothèse. Le journal `/var/log/docker-image-prune.log` du voisin contient déjà :
+
+```
+untagged: axion-audit-postgres:16
+untagged: caddy:2-alpine
+```
+
+— une de nos images d'un ancien nommage, et une **image de base** dont notre `caddy` a besoin pour
+se reconstruire.
+
+Et l'état constaté le 2026-08-28 est pire : les conteneurs `postgres` et `caddy` du staging tournent
+sur des images **absentes de l'index Docker** (`docker image inspect` répond « No such image »). Un
+déploiement en échec à 06:09 a reconstruit ces deux images et déplacé les tags ; les conteneurs, eux,
+n'ont pas été recréés et sont restés sur l'image précédente, désormais innommable.
+
+**Ce que cela veut dire, concrètement :** un `docker compose up -d`, un redémarrage avec recréation,
+ou un `docker compose down` suivi d'un `up` **ne peut plus recréer ces deux conteneurs à l'identique**.
+Ce qui tourne n'est plus ce qu'aucun tag désigne. La seule sortie est une reconstruction complète
+(≈ 70 s par déploiement Coolify), qui exigera de retirer à nouveau les images de base éventuellement
+élaguées entre-temps — donc du réseau.
+
+### 3bis.5 Ce que nous faisons, et ce que nous ne ferons jamais
+
+`infra/scripts/empreinte-docker.sh` est l'outil de ce poste. Il a deux modes : `mesurer` (défaut,
+n'écrit rien) et `elaguer` (à blanc sans `--confirmer`).
+
+**Interdictions absolues, inscrites dans le script et vérifiables en le lisant :** aucune commande
+globale — ni `docker system prune`, ni `docker volume prune`, ni `docker image prune -a`, ni
+`docker builder prune`. Sur une machine partagée, ces commandes ne sont pas « risquées », elles sont
+hors sujet : elles ne savent pas distinguer nos objets de ceux du voisin.
+
+**Ce que le script ne touchera JAMAIS, en aucun mode :** les volumes (les nôtres comme ceux du
+voisin), les réseaux, les conteneurs, le cache de build, toute image hors du préfixe `axion-audit-`,
+et **toute image utilisée par un conteneur, même arrêté, même au voisin**.
+
+**Ce qu'il élague :** les seules images `axion-audit-*` **déclassées** — au-delà des 2 plus récentes
+de leur dépôt et référencées par aucun conteneur. La plus récente d'un dépôt n'est jamais supprimable.
+
+**Ce mode est un no-op aujourd'hui, et c'est voulu.** Avec des tags fixes, il n'y a qu'une image par
+dépôt : elle est toujours au rang 0, donc toujours gardée. La règle existe pour le jour où les images
+seront taguées par commit — le changement qui rendrait le retour arrière possible. La première
+version de ce script, elle, proposait de supprimer `axion-audit-postgres:16-coolify` et
+`axion-audit-caddy:coolify`, c'est-à-dire les deux seules copies restantes de ces images ; le passage
+à blanc l'a montré avant qu'elle ne soit exécutée. C'est la raison d'être du mode à blanc.
+
+**Le cache de build, notre plus gros poste, n'est volontairement pas élagué par nous.** BuildKit
+n'offre aucun filtre de propriété : `docker builder prune` n'accepte que `--filter until=` et
+`--keep-storage`, qui frapperaient le voisin dans la même commande. Et cet objet est déjà élagué deux
+fois par jour par deux autres acteurs. Un troisième élagueur ne libérerait rien de plus ; il
+augmenterait seulement la probabilité qu'une construction en cours perde son cache au milieu.
+
+**Ce qui reste à arbitrer** (hors du périmètre de cette note, à porter en `DECISIONS.md`) : faut-il
+poser `coolify.managed=true` sur nos images pour les soustraire aux deux élagueurs, ou accepter la
+reconstruction ? La première option ment à Coolify sur la propriété de l'objet ; la seconde accepte
+qu'une panne du réseau sortant nous empêche de redéployer. Aucune n'est gratuite.
+
+---
+
 ## 4. Les trois commandes à me fournir (lecture seule, elles ne modifient rien)
 
 ```bash
@@ -83,14 +217,114 @@ en priorité sur PostgreSQL, qui est le seul service dont la lenteur se voit imm
 
 ## 5. Les quatre conditions de la cohabitation
 
-1. **Réseaux Docker séparés.** Nos services ne rejoignent aucun réseau existant. MinIO reste interne
+1. **Réseaux Docker séparés — CONDITION AMENDÉE, elle n'est pas tenue telle qu'elle était écrite.**
+   Voir §5bis : Coolify impose un second réseau, partagé avec son proxy. MinIO reste interne
    (11 §2 : jamais exposé publiquement) ; l'accès aux fichiers passe par l'API, en flux, avec RBAC.
 2. **Ports non publiés.** Aucun `ports:` vers l'hôte sauf le port du Caddy d'audit, écouté sur
    `127.0.0.1` uniquement. Le proxy d'axion-ia.com est le seul point d'entrée public.
+   **Vérifiée et tenue** : aucun de nos huit conteneurs ne publie de port sur l'hôte.
 3. **Volumes préfixés et arborescence dédiée** (`/opt/axion-audit/staging`). Aucune donnée d'audit
    hors de cet arbre : c'est ce qui permet de tout déplacer plus tard en une commande.
+   **Tenue quant au fond, mais PAS avec les noms que le compose annonce** — voir §5ter.
 4. **Plafonds mémoire et CPU sur TOUS nos conteneurs**, y compris ceux qu'on croit petits. Un worker
    qui ne fait rien 99 % du temps est précisément celui qui surprend.
+   **Vérifiée et tenue** : `mem_limit`, `memswap_limit` et `deploy.resources` sont présents sur les
+   huit services dans le compose que Coolify déploie réellement.
+
+---
+
+## 5bis. Condition n° 1 : ce que Coolify impose, et ce qui reste vrai malgré tout
+
+**Ce que ce document promettait :** « Nos services ne rejoignent aucun réseau existant. »
+**Ce que la machine fait :** nos huit conteneurs sont sur **trois** réseaux, pas un.
+
+| Réseau                        | Qui l'a voulu         | Qui d'autre est dessus                                                 |
+| ----------------------------- | --------------------- | ---------------------------------------------------------------------- |
+| `axion-audit-coolify-interne` | nous (le compose)     | **personne d'autre** — la promesse tient ici                           |
+| `wrunr6mwq2oxqq392i4myzjn`    | **Coolify, d'office** | `coolify-proxy` (Traefik) — et personne d'autre                        |
+| `coolify`                     | **nous** (`edge:`)    | `coolify-proxy`, **axion-ia, Docuseal, `coolify-db`, `coolify-redis`** |
+
+**Le prix de l'insertion derrière Traefik.** Coolify crée un réseau par application, l'ajoute à
+**chaque** service de la pile — postgres, redis et minio compris — et y attache son proxy. Ce n'est
+pas configurable : c'est ainsi que Coolify sait router vers une application. Traefik est donc
+**adjacent au niveau réseau** à notre base, à notre cache et à notre stockage d'objets. C'est réel,
+ce n'est pas gratuit, et cela doit pouvoir être arbitré plutôt que découvert.
+
+**Ce qui reste vrai malgré tout, et qui a été vérifié une par une :**
+
+- **aucun de ces services ne publie de port sur l'hôte** — ils sont injoignables depuis Internet
+  autrement qu'en traversant Traefik ;
+- **Traefik ne publie aucune route vers eux** : seul `caddy` porte un domaine
+  (`docker_compose_domains`), et `postgres`, `redis`, `minio`, `api` et `worker` ne portent
+  **zéro label `traefik.*`** ;
+- **ce réseau n'est partagé avec personne d'autre** : le voisin n'y est pas, seul le proxy y est.
+
+Autrement dit : **l'isolement qui s'applique est celui de la configuration de Traefik, pas celui de
+la topologie du réseau.** C'est un cran plus faible que ce qui était écrit, et c'est la formulation
+honnête. Un routeur Traefik mal déclaré — par nous ou par une future version de Coolify — exposerait
+un service qu'aucune barrière réseau ne protège plus.
+
+**Le point le plus discutable n'est pas de Coolify, il est de nous.** La troisième ligne du tableau
+— `caddy` sur le réseau `coolify` — vient de notre propre déclaration `edge: external`. Elle place
+notre Caddy sur le même segment que les conteneurs d'axion-ia.com, de Docuseal et **de la base de
+données de Coolify**. Or Coolify attache déjà son proxy au réseau de l'application : cette seconde
+attache est **redondante pour le routage**. La retirer sortirait `caddy` du segment partagé sans rien
+casser.
+
+> **À arbitrer (`DECISIONS.md`)** : retirer `edge:`/`COOLIFY_PROXY_NETWORK` du service `caddy` dans
+> `infra/docker-compose.coolify.yml`. Bénéfice : plus aucun de nos conteneurs sur un réseau partagé
+> avec le voisin. Risque : à confirmer sur un déploiement de contrôle que Traefik route bien par le
+> réseau d'application seul. Non fait ici — ce fichier est en cours de modification par d'autres
+> travaux et la modification sort du périmètre de cette note.
+
+---
+
+## 5ter. Condition n° 3 : les noms de volumes du compose sont lettres mortes
+
+**Ce que le compose déclare :** `name: axion-coolify-postgres-data`, et sept autres du même genre.
+**Ce que la machine porte :** `wrunr6mwq2oxqq392i4myzjn_postgres-data`.
+**Combien de volumes `axion-coolify-*` existent :** **zéro.**
+
+**Pourquoi.** Coolify ne déploie pas notre fichier : il le réécrit, et c'est sa version qui fait foi
+(`applications.docker_compose` en base). Dans cette version, les montages au niveau des services ont
+été récrits en `<uuid>_<clé>`, les entrées de haut niveau correspondantes ont été ajoutées, et **nos
+huit déclarations d'origine ont été laissées dans le fichier, orphelines** — plus aucun service ne
+les monte. Docker ne crée pas un volume que personne ne monte. Nos noms n'ont donc jamais désigné
+quoi que ce soit.
+
+**Les noms réels, à utiliser dans toute procédure d'exploitation :**
+
+| Clé du compose    | Volume réel                                |
+| ----------------- | ------------------------------------------ |
+| `postgres_data`   | `wrunr6mwq2oxqq392i4myzjn_postgres-data`   |
+| `pgbackrest_repo` | `wrunr6mwq2oxqq392i4myzjn_pgbackrest-repo` |
+| `redis_data`      | `wrunr6mwq2oxqq392i4myzjn_redis-data`      |
+| `minio_data`      | `wrunr6mwq2oxqq392i4myzjn_minio-data`      |
+| `caddy_data`      | `wrunr6mwq2oxqq392i4myzjn_caddy-data`      |
+| `caddy_config`    | `wrunr6mwq2oxqq392i4myzjn_caddy-config`    |
+| `field_dist`      | `wrunr6mwq2oxqq392i4myzjn_field-dist`      |
+| `hq_dist`         | `wrunr6mwq2oxqq392i4myzjn_hq-dist`         |
+
+**Ne recopiez pas cette colonne dans un script.** `wrunr6mwq2oxqq392i4myzjn` est l'uuid de
+l'application **Coolify**, pas le nôtre : supprimer puis recréer l'application dans Coolify le change,
+et tous les noms avec. Une procédure d'exploitation doit **déduire** le nom, jamais l'écrire :
+
+```bash
+# Le nom réel du volume monté par un service, demandé au conteneur lui-même.
+docker inspect postgres-wrunr6mwq2oxqq392i4myzjn-051636151140 \
+  --format '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql/data"}}{{.Name}}{{end}}{{end}}'
+
+# Tous nos volumes, quel que soit l'uuid en vigueur.
+docker volume ls --format '{{.Name}}' | grep -E '_(postgres|pgbackrest|redis|minio|caddy|field|hq)-'
+```
+
+**Pourquoi cela comptait.** Une procédure de sauvegarde ou de reprise qui cite
+`axion-coolify-postgres-data` ne restaure pas la mauvaise donnée : elle échoue sur un volume
+inexistant, ou — pire — en crée un vide et le monte à la place du bon. Au moment où on la joue, on ne
+cherche pas ce genre d'erreur.
+
+> **Le `name:` du compose est conservé pour la production**, qui n'est pas déployée par Coolify et où
+> il désigne bien le volume créé. C'est la voie Coolify, et elle seule, qui l'ignore.
 
 ---
 

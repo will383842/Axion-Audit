@@ -1,192 +1,198 @@
 # `infra/` — RUNBOOK D'EXPLOITATION AXION AUDIT
 
-> Ce fichier est le mode d'emploi du lot **L0-b** (décision `DECISIONS.md` du 2026-08-27,
-> « Périmètre exact de L0 »). Il applique **02 §11.2, §11.3, §11.4 et §30 intégral**,
-> **06 §10.2/§10.3**, **11 §1/§2/§7**. Des commandes et des sorties attendues, rien d'autre.
+> **Ce fichier a été confronté à la machine le 2026-08-28** (mesures entre 06h35 et 06h50 UTC,
+> depuis le poste de développement, en lecture seule, par A57).
+> Tout ce qui suit porte l'une de ces trois marques, et jamais rien d'autre :
 >
-> **Règle absolue : aucune valeur de secret n'entre jamais dans un fichier versionné**
-> (02 §30.4-1/5, gitleaks est bloquant en CI). Tout passe par
-> **`/opt/axion-audit/<env>/.env`** (`<env>` = `staging` ou `prod` — il n’existe PAS de
-> `.env` à la racine, voir l’encadré du §4),
-> `root:root`, `chmod 600`, **posé à la main par SSH** (02 §30.4-2).
+> | Marque           | Signification                                                                           |
+> | ---------------- | --------------------------------------------------------------------------------------- |
+> | **MESURÉ**       | commande passée sur `axionia-web`, sortie relevée, reproduite ici                       |
+> | **JAMAIS JOUÉE** | la procédure existe dans le dépôt, elle n'a **jamais** été exécutée : rien n'est acquis |
+> | **NON VÉRIFIÉ**  | ni mesuré, ni joué — écrit tel quel pour que personne ne s'y fie                        |
+>
+> **Un runbook qui annonce plus qu'il ne fait est un défaut grave.** La version précédente de ce
+> fichier décrivait `/opt/axion-audit` comme la racine de déploiement du staging : **ce répertoire
+> n'existe pas sur la machine**. Le point 25 du gardien A02 portait sur cela ; ce fichier est la
+> réponse.
 
 ---
 
-## ⛔ AVANT TOUTE CHOSE — CE RUNBOOK NE DÉCRIT PAS LE STAGING D'AUJOURD'HUI
+## ⛔ LIRE CECI AVANT TOUT — IL Y A DEUX MONDES, ET UN SEUL EXISTE
 
-**Ce fichier décrit l'installation d'une pile Axion Audit sur un VPS NEUF ET VIDE, provisionné par
-SSH.** C'est le chemin de la **production**. **Ce n'est pas celui du staging.**
+| &nbsp;                   | **Le staging D'AUJOURD'HUI**                                  | **Le chemin « VPS dédié » du pack**                 |
+| ------------------------ | ------------------------------------------------------------- | --------------------------------------------------- |
+| Existe ?                 | **OUI — MESURÉ, il tourne**                                   | **NON — rien n'a jamais été déployé ainsi**         |
+| Qui déploie              | **Coolify v4** (API + clone git + build sur le serveur)       | `infra/scripts/deploy.sh` par SSH                   |
+| Où vivent les fichiers   | `/data/coolify/applications/<uuid>/` — **choisi par Coolify** | `/opt/axion-audit/` — **ABSENT de `axionia-web`**   |
+| Frontal / TLS            | Traefik (`coolify-proxy`), qui possède 80/443                 | notre Caddy                                         |
+| Fichier compose          | `infra/docker-compose.coolify.yml` (autoportant)              | `docker-compose.yml` + `.staging.yml` / `.prod.yml` |
+| Scripts `infra/scripts/` | **AUCUN ne s'applique** (§6)                                  | ce sont les leurs                                   |
+| Sauvegardes              | **AUCUNE** (§5)                                               | décrites, **JAMAIS JOUÉES**                         |
 
-Le staging tourne sur `axionia-web`, une machine **qui héberge déjà le site de production
-`axion-ia.com`** et qui fait tourner **Coolify v4** — dont le proxy Traefik possède les ports
-80/443. Il n'y a donc ni notre Caddy en frontal, ni `provision-vps.sh`, ni `deploy.sh`, ni SSH dans
-la chaîne de déploiement : c'est **l'API Coolify** qui déploie, et **Coolify construit les images
-sur le serveur** au lieu de les tirer de GHCR.
+**Sections à lire selon ce que vous cherchez :**
 
-| Si vous cherchez…                                            | Lisez                                                                                               |
-| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
-| **Les conditions de la cohabitation avec `axion-ia.com`**    | **`infra/COHABITATION_AXIONIA_WEB.md`** — les quatre conditions, les plafonds, ce qu'on ne fait PAS |
-| **La pile réellement déployée en staging**                   | **`infra/docker-compose.coolify.yml`** — autoportante, 9 services, aucun port publié                |
-| Le déclenchement du déploiement staging par la CI            | `.github/workflows/deploy-staging.yml` + `.github/workflows/README.md` §1 et §3                     |
-| Les deux amendements au contrat d'ops, **à ratifier en P-A** | `DECISIONS.md`, entrées du **2026-08-28**                                                           |
-| Ce qui a été prouvé sur le serveur                           | `docs/portes/PORTE_A_2026-08-27.md` §2ter                                                           |
-
-**Concrètement, pour le staging, ne suivez PAS** : le §3 (provisionnement, et surtout §3.3 —
-`provision-vps.sh` couperait l'accès SSH et redémarrerait Docker **sur le serveur de production** du
-voisin), le §5 (premier déploiement par `deploy.sh`) ni le §5 bis (frontal Caddy unique).
-Le reste — développement local (§2, §2 bis), pose des secrets (§4), PRA (§6), rotation (§7),
-diagnostic du test de restauration (§9) — **reste valable**.
-
-**Nom retenu pour le sous-domaine de staging : `audit-staging.axion-ia.com`**, en une seule forme
-(`DECISIONS.md` du 2026-08-28). Il n'est **pas encore posé** — la zone DNS est chez Cloudflare,
-partagée avec la production ; le staging vit en attendant sur l'adresse automatique de Coolify
-(`*.sslip.io`). Dans ce fichier, il s'écrit `audit-staging.<domaine>`.
+| Vous cherchez…                                             | Allez au…                                     |
+| ---------------------------------------------------------- | --------------------------------------------- |
+| La confrontation « ce que disait ce fichier » ↔ la machine | **§1**                                        |
+| Le staging réel : chemins, noms, réseaux, conventions      | **§4** (tout est MESURÉ)                      |
+| L'état de la sauvegarde et de la restauration              | **§5** — réponse courte : **il n'y en a pas** |
+| Ce que valent les scripts `infra/scripts/*.sh`             | **§6**                                        |
+| Le développement local                                     | **§3**                                        |
+| Le chemin « VPS dédié » (prod future)                      | **§7** — intégralement **JAMAIS JOUÉ**        |
+| Les conditions de cohabitation avec `axion-ia.com`         | `infra/COHABITATION_AXIONIA_WEB.md`           |
+| Les arbitrages Coolify (Traefik, build serveur)            | `DECISIONS.md`, entrées du **2026-08-28**     |
+| Les garde-fous nés des déploiements ratés                  | `AMELIORATIONS.md`, fiche du **2026-08-28**   |
 
 ---
 
-## 0. Arborescence
+## 1. CONFRONTATION À LA MACHINE — affirmation, mesure, verdict
+
+Méthode : `ssh axionia-web '<commande>'` depuis le poste de développement, 2026-08-28 ~06h40 UTC.
+**Attention à la forme de la commande SSH** : `ssh root@178.105.55.15` échoue
+(`Permission denied (publickey)`) ; c'est l'alias `axionia-web` de `~/.ssh/config` qui porte la clé
+`~/.ssh/axion_audit_ed25519`. Équivalent explicite :
+`ssh -i ~/.ssh/axion_audit_ed25519 -o IdentitiesOnly=yes root@178.105.55.15`.
+
+| Ce que ce fichier affirmait                                                          | Commande                                                                                 | Ce que dit la machine                                                                                              | Verdict                                                    |
+| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- |
+| `/opt/axion-audit` est la racine d'exploitation                                      | `ls -la /opt`                                                                            | `axion-ia`, `containerd`. **Pas d'`axion-audit`**                                                                  | **FAUX** — corrigé §4.1                                    |
+| `/opt/axion-audit/<env>/.env` porte les secrets                                      | `ls /opt/axion-audit`                                                                    | `No such file or directory`                                                                                        | **FAUX** — corrigé §4.1                                    |
+| `pnpm infra:restore-test` → `/opt/axion-audit/prod/.env`                             | lecture de `package.json` + `ls`                                                         | chemin inexistant ; script corrigé, voir §6.1                                                                      | **FAUX** — corrigé                                         |
+| Le dépôt est cloné dans `/opt/axion-audit/repo`                                      | `ls -d /root/axion* /srv/axion* /home/*/axion*`                                          | **aucune copie du dépôt sur le serveur**                                                                           | **FAUX** — §4.5                                            |
+| `/var/backups/axion` reçoit les sauvegardes                                          | `ls -la /var/backups/axion`                                                              | `No such file or directory`                                                                                        | **FAUX** — §5                                              |
+| `/var/log/axion` reçoit les rapports horodatés                                       | `ls -la /var/log/axion`                                                                  | `No such file or directory`                                                                                        | **FAUX** — §5                                              |
+| `/etc/cron.d/axion-audit` planifie les 4 tâches                                      | `cat /etc/cron.d/axion-audit` · `ls /etc/cron.d`                                         | absent ; `/etc/cron.d` ne contient que `e2scrub_all` et `sysstat`                                                  | **FAUX** — §5                                              |
+| Le magasin TLS et les archives sont poussés sur une Storage Box                      | `ls -la /root/.ssh/`                                                                     | seul `authorized_keys` — **aucune clé `storagebox_ed25519`**                                                       | **FAUX** — §5                                              |
+| La copie hors Hetzner se fait par `rclone`                                           | `command -v rclone`                                                                      | **ABSENT** (`gpg`, `curl`, `openssl`, `sha256sum`, `rsync` sont présents)                                          | **FAUX** — §5                                              |
+| Volumes du staging nommés `axion-coolify-*`                                          | `docker volume ls`                                                                       | **aucun** `axion-coolify-*` ; les vrais sont `wrunr6mwq2oxqq392i4myzjn_*`                                          | **FAUX** — §4.3, convention 5                              |
+| Volume `axion-staging-field-dist` / `-hq-dist`, réseau `axion-edge-staging`          | `docker volume ls` · `docker network ls`                                                 | **aucun des trois n'existe** (ce sont les noms du montage « VPS dédié »)                                           | **FAUX pour le staging**                                   |
+| `provision-vps.sh` a créé l'arborescence et les deux `.env`                          | `ls /opt` (ci-dessus)                                                                    | rien de tout cela ; le script n'a **jamais** tourné sur cette machine                                              | **VRAI mais trompeur** — il **ne doit pas** y tourner, §7  |
+| L'unique Caddy de prod sert les deux environnements sur 80/443                       | `docker ps` (colonne `PORTS`)                                                            | 80/443 appartiennent à `coolify-proxy` (Traefik). Notre Caddy **ne publie aucun port**                             | **FAUX pour le staging**                                   |
+| `https://audit-staging.<domaine>/api/v1/health` → 200                                | `getent hosts audit-staging.axion-ia.com`                                                | **non résolu** — l'enregistrement DNS n'existe pas                                                                 | **FAUX** — §4.6                                            |
+| Le staging est joignable publiquement                                                | `curl -o /dev/null -w '%{http_code}' http://<uuid>.178.105.55.15.sslip.io/api/v1/health` | **404** à 06h41, **504** à 06h47 (redéploiement en cours par un autre agent)                                       | **FAUX à l'heure du relevé** — §4.6                        |
+| §5.3 : `pgbackrest --stanza=axion stanza-create` puis `check` réussissent            | `docker exec --user postgres <pg> pgbackrest --stanza=axion info`                        | la stanza **existe**, mais `status: error (no valid backups)`                                                      | **PARTIELLEMENT VRAI** — §5                                |
+| L'archivage WAL fonctionne réellement (`failed_count = 0`)                           | `psql -U axion -d axion_audit -c 'SELECT … FROM pg_stat_archiver;'`                      | `archived_count=3`, `failed_count=0`, `last_archived_wal=000000010000000000000003`                                 | **VRAI — et c'est le seul point de sauvegarde qui tienne** |
+| §5.3 : la commande de contrôle s'écrit `psql` sans `-U`                              | même commande                                                                            | `FATAL: role "postgres" does not exist` — le rôle est **`axion`**                                                  | **FAUX** — corrigé §4.4                                    |
+| §2 bis : les fronts sont des jobs one-shot qui sortent en 0, Caddy sert les fichiers | `docker ps -a --filter label=coolify.resourceName=axion-audit-staging`                   | `field` et `hq` : `Exited (0)` ; `caddy` : `Up (healthy)` ; montages `…_field-dist:/srv/principal/field`           | **VRAI — le README avait raison**                          |
+| §2 bis : `hq` sur le port interne **5174**, `api` sur `${API_PORT}` (3000)           | `docker ps` (colonne `PORTS`) · `.env`                                                   | `api` expose `3000/tcp` ; `API_PORT=3000` présent dans le `.env` du staging                                        | **VRAI**                                                   |
+| La posture de sécurité (CSP, HSTS, `nosniff`…) est appliquée identiquement           | `docker exec <caddy> wget -qO- --server-response http://localhost:8080/api/v1/health`    | 200 + CSP complète, HSTS `max-age=31536000; includeSubDomains; preload`, `X-Frame-Options: DENY`, `Via: 1.1 Caddy` | **VRAI — le README avait raison**                          |
+| Aucun port de données n'est publié (5432/6379/9000)                                  | `docker ps` (colonne `PORTS`)                                                            | `postgres 5432/tcp`, `redis 6379/tcp`, `minio 9000/tcp` — **exposés, jamais publiés** (pas de `0.0.0.0:`)          | **VRAI**                                                   |
+| Le `.env` est en `root:root` `chmod 600`                                             | `stat -c '%n %U:%G %a' …/.env`                                                           | `root:root` **644** — et le répertoire parent est `755`                                                            | **FAUX** — §4.1, écart ouvert                              |
+
+**Deux points où le gardien avait tort, et il faut le dire aussi :**
+
+1. **La stanza pgBackRest existe.** Le point de contrôle n°1 de la porte P-A n'est pas « jamais
+   fait » : `pgbackrest --stanza=axion info` répond, le chiffrement `aes-256-cbc` est en place et
+   **l'archivage WAL fonctionne sans un seul échec**. Ce qui manque est le `backup` lui-même (§5).
+2. **Le §2 bis du README était exact** sur le service des fronts (jobs one-shot + `root`/`file_server`)
+   et sur la posture de sécurité HTTP. Ces deux passages ont été mesurés et conservés tels quels.
+
+---
+
+## 2. Arborescence de `infra/` — VÉRIFIÉE `find infra -type f`
 
 ```
 infra/
 ├── docker-compose.yml            pile de DÉV local (build local, hot reload)
-├── docker-compose.staging.yml    surcharge staging (images GHCR, limites CPU/RAM, SANS frontal)
-├── docker-compose.prod.yml       surcharge prod    (images GHCR, 80/443, frontal des 2 piles)
-├── docker-compose.coolify.yml    ← LA PILE RÉELLEMENT DÉPLOYÉE EN STAGING. AUTOPORTANTE
-│                                   (Coolify ne prend qu'un seul `-f`, aucune surcharge),
-│                                   chemins relatifs depuis la RACINE du dépôt, images
-│                                   CONSTRUITES sur le serveur, zéro port publié
-├── COHABITATION_AXIONIA_WEB.md   ← les 4 conditions de la cohabitation avec axion-ia.com
-├── caddy/Caddyfile               2 blocs de site (prod + staging), sécurité, CSP
-├── caddy/Dockerfile              image Caddy du projet
-├── caddy/fronts.dev.caddy        fronts en DEV    : reverse_proxy vers Vite
-├── caddy/fronts.static.caddy     fronts en PROD   : root + file_server + repli SPA
-├── postgres/Dockerfile           PostgreSQL 16 + pgBackRest
+├── docker-compose.staging.yml    surcharge staging du montage « VPS dédié » — NON UTILISÉE (§7)
+├── docker-compose.prod.yml       surcharge prod du montage « VPS dédié »    — NON UTILISÉE (§7)
+├── docker-compose.coolify.yml    ← LA PILE RÉELLEMENT DÉPLOYÉE EN STAGING. AUTOPORTANTE.
+│                                   Ne pas modifier sans lire ses quatre encadrés d'en-tête.
+├── COHABITATION_AXIONIA_WEB.md   les 4 conditions de la cohabitation avec axion-ia.com
+├── caddy/Caddyfile               2 blocs de site (principal + staging), sécurité, CSP
+├── caddy/Dockerfile              image Caddy du projet (config EMBARQUÉE — §4.3, convention 4)
+├── caddy/fronts.dev.caddy        fronts en DEV  : reverse_proxy vers Vite
+├── caddy/fronts.static.caddy     fronts en PROD : root + file_server + repli SPA
+├── postgres/Dockerfile           PostgreSQL 16 + pgBackRest (+ cible `config-embarquee`)
 ├── postgres/postgresql.custom.conf  archive_mode, wal_level, UTC
+├── postgres/healthcheck.sh       sonde du conteneur postgres
+├── postgres/stanza-create.sh     création de la stanza pgBackRest
 ├── pgbackrest/pgbackrest.conf    dépôt chiffré, rétention
 ├── README.md                     ← ce runbook
-└── scripts/
-    ├── lib/common.sh             fonctions partagées (log, alerte, chiffrement)
-    ├── provision-vps.sh          durcissement Ubuntu (06 §10.3), idempotent
+└── scripts/                      ← TOUS écrits pour le montage « VPS dédié ». Voir §6.
+    ├── lib/common.sh             fonctions partagées (log, alerte, chargement du .env)
+    ├── provision-vps.sh          durcissement Ubuntu — NE JAMAIS EXÉCUTER SUR axionia-web
     ├── deploy.sh                 pull → migration garde-fou → up -d → smoke → rollback
     ├── smoke-test.sh             santé API + écriture/lecture PG, MinIO, Redis
     ├── backup-postgres.sh        pg_dump 6 h + pgBackRest + Storage Box + hors Hetzner
     ├── backup-minio.sh           mc mirror + archive chiffrée + Storage Box
-    ├── backup-caddy.sh           magasin TLS (certificats des 2 domaines) + Storage Box
-    ├── restore-test.sh           TEST DE RESTAURATION NOCTURNE (critère L0)
-    └── install-cron.sh           planification des quatre tâches ci-dessus
+    ├── backup-caddy.sh           magasin TLS + Storage Box
+    ├── restore-test.sh           test de restauration (critère L0)
+    ├── install-cron.sh           planification des quatre tâches ci-dessus
+    └── empreinte-docker.sh       empreinte des images
 ```
+
+> `postgres/healthcheck.sh`, `postgres/stanza-create.sh` et `scripts/empreinte-docker.sh`
+> manquaient à l'arborescence précédente. Ajoutés ici après `find`.
 
 ---
 
-## 1. Prérequis
+## 3. Développement local — la seule chose que `pnpm infra:*` sache faire
 
-| Poste          | Outils                                                                                                                                   |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Machine de dev | Docker Engine + **Docker Compose ≥ 2.24** (balises `!reset`/`!override`), Node 22, pnpm 9, git                                           |
-| VPS            | Ubuntu LTS fraîchement loué (Hetzner Falkenstein/Nuremberg — 02 §4.2), une clé SSH publique déjà déposée pour le compte d'administration |
-| Hors serveur   | Storage Box Hetzner (02 §11.4) + un second remote `rclone` **hors Hetzner** (règle 3-2-1)                                                |
-
-Vérification :
+**État : PARTIELLEMENT JOUÉ.** Le démarrage a été joué et documenté (`DECISIONS.md`,
+`docs/journal/`). **Le test de restauration local n'a jamais été joué** — voir §6.1.
 
 ```bash
-docker compose version     # attendu : Docker Compose version v2.24.x ou supérieur
+cp .env.example .env          # JAMAIS commité — .env est gitignoré
+# Remplacer les __CHANGEME__ par des valeurs LOCALES :
+#   openssl rand -base64 32  (mots de passe)   ·  openssl rand -hex 64 (JWT)
+#   openssl rand -hex 32     (APP_ENCRYPTION_KEY)
+#   PUBLIC_BASE_URL=http://localhost:8080 · CADDY_SITE_ADDRESS=:8080
+#   CADDY_STAGING_SITE_ADDRESS=:8081  (bloc inerte en local, mais OBLIGATOIRE :
+#   une adresse de site vide empêcherait Caddy de démarrer)
+#   CADDY_FRONT_CONFIG=/etc/caddy/fronts.dev.caddy
+pnpm infra:up                 # = docker compose --env-file .env -f infra/docker-compose.yml up -d --wait
 ```
 
----
+| Script                    | Ce qu'il fait vraiment                                          | Cible                          |
+| ------------------------- | --------------------------------------------------------------- | ------------------------------ |
+| `pnpm infra:up`           | `up -d --wait` sur la pile de dév                               | **poste local uniquement**     |
+| `pnpm infra:down`         | `down`                                                          | **poste local uniquement**     |
+| `pnpm infra:logs`         | `logs -f`                                                       | **poste local uniquement**     |
+| `pnpm infra:reset`        | `down -v` — **DONNÉES EFFACÉES**                                | **poste local uniquement**     |
+| `pnpm infra:config`       | `config -q` (syntaxe seule, jamais l'existence des chemins)     | **poste local uniquement**     |
+| `pnpm infra:restore-test` | voir **§6.1** — exige désormais un chemin de `.env` en argument | serveur, montage « VPS dédié » |
 
-## 2. Développement local
+> **`pnpm infra:config` ne valide PAS `docker-compose.coolify.yml`**, et le valider avec la
+> commande habituelle donnerait un faux résultat (répertoire de projet différent). La bonne
+> commande est dans l'en-tête du fichier :
+> `docker compose --project-directory . -f infra/docker-compose.coolify.yml config -q`.
+> Ce que `config -q` ne dit jamais, c'est si les chemins **existent** : c'est le rôle de
+> `pnpm check:compose-coolify` (`AMELIORATIONS.md`, 2026-08-28).
 
-```bash
-# 1. Fichier d'environnement local (JAMAIS commité — .env est gitignoré)
-cp .env.example .env
-# 2. Remplacer les __CHANGEME__ par des valeurs LOCALES :
-#    openssl rand -base64 32   (mots de passe)     openssl rand -hex 64 (JWT)
-#    openssl rand -hex 32      (APP_ENCRYPTION_KEY)
-#    En local : PUBLIC_BASE_URL=http://localhost:8080, CADDY_SITE_ADDRESS=:8080
-#    et CADDY_STAGING_SITE_ADDRESS=:8081 (second bloc de site, inerte en local —
-#    voir la note ci-dessous ; la variable est OBLIGATOIRE, une adresse de site
-#    vide empêcherait Caddy de démarrer).
-# 3. Démarrage de la pile complète (depuis la RACINE du dépôt)
-docker compose --env-file .env -f infra/docker-compose.yml up -d --build
-```
+### Sortie attendue, service par service (pile de DÉV)
 
-### Sortie attendue, service par service
-
-```bash
-docker compose --env-file .env -f infra/docker-compose.yml ps
-```
-
-| Service         | État attendu   | Contrôle                                                                         |
-| --------------- | -------------- | -------------------------------------------------------------------------------- |
-| `postgres`      | `Up (healthy)` | `pg_isready` répond sur la base `axion_audit`                                    |
-| `redis`         | `Up (healthy)` | `redis-cli ping` → `PONG` (authentifié)                                          |
-| `minio`         | `Up (healthy)` | `mc ready local` → OK                                                            |
-| `createbuckets` | `Exited (0)`   | log : `buckets et utilisateur applicatif restreint prets.`                       |
-| `api`           | `Up (healthy)` | `GET /v1/health` → 200                                                           |
-| `worker`        | `Up (healthy)` | **battement Redis frais + un travailleur attaché aux 5 files** (voir ci-dessous) |
-| `field`         | `Up (healthy)` | Vite sert `/`                                                                    |
-| `hq`            | `Up (healthy)` | Vite sert `/hq/`                                                                 |
-| `caddy`         | `Up (healthy)` | API d'admin locale répond                                                        |
-
-Contrôles fonctionnels :
+| Service         | État attendu   | Contrôle                                                       |
+| --------------- | -------------- | -------------------------------------------------------------- |
+| `postgres`      | `Up (healthy)` | `pg_isready` sur `axion_audit`                                 |
+| `redis`         | `Up (healthy)` | `redis-cli ping` → `PONG` (authentifié)                        |
+| `minio`         | `Up (healthy)` | `mc ready local` → OK                                          |
+| `createbuckets` | `Exited (0)`   | log : `buckets et utilisateur applicatif restreint prets.`     |
+| `api`           | `Up (healthy)` | `GET /v1/health` → 200                                         |
+| `worker`        | `Up (healthy)` | battement Redis frais **+** un travailleur attaché aux 5 files |
+| `field`         | `Up (healthy)` | Vite sert `/`                                                  |
+| `hq`            | `Up (healthy)` | Vite sert `/hq/`                                               |
+| `caddy`         | `Up (healthy)` | API d'admin locale répond                                      |
 
 ```bash
 curl -i http://localhost:8080/api/v1/health   # 200 + JSON de santé
 curl -i http://localhost:8080/                # 200, PWA terrain
 curl -i http://localhost:8080/hq/             # 200, console siège
-curl -sI http://localhost:8080/ | grep -i content-security-policy   # CSP présente
+curl -sI http://localhost:8080/ | grep -i content-security-policy
 ```
 
 > **`Up (healthy)` sur le `worker` n'a pas toujours voulu dire quelque chose.** Jusqu'au
 > 2026-08-28, sa sonde était `pgrep -f node` : elle voyait le `tsc --watch` du lanceur de
-> développement et restait verte pendant que le worker était **mort au démarrage** — il ne démarrait
-> pas du tout depuis le lot L0. `docker ps` a affiché « Up 13 hours (healthy) » sur un conteneur dont
-> la première ligne de journal était une pile d'exception, et le critère L0 « `docker compose up` =
-> stack complète » a été coché sur cette apparence. La sonde actuelle
-> (`apps/worker/src/sonde-sante.ts`) vérifie un **battement écrit par le processus lui-même** dans
-> Redis et **l'attachement d'un travailleur de CE conteneur à chacune des cinq files**. Ce qu'elle
-> ne prouve pas est écrit noir sur blanc dans `apps/worker/README.md` — lisez-le avant de vous
-> appuyer dessus. En cas de rouge :
->
-> ```bash
-> docker inspect --format '{{json .State.Health}}' <conteneur worker>   # la sortie de la sonde
-> ```
+> développement et restait verte pendant que le worker était **mort au démarrage**. La sonde
+> actuelle (`apps/worker/src/sonde-sante.ts`) vérifie un battement écrit par le processus lui-même
+> dans Redis **et** l'attachement d'un travailleur de CE conteneur à chacune des cinq files. Ce
+> qu'elle ne prouve pas est écrit dans `apps/worker/README.md`. En cas de rouge :
+> `docker inspect --format '{{json .State.Health}}' <conteneur worker>`.
 
-> **Le second bloc de site (staging) est INERTE en local.** Le `Caddyfile` porte deux blocs
-> depuis l'arbitrage du 2026-08-27 (`DECISIONS.md`, « Cohabitation staging/prod : qui écoute
-> sur 443 ? ») : `:8080` pour la pile courante, `:8081` pour la pile de staging. En local, le
-> port `8081` **n'est pas publié** et les upstreams `staging-api` / `staging-field` /
-> `staging-hq` n'existent pas — le bloc se charge, ne sert rien, et ne gêne rien. Il n'a de
-> conteneurs en face que sur le VPS. Rien à faire en développement.
+### Deux modes de service des fronts, jamais mélangés
 
-**PREMIER DÉMARRAGE — ÉTAPE N°1, avant tout le reste.** Initialisation **unique** du dépôt de
-sauvegarde. `archive_mode` est à `on` dès le premier démarrage (`postgres/postgresql.custom.conf`) :
-tant que la stanza n'existe pas, `archive_command` échoue à chaque WAL, les journaux s'accumulent
-dans `pg_wal` et **il n'existe aucune sauvegarde restaurable**. C'est le **point de contrôle n°1
-de la porte P-A côté sauvegardes** (`DECISIONS.md`, « Points d'infrastructure actés sans
-réserve », point 12) :
-
-```bash
-docker compose --env-file .env -f infra/docker-compose.yml \
-  exec --user postgres postgres pgbackrest --stanza=axion stanza-create
-docker compose --env-file .env -f infra/docker-compose.yml \
-  exec --user postgres postgres pgbackrest --stanza=axion check
-# attendu : "check command end: completed successfully"
-```
-
-Arrêt / remise à zéro totale :
-
-```bash
-docker compose --env-file .env -f infra/docker-compose.yml down          # arrêt
-docker compose --env-file .env -f infra/docker-compose.yml down -v       # + DONNÉES EFFACÉES
-```
-
----
-
-## 2 bis. Comment les fronts sont servis — deux modes, jamais mélangés
-
-Arbitrage A01 du 2026-08-27 (`DECISIONS.md`, « Comment les fronts sont servis en production »),
-après la revue croisée **B-7**.
+Arbitrage A01 du 2026-08-27 (`DECISIONS.md`), revue croisée B-7. **Le mode « staging/prod » de ce
+tableau a été MESURÉ sur `axionia-web` (§1) : il est exact.**
 
 |                            | **Développement local**   | **Staging et production**                                     |
 | -------------------------- | ------------------------- | ------------------------------------------------------------- |
@@ -198,185 +204,412 @@ après la revue croisée **B-7**.
 | Ce que fait Caddy          | `reverse_proxy` vers Vite | `root` + `file_server` + repli SPA                            |
 | Fichier de config chargé   | `caddy/fronts.dev.caddy`  | `caddy/fronts.static.caddy`                                   |
 
-**Pourquoi Caddy sert lui-même les fichiers en production.** Ce n'est pas l'économie d'un
-composant, c'est la PWA : Caddy doit **maîtriser lui-même le `Cache-Control` du service worker**
-(`no-cache, no-store, must-revalidate`) et le **repli SPA** (`try_files … /index.html`). La mise à
-jour applicative (§31) et le démarrage hors ligne (invariant 1) dépendent exactement de ces
-en-têtes ; les déléguer à un serveur intermédiaire, c'est perdre le seul mécanisme qui décide de
-la version que voit un iPad en clientèle.
+**Pourquoi Caddy sert lui-même les fichiers.** Ce n'est pas l'économie d'un composant, c'est la
+PWA : Caddy doit maîtriser lui-même le `Cache-Control` du service worker
+(`no-cache, no-store, must-revalidate`) et le repli SPA (`try_files … /index.html`). La mise à jour
+applicative et le démarrage hors ligne (invariant 1) dépendent exactement de ces en-têtes.
 
-**Pourquoi le mode dev reste un `reverse_proxy`.** Le rechargement à chaud est tout l'intérêt du
-mode développement : le servir depuis un volume de fichiers construits le supprimerait.
-
-**Pourquoi aucune sonde sur les jobs.** Un conteneur sorti n'a pas de vivacité à mesurer. Une
-sonde qui ne peut pas réussir est **pire qu'une sonde absente** : elle bloque indéfiniment tout ce
-qui en dépend. Ce qui prouve le succès d'un job, c'est son **code de sortie** — ce que
-`service_completed_successfully` vérifie, et qui garantit au passage que le volume contient bien
-un build avant que Caddy ne commence à servir.
-
-**La bascule.** Le `Caddyfile` fait `import {$CADDY_FRONT_CONFIG}`. Les deux fichiers définissent
-les **mêmes** noms de snippets (`fronts_principal`, `fronts_staging`), donc les blocs de site ne
-changent jamais. Les deux variantes sont montées dans tous les environnements ; seule la variable
-choisit. **Sur le VPS, elle est imposée par la surcharge Compose et non lue dans le `.env`** : le
-mode de service découle de la forme du déploiement, pas d'un réglage d'exploitant — un `.env` de
-prod portant la valeur `dev` mettrait le site entier en 502.
-
-> **La posture de sécurité ne change pas d'un mode à l'autre.** Le snippet `(securite)` du
-> `Caddyfile` (HSTS, CSP, `nosniff`, `Permissions-Policy`, règles de cache) est appliqué **avant**
-> l'import, à l'identique en dev, en staging et en prod. Un dev plus permissif ne validerait rien.
-
-**Ports internes — un port par application, identique dedans et dehors** (`DECISIONS.md`, « Points
-d'infrastructure actés sans réserve », point 9) :
-
-| Application | Port interne         | Publié en dev sur | Publié en staging/prod |
-| ----------- | -------------------- | ----------------- | ---------------------- |
-| `api`       | `${API_PORT}` (3000) | — (via Caddy)     | —                      |
-| `field`     | 5173                 | `127.0.0.1:5173`  | aucun (job one-shot)   |
-| `hq`        | **5174**             | `127.0.0.1:5174`  | aucun (job one-shot)   |
+**Pourquoi aucune sonde sur les jobs.** Un conteneur sorti n'a pas de vivacité à mesurer. Une sonde
+qui ne peut pas réussir est pire qu'une sonde absente : elle bloque indéfiniment tout ce qui en
+dépend. Ce qui prouve le succès d'un job, c'est son **code de sortie** — ce que
+`service_completed_successfully` vérifie.
 
 **Fichiers obsolètes dans les volumes de build.** Le job fait `cp -a`, pas une synchronisation
-destructive : les assets d'une version précédente restent en place. C'est **voulu** — un client
-qui a chargé l'ancienne page peut encore récupérer ses fragments pendant la bascule. Le ménage se
-fait en supprimant le volume et en redéployant, jamais pendant une journée de collecte.
+destructive : les assets d'une version précédente restent en place. C'est **voulu** — un client qui
+a chargé l'ancienne page peut encore récupérer ses fragments pendant la bascule. Le ménage se fait
+en supprimant le volume et en redéployant, jamais pendant une journée de collecte.
 
 ---
 
-## 3. Provisionnement du VPS, pas à pas (L0-b)
+## 4. LE STAGING TEL QU'IL EST — tout ce qui suit est MESURÉ
 
-> **Ne fermez jamais votre session SSH courante** tant que le nouvel accès n'est pas testé.
+Hôte : `axionia-web` / `178.105.55.15`, Ubuntu, noyau `6.8.0-124-generic`
+(`ssh axionia-web 'hostname; uname -a'`).
+Cette machine héberge **aussi la production `axion-ia.com`**. Voir
+`infra/COHABITATION_AXIONIA_WEB.md` avant toute manœuvre.
 
-> ## ⛔ ARRÊTEZ-VOUS AVANT DE LANCER CETTE COMMANDE SUR UNE MACHINE HABITÉE
->
-> **Ce script est écrit pour un serveur NEUF ET VIDE.** Sur une machine qui héberge déjà quelque
-> chose — c'est le cas de `axionia-web`, qui sert `axion-ia.com` — il fait au moins trois choses
-> dangereuses, vérifiées ligne à ligne par l'agent sécurité A54 :
->
-> 1. **il fait passer SSH du port 22 au port 2222** et redémarre le démon. Les sessions ouvertes
->    survivent, **toute nouvelle connexion sur 22 échoue**. C'est le meilleur moyen de se verrouiller
->    dehors de son propre serveur ;
-> 2. **il active un pare-feu UFW aujourd'hui inactif**, ce qui coupe l'accès humain à SSH sur 22 —
->    sans pour autant refermer les ports publiés par Docker, dont les règles sont évaluées AVANT
->    celles d'UFW ;
-> 3. **il installe Docker CE** alors qu'une autre installation est peut-être déjà là. Le remplacement
->    redémarre le démon, donc **arrête tous les conteneurs, y compris le site de production**.
->
-> Un quatrième effet ne se produit pas ici par chance de conception : `userns-remap` n'est écrit que
-> si `/etc/docker/daemon.json` est absent. Si ce fichier venait à disparaître, le remappage des UID
-> s'appliquerait à **tous les volumes existants** — la base PostgreSQL du voisin ne redémarrerait plus.
->
-> **Sur `axionia-web`, on n'exécute PAS ce script.** On en reprend à la main la seule partie
-> inoffensive : vérifier Docker, créer l'arborescence, créer l'utilisateur de déploiement. Le
-> durcissement SSH et le pare-feu appartiennent à celui qui connaît la machine.
->
-> Procédure complète : **`infra/COHABITATION_AXIONIA_WEB.md`**.
+Identifiants Coolify (non secrets, déjà tracés dans `DECISIONS.md` 2026-08-28) :
+console `http://178.105.55.15:8000` · serveur `l877luxxpv1mx96sss7tc6zj` · projet `axion-audit` ·
+ressource `axion-audit-staging` · **uuid d'application `wrunr6mwq2oxqq392i4myzjn`**.
+
+**Cet uuid est le préfixe de tout.** Il apparaît ci-dessous dans les noms de conteneurs, de volumes
+et d'un réseau. Il est noté `<uuid>` quand la forme compte plus que la valeur.
+
+### 4.1 Où Coolify range réellement les fichiers
 
 ```bash
-# 3.1 — Depuis votre poste : déposer votre clé publique AVANT tout durcissement
-ssh-copy-id root@<IP>
-
-# 3.2 — Sur le VPS : cloner le dépôt à l'emplacement d'exploitation
-ssh root@<IP>
-mkdir -p /opt/axion-audit
-git clone git@github.com:<compte>/axion-audit.git /opt/axion-audit/repo
-
-# 3.3 — Durcissement complet (06 §10.3) — IDEMPOTENT, rejouable
-/opt/axion-audit/repo/infra/scripts/provision-vps.sh --ssh-port 2222 --admin-user root
+ssh axionia-web 'ls -la /data/coolify/applications/wrunr6mwq2oxqq392i4myzjn'
 ```
 
-Ce que le script fait, dans l'ordre : paquets · **refus de continuer si aucune clé SSH n'est
-installée** · SSH clés uniquement sur le port choisi · fail2ban · UFW (SSH + 80 + 443, tout le
-reste refusé) · Docker CE + Compose · `userns-remap` · `unattended-upgrades` (sans redémarrage
-automatique) · réseau et volumes partagés (7bis) · `/opt/axion-audit` + `/var/log/axion`
+```
+drwxr-xr-x 5 root root  4096  caddy/          ← RÉPERTOIRES VIDES créés par Docker (voir convention 4)
+-rw-r--r-- 1 root root 30883  docker-compose.yaml   ← LE COMPOSE RÉELLEMENT APPLIQUÉ (rendu par Coolify)
+-rw-r--r-- 1 root root  2464  .env                  ← LES SECRETS DU STAGING
+drwxr-xr-x 5 root root  4096  infra/          ← idem, vides
+drwxr-xr-x 3 root root  4096  pgbackrest/     ← idem, vides
+drwxr-xr-x 3 root root  4096  postgres/       ← idem, vides
+-rw-r--r-- 1 root root    79  README.md       ← posé par Coolify : nom de ressource + date du dernier déploiement
+```
 
-- `/var/backups/axion` · **deux** fichiers `.env` (`prod/` et `staging/`) créés depuis
-  `.env.example` en `root:600` — et **aucun** à la racine.
+| Ce que le pack demande          | Ce qu'il y a réellement                                            |
+| ------------------------------- | ------------------------------------------------------------------ |
+| `/opt/axion-audit/staging/.env` | `/data/coolify/applications/wrunr6mwq2oxqq392i4myzjn/.env`         |
+| une copie du dépôt              | **aucune** — Coolify clone dans un conteneur d'assistance éphémère |
+| `.env` en `root:root` `600`     | `root:root` **644**, répertoire parent `755`                       |
 
-Il **s'arrête ensuite volontairement** : il ne pose **aucun secret** (02 §30.4-2).
+> **⚠️ ÉCART DE SÉCURITÉ OUVERT — le `.env` du staging est lisible par tout compte local de la
+> machine.** Mesuré : `stat -c '%n %U:%G %a' …/.env` → `644`. Le 02 §30.4-2 impose `600`. Cette
+> machine héberge aussi la production d'un tiers. **Ce n'est pas corrigé ici** : le fichier est
+> posé par Coolify à chaque déploiement, un `chmod` manuel serait effacé au suivant, et le corriger
+> durablement demande un arbitrage (réglage Coolify, ou renoncement tracé). Le gardien A02 a inscrit
+> le point à la porte P-A (`docs/portes/PORTE_A_2026-08-27.md`, critère 3).
+
+**Le compose rendu n'est pas notre fichier.** Coolify lit
+`infra/docker-compose.coolify.yml` depuis le dépôt cloné, le **réécrit**, et dépose le résultat
+dans `docker-compose.yaml` (fichier de 30 883 octets ci-dessus). **C'est ce fichier-là qui décrit
+la réalité**, pas le nôtre. Les réécritures sont énumérées au §4.3.
+
+Le chemin visible dans les étiquettes des conteneurs
+(`com.docker.compose.project.working_dir = /artifacts/zswdybh053dzer678q4th1v9`) **n'existe pas sur
+l'hôte** (`ls /artifacts` → `No such file or directory`) : c'est le répertoire du conteneur
+d'assistance de build, détruit après le déploiement. Ne le cherchez pas.
+
+### 4.2 Les noms réels
 
 ```bash
-# 3.4 — DEPUIS UN AUTRE TERMINAL, vérifier le nouvel accès avant de fermer l'ancien
-ssh -p 2222 root@<IP> 'ufw status verbose && docker compose version'
+ssh axionia-web 'docker ps -a --filter label=coolify.resourceName=axion-audit-staging \
+  --format "{{.Names}}\t{{.Status}}"'
 ```
 
-Sortie attendue : `Status: active`, `22/tcp` **absent**, `2222/tcp ALLOW`, `80/tcp ALLOW`,
-`443/tcp ALLOW`, `443/udp ALLOW`, aucun port 5432/6379/9000.
+Relevé du 2026-08-28 06h44 UTC :
 
-### 3.5 — Deux prérequis à poser AVANT le premier `up`
+| Service         | Nom du conteneur                    | État           |
+| --------------- | ----------------------------------- | -------------- |
+| `postgres`      | `postgres-<uuid>-064303737694`      | `Up (healthy)` |
+| `redis`         | `redis-<uuid>-064303768575`         | `Up (healthy)` |
+| `minio`         | `minio-<uuid>-064303784563`         | `Up (healthy)` |
+| `createbuckets` | `createbuckets-<uuid>-064303802769` | `Exited (0)` ✔ |
+| `api`           | `api-<uuid>-064303822542`           | `Up (healthy)` |
+| `worker`        | `worker-<uuid>-064303889626`        | `Up (healthy)` |
+| `field`         | `field-<uuid>-064303929685`         | `Exited (0)` ✔ |
+| `hq`            | `hq-<uuid>-064303938589`            | `Exited (0)` ✔ |
+| `caddy`         | `caddy-<uuid>-064303947501`         | `Up (healthy)` |
 
-**a. Enregistrements DNS — à créer AVANT le premier démarrage.** Le 02 §11.2 place le staging
-sur un **sous-domaine** du même VPS ; depuis l'arbitrage du 2026-08-27 (`DECISIONS.md`,
-« Cohabitation staging/prod : qui écoute sur 443 ? »), l'unique Caddy demande donc **deux**
-certificats ACME.
+> **⚠️ N'ÉCRIVEZ JAMAIS UN NOM DE CONTENEUR EN DUR DANS UN SCRIPT OU UNE PROCÉDURE.** Le suffixe
+> change **à chaque déploiement** : entre deux relevés espacés de six minutes, il est passé de
+> `051636151140` à `064303737694`. Résolvez toujours le nom :
+>
+> ```bash
+> PG=$(ssh axionia-web 'docker ps --format "{{.Names}}" | grep "^postgres-wrunr" | head -1')
+> ```
 
-| Nom                       | Type | Valeur     |
-| ------------------------- | ---- | ---------- |
-| `audit.<domaine>`         | A    | `<IP VPS>` |
-| `audit-staging.<domaine>` | A    | `<IP VPS>` |
+**Volumes réels** (`docker volume ls`) — **huit**, tous préfixés par l'uuid, avec des **tirets** là
+où le fichier écrit des **soulignés** :
 
-Si un enregistrement manque, la validation HTTP-01 échoue, **Caddy retente en boucle** (backoff
-croissant, le conteneur reste « up » mais le site est inaccessible) et Let's Encrypt plafonne
-les échecs répétés — on se retrouve bloqué pour des heures. Vérifier AVANT de démarrer :
+```
+wrunr6mwq2oxqq392i4myzjn_postgres-data
+wrunr6mwq2oxqq392i4myzjn_pgbackrest-repo
+wrunr6mwq2oxqq392i4myzjn_redis-data
+wrunr6mwq2oxqq392i4myzjn_minio-data
+wrunr6mwq2oxqq392i4myzjn_field-dist
+wrunr6mwq2oxqq392i4myzjn_hq-dist
+wrunr6mwq2oxqq392i4myzjn_caddy-data
+wrunr6mwq2oxqq392i4myzjn_caddy-config
+```
+
+**Réseaux réellement attachés** (`docker inspect --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}'`) :
+
+| Service                                       | Réseaux                                                                    |
+| --------------------------------------------- | -------------------------------------------------------------------------- |
+| `postgres`, `redis`, `minio`, `api`, `worker` | `axion-audit-coolify-interne` · `wrunr6mwq2oxqq392i4myzjn`                 |
+| `caddy`                                       | `axion-audit-coolify-interne` · `wrunr6mwq2oxqq392i4myzjn` · **`coolify`** |
+
+Seul `caddy` touche `coolify`, le réseau du proxy Traefik. C'est une **exigence de sécurité**, pas
+une élégance : A54 a mesuré que ce réseau a l'ICC activé, donc tout conteneur qui le rejoint obtient
+une route directe vers la base PostgreSQL et le Redis d'`axion-ia.com` (02 §30.4-4). La propriété est
+gardée par `pnpm check:isolation-reseau` (`AMELIORATIONS.md`, 2026-08-28).
+
+### 4.3 Les cinq conventions propres à Coolify
+
+Elles sont **documentées ailleurs, et elles font foi ailleurs** : les quatre premières dans les
+encadrés d'en-tête de `infra/docker-compose.coolify.yml` et dans `DECISIONS.md` / `AMELIORATIONS.md`
+du 2026-08-28. Ce tableau ne les remplace pas, il les rassemble pour l'exploitant et renvoie.
+
+| #   | Convention                                                                                                                                                                   | Conséquence à l'exploitation                                                                                                                                                                                                                                                                                                                                      | Où c'est tranché                                                            |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| 1   | **Un seul `-f`, aucune surcharge** → `docker-compose.coolify.yml` est autoportant, donc **dupliqué**                                                                         | toute modification de `docker-compose.yml` doit être reportée à la main. **Rien ne le vérifie.**                                                                                                                                                                                                                                                                  | en-tête du fichier · `AMELIORATIONS.md` (« la troisième convention d'A11 ») |
+| 2   | **Le répertoire de projet est la RACINE du dépôt**, pas `infra/` — l'inverse des trois autres fichiers                                                                       | valider avec `docker compose --project-directory . -f infra/docker-compose.coolify.yml config -q`                                                                                                                                                                                                                                                                 | en-tête du fichier · `pnpm check:compose-coolify`                           |
+| 3   | **Aucune interpolation dans un chemin de volume**                                                                                                                            | a coûté un déploiement                                                                                                                                                                                                                                                                                                                                            | `AMELIORATIONS.md` 2026-08-28 · `pnpm check:compose-coolify`                |
+| 4   | **Aucun fichier du dépôt n'est monté** : Coolify réécrit tout montage relatif vers `/data/coolify/applications/<uuid>/`, où il ne dépose que `docker-compose.yaml` et `.env` | la configuration (Caddyfile, `postgresql.custom.conf`, `pgbackrest.conf`) est **embarquée dans les images**. **Plus de « je corrige et je redémarre » : tout changement exige un redéploiement complet.** Les répertoires `caddy/`, `infra/`, `postgres/`, `pgbackrest/` vus au §4.1 sont les **coquilles vides** que Docker crée à la place des sources absentes | en-tête du fichier · `DECISIONS.md` 2026-08-28                              |
+| 5   | **Coolify réécrit les noms de volumes et injecte un troisième réseau**                                                                                                       | voir l'encadré ci-dessous — **c'est celle qui casse les scripts** (§6)                                                                                                                                                                                                                                                                                            | mesuré ici, 2026-08-28                                                      |
+
+> **Convention 5, en détail, parce que c'est celle qui trompe.**
+> `infra/docker-compose.coolify.yml` déclare huit volumes avec un `name:` **explicite**
+> (`axion-coolify-postgres-data`, etc.) et deux réseaux (`axion-audit-coolify-interne`, `coolify`).
+>
+> Dans le compose **rendu**, Coolify :
+>
+> - **conserve** les huit déclarations `axion-coolify-*` — mais **plus aucun service n'y fait
+>   référence** : elles sont orphelines, et `docker volume ls` confirme qu'**aucune n'est créée** ;
+> - **ajoute** huit volumes `wrunr6mwq2oxqq392i4myzjn_<nom-a-tirets>` et **réécrit chaque montage de
+>   service** vers eux :
+>   `- 'wrunr6mwq2oxqq392i4myzjn_postgres-data:/var/lib/postgresql/data'` ;
+> - **ajoute** un troisième réseau `wrunr6mwq2oxqq392i4myzjn`, déclaré `external: true`, attaché à
+>   **tous** les services. Le réseau `axion-audit-coolify-interne` que nous nommons, lui, **survit**.
+>
+> Vérification :
+>
+> ```bash
+> ssh axionia-web 'docker volume ls --format "{{.Name}}" | grep -c axion-coolify'   # → 0
+> ssh axionia-web 'grep -n "postgres-data:/var/lib/postgresql/data" \
+>   /data/coolify/applications/wrunr6mwq2oxqq392i4myzjn/docker-compose.yaml'
+> ```
+>
+> **Le `name:` que nous écrivons ne fait donc PAS autorité sur le staging.** Ne construisez aucune
+> procédure de sauvegarde ou de restauration sur les noms `axion-coolify-*` : ils n'existent pas.
+
+### 4.4 Regarder le staging — commandes vérifiées
 
 ```bash
-dig +short audit.<domaine> audit-staging.<domaine>   # DEUX fois l'IP du VPS
+# Résoudre les noms (ils changent à chaque déploiement)
+PG=$(ssh axionia-web 'docker ps --format "{{.Names}}" | grep "^postgres-wrunr" | head -1')
+CADDY=$(ssh axionia-web 'docker ps --format "{{.Names}}" | grep "^caddy-wrunr"   | head -1')
+
+# Santé de l'API, vue à travers NOTRE Caddy, sans passer par Traefik
+ssh axionia-web "docker exec $CADDY wget -qO- http://localhost:8080/api/v1/health"
+# MESURÉ 2026-08-28 : {"status":"ok"}  + CSP complète, HSTS, X-Frame-Options: DENY, Via: 1.1 Caddy
+
+# État de pgBackRest  (⚠️ le rôle PostgreSQL est `axion`, PAS `postgres`)
+ssh axionia-web "docker exec --user postgres $PG pgbackrest --stanza=axion info"
+ssh axionia-web "docker exec --user postgres $PG \
+  psql -U axion -d axion_audit -c 'SELECT archived_count, failed_count, last_archived_wal FROM pg_stat_archiver;'"
+
+# Journaux d'un service
+ssh axionia-web "docker logs --tail 100 $PG"
 ```
 
-> **Sur `axionia-web`, ACME n'est pas de notre ressort** (`DECISIONS.md` 2026-08-28) : c'est le
-> Traefik de Coolify qui obtient et renouvelle le certificat de `audit-staging.axion-ia.com`, et
-> l'enregistrement DNS pointe l'IP de cette machine. Le tableau ci-dessus décrit le montage à
-> **deux certificats servis par notre Caddy**, qui reste celui de la production sur un VPS dédié.
+> **Le rôle PostgreSQL est `axion`.** `psql` sans `-U` échoue avec
+> `FATAL: role "postgres" does not exist`. L'ancienne version de ce runbook (§5.3) donnait la
+> commande sans `-U` : elle ne pouvait pas fonctionner.
 
-**b. Réseau de liaison ET volumes partagés des fronts.** `provision-vps.sh` les crée
-(étape 7bis) : un réseau (l’API de staging, joignable par le Caddy de prod) et deux volumes
-(les fichiers construits des fronts de staging, que ce même Caddy sert — voir §2 bis).
-Tous trois sont déclarés
-`external` dans les deux surcharges Compose : l’absence de l’un d’eux fait échouer `up`
-immédiatement, plutôt que de démarrer une prod à moitié câblée.
+### 4.5 Ce qui n'est PAS sur la machine, et qu'il ne faut pas chercher
 
-```bash
-docker network inspect axion-edge-staging >/dev/null && echo 'réseau de liaison présent'
-docker volume  inspect axion-staging-field-dist >/dev/null && echo 'volume field staging présent'
-docker volume  inspect axion-staging-hq-dist    >/dev/null && echo 'volume hq staging présent'
-# à défaut : docker volume create axion-staging-field-dist axion-staging-hq-dist
-# à défaut : docker network create --driver bridge axion-edge-staging
-```
+| Absent (MESURÉ)                           | Conséquence                                                               |
+| ----------------------------------------- | ------------------------------------------------------------------------- |
+| `/opt/axion-audit` (toute l'arborescence) | aucune racine d'exploitation, aucun `.env` par environnement              |
+| **une copie du dépôt**                    | **aucun script de `infra/scripts/` n'est exécutable sur ce serveur** (§6) |
+| `/var/backups/axion`, `/var/log/axion`    | aucune sauvegarde locale, aucun rapport horodaté                          |
+| `/etc/cron.d/axion-audit`                 | aucune tâche planifiée pour Axion Audit                                   |
+| `/root/.ssh/storagebox_ed25519`           | aucun accès Storage Box → **aucune copie hors serveur**                   |
+| `rclone`                                  | la règle 3-2-1 n'est pas outillée                                         |
+| l'image `axion-audit-postgres:16`         | l'image du staging est **`axion-audit-postgres:16-coolify`**              |
 
-Sur le réseau de liaison : le `caddy` de la pile de prod et **la seule `api`** de staging —
-jamais Postgres, Redis, MinIO ni le worker. Les fronts de staging n’y sont pas non plus :
-ce sont des jobs one-shot, Caddy ne les JOINT pas, il LIT leurs fichiers dans les volumes
-(§2 bis). La séparation du 02 §30.4-4 tient : aucun conteneur de staging n’a de route vers
-la base, les buckets ou Redis de la prod, et les volumes partagés ne contiennent que du
-HTML/JS/CSS publiquement servi — aucune donnée, aucun secret.
+**Ce qui est présent sur l'hôte** (`command -v`) : `docker`, `bash`, `gpg`, `curl`, `openssl`,
+`sha256sum`, `rsync`.
+
+> **Un voisin fait le ménage.** Le crontab de `root` appartient à `axion-ia` et contient
+> `0 */6 * * * /usr/bin/docker image prune -af`. **Toute image Docker non utilisée est supprimée
+> toutes les six heures**, y compris les nôtres. C'est un fait de l'environnement, pas un réglage à
+> nous : n'écrivez aucune procédure qui suppose qu'une image inutilisée survivra à la nuit.
+
+### 4.6 Accès public — état au 2026-08-28
+
+| Fait                                             | Mesure                                                           |
+| ------------------------------------------------ | ---------------------------------------------------------------- |
+| `PUBLIC_BASE_URL` du `.env`                      | `https://audit-staging.axion-ia.com`                             |
+| DNS de ce nom                                    | `getent hosts audit-staging.axion-ia.com` → **non résolu**       |
+| Domaine réellement posé sur la ressource Coolify | `COOLIFY_FQDN=wrunr6mwq2oxqq392i4myzjn.178.105.55.15.sslip.io`   |
+| Réponse publique                                 | **404** à 06h41 UTC (aucun routeur Traefik), **504** à 06h47 UTC |
+
+**Le staging n'était joignable de l'extérieur à aucun des deux relevés.** À 06h41 le conteneur
+`caddy` ne portait **aucune étiquette Traefik** ; à 06h47 (après un redéploiement lancé par un autre
+agent) les étiquettes existaient —
+`traefik.http.routers.http-0-<uuid>-caddy.rule=Host(`…sslip.io`) && PathPrefix(`/`)` — mais **aucune
+étiquette `loadbalancer.server.port`** : Traefik choisit alors le premier port exposé (80), là où
+notre Caddy écoute sur **8080**, d'où le 504.
+
+> **NE FIGEZ PAS CE POINT** : un autre agent travaillait sur le port cible de Traefik à l'heure du
+> relevé. **Ce qui est acquis**, en revanche : la pile répond correctement en interne
+> (`{"status":"ok"}` par `docker exec`), donc la panne est **de routage, pas d'application**.
+> `PUBLIC_BASE_URL` désigne un nom qui ne résout pas : c'est un second point à traiter, distinct.
 
 ---
 
-## 4. Pose des secrets (à la main, 02 §30.4-2)
+## 5. SAUVEGARDE ET RESTAURATION — L'ÉTAT RÉEL, SANS ENJOLIVEMENT
 
-> ### Convention de chemin du `.env` — une seule, sans exception
->
-> ```
-> /opt/axion-audit/<env>/.env        avec <env> ∈ { staging, prod }
-> ```
->
-> **Il n'existe PAS de `/opt/axion-audit/.env`.** Le 02 §30.4-4 impose des valeurs distinctes par
-> environnement : un fichier unique ne peut pas porter deux bases, deux jeux de clés JWT et deux
-> jeux de buckets. `provision-vps.sh` crée donc les **deux** fichiers (`root:600`, répertoires en
-> `700`) et n'en crée aucun à la racine — car son existence ferait **silencieusement réussir** un
-> script appelé sans argument, sur un modèle plein de `__CHANGEME__` : la panne la plus coûteuse à
-> diagnostiquer. Tout script appelé sans argument échoue désormais avec un message qui nomme la
-> convention.
->
-> **Tout appelant passe le chemin explicitement** — `deploy.sh --env-file …`, les scripts de
-> sauvegarde en premier argument, `install-cron.sh` qui l'inscrit dans `/etc/cron.d/axion-audit`,
-> et les workflows GitHub. (Revue croisée M-11.)
+### 🔴 Y a-t-il une sauvegarde restaurable du staging aujourd'hui ? **NON.**
 
 ```bash
-ssh -p 2222 root@<IP>
-# DEUX fichiers, un par environnement — déjà créés par provision-vps.sh en root:600,
-# dans des répertoires en 700. N’en créez AUCUN autre, surtout pas à la racine.
-nano /opt/axion-audit/prod/.env
-nano /opt/axion-audit/staging/.env    # VALEURS DISTINCTES (02 §30.4-4)
+ssh axionia-web "docker exec --user postgres $PG pgbackrest --stanza=axion info"
 ```
+
+```
+stanza: axion
+    status: error (no valid backups)
+    cipher: aes-256-cbc
+
+    db (current)
+        wal archive min/max (16): 000000010000000000000001/000000010000000000000003
+```
+
+**Décomposition honnête de ce résultat :**
+
+| Élément                            | État                                                                      |
+| ---------------------------------- | ------------------------------------------------------------------------- |
+| Stanza pgBackRest `axion`          | ✅ **existe**, chiffrement `aes-256-cbc` actif                            |
+| Archivage WAL                      | ✅ **fonctionne** : `archived_count=3`, `failed_count=0`                  |
+| **Sauvegarde complète (`backup`)** | 🔴 **AUCUNE** — `no valid backups`. `pgbackrest backup` n'a jamais tourné |
+| Sauvegarde MinIO                   | 🔴 aucune (`/var/backups/axion` absent)                                   |
+| Sauvegarde du magasin TLS          | 🔴 sans objet **et** absente (le TLS est chez Traefik)                    |
+| Copie hors serveur                 | 🔴 aucune (ni clé Storage Box, ni `rclone`)                               |
+| Planification                      | 🔴 aucune (`/etc/cron.d/axion-audit` absent)                              |
+| Test de restauration               | 🔴 **JAMAIS JOUÉ** (`/var/log/axion` absent)                              |
+
+**Conclusion, en une phrase : sans sauvegarde complète, les WAL archivés ne se rejouent sur rien.**
+Un `restore` aujourd'hui échouerait faute de point de départ. **L'invariant 8 n'est pas tenu sur le
+staging**, et le critère d'acceptation L0 « restauration Postgres ET MinIO testée depuis zéro » est
+**non satisfait**.
+
+> La création de la stanza et la première sauvegarde sont en cours de traitement par un autre agent
+> (A11c) à la date de ce relevé. **Ce runbook constate, il n'agit pas** de ce côté. Le jour où une
+> sauvegarde valide existera, `pgbackrest info` affichera un bloc `full backup:` au lieu de
+> `status: error` : c'est le seul contrôle qui vaille, et il tient en une commande.
+
+### Ce qui manque encore avant qu'une restauration soit jouable sur le staging
+
+1. Une **sauvegarde complète** (`pgbackrest --stanza=axion backup`) — sans elle, rien.
+2. Une **planification** : il n'y a ni cron ni timer systemd pour Axion Audit sur la machine.
+3. Une **copie hors serveur** : ni clé Storage Box, ni `rclone`.
+4. Un **test de restauration exécutable**, ce que `restore-test.sh` n'est pas ici (§6.2).
+
+---
+
+## 6. LES SCRIPTS `infra/scripts/*.sh` — ce qu'ils valent réellement
+
+### 🔴 Fait central : aucun d'eux ne peut tourner sur `axionia-web` aujourd'hui.
+
+Deux raisons cumulées, chacune suffisante :
+
+1. **Le dépôt n'est pas sur le serveur** (`ls -d /root/axion* /srv/axion* /home/*/axion*` →
+   rien). Coolify clone dans un conteneur d'assistance détruit après le déploiement. Il n'y a donc
+   littéralement **aucun fichier `.sh` de ce dossier sur la machine**.
+2. **Ils s'adressent tous à un projet Compose qui n'existe pas.** `lib/common.sh` construit les
+   commandes par `axion_compose` (`docker compose -f infra/docker-compose.yml -f …staging.yml`) et
+   nomme les ressources par `axion_project_name` → **`axion-audit-staging`**. Le projet Compose réel
+   est **`wrunr6mwq2oxqq392i4myzjn`**, et ses volumes portent des **tirets** là où les scripts
+   attendent des **soulignés** (convention 5, §4.3).
+
+| Script               | Utilisable sur le staging Coolify ?                                                        | État        |
+| -------------------- | ------------------------------------------------------------------------------------------ | ----------- |
+| `provision-vps.sh`   | **NON — ET NE DOIT JAMAIS Y ÊTRE LANCÉ** (§7)                                              | interdit    |
+| `deploy.sh`          | **NON** — c'est Coolify qui déploie ; le script exige `GHCR_OWNER` (absent du `.env` réel) | JAMAIS JOUÉ |
+| `smoke-test.sh`      | **NON** — `axion_compose` + `axion_project_name`                                           | JAMAIS JOUÉ |
+| `backup-postgres.sh` | **NON** — `axion_compose`, plus `STORAGE_BOX_*` absents du `.env` réel                     | JAMAIS JOUÉ |
+| `backup-minio.sh`    | **NON** — idem (réseau nommé par `axion_project_name`)                                     | JAMAIS JOUÉ |
+| `backup-caddy.sh`    | **NON** — idem, et le TLS du staging n'est plus chez nous                                  | JAMAIS JOUÉ |
+| `install-cron.sh`    | **NON** — exige `RESTORE_TEST_CRON`, absent du `.env` réel                                 | JAMAIS JOUÉ |
+| `restore-test.sh`    | **NON** — voir §6.2, trois causes distinctes                                               | JAMAIS JOUÉ |
+
+### 6.1 `pnpm infra:restore-test` — ce qui a changé, et pourquoi
+
+**Avant** (faux) : `bash infra/scripts/restore-test.sh /opt/axion-audit/prod/.env`
+Ce chemin n'existe **sur aucune des deux machines** : ni sur le poste de développement, ni sur
+`axionia-web`. Le script échouait donc toujours, et pour une raison qui n'était pas la vraie.
+
+**Maintenant** : `bash infra/scripts/restore-test.sh` — **le chemin du `.env` se passe en argument**.
+
+```bash
+pnpm infra:restore-test /chemin/vers/.env     # pnpm transmet l'argument au script
+```
+
+Sans argument, le script **refuse de tourner** et **nomme la convention** (MESURÉ le 2026-08-28,
+`pnpm -s infra:restore-test`, code de sortie 1) :
+
+```
+[ERROR] Fichier d’environnement illisible : /opt/axion-audit/<env>/.env
+        — convention : /opt/axion-audit/<staging|prod>/.env (passer le chemin en argument).
+```
+
+> **Sur un poste Windows, ne passez pas le chemin depuis Git Bash.** MESURÉ :
+> `pnpm infra:restore-test /chemin/bidon/.env` arrive au script sous la forme
+> `C:/Program Files/Git/chemin/bidon/.env` — la conversion de chemin MSYS s'applique à tout
+> argument commençant par `/`. C'est un artefact du poste, **pas** un défaut du script : sur le
+> serveur Linux, où ce script est censé tourner, l'argument passe tel quel. Sur Windows, préférez
+> `MSYS_NO_PATHCONV=1 pnpm infra:restore-test …` si vous devez vraiment l'invoquer localement.
+
+**Pourquoi ce choix plutôt qu'un chemin « corrigé ».** Il n'existe aujourd'hui **aucun** chemin de
+`.env` qui rendrait ce script fonctionnel (§6.2) : y écrire
+`/data/coolify/applications/<uuid>/.env` produirait un script qui démarre, franchit le chargement de
+l'environnement, puis meurt trois étapes plus loin sur un garde-fou — c'est-à-dire **un script qui
+ment plus longtemps**. Le message ci-dessus refuse tout de suite, en français, en nommant la règle.
+Le comportement était déjà prévu par `lib/common.sh` (`axion_env_file_default`, commentaire M-11) :
+le `package.json` était le seul endroit qui le contournait.
+
+**Les cinq autres scripts `infra:*` sont inchangés** : `infra:up`, `infra:down`, `infra:logs`,
+`infra:reset`, `infra:config` visent la pile de **développement local** et ne mentionnent aucun
+chemin serveur. Ils ne mentaient pas.
+
+### 6.2 Ce qu'il faudrait décider avant que `restore-test.sh` puisse viser le staging
+
+**Ce point n'est PAS corrigé, et il ne doit pas l'être par bricolage.** Trois désaccords entre le
+script et la machine, dont un au moins relève d'une décision de spécification :
+
+| #   | Le script attend                                | La machine a                                      | Nature                                       |
+| --- | ----------------------------------------------- | ------------------------------------------------- | -------------------------------------------- |
+| 1   | le volume `axion-audit-staging_pgbackrest_repo` | `wrunr6mwq2oxqq392i4myzjn_pgbackrest-repo`        | **décision** : d'où vient le nom de projet ? |
+| 2   | l'image `axion-audit-postgres:16` (`PG_IMAGE`)  | `axion-audit-postgres:16-coolify`                 | surchargeable par variable d'environnement   |
+| 3   | `/var/backups/axion/{minio,caddy}/archives`     | absents — aucune sauvegarde MinIO ni TLS n'existe | dépend du §5                                 |
+
+Le point 1 est le vrai : `axion_project_name()` **dérive** le nom de projet de `APP_ENV`, ce qui est
+juste dans le montage « VPS dédié » et faux sous Coolify, où le nom est un uuid opaque imposé par
+l'orchestrateur. Le rendre paramétrable est une modification du contrat d'exploitation
+(`CLAUDE.md` §3-2), pas un ajustement d'agent.
+
+> **ESCALADE À OUVRIR** — proposition d'entrée `DECISIONS.md`, à instruire par A01 :
+> _« [L0-b] Les scripts d'exploitation dérivent le nom de projet Compose d'`APP_ENV` ; sous Coolify
+> ce nom est un uuid imposé. Options : (a) `AXION_COMPOSE_PROJECT` surchargeable dans le `.env`,
+> (b) un `restore-test-coolify.sh` distinct qui parle à `docker` sans passer par Compose,
+> (c) renoncer au test de restauration sur le staging Coolify et ne le tenir que sur la prod. »_
+> A57 n'a pas écrit cette entrée lui-même : `DECISIONS.md` est en cours d'édition par un autre agent.
+
+---
+
+## 7. LE CHEMIN « VPS DÉDIÉ » — décrit, JAMAIS JOUÉ
+
+**Tout ce chapitre décrit l'installation d'une pile Axion Audit sur un VPS NEUF ET VIDE. C'est le
+chemin visé pour la PRODUCTION. Il n'a jamais été exécuté, nulle part.** Aucune de ses commandes ne
+doit être lancée sur `axionia-web`.
+
+### 7.1 ⛔ `provision-vps.sh` sur une machine habitée
+
+> **Ce script est écrit pour un serveur neuf.** Sur `axionia-web`, qui sert `axion-ia.com`, il fait
+> au moins trois choses dangereuses, vérifiées ligne à ligne par A54 :
+>
+> 1. il fait **passer SSH du port 22 au port 2222** et redémarre le démon — toute nouvelle connexion
+>    sur 22 échoue ;
+> 2. il **active UFW**, aujourd'hui inactif, ce qui coupe l'accès humain à SSH sur 22 ;
+> 3. il **installe Docker CE** par-dessus l'installation existante — le remplacement redémarre le
+>    démon, donc **arrête tous les conteneurs, y compris le site de production**.
+>
+> Un quatrième effet ne se produit ici que par chance de conception : `userns-remap` n'est écrit que
+> si `/etc/docker/daemon.json` est absent.
+>
+> **Sur `axionia-web`, on n'exécute PAS ce script.** Procédure de cohabitation :
+> `infra/COHABITATION_AXIONIA_WEB.md`.
+
+### 7.2 Convention de chemin du `.env` — pour le montage VPS dédié
+
+```
+/opt/axion-audit/<env>/.env        avec <env> ∈ { staging, prod }
+```
+
+**Il n'existe PAS de `/opt/axion-audit/.env`.** Le 02 §30.4-4 impose des valeurs distinctes par
+environnement : un fichier unique ne peut pas porter deux bases, deux jeux de clés JWT et deux jeux
+de buckets. Un fichier à la racine ferait **silencieusement réussir** un script appelé sans argument
+sur un modèle plein de `__CHANGEME__` — la panne la plus coûteuse à diagnostiquer. **Tout appelant
+passe le chemin explicitement** (revue croisée M-11 ; voir §6.1).
+
+**Ce chemin n'existe sur aucune machine à ce jour.** Il décrit une convention, pas un fait.
 
 | Secret (02 §30.3)                                                                    | Génération                                  |
 | ------------------------------------------------------------------------------------ | ------------------------------------------- |
@@ -387,456 +620,71 @@ nano /opt/axion-audit/staging/.env    # VALEURS DISTINCTES (02 §30.4-4)
 | `ANTHROPIC_API_KEY`, `DOCXTEMPLATER_LICENSE`, `TELEGRAM_*`, `CONSOLE_WEBHOOK_SECRET` | fournis par le service concerné             |
 | `GHCR_OWNER`, `IMAGE_TAG`                                                            | non secrets : compte GitHub et tag d'images |
 
-Puis, en cohérence avec `DATABASE_URL` et `REDIS_URL`, **répercuter les mots de passe dans les
-deux URL** (elles sont construites à partir des variables du dessus).
+`API_PORT` est une **convention commune aux deux environnements** (arbitrage A01 du 2026-08-27) : le
+port n'est jamais publié, il n'a aucune raison de différer, et deux copies à tenir à la main seraient
+une panne en attente. **Ne pas le changer sans le changer dans LES DEUX `.env`.**
 
-**Séparation stricte staging/prod (02 §30.4-4)** : deux fichiers, deux jeux de valeurs.
+> **Le `.env` du staging Coolify ne suit PAS cette convention** — il est posé par Coolify (§4.1). Il
+> porte 72 variables, dont `APP_ENV`, `API_PORT=3000`, `PGBACKREST_STANZA`, `PGBACKREST_REPO_PATH`,
+> les secrets et les URL. **Il ne contient ni `STORAGE_BOX_*`, ni `RESTORE_TEST_CRON`, ni
+> `GHCR_OWNER`, ni `DEPLOY_PATH`, ni aucune variable `CADDY_*`** — les scripts qui les exigent
+> échoueraient donc même en pointant ce fichier (§6).
 
-```
-/opt/axion-audit/prod/.env       APP_ENV=prod
-                                 CADDY_SITE_ADDRESS=audit.<domaine>
-                                 CADDY_STAGING_SITE_ADDRESS=audit-staging.<domaine>
-                                 API_PORT=3000
-/opt/axion-audit/staging/.env    APP_ENV=staging
-                                 API_PORT=3000     ← MÊME VALEUR, obligatoire
-                                 (aucune variable CADDY_* n'est utilisée : depuis
-                                  l'arbitrage du 2026-08-27, la pile de staging
-                                  n'a plus de frontal — c'est le Caddy de la prod)
-```
+### 7.3 Premier déploiement, PRA, rotation, rollback — **PROCÉDURES NON JOUÉES**
 
-> **Les deux adresses de site vivent dans le `.env` de PROD**, puisque c'est la pile de prod qui
-> porte l'unique Caddy (`.env.example` §14).
->
-> **`API_PORT` est une CONVENTION COMMUNE aux deux environnements** (arbitrage A01 du
-> 2026-08-27) : les deux blocs du `Caddyfile` l'utilisent. Ce port n'est jamais publié
-> (06 §10.3, 11 §2), il n'a donc aucune raison de différer — et une variable séparée qu'il
-> faudrait tenir en double à la main serait une panne en attente : le jour où les deux valeurs
-> divergent, c'est la **production** qui rend des 502 à cause d'une valeur de staging.
-> **Ne pas changer `API_PORT` sans le changer dans LES DEUX `.env`.**
->
-> Tout le reste (base, buckets, clés JWT, clés API, passphrases) reste rigoureusement disjoint
-> entre les deux fichiers.
+Les sections qui suivaient dans la version précédente de ce fichier (premier déploiement par
+`deploy.sh`, PRA en 7 étapes avec RTO 4 h, tableau de rotation des secrets, rollback par
+`deploy.sh --rollback`, diagnostic du test de restauration nocturne) **décrivent un système qui n'a
+jamais tourné**. Elles ne sont pas fausses en soi ; elles ne sont **rien de plus qu'une intention
+écrite**.
 
-Clé SSH de la Storage Box et test d'accès :
+**Ce qui est certain à leur sujet, et qui doit être dit avant qu'on s'y fie :**
 
-```bash
-ssh-keygen -t ed25519 -f /root/.ssh/storagebox_ed25519 -C 'axion-audit-backups'
-# déposer la clé publique dans la Storage Box, puis :
-ssh -p 23 -i /root/.ssh/storagebox_ed25519 <user>@<host> ls
-```
+- **Aucune de ces commandes n'a jamais été exécutée**, ni sur `axionia-web` (rien n'y est installé),
+  ni ailleurs (aucun autre VPS n'existe).
+- Le **RTO de 4 h** est une **cible calculée**, jamais chronométrée. Tant que le PRA n'a pas été
+  joué une fois de bout en bout, ce chiffre n'engage personne.
+- La table de diagnostic du test de restauration nocturne décrit les messages d'un script **qui n'a
+  jamais produit un seul rapport** : `/var/log/axion` n'existe pas.
+- Le tableau de rotation des secrets décrit des effets **jamais observés**.
+- Le rollback repose sur `/opt/axion-audit/<env>.deployed-tags`, un fichier **qui n'existe pas**.
 
-**Sauvegarde chiffrée du `.env` lui-même** (02 §30.4-2 — sans elle, un PRA restaure une infra
-sans ses clés) :
+Elles seront réintroduites ici **au fur et à mesure qu'elles seront jouées**, chacune avec la date
+et la preuve de son exécution. En attendant, la source d'exécution reste le pack (02 §11.4, §30.4,
+§30.6) et les scripts eux-mêmes, qui sont lisibles.
 
-```bash
-gpg --symmetric --cipher-algo AES256 -o /root/env-prod-$(date -u +%F).gpg /opt/axion-audit/prod/.env
-scp -P 23 -i /root/.ssh/storagebox_ed25519 /root/env-prod-*.gpg <user>@<host>:/home/axion-audit/secrets/
-shred -u /root/env-prod-*.gpg
-```
-
-> La passphrase de ce `gpg` est le **dernier maillon** : elle se conserve hors ligne
-> (gestionnaire de mots de passe personnel), jamais sur le VPS.
+> **La seule chose de ce chapitre qui soit acquise** est l'ordre du premier démarrage, parce qu'il
+> a été appliqué au staging : `pgbackrest stanza-create` **avant** tout le reste. `archive_mode` est
+> à `on` dès le premier démarrage (`postgres/postgresql.custom.conf`) ; tant que la stanza n'existe
+> pas, `archive_command` échoue à chaque WAL et les journaux s'entassent dans `pg_wal`. Sur le
+> staging, la stanza existe et `failed_count = 0` (§5) : **cette partie-là a marché.**
 
 ---
 
-## 5. Premier déploiement
-
-> **CHECKLIST DU PREMIER DÉMARRAGE — dans cet ordre, rien d'optionnel.**
->
-> 1. **`pgbackrest stanza-create`** (étape 5.3 ci-dessous) — **POINT DE CONTRÔLE N°1 DE LA PORTE
->    P-A côté sauvegardes** (`DECISIONS.md`, « Points d'infrastructure actés sans réserve »,
->    point 12). `archive_mode` est à `on` dès le premier démarrage : tant que la stanza n'existe
->    pas, `archive_command` échoue à chaque WAL, les journaux s'entassent dans `pg_wal` et
->    **il n'existe aucune sauvegarde restaurable**. Une pile qui tourne sans stanza est une pile
->    sans PRA — et elle en donne pourtant toutes les apparences.
-> 2. Les **enregistrements DNS** du domaine de prod ET du sous-domaine de staging existent et
->    pointent sur le VPS (§3.5-a) — sinon l'émission ACME échoue et Caddy retente en boucle.
-> 3. Le **réseau de liaison** `axion-edge-staging` **et les deux volumes partagés**
->    `axion-staging-field-dist` / `axion-staging-hq-dist` existent (§3.5-b) : ils sont
->    déclarés `external`, donc leur absence fait échouer `up` immédiatement.
-> 4. **La prod se déploie AVANT le staging** : c'est elle qui porte l'unique Caddy, donc le
->    frontal des deux environnements.
-
-```bash
-# 5.1 — Authentification au registre d'images privé (02 §30.5)
-echo "$GHCR_TOKEN" | docker login ghcr.io -u <compte> --password-stdin
-
-# 5.2 — Déploiement de la PROD (elle porte le frontal des deux environnements)
-/opt/axion-audit/repo/infra/scripts/deploy.sh --env prod --tag v0.0 \
-  --env-file /opt/axion-audit/prod/.env
-
-# 5.3 — ⚠️ POINT DE CONTRÔLE N°1 DE LA PORTE P-A : initialisation du dépôt
-#       pgBackRest (UNE SEULE FOIS PAR ENVIRONNEMENT, prod ET staging).
-cd /opt/axion-audit/repo
-docker compose --env-file /opt/axion-audit/prod/.env \
-  -f infra/docker-compose.yml -f infra/docker-compose.prod.yml \
-  exec --user postgres postgres pgbackrest --stanza=axion stanza-create
-docker compose --env-file /opt/axion-audit/prod/.env \
-  -f infra/docker-compose.yml -f infra/docker-compose.prod.yml \
-  exec --user postgres postgres pgbackrest --stanza=axion check
-# attendu : "check command end: completed successfully"
-# Contrôle complémentaire — l'archivage FONCTIONNE réellement :
-docker compose ... exec --user postgres postgres \
-  psql -d "$POSTGRES_DB" -c 'SELECT archived_count, failed_count FROM pg_stat_archiver;'
-# attendu : failed_count = 0 (s'il monte, la stanza ou le dépôt est en cause)
-
-# 5.4 — Déploiement du STAGING (après la prod), puis SA PROPRE stanza
-/opt/axion-audit/repo/infra/scripts/deploy.sh --env staging --tag sha-1a2b3c4 \
-  --env-file /opt/axion-audit/staging/.env
-docker compose --env-file /opt/axion-audit/staging/.env \
-  -f infra/docker-compose.yml -f infra/docker-compose.staging.yml \
-  exec --user postgres postgres pgbackrest --stanza=axion stanza-create
-
-# 5.5 — Première sauvegarde complète, puis planification
-infra/scripts/backup-postgres.sh /opt/axion-audit/prod/.env
-infra/scripts/backup-minio.sh    /opt/axion-audit/prod/.env
-infra/scripts/backup-caddy.sh    /opt/axion-audit/prod/.env
-infra/scripts/install-cron.sh    /opt/axion-audit/prod/.env
-
-# 5.6 — Premier test de restauration, à la main, sans attendre la nuit
-infra/scripts/restore-test.sh /opt/axion-audit/prod/.env
-echo "code de sortie : $?"     # attendu : 0
-```
-
-Sortie attendue de `deploy.sh` : `pull` OK · `migration — ÉTAPE 1/2 : simulation` OK ·
-`ÉTAPE 2/2 : application` OK · `up -d` · `smoke tests : SUCCÈS` · notification Telegram
-`Déploiement prod OK — tag v0.0`.
-
-Tâches installées (`cat /etc/cron.d/axion-audit`) :
-
-| Quand (UTC)                                 | Tâche                                              |
-| ------------------------------------------- | -------------------------------------------------- |
-| `0 */6 * * *`                               | `backup-postgres.sh` — RPO ≤ 6 h (02 §11.4)        |
-| `30 1 * * *`                                | `backup-minio.sh` — `mc mirror` + archive chiffrée |
-| `45 1 * * *`                                | `backup-caddy.sh` — magasin TLS (2 domaines)       |
-| `${RESTORE_TEST_CRON}` (défaut `0 3 * * *`) | `restore-test.sh` — **critère d'acceptation L0**   |
-
----
-
-## 5 bis. Accéder au staging — il n'y a plus de tunnel SSH
-
-> **⚠️ Cette section décrit le montage « deux piles sur un VPS dédié », PAS le staging
-> d'aujourd'hui.** Sur `axionia-web`, le frontal n'est pas notre Caddy mais le **Traefik de
-> Coolify**, qui termine TLS pour `audit-staging.axion-ia.com` puis passe la main à notre routeur
-> interne — le domaine reste unique et l'absence de CORS (11 §2) est préservée. Voir l'encadré en
-> tête de fichier, `DECISIONS.md` du 2026-08-28 et `infra/docker-compose.coolify.yml`. Les
-> vérifications de non-croisement en fin de section restent, elles, pertinentes dans les deux
-> montages.
-
-Arbitrage A01 du 2026-08-27 (`DECISIONS.md`, « Cohabitation staging/prod : qui écoute sur
-443 ? », option 2), en application littérale du 02 §11.2 (« `staging` (même VPS, **sous-domaine**,
-DB séparée) ») : **un seul Caddy**, celui de la pile de prod, lie 80/443 et sert les deux
-environnements par deux blocs de site. Motif opérationnel : **les portes P-A à P-E se démontrent
-sur staging** (09 §4), et une démo qui exige d'ouvrir un tunnel est une démo qu'on finit par ne
-pas faire.
-
-| Environnement | Adresse publique                  | Frontal                              | Ports publiés    |
-| ------------- | --------------------------------- | ------------------------------------ | ---------------- |
-| prod          | `https://audit.<domaine>`         | `caddy` du projet `axion-audit-prod` | 80, 443, 443/udp |
-| staging       | `https://audit-staging.<domaine>` | **le MÊME conteneur `caddy`**        | aucun            |
-
-Ce qui reste STRICTEMENT séparé (02 §30.4-4) : base PostgreSQL, buckets MinIO, Redis, volumes
-de DONNÉES,
-réseau interne, `.env` et donc tous les secrets. Le réseau de liaison ne porte que du HTTP
-depuis Caddy vers les trois services web de staging ; aucun conteneur de staging n'a de route
-vers les données de la prod.
-
-Contrôles après déploiement :
-
-```bash
-curl -i  https://audit-staging.<domaine>/api/v1/health          # 200 + JSON de santé
-curl -i  https://audit-staging.<domaine>/                       # 200, PWA terrain (staging)
-curl -i  https://audit-staging.<domaine>/hq/                    # 200, console siège (staging)
-curl -sI https://audit-staging.<domaine>/ | grep -i x-robots-tag
-# attendu : x-robots-tag: noindex, nofollow  ← un sous-domaine avec un vrai certificat est
-#           indexable, et l'outil est confidentiel.
-curl -sI https://audit-staging.<domaine>/ | grep -i content-security-policy
-curl -sI https://audit.<domaine>/          | grep -i content-security-policy
-# attendu : les DEUX lignes sont IDENTIQUES. Les en-têtes de sécurité viennent du même
-#           snippet Caddy `(securite)` : un staging plus permissif ne validerait rien.
-```
-
-**Vérification qu'aucun croisement n'a lieu** (le seul défaut vraiment dangereux de ce montage —
-un `reverse_proxy` de staging qui atteindrait la base de prod) :
-
-```bash
-# Les upstreams vus par Caddy doivent être des alias LONGS, jamais `api`/`field`/`hq`.
-grep -n 'reverse_proxy' infra/caddy/Caddyfile
-# attendu : axion-api ET staging-api, et RIEN d’autre — les fronts ne passent plus par
-# un upstream en staging/prod mais par des racines de fichiers distinctes :
-grep -n 'root \*' infra/caddy/fronts.static.caddy
-# attendu : /srv/principal/{field,hq} ET /srv/staging/{field,hq} — jamais croisés.
-docker network inspect axion-edge-staging --format '{{range .Containers}}{{.Name}} {{end}}'
-# attendu : le caddy de prod + la seule `api` de staging — RIEN d’autre.
-# (les fronts de staging ne sont pas sur le réseau : ce sont des jobs one-shot,
-#  Caddy lit leurs FICHIERS dans les volumes partagés — voir §2 bis)
-```
-
-⚠️ **Gel des déploiements staging les jours de collecte (02 §11.2) — règle renforcée.** Les deux
-piles partageaient déjà le CPU et la RAM du VPS ; elles partagent désormais aussi le frontal
-HTTP. Un `up -d` de staging un jour de collecte ne met plus seulement la prod sous tension : il
-peut provoquer des 502 sur la **production**.
-
----
-
-## 6. PRA — restauration complète, RTO cible **4 h** (02 §11.4)
-
-Scénario : **le VPS est perdu**. RPO ≤ 6 h côté siège ; côté terrain, les données non
-synchronisées vivent encore sur les appareils (invariant 8).
-
-| #   | Étape                                                                             | Durée cible  |
-| --- | --------------------------------------------------------------------------------- | ------------ |
-| 1   | Louer un VPS Ubuntu LTS identique, y déposer sa clé SSH                           | 15 min       |
-| 2   | `git clone` du dépôt + `provision-vps.sh`                                         | 20 min       |
-| 3   | Restaurer le `.env` chiffré depuis la Storage Box                                 | 10 min       |
-| 4   | Restaurer PostgreSQL (ci-dessous)                                                 | 60 min       |
-| 5   | Restaurer MinIO (ci-dessous)                                                      | 60 min       |
-| 5b  | Restaurer le magasin TLS de Caddy (ci-dessous)                                    | 5 min        |
-| 6   | `deploy.sh` + `smoke-test.sh`                                                     | 20 min       |
-| 7   | Repointer les DEUX enregistrements DNS (prod + staging), vérifier les certificats | 30 min       |
-|     | **Total**                                                                         | **≈ 3 h 40** |
-
-**3.1 — Récupérer le `.env`**
-
-```bash
-scp -P 23 -i /root/.ssh/storagebox_ed25519 <user>@<host>:/home/axion-audit/secrets/env-prod-<date>.gpg .
-gpg --decrypt env-prod-<date>.gpg > /opt/axion-audit/prod/.env
-chown root:root /opt/axion-audit/prod/.env && chmod 600 /opt/axion-audit/prod/.env
-```
-
-**4 — PostgreSQL**
-
-```bash
-cd /opt/axion-audit/repo
-set -a; . /opt/axion-audit/prod/.env; set +a
-
-# a. Rapatrier le dépôt pgBackRest depuis la Storage Box
-mkdir -p /var/backups/axion/pgbackrest-export
-rsync -a -e "ssh -p $STORAGE_BOX_PORT -i $STORAGE_BOX_SSH_KEY_PATH" \
-  "$STORAGE_BOX_USER@$STORAGE_BOX_HOST:$STORAGE_BOX_PATH/postgres/pgbackrest/" \
-  /var/backups/axion/pgbackrest-export/
-
-# b. Le réinjecter dans le volume attendu par la pile
-docker volume create axion-audit-prod_pgbackrest_repo
-docker run --rm -v axion-audit-prod_pgbackrest_repo:/repo \
-  -v /var/backups/axion/pgbackrest-export:/import:ro alpine:3.21 sh -c 'cp -a /import/. /repo/'
-
-# c. Démarrer Postgres à VIDE puis restaurer (rejeu WAL complet)
-docker compose --env-file /opt/axion-audit/prod/.env \
-  -f infra/docker-compose.yml -f infra/docker-compose.prod.yml up -d postgres
-docker compose ... exec --user postgres postgres \
-  pgbackrest --stanza=$PGBACKREST_STANZA --type=default --delta restore
-docker compose ... restart postgres
-
-# d. Contrôle
-docker compose ... exec --user postgres postgres \
-  psql -d "$POSTGRES_DB" -c 'SELECT pg_is_in_recovery();'   # attendu : f
-docker compose ... exec --user postgres postgres \
-  psql -d "$POSTGRES_DB" -c '\dt'                            # tables du fichier 04
-```
-
-> Repli si le dépôt physique est inexploitable : le dernier `pg_dump` chiffré
-> (`/var/backups/axion/postgres/pgdump-*.dump.gpg`, également sur la Storage Box) se restaure par
-> `gpg --decrypt … | pg_restore -d "$POSTGRES_DB"`. On perd le rejeu WAL (RPO = 6 h au lieu de 0).
-
-**5 — MinIO**
-
-```bash
-rsync -a -e "ssh -p $STORAGE_BOX_PORT -i $STORAGE_BOX_SSH_KEY_PATH" \
-  "$STORAGE_BOX_USER@$STORAGE_BOX_HOST:$STORAGE_BOX_PATH/minio/archives/" \
-  /var/backups/axion/minio/archives/
-
-for b in "$MINIO_BUCKET_ATTACHMENTS" "$MINIO_BUCKET_REPORTS" "$MINIO_BUCKET_TEMPLATES"; do
-  archive=$(ls -t /var/backups/axion/minio/archives/minio-$b-*.tar.gpg | head -1)
-  gpg --decrypt "$archive" | tar -C /var/backups/axion/minio/mirror -xf -
-  ( cd /var/backups/axion/minio/mirror/$b && sha256sum --quiet -c MANIFEST.sha256 ) \
-    && echo "$b : intégrité vérifiée"
-done
-# puis rechargement par mc mirror dans le MinIO de la pile (voir restore-test.sh, section (b))
-```
-
-**5 bis — Magasin TLS de Caddy (certificats des DEUX domaines)**
-
-Cette étape existe pour une raison précise : **le PRA ne doit pas dépendre de Let's Encrypt.**
-Une réémission ACME est plafonnée (5 certificats par domaine et par semaine) ; si elle échoue le
-jour du sinistre, **les deux environnements sont injoignables en HTTPS** — y compris celui qui
-devrait servir à vérifier que la restauration a réussi. Restaurer le magasin coûte 2 minutes et
-supprime cette dépendance (arbitrage A01 du 2026-08-27).
-
-```bash
-rsync -a -e "ssh -p $STORAGE_BOX_PORT -i $STORAGE_BOX_SSH_KEY_PATH" \
-  "$STORAGE_BOX_USER@$STORAGE_BOX_HOST:$STORAGE_BOX_PATH/caddy/archives/" \
-  /var/backups/axion/caddy/archives/
-
-archive=$(ls -t /var/backups/axion/caddy/archives/caddy-data-*.tar.gpg | head -1)
-docker volume create axion-audit-prod_caddy_data
-gpg --decrypt "$archive" \
-  | docker run --rm -i -v axion-audit-prod_caddy_data:/data alpine:3.21 tar -C /data -xf -
-
-# Contrôle : les certificats sortis du volume sont lisibles et NON EXPIRÉS
-docker run --rm -v axion-audit-prod_caddy_data:/data:ro alpine:3.21 \
-  find /data -type f -name '*.crt' \
-  | while read -r c; do
-      docker run --rm -v axion-audit-prod_caddy_data:/data:ro alpine:3.21 cat "$c" \
-        | openssl x509 -noout -subject -enddate -checkend 0 \
-        && echo "  ^ valide"
-    done
-```
-
-> **À restaurer AVANT le premier démarrage de Caddy.** Si la pile démarre avec un volume vide,
-> Caddy demande immédiatement de nouveaux certificats et consomme le quota que cette étape
-> cherchait justement à préserver.
->
-> Si le magasin est irrécupérable, le repli reste ACME : démarrer la pile, laisser Caddy émettre,
-> et **vérifier le quota** — c'est un repli, pas le chemin nominal.
-
-**Après restauration, rejouer immédiatement** `infra/scripts/restore-test.sh` : le PRA n'est
-terminé que lorsque le test de restauration repasse au vert.
-
----
-
-## 7. Rotation des secrets (02 §30.4-6)
-
-Règle commune : éditer `/opt/axion-audit/<env>/.env`, redéployer, **re-sauvegarder le `.env`
-chiffré**, puis vérifier par `smoke-test.sh`.
-
-| Secret                                                    | Effet                                                                 | Procédure                                                                                                                                             | Fenêtre                                                |
-| --------------------------------------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET`                | **invalide toutes les sessions**                                      | changer les 2 valeurs, `deploy.sh`                                                                                                                    | **heures creuses, JAMAIS un jour de collecte terrain** |
-| `POSTGRES_PASSWORD`                                       | coupure courte                                                        | `ALTER ROLE axion WITH PASSWORD '…';` puis mettre à jour `POSTGRES_PASSWORD` **et** `DATABASE_URL`, `deploy.sh`                                       | heures creuses                                         |
-| `REDIS_PASSWORD`                                          | jobs BullMQ interrompus                                               | mettre à jour `REDIS_PASSWORD` **et** `REDIS_URL`, redémarrer `redis`, `worker`, `api`                                                                | file vide de préférence                                |
-| `MINIO_SECRET_KEY` (clés applicatives)                    | aucune coupure si fait dans l'ordre                                   | `mc admin user add` d'une nouvelle clé → `.env` → `deploy.sh` → `mc admin user remove` de l'ancienne                                                  | quelconque                                             |
-| `MINIO_ROOT_PASSWORD`                                     | redémarrage MinIO                                                     | changer, `up -d minio`                                                                                                                                | heures creuses                                         |
-| `APP_ENCRYPTION_KEY`                                      | **les valeurs chiffrées d'`app_settings` deviennent illisibles**      | ne jamais tourner sans procédure de re-chiffrement — escalade `DECISIONS.md`                                                                          | jamais en urgence                                      |
-| `CONSOLE_WEBHOOK_SECRET`                                  | aucune                                                                | **double clé** : poser l'ancienne dans `CONSOLE_WEBHOOK_SECRET_PREVIOUS`, la nouvelle dans `CONSOLE_WEBHOOK_SECRET`, **vider `_PREVIOUS` après 24 h** | quelconque                                             |
-| `ANTHROPIC_API_KEY`                                       | worker seul                                                           | nouvelle clé côté console Anthropic, `.env`, `up -d worker`                                                                                           | quelconque                                             |
-| `TELEGRAM_BOT_TOKEN`                                      | alertes                                                               | régénérer via BotFather, `.env`, `up -d worker`                                                                                                       | quelconque                                             |
-| `BACKUP_ENCRYPTION_PASSPHRASE` / `PGBACKREST_CIPHER_PASS` | **les anciennes sauvegardes restent lisibles avec l'ANCIENNE valeur** | conserver l'ancienne passphrase jusqu'à expiration de la rétention (30 j), puis la détruire                                                           | quelconque                                             |
-| `DEPLOY_SSH_KEY`, `GHCR_TOKEN`                            | CI                                                                    | régénérer dans **GitHub Environments**, jamais en secret de dépôt (02 §30.4-3)                                                                        | quelconque                                             |
-
-**Suspicion de fuite : rotation immédiate, sans fenêtre, et entrée dans `DECISIONS.md`.**
-
----
-
-## 8. Rollback (02 §30.6)
-
-`deploy.sh` bascule **automatiquement** sur le tag précédent si les smoke tests sont rouges.
-À la main :
-
-```bash
-infra/scripts/deploy.sh --env prod --rollback --env-file /opt/axion-audit/prod/.env
-cat /opt/axion-audit/prod.deployed-tags     # historique des tags déployés
-```
-
-Le rollback **ne défait pas les migrations** : elles sont rétrocompatibles N-1 (02 §11.2), donc
-le tag précédent fonctionne sur le schéma courant. Un incident qui exigerait un `down` de
-migration n'est **pas** une opération de routine : arrêt, escalade humaine, entrée
-`DECISIONS.md`.
-
-**Conséquence du frontal partagé** (arbitrage du 2026-08-27) : un rollback de prod recrée le
-conteneur `caddy`, et ce conteneur sert **aussi** le sous-domaine de staging.
-
-- Le rollback provoque donc une **brève coupure HTTP du staging** (quelques secondes, le temps
-  que Caddy reparte). Les données, la base et les buckets de staging ne sont, eux, **jamais**
-  touchés : ils vivent dans un autre projet Compose.
-- **Ne jamais lancer un rollback de prod pendant une démo de porte sur staging** : prévenir, ou
-  attendre la fin de la démo.
-- Les certificats des **deux** domaines vivent dans le volume `caddy_data` de la pile de prod ;
-  un rollback les conserve. En revanche un `down -v` sur la prod détruit ce volume, donc **aussi
-  le certificat du staging** — Let's Encrypt plafonne les réémissions (5 par domaine et par
-  semaine). Ne jamais faire de `down -v` en production pour « repartir propre ».
-- À l'inverse, un rollback ou un redéploiement de **staging** ne touche pas au frontal : le
-  service `caddy` n'existe pas dans cette pile (profil désactivé).
-
-**Le magasin TLS est sauvegardé — donc `down -v` n'est plus fatal, mais reste interdit.**
-Depuis l'arbitrage du 2026-08-27, `caddy_data` est sauvegardé chaque nuit par
-`infra/scripts/backup-caddy.sh` (archive GPG AES-256, Storage Box, copie hebdomadaire hors
-Hetzner, rétention 30 j comme le reste), et sa restauration est **vérifiée toutes les nuits** par
-`restore-test.sh`, étape (c) : l'archive est restaurée dans un volume jetable et chaque
-certificat qui en sort doit être lisible, accompagné de sa clé privée, et non expiré. Motif :
-un PRA qui dépend d'une réémission ACME sous quota Let's Encrypt n'est pas un PRA.
-
-```bash
-# Sauvegarde manuelle du magasin TLS (avant une manœuvre risquée sur le frontal)
-infra/scripts/backup-caddy.sh /opt/axion-audit/prod/.env
-ls -t /var/backups/axion/caddy/archives/caddy-data-*.tar.gpg | head -1
-```
-
-Cela réduit la gravité d'un `down -v` accidentel, **cela ne l'autorise pas** : la restauration
-coûte une coupure, et tout ce qui a été émis depuis la dernière archive est perdu. Procédure de
-restauration : §6, étape « 5 bis ».
-
----
-
-## 9. Le test de restauration nocturne a échoué — que faire
-
-Vous recevez sur Telegram : `ÉCHEC du test de restauration nocturne (N contrôle(s))`.
-
-```bash
-ssh -p 2222 root@<IP>
-ls -t /var/log/axion/restore-test-*.log | head -1
-less "$(ls -t /var/log/axion/restore-test-*.log | head -1)"
-```
-
-| Message dans le rapport         | Cause probable                                          | Action                                                                                  |
-| ------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `dépôt pgBackRest introuvable`  | stanza jamais créée, ou volume perdu                    | `pgbackrest --stanza=… stanza-create` puis `backup-postgres.sh`                         |
-| `pgbackrest restore a échoué`   | dépôt corrompu ou passphrase changée                    | `pgbackrest --stanza=… check` puis `info` ; vérifier `PGBACKREST_CIPHER_PASS`           |
-| `resté en recovery`             | WAL manquants (archivage cassé)                         | `SELECT * FROM pg_stat_archiver;` — si `failed_count` monte, l'`archive_command` échoue |
-| `Jeu de tables divergent`       | sauvegarde antérieure à une migration                   | normal **le jour d'un déploiement de schéma** ; doit redevenir vert au passage suivant  |
-| `COUNT incohérent`              | la restauration contient **plus** de lignes que la prod | anomalie sérieuse (mauvaise base ciblée) — **escalade immédiate**                       |
-| `sommes de contrôle INVALIDES`  | archive MinIO corrompue                                 | reprendre l'archive de la veille sur la Storage Box ; relancer `backup-minio.sh`        |
-| `Aucune archive MinIO trouvée`  | `backup-minio.sh` n'a jamais tourné                     | vérifier `/etc/cron.d/axion-audit`, lancer à la main                                    |
-| `Bucket … : VIDE (0 objet)`     | aucune mission n’a encore produit de fichier            | **ÉTAT NORMAL au lot L0** — verdict OK, ce n’est PAS une alerte (M-9)                   |
-| `manifeste sha256 ABSENT`       | sauvegarde incomplète                                   | relancer `backup-minio.sh`, vérifier l’espace disque                                    |
-| `manifeste TRONQUÉ`             | archive écrite pendant une écriture concurrente         | relancer `backup-minio.sh` ; si ça persiste, examiner `mc mirror`                       |
-| `Aucune archive du magasin TLS` | `backup-caddy.sh` n’a jamais tourné                     | vérifier `/etc/cron.d/axion-audit`, lancer à la main                                    |
-| `Aucun certificat VALIDE`       | tous les certificats sauvegardés sont expirés           | la sauvegarde date d’avant le dernier renouvellement — relancer `backup-caddy.sh`       |
-| `Clé privée absente`            | magasin TLS tronqué à la sauvegarde                     | relancer `backup-caddy.sh` ; si ça persiste, le volume `caddy_data` est abîmé           |
-
-**Deux nuits rouges consécutives = les sauvegardes ne sont plus une garantie.** Arrêt des
-déploiements, sauvegarde manuelle immédiate hors serveur, escalade Williams.
-
-Le script est **non destructif** et **idempotent** : il se rejoue à la main sans risque.
-
-```bash
-infra/scripts/restore-test.sh /opt/axion-audit/prod/.env ; echo "code : $?"
-```
-
----
-
-## 10. Points à confirmer (remontés à A01)
-
-Les points **arbitrés** sont conservés ici, marqués comme tels, pour que la porte P-A puisse les
-relire un par un. Les autres sont **volontairement non devinés** et attendent `DECISIONS.md`.
-
-1. **ARBITRÉ le 2026-08-27** — ~~Cohabitation staging/prod et port 443~~. `DECISIONS.md`,
-   « Cohabitation staging/prod : qui écoute sur 443 ? », **option 2** : **UN SEUL Caddy**, dans
-   la pile de prod, sert les deux environnements par deux blocs de site — application littérale
-   du 02 §11.2 (« `staging` (même VPS, **sous-domaine**, DB séparée) »). Le Caddy de staging en
-   loopback et le tunnel SSH `127.0.0.1:8081` sont **supprimés** ; voir §5 bis.
-2. **ARBITRÉ le 2026-08-27 (revue croisée B-6)** — ~~Ports internes de `field` et `hq`~~ :
-   **un port par application, identique dedans et dehors** — `field` 5173, `hq` **5174**.
-   L’infra disait 5173 pour `hq` là où les trois sources applicatives disent 5174 ; la sonde
-   ne passait donc jamais, Caddy (qui en dépend) ne démarrait pas, et
-   « `docker compose up` = stack complète » était faux **en local**. Corrigé : commentaire de
-   contrat, mappage d’hôte, sonde et fichiers de fronts. Voir §2 bis.
-3. **Commandes de migration** : `deploy.sh` appelle `pnpm db:migrate:check` (dry-run) puis
-   `pnpm db:migrate`. Ces deux scripts doivent exister dans l'image `api`.
-4. **ARBITRÉ le 2026-08-27** — ~~`GHCR_OWNER` et `IMAGE_TAG` absents de `.env.example`~~ :
-   ajoutés par A01 en **section 18** du `.env.example` (`DECISIONS.md`, « Points
-   d'infrastructure actés sans réserve », point 2).
-5. **Tags MinIO / `mc` / Caddy** figés dans les fichiers : à confirmer comme « dernière release
-   stable au démarrage » (11 §1) au moment du provisionnement réel, puis à geler.
-6. **ARBITRÉ le 2026-08-27** — `CADDY_STAGING_SITE_ADDRESS` ajoutée par A01 au `.env.example`
-   §14, documentée comme vivant dans le `.env` de **prod**. La variable
-   ~~`CADDY_STAGING_API_PORT`~~ a été **refusée et supprimée** : le port de l'API n'est jamais
-   publié, il n'a aucune raison de différer entre les deux environnements, et deux copies à
-   tenir à la main dans deux `.env` auraient été une panne en attente. `API_PORT` est désormais
-   une **convention commune** (voir §4).
-7. **ARBITRÉ le 2026-08-27 (revue croisée B-7)** — **service des fronts** : volume partagé
-   - `root`/`file_server` dans Caddy en staging/prod, `reverse_proxy` vers Vite en dev.
-     Bascule par `CADDY_FRONT_CONFIG` (**variable à ajouter au `.env.example`, valeur locale
-     `/etc/caddy/fronts.dev.caddy`**). Voir §2 bis.
-8. **ARBITRÉ le 2026-08-27 (revue croisée M-11)** — **chemin du `.env`** :
-   `/opt/axion-audit/<env>/.env`, et RIEN à la racine. Voir l’encadré du §4.
+## 8. CE QUI RESTE FAUX, INCERTAIN OU OUVERT
+
+Écrit ici plutôt que tu, pour que la porte P-A puisse le relire point par point.
+
+| #   | Point                                                                                 | Statut                                                                                                     |
+| --- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| 1   | `.env` du staging en `644` dans un répertoire `755`                                   | **ÉCART DE SÉCURITÉ OUVERT** — posé par Coolify à chaque déploiement, non corrigeable à la main            |
+| 2   | Aucune sauvegarde restaurable du staging                                              | **OUVERT** — A11c en cours ; §5                                                                            |
+| 3   | `restore-test.sh` ne sait pas parler à un projet Compose imposé par un orchestrateur  | **ESCALADE À OUVRIR** — §6.2                                                                               |
+| 4   | `PUBLIC_BASE_URL` désigne `audit-staging.axion-ia.com`, qui **ne résout pas**         | **OUVERT** — le domaine réel est l'adresse `sslip.io` de Coolify                                           |
+| 5   | Routage Traefik → Caddy : port cible non déclaré, 504 au relevé                       | **EN COURS** par un autre agent — ne pas figer                                                             |
+| 6   | Duplication `docker-compose.coolify.yml` ↔ `docker-compose.yml` non gardée            | **OUVERT** — `AMELIORATIONS.md` 2026-08-28, « la troisième convention d'A11 »                              |
+| 7   | Tags MinIO / `mc` / Caddy figés : « dernière release stable au démarrage » (11 §1)    | à confirmer au provisionnement réel de la production, puis à geler                                         |
+| 8   | `deploy.sh` appelle `pnpm db:migrate:check` puis `pnpm db:migrate` dans l'image `api` | les deux scripts existent à la racine (`package.json`) ; **leur présence dans l'image n'est pas vérifiée** |
+| 9   | Le PRA (§7.3) et la rotation des secrets                                              | **JAMAIS JOUÉS** — RTO 4 h non chronométré                                                                 |
+| 10  | `docker image prune -af` toutes les 6 h par le crontab du voisin                      | **NON VÉRIFIÉ** : effet réel sur nos images entre deux déploiements                                        |
+| 11  | Contrôle nominatif des 12 familles de secrets §30.3 dans le `.env` du staging         | **NON VÉRIFIÉ** — appartient à Williams, pas à un agent (porte P-A, §G.6-1)                                |
+| 12  | Consommation CPU/RAM réelle du staging en cohabitation                                | **NON VÉRIFIÉ** dans cette passe — seules les marges d'avant déploiement sont tracées (`DECISIONS.md`)     |
+
+### Ce qui a été mesuré, et qu'il ne faut pas re-suspecter
+
+Pour éviter qu'une prochaine revue reparte à zéro : **la pile de staging fonctionne**. Les neuf
+services se comportent comme le fichier compose le décrit (six `Up (healthy)`, trois `Exited (0)`
+attendus), aucun port de données n'est publié, l'API répond `{"status":"ok"}` derrière notre Caddy
+avec l'intégralité des en-têtes de sécurité, l'isolement réseau est celui qui a été arbitré, et
+l'archivage WAL de PostgreSQL tourne sans échec. **Ce qui manque est autour : la sauvegarde, le
+routage public, et l'outillage d'exploitation.**
