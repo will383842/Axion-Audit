@@ -1776,3 +1776,71 @@ contenant douze migrations SQL pourrait croire à un mélange accidentel. Le dos
 
 **Décideur :** A01
 **Impact spec :** aucun · régularisation d'un écart de nommage, relevé par A02
+
+---
+
+## 2026-08-28 — [L0-b] Le staging s'insère derrière le Traefik de Coolify, il ne pose pas son propre frontal
+
+**Constat, établi par mesure sur le serveur** (accès obtenu ce jour, voir plus bas) : `axionia-web`
+n'est pas une machine nue. Elle fait tourner **Coolify v4**, qui y déploie déjà six ressources —
+`axion-ia`, son worker, sa base PostgreSQL, Redis, Docuseal et Plausible — et surtout **son propre
+reverse proxy, `coolify-proxy` (Traefik), qui possède les ports 80 et 443** (vérifié : `ss -lntp`).
+
+Le contrat d'ops (02 §11) suppose un **Caddy à nous** en frontal, terminant TLS et servant les trois
+chemins sous un domaine unique (`/` → terrain, `/hq` → console, `/api` → API). **Sur cette machine,
+c'est impossible : les ports sont pris**, et les reprendre casserait `axion-ia.com`.
+
+**Options :**
+
+1. Renoncer à `axionia-web` et prendre un serveur dédié.
+2. Poser notre Caddy sur les ports 80/443 — **exclu**, cela coupe le site de production.
+3. Déclarer chaque service comme une application Coolify distincte et laisser Traefik router les
+   chemins.
+4. Conserver notre pile intacte, sans port publié, et laisser **Traefik terminer TLS pour
+   `audit-staging.axion-ia.com` puis passer la main à notre routeur interne**.
+
+**Arbitrage : option 4.** Règle de précédence **sans objet** — le pack ne prévoit pas le cas d'un
+frontal préexistant ; il fallait donc trancher et tracer.
+
+**Pourquoi pas 3, qui est le piège.** Éclater les services en applications Coolify séparées ferait
+router les chemins par Traefik, donc **hors de notre Caddyfile**. Les fronts et l'API cesseraient
+d'être servis par la même origine dès qu'un réglage diverge — et le 11 §2 interdit CORS précisément
+parce que « même domaine » est ce qui rend l'absence de CORS possible. On perdrait un invariant pour
+gagner un peu de confort d'interface.
+
+**Pourquoi 4 préserve tout.** Notre pile garde **son** routeur interne : le domaine reste unique, les
+trois chemins restent servis par la même origine, aucun CORS n'apparaît. Ce qui change est
+strictement la **terminaison TLS**, qui passe de notre Caddy à Traefik.
+
+**Et le fichier `infra/docker-compose.staging.yml` était DÉJÀ écrit pour ce cas** : il ne publie aucun
+port (`ports: !reset []` sur les sept services), son Caddy est neutralisé par un profil jamais activé
+(`ne-jamais-activer-en-staging`), et il se rattache à un **réseau de liaison externe** vers un frontal
+extérieur. Il avait été conçu pour le Caddy de notre production sur la même machine ; le frontal est
+simplement Traefik. **L'architecture ne change pas, la pièce frontale change.**
+
+**CE QUE CETTE ENTRÉE NE FAIT PAS.** Elle ne modifie pas le contrat d'ops : `CLAUDE.md` §3 interdit à
+l'autopilote de le décider seul. Elle **constate une contrainte de l'environnement choisi par
+Williams** et propose la seule adaptation qui préserve les invariants. **Elle doit être RATIFIÉE à la
+porte P-A** — c'est un amendement horodaté du 02 §11, pas une décision d'agent.
+
+**Conséquences à assumer, écrites maintenant plutôt que découvertes plus tard :**
+
+- **ACME n'est plus de notre ressort** : c'est Traefik qui obtient et renouvelle le certificat. Notre
+  procédure de renouvellement (02 §11.3) ne s'applique plus au staging.
+- **Le pare-feu et le durcissement SSH restent ceux de Williams** : `provision-vps.sh` n'est pas
+  exécuté sur cette machine (il changerait le port SSH et refermerait UFW sur un serveur de
+  production — voir `infra/COHABITATION_AXIONIA_WEB.md`).
+- **La production reste une décision ouverte**, à prendre à l'AIPD (06 §10.4). Le staging ne porte que
+  les deux missions fictives FIL-TPE et FIL-GC : aucune donnée personnelle, donc aucune question RGPD.
+
+**Identifiants de l'environnement, non secrets :** Coolify `http://178.105.55.15:8000` · serveur
+`localhost` (`l877luxxpv1mx96sss7tc6zj`) · projet `Axion-Audit` (`tahbm502728xuxu5wgry04s7`) · projet
+voisin `Axion-IA` (`wfm03z4asw5yf5mro2fk6gp9`), auquel on ne touche pas.
+
+**Marge mesurée avant tout déploiement :** 15 Go de RAM dont **11 disponibles**, 150 Go de disque dont
+**105 libres**, 8 cœurs à 15 % de charge, ~2,4 Go consommés par les six ressources existantes. La
+cohabitation ne pose aucun problème de dimensionnement — c'était l'inconnue, elle est levée.
+
+**Décideur :** A01 (constat et proposition) · **Williams doit RATIFIER à la porte P-A**
+**Impact spec :** **amendement proposé du 02 §11** — terminaison TLS déportée sur le frontal de
+l'hôte pour le staging ; le domaine unique et l'absence de CORS sont préservés
