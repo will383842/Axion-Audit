@@ -2129,3 +2129,96 @@ besoin._
 R2 au lieu de Hetzner Storage Box, et la troisième copie est **différée hors Phase 1**.
 **À RATIFIER par Williams à la porte P-A**, au même titre que les amendements Traefik et
 construction-sur-le-serveur.
+
+## 2026-08-28 — [l0] Ajouter `ca-certificates` et le binaire `mc` à l'image PostgreSQL
+
+**Options :**
+
+1. Ajouter les deux à l'image : `ca-certificates` (paquet Debian) et `mc` **copié depuis
+   `minio/mc` au tag déjà épinglé** par le service `createbuckets`.
+2. Installer les deux **à l'exécution**, au moment de la sauvegarde, comme le fait le voisin
+   `axion-ia` (`apk add --no-cache aws-cli` dans un conteneur jetable).
+3. Écrire la signature SigV4 à la main avec `openssl`, seul outil de chiffrement présent.
+
+**Arbitrage : option 1.** Règle de précédence **sans objet** (aucune divergence interne au pack ; le
+11 §1 épingle des dépendances applicatives, pas le contenu d'une image de base).
+
+**`ca-certificates` n'est pas un ajout de confort, c'est la condition d'existence de la
+fonctionnalité.** L'image est une `postgres:16-bookworm` — et non une Alpine, comme le dépôt le
+croyait — dont `/etc/ssl/certs/` ne contient **que le certificat auto-signé du système**.
+`dpkg -l ca-certificates` ne rend rien. **Sans lui, tout client TLS échoue** : l'expédition aurait
+été branchée, déployée, et n'aurait jamais rien envoyé, avec une erreur TLS qui ne nomme pas sa
+cause. Le choix n'est donc pas « avec ou sans », c'est **« HTTPS ou rien »**.
+
+_Ce qui a permis de l'attraper mérite d'être noté : un `test -s` sur le magasin de certificats, posé
+dans le Dockerfile, qui fait échouer **la construction**. Le défaut aurait autrement été découvert
+la première nuit où une sauvegarde aurait dû partir._
+
+**`mc` plutôt que les autres, et chaque écart est motivé par une mesure :**
+
+- **Relevé dans l'image en vie avant de choisir** : présents `openssl`, `gpg`, `zstd`, `tar`,
+  `sha256sum`, `pgbackrest` ; **absents `curl`, `wget`, `python`, `jq`, `aws`, `rclone`, `mc`**.
+  **Aucun client HTTP.**
+- **Option 3 écartée** : un SigV4 écrit à la main marche à la démonstration et casse à 3 h du matin.
+  On n'écrit pas de cryptographie de transport quand un binaire éprouvé existe.
+- **Option 2 écartée** : elle exige le socket Docker (élévation de privilège franche), une
+  installation **par le réseau au moment même de la sauvegarde**, et une version non épinglée. _Une
+  chaîne de secours qui dépend du réseau pour démarrer n'est pas une chaîne de secours._
+- **`pgbackrest` comme téléverseur, écarté sur mesure et non par principe** : `repo-get` et
+  `repo-ls` existent, **`repo-put` n'existe pas**. Il sait lire un dépôt distant, pas y écrire.
+- **`repo2` natif S3, écarté sur conséquence** : il exigerait de donner R2 à l'`archive_command` du
+  serveur, donc une panne R2 ferait gonfler `pg_wal` **sur un disque partagé avec la production d'un
+  tiers**. On échangerait « pas de copie distante » contre « le voisin tombe quand Cloudflare
+  tousse ».
+
+**Ce n'est pas une dépendance nouvelle au sens du 11 §8-1** : `minio/mc` est déjà dans ce fichier,
+au même tag, utilisé par `createbuckets`. **Coût assumé** : +30 Mo dans l'image, et **deux endroits
+à garder synchrones** — le tag du `COPY --from` et celui du service. C'est noté dans le Dockerfile,
+et un test est demandé pour le mécaniser.
+
+**Décideur :** A01, sur mesure d'A61
+**Impact spec :** aucun. Contenu d'image, pas de dépendance applicative. À signaler au brief L2, qui
+reconstruira cette image.
+
+## 2026-08-28 — [l0] Le moindre accès sur les secrets n'existe pas sous Coolify : constat, et ce qu'on en fait
+
+**Options :**
+
+1. Laisser croire que déclarer l'environnement **service par service** cloisonne les secrets.
+2. **Écrire le constat**, corriger le commentaire qui prétendait le contraire, et faire porter le
+   cloisonnement par le **fournisseur** plutôt que par notre compose.
+3. Chercher un contournement dans Coolify pour rétablir un cloisonnement réel.
+
+**Arbitrage : option 2.** Règle de précédence **appliquée** : 02 §30.4 (sécurité, étage §16-22)
+prime sur la convention d'écriture du compose (étage §1-15) — l'exigence est le moindre accès, pas
+la forme qui prétend le produire.
+
+**Le constat, mesuré et non supposé.** Notre `docker-compose.coolify.yml` déclare `environment:`
+service par service, ce qui, en Compose ordinaire, limite ce que chaque conteneur voit. **Sous
+Coolify, non** : les quatre variables `BACKUP_R2_*` sont lisibles dans le conteneur `api`, **qui ne
+les demande pas**. Coolify injecte le `.env` **entier** dans tous les conteneurs de la pile.
+
+**Ce que ça change concrètement :** notre déclaration service par service reste utile comme
+**documentation d'intention** — elle dit ce dont un service a besoin — mais **elle ne garde rien**.
+C'est très exactement la famille de défauts que ce lot passe la journée à éliminer : _un
+cloisonnement qui annonce plus qu'il ne fait_. Le commentaire du fichier qui l'affirmait est
+corrigé ; mieux vaut un fichier qui avoue sa limite qu'un fichier qui rassure à tort.
+
+**Ce qui protège réellement, et c'est ce qui doit être maintenu :** le jeton R2 est **limité au seul
+bucket `axion-audit-backups`**, en lecture/écriture d'objets, jamais Admin. Sans ce cloisonnement
+côté Cloudflare, le `.env` du staging — **en 644, sur une machine qui héberge la production d'un
+tiers** — donnerait accès aux sauvegardes de cette production. _La protection est chez le
+fournisseur ; toute nouvelle intégration devra être cloisonnée là-bas, jamais ici._
+
+**Option 3 écartée**, et c'est une décision de sobriété : contourner l'orchestrateur pour rétablir
+un cloisonnement local serait un mécanisme de plus à maintenir, invisible dans son interface, et
+qui casserait à sa prochaine version. **Le pack l'aurait rangé dans les écarts à ne pas prendre.**
+
+**Ce que cet arbitrage laisse ouvert :** le `.env` du staging reste en **644** et Coolify le repose à
+chaque déploiement — un `chmod` manuel serait effacé au suivant. Reste également due la vérification
+nominative des 12 familles de secrets du 02 §30.3, qui appartient à Williams.
+
+**Décideur :** A01, sur mesure d'A61
+**Impact spec :** aucun sur le pack. **Amendement de fait au commentaire d'architecture du compose**,
+et point à porter au brief L2 (authentification) : **toute variable ajoutée à cette pile est visible
+par tous ses conteneurs.**

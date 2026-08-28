@@ -480,3 +480,46 @@ Prochaine action : rejouer la chaîne de migrations up/down sur le socle assaini
 DoD manquante — puis représenter la porte P-A au gardien A02.
 
 Tests rouges connus : aucun.
+
+## 2026-08-28 11h05 — [lot L0-b] — étape pipeline 6/7 — LES SAUVEGARDES QUITTENT LA MACHINE
+
+Dernier commit vert : 4226d88 (feat(l0b): les sauvegardes quittent enfin la machine — aller-retour
+prouvé depuis R2) · Branche : lot/l0-infra · Poussé : oui
+
+**Déployé et actif** (`i4rlohcc0tcbq6s83ho5hnva`, `finished`) : le service `sauvegarde` a expédié
+**1 539 objets vers Cloudflare R2 en 16 s**, avec **relecture depuis R2 vérifiée** sur deux témoins,
+puis « expédition de rattrapage terminée avec succès ». Onze conteneurs sains, production intacte.
+
+**L'aller-retour complet avait été joué avant** : archive récupérée **depuis R2** sur un chemin
+incapable de relire la copie locale, déchiffrée, restaurée sur base jetable, **empreinte identique à
+l'originale**. MinIO : 3/3 objets au même sha256, versioning et politique conservés.
+
+**DEUX DÉCOUVERTES, ET LA PREMIÈRE AURAIT TOUT CASSÉ EN SILENCE.**
+
+1. **L'image PostgreSQL n'a aucun magasin de certificats.** Ce n'est pas une Alpine — comme le dépôt
+   le croyait — mais une `postgres:16-bookworm` dont `/etc/ssl/certs/` ne contient que le certificat
+   auto-signé du système. **Sans `ca-certificates`, tout client TLS y échoue** : l'expédition aurait
+   été branchée, déployée, et n'aurait **jamais rien envoyé**. Attrapé par un `test -s` posé dans le
+   Dockerfile, **à la construction** — sinon on l'aurait découvert la première nuit.
+2. **Notre cloisonnement des secrets n'en est pas un.** Déclarer `environment:` service par service
+   ne garde rien sous Coolify, qui injecte le `.env` **entier** dans tous les conteneurs : les
+   variables `BACKUP_R2_*` sont lisibles depuis l'`api`, qui ne les demande pas. Ce qui protège
+   réellement est la **portée du jeton côté Cloudflare**. Le commentaire qui prétendait le contraire
+   est corrigé — *un fichier qui avoue sa limite vaut mieux qu'un fichier qui rassure à tort.*
+
+**Invariant 8 réévalué en 🟠, et la nuance est le fait important :** « rien ne vit sur un seul
+support » est **tenu et prouvé** ; « alerte automatique au-delà » ne l'est **pas** — trois nuits sans
+R2 laisseraient les sauvegardes locales tourner sans que rien ne sorte, et la découverte dépendrait
+d'un humain qui regarde. La troisième copie du 02 §11.4 n'existe pas non plus (écart tracé, à
+ratifier).
+
+**Trois amendements attendent maintenant Williams** : Traefik · construction sur le serveur · R2 au
+lieu de Hetzner+Scaleway.
+
+Prochaine action : intégrer le rendu de l'agent de tests croisés, puis basculer le staging en HTTPS
+sur `audit-staging.axion-ia.com` (DNS posé par Williams, résolution vérifiée) — **après** les tests,
+jamais deux changements à la fois sur la chaîne TLS partagée avec la production.
+
+Tests rouges connus : `lint` et `format:check` **rouges** sur les deux fichiers de tests
+d'intégration non suivis, laissés par un agent interrompu. Leur auteur y travaille. **La DoD est
+rouge tant qu'ils le sont.**
