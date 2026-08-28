@@ -791,3 +791,41 @@ sous un seul message. Les deux sessions avaient pourtant stagé **explicitement*
 `git add` ciblé ne protège de rien quand un `git commit` d'une autre session s'intercale. **Seul
 `git commit -- <chemins>` isole vraiment**, parce qu'il ignore l'index partagé. C'est la règle à
 retenir pour tout travail croisé.
+
+---
+
+## 2026-08-28 20h05 — [lot L0-b] — CORRECTION du bloc précédent : le coffre EXISTE
+Dernier commit vert : 1df1664 (chore(l0b): ETAT — CI verte, gouvernance verrouillée, et sept points qui restent)   ·   Branche : lot/l0-infra   ·   Poussé : oui
+Tâche en cours : correction d'un bloc d'état devenu faux moins d'une heure après son écriture.
+Prochaine action : **faire confirmer par celui qui a les accès que `/sauvegarde` contient bien `secrets-20260828T175324Z.coffre.gpg`** — la session qui écrit ces lignes n'a pas pu le vérifier elle-même.
+Tests rouges connus : aucun.
+
+**Le point n° 1 du bloc précédent est PÉRIMÉ.** Il annonçait « le coffre des secrets n'existe pas
+encore, premier coffre à 02h30 UTC ». **Williams a lancé lui-même la passe de rattrapage** — le geste
+que le classificateur de permissions avait refusé à deux sessions d'agents, et qui lui revenait.
+
+Mesuré par la session `axion-audit-v2-12-complet-2a` : `secrets-20260828T175324Z.coffre.gpg` écrit,
+expédié vers R2, **relecture de contrôle conforme** (`e9634b5fbc00487a…`), 1596 objets sous
+`staging/`, « passe terminée avec succès (locale ET hors serveur) ». Le code de sortie 124 est
+`timeout` coupant la boucle de planification après la passe — pas un échec.
+
+**La copie hors serveur porte donc les secrets, et l'invariant 8 ne dépend plus de la passe de
+02h30.**
+
+⚠️ **HONNÊTETÉ SUR LA PREUVE — je n'ai pas pu la revérifier.** Ces mesures sont celles d'une autre
+session, pas les miennes. La passe est passée par `docker exec`, dont la sortie **ne va pas dans
+`docker logs`** : les journaux du conteneur, que j'ai relus, ne portent toujours que les quatre
+lignes de démarrage. Et les deux voies de vérification indépendante me sont fermées — SSH et le
+terminal Coolify sont refusés à cette session. **Le contrôle qui clôt formellement D-3 reste donc à
+faire par quelqu'un qui a les accès**, et il tient en une ligne : `ls -la /sauvegarde`.
+
+**Le point n° 5 du bloc précédent est INCOMPLET, et sa correction est plus grave que l'oubli.**
+`COHABITATION_AXIONIA_WEB.md` §5quater proposait en étape 4 de « fermer le port 8000 au pare-feu ».
+**Cette étape était fausse et vient d'être remplacée.** Mesuré : `ufw` est **inactive**, la chaîne
+`iptables DOCKER-USER` est **VIDE**, et le trafic est DNATé puis FORWARDé — il ne traverse jamais la
+chaîne `INPUT` que `ufw` filtre. **Un `ufw deny 8000` s'afficherait vert et laisserait le port grand
+ouvert** : exactement le motif de sonde menteuse que ce lot a démonté plusieurs fois. La voie
+`iptables` est par ailleurs interdite à un agent du lot Audit, `DOCKER-USER` filtrant aussi
+`coolify-proxy` sur 80/443, donc la production du voisin. Le §5quater porte désormais la voie sûre
+(`APP_PORT=127.0.0.1:8000` + tunnel SSH sur 8000, 6001 et 6002) et la liste réelle des ports ouverts
+— 8000, mais aussi **6001, 6002 et 32769**.

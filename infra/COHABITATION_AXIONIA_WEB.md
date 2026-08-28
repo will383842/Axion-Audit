@@ -360,7 +360,40 @@ de Williams.
 3. seulement ensuite, poser le domaine d'instance dans Coolify, qui demandera un certificat
    Let's Encrypt. **Les enregistrements CAA de la zone autorisent déjà `letsencrypt.org`** — vérifié
    le 2026-08-28, aux côtés de `sectigo.com`, `ssl.com` et `pki.goog` ;
-4. fermer le port 8000 au pare-feu, ou le restreindre, une fois le nom en service.
+4. **NE PAS croire qu'`ufw` ferme le port — voir l'encadré ci-dessous.** Restreindre l'exposition
+   se fait ailleurs, et l'encadré dit où.
+
+> ### ⚠️ `ufw` NE FERMERAIT RIEN — mesuré le 2026-08-28
+>
+> **C'est la correction que tout le monde tente en premier, et elle produirait un garde-fou menteur :
+> une règle affichée verte, un port resté grand ouvert.**
+>
+> Mesures sur la machine : `ufw status` → **inactive**, rien n'est filtré. Et surtout
+> `iptables -S DOCKER-USER` → **la chaîne est VIDE**, tandis que `iptables -t nat -S` montre
+> `-A DOCKER … --dport 8000 -j DNAT --to-destination 10.0.1.11:8080`. Le trafic conteneur est
+> **DNATé puis FORWARDé** : il ne traverse jamais la chaîne `INPUT` que `ufw` filtre. Un
+> `ufw deny 8000` serait donc sans effet, tout en donnant l'apparence de la protection.
+>
+> **Et la voie `iptables` est interdite à un agent du lot Audit** : `DOCKER-USER` filtre **tout** le
+> trafic conteneur, `coolify-proxy` sur 80/443 compris — donc **`axion-ia.com` en production**. Une
+> règle mal cadrée coupe le site du voisin.
+>
+> **Ce n'est pas non plus le seul port ouvert** : outre 8000, sont joignables en clair depuis
+> Internet **6001 et 6002** (`coolify-realtime`) et **32769** (Plausible, HTTP 200).
+>
+> **La voie sûre, bornée et réversible** : `/data/coolify/source/docker-compose.prod.yml` publie
+> `"${APP_PORT:-8000}:8080"`. Poser `APP_PORT=127.0.0.1:8000` et relancer ce compose ne republie
+> plus le port que sur la boucle locale ; l'accès se fait ensuite par tunnel SSH — **en redirigeant
+> aussi 6001 et 6002**, sans quoi le temps réel du tableau de bord casse. Seul le conteneur
+> `coolify` est recréé : les applications déployées ne bougent pas, SSH n'est pas touché.
+>
+> **Bonne nouvelle du même relevé** : `axion-ia.com` répond bien en **HTTPS** (301 http → https), et
+> **notre Caddy n'est pas exposé** — le `8080` public appartient à `coolify-proxy`, le nôtre n'a
+> aucune liaison d'hôte. Les noms `coolify.axion-ia.com` et `admin.axion-ia.com` sont libres.
+>
+> Mesures relevées par la session `axion-audit-v2-12-complet-2a` ; **non revérifiées ici** — l'accès
+> SSH et le terminal Coolify sont refusés à la session qui écrit ces lignes. À confirmer avant tout
+> geste, par celui qui l'exécutera.
 
 **Inverser 1 et 3 vous enferme dehors de votre propre tableau de bord.** C'est la seule manœuvre de
 cette liste qui peut coûter l'accès au serveur.
