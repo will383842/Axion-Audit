@@ -642,6 +642,12 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: ./.github/actions/setup-node-pnpm
+      # Voir l'encadré du job `3 · unit` : `needs:` n'impose qu'un ORDRE, il ne
+      # partage AUCUN artefact. Sans cette étape, les tests qui importent
+      # `@axion/shared` par son nom de paquet échouent sur « Failed to resolve
+      # entry » — vert en local où `dist/` traîne, rouge ici. (2026-08-29)
+      - name: pnpm build (paquets uniquement)
+        run: pnpm --recursive --filter "./packages/**" build
 
       # MinIO ne peut PAS être déclaré en `services:` : son entrypoint exige
       # l'argument `server /data`, que la clé `services` de GitHub Actions ne
