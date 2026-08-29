@@ -1327,3 +1327,70 @@ cible inconnue de git : **avant, `✓ aucun import pendu`, code 0** ; après, `�
 Il ne manquait pas le défaut — **il imprimait sa garantie d'absence, en vert, dans les mots exacts du
 contrôle**. Son auteur a également retiré sa propre affirmation « zéro faux positif », fausse. Corrigé
 par un automate à sept états ; seize angles morts désormais énumérés.
+
+---
+
+## 2026-08-29 06h50 — [lot L2 / T5 en cours · porte P-A SIGNÉE] — étape pipeline 6/7
+
+Dernier commit vert : e04b417 (docs(infra) : le coffre de secrets, ouvert pour de vrai) · Branche : lot/l0-infra · Poussé : oui
+Tâche en cours : T5 (étanchéité financière + balayage sentinelle) · six tests de couverture des modules critiques.
+Prochaine action : **dès que le job « couverture » passe au vert, MERGER `lot/l0-infra` vers `main` — autorisé par Williams, sans squash** — puis poser le tag, puis ouvrir L3b sur `lot/l3b`.
+Tests rouges connus : **un seul job de CI**, la couverture du journal d'activité (74,67 % lignes / 46,15 % branches), à **12 lignes et 6 branches** du seuil. Douze jobs sur treize sont verts.
+
+✅ **LA PORTE P-A EST SIGNÉE PAR WILLIAMS** — 🟡 acceptée sous réserve, le 2026-08-29, sur `f0ad6e6`.
+Dossier : `docs/portes/PORTE_A_2026-08-27.md`, section « SIGNATURE HUMAINE ».
+· critères 1 et 2 **acquis** (la pile démarre ; restauration depuis zéro prouvée par identité d'empreinte) ;
+· critère 3 **en dette datée** : contrôle nominatif des 12 familles de secrets, et sauvegarde chiffrée du `.env` — **cette dernière est désormais FAITE et prouvée** (voir plus bas) ;
+· critère 4 **débloqué par le merge**, qui le prouvera par le mécanisme prévu.
+
+✅ **CE QUE WILLIAMS A ACCORDÉ LE MÊME JOUR** : le premier merge vers `main` · **l'exception au squash du §7** pour ce merge-là, les 126 commits conservés · la récupération du jeton Coolify · le ménage des conteneurs orphelins (**fait : 25 supprimés**, un seul épargné).
+
+⚠️ **LE MERGE N'EST PAS EXÉCUTÉ, ET C'EST DÉLIBÉRÉ.** Le §7 dit « merge bloqué sans tout vert » et le
+02 §30.5 « CI verte obligatoire sur `main` ». **L'autorisation de Williams ne lève pas la règle qu'il a
+lui-même posée.** Le merge partira au vert du dernier job, sans nouvelle intervention humaine.
+
+✅ **LE COFFRE DE SECRETS EST PROUVÉ, PAS DÉCLARÉ.** Le mécanisme existait déjà ; ce qui manquait était
+de l'ouvrir. Retéléchargé depuis le stockage distant, ouvert par la commande de son propre mode
+d'emploi, empreinte identique à chaque étape, arbre recomposé égal à l'empreinte journalisée à
+l'écriture. **Et l'ouverture avec l'AUTRE passphrase est REFUSÉE** — le cloisonnement tient
+réellement. Runbook en `infra/README.md` §5.3bis, placé **avant** les sections de restauration qu'il
+conditionne.
+
+⛔ **UN DÉFAUT GRAVE TROUVÉ HORS MANDAT : la sauvegarde du 02h30 était INCOMPLÈTE et se déclarait
+réussie.** Comparaison exhaustive : 1 613 objets attendus, **1 611 présents**. L'un des manquants était
+`backup.info` — **le fichier sans lequel aucune restauration pgBackRest ne démarre**. L'expédition
+était morte là, si bien que la relecture de contrôle du script **n'a jamais été atteinte**.
+**Ce qui compte plus que le fichier** : cette relecture ne vérifie que **3 objets sur 1 613**. Elle a
+attrapé ce cas parce que la victime se trouvait être l'un des trois. Une passe peut se déclarer
+réussie en laissant un trou ailleurs. Trou refermé pour cette passe ; **correction instruite et NON
+implémentée** — elle touche la fiabilité de la copie hors serveur, pas un réglage.
+
+📌 **LA SEULE DÉCISION QUI RESTE À WILLIAMS, ET SON ÉCHEC NE SE RATTRAPERAIT PAS** : la garde de la
+passphrase. Un seul détenteur aujourd'hui. Si elle est perdue, **les coffres ET les archives ET le
+dépôt de sauvegarde deviennent illisibles** — leurs passphrases sont dedans. Quatre options rédigées
+pour être tranchables en `infra/README.md` §5.7bis, avec une procédure de dépôt dont la 4ᵉ étape est
+de **rouvrir un coffre avec la copie déposée** — sans quoi on a déposé une croyance.
+
+🔎 **CE BLOC EXISTE PARCE QU'UNE AUTRE SESSION A LU LE PRÉCÉDENT ET S'EST TROMPÉE.** Une session
+`…-00` a rendu à Williams un état d'avancement fondé sur le bloc de 02h30 : elle lui a annoncé la
+porte **non signée** et la branche **non constructible**, alors que les deux étaient réglées depuis
+des heures. **Elle a suivi le protocole du §8 exactement ; c'est le fichier qui mentait.** C'est la
+dixième variante du motif de cette session — *une lecture vraie sur ce qu'elle mesure, mais qui répond
+à une autre question que celle posée* — et la plus coûteuse, parce qu'elle trompe **le lecteur
+suivant** plutôt que son auteur. **Un `ETAT.md` en retard n'est pas une documentation en retard :
+c'est un garde-fou qui ment.**
+
+✅ **CE QUE LE LOT L2 A LIVRÉ ET PROUVÉ** : socle d'autorisation (une route sans politique empêche
+l'API de démarrer) · routes d'authentification, 29 cas d'intégration dont **4 bascules reconstruites
+par interception** · redaction des journaux, 39 cas, **3 fuites avant / 0 après contre un vrai
+PostgreSQL** · journal d'activité, **porte d'écriture unique prouvée sur 4 contournements injectés** ·
+plafond de connexion rendu réel (`trusted_proxies` sur les deux blocs) · socle HTTP L3a.
+**Suites : 297 unitaires, 0 skippé ; intégration verte en CI.**
+
+📌 **RESTE DÛ, écrit plutôt que tu** : la mesure du plafond **sur le fil** et non sur le papier — un
+agent est prêt, elle s'exécutera après le déploiement que le merge déclenchera · T3 (application RBAC)
+et la clôture de L2 · la migration des routes d'auth vers la forme déclarative des schémas, **bloquante
+pour la porte L2** · `packages/shared/src/**` est rapporté à **0 %** de couverture pour tous ses
+fichiers (les tests exécutent le JS compilé, pas les sources) : **`journal.ts` et `redaction.ts`, qui
+portent la substance de deux garanties, sont structurellement invisibles au garde** — refusé de
+corriger par un alias, qui ferait tester la source au lieu de ce qui est publié.
