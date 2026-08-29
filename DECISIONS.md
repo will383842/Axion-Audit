@@ -3513,3 +3513,116 @@ interne au pack, seulement un écart entre le pack et ma pratique.
 Décideur : A01 pour le refus de réécrire l'historique et pour la discipline en avant. **Williams pour
 le merge, la signature de P-A et l'exception au squash.**
 Impact spec : aucun amendement du pack. Un écart de pratique constaté, daté, et refermé en avant.
+
+---
+
+## 2026-08-29 — [L0/L2] Deux leurres de test font rougir gitleaks : comment les exempter sans ouvrir de brèche ?
+
+**Cette entrée existe parce que `.gitleaks.toml` l'exige de lui-même** : « toute autre entrée dans
+cette allowlist est une décision humaine tracée dans `DECISIONS.md` (11 §8-4) ». Elle consigne aussi
+une omission de ma part.
+
+**L'AVEU D'ABORD.** Le 2026-08-28 j'ai resserré `regexTarget` de `line` à `match` — correctif réel :
+en `line`, toute ligne contenant `__CHANGEME__`, **dans n'importe quel fichier**, était exemptée de
+**toutes** les règles. L'encadré que j'ai écrit ce jour-là annonçait noir sur blanc le résultat de
+l'épreuve : `line` → 1 fuite détectée, `match` → **2**. **J'ai livré le correctif sans traiter les
+deux trouvailles qu'il révélait.** La CI est restée **ROUGE depuis**, et je ne l'ai pas regardée
+pendant que je rapportais des verts **locaux** comme des verts tout court. _Un correctif qui ouvre un
+rouge sans le refermer n'est livré qu'à moitié._
+
+**LES DEUX TROUVAILLES, vérifiées avant d'être exemptées** — c'est l'ordre qui compte, l'inverse
+serait une CI qu'on fait taire :
+· `apps/api/src/redaction-journal.test.ts` — règle `jwt`. La valeur est l'exemple **public et
+canonique** de la documentation JWT, tronqué de surcroît. Il ne signe rien et n'ouvre rien. C'est le
+leurre qui sert à prouver que la redaction masque les jetons.
+· `apps/api/tests/l0-sauvegarde.integration.test.ts` — règle `private-key`. La valeur porte
+`leurre-de-test-sans-valeur` **dans son corps**, à la place du matériel cryptographique, et le fichier
+le dit déjà en commentaire.
+
+Le 02 §30.4-5 exige que « les tests utilisent des secrets factices ». Ces deux valeurs **sont** ces
+secrets factices : les exempter **applique** la spécification, ça n'y déroge pas.
+
+Options :
+
+1. **Exempter par chemin** (`apps/api/**/*.test.ts`).
+2. **Éteindre les règles `jwt` et `private-key`.**
+3. **Exempter par empreinte** (`commit:fichier:règle:ligne`).
+4. **Exempter par la VALEUR EXACTE, et rien qu'elle.**
+
+Arbitrage : **option 4**, et les trois autres sont écartées pour des raisons qui valent d'être dites.
+
+L'**option 1** créerait une zone du dépôt où l'on peut fuiter tranquillement — exactement ce que le
+même fichier refuse pour `.env.example`, et pour le même motif. L'**option 2** éteindrait la règle sur
+**tout** le dépôt, code de production compris : on protégerait moins qu'avant pour faire passer un
+test. L'**option 3** est la plus tentante parce qu'elle paraît chirurgicale, et c'est la pire : une
+empreinte contient le sha du commit et le **numéro de ligne**, donc elle se périme au premier
+déplacement du fichier — **un garde-fou qui se désarme tout seul sans le dire**, la famille de défaut
+que ce dépôt traque depuis quatre jours.
+
+**Vérifié, pas supposé** : `gitleaks v8.18.4` exécuté localement sur l'historique complet →
+`130 commits scanned`, **`no leaks found`**, code de sortie **0**.
+
+**Ce que cette exemption coûte, dit sans enjoliver** : ces deux valeurs exactes ne feront plus jamais
+rougir le build, où qu'elles apparaissent. Le risque résiduel est nul pour la seconde (elle ne
+contient aucun matériel) et théorique pour la première (un jeton d'exemple public réutilisé comme
+vrai secret serait déjà une faute plus grave). **Tout autre jeton, toute autre clé, dans ces mêmes
+fichiers, font toujours rougir le build.**
+
+**Et une règle qui en découle, pour la suite** : un leurre de test doit se **désigner lui-même** —
+porter dans sa valeur un marqueur qui dit ce qu'il est. Celui de la clé privée le fait ; c'est ce qui
+a rendu son exemption immédiate et vérifiable. À défaut, on retombe sur une exemption par chemin ou
+par règle, c'est-à-dire sur une brèche.
+
+Précédence : 02 §30.4-5 (« les tests utilisent des secrets factices ») et 11 §2 (« aucune valeur de
+secret dans un fichier versionné ») se conjuguent sans se contredire. Règle de précédence du pack
+**sans objet** — aucune divergence interne.
+
+Décideur : A01.
+Impact spec : aucun amendement.
+
+---
+
+## 2026-08-29 — [CI] Les tests unitaires étaient VERTS en local et ROUGES en CI : pourquoi, et que corrige-t-on ?
+
+Constat en allant lire la CI, ce que je n'avais **pas fait** de la nuit : cinq fichiers de tests
+échouaient sur `Failed to resolve entry for package "@axion/shared"`, pendant que je rapportais
+« 279 tests unitaires verts » d'après des exécutions **locales**.
+
+**La cause, mesurée.** Le job `3 · unit` fait `checkout`, `setup-node-pnpm`, puis `pnpm test:unit` —
+**sans jamais construire les paquets de l'espace de travail**. Le job `2bis · build (sources)` existe
+et compile, mais `needs:` **n'impose qu'un ordre, il ne partage rien** : chaque job démarre sur une
+machine neuve, aucun artefact n'est transmis. `packages/shared` déclare `main: ./dist/index.js` ; ce
+`dist/` n'existe donc jamais en CI.
+
+**Pourquoi personne ne l'avait vu, et c'est le vrai enseignement** : sur un poste de développement,
+`dist/` **traîne depuis une compilation antérieure**. La suite est donc verte en local et rouge en CI,
+et l'écart ne se voit que si l'on va lire la CI. **Un vert qui ne se reproduit pas là où il compte
+n'est pas un vert** — c'est la même famille que la sonde applicative verte au-dessus d'un déploiement
+qui avait échoué, et que le `typecheck` de pré-commit qui examine l'arbre au lieu de l'index.
+
+Options :
+
+1. **Partager les artefacts** entre `build-sources` et les jobs de test.
+2. **Construire les paquets dans le job qui en a besoin.**
+3. **Aliaser `@axion/shared` vers ses sources** dans la configuration de test.
+
+Arbitrage : **option 2**, limitée à `./packages/**`.
+
+L'option 3 est refusée pour une raison de fond : elle testerait **la source** au lieu de **ce qui est
+publié**. Le paquet expose `dist/index.js` ; c'est ce fichier-là que consomment l'API et le worker en
+production, et c'est donc lui qu'il faut éprouver. Un alias aurait rendu la suite verte en masquant
+définitivement toute erreur de configuration d'export. L'option 1 est plus économe en temps de calcul
+mais ajoute un couplage entre jobs pour un gain de quelques secondes — `tsc` sur deux paquets est
+rapide. Les applications ne sont pas construites : les tests unitaires n'en ont pas besoin, et
+`build-sources` reste seul juge de la compilation complète.
+
+**Reste à instruire, et je ne le referme pas ici** : trois autres jobs ne construisent pas non plus
+(`2 · typecheck`, `4 · integration`, `couverture`). Ils ont été **sautés** lors de l'exécution
+observée, à cause des échecs amont — **je ne sais donc pas s'ils échoueraient**, et je refuse de le
+supposer dans un sens ou dans l'autre. La prochaine exécution le dira.
+
+Précédence : `CLAUDE.md` §5 (DoD : « tous les tests verts, AUCUN test skippé » — cochée sur la CI, pas
+sur un poste) et 09 §5.7 (« la CI reste seule juge »). Règle de précédence du pack **sans objet**.
+
+Décideur : A01.
+Impact spec : aucun.

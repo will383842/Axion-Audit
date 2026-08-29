@@ -65,6 +65,12 @@ const sondes = vi.hoisted(() => ({
    * la sonde mesurerait des appels, pas du temps.
    */
   travauxArgon2: 0,
+  /**
+   * Les empreintes PHC contre lesquelles une vérification a été demandée. Elles
+   * portent les paramètres de coût (`$argon2id$v=19$m=…,t=…,p=…$…`) : c'est la
+   * seule façon d'observer, sans chronomètre, ce que chaque chemin fait TRAVAILLER.
+   */
+  empreintesVerifiees: [] as string[],
   /** Toutes les lignes écrites par pino pendant l'exécution. */
   lignesJournal: [] as string[],
 }));
@@ -79,6 +85,7 @@ vi.mock('hash-wasm', async (importOriginal) => {
       return resultat;
     },
     argon2Verify: async (options: Parameters<typeof reel.argon2Verify>[0]) => {
+      sondes.empreintesVerifiees.push(options.hash);
       const resultat = await reel.argon2Verify(options);
       sondes.travauxArgon2 += 1;
       return resultat;
@@ -132,6 +139,27 @@ const PARAMETRES_SEMENCE = {
   memorySize: 19_456,
   hashLength: 32,
 } as const;
+
+/**
+ * Les paramètres que portent les empreintes des comptes RÉELS — lus dans le seul
+ * producteur d'empreintes du dépôt à ce jour, `apps/api/scripts/seed.mjs`
+ * (`iterations: 3, memorySize: 19456, parallelism: 1`). Ils servent au test qui
+ * compare le coût du LEURRE à celui d'une empreinte réelle : c'est la moitié de
+ * l'absence d'oracle que l'égalité du NOMBRE de dérivations ne couvre pas.
+ */
+const PARAMETRES_DES_COMPTES_REELS = {
+  parallelism: 1,
+  iterations: 3,
+  memorySize: 19_456,
+  hashLength: 32,
+} as const;
+
+/** Extrait `m=…,t=…,p=…` d'une empreinte au format PHC. */
+function coutEncode(empreinte: string): string {
+  return (
+    /\$(m=\d+,t=\d+,p=\d+)\$/.exec(empreinte)?.[1] ?? `(illisible : ${empreinte.slice(0, 24)})`
+  );
+}
 
 let nomBase = '';
 let client: Client | undefined;
@@ -243,7 +271,12 @@ let compteurCompte = 0;
  */
 async function creerCompte(
   marqueur: string,
-  options: { readonly actif?: boolean; readonly empreinteIllisible?: boolean } = {},
+  options: {
+    readonly actif?: boolean;
+    readonly empreinteIllisible?: boolean;
+    /** Hache avec les paramètres des comptes RÉELS plutôt qu'avec ceux de la semence. */
+    readonly commeUnCompteReel?: boolean;
+  } = {},
 ): Promise<Compte> {
   compteurCompte += 1;
   const suffixe = `${marqueur}-${String(compteurCompte)}`;
@@ -257,7 +290,9 @@ async function creerCompte(
       : await argon2id({
           password: motDePasse,
           salt: randomBytes(16),
-          ...PARAMETRES_SEMENCE,
+          ...(options.commeUnCompteReel === true
+            ? PARAMETRES_DES_COMPTES_REELS
+            : PARAMETRES_SEMENCE),
           outputType: 'encoded',
         });
 
@@ -483,6 +518,50 @@ describe('POST /v1/auth/login — absence d’oracle', () => {
     ).toStrictEqual([]);
   });
 
+  it('@critique le LEURRE coûte autant qu’une empreinte réelle — l’autre moitié de l’oracle', async () => {
+    // CE QUE L'ÉGALITÉ DU NOMBRE DE DÉRIVATIONS NE DIT PAS.
+    // Compter les dérivations prouve qu'aucun chemin n'en saute une ni n'en paie
+    // deux. Cela ne prouve RIEN sur ce que chaque dérivation coûte : Argon2id lit
+    // son coût dans les paramètres ENCODÉS de l'empreinte qu'on lui présente. Le
+    // compte inexistant est vérifié contre un LEURRE fabriqué par le code ; un
+    // compte existant, contre l'empreinte STOCKÉE, produite ailleurs — aujourd'hui
+    // par `apps/api/scripts/seed.mjs`, demain par le CRUD des utilisateurs (T3).
+    //
+    // Ces deux jeux de paramètres sont écrits dans DEUX fichiers qui ne se
+    // connaissent pas, et rien — ni constante partagée, ni contrôle — ne les tient
+    // ensemble. Le jour où l'on durcira le coût d'un seul côté (ou le jour où l'on
+    // durcira le code sans re-hacher les comptes existants), « compte inexistant »
+    // et « mot de passe faux » cesseront de coûter le même temps, et l'énumération
+    // de comptes redeviendra possible SANS qu'aucun message n'ait changé. C'est
+    // exactement la famille de défaut que le préchauffage a corrigée — sa seconde
+    // moitié, restée ouverte.
+    const compteReel = await creerCompte('cout-parametres', { commeUnCompteReel: true });
+
+    sondes.empreintesVerifiees.length = 0;
+    await poster('/v1/auth/login', {
+      email: 'compte.jamais-vu-parametres@exemple.test',
+      password: 'mot-de-passe-factice-quelconque',
+    });
+    const coutDuLeurre = sondes.empreintesVerifiees.map(coutEncode);
+
+    sondes.empreintesVerifiees.length = 0;
+    await poster('/v1/auth/login', {
+      email: compteReel.email,
+      password: 'mot-de-passe-factice-errone',
+    });
+    const coutReel = sondes.empreintesVerifiees.map(coutEncode);
+
+    expect(coutDuLeurre.length, 'une seule vérification par tentative').toBe(1);
+    expect(
+      coutDuLeurre,
+      'Le leurre doit imposer EXACTEMENT le même travail que l’empreinte d’un compte\n' +
+        'réel. Sinon le chronomètre sépare « ce compte existe » de « ce compte\n' +
+        'n’existe pas », et l’égalité des messages ne protège plus rien.\n' +
+        'Si ce test rougit, ce n’est pas lui qu’il faut ajuster : c’est que les\n' +
+        'paramètres Argon2id du code et ceux des empreintes stockées ont divergé.',
+    ).toStrictEqual(coutReel);
+  });
+
   it('un mot de passe hors gabarit est refusé SANS payer la moindre dérivation', async () => {
     const compte = await creerCompte('gabarit');
     sondes.travauxArgon2 = 0;
@@ -517,7 +596,9 @@ describe('POST /v1/auth/login — le couple émis', () => {
     expect(emise.accessExpiresAt.endsWith('Z'), 'ISO 8601 UTC (11 §3)').toBe(true);
     expect(emise.refreshExpiresAt.endsWith('Z'), 'ISO 8601 UTC (11 §3)').toBe(true);
     expect(Math.abs(expirationAcces - (avant + 15 * MINUTE_MS))).toBeLessThan(30_000);
-    expect(Math.abs(expirationRafraichissement - (avant + 30 * JOUR_MS))).toBeLessThan(5 * MINUTE_MS);
+    expect(Math.abs(expirationRafraichissement - (avant + 30 * JOUR_MS))).toBeLessThan(
+      5 * MINUTE_MS,
+    );
 
     const lignes = await lignesJeton(compte.id);
     expect(lignes).toHaveLength(1);
@@ -884,7 +965,9 @@ describe('POST /v1/auth/refresh — grâce contre réutilisation : seul le déla
     const vivantes = await lignesVivantes(compte.id);
     expect(vivantes, 'exactement le jeton fraîchement émis, et lui seul').toHaveLength(1);
 
-    const suite = await poster('/v1/auth/refresh', { refreshToken: session(gagnante).refreshToken });
+    const suite = await poster('/v1/auth/refresh', {
+      refreshToken: session(gagnante).refreshToken,
+    });
     expect(suite.statut, 'le jeton gagnant reste utilisable').toBe(200);
   });
 });
@@ -1066,7 +1149,10 @@ describe('quota des routes d’authentification (11 §3)', () => {
         { ip: ipSaturee },
       );
     }
-    expect((await poster('/v1/auth/login', { email: compte.email, password: 'x' }, { ip: ipSaturee })).statut).toBe(429);
+    expect(
+      (await poster('/v1/auth/login', { email: compte.email, password: 'x' }, { ip: ipSaturee }))
+        .statut,
+    ).toBe(429);
 
     const ailleurs = await poster(
       '/v1/auth/login',
@@ -1110,9 +1196,15 @@ describe('quota des routes d’authentification (11 §3)', () => {
     for (let n = 0; n < 11; n += 1) {
       await poster('/v1/auth/login', { email: compte.email, password: 'x' }, { ip });
     }
-    expect((await poster('/v1/auth/login', { email: compte.email, password: 'x' }, { ip })).statut).toBe(429);
+    expect(
+      (await poster('/v1/auth/login', { email: compte.email, password: 'x' }, { ip })).statut,
+    ).toBe(429);
 
-    const surRefresh = await poster('/v1/auth/refresh', { refreshToken: 'jeton-inexistant' }, { ip });
+    const surRefresh = await poster(
+      '/v1/auth/refresh',
+      { refreshToken: 'jeton-inexistant' },
+      { ip },
+    );
     expect(
       surRefresh.statut,
       '`refresh` garde son propre budget de 10 : le plafond du préfixe `/v1/auth/*`\n' +

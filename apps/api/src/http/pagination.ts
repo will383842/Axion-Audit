@@ -275,7 +275,10 @@ export function paginerParCurseur<Ligne>(
  */
 export function contratDeListe<Item extends z.ZodType>(
   item: Item,
-): { querystring: typeof paginationQuerySchema; response: { 200: ReturnType<typeof pageSchema<Item>> } } {
+): {
+  querystring: typeof paginationQuerySchema;
+  response: { 200: ReturnType<typeof pageSchema<Item>> };
+} {
   return {
     querystring: paginationQuerySchema,
     response: { 200: pageSchema(item) },

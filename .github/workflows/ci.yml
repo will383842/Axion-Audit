@@ -582,6 +582,27 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: ./.github/actions/setup-node-pnpm
+      # -----------------------------------------------------------------------
+      # POURQUOI CONSTRUIRE ICI ALORS QUE `build-sources` EXISTE DÉJÀ.
+      #
+      # `needs:` n'impose qu'un ORDRE — il ne partage rien. Chaque job démarre sur
+      # une machine neuve, sans `dist/`, et aucun artefact n'est transmis. Les
+      # tests qui importent `@axion/shared` par son nom de paquet résolvent donc
+      # `main: ./dist/index.js`, absent : « Failed to resolve entry for package ».
+      #
+      # LE DÉFAUT QUE CELA A PRODUIT, ET IL EST INSTRUCTIF : sur un poste de
+      # développement `dist/` traîne depuis une compilation antérieure, donc la
+      # suite est VERTE en local et ROUGE en CI. Cinq fichiers de tests ont ainsi
+      # échoué en CI pendant qu'A01 rapportait « 279 tests verts » d'après des
+      # exécutions locales. Un vert qui ne se reproduit pas là où il compte n'est
+      # pas un vert. (2026-08-29)
+      #
+      # Seuls `./packages/**` sont construits : les tests unitaires n'ont pas
+      # besoin des applications, et `build-sources` reste seul juge de la
+      # compilation complète.
+      # -----------------------------------------------------------------------
+      - name: pnpm build (paquets uniquement — voir l'encadré ci-dessus)
+        run: pnpm --recursive --filter "./packages/**" build
       - name: pnpm test:unit
         run: pnpm test:unit
 

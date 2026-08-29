@@ -83,6 +83,44 @@ description = "Placeholders __CHANGEME__ de .env.example (02 §30.4-1) — et ri
 regexTarget = "match"
 regexes = [
   '''__CHANGEME__''',
+  # ---------------------------------------------------------------------------
+  # DEUX LEURRES DE TEST, exemptés par leur VALEUR EXACTE — 2026-08-29.
+  #
+  # Le 02 §30.4-5 exige que « les tests utilisent des secrets factices ». Ces deux
+  # valeurs SONT ces secrets factices : les exempter applique la spécification,
+  # ça n'y déroge pas. Mais elles doivent l'être de la façon la plus étroite
+  # possible, et voici pourquoi chaque option plus large a été écartée :
+  #
+  #   · PAS par chemin (`apps/api/**/*.test.ts`) : ce serait créer une zone du
+  #     dépôt où l'on peut fuiter tranquillement — exactement ce que l'encadré
+  #     ci-dessus refuse pour `.env.example` ;
+  #   · PAS par règle (désactiver `jwt` et `private-key`) : la règle serait
+  #     éteinte sur TOUT le dépôt, y compris le code de production ;
+  #   · PAS par empreinte : elle contient le sha du commit et le numéro de ligne,
+  #     donc elle se périme au premier déplacement du fichier — un garde-fou qui
+  #     se désarme tout seul sans le dire.
+  #
+  # ON EXEMPTE DONC LA VALEUR, ET RIEN QU'ELLE. Un autre jeton, une autre clé,
+  # dans ce même fichier, font toujours rougir le build.
+  #
+  # POURQUOI CES DEUX-LÀ SONT PROUVABLEMENT INOFFENSIVES :
+  #   1. le jeton est l'exemple PUBLIC et canonique de la documentation JWT,
+  #      tronqué de surcroît — il ne signe rien et n'ouvre rien ;
+  #   2. la clé privée porte `leurre-de-test-sans-valeur` DANS SON CORPS, à la
+  #      place du matériel cryptographique, et son fichier le dit déjà en
+  #      commentaire.
+  #
+  # HISTORIQUE, ET C'EST UN AVEU : l'encadré ci-dessus annonçait déjà que passer
+  # de `line` à `match` ferait passer les fuites détectées de 1 à 2. Le correctif
+  # a été livré le 2026-08-28 SANS traiter les deux trouvailles qu'il révélait.
+  # La CI en est restée ROUGE, et personne ne l'a regardée pendant que les verts
+  # LOCAUX étaient rapportés comme des verts tout court. Un correctif qui ouvre
+  # un rouge sans le refermer n'est livré qu'à moitié.
+  #
+  # Trace : DECISIONS.md 2026-08-29 « Deux leurres de test font rougir gitleaks ».
+  # ---------------------------------------------------------------------------
+  '''eyJhbGciOiJIUzI1NiJ9\.eyJzdWIiOiIxMjM0NTY3ODkwIn0\.dBjftJeZ4CVPmB92K27uhbUJU1p1r''',
+  '''leurre-de-test-sans-valeur''',
 ]
 
 # SECONDE ENTRÉE — ajoutée après la PREMIÈRE EXÉCUTION RÉELLE de la CI, qui a
