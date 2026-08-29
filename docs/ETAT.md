@@ -1459,3 +1459,60 @@ RBAC) non livré · `packages/shared/src/**` rapporté à **0 %** de couverture 
 compilé) : `journal.ts` et `redaction.ts`, qui portent la substance de deux garanties, sont
 **structurellement invisibles** au garde — la correction la plus étroite est de co-localiser leurs
 tests en import relatif, sans aucune ligne de configuration, comme `packages/ui` le fait déjà.
+
+---
+
+## 2026-08-29 08h30 — [lot L2] — reprise · **CORRECTION D'UN DIAGNOSTIC FAUX DU BLOC PRÉCÉDENT**
+
+Dernier commit vert : 4687433 (test(l2) : la ceinture d'étanchéité était redondante avec un accident de rédaction) · Branche : lot/l0-infra · Poussé : oui
+Tâche en cours : attente du verdict de CI sur `4687433`, **puis MERGE vers `main`** — autorisé et signé par Williams, sans squash.
+Prochaine action : si les 13 jobs sont verts, merger, poser le tag, puis ouvrir L3b sur `lot/l3b`.
+Tests rouges connus : **aucun.** Le 13ᵉ job (couverture) est levé.
+
+⛔ **LE BLOC DE 07h40 DIAGNOSTIQUE UN BLOCAGE MÉMOIRE. C'EST FAUX, ET C'EST MOI QUI L'AI ÉCRIT.**
+La cause réelle : `DECISIONS.md` échouait à `prettier --check`, et **`lint-staged` tue les tâches
+concurrentes dès qu'une échoue**. Le `[FAILED] eslint --fix [SIGKILL]` était donc la **CONSÉQUENCE**,
+jamais la cause. `npx prettier --write DECISIONS.md` a suffi ; le commit est passé du premier coup.
+
+**Ce que j'aurais dû voir, et que j'avais sous les yeux** : après avoir arrêté huit conteneurs, la
+mémoire libre **n'avait pas augmenté** — elle avait baissé. C'était l'infirmation directe de ma
+théorie. Je l'ai constatée, écrite, et je n'en ai pas tiré la conséquence. **Le problème n'était pas
+l'absence de mesure, mais le fait de ne pas laisser la mesure décider.**
+
+**La règle qui en sort, généralisable** : *le mot « tué » ne nomme pas son tueur.* Devant un
+`[SIGKILL]` sous `lint-staged`, lancer `npx prettier --check` sur les fichiers **non-TypeScript**
+AVANT de chercher ailleurs.
+
+**Coût réel : nul.** Williams avait répondu « ne pas y toucher » avant ma rectification ; aucun
+conteneur d'un autre projet n'a été arrêté, aucune application fermée. Mais **c'est la deuxième fois
+qu'un bloc de ce fichier conduit une session voisine à rendre à Williams un rapport faux** — la
+première étant un `ETAT.md` en retard. Un état périmé ou erroné n'est pas de la documentation fautive :
+c'est un garde-fou qui ment, et il ment au **lecteur suivant**, qui n'a aucun moyen de le savoir.
+
+✅ **LE DERNIER VERROU EST LEVÉ.** `apps/api/src/domaines/scoping/financiers.depot.ts` et
+`apps/api/src/routes/scoping.ts` : **100 % sur les quatre métriques**. Suite complète **546 tests,
+26 fichiers, 0 échec, 0 skippé**. Seuil inchangé à 90, aucun fichier écarté d'un glob, aucune ligne de
+source modifiée.
+
+🔎 **ET UN DÉFAUT DE CODE TROUVÉ EN ÉCRIVANT LE TEST — à arbitrer avant la porte L2.** La première
+version du test de la ceinture d'étanchéité était **verte dans les deux mondes**. Raison : en
+supprimant le garde `contexteAdmin === null`, la route rend **quand même** 500, parce que
+`contexteAdmin.utilisateurId` déréférence `null` plus bas, au moment de journaliser. **Vu du réseau,
+un refus délibéré et une chute fortuite sont indiscernables** — la ceinture est donc redondante avec
+un **accident de rédaction**, qui ne protège rien de durable : le jour où la journalisation change de
+forme, disparaît, ou passe en appel optionnel, la route servirait les montants **sans marque**.
+Le test n'a pas été supprimé mais **rendu discriminant** (crochet `onError`, l'erreur doit porter le
+code du catalogue et non un `TypeError`). **Reste à décider si le code lui-même doit être corrigé** —
+fiche `AMELIORATIONS.md` ou correction directe.
+
+📌 **DEUX AVERTISSEMENTS MESURÉS POUR QUI REPRENDRA À FROID**
+· **Node 24 est installé, le dépôt épingle Node 22.** Sous instrumentation de couverture, quatre
+fichiers dépassent le délai de 5 s et **vitest n'écrit alors AUCUN rapport**. Les 17 « skipped » que
+cela produit sont des **victimes de `beforeAll`, pas de vrais tests désactivés** — ne pas les
+diagnostiquer comme tels. La CI sous Node 22 n'a pas ce problème.
+· Le `jq` de Git Bash sous Windows **sort du CRLF** : toute reproduction locale d'un script de CI qui
+le lit dans une boucle rend **silencieusement zéro résultat**. `| tr -d '\r'` règle la question.
+
+📌 **COORDINATION** : la session `…-00` reste en **lecture seule**, un seul pilote. Une session `…-85`
+est apparue et **n'appartient à aucune des deux** — Williams est interrogé ; le merge attend cette
+confirmation.
