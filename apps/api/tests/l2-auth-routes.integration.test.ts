@@ -15,7 +15,9 @@
 //     d'erreur ;
 //   · la fenêtre de grâce et la détection ne diffèrent QUE par le délai ;
 //   · les quatre causes de refus de connexion rendent la même réponse à l'octet
-//     près ET consomment le MÊME travail Argon2id ;
+//     près, consomment le MÊME NOMBRE de dérivations Argon2id, et chacune de ces
+//     dérivations coûte le MÊME PRIX (paramètres du leurre == paramètres des
+//     empreintes stockées) — c'est la moitié de l'oracle que le décompte ignore ;
 //   · rien de tout cela n'apparaît dans les journaux pino.
 //
 // ── DEUX SONDES, ET POURQUOI ELLES SONT LÉGITIMES ────────────────────────────
