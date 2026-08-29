@@ -148,6 +148,150 @@ jobs:
           pnpm infra:config
           rm -f .env
 
+      # -----------------------------------------------------------------------
+      # LE `Caddyfile` EST DE L'INFRASTRUCTURE EXÉCUTABLE, AU MÊME TITRE QUE LE
+      # COMPOSE — et jusqu'au 2026-08-29, PERSONNE N'AVAIT JAMAIS FAIT TOURNER LE
+      # VRAI VALIDATEUR DESSUS.
+      # -----------------------------------------------------------------------
+      # `scripts/garde-fous-proxy-de-confiance.test.ts` est un garde LEXICAL : il
+      # lit le fichier comme du texte. Il ne peut donc pas voir qu'un `Caddyfile`
+      # syntaxiquement FAUX a été écrit. C'est par ce trou qu'est passée la forme
+      # `trusted_proxies static 10.0.1.0/24` DANS UN BLOC `reverse_proxy`, que
+      # Caddy refuse (`invalid IP address: 'static'` — `static` est le mot-clé de
+      # l'option GLOBALE `servers`, pas du sous-directive de bloc). Sans cette
+      # étape, une telle faute ne se découvre qu'au déploiement, quand le
+      # conteneur ne démarre pas.
+      #
+      # POURQUOI `adapt` ET PAS SEULEMENT `validate` — mesuré, et c'est le cœur :
+      # `validate` seul annonce plus qu'il ne fait. Sans `API_PORT`, Caddy adapte
+      # silencieusement l'upstream en `axion-api:80` au lieu de `:3000` ET REND
+      # EXIT 0. Un `.env` de production qui oublierait la variable donnerait donc
+      # un Caddy « valide » rendant des 502 sur toute l'API. `adapt` rend le JSON
+      # RÉELLEMENT CHARGÉ : c'est la seule façon d'affirmer sur ce qui tournera,
+      # et cela ferme du même coup le trou du garde lexical — on vérifie que
+      # `trusted_proxies` est CHARGÉ, pas seulement présent dans le texte.
+      #
+      # ⚠️ FORME DE LA CLÉ DANS LE JSON ADAPTÉ — piège dans lequel l'auteur de
+      # cette étape est lui-même tombé. La sous-directive de BLOC rend un TABLEAU
+      # SIMPLE :
+      #     "trusted_proxies":["10.0.1.0/24"]
+      # et NON `{"source":"static","ranges":[…]}`, qui est la forme de l'option
+      # GLOBALE `servers { trusted_proxies static … }`. Chercher `"ranges"` ne
+      # rend rien et ferait conclure à tort que la directive est absente.
+      #
+      # POURQUOI LES PLAGES NE SONT PAS ÉCRITES EN DUR ICI : elles seraient une
+      # SECONDE SOURCE DE VÉRITÉ à côté du `Caddyfile`, et deux copies divergent.
+      # On compare donc le DÉCLARÉ (lu dans le fichier) au CHARGÉ (lu dans le
+      # JSON adapté) : l'étape prouve la FIDÉLITÉ texte → configuration sans
+      # dupliquer la valeur. La forme des plages, elle, est déjà gardée par
+      # `garde-fous-proxy-de-confiance.test.ts` (qui refuse `0.0.0.0/0`).
+      #
+      # IMAGE ÉPINGLÉE AU DIGEST (11 §1, gel des versions) : `caddy:2-alpine` est
+      # un tag MOUVANT. Une CI qui valide contre une autre version que celle
+      # déployée ne valide pas ce qui tourne. Le digest ci-dessous a été vérifié
+      # le 2026-08-29 : il rend `v2.11.4`, EXACTEMENT la version du conteneur
+      # `caddy` en service sur le staging (`docker exec … caddy version`).
+      #
+      # ÉCHEC FERMÉ, et pas seulement sur le code de retour : une étape qui
+      # passerait parce que Caddy est absent serait un garde qui ment. Docker
+      # manquant ou image intirable ⇒ ÉCHEC EXPLICITE, jamais un saut silencieux.
+      #
+      # ⚠️ IDIOME DES CODES DE RETOUR — `cmd; RC=$?` EST UN PIÈGE SOUS `set -e` :
+      # bash abandonne le script AVANT la capture, et l'étape rougit MUETTE, sans
+      # dire pourquoi. Mesuré sur cette étape même. On écrit donc partout
+      # `RC=0; cmd || RC=$?`, qui rend l'échec « traité » et laisse le diagnostic
+      # s'afficher. Même famille : `set -o pipefail` + un `grep` SANS
+      # correspondance (donc exit 1) tue la substitution de commande — d'où le
+      # `{ grep … || true; }` du comptage, qui doit pouvoir rendre ZÉRO.
+      #
+      # RECETTE ET DIAGNOSTIC DES DEUX ÉCHECS CLASSIQUES : infra/README.md §3bis.
+      - name: Valider le Caddyfile avec le vrai binaire Caddy
+        run: |
+          set -euo pipefail
+
+          # Digest vérifié le 2026-08-29 = v2.11.4 = version en service (voir ci-dessus).
+          IMAGE_CADDY='caddy@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648'
+
+          if ! command -v docker >/dev/null 2>&1; then
+            echo "::error::docker introuvable sur le runner — le Caddyfile ne peut pas être validé. Échec explicite plutôt que faux vert."
+            exit 1
+          fi
+          RC=0; docker pull --quiet "$IMAGE_CADDY" >/dev/null 2>&1 || RC=$?
+          if [ "$RC" -ne 0 ]; then
+            echo "::error::Image Caddy épinglée indisponible ($IMAGE_CADDY) — vérification impossible."
+            exit 1
+          fi
+
+          # Le dossier ENTIER est monté, jamais le seul Caddyfile : il fait
+          # `import {$CADDY_FRONT_CONFIG}` et échouerait sur « unrecognized
+          # directive: import ». Les QUATRE variables sont obligatoires — seule
+          # CADDY_ACME_EMAIL porte un défaut. Une adresse de site VIDE réduit
+          # `{$CADDY_SITE_ADDRESS} {` à `{`, que Caddy lit comme un bloc
+          # d'options globales, d'où l'erreur trompeuse « server block without
+          # any key … must be first » qui désigne un problème d'ORDRE là où la
+          # cause est une VARIABLE MANQUANTE (infra/README.md §3bis).
+          caddy_avec() {
+            SOUS_COMMANDE="$1"; MODE="$2"
+            docker run --rm -v "$PWD/infra/caddy:/etc/caddy:ro" \
+              -e CADDY_FRONT_CONFIG="/etc/caddy/$MODE" \
+              -e CADDY_SITE_ADDRESS=:8080 \
+              -e CADDY_STAGING_SITE_ADDRESS=:8081 \
+              -e API_PORT=3000 \
+              "$IMAGE_CADDY" caddy "$SOUS_COMMANDE" --config /etc/caddy/Caddyfile
+          }
+
+          # LES DEUX MODES DE SERVICE DES FRONTS. `fronts.static.caddy` est celui
+          # embarqué dans l'image de staging/prod ; `fronts.dev.caddy` sert en
+          # local. Les deux sont de vraies configurations : les deux se valident.
+          for MODE in fronts.static.caddy fronts.dev.caddy; do
+            RC=0; SORTIE="$(caddy_avec validate "$MODE" 2>&1)" || RC=$?
+            if [ "$RC" -ne 0 ]; then
+              echo "::error::caddy validate ÉCHOUE en mode $MODE (exit $RC)."
+              printf '%s\n' "$SORTIE" | grep -m1 '^Error:' || printf '%s\n' "$SORTIE" | tail -3
+              exit 1
+            fi
+            echo "  caddy validate ($MODE) : OK"
+          done
+
+          RC=0; ADAPTE="$(caddy_avec adapt fronts.static.caddy 2>/dev/null)" || RC=$?
+          if [ "$RC" -ne 0 ] || [ -z "$ADAPTE" ]; then
+            echo "::error::caddy adapt n'a rien rendu (exit $RC) — impossible d'affirmer quoi que ce soit."
+            exit 1
+          fi
+
+          # 1/3 — `trusted_proxies` CHARGÉ sur les DEUX blocs (prod ET staging).
+          # `grep -c` compterait les LIGNES contenant un match ; le JSON adapté
+          # tient sur UNE seule ligne et rendrait toujours 1. D'où `grep -o | wc -l`.
+          NB_TP="$(printf '%s' "$ADAPTE" | { grep -o '"trusted_proxies":\[[^]]*\]' || true; } | wc -l | tr -d ' ')"
+          if [ "$NB_TP" -ne 2 ]; then
+            echo "::error::$NB_TP bloc(s) reverse_proxy portent trusted_proxies dans la configuration CHARGÉE, 2 attendus. Sans cette directive, Caddy REMPLACE X-Forwarded-For et le plafond de 10 req/min/IP sur /v1/auth/* devient un seau GLOBAL (DECISIONS.md 2026-08-29)."
+            exit 1
+          fi
+          echo "  trusted_proxies chargé sur les 2 blocs"
+
+          # 2/3 — FIDÉLITÉ : les plages chargées sont celles que le fichier déclare.
+          DECLARE="$(grep -hoE '^[[:space:]]*trusted_proxies[[:space:]]+.*$' infra/caddy/Caddyfile \
+            | sed -E 's/^[[:space:]]*trusted_proxies[[:space:]]+//; s/[[:space:]]+$//' | tr ' ' '\n' | sort -u)"
+          CHARGE="$(printf '%s' "$ADAPTE" | grep -o '"trusted_proxies":\[[^]]*\]' \
+            | sed -E 's/.*\[//; s/\]//; s/"//g; s/,/\n/g' | sort -u)"
+          if [ "$DECLARE" != "$CHARGE" ]; then
+            echo "::error::Les plages CHARGÉES diffèrent de celles DÉCLARÉES dans le Caddyfile."
+            printf 'déclaré : %s\nchargé  : %s\n' "$DECLARE" "$CHARGE"
+            exit 1
+          fi
+          echo "  plages chargées == plages déclarées : $(printf '%s' "$CHARGE" | tr '\n' ' ')"
+
+          # 3/3 — L'UPSTREAM PORTE BIEN {$API_PORT}. C'est CE contrôle qui ferme
+          # le trou mesuré : sans lui, un upstream figé à :80 passerait au vert.
+          for CIBLE in axion-api:3000 staging-api:3000; do
+            if ! printf '%s' "$ADAPTE" | grep -q "\"dial\":\"$CIBLE\""; then
+              echo "::error::Upstream attendu absent de la configuration chargée : $CIBLE. Vérifier que le Caddyfile interpole bien {\$API_PORT}."
+              printf '%s' "$ADAPTE" | grep -o '"dial":"[^"]*"' | sort -u
+              exit 1
+            fi
+          done
+          echo "  upstreams : axion-api:3000 et staging-api:3000"
+
   # ---------------------------------------------------------------------------
   # GARDE-FOU 3 — AUCUN TEST NE DORT (11 §2 · 09 §5.7 · DoD transverse 09 §3)
   # ---------------------------------------------------------------------------
@@ -283,6 +427,38 @@ jobs:
       - uses: ./.github/actions/setup-node-pnpm
       - name: pnpm check:jonction
         run: pnpm check:jonction
+
+      # MÊME GRAPHE, LES DEUX SENS. `check:jonction` va de l'APPELANT vers
+      # l'appelé (« ce que j'invoque existe-t-il ? »). `check:graphe-modules`
+      # ferme les deux autres côtés, et le premier est un contrôle de
+      # CONSTRUCTIBILITÉ, pas d'hygiène — que personne ne sous-estime ce rouge :
+      #
+      #   1. LE PENDU — un fichier suivi par git qui importe un chemin que git NE
+      #      CONNAÎT PAS. Défaut réel `b24b98c` : `apps/api/src/app.ts` importait
+      #      `./domaines/auth/routes.js` alors que `apps/api/src/domaines/`
+      #      n'était pas indexé. `origin` référençait un fichier absent du dépôt :
+      #      clone frais en TS2307, CI en échec de construction, staging NON
+      #      DÉPLOYABLE. Trouvé par un agent qui TENTAIT un déploiement — après un
+      #      `typecheck` de pré-commit AU VERT, parce que `tsc` lit le disque et
+      #      non l'index. Ce contrôle ne demande jamais « le fichier existe-t-il »
+      #      mais « git connaît-il ce chemin ». Aucune soupape.
+      #
+      #   2. L'ORPHELIN — un module de `src/` que PERSONNE n'importe. Il mécanise
+      #      la seconde moitié de la traçabilité de `CLAUDE.md` §4 étape 6
+      #      (« code → exigences : le code orphelin est REFUSÉ »), la seule à ne
+      #      reposer sur AUCUNE machine. Défaut réel `591ccbd` : un message qui
+      #      annonçait quatre correctifs de sécurité, UN SEUL fichier livré (un
+      #      module d'aide que personne n'importait), les cinq fichiers portants
+      #      restés hors de l'index — **et une CI VERTE**, parce qu'aucun test ne
+      #      couvrait encore le cas corrigé. Soupape bornée et auto-péremptoire :
+      #      `scripts/modules-en-attente.md`.
+      #
+      # Les deux défauts sont rejouables sans toucher à l'arbre de travail :
+      #   node scripts/check-graphe-modules.mjs --ref 591ccbd   → erreurs-jeton.ts
+      #   node scripts/check-graphe-modules.mjs --ref b24b98c   → app.ts:18
+      # Portée exacte et seize angles morts assumés : `--angles-morts`.
+      - name: pnpm check:graphe-modules
+        run: pnpm check:graphe-modules
 
   # ---------------------------------------------------------------------------
   # 1/8 — LINT (11 §7)
