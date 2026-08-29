@@ -1145,3 +1145,72 @@ contrainte, sans quoi le correctif détruirait le diagnostic qu'il devait prése
 d'un vrai défaut serveur pour un risque que le correctif ci-dessus referme mieux et plus haut.
 Correctif et tests écrits par deux agents distincts, le test à l'aveugle depuis la spécification
 (09 §5.6).
+
+---
+
+## 2026-08-29 02h30 — [lot L2 / incrément L2a] — étape pipeline 4/7 (revue croisée)
+Dernier commit vert : 745b150 (docs(etat): le commit 591ccbd annonçait ce qu'il ne contenait pas)   ·   Branche : lot/l0-infra   ·   Poussé : oui
+Tâche en cours : T2 (routes d'authentification) ; pose de `trusted_proxies` au Caddyfile ; gardes code orphelin et cohérence proxy.
+Prochaine action : faire commiter `apps/api/src/domaines/` par son auteur pour rendre la branche constructible, PUIS déployer et rejouer l'observation.
+Tests rouges connus : 3 dans `apps/api/src/auth/` (`jetons`, `quota`, `socle`) — routes en cours d'écriture, à leur auteur.
+
+⛔ **JE DOIS CORRIGER LE BLOC PRÉCÉDENT : « LA RÉSERVE SUR LE PLAFOND EST LEVÉE » EST FAUX.**
+Le bloc de 01h55 conclut, sur la seule mesure du premier maillon, que la forgerie est bloquée et que
+la chaîne dégradée n'existe pas. La mesure du maillon suivant m'a donné tort, et **le résultat est
+pire que la question posée**.
+
+**CE QUI EST VRAI** : Traefik écrase bien `X-Forwarded-For` par l'adresse réelle du client.
+**CE QUE J'AI DÉDUIT ET QUI EST FAUX** : que Caddy y ajouterait ensuite son pair. **Caddy REMPLACE.**
+Depuis Caddy 2.7, `reverse_proxy` n'append que si le pair figure dans `trusted_proxies` — et notre
+`Caddyfile` n'en déclare aucun. Mesuré sur réplique locale (même image 2.11.4, directive verbatim) :
+trois chaînes différentes en entrée, **le pair seul en sortie dans les trois cas**.
+
+**CONSÉQUENCE : le plafond de 10 req/min/IP n'est pas contournable — IL N'EXISTE PAS.** L'API reçoit
+`10.0.1.6`, l'adresse de Traefik, **identique pour tous les clients du monde**. La clé de quota n'est
+pas forgeable : elle est **constante**. Donc **le premier attaquant venu verrouille l'authentification
+de tous les auditeurs** — déni de service à coût nul sur la route la plus sensible. C'est la faute de
+raisonnement déjà corrigée pour le quota global (« derrière le NAT, une équipe partage une adresse »)
+poussée à son terme : il n'y a plus qu'UNE adresse.
+
+**L'indice était dans le journal que j'avais lu une heure plus tôt** : `"client_ip":"10.0.1.6"`.
+Caddy y disait déjà qu'il ne croit pas Traefik. Je ne l'ai pas vu, et j'ai conclu depuis un seul
+maillon ce qui demandait la chaîne entière.
+
+**Ce que cela établit sur `b24b98c`** : il reste **juste et nécessaire, mais insuffisant seul**. Sur
+une chaîne à trois entrées, l'ancien réglage retient la valeur forgée là où le nouveau retient la
+vraie. Déclarer `trusted_proxies` **sans** lui rouvrirait la forgerie. Les deux vont ensemble — d'où
+un garde qui protège cette cohérence entre deux fichiers, et non un simple correctif.
+
+⛔ **DEUXIÈME FAUTE, D'UNE AUTRE NATURE : LA BRANCHE N'EST PAS CONSTRUCTIBLE, ET C'EST MOI.**
+`b24b98c` a emporté dans `apps/api/src/app.ts` la ligne `import … './domaines/auth/routes.js'` alors
+que `apps/api/src/domaines/` **n'est pas suivi par git**. `origin` référence un fichier absent : un
+clone frais échoue en TS2307, le staging n'est pas déployable. Découvert par l'agent d'infrastructure
+en tentant le déploiement, pas par moi.
+
+**Pourquoi le hook ne l'a pas vu, et c'est la leçon** : le `typecheck` du pré-commit examine
+**l'arbre de travail**, qui possède le fichier ; **l'index, non**. Ma vérification post-commit, elle,
+contrôlait que le commit contenait ce que j'annonçais — **pas qu'il tenait debout seul**. Deux
+questions différentes ; je n'en posais qu'une.
+*L'orphelin (personne ne l'importe) et le pendu (il importe ce qui n'existe pas dans git) sont le même
+graphe lu dans les deux sens. Le garde en cours d'écriture couvrira les deux — sans soupape pour le
+second, qui n'a aucun cas légitime.*
+
+✅ **CE QUI EST SOLIDE, ET PROUVÉ PAR BASCULE.** Les tests de redaction, écrits à l'aveugle depuis la
+spécification par un agent qui n'a jamais lu `redaction.ts` : **39 cas, 22 `@critique`**. Sortis verts
+d'emblée parce que le correctif avait déjà atterri, l'agent a **refusé de s'en satisfaire** — il a
+extrait la version pré-correctif depuis git, l'a compilée à part et rejoué les mêmes assertions :
+**11 ROUGES / 13 verts**. Les 11 rouges sont exactement les 11 cas de fuite. *Un vert d'emblée ne
+prouve rien ; celui-ci est démontré.*
+
+**Et une confirmation de ma contamination** : sur la politique pré-correctif,
+`invalid signature for token eyJ…` était **nettoyé** tandis que `jwt malformed: eyJ…` **fuyait**. Le
+déclencheur était bien le mot voisin, pas le jeton. D'où un garde ajouté contre la sur-détection :
+`c2hhMjU2.YWJj.ZGVm` — trois segments base64url **sans** `eyJ` — doit traverser INTACT. Une expression
+qui se contenterait de « trois groupes séparés par des points » le mangerait.
+
+**Dette explicite, écrite plutôt que tue** : `apps/worker` consomme la même politique sans que son
+assemblage soit prouvé · le transport `pino-pretty` du mode dev n'est pas vérifié comme chemin de
+sortie · la chaîne réelle `pg` → Fastify → journal reste à porter en Testcontainers · `request.ip` est
+**expurgé par conception** (`remoteAddress` → `[masqué:rgpd]`), donc aucune vérification de la clé de
+quota ne pourra jamais passer par la lecture d'un journal · `infra/scripts/empreinte-docker.sh` mesure
+le **disque**, pas le déploiement : il n'existe aucun outil d'empreinte de déploiement dans le dépôt.

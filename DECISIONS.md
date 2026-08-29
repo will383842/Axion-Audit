@@ -2805,3 +2805,175 @@ Décideur : A01 (arbitrage de lecture du registre, sur constat mesuré d'A83) �
 Impact spec : aucun **de plus**. Cette entrée ne crée aucun amendement : elle établit qu'il n'y en a
 **qu'un** en attente sur le 02 §11.4, celui d'E1, et que le calendrier de la troisième copie est
 celui d'E2.
+
+---
+
+## 2026-08-29 — [L2] La branche 5xx journalise `{ err }` : faut-il l'en retirer ?
+
+Un agent a signalé que le gestionnaire d'erreurs central journalise l'objet d'erreur complet sur la
+branche 5xx, et que c'est probablement le chemin le plus fréquent pour une fuite de donnée
+personnelle — plus que le repli 4xx qui venait d'être refermé. Il a refusé de trancher seul, à raison :
+le code appartient à L0.
+
+Options :
+
+1. **Retirer `{ err }` de la branche 5xx.** Ferme le risque par construction, et détruit le seul
+   diagnostic dont on dispose sur un vrai défaut serveur.
+2. **Le garder tel quel** en pariant que la politique de redaction suffit.
+3. **Le garder, et refermer la fuite à sa source** — dans la politique de redaction.
+
+Arbitrage : **option 3**, sur MESURE et non sur jugement. Passage de quatre catégories dans le
+harnais réel (`pino` + `OPTIONS_REDACTION_JOURNAL`, erreur journalisée en `{ err }`) :
+
+    adresse e-mail -> nettoyée     téléphone -> nettoyé
+    JWT préfixé    -> nettoyé      nom de personne -> **PRÉSENT, message ET pile**
+
+`person_name` est le **premier terme nommé** par l'interdiction du `CLAUDE.md` §2. L'option 1 aurait
+donc payé le prix fort — la perte du diagnostic — pour un risque qu'elle n'aurait refermé qu'en
+partie, la même donnée pouvant atteindre le journal par d'autres chemins. L'option 2 était exclue dès
+la mesure.
+
+**Le point de conception qui décide de tout : on ne reconnaît PAS le nom, on reconnaît le CONTENANT.**
+Un nom de personne n'a aucune forme distinctive ; prétendre détecter « ce qui ressemble à un nom »
+produirait un garde-fou qui annonce plus qu'il ne fait — la famille de défaut que ce dépôt traque
+depuis trois jours. En revanche PostgreSQL produit une forme rigide et documentée,
+`Key (<colonne>)=(<valeur>)`, dont la partie valeur transporte une donnée utilisateur arbitraire
+QUELLE QUE SOIT la colonne. C'est elle qu'on masque, en conservant le code SQLSTATE, le nom de colonne
+et le nom de contrainte — sans quoi le correctif aurait détruit ce qu'il devait préserver.
+
+Précédence : `CLAUDE.md` §2 (« Aucune donnée personnelle dans les logs : `person_name`, emails,
+contenus de réponse interdits dans pino ») est une interdiction explicite du contrat, elle prime sur
+le confort de diagnostic. L'option 3 est la seule qui honore les deux.
+
+Correctif et tests écrits par **deux agents distincts**, le test à l'aveugle depuis la spécification
+(09 §5.6). Résultat : 6 cas ROUGES avant le correctif, 27/27 verts après — c'est cette bascule qui
+prouve que les tests mesuraient le correctif et non un harnais complaisant.
+
+Ce que cet arbitrage NE couvre PAS, et qui est une dette explicite plutôt qu'un point couvert :
+la chaîne réelle `pg` → Fastify → journal n'est pas éprouvée de bout en bout (erreurs fabriquées à
+l'image de ce que remonte `pg`, à porter en Testcontainers) · `apps/worker` consomme la même
+politique sans que son assemblage soit prouvé · le transport `pino-pretty` du mode dev n'a pas été
+vérifié comme chemin de sortie · un nom saisi librement dans un message applicatif reste hors de
+portée de tout motif.
+
+Décideur : A01
+Impact spec : aucun. Le §2 est appliqué, pas amendé.
+
+---
+
+## 2026-08-29 — [L2] Un jeton JWT nu fuit dans les journaux : étage 1 ou fiche d'étage 2 ?
+
+**Cette entrée corrige une affirmation fausse de ma part.** J'avais mesuré « jetons nettoyés » et
+briefé un agent sur cette prémisse. L'agent de test l'a infirmée ; j'ai refait la mesure, il a raison.
+
+Mon échantillon disait `refresh token eyJ…` : c'est le mot « token » adjacent qui déclenchait
+l'assainisseur, **pas le jeton**. Ma sonde répondait à une autre question que celle que je croyais
+poser — exactement la famille de défaut traquée ici, cette fois logée dans l'instrument de mesure.
+C'est la deuxième fois en une journée qu'un contrôle à moi répond à côté ; la première était un
+`git commit` dont je n'avais pas vérifié le résultat.
+
+    JWT nu dans un message libre               -> FUITE (message ET pile)
+    JWT préfixé « Bearer »                     -> nettoyé
+    mon échantillon d'origine                  -> nettoyé, pour la mauvaise raison
+
+Seules la forme `Bearer <jwt>`, le champ `authorization` et le paramètre `?token=` étaient couverts.
+Un `err.message` de bibliothèque du type `jwt malformed: eyJ…` laisse donc passer le jeton en clair.
+
+Options :
+
+1. **Fiche `AMELIORATIONS.md` d'étage 2** — proposée, implémentée seulement après arbitrage humain.
+   C'est ce que proposait l'agent qui l'a trouvée.
+2. **Étage 1, corrigé d'office.**
+
+Arbitrage : **option 2**, contre la proposition de l'agent, pour deux raisons.
+
+D'abord la nature du défaut : l'étage 2 sert à ce qui doit **attendre** un arbitrage humain, et une
+fuite de secret n'attend pas. Ensuite — et c'est l'argument qui décide — un JWT a une forme **rigide**
+et fiable : trois segments base64url séparés par des points, le premier commençant par `eyJ` parce
+qu'il encode `{"`. Le reconnaître par motif est **honnête**. C'est le cas exactement inverse du nom de
+personne, où j'ai refusé toute détection par ressemblance dans l'entrée précédente. La même doctrine
+produit ici la réponse opposée, et c'est cohérent : on masque ce qui a une forme, jamais ce qui n'en
+a pas.
+
+Précédence : `CLAUDE.md` §6 étage 1 — « robustesse évidente qui ne touche NI le schéma 04, NI l'API,
+NI la crypto, NI le périmètre fonctionnel », plafond 0,5 j cumulé par lot, une ligne dans
+`AMELIORATIONS.md`. Toutes les conditions sont réunies.
+
+Exigence posée au correctif : **masquer le jeton, pas la phrase** — « jwt malformed », « signature
+invalid » sont du diagnostic et survivent, même équilibre que pour `Key (colonne)=(valeur)`. Et rendre
+la liste de ce que le motif ne voit pas : jeton opaque, jeton tronqué, secret sans forme.
+
+Décideur : A01
+Impact spec : aucun.
+
+---
+
+## 2026-08-29 — [L2] Le plafond de 10 req/min/IP sur `/v1/auth/*` est un seau GLOBAL : que corrige-t-on, et où ?
+
+**Cette entrée corrige une déduction fausse de ma part, la seconde de la journée.** J'avais écrit que
+Caddy « ajoute normalement son propre `remote_host` » à `X-Forwarded-For`, et j'en avais déduit que
+l'API retiendrait l'adresse réelle du client. J'ai explicitement demandé qu'on mesure plutôt que de me
+croire ; la mesure m'a donné tort, et le résultat est plus grave que la question posée.
+
+**CE QUI EST MESURÉ, maillon par maillon (2026-08-29) :**
+
+| Maillon                                                                               | Mesure                                                                                                       | Verdict                                                                  |
+| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| client → Traefik                                                                      | `XFF: 9.9.9.9` envoyé → `"X-Forwarded-For":["37.65.10.24"]` reçu ; un XFF multi-valeurs est écrasé de même   | Traefik **écrase** par l'adresse réelle — forgerie impossible à l'entrée |
+| Traefik → Caddy                                                                       | journal de Caddy : `"client_ip":"10.0.1.6"`                                                                  | Caddy **ne croit pas** Traefik                                           |
+| Caddy → API (réplique locale, même image `caddy:2-alpine` 2.11.4, directive verbatim) | trois chaînes différentes en entrée → `x-forwarded-for: <pair>` en sortie, **dans les trois cas**            | Caddy **REMPLACE**, il n'ajoute pas                                      |
+| chaîne → `request.ip` (vraie `@fastify/proxy-addr` 5.1.0)                             | chaîne réelle `10.0.1.6` → `request.ip = 10.0.1.6` avec `trustProxy: true` **comme** avec les plages privées | la valeur est **constante**                                              |
+
+Cause : depuis **Caddy 2.7**, `reverse_proxy` n'append à `X-Forwarded-For` que si le pair immédiat
+figure dans `trusted_proxies`. Notre `Caddyfile` n'en déclare **aucun** (vérifié, `grep` vide). Caddy
+jette donc le `X-Forwarded-For` de Traefik et le réécrit à l'adresse de son pair.
+
+**LA CONSÉQUENCE, ET ELLE EST PIRE QUE LA FORGERIE REDOUTÉE.** `keyGenerator` retombe sur
+`request.ip` pour tout flot anonyme — donc `/v1/auth/login`, cible même du bourrage d'identifiants.
+Cette clé vaut `10.0.1.6` **pour tous les clients du monde**. Le plafond n'est pas contournable : il
+est **unique et global**. Deux effets opposés, tous deux mauvais : l'attaquant partage son seau avec
+les auditeurs légitimes, et surtout **le premier attaquant venu verrouille l'authentification de tous
+les utilisateurs — un déni de service à coût nul.** C'est la faute de raisonnement déjà corrigée pour
+le quota global (« derrière le NAT, une équipe partage une adresse ») poussée à son terme : ici il
+n'y a plus qu'UNE adresse.
+
+Options :
+
+1. **Ne rien changer** et documenter le plafond comme global. Laisse un déni de service trivial ouvert
+   sur la route la plus sensible, et rend le §9 du contrat inapplicable.
+2. **Compenser dans le code applicatif** — clé de repli maison, verrouillage par compte improvisé.
+3. **Déclarer `trusted_proxies static 10.0.1.0/24` dans le bloc `reverse_proxy` du `Caddyfile`.**
+
+Arbitrage : **option 3.** Caddy appendra alors au lieu de remplacer, l'API recevra
+`37.65.10.24, 10.0.1.6`, et `trustProxy: ['loopback','linklocal','uniquelocal']` retiendra l'adresse
+réelle du client.
+
+L'option 2 est refusée explicitement : elle produirait un garde-fou qui annonce plus qu'il ne fait,
+la famille de défaut que ce dépôt traque, et elle placerait dans le code applicatif la compensation
+d'un défaut de configuration d'infrastructure — deux sources de vérité pour une même garantie.
+
+**Ce que cet arbitrage établit sur le correctif `b24b98c` :** il reste **juste et nécessaire**, mais
+il ne suffit pas seul. La mesure le montre : sur une chaîne à trois entrées, `trustProxy: true`
+retient `9.9.9.9` (forgé) là où les plages privées retiennent `37.65.10.24` (réel). `b24b98c` ferme
+donc une forgerie qui n'existe **pas encore** — et qui s'ouvrirait le jour où `trusted_proxies` serait
+déclaré sans lui. **Les deux changements sont complémentaires ; livrer le second sans le premier
+serait une régression de sécurité.** À écrire dans le `Caddyfile` lui-même.
+
+Précédence : `CLAUDE.md` §9 impose « `/v1/auth/*` 10 req/min/IP ». Un seau global ne satisfait pas
+« par IP » ; corriger la chaîne pour rendre la règle applicable, c'est **implémenter** le contrat, non
+y déroger. Le §3-4 (« toucher à la sécurité autrement que spécifié ») ne s'y oppose donc pas — mais la
+modification touche un fichier d'infrastructure, d'où cette entrée plutôt qu'une correction d'office.
+
+**Trou d'observabilité à écrire plutôt qu'à subir :** `request.ip` est **expurgé par conception** —
+le sérialiseur Fastify le journalise sous `remoteAddress`, que la politique RGPD masque en
+`[masqué:rgpd]`. **Aucune adresse ne sortira jamais du journal de l'API.** Ce n'est pas un défaut,
+c'est l'invariant qui fonctionne ; mais toute vérification future de la clé de quota devra passer par
+les en-têtes `x-ratelimit-*` ou un test d'intégration dédié, jamais par la lecture d'un journal.
+
+**Dépendance à écrire dans `infra/COHABITATION_AXIONIA_WEB.md` :** ce verdict vaut pour la chaîne
+telle que configurée le 2026-08-29. Le Traefik de Coolify n'est **pas sous notre contrôle** ; si sa
+configuration change, la garantie change — vers le meilleur ou vers le pire selon le réglage de
+`trustProxy`. À couvrir par un test de non-régression, pas à tenir pour acquis.
+
+Décideur : A01, sur mesure d'A57 qui a contredit ma déduction.
+Impact spec : aucun amendement. Le §9 est rendu applicable, pas modifié.

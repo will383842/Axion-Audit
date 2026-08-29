@@ -313,7 +313,20 @@ describe('méta-test 4 — aucune route n’échappe au crochet d’autorisation
 
     // Toute route de l'app apparaît dans l'arbre de routage ET dans le registre :
     // deux vues du même ensemble, comparées l'une à l'autre.
-    const arbre = app.printRoutes();
+    //
+    // ── `commonPrefix: false` N'EST PAS UN CONFORT — 2026-08-29, T2 ────────────
+    // Par défaut, `printRoutes()` imprime l'arbre RADIX COMPRESSÉ : deux routes qui
+    // partagent un préfixe sont fusionnées en un nœud commun. Dès l'arrivée de
+    // `/v1/auth/login` et `/v1/auth/logout`, l'arbre affichait
+    // `log ├── in └── out` — et la chaîne « login » n'y figurait PLUS NULLE PART.
+    // Ce test échouait donc en annonçant « au registre mais pas dans l'arbre » alors
+    // que les deux vues concordaient : c'était l'ASSERTION qui était fausse, pas le
+    // code. Le défaut n'était pas propre à l'auth — il se serait déclenché pour
+    // n'importe quelle paire de routes à préfixe commun (`/missions`,
+    // `/missions-archivees`…), donc à peu près sûrement en L3.
+    // `commonPrefix: false` imprime les chemins ENTIERS : la comparaison redevient
+    // vraie, et elle est plus stricte qu'avant, pas plus laxiste.
+    const arbre = app.printRoutes({ commonPrefix: false });
     for (const entree of app.registreAcces) {
       const dernierSegment =
         entree.url
@@ -344,15 +357,24 @@ describe('méta-test 5 — instantané des routes publiques', () => {
    *
    * L'échec à ne PAS corriger de cette façon est l'inverse : une route qui apparaît
    * ici sans que personne n'ait décidé de l'ouvrir. Le message ci-dessous le dit.
+   *
+   * ── 2026-08-29, T2 : les deux lignes annoncées sont ajoutées, et SEULEMENT elles.
+   * `POST /v1/auth/logout` N'Y EST PAS, et c'est le point à relire : elle est
+   * déclarée `{ type: 'authentifie' }`. C'est ce qui permet de vérifier que le jeton
+   * de rafraîchissement présenté APPARTIENT à l'appelant (la propriété est portée par
+   * la clause `WHERE` du dépôt). Publique, elle aurait laissé n'importe qui révoquer
+   * le jeton de n'importe qui — un déni de service anonyme sur la synchronisation
+   * d'un auditeur. Le prix, à connaître : un client dont le jeton d'ACCÈS a expiré ne
+   * peut plus se déconnecter côté serveur ; il efface localement, et le
+   * rafraîchissement s'éteint à sa date d'expiration.
    */
   const ROUTES_PUBLIQUES_ATTENDUES = [
     'GET /v1/health',
     'GET /v1/health/ready',
     'HEAD /v1/health',
     'HEAD /v1/health/ready',
-    // À l'arrivée de T2, ajouter ici — et seulement ici :
-    //   'POST /v1/auth/login',
-    //   'POST /v1/auth/refresh',
+    'POST /v1/auth/login',
+    'POST /v1/auth/refresh',
   ] as const;
 
   it('l’ensemble des routes `public` est EXACTEMENT la liste commitée', async () => {
