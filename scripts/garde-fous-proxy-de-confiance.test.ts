@@ -59,8 +59,14 @@
 //      `X-Forwarded-For`, la forgerie reviendrait par le haut de la chaîne, et ce
 //      fichier resterait vert.
 //
-// Traçabilité : invariant 3 · CLAUDE.md §9 (rate limiting /v1/auth/*) · E17, E43 ·
-// DECISIONS.md 2026-08-29 · 09 §5.6.
+// Traçabilité : invariant 3 (RBAC/plafonds serveur) · invariant 7 (« rien n'est jamais
+// silencieusement écrasé » — un journal d'accès qui enregistre une adresse choisie par
+// l'attaquant est une trace silencieusement faussée) · CLAUDE.md §9 (rate limiting
+// /v1/auth/*) · E17, E43 · 09 §5.6 · DECISIONS.md 2026-08-29, DEUX entrées :
+//   · « [L2] Le plafond de 10 req/min/IP sur /v1/auth/* est un seau GLOBAL » ;
+//   · « [L2] `trusted_proxies` : quelle FORME, et sur combien de blocs ? », qui corrige
+//     la première (elle disait « LE bloc » ; il y en a deux) et fonde le refus de la
+//     forme globale ainsi que l'échec sur `trustProxy` ABSENT.
 // =============================================================================
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -526,9 +532,12 @@ describe('infra/caddy/Caddyfile — la chaîne X-Forwarded-For', () => {
         'gauche de `X-Forwarded-For`, c’est-à-dire à une valeur que le client choisit\n' +
         '(`client_ip: 9.9.9.9`). On enquêterait sur l’adresse écrite par l’attaquant.\n\n' +
         'Un journal peu informatif vaut mieux qu’un journal qui ment : `trusted_proxies`\n' +
-        'reste déclaré bloc par bloc, dans la portée étroite du handler `reverse_proxy`.\n' +
-        'Revenir sur cet arbitrage demande une entrée `DECISIONS.md`, pas une ligne de\n' +
-        'configuration.',
+        'reste déclaré bloc par bloc, dans la portée étroite du handler `reverse_proxy`.\n\n' +
+        'ARBITRAGE TRACÉ — `DECISIONS.md`, 2026-08-29, « [L2] `trusted_proxies` : quelle\n' +
+        'FORME, et sur combien de blocs ? ». Précédence retenue : invariant 7 (« rien\n' +
+        'n’est jamais silencieusement écrasé ») — un journal d’accès qui enregistre une\n' +
+        'adresse choisie par l’attaquant est une trace silencieusement faussée.\n' +
+        'Revenir dessus demande une entrée `DECISIONS.md`, pas une ligne de configuration.',
     );
   });
 });
