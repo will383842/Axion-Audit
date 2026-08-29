@@ -15,16 +15,52 @@ import rateLimit from '@fastify/rate-limit';
 import { loggerFastify } from './logger.js';
 import { enregistrerGestionErreurs } from './erreurs.js';
 import { enregistrerSocleAutorisation } from './auth/politique.js';
+import { routesAuth } from './domaines/auth/routes.js';
 import { routesSante } from './routes/sante.js';
+
+// =============================================================================
+// PÉRIMÈTRE DE CONFIANCE DES EN-TÊTES DE PROXY — correctif de sécurité.
+// =============================================================================
+// CE QUI ÉTAIT FAUX : `trustProxy: true` fait confiance à TOUS les sauts. Fastify
+// retient alors l'entrée LA PLUS À GAUCHE de `X-Forwarded-For` — une valeur
+// intégralement fournie par le client. Mesuré : on envoie `X-Forwarded-For:
+// 9.9.9.9`, `request.ip` vaut `9.9.9.9`.
+//
+// CE QUE ÇA COÛTAIT, ET POURQUOI C'ÉTAIT URGENT : le plafond de 10 req/min/IP sur
+// `/v1/auth/*` (11 §3) aurait été INOPÉRANT contre le bourrage d'identifiants —
+// c'est-à-dire contre exactement ce pour quoi il existe : il suffisait de changer
+// un en-tête à chaque essai. C'est la symétrie du raisonnement tenu sur le jeton :
+// on refuse un `sub` non vérifié parce qu'il laisserait forger un quota illimité ;
+// l'adresse, elle, n'était vérifiée par personne.
+//
+// NOTRE FRONTAL POSE BIEN `X-Real-IP` (infra/caddy/Caddyfile) — MAIS FASTIFY NE LE
+// LIT PAS. Il lit `X-Forwarded-For`, que les frontaux COMPLÈTENT au lieu de
+// remplacer. L'en-tête propre existe et ne sert à rien ici.
+//
+// CE QU'ON RETIENT : ne faire confiance qu'aux adresses PRIVÉES. La chaîne réelle
+// (client → Traefik de Coolify → notre Caddy → API, cf. infra/docker-compose
+// .coolify.yml) n'est faite que de conteneurs Docker, donc d'adresses RFC1918 ;
+// la remontée s'arrête à la première adresse PUBLIQUE, qui est le client. Une
+// forgerie placée à gauche devient inatteignable.
+//
+// POURQUOI PAS UN NOMBRE DE SAUTS : `trustProxy: <number>` échoue fermé dans
+// Fastify 5 (`lib/request.js` : « Hop-count-only trust cannot validate the
+// immediate peer ») — il ne ferait plus confiance à personne.
+//
+// CE QUE ÇA NE CORRIGE PAS, ET QUI DOIT ÊTRE VÉRIFIÉ SUR STAGING : si le frontal
+// le plus externe n'ajoute RIEN à `X-Forwarded-For` tout en laissant passer celui
+// du client, la chaîne ne contient aucune adresse publique et la forgerie
+// redevient atteignable. Mesuré : ce cas rend la même chose AVANT et APRÈS — le
+// correctif n'y perd rien, il n'y gagne rien non plus.
+// =============================================================================
+const SOUS_RESEAUX_DE_CONFIANCE = ['loopback', 'linklocal', 'uniquelocal'];
 
 export async function construireApp(): Promise<FastifyInstance> {
   const app = Fastify({
     loggerInstance: loggerFastify,
-    // Identifiant de requête présent dans chaque ligne de journal : c'est ce qui
-    // permet de suivre une sync défaillante de bout en bout (02 §11.3).
-    trustProxy: true,
-    // Derrière Caddy, `trustProxy` fait porter le quota par IP sur la VRAIE IP
-    // cliente et non sur celle du proxy (11 §3 : `/v1/auth/*` 10 req/min/IP).
+    // Périmètre de confiance des en-têtes de proxy — voir le bloc ci-dessus, qui
+    // explique pourquoi ce n'est PLUS `true` et ce que ça change sur le quota.
+    trustProxy: SOUS_RESEAUX_DE_CONFIANCE,
     //
     // 06 §10.2 : taille maximale des entrées. Les pièces jointes ne passent PAS
     // par là (protocole de chunks §9.6, lot L6c) — cette limite vise le JSON.
@@ -127,6 +163,12 @@ export async function construireApp(): Promise<FastifyInstance> {
 
   // --- Routes ----------------------------------------------------------------
   await app.register(routesSante, { prefix: '/v1' });
+
+  // Authentification (05 §8.1) — lot L2/T2. Le quota `/v1/auth/*` (10 req/min/IP,
+  // 11 §3) est déclaré PAR ROUTE dans ce greffon et non ici : le poser au niveau du
+  // préfixe supposerait qu'aucune route non-auth ne viendra jamais s'y ajouter, ce
+  // qu'aucun mécanisme ne garantit. Voir `QUOTA_AUTH` dans domaines/auth/routes.ts.
+  await app.register(routesAuth, { prefix: '/v1' });
 
   return app;
 }

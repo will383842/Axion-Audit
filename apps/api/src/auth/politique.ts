@@ -34,7 +34,8 @@ import type {
 } from 'fastify';
 import { AppError } from '@axion/shared';
 import type { RoleUtilisateur } from '../db/schema.js';
-import { decorerRequete, identification, MESSAGE_AUTH_REQUISE } from './identite.js';
+import { decorerRequete, identification } from './identite.js';
+import { MESSAGE_AUTH_REQUISE } from './erreurs-jeton.js';
 import { lireUtilisateurAuthentifie } from './depot.js';
 import { creerContexteAdmin } from './contexte.js';
 import { enregistrerJetons } from './jetons.js';
@@ -200,6 +201,31 @@ const autorisation: onRequestAsyncHookHandler = async function autorisation(
       // exister). Une route qui les déclare SANS que son dépôt filtre est un défaut
       // de revue — pas un trou de ce crochet.
       return;
+
+    default: {
+      // ═══════════════════════════════════════════════════════════════════════
+      // ÉCHEC FERMÉ — la branche qui manquait, et le trou qu'elle bouchait.
+      // ═══════════════════════════════════════════════════════════════════════
+      // Sans elle, un `type` hors de l'union ne correspondait à AUCUN `case`, la
+      // fonction se terminait normalement, et LA REQUÊTE PASSAIT : un compte actif
+      // atteignait le gestionnaire avec un 200. Le contrôle d'identité en amont
+      // masquait le trou pour un anonyme (401), ce qui le rendait invisible en
+      // revue rapide comme au méta-test du registre.
+      //
+      // La vérification d'exhaustivité de TypeScript ne suffit pas : elle couvre
+      // la COMPILATION. Un `config` venu d'un `.mjs`, d'un JSON de configuration
+      // ou d'une assertion la franchit sans rien déclencher.
+      //
+      // `politiqueInconnue: never` garde la garantie de compilation — ajouter une
+      // variante à `PolitiqueAcces` sans la traiter ci-dessus ne compile plus — et
+      // le `throw` garantit l'exécution. Les deux, pas l'un ou l'autre.
+      const politiqueInconnue: never = acces;
+      requete.log.error(
+        { url: requete.url, politique: JSON.stringify(politiqueInconnue) },
+        "Politique d'accès non reconnue : requête refusée par défaut",
+      );
+      throw new AppError('FORBIDDEN', "Vous n'avez pas les droits nécessaires pour cette action.");
+    }
   }
 };
 

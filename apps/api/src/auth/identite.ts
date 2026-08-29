@@ -25,7 +25,8 @@
 // =============================================================================
 import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fastify';
 import { AppError } from '@axion/shared';
-import { verifierJetonAcces, traduireErreurJeton } from './jetons.js';
+import { verifierJetonAcces } from './jetons.js';
+import { MESSAGE_AUTH_REQUISE, traduireErreurJeton } from './erreurs-jeton.js';
 import type { UtilisateurAuthentifie } from './depot.js';
 import type { ContexteAdmin } from './contexte.js';
 
@@ -56,13 +57,6 @@ declare module 'fastify' {
 }
 
 const PREFIXE_BEARER = 'Bearer ';
-
-/**
- * Message unique de refus d'authentification. 06 §10.2 : la réponse ne dit JAMAIS
- * ce qui a échoué (schéma inattendu, jeton vide, signature fausse) — sans quoi elle
- * devient un oracle qui aide à reconnaître ce qui existe.
- */
-export const MESSAGE_AUTH_REQUISE = 'Authentification requise.';
 
 /**
  * Pose les décorations de requête. À appeler AVANT tout crochet qui les lit.

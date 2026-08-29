@@ -18,6 +18,14 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { AppError } from '@axion/shared';
 import { config } from '../config.js';
+import { MESSAGE_AUTH_REQUISE, traduireErreurJeton } from './erreurs-jeton.js';
+
+// La reconnaissance des erreurs de jeton VIT dans `erreurs-jeton.ts` : le
+// gestionnaire d'erreurs central en a besoin et ne doit PAS pour autant dépendre de
+// `config.ts` (voir l'en-tête de ce module). Elle reste exportée ICI parce que c'est
+// l'adresse naturelle de tout ce qui concerne les jetons — un seul point d'entrée
+// pour les appelants, une seule définition.
+export { traduireErreurJeton, reconnaitreErreurDeJeton } from './erreurs-jeton.js';
 
 /**
  * CE QUE LE JETON PORTE — et rien d'autre.
@@ -136,34 +144,7 @@ export function verifierJetonAcces(app: FastifyInstance, jeton: string): ChargeU
   if (!analyse.success) {
     // Le jeton est authentique mais mal formé : c'est nous qui l'avons mal frappé,
     // ou le format a changé. Côté client, la seule action utile reste la reconnexion.
-    throw new AppError('UNAUTHENTICATED', 'Authentification requise.');
+    throw new AppError('UNAUTHENTICATED', MESSAGE_AUTH_REQUISE);
   }
   return analyse.data;
-}
-
-/** Code d'erreur de `fast-jwt` pour un jeton expiré — le seul cas qu'on distingue. */
-const CODE_JETON_EXPIRE = 'FAST_JWT_EXPIRED';
-
-/**
- * Traduit une erreur de la bibliothèque de jetons en `AppError`.
- *
- * DEUX RÉSULTATS SEULEMENT, et c'est délibéré (06 §10.2 : aucune aide à la
- * reconnaissance) :
- *   · `TOKEN_EXPIRED`   — le client sait qu'il doit rafraîchir, pas se reconnecter ;
- *   · `UNAUTHENTICATED` — tout le reste, sans dire si la signature, la forme ou
- *     l'algorithme était en cause.
- * `TOKEN_EXPIRED` est le SEUL détail qu'on concède, parce qu'il est déductible sans
- * risque (le client connaît déjà l'`exp` de son propre jeton) et qu'il évite une
- * déconnexion inutile.
- */
-export function traduireErreurJeton(erreur: unknown): AppError {
-  const code =
-    erreur instanceof Error && 'code' in erreur && typeof erreur.code === 'string'
-      ? erreur.code
-      : '';
-
-  if (code === CODE_JETON_EXPIRE) {
-    return new AppError('TOKEN_EXPIRED', 'Votre session a expiré. Reconnectez-vous.');
-  }
-  return new AppError('UNAUTHENTICATED', 'Authentification requise.');
 }
