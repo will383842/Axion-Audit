@@ -1139,16 +1139,22 @@ jobs:
 
           mapfile -t ATTENDUES < <(awk '
             /^[[:space:]]*- name: pnpm test:integration$/ { dans = 1; next }
-            # BORNE STRUCTURELLE, ET NON TEXTUELLE — corrigé le 2026-08-29 en revue croisée.
-            # La borne était `run: pnpm test:integration$`, ancrée sur le CONTENU de la
-            # ligne. Un simple drapeau ajouté (`--reporter=verbose`) et l'ancre ne mord
-            # plus : `dans` ne retombe jamais, le scan avale toutes les clés majuscules
-            # du reste du fichier. Mesuré sur copie : 13 attendues -> **43**, et le job
-            # rougit en réclamant trente variables qui n'ont rien à y faire, avec un
-            # message incompréhensible. C'était un garde qui échoue pour une raison AUTRE
-            # que celle qu'il nomme — la famille de défaut que ce garde existe pour
-            # fermer, réintroduite dans le réparateur lui-même.
-            # Le début de l'étape suivante ne glisse pas quand on édite un contenu.
+            # BORNE STRUCTURELLE, ET NON TEXTUELLE — corrigee le 2026-08-29 en revue croisee.
+            # La borne etait ancree sur le CONTENU de la ligne run. Un simple drapeau
+            # ajoute (--reporter=verbose) et lancre ne mord plus : dans ne retombe
+            # jamais, le scan avale toutes les cles majuscules du reste du fichier.
+            # Mesure sur copie : 13 attendues devient 43, et le job rougit en reclamant
+            # trente variables etrangeres avec un message incomprehensible. Un garde qui
+            # echoue pour une raison AUTRE que celle quil nomme, reintroduit dans le
+            # reparateur lui-meme. Le debut de letape suivante ne glisse pas quand on
+            # edite un contenu.
+            #
+            # SANS APOSTROPHE NI ACCENT DANS CE BLOC, ET CE NEST PAS UN OUBLI DE STYLE :
+            # ce programme awk est delimite par des apostrophes dans le shell. Une seule
+            # apostrophe francaise ici FERME la chaine et fait sortir letape en code 2,
+            # avant tout verdict. Cest arrive le 2026-08-29 : ces commentaires ont ete
+            # ecrits avec apostrophes, et le garde est mort sans rien dire. Toute
+            # modification de ce bloc doit rester sans apostrophe.
             dans && /^[[:space:]]*- name:/ { dans = 0 }
             dans && /^[[:space:]]*[A-Z][A-Z0-9_]*:/ {
               ligne = $0
