@@ -257,7 +257,15 @@ export async function balayerSentinellesFinancieres(
   const routesFinancieres: string[] = [];
 
   for (const entree of registre) {
-    if (entree.acces.type === 'roles' && entree.acces.financier === true) {
+    // Fastify appelle `onRoute` DEUX FOIS pour un `GET` (la route et le `HEAD`
+    // qu'il engendre) : le registre porte donc deux entrées de même URL. On
+    // dédoublonne pour que le rapport se lise, sans toucher au registre — c'est le
+    // socle qui décide de ce qu'il enregistre, pas le balayage.
+    if (
+      entree.acces.type === 'roles' &&
+      entree.acces.financier === true &&
+      !routesFinancieres.includes(entree.url)
+    ) {
       routesFinancieres.push(entree.url);
     }
 

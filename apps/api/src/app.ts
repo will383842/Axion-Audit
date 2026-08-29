@@ -18,6 +18,7 @@ import { enregistrerSocleAutorisation } from './auth/politique.js';
 import { enregistrerCompilateursZod } from './http/zod.js';
 import { routesAuth } from './domaines/auth/routes.js';
 import { routesSante } from './routes/sante.js';
+import { routesScoping } from './routes/scoping.js';
 
 // =============================================================================
 // PÉRIMÈTRE DE CONFIANCE DES EN-TÊTES DE PROXY — correctif de sécurité.
@@ -178,6 +179,12 @@ export async function construireApp(): Promise<FastifyInstance> {
   // préfixe supposerait qu'aucune route non-auth ne viendra jamais s'y ajouter, ce
   // qu'aucun mécanisme ne garantit. Voir `QUOTA_AUTH` dans domaines/auth/routes.ts.
   await app.register(routesAuth, { prefix: '/v1' });
+
+  // Cadrage financier (05 §8, « `/v1/scoping` (+ `/financials`, admin only) ») —
+  // lot L2/T5. Invariant 3 : c'est la SEULE route du produit qui touche
+  // `scoping_financials`, et le balayage sentinelle vérifie que ça reste vrai à
+  // l'exécution, sur le registre `onRoute` plutôt que sur une liste écrite à la main.
+  await app.register(routesScoping, { prefix: '/v1' });
 
   return app;
 }

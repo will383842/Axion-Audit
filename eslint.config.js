@@ -11,6 +11,99 @@ import tseslint from 'typescript-eslint';
 import prettier from 'eslint-config-prettier';
 import globals from 'globals';
 
+// =============================================================================
+// PAGINATION SANS DÉCALAGE — contrat 11 §3, lot L3a
+// « Pagination : keyset partout (`?limit=50&after=<curseur>`), jamais d'offset. »
+//
+// Pourquoi une règle et pas une consigne : la méthode interdite est celle que
+// tout le monde écrit par réflexe, elle compile, elle passe les tests unitaires,
+// et elle ne se voit qu'en production sur une liste qui bouge — c'est-à-dire
+// pendant une synchronisation terrain, au moment le plus coûteux.
+//
+// -----------------------------------------------------------------------------
+// PORTÉE RÉELLE — CE QUE CETTE RÈGLE VOIT, ET CE QU'ELLE NE VOIT PAS
+// -----------------------------------------------------------------------------
+// ELLE VOIT (prouvé par des cas fautifs joués à l'écriture) :
+//   · `qb.offset(20)` et toute lecture de `.offset`, y compris en bout de chaîne
+//     `db.select().from(t).limit(10).offset(20)` ;
+//   · l'accès calculé littéral `qb['offset'](20)` ;
+//   · l'option `offset:` de l'API relationnelle de Drizzle
+//     (`db.query.t.findMany({ limit, offset })`), qui n'est PAS un appel de
+//     méthode et échapperait aux deux sélecteurs précédents ;
+//   · le mot-clé SQL dans une chaîne (`'… LIMIT 50 OFFSET 100'`) ou dans un
+//     gabarit `sql\`…\``, suivi d'un nombre, d'un paramètre ou de fin de fragment.
+//
+// ELLE NE VOIT PAS — liste tenue à jour, elle fait partie du garde-fou :
+//   1. l'appel par nom calculé NON littéral : `qb[nomDeMethode](20)`, ou
+//      `const m = 'off' + 'set'`. Aucune règle syntaxique ne le peut ;
+//   2. le SQL CONSTRUIT : `sql.raw('… ' + clause)` où `clause` porte le mot-clé.
+//      C'est la contrepartie de `sql.raw`, qui est déjà une porte ouverte assumée ;
+//   3. les fichiers `.sql` — les migrations de `apps/api/drizzle/*.sql` ne sont
+//      pas analysées par ESLint, qui ne parse pas le SQL. TROU CONNU, NON FERMÉ
+//      ICI : il appartiendrait à `scripts/check-invariants.mjs`, qui lit le texte
+//      de tous les fichiers versionnés (proposition remontée au chef de lot) ;
+//   4. `eslint.config.js` lui-même, exclu ci-dessous. MESURÉ, et le résultat n'est
+//      PAS celui qu'on attendait : en retirant l'exclusion, ce fichier reste VERT
+//      aujourd'hui — les motifs qu'il cite sont écrits `\\bOFFSET\\s+…`, et le
+//      `\s` littéral n'est pas un espace. L'exclusion est donc une PRÉCAUTION
+//      pour le jour où un message citera « … OFFSET 100 » en clair, pas la
+//      correction d'un défaut constaté. Écrit tel quel plutôt qu'affirmé plus
+//      fort qu'il n'est vrai ;
+//   5. tout ce qui n'est pas du code du dépôt : une vue SQL, une fonction stockée,
+//      une requête écrite dans un outil d'administration ;
+//   6. un `lint` non exécuté. La garantie vient de la CI (`pnpm lint`), pas du
+//      poste de développement, où la règle se contourne d'un commentaire.
+//
+// FAUX POSITIF ASSUMÉ : toute propriété métier nommée `offset` (un décalage
+// d'horaire, un décalage de page dans un PDF) sera refusée. L'échappatoire est
+// `// eslint-disable-next-line no-restricted-syntax -- <raison>`, qui LAISSE UNE
+// TRACE dans le diff — c'est le but. `{ offset: false }` de `z.string()
+// .datetime()` est en revanche épargné : les sélecteurs d'option ne visent qu'une
+// valeur numérique ou calculée, jamais un booléen.
+// =============================================================================
+const MESSAGE_SANS_DECALAGE =
+  'Interdit (contrat 11 §3) : la pagination est keyset PARTOUT (`?limit=50&after=<curseur>`), jamais par décalage. Sur une liste qui bouge pendant la pagination — une sync terrain qui pousse des réponses — le décalage saute ou duplique des lignes. Utilisez `conditionApresCurseur` / `ordreDuCurseur` / `paginerParCurseur` (apps/api/src/http/pagination.ts).';
+
+const PAGINATION_SANS_DECALAGE = [
+  // `qb.offset(20)`, et toute lecture de la propriété.
+  { selector: "MemberExpression[property.name='offset']", message: MESSAGE_SANS_DECALAGE },
+  // `qb['offset'](20)` — le contournement d'une règle qui ne regarderait que les
+  // accès en clair.
+  {
+    selector: "MemberExpression[computed=true][property.value='offset']",
+    message: MESSAGE_SANS_DECALAGE,
+  },
+  // Option `offset:` de l'API relationnelle de Drizzle. Quatre formes de valeur,
+  // toutes sauf le booléen — voir le faux positif assumé ci-dessus.
+  {
+    selector: "Property[key.name='offset'][value.type='Literal'][value.raw=/^[0-9]/]",
+    message: MESSAGE_SANS_DECALAGE,
+  },
+  {
+    selector: "Property[key.name='offset'][value.type='Identifier']",
+    message: MESSAGE_SANS_DECALAGE,
+  },
+  {
+    selector: "Property[key.name='offset'][value.type='MemberExpression']",
+    message: MESSAGE_SANS_DECALAGE,
+  },
+  {
+    selector: "Property[key.name='offset'][value.type='BinaryExpression']",
+    message: MESSAGE_SANS_DECALAGE,
+  },
+  // Le mot-clé SQL en clair, dans une chaîne ou dans un gabarit `sql`…``.
+  // Le motif exige un séparateur PUIS un nombre, un paramètre, un deux-points ou
+  // la fin du fragment : « outline-offset: » et « d'offset » ne le déclenchent pas.
+  {
+    selector: 'Literal[value=/\\bOFFSET\\s+(?:\\d|\\$|:|$)/i]',
+    message: MESSAGE_SANS_DECALAGE,
+  },
+  {
+    selector: 'TemplateElement[value.raw=/\\bOFFSET\\s+(?:\\d|\\$|:|$)/i]',
+    message: MESSAGE_SANS_DECALAGE,
+  },
+];
+
 export default tseslint.config(
   {
     // Le pack, les archives et les artefacts ne sont jamais analysés.
@@ -117,6 +210,7 @@ export default tseslint.config(
           message:
             'Interdit (invariant 1) : `crypto.randomUUID()` produit un UUID v4, non ordonnable. Toute entité créable hors ligne exige un UUID v7 (`uuidv7()` de la lib `uuidv7`).',
         },
+        ...PAGINATION_SANS_DECALAGE,
       ],
     },
   },
@@ -209,6 +303,33 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',
       '@typescript-eslint/no-unsafe-call': 'off',
+    },
+  },
+
+  // --- Pagination sans décalage : RÉTABLIE sur les fichiers d'outillage -------
+  //
+  // CE BLOC EXISTE PARCE QUE LES DEUX PRÉCÉDENTS ÉTEIGNENT `no-restricted-syntax`
+  // sur tout `.js/.mjs/.cjs`. La règle anti-décalage y aurait donc été inopérante
+  // — et pas sur des fichiers anodins : `apps/api/scripts/{seed,migrations,
+  // import-banque-questions}.mjs` écrivent du SQL. Une règle qui protège le code
+  // TypeScript et laisse le SQL des scripts est exactement le garde-fou qui
+  // rassure sans agir.
+  //
+  // Il doit rester LE DERNIER : en configuration à plat, c'est le dernier bloc
+  // correspondant qui fixe la règle. Le déplacer plus haut le désactiverait, en
+  // silence et sans qu'aucun test ne rougisse — sauf celui écrit pour ce cas.
+  //
+  // Les selectors UUID des blocs précédents, eux, restent éteints ici : ils
+  // citent leurs propres motifs et se dénonceraient (c'est le motif écrit en tête
+  // du bloc « fichiers d'outillage »). Ce bloc ne rétablit QUE l'anti-décalage.
+  // `eslint.config.js` en est exclu par PRÉCAUTION et non par nécessité : mesuré,
+  // sans cette exclusion il reste vert aujourd'hui (voir le point 4 de la portée,
+  // en tête de fichier).
+  {
+    files: ['**/*.{js,mjs,cjs}'],
+    ignores: ['eslint.config.js'],
+    rules: {
+      'no-restricted-syntax': ['error', ...PAGINATION_SANS_DECALAGE],
     },
   },
 );

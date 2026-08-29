@@ -24,6 +24,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Client } from 'pg';
 import type { FastifyInstance } from 'fastify';
 import type { RoleUtilisateur } from '../src/db/schema.js';
+import type { PolitiqueAcces } from '../src/auth/politique.js';
 import {
   appliquerMontee,
   connecter,
@@ -214,6 +215,22 @@ beforeAll(async () => {
     (requete) => ({ role: requete.utilisateur?.role ?? null }),
   );
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // UNE POLITIQUE HORS DE L'UNION — le banc de l'ÉCHEC FERMÉ (`default`).
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Ajouté par A17. Le compilateur interdit cette valeur, et il a raison : c'est
+  // pourquoi elle est FABRIQUÉE ici, dans un test, et nulle part ailleurs. Le code
+  // testé, lui, doit y survivre — sa propre branche `default` dit exactement d'où
+  // elle viendra : « un `config` venu d'un `.mjs`, d'un JSON de configuration ou
+  // d'une assertion » franchit la vérification d'exhaustivité de TypeScript sans
+  // rien déclencher. L'assertion du test REPRODUIT ce chemin ; elle ne le simule
+  // pas.
+  instance.get(
+    '/essai/politique-inconnue',
+    { config: { acces: { type: 'politique_inventee' } as unknown as PolitiqueAcces } },
+    () => ({ atteint: true }),
+  );
+
   // Une route dans un greffon ENCAPSULÉ : c'est la forme qu'auront toutes les routes
   // métier (`app.register(routesX, { prefix })`). Si le crochet ③ ne descendait pas
   // dans les instances filles, tout le produit serait hors garde-fou et les tests
@@ -377,6 +394,57 @@ describe('crochet ③ — autorisation', () => {
 // =============================================================================
 // RÉVOCATION INSTANTANÉE — LA PREUVE, C'EST LA REQUÊTE SUIVANTE
 // =============================================================================
+// =============================================================================
+// L'ÉCHEC FERMÉ — LA BRANCHE QUI A BOUCHÉ UN TROU RÉEL, ET QUI N'AVAIT PAS DE TEST
+// =============================================================================
+// Ajouté par A17 le 2026-08-29, après mesure de couverture : `politique.ts`
+// l.205 et 222-228 — la branche `default` du crochet ③ — n'était exercée par AUCUN
+// test, alors qu'elle est LE correctif d'un défaut grave constaté douze heures
+// plus tôt : un `type` hors de l'union ne correspondait à aucun `case`, la
+// fonction se terminait normalement, ET LA REQUÊTE PASSAIT — 200 sur un compte
+// actif muni d'un jeton valide.
+//
+// Ce qui rend ce trou vicieux, et ce que ce test doit donc prouver EXPLICITEMENT :
+// le contrôle d'identité en amont masquait le défaut pour un ANONYME (401), ce qui
+// le rendait invisible en revue rapide comme au méta-test du registre. La seule
+// épreuve qui le voie est celle qui présente un compte ACTIF et un jeton VALIDE.
+// C'est pour cela que la contre-épreuve ci-dessous n'est pas décorative : sans
+// elle, un 403 obtenu parce que le compte est cassé se lirait comme un succès.
+// =============================================================================
+describe('crochet ③ — échec fermé : une politique hors de l’union', () => {
+  it('@critique compte ACTIF + jeton VALIDE + politique inconnue → 403, jamais 200', async () => {
+    const reponse = await appeler('/essai/politique-inconnue', jetons.consultant);
+
+    expect(
+      reponse.statut,
+      'CECI EST LE TEST DU CORRECTIF. Un 200 signifie que la branche `default` a été\n' +
+        'retirée ou neutralisée, et qu’une politique non reconnue laisse de nouveau\n' +
+        'PASSER la requête. Le défaut est silencieux : rien d’autre ne le signale.',
+    ).toBe(403);
+    expect(
+      reponse.code,
+      'Le refus doit être FORBIDDEN : l’identité est établie et le compte est bon —\n' +
+        'c’est la POLITIQUE qui n’est pas reconnue. Un UNAUTHENTICATED ici voudrait\n' +
+        'dire que le refus vient de l’identité, donc que le vrai trou est ailleurs.',
+    ).toBe('FORBIDDEN');
+  });
+
+  it('contre-épreuve : le MÊME jeton, sur une politique reconnue, est servi', async () => {
+    // Sans ce cas, un compte désactivé ou un jeton périmé produirait aussi un refus
+    // au-dessus, et le test passerait au vert sans rien prouver de la branche visée.
+    const reponse = await appeler('/essai/authentifie', jetons.consultant);
+    expect(reponse.statut).toBe(200);
+  });
+
+  it('le refus ne dépend pas du rôle : même un ADMIN est refusé', async () => {
+    // La politique inconnue ne se « rattrape » pas par un rôle élevé. Si un admin
+    // passait là où un consultant est refusé, c’est que le refus vient d’une
+    // comparaison de rôles et non de l’échec fermé.
+    const reponse = await appeler('/essai/politique-inconnue', jetons.admin);
+    expect(reponse.statut).toBe(403);
+  });
+});
+
 describe('révocation instantanée (06 §10.1)', () => {
   it('compte désactivé → 401 sur la requête qui suit IMMÉDIATEMENT la désactivation', async () => {
     const avant = await appeler('/essai/authentifie', jetons.aDesactiver);

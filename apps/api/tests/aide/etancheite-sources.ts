@@ -37,7 +37,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CHAMPS_FINANCIERS } from '@axion/shared';
+import { CHAMPS_FINANCIERS_SURVEILLES } from '@axion/shared';
 
 const ICI = fileURLToPath(new URL('.', import.meta.url));
 
@@ -61,11 +61,18 @@ const DOSSIERS_IGNORES = new Set([
 const EXTENSIONS = ['.ts', '.tsx', '.mts', '.mjs', '.js', '.sql'];
 
 /**
- * LA LISTE BLANCHE — les seuls fichiers autorisés à nommer la table financière.
+ * LA LISTE BLANCHE — les seuls fichiers autorisés à nommer la table financière ou
+ * ses colonnes.
  *
  * Chemins RELATIFS à la racine, en séparateurs POSIX. Toute addition à cette liste
- * est un acte de conception : elle élargit la surface d'accès aux montants et doit
+ * est un ACTE DE CONCEPTION : elle élargit la surface d'accès aux montants et doit
  * être justifiée en revue croisée, jamais glissée pour faire passer un test.
+ *
+ * Sa longueur EST la mesure de la surface. Aujourd'hui : onze fichiers, dont UN
+ * SEUL lit vraiment la table (le dépôt) et un seul la sert (la route admin) ; les
+ * neuf autres la NOMMENT sans jamais en lire une valeur. Le jour où elle en compte
+ * vingt, la question à poser n'est pas « ce balayage est-il trop strict ? » mais
+ * « pourquoi vingt fichiers parlent-ils d'argent ? ».
  */
 export const LISTE_BLANCHE: readonly string[] = [
   // La déclaration Drizzle de la table — elle DOIT la nommer.
@@ -74,11 +81,18 @@ export const LISTE_BLANCHE: readonly string[] = [
   'apps/api/drizzle/0006_rapport_cadrage_pilotage.sql',
   // L'UNIQUE dépôt (ceinture 2).
   'apps/api/src/domaines/scoping/financiers.depot.ts',
-  // Le contrat d'API partagé : il déclare les CLÉS de la réponse, aucun montant.
+  // L'UNIQUE route admin, et le contrat d'API qu'elle sert.
+  'apps/api/src/routes/scoping.ts',
   'packages/shared/src/scoping.ts',
+  // La politique de redaction pino : elle nomme ces champs pour les MASQUER.
+  'packages/shared/src/redaction.ts',
   // Les garde-fous eux-mêmes.
   'apps/api/tests/aide/etancheite-sources.ts',
   'apps/api/tests/aide/sentinelle-financiere.ts',
+  // Conformité de schéma L1 : ces fichiers vérifient que les colonnes du fichier 04
+  // EXISTENT. Ils nomment la table, ils n'en lisent jamais une valeur.
+  'apps/api/tests/aide/specification-l1.ts',
+  'apps/api/tests/l1-structure.integration.test.ts',
   // Les tests d'étanchéité (ils sèment et lisent la table à dessein).
   'apps/api/tests/l2-crochets.integration.test.ts',
 ];
@@ -120,7 +134,9 @@ function sondes(): readonly Sonde[] {
   // de réponse est surveillé sans qu'on ait à modifier ce fichier. Une liste
   // recopiée aurait dérivé au premier ajout — et un garde-fou qui surveille
   // l'ancienne liste est un garde-fou vert qui ne protège plus rien.
-  const champs = CHAMPS_FINANCIERS.map((champ) => champ.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const champs = CHAMPS_FINANCIERS_SURVEILLES.map((champ) =>
+    champ.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+  );
 
   return [
     {

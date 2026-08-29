@@ -12,17 +12,34 @@
 // répété ici.
 //
 // ── LES DEUX TROUS MESURÉS LE 2026-08-29 (suite complète verte) ──────────────
-//  1. `identite.ts` l.93-106 — un `Authorization` d'un AUTRE SCHÉMA que Bearer, et
-//     un `Bearer` SANS jeton : aucun test. Or c'est la porte d'entrée de toute
+//  1. `identite.ts` l.93-99 — un `Authorization` d'un AUTRE SCHÉMA que Bearer :
+//     aucun test. Or c'est la porte d'entrée de toute
 //     requête authentifiée, et sa règle (« tout autre schéma est un jeton invalide,
 //     pas une négociation ») ne tient qu'à un `startsWith`. Une refactorisation qui
 //     le remplacerait par un `includes` accepterait
 //     `Authorization: Basic Bearer …` sans qu'aucun test ne rougisse.
-//  2. `politique.ts` l.258-259 — `ajouterCrochetOnRequest` face à un `onRequest`
-//     DÉJÀ PRÉSENT sous forme de FONCTION UNIQUE. La forme TABLEAU est exercée en
-//     permanence par `@fastify/rate-limit` ; la forme fonction, jamais. C'est la
-//     branche qui décide si un crochet préexistant est CONSERVÉ ou ÉCRASÉ — et
-//     l'ordre ①→②→③ que la note §2.1 impose repose entièrement sur elle.
+//  2. `ajouterCrochetOnRequest` — un `onRequest` DÉJÀ PRÉSENT sur la route est-il
+//     CONSERVÉ quand ③ vient s'y ajouter ? Le jour où ce « déjà présent » est le
+//     compteur de quota, l'écraser rend les jetons invalides NON BORNÉS : c'est
+//     l'inversion exacte que la note §2.1 interdit. Aucun test ne l'éprouvait.
+//
+// ── DEUX CHOSES MESURÉES ICI QUI CONTREDISENT CE QU'ON CROYAIT ───────────────
+//  · `politique.ts` l.258-259 (branche « `onRequest` est une FONCTION unique »)
+//    reste NON COUVERTE, et elle est INATTEIGNABLE dans l'application assemblée.
+//    Vérifié par mutation : remplacer le corps de cette branche par
+//    `options.onRequest = []` ne fait rougir AUCUN test. La raison est chez
+//    `@fastify/rate-limit` 10.3.0 (index.js l.204-209) : son propre `onRoute`,
+//    enregistré AVANT le nôtre par `poserLeQuota`, normalise déjà `onRequest` en
+//    TABLEAU dans les trois cas. Quand notre crochet arrive, `existant` est donc
+//    toujours un tableau. La branche est de la défense en profondeur contre un
+//    futur sans quota — on ne la teste PAS, et c'est un signalement, pas un oubli.
+//    Les trois cas ci-dessous éprouvent la branche RÉELLEMENT empruntée, et ils
+//    rougissent quand on la casse (mutation vérifiée le 2026-08-29).
+//  · Le garde-fou du jeton VIDE (`identite.ts` l.102-106) n'est PAS observable :
+//    le supprimer laisse `verifierJetonAcces('')` lever, et l'échec est mémorisé
+//    à l'identique. Un test sur ce cas serait resté vert en son absence — donc il
+//    n'a pas été écrit. Un test qui ne peut pas échouer ne prouve rien ; il
+//    rassure, ce qui est pire.
 //
 // ── POURQUOI CES TESTS SONT UNITAIRES ET NON D'INTÉGRATION ───────────────────
 // Aucun des deux ne lit la base : le crochet ① ne consulte jamais `users`, et une
@@ -162,11 +179,9 @@ beforeAll(async () => {
   );
 
   // ③ : aucun crochet préexistant — le troisième cas de la même fonction.
-  instance.get(
-    '/essai/crochets/aucun',
-    { config: { acces: { type: 'authentifie' } } },
-    () => ({ atteint: true }),
-  );
+  instance.get('/essai/crochets/aucun', { config: { acces: { type: 'authentifie' } } }, () => ({
+    atteint: true,
+  }));
 
   await instance.ready();
 }, 60_000);
@@ -191,16 +206,13 @@ describe('crochet ① — un en-tête `Authorization` qui n’est pas un Bearer'
 
     expect(
       reponse.statut,
-      "Le crochet ① NE REFUSE JAMAIS (note L2 §2.1) : sur une route publique, un\n" +
+      'Le crochet ① NE REFUSE JAMAIS (note L2 §2.1) : sur une route publique, un\n' +
         "en-tête illisible doit rendre 200. Un 401 ici signifierait que ① s'est mis à\n" +
         'refuser — et que les jetons bidons échappent désormais au compteur de quota.',
     ).toBe(200);
 
     const { identite, echec } = etat(reponse);
-    expect(
-      identite,
-      'Aucune identité ne doit être posée depuis un schéma non vérifié.',
-    ).toBeNull();
+    expect(identite, 'Aucune identité ne doit être posée depuis un schéma non vérifié.').toBeNull();
     expect(
       echec,
       'Le refus doit être MÉMORISÉ : c’est lui que ③ lèvera sur une route protégée.',
@@ -215,18 +227,6 @@ describe('crochet ① — un en-tête `Authorization` qui n’est pas un Bearer'
     expect(echec).toBe('UNAUTHENTICATED');
   });
 
-  it('@critique un `Bearer` au jeton VIDE est refusé, jamais traité comme un jeton', async () => {
-    // Le cas que produit un client qui a effacé son jeton sans effacer l'en-tête.
-    // Le laisser descendre dans la vérification reviendrait à demander à la
-    // bibliothèque de jetons de trancher une chaîne vide — et à dépendre de ce
-    // qu'elle en fait.
-    for (const entete of ['Bearer ', 'Bearer    ', 'Bearer \t']) {
-      const { identite, echec } = etat(await appeler('/essai/crochets/public', entete));
-      expect(identite, `« ${entete} » ne doit poser aucune identité`).toBeNull();
-      expect(echec, `« ${entete} » doit être mémorisé comme un échec`).toBe('UNAUTHENTICATED');
-    }
-  });
-
   it('contre-épreuve : SANS en-tête, il n’y a ni identité NI échec', async () => {
     // Sans ce cas, un crochet qui mémoriserait un échec pour TOUTE requête passerait
     // les trois tests ci-dessus. L'absence d'en-tête n'est pas une erreur : une
@@ -235,7 +235,7 @@ describe('crochet ① — un en-tête `Authorization` qui n’est pas un Bearer'
     expect(identite).toBeNull();
     expect(
       echec,
-      "Une requête sans en-tête ne doit RIEN mémoriser : sinon toute route publique\n" +
+      'Une requête sans en-tête ne doit RIEN mémoriser : sinon toute route publique\n' +
         'servirait un échec fantôme, et le diagnostic deviendrait illisible.',
     ).toBeNull();
   });
@@ -245,7 +245,7 @@ describe('crochet ① — un en-tête `Authorization` qui n’est pas un Bearer'
 // ③ LA POSE DU CROCHET — CONSERVER CE QUI EST DÉJÀ LÀ
 // =============================================================================
 describe('crochet ③ — pose sur une route qui a DÉJÀ un `onRequest`', () => {
-  it('@critique forme FONCTION : le crochet préexistant survit ET l’autorisation s’applique', async () => {
+  it('@critique un `onRequest` déclaré par la route survit ET l’autorisation s’applique', async () => {
     // LA PROPRIÉTÉ, EN UNE PHRASE : poser ③ ne doit rien écraser, et rien ne doit
     // empêcher ③ d'être posé. Les deux moitiés comptent — une implémentation qui
     // remplacerait `options.onRequest` par le seul `autorisation` refuserait bien

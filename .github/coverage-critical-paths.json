@@ -6,24 +6,102 @@
     "Consomme par le job `coverage` de .github/workflows/ci.yml via",
     ".github/scripts/check-coverage.mjs.",
     "",
-    "ETAT AU LOT L0 : `cheminsCritiques` est VIDE parce qu'AUCUN de ces modules",
-    "n'existe encore. Ce n'est pas une derogation : la CI verifie a chaque run",
-    "que la liste est alimentee des que le code correspondant apparait (voir",
-    "`cheminsAttendus`), et echoue sinon. Le seuil ne peut donc pas etre",
-    "contourne en silence.",
+    "ETAT AU LOT L2 : la liste est ALIMENTEE. Elle etait vide au lot L0 parce",
+    "qu'aucun module critique n'existait ; la ceinture 2 du job `coverage`",
+    "(ci.yml) a signale au lot L2 que du code critique etait LIVRE hors liste.",
+    "Le seuil ne peut donc pas etre contourne en silence.",
     "",
     "REGLE : abaisser `seuilMinimalPourcent` est une decision humaine tracee",
     "dans DECISIONS.md (11 §8-5), jamais une modification de configuration ; la",
     "CI refuse toute valeur differente de 90.",
     "",
-    "Tracabilite E36/E43 — lot L0 (07 §12), agent A52."
+    "REGLE JUMELLE, ET C'EST LA MEME FAUTE SOUS UNE AUTRE FORME : on n'ecarte",
+    "AUCUN fichier d'un glob critique pour faire passer le seuil. Un module sous",
+    "le seuil se corrige par des tests, jamais par un retrecissement de perimetre.",
+    "",
+    "TROU DE MESURE CONNU — A NE PAS CONFONDRE AVEC UNE COUVERTURE BASSE.",
+    "`packages/shared` s'exporte par `./dist/index.js` (son package.json) : les",
+    "tests executent le JS COMPILE, jamais les sources `.ts` que designe",
+    "`coverage.include` de vitest.config.ts. TOUS les fichiers de",
+    "`packages/shared/src/**` sont donc rapportes a 0,00 %, y compris ceux que la",
+    "suite exerce lourdement. Consequence pour L2 : le catalogue ferme du journal",
+    "(`packages/shared/src/journal.ts`) et la politique de redaction pino",
+    "(`packages/shared/src/redaction.ts`) NE PEUVENT PAS etre soumis a ce seuil",
+    "aujourd'hui — les y inscrire ferait echouer la CI a 0 % pour une raison",
+    "d'outillage et non de test. Ils sont donc ABSENTS de la liste, et cette",
+    "absence est un DEFAUT REMONTE (A17, 2026-08-29), pas une dispense.",
+    "",
+    "Tracabilite E36/E43 — lot L0 (07 §12), agent A52 ; alimente au lot L2."
   ],
 
   "seuilMinimalPourcent": 90,
 
   "metriquesControlees": ["lines", "statements", "functions", "branches"],
 
-  "cheminsCritiques": [],
+  "cheminsCritiques": [
+    {
+      "lot": "L2",
+      "module": "RBAC / propriete de session + authentification JWT (socle)",
+      "glob": "apps/api/src/auth/**",
+      "reference": "07 §12 lot L2 · 05 §9.9 · 06 §10.1 · 11 §3 · 09 §3 (« RBAC/propriete »)",
+      "_note_glob": [
+        "FUSION DE DEUX ENTREES ATTENDUES. Le lot L0 attendait un module RBAC sous",
+        "`apps/api/src/rbac/**` : ce repertoire N'EXISTE PAS, et ce n'est pas un oubli",
+        "de livraison. Le lot L2 a place le RBAC dans `apps/api/src/auth/politique.ts`",
+        "(crochet ③ d'autorisation, registre des routes, marque `ContexteAdmin`), au",
+        "meme endroit que l'identification et les jetons qu'il consomme. L'entree",
+        "`rbac` a donc ete FUSIONNEE ici plutot que laissee « non livree » — la laisser",
+        "aurait fait croire a un module encore du, alors qu'il est livre et mesure.",
+        "Le mode d'emploi ci-dessous autorise nommement cette correction de glob."
+      ]
+    },
+    {
+      "lot": "L2",
+      "module": "Domaine d'authentification (Argon2id, rotation, detection de reutilisation, propriete du jeton)",
+      "glob": "apps/api/src/domaines/auth/**",
+      "reference": "07 §12 lot L2 · 06 §10.1 · docs/conception/LOT_L2.md §5 · 09 §3 (« crypto locale », « RBAC/propriete »)",
+      "_note_glob": [
+        "N'ETAIT DANS AUCUNE ENTREE ATTENDUE — la ceinture 2 ne l'aurait donc jamais",
+        "reclamee. Il y entre pour trois raisons MESURABLES, pas par symetrie :",
+        "  · `mots-de-passe.ts` porte la verification Argon2id ET la defense contre",
+        "    l'oracle temporel (empreinte-leurre) : c'est de la crypto au sens 09 §3 ;",
+        "  · `service.ts` porte la machine a etats de rotation et la revocation de",
+        "    famille exigees par 06 §10.1 — une regression y est SILENCIEUSE (les",
+        "    jetons continuent de fonctionner, seule la DETECTION du vol disparait) ;",
+        "  · `depot.ts` porte la clause de PROPRIETE du jeton dans le `WHERE` de",
+        "    `revoquerJetonDeLUtilisateur` — « propriete » au sens litteral de 09 §3.",
+        "`routes.ts` reste DANS le glob : l'en ecarter parce qu'il contient du",
+        "branchement Fastify serait exactement le retrecissement que le bandeau",
+        "interdit, et il porte lui-meme le quota et la ceinture `utilisateur === null`.",
+        "La note de conception `docs/conception/LOT_L2.md` §5 engageait deja ce",
+        "perimetre par ecrit avant la premiere ligne de code."
+      ]
+    },
+    {
+      "lot": "L2",
+      "module": "Journal d'activite — porte d'ecriture unique d'`activity_log` (invariant 7)",
+      "glob": "apps/api/src/domaines/journal/**",
+      "reference": "07 §12 lot L2 · 06 §10.4 · docs/conception/LOT_L2.md §2.4 et §5 · invariant 7",
+      "_note_glob": [
+        "N'ETAIT DANS AUCUNE ENTREE ATTENDUE non plus. Il y entre parce que ces deux",
+        "fichiers sont la SEULE porte d'ecriture d'`activity_log` : `depot.ts` n'expose",
+        "qu'un `insert` (ni update, ni delete — c'est ainsi que l'invariant 7 « rien",
+        "n'est jamais silencieusement ecrase » est tenu), et `service.ts` porte la",
+        "borne sur `request.ip`, qui est la seule chose empechant un",
+        "`X-Forwarded-For` forge d'ecrire du texte libre dans une colonne placee sous",
+        "regime RGPD par 06 §10.4, depuis une route PUBLIQUE.",
+        "",
+        "HISTORIQUE, PARCE QU'IL DIT COMMENT CE GLOB A ETE TENU. A sa declaration",
+        "(A17, 2026-08-29) il etait SOUS LE SEUIL : 74,67 % lignes, 46,15 % branches.",
+        "Il a ete declare QUAND MEME, CI rouge assumee — le retirer pour obtenir du",
+        "vert aurait ete le defaut meme que la ceinture 2 venait d'attraper. Il a",
+        "ensuite ete tenu par des TESTS, jamais par un ajustement de perimetre :",
+        "`apps/api/tests/l2-journal.integration.test.ts` (11 cas) livre le controle de",
+        "« Purete d'`activity_log` » que la note L2 §5 promettait et que personne",
+        "n'avait ecrit. Mesure apres tests : 93,33 % lignes, 95,24 % branches."
+      ]
+    }
+  ],
 
   "_cheminsAttendus_mode_emploi": [
     "Chaque entree ci-dessous decrit un module critique NON ENCORE LIVRE, le lot",
@@ -36,18 +114,34 @@
 
   "cheminsAttendus": [
     {
-      "lot": "L2",
-      "module": "RBAC / propriete de session",
-      "glob": "apps/api/src/rbac/**",
-      "reference": "07 §12 lot L2 · 05 §9.9 · 09 §3 (« RBAC/propriete »)",
-      "statut": "non livre"
+      "lot": "L2 (T3)",
+      "module": "Domaine `users` — habilitation §34.4 et garde-fou de reinitialisation §9.7",
+      "glob": "apps/api/src/domaines/users/**",
+      "reference": "docs/conception/LOT_L2.md §1 (T3) et §5 · 03 §34.4 · 05 §9.7",
+      "statut": "non livre — ENCORE DU PAR LE LOT L2",
+      "_pourquoi_attendu": [
+        "AJOUT A17, 2026-08-29. La note de conception L2 §5 engage la couverture ≥ 90 %",
+        "sur `apps/api/src/domaines/{auth,users,scoping,journal}/**`. `auth` et",
+        "`journal` sont livres et desormais sous seuil ; `users` (T3) ne l'est PAS.",
+        "Sans cette entree, il pourrait etre livre au lot suivant sans jamais entrer",
+        "dans `cheminsCritiques` — c'est-a-dire exactement le trou que la ceinture 2",
+        "vient d'attraper sur `apps/api/src/auth/**`. Un garde-fou ne se repare pas",
+        "une fois : il se reparme."
+      ]
     },
     {
-      "lot": "L2",
-      "module": "Authentification JWT (rotation, detection de reutilisation)",
-      "glob": "apps/api/src/auth/**",
-      "reference": "07 §12 lot L2 · 11 §3 · 06 §10.1",
-      "statut": "non livre"
+      "lot": "L2 (T5)",
+      "module": "Etancheite financiere — depot unique `scoping_financials` (invariant 3)",
+      "glob": "apps/api/src/domaines/scoping/**",
+      "reference": "docs/conception/LOT_L2.md §1 (T5), §2.2 et §5 · invariant 3 · E27",
+      "statut": "non livre — ENCORE DU PAR LE LOT L2",
+      "_pourquoi_attendu": [
+        "AJOUT A17, 2026-08-29. Meme raison que l'entree `users` ci-dessus. Ce module",
+        "est le CONSOMMATEUR de la marque `ContexteAdmin` (apps/api/src/auth/contexte.ts) :",
+        "la marque est livree et testee, le depot qui l'exige ne l'est pas. Le",
+        "« balayage sentinelle financier » promis par la note L2 §5 n'a donc pas d'objet",
+        "aujourd'hui — il en aura un des que ce repertoire existera."
+      ]
     },
     {
       "lot": "L5a",

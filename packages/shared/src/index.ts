@@ -11,3 +11,4 @@ export * from './temps.js';
 export * from './env.js';
 export * from './redaction.js';
 export * from './journal.js';
+export * from './scoping.js';
