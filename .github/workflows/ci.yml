@@ -17,13 +17,33 @@
 # passer au vert en masquant un échec. Aucun `continue-on-error`, et aucun
 # `|| true` sur un CONTRÔLE. Une CI qui ment est pire que pas de CI.
 #
-# Deux `|| true` subsistent dans ce fichier, et il faut dire lesquels plutôt que
-# de laisser croire qu'il n'y en a aucun : `docker logs minio || true` (l. ~351)
-# et `docker rm -f minio || true` (l. ~372). Tous deux portent sur du DIAGNOSTIC
-# et du NETTOYAGE, jamais sur un verdict — l'un s'exécute alors que l'étape a
-# DÉJÀ échoué (il ne peut donc rien masquer), l'autre est un teardown
-# `if: always()` dont l'échec ne dit rien sur le code testé. Les retirer rendrait
-# la CI rouge pour des raisons étrangères au code : c'est l'inverse du but.
+# CINQ `|| true` subsistent dans ce fichier, et il faut dire lesquels plutôt que
+# de laisser croire qu'il n'y en a aucun. Aucun ne porte sur un VERDICT :
+#   · `docker logs minio || true` — DIAGNOSTIC, dans les jobs `4 · integration`
+#     et `couverture ≥ 90 %`. Il ne s'exécute QUE lorsque l'étape a DÉJÀ échoué :
+#     il ne peut donc rien masquer, il ne fait qu'imprimer le journal avant de
+#     sortir en 1.
+#   · `docker rm -f minio || true` — NETTOYAGE, dans les deux mêmes jobs. Ce sont
+#     des teardowns `if: always()` dont l'échec ne dit rien sur le code testé.
+#   · `{ grep -o … || true; }` dans l'étape de validation Caddy — un `grep` SANS
+#     correspondance sort en 1 et tuerait la substitution de commande sous
+#     `set -o pipefail` ; ce comptage doit pouvoir rendre ZÉRO, et c'est le `if`
+#     qui suit — jamais ce `|| true` — qui rend le verdict.
+# Les retirer rendrait la CI rouge pour des raisons étrangères au code : c'est
+# l'inverse du but.
+# (Ce compte disait DEUX et citait « l. ~351 » et « l. ~372 ». Les deux numéros
+# étaient FAUX — ils dataient d'une version antérieure du fichier — et le compte
+# lui-même oubliait le `|| true` de l'étape Caddy, pourtant expliqué vingt lignes
+# au-dessus de sa propre ligne. Un décompte documentaire faux est exactement la
+# famille de défaut que ce dépôt traque : on nomme donc désormais les JOBS, qui
+# ne glissent pas quand on insère vingt lignes plus haut, et on cite les trois
+# formes plutôt que d'annoncer un total qu'on ne recompte jamais. 2026-08-29.)
+#
+# `|| RC=$?` N'ENTRE PAS DANS CE COMPTE, et la distinction est le cœur de la
+# règle ci-dessus : il CAPTURE un code de sortie qui est ensuite REPROPAGÉ par un
+# `exit` (étape de mesure de la couverture, étape de validation Caddy). Capturer
+# un échec pour le rendre lisible n'est pas masquer un échec — masquer, ce serait
+# ne jamais le repropager.
 #
 # Traçabilité E36/E43 — livrable du lot L0 (07 §12), agent A52 (09 §1).
 # =============================================================================
@@ -858,6 +878,109 @@ jobs:
     name: couverture ≥ 90 % (modules critiques — 09 §3)
     runs-on: ubuntu-latest
     needs: [unit]
+    # -------------------------------------------------------------------------
+    # POURQUOI CE JOB REPREND LE DÉCOR DU JOB `4 · integration` — 2026-08-29.
+    # -------------------------------------------------------------------------
+    # `pnpm test:coverage` est `vitest run --coverage` : il exécute TOUS les
+    # projets vitest, `integration` COMPRIS. Ce job faisait donc tourner la suite
+    # d'intégration SANS construction des paquets, SANS service et SANS aucune
+    # variable — et il mourait AVANT de mesurer quoi que ce soit :
+    #   · « Failed to resolve entry for package "@axion/shared" » sur les QUATRE
+    #     fichiers qui portent justement la couverture critique (auth/crochets,
+    #     auth/quota, auth/socle, domaines/auth/jetons-rafraichissement) ;
+    #   · « SEED_ADMIN_EMAIL ou SEED_ADMIN_PASSWORD absent » sur le seed du L1.
+    #
+    # CE GARDE N'A DONC JAMAIS MESURÉ QUOI QUE CE SOIT depuis sa création. Sa
+    # première ceinture (« module critique livré mais non soumis au seuil »)
+    # échouait en amont et masquait le fait que la seconde ne pouvait pas
+    # s'exécuter ; sa ligne rouge ne voulait pas dire « couverture insuffisante »
+    # mais « les tests n'ont pas démarré ». C'est la famille de défaut que ce
+    # dépôt traque : un garde-fou dont on croit qu'il mesure, et qui n'atteint
+    # jamais sa mesure. Corollaire à ne pas oublier : le premier vert de ce job
+    # sera la PREMIÈRE mesure réelle du seuil sur ce dépôt, et non la
+    # confirmation d'un vert antérieur — il n'y en a jamais eu.
+    #
+    # Le diagnostic était DÉJÀ écrit dans ce fichier, au-dessus de l'étape
+    # « pnpm build (paquets uniquement) » du job `3 · unit` : « `needs:` n'impose
+    # qu'un ORDRE, il ne partage AUCUN artefact ». Il avait été appliqué à deux
+    # jobs sur trois. Un diagnostic juste qui n'est pas appliqué partout où il
+    # vaut ne protège que les endroits où l'on a pensé à le poser.
+    #
+    # NE PAS « NETTOYER » CETTE DUPLICATION SANS LIRE CE QUI SUIT. Trois voies
+    # plus élégantes ont été examinées et écartées, chacune pour sa raison :
+    #   · ANCRES YAML (`&decor` / `*decor`) : le parseur de workflows de GitHub
+    #     Actions ne les prend pas en charge. Piège aggravant, et il est de la
+    #     famille de ceux qui ont déjà coûté une nuit ici : les bibliothèques
+    #     YAML locales, elles, les acceptent — un « YAML valide » mesuré sur le
+    #     poste ne prouverait donc RIEN sur ce que GitHub accepte.
+    #   · WORKFLOW RÉUTILISABLE : le contrôle changerait de NOM (il deviendrait
+    #     « couverture ≥ 90 % / <job appelé> »). La protection de `main` exige des
+    #     contrôles NOMMÉS : le garde deviendrait NON REQUIS jusqu'à ce qu'un
+    #     humain édite la protection de branche — c'est-à-dire un garde qui ne
+    #     bloque rien, exactement le défaut qu'on répare ici. Ce raisonnement est
+    #     déjà écrit au job `1 · lint`, à propos du douzième job qu'on n'a pas créé.
+    #   · `env:` AU NIVEAU DU WORKFLOW : cela supprimerait vraiment la
+    #     duplication des variables, mais les distribuerait AUSSI à `unit`, `e2e`
+    #     et `lint`. Les tests unitaires posent leurs valeurs en `??=` : ils
+    #     prendraient alors silencieusement les URL de la CI à la place de leurs
+    #     valeurs factices. Changer le comportement de trois jobs VERTS pour
+    #     réparer un job rouge, c'est acheter un mystère avec de l'élégance.
+    #
+    # ET L'ON NE RESTREINT PAS LA MESURE AU PROJET `unit`. Ce serait le remède
+    # qui mesure moins : le journal d'activité et l'étanchéité financière sont
+    # éprouvés par des tests d'INTÉGRATION — `apps/api/tests/l2-journal.integration.test.ts`
+    # a fait passer `domaines/journal/**` de 74,67 % à 93,33 % (voir
+    # .github/coverage-critical-paths.json). Les exclure rendrait un chiffre
+    # rassurant et faux : on remplacerait un garde qui ne mesure pas par un garde
+    # qui mesure à côté.
+    #
+    # LA DUPLICATION NE PEUT PAS DÉRIVER EN SILENCE : l'étape « parité » plus bas
+    # relit CE fichier et échoue en nommant toute variable que
+    # `4 · integration` déclare et que ce job-ci n'a pas. C'est ce qui remplace
+    # l'ancre impossible — une seule déclaration de référence, et une machine qui
+    # vérifie la copie, plutôt que deux déclarations tenues par la discipline.
+    # -------------------------------------------------------------------------
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: axion
+          POSTGRES_PASSWORD: ci_factice_postgres
+          POSTGRES_DB: axion_audit_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U axion -d axion_audit_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    # Les MÊMES variables que l'étape `pnpm test:integration` du job
+    # `4 · integration`, et pour la même raison : la suite d'intégration s'exécute
+    # ici aussi. Déclarées au niveau du JOB et non de l'étape — deux étapes de ce
+    # job en ont besoin (la mesure et le garde de parité), et les écrire deux fois
+    # rouvrirait à l'intérieur du job la dérive qu'on ferme entre les jobs.
+    # Valeurs FACTICES (11 §2), identiques à celles du job d'intégration.
+    env:
+      DATABASE_URL: postgresql://axion:ci_factice_postgres@127.0.0.1:5432/axion_audit_test
+      DATABASE_URL_TEST: postgresql://axion:ci_factice_postgres@127.0.0.1:5432/axion_audit_test
+      REDIS_URL: redis://127.0.0.1:6379
+      MINIO_ENDPOINT: 127.0.0.1
+      MINIO_PORT: '9000'
+      MINIO_USE_SSL: 'false'
+      MINIO_ACCESS_KEY: ci_factice_minio
+      MINIO_SECRET_KEY: ci_factice_minio_secret
+      APP_ENV: dev
+      SEED_ADMIN_EMAIL: ci-factice@example.invalid
+      SEED_ADMIN_PASSWORD: ci_factice_mot_de_passe_admin_12
+      SEED_ADMIN_FULL_NAME: Administrateur de CI
+      TZ: UTC
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: ./.github/actions/setup-node-pnpm
@@ -939,19 +1062,165 @@ jobs:
         run: |
           echo "::warning title=Seuil de couverture non applicable::La liste .cheminsCritiques est vide : aucun module critique (sync, crypto locale, scoring, RBAC/propriété) n'est encore livré. Le seuil de 90 % s'activera automatiquement dès la première entrée — voir .github/coverage-critical-paths.json (colonne « lot qui alimente »). Contrôle de cohérence passé : aucun code critique livré hors liste."
 
+      # -----------------------------------------------------------------------
+      # LES TROIS ÉTAPES DE DÉCOR, reprises du job `4 · integration`.
+      # Elles ne s'exécutent que si la mesure a lieu : quand `cheminsCritiques`
+      # est vide, il n'y a rien à mesurer et rien à démarrer.
+      # -----------------------------------------------------------------------
+      # Voir l'encadré du job `3 · unit` : `needs:` n'impose qu'un ORDRE, il ne
+      # partage AUCUN artefact. Sans cette étape, les tests qui importent
+      # `@axion/shared` par son nom de paquet échouent sur « Failed to resolve
+      # entry » — et c'est précisément ce qui tuait ce job. (2026-08-29)
+      - name: pnpm build (paquets uniquement)
+        if: steps.config.outputs.nb != '0'
+        run: pnpm --recursive --filter "./packages/**" build
+
+      # MinIO ne peut PAS être déclaré en `services:` : son entrypoint exige
+      # l'argument `server /data`, que la clé `services` de GitHub Actions ne
+      # permet pas de passer (elle n'expose que `options`, pas `command`).
+      - name: Démarrer MinIO (même décor que `4 · integration`)
+        if: steps.config.outputs.nb != '0'
+        run: |
+          set -euo pipefail
+          docker run -d --name minio \
+            -p 9000:9000 -p 9001:9001 \
+            -e "MINIO_ROOT_USER=${MINIO_ROOT_USER}" \
+            -e "MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}" \
+            --health-cmd "mc ready local || curl -fsS http://localhost:9000/minio/health/live" \
+            --health-interval 5s --health-timeout 5s --health-retries 20 \
+            "${MINIO_IMAGE}" server /data --console-address ":9001"
+
+      - name: Attendre que MinIO soit vivant (échec explicite après 60 s)
+        if: steps.config.outputs.nb != '0'
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null 2>&1; then
+              echo "MinIO prêt après ${i} tentative(s)."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::MinIO n'a pas démarré en 60 s — journal du conteneur ci-dessous."
+          docker logs minio || true
+          exit 1
+
+      # -----------------------------------------------------------------------
+      # PARITÉ AVEC `4 · integration` — le garde qui remplace l'ancre YAML.
+      # -----------------------------------------------------------------------
+      # GitHub Actions ne permet pas de partager un bloc `env:` entre deux jobs
+      # (voir l'encadré en tête de ce job). La copie est donc inévitable ; ce qui
+      # ne l'est pas, c'est qu'elle dérive en silence. Cette étape LIT ce fichier
+      # et exige que toute variable déclarée par l'étape « pnpm test:integration »
+      # soit présente ici. Aucune liste n'est recopiée dans ce script : il n'y a
+      # donc aucune troisième copie à maintenir, et le jour où quelqu'un ajoute
+      # une variable au job d'intégration, CE job rougit en la nommant plutôt que
+      # d'échouer six étapes plus loin sur un message de test incompréhensible.
+      #
+      # Le garde échoue AUSSI s'il ne trouve rien : une étape renommée le rendrait
+      # muet, et un contrôle qui n'a rien vérifié ne sort jamais vert (09 §5.7).
+      #
+      # ⚠️ CE QU'IL NE VOIT PAS, ET IL FAUT LE LIRE AVANT DE LUI FAIRE CONFIANCE :
+      # il compare des NOMS, jamais des VALEURS. Si quelqu'un change l'URL de la
+      # base dans un job et pas dans l'autre, les deux listes de noms restent
+      # identiques et ce garde reste MUET. La phrase « la copie ne peut pas dériver
+      # en silence » ci-dessus est donc vraie pour les noms et FAUSSE pour les
+      # valeurs. La parité des valeurs a été vérifiée à la main le 2026-08-29
+      # (13 variables, 0 divergence) ; rien ne la rejouera demain.
+      # Relevé en revue croisée, écrit plutôt que corrigé : étendre le garde aux
+      # valeurs demande de résoudre les substitutions du niveau workflow, ce qui
+      # est une autre pièce — et un garde qu'on croit plus large qu'il n'est vaut
+      # moins qu'un garde étroit dont la portée est écrite.
+      - name: Parité des variables avec le job `4 · integration`
+        if: steps.config.outputs.nb != '0'
+        run: |
+          set -euo pipefail
+          FICHIER=.github/workflows/ci.yml
+
+          mapfile -t ATTENDUES < <(awk '
+            /^[[:space:]]*- name: pnpm test:integration$/ { dans = 1; next }
+            # BORNE STRUCTURELLE, ET NON TEXTUELLE — corrigé le 2026-08-29 en revue croisée.
+            # La borne était `run: pnpm test:integration$`, ancrée sur le CONTENU de la
+            # ligne. Un simple drapeau ajouté (`--reporter=verbose`) et l'ancre ne mord
+            # plus : `dans` ne retombe jamais, le scan avale toutes les clés majuscules
+            # du reste du fichier. Mesuré sur copie : 13 attendues -> **43**, et le job
+            # rougit en réclamant trente variables qui n'ont rien à y faire, avec un
+            # message incompréhensible. C'était un garde qui échoue pour une raison AUTRE
+            # que celle qu'il nomme — la famille de défaut que ce garde existe pour
+            # fermer, réintroduite dans le réparateur lui-même.
+            # Le début de l'étape suivante ne glisse pas quand on édite un contenu.
+            dans && /^[[:space:]]*- name:/ { dans = 0 }
+            dans && /^[[:space:]]*[A-Z][A-Z0-9_]*:/ {
+              ligne = $0
+              sub(/:.*$/, "", ligne)
+              gsub(/[[:space:]]/, "", ligne)
+              print ligne
+            }
+          ' "$FICHIER")
+
+          if [ "${#ATTENDUES[@]}" -eq 0 ]; then
+            echo "::error::Le garde de parité n'a trouvé AUCUNE variable dans l'étape « pnpm test:integration » de ${FICHIER}. L'étape a probablement été renommée : un contrôle qui ne trouve rien ne doit JAMAIS sortir vert (09 §5.7). Corriger le motif de recherche de cette étape."
+            exit 1
+          fi
+
+          MANQUANTES=''
+          for NOM in "${ATTENDUES[@]}"; do
+            if [ -z "${!NOM:-}" ]; then
+              MANQUANTES="${MANQUANTES} ${NOM}"
+            fi
+          done
+
+          if [ -n "$MANQUANTES" ]; then
+            echo "::error::Ce job exécute la MÊME suite que « 4 · integration » (test:coverage lance TOUS les projets vitest, integration compris) mais il lui manque :${MANQUANTES}. Ajouter ces variables au bloc « env: » du job « coverage » — sans elles, les tests échouent sur un défaut d'ENVIRONNEMENT et le chiffre de couverture ne veut rien dire."
+            exit 1
+          fi
+
+          echo "Parité vérifiée : ${#ATTENDUES[@]} variable(s) déclarées par « 4 · integration », toutes présentes ici."
+
       - name: Mesurer la couverture et appliquer le seuil de 90 %
         if: steps.config.outputs.nb != '0'
         run: |
           set -euo pipefail
-          pnpm test:coverage
-          # `pnpm test:coverage` doit produire un rapport `coverage/coverage-summary.json`
-          # (reporter `json-summary` de Vitest 3). La CI ne fait PAS confiance au
-          # code de sortie seul : elle relit les chiffres et tranche elle-même.
+          # ------------------------------------------------------------------
+          # ON CAPTURE L'EXÉCUTION, JAMAIS LE VERDICT. (2026-08-29)
+          # ------------------------------------------------------------------
+          # Cette étape écrivait `pnpm test:coverage` nu sous `set -e` : quand la
+          # suite plantait au CHARGEMENT, on sortait à la PREMIÈRE LIGNE et le
+          # contrôle de présence du rapport, juste au-dessous, n'était JAMAIS
+          # atteint. Son message — « la couverture doit être MESURÉE, pas
+          # déclarée » — ne pouvait donc pas s'afficher dans le seul cas où il
+          # aurait tout expliqué. Pendant deux heures, un code de sortie qui
+          # signifiait « les tests n'ont pas démarré » s'est lu « couverture
+          # insuffisante ». Le garde existait ; il était muet là où il servait.
+          #
+          # `|| RC=$?` porte sur l'EXÉCUTION, et son code est REPROPAGÉ plus bas
+          # par un `exit`. Ce n'est PAS un `|| true` sur un VERDICT, que la règle
+          # fondatrice en tête de fichier interdit : les DEUX chemins ci-dessous
+          # se terminent par une sortie NON NULLE. Rendre un échec lisible n'est
+          # pas l'avaler. Ne pas remplacer par `pnpm test:coverage; RC=$?` : sous
+          # `set -e`, bash abandonne AVANT la capture (même piège que l'étape de
+          # validation Caddy, mesuré sur ce fichier).
+          RC=0
+          pnpm test:coverage || RC=$?
+
+          # Le rapport `coverage/coverage-summary.json` (reporter `json-summary`
+          # de Vitest 3) est la MESURE. La CI ne fait PAS confiance au code de
+          # sortie seul : elle relit les chiffres et tranche elle-même.
           if [ ! -f coverage/coverage-summary.json ]; then
-            echo "::error::coverage/coverage-summary.json absent — la couverture doit être MESURÉE (09 §3), pas déclarée. Configurer le reporter 'json-summary' de Vitest."
+            echo "::error::coverage/coverage-summary.json absent (vitest a rendu ${RC}) — la couverture doit être MESURÉE (09 §3), pas déclarée. Si ce code est NON NUL, la suite a échoué AVANT d'écrire son rapport : la cause est dans les erreurs ci-dessus, PAS dans le seuil. S'il est nul, configurer le reporter « json-summary » de Vitest."
             exit 1
           fi
+
+          if [ "$RC" -ne 0 ]; then
+            echo "::error::La suite de tests a échoué (code ${RC}). Le rapport de couverture existe, mais il décrit une suite ROUGE : aucun seuil n'est appliqué sur une suite qui n'est pas verte."
+            exit "$RC"
+          fi
+
           node .github/scripts/check-coverage.mjs
+
+      - name: Arrêter MinIO
+        if: always()
+        run: docker rm -f minio || true
 
       - name: Conserver le rapport de couverture
         if: always()
