@@ -749,6 +749,82 @@ Deux rétentions différentes, c'est une restauration à moitié possible.
 > disque du voisin. **Une sauvegarde MinIO incrémentale, ou une destination externe, devra être
 > tranchée avant que les premières missions produisent des pièces jointes.**
 
+### 5.3bis ⛔ LE COFFRE DES SECRETS — À OUVRIR **AVANT** §5.4 ET §5.5
+
+> **Si vous restaurez dans l'urgence, cette section passe en premier et les deux suivantes ne
+> marchent pas sans elle.** §5.4 exige `PGBACKREST_CIPHER_PASS`, §5.5 exige
+> `BACKUP_ENCRYPTION_PASSPHRASE`. Ces deux valeurs vivent **dans le coffre**. Restaurer la base et
+> les pièces jointes sans avoir ouvert le coffre rend des octets chiffrés et **aucun conteneur qui
+> redémarre** (02 §30.4-2).
+
+**Ce qu'est le coffre.** Une archive `tar + zstd + gpg AES256` produite **à chaque passe** de
+`infra/postgres/sauvegarde.sh` (fonction « coffre des secrets »), déposée dans `/sauvegarde` à côté
+des archives MinIO, expédiée vers R2 sous `staging/minio/`, et soumise à la **même rétention** que
+les archives qu'elle permet de rouvrir. Nom : `secrets-<horodatage>.coffre.gpg`, avec son
+`.sha256` à côté.
+
+**La clé.** `BACKUP_SECRETS_PASSPHRASE` — décision **D-3, option A** : une valeur **distincte** de
+`BACKUP_ENCRYPTION_PASSPHRASE`, qui ne vit **pas** sur la machine. Elle est dans le gestionnaire de
+mots de passe de Williams. **Si vous ne l'avez pas, aucune commande de cette section ne peut
+aboutir — il n'existe aucun contournement, et c'est voulu.**
+
+#### La procédure, depuis le seul stockage distant
+
+```bash
+# Pré-requis : `mc` configuré sur le bucket R2, la passphrase du coffre dans un
+# FICHIER (jamais sur une ligne de commande — /proc/<pid>/cmdline est lisible).
+umask 077
+D=$(mktemp -d); chmod 700 "$D"
+
+# 1. Choisir le coffre le plus récent et le retélécharger.
+mc ls axionr2/<bucket>/staging/minio/ | grep '\.coffre\.gpg$'
+mc cp axionr2/<bucket>/staging/minio/secrets-<horodatage>.coffre.gpg "$D/coffre.gpg"
+
+# 2. Vérifier qu'il est arrivé entier (le .sha256 voyage à côté).
+mc cat axionr2/<bucket>/staging/minio/secrets-<horodatage>.coffre.gpg.sha256
+sha256sum "$D/coffre.gpg"      # les deux empreintes doivent être IDENTIQUES
+
+# 3. L'ouvrir — commande exacte du `LISEZ-MOI.txt` qu'il contient.
+printf %s "$PASSPHRASE_DU_COFFRE" > "$D/pp"     # variable d'env, jamais un littéral
+mkdir "$D/ouvert" && cd "$D/ouvert"
+gpg --decrypt --batch --pinentry-mode loopback --passphrase-file "$D/pp" \
+    "$D/coffre.gpg" | zstd -d | tar -xv
+
+# 4. Effacer le clair dès que les valeurs sont reposées dans Coolify.
+cd / && rm -rf "$D"
+```
+
+**Ce que vous obtenez** (5 fichiers) : `application.env` (les `CLÉ=valeur`, triées) ·
+`environnement-conteneur.brut` (l'environnement complet, pour trancher si le filtre s'est trompé) ·
+`manifeste.txt` (nom, longueur et empreinte de chaque valeur — sert à vérifier un `.env` reposé à la
+main **sans afficher un seul secret**) · `contexte-coolify.txt` (uuid, branche, commit, domaines) ·
+`LISEZ-MOI.txt`.
+
+**Puis, dans l'ordre** : recréer l'application Coolify (dépôt git + branche), coller
+`application.env` dans ses variables, **reposer à la main les trois choses que le coffre ne contient
+pas** — le **port cible Traefik** (notre Caddy écoute sur 8080 ; sans ce réglage Traefik prend le
+premier port exposé et rend un 504), la **liaison au dépôt git**, et le **domaine** — déployer une
+fois à vide, **puis seulement** §5.4 (PostgreSQL) et §5.5 (MinIO).
+
+#### Preuve d'aller-retour — jouée le 2026-08-29 sur le coffre de PRODUCTION du staging
+
+Pas sur un coffre de test : sur `secrets-20260829T023005Z.coffre.gpg`, **retéléchargé depuis R2**,
+et par la commande du `LISEZ-MOI` ci-dessus.
+
+| Étape                                                        | Mesure                                                                   |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| SHA-256 local et sidecar `.sha256`                           | `f994768b44693c44…` — identiques                                         |
+| SHA-256 **relu depuis R2** (`mc cat`, flux, rien sur disque) | `f994768b44693c44…` — **identique à la source**                          |
+| Déchiffrement + extraction de l'objet **venu de R2**         | rc 0 — 5 fichiers, 103 variables applicatives                            |
+| SHA-256 de l'arbre recomposé                                 | `bcdef88b7f455edf…` — **égal à l'empreinte journalisée à l'écriture**    |
+| Ouverture avec `BACKUP_ENCRYPTION_PASSPHRASE`                | **rc 2 — refusée.** Les deux gardes sont bien cloisonnées (D-3 option A) |
+
+> **Ce que cette preuve ne couvre pas, et qu'il faut savoir avant d'en avoir besoin :** elle prouve
+> que le coffre **s'ouvre** et que son contenu est **intègre**. Elle ne prouve pas qu'une pile
+> reconstruite **depuis** ces variables redémarre — cela suppose de recréer une application Coolify,
+> ce qui n'a jamais été joué (§7.3). Et elle ne vaut que tant que **quelqu'un détient la
+> passphrase** : voir §5.7, point 6.
+
 ### 5.4 LA RESTAURATION POSTGRESQL — JOUÉE, PAS DÉCRITE
 
 **Base jetable, jamais le staging.** Le dépôt pgBackRest est monté **en lecture seule** : le test ne
@@ -914,14 +990,99 @@ la perte du serveur. **La règle 3-2-1 du 02 §11.4 n'est pas tenue.**
 
 ### 5.7 Ce qui reste ouvert côté sauvegarde
 
-1. **Le service `sauvegarde` n'est pas déployé** — il le sera au prochain déploiement Coolify (§5.0).
-2. **Aucune copie hors serveur** — §5.6, décision Williams.
-3. **Aucune alerte** : un échec se voit dans `docker ps`, pas dans une notification (02 §11.3 prévoit
-   Uptime Kuma ; il n'est pas déployé).
+> **⚠️ Points 1 à 3 PÉRIMÉS — corrigés le 2026-08-29 par mesure sur la machine.** Ils décrivaient
+> l'état d'avant le déploiement du service. Ils sont réécrits ci-dessous plutôt qu'effacés : un
+> document d'exploitation qui se réécrit sans le dire ne vaut pas mieux qu'une sonde qui ment.
+
+1. ~~Le service `sauvegarde` n'est pas déployé~~ → **il tourne** (`Up … (healthy)`), créneau
+   02:30 UTC, passe locale vérifiée.
+2. ~~Aucune copie hors serveur~~ → **R2 est en service** (bucket `…/staging`, 1 613 objets attendus).
+   Reste ouvert : la **deuxième** destination (D-1, Hetzner Storage Box) est **décidée mais pas
+   posée** — `BACKUP_STORAGEBOX_*` absentes, le journal l'annonce à chaque démarrage. Le 02 §11.4
+   demande deux destinations ; il y en a **une**.
+3. ~~Aucune alerte~~ → **Telegram est actif** (« notification sortante ACTIVE » au journal).
+   Reste ouvert, et c'est le trou principal : **aucune sonde EXTERNE**. La sonde et l'alerte
+   s'exécutent sur la machine qu'elles surveillent — VPS éteint, plus d'alerte. Uptime Kuma
+   (02 §11.3) n'est pas déployé.
 4. **Le test de restauration reste MANUEL.** L'automatiser suppose de trancher §6.2 (nom de projet
    Compose imposé par l'orchestrateur). La procédure de §5.4 est reproductible telle quelle.
 5. **La rétention MinIO à 30 archives complètes ne passera pas l'échelle** dès que les missions
    produiront des pièces jointes (§5.3).
+6. 🔴 **LA PASSPHRASE DU COFFRE N'A QU'UN SEUL DÉTENTEUR** (D-3, question annexe non tranchée). Le
+   coffre ferme le trou « on restaure les données sans les clés » et **en ouvre un autre, de la même
+   famille** : si Williams devient indisponible et que son gestionnaire de mots de passe est perdu,
+   `secrets-*.coffre.gpg` devient un fichier définitivement illisible — et les archives MinIO et le
+   dépôt pgBackRest avec lui, puisque leurs passphrases sont **dedans**. **Aucune quantité de
+   sauvegardes ne compense cela.** Décision humaine, §5.7bis.
+7. 🔴 **`mc mirror --remove` a supprimé de R2 un objet qu'il venait d'y écrire.** Mesuré le
+   2026-08-29 : après la passe de 02:30, `backup.info` — **le fichier sans lequel aucune restauration
+   pgBackRest ne démarre** — était absent du bucket alors que le journal du miroir affichait son
+   transfert, suivi d'une ligne de suppression à source vide. `mc cp` du même fichier a fonctionné et
+   s'est relu à l'identique : **le chemin d'envoi est sain, c'est la phase `--remove` du miroir qui
+   retire.** Voir §5.7ter.
+
+### 5.7bis ESCALADE — LE DÉPÔT DE LA PASSPHRASE DU COFFRE (pour Williams)
+
+> **À trancher à la porte P-A.** Elle n'appartient à aucun agent (CLAUDE.md §3-4).
+>
+> _« [L0-b] La passphrase `BACKUP_SECRETS_PASSPHRASE` doit-elle être déposée ailleurs que chez un
+> unique détenteur ?_
+> _(a) **Statu quo** — un seul gestionnaire, un seul détenteur. Zéro coût, point de défaillance
+> unique assumé et écrit._
+> _(b) **Enveloppe scellée hors ligne** — la valeur imprimée, scellée, datée, rangée dans un lieu
+> physique distinct (coffre bancaire, notaire). Coût : ~0 €, une heure. Ne dépend d'aucun
+> fournisseur, ne fuit pas par le réseau. Contrainte : toute rotation de la passphrase oblige à
+> refaire l'enveloppe, et une enveloppe périmée est pire qu'aucune._
+> _(c) **Second détenteur** — un tiers de confiance reçoit la valeur par un canal hors bande. Coût
+> nul, mais double la surface de fuite et suppose quelqu'un à désigner._
+> _(d) **Partage à seuil (Shamir 2-sur-3)** — trois parts, deux suffisent. Ferme à la fois la perte
+> et la fuite unique. Coût : un outil de plus à manipuler correctement le jour du sinistre, sous
+> pression, par quelqu'un qui ne s'en sert jamais — c'est son vrai risque._
+>
+> _Ce que la décision doit fournir : le mode retenu, le ou les dépositaires, et **la date du
+> prochain contrôle que la copie déposée est toujours lisible** — une copie de secours jamais
+> relue n'est pas une copie de secours, c'est la leçon que ce lot a apprise trois fois. »_
+
+**Procédure exacte si l'option (b) ou (c) est retenue** — elle ne demande aucun agent :
+
+1. dans Coolify, ouvrir l'application Axion Audit → **Environment Variables** → révéler
+   `BACKUP_SECRETS_PASSPHRASE` ;
+2. la reporter sur le support choisi **sans passer par un ordinateur en réseau** (écrite à la main,
+   ou imprimée depuis le gestionnaire de mots de passe) ; y joindre **une seule phrase** : « ouvre
+   les fichiers `secrets-*.coffre.gpg` d'Axion Audit ; procédure dans `infra/README.md` §5.3bis » ;
+3. sceller, dater, déposer ; noter **le lieu** (pas la valeur) dans le gestionnaire de mots de passe ;
+4. **contrôler une fois** que la copie déposée est correcte — relire la valeur déposée et rouvrir un
+   coffre avec elle, par §5.3bis. Sans ce contrôle, on a déposé une croyance ;
+5. tracer dans `DECISIONS.md` : le mode, la date, le dépositaire, la date du prochain contrôle.
+   **Jamais la valeur** — ni ici, ni dans un ticket, ni dans une conversation avec un agent.
+
+### 5.7ter LE DÉFAUT DU MIROIR R2 — CE QU'IL FAUT SAVOIR AVANT DE S'Y FIER
+
+**Le fait, mesuré, pas supposé.** Le 2026-08-29 à 04h30 UTC, comparaison exhaustive du contenu local
+et du bucket : **1 613 objets attendus, 1 611 présents**. Les deux écarts :
+
+| Objet manquant                        | Verdict                                                                           |
+| ------------------------------------- | --------------------------------------------------------------------------------- |
+| un segment WAL `…00000002D.zst`       | **normal** — archivé _après_ le passage du miroir, il partira à la passe suivante |
+| `pgbackrest/backup/axion/backup.info` | 🔴 **anormal** — écrit par le miroir puis retiré dans la même passe               |
+
+**Pourquoi c'est grave au-delà d'un fichier.** La relecture de contrôle du script ne vérifie que
+**trois** objets (`backup.info`, la dernière archive MinIO, le dernier coffre). Elle a attrapé ce
+cas-ci **parce que la victime était l'un des trois**. Rien ne garantit que ce soit toujours le cas :
+une passe peut se déclarer **réussie** en laissant un trou ailleurs dans les 1 600 objets. **C'est
+exactement le garde-fou menteur que le reste de ce lot a passé son temps à démonter.**
+
+**Ce qui a été fait le 2026-08-29** : `backup.info` a été re-déposé par `mc cp` et **relu depuis R2 à
+l'empreinte identique** (`e94aa1d76384b8f8…`). Le trou est fermé **pour cette passe**. Rien n'a été
+changé dans le script : le défaut se reproduira.
+
+**Ce qu'il reste à instruire** (escalade, non tranché ici — cela touche à la fiabilité de la copie
+hors serveur, pas à un réglage) : (a) remplacer la relecture par **échantillon de 3** par une
+**comparaison exhaustive des noms** local↔distant en fin d'expédition — le coût est un `ls
+--recursive`, déjà payé par le comptage d'objets de l'étape 6 ; (b) déterminer si `--remove` doit
+être dissocié du miroir et joué en **passe séparée**, après vérification, plutôt que dans la même
+invocation que les envois. Tant que (a) n'est pas fait, **« expédition terminée » ne prouve la
+présence que de trois objets sur mille six cents.**
 
 ---
 
