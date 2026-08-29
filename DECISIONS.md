@@ -3259,3 +3259,182 @@ ne peut de toute façon ni étendre ni réduire ce que le pack fixe.
 Décideur : A01, sur constat d'A14.
 Impact spec : aucun amendement au pack. La note `docs/conception/LOT_L2.md` porte une phrase
 d'intention désormais périmée sur ce point ; la présente entrée fait foi.
+
+---
+
+## 2026-08-29 — [L3] Les quatre codes d'erreur du lot : lesquels existent vraiment ?
+
+`docs/conception/LOT_L3.md` §5-2 nomme quatre codes et les subordonne à un arbitrage qui n'existait
+pas. Instruits par A32, mesurés contre les 17 codes réels de `packages/shared/src/errors.ts`.
+
+**Le critère que je retiens, et qui décide des quatre** : deux causes méritent deux codes **si et
+seulement si le front doit faire deux choses différentes**. Un code qui ne produit que le même message
+qu'un autre est un code mort — il gonfle un registre que plus personne ne consulte.
+
+Options :
+
+1. Créer les quatre codes tels que nommés par la conception.
+2. N'en créer aucun et tout ramener aux codes génériques existants.
+3. **Trois codes, dont un renommé, et un refus motivé.**
+
+Arbitrage : **option 3.**
+
+- **`COMPANY_DUPLICATE` · 409 · retenu, périmètre RÉDUIT au SIREN.** Un SIREN valide mais pris est un
+  conflit d'état, pas une requête malformée — un SIREN mal formé reste un 400 rendu par le compilateur
+  Zod. Le code générique suffirait **aujourd'hui**, puisque cette route n'a qu'un seul 409 possible ;
+  je retiens quand même le code dédié parce que 05 §8.3 et M8.1 annoncent un référentiel partagé avec
+  `external_ref` : le jour où un second conflit arrive, un branchement front bâti sur un conflit nu
+  devient faux **en silence**. C'est l'assurance la moins chère du dossier.
+- **`CSV_IMPORT_REJECTED` → renommé `IMPORT_REJECTED` · 422.** `banque-questions.ts` annonce déjà un
+  `BANK_IMPORT_REJECTED` pour le lot L9. Deux codes, une seule action front, une seule forme de
+  rapport, et **deux imports qui sont tous deux du CSV** : « CSV » nomme le médium, pas le sujet. La
+  paire serait bancale dès sa naissance. Un seul code, la route disant ce qui a été importé — un code
+  aujourd'hui, un code évité au lot L9.
+- **`TREE_NOT_EMPTY` · REFUSÉ, redondant.** Une seule issue possible pour l'utilisateur : vider
+  l'arbre ou éditer à la main. Aucun branchement à gagner. Le code générique porte tout. La _règle_
+  (pas de ré-import destructeur) est bonne et gardée — mais elle est une invention de la conception,
+  §35.2 ne dit rien du ré-import. La règle mérite d'être gardée ; le code ne la mérite pas.
+- **`QUESTIONNAIRE_ALREADY_FROZEN` · 409 · retenu.** La preuve est dans le pack lui-même : 05 §8.3
+  liste `generate-questionnaire` **et** `resync-questionnaire` comme deux routes distinctes — si
+  `generate` pouvait re-figer, `resync` n'aurait aucune raison d'exister. Ce n'est pas une transition
+  de statut (§32.2 régit `missions.status`, et il n'y a pas de colonne « figé » : l'existence des
+  lignes EST la preuve), et le second appel est **probable** — double clic, ré-essai sur un assemblage
+  de 240 questions. Le message doit porter **le compte et la date**, seule façon pour l'opérateur de
+  distinguer « mon ré-essai a abouti » de « ma demande a échoué ».
+
+**Le statut 422 est ajouté à la table** (aucun n'existait). Motif : sur la route d'import, 400 est
+déjà consommé par le compilateur Zod. Faire cohabiter « votre appel HTTP est malformé » et « votre
+document a été lu et rejeté sur 12 lignes » sous un statut unique rendrait la distinction dépendante
+du seul code, alors que la route peut lever les deux.
+
+**`errorDetailSchema` reçoit un `code` optionnel.** Sans lui, le rapport ligne à ligne exigé par
+§35.2 (`{ligne, colonne, code, message}`) est inexprimable, et la promesse déjà écrite dans
+`banque-questions.ts` — « les codes voyageront dans `details[]`, inchangés » — est **aujourd'hui
+inexécutable**. Amendement minimal et rétro-compatible ; ce champ porte un code de défaut **métier**,
+jamais un code d'erreur HTTP.
+
+**Deux conséquences que je tranche dans le même geste :**
+· la validation **à blanc** rend **200**, pas 422 — une validation à blanc qui trouve des erreurs a
+**réussi son travail**, et rendre une erreur HTTP sur le succès d'un contrôle est une incohérence qui
+se paie au front ;
+· le rapport d'import **ne doit jamais être journalisé**, seulement rendu : il recopie des cellules du
+fichier client (noms d'unités, effectifs). Le §2 vise `person_name` et les adresses, mais l'esprit
+couvre tout déversement de données client dans les journaux.
+
+**Et je retire de la conception le second usage de `COMPANY_DUPLICATE`** — la collision de _nom
+normalisé_. La conception se contredit dans la même phrase : « aucune unicité n'est possible en base,
+donc **avertissement, pas blocage** », puis elle implémente un blocage. Le pack a une maison de style
+pour exactement ce cas (§25.2 chevauchement d'agenda, §34.6 anti-collision : **avertissement NON
+bloquant**). La création rend donc **201** avec un champ d'avertissement, pas un 409. Risque assumé et
+écrit : aucune fusion de `companies` n'existe dans le pack, un doublon créé se rattrape à la main.
+
+Précédence : `CLAUDE.md` §9 (codes dans `packages/shared`, statut HTTP cohérent) et §0 (le 07 fait foi
+pour le périmètre). La règle de précédence du pack est **sans objet** : la contradiction relevée est
+interne à la note de conception, qui ne peut ni étendre ni réduire ce que le pack fixe.
+
+Décideur : A01, sur dossier d'A32.
+Impact spec : deux amendements de convention 11 §3, horodatés au 2026-08-29 — ajout du statut 422 à
+la table, et champ `code` optionnel dans `errorDetailSchema`. Aucun amendement du fichier 04.
+
+---
+
+## 2026-08-29 — [L3] Les quatre routes hors §8/§24.2 : lesquelles documente-t-on, laquelle reporte-t-on ?
+
+Le `CLAUDE.md` §3-6 interdit de créer une route non listée **sans la documenter** — documenter est
+donc le chemin. Instruites par A32, avec le style réellement en vigueur relevé aux §8/§24.2 plutôt que
+deviné.
+
+Options :
+
+1. Documenter les quatre telles que nommées par la conception.
+2. **Documenter trois, en renommer une, et reporter la quatrième faute de support.**
+
+Arbitrage : **option 2.**
+
+- **`GET /v1/missions/:id/questionnaire-preview`** — renommée depuis `POST …/questionnaire/preview`.
+  Deux écarts au style : le pack n'a aucun segment `/questionnaire/` (le figeage est
+  `generate-questionnaire`, à plat), et une lecture sans effet de bord se déclare **GET + nom**, jamais
+  POST + verbe. Besoin tracé mot pour mot au 07 et au §33.4 : « plus jamais de 240 questions
+  découvertes après figeage ». Accès **admin** (§34.1 : la console est admin seul en V1). Aucune donnée
+  financière. **La réponse n'est délibérément PAS paginée** — la prévisualisation est un tout, et la
+  paginer viderait l'écran de son sens. À écrire explicitement, sinon la règle « keyset partout » sera
+  lue comme violée en revue croisée.
+- **`GET /v1/missions/:id/interview-plan`** — inchangée. Besoin = **critère d'acceptation n° 4** du 07.
+  Accès **cadré par mission, surtout pas admin** : le §18.3 est explicite, l'auditeur voit **son** plan
+  et ne voit **jamais** le TJM ni les montants. Aucune lecture de `scoping_estimates`, dont les colonnes
+  de charge sont voisines de table de `scoping_financials`. Le générateur est une fonction pure,
+  testable sans base — c'est ce qui rend le critère n° 4 tenable.
+- **`POST /v1/org-units/:id/validate` et `/merge`** — inchangées, plus un `PATCH` dont le schéma
+  d'entrée **exclut** `status` et `mergedIntoId` : les laisser dans un PATCH générique contournerait
+  toute la règle §25.3 par la porte de service. Ce ne sont pas des routes de confort : ce sont **les
+  seules sorties** d'un état que le terrain sait créer, et sans elles une unité proposée n'entre jamais
+  ni dans la couverture ni dans le scoring. Le premier niveau d'URL est le précédent du pack lui-même
+  (`PATCH /v1/answers/:id`, `PATCH /v1/interviews/:id/reassign`).
+- **`POST …/interview-plan/apply` — REPORTÉE, fiche d'étage 2.**
+
+**Le motif du report, et c'est le point dur du dossier : il n'existe aucune table où poser ce plan.**
+Les trois candidats du fichier 04 sont disqualifiés, chacun pour une raison propre. `work_assignments`
+exige un `user_id` — c'est une affectation d'auditeur, pas une cible d'audit — et n'a **aucune
+dimension profil**, alors que le plan est spécifié par unité **et par profil** ; le §34.3 les cite
+d'ailleurs comme deux objets distincts. Une table nouvelle serait un amendement du fichier 04, donc la
+signature de Williams (§3-2).
+
+Et le troisième candidat est un piège qu'il faut nommer : **écrire le plan ajusté dans
+`scoping_estimates.planned_interviews` DÉTRUIRAIT la référence du recalage.** Le §25.1 s'appuie
+précisément sur cette colonne comme plan **vendu** pour comparer au réel. Un agent pressé l'aurait
+choisie — c'est la colonne dont le nom correspond.
+
+**Deux conséquences à écrire au dossier de porte, sinon elles seront lues comme des régressions :**
+· la condition §32.2 « plan d'entretiens existant » devient **non évaluable** ; sous la règle
+§17.2-V2.9, elle est **réputée satisfaite** — jamais un verrou sur une fonctionnalité absente. Le
+critère n° 3 du 07 reste tenu : ce sont les transitions **illégales** qui sont rejetées, seule une
+_condition_ d'une transition légale est relâchée, et elle est doublée par la validation d'étape qui
+porte l'acte humain ;
+· le blocage est **double** — même avec une table, la cible « par profil » resterait incomparable au
+réel tant que `interviews.interlocutor_profile_id` n'existe pas. Les deux décisions se prennent
+ensemble ou pas du tout.
+
+Le critère n° 4 du 07 dit « plan d'entretiens **généré** », pas « persisté » : L3 livre le générateur,
+le critère est tenu.
+
+Précédence : `CLAUDE.md` §0 (le 07 fait foi), §3-2 (le schéma 04 est la signature de Williams), §3-6
+(documenter une route non listée), invariant 3 (étanchéité financière). Règle de précédence du pack
+sans objet.
+
+Décideur : A01, sur dossier d'A32. **L'amendement du 04 qu'appellerait `/apply` reste à Williams.**
+Impact spec : aucun amendement du 04. Quatre routes documentées ici, une reportée en étage 2.
+
+---
+
+## 2026-08-29 — [L2/L3] `PolitiqueAcces` est une union exclusive : une route peut-elle être admin ET cadrée par mission ?
+
+Trouvé par A32 en instruisant L3b, sans que ce soit demandé. `apps/api/src/auth/politique.ts` définit
+une **union discriminée** : une route est cadrée par rôles **ou** par mission, jamais les deux. Deux
+routes de L3 semblent exiger les deux — le changement de statut de mission (retours arrière
+admin-only) et la réassignation d'entretien.
+
+Options :
+
+1. **Élargir l'union** pour qu'une route puisse déclarer rôles ET cadrage par mission.
+2. **Ajouter une troisième variante** de politique combinant les deux.
+3. **Ne rien changer** : la limite est correcte, et le contrôle « lead » relève du service.
+
+Arbitrage : **aucune modification du socle L2. La limite est correcte.**
+
+Deux raisons, et la seconde est la plus importante. D'abord, **pour un administrateur, le cadrage par
+mission est sans objet** : il voit tout, et le service vérifie de toute façon que la ressource existe.
+Ensuite — et c'est ce qui tranche — **« lead » n'est pas un rôle d'utilisateur.** C'est
+`mission_users.role_on_mission` dans le fichier 04, pas `users.role`. Il ne peut donc **pas**
+s'exprimer dans `config.acces`, quelle que soit la forme de l'union, et relève nécessairement du
+service. Élargir l'union pour accueillir un cas qu'elle ne pourrait de toute façon pas exprimer aurait
+affaibli une garantie vérifiée au démarrage pour rien.
+
+**Ce que cela impose à L3b, et qui doit être écrit dans son brief** : le contrôle « lead sur cette
+mission » vit dans le service, pas dans le crochet — donc il n'est **pas** couvert par la vérification
+de totalité au démarrage. C'est une garantie d'un autre régime, et elle doit être testée comme telle.
+
+Précédence : invariant 3 (RBAC serveur systématique) et le précédent `config.acces` du lot L2.
+Règle de précédence du pack sans objet.
+
+Décideur : A01, sur constat d'A32.
+Impact spec : aucun.
