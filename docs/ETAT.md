@@ -1214,3 +1214,69 @@ sortie · la chaîne réelle `pg` → Fastify → journal reste à porter en Tes
 **expurgé par conception** (`remoteAddress` → `[masqué:rgpd]`), donc aucune vérification de la clé de
 quota ne pourra jamais passer par la lecture d'un journal · `infra/scripts/empreinte-docker.sh` mesure
 le **disque**, pas le déploiement : il n'existe aucun outil d'empreinte de déploiement dans le dépôt.
+
+---
+
+## 2026-08-29 05h20 — [lot L2 / incrément L2a-T2 livré · L3a livré] — étape pipeline 4/7 (revue croisée)
+
+Dernier commit vert : fdd1f07 (docs(l3) : trois codes d'erreur au lieu de quatre) · Branche : lot/l0-infra · Poussé : oui
+Tâche en cours : tests croisés des routes d'authentification ; journal d'activité (T4) ; contrôle SQL anti-décalage et son test ; correctif du scanner de commentaires ; étape CI de validation Caddy.
+Prochaine action : recueillir les cinq rapports en vol, puis ouvrir T3 (application RBAC) et T5 (étanchéité financière + balayage sentinelle) pour clore le lot L2.
+Tests rouges connus : aucun de fond. Les rouges observés sont des **dépassements de délai** dus à ~38 conteneurs Postgres orphelins — chaque fichier rejoué isolément passe.
+
+✅ **CE QUI EST LIVRÉ ET PROUVÉ CETTE NUIT.** Routes d'authentification (connexion, rotation,
+déconnexion) avec 50 assertions vertes sur banc jetable · redaction des journaux corrigée et mesurée
+**contre un vrai PostgreSQL** (3 fuites avant, 0 après) · plafond de connexion par IP rendu réel
+(`trusted_proxies` sur les deux blocs) · socle HTTP L3a (compilateurs Zod in/out, pagination keyset,
+règle anti-décalage) · deux gardes neufs. Suites : **279 unitaires, 175 d'intégration, aucun test
+skippé.**
+
+⛔ **QUATRE DE MES AFFIRMATIONS RENVERSÉES EN UNE NUIT, AUCUNE PAR MOI.**
+Le commit qui annonçait quatre correctifs et n'en contenait aucun · la chaîne de proxys déduite d'un
+seul maillon alors que l'indice contraire était dans un journal que j'avais lu une heure plus tôt · le
+jeton que je croyais nettoyé, mon échantillon contenant le mot déclencheur collé au jeton · la
+syntaxe `trusted_proxies static` que j'ai fait écrire et que Caddy refuse. **C'est l'argument le plus
+solide en faveur de la règle de croisement, et la raison de continuer à briefer chaque agent en
+l'invitant explicitement à me contredire.**
+
+⛔ **LE PIÈGE DU COMMIT S'EST REFERMÉ TROIS FOIS SUR MOI, SOUS TROIS FORMES.** Une liste de chemins
+incomplète · un import emporté vers un fichier absent du dépôt (branche non constructible) · l'index
+entier balayé, emportant le travail de trois agents sous une étiquette « docs ». **Aucune des deux
+méthodes de commit n'est sûre dans un arbre partagé** — sans chemins on emporte tout, avec chemins on
+aveugle les hooks. La seule parade est de **lire l'index juste avant de commiter et de rédiger le
+message depuis ce qu'il contient réellement**.
+
+🔎 **DEUX GARDES-FOUS QUI MENTAIENT, TROUVÉS EN MESURANT.**
+· Le garde de graphe de modules était **aveugle sur son propre cas d'usage** : un commentaire de ligne
+contenant `/*` ouvre un faux bloc qui blanchit par-dessus les imports. Il voyait 0 import sur 4 — et
+le même trou rendait invisible tout import mort placé après un tel commentaire, soit exactement ce
+qu'il existe pour attraper. Il restait **vert**.
+· Les blocs « outillage » d'ESLint éteignaient la règle anti-décalage sur **tout** `.js/.mjs/.cjs`,
+donc sur les scripts qui écrivent du SQL.
+
+🔎 **ET UN GARDE QUI ENSEIGNAIT UNE SYNTAXE INVALIDE.** Le luminaire du garde proxy portait
+`trusted_proxies static …` dans un bloc — forme que Caddy **refuse de démarrer**. Ce n'était « qu'une
+chaîne de test », mais c'est ce qu'un contributeur lit pour savoir à quoi ressemble une configuration
+correcte. Corrigé par une **propriété universelle** (tout argument doit être une adresse analysable)
+plutôt que par une liste de mots interdits — une liste n'aurait fait que déplacer le trou.
+
+📌 **CE QUI RESTE DÛ, ÉCRIT PLUTÔT QUE TU.**
+· **Le staging tourne toujours sans le correctif du plafond** — file de déploiement inchangée, le seau
+global y est actif. Bloqué faute d'accès au déploiement ; demandé à Williams.
+· La garantie « 10 req/min par IP » est **vérifiée sur le papier, pas sur le fil** : le garde lit du
+texte de configuration, pas le comportement d'un Caddy vivant. Le test de bout en bout est porté au
+lot d'intégration.
+· `validate` seul ne suffit pas : sans `API_PORT` il passe au vert en dégradant l'amont vers le port
+80. L'étape CI devra affirmer sur la configuration **adaptée**.
+· Migration des routes d'authentification vers la forme déclarative des schémas — **bloquante pour la
+porte L2**.
+· `apps/worker` consomme la politique de redaction sans que son assemblage soit prouvé ; le transport
+de développement n'est pas vérifié ; la chaîne réelle `pg` → journal reste à porter en conteneurs.
+· ~38 conteneurs Postgres orphelins saturent la machine et mettent des tests en `skipped` —
+**violation de la DoD causée par la machine, pas par le code**. Nettoyage refusé par le garde-fou de
+sécurité ; demandé à Williams.
+
+📌 **EN ATTENTE DE WILLIAMS** : jeton Coolify ou déclenchement du déploiement · nettoyage des
+conteneurs · amendement du fichier 04 pour la route `interview-plan/apply` (aucune table où la poser)
+· les six colonnes manquantes déjà groupées · la ratification des amendements de convention du jour
+(statut 422, champ `code` dans le détail d'erreur).
