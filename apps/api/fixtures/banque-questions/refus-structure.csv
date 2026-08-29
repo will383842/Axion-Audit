@@ -1,0 +1,13 @@
+code;bloc_code;texte_fr;guidance_fr;answer_type;options;allow_range;poids;scoring;criticality;expected_source;secteurs;services_cibles;niveaux;effectif_min;effectif_max;profils;geo
+STR-01;bloc_1;Un référent IA est-il identifié ?;Nom de la fonction.;yes_no;;;1;"{""map"":{""oui"":5,""non"":0}}";important;;;;;;;;
+STR-01;bloc_1;Un référent conformité est-il identifié ?;Nom de la fonction.;yes_no;;;1;"{""map"":{""oui"":5,""non"":0}}";important;;;;;;;;
+STR-02;bloc_42;Un plan de continuité existe-t-il ?;Demander le document.;yes_no;;;1;"{""map"":{""oui"":5,""non"":0}}";important;;;;;;;;
+STR-03;bloc_1;Les outils sont-ils inventoriés ?;Demander l’inventaire.;yes_no;;;1;"{""map"":{""oui"":5,""non"":0}}";important;;batiment|commerce;informatique;audit_flash;;;directeur_general;
+STR-04;bloc_1;Les accès sont-ils revus au départ d’un collaborateur ?;Demander la procédure.;yes_no;;;1;"{""map"":{""oui"":5,""non"":0}}";important;;;;;500;50;;
+STR-05;bloc_1;Un comité de pilotage se réunit-il ?;Fréquence attendue.;yes_no;;vrai;1;"{""map"":{""oui"":5,""non"":0}}";important;;;;;;;;
+STR-06;bloc_3;Quel outil de gestion est utilisé ?;Un seul choix.;single_choice;"[{""code"":""a"",""label"":""Outil A"",""score"":3},";;1;"{""source"":""options""}";important;;;;;;;;
+STR-07;bloc_1;Une revue de contrat est-elle faite avant tout achat logiciel ?;Demander un exemple.;yes_no;"[{""code"":""oui"",""label"":""Oui"",""score"":5}]";;1;"{""map"":{""oui"":5,""non"":0}}";important;;;;;;;;
+STR-08;bloc_3;Quel canal est privilégié pour les échanges internes ?;Un seul choix.;single_choice;"[{""code"":""mail"",""label"":""Courriel"",""score"":3},{""code"":""mail"",""label"":""Messagerie"",""score"":5}]";;1;"{""source"":""options""}";important;;;;;;;;
+STR-09;bloc_3;Quel est le mode de suivi des demandes ?;Un seul choix.;single_choice;;;1;"{""source"":""options""}";important;;;;;;;;
+STR-10;bloc_1;;Question sans énoncé.;yes_no;;;1;"{""map"":{""oui"":5,""non"":0}}";important;;;;;;;;
+STR-11;bloc_1;Quel est le niveau de satisfaction des équipes ?;Type volontairement inconnu.;echelle_1_10;;;1;"{""map"":""identity""}";urgent;sondage;;;;;;;

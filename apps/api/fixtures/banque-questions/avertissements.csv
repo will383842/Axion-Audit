@@ -1,0 +1,4 @@
+code;bloc_code;texte_fr;guidance_fr;answer_type;options;allow_range;poids;scoring;criticality;expected_source;secteurs;services_cibles;niveaux;effectif_min;effectif_max;profils;geo
+AVERT-01;bloc_5;Quel est le coût annuel de la maintenance informatique ?;Donnée de chiffrage.;money;;vrai;0;"{""bands"":[{""max"":10000,""score"":1},{""score"":5}]}";informatif;;;;;;;;tous
+AVERT-02;bloc_1;Les mots de passe sont-ils partagés entre collaborateurs ?;Question sensible : formuler sans jugement.;yes_no;;;1;"{""map"":{""oui"":0,""non"":5},""red_flag"":{""values"":[""oui""]}}";important;;;;;;;;tous
+AVERT-03;bloc_6;Décrire le niveau de maturité perçu par l’équipe.;1 = aucune maturité · 3 = maturité partielle · 5 = maturité complète;free_text;;;0;;informatif;;;;;;;;tous

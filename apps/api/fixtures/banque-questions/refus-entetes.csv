@@ -1,0 +1,2 @@
+code;bloc_code;texte_fr;guidance_fr;answer_type;options;allow_range;poids;scoring;criticality;secteurs;services_cibles;niveaux;effectif_min;effectif_max;profils;geo;commentaire
+ENT-01;bloc_1;Un registre des traitements existe-t-il ?;Demander le registre.;yes_no;;;1;{"map":{"oui":5,"non":0}};important;;;;;;;tous;colonne ajoutée à la main dans le tableur

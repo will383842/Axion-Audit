@@ -1,0 +1,12 @@
+code;bloc_code;texte_fr;guidance_fr;answer_type;options;allow_range;poids;scoring;criticality;expected_source;secteurs;services_cibles;niveaux;effectif_min;effectif_max;profils;geo
+BAR-01;bloc_1;Un budget est-il alloué aux projets IA ?;Montant non demandé ici.;yes_no;;;2;;important;;;;;;;;
+BAR-02;bloc_2;Quel est le niveau de conduite du changement ?;Ancres de cotation — 1 = aucune pratique formalisée · 3 = pratique documentée mais irrégulière · 5 = pratique systématique et mesurée;scale_1_5;;;1;"{""map"":{""oui"":5,""non"":0}}";important;;;;;;;;
+BAR-03;bloc_4;Combien de rapports sont produits manuellement chaque mois ?;Compter les rapports récurrents.;number;;;1;"{""bands"":[{""max"":10,""score"":5},{""max"":50,""score"":1}]}";important;;;;;;;;
+BAR-04;bloc_4;Quelle part du chiffre d’affaires passe par un canal numérique ?;Ordre de grandeur suffisant.;percent;;;1;"{""bands"":[{""max"":60,""score"":1},{""max"":20,""score"":3},{""score"":5}]}";important;;;;;;;;
+BAR-05;bloc_6;Décrire le principal irritant du quotidien.;Noter le verbatim.;free_text;;;1;;informatif;;;;;;;;
+BAR-06;bloc_6;À quelle date le dernier audit interne a-t-il eu lieu ?;Noter « jamais » le cas échéant.;date;;;0;"{""map"":""identity""}";informatif;;;;;;;;
+BAR-07;bloc_3;Comment les priorités sont-elles arbitrées ?;Faire décrire un arbitrage récent.;single_choice;"[{""code"":""informel"",""label"":""Arbitrage informel""},{""code"":""comite"",""label"":""Comité dédié""}]";;2;"{""source"":""options""}";important;;;;;;;;
+BAR-08;bloc_1;Une charte d’usage de l’IA existe-t-elle ?;Demander à la voir.;yes_no;;;1;"{""map"":{""oui"":5,""non"":0},""seuil"":3}";important;;;;;;;;
+BAR-09;bloc_1;Les incidents de sécurité sont-ils tracés ?;Demander le registre.;yes_no;;;1;"{""map"":{""oui"":5,""non"":0},""red_flag"":{""below"":2}}";bloquant;;;;;;;;
+BAR-10;bloc_3;Quels contrôles sont appliqués aux contenus générés ?;Cocher les contrôles réellement pratiqués.;multi_choice;"[{""code"":""relecture"",""label"":""Relecture humaine"",""score"":5},{""code"":""aucun"",""label"":""Aucun contrôle"",""score"":0}]";;1;"{""source"":""options"",""red_flag"":{""values"":[""absent""]}}";bloquant;;;;;;;;
+BAR-11;bloc_1;Les sauvegardes sont-elles testées ?;Demander la date du dernier test de restauration.;yes_no;;;0;"{""map"":{""oui"":9,""non"":0}}";informatif;;;;;;;;

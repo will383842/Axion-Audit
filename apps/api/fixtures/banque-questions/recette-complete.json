@@ -1,0 +1,440 @@
+[
+  {
+    "code": "REC-YESNO-01",
+    "bloc_code": "bloc_1",
+    "texte_fr": "Une personne est-elle nommément responsable des sujets IA ?",
+    "guidance_fr": "Relancer sur le nom de la fonction, pas de la personne.",
+    "answer_type": "yes_no",
+    "options": null,
+    "allow_range": false,
+    "poids": 2,
+    "scoring": {
+      "map": {
+        "oui": 5,
+        "non": 0
+      },
+      "red_flag": {
+        "values": ["non"]
+      }
+    },
+    "criticality": "bloquant",
+    "expected_source": "entretien",
+    "secteurs": [],
+    "services_cibles": [],
+    "niveaux": [],
+    "effectif_min": null,
+    "effectif_max": null,
+    "profils": ["dirigeant", "dsi"],
+    "geo": "tous"
+  },
+  {
+    "code": "REC-YESNO-02",
+    "bloc_code": "bloc_1",
+    "texte_fr": "Des fichiers critiques sont-ils stockés hors du système de sauvegarde ?",
+    "guidance_fr": "Barème INVERSÉ : répondre « oui » est un mauvais signal.",
+    "answer_type": "yes_no",
+    "options": null,
+    "allow_range": false,
+    "poids": 1,
+    "scoring": {
+      "map": {
+        "oui": 0,
+        "non": 5
+      }
+    },
+    "criticality": "important",
+    "expected_source": "entretien",
+    "secteurs": [],
+    "services_cibles": [],
+    "niveaux": [],
+    "effectif_min": null,
+    "effectif_max": null,
+    "profils": ["dsi"],
+    "geo": "tous"
+  },
+  {
+    "code": "REC-SCALE-03",
+    "bloc_code": "bloc_2",
+    "texte_fr": "Quel est le niveau de formalisation des processus métier ?",
+    "guidance_fr": "Ancres de cotation — 1 = aucun processus documenté · 3 = documenté mais non appliqué · 5 = documenté, appliqué et mesuré",
+    "answer_type": "scale_1_5",
+    "options": null,
+    "allow_range": false,
+    "poids": 3,
+    "scoring": {
+      "map": "identity",
+      "red_flag": {
+        "below": 2
+      }
+    },
+    "criticality": "bloquant",
+    "expected_source": "entretien",
+    "secteurs": [],
+    "services_cibles": [],
+    "niveaux": [],
+    "effectif_min": null,
+    "effectif_max": null,
+    "profils": ["resp_metier", "chef_equipe"],
+    "geo": "tous"
+  },
+  {
+    "code": "REC-SCALE-04",
+    "bloc_code": "bloc_2",
+    "texte_fr": "Quel est le niveau de maîtrise des outils numériques par les équipes ?",
+    "guidance_fr": "1 = aucune autonomie · 2 = autonomie assistée · 3 = autonomie sur les tâches courantes · 4 = autonomie complète · 5 = capacité à former les autres",
+    "answer_type": "scale_1_5",
+    "options": null,
+    "allow_range": false,
+    "poids": 1,
+    "scoring": {
+      "map": "identity"
+    },
+    "criticality": "important",
+    "expected_source": "observation",
+    "secteurs": [],
+    "services_cibles": [],
+    "niveaux": [],
+    "effectif_min": null,
+    "effectif_max": null,
+    "profils": ["salarie", "technicien_operateur"],
+    "geo": "tous"
+  },
+  {
+    "code": "REC-UNIQ-05",
+    "bloc_code": "bloc_3",
+    "texte_fr": "Comment les demandes entrantes sont-elles réparties entre les équipes ?",
+    "guidance_fr": "Faire décrire le circuit réel, pas le circuit officiel.",
+    "answer_type": "single_choice",
+    "options": [
+      {
+        "code": "manuel",
+        "label": "Répartition manuelle",
+        "score": 1
+      },
+      {
+        "code": "regles",
+        "label": "Règles fixes outillées",
+        "score": 3
+      },
+      {
+        "code": "pilote",
+        "label": "Pilotage automatisé et mesuré",
+        "score": 5
+      }
+    ],
+    "allow_range": false,
+    "poids": 2,
+    "scoring": {
+      "source": "options"
+    },
+    "criticality": "important",
+    "expected_source": "entretien",
+    "secteurs": [],
+    "services_cibles": ["service_client"],
+    "niveaux": [],
+    "effectif_min": null,
+    "effectif_max": null,
+    "profils": [],
+    "geo": "tous"
+  },
+  {
+    "code": "REC-MULTI-06",
+    "bloc_code": "bloc_3",
+    "texte_fr": "Quels canaux de contact sont ouverts aux clients ?",
+    "guidance_fr": "Cocher tout ce qui est réellement traité, pas ce qui est affiché.",
+    "answer_type": "multi_choice",
+    "options": [
+      {
+        "code": "telephone",
+        "label": "Téléphone",
+        "score": 2
+      },
+      {
+        "code": "email",
+        "label": "Courriel",
+        "score": 3
+      },
+      {
+        "code": "formulaire",
+        "label": "Formulaire en ligne",
+        "score": 4
+      },
+      {
+        "code": "messagerie",
+        "label": "Messagerie instantanée",
+        "score": 5
+      }
+    ],
+    "allow_range": false,
+    "poids": 1,
+    "scoring": {
+      "source": "options",
+      "aggregate": "mean"
+    },
+    "criticality": "informatif",
+    "expected_source": "entretien",
+    "secteurs": [],
+    "services_cibles": ["service_client", "commercial_ventes"],
+    "niveaux": [],
+    "effectif_min": null,
+    "effectif_max": null,
+    "profils": [],
+    "geo": "tous"
+  },
+  {
+    "code": "REC-NB-07",
+    "bloc_code": "bloc_4",
+    "texte_fr": "Combien de logiciels métier distincts sont utilisés au quotidien ?",
+    "guidance_fr": "Compter les outils réellement ouverts chaque semaine.",
+    "answer_type": "number",
+    "options": null,
+    "allow_range": true,
+    "poids": 1,
+    "scoring": {
+      "bands": [
+        {
+          "max": 3,
+          "score": 5
+        },
+        {
+          "max": 8,
+          "score": 3
+        },
+        {
+          "score": 1
+        }
+      ]
+    },
+    "criticality": "important",
+    "expected_source": "releve",
+    "secteurs": [],
+    "services_cibles": ["dsi_data"],
+    "niveaux": [],
+    "effectif_min": null,
+    "effectif_max": null,
+    "profils": [],
+    "geo": "tous"
+  },
+  {
+    "code": "REC-PCT-08",
+    "bloc_code": "bloc_4",
+    "texte_fr": "Quelle part des tâches administratives est aujourd'hui automatisée ?",
+    "guidance_fr": "Demander un ordre de grandeur, accepter une fourchette.",
+    "answer_type": "percent",
+    "options": null,
+    "allow_range": true,
+    "poids": 2,
+    "scoring": {
+      "bands": [
+        {
+          "max": 10,
+          "score": 1
+        },
+        {
+          "max": 40,
+          "score": 3
+        },
+        {
+          "score": 5
+        }
+      ]
+    },
+    "criticality": "important",
+    "expected_source": "entretien",
+    "secteurs": [],
+    "services_cibles": ["support_admin", "finance_compta"],
+    "niveaux": [],
+    "effectif_min": null,
+    "effectif_max": null,
+    "profils": [],
+    "geo": "tous"
+  },
+  {
+    "code": "REC-DUR-09",
+    "bloc_code": "bloc_5",
+    "texte_fr": "Combien d'heures par semaine sont consacrées aux ressaisies manuelles ?",
+    "guidance_fr": "Heures par semaine et par personne concernée.",
+    "answer_type": "duration",
+    "options": null,
+    "allow_range": true,
+    "poids": 1,
+    "scoring": {
+      "bands": [
+        {
+          "max": 2,
+          "score": 5
+        },
+        {
+          "max": 6,
+          "score": 3
+        },
+        {
+          "score": 1
+        }
+      ]
+    },
+    "criticality": "important",
+    "expected_source": "releve",
+    "secteurs": [],
+    "services_cibles": [],
+    "niveaux": [],
+    "effectif_min": null,
+    "effectif_max": null,
+    "profils": ["salarie"],
+    "geo": "tous"
+  },
+  {
+    "code": "REC-MONEY-10",
+    "bloc_code": "bloc_5",
+    "texte_fr": "Quel budget annuel est consacré aux licences logicielles ?",
+    "guidance_fr": "Donnée factuelle : hors scoring (poids 0), elle alimente le chiffrage.",
+    "answer_type": "money",
+    "options": null,
+    "allow_range": true,
+    "poids": 0,
+    "scoring": null,
+    "criticality": "informatif",
+    "expected_source": "document",
+    "secteurs": [],
+    "services_cibles": ["finance_compta"],
+    "niveaux": [],
+    "effectif_min": null,
+    "effectif_max": null,
+    "profils": [],
+    "geo": "tous"
+  },
+  {
+    "code": "REC-TEXTE-11",
+    "bloc_code": "bloc_6",
+    "texte_fr": "Quelle tâche répétitive aimeriez-vous voir disparaître en premier ?",
+    "guidance_fr": "Noter le verbatim : il alimente les cas d'usage.",
+    "answer_type": "free_text",
+    "options": null,
+    "allow_range": false,
+    "poids": 0,
+    "scoring": null,
+    "criticality": "informatif",
+    "expected_source": "entretien",
+    "secteurs": [],
+    "services_cibles": [],
+    "niveaux": [],
+    "effectif_min": null,
+    "effectif_max": null,
+    "profils": ["salarie", "technicien_operateur"],
+    "geo": "tous"
+  },
+  {
+    "code": "REC-DATE-12",
+    "bloc_code": "bloc_6",
+    "texte_fr": "À quelle date la dernière cartographie des processus a-t-elle été réalisée ?",
+    "guidance_fr": "Format libre, noter « jamais » le cas échéant.",
+    "answer_type": "date",
+    "options": null,
+    "allow_range": false,
+    "poids": 0,
+    "scoring": null,
+    "criticality": "informatif",
+    "expected_source": "document",
+    "secteurs": [],
+    "services_cibles": [],
+    "niveaux": [],
+    "effectif_min": null,
+    "effectif_max": null,
+    "profils": ["resp_metier"],
+    "geo": "tous"
+  },
+  {
+    "code": "REC-TAB-13",
+    "bloc_code": "bloc_7",
+    "texte_fr": "Inventaire des outils numériques utilisés par le service.",
+    "guidance_fr": "Une ligne par outil : nom, usage, nombre d'utilisateurs.",
+    "answer_type": "table",
+    "options": null,
+    "allow_range": false,
+    "poids": 0,
+    "scoring": null,
+    "criticality": "informatif",
+    "expected_source": "releve",
+    "secteurs": [],
+    "services_cibles": ["dsi_data"],
+    "niveaux": [],
+    "effectif_min": null,
+    "effectif_max": null,
+    "profils": [],
+    "geo": "tous"
+  },
+  {
+    "code": "REC-MULTI-14",
+    "bloc_code": "bloc_8",
+    "texte_fr": "Quels dispositifs de gouvernance existent aujourd'hui ?",
+    "guidance_fr": "Question de cadrage : hors scoring, elle sert au chapitre gouvernance.",
+    "answer_type": "multi_choice",
+    "options": [
+      {
+        "code": "comite",
+        "label": "Comité de pilotage"
+      },
+      {
+        "code": "charte",
+        "label": "Charte d'usage"
+      },
+      {
+        "code": "aucun",
+        "label": "Aucun dispositif"
+      }
+    ],
+    "allow_range": false,
+    "poids": 0,
+    "scoring": null,
+    "criticality": "informatif",
+    "expected_source": "entretien",
+    "secteurs": [],
+    "services_cibles": ["direction_generale"],
+    "niveaux": [],
+    "effectif_min": null,
+    "effectif_max": null,
+    "profils": [],
+    "geo": "tous"
+  },
+  {
+    "code": "REC-UNIQ-15",
+    "bloc_code": "bloc_9",
+    "texte_fr": "Les contenus produits par un système d'IA sont-ils signalés comme tels ?",
+    "guidance_fr": "Transparence : obligation applicable aux déployeurs.",
+    "answer_type": "single_choice",
+    "options": [
+      {
+        "code": "non",
+        "label": "Aucun signalement",
+        "score": 0
+      },
+      {
+        "code": "partiel",
+        "label": "Signalement partiel",
+        "score": 3
+      },
+      {
+        "code": "systematique",
+        "label": "Signalement systématique",
+        "score": 5
+      }
+    ],
+    "allow_range": false,
+    "poids": 2,
+    "scoring": {
+      "source": "options",
+      "red_flag": {
+        "values": ["non"]
+      }
+    },
+    "criticality": "bloquant",
+    "expected_source": "document",
+    "secteurs": ["commerce", "industrie"],
+    "services_cibles": ["juridique_conformite", "marketing_contenu"],
+    "niveaux": ["operationnel", "strategique_groupe"],
+    "effectif_min": 11,
+    "effectif_max": 4999,
+    "profils": ["dirigeant", "autre"],
+    "geo": "france"
+  }
+]

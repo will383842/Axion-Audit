@@ -1,0 +1,6 @@
+code;bloc_code;texte_fr;guidance_fr;answer_type;options;allow_range;poids;scoring;criticality;expected_source;secteurs;services_cibles;niveaux;effectif_min;effectif_max;profils;geo
+LIG-01;bloc_2;Question à ancres multi-lignes.;"Ancres :
+1 = a
+3 = b
+5 = c";scale_1_5;;faux;2;{"map":"identity"};important;;;;;;;;tous
+LIG-02;bloc_99;Ligne fautive après un enregistrement multi-lignes.;Consigne.;yes_no;;faux;1;{"map":{"oui":5,"non":0}};important;;;;;;;;tous

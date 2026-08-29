@@ -4,6 +4,7 @@
 // contrats d'interface. Aucune logique métier n'y vit.
 // =============================================================================
 export * from './errors.js';
+export * from './banque-questions.js';
 export * from './pagination.js';
 export * from './temps.js';
 export * from './env.js';

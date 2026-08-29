@@ -1,0 +1,11 @@
+code;bloc_code;texte_fr;guidance_fr;answer_type;options;allow_range;poids;scoring;criticality;expected_source;secteurs;services_cibles;niveaux;effectif_min;effectif_max;profils;geo
+ATOM-00;bloc_99;Première ligne : bloc inexistant.;Erreur volontaire en tête de fichier.;yes_no;;;1;"{""map"":{""oui"":5,""non"":0}}";important;;;;;;;;tous
+ATOM-01;bloc_1;Question valide n° 1 du fichier d’atomicité.;Ligne volontairement conforme.;yes_no;;;1;"{""map"":{""oui"":5,""non"":0}}";important;;;;;;;;tous
+ATOM-02;bloc_1;Question valide n° 2 du fichier d’atomicité.;Ligne volontairement conforme.;yes_no;;;1;"{""map"":{""oui"":5,""non"":0}}";important;;;;;;;;tous
+ATOM-03;bloc_1;Question valide n° 3 du fichier d’atomicité.;Ligne volontairement conforme.;yes_no;;;1;"{""map"":{""oui"":5,""non"":0}}";important;;;;;;;;tous
+ATOM-04;bloc_1;Question valide n° 4 du fichier d’atomicité.;Ligne volontairement conforme.;yes_no;;;1;"{""map"":{""oui"":5,""non"":0}}";important;;;;;;;;tous
+ATOM-05;bloc_1;Question valide n° 5 du fichier d’atomicité.;Ligne volontairement conforme.;yes_no;;;1;"{""map"":{""oui"":5,""non"":0}}";important;;;;;;;;tous
+ATOM-06;bloc_1;Question valide n° 6 du fichier d’atomicité.;Ligne volontairement conforme.;yes_no;;;1;"{""map"":{""oui"":5,""non"":0}}";important;;;;;;;;tous
+ATOM-07;bloc_1;Question valide n° 7 du fichier d’atomicité.;Ligne volontairement conforme.;yes_no;;;1;"{""map"":{""oui"":5,""non"":0}}";important;;;;;;;;tous
+ATOM-08;bloc_1;Question valide n° 8 du fichier d’atomicité.;Ligne volontairement conforme.;yes_no;;;1;"{""map"":{""oui"":5,""non"":0}}";important;;;;;;;;tous
+ATOM-09;bloc_2;Dernière ligne : échelle sans ancres et barème absent.;Erreur volontaire en fin de fichier.;scale_1_5;;;3;;important;;;;;;;;tous

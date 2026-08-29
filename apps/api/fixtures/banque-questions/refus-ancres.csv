@@ -1,0 +1,6 @@
+code;bloc_code;texte_fr;guidance_fr;answer_type;options;allow_range;poids;scoring;criticality;expected_source;secteurs;services_cibles;niveaux;effectif_min;effectif_max;profils;geo
+ANCRE-01;bloc_2;Quel est le niveau de pilotage par indicateurs ?;Faire préciser la fréquence de revue des indicateurs.;scale_1_5;;;2;"{""map"":""identity""}";important;;;;;;;;
+ANCRE-02;bloc_2;Quel est le niveau de documentation des procédures ?;1 = rien de documenté · 5 = tout est documenté et à jour;scale_1_5;;;1;"{""map"":""identity""}";important;;;;;;;;
+ANCRE-03;bloc_2;Quel est le niveau de maîtrise des données ?;1 = données éparses · 3 = · 5 = données gouvernées et qualifiées;scale_1_5;;;1;"{""map"":""identity""}";important;;;;;;;;
+ANCRE-04;bloc_2;Quel est le niveau de sécurisation des accès ?;1 = aucun contrôle · 3 = contrôle partiel · 3 = revue annuelle des accès · 5 = contrôle continu;scale_1_5;;;1;"{""map"":""identity""}";important;;;;;;;;
+ANCRE-05;bloc_2;Quel est le niveau de suivi de la satisfaction interne ?;;scale_1_5;;;1;"{""map"":""identity""}";important;;;;;;;;
