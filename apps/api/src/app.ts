@@ -15,6 +15,7 @@ import rateLimit from '@fastify/rate-limit';
 import { loggerFastify } from './logger.js';
 import { enregistrerGestionErreurs } from './erreurs.js';
 import { enregistrerSocleAutorisation } from './auth/politique.js';
+import { enregistrerCompilateursZod } from './http/zod.js';
 import { routesAuth } from './domaines/auth/routes.js';
 import { routesSante } from './routes/sante.js';
 
@@ -82,6 +83,14 @@ export async function construireApp(): Promise<FastifyInstance> {
     // Pas de CORS (11 §2) : field, hq et l'API sont servis sous le MÊME domaine.
     crossOriginResourcePolicy: { policy: 'same-origin' },
   });
+
+  // --- Compilateurs Zod (11 §3) — AVANT toute route -------------------------
+  // Fastify lit ses compilateurs au moment où la ROUTE est déclarée, pas à la
+  // requête : posés plus bas, ils ne s'appliqueraient qu'aux routes suivantes.
+  // Ils rendent `schema: { body, querystring, params, response }` utilisable avec
+  // des schémas Zod nus. Ils ne RENDENT PAS la déclaration obligatoire — voir
+  // l'en-tête de http/zod.ts, qui dit précisément ce qu'ils ne font pas.
+  enregistrerCompilateursZod(app);
 
   // --- Socle d'authentification et d'autorisation (invariant 3) --------------
   //
