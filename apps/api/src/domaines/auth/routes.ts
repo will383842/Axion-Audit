@@ -38,6 +38,7 @@ import {
   refreshResponseSchema,
   type AuthSession,
 } from '@axion/shared';
+import { contexteDepuisRequete } from '../journal/service.js';
 import { prechaufferVerificationMotDePasse } from './mots-de-passe.js';
 import { connecter, deconnecter, rafraichir, type SessionEmise } from './service.js';
 
@@ -142,19 +143,28 @@ export const routesAuth: FastifyPluginAsync = async (app) => {
   /**
    * Connexion. `{email, password}` → couple de jetons (05 §8.1).
    *
-   * Aucune journalisation de l'échec ici : la note L2 §2.4 l'interdit nommément —
-   * « jamais l'e-mail tenté : un échec sur une adresse inconnue créerait une trace
-   * sur une NON-PERSONNE ». Le refus est déjà tracé par le gestionnaire d'erreurs
-   * (code + URL, sans identité), et la ligne `activity_log` `auth.login.echec`
-   * appartient à la porte d'écriture unique du journal (tâche T4).
+   * Aucune journalisation de l'échec DANS CETTE ROUTE, et ce n'est pas un oubli :
+   * la ligne `activity_log` `auth.login.echec` est écrite par le SERVICE, qui seul
+   * connaît la cause du refus, et elle passe par la porte unique
+   * (`domaines/journal/service.ts`, tâche T4). La note L2 §2.4 interdit nommément
+   * d'y faire figurer l'adresse tentée — « un échec sur une adresse inconnue
+   * créerait une trace sur une NON-PERSONNE » : le catalogue partagé rend cette
+   * interdiction inexprimable (aucune variante n'a de champ d'adresse). Le refus
+   * reste par ailleurs tracé par le gestionnaire d'erreurs (code + URL, sans
+   * identité).
+   *
+   * `contexteDepuisRequete` ne transporte QUE `request.ip` et le journal de la
+   * requête : l'adresse est légale dans la TABLE (06 §10.4) et interdite dans pino
+   * (11 §2) — deux journaux, deux régimes, et c'est la porte qui tient la frontière.
    */
   app.post('/auth/login', { config: CONFIG_PUBLIQUE }, async (requete) => {
     const entree = loginRequestSchema.parse(requete.body);
 
-    const session = await connecter(requete.server, {
-      email: entree.email,
-      motDePasse: entree.password,
-    });
+    const session = await connecter(
+      requete.server,
+      { email: entree.email, motDePasse: entree.password },
+      contexteDepuisRequete(requete),
+    );
 
     return loginResponseSchema.parse(versReponse(session));
   });
@@ -167,7 +177,12 @@ export const routesAuth: FastifyPluginAsync = async (app) => {
   app.post('/auth/refresh', { config: CONFIG_PUBLIQUE }, async (requete) => {
     const entree = refreshRequestSchema.parse(requete.body);
 
-    const session = await rafraichir(requete.server, requete.log, entree.refreshToken);
+    const session = await rafraichir(
+      requete.server,
+      requete.log,
+      entree.refreshToken,
+      contexteDepuisRequete(requete),
+    );
 
     return refreshResponseSchema.parse(versReponse(session));
   });
@@ -189,7 +204,7 @@ export const routesAuth: FastifyPluginAsync = async (app) => {
       throw new AppError('INTERNAL_ERROR', 'Une erreur interne est survenue.');
     }
 
-    await deconnecter(utilisateur.id, entree.refreshToken);
+    await deconnecter(utilisateur.id, entree.refreshToken, contexteDepuisRequete(requete));
 
     return logoutResponseSchema.parse({ loggedOut: true });
   });

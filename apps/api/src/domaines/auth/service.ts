@@ -41,6 +41,7 @@ import {
   empreinteJetonRafraichissement,
   expirationRafraichissement,
 } from './jetons-rafraichissement.js';
+import { journaliserActivite, type ContexteJournal } from '../journal/service.js';
 import { consommerLeTempsDUneVerification, verifierMotDePasse } from './mots-de-passe.js';
 import {
   horodaterConnexion,
@@ -137,11 +138,20 @@ async function emettreSession(
 export async function connecter(
   app: FastifyInstance,
   identifiants: { readonly email: string; readonly motDePasse: string },
+  contexteJournal: ContexteJournal,
 ): Promise<SessionEmise> {
   const compte = await lireIdentifiantsParEmail(identifiants.email);
 
   if (compte === null) {
     await consommerLeTempsDUneVerification(identifiants.motDePasse);
+    // `utilisateurId: null` — la note L2 §2.4 interdit de journaliser l'adresse
+    // tentée : « un échec sur une adresse inconnue créerait une trace sur une
+    // NON-PERSONNE ». La ligne existe quand même (elle porte l'IP et l'heure : c'est
+    // ce qui rend un balayage d'adresses visible), mais elle ne nomme personne.
+    await journaliserActivite(
+      { action: 'auth.login.echec', utilisateurId: null, raison: 'compte_inconnu' },
+      contexteJournal,
+    );
     throw new AppError('INVALID_CREDENTIALS', MESSAGE_IDENTIFIANTS_REFUSES);
   }
 
@@ -155,6 +165,20 @@ export async function connecter(
     // le mot de passe est juste ne doit pas se distinguer d'un mot de passe faux.
     // Distinguer les deux confirmerait à un ancien salarié — ou à qui a acheté sa
     // liste de mots de passe — que le compte existe bel et bien.
+    //
+    // LE JOURNAL, LUI, DISTINGUE — et ce n'est pas une contradiction. La RÉPONSE
+    // HTTP est indifférenciée parce qu'elle part à un inconnu ; `activity_log` est
+    // réservé aux administrateurs (§34.1) et existe précisément pour répondre à
+    // « quelqu'un a-t-il martelé le compte d'un auditeur ? ». Un journal aussi muet
+    // que la réponse ne servirait à rien.
+    await journaliserActivite(
+      {
+        action: 'auth.login.echec',
+        utilisateurId: compte.id,
+        raison: motDePasseValide ? 'compte_desactive' : 'mot_de_passe_invalide',
+      },
+      contexteJournal,
+    );
     throw new AppError('INVALID_CREDENTIALS', MESSAGE_IDENTIFIANTS_REFUSES);
   }
 
@@ -162,10 +186,18 @@ export async function connecter(
 
   // Transaction : sans elle, un échec d'insertion du jeton laisserait une connexion
   // horodatée qui n'a rendu aucun jeton — une trace qui ment.
-  return db.transaction(async (tx) => {
+  const session = await db.transaction(async (tx) => {
     await horodaterConnexion(tx, compte.id, maintenant);
     return emettreSession(app, tx, compte.id, maintenant);
   });
+
+  // APRÈS la validation, jamais dedans. Une écriture de journal qui échouerait à
+  // l'intérieur de la transaction abandonnerait la session qu'on vient d'émettre —
+  // et `journaliserActivite` ne lève pas, donc l'échec serait AVALÉ : PostgreSQL
+  // refuserait ensuite le `COMMIT` sans que rien n'explique pourquoi.
+  await journaliserActivite({ action: 'auth.login.ok', utilisateurId: compte.id }, contexteJournal);
+
+  return session;
 }
 
 // =============================================================================
@@ -204,6 +236,7 @@ export async function rafraichir(
   app: FastifyInstance,
   journal: FastifyBaseLogger,
   jetonPresente: string,
+  contexteJournal: ContexteJournal,
 ): Promise<SessionEmise> {
   const empreinte = empreinteJetonRafraichissement(jetonPresente);
   const maintenant = new Date();
@@ -297,16 +330,26 @@ export async function rafraichir(
     case 'reutilisation':
       // Journal d'EXPLOITATION (pino) : ni jeton, ni empreinte, ni adresse — un
       // identifiant de compte et un décompte, c'est-à-dire de quoi enquêter sans
-      // rien divulguer. La trace MÉTIER (`activity_log`, `auth.reuse_detected`,
-      // note L2 §2.4) appartient à la porte d'écriture unique du journal, livrée
-      // par la tâche T4 : ce service l'appellera ici quand elle existera, et il
-      // n'écrit surtout pas sa propre variante dans la table d'audit.
+      // rien divulguer.
       journal.warn(
         {
           utilisateurId: resultat.utilisateurId,
           jetonsRevoques: resultat.jetonsRevoques,
         },
         'Réutilisation de jeton de rafraîchissement détectée — famille révoquée',
+      );
+      // Trace MÉTIER (note L2 §2.4). Elle passe par LA porte, jamais par une
+      // variante locale : c'est cette contrainte qui a fait laisser le point d'appel
+      // vide jusqu'à la livraison de T4. La révocation de famille est DÉJÀ validée
+      // en base à ce stade ; `journaliserActivite` ne lève pas, donc le
+      // `TOKEN_REUSE_DETECTED` que la PWA sait interpréter part quoi qu'il arrive.
+      await journaliserActivite(
+        {
+          action: 'auth.reuse_detected',
+          utilisateurId: resultat.utilisateurId,
+          jetonsRevoques: resultat.jetonsRevoques,
+        },
+        contexteJournal,
       );
       throw new AppError('TOKEN_REUSE_DETECTED', MESSAGE_SESSION_REVOQUEE);
 
@@ -349,10 +392,21 @@ export async function rafraichir(
  * rafraîchissement est vérifiée dans la clause `WHERE` du dépôt, ce qui rend
  * impossible de fabriquer un chemin de code capable de la divulguer.
  */
-export async function deconnecter(utilisateurId: string, jetonPresente: string): Promise<void> {
+export async function deconnecter(
+  utilisateurId: string,
+  jetonPresente: string,
+  contexteJournal: ContexteJournal,
+): Promise<void> {
   await revoquerJetonDeLUtilisateur(
     empreinteJetonRafraichissement(jetonPresente),
     utilisateurId,
     new Date(),
   );
+
+  // JOURNALISÉE MÊME QUAND AUCUNE LIGNE N'A ÉTÉ RÉVOQUÉE, et c'est cohérent avec
+  // l'idempotence de la route : ce que la ligne atteste, c'est qu'un compte
+  // AUTHENTIFIÉ a demandé une déconnexion depuis cette adresse à cette heure.
+  // Conditionner la trace au succès de la révocation ferait disparaître du journal
+  // exactement les cas curieux — un `logout` rejoué, un jeton d'autrui présenté.
+  await journaliserActivite({ action: 'auth.logout', utilisateurId }, contexteJournal);
 }
