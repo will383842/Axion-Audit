@@ -25,7 +25,9 @@
 | ---- | -------- | ------- | ------------------------- |
 | L0   | ~0,5 j   | 0,5 j   | 0 j (**plafond atteint**) |
 | L1   | ~0,3 j   | 0,5 j   | ~0,2 j                    |
-| L0-b | ~0,2 j   | 0,5 j   | ~0,3 j                    |
+| L0-b | ~0,25 j  | 0,5 j   | ~0,25 j                   |
+| L2   | ~0,3 j   | 0,5 j   | ~0,2 j                    |
+| L3a  | ~0,1 j   | 0,5 j   | ~0,4 j                    |
 
 ---
 
@@ -648,3 +650,362 @@ fiche est découpée : elle peut être absorbée **en partie**.
 **Ce que cette fiche NE propose PAS :** aucun code. `.claude/agents/a53-observabilite.md` existe dans
 le dépôt — l'agent est défini, il n'a jamais rien livré. C'est un choix à faire, pas un oubli à
 rattraper au jugé.
+
+---
+
+## 2026-08-29 — [L0-b] Étage 1 — un jeton JWT **nu** dans un message d'erreur sortait en clair
+
+**Constat, mesuré — et la première mesure était fausse.** L'échantillon d'origine disait
+`refresh token eyJ…` et ressortait nettoyé : on en avait conclu que le jeton était couvert. C'est le
+mot **`token`**, adjacent, qui déclenchait l'assainisseur — pas le jeton. La sonde répondait à une
+autre question que celle qu'elle croyait poser. Mesure refaite sur des échantillons non contaminés
+(`jwt malformed: eyJ…`, `signature invalid for eyJ…`, le jeton seul, et un jeton dans une pile
+d'appels) : **5 fuites sur 7 cas avant, 0 après**. Seules `Bearer <jwt>`, le champ `authorization` et
+le paramètre `?token=` étaient couverts ; un `err.message` de bibliothèque JWT laissait donc passer
+le jeton en clair, dans le message **et** dans la pile.
+
+**Ajout :** `RX_JETON_JWT` dans `packages/shared/src/redaction.ts` — segments base64url séparés par
+des points dont le premier commence par `eyJ` (un en-tête JWT encode toujours `{"`). **On masque le
+jeton, pas la phrase** : « jwt malformed », « signature invalid » sont le diagnostic et survivent.
+
+**Pourquoi ce motif est légitime là où « détecter un nom » ne le serait pas.** Un JWT a une forme
+**rigide et vérifiable** : on ne devine rien, on reconnaît une structure. C'est l'exact inverse d'un
+nom de personne, qui n'a aucune forme et dont la « détection » ne serait qu'une promesse — raison
+pour laquelle le même fichier refuse explicitement de tenter cette détection-là.
+
+**Ce que ce motif NE voit PAS, dit ici pour qu'on ne le redécouvre pas :** un jeton **opaque** (sans
+structure — rafraîchissement, clé d'API maison, identifiant de session), qui reste couvert par le nom
+de champ et par lui seul ; un jeton **tronqué** avant son deuxième point ; un secret **sans forme**
+(mot de passe, phrase de passe) recopié dans un texte libre. Ce garde-fou est un filet sous la liste
+de champs, pas son remplaçant.
+
+**Coût :** ~0,05 j. Une expression régulière, une garde, aucune dépendance.
+
+**Impact schéma / API :** aucun. **Étage 1** — ne touche ni le schéma 04, ni l'API, ni la crypto, ni
+le périmètre fonctionnel. Arbitrage A01 : une fuite de **secret** ne se met pas en attente
+d'arbitrage d'étage 2.
+
+---
+
+## 2026-08-29 — [L2] Étage 1 — le graphe des modules, lu dans les deux sens (`pnpm check:graphe-modules`)
+
+**Constat, mesuré — deux défauts réels de la même journée, et c'est le MÊME graphe.**
+
+_Sens 1, l'orphelin._ Le commit `591ccbd` annonçait quatre correctifs de sécurité (« le socle
+échouait ouvert, et la clé de quota était forgeable par le client ») et ne contenait **qu'un seul
+fichier** : `apps/api/src/auth/erreurs-jeton.ts`, un module d'aide **que personne n'importait**. Les
+cinq fichiers portant les correctifs étaient restés hors de l'index. **Et la CI était VERTE**, parce
+qu'aucun test de ce commit ne couvrait le cas corrigé : un message de commit et une CI se
+corroboraient pour une correction qui n'existait pas. `CLAUDE.md` §4 étape 6 énonce pourtant la règle
+— « code → exigences : **le code orphelin est REFUSÉ** » — mais **rien ne la contrôlait** : elle
+reposait entièrement sur l'œil du gardien, alors que l'autre sens (exigences → code) a trois scripts.
+
+_Sens 2, le pendu._ Le commit `b24b98c` a emporté dans `apps/api/src/app.ts` un
+`import … from './domaines/auth/routes.js'` alors que `apps/api/src/domaines/` **n'était pas suivi
+par git**. `origin` référençait un fichier absent du dépôt : clone frais en TS2307, staging non
+déployable. Découvert par un agent d'infrastructure **en tentant un déploiement** — après être passé
+au VERT sous un `typecheck` de pré-commit, parce que **`tsc` lit le disque, l'index non**.
+
+**Ajout :** `scripts/check-graphe-modules.mjs` (+ `pnpm check:graphe-modules`, branché dans `verify` et
+dans le job `jonction` de la CI — le job qui pose déjà la question « appelant → appelé »). Un seul
+script pour les deux contrôles : même graphe, même résolution de modules ; deux scripts
+dupliqueraient cette résolution et finiraient par diverger.
+
+- **Contrôle 1 — le pendu :** un fichier suivi par git qui importe un chemin que **git ne connaît
+  pas**. La question posée est « ce chemin est-il dans `git ls-files` ? », **jamais** « ce fichier
+  existe-t-il ? » — poser la seconde reproduirait exactement l'angle mort du `typecheck` de
+  pré-commit. Le disque n'est consulté que pour rédiger le remède (`git add` suffit, aucun commit
+  requis : 09 §5.6). **Aucune soupape** : un orphelin est inoffensif et peut attendre son
+  consommateur, un import vers rien casse la branche de tout le monde.
+- **Contrôle 2 — l'orphelin :** un module de `apps/*/src` ou `packages/*/src` que rien n'atteint.
+  Les points d'entrée ne sont pas devinés par leur nom mais **lus là où ils sont déclarés**
+  (`package.json` `exports`/`main`/`bin`/`scripts`, `index.html`, `CMD`/`ENTRYPOINT`/`HEALTHCHECK`
+  des Dockerfiles). Un `export * from` dans un baril compte comme un **transit**, pas comme une
+  consommation — sans quoi `packages/shared/src/index.ts` rendrait indétectable tout module inutilisé
+  du paquet. **Pas de jaune** : ce contrôle refuse, il n'avertit pas (doctrine de
+  `check-test-projects.mjs`, 2026-08-28).
+- **La soupape, bornée et auto-péremptoire :** `scripts/modules-en-attente.md`, quatre colonnes
+  (module, incrément consommateur, date, justification), **plafond 5 entrées, péremption 14 jours**,
+  et surtout : **une entrée dont le module est enfin consommé fait ÉCHOUER le contrôle** — la soupape
+  se referme au lieu de dormir. Ni `DECISIONS.md` (append-only : ne peut pas héberger une liste qui
+  doit rétrécir) ni `AMELIORATIONS.md` (registre de fiches arbitrées) ne pouvaient l'accueillir.
+
+**Recette d'acceptation — le garde attrape les deux défauts qui l'ont fait naître.** Le script lit
+n'importe quel commit sans toucher à l'arbre partagé (`--ref`, via `git ls-tree`/`git show`) :
+
+    node scripts/check-graphe-modules.mjs --ref 591ccbd → EXIT 1, nomme apps/api/src/auth/erreurs-jeton.ts
+    node scripts/check-graphe-modules.mjs --ref b24b98c → EXIT 1, nomme apps/api/src/app.ts:18 → ./domaines/auth/routes.js
+
+Sur `b0d7cff` (parent) et sur `b24b98c`, `erreurs-jeton.ts` n'apparaît pas : le contrôle isole
+exactement le commit fautif.
+
+**Honnêteté de portée.** `node scripts/check-graphe-modules.mjs --angles-morts` imprime les **seize**
+angles morts connus (imports dynamiques non littéraux, `import * as` sur un baril, granularité module
+et non symbole, cycles, alias `tsconfig`, conditions d'`exports`…). Un garde honnête sur sa portée
+vaut mieux qu'un garde qui rassure — c'est la famille de défaut que ce dépôt traque quinze fois en
+trois jours, et un garde-fou n'y échappe pas.
+
+**Faux positifs : un seul, mesuré et corrigé.** `import '@axion/ui/tokens.css'` était déclaré pendu
+parce que la résolution concaténait naïvement le sous-chemin au répertoire du paquet, alors que
+`packages/ui/package.json` publie `"./tokens.css": "./src/tokens.css"`. La carte `exports` (motifs
+`./*` compris) fait désormais foi. Après correction : **0 faux positif** sur l'arbre, sur les trois
+commits rejoués et sur un dépôt-témoin de 12 modules construit pour l'occasion (imports commentés,
+mention en Markdown, dépendance externe, `node:`, sous-chemin d'`exports`, joker d'`exports`,
+`import()` littéral, spécificateur variable, baril, `bin`).
+
+**Coût :** ~0,3 j. Aucune dépendance ajoutée (`node:fs`, `node:path`, `node:child_process`).
+
+**Impact schéma / API :** aucun. **Étage 1** — ne touche ni le schéma 04, ni l'API, ni la crypto, ni
+le périmètre fonctionnel. **Tests à écrire par un autre agent** (09 §5.6) : le détail des cas est
+dans le rapport d'A02 ; ils ont leur place dans `scripts/garde-fous-invariants.test.ts`.
+
+---
+
+## 2026-08-29 — [L0] Étage 2 — Aucun outil ne prouve QUEL COMMIT tourne : `empreinte-docker.sh` mesure le disque, pas le déploiement
+
+**Constat terrain.** Le 2026-08-29, A01 m'oriente vers `infra/scripts/empreinte-docker.sh` pour
+« comparer l'empreinte du fichier dans l'image en service à celle du dépôt ». Ce script ne fait pas
+cela : ses deux seuls modes sont `mesurer` et `elaguer`, et il mesure l'**empreinte DISQUE** de la
+pile sur une machine partagée. La confusion vient du mot « empreinte », qui désigne deux choses sans
+rapport. **Aucun outil du dépôt ne répond à la question « quel commit tourne ? ».**
+
+Ce n'est pas une lacune théorique. Le même jour, `docs/ETAT.md` et la mémoire d'A01 plaçaient le
+staging sur `b24b98c`, alors qu'il servait `8adaaea` — **huit commits en arrière**, depuis la veille
+au soir. Trois affirmations fausses avaient déjà été produites plus tôt en faisant confiance au champ
+`status` de l'API Coolify pour des déploiements qui avaient ÉCHOUÉ.
+
+**Valeur pour l'auditeur — indirecte mais réelle.** Une porte se signe sur une démo faite en staging
+(§7, `docs/portes/`). Une porte franchie sur un binaire dont personne n'a prouvé la provenance est
+une signature sur un objet inconnu.
+
+**Ce qui marche aujourd'hui, à la main, et qu'il faut outiller.** Deux sources indépendantes, dont
+aucune ne repose sur un champ `status` :
+
+1. **La file de déploiement, FILTRÉE sur notre application.** Jamais sans clause `WHERE` :
+   `application_deployment_queues` contient aussi les déploiements d'`axion-ia.com`. La colonne à
+   filtrer est `application_id` (entier), obtenue par `SELECT id FROM applications WHERE uuid =
+'wrunr6mwq2oxqq392i4myzjn'` — soit `4`. Filtrer directement sur l'uuid rend `(0 rows)`, ce qui
+   ressemble à « aucun déploiement » et n'est qu'une colonne mal choisie.
+2. **L'empreinte du code en service**, qui ne dépend d'aucun champ déclaratif :
+   `docker exec api-<uuid>-<suffixe> grep -o "trustProxy: [a-zA-Z]*" /app/dist/app.js`.
+
+C'est la source 2 qui a tranché : `trustProxy: true` et zéro occurrence de `domaines` prouvaient
+`8adaaea` sans discussion possible.
+
+**Proposition — `infra/scripts/empreinte-deploiement.sh`** (nom distinct : la confusion est la moitié
+du défaut). En lecture seule, il rendrait le commit de la dernière entrée `finished` filtrée sur notre
+`application_id` ; le condensé d'un fichier témoin de `/app/dist` dans chaque conteneur en service,
+comparé à celui obtenu depuis le commit annoncé ; et un verdict binaire **CONFORME / DÉRIVE**, avec
+l'écart en commits. Il refuserait de conclure « conforme » sur la seule foi de la file.
+
+**Coût estimé :** ~0,5 j. **Dépendances :** aucune (`ssh`, `docker`, `psql`, `sha256sum`).
+
+**Impact schéma / API :** aucun. Impact ops : un script de plus dans `infra/scripts/`.
+
+**Étage 2 — À ARBITRER, non implémenté.** Ce n'est ni un libellé ni un état vide : c'est un outil
+d'exploitation qui devient une dépendance de la procédure de porte. **Tests à écrire par un autre
+agent** (09 §5.6). Traçabilité : E36, E43.
+
+---
+
+## 2026-08-29 — [L2] Étage 2 — `request.ip` n'est OBSERVABLE NULLE PART : la redaction RGPD ferme la seule fenêtre
+
+**Constat terrain.** Le contrat 11 §3 impose `10 req/min/IP` sur `/v1/auth/*`, et `QUOTA_AUTH`
+(`apps/api/src/domaines/auth/routes.ts`) prend bien `requete.ip` pour clé. Mais **rien, dans le
+système déployé, ne permet de vérifier quelle valeur cette clé prend réellement** :
+
+1. **Le journal l'expurge, par conception.** Le sérialiseur par défaut de Fastify écrit
+   `req.remoteAddress`, qui **est** `request.ip` ; la politique de redaction
+   (`packages/shared/src/redaction.ts`, clés `ip`, `client_ip`, `x_real_ip`) le remplace par
+   `[masqué:rgpd]`. Mesuré sur staging le 2026-08-29 :
+   `{"req":{"method":"GET","url":"/v1/forge-…","remoteAddress":"[masqué:rgpd]",…}}`.
+   **Ce n'est pas un défaut à corriger** : c'est l'invariant 11 §2 et le RGPD 06 §10.4 qui
+   fonctionnent. Cette fiche ne demande pas de lever la redaction.
+2. **Les 404 ne portent aucun en-tête `x-ratelimit-*`** — dump complet des en-têtes vérifié.
+3. **Les sondes sont exemptées** (`/v1/health`, `/v1/health/ready` : `rateLimit: false` **et**
+   `logLevel: 'warn'`) — ni quota, ni journal.
+
+Conséquence mesurée : pour établir si `request.ip` valait l'adresse réelle, l'adresse forgée ou celle
+du frontal, il a fallu **reconstruire la chaîne maillon par maillon sur un banc local**. La réponse —
+une adresse unique pour tous les clients, donc un seau de quota global — est arrivée par composition
+de trois mesures indirectes, là où **une** mesure directe aurait suffi.
+
+**Valeur pour l'auditeur.** Le plafond de `/v1/auth/*` protège le compte de l'auditeur contre le
+bourrage d'identifiants. Une protection qu'on ne sait pas observer est une protection qu'on ne sait
+pas prouver — et, en l'espèce, elle était inopérante depuis l'origine sans que rien ne le signale.
+
+**Proposition — deux fenêtres, aucune ne rouvrant la donnée personnelle.**
+
+- **(a) En-têtes `x-ratelimit-*` sur les routes à quota, y compris sur le 404.**
+  `@fastify/rate-limit` sait les poser (`addHeaders`) ; ils exposent le **compteur**, jamais
+  l'adresse. Douze requêtes en faisant varier `X-Forwarded-For` suffisent alors à prouver, de
+  l'extérieur et sans lire un journal, que la clé est **une par client** et non un seau unique.
+- **(b) Un condensé tronqué et salé de `request.ip` dans le journal** (`ipHash`, 8 hexadécimaux, sel
+  de session) : deux requêtes du même client se rapprochent, mais l'adresse ne se reconstitue pas.
+
+L'option (a) seule répond au besoin de preuve et **n'a aucun impact RGPD** ; (b) sert le diagnostic
+d'incident et doit être arbitrée avec 06 §10.4 (donnée pseudonymisée, pas anonyme). Non exclusives.
+
+**Coût estimé :** (a) ~0,2 j · (b) ~0,4 j.
+
+**Impact schéma :** aucun. **Impact API :** (a) ajoute trois en-têtes de réponse sur les routes à
+quota — à documenter aux §8/§24.2. **Impact crypto :** (b) uniquement (sel de session).
+
+**Étage 2 — À ARBITRER, non implémenté** : (a) touche le contrat d'API, (b) touche la politique de
+redaction et le RGPD. **Tests à écrire par un autre agent** (09 §5.6). Traçabilité : E33, E42.
+
+---
+
+## 2026-08-29 — [L0] Étage 2 — La plage `trusted_proxies` appartient à Coolify : la garantie s'éteint en silence
+
+**Constat terrain.** `infra/caddy/Caddyfile` déclare désormais `trusted_proxies 10.0.1.0/24` dans ses
+deux blocs `reverse_proxy` (arbitrage A01 du 2026-08-29). Cette plage est celle du réseau Docker
+`coolify`, **vérifiée le jour même** (`docker network inspect coolify` → `subnet=10.0.1.0/24`,
+`gateway=10.0.1.1`, `coolify-proxy=10.0.1.6`). Ce réseau est créé, détruit et renuméroté par
+**Coolify**, pas par nous.
+
+Si Coolify le recrée sur une autre plage — ou si Traefik joignait Caddy par l'IPv6 du même réseau,
+`fd7b:96c6:c023::/64`, que `10.0.1.0/24` ne couvre pas — la directive cesse de correspondre. Mesuré
+sur banc : Caddy revient alors à **remplacer** `X-Forwarded-For`, l'API revoit une adresse unique, et
+le plafond par IP redevient un seau global.
+
+**L'échec est FERMÉ (jamais une adresse forgée), mais SILENCIEUX** : aucun test ne rougit, aucune
+alerte ne part, la journée continue. Le garde `scripts/garde-fous-proxy-de-confiance.test.ts` vérifie
+que la directive est _écrite_ — il ne peut pas vérifier qu'elle _correspond encore_ à la réalité du
+réseau, et son en-tête le dit lui-même.
+
+**Proposition.** Une sonde d'exploitation, en lecture seule, jouée par le cron de la machine et à
+chaque déploiement : lire le sous-réseau réel de `coolify` et l'adresse réelle de `coolify-proxy`,
+les confronter aux plages déclarées dans le `Caddyfile`, et **alerter sur le canal interne**
+(02 §11.3) en cas d'écart. La commande de vérification manuelle est déjà écrite dans
+`infra/COHABITATION_AXIONIA_WEB.md` §3ter — cette fiche demande à l'automatiser.
+
+**Coût estimé :** ~0,3 j. **Impact schéma / API :** aucun. Impact ops : une entrée de crontab.
+
+**Étage 2 — À ARBITRER, non implémenté** : c'est une sonde d'exploitation avec une alerte, pas un
+confort d'écran (09 §5.9). **Tests à écrire par un autre agent** (09 §5.6). Traçabilité : E36, E43.
+
+---
+
+## 2026-08-29 — [L2] Étage 1 — le garde-fou du graphe était aveugle sur son propre cas d'usage
+
+**Correctif d'une amélioration livrée le jour même. Il est écrit ici plutôt que corrigé en silence,
+parce que c'est le défaut le plus grave de la journée et qu'il visait le garde qui traque ce défaut.**
+
+**Constat, trouvé et reproduit par l'agent du lot L2 avec ma propre fonction.** `check-graphe-modules`
+accusait `apps/api/src/domaines/auth/service.ts` et `packages/shared/src/auth.ts` d'être orphelins.
+Ils ne l'étaient pas : `routes.ts:42` importe `./service.js`, `routes.ts:33` importe
+`loginRequestSchema`. Sur `routes.ts`, `sansCommentaires` voyait **0 import sur 4**.
+
+**Cause.** `routes.ts:9` contient `` `/v1/auth/*` `` dans un commentaire `//`. La sous-chaîne `/*` y
+ouvrait un **faux bloc** pour l'expression `/\/\*[\s\S]*?\*\//g`, refermé sur le `*/` du premier
+JSDoc — **trente lignes plus bas, par-dessus tout le bloc d'imports**.
+
+**Pourquoi ce n'est pas un faux positif mais une CÉCITÉ.** Le contrôle 2 accusait à tort : du bruit,
+visible. Mais le **contrôle 1 — le pendu** — devenait aveugle sur le même chemin. Mesuré en A/B sur un
+dépôt-témoin dont le SEUL défaut est un import vers une cible inconnue de git, placé après un tel
+commentaire, à script par ailleurs identique :
+
+| Version de `sansCommentaires` | Sortie                                          | Code  |
+| ----------------------------- | ----------------------------------------------- | ----- |
+| deux `replace` (avant)        | `✓ … aucun import pendu.`                       | **0** |
+| automate à états (après)      | `✗ 1 IMPORT … grave.ts:6 → ./cible-inconnue.js` | **1** |
+
+L'ancienne version **n'omettait pas** le défaut : elle **affirmait son absence**, en vert, dans les
+mots mêmes du contrôle. C'est exactement le défaut que ce garde existe pour attraper, et exactement
+celui qui a rendu la branche non constructible cette nuit-là. Un garde-fou aveugle sur son propre cas
+d'usage est la forme la plus aboutie de la famille traquée par ce dépôt.
+
+**Correctif : un automate à états** (code / commentaire de ligne / commentaire de bloc / chaîne
+simple / chaîne double / gabarit avec pile de `${…}` / expression régulière avec classes `[…]`), et
+non un réordonnancement des deux `replace` — **vérifié, pas supposé** : traiter la ligne d'abord casse
+`/* voir //note */`. Aucun ORDRE ne marche, parce qu'aucun MOTIF ne peut décider si `/*` ouvre un bloc
+sans savoir s'il est déjà dans un commentaire de ligne, une chaîne ou une expression régulière.
+
+**Un second défaut, trouvé en corrigeant le premier.** Les chaînes sont conservées (un spécificateur
+d'import EST une chaîne), donc une chaîne de documentation — `"corrige ainsi : import { x } from
+'./fantome.js'"` — était lue comme un import réel : **deux faux positifs de pendu** sur le
+dépôt-témoin, et précisément le genre de phrase que ce garde imprime dans ses propres messages
+d'erreur. L'automate expose désormais un drapeau par caractère (`enCode`) et le **mot-clé** doit être
+du code ; le spécificateur, lui, reste dans sa chaîne.
+
+**Recette d'acceptation — trois cas gravés, en plus de `591ccbd` et `b24b98c` :**
+
+1. `routes.ts` réel : les 4 imports sont vus (`--details` montre `service.ts` et `mots-de-passe.ts`
+   consommés par `routes.ts`, et `routes.ts` dans les consommateurs du baril `@axion/shared`).
+2. **Le cas grave** : commentaire `//` contenant `/*`, puis un import vers une cible inconnue de git,
+   puis un JSDoc → **refusé, ligne exacte**. Avant : vert et muet.
+3. Les voisins, tous traversés : bloc contenant `//note`, chaînes simple et double contenant `//` et
+   `/*`, gabarit avec substitutions dont une chaîne imbriquée contenant `//`, expression régulière
+   contenant `\/\/` et un `/` en classe `[a-z/]`, et une division `x / 2 / 1` qui ne doit pas être
+   prise pour une expression régulière.
+
+**Angles morts : douze → seize.** Les quatre nouveaux disent ce qu'un automate LEXICAL ne peut pas
+trancher : expression régulière vs division après `)` `]` `}`, texte JSX hors accolades, fichier
+syntaxiquement invalide, et le fait que l'automate ne couvre que les fichiers de code.
+
+**Comment le défaut a été trouvé, et pourquoi cela vaut d'être écrit.** L'agent accusé n'a **pas**
+inscrit ses modules dans `modules-en-attente.md` pour faire taire le rouge : il a vérifié si
+l'accusation était fondée, l'a trouvée fausse, et l'a remontée. Y déclarer un module effectivement
+consommé aurait pourri le registre — c'est le raisonnement que j'avais moi-même tenu en refusant de
+déclarer à sa place. **La règle a fonctionné dans les deux sens, et c'est elle qui a produit le
+diagnostic.**
+
+**Coût :** ~0,15 j (compris dans les ~0,3 j de la fiche précédente ; le compteur L2 est inchangé).
+
+**Impact schéma / API :** aucun. **Étage 1.**
+
+---
+
+## 2026-08-29 — [L3a] Étage 1 — le décalage de pagination était invisible dans les fichiers `.sql`
+
+**Constat terrain.** Le `CLAUDE.md` §9 impose la pagination keyset **partout**, `?limit=50&after=<curseur>`,
+jamais de décalage. Une règle ESLint `no-restricted-syntax` tient cette promesse sur le TypeScript :
+neuf formes, mesurées, zéro faux positif sur `outline-offset` ni sur `datetime({ offset: false })`,
+tous deux réellement versionnés. **Mais ESLint ne parse pas le SQL** : `npx eslint apps/api/drizzle/`
+rend « File ignored because no matching configuration was supplied » sur les douze migrations. Le
+décalage écrit dans une migration versionnée passait donc sans être vu — par le chemin le plus naturel
+qui soit, écrire du SQL dans un fichier SQL. Arbitré le 2026-08-29 (`DECISIONS.md`, « La règle
+anti-décalage ne voit pas les fichiers `.sql` »), option 2.
+
+**Valeur pour l'auditeur.** Sur une liste qui bouge pendant la pagination — une sync terrain qui pousse
+des réponses — le décalage saute ou duplique des lignes. Le défaut ne se voit ni à la compilation, ni
+aux tests unitaires : il se voit en production, sur FIL-GC (60 sessions, ~8 000 réponses), au moment le
+plus coûteux. Une vue ou une requête de rapport livrée dans une migration aurait porté ce défaut sans
+qu'aucun contrôle ne le nomme.
+
+**Ce qui a été livré.** Un contrôle `CT-3-KEYSET-SQL` dans `scripts/check-invariants.mjs`, déjà câblé
+dans `pnpm check:invariants` et `pnpm verify` — **aucune ligne de `package.json` touchée, aucune
+dépendance ajoutée**. Il **refuse** (il n'avertit pas : doctrine du 2026-08-28) le mot-clé de décalage
+suivi d'une valeur littérale, d'un paramètre lié (`$1`, `:nom`, `?`) ou d'une sous-requête, dans tout
+`.sql` suivi par git. Commentaires masqués, casse indifférente, valeur reportée à la ligne suivante
+attrapée, échappatoire `invariant-ok:` tracée.
+
+**Mesures, pas impressions.**
+
+| Mesure                                                    | Résultat                                                          |
+| --------------------------------------------------------- | ----------------------------------------------------------------- |
+| SQL fautif refusé (10 formes, dépôts jetables)            | **10/10 rouges, code 1, contrôle nommé**                          |
+| Faux positifs cherchés activement (9 formes)              | **9/9 verts**                                                     |
+| Occurrences du mot dans les 12 migrations livrées         | **0** — le dépôt reste vert, code 0                               |
+| Témoins sains existants (`garde-fous-invariants.test.ts`) | **48/48 verts** (31 avant l'ajout, 17 écrits à l'aveugle par A04) |
+
+**Un piège trouvé en chemin, et mesuré, pas supposé.** Écrire les exemples fautifs _en clair_ dans le
+message d'explication du contrôle rendait `npx eslint scripts/check-invariants.mjs` **rouge : 2 erreurs
+`no-restricted-syntax`**, sur les deux lignes qui citent la faute. Le garde-fou devenait son propre
+contre-exemple et cassait `pnpm lint` pour tout le monde. Correctif : le mot-clé est **assemblé**
+(`MOT_DECALAGE`), pas désactivé — le fichier avait déjà tranché ce dilemme une fois, pour les quatre
+noms de couleurs les plus courts. La sortie imprimée est identique au caractère près.
+
+**Angles morts, écrits plutôt que masqués** (six, dont un faux positif assumé) : une vue ou une fonction
+stockée créée hors migration ; du SQL assemblé puis passé en brut ; une requête tapée dans un outil
+d'administration ; un `.sql` non suivi par git (**vérifié : le même SQL fautif, non indexé, sort en
+vert**) ; le décalage écrit sans le mot-clé (`row_number() … BETWEEN 101 AND 150`) ou avec une valeur
+nue (`OFFSET debut`) ; et un `pnpm check:invariants` non exécuté — la garantie vient de la CI, jamais
+du poste. **Faux positif assumé et mesuré** : de la prose _chiffrée_ dans une chaîne SQL
+(`COMMENT ON COLUMN … IS '… 100 …'`) est refusée, parce que les chaînes ne sont **pas** masquées — en
+SQL une chaîne s'exécute (`EXECUTE`), et les masquer aveuglerait le contrôle au seul cas dynamique
+qu'il peut encore voir.
+
+**Coût :** ~0,1 j, conforme à l'estimation de l'arbitrage. **Impact schéma / API / crypto / périmètre
+fonctionnel : aucun. Étage 1.**

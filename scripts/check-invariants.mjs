@@ -44,6 +44,13 @@
 //   SEC-30.4c  dans un `.env*`, c'est la FORME DE LA VALEUR qui est jugée
 //           (longueur + entropie), jamais le NOM de la clé : une variable inventée
 //           demain est couverte le jour où elle est écrite.
+//   CT-3-KEYSET-SQL  aucune clause de DÉCALAGE dans un `.sql` versionné. Ce
+//           contrôle ne double pas ESLint, il ferme un trou qu'ESLint ne PEUT pas
+//           voir : `eslint` ne parse pas le SQL et rend « File ignored because no
+//           matching configuration was supplied » sur `apps/api/drizzle/*.sql`.
+//           Le §9 du CLAUDE.md impose le keyset PARTOUT ; le décalage écrit dans
+//           un fichier SQL — le chemin le plus naturel qui soit — n'était vu par
+//           personne. (Arbitrage DECISIONS.md du 2026-08-29, étage 1.)
 //
 // -----------------------------------------------------------------------------
 // CE QUE CES CONTRÔLES NE COUVRIRONT JAMAIS — À LIRE AVANT DE S'Y FIER
@@ -88,6 +95,51 @@
 //     d'images et les jeux de test. Leur liste de noms est donc incomplète PAR
 //     CONSTRUCTION ; gitleaks (entropie, bloquant en CI) est le filet qui ne
 //     dépend d'aucun nom.
+//   · CT-3-KEYSET-SQL ne voit QUE le mot-clé écrit en clair dans un `.sql`
+//     VERSIONNÉ, suivi d'un séparateur puis d'une valeur. Ce qu'il ne verra
+//     jamais, mesuré et écrit plutôt que supposé :
+//       1. une VUE ou une FONCTION STOCKÉE créée hors migration — elle vit dans
+//          la base, pas dans le dépôt ; rien de textuel ne peut l'atteindre ;
+//       2. du SQL ASSEMBLÉ puis passé en brut (`sql.raw('… ' + clause)`) : le
+//          mot-clé n'est écrit nulle part en entier. C'est le pendant exact du
+//          trou n° 2 d'`eslint.config.js`, et la contrepartie assumée de
+//          `sql.raw` ;
+//       3. une requête tapée dans un OUTIL D'ADMINISTRATION (psql, un client
+//          graphique) : elle ne passe par aucun fichier ;
+//       4. un `.sql` NON SUIVI par git — le périmètre vient de `git ls-files` ;
+//       5. le décalage écrit SANS le mot-clé : `ROW_NUMBER() OVER (…) BETWEEN
+//          101 AND 150`, ou un `FETCH … OFFSET` dont la valeur serait un nom nu
+//          (`OFFSET debut`). Le mot nu est délibérément HORS motif : il est la
+//          seule forme qui produirait des faux positifs (voir ci-dessous), et
+//          `OFFSET` étant un mot RÉSERVÉ de PostgreSQL, la forme utile passe
+//          toujours par un chiffre, un paramètre ou une parenthèse ;
+//       6. un `pnpm check:invariants` non exécuté. La garantie vient de la CI,
+//          jamais du poste — même réserve que la règle ESLint jumelle.
+//     FAUX POSITIFS SUR LE DÉPÔT AU 2026-08-29 : ZÉRO — les douze migrations de
+//     `apps/api/drizzle/` ne contiennent pas une seule occurrence du mot, et le
+//     dépôt reste vert avec le contrôle en place. Cinq familles ont été cherchées
+//     ACTIVEMENT sur un dépôt jetable ; quatre ne se déclenchent pas :
+//       · un commentaire SQL qui CITE la règle (`-- jamais d'OFFSET 100 ici`,
+//         apostrophe française comprise, et son équivalent en bloc `/* … */`) :
+//         les commentaires sont masqués avant l'analyse ;
+//       · une colonne nommée `offset` (`"offset" integer NOT NULL`), ou
+//         `offset_minutes` / `date_offset` : le motif exige une ESPACE puis une
+//         valeur, et ni le guillemet double ni le souligné n'en sont une — de plus
+//         PostgreSQL RÉSERVE ce mot, donc une telle colonne est forcément quotée ;
+//       · le mot dans une chaîne de prose NON CHIFFRÉE (`'… OFFSET saute des
+//         lignes'`) : le motif exige un chiffre, `$`, `:`, `?` ou `(` après
+//         l'espace, jamais une lettre ;
+//       · `outline-offset: …` du CSS et `{ offset: false }` de Zod : hors
+//         périmètre (`.sql` seulement), et de toute façon sans espace avant le
+//         `:`. Ce sont les deux faux positifs qu'a mesurés la règle ESLint ; la
+//         restriction aux `.sql` les met hors de portée par construction.
+//     LA CINQUIÈME SE DÉCLENCHE, et c'est un CHOIX, pas un oubli : de la prose
+//     CHIFFRÉE dans une CHAÎNE SQL — `COMMENT ON COLUMN … IS 'un OFFSET 100 saute
+//     des lignes'` — est refusée. Les chaînes ne sont PAS masquées, et ne doivent
+//     pas l'être : en SQL une chaîne s'EXÉCUTE (`EXECUTE 'SELECT … OFFSET 100'`,
+//     `sql.raw`), donc masquer les chaînes rendrait le contrôle aveugle au seul
+//     cas dynamique qu'il peut encore voir. Le prix est une phrase de commentaire
+//     mal placée ; l'échappatoire est `invariant-ok:`, tracée et relue.
 // =============================================================================
 import { readFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -588,6 +640,23 @@ function fichiersSources() {
     .filter((f) => !FICHIERS_HORS_ANALYSE.some((re) => re.test(f)));
 }
 
+/**
+ * Le mot-clé de décalage, ASSEMBLÉ — jamais écrit d'un seul tenant dans une chaîne
+ * de ce fichier.
+ *
+ * MESURÉ, pas supposé : écrit en clair dans l'explication de CT-3-KEYSET-SQL
+ * (« ni littérale (`OFFSET 100`), ni liée (`OFFSET $1`) »), il déclenchait la règle
+ * ESLint jumelle — `npx eslint scripts/check-invariants.mjs` rendait 2 erreurs
+ * `no-restricted-syntax`, sur les deux lignes qui CITENT la faute. Le garde-fou
+ * devenait son propre contre-exemple, et `pnpm lint` rougissait pour tout le monde.
+ *
+ * L'échappatoire `eslint-disable-next-line` existe et laisse une trace, mais ce
+ * fichier a déjà tranché ce dilemme une fois (les quatre noms de couleurs les plus
+ * courts, plus haut) : on ASSEMBLE plutôt qu'on ne DÉSACTIVE. La sortie imprimée est
+ * identique au caractère près ; seule la façon de l'écrire change.
+ */
+const MOT_DECALAGE = 'OFF' + 'SET';
+
 const controles = [
   {
     id: 'INV-2',
@@ -741,6 +810,53 @@ const controles = [
       '  SQL relues. Drizzle ne sert QU’aux requêtes typées. Un ORM qui « génère » le schéma\n' +
       '  crée une seconde source de vérité — exactement ce que le pack interdit.',
     motif: /@prisma\/client|prisma\.schema|PrismaClient/g,
+    fichiersExclus: [],
+  },
+  {
+    id: 'CT-3-KEYSET-SQL',
+    titre: 'Contrat 11 §3 — aucun décalage de pagination dans un `.sql` versionné',
+    explication:
+      '« Pagination : keyset PARTOUT (`?limit=50&after=<curseur>`), jamais d’offset »\n' +
+      '  (CLAUDE.md §9, contrat 11 §3). Sur une liste qui bouge pendant la pagination —\n' +
+      '  une sync terrain qui pousse des réponses — le décalage SAUTE ou DUPLIQUE des\n' +
+      '  lignes, et il coûte de plus en plus cher à mesure qu’on avance.\n' +
+      '  POURQUOI ICI plutôt que dans ESLint : une règle `no-restricted-syntax` couvre\n' +
+      '  déjà neuf formes en TypeScript, mais **ESLint ne parse pas le SQL** — il rend\n' +
+      '  « File ignored because no matching configuration was supplied » sur\n' +
+      '  `apps/api/drizzle/*.sql`. Un décalage écrit dans une migration versionnée\n' +
+      '  passait donc sans être vu, par le chemin le plus naturel qui soit.\n' +
+      '  PROPRIÉTÉ GARDÉE : dans un `.sql` suivi par git, le mot-clé de décalage\n' +
+      `  n’apparaît jamais suivi d’une valeur — ni littérale (\`${MOT_DECALAGE} 100\`,\n` +
+      `  \`${MOT_DECALAGE} 20 ROWS\`), ni liée (\`${MOT_DECALAGE} $1\`, \`${MOT_DECALAGE} :debut\`,\n` +
+      `  \`${MOT_DECALAGE} ?\`), ni calculée (\`${MOT_DECALAGE} (SELECT …)\`).\n` +
+      '  Utilisez `conditionApresCurseur` /\n' +
+      '  `ordreDuCurseur` (apps/api/src/http/pagination.ts) et un curseur keyset.\n' +
+      '  Une exception se marque `invariant-ok:` sur la ligne ou celle du dessus, et\n' +
+      '  se relit comme le reste du code.\n' +
+      '  LIMITES ÉCRITES EN TÊTE DE FICHIER : une vue ou une fonction stockée créée\n' +
+      '  hors migration, du SQL assemblé puis passé en brut, une requête tapée dans un\n' +
+      '  outil d’administration, un `.sql` non suivi par git.',
+    // Le motif exige une ESPACE puis le début d’une VALEUR — chiffre, paramètre
+    // positionnel `$1`, paramètre nommé `:debut`, marqueur `?`, ou parenthèse
+    // ouvrante d’une sous-requête. Un mot nu (`OFFSET saute des lignes`) ne le
+    // déclenche PAS : c’est la seule alternative qui produirait des faux positifs,
+    // et elle est délibérément hors motif (voir l’en-tête, point 5).
+    // Pas de « fin de ligne » parmi les alternatives, contrairement à la règle
+    // ESLint jumelle : un gabarit TypeScript a des FRAGMENTS qui se terminent
+    // (`sql\`… OFFSET ${n}\``), un fichier SQL n’en a pas — et `\s+` traverse déjà
+    // les sauts de ligne, donc `OFFSET\n  100` est attrapé sans cette alternative,
+    // qui n’aurait apporté que du bruit.
+    motif: /\bOFFSET\s+(?:\d|\$|:|\?|\()/gi,
+    // Les commentaires sont masqués : les migrations de ce dépôt sont commentées en
+    // français et CITENT la règle (« jamais d’OFFSET »). Une forme citée n’est pas
+    // une forme écrite — même doctrine que INV-1a/1b/1c.
+    masquerCommentaires: true,
+    // `.sql` UNIQUEMENT : le TypeScript, le JavaScript d’outillage et les gabarits
+    // `sql\`…\`` sont couverts par la règle ESLint (y compris les scripts de
+    // `apps/api/scripts/`, que le dernier bloc d’`eslint.config.js` rétablit). Hors
+    // des `.sql`, ce motif textuel crierait là où la règle syntaxique sait se taire :
+    // `outline-offset : var(…)` en CSS relâché en est l’exemple mesuré.
+    fichiersInclus: [/\.sql$/],
     fichiersExclus: [],
   },
   {

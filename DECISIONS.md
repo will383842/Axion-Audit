@@ -3438,3 +3438,78 @@ Règle de précédence du pack sans objet.
 
 Décideur : A01, sur constat d'A32.
 Impact spec : aucun.
+
+---
+
+## 2026-08-29 — [gouvernance] Tout le travail vit sur `lot/l0-infra` alors que le §7 impose une branche par lot : que fait-on de 126 commits ?
+
+Signalé par **Williams**. Constat mesuré, et il dépasse le nom de la branche :
+
+| Mesure                                   | Valeur                               |
+| ---------------------------------------- | ------------------------------------ |
+| Commits sur `lot/l0-infra` depuis `main` | **126**                              |
+| Lots qu'ils portent                      | L0, L0-b, L1, **L2**, **L3**, L4     |
+| État de `main`                           | le commit de genèse, **16 fichiers** |
+| Tags `v0.<lot>`                          | **aucun**                            |
+| PR ouvertes ou fusionnées                | **aucune**                           |
+
+**LE NOM DE BRANCHE EST LE SYMPTÔME, PAS LA MALADIE.** La cause est que la porte P-A **n'a jamais
+reçu la signature humaine** que le §10 exige. Rien n'a donc été mergé ; rien n'ayant été mergé, il n'y
+avait aucune base depuis laquelle brancher un lot suivant ; et j'ai ouvert L1, L2, L3 et L4 par-dessus
+— alors que le §4bis énonce qu'aucun lot suivant ne s'ouvre tant qu'une porte n'est pas franchie.
+**C'est ma faute, et elle est de gouvernance, pas de technique.**
+
+**ET IL EXISTE UN BLOCAGE CIRCULAIRE DANS P-A ELLE-MÊME**, écrit noir sur blanc dans son propre
+dossier au critère 4 : « Déploiement staging par la CI » ne peut être prouvé qu'**au merge**, parce que
+GitHub n'exécute un workflow que s'il existe sur la branche par défaut, et `deploy-staging.yml` n'est
+pas sur `main` (`git ls-tree origin/main` : 16 fichiers). **La porte exige le merge ; le §7 interdit le
+merge sans la porte.** Ce n'est pas une négligence : c'est une impasse de conception du dossier de
+porte, et elle explique pourquoi P-A ne s'est jamais refermée.
+
+Options :
+
+1. **Réécrire l'historique** pour répartir les 126 commits sur `lot/l0`, `lot/l1`, `lot/l2`, `lot/l3a`.
+2. **Ne rien changer** et documenter la dérive.
+3. **Un premier merge vers `main`**, puis discipline stricte une branche par lot à partir de L3b.
+
+Arbitrage, pour la part qui m'appartient : **option 3 — et le merge lui-même est la signature de
+Williams, pas la mienne.**
+
+**Pourquoi je refuse l'option 1, et ce n'est pas par confort.** Trois raisons mesurées :
+· **six agents travaillent en ce moment dans l'arbre partagé** ; un `push --force` sur la branche
+qu'ils ont pour base détruirait leur travail en cours ;
+· **les lots sont réellement entremêlés dans les commits eux-mêmes** — mes propres balayages d'index
+ont mis du L2 et du L3a dans un même commit, et un commit L4 (`cedde3e`) précède des commits L2. Une
+répartition propre exigerait de réécrire le contenu des commits, pas seulement leur ordre ;
+· la doctrine de ce dépôt est **la trace plutôt que l'effacement** — `DECISIONS.md` est append-only,
+`ETAT.md` aussi, et le commit `591ccbd` a été corrigé **par ajout** pour cette raison exacte.
+
+**Et je recommande une exception explicite au « squash merge » du §7 pour ce premier merge.** Le §7
+prescrit le squash ; écraser 126 commits en un seul détruirait la trace forensique de cinq jours —
+or, dans ce dépôt précisément, **cette trace est une partie du produit** : elle documente une vingtaine
+de garde-fous qui annonçaient plus qu'ils ne faisaient, quatre affirmations d'A01 renversées par la
+mesure, et trois pièges de commit. Un outil d'audit dont l'historique de fabrication serait écrasé
+serait une ironie coûteuse. **Un merge sans avance rapide (`--no-ff`) conserve tout et reste
+reversible d'un seul geste.** Le squash reprend ses droits dès le lot suivant, où il aura du sens :
+une branche = un incrément = un commit.
+
+**CE QUE JE FAIS IMMÉDIATEMENT, sans attendre :** la discipline reprend **en avant**. À partir de L3b,
+une branche `lot/<code>` par incrément, branchée depuis `main` une fois le premier merge fait. Je ne
+renomme pas `lot/l0-infra` : le renommage coûterait une perturbation à six agents pour zéro gain
+fonctionnel, et le nom sera de toute façon retiré au merge. Elle est, de fait, **la branche
+d'intégration du socle de Phase 1**, et c'est ainsi qu'elle doit être lue.
+
+Précédence : le §7 (branche par lot, squash, tag) est une **convention** au sens du §3-2 — sa
+modification n'appartient donc pas à l'autopilote, d'où cette entrée. Le §10 réserve la signature de
+la porte à Williams. La règle de précédence du pack est **sans objet** : il n'y a aucune divergence
+interne au pack, seulement un écart entre le pack et ma pratique.
+
+**CE QUI APPARTIENT À WILLIAMS, ET QUE JE NE FAIS PAS :**
+· signer la porte P-A, ou la déclarer en échec — elle est à 🟡 « accepté sous réserve » depuis le
+2026-08-28, verdict d'un gardien, **jamais contresigné** ;
+· autoriser le premier merge vers `main`, qui débloque mécaniquement le critère 4 de cette même porte ;
+· ratifier l'exception au squash pour ce merge-là.
+
+Décideur : A01 pour le refus de réécrire l'historique et pour la discipline en avant. **Williams pour
+le merge, la signature de P-A et l'exception au squash.**
+Impact spec : aucun amendement du pack. Un écart de pratique constaté, daté, et refermé en avant.
