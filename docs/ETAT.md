@@ -1280,3 +1280,50 @@ sécurité ; demandé à Williams.
 conteneurs · amendement du fichier 04 pour la route `interview-plan/apply` (aucune table où la poser)
 · les six colonnes manquantes déjà groupées · la ratification des amendements de convention du jour
 (statut 422, champ `code` dans le détail d'erreur).
+
+---
+
+## 2026-08-29 06h00 — [lot L2] — étape pipeline 4/7 — note de méthode
+
+⛔ **QUATRIÈME BALAYAGE D'INDEX, ET J'AI TROUVÉ LA FAILLE DE MA PROPRE PARADE.**
+`d3078cb` porte le message « docs(gouvernance) » et contient en réalité **cinq fichiers, 2 102
+insertions** : l'arbitrage de gouvernance et le test d'intégration L2 annoncés, mais aussi le
+contrôle SQL anti-décalage, ses 18 tests écrits à l'aveugle, et 363 lignes de fiches d'amélioration.
+Tout est du travail légitime et terminé — mais l'étiquette dit moins que le contenu, pour la
+quatrième fois.
+
+**La faille n'était pas dans la règle, elle était dans son exécution.** J'avais écrit : « lire l'index
+AVANT de commiter ». J'ai affiché l'index **dans la même commande que le commit**. Or la sortie
+n'existe qu'une fois la commande terminée — c'est-à-dire **après** le commit. **Afficher n'est pas
+lire.** Un contrôle dont le résultat arrive après la décision qu'il devait éclairer n'est pas un
+contrôle ; c'est la même forme de défaut que le code de sortie lu en bout de tube, et que le
+`typecheck` de pré-commit qui examine l'arbre au lieu de l'index.
+
+**La règle corrigée, et elle est mécanique** : `git diff --cached --name-only` est une **commande
+séparée**, dont je lis la sortie, **avant** toute rédaction de message. Le commit est une seconde
+commande.
+
+Corrigé **par ajout**, sans réécriture : `d3078cb` est poussé, la branche est partagée par six
+agents, et je viens de refuser la réécriture d'historique pour ces raisons exactes. La trace de
+l'erreur vaut mieux que son effacement.
+
+✅ **CE QUE `d3078cb` CONTIENT RÉELLEMENT** : l'entrée `DECISIONS.md` sur les 126 commits et le
+blocage circulaire de P-A · `apps/api/tests/l2-auth-routes.integration.test.ts`, **jusque-là non suivi
+par git donc invisible de la CI** — c'est le garde-fou des projets vitest qui a refusé le commit et
+l'a révélé · `scripts/check-invariants.mjs`, le contrôle SQL anti-décalage (10 formes refusées, zéro
+faux positif mesuré) · `scripts/garde-fous-invariants.test.ts`, ses 18 cas écrits **à l'aveugle**
+(7 bascules rouge → vert prouvées en reconstruisant la version antérieure depuis git) ·
+`AMELIORATIONS.md`.
+
+🔎 **LA RÈGLE DE CROISEMENT A PRODUIT SA MEILLEURE PREUVE.** Deux agents, l'un écrivant le contrôle,
+l'autre ses tests depuis la seule spécification, **sans jamais voir le code l'un de l'autre** :
+49 cas verts du premier coup. Et l'agent de test a refusé de se satisfaire d'un vert d'emblée — il a
+reconstruit la version pré-correctif et rejoué ses assertions contre elle.
+
+🔎 **UN GARDE QUI AFFIRMAIT L'ABSENCE DU DÉFAUT QU'IL MANQUAIT.** Le garde de graphe de modules
+blanchissait les commentaires par deux expressions régulières : un commentaire de ligne contenant
+`/*` ouvrait un faux bloc qui effaçait le bloc d'imports. Mesuré en A/B sur un import mort vers une
+cible inconnue de git : **avant, `✓ aucun import pendu`, code 0** ; après, `✗ grave.ts:6`, code 1.
+Il ne manquait pas le défaut — **il imprimait sa garantie d'absence, en vert, dans les mots exacts du
+contrôle**. Son auteur a également retiré sa propre affirmation « zéro faux positif », fausse. Corrigé
+par un automate à sept états ; seize angles morts désormais énumérés.
