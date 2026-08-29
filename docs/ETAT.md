@@ -1082,3 +1082,66 @@ d'alignement en lecture seule et prendra la main pour le déploiement après ce 
 opérationnelle payée deux fois : `git add` puis `git commit` commite l'INDEX ENTIER, donc le travail
 d'une session voisine qui se serait intercalée. La parade est `git commit -- <chemins>`**, utilisée
 ici.
+
+---
+
+## 2026-08-29 01h55 — [lot L2 / incrément L2a-T1] — étape pipeline 4/7 (revue croisée)
+Dernier commit vert : b24b98c (fix(l2): les correctifs que 591ccbd annonçait)   ·   Branche : lot/l0-infra   ·   Poussé : oui
+Tâche en cours : T2 (routes d'authentification) en écriture ; correctif d'assainissement `person_name` croisé code/tests ; observation de l'adresse cliente sur staging.
+Prochaine action : recueillir les trois rapports en vol (T2, assainissement, observation staging), puis enchaîner T3 (application RBAC), T4 (`activity_log`) et T5 (étanchéité financière + balayage sentinelle).
+Tests rouges connus : le cas `person_name` de la redaction, ROUGE À DESSEIN — test écrit à l'aveugle avant son correctif.
+
+⛔ **UN COMMIT QUI ANNONÇAIT CE QU'IL NE CONTENAIT PAS.** `591ccbd` porte le message « le socle
+échouait ouvert, et la clé de quota était forgeable » et ne contenait **qu'un seul fichier** :
+`auth/erreurs-jeton.ts`, un module que **rien n'importait**. Les cinq fichiers portant réellement les
+corrections étaient restés non indexés. Sur ce commit, une politique hors union laissait toujours
+passer un compte actif avec un 200, et `X-Forwarded-For: 9.9.9.9` faisait toujours
+`request.ip = 9.9.9.9`.
+
+**Ce qui rend ce défaut pire qu'un commit incomplet : la corroboration.** Aucun test de ce commit ne
+couvrait la politique hors union — le test attendait le correctif. Donc **la CI était verte**, et un
+lecteur avait un message de commit et une CI qui se confirmaient mutuellement pour une correction
+inexistante. C'est la famille de défaut que ce dépôt traque depuis trois jours — *un garde-fou qui
+annonce plus qu'il ne fait* — cette fois logée dans l'historique lui-même.
+
+**L'ironie du bloc précédent.** Il se referme sur la parade « `git commit -- <chemins>` ». J'ai
+employé cette parade exacte, avec une **liste de chemins incomplète**. La parade était bonne ;
+l'usage ne l'était pas. Une parade dont on ne vérifie pas le résultat n'est pas une parade.
+
+✅ **LE CONTRÔLE QUI MANQUAIT, ET QUI DEVIENT UN RÉFLEXE** : après tout commit, lire ce que
+`git show HEAD:<fichier>` contient **réellement** — jamais ce que contient l'arbre de travail.
+L'arbre a toujours eu les correctifs ; c'est l'historique qui mentait. Réparé par **ajout**
+(`b24b98c`), sans réécriture : la branche est partagée, et la trace de l'erreur vaut mieux que son
+effacement. `packages/shared/src/index.ts` délibérément laissé de côté — il exporte `./auth.js`,
+fichier de T2 non suivi, et l'aurait cassée pour quiconque récupère la branche.
+
+*Détecté par l'agent qui avait produit le correctif, en vérifiant `HEAD` de sa propre initiative.
+Quatrième fois qu'un agent me contredit en mesurant, et la plus utile.*
+
+🔎 **LA RÉSERVE SUR LE PLAFOND `/v1/auth/*` EST LEVÉE — PAR LA MESURE.** Requête forgée depuis
+l'extérieur avec `X-Forwarded-For: 9.9.9.9` et `X-Real-IP: 9.9.9.9` ; le journal d'accès de Caddy
+montre ce qui est réellement arrivé : `"X-Forwarded-For":["37.65.10.24"]`. **Traefik écrase les deux
+en-têtes par l'adresse réelle du client** — la valeur forgée ne disparaît pas dans le bruit, elle est
+effacée. La « chaîne dégradée » redoutée n'existe pas dans la configuration actuelle.
+**Ce que cela ne couvre pas** : le Traefik de Coolify n'est pas sous notre contrôle ; si sa
+configuration change, la garantie change. Et notre Caddy pose `X-Real-IP {remote_host}`, qui vaut
+l'adresse de Traefik et **non celle du client** — cet en-tête est inutilisable comme clé de quota.
+Le dernier maillon (Caddy → API, `request.ip` effectif) est en cours de mesure : la déduction est
+favorable, mais une déduction n'est pas une preuve.
+
+🔎 **LA FUITE RGPD N'ÉTAIT PAS OÙ ON LA CHERCHAIT.** La branche 5xx journalise `{ err }` et j'ai
+mesuré ce qu'elle laisse passer, plutôt que de trancher au jugé :
+
+    adresse e-mail   -> nettoyée        téléphone -> nettoyé
+    jeton JWT        -> nettoyé         nom de personne -> **PRÉSENT DANS LE JOURNAL**
+
+`person_name` est le **premier terme nommé** par l'interdiction du §2, et c'est le seul qui fuit —
+message **et** pile. Structurellement : un nom n'a aucune forme reconnaissable, contrairement à une
+adresse ou un jeton. **Donc on ne cherche pas à reconnaître le nom : on reconnaît le contenant**, la
+forme rigide `Key (<colonne>)=(<valeur>)` de PostgreSQL, qui transporte une donnée utilisateur
+arbitraire quelle que soit la colonne — en conservant code SQLSTATE, nom de colonne et nom de
+contrainte, sans quoi le correctif détruirait le diagnostic qu'il devait préserver.
+**Arbitrage rendu : `{ err }` RESTE sur la branche 5xx.** Le supprimer coûterait le seul diagnostic
+d'un vrai défaut serveur pour un risque que le correctif ci-dessus referme mieux et plus haut.
+Correctif et tests écrits par deux agents distincts, le test à l'aveugle depuis la spécification
+(09 §5.6).
