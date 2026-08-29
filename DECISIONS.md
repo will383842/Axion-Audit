@@ -3782,3 +3782,81 @@ est la signature de Williams). Règle de précédence du pack **sans objet**.
 
 Décideur : A01 pour la ratification et pour le refus d'improviser du DDL. **Williams pour le `REVOKE`.**
 Impact spec : aucun amendement. Une proposition d'amendement du 04 est portée à la porte.
+
+## 2026-08-29 — [L2 / gardien A02] À quelle exigence se rattache le socle d'autorisation, et que faire des 25 fichiers qui citaient E5 ?
+
+**Constat, mesuré et non rapporté.** 25 fichiers du socle d'authentification portaient
+`// Traçabilité : E5 (RBAC serveur systématique)` ; 5 d'entre eux ajoutaient
+`E27 (étanchéité financière)`. Or, dans `docs/TRACABILITE_E1-E47.md` comme dans le fichier 08
+scellé, **E5 = « Chaque service audité en profondeur (paquets service, scoring par unité,
+heatmap) » et E27 = « Design moderne, visuel, efficace : charte Axion-IA, composants uniques,
+dataviz, WCAG AA »**. La matrice de traçabilité — l'instrument que le gardien coche à l'étape 6 —
+aurait donc validé un socle d'autorisation contre une carte de chaleur et une charte graphique.
+**Le défaut du 2026-08-29 (« une citation non vérifiée vaut moins qu'une absence de citation »)
+était logé dans l'instrument de contrôle lui-même.**
+
+**Troisième famille, non signalée à l'ouverture et trouvée en établissant la carte** :
+`apps/api/scripts/import-banque-questions.mjs` et `packages/shared/src/banque-questions.ts`
+citaient `E4 (banque de questions)` — E4 est « Filiales, mono/multi-établissements, arbre
+organisationnel à profondeur libre ». La banque de questions est **E10**.
+
+**Question tranchée** : existe-t-il une exigence « RBAC » dédiée ?
+
+Options :
+
+1. **Amender la table** pour que E5 dise « RBAC ». **REFUSÉE d'emblée** — on corrige les citations,
+   jamais la référence. C'est la règle qu'A01 s'est appliquée à lui-même cette nuit.
+2. **Rattacher tout le socle à E33** (« Sécurité/RGPD », §10). Vrai mais grossier : E33 ne dit rien
+   du cloisonnement financier ni de la matrice rôle×espace.
+3. **Rattachement différencié**, exigence par exigence, selon ce que chaque fichier fait réellement.
+
+Arbitrage : **option 3.** Et la réponse à la question est : **NON, aucune des 47 exigences n'est
+intitulée « RBAC »**. « RBAC serveur systématique » est un **invariant** (`CLAUDE.md` §1, n° 3),
+pas une exigence. Le mot « RBAC » n'apparaît **qu'une seule fois** dans les 47 libellés, à **E21** :
+« Auditeurs : jamais accès aux devis/montants (**RBAC routes + colonnes, testé**) ». La convention
+réelle du dépôt le confirmait déjà, et c'est ce qui a servi de preuve plutôt que de conviction :
+`apps/api/drizzle/0006_rapport_cadrage_pilotage.sql:96` cite **E21** pour `scoping_financials`,
+et les trois fichiers de cadrage livrés par l'équipe parallèle (`domaines/scoping/financiers.depot.ts`,
+`routes/scoping.ts`, `packages/shared/src/scoping.ts`) citent **E21** eux aussi. Le dépôt portait donc
+déjà le rattachement juste ; c'est le lot L2 qui a inventé le sien.
+
+La répartition retenue, chaque fichier lu et non déduit de son chemin :
+
+| Ce que fait le fichier                                         | Exigence                                                                                                      | Fichiers                                                                                                                        |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Politique de route, marque `ContexteAdmin`, tests d'étanchéité | **E21** (+ E33, + E45 pour la matrice rôle×espace)                                                            | `auth/politique.ts`, `auth/contexte.ts`, `auth/socle.test.ts`, `auth/crochets.test.ts`, `tests/l2-crochets.integration.test.ts` |
+| Identité, jetons, mots de passe, quota, dépôts, routes d'auth  | **E33** (§10 : « comptes désactivables instantanément », « aucun oracle ») + **E43** pour les conventions API | `auth/{identite,jetons,erreurs-jeton,depot}.ts`, `domaines/auth/*`, `packages/shared/src/auth.ts`, `tests/l2-auth-routes…`      |
+| Lecture de `habilitated_at` par requête                        | **E45** (habilitation obligatoire, §34.4)                                                                     | `auth/depot.ts`                                                                                                                 |
+| Journal d'activité, porte unique, catalogue fermé              | **E42** (rétention `activity_log`, §10.4) + E33                                                               | `domaines/journal/*`, `packages/shared/src/journal.ts`, `scripts/check-porte-journal.mjs`                                       |
+| Import de la banque de questions                               | **E10**, **E37** (contrôle bloquant à l'import), **E47** (format §36.4)                                       | `scripts/import-banque-questions.mjs`, `packages/shared/src/banque-questions.ts`                                                |
+
+**Ce que cette correction met à nu, et qui vaut plus que la correction : l'invariant 3 n'a pas
+d'exigence.** « RBAC serveur systématique » est exigible partout et n'est porté nommément que par
+E21, qui n'en couvre que le cas financier. Un socle d'autorisation générique n'a donc **pas de
+domicile propre** dans E1-E47 : il se rattache honnêtement à E21+E33+E45, jamais à une seule.
+**Ce n'est pas du code orphelin** (tout se rattache), mais c'est une **maille lâche de la
+spécification**, et elle est portée à Williams à la porte P-B.
+
+**Garde-fou livré**, parce qu'une correction sans garde-fou se refait :
+`scripts/check-tracabilite-exigences.mjs` + `pnpm check:tracabilite`, câblé dans `verify` **et dans
+`ci.yml`**. C1 : tout `E<n>` cité dans une source existe dans `docs/TRACABILITE_E1-E47.md`.
+C2 : toute citation portant une glose voit cette glose confrontée au libellé officiel. **Éprouvé par
+injection : 4 injections, 4 attrapées (RC=1), la citation juste non signalée.**
+**Sa limite fondamentale est écrite dans son en-tête et imprimée par `--angles-morts` : il ne
+distingue pas un rattachement juste d'un rattachement faux.**
+
+**Contestation assumée de la piste proposée par A01** (un fichier déclarant, par exigence, les globs
+qui la servent) : elle cumule deux défauts — c'est une **seconde source de vérité** à côté de la table,
+et **elle ne vérifie rien du sens** ; elle déplace la revendication non vérifiée dans un fichier que
+plus personne ne relit. La glose fait l'inverse : elle oblige l'auteur à écrire ce qu'il croit que
+l'exigence dit, et confronte cette phrase à la table. Elle transforme une citation **invérifiable**
+en citation **falsifiable**, sans créer aucune source nouvelle.
+
+Précédence : `CLAUDE.md` §4 étape 6 (« code → exigences ») et le mode d'emploi §5 de
+`docs/TRACABILITE_E1-E47.md` (« un désaccord sur un rattachement se tranche dans `DECISIONS.md`,
+jamais ici »). Règle de précédence du pack **sans objet** : aucune divergence entre sections.
+
+Décideur : A02 pour la carte et le garde-fou. **A01 pour la ratification du rattachement E21/E33/E45
+et du plafond d'exemptions. Williams pour la maille lâche de l'invariant 3, à la porte P-B.**
+Impact spec : **aucun amendement**. `docs/TRACABILITE_E1-E47.md` et `docs/08_TRACABILITE.md` sont
+**inchangés** — c'est le code qui a été corrigé, pas la référence.

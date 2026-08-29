@@ -31,6 +31,7 @@
     "check:jonction": "node scripts/check-jonction.mjs",
     "check:graphe-modules": "node scripts/check-graphe-modules.mjs",
     "check:porte-journal": "node scripts/check-porte-journal.mjs",
+    "check:tracabilite": "node scripts/check-tracabilite-exigences.mjs",
     "check:pack": "node scripts/check-pack-integrity.mjs",
     "check:decisions": "node scripts/check-decisions.mjs",
     "schema:diff": "node scripts/schema-diff.mjs",
@@ -51,7 +52,7 @@
     "infra:restore-test": "bash infra/scripts/restore-test.sh",
     "prepare": "node scripts/prepare-husky.mjs",
     "check:test-projects": "node scripts/check-test-projects.mjs",
-    "verify": "pnpm build && pnpm lint && pnpm format:check && pnpm typecheck && pnpm check:pack && pnpm check:decisions && pnpm check:invariants && pnpm check:jonction && pnpm check:graphe-modules && pnpm check:porte-journal && pnpm check:no-skipped-tests && pnpm check:test-projects && pnpm check:isolation-reseau && pnpm check:compose-coolify && pnpm test:unit && pnpm test:integration && pnpm test:e2e",
+    "verify": "pnpm build && pnpm lint && pnpm format:check && pnpm typecheck && pnpm check:pack && pnpm check:decisions && pnpm check:invariants && pnpm check:jonction && pnpm check:graphe-modules && pnpm check:porte-journal && pnpm check:tracabilite && pnpm check:no-skipped-tests && pnpm check:test-projects && pnpm check:isolation-reseau && pnpm check:compose-coolify && pnpm test:unit && pnpm test:integration && pnpm test:e2e",
     "build:packages": "pnpm --recursive --filter \"./packages/**\" build"
   },
   "devDependencies": {

@@ -460,6 +460,23 @@ jobs:
       - name: pnpm check:graphe-modules
         run: pnpm check:graphe-modules
 
+      # LE TROISIÈME SENS DU MÊME GRAPHE. `check:jonction` et `check:graphe-modules`
+      # rattachent le code AU CODE. `check:tracabilite` rattache le code À LA SPEC :
+      # tout `E<n>` cité dans une source doit exister dans `docs/TRACABILITE_E1-E47.md`
+      # (C1) et, s'il porte une glose, cette glose doit dire ce que dit le libellé
+      # officiel (C2).
+      #
+      # LE DÉFAUT QU'IL FERME, ET IL ÉTAIT RÉEL : le 2026-08-29, 25 fichiers du socle
+      # d'authentification revendiquaient E5 (« Scoring par unité, heatmap ») et E27
+      # (« Design moderne, WCAG AA ») — la matrice qui VALIDE LA PORTE aurait donc
+      # coché un socle d'autorisation contre une carte de chaleur.
+      # Rejouable : `node scripts/check-tracabilite-exigences.mjs --verbeux`.
+      # Portée exacte et six angles morts assumés — dont la limite fondamentale, qui
+      # est qu'il ne distingue PAS un rattachement juste d'un rattachement faux :
+      #   node scripts/check-tracabilite-exigences.mjs --angles-morts
+      - name: pnpm check:tracabilite
+        run: pnpm check:tracabilite
+
   # ---------------------------------------------------------------------------
   # 1/8 — LINT (11 §7)
   # ---------------------------------------------------------------------------
