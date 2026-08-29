@@ -3179,3 +3179,83 @@ pour L3b et appellent leurs propres entrées.**
 Précédence : `CLAUDE.md` §0 (le 07 fait foi pour le périmètre) et 11 §6 (le découpage en incréments).
 Décideur : A01, sur constat d'A31.
 Impact spec : aucun amendement.
+
+---
+
+## 2026-08-29 — [L2] Le poivre de l'empreinte des jetons de rafraîchissement : secret dédié ou réemploi ?
+
+Les jetons de rafraîchissement sont **opaques** (256 bits base64url), et seule leur empreinte
+HMAC-SHA256 est stockée. Reste à décider d'où vient le poivre de ce HMAC. La conception §6.5 ne le
+tranchait pas ; l'agent a retenu le réemploi de `JWT_REFRESH_SECRET` **en signalant que c'était un
+choix par défaut et non un arbitrage**, et en précisant qu'une seule ligne change si je décide
+autrement. Il a eu raison de ne pas laisser ce point passer pour acquis.
+
+Options :
+
+1. **Une treizième famille de secret dédiée** (`REFRESH_TOKEN_PEPPER`). Sépare proprement deux usages
+   cryptographiques distincts — signer un jeton d'accès, poivrer une empreinte en base.
+2. **Réemployer `JWT_REFRESH_SECRET`.**
+
+Arbitrage : **option 2 pour la Phase 1**, avec une conséquence à écrire plutôt qu'à découvrir.
+
+Le motif n'est pas la simplicité mais le **coût de garde**. Le dépôt compte déjà douze familles de
+secrets en attente de vérification nominative par Williams, et le 02 §30.4 impose qu'un secret vive
+dans le coffre chiffré, sans quoi une restauration rend les données sans rendre l'accès. **Un secret
+de plus est un secret de plus à perdre** — et la Phase 1 a déjà démontré qu'un coffre inactif ne se
+voit pas tant qu'on n'en a pas besoin.
+
+**La conséquence, et elle est FAVORABLE — c'est ce qui emporte la décision :** faire tourner
+`JWT_REFRESH_SECRET` invalide d'un coup **toutes** les empreintes stockées, donc toutes les sessions.
+Ce n'est pas un effet de bord subi, c'est le comportement qu'on veut d'une rotation de secret : une
+rotation qui laisserait des sessions vivantes ne serait pas une rotation. Avec un poivre séparé, il
+aurait fallu **penser** à faire tourner les deux — et l'oubli aurait été silencieux.
+
+**Ce que cela ne couvre pas, et qui est une dette** : les deux usages partagent désormais un destin.
+Si `JWT_REFRESH_SECRET` devait être renouvelé pour une raison étrangère aux sessions, la déconnexion
+générale serait un effet non voulu. À réévaluer en Phase 2, quand la question de la rotation
+programmée se posera pour de bon. **À écrire dans `.env.example` à côté de la variable**, pas
+seulement ici : le lecteur d'un fichier d'environnement ne lit pas `DECISIONS.md`.
+
+Précédence : `CLAUDE.md` §2 (« aucune valeur de secret dans un fichier versionné ») et 02 §30.4
+(tout secret vit dans le coffre). Règle de précédence du pack sans objet — aucune divergence interne.
+
+Décideur : A01, sur signalement d'A14 qui a refusé de faire passer un défaut par défaut pour un choix.
+Impact spec : aucun amendement. Une dette de Phase 2, datée.
+
+---
+
+## 2026-08-29 — [L2] `logout` : route publique ou authentifiée ? Deux exigences de la conception se contredisaient
+
+L'agent a buté sur une contradiction interne qu'il a démontrée par le comptage, plutôt que de choisir
+la branche qui l'arrangeait : la conception annonce « logout sera publique » **et** fige « de deux à
+quatre entrées » dans la liste commitée des routes publiques. Trois routes publiques en feraient
+cinq. Les deux affirmations ne peuvent pas être vraies ensemble. La §5 fige quatre entrées et **n'y
+met pas `logout`** ; la liste commitée en portait déjà quatre — les méthodes GET et HEAD des deux
+sondes de santé.
+
+Options :
+
+1. **`logout` publique**, et amender la liste commitée à cinq entrées.
+2. **`logout` authentifiée.**
+
+Arbitrage : **option 2**, et le motif dépasse le comptage.
+
+Une route de déconnexion authentifiée permet de **vérifier la propriété du jeton présenté** — le §9.9
+réserve les écritures au propriétaire de la session. Publique, elle accepterait n'importe quel jeton
+de rafraîchissement présenté par n'importe qui : soit elle le révoque, et c'est un déni de service à
+coût nul contre un tiers, soit elle refuse en disant pourquoi, et c'est un oracle. Le comportement
+retenu — 200 muet, jeton d'autrui **non révoqué** — ferme les deux.
+
+**Le prix, écrit dans le code plutôt que découvert plus tard** : un jeton d'accès expiré ne peut plus
+se déconnecter côté serveur. Le client devra rafraîchir avant de se déconnecter, ou abandonner ses
+jetons localement. C'est acceptable — un jeton d'accès vit quinze minutes — mais ce n'est pas gratuit,
+et le terrain hors ligne devra le savoir.
+
+Précédence : `CLAUDE.md` §9 et l'invariant 3 (« écritures de sync réservées au propriétaire de la
+session », 05 §9.9) l'emportent sur une phrase d'intention de la note de conception. La règle de
+précédence du pack est sans objet : la contradiction est **interne à la note de conception**, laquelle
+ne peut de toute façon ni étendre ni réduire ce que le pack fixe.
+
+Décideur : A01, sur constat d'A14.
+Impact spec : aucun amendement au pack. La note `docs/conception/LOT_L2.md` porte une phrase
+d'intention désormais périmée sur ce point ; la présente entrée fait foi.

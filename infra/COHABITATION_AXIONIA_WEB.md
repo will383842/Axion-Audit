@@ -198,6 +198,65 @@ qu'une panne du réseau sortant nous empêche de redéployer. Aucune n'est gratu
 
 ---
 
+## 3ter. Une garantie de sécurité qui repose sur un Traefik qui ne nous appartient pas
+
+Le plafond de `10 req/min/IP` sur `/v1/auth/*` (contrat 11 §3) ne vaut que si l'API sait quelle est
+l'adresse du client. Sur cette machine, elle ne l'apprend qu'au bout d'une chaîne de trois maillons,
+et **le premier n'est pas sous notre contrôle** :
+
+```
+client ──► Traefik de Coolify ──► notre Caddy ──► notre API
+           (10.0.1.6)             (10.0.4.8)      (request.ip)
+           PAS À NOUS             à nous          à nous
+```
+
+**Mesuré le 2026-08-29** (A57), maillon par maillon, sur la chaîne réelle :
+
+| Maillon          | Comportement constaté                                                                                            | Comment c'est mesuré                                                                     |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| client → Traefik | Traefik **écrase** `X-Forwarded-For` et `X-Real-IP` par l'adresse réelle, même si le client en envoie plusieurs  | journal d'accès de notre Caddy, en situ                                                  |
+| Traefik → Caddy  | Caddy **n'ajoute** à `X-Forwarded-For` que si le pair est déclaré dans `trusted_proxies` ; sinon il **remplace** | banc local, `caddy:2-alpine` v2.11.4, Caddyfile du dépôt monté tel quel, pair `10.0.1.6` |
+| Caddy → API      | `request.ip` = première adresse **publique** en remontant, grâce au `trustProxy` restreint                       | vraie `@fastify/proxy-addr` 5.1.0, pair TCP `10.0.4.8`                                   |
+
+### Ce que cette garantie suppose, et qui peut changer sans nous
+
+1. **Que Traefik continue d'écraser `X-Forwarded-For`.** S'il se mettait à le _compléter_ au lieu de
+   l'écraser, un client pourrait glisser une adresse à gauche de la sienne. Le `trustProxy` restreint
+   de `apps/api/src/app.ts` (`['loopback','linklocal','uniquelocal']`) neutralise ce cas — la remontée
+   s'arrête à la première adresse publique — **mais uniquement parce qu'il est restreint** : avec
+   `trustProxy: true`, la valeur forgée serait retenue. C'est mesuré, pas supposé.
+2. **Que le réseau Docker `coolify` garde le sous-réseau `10.0.1.0/24`.** C'est la plage déclarée dans
+   `trusted_proxies` (`infra/caddy/Caddyfile`, les deux blocs). Vérifié le 2026-08-29 :
+   `docker network inspect coolify` → `subnet=10.0.1.0/24`, `gateway=10.0.1.1`, `coolify-proxy=10.0.1.6`.
+   Ce réseau est créé et détruit par **Coolify**, pas par nous.
+3. **Que Traefik joigne Caddy en IPv4.** Le réseau `coolify` porte aussi un préfixe IPv6
+   (`fd7b:96c6:c023::/64`) que `10.0.1.0/24` ne couvre pas.
+
+### Ce qui se passe si l'une de ces suppositions tombe
+
+**L'échec est FERMÉ, jamais ouvert** — et c'est la propriété qui rend la situation tenable :
+si la plage ne correspond plus, Caddy revient à _remplacer_ l'en-tête, l'API revoit `10.0.1.6` pour
+tout le monde, et le plafond redevient un **seau unique et global**. Jamais une adresse forgée.
+
+Mais l'échec est aussi **SILENCIEUX** : rien ne se casse, rien n'alerte, et le plafond par client
+cesse simplement d'exister. C'est pourquoi cette dépendance est écrite ici plutôt que tenue pour
+acquise, et pourquoi une fiche `AMELIORATIONS.md` demande une sonde qui la vérifie en continu.
+
+> **Vérification manuelle, en lecture seule, à rejouer après toute mise à jour de Coolify :**
+>
+> ```bash
+> ssh axionia-web 'docker network inspect coolify \
+>   --format "{{range .IPAM.Config}}{{.Subnet}} {{end}}"'   # doit contenir 10.0.1.0/24
+> ssh axionia-web 'docker inspect coolify-proxy \
+>   --format "{{(index .NetworkSettings.Networks \"coolify\").IPAddress}}"'  # doit être dans cette plage
+> ```
+>
+> Si la plage a changé : mettre à jour `trusted_proxies` dans **les deux blocs** de
+> `infra/caddy/Caddyfile`, et redéployer. Tant que ce n'est pas fait, le plafond de `/v1/auth/*`
+> ne protège personne individuellement.
+
+---
+
 ## 4. Les trois commandes à me fournir (lecture seule, elles ne modifient rien)
 
 ```bash

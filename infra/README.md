@@ -223,6 +223,113 @@ en supprimant le volume et en redéployant, jamais pendant une journée de colle
 
 ---
 
+## 3bis. Valider le `Caddyfile` avec le VRAI binaire — la recette verte, et les deux façons de la rater
+
+**Personne n'avait jamais fait tourner `caddy validate` sur `infra/caddy/Caddyfile` avant le
+2026-08-29.** Le garde `scripts/garde-fous-proxy-de-confiance.test.ts` est **lexical** : il lit le
+fichier comme du texte. Il ne peut donc pas voir qu'un fichier syntaxiquement faux a été écrit — et
+c'est exactement par ce trou qu'est passée la forme `trusted_proxies static 10.0.1.0/24` **dans un
+bloc `reverse_proxy`**, que Caddy REFUSE (`invalid IP address: 'static'` — `static` est le mot-clé
+de l'option _globale_ `servers`, pas du sous-directive). Un `Caddyfile` faux ne se découvre alors
+qu'au déploiement, quand le conteneur ne démarre pas.
+
+### La recette (mesurée verte le 2026-08-29, `caddy:2-alpine` v2.11.4)
+
+```bash
+docker run --rm -v "$PWD/infra/caddy:/etc/caddy:ro" \
+  -e CADDY_FRONT_CONFIG=/etc/caddy/fronts.static.caddy \
+  -e CADDY_SITE_ADDRESS=:8080 \
+  -e CADDY_STAGING_SITE_ADDRESS=:8081 \
+  -e API_PORT=3000 \
+  caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
+# → "Valid configuration", exit 0
+```
+
+Le **mode dev** se valide avec le même jeu, en changeant la seule variable qui le désigne :
+`-e CADDY_FRONT_CONFIG=/etc/caddy/fronts.dev.caddy` → également vert. Les deux modes méritent d'être
+validés : `fronts.dev.caddy` n'est pas embarqué dans l'image, mais il est utilisé en local.
+
+### Les deux façons de rater cette commande, et ce qu'elles signifient
+
+| Symptôme                                                                                                                      | Cause                                                                  | Ce n'est PAS                          |
+| ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------- |
+| `Error: … 'import', at /etc/caddy/Caddyfile:153`                                                                              | seul le `Caddyfile` est monté ; il fait `import {$CADDY_FRONT_CONFIG}` | un défaut du fichier                  |
+| `Error: adapting config using caddyfile: server block without any key is global configuration, and if used, it must be first` | **une variable d'adresse de site est vide**                            | **un défaut d'ordre dans le fichier** |
+
+La seconde mérite une explication, parce que son message désigne un tout autre problème que le sien.
+Le fichier ouvre ses blocs par `{$CADDY_SITE_ADDRESS} {` et `{$CADDY_STAGING_SITE_ADDRESS} {`. Si la
+variable est vide, la ligne se réduit à `{` — que Caddy lit comme un **bloc d'options globales**, or
+il y en a déjà un en tête de fichier, et il doit être premier. **Le message parle d'ordre ; la cause
+est une variable manquante.** Isolé pas à pas :
+
+| Variables fournies             | `validate`                                                |
+| ------------------------------ | --------------------------------------------------------- |
+| `CADDY_FRONT_CONFIG` seul      | exit 1 — « server block without any key »                 |
+| `+ CADDY_SITE_ADDRESS`         | exit 1 — **même erreur** (le second bloc est encore vide) |
+| `+ CADDY_STAGING_SITE_ADDRESS` | **exit 0**                                                |
+
+Le `Caddyfile` le dit d'ailleurs déjà, à propos du bloc de staging : « La variable est néanmoins
+OBLIGATOIRE : une adresse de site vide empêcherait Caddy de démarrer. » C'était écrit ; ça n'avait
+jamais été éprouvé.
+
+### Le piège qui reste, et que `validate` NE VOIT PAS
+
+`API_PORT` **n'est pas nécessaire** pour obtenir un vert : absent, Caddy adapte silencieusement
+l'upstream en `axion-api:80` au lieu de `axion-api:3000`, et valide. Un `.env` de production qui
+oublierait `API_PORT` produirait donc un Caddy parfaitement « valide » qui rend des 502.
+Mesuré :
+
+```bash
+# sans API_PORT
+caddy adapt … | grep -o '"dial":"[^"]*"'   # → "dial":"axion-api:80"   (et validate = exit 0)
+# avec API_PORT=3000
+caddy adapt … | grep -o '"dial":"[^"]*"'   # → "dial":"axion-api:3000"
+```
+
+**Conséquence pour la CI : valider ne suffit pas, il faut AFFIRMER SUR LA CONFIG ADAPTÉE.**
+`caddy adapt` rend le JSON réellement chargé ; c'est lui qui porte les propriétés qu'on veut garder :
+
+```bash
+caddy adapt --config /etc/caddy/Caddyfile 2>/dev/null | grep -o '"trusted_proxies":\[[^]]*\]'
+# → "trusted_proxies":["10.0.1.0/24"]   DEUX fois (un bloc de prod, un bloc de staging)
+```
+
+> ⚠️ La clé JSON est un **tableau simple** (`"trusted_proxies":["10.0.1.0/24"]`), et non
+> `{"source":"static","ranges":[…]}` — cette seconde forme est celle de l'option _globale_. Chercher
+> `"ranges"` dans la config adaptée ne rend rien et ferait conclure à tort que la directive est
+> absente.
+
+### Où cette vérification doit vivre — pas dans la suite unitaire
+
+`vitest.config.ts` grave qu'un test unitaire tourne **sans service**, et un `@critique` ne se skippe
+jamais (CLAUDE.md §5) : une assertion qui exige Docker ne peut donc pas y entrer sans créer soit un
+skip conditionnel interdit, soit un rouge sur toute machine sans Docker.
+
+Sa place est le job **`shellcheck`** de `.github/workflows/ci.yml` — celui qui porte déjà
+« Valider la syntaxe des fichiers docker compose », sous le commentaire _« Le fichier compose EST de
+l'infrastructure exécutable : une faute de syntaxe s'y découvre en CI, pas au moment du
+déploiement. »_ Le `Caddyfile` est exactement le même genre d'objet, et le job dispose déjà de Docker.
+
+**Échec fermé, obligatoire.** Une étape qui passerait parce que Caddy est absent serait un garde qui
+ment. Le job a déjà le motif à recopier (`if ! command -v shellcheck …; then exit 1; fi`) :
+
+```bash
+set -euo pipefail
+docker pull "$IMAGE_CADDY" || { echo "::error::Image Caddy indisponible — vérification impossible."; exit 1; }
+docker run --rm -v "$PWD/infra/caddy:/etc/caddy:ro" … "$IMAGE_CADDY" caddy validate …; RC=$?
+[ "$RC" -eq 0 ] || { echo "::error::Caddyfile invalide."; exit 1; }
+```
+
+Le code de retour est **capturé dans une variable**, jamais lu en bout de tube : `caddy validate | grep`
+rendrait le code de `grep`.
+
+**Épingler l'image.** `caddy:2-alpine` est un tag mouvant ; 11 §1 gèle les versions. Au 2026-08-29 il
+pointe la MÊME version que le conteneur en service — `v2.11.4`, vérifié des deux côtés —
+digest `caddy@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648`. Une CI qui
+valide contre une autre version que celle déployée ne valide pas ce qui tourne.
+
+---
+
 ## 4. LE STAGING TEL QU'IL EST — tout ce qui suit est MESURÉ
 
 > **`<IP_AXIONIA_WEB>` — placeholder, pas une valeur perdue.** Le dépôt est **public** (décision du
