@@ -3042,3 +3042,140 @@ Seul un test de bout en bout contre un Caddy vivant fermerait le premier point. 
 
 Décideur : A01, sur constat d'A18 (garde) et mesure d'A57 (`client_ip`).
 Impact spec : aucun amendement. Le §9 est rendu applicable, pas modifié.
+
+---
+
+## 2026-08-29 — [L3a] La déclaration `schema:` in/out doit-elle être OBLIGATOIRE au démarrage ?
+
+Le socle L3a rend la validation Zod par route **possible et correcte**, pas **obligatoire**. Un crochet
+`onRoute` à la manière de `config.acces` — refuser de démarrer si une route ne déclare pas ses schémas
+— est écrivable en une vingtaine de lignes. L'agent ne l'a **pas** livré, et il a eu raison de me poser
+la question : le crochet **refuserait les routes d'authentification du lot L2**, qui valident dans le
+gestionnaire (`loginRequestSchema.parse(requete.body)`) sans déclarer de `schema`.
+
+Options :
+
+1. **Livrer le crochet maintenant.** Casse L2 au démarrage — donc impossible en l'état.
+2. **Ne rien imposer** et se contenter d'un socle disponible. Laisse la garantie du 11 §3 dépendre de
+   la discipline de chacun, ce qui n'est pas une garantie.
+3. **Déclarer la forme déclarative comme NORME, faire migrer les routes L2 avant la porte du lot, et
+   brancher le crochet à ce moment-là.**
+
+Arbitrage : **option 3.**
+
+Le §9 du `CLAUDE.md` dit « chaque route **déclare** son schéma Zod in/out depuis `packages/shared` ».
+Valider dans le gestionnaire tient l'_intention_ — rien ne passe sans validation — mais pas la
+_lettre_, et surtout pas la propriété qui compte : **une validation déclarée est vérifiable de
+l'extérieur du gestionnaire ; une validation écrite à l'intérieur ne l'est que par relecture.** C'est
+exactement le raisonnement qui a fondé `config.acces` au lot L2 : une route sans politique empêche
+l'API de démarrer, précisément parce qu'un oubli ne doit pas dépendre d'un œil.
+
+Le socle ferme au passage un défaut réel, mesuré : Fastify estampille `statusCode = 500` sur toute
+erreur **levée** par un validateur (`fastify@5.12.1/lib/validation.js`). Un corps malformé serait donc
+sorti en « erreur interne ». Le compilateur rend `{ error }` au lieu de lever, et l'erreur Zod arrive
+intacte au gestionnaire central, qui produit `400 VALIDATION_FAILED` avec les **chemins** fautifs, en
+français, **sans la valeur**. La forme déclarative n'est donc pas un formalisme : c'est elle qui
+produit le bon code de statut.
+
+**Ce que je refuse explicitement : livrer le crochet non branché.** Un garde-fou présent mais inactif
+est la famille de défaut que ce dépôt traque depuis trois jours — il rassure sans protéger. Le crochet
+sera écrit **par le même geste** que la migration des routes L2, pas avant.
+
+Précédence : `CLAUDE.md` §9 (« chaque route déclare son schéma Zod in/out ») et le précédent
+`config.acces` du lot L2 (totalité vérifiée au démarrage).
+
+Décideur : A01, sur escalade d'A31 qui a refusé de deviner la convention (11 §8-2).
+Impact spec : aucun amendement. Une dette datée : la migration des routes d'authentification vers la
+forme déclarative est **bloquante pour la porte du lot L2**.
+
+---
+
+## 2026-08-29 — [L3a] La règle anti-décalage ne voit pas les fichiers `.sql` : que fait-on du trou ?
+
+La règle ESLint qui interdit le décalage couvre neuf formes mesurées, y compris l'option `offset:` de
+l'API relationnelle de Drizzle sous quatre formes de valeur, et le décalage écrit dans un gabarit SQL.
+Zéro faux positif sur `z.string().datetime({ offset: false })` ni sur `outline-offset`, tous deux
+présents dans le dépôt.
+
+**Le trou : ESLint ne parse pas le SQL.** `apps/api/drizzle/*.sql` rend « File ignored because no
+matching configuration was supplied ». Un décalage écrit dans une migration versionnée passerait donc
+sans être vu, alors que le §9 impose la pagination keyset **partout**.
+
+Options :
+
+1. **Laisser le trou** et le documenter. Un angle mort connu vaut mieux qu'un angle mort ignoré, mais
+   celui-ci est atteignable par le chemin le plus naturel — écrire du SQL dans un fichier SQL.
+2. **Contrôle textuel dans `scripts/check-invariants.mjs`**, qui lit déjà le texte de tous les fichiers
+   versionnés.
+
+Arbitrage : **option 2, étage 1** (`CLAUDE.md` §6 ; règle de précédence sans objet — aucune divergence interne du pack) — robustesse évidente, ne touche NI le schéma 04, NI
+l'API, NI la crypto, NI le périmètre fonctionnel. Coût estimé ~0,1 j, dans le plafond de 0,5 j cumulé
+par lot. Une ligne dans `AMELIORATIONS.md`.
+
+Deux exigences, parce que ce contrôle touche un garde-fou **partagé** :
+
+- il refuse le décalage sous ses deux écritures dans les `.sql` versionnés, et **son témoin sain doit
+  être revérifié** — un garde-fou dont le cas « ne doit pas se déclencher » n'est plus valable devient
+  un garde-fou qui ment ;
+- `09 §5.6` : le test appartient à un autre agent que celui qui écrit le contrôle.
+
+**Ce que cela ne fermera PAS, et qui reste écrit** : un nom de méthode calculé, un nom construit par
+concaténation, du SQL assemblé puis passé en brut, une vue ou une fonction stockée, une requête tapée
+dans un outil d'administration, et un `lint` non exécuté — la garantie vient de la CI, jamais du poste.
+
+**Un piège trouvé en chemin, et qui valait à lui seul l'exercice** : les deux blocs « fichiers
+d'outillage » d'`eslint.config.js` éteignaient `no-restricted-syntax` sur **tout** `.js/.mjs/.cjs`. La
+règle aurait donc été **inopérante sur les scripts de `apps/api/scripts/` qui écrivent du SQL** —
+amorçage, migrations, import de la banque de questions. Un bloc final la rétablit pour ces fichiers ;
+**il doit rester le dernier** — le déplacer la désactiverait en silence. C'était précisément un
+garde-fou qui annonçait plus qu'il ne faisait, et il n'a été vu qu'en mesurant.
+
+Décideur : A01, sur escalade d'A31.
+Impact spec : aucun.
+
+---
+
+## 2026-08-29 — [L3a] Le fichier 07 ne décrit pas L3a : d'où vient alors son brief ?
+
+Constat de l'agent, vérifié : la table des lots du fichier 07 ne connaît que **L3** (3 j, quatre
+critères d'acceptation portant sur l'import CSV §35.2, le questionnaire figé, la transition interdite
+et le plan d'entretiens §32.4). **Aucun de ces quatre critères ne porte sur le socle d'API.** Le
+découpage L3a/b/c/d vient de `docs/conception/LOT_L3.md` §1.
+
+Cela contredit-il le `CLAUDE.md` §0 — « le brief d'un lot vient EXCLUSIVEMENT de la table du
+fichier 07 » ?
+
+Options :
+
+1. **Considérer L3a comme hors périmètre** faute de source dans le 07, et refuser l'incrément.
+2. **Traiter la note de conception comme une source de brief à part entière**, au même rang que le 07.
+3. **Distinguer le lot de l'incrément** : le 07 fait foi pour le périmètre et les critères de L3 ;
+   la conception ordonne le travail à l'intérieur, sans pouvoir l'étendre ni le réduire.
+
+Arbitrage : **non, et la règle garde tout son sens.** Le 11 §6 impose le découpage d'un lot en
+incréments commitables ; un incrément n'est pas un lot. Le fichier 07 reste la source **du périmètre et
+des critères d'acceptation de L3** — et c'est contre **ces quatre critères-là** que la porte se jouera,
+pas contre le découpage. La note de conception ordonne le travail à l'intérieur du périmètre ; elle ne
+peut ni l'étendre ni le réduire.
+
+**Conséquence pratique, à ne pas perdre de vue** : L3a n'a **aucun critère d'acceptation propre dans le
+07**. Il ne se juge donc pas seul — il se juge par le fait que L3b-d puissent tenir les quatre
+critères. Un socle qui « marche » mais sur lequel l'import CSV ne peut pas se construire serait un
+socle refusé, même vert.
+
+**Un écart assumé par l'agent, et que je valide** : la conception plaçait le socle dans
+`packages/shared/src/api/`; il a placé la moitié serveur dans `apps/api/src/http/`, au motif que le
+codage/décodage de curseur et la clause SQL n'ont rien à faire dans un paquet chargé par le navigateur.
+Le motif est juste — c'est la même logique qui a sorti la reconnaissance des erreurs de jeton de
+`config.ts` au lot L2. Conséquence heureuse : aucune ligne d'export à ajouter, aucune collision avec
+les autres agents.
+
+**Ce que l'agent n'a délibérément PAS livré, et qui reste dû avant L3b** : les quatre codes d'erreur du
+lot et les quatre routes hors §8/§24.2 (`preview`, `interview-plan`, `/apply`, `org-units/:id/*`), que
+la §5-2 de la conception subordonne à un arbitrage inexistant. Il a eu raison de ne pas les inventer :
+le §3-6 interdit de créer une route non listée sans la documenter. **Ces deux points sont bloquants
+pour L3b et appellent leurs propres entrées.**
+
+Précédence : `CLAUDE.md` §0 (le 07 fait foi pour le périmètre) et 11 §6 (le découpage en incréments).
+Décideur : A01, sur constat d'A31.
+Impact spec : aucun amendement.

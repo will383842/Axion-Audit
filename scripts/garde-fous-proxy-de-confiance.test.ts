@@ -51,13 +51,29 @@
 //      à l'exécution : ni que `trusted_proxies` porte les bonnes plages, ni que
 //      l'en-tête est réellement APPENDU sur une requête réelle. Seul un test de bout
 //      en bout contre un Caddy vivant le prouverait ;
+//   1bis. IL N'EST PAS UN VALIDATEUR DE SYNTAXE, et ce trou lui a coûté un défaut :
+//      son propre luminaire a porté `trusted_proxies static …` dans un bloc, forme
+//      sur laquelle le binaire REFUSE DE DÉMARRER. Un seul cas couvre désormais la
+//      propriété qui l'aurait attrapée (chaque argument est une adresse) ; la
+//      validité du fichier ENTIER demande le vrai binaire, et rien dans la suite
+//      unitaire ne peut la donner — un test unitaire tourne SANS service
+//      (vitest.config.ts) et un `@critique` ne se skippe jamais, donc un cas qui
+//      passerait « si Caddy est absent » serait un garde qui ment. À BRANCHER EN CI,
+//      étape à part, échec FERMÉ si le binaire manque :
+//        docker run --rm -v "$PWD/infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro" \
+//          caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
 //   2. il ne prouve pas que le conteneur DÉPLOYÉ porte cette configuration — image
 //      figée, montage oublié, configuration éditée à la main sur l'hôte ;
 //   3. il ne vérifie pas la valeur des plages de `trustProxy` autrement qu'en
-//      refusant les formes qui font confiance à tout le monde ;
+//      refusant les formes qui font confiance à tout le monde ; il ÉPARGNE de même
+//      les remplaçants `{$VAR}`, que Caddy substitue à la lecture et dont la valeur
+//      n'existe pas ici ;
 //   4. il ne connaît pas les autres maillons : si Traefik cessait d'écraser
 //      `X-Forwarded-For`, la forgerie reviendrait par le haut de la chaîne, et ce
-//      fichier resterait vert.
+//      fichier resterait vert. Consolation mesurée par l'agent d'infrastructure, et
+//      c'est elle qui rend cette dépendance supportable : L'ÉCHEC EST FERMÉ. Si la
+//      plage déclarée ne correspond plus au réseau réel, Caddy cesse de faire
+//      confiance au pair et l'on retombe sur le seau global — jamais sur la forgerie.
 //
 // Traçabilité : invariant 3 (RBAC/plafonds serveur) · invariant 7 (« rien n'est jamais
 // silencieusement écrasé » — un journal d'accès qui enregistre une adresse choisie par
@@ -69,6 +85,7 @@
 //     forme globale ainsi que l'échec sur `trustProxy` ABSENT.
 // =============================================================================
 import { existsSync, readFileSync } from 'node:fs';
+import { isIP } from 'node:net';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -231,9 +248,14 @@ function estDebutDeDirective(jetons: readonly Jeton[], index: number): boolean {
   return precedent === SAUT || precedent === '{' || precedent === '}';
 }
 
-/** Noms des directives de PREMIER niveau du bloc ouvert par le `{` en `depart`. */
-function directivesDuBloc(jetons: readonly Jeton[], depart: number): readonly string[] {
-  const directives: string[] = [];
+interface DirectiveBloc {
+  readonly nom: string;
+  readonly arguments: readonly string[];
+}
+
+/** Directives de PREMIER niveau du bloc ouvert par le `{` en `depart`, ARGUMENTS COMPRIS. */
+function directivesDuBloc(jetons: readonly Jeton[], depart: number): readonly DirectiveBloc[] {
+  const directives: DirectiveBloc[] = [];
   let profondeur = 0;
   for (let i = depart; i < jetons.length; i += 1) {
     const texte = texteDe(jetons, i);
@@ -247,10 +269,55 @@ function directivesDuBloc(jetons: readonly Jeton[], depart: number): readonly st
       continue;
     }
     if (profondeur === 1 && texte !== SAUT && estDebutDeDirective(jetons, i)) {
-      directives.push(texte);
+      const args: string[] = [];
+      for (let k = i + 1; k < jetons.length; k += 1) {
+        const suite = texteDe(jetons, k);
+        if (suite === SAUT || suite === '{') break;
+        args.push(suite);
+      }
+      directives.push({ nom: texte, arguments: args });
     }
   }
   return directives;
+}
+
+const nomsDe = (directives: readonly DirectiveBloc[]): readonly string[] =>
+  directives.map((d) => d.nom);
+
+/**
+ * UNE ADRESSE, ET NON « UN MOT QUE JE CONNAIS ».
+ *
+ * Caddy passe CHAQUE argument de la sous-directive `trusted_proxies` à son analyseur
+ * d'adresses. Vérifier qu'ils sont tous des IP ou des CIDR est une PROPRIÉTÉ
+ * UNIVERSELLE de cette directive — pas une liste de mots interdits, et pas une
+ * réimplémentation de la grammaire de Caddy : une seule directive, un seul type
+ * d'argument, celui que le binaire refuse bruyamment au démarrage.
+ */
+function adresseValide(argument: string): boolean {
+  const barre = argument.indexOf('/');
+  const hote = barre < 0 ? argument : argument.slice(0, barre);
+  const version = isIP(hote);
+  if (version === 0) return false;
+  if (barre < 0) return true;
+  const masque = argument.slice(barre + 1);
+  if (!/^\d{1,3}$/.test(masque)) return false;
+  const bits = Number(masque);
+  return bits >= 0 && bits <= (version === 4 ? 32 : 128);
+}
+
+/**
+ * Les arguments qu'un `trusted_proxies` DE BLOC ne peut pas porter.
+ *
+ * Les remplaçants `{$VAR}` sont écartés : Caddy les substitue à la lecture du
+ * fichier, leur valeur n'existe pas ici, et les refuser rendrait ce garde rouge sur
+ * une configuration correcte. C'est un angle mort assumé, écrit en tête de fichier.
+ */
+function argumentsDeConfianceInvalides(directives: readonly DirectiveBloc[]): readonly string[] {
+  const confiance = directives.filter((d) => d.nom === 'trusted_proxies');
+  if (confiance.length === 0) return [];
+  const args = confiance.flatMap((d) => d.arguments);
+  if (args.length === 0) return ['(aucun argument)'];
+  return args.filter((a) => !a.includes('{$') && !adresseValide(a));
 }
 
 /** Position du `{` qui suit les arguments d'une directive, ou `null` s'il n'y en a pas. */
@@ -270,6 +337,8 @@ interface BlocProxy {
   readonly cibles: readonly string[];
   readonly aUnBloc: boolean;
   readonly directives: readonly string[];
+  /** Arguments de son `trusted_proxies` que le binaire Caddy refuserait au démarrage. */
+  readonly confianceInvalide: readonly string[];
 }
 
 /**
@@ -290,11 +359,13 @@ function blocsReverseProxy(jetons: readonly Jeton[]): readonly BlocProxy[] {
       if (texte === SAUT || texte === '{') break;
       cibles.push(texte);
     }
+    const directives = accolade === null ? [] : directivesDuBloc(jetons, accolade);
     blocs.push({
       ligne: jetons[i]?.ligne ?? 0,
       cibles,
       aUnBloc: accolade !== null,
-      directives: accolade === null ? [] : directivesDuBloc(jetons, accolade),
+      directives: nomsDe(directives),
+      confianceInvalide: argumentsDeConfianceInvalides(directives),
     });
   }
   return blocs;
@@ -320,7 +391,7 @@ function optionGlobaleTrustedProxies(jetons: readonly Jeton[]): boolean {
     if (texteDe(jetons, i) !== 'servers' || !estDebutDeDirective(jetons, i)) continue;
     const accolade = accoladeApres(jetons, i + 1);
     if (accolade === null) continue;
-    if (directivesDuBloc(jetons, accolade).includes('trusted_proxies')) return true;
+    if (nomsDe(directivesDuBloc(jetons, accolade)).includes('trusted_proxies')) return true;
   }
   return false;
 }
@@ -515,6 +586,44 @@ describe('infra/caddy/Caddyfile — la chaîne X-Forwarded-For', () => {
     );
   });
 
+  it('@critique chaque argument de `trusted_proxies` est une ADRESSE que Caddy sait analyser', () => {
+    // CE CAS EXISTE PARCE QUE CE GARDE A LUI-MÊME PORTÉ LE DÉFAUT. Son luminaire
+    // écrivait `trusted_proxies static 10.0.0.0/8 …` dans un bloc `reverse_proxy` —
+    // recopié depuis un arbitrage qui donnait cette syntaxe. Mesuré contre le vrai
+    // binaire (`caddy:2-alpine` v2.11.4) : Caddy REFUSE DE DÉMARRER.
+    //
+    //   Error: … provision http.handlers.reverse_proxy: invalid IP address: 'static':
+    //          ParseAddr("static"): unable to parse IP
+    //
+    // Le mot-clé `static` appartient à l'option GLOBALE `servers { trusted_proxies
+    // static … }`, jamais à la sous-directive. Un garde purement lexical acceptait
+    // donc un fichier sur lequel la production ne démarre pas — et son luminaire
+    // était un modèle à copier qui casse. Un garde dont les exemples valides ne le
+    // sont pas est une variante du défaut qu'il combat.
+    //
+    // CE N'EST PAS UN VALIDATEUR MAISON : une seule directive, un seul type
+    // d'argument, celui que le binaire refuse bruyamment. La grammaire de Caddy reste
+    // la propriété de Caddy — voir la recommandation `caddy validate` en tête.
+    const { blocs } = lireCaddyfile(lireFichier(CHEMIN_CADDYFILE) ?? '');
+    const fautifs = blocs.filter((b) => b.confianceInvalide.length > 0);
+    exiger(
+      fautifs.length === 0,
+      () =>
+        'Des arguments de `trusted_proxies` ne sont pas des adresses :\n' +
+        fautifs
+          .map((b) => `${decrireBloc(b)}\n      → ${b.confianceInvalide.join(', ')}`)
+          .join('\n') +
+        '\n\nCaddy passe CHAQUE argument de cette sous-directive à son analyseur\n' +
+        'd’adresses et REFUSE DE DÉMARRER si l’un échoue (mesuré, v2.11.4) :\n' +
+        '  Error: … invalid IP address: \'static\': ParseAddr("static"): unable to parse IP\n\n' +
+        'Le mot-clé `static` n’existe QUE dans l’option globale `servers { … }`. Dans un\n' +
+        'bloc, la forme correcte est `trusted_proxies 10.0.1.0/24` — une ou plusieurs\n' +
+        'adresses ou CIDR, sans mot-clé.\n\n' +
+        'Ce cas est un COMPLÉMENT, pas un substitut : seul `caddy validate` contre le\n' +
+        'vrai binaire prouve que le fichier démarre. Voir la recommandation en tête.',
+    );
+  });
+
   it('@critique l’option globale `servers { trusted_proxies … }` ne remplace pas la déclaration par bloc', () => {
     // ELLE PRODUIT LE MÊME `X-Forwarded-For` SORTANT — c’est ce qui la rend tentante,
     // et c’est pourquoi ce garde doit la voir. Mesuré le 2026-08-29 et tracé en tête
@@ -650,7 +759,7 @@ ${bloc2}
 }
 `;
 
-const CONFIANCE = '\t\t\ttrusted_proxies static 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16';
+const CONFIANCE = '			trusted_proxies 10.0.1.0/24';
 const ENTETE_SEULE = '\t\t\theader_up X-Real-IP {remote_host}';
 
 describe('le lecteur de Caddyfile mord — sinon ce garde est décoratif', () => {
@@ -709,6 +818,50 @@ ${CONFIANCE}
     const { blocs, fautifs } = lireCaddyfile(source);
     expect(blocs).toHaveLength(1);
     expect(fautifs).toHaveLength(0);
+  });
+
+  it('@critique le mot-clé `static` DANS UN BLOC est vu — Caddy refuserait de démarrer', () => {
+    // La forme exacte que ce fichier portait dans son propre luminaire.
+    const { blocs } = lireCaddyfile(
+      DEUX_BLOCS('\t\t\ttrusted_proxies static 10.0.1.0/24', CONFIANCE),
+    );
+    expect(blocs[0]?.confianceInvalide).toEqual(['static']);
+    expect(blocs[1]?.confianceInvalide).toEqual([]);
+  });
+
+  it('@critique un mot-clé INCONNU est refusé aussi — la règle porte sur la forme, pas sur une liste', () => {
+    // `private_ranges` est le contre-exemple : allonger une liste de mots interdits
+    // n'aurait fait que déplacer le trou jusqu'ici. La propriété est « c'est une
+    // adresse », et elle ne demande à connaître aucun mot-clé.
+    const { blocs } = lireCaddyfile(
+      DEUX_BLOCS('\t\t\ttrusted_proxies private_ranges', '\t\t\ttrusted_proxies 10.0.1.0/33'),
+    );
+    expect(blocs[0]?.confianceInvalide).toEqual(['private_ranges']);
+    expect(blocs[1]?.confianceInvalide).toEqual(['10.0.1.0/33']);
+  });
+
+  it('@critique les formes VALIDES passent : IPv4, CIDR, IPv6, adresse nue, plusieurs plages', () => {
+    const { blocs } = lireCaddyfile(
+      DEUX_BLOCS(
+        '\t\t\ttrusted_proxies 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 127.0.0.1',
+        '\t\t\ttrusted_proxies ::1 fd00::/8',
+      ),
+    );
+    expect(blocs[0]?.confianceInvalide).toEqual([]);
+    expect(blocs[1]?.confianceInvalide).toEqual([]);
+  });
+
+  it('@critique un `trusted_proxies` SANS argument est fautif', () => {
+    const { blocs } = lireCaddyfile(DEUX_BLOCS('\t\t\ttrusted_proxies', CONFIANCE));
+    expect(blocs[0]?.confianceInvalide).toEqual(['(aucun argument)']);
+  });
+
+  it('@critique un remplaçant `{$VAR}` est ÉPARGNÉ — angle mort assumé, pas ignoré', () => {
+    // Caddy substitue ces valeurs à la lecture du fichier : elles n'existent pas ici.
+    // Les refuser rendrait le garde rouge sur une configuration correcte ; les taire
+    // sans le dire en ferait un garde qui rassure. C'est écrit en tête de fichier.
+    const { blocs } = lireCaddyfile(DEUX_BLOCS('\t\t\ttrusted_proxies {$PLAGE_PROXY}', CONFIANCE));
+    expect(blocs[0]?.confianceInvalide).toEqual([]);
   });
 
   it('@critique l’option globale est REPÉRÉE, et ne blanchit aucun bloc', () => {
