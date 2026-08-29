@@ -3626,3 +3626,159 @@ sur un poste) et 09 §5.7 (« la CI reste seule juge »). Règle de précédence
 
 Décideur : A01.
 Impact spec : aucun.
+
+---
+
+## 2026-08-29 — [L2] La fenêtre de grâce de 60 s à la rotation : le code cite un arbitrage qui n'existe pas
+
+**Entrée écrite parce qu'un agent de test a cherché l'arbitrage que le code invoque, et ne l'a pas
+trouvé.** `service.ts` porte « arbitrage A01 du 2026-08-29 » ; il a relu les 3 515 lignes du registre :
+**aucune entrée** sur la fenêtre de grâce, la rotation concurrente ni `TOKEN_REUSE_DETECTED`. La note
+`LOT_L2.md` §2.3 et §6.1 l'exigeait pourtant nommément, « décideur A01, **AVANT la première ligne de
+T2** ».
+
+C'est la faute la plus grave de la nuit, et elle est de gouvernance : **du code de sécurité livré
+s'appuie sur une référence qui ne pointe nulle part.** Le §7 est sans ambiguïté — « une décision non
+tracée dans ce format n'existe pas ». Un lecteur qui irait vérifier trouverait le vide et pourrait en
+conclure, à bon droit, que l'affaiblissement n'a jamais été arbitré.
+
+**Le problème réel.** La rotation d'un jeton de rafraîchissement doit distinguer deux situations qui
+présentent le **même symptôme** — un jeton déjà tourné est présenté :
+· le client légitime a rejoué sa requête (réseau coupé, réponse perdue, deux onglets) ;
+· un attaquant rejoue un jeton volé.
+Traiter les deux comme un vol révoque toute la famille et déconnecte un utilisateur innocent à chaque
+hoquet réseau. Traiter les deux comme un hoquet supprime la détection de réutilisation, qui est la
+seule protection contre le vol d'un jeton de rafraîchissement.
+
+Options :
+
+1. **Aucune fenêtre** : tout rejeu est un vol. Sûr, et inutilisable — le terrain travaille hors ligne
+   et rejoue par construction (invariant 1).
+2. **Fenêtre de grâce longue** (plusieurs minutes) : confortable, mais elle offre à l'attaquant une
+   fenêtre exploitable pendant laquelle un jeton volé passe pour un rejeu.
+3. **Fenêtre courte de 60 s**, bornée par l'horodatage de révocation de la ligne.
+
+Arbitrage : **option 3, et l'affaiblissement est assumé et borné.**
+
+Ce qui décide : un rejeu légitime suit la requête perdue de quelques secondes — c'est un aller-retour
+réseau, pas une session. Soixante secondes couvrent largement le hoquet et un client qui réessaie une
+fois. Au-delà, la présentation d'un jeton tourné n'a plus d'explication innocente plausible, et la
+détection reprend ses droits. **Le comportement est mesuré, pas supposé** : dans la fenêtre →
+`TOKEN_EXPIRED` et **famille intacte** ; hors fenêtre → `TOKEN_REUSE_DETECTED` et **famille révoquée**.
+Deux rotations concurrentes rendent un 200 et un `TOKEN_EXPIRED`, jamais une détection.
+
+**LE COÛT, CHIFFRÉ PAR LE TEST ET NON PLUS ÉNONCÉ** — c'est ce que cette entrée doit à un lecteur
+futur : la révocation de famille déconnecte **tous les appareils** de l'utilisateur, y compris celui
+qui n'a rien fait. Le test monte deux appareils, mesure 2 jetons vivants avant et 0 après. Et il rend
+visible une conséquence que personne n'avait écrite : **le message reçu par l'appareil innocent dépend
+de la seconde à laquelle il réessaie** — grâce avant 60 s, détection après, sur un jeton qu'il n'a
+jamais volé.
+
+**Ce que cet arbitrage n'excuse pas** : il aurait dû être écrit avant la première ligne de T2, comme
+la conception l'exigeait. Il est écrit après, sur signalement d'un agent. La règle a fonctionné ; le
+processus, non.
+
+Précédence : `CLAUDE.md` invariant 1 (offline-first, le rejeu est structurel) contre l'exigence de
+détection de réutilisation du §9. Aucune des deux ne prime dans le pack — la fenêtre bornée est la
+seule lecture qui les honore ensemble. Règle de précédence du pack **sans objet** : il n'y a pas de
+divergence entre sections, mais une tension entre deux exigences que la borne temporelle résout.
+
+Décideur : A01, sur signalement d'A16.
+Impact spec : aucun amendement. Une dette de Phase 2 nommée dans le registre des améliorations :
+`family_id`/`replaced_by_id` permettraient de ne révoquer que la branche compromise au lieu de toute
+la famille.
+
+---
+
+## 2026-08-29 — [L2] « Le §10.2 interdit l'aide à la reconnaissance » : la règle est juste, la citation est FAUSSE
+
+**Je me suis trompé, et je l'ai propagé.** J'ai écrit dans plusieurs briefs, et le code puis la note
+de conception l'ont repris, que « 06 §10.2 interdit toute aide à la reconnaissance » de l'existence
+d'un compte. Un agent a lu la section en entier : c'est une **liste de durcissement OWASP** (Zod,
+requêtes paramétrées, en-têtes, quota, CORS, secrets, téléversements). **Ni §10.1 ni §10.2 ne parlent
+d'oracle ni d'énumération de comptes, et le mot n'apparaît nulle part dans le pack.**
+
+Ce défaut est exactement celui que ce dépôt traque : **une référence qui a l'air faisant autorité et
+qui ne pointe nulle part.** Sa nocivité est particulière — un agent consciencieux qui ira vérifier
+§10.2 n'y trouvera rien, et pourra en conclure que la contrainte n'existe pas et l'affaiblir de bonne
+foi.
+
+Options :
+
+1. **Retirer la règle**, puisqu'elle n'est pas dans le pack.
+2. **La conserver et corriger la citation** en la rattachant à ce qui la fonde réellement.
+
+Arbitrage : **option 2. La règle reste, la citation change.**
+
+La règle est juste indépendamment de sa mauvaise référence : quatre causes de refus — mot de passe
+faux, compte inexistant, compte désactivé avec le bon mot de passe, empreinte illisible — rendent le
+même code **et le même corps à l'octet près**, et le même travail cryptographique. Ce qui la fonde :
+le RGPD (l'existence d'un compte chez un client audité est une donnée personnelle, et un audit est
+par nature confidentiel), l'invariant 3 (RBAC serveur systématique) et le §2 (aucune donnée
+personnelle exposée). Ce n'est pas une exigence inventée ; c'est une exigence **mal citée**.
+
+**Ce que je fais, et ce que je ne fais pas** : la citation fautive est corrigée là où elle a été
+propagée — briefs, commentaires de code, note de conception. Je **n'amende pas le pack** pour y
+ajouter après coup la section que j'avais imaginée : ce serait réécrire la source pour valider ma
+citation, l'inverse de ce qu'un registre append-only protège.
+
+**Et une règle de méthode qui en découle** : citer une section du pack, c'est affirmer qu'elle dit ce
+qu'on lui fait dire. Une citation non vérifiée vaut moins qu'une absence de citation, parce qu'elle
+transfère au lecteur une confiance qu'elle n'a pas gagnée.
+
+Précédence : règle de précédence du pack **sans objet** — il n'y a aucune divergence interne, mais une
+affirmation de ma part sans source.
+
+Décideur : A01, sur constat d'A16.
+Impact spec : aucun amendement du pack. Correction de citation dans le code et la conception.
+
+---
+
+## 2026-08-29 — [L2] `activity_log` : la table est append-only par ABSENCE DE SURFACE, pas par contrainte
+
+L'agent T4 a livré la porte d'écriture unique du journal d'activité et pose la question franchement
+plutôt que de laisser croire à une garantie qu'il n'a pas.
+
+**Ce qui est réellement garanti** : aucune fonction d'écriture autre que l'insertion n'existe dans le
+code, et un balayage structurel refuse tout `UPDATE`, `DELETE` ou `TRUNCATE` où qu'il apparaisse —
+prouvé sur quatre contournements injectés (Drizzle nu, Drizzle par espace de noms, `DELETE` dans un
+`.sql`, `truncate` dans un `.mjs`) : **7 violations, code 1**, chacune nommée avec fichier et ligne.
+
+**Ce qui ne l'est PAS, et c'est le point** : ce n'est pas une table immuable. Un `psql`, un outil
+d'administration, une migration future ou un second service écriraient sans rencontrer aucun obstacle.
+La seule barrière qui les couvrirait est `REVOKE UPDATE, DELETE ON activity_log` sur le rôle
+applicatif — **c'est-à-dire du DDL, donc le fichier 04, donc la signature de Williams** (§3-2).
+
+Options :
+
+1. **S'en tenir à la garantie applicative** et l'écrire honnêtement.
+2. **Ajouter le `REVOKE`** — amendement du fichier 04.
+
+Arbitrage : **option 1 pour l'instant, et l'option 2 est PORTÉE À WILLIAMS**, pas enterrée.
+
+Motif : l'agent a raison de ne pas improviser du DDL, et je ne le ferai pas davantage. Mais la
+distinction doit être écrite là où quelqu'un la lira — **une garantie « par absence de surface » tient
+tant que personne n'ouvre une porte de service**, et c'est précisément ce que l'invariant 7 refuse de
+laisser au hasard. La proposer est un devoir ; l'implémenter sans arbitrage serait une faute (§3-7).
+
+**Décision de lecture ratifiée dans le même geste** : `activity_log.id`. La migration pose
+`DEFAULT gen_random_uuid()` (v4, toléré par le §2 pour les tables purement serveur) tandis que le
+fichier 04 annonce v7 pour l'ordonnancement temporel. L'agent a retenu : **défaut SQL v4 conservé comme
+filet, chemin applicatif produisant du v7** — les deux textes sont satisfaits, le journal se paginera
+en keyset, et les identifiants mesurés en base sont bien v7 et croissants. **Je ratifie**, et je note
+le raisonnement : le défaut SQL n'est pas une seconde source de vérité, c'est un filet qui ne se
+déclenche que si le chemin applicatif est contourné — auquel cas on a un problème plus grave qu'un
+identifiant mal ordonné.
+
+**Et deux angles morts que je consigne plutôt que de les laisser découvrir** : une insertion échouée ne
+lève jamais (sinon une table pleine arrêterait la collecte, et un 500 muet remplacerait le code que la
+PWA sait lire) — donc **un attaquant capable de saturer l'écriture devient invisible à l'audit**, et le
+remède est une supervision, pas une exception. Un nom de personne sans forme distinctive
+(`jeanmartin`) passe les deux ceintures — la vraie protection est qu'aucune variante n'a de champ de
+texte libre, et **la revue croisée doit refuser la première qui en gagnerait un**.
+
+Précédence : invariant 7 (« rien n'est jamais silencieusement écrasé ou supprimé ») et §3-2 (le schéma
+est la signature de Williams). Règle de précédence du pack **sans objet**.
+
+Décideur : A01 pour la ratification et pour le refus d'improviser du DDL. **Williams pour le `REVOKE`.**
+Impact spec : aucun amendement. Une proposition d'amendement du 04 est portée à la porte.
