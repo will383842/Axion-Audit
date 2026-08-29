@@ -236,7 +236,17 @@ export async function rafraichir(
       // `revoked_at` ne dit pas QUI a révoqué. Une déconnexion volontaire et une
       // révocation de famille horodatent la même colonne. Un jeton rejoué dans les
       // 60 s qui suivent un `logout` bénéficie donc lui aussi de la grâce — il reste
-      // REFUSÉ, mais il ne déclenche pas la détection. Distinguer les deux exigerait
+      // REFUSÉ, mais il ne déclenche pas la détection.
+      //
+      // ⚠ ET LA CONTREPARTIE, QUI SURPRENDRA UN JOUR L'EXPLOITATION : au-delà de ces
+      // 60 s, un jeton rejoué APRÈS UNE DÉCONNEXION VOLONTAIRE est traité comme un
+      // vol, et révoque toute la famille. Le cas n'est pas théorique — un
+      // rafraîchissement parti juste avant le `logout` et rejoué après un backoff de
+      // réseau suffit à le produire. L'auditeur voit alors tous ses appareils
+      // déconnectés sans qu'aucun jeton n'ait été volé. C'est le prix de l'absence de
+      // lignée : sans savoir POURQUOI un jeton a été révoqué, on ne peut choisir
+      // qu'entre rater des vols et produire ces faux positifs — et 06 §10.1 tranche
+      // en faveur de la détection. Distinguer les deux exigerait
       // une colonne de lignée (`replaced_by`), c'est-à-dire une modification du
       // fichier 04, donc une escalade. La constante disparaîtra le jour où cette
       // colonne existera : ce n'est pas un réglage, c'est un pansement daté.

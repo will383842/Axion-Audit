@@ -45,44 +45,48 @@ import { connecter, deconnecter, rafraichir, type SessionEmise } from './service
  * QUOTA DES ROUTES D'AUTHENTIFICATION — 10 req/min, clé = `request.ip` (11 §3).
  *
  * ═══════════════════════════════════════════════════════════════════════════════
- * ⚠ CE PLAFOND N'EST PAS, AUJOURD'HUI, UN PLAFOND « PAR IP ».
- *   C'EST UN SEAU UNIQUE ET GLOBAL, PARTAGÉ PAR LA PLANÈTE ENTIÈRE.
- *   Observé maillon par maillon sur staging le 2026-08-29. Ce paragraphe décrit
- *   ce que le code FAIT, pas ce que le contrat DEMANDE — s'il décrivait le second,
- *   ce serait un garde-fou qui annonce plus qu'il ne fait.
+ * ⚠ CE PLAFOND N'EST « PAR IP » QUE PARCE QUE DEUX FICHIERS SE TIENNENT.
+ *   TOUCHER À L'UN SANS L'AUTRE LE RAMÈNE À UN SEAU GLOBAL — OU L'OUVRE À LA
+ *   FORGERIE. Les deux moitiés : `trusted_proxies` dans `infra/caddy/Caddyfile`
+ *   et `trustProxy: ['loopback','linklocal','uniquelocal']` dans `app.ts`.
  * ═══════════════════════════════════════════════════════════════════════════════
- * La chaîne réelle est client → Traefik (Coolify) → notre Caddy → API.
- *   · Traefik ÉCRASE bien `X-Forwarded-For` par l'adresse réelle du client. Correct.
- *   · Notre Caddy, lui, ne l'AJOUTE PAS : il le REMPLACE. Depuis Caddy 2.7,
- *     `reverse_proxy` n'append à `X-Forwarded-For` que si le pair immédiat figure
- *     dans `trusted_proxies` — et `infra/caddy/Caddyfile` n'en déclare AUCUN.
- *   · L'API reçoit donc `X-Forwarded-For: <adresse de Traefik>`, la MÊME pour tous
- *     les clients. `request.ip` est une CONSTANTE — pas une valeur forgeable :
- *     une constante.
+ * L'HISTOIRE, PARCE QU'ELLE EXPLIQUE POURQUOI CE BLOC EST SI INSISTANT — mesurée
+ * maillon par maillon sur staging le 2026-08-29, pas déduite. La chaîne est
+ * client → Traefik (Coolify) → notre Caddy → API. Traefik écrase bien
+ * `X-Forwarded-For` par l'adresse réelle du client. Mais depuis Caddy 2.7,
+ * `reverse_proxy` n'AJOUTE à cet en-tête que si son pair immédiat est un proxy
+ * DÉCLARÉ DE CONFIANCE — sinon il l'ÉCRASE. Le `Caddyfile` n'en déclarait aucun :
+ * l'API recevait `X-Forwarded-For: 10.0.1.6`, l'adresse de Traefik, POUR TOUS LES
+ * CLIENTS DU MONDE. `request.ip` était une CONSTANTE — pas une valeur forgeable,
+ * une constante — et ce plafond était un SEAU UNIQUE ET GLOBAL : dix requêtes
+ * suffisaient à rendre 429 à toute la planète, déni de service à coût nul, sur la
+ * route même que le plafond est censé protéger.
  *
- * DEUX CONSÉQUENCES, TOUTES DEUX MAUVAISES, SUR CETTE ROUTE PRÉCISE — qui est
- * exactement la cible d'un bourrage d'identifiants :
- *   1. l'attaquant partage son seau avec les auditeurs légitimes ;
- *   2. surtout, LE PREMIER ATTAQUANT VENU VERROUILLE L'AUTHENTIFICATION DE TOUT LE
- *      MONDE — dix requêtes suffisent à rendre 429 à tous les autres. Déni de
- *      service à coût nul, et c'est le risque dominant tant que le point ci-dessous
- *      n'est pas corrigé.
+ * `trusted_proxies` est désormais déclaré (commit `66a800a`), et `request.ip` est
+ * de nouveau l'adresse du client. LA GARANTIE TIENT DONC AUJOURD'HUI — et elle
+ * tient par un COUPLAGE, ce qui est précisément ce qu'on oublie : remettre
+ * `trustProxy: true` côté API tout en gardant `trusted_proxies` côté Caddy
+ * rouvrirait la forgerie (le client choisirait sa propre clé de quota) ; retirer
+ * `trusted_proxies` en gardant le périmètre restreint ramènerait le seau global.
+ * Chacun des deux fichiers porte l'avertissement vers l'autre.
  *
- * ── OÙ EST LE CORRECTIF, ET POURQUOI PAS ICI ─────────────────────────────────
- * Dans le `Caddyfile` (`trusted_proxies`), arbitré et tracé hors de ce lot. AUCUNE
- * compensation n'est inventée dans cette route : pas de clé de repli maison, pas de
- * verrouillage par compte improvisé, rien qui prétende protéger ce que la chaîne ne
- * permet pas encore de protéger. Deux mécanismes approximatifs valent moins qu'un
- * mécanisme et une mesure — et un plafond qu'on croit par IP alors qu'il est global
- * est plus dangereux qu'un plafond dont on sait ce qu'il vaut.
+ * AUCUNE COMPENSATION N'EST INVENTÉE ICI — ni clé de repli maison, ni verrouillage
+ * par compte improvisé. Un plafond dont on sait exactement ce qu'il vaut, plus une
+ * mesure, valent mieux que deux mécanismes approximatifs.
  *
- * ── POURQUOI LA CLÉ RESTE `request.ip` MALGRÉ TOUT ───────────────────────────
- * Parce que c'est ce que le contrat demande, et parce que la ligne redeviendra juste
- * le jour où `trusted_proxies` sera déclaré — sans qu'on ait à y revenir. Le
- * `keyGenerator` global (`identite?.utilisateurId ?? ip`, app.ts) est explicitement
- * REMPLACÉ : sur `logout`, qui est authentifiée, il aurait basculé sur l'identifiant
- * de compte, et un plafond anti-bourrage indexé sur l'identité de qui n'en a pas
- * encore prouvé n'a aucun sens.
+ * ── POURQUOI LA CLÉ EST `request.ip` ET NON LE SUJET DU JETON ────────────────
+ * Le `keyGenerator` global (`identite?.utilisateurId ?? ip`, app.ts) est
+ * explicitement REMPLACÉ : ce plafond existe contre le bourrage d'identifiants,
+ * c'est-à-dire contre un appelant qui n'a précisément pas encore prouvé d'identité.
+ * Sur `logout`, qui est authentifiée, la clé globale aurait basculé sur
+ * l'identifiant de compte — un plafond anti-bourrage indexé sur l'identité de qui
+ * n'en a pas encore prouvé n'a aucun sens.
+ *
+ * ── CE QU'IL COÛTE, ET QUI SE VERRA UN LUNDI MATIN ───────────────────────────
+ * Le plafond est PAR IP, donc PAR SORTIE NAT. Une équipe d'audit entière derrière
+ * l'adresse d'un client partage dix connexions par minute. Le contrat le veut ainsi
+ * (11 §3 ; la bascule « par jeton » de la note L2 §3.2 ne concerne QUE le quota
+ * global) — l'exploitation doit le savoir plutôt que le découvrir en clientèle.
  *
  * ── COMMENT VÉRIFIER LA CLÉ, PUISQUE LE JOURNAL NE LA DIT PAS ────────────────
  * `request.ip` est EXPURGÉ des journaux par la politique RGPD (`remoteAddress` sort

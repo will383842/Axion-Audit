@@ -27,13 +27,19 @@
 //      c'est-à-dire l'absence de journal, au moment précis où l'on en a besoin.
 //
 //   3. LES CHAMPS OÙ UNE IDENTITÉ ARRIVE PAR ACCIDENT SONT NETTOYÉS, PAS MASQUÉS.
-//      Une URL, un `err.message`, un `msg` : la donnée personnelle y entre par un
-//      chemin que la liste de champs ne voit pas (`/v1/users?email=…`, « échec pour
-//      jean.dupont@client.fr »). Les masquer en bloc coûterait la route fautive et la
-//      cause de l'erreur — le cœur du diagnostic. On les CONSERVE en retirant
-//      chirurgicalement e-mails, jetons porteurs, numéros de téléphone et valeurs de
-//      paramètres de requête sensibles. Ce nettoyage s'applique à TOUTE chaîne, à
-//      toute profondeur : c'est le filet sous la liste de champs.
+//      Une URL, un `err.message`, un `err.detail`, un `msg` : la donnée personnelle y
+//      entre par un chemin que la liste de champs ne voit pas (`/v1/users?email=…`,
+//      « échec pour jean.dupont@client.fr »). Les masquer en bloc coûterait la route
+//      fautive et la cause de l'erreur — le cœur du diagnostic. On les CONSERVE en
+//      retirant chirurgicalement e-mails, jetons porteurs, numéros de téléphone,
+//      valeurs de paramètres de requête sensibles, ET LE CONTENU DES CONTENANTS À
+//      GABARIT RIGIDE (§6 : `Key (…)=(…)`, `Failing row contains (…)`, valeur refusée
+//      à la conversion, extrait de JSON invalide). Ce nettoyage s'applique à TOUTE
+//      chaîne, à toute profondeur : c'est le filet sous la liste de champs.
+//
+//      La distinction qui porte tout le §6 : on ne reconnaît JAMAIS la donnée, on
+//      reconnaît le bocal. Un nom de personne n'a aucune forme ; le gabarit dans
+//      lequel PostgreSQL le recopie, si.
 //
 // -----------------------------------------------------------------------------
 // POURQUOI UN PARCOURS RÉCURSIF ET NON UNE LISTE DE CHEMINS `*.*.champ`
@@ -69,11 +75,18 @@
 // CE QUE CETTE POLITIQUE NE COUVRE PAS — dit ici pour qu'on ne le redécouvre pas
 // -----------------------------------------------------------------------------
 //   · Un NOM DE PERSONNE en texte libre (« échec pour Jean Dupont ») dans un `msg` ou
-//     un champ non listé. Aucune expression régulière ne détecte un nom propre ; 06
-//     §10.4 confie cela à une passe NER, qui n'a pas sa place dans un logger. C'est
-//     précisément pourquoi les champs de texte libre du modèle sont MASQUÉS et non
-//     nettoyés — et pourquoi « pas de donnée métier dans un `msg` » reste une règle de
-//     revue croisée, pas une garantie technique.
+//     un champ non listé, HORS d'un contenant du §6. Aucune expression régulière ne
+//     détecte un nom propre ; 06 §10.4 confie cela à une passe NER, qui n'a pas sa
+//     place dans un logger. C'est précisément pourquoi les champs de texte libre du
+//     modèle sont MASQUÉS et non nettoyés — et pourquoi « pas de donnée métier dans un
+//     `msg` » reste une règle de revue croisée, pas une garantie technique. Le §6
+//     rattrape le nom que la BASE recopie dans un gabarit connu ; il ne rattrape pas
+//     celui qu'un développeur interpole lui-même dans une phrase.
+//   · Un contenant à gabarit qu'on n'a pas relevé. Le §6 couvre ce qui a été MESURÉ
+//     contre PG 16 et V8 ; un greffon tiers, un autre SGBD ou une future version de
+//     Node peuvent en introduire d'autres. La parade est de mesurer à nouveau, pas
+//     d'élargir les motifs « au cas où » — un motif trop large masque le diagnostic
+//     et fait croire à une couverture qu'on n'a pas éprouvée.
 //   · Une clé RACINE inconnue de la liste : pino appelle le censor du joker clé par
 //     clé sans transmettre son nom (voir plus haut). Une donnée personnelle rangée
 //     sous une clé racine que le fichier 04 ne nomme pas sortirait en clair si elle
@@ -384,6 +397,10 @@ export const CHAMPS_NETTOYES_JOURNAL: readonly string[] = [
   'reason',
   'title',
   'details',
+  // `detail` (singulier) est le champ où le driver `pg` range le DETAIL de PostgreSQL
+  // — donc `Key (…)=(…)` et `Failing row contains (…)`. Mesuré : c'est LÀ que vivait
+  // la fuite de `person_name`, et non dans `err.message` comme on pouvait le croire.
+  'detail',
 ];
 
 /** Tous les noms de champs masqués, forme canonique du fichier 04 (snake_case). */
@@ -438,6 +455,38 @@ const RX_EMAIL = /[A-Za-z0-9._%+'-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 const RX_PORTEUR = /\b(Bearer|Basic|Digest|Token)\s+[A-Za-z0-9._~+/=-]{8,}/gi;
 
 /**
+ * JETON JWT **NU**, sans préfixe et sans champ porteur.
+ *
+ * `RX_PORTEUR` ci-dessus ne voit le jeton que s'il est annoncé (`Bearer eyJ…`), et la
+ * liste de champs ne le voit que s'il est rangé sous `authorization`/`token`. Or les
+ * bibliothèques de jetons le recopient NU au milieu d'une phrase — `jwt malformed:
+ * eyJ…`, `signature invalid for eyJ…`. Mesuré : il sortait alors en clair, dans le
+ * message ET dans la pile. Le mot « token » voisin dans un échantillon donnait
+ * l'illusion inverse — c'est lui, et non le jeton, qui déclenchait l'assainisseur.
+ *
+ * POURQUOI CE MOTIF EST LÉGITIME LÀ OÙ « DÉTECTER UN NOM » NE LE SERAIT PAS : un JWT a
+ * une forme RIGIDE et vérifiable — des segments base64url séparés par des points, dont
+ * le premier commence par `eyJ` parce qu'un en-tête JWT encode toujours `{"`. On ne
+ * devine rien, on reconnaît une structure. C'est l'exact inverse d'un nom de personne,
+ * qui n'a aucune forme et dont la « détection » ne serait qu'une promesse (voir §6).
+ *
+ * On masque le JETON, pas la PHRASE : « jwt malformed » et « signature invalid » sont
+ * le diagnostic et survivent — même équilibre que `Key (colonne)=(valeur)` au §6.
+ * Le champ `authorization` et les noms de champs porteurs restent masqués EN BLOC par
+ * le §3 : ce motif n'est pas leur remplaçant, il est le filet sous eux.
+ *
+ * CE QUE CE MOTIF NE VOIT PAS, et qu'aucune forme ne trahit :
+ *   · un jeton OPAQUE (chaîne aléatoire sans structure) — jeton de rafraîchissement,
+ *     clé d'API maison, identifiant de session. Rien ne le distingue d'un identifiant
+ *     métier. Il reste couvert par le NOM DE CHAMP (§3) et par lui seul.
+ *   · un jeton TRONQUÉ avant son deuxième point (« eyJhbGciOiJIUzI1NiJ9… ») : le
+ *     fragment restant ne prouve plus rien, mais il ne suffit pas non plus à rejouer.
+ *   · un secret sans forme (mot de passe, phrase de passe) recopié dans un texte libre.
+ *     Comme le nom de personne : hors de portée d'un motif, par nature.
+ */
+const RX_JETON_JWT = /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}(?:\.[A-Za-z0-9_-]*){0,3}/g;
+
+/**
  * Paramètres de requête dont la VALEUR est personnelle.
  * `code` n'y figure pas volontairement : `?code=CAD-01` est un code de bloc ou de
  * question (04), pas un secret — le masquer coûterait le diagnostic d'un import.
@@ -448,6 +497,99 @@ const RX_PARAM_SENSIBLE =
 /** Numéro de téléphone français, sous ses formes usuelles. */
 const RX_TELEPHONE = /(?:(?:\+|00)33[\s.-]?|\b0)[1-9](?:[\s.-]?\d{2}){4}\b/g;
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// 6. CONTENANTS À VALEUR — on ne reconnaît pas la donnée, on reconnaît le BOCAL
+//
+// Les motifs ci-dessus reposent tous sur une donnée AUTO-DESCRIPTIVE : une adresse a
+// une arobase, un jeton porteur a son préfixe, un numéro français a sa forme. Un NOM
+// DE PERSONNE n'a rien de tel — et il ne faut SURTOUT PAS essayer de « détecter ce qui
+// ressemble à un nom » : ce garde-fou-là annoncerait bien plus qu'il ne tiendrait.
+//
+// Ce qui est reconnaissable n'est pas la valeur, c'est le CONTENANT. PostgreSQL et V8
+// produisent des gabarits rigides et documentés dans lesquels une valeur utilisateur
+// ARBITRAIRE est recopiée. On masque la case « valeur » de ces gabarits sans jamais
+// regarder de quelle colonne il s'agit — donc en couvrant `person_name` exactement
+// comme `answers.value` ou une colonne que le fichier 04 ne connaît pas encore.
+//
+// LE PRINCIPE, EN UNE LIGNE : le nom de colonne, le nom de contrainte, le nom de type
+// et le SQLSTATE sont du DIAGNOSTIC et doivent SURVIVRE ; ce qui est entre parenthèses
+// ou entre guillemets après eux est de la DONNÉE et doit disparaître. C'est ce qui
+// rend un incident encore lisible (06 §10.2) sans divulguer de personne (06 §10.4).
+//
+// OÙ LA VALEUR VIT RÉELLEMENT — mesuré contre PostgreSQL 16 + driver `pg` 8.23, pas
+// supposé : le driver NE concatène PAS le DETAIL dans `err.message`. Il l'expose dans
+// un champ `err.detail` distinct, que pino sérialise tel quel. `err.message` ne porte
+// que la constante (« duplicate key value violates unique constraint "…" »). La fuite
+// vivait donc dans `err.detail` — d'où le nettoyage appliqué à TOUTE chaîne, à toute
+// profondeur, plutôt qu'à une liste de champs qu'on aurait encore fallu deviner.
+// Contre-exemple conservé : `err.message` PORTE la valeur pour le SQLSTATE 22P02
+// (« invalid input syntax for type uuid: "…" »). Les deux champs devaient être traités.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * PostgreSQL — violation d'unicité (23505), d'exclusion (23P01) et de clé étrangère
+ * (23503). Formes RELEVÉES sur PG 16, pas citées de mémoire :
+ *   `Key (email)=(jean@client.fr) already exists.`
+ *   `Key (mission_id, person_name)=(10, Jean Dupont) already exists.`
+ *   `Key (user_id)=(999) is not present in table "users".`
+ *   `Key (id)=(1) is still referenced from table "interviews".`
+ * Le groupe capturé — la liste des COLONNES — est réinjecté : c'est lui qui dit quelle
+ * contrainte a sauté, et il ne contient que des identifiants SQL, jamais de donnée.
+ * La partie valeur est prise GLOUTONNEMENT jusqu'au dernier `)` de la LIGNE : une
+ * valeur peut elle-même contenir des parenthèses (« Acme (SARL) ») et s'arrêter à la
+ * première fermante laisserait fuiter la fin. Le bornage à la ligne (`[^\n]`) est ce
+ * qui empêche cette gourmandise d'avaler la pile d'appels qui suit.
+ */
+const RX_PG_CLE = /\bKey \(([^()\n]*)\)=\([^\n]*\)/g;
+
+/**
+ * PostgreSQL — violation de CHECK (23514) et de NOT NULL (23502). C'est le contenant
+ * le plus dangereux du lot : il ne recopie pas une colonne, il déverse la LIGNE
+ * ENTIÈRE, colonnes non fautives comprises.
+ *   `Failing row contains (4, 12, Sophie Bernard, STAGIAIRE, null).`
+ * Rien n'y est réinjecté : contrairement à `Key (…)=(…)`, ce gabarit ne nomme aucune
+ * colonne, donc il ne contient AUCUN diagnostic à préserver. Le nom de la contrainte
+ * et le SQLSTATE, eux, vivent dans d'autres champs et ne sont pas touchés.
+ */
+const RX_PG_LIGNE_FAUTIVE = /\bFailing row contains \([^\n]*\)/g;
+
+/**
+ * PostgreSQL — valeur refusée à la conversion (22P02 et voisins) :
+ *   `invalid input syntax for type uuid: "Paul Martin"`
+ *   `invalid input value for enum role_personne: "Paul Martin"`
+ * Celui-ci vit dans `err.message`, pas dans `err.detail` — d'où sa présence ici alors
+ * que les deux précédents auraient pu laisser croire que seul `detail` était en cause.
+ * Le NOM DU TYPE est conservé : « ce n'est pas un uuid » est le diagnostic entier.
+ */
+const RX_PG_SYNTAXE_TYPE =
+  /\b(invalid input (?:syntax for type|value for enum) [^:\n"]*): "[^\n]*"/g;
+
+/**
+ * V8 / `JSON.parse` — le moteur recopie un extrait de l'entrée refusée :
+ *   `Unexpected token 'p', "person_nam"... is not valid JSON`
+ * Atteignable ici : l'import de banque (L4) recopie `cause.message` dans le libellé de
+ * son défaut (`banque-questions.ts`, cellules `options` et `scoring`). L'extrait est
+ * tronqué par V8, jamais assaini : dix caractères de corps de requête suffisent à
+ * porter un début de nom.
+ */
+const RX_JSON_INVALIDE = /"[^\n]*"(\.\.\.)? is not valid JSON/g;
+
+/**
+ * PRÉFILTRE — un seul balayage pour écarter le cas courant.
+ *
+ * Mesuré, et c'est la raison d'être de cette ligne : garder chaque motif par son propre
+ * `includes` coûtait +41 % sur une chaîne qui n'en contient AUCUN — c'est-à-dire sur
+ * l'écrasante majorité du trafic, piles d'appels comprises. Cette alternance de
+ * littéraux purs est compilée par V8 en un automate à préfiltre : elle tranche en une
+ * passe, et les gardes fines ne sont payées que par les chaînes qui ont mordu.
+ *
+ * Les CINQ motifs ajoutés (quatre contenants du §6 + le jeton JWT nu) partagent ce
+ * préfiltre unique : deux préfiltres séparés coûtaient deux balayages là où un seul
+ * suffit. Toute nouvelle alternative ajoutée ici doit rester un LITTÉRAL — une
+ * alternative à quantificateur ferait perdre l'automate, donc tout le bénéfice.
+ */
+const RX_INDICE_MOTIF = /\)=\(|row contains \(|invalid input |valid JSON|eyJ/;
+
 /**
  * Retire les identités d'une chaîne QUE L'ON CONSERVE.
  * C'est le filet sous la liste de champs : il s'applique à toute chaîne journalisée,
@@ -455,10 +597,46 @@ const RX_TELEPHONE = /(?:(?:\+|00)33[\s.-]?|\b0)[1-9](?:[\s.-]?\d{2}){4}\b/g;
  * Il ne prétend pas détecter les NOMS DE PERSONNES en texte libre — aucune expression
  * régulière ne le fait (06 §10.4 confie cela à une passe NER, hors d'un journal).
  * C'est la raison pour laquelle les champs de texte libre du modèle, eux, sont MASQUÉS.
+ * Il vide en revanche les CONTENANTS à gabarit rigide (§6) dans lesquels une base ou un
+ * moteur JSON recopie une valeur utilisateur arbitraire — un nom y compris.
+ *
+ * Chaque motif est gardé par un test très sélectif. Ce n'est pas de la superstition
+ * d'optimisation : cette fonction s'exécute sur CHAQUE chaîne journalisée, piles
+ * d'appels comprises, et une pile est longue. Le cas courant — une chaîne qui ne
+ * contient aucun de ces gabarits — ne paie qu'un balayage, jamais les substitutions.
+ * L'ordre des gardes est mesuré, pas supposé : voir `RX_INDICE_CONTENANT`.
  */
 export function nettoyerTexteJournal(texte: string): string {
   if (texte.length === 0) return texte;
   let resultat = texte;
+  // Les contenants d'abord : ils englobent la valeur, donc les vider dispense les
+  // motifs suivants de retravailler ce qui vient déjà d'être remplacé. Le préfiltre
+  // écarte en une passe les chaînes qui n'en contiennent aucun — le cas courant.
+  if (RX_INDICE_MOTIF.test(resultat)) {
+    if (resultat.includes(')=(')) {
+      resultat = resultat.replace(RX_PG_CLE, `Key ($1)=(${CENSEUR_TEXTE_JOURNAL})`);
+    }
+    if (resultat.includes('row contains (')) {
+      resultat = resultat.replace(
+        RX_PG_LIGNE_FAUTIVE,
+        `Failing row contains (${CENSEUR_TEXTE_JOURNAL})`,
+      );
+    }
+    if (resultat.includes('invalid input ')) {
+      resultat = resultat.replace(RX_PG_SYNTAXE_TYPE, `$1: "${CENSEUR_TEXTE_JOURNAL}"`);
+    }
+    if (resultat.includes('valid JSON')) {
+      resultat = resultat.replace(
+        RX_JSON_INVALIDE,
+        `"${CENSEUR_TEXTE_JOURNAL}"$1 is not valid JSON`,
+      );
+    }
+    // Le jeton nu partage le préfiltre. Le masquer AVANT `RX_PORTEUR` ne change rien
+    // aux cas déjà couverts — `Bearer eyJ…` devient `Bearer [masqué]` par l'un ou par
+    // l'autre — et c'est vérifié : zéro écart sur les entrées que la version
+    // précédente traitait déjà.
+    if (resultat.includes('eyJ')) resultat = resultat.replace(RX_JETON_JWT, CENSEUR_TEXTE_JOURNAL);
+  }
   if (resultat.includes('@')) resultat = resultat.replace(RX_EMAIL, CENSEUR_TEXTE_JOURNAL);
   if (resultat.includes(' '))
     resultat = resultat.replace(RX_PORTEUR, `$1 ${CENSEUR_TEXTE_JOURNAL}`);
