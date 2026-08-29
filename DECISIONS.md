@@ -2977,3 +2977,68 @@ configuration change, la garantie change — vers le meilleur ou vers le pire se
 
 Décideur : A01, sur mesure d'A57 qui a contredit ma déduction.
 Impact spec : aucun amendement. Le §9 est rendu applicable, pas modifié.
+
+---
+
+## 2026-08-29 — [L2] `trusted_proxies` : quelle FORME, et sur combien de blocs ? (complète et corrige l'entrée « seau GLOBAL » du même jour)
+
+**Entrée écrite à la demande d'un agent qui a refusé d'appliquer une règle non tracée.** Son garde
+`@critique` refuse une forme de configuration que mon arbitrage précédent ne mentionnait nulle part.
+Il avait raison de me le signaler plutôt que de la faire respecter en silence : le 11 §9bis est
+explicite, **une décision non tracée dans ce format n'existe pas**, et un test qui impose une règle
+absente du registre est un test qu'un futur lecteur désactivera à bon droit.
+
+**DEUX CORRECTIONS À MON ENTRÉE PRÉCÉDENTE.**
+
+**1. « Dans LE bloc `reverse_proxy` » était faux — il y en a DEUX.** Le `Caddyfile` porte
+`reverse_proxy axion-api:{$API_PORT}` et `reverse_proxy staging-api:{$API_PORT}`. Le garde les a pris
+tous les deux à sa première exécution, alors qu'il découvrait les blocs par tokenisation au lieu de
+les coder en dur. Un correctif posé sur un seul aurait laissé l'autre dériver — et la production est
+justement celui que je n'avais pas nommé. La directive est posée sur les deux (lignes 253 et 301).
+
+**2. Le cas « `trustProxy` ABSENT » n'était pas couvert, et il est aussi grave que `true`.** Mon brief
+demandait de refuser `trustProxy: true` et `trustProxy: <nombre>`. Le garde reste vert si la clé
+**disparaît** — or le défaut de Fastify (`false`) prend `request.ip` sur la socket, donc l'adresse du
+conteneur Caddy : **exactement le même seau global**. L'absence est donc devenue un échec, de même que
+`0.0.0.0/0` et `::/0`, qui sont `true` habillé en CIDR.
+
+**LA FORME GLOBALE `servers { trusted_proxies static … }` EST REFUSÉE, ET VOICI LA MESURE.**
+
+Elle produit le **même `X-Forwarded-For` sortant** que la forme par bloc — donc `request.ip` serait
+correct, et on pourrait la croire équivalente. Elle ne l'est pas : elle fait passer `client_ip` du
+**journal d'accès de Caddy** à l'entrée la plus à gauche de l'en-tête, c'est-à-dire **une valeur
+choisie par le client** (`client_ip: 9.9.9.9` mesuré). Conséquence à énoncer clairement :
+**l'exploitant qui enquêterait sur un incident enquêterait sur l'adresse écrite par l'attaquant.**
+
+Le quota serait juste et la trace mensongère. C'est un défaut plus insidieux que celui qu'on corrige,
+parce qu'il ne se voit pas depuis l'application : seule la forme par bloc donne à la fois la bonne clé
+de quota ET un journal d'accès véridique.
+
+Options :
+
+1. Accepter les deux formes comme équivalentes — ce que faisait la version aveugle du garde.
+2. **N'accepter que la forme par bloc, sur chacun des blocs visant l'API.**
+
+Arbitrage : **option 2.** La forme globale est refusée par un cas `@critique`, avec la mesure de
+`client_ip` inscrite dans le message d'échec — pour que le prochain lecteur comprenne _pourquoi_ avant
+de songer à désactiver le test.
+
+Précédence : `CLAUDE.md` §9 (« 10 req/min/IP ») pour la clé de quota, et l'invariant 7 (« toute
+correction de donnée = révision tracée ; rien n'est jamais silencieusement écrasé ») pour l'exigence
+d'un journal véridique — un journal d'accès qui enregistre une adresse choisie par l'attaquant est une
+trace silencieusement faussée.
+
+**Ce que ce garde NE PROUVE PAS, et qui doit être écrit plutôt que supposé** — il lit du texte de
+configuration, rien d'autre :
+· il ne prouve pas le comportement de Caddy à l'exécution, ni que `10.0.1.0/24` est la bonne plage,
+ni que l'en-tête est réellement _appendu_ sur une requête réelle ;
+· il ne prouve pas que le conteneur **déployé** porte cette configuration — image figée, montage
+oublié, édition à la main sur l'hôte ;
+· il ne valide pas le contenu des plages de `trustProxy` au-delà du refus des formes « tout le monde » ;
+· il ignore les autres maillons : **si Traefik cessait d'écraser `X-Forwarded-For`, la forgerie
+reviendrait par le haut et ce fichier resterait vert.**
+Seul un test de bout en bout contre un Caddy vivant fermerait le premier point. Ces limites sont
+écrites en tête du fichier de test, pas seulement ici.
+
+Décideur : A01, sur constat d'A18 (garde) et mesure d'A57 (`client_ip`).
+Impact spec : aucun amendement. Le §9 est rendu applicable, pas modifié.

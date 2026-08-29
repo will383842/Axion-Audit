@@ -295,12 +295,21 @@ function blocsReverseProxy(jetons: readonly Jeton[]): readonly BlocProxy[] {
 }
 
 /**
- * `trusted_proxies` peut aussi être posé UNE FOIS pour tous les serveurs, dans les
- * options globales (`{ servers { trusted_proxies … } }`). Cette forme couvre chaque
- * `reverse_proxy` du fichier ; la refuser rendrait ce garde rouge sur une
- * configuration CORRECTE, et un garde rouge à tort finit désactivé.
+ * L'AUTRE ÉCRITURE POSSIBLE — DÉTECTÉE POUR ÊTRE REFUSÉE, ET NON POUR SATISFAIRE.
+ *
+ * `trusted_proxies` peut aussi être posé une fois pour tous les serveurs, dans les
+ * options globales (`{ servers { trusted_proxies static … } }`). Cette forme produit
+ * bien le MÊME `X-Forwarded-For` sortant — et c'est le piège. Mesuré le 2026-08-29
+ * et tracé en tête du `Caddyfile` : elle change EN PLUS le champ `client_ip` du
+ * journal d'accès, qui devient l'entrée LA PLUS À GAUCHE de l'en-tête, donc une
+ * valeur CHOISIE PAR LE CLIENT (`client_ip: 9.9.9.9`). L'exploitant qui lirait le
+ * journal pour identifier un attaquant lirait ce que l'attaquant a écrit.
+ *
+ * Un journal peu informatif vaut mieux qu'un journal qui ment. La portée étroite du
+ * handler est donc la seule écriture retenue, et migrer vers l'option globale est une
+ * régression que ce garde doit voir — pas une équivalence qu'il doit tolérer.
  */
-function confianceGlobale(jetons: readonly Jeton[]): boolean {
+function optionGlobaleTrustedProxies(jetons: readonly Jeton[]): boolean {
   for (let i = 0; i < jetons.length; i += 1) {
     if (texteDe(jetons, i) !== 'servers' || !estDebutDeDirective(jetons, i)) continue;
     const accolade = accoladeApres(jetons, i + 1);
@@ -312,18 +321,17 @@ function confianceGlobale(jetons: readonly Jeton[]): boolean {
 
 interface LectureCaddy {
   readonly blocs: readonly BlocProxy[];
-  readonly globale: boolean;
+  readonly optionGlobale: boolean;
   readonly fautifs: readonly BlocProxy[];
 }
 
 function lireCaddyfile(source: string): LectureCaddy {
   const jetons = decouper(source);
   const blocs = blocsReverseProxy(jetons);
-  const globale = confianceGlobale(jetons);
   return {
     blocs,
-    globale,
-    fautifs: globale ? [] : blocs.filter((b) => !b.directives.includes('trusted_proxies')),
+    optionGlobale: optionGlobaleTrustedProxies(jetons),
+    fautifs: blocs.filter((b) => !b.directives.includes('trusted_proxies')),
   };
 }
 
@@ -482,7 +490,7 @@ describe('infra/caddy/Caddyfile — la chaîne X-Forwarded-For', () => {
 
   it('@critique chaque bloc `reverse_proxy` déclare `trusted_proxies`', () => {
     const source = lireFichier(CHEMIN_CADDYFILE) ?? '';
-    const { blocs, fautifs, globale } = lireCaddyfile(source);
+    const { blocs, fautifs } = lireCaddyfile(source);
     exiger(blocs.length > 0, () => `Aucun \`reverse_proxy\` lu dans \`${CHEMIN_CADDYFILE}\`.`);
     exiger(
       fautifs.length === 0,
@@ -492,13 +500,35 @@ describe('infra/caddy/Caddyfile — la chaîne X-Forwarded-For', () => {
         `${fautifs.map(decrireBloc).join('\n')}\n\n` +
         `${LA_CHAINE}\n\n` +
         'CORRECTIF ARBITRÉ (DECISIONS.md, 2026-08-29) : déclarer `trusted_proxies` dans\n' +
-        'CHAQUE bloc `reverse_proxy` du Caddyfile — ou une fois pour toutes dans les\n' +
-        'options globales (`{ servers { trusted_proxies … } }`), que ce garde accepte\n' +
-        `aussi (couverture globale détectée ici : ${globale ? 'oui' : 'non'}).\n\n` +
+        'CHAQUE bloc `reverse_proxy` du Caddyfile — la portée étroite du handler, et non\n' +
+        'l’option globale (voir le cas suivant, qui dit pourquoi).\n\n' +
         'Le Caddyfile en porte PLUSIEURS. Corriger celui qu’on a sous les yeux et\n' +
         'oublier l’autre laisse la pré-production — ou la production — dériver seule,\n' +
         'avec le même déni de service et aucun signal.\n\n' +
         LES_DEUX_ENSEMBLE,
+    );
+  });
+
+  it('@critique l’option globale `servers { trusted_proxies … }` ne remplace pas la déclaration par bloc', () => {
+    // ELLE PRODUIT LE MÊME `X-Forwarded-For` SORTANT — c’est ce qui la rend tentante,
+    // et c’est pourquoi ce garde doit la voir. Mesuré le 2026-08-29 et tracé en tête
+    // du Caddyfile : elle change EN PLUS le champ `client_ip` du journal d’accès, qui
+    // devient l’entrée la plus à gauche de l’en-tête — donc une valeur CHOISIE PAR LE
+    // CLIENT. L’exploitant qui lirait le journal pour identifier un attaquant lirait
+    // ce que l’attaquant a écrit.
+    const { optionGlobale } = lireCaddyfile(lireFichier(CHEMIN_CADDYFILE) ?? '');
+    exiger(
+      !optionGlobale,
+      () =>
+        '`trusted_proxies` est déclaré dans les options globales `servers { … }`.\n\n' +
+        'La garantie sur `request.ip` serait tenue — mais le JOURNAL D’ACCÈS mentirait :\n' +
+        'mesuré le 2026-08-29, cette forme fait passer `client_ip` à l’entrée la plus à\n' +
+        'gauche de `X-Forwarded-For`, c’est-à-dire à une valeur que le client choisit\n' +
+        '(`client_ip: 9.9.9.9`). On enquêterait sur l’adresse écrite par l’attaquant.\n\n' +
+        'Un journal peu informatif vaut mieux qu’un journal qui ment : `trusted_proxies`\n' +
+        'reste déclaré bloc par bloc, dans la portée étroite du handler `reverse_proxy`.\n' +
+        'Revenir sur cet arbitrage demande une entrée `DECISIONS.md`, pas une ligne de\n' +
+        'configuration.',
     );
   });
 });
@@ -672,7 +702,9 @@ ${CONFIANCE}
     expect(fautifs).toHaveLength(0);
   });
 
-  it('@critique les options globales `servers { trusted_proxies … }` couvrent tout le fichier', () => {
+  it('@critique l’option globale est REPÉRÉE, et ne blanchit aucun bloc', () => {
+    // Elle produit le même `X-Forwarded-For` sortant : un garde qui l'accepterait
+    // comme équivalente laisserait passer la migration qui empoisonne `client_ip`.
     const source = `{
 	servers {
 		trusted_proxies static private_ranges
@@ -680,23 +712,23 @@ ${CONFIANCE}
 }
 
 ${DEUX_BLOCS(ENTETE_SEULE, ENTETE_SEULE)}`;
-    const { blocs, globale, fautifs } = lireCaddyfile(source);
+    const { blocs, optionGlobale, fautifs } = lireCaddyfile(source);
     expect(blocs).toHaveLength(2);
-    expect(globale).toBe(true);
-    expect(fautifs).toHaveLength(0);
+    expect(optionGlobale).toBe(true);
+    expect(fautifs).toHaveLength(2);
   });
 
-  it('@critique un `servers {}` SANS `trusted_proxies` ne couvre rien', () => {
+  it('@critique un `servers {}` SANS `trusted_proxies` n’est pas confondu avec l’option globale', () => {
     const source = `{
 	servers {
 		protocols h1 h2
 	}
 }
 
-${DEUX_BLOCS(ENTETE_SEULE, ENTETE_SEULE)}`;
-    const { globale, fautifs } = lireCaddyfile(source);
-    expect(globale).toBe(false);
-    expect(fautifs).toHaveLength(2);
+${DEUX_BLOCS(CONFIANCE, CONFIANCE)}`;
+    const { optionGlobale, fautifs } = lireCaddyfile(source);
+    expect(optionGlobale).toBe(false);
+    expect(fautifs).toHaveLength(0);
   });
 
   it('@critique les fins de ligne Windows (CRLF) ne rendent pas le lecteur aveugle', () => {

@@ -52,6 +52,63 @@
 # │ Arbitrage A01 du 2026-08-27.                                              │
 # └───────────────────────────────────────────────────────────────────────────┘
 #
+# ┌───────────────────────────────────────────────────────────────────────────┐
+# │ `trusted_proxies` ET LE `trustProxy` DE L'API SONT COMPLÉMENTAIRES.       │
+# │ NE JAMAIS REVENIR SUR L'UN SANS REVENIR SUR L'AUTRE — MESURÉ, PAS DÉDUIT. │
+# │                                                                           │
+# │ Depuis Caddy 2.7, `reverse_proxy` n'AJOUTE à `X-Forwarded-For` que si son │
+# │ pair immédiat est un proxy DÉCLARÉ DE CONFIANCE. Sinon il ÉCRASE l'en-tête│
+# │ par l'adresse de ce pair. Sans la ligne `trusted_proxies` posée plus bas, │
+# │ l'API recevait donc `X-Forwarded-For: 10.0.1.6` — l'adresse du Traefik de │
+# │ Coolify — POUR TOUS LES CLIENTS DU MONDE, et le plafond de 10 req/min/IP  │
+# │ sur `/v1/auth/*` (11 §3) était un SEAU UNIQUE ET GLOBAL : le premier      │
+# │ attaquant venu verrouillait la connexion de tous les auditeurs, à coût    │
+# │ nul. Mesuré le 2026-08-29 sur `caddy:2-alpine` v2.11.4, banc A57.         │
+# │                                                                           │
+# │ Les DEUX réglages sont nécessaires, et aucun ne suffit seul. Mesure sur   │
+# │ la vraie `@fastify/proxy-addr` 5.1.0 (pair TCP = Caddy, 10.0.4.8) :       │
+# │                                                                           │
+# │   chaîne reçue par l'API      trustProxy: true   trustProxy: [privées]    │
+# │   ------------------------    ----------------   -------------------      │
+# │   10.0.1.6                    10.0.1.6           10.0.1.6                 │
+# │     (sans trusted_proxies)    SEAU GLOBAL        SEAU GLOBAL              │
+# │   37.65.10.24, 10.0.1.6       37.65.10.24        37.65.10.24              │
+# │     (client honnête)          ok                 ok                       │
+# │   9.9.9.9, 37.65.10.24,       9.9.9.9            37.65.10.24              │
+# │   10.0.1.6  (client qui       >>> FORGÉ <<<      ok                       │
+# │   envoie son propre XFF)                                                  │
+# │                                                                           │
+# │ Lire la DERNIÈRE LIGNE : déclarer `trusted_proxies` ICI tout en remettant │
+# │ `trustProxy: true` dans apps/api/src/app.ts ROUVRIRAIT LA FORGERIE que ce │
+# │ fichier vient de rendre possible — le client peut alors choisir sa propre │
+# │ clé de quota. Le périmètre restreint côté API (`['loopback','linklocal',  │
+# │ 'uniquelocal']`) est ce qui fait s'arrêter la remontée à la première      │
+# │ adresse PUBLIQUE. Les deux moitiés de la garantie vivent dans deux        │
+# │ fichiers : c'est pourquoi chacun porte l'avertissement vers l'autre.      │
+# │                                                                           │
+# │ POURQUOI PAS L'OPTION GLOBALE `servers { trusted_proxies static … }`,     │
+# │ QUI EST L'AUTRE ÉCRITURE POSSIBLE : mesurée elle aussi, elle produit le   │
+# │ MÊME `X-Forwarded-For` sortant, mais elle change EN PLUS le champ         │
+# │ `client_ip` du journal d'accès, qui devient l'entrée LA PLUS À GAUCHE de  │
+# │ l'en-tête — donc une valeur CHOISIE PAR LE CLIENT (mesuré :               │
+# │ `client_ip: 9.9.9.9`). L'exploitant qui lirait le journal pour identifier │
+# │ un attaquant lirait ce que l'attaquant a écrit. On garde donc la portée   │
+# │ étroite du handler : le journal reste peu informatif, mais il ne ment pas.│
+# │                                                                           │
+# │ FRAGILITÉ CONNUE ET ASSUMÉE : `10.0.1.0/24` est le sous-réseau du réseau  │
+# │ Docker `coolify`, VÉRIFIÉ le 2026-08-29 (`docker network inspect          │
+# │ coolify` → subnet=10.0.1.0/24, gateway=10.0.1.1, coolify-proxy=10.0.1.6). │
+# │ Ce réseau appartient à Coolify, PAS À NOUS. S'il était recréé sur un      │
+# │ autre sous-réseau, ou si Traefik joignait Caddy par l'IPv6 du même réseau │
+# │ (`fd7b:96c6:c023::/64`, non couverte ici), la ligne cesserait de          │
+# │ correspondre EN SILENCE. Elle échoue alors FERMÉ — retour au seau global, │
+# │ jamais à la forgerie — mais la granularité par client serait perdue sans  │
+# │ qu'aucune alerte ne se déclenche. Voir infra/COHABITATION_AXIONIA_WEB.md  │
+# │ §3ter et la fiche AMELIORATIONS correspondante.                           │
+# │ Arbitrage A01 du 2026-08-29 (DECISIONS.md, « Le plafond de 10 req/min/IP  │
+# │ sur /v1/auth/* est un seau GLOBAL »).                                     │
+# └───────────────────────────────────────────────────────────────────────────┘
+#
 # ADRESSES : `:8080` / `:8081` en local (aucun ACME), les vrais domaines en
 # staging/prod (TLS automatique via {$CADDY_ACME_EMAIL}).
 # ⚠️ L'ENREGISTREMENT DNS DU SOUS-DOMAINE DOIT EXISTER AVANT LE PREMIER
@@ -189,6 +246,11 @@ import {$CADDY_FRONT_CONFIG}
 	# API : `handle_path` RETIRE le préfixe /api → l'API reçoit /v1/…
 	handle_path /api/* {
 		reverse_proxy axion-api:{$API_PORT} {
+			# SANS CETTE LIGNE, Caddy ÉCRASE X-Forwarded-For et l'API voit la même
+			# adresse pour tout le monde : le plafond par IP devient un seau global.
+			# Elle ne vaut QUE couplée au `trustProxy` restreint d'apps/api/src/app.ts.
+			# Encadré « `trusted_proxies` ET LE `trustProxy` DE L'API » en tête de fichier.
+			trusted_proxies 10.0.1.0/24
 			# En-têtes d'origine conservés (rate limiting par IP, 11 §3).
 			header_up X-Real-IP {remote_host}
 			# Uploads par chunks (§9.6) : pas de tampon, flux direct.
@@ -228,6 +290,15 @@ import {$CADDY_FRONT_CONFIG}
 		# {$API_PORT} : MÊME variable que le bloc de prod — voir la convention
 		# « PORT INTERNE DE L’API » en tête de fichier.
 		reverse_proxy staging-api:{$API_PORT} {
+			# MÊME ligne que le bloc de prod, ET C'EST DÉLIBÉRÉ MÊME SI CE BLOC N'EN A
+			# PAS BESOIN AUJOURD'HUI : dans l'agencement Coolify c'est le bloc 1 qui est
+			# servi ({$CADDY_SITE_ADDRESS}=:8080), celui-ci étant inerte. La règle du
+			# snippet (securite) vaut ici aussi — « un staging plus permissif ne valide
+			# plus rien » — et le jour où ce bloc passera derrière un frontal, l'oubli
+			# se paierait par le seau global, en silence. NE PAS LA « NETTOYER » PARCE
+			# QU'ELLE SEMBLE SANS EFFET : c'est justement quand elle en aura un qu'il
+			# sera trop tard pour y penser. Voir l'encadré en tête de fichier.
+			trusted_proxies 10.0.1.0/24
 			header_up X-Real-IP {remote_host}
 			flush_interval -1
 		}
