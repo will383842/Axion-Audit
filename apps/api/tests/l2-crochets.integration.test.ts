@@ -90,6 +90,25 @@ const cadrageAvecFinancier = uuidv7();
 const cadrageSansFinancier = uuidv7();
 /** Un identifiant bien formé qui ne désigne AUCUN cadrage. */
 const cadrageInexistant = uuidv7();
+/**
+ * Un cadrage dont le volet financier existe mais n'a AUCUN taux journalier
+ * (`daily_rates` est `NULL` — la colonne est nullable au fichier 04). C'est l'état
+ * d'un devis en cours de saisie : les frais sont posés, la grille tarifaire non.
+ */
+const cadrageSansTaux = uuidv7();
+/**
+ * Un cadrage dont `daily_rates` porte une forme que le contrat ne reconnaît PAS —
+ * ici le taux écrit en CHAÎNE, ce qu'un import ou une saisie non validée produit.
+ * Le JSONB accepte n'importe quelle forme ; le contrat d'API, non.
+ */
+const cadrageTauxInformes = uuidv7();
+
+/**
+ * L'erreur que le banc « socle cassé » a vue passer, capturée par son crochet
+ * `onError`. Vue du réseau, la route rend 500 dans les deux cas ; seule la NATURE de
+ * l'erreur dit si elle a refusé ou si elle est tombée.
+ */
+let erreurDuBancSocleCasse: unknown = null;
 
 function bd(): Client {
   if (client === undefined) throw new Error('connexion absente');
@@ -192,7 +211,12 @@ beforeAll(async () => {
   await bd().query(`INSERT INTO companies (id, name) VALUES ($1, 'Entreprise de démonstration')`, [
     entrepriseId,
   ]);
-  for (const cadrageId of [cadrageAvecFinancier, cadrageSansFinancier]) {
+  for (const cadrageId of [
+    cadrageAvecFinancier,
+    cadrageSansFinancier,
+    cadrageSansTaux,
+    cadrageTauxInformes,
+  ]) {
     await bd().query(
       `INSERT INTO scoping_estimates
          (id, company_id, workload_days, team_size, calendar_days, status)
@@ -210,6 +234,38 @@ beforeAll(async () => {
         [SENTINELLES_FINANCIERES.profilTauxJournalier]: Number(
           SENTINELLES_FINANCIERES.tauxJournalier,
         ),
+      }),
+      SENTINELLES_FINANCIERES.travelCosts,
+      SENTINELLES_FINANCIERES.totalAmount,
+      comptes.admin,
+    ],
+  );
+
+  // `daily_rates` ABSENT — et les frais, eux, bien présents : la réponse doit
+  // porter `dailyRates: null` sans amputer le reste du volet.
+  await bd().query(
+    `INSERT INTO scoping_financials
+       (scoping_estimate_id, daily_rates, travel_costs, total_amount, currency, updated_by)
+     VALUES ($1, NULL, $2, $3, 'EUR', $4)`,
+    [
+      cadrageSansTaux,
+      SENTINELLES_FINANCIERES.travelCosts,
+      SENTINELLES_FINANCIERES.totalAmount,
+      comptes.admin,
+    ],
+  );
+
+  // `daily_rates` de FORME INATTENDUE : le taux en chaîne au lieu d'un nombre. Le
+  // JSONB l'accepte, `tauxJournaliersSchema` non — et la valeur est une SENTINELLE,
+  // pour que le balayage la voie si elle sortait quand même.
+  await bd().query(
+    `INSERT INTO scoping_financials
+       (scoping_estimate_id, daily_rates, travel_costs, total_amount, currency, updated_by)
+     VALUES ($1, $2::jsonb, $3, $4, 'EUR', $5)`,
+    [
+      cadrageTauxInformes,
+      JSON.stringify({
+        [SENTINELLES_FINANCIERES.profilTauxJournalier]: SENTINELLES_FINANCIERES.tauxJournalier,
       }),
       SENTINELLES_FINANCIERES.travelCosts,
       SENTINELLES_FINANCIERES.totalAmount,
@@ -304,6 +360,41 @@ beforeAll(async () => {
       await Promise.resolve();
     },
     { prefix: '/essai/greffon' },
+  );
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // BANC « SOCLE CASSÉ » — la ceinture d'EXÉCUTION de la route financière.
+  // ═══════════════════════════════════════════════════════════════════════════
+  // La route du produit porte un `if (contexteAdmin === null)` que le socle rend
+  // aujourd'hui INATTEIGNABLE : sa politique est `roles: ['admin'], financier: true`,
+  // donc le crochet ③ pose la marque pour quiconque franchit la porte. Ce `if` n'est
+  // pourtant pas du code mort — son commentaire nomme lui-même le jour où il servira :
+  // « un remaniement du socle ». Non exercé, il serait une intention non vérifiée, et
+  // l'intention non vérifiée est exactement ce qui s'ouvre en silence.
+  //
+  // On REPRODUIT ce jour-là, du même geste que `/essai/politique-inconnue` reproduit
+  // un `config` venu d'un JSON : c'est `routesScoping` LUI-MÊME — la route du produit,
+  // pas une imitation — qui est montée dans un greffon encapsulé dont un crochet
+  // `preHandler` efface la marque APRÈS que le crochet ③ (`onRequest`) l'a posée.
+  // L'encapsulation confine ce crochet à ce greffon : la route de `/v1` n'en sait rien.
+  const { routesScoping } = await import('../src/routes/scoping.js');
+  await instance.register(
+    async (fille) => {
+      fille.addHook('preHandler', async (requete) => {
+        requete.contexteAdmin = null;
+        await Promise.resolve();
+      });
+      // Le crochet `onError` OBSERVE sans rien changer (Fastify ne lui permet pas de
+      // substituer l'erreur). Il est indispensable, et la raison tient en une phrase :
+      // vu du réseau, un REFUS DÉLIBÉRÉ et un PLANTAGE FORTUIT rendent le même 500. La
+      // seule chose qui les sépare est la nature de l'erreur levée.
+      fille.addHook('onError', async (_requete, _reponse, erreur) => {
+        erreurDuBancSocleCasse = erreur;
+        await Promise.resolve();
+      });
+      await fille.register(routesScoping);
+    },
+    { prefix: '/essai/socle-casse' },
   );
 
   await instance.ready();
@@ -777,6 +868,117 @@ describe('T5 — route financière : ce qu’elle répond quand il n’y a rien'
       const reponse = await appeler(urlFinanciere(mauvais), jetons.admin);
       expect(reponse.statut, `« ${mauvais} » doit être refusé par la validation`).toBe(400);
     }
+  });
+});
+
+describe('T5 — `daily_rates` : ce que le dépôt accepte de laisser sortir', () => {
+  it('@critique volet financier SANS taux : `dailyRates` vaut `null`, jamais `{}`', async () => {
+    // `daily_rates` est nullable au fichier 04, et le contrat d'API le déclare
+    // `nullable()` : l'absence de grille tarifaire est un ÉTAT NORMAL d'un devis en
+    // cours. La distinction compte pour la console : `null` se rend « non renseigné »,
+    // un objet vide se rend « aucun profil facturé », et ce n'est pas la même phrase
+    // devant un client. Le reste du volet, lui, doit sortir intact — un devis amputé
+    // de ses frais parce qu'il manque une grille serait un faux, pas une prudence.
+    const reponse = await appeler(urlFinanciere(cadrageSansTaux), jetons.admin);
+
+    expect(reponse.statut).toBe(200);
+    const corps = financiers(reponse.corps);
+    expect(corps.dailyRates, '`null` en base doit rester `null` sur le réseau.').toBeNull();
+    expect(corps.totalAmount).toBe(SENTINELLES_FINANCIERES.totalAmount);
+    expect(corps.travelCosts).toBe(SENTINELLES_FINANCIERES.travelCosts);
+  });
+
+  it('@critique `daily_rates` de forme INATTENDUE : `null`, jamais une forme non validée', async () => {
+    // Le JSONB n'a pas de forme : `{"profil": "1234.56"}` y entre aussi bien que
+    // `{"profil": 1234.56}`. C'est la seule colonne du volet dont la base ne garantit
+    // rien, donc la seule par laquelle une forme surprise peut atteindre la console —
+    // et sur cette table-ci, une forme surprise est un montant qui voyage sans contrat.
+    // Le dépôt la fait REVALIDER par le schéma partagé, celui-là même que la route
+    // impose en sortie ; ce test constate que la revalidation existe et qu'elle
+    // dégrade en `null` plutôt que de laisser passer ou de rompre la réponse.
+    const reponse = await appeler(urlFinanciere(cadrageTauxInformes), jetons.admin);
+
+    expect(
+      reponse.statut,
+      'Une valeur informe ne doit ni sortir telle quelle, ni faire tomber la route :\n' +
+        'un 500 ici priverait l’administrateur de TOUT le volet à cause d’une seule\n' +
+        'colonne, et un 200 portant la forme brute la servirait hors contrat.',
+    ).toBe(200);
+    const corps = financiers(reponse.corps);
+    expect(corps.dailyRates).toBeNull();
+    expect(
+      detecterSentinelles(reponse.corps, [
+        SENTINELLES_FINANCIERES.profilTauxJournalier,
+        SENTINELLES_FINANCIERES.tauxJournalier,
+      ]),
+      'Le profil et le taux informes sont des SENTINELLES : les retrouver dans la\n' +
+        'réponse prouverait que la forme brute est sortie. Les frais et le total, eux,\n' +
+        'sont légitimement là — l’administrateur a le droit de les voir.',
+    ).toStrictEqual([]);
+  });
+});
+
+describe('T5 — ceinture d’EXÉCUTION : la marque effacée fait ÉCHOUER, jamais servir', () => {
+  it('@critique socle cassé — la route rend 500 et AUCUN montant', async () => {
+    // Le banc `/essai/socle-casse` monte la route DU PRODUIT sous un crochet qui
+    // efface `contexteAdmin` après le crochet ③ : c'est, à la ligne près, ce que
+    // produirait un remaniement du socle qui cesserait de poser la marque.
+    //
+    // Ce que ce test tranche est une ALTERNATIVE, pas un détail de statut : sans le
+    // `if`, l'appel au dépôt passerait quand même — `lireFinanciersDuCadrage` ne LIT
+    // pas son contexte, il l'EXIGE à la compilation — et la route servirait les
+    // montants à une requête dont plus personne n'a vérifié qu'elle vient d'un
+    // administrateur. Le 500 n'est donc pas une dégradation : c'est le refus.
+    // Le banc est aussi traversé par le méta-test du registre et par le balayage
+    // sentinelle, qui y récoltent des refus 401/403. On repart donc de zéro : ce test
+    // doit juger de SON appel, jamais d'une erreur laissée par un autre.
+    erreurDuBancSocleCasse = null;
+
+    const reponse = await appeler(
+      `/essai/socle-casse/scoping/${cadrageAvecFinancier}/financials`,
+      jetons.admin,
+    );
+
+    expect(
+      reponse.statut,
+      'Un 200 ici signifierait que la route a servi les montants SANS marque ; un 404\n' +
+        'ou un 401 signifierait que le banc n’a pas atteint le gestionnaire, et que ce\n' +
+        'test ne prouve rien.',
+    ).toBe(500);
+    expect(reponse.code).toBe('INTERNAL_ERROR');
+    expect(
+      detecterSentinelles(reponse.corps),
+      'La réponse d’échec ne doit contenir aucun montant.',
+    ).toStrictEqual([]);
+
+    // ── ET C'EST ICI QUE LE TEST DEVIENT MORDANT ─────────────────────────────
+    // Le statut seul ne prouve RIEN, et il faut le dire franchement : sans la
+    // ceinture, l'appel au dépôt passerait, la ligne financière serait LUE, puis
+    // `contexteAdmin.utilisateurId` déréférencerait `null` au moment de journaliser
+    // — ce qui rend AUSSI un 500. Deux mondes, un même statut. Le seul témoin qui
+    // les sépare est la NATURE de l'erreur : un refus délibéré (`AppError`, code du
+    // catalogue, message français) contre une chute fortuite (`TypeError`).
+    //
+    // La différence n'est pas théorique. La chute fortuite dépend d'une ligne qui
+    // n'a rien à voir avec la sécurité : le jour où la journalisation change de
+    // forme, disparaît, ou passe en `?.`, elle cesse de protéger — et la route
+    // servirait les montants sans marque. La ceinture, elle, refuse AVANT de lire.
+    expect(
+      erreurDuBancSocleCasse,
+      'Aucune erreur observée : le banc n’a pas atteint le gestionnaire.',
+    ).not.toBeNull();
+    expect(
+      erreurDuBancSocleCasse,
+      'La route est TOMBÉE au lieu de REFUSER : le 500 vient d’un déréférencement de\n' +
+        '`null` plus bas dans le gestionnaire, pas de la ceinture d’exécution. Les\n' +
+        'montants ont donc été lus en base avant la chute, et la seule chose qui les a\n' +
+        'retenus est un accident de rédaction.',
+    ).not.toBeInstanceOf(TypeError);
+    expect(
+      (erreurDuBancSocleCasse as { code?: unknown }).code,
+      'Le refus doit porter un code du catalogue partagé (11 §3), pas être une erreur\n' +
+        'anonyme.',
+    ).toBe('INTERNAL_ERROR');
   });
 });
 
