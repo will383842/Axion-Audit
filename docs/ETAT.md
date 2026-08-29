@@ -1394,3 +1394,68 @@ pour la porte L2** · `packages/shared/src/**` est rapporté à **0 %** de couve
 fichiers (les tests exécutent le JS compilé, pas les sources) : **`journal.ts` et `redaction.ts`, qui
 portent la substance de deux garanties, sont structurellement invisibles au garde** — refusé de
 corriger par un alias, qui ferait tester la source au lieu de ce qui est publié.
+
+---
+
+## 2026-08-29 07h40 — [lot L2] — **PAUSE DEMANDÉE PAR WILLIAMS** — étape pipeline 6/7
+
+Dernier commit vert : 96efbca (feat(l2) : étanchéité financière, et 90 % atteints par des TESTS) · Branche : lot/l0-infra · Poussé : **oui**
+Tâche en cours : **aucune — session mise en pause à la demande de Williams.** Agents arrêtés proprement.
+Prochaine action : **libérer de la mémoire sur la machine** (voir le blocage ci-dessous), puis écrire les tests de `apps/api/src/domaines/scoping/**` et `apps/api/src/routes/scoping.ts`, puis **MERGER vers `main`** — autorisé et signé, sans squash.
+Tests rouges connus : **un seul job de CI**, la couverture — `apps/api/src/domaines/scoping/**` livré sans être sous seuil. **Douze jobs sur treize sont verts.**
+
+⛔ **BLOCAGE MATÉRIEL, PAS LOGICIEL — À LIRE EN PREMIER À LA REPRISE.**
+`eslint --fix` est **tué par le système (SIGKILL)** sous le hook de pré-commit, **même sur deux
+fichiers**. Ce n'est pas un défaut de code : mesuré, `npx eslint --max-warnings=0` sur les **35
+fichiers** concernés passe **code 0** hors du hook. C'est la mémoire qui manque pour charger le
+programme TypeScript.
+**Mesure au moment de la pause : 3 126 Mo libres sur 16 194 · 12 conteneurs Docker debout depuis 22 à
+38 h**, dont **quatre étrangers au projet** (`axion-crm-pro-app`, `pgvector`, `mailhog`, un second
+Caddy) et huit de notre pile de développement locale — inutile au travail en cours, les tests
+utilisant des conteneurs jetables.
+**Remède à la reprise : arrêter l'un des deux groupes.** Le hook n'a **jamais** été contourné — une CI
+qui ment est pire que pas de CI, et cela vaut aussi au poste.
+
+📌 **CE QUI EST DANS L'ARBRE ET NON COMMITÉ** (à reprendre en premier, le travail est fait et vérifié) :
+la correction de traçabilité — **37 fichiers**, lignes de traçabilité **uniquement** — et son garde
+`scripts/check-tracabilite-exigences.mjs` avec son câblage (`package.json`, `ci.yml`) et son entrée
+`DECISIONS.md`. `check:tracabilite` rend **RC=0, 232 citations, 173 fichiers**. `npx eslint` sur ces
+fichiers : **RC=0**. Seul le commit bloque.
+
+✅ **CE QUI EST ACQUIS, COMMITÉ ET POUSSÉ**
+· **La porte P-A est SIGNÉE par Williams** (acceptée sous réserve) et le **premier merge vers `main`
+est autorisé, sans squash** — les 126 commits conservés.
+· **Lot L2 fonctionnellement complet** : socle d'autorisation · routes d'authentification · redaction
+des journaux · journal d'activité (porte d'écriture unique) · **étanchéité financière prouvée par
+injection** (trois rôles non-admin ont reçu le montant d'une route fautive introduite exprès ; retirée,
+vert) · plafond de connexion réel · socle HTTP L3a.
+· **Couverture des modules critiques atteinte PAR DES TESTS** : auth 97,29/92,71 · domaines/auth
+98,13/94,20 · journal 93,33/95,24. **Chaque test prouvé mordant par mutation du code testé**, et **un
+test supprimé après écriture** parce que la mutation l'a montré vert dans les deux mondes.
+· **Le coffre de secrets ouvert pour de vrai** — aller-retour complet depuis le stockage distant,
+empreintes identiques, et l'ouverture avec l'autre passphrase **refusée**.
+· **CI : 12 jobs verts sur 13**, dont l'intégration, l'end-to-end et le diff schéma-contre-04 — trois
+qui n'avaient **jamais** réussi à s'exécuter avant cette nuit.
+
+📌 **CE QUI ATTEND WILLIAMS, par ordre de gravité**
+1. **La garde de la passphrase du coffre** — un seul détenteur. Si elle est perdue, les coffres, les
+   archives et le dépôt de sauvegarde deviennent **tous** illisibles : leurs passphrases sont dedans.
+   Quatre options rédigées en `infra/README.md` §5.7bis, avec une procédure dont la 4ᵉ étape est de
+   **rouvrir un coffre avec la copie déposée** — sans quoi on a déposé une croyance.
+2. **La sauvegarde du 02h30 était incomplète et se déclarait réussie** — `backup.info` manquant, le
+   fichier sans lequel aucune restauration ne démarre. Trou refermé pour cette passe ; **la correction
+   de fond est instruite et non implémentée** : la relecture de contrôle ne vérifie que **3 objets sur
+   1 613**.
+3. **Le contrôle nominatif des 12 familles de secrets** sur la machine — refusé à un agent par la
+   politique d'exécution, à juste titre.
+4. **L'invariant 3 n'a aucune exigence à lui** dans la matrice E1-E47 — ce qui explique, sans
+   l'excuser, pourquoi un lot a inventé un numéro. À porter à la porte P-B.
+5. La route `interview-plan/apply` n'a **aucune table où se poser** : amendement du fichier 04.
+
+📌 **DETTES ÉCRITES, NON MASQUÉES** : le plafond par IP est vérifié **sur le papier, pas sur le fil** —
+un agent est prêt, la mesure s'exécutera après le déploiement que le merge déclenchera · migration des
+routes d'auth vers la forme déclarative des schémas, **bloquante pour la porte L2** · T3 (application
+RBAC) non livré · `packages/shared/src/**` rapporté à **0 %** de couverture (les tests exécutent le JS
+compilé) : `journal.ts` et `redaction.ts`, qui portent la substance de deux garanties, sont
+**structurellement invisibles** au garde — la correction la plus étroite est de co-localiser leurs
+tests en import relatif, sans aucune ligne de configuration, comme `packages/ui` le fait déjà.
