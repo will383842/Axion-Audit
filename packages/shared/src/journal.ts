@@ -41,7 +41,7 @@
 //
 // AUCUNE LOGIQUE D'ACCÈS À LA BASE ICI : ce paquet est importé par la PWA terrain
 // et par la console. Ce qui y entre part dans un navigateur.
-// Traçabilité : E5 (RBAC serveur systématique), E33, E42 (RGPD renforcé).
+// Traçabilité : E33 (sécurité), E42 (RGPD renforcé : rétention activity_log).
 // =============================================================================
 import { z } from 'zod';
 

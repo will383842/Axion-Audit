@@ -43,7 +43,7 @@
 //   mesurée ci-dessus est ce que l'API peut honnêtement affirmer des files ;
 //   la santé du CONSOMMATEUR n'est pas la sienne à déclarer.
 //
-// Traçabilité : E17, E35 (exploitation).
+// Traçabilité : E17 (stack imposée), E35 (scalabilité : exploitation).
 // =============================================================================
 import net from 'node:net';
 import { config, configMinio } from './config.js';

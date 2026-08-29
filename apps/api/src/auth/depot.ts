@@ -16,7 +16,7 @@
 // pour supprimer.
 //
 // Drizzle ne sert QU'AUX REQUÊTES TYPÉES (11 §2) : aucun DDL ici, aucun SQL concaténé.
-// Traçabilité : E5 (RBAC serveur systématique).
+// Traçabilité : E33 (sécurité : comptes désactivables 06 §10.1), E45 (habilitation).
 // =============================================================================
 import { eq } from 'drizzle-orm';
 import { db } from '../db.js';

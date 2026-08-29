@@ -35,7 +35,7 @@
 // La correction de ce trou n'est pas dans ce fichier : elle est dans la supervision
 // (une alerte sur `journal_activite_ecriture_echouee`) et, à terme, dans une
 // contrainte d'infrastructure. Elle est REMONTÉE, pas simulée par un `throw`.
-// Traçabilité : E5, E33, E42.
+// Traçabilité : E33 (sécurité), E42 (RGPD renforcé : rétention activity_log).
 // =============================================================================
 import type { FastifyBaseLogger, FastifyRequest } from 'fastify';
 import {

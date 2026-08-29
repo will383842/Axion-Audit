@@ -25,7 +25,7 @@
 // LE PRIX, ÉCRIT ICI : un client dont le jeton d'ACCÈS a expiré ne peut plus se
 // déconnecter côté serveur. Il efface ses jetons localement et le rafraîchissement
 // s'éteint à sa date d'expiration. C'est un défaut mineur, et c'est un défaut.
-// Traçabilité : E5, E43.
+// Traçabilité : E33 (sécurité), E43 (conventions API épinglées).
 // =============================================================================
 import type { FastifyPluginAsync } from 'fastify';
 import {

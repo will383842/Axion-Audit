@@ -24,7 +24,8 @@
 // (jointure obligatoire sur `mission_users`), pas par ce crochet. Deux garde-fous,
 // deux natures ; confondre les deux, c'est croire qu'une porte fermée trie le
 // courrier.
-// Traçabilité : E5 (RBAC serveur systématique), E27 (étanchéité financière).
+// Traçabilité : E21 (auditeurs jamais d'accès aux montants — « RBAC routes +
+// colonnes, testé »), E33 (sécurité), E45 (pilotage humain : matrice rôle×espace).
 // =============================================================================
 import type {
   FastifyInstance,

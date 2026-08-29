@@ -39,7 +39,8 @@
 // la famille de défaut que ce dépôt traque depuis trois jours.
 //
 // Sortie : 0 = conforme, 1 = violation, 2 = erreur d'exécution du contrôle.
-// Traçabilité : E5, E33, E42 · CLAUDE.md invariant 7 · note L2 §2.4.
+// Traçabilité : E33 (sécurité), E42 (RGPD renforcé : rétention activity_log) ·
+// CLAUDE.md invariant 7 · note L2 §2.4.
 // =============================================================================
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';

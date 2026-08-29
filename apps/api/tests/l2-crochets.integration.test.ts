@@ -18,13 +18,25 @@
 // la pose de `process.env` — un import statique serait hissé avant, et `config.ts`
 // échouerait au chargement.
 //
-// Traçabilité : E5 (RBAC serveur systématique), E27 (étanchéité financière).
+// Traçabilité : E21 (auditeurs jamais d'accès aux montants), E33 (sécurité).
 // =============================================================================
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Client } from 'pg';
 import type { FastifyInstance } from 'fastify';
 import type { RoleUtilisateur } from '../src/db/schema.js';
 import type { PolitiqueAcces } from '../src/auth/politique.js';
+// Import de TYPE uniquement : entièrement effacé à la compilation, donc il ne
+// charge PAS `db.ts` — la contrainte d'en-tête de ce fichier (imports applicatifs
+// dynamiques, après la pose de `process.env`) reste intacte.
+import type * as DepotFinancier from '../src/domaines/scoping/financiers.depot.js';
+import { balayerSources, decrireInfractions } from './aide/etancheite-sources.js';
+import {
+  balayerSentinellesFinancieres,
+  decrireRapport,
+  detecterSentinelles,
+  SENTINELLES_FINANCIERES,
+  VALEURS_SENTINELLES,
+} from './aide/sentinelle-financiere.js';
 import {
   appliquerMontee,
   connecter,
@@ -55,6 +67,8 @@ const comptes = {
   lecteur: uuidv7(),
   aDesactiver: uuidv7(),
   aSupprimer: uuidv7(),
+  /** Un SECOND administrateur, désactivé par le test de la route financière. */
+  adminADesactiver: uuidv7(),
 };
 
 const jetons: Record<keyof typeof comptes, string> = {
@@ -64,7 +78,18 @@ const jetons: Record<keyof typeof comptes, string> = {
   lecteur: '',
   aDesactiver: '',
   aSupprimer: '',
+  adminADesactiver: '',
 };
+
+// -----------------------------------------------------------------------------
+// Cadrages semés pour la route financière (T5)
+// -----------------------------------------------------------------------------
+/** Un cadrage AVEC volet financier — celui que l'administrateur a le droit de lire. */
+const cadrageAvecFinancier = uuidv7();
+/** Un cadrage SANS volet financier — il doit rendre la MÊME chose qu'un inconnu. */
+const cadrageSansFinancier = uuidv7();
+/** Un identifiant bien formé qui ne désigne AUCUN cadrage. */
+const cadrageInexistant = uuidv7();
 
 function bd(): Client {
   if (client === undefined) throw new Error('connexion absente');
@@ -155,6 +180,42 @@ beforeAll(async () => {
   await semerUtilisateur(comptes.lecteur, 'lecteur', 'lecteur');
   await semerUtilisateur(comptes.aDesactiver, 'consultant', 'a-desactiver');
   await semerUtilisateur(comptes.aSupprimer, 'consultant', 'a-supprimer');
+  await semerUtilisateur(comptes.adminADesactiver, 'admin', 'admin-a-desactiver');
+
+  // --- Cadrages et volet financier (T5) ---------------------------------------
+  // Les montants semés sont les SENTINELLES : des valeurs improbables et
+  // textuellement reconnaissables, dont le balayage prouvera qu'aucune route
+  // non-administrateur ne les laisse sortir. Ce sont des leurres de test, jamais
+  // un secret (11 §2). Le nom d'entreprise est générique — invariant 2 : aucune
+  // référence client dans le code, fixture comprise.
+  const entrepriseId = uuidv7();
+  await bd().query(`INSERT INTO companies (id, name) VALUES ($1, 'Entreprise de démonstration')`, [
+    entrepriseId,
+  ]);
+  for (const cadrageId of [cadrageAvecFinancier, cadrageSansFinancier]) {
+    await bd().query(
+      `INSERT INTO scoping_estimates
+         (id, company_id, workload_days, team_size, calendar_days, status)
+       VALUES ($1, $2, 12, 2, 30, 'brouillon')`,
+      [cadrageId, entrepriseId],
+    );
+  }
+  await bd().query(
+    `INSERT INTO scoping_financials
+       (scoping_estimate_id, daily_rates, travel_costs, total_amount, currency, updated_by)
+     VALUES ($1, $2::jsonb, $3, $4, 'EUR', $5)`,
+    [
+      cadrageAvecFinancier,
+      JSON.stringify({
+        [SENTINELLES_FINANCIERES.profilTauxJournalier]: Number(
+          SENTINELLES_FINANCIERES.tauxJournalier,
+        ),
+      }),
+      SENTINELLES_FINANCIERES.travelCosts,
+      SENTINELLES_FINANCIERES.totalAmount,
+      comptes.admin,
+    ],
+  );
 
   // La configuration est lue AU CHARGEMENT des modules applicatifs : elle doit être
   // posée avant le premier `import()` dynamique, jamais après.
@@ -545,5 +606,334 @@ describe('méta-test — le registre est le périmètre, pas une liste écrite �
         'Une anomalie ici signifie que le crochet ③ n’a pas été posé sur une route —\n' +
         'le cas exact que le contrôle `onReady` du socle prétend rendre impossible.',
     ).toStrictEqual([]);
+  });
+});
+
+// =============================================================================
+// T5 — LA ROUTE FINANCIÈRE. Ajouté par A17 le 2026-08-29.
+//
+// La ceinture 2 de la CI a réclamé le seuil sur `domaines/scoping/**` dès que T5 a
+// atterri ; le glob a été basculé, ET ÉLARGI À LA ROUTE — l'auteur de T5 avait
+// signalé qu'un seuil laissant la route dehors ne mesure pas ce qu'il prétend.
+// Ces tests sont écrits par un agent qui n'a produit aucune de ces lignes (09 §5.6).
+//
+// LA PHRASE QUI GOUVERNE (03 §18.3, verbatim) : « L'auditeur voit son avance/retard,
+// son plan, ses dates — il ne voit JAMAIS le TJM, les montants, ni le devis. »
+// =============================================================================
+
+/** Ce que la route rend à un administrateur. */
+interface ReponseFinanciere {
+  readonly scopingEstimateId: string;
+  readonly dailyRates: Record<string, number> | null;
+  readonly travelCosts: string | null;
+  readonly totalAmount: string | null;
+  readonly currency: string;
+  readonly updatedBy: string | null;
+  readonly updatedAt: string;
+}
+
+function financiers(corps: string): ReponseFinanciere {
+  const analyse: unknown = JSON.parse(corps);
+  if (typeof analyse !== 'object' || analyse === null || !('currency' in analyse)) {
+    throw new Error(`réponse financière inattendue : ${corps}`);
+  }
+  return analyse as ReponseFinanciere;
+}
+
+function urlFinanciere(cadrageId: string): string {
+  return `/v1/scoping/${cadrageId}/financials`;
+}
+
+// -----------------------------------------------------------------------------
+// CEINTURE 2 — LA MARQUE, VÉRIFIÉE PAR LE COMPILATEUR ET PAR LUI SEUL
+// -----------------------------------------------------------------------------
+/**
+ * CETTE FONCTION N'EST JAMAIS APPELÉE. Elle n'existe que pour être TYPÉE.
+ *
+ * `@ts-expect-error` est ici une ASSERTION AU SENS PLEIN : `tsc` échoue si l'erreur
+ * attendue ne se produit PAS. Le jour où `lireFinanciersDuCadrage` cesserait
+ * d'exiger un `ContexteAdmin` — un `boolean`, un `string`, un paramètre optionnel —
+ * cette ligne compilerait, et `pnpm typecheck` virerait au ROUGE en disant que
+ * l'erreur attendue a disparu. Le garde-fou est donc porté par le job `typecheck`
+ * de la CI, pas par vitest : une garantie de COMPILATION ne se prouve pas à
+ * l'exécution, et un test qui prétendrait le faire mentirait sur sa nature.
+ *
+ * L'objet passé imite EXACTEMENT la forme visible de `ContexteAdmin`
+ * (`{ utilisateurId }`) : c'est le geste qu'un développeur pressé ferait de bonne
+ * foi. Ce qu'il ne peut pas fabriquer, c'est la marque `unique symbol`, dont la clé
+ * n'est pas nommable hors de `auth/contexte.ts`.
+ */
+export async function marqueExigeeALaCompilation(
+  depot: typeof DepotFinancier,
+  cadrageId: string,
+): Promise<void> {
+  // @ts-expect-error — invariant 3 : sans la marque `ContexteAdmin`, l'appel au
+  // dépôt financier NE DOIT PAS COMPILER. Si cette ligne cesse d'être une erreur,
+  // la ceinture 2 a disparu et `tsc` doit le dire.
+  await depot.lireFinanciersDuCadrage({ utilisateurId: 'pas-une-marque' }, cadrageId);
+}
+
+describe('T5 — route financière : qui entre', () => {
+  it('@critique un ADMINISTRATEUR obtient les montants', async () => {
+    const reponse = await appeler(urlFinanciere(cadrageAvecFinancier), jetons.admin);
+
+    expect(reponse.statut, '03 §34.1 : « Chiffrage & devis : admin SEUL »').toBe(200);
+    const corps = financiers(reponse.corps);
+    expect(corps.scopingEstimateId).toBe(cadrageAvecFinancier);
+    expect(corps.totalAmount).toBe(SENTINELLES_FINANCIERES.totalAmount);
+    expect(corps.travelCosts).toBe(SENTINELLES_FINANCIERES.travelCosts);
+    expect(corps.currency).toBe('EUR');
+    expect(corps.dailyRates).toEqual({
+      [SENTINELLES_FINANCIERES.profilTauxJournalier]: Number(
+        SENTINELLES_FINANCIERES.tauxJournalier,
+      ),
+    });
+  });
+
+  it('@critique les montants restent des CHAÎNES — un `NUMERIC` converti perd le devis', async () => {
+    // Le dépôt le dit : `travel_costs` et `total_amount` sont des `NUMERIC` rendus
+    // en décimal exact par `node-postgres`. Les convertir en `number` perdrait de la
+    // précision sur un devis SIGNÉ, et le ferait silencieusement. Un test qui se
+    // contenterait d'une égalité numérique ne verrait jamais la bascule.
+    const reponse = await appeler(urlFinanciere(cadrageAvecFinancier), jetons.admin);
+    const corps = financiers(reponse.corps);
+    expect(typeof corps.totalAmount).toBe('string');
+    expect(typeof corps.travelCosts).toBe('string');
+  });
+
+  it('@critique consultant, analyste et lecteur sont refusés en 403 — jamais 401', async () => {
+    // 403 et non 401, et la nuance n'est pas cosmétique : l'identité EST établie et
+    // le compte est bon. Un 401 ici enverrait le terrain se reconnecter en boucle
+    // pour un droit qu'il n'aura jamais, et masquerait un refus d'AUTORISATION
+    // derrière une panne d'AUTHENTIFICATION.
+    for (const role of ['consultant', 'analyste', 'lecteur'] as const) {
+      const reponse = await appeler(urlFinanciere(cadrageAvecFinancier), jetons[role]);
+      expect(reponse.statut, `${role} doit être refusé`).toBe(403);
+      expect(reponse.code, `${role} : le refus doit être une AUTORISATION`).toBe('FORBIDDEN');
+      expect(
+        detecterSentinelles(reponse.corps),
+        `Le corps du refus servi à ${role} contient un montant.`,
+      ).toStrictEqual([]);
+    }
+  });
+
+  it('@critique un ANONYME est refusé en 401', async () => {
+    const reponse = await appeler(urlFinanciere(cadrageAvecFinancier));
+    expect(reponse.statut).toBe(401);
+    expect(reponse.code).toBe('UNAUTHENTICATED');
+  });
+
+  it('@critique un admin DÉSACTIVÉ entre deux requêtes perd l’accès IMMÉDIATEMENT', async () => {
+    // 06 §10.1 : « comptes désactivables INSTANTANÉMENT ». Le jeton reste
+    // cryptographiquement valide pendant 15 minutes : sans la relecture de `users`
+    // à chaque requête, un administrateur révoqué continuerait de lire les montants
+    // pendant tout ce quart d'heure. On prouve donc les DEUX temps.
+    const avant = await appeler(urlFinanciere(cadrageAvecFinancier), jetons.adminADesactiver);
+    expect(avant.statut, 'témoin : l’accès doit exister AVANT la désactivation').toBe(200);
+
+    await bd().query(`UPDATE users SET is_active = false WHERE id = $1`, [
+      comptes.adminADesactiver,
+    ]);
+
+    const apres = await appeler(urlFinanciere(cadrageAvecFinancier), jetons.adminADesactiver);
+    expect(
+      apres.statut,
+      'Le MÊME jeton, non expiré, doit être refusé dès la requête suivante.',
+    ).toBe(401);
+    expect(
+      detecterSentinelles(apres.corps),
+      'La réponse de refus ne doit contenir aucun montant.',
+    ).toStrictEqual([]);
+  });
+});
+
+describe('T5 — route financière : ce qu’elle répond quand il n’y a rien', () => {
+  it('@critique cadrage SANS volet financier et cadrage INEXISTANT : réponse identique', async () => {
+    // Distinguer les deux dirait « ce cadrage existe », c'est-à-dire un oracle
+    // d'existence sur le portefeuille commercial. La route étant déjà réservée aux
+    // administrateurs, l'enjeu n'est pas le secret : c'est qu'une distinction sans
+    // valeur pour l'appelant finit toujours par être exploitée par quelqu'un.
+    const sansVolet = await appeler(urlFinanciere(cadrageSansFinancier), jetons.admin);
+    const inexistant = await appeler(urlFinanciere(cadrageInexistant), jetons.admin);
+
+    expect(sansVolet.statut).toBe(404);
+    expect(inexistant.statut).toBe(404);
+    expect(
+      sansVolet.corps,
+      'Les deux réponses doivent être RIGOUREUSEMENT identiques — même code, même\n' +
+        'message. Ce test ne juge pas de l’intention : il constate que les deux\n' +
+        'situations sont devenues DISTINGUABLES de l’extérieur. Selon ce qui les\n' +
+        'distingue, c’est un oracle d’existence de cadrage, ou seulement un écho de\n' +
+        'l’entrée — dans les deux cas la propriété tenue jusqu’ici a été perdue, et\n' +
+        'c’est à la revue de dire laquelle des deux vient d’arriver.',
+    ).toBe(inexistant.corps);
+  });
+
+  it('@critique un `:id` qui n’est pas un UUID rend 400, jamais 500', async () => {
+    // Un 500 signifierait que la valeur a atteint la couche base. Le schéma Zod de
+    // paramètres doit trancher AVANT — et un 500 sur entrée invalide est aussi une
+    // fuite d'information sur la pile technique.
+    for (const mauvais of ['pas-un-uuid', '12345', 'NULL']) {
+      const reponse = await appeler(urlFinanciere(mauvais), jetons.admin);
+      expect(reponse.statut, `« ${mauvais} » doit être refusé par la validation`).toBe(400);
+    }
+  });
+});
+
+describe('T5 — « qui a vu l’argent », et rien de plus (06 §10.5)', () => {
+  it('@critique une lecture admin écrit EXACTEMENT une ligne, sans montant', async () => {
+    const avant = await bd().query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM activity_log WHERE action = 'financier.consultation'`,
+    );
+
+    const reponse = await appeler(urlFinanciere(cadrageAvecFinancier), jetons.admin);
+    expect(reponse.statut).toBe(200);
+
+    const apres = await bd().query<{
+      user_id: string | null;
+      entity_type: string | null;
+      entity_id: string | null;
+      meta: unknown;
+    }>(
+      `SELECT user_id, entity_type, entity_id, meta FROM activity_log
+        WHERE action = 'financier.consultation' ORDER BY id`,
+    );
+
+    expect(
+      apres.rows.length - Number(avant.rows[0]?.n ?? '0'),
+      'Une consultation = UNE ligne. Zéro signifierait que « qui a vu l’argent » n’est\n' +
+        'pas tracé ; deux signifieraient un double appel, et un journal qui compte faux\n' +
+        'ne sert à rien le jour où quelqu’un conteste une consultation.',
+    ).toBe(1);
+
+    const derniere = apres.rows[apres.rows.length - 1];
+    expect(derniere?.user_id, 'la ligne doit nommer l’ADMINISTRATEUR qui a consulté').toBe(
+      comptes.admin,
+    );
+    expect(derniere?.entity_id).toBe(cadrageAvecFinancier);
+    expect(
+      derniere?.meta,
+      'On trace QUI a vu l’argent, JAMAIS COMBIEN : la variante du catalogue ne porte\n' +
+        'aucun champ de montant, et `meta` doit rester nul.',
+    ).toBeNull();
+  });
+
+  it('@critique aucune ligne de TOUTE la table ne porte de montant', async () => {
+    // On relit la table ENTIÈRE, pas la dernière ligne : le balayage doit voir les
+    // lignes qu'il n'a pas vu passer — celles écrites par les refus, par les 404,
+    // par les tentatives non-admin de ce fichier.
+    const toutes = await bd().query<Record<string, unknown>>(`SELECT * FROM activity_log`);
+    expect(toutes.rows.length, 'le balayage doit avoir de la matière').toBeGreaterThan(0);
+
+    const trouvees = detecterSentinelles(JSON.stringify(toutes.rows));
+    expect(
+      trouvees,
+      'Un montant a été retrouvé dans `activity_log`. La table est lisible par les\n' +
+        'administrateurs (§34.1) mais elle n’a PAS le régime du financier : y écrire un\n' +
+        'montant, c’est en créer une seconde copie que personne ne surveille.',
+    ).toStrictEqual([]);
+  });
+});
+
+describe('T5 — les ceintures 3 et 4 : sources et exécution', () => {
+  it('@critique CEINTURE 3 — aucun fichier hors liste blanche ne nomme la table financière', () => {
+    const infractions = balayerSources();
+    expect(
+      infractions,
+      `Étanchéité des sources ROMPUE :\n${decrireInfractions(infractions)}\n` +
+        'Un second fichier qui nomme la table, et la garantie « une seule porte » vaut\n' +
+        'ce que vaut le chemin le plus laxiste. Élargir la liste blanche est un ACTE DE\n' +
+        'CONCEPTION, jamais un moyen de faire passer ce test.',
+    ).toStrictEqual([]);
+  });
+
+  it('@critique CEINTURE 3 — le balayage TROUVE quand on lui retire ses œillères', () => {
+    // Sans cette contre-épreuve, un balayage cassé (mauvaise racine, motif qui ne
+    // correspond plus, extension oubliée) rendrait « aucune infraction » et le test
+    // ci-dessus serait vert par vacuité. On lui retire la liste blanche : il DOIT
+    // alors dénoncer le dépôt financier lui-même.
+    const sansOeilleres = balayerSources([]);
+    const fichiers = new Set(sansOeilleres.map((infraction) => infraction.fichier));
+    expect(
+      fichiers.has('apps/api/src/domaines/scoping/financiers.depot.ts'),
+      'Le balayage ne retrouve même pas le dépôt financier : il ne cherche rien, et\n' +
+        'son silence dans le test précédent ne prouvait donc rien.',
+    ).toBe(true);
+  });
+
+  it('@critique CEINTURE 4 — balayage sentinelle : aucune route ne laisse sortir un montant', async () => {
+    const rapport = await balayerSentinellesFinancieres({
+      app: api(),
+      // L'ADMINISTRATEUR est délibérément ABSENT : il a le droit de voir les
+      // montants (03 §34.1). L'inclure produirait une fausse fuite, et un garde-fou
+      // qui crie à tort finit désarmé.
+      porteurs: {
+        consultant: jetons.consultant,
+        analyste: jetons.analyste,
+        lecteur: jetons.lecteur,
+        anonyme: null,
+      },
+      valeursDeParametre: {
+        id: cadrageAvecFinancier,
+        missionId: '018f0000-0000-7000-8000-00000000aaaa',
+        sessionId: '018f0000-0000-7000-8000-00000000bbbb',
+      },
+    });
+
+    expect(
+      rapport.fuites,
+      `Une route a laissé sortir un montant :\n${decrireRapport(rapport)}`,
+    ).toStrictEqual([]);
+
+    expect(
+      rapport.parametresNonCartographies,
+      'Des paramètres d’URL n’ont pas de valeur réelle : le balayage a tapé dans le\n' +
+        'vide sur ces routes, et son silence ne vaut rien pour elles.',
+    ).toStrictEqual([]);
+
+    expect(
+      rapport.routesFinancieres.includes('/v1/scoping/:id/financials'),
+      'Le balayage n’a pas vu la route financière du PRODUIT dans le registre : il\n' +
+        'n’a pas d’objet, et son vert ne prouve rien.',
+    ).toBe(true);
+
+    expect(
+      rapport.couverture.exerces,
+      'Aucun appel n’a rendu 2xx : le balayage n’a lu aucun corps, il est vert par\n' + 'vacuité.',
+    ).toBeGreaterThan(0);
+
+    // ── LA ROUTE DU PRODUIT DOIT REFUSER TOUT LE MONDE, SANS EXCEPTION ─────────
+    // On n'assère PAS `anomaliesDeCouverture` en bloc, et il faut dire pourquoi
+    // plutôt que de le taire : le banc d'essai `/essai/financier` est déclaré
+    // `financier: true` TOUT EN autorisant le consultant à entrer — c'est
+    // délibéré, c'est ce qui permet au test « marque NULLE pour un non-admin » de
+    // prouver que la marque ne dépend pas de la liste de rôles déclarée par la
+    // route. Le balayage, qui ne sait pas distinguer un banc d'une route de
+    // produit, le compte donc comme une anomalie. Assérer la liste entière
+    // rendrait ce test rouge en permanence ; l'ignorer le rendrait aveugle. On
+    // assère donc exactement ce que le balayage doit prouver DU PRODUIT.
+    const surLaRouteDuProduit = rapport.anomaliesDeCouverture.filter((anomalie) =>
+      anomalie.includes('/v1/scoping/:id/financials'),
+    );
+    expect(
+      surLaRouteDuProduit,
+      `La route financière du produit a été ATTEINTE sans refus :\n${decrireRapport(rapport)}`,
+    ).toStrictEqual([]);
+  });
+
+  it('@critique le détecteur de sentinelles est SENSIBLE, y compris au format français', () => {
+    // Un détecteur aveugle rendrait tous les tests ci-dessus verts. On prouve qu'il
+    // voit — et qu'il voit la variante `987654,21`, celle qu'une couche
+    // d'affichage produirait.
+    for (const valeur of VALEURS_SENTINELLES) {
+      expect(detecterSentinelles(`bruit ${valeur} bruit`)).toContain(valeur);
+    }
+    const francais = SENTINELLES_FINANCIERES.totalAmount.replace('.', ',');
+    expect(
+      detecterSentinelles(`total : ${francais} EUR`),
+      'La variante à virgule décimale doit être détectée : sinon toute fuite passée\n' +
+        'par une couche de formatage serait invisible au balayage.',
+    ).toContain(SENTINELLES_FINANCIERES.totalAmount);
+    expect(detecterSentinelles('aucun montant ici')).toStrictEqual([]);
   });
 });

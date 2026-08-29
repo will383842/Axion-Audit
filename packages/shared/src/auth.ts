@@ -18,7 +18,7 @@
 // AUCUNE LOGIQUE ICI — ni vérification de mot de passe, ni frappe de jeton : ce
 // paquet est importé par la PWA terrain et par la console. Ce qui y entre part dans
 // un navigateur.
-// Traçabilité : E5 (RBAC serveur systématique), E43 (conventions API épinglées).
+// Traçabilité : E33 (sécurité : authentification), E43 (conventions API épinglées).
 // =============================================================================
 import { z } from 'zod';
 import { isoUtcSchema } from './temps.js';

@@ -30,7 +30,7 @@
 //      empreintes stockées, donc déconnecte tous les appareils. C'est un levier
 //      d'exploitation utile, pas un effet de bord — mais il doit être voulu.
 //
-// Traçabilité : E5, E33.
+// Traçabilité : E33 (sécurité : 06 §10.1).
 // =============================================================================
 import { createHmac, randomBytes } from 'node:crypto';
 import { config } from '../../config.js';

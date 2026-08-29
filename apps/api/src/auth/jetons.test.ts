@@ -15,7 +15,7 @@
 // risque (le client connaît l'`exp` de son propre jeton) et qu'elle évite de faire
 // ressaisir un mot de passe à un auditeur en clientèle.
 //
-// Traçabilité : E5, E43.
+// Traçabilité : E33 (sécurité), E43 (conventions API épinglées).
 // =============================================================================
 import { describe, expect, it } from 'vitest';
 import { createHmac } from 'node:crypto';

@@ -14,7 +14,7 @@
 // rafraîchissement importe `lireUtilisateurAuthentifie` du socle.)
 //
 // Drizzle NE SERT QU'AUX REQUÊTES TYPÉES (11 §2) : aucun DDL, aucun SQL concaténé.
-// Traçabilité : E5, E33.
+// Traçabilité : E33 (sécurité : 06 §10.1).
 // =============================================================================
 import { and, eq, isNull } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';

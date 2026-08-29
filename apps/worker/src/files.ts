@@ -21,7 +21,7 @@
 // visait — `axion:rapports:…` — sans deux-points dans le NOM. Le cloisonnement était le
 // besoin, le nom n'était que le moyen : on garde le besoin, on change le moyen.
 //
-// Traçabilité : E17 (stack imposée), E35 (jobs asynchrones), E43 (exécutabilité).
+// Traçabilité : E17 (stack imposée), E35 (scalabilité : jobs asynchrones), E43 (exécutabilité).
 // =============================================================================
 import { hostname } from 'node:os';
 

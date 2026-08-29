@@ -25,7 +25,7 @@
 // laisserait la moitié du produit hors garde-fou, puisque toutes les routes métier
 // vivront dans des greffons.
 //
-// Traçabilité : E5 (RBAC serveur systématique).
+// Traçabilité : E21 (auditeurs jamais d'accès aux montants), E33 (sécurité).
 // =============================================================================
 import { beforeAll, describe, expect, it } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
@@ -404,7 +404,7 @@ describe('méta-test 5 — instantané des routes publiques', () => {
   it('aucune route publique ne porte la marque financière', async () => {
     // `financier: true` n'existe que sur `type: 'roles'` — le type l'interdit déjà
     // ailleurs. Ce test garde la propriété si l'union venait à être élargie : une
-    // route financière publique serait la fuite la plus directe possible (E27).
+    // route financière publique serait la fuite la plus directe possible (E21).
     const { construireApp } = await import('../app.js');
     const app = await construireApp();
     await app.ready();

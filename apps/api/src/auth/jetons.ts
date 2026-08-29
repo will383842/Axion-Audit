@@ -11,7 +11,7 @@
 // secret opaque se recherche par empreinte, là où un JWT invite à faire confiance à
 // ses claims — donc à sauter la lecture en base, qui EST la détection de réutilisation
 // (note de conception L2 §2.3).
-// Traçabilité : E5 (RBAC serveur), E43.
+// Traçabilité : E33 (sécurité : jetons 06 §10.1), E43 (conventions API épinglées).
 // =============================================================================
 import fastifyJwt from '@fastify/jwt';
 import type { FastifyInstance } from 'fastify';

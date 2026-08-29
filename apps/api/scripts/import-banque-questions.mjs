@@ -47,7 +47,8 @@
 // CE QUE CE SCRIPT NE FAIT PAS : il n'importe pas les ~200 questions réelles.
 // Le contenu suit son propre jalon (07 §14) ; le livrable du lot est CE script et
 // son jeu de recette, rejoués plus tard avec les vraies questions.
-// Traçabilité : E4 (banque de questions) · critère L4 du fichier 07.
+// Traçabilité : E10 (banque de questions UNIQUE versionnée), E37 (contrôle bloquant
+// à l'import), E47 (format d'import de la banque, 03 §36.4) · critère L4 du fichier 07.
 // =============================================================================
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { relative, resolve } from 'node:path';

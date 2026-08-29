@@ -17,7 +17,7 @@
 //
 // D'où une reconnaissance PAR CODE D'ERREUR et non par statut : le statut est ce
 // que la bibliothèque a choisi, le code est ce qu'il s'est passé.
-// Traçabilité : E5, E43.
+// Traçabilité : E33 (sécurité), E43 (conventions API épinglées).
 // =============================================================================
 import { AppError } from '@axion/shared';
 

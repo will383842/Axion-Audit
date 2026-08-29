@@ -26,7 +26,8 @@
 //
 // Invariant 5 : tous les messages sont en français, destinés à être lus par un
 // administrateur devant son fichier.
-// Traçabilité : E4 (banque de questions), E43 (conventions).
+// Traçabilité : E10 (banque de questions UNIQUE versionnée), E37 (contrôle bloquant
+// à l'import), E47 (format d'import de la banque, 03 §36.4), E43 (conventions).
 // =============================================================================
 import { z } from 'zod';
 

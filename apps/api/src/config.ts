@@ -2,7 +2,7 @@
 // Configuration de l'API — validée par Zod AU DÉMARRAGE (11 §3, 06 §10.2).
 // Un `undefined` silencieux sur un secret est une faille : le processus refuse de
 // démarrer plutôt que de tourner à moitié configuré.
-// Traçabilité : E33 (secrets hors code), E43.
+// Traçabilité : E33 (sécurité : secrets hors code), E43.
 // =============================================================================
 import { z } from 'zod';
 import { chargerEnv, envApiSchema, type EnvApi } from '@axion/shared';

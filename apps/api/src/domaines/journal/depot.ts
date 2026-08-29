@@ -42,7 +42,7 @@
 // par ordre chronologique et se paginera en keyset (11 §3) ; un v4 rendrait cet
 // ordre indisponible sans trier sur `created_at`, qui n'est pas unique. Les deux
 // textes sont satisfaits : le défaut SQL reste v4, le chemin applicatif produit v7.
-// Traçabilité : E5, E33, E42 (RGPD renforcé).
+// Traçabilité : E33 (sécurité), E42 (RGPD renforcé : rétention activity_log).
 // =============================================================================
 import { uuidv7 } from 'uuidv7';
 import type { ContenuLigneJournal } from '@axion/shared';

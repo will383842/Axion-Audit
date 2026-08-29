@@ -40,7 +40,7 @@
 //   · L'état de Postgres ou de MinIO : la sonde ne parle qu'à Redis.
 //
 // Le dépôt préfère une garantie faible et énoncée à une garantie forte et fausse.
-// Traçabilité : E35 (exploitation), E43 (exécutabilité).
+// Traçabilité : E35 (scalabilité : exploitation), E43 (exécutabilité).
 // =============================================================================
 import { Queue } from 'bullmq';
 import { pino } from 'pino';

@@ -21,7 +21,7 @@
 // Sur une route PUBLIQUE (login, refresh, sondes), un jeton périmé traîné par le
 // client est simplement IGNORÉ : refuser un login parce que l'ancien jeton a expiré
 // serait un verrou qui s'auto-alimente.
-// Traçabilité : E5.
+// Traçabilité : E33 (sécurité : authentification, 06 §10.1-10.2).
 // =============================================================================
 import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fastify';
 import { AppError } from '@axion/shared';

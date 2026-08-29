@@ -9,7 +9,7 @@
 // (requêtes filtrées par mission, propriété de session) restent à la revue croisée
 // (étape 4) et aux tests d'intégration RBAC — ils sont listés en fin de sortie pour
 // que personne ne croie la checklist complète.
-// Traçabilité : E31 (généricité absolue), E27/E44 (design system), E43.
+// Traçabilité : E31 (généricité absolue), E27 (design moderne, charte), E44 (tokens du design system), E43.
 //
 // -----------------------------------------------------------------------------
 // RÉVISION DU 2026-08-28 — CES CONTRÔLES GARDAIENT DES LISTES, PAS DES PROPRIÉTÉS

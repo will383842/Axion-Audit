@@ -23,7 +23,7 @@
 // détection dont l'effet est annulé par sa propre annonce ne protège personne.
 // D'où le type `ResultatRotation` : la transaction rend un VERDICT, l'appelant le
 // traduit en `AppError` une fois la validation acquise.
-// Traçabilité : E5 (RBAC serveur systématique), E33.
+// Traçabilité : E33 (sécurité : 06 §10.1-10.2), E43 (conventions API épinglées).
 // =============================================================================
 import type { FastifyBaseLogger, FastifyInstance } from 'fastify';
 import { uuidv7 } from 'uuidv7';

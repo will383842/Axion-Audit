@@ -78,6 +78,39 @@
       ]
     },
     {
+      "lot": "L2 (T5)",
+      "module": "Etancheite financiere — depot unique `scoping_financials` (invariant 3)",
+      "glob": "apps/api/src/domaines/scoping/**",
+      "reference": "docs/conception/LOT_L2.md §1 (T5), §2.2 et §5 · invariant 3 · E21 (auditeurs jamais d acces aux montants)",
+      "_note_glob": [
+        "Bascule par A17 le 2026-08-29, apres que la ceinture 2 l'a reclame — l'entree",
+        "d'attente avait ete posee une heure plus tot, T5 a atterri, elle a mordu.",
+        "",
+        "`financiers.depot.ts` est la SEULE porte vers `scoping_financials`. Le danger",
+        "qu'il ferme n'est pas la table interdite : c'est sa VOISINE. `scoping_estimates`",
+        "porte la charge (que l'auditeur a le droit de voir, 03 §18.3) et se trouve a UNE",
+        "JOINTURE des montants. Une regression ici ne casse rien de visible — elle ouvre."
+      ]
+    },
+    {
+      "lot": "L2 (T5)",
+      "module": "Route financiere `GET /v1/scoping/:id/financials` (admin exclusivement)",
+      "glob": "apps/api/src/routes/scoping.ts",
+      "reference": "05 §8 · 03 §34.1 et §34.3 · invariant 3 · E21, E43",
+      "_note_glob": [
+        "SECOND GLOB, ET C'EST LE POINT QUI COMPTE. L'entree d'attente ne nommait que",
+        "`domaines/scoping/**` : la ROUTE en serait restee dehors. Or c'est elle qui",
+        "porte `roles: ['admin'], financier: true`, la ceinture d'execution sur la",
+        "marque, le 404 indifferencie et l'ecriture de `financier.consultation`. Un",
+        "seuil qui mesure le depot mais pas la route mesure la moitie qui ne decide",
+        "de rien — l'auteur de T5 l'a signale lui-meme, et il a raison.",
+        "",
+        "Le glob vise UN FICHIER et non `apps/api/src/routes/**` : les autres routes de",
+        "ce repertoire n'ont pas ete revues sous cet angle, et les mettre sous seuil",
+        "par ricochet ferait passer pour mesure une chose que personne n'a decidee."
+      ]
+    },
+    {
       "lot": "L2",
       "module": "Journal d'activite — porte d'ecriture unique d'`activity_log` (invariant 7)",
       "glob": "apps/api/src/domaines/journal/**",
@@ -127,20 +160,6 @@
         "dans `cheminsCritiques` — c'est-a-dire exactement le trou que la ceinture 2",
         "vient d'attraper sur `apps/api/src/auth/**`. Un garde-fou ne se repare pas",
         "une fois : il se reparme."
-      ]
-    },
-    {
-      "lot": "L2 (T5)",
-      "module": "Etancheite financiere — depot unique `scoping_financials` (invariant 3)",
-      "glob": "apps/api/src/domaines/scoping/**",
-      "reference": "docs/conception/LOT_L2.md §1 (T5), §2.2 et §5 · invariant 3 · E27",
-      "statut": "non livre — ENCORE DU PAR LE LOT L2",
-      "_pourquoi_attendu": [
-        "AJOUT A17, 2026-08-29. Meme raison que l'entree `users` ci-dessus. Ce module",
-        "est le CONSOMMATEUR de la marque `ContexteAdmin` (apps/api/src/auth/contexte.ts) :",
-        "la marque est livree et testee, le depot qui l'exige ne l'est pas. Le",
-        "« balayage sentinelle financier » promis par la note L2 §5 n'a donc pas d'objet",
-        "aujourd'hui — il en aura un des que ce repertoire existera."
       ]
     },
     {

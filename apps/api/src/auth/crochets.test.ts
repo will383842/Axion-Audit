@@ -47,7 +47,7 @@
 // par ③ AVANT le `lireUtilisateurAuthentifie`. Un test qui démarrerait un conteneur
 // Postgres pour éprouver un `startsWith` serait un test d'intégration qui s'ignore.
 //
-// Traçabilité : E5 (RBAC serveur systématique).
+// Traçabilité : E21 (auditeurs jamais d'accès aux montants), E33 (sécurité).
 // =============================================================================
 import { beforeAll, afterAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';

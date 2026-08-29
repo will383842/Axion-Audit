@@ -24,7 +24,7 @@
 // crochet ③ ne lit jamais `users`. Aucune base n'est touchée — un test qui démarrerait
 // un conteneur pour compter des refus serait un test d'intégration qui s'ignore.
 //
-// Traçabilité : E5, E43.
+// Traçabilité : E33 (sécurité : plafonds 11 §3), E43 (conventions API épinglées).
 // =============================================================================
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';

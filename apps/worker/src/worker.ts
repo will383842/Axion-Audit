@@ -10,7 +10,7 @@
 // leurs lots (L10 DOCX, L11 LLM, L13 webhooks, purges RGPD). Les noms de files sont
 // déclarés dans `files.ts` pour que l'ajout d'un job soit une ligne, pas une refonte.
 // Voir DECISIONS.md 2026-08-27 « Squelette applicatif minimal ».
-// Traçabilité : E17 (stack imposée), E35 (exploitation).
+// Traçabilité : E17 (stack imposée), E35 (scalabilité : exploitation).
 // =============================================================================
 import { Queue, Worker, type Processor } from 'bullmq';
 import { pino } from 'pino';

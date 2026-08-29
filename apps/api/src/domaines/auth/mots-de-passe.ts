@@ -21,7 +21,7 @@
 // de passe faux répond en 40 ms énumère les comptes aussi sûrement qu'un message
 // « adresse inconnue ». D'où `consommerLeTempsDUneVerification` — voir son
 // commentaire, qui dit aussi ce qu'elle ne garantit pas.
-// Traçabilité : E5, E33 (secrets hors code).
+// Traçabilité : E33 (sécurité : secrets hors code, Argon2id 06 §10.1).
 // =============================================================================
 import { randomBytes } from 'node:crypto';
 import { argon2Verify, argon2id } from 'hash-wasm';

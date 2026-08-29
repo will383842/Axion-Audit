@@ -4,7 +4,7 @@
 // pas provoquer un `undefined` silencieux trois heures plus tard en pleine sync.
 // Le fichier .env.example documente chaque variable (02 §30.4-1) : ce schéma en est
 // la contrepartie exécutable.
-// Traçabilité : E33 (secrets hors code), E43.
+// Traçabilité : E33 (sécurité : secrets hors code), E43.
 // =============================================================================
 import { z } from 'zod';
 

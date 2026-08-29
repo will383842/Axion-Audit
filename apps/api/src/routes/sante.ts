@@ -14,7 +14,7 @@
 // MÉTIER) : elles sont documentées ici et dans apps/api/README.md au titre du
 // 11 §8.6. Elles n'exposent RIEN — ni version, ni nom d'hôte, ni message d'erreur
 // de dépendance (06 §10.2 : pas d'aide à la reconnaissance).
-// Traçabilité : E17, E35 (exploitation).
+// Traçabilité : E17 (stack imposée), E35 (scalabilité : exploitation).
 //
 // -----------------------------------------------------------------------------
 // POURQUOI CES DEUX ROUTES SONT EXEMPTÉES DU QUOTA GLOBAL — et elles seules

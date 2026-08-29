@@ -32,7 +32,7 @@
 // filtre ; cela n'aurait pas prouvé qu'elle est BRANCHÉE sur le chemin qu'un
 // attaquant emprunte — et c'est cette seconde chose qui protège.
 //
-// Traçabilité : E5, E33, E42 (RGPD renforcé), invariant 7.
+// Traçabilité : E33 (sécurité), E42 (RGPD renforcé : rétention activity_log), invariant 7.
 // =============================================================================
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Client } from 'pg';

@@ -17,7 +17,8 @@
 // suffit d'un `estAdmin: true` écrit de bonne foi dans un service pour ouvrir la
 // table. Une marque ne se fabrique pas ; elle se REÇOIT du seul endroit qui a lu le
 // rôle en base.
-// Traçabilité : E5 (RBAC serveur), E27 (étanchéité financière).
+// Traçabilité : E21 (auditeurs jamais d'accès aux montants — « RBAC routes +
+// colonnes, testé »), E33 (sécurité).
 // =============================================================================
 import type { RoleUtilisateur } from '../db/schema.js';
 

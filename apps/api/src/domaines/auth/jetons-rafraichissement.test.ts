@@ -33,7 +33,7 @@
 // et non pour la vérité est PIRE qu'une couverture basse, parce qu'il rassure : ces
 // deux branches restent donc rouges, et c'est un signalement, pas un oubli.
 //
-// Traçabilité : E5, E33.
+// Traçabilité : E33 (sécurité : 06 §10.1).
 // =============================================================================
 import { beforeAll, describe, expect, it } from 'vitest';
 

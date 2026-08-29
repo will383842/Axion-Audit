@@ -36,7 +36,7 @@
 // La propriété est donc éprouvée par sa CAUSE — le nombre d'unités de travail
 // Argon2id — qui est déterministe, et non par son symptôme, qui ne l'est pas.
 //
-// Traçabilité : E5 (RBAC serveur systématique), E33, E43.
+// Traçabilité : E33 (sécurité), E43 (conventions API épinglées).
 // =============================================================================
 import { randomBytes } from 'node:crypto';
 import type * as ModuleHashWasm from 'hash-wasm';
