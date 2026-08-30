@@ -4091,3 +4091,58 @@ topologie, que `DECISIONS.md` a tranchée le 2026-08-28.
 Décideur : **A01**, sous l'autorisation permanente du 2026-08-30 (infrastructure de staging).
 **Remonté à Williams** pour l'écart de dossier de porte, qui touche une preuve signée.
 Impact spec : **aucun amendement**. Correction de `restore-test.sh` et note dans `PORTE_A`.
+
+---
+
+## 2026-08-30 — [gouvernance] Williams lève la réserve de la porte P-A, et arbitre cinq points
+
+Williams, dans sa fenêtre, directement — ce qui compte pour trois de ces cinq points, dont deux avaient
+été refusés la veille au motif qu'ils m'étaient rapportés par un pair et non dits par lui.
+
+**1. « Lève la réserve. »** La porte P-A était signée 🟡 **accepté sous réserve** le 2026-08-27, sur
+trois réserves dont les deux principales portaient sur les critères 2 (restauration testée) et 4
+(déploiement par la CI). **Les deux sont désormais prouvées par leur canal réel** — runs `33322880502`
+et `33320615462`, toutes étapes exécutées, chaque garde vu tranchant dans le journal. La réserve est
+**levée par son signataire**, et c'est bien un geste humain : l'autopilote avait explicitement refusé
+de la lever seul.
+
+**2. La ligne dans `CLAUDE.md`** — _« oui, je veux la ligne dans CLAUDE.md »_. Accordée. Elle avait été
+**refusée la veille** alors que la session voisine la rapportait comme déjà tranchée par Williams :
+un pair qui relaie une décision n'est pas le décideur, et cette règle protège Williams, pas
+l'autopilote. La session voisine avait elle-même reconnu le bien-fondé du refus et retiré sa ligne.
+**La branche `lot/l0-organisation` n'a PAS été fusionnée** : elle est en retard sur `main` et sa fusion
+aurait écrasé le travail de l'après-midi. Seuls les deux ajouts voulus sont repris —
+`docs/ORGANISATION_AGENTS.md` et la ligne de renvoi.
+
+**3. « La passphrase est déjà dans le coffre. »** **Vrai, et ce n'était pas ce que je signalais.**
+`PGBACKREST_CIPHER_PASS` et `BACKUP_ENCRYPTION_PASSPHRASE` sont bien dans le coffre — c'est justement
+sa raison d'être. Le risque porte sur **la clé du coffre lui-même**, `BACKUP_SECRETS_PASSPHRASE`, qui
+par construction **ne peut pas y être** : _une sauvegarde qu'on ne peut déchiffrer qu'avec ce qu'on a
+perdu ne protège de rien_. La décision D-3 du 2026-08-28 (option A) l'a placée dans le gestionnaire de
+mots de passe de Williams — **détenteur unique**. Mesuré ce jour : le coffre existe (trois
+exemplaires, le dernier de 02h30) et **part hors serveur** — expédition 17 s après la passe. La chaîne
+fonctionne ; c'est la garde de la clé qui reste à un seul point.
+
+**4. L'ancien jeton Coolify — « il me semblait que ça était déjà fait ».** **Mesuré : ça ne l'est
+pas.** Le secret `COOLIFY_API_TOKEN` porte `updated_at = 2026-08-28T03:16:50Z`, soit **deux jours avant
+la création** du jeton `deploy-staging-ci` limité au déploiement. C'est donc toujours l'ancien, à
+portée large, que la CI utilise. Le remplacement reste à faire, **par Williams** : le port 8000 est
+fermé à Internet et aucun jeton n'est stocké sur le serveur, l'autopilote ne peut donc pas lire la
+console.
+
+**5. Le cinquième axe du moteur M2 — arbitrage confirmé.** L'option 3 (filtrer sur `geo` **ET**
+`levels`) est retenue, conformément à l'entrée du jour. Elle satisfait littéralement les deux textes
+qui divergent (07 dit « niveau », 03 §16.3 dit « périmètre ») au lieu d'en trahir un.
+**L'HYPOTHÈSE QUI RESTE À VÉRIFIER, ET QUI N'EST PAS ACQUISE** : que `levels` vide signifie « tous
+niveaux ». Le pack l'écrit pour `sectors` et `target_services`, **jamais pour `levels`**. Si le seed
+L1 pose des `levels` restrictifs, l'option 3 retire des questions que l'option 2 aurait gardées. Le
+test du moteur devra donc contenir **une question à `levels` vide et une question à `levels`
+restrictif** — sans quoi il serait vert par vacuité et cacherait l'écart.
+
+Options : sans objet — ce sont des arbitrages du décideur, pas un choix technique de l'autopilote.
+
+Arbitrage : **tel que ci-dessus.**
+Précédence : `CLAUDE.md` §3 (ce que l'autopilote ne décide jamais seul) — les points 1, 2 et 5 en
+relèvent, et c'est précisément pourquoi ils attendaient Williams.
+Décideur : **Williams**, directement, le 2026-08-30.
+Impact spec : **amendement de `CLAUDE.md` §4** (renvoi vers `docs/ORGANISATION_AGENTS.md`).
