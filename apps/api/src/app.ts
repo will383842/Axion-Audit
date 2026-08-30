@@ -19,6 +19,7 @@ import { enregistrerCompilateursZod } from './http/zod.js';
 import { routesAuth } from './domaines/auth/routes.js';
 import { routesSante } from './routes/sante.js';
 import { routesScoping } from './routes/scoping.js';
+import { routesUsers } from './routes/users.js';
 
 // =============================================================================
 // PÉRIMÈTRE DE CONFIANCE DES EN-TÊTES DE PROXY — correctif de sécurité.
@@ -185,6 +186,21 @@ export async function construireApp(): Promise<FastifyInstance> {
   // `scoping_financials`, et le balayage sentinelle vérifie que ça reste vrai à
   // l'exécution, sur le registre `onRoute` plutôt que sur une liste écrite à la main.
   await app.register(routesScoping, { prefix: '/v1' });
+
+  // Comptes (07, ligne L2 : « CRUD users ») — lot L2/T3. HUIT routes sont
+  // enregistrées, et non sept : Fastify ajoute d'office `HEAD /v1/users` en
+  // compagne du `GET` (`exposeHeadRoutes`). Elle n'est écrite dans aucun fichier
+  // du produit — relevée le 2026-08-31 par l'agent qui testait ce module, en
+  // lisant le REGISTRE D'EXÉCUTION plutôt que les fichiers. Elle hérite de
+  // `config.acces` et du crochet ③, donc elle est protégée (403/200/401 vérifiés) ;
+  // ce n'est pas une faille, c'est un écart entre ce que le code DIT et ce qu'il
+  // ENREGISTRE. Le jour où une route de comptes ne devra PAS exposer son `HEAD`,
+  // il faudra le décider, pas le subir.
+  // Toutes sont
+  // `admin` (03 §34.1 « la console est ADMIN SEUL », §34.3 « JAMAIS […] les
+  // comptes » pour le lead). `GET /v1/users` est le PREMIER appelant réel de la
+  // pagination keyset de `http/pagination.ts` — curseur `(created_at, id)`.
+  await app.register(routesUsers, { prefix: '/v1' });
 
   return app;
 }
