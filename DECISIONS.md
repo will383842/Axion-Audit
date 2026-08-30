@@ -4408,6 +4408,7 @@ contradiction est entre deux notes de conception, pas entre sections du pack.
 Décideur : **A01**. **Remonté à Williams** parce qu'il retire une ligne d'un plan de tests que la porte
 P-B allait lire.
 Impact spec : **aucun amendement du pack** ; deux notes de conception à aligner.
+
 ## 2026-08-31 — [L2b] `@fastify/cookie` entre dans la liste épinglée — décidé par Williams
 
 **« OK pour @fastify/cookie, ajoute-le »** — Williams, directement, le 2026-08-31.
