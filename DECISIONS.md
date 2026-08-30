@@ -4354,3 +4354,57 @@ sections de rang différent.
 Décideur : **Williams** pour l'ordre de les faire ; **A01** pour la forme, avec les deux décisions
 signalées ci-dessus.
 Impact spec : **amendement horodaté du fichier 04**, sceau régénéré, migration `up`/`down` livrée.
+
+---
+
+## 2026-08-31 — [L2/L3] L2 se donne un critère de test qu'il ne peut pas exécuter
+
+Enquête déclenchée par la passe de traçabilité, qui relevait « **E45 : la colonne est lue, la règle
+n'est pas appliquée** ». **L'alerte est infirmée sur le fond, et l'enquête en a trouvé une autre.**
+
+**CE QUI EST INFIRMÉ, et il faut le dire aussi nettement que si ça l'avait été.** Le relevé portait sur
+`apps/api/src/domaines/auth/depot.ts` ; la ligne de traçabilité est dans `apps/api/src/auth/depot.ts`
+— **deux fichiers homonymes**. Et sur le fond : §34.4 ne refuse **que** l'affectation à `mission_users`
+— ni le login, ni le pull, ni l'accès API. Or **cette route n'existe pas et appartient à L3** : la note
+de conception L3 l'écrit elle-même, « garde `habilitated_at` §34.4 **appelée par la route
+`assignments` de L3** ». **En L2, il n'y a rien à refuser.** E45 « partiellement amorcée » est donc le
+bon verdict, et le rattachement du dépôt est légitime : il **approvisionne** la garde de L3 en lisant
+la colonne à chaque requête, pour qu'elle n'ait pas à rouvrir la base.
+
+**CE QUE L'ENQUÊTE A TROUVÉ À LA PLACE, et qui touche la porte P-B.** Deux notes de conception se
+contredisent :
+· **L3** dit que la garde est _appelée par la route `assignments` de L3_ ;
+· **L2** inscrit dans **son propre plan de tests** : « Habilitation : affectation `mission_users`
+refusée si `habilitated_at IS NULL` (§34.4) — intégration ».
+
+**L2 se donne donc un critère d'acceptation qu'il ne peut pas exécuter, faute d'appelant.** La porte
+P-B cocherait une case dont la preuve ne peut pas exister — exactement ce que l'addendum de P-A vient
+de corriger sur deux autres critères.
+
+Options :
+
+1. **Écrire un test L2 qui appelle directement le dépôt**, sans passer par une route. Refusé : il
+   prouverait qu'une fonction refuse, pas que **le chemin réel** refuse. C'est la distinction
+   contenu/canal qui a occupé toute la journée d'hier, et elle vaut ici aussi.
+2. **Retirer la ligne du plan de tests de L2.** Refusé seul : le critère disparaîtrait sans que
+   personne ne garantisse qu'il réapparaît en L3.
+3. **Déplacer le critère en L3, à l'endroit où il est exécutable, et le dire dans les deux notes.**
+
+Arbitrage : **option 3.** Un critère d'acceptation doit vivre là où **sa preuve peut exister**. Le
+laisser en L2 produirait soit une case cochée sans preuve, soit un test qui éprouve autre chose que ce
+qu'il annonce — les deux défauts que ce dépôt passe ses journées à démonter.
+
+**CE QUE CELA CHANGE POUR LA PORTE P-B, et qui doit être su avant qu'elle ne s'ouvre** : ce critère
+**n'est pas cochable en L2**, et son absence ne doit pas être lue comme un manque de L2. Il est reporté
+à L3d, avec la route qui le rend exécutable.
+
+**TROIS ÉLÉMENTS DÉCLARÉS ET JAMAIS ÉMIS, qui ne sont PAS des orphelins** : `NOT_HABILITATED`,
+`non_habilite` et l'action `user.habilitate`. Ils attendent la route `habilitate` de T3, en cours
+d'écriture. Le noter pour qu'une passe de traçabilité ultérieure ne les compte pas comme du code mort.
+
+Précédence : `CLAUDE.md` §4 étape 6 (le gardien coche les critères **avec la preuve**) — un critère
+sans preuve possible n'est pas un critère. Règle de précédence du pack **sans objet** : la
+contradiction est entre deux notes de conception, pas entre sections du pack.
+Décideur : **A01**. **Remonté à Williams** parce qu'il retire une ligne d'un plan de tests que la porte
+P-B allait lire.
+Impact spec : **aucun amendement du pack** ; deux notes de conception à aligner.
