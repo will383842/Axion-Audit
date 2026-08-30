@@ -480,6 +480,31 @@ jobs:
       - name: pnpm check:graphe-modules
         run: pnpm check:graphe-modules
 
+      # ---------------------------------------------------------------------
+      # LA PORTE D'ÉCRITURE UNIQUE DU JOURNAL — ET LE DÉFAUT M-1, UNE TROISIÈME FOIS.
+      # ---------------------------------------------------------------------
+      # `check:porte-journal` est le SEUL garant mécanique de l'invariant 7 sur
+      # `activity_log` : « une seule fonction d'écriture, `journaliserActivite` ».
+      # Son propre en-tête explique pourquoi la note de conception ne suffit pas —
+      # « une phrase de conception vaut jusqu'au premier agent qui ne l'a pas lue ».
+      #
+      # MESURÉ LE 2026-08-31 : ce script était déclaré dans `package.json` et
+      # appelé par `pnpm verify` — or `pnpm verify` n'est appelé NULLE PART dans
+      # `.github/`, délibérément (voir le README de ce répertoire). Il ne tournait
+      # donc QUE si un humain le tapait à la main. Sur les treize `check:*` du
+      # dépôt, IL ÉTAIT LE SEUL DANS CET ÉTAT.
+      #
+      # ET LE COMMENTAIRE DE `check:jonction`, QUARANTE LIGNES PLUS HAUT, RACONTE
+      # DÉJÀ CE DÉFAUT — « le défaut M-1 reproduit dans le commit qui corrigeait
+      # M-1 ». La leçon était écrite, longuement, et ce garde-ci est resté dans
+      # l'état qu'elle décrit. Un savoir écrit et non appliqué est la forme la plus
+      # tenace de cette famille : elle survit à sa propre documentation.
+      #
+      # Relevé par la passe de traçabilité E1-E47, dans le sens code → exigences,
+      # celui qui n'avait jamais été fait.
+      - name: pnpm check:porte-journal (invariant 7 — une seule porte d'écriture)
+        run: pnpm check:porte-journal
+
       # LE TROISIÈME SENS DU MÊME GRAPHE. `check:jonction` et `check:graphe-modules`
       # rattachent le code AU CODE. `check:tracabilite` rattache le code À LA SPEC :
       # tout `E<n>` cité dans une source doit exister dans `docs/TRACABILITE_E1-E47.md`
