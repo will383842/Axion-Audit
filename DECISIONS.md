@@ -4508,3 +4508,159 @@ n'est pas un fichier du pack.
 Décideur : **Williams**, sur la décomposition en trois règles. **A01** pour la rédaction et pour la
 décision de ne citer aucun chiffre dans le renvoi.
 Impact spec : **amendement de `docs/ORGANISATION_AGENTS.md` §2 et du renvoi de `CLAUDE.md` §4.**
+
+---
+
+## 2026-08-31 — [L3a] Quel rôle accède au référentiel client ? Le pack ne le dit nulle part
+
+`docs/conception/LOT_L3.md` §2 nomme les quatre routes `companies` mais ne leur donne aucune
+politique d'accès. Le pack a été relu sur ce point avant d'écrire la première ligne : **05 §8 et
+§24.2 ne listent pas `/v1/companies`** (elles ne nomment que `/v1/missions`, `/v1/scoping`,
+`/v1/answers`…), et la matrice **03 §34.1** ne comporte aucune ligne « fiche client ». C'est un
+silence, pas une négligence de lecture — et `apps/api/src/auth/politique.ts` refuse le démarrage
+d'une route sans `config.acces` : il fallait donc trancher pour livrer.
+
+Options :
+
+1. `roles: ['admin']` — le plus restrictif.
+2. `roles: ['admin', 'consultant']` — un consultant crée la fiche du client qu'il va auditer.
+3. `type: 'authentifie'` — tout compte actif lit le référentiel client.
+
+Arbitrage : **option 1, `admin` seul, et l'ouverture reste possible ; l'inverse ne l'était pas.**
+
+Trois éléments orientent, aucun ne prescrit :
+· **03 §34.1 : « la console est ADMIN SEUL »** en V1. Une fiche client est un objet de console — la
+PWA terrain ne connaît que des missions, jamais le référentiel qui les porte (05 §9.5 : le pull de
+sync ne descend pas `companies`) ;
+· **03 §34.3** borne le lead de mission et l'exclut nommément des « comptes » et du financier ; rien
+n'y étend son périmètre au référentiel client ;
+· `companies.external_ref` est **la clé de liaison avec la console commerciale axion-ia.com** (04,
+E18). L'ouvrir plus largement ouvrirait la lecture de cette liaison, dont le §20.6 fait un objet
+d'administration.
+
+**La règle qui décide, et elle n'est pas de goût** : un droit qu'on ouvre ne se reprend pas sans
+casser un usage installé, alors qu'un droit qu'on élargit ne casse rien. Sur un silence, le coût
+d'erreur est donc asymétrique — et la doctrine du dépôt sur les silences d'accès est déjà écrite
+(`domaines/scoping/financiers.depot.ts` : « une porte fermée ne trie pas le courrier »). L'option 2
+sera légitime le jour où un besoin terrain réel l'appellera ; elle sera alors **une ligne** dans
+`CONFIG_ADMIN` et une entrée ici.
+
+⚠ **CONSÉQUENCE À CONNAÎTRE, ÉCRITE PLUTÔT QUE DÉCOUVERTE EN RECETTE** : un consultant ne peut ni
+créer ni lire une fiche client. Si le parcours de préparation d'une mission (L3b) suppose qu'un
+consultant crée l'entreprise avant la mission, **il faudra rouvrir cette décision** — et non
+contourner la route.
+
+Précédence : `CLAUDE.md` invariant 3 (RBAC serveur systématique) · §3-6 (documenter ce que le pack ne
+liste pas) · 03 §34.1 comme texte le plus proche. Règle de précédence du pack **sans objet** : il n'y
+a pas divergence entre deux textes, il y a absence de texte.
+
+Décideur : A01, sur constat de l'agent L3a.
+Impact spec : aucun amendement du pack. Politique d'accès des quatre routes `companies` documentée
+ici et dans `apps/api/src/routes/companies.ts`.
+
+---
+
+## 2026-08-31 — [L3a] `COMPANY_DUPLICATE` était arbitré depuis deux jours et n'existait pas dans le code
+
+L'entrée du 2026-08-29 (« Les quatre codes d'erreur du lot ») retient « `COMPANY_DUPLICATE` · 409 ·
+périmètre réduit au SIREN ». **Mesuré au moment d'écrire L3a : `packages/shared/src/errors.ts` porte
+17 codes, et celui-là n'y est pas.** Le brief du lot interdit par ailleurs tout code hors de ce
+fichier — la route ne pouvait donc pas être écrite telle qu'elle est arbitrée.
+
+Le même relevé montre que **deux autres amendements de la même journée sont restés sur le papier** :
+le champ `code` optionnel d'`errorDetailSchema` et le statut **422** (tous deux annoncés « Impact
+spec » de l'entrée du 2026-08-29). Ils appartiennent à l'import CSV (L3c) et à l'import de banque
+(L9), pas à `companies`.
+
+Options :
+
+1. S'arrêter et rendre le lot non livrable tant que le code n'est pas posé par un autre.
+2. Ramener le conflit de SIREN au `CONFLICT` générique et ignorer l'arbitrage.
+3. **Poser le seul code que l'arbitrage du 2026-08-29 nomme pour ce périmètre, et signaler les deux
+   amendements restants sans les faire.**
+
+Arbitrage : **option 3.**
+
+L'option 2 contredirait une décision d'A01 déjà prise, datée et motivée — et le motif tient : 05 §8.3
+annonce un second conflit possible sur ces routes (référentiel partagé `external_ref`), qui rendrait
+un branchement front bâti sur un conflit nu **faux en silence**. L'option 1 confondrait « décider »
+et « exécuter » : ajouter un code d'erreur **déjà arbitré, à son statut arbitré, sur son périmètre
+arbitré** est de l'exécution. Ce qui aurait exigé un arrêt, c'est un code dont personne n'aurait
+tranché l'existence — et ce n'est pas le cas ici.
+
+**Ce qui n'a PAS été fait, délibérément** : ni le `code` d'`errorDetailSchema`, ni le statut 422. Ils
+n'ont aucun appelant dans ce lot, et un code d'erreur sans appelant est exactement le « code mort »
+que l'entrée du 2026-08-29 refuse. Ils sont **dus aux lots L3c et L9**, qui les poseront avec leur
+premier usage.
+
+**Même geste, même raison, pour le catalogue du journal** : `packages/shared/src/journal.ts` ne
+connaissait ni l'entité `company` ni ses actions. Deux actions (`company.create`, `company.update`),
+l'entité `company`, et `CHAMPS_ENTREPRISE_JOURNALISABLES` sont ajoutés. Aucune action de
+consultation : le catalogue n'en trace aucune hors du financier (06 §10.5), et une liste qui se
+rafraîchit à chaque ouverture d'écran noierait la table. `activity_log.entity_type` est un `TEXT`
+**sans CHECK** (migration `0007`) : l'ajout ne touche donc pas le fichier 04.
+
+Précédence : `CLAUDE.md` §9 (les codes vivent dans `packages/shared`, statut HTTP cohérent) · §3-6
+(une décision d'API se documente) · invariant 7 (toute correction est tracée). La règle de précédence
+du pack est **sans objet** : l'écart est entre une décision et le code, pas entre deux textes.
+
+Décideur : A01, par l'entrée du 2026-08-29 qu'il ne s'agit ici que d'exécuter.
+Impact spec : aucun amendement du pack. `ERROR_CODES` passe de 17 à 18 entrées ; `ACTIONS_JOURNAL` de
+12 à 14 ; `ENTITES_JOURNAL` de 2 à 3.
+
+---
+
+## 2026-08-31 — [L3a] Trois silences de forme du CRUD companies : le curseur, la place de l'avertissement, la suppression
+
+Trois questions que ni le pack ni la note de conception ne tranchent, rencontrées en écrivant les
+quatre routes. Elles sont groupées parce qu'elles ont la même nature — de la FORME d'API, jamais du
+produit — et le même arbitre.
+
+Options :
+
+1. Les trancher au fil du code sans les écrire.
+2. **Les trancher en les écrivant, chacune sur son propre motif.**
+
+Arbitrage : **option 2 — trois arbitrages distincts.**
+
+**a. LE CURSEUR EST `(name, id)`, PAS `(created_at, id)`.** La note de conception L3 §2 le fige
+(« `companies`: `name,id` ») et `apps/api/src/http/pagination.ts` en porte déjà la trace dans son
+en-tête, avant toute ligne de ce lot. Le brief de l'agent rappelait à juste titre le précédent de
+`users` — mais ce précédent porte sur la **forme** (curseur composite, dernière clé unique), pas sur
+le **choix des colonnes**, que le contrat 11 §3 confie explicitement à chaque route (« curseur
+documenté par route »). Le motif est fonctionnel : un référentiel client se cherche par ordre
+alphabétique. ⚠ **Le piège des microsecondes reste vrai et reste écrit** : il vient de la conversion
+`TIMESTAMPTZ` → `Date` du pilote, il ne s'applique pas à une colonne `TEXT`, et le dépôt le dit à
+l'endroit exact où le lecteur suivant se demandera pourquoi le `::text` de `users` a disparu.
+**Dette REMONTÉE** : aucun index ne sert `companies(name, id)` au §7.1 du fichier 04 — le tri est
+fait en mémoire. Sans effet en Phase 1 ; l'ajouter est un amendement du 04, donc Williams.
+
+**b. L'AVERTISSEMENT VIT DANS LA RÉPONSE DE L'ÉCRITURE, PAS DANS LA FICHE.** L'entrée du 2026-08-29 a
+substitué au 409 sur le nom un « 201 avec un champ d'avertissement » sans en fixer la forme.
+`POST` et `PATCH` rendent donc `{ company, secteurAQualifier, doublonsNomPossibles }`, tandis que
+`GET` rend la fiche à plat. **L'asymétrie est le prix d'une distinction juste** : ces deux champs
+sont des constats sur l'ACTE d'écriture, pas des propriétés de l'entreprise ; les aplatir obligerait
+la lecture à rescanner les homonymes à chaque affichage, ou à les rendre faux. Le nom
+`secteurAQualifier` est repris **verbatim** de la note de conception §3d ; il jure avec les champs
+anglais voisins, et cet écart est assumé plutôt que corrigé en douce — la note lie ce lot, et
+renommer un champ contractuel n'est pas de l'exécution. **À reprendre au moment où la console
+consommera ces routes**, si le mélange gêne à l'usage.
+
+**c. IL N'Y A PAS DE ROUTE DE SUPPRESSION, ALORS QUE LA COLONNE EXISTE.** `companies.deleted_at` est
+au fichier 04, et pourtant aucune section fonctionnelle ne dit ce que supprimer une fiche
+signifierait pour les missions qui la référencent (`missions.company_id` est **NOT NULL**). Créer la
+route exigerait de trancher cela : c'est du produit, pas une convention. Les lectures filtrent
+néanmoins `deleted_at IS NULL` dès aujourd'hui — le filtre est écrit **une fois**, dans le dépôt.
+⚠ **Conséquence à connaître le jour où la suppression arrivera** : l'index unique partiel
+`uq_companies_siren` **n'exclut pas les lignes supprimées**. Une fiche supprimée retiendra donc son
+SIREN, et le 409 désignera une fiche que la liste ne montre plus. Le corriger demanderait de changer
+l'index, donc le fichier 04.
+
+Précédence : `CLAUDE.md` §9 (pagination keyset, curseur documenté par route ; nommage camelCase) ·
+§3-2 (le schéma 04 est la signature de Williams) · §0 (la note de conception du lot lie l'agent).
+Règle de précédence du pack **sans objet** pour a et c ; pour b, la note de conception ne peut ni
+étendre ni réduire ce que le pack fixe, mais le pack ne fixe rien ici.
+
+Décideur : A01, sur dossier de l'agent L3a.
+Impact spec : aucun amendement du pack. Deux dettes remontées à Williams (index
+`companies(name, id)` ; portée de `uq_companies_siren` vis-à-vis de `deleted_at`).

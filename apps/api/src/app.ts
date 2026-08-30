@@ -19,6 +19,7 @@ import { enregistrerCompilateursZod } from './http/zod.js';
 import { routesAuth } from './domaines/auth/routes.js';
 import { routesSante } from './routes/sante.js';
 import { routesScoping } from './routes/scoping.js';
+import { routesCompanies } from './routes/companies.js';
 
 // =============================================================================
 // PÉRIMÈTRE DE CONFIANCE DES EN-TÊTES DE PROXY — correctif de sécurité.
@@ -185,6 +186,11 @@ export async function construireApp(): Promise<FastifyInstance> {
   // `scoping_financials`, et le balayage sentinelle vérifie que ça reste vrai à
   // l'exécution, sur le registre `onRoute` plutôt que sur une liste écrite à la main.
   await app.register(routesScoping, { prefix: '/v1' });
+
+  // Référentiel client (07, table des lots : « API missions/companies — dédup SIREN
+  // R3, NAF→secteur R4 ») — lot L3/L3a. Les quatre routes sont `admin` seul ; le
+  // crochet `onRoute` refuse le démarrage si l'une d'elles perdait `config.acces`.
+  await app.register(routesCompanies, { prefix: '/v1' });
 
   return app;
 }

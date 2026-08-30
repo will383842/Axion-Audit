@@ -24,9 +24,12 @@ et **un garde qui bloque à tort finit désactivé** — ce qui est pire que pas
 
 ## Format — quatre colonnes, une ligne par module
 
-| module                          | incrément consommateur | déclaré le | justification                                                                                                                                                               |
-| ------------------------------- | ---------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| apps/api/src/http/pagination.ts | L3b                    | 2026-08-29 | Moitié serveur du keyset (11 §3) livrée au socle L3a ; premiers consommateurs nommés par `docs/conception/LOT_L3.md` §2 : `GET /v1/companies` puis `GET /v1/missions` (L3b) |
+| module | incrément consommateur | déclaré le | justification |
+| ------ | ---------------------- | ---------- | ------------- |
+
+_(Aucune entrée. `apps/api/src/http/pagination.ts` y figurait depuis le 2026-08-29 ; son premier
+consommateur réel — `GET /v1/companies`, via `apps/api/src/domaines/companies/depot.ts` — est livré
+par l'incrément L3a. La soupape a fait son office : la ligne est retirée, comme la règle 2 l'exige.)_
 
 ## Les cinq règles que la machine applique
 

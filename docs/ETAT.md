@@ -1827,3 +1827,66 @@ miennes, deux des leurs** — dont une alerte sur T3 et mon diagnostic mémoire 
 n'aurait été vue par son auteur seul.** La discipline de mesure reste le seul garde : ne rien conclure
 d'un verdict global, lire les étapes, et écrire à côté de chaque « vérifié » ce que la preuve
 n'établit pas.
+
+## 2026-08-31 00h30 — [lot L3 / incrément L3a — `companies`] — étape pipeline 3/7 (auto-revue faite)
+
+Dernier commit vert : (ce commit) · Branche : lot/l3a-companies · Poussé : oui
+Tâche en cours : L3a — l'API `companies` (quatre routes, dédup SIREN R3, NAF→secteur R4). **Code
+seul : aucun test écrit par moi (09 §5.6).**
+Prochaine action : **confier les tests à un agent qui n'a pas écrit ce code** — priorité aux quatre
+cas listés ci-dessous, puis revue croisée (étape 4/7).
+Tests rouges connus : aucun **imputable à ce lot**. `pnpm test:unit` échoue par intermittence sur un
+`beforeAll` de 10 s dans `auth/socle.test.ts` / `auth/crochets.test.ts` (préchauffage d'imports) —
+**mesuré identique sur la base sans mes modifications** (stash : 367 passés, 1 fichier en échec, dans
+les deux cas). Ce n'est donc pas une régression, mais c'est une **flakiness réelle à corriger**.
+
+📌 **CE QUI EST LIVRÉ.** `GET|POST /v1/companies` · `GET|PATCH /v1/companies/:id`, toutes en forme
+déclarative (`withTypeProvider<FournisseurZod>()` + `schema:` in **et** out), toutes
+`config.acces: roles: ['admin']`. **Preuve d'exécution** : `construireApp()` démarre et le registre
+`onRoute` rend **6 entrées** `/v1/companies*` (HEAD compris), toutes `protegee=true`, toutes admin.
+`apps/api/src/http/pagination.ts` cesse d'être en attente : c'est son **premier consommateur réel**,
+la ligne de `scripts/modules-en-attente.md` est retirée comme la règle 2 l'exige.
+
+📌 **LE PIÈGE CENTRAL, ET CE QUE LE CODE EN FAIT.** L'index du fichier 04 est
+`companies(siren) WHERE siren IS NOT NULL` — **PARTIEL**. Plusieurs fiches à `siren = NULL` sont donc
+légitimes (filiales étrangères, §16), et une déduplication qui traiterait `NULL` comme une valeur
+refuserait des créations valides. Deux régimes, jamais un seul : **SIREN présent** → la contrainte
+arbitre, `409 COMPANY_DUPLICATE` portant l'id de la fiche existante, aucune lecture préalable (elle
+n'ajouterait qu'un aller-retour et l'illusion d'une garantie face à une course) ; **SIREN absent** →
+aucune unicité possible, donc **avertissement non bloquant** sur le nom normalisé, rendu avec le
+`201`. C'est ce que R3 écrit (« **alerte** ») et ce que `DECISIONS.md` du 2026-08-29 a substitué au
+409 que la note de conception proposait.
+
+📌 **TROIS DÉFAUTS TROUVÉS DANS L'EXISTANT — un seul est à moi.**
+
+· **`naf_sector_map` n'est PAS indexée par le code APE complet.** `seed.mjs` la peuple de **88 lignes
+dont la clé est une DIVISION à deux chiffres** (`'01'`…`'99'`), alors que `companies.naf_code` porte
+un code APE complet (`'62.01Z'`, fixture de démonstration). Une correspondance écrite naïvement
+n'aurait **jamais** rien trouvé, et **R4 serait sorti vert en ne faisant rien** : chaque création
+aurait rendu poliment « secteur à qualifier » sans que la table soit consultée une seule fois. Le
+code passe donc par `divisionNaf()`. **C'est le défaut le plus coûteux du lot, et il est invisible en
+relecture.**
+
+· **`COMPANY_DUPLICATE` était arbitré depuis le 2026-08-29 et absent d'`errors.ts`** (17 codes
+mesurés). Posé, avec son statut et son périmètre arbitrés. **Deux autres amendements de la même
+entrée restent dus** : le `code` optionnel d'`errorDetailSchema` et le statut **422** — ils
+appartiennent à L3c et L9, et un code sans appelant est le « code mort » que cette entrée refuse.
+
+· **À moi, trouvé par exécution avant livraison** : la normalisation de nom ramenait d'abord la
+ponctuation à l'espace, si bien que « Untel SAS » donnait `untel` et « UNTEL S.A.S. » `untel s a s`.
+**Les deux graphies les plus courantes de la même entreprise ne se seraient jamais reconnues** —
+l'alerte R3 aurait été muette précisément sur le cas qu'elle existe pour voir. Le point est désormais
+supprimé avant tout le reste.
+
+📌 **CE QUE JE N'AI PAS PROUVÉ, ET QUI EST DÛ AUX TESTS.** Quatre points ne se prouvent que contre un
+PostgreSQL réel, et **aucun n'est couvert aujourd'hui** : (1) deux `POST` concurrents sur le même
+SIREN → une création, un 409 — c'est-à-dire que la remontée de la chaîne `cause` de
+`DrizzleQueryError` attrape bien le `23505` ; (2) trois créations à `siren = NULL` → trois succès ;
+(3) un code APE valide et inconnu → `201` avec `sectorId: null` et `secteurAQualifier: true`, ET un
+code connu → secteur rempli, **les deux dans le même test**, sinon il serait vert par vacuité ;
+(4) le curseur `(name, id)` stable sous insertion concurrente, avec deux homonymes.
+
+📌 **DEUX DETTES REMONTÉES À WILLIAMS** (tracées, non faites) : aucun index ne sert
+`companies(name, id)` au §7.1 du fichier 04 (tri en mémoire — sans effet en Phase 1) ; et
+`uq_companies_siren` **n'exclut pas les lignes supprimées**, donc le jour où une suppression
+existera, le 409 désignera une fiche que la liste ne montre plus. Les deux touchent le 04.

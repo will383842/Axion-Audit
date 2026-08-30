@@ -71,6 +71,22 @@ export const ERROR_CODES = {
   NOT_FOUND: 'NOT_FOUND',
   CONFLICT: 'CONFLICT',
   ILLEGAL_STATE_TRANSITION: 'ILLEGAL_STATE_TRANSITION',
+  /**
+   * `POST|PATCH /v1/companies` — le SIREN présenté est DÉJÀ porté par une autre
+   * fiche. Arbitré par `DECISIONS.md` du 2026-08-29 (« Les quatre codes d'erreur du
+   * lot »), option 3 : **retenu, périmètre RÉDUIT au SIREN**.
+   *
+   * Le générique `CONFLICT` suffirait AUJOURD'HUI — cette route n'a qu'un seul 409
+   * possible. Le code dédié est une assurance, et A01 en écrit le prix : 05 §8.3 et
+   * M8.1 annoncent un référentiel partagé avec `external_ref` ; le jour où un second
+   * conflit arrivera sur ces routes, un branchement front bâti sur un conflit nu
+   * deviendrait faux **en silence**.
+   *
+   * ⚠ IL NE COUVRE PAS LA COLLISION DE NOM. Le nom n'a aucune unicité en base (04 :
+   * l'index unique est PARTIEL, sur `siren` seul) ; une collision de nom rend donc
+   * un **201 avec avertissement**, jamais ce code. Voir `companies.ts`.
+   */
+  COMPANY_DUPLICATE: 'COMPANY_DUPLICATE',
 
   // --- 413 / 415 / 429 -------------------------------------------------------
   PAYLOAD_TOO_LARGE: 'PAYLOAD_TOO_LARGE',
@@ -154,6 +170,7 @@ export const HTTP_STATUS_BY_ERROR_CODE: Record<ErrorCode, number> = {
   NOT_FOUND: 404,
   CONFLICT: 409,
   ILLEGAL_STATE_TRANSITION: 409,
+  COMPANY_DUPLICATE: 409,
   PAYLOAD_TOO_LARGE: 413,
   UNSUPPORTED_MEDIA_TYPE: 415,
   RATE_LIMITED: 429,
