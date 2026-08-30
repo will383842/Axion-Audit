@@ -2124,3 +2124,141 @@ describe('violation d’unicité qui n’est PAS l’adresse', () => {
     expect(apresRetrait.statut).toBe(201);
   });
 });
+
+// =============================================================================
+// QUAND DEUX REFUS SONT VRAIS EN MÊME TEMPS — L'ORDRE EST UNE DÉCISION
+// =============================================================================
+describe('deux refus simultanés : lequel l’emporte', () => {
+  // ═══════════════════════════════════════════════════════════════════════════
+  // POURQUOI CETTE SECTION EXISTE, ALORS QUE CHAQUE REFUS EST DÉJÀ ÉPROUVÉ SEUL.
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Un refus testé isolément ne dit rien de sa PLACE. Or l'ordre des contrôles est un
+  // choix de conception qui ne se voit dans aucune signature : déplacer trois lignes
+  // le change, aucun test unitaire ne bronche, et le produit se met à répondre une
+  // vérité pour une autre. Les trois cas ci-dessous sont ceux où deux refus
+  // légitimes sont simultanément vrais, et où le message reçu par l'administrateur
+  // dépend entièrement de celui qui parle en premier.
+
+  it('@critique compte INEXISTANT + aucune sync connue → 404, jamais le 409 du garde-fou', async () => {
+    // LES DEUX REFUS SONT VRAIS. Un identifiant qui ne désigne aucun compte n'a, par
+    // construction, aucune ligne `sync_log` : la condition « aucune sync connue »
+    // du §9.7 est donc TOUJOURS satisfaite pour lui. Si la lecture de `sync_log`
+    // passait avant la lecture du compte, `PATCH /v1/users/<n'importe quel
+    // uuid>/password-reset` répondrait « des données de collecte non synchronisées
+    // seraient définitivement perdues » — pour un compte qui n'existe pas.
+    //
+    // CE QUE ÇA COÛTERAIT, CONCRÈTEMENT : un administrateur qui se trompe d'une
+    // ligne dans sa console lit un avertissement de perte de données, et le
+    // MESSAGE LUI DIT QU'IL PEUT FORCER. Il force. Il reçoit alors un 404 — après
+    // avoir cru détruire le travail de quelqu'un. Le garde-fou aurait crié au loup
+    // sur un compte fantôme, et c'est ainsi qu'on apprend à l'ignorer.
+    const admin = await creerAdmin('ordre-404-409');
+    const fantome = uuidv7();
+
+    const reponse = await appeler('PATCH', `/v1/users/${fantome}/password-reset`, {
+      jeton: admin.jeton,
+      corps: { force: false },
+    });
+
+    expect(reponse.statut, 'le compte n’existe pas : c’est CELA qu’il faut dire').toBe(404);
+    expect(reponse.code).toBe('NOT_FOUND');
+    expect(
+      reponse.code,
+      'Un `UNSYNCED_DATA_AT_RISK` ici signifierait que `sync_log` est lu AVANT le\n' +
+        'compte : on parlerait de données en danger pour un compte qui n’a jamais existé.',
+    ).not.toBe('UNSYNCED_DATA_AT_RISK');
+    expect(reponse.corps.includes('synchronis'), 'et le message n’évoque pas la sync').toBe(false);
+
+    // ── CONTRE-ÉPREUVE : les DEUX refus sont bien vivants ────────────────────
+    // Sans elle, le 404 ci-dessus serait vert sur une route où le garde-fou §9.7
+    // aurait purement disparu. On prouve donc que le MÊME appel, sur un compte qui
+    // EXISTE et n'a jamais synchronisé, rend bien 409 : les deux refus fonctionnent,
+    // et c'est l'ORDRE qui décide lequel s'exprime.
+    const reel = await creerCompte('ordre-404-409-cible');
+    const surCompteReel = await appeler('PATCH', `/v1/users/${reel.id}/password-reset`, {
+      jeton: admin.jeton,
+      corps: { force: false },
+    });
+    expect(surCompteReel.statut).toBe(409);
+    expect(surCompteReel.code).toBe('UNSYNCED_DATA_AT_RISK');
+  });
+
+  it('@critique le garde anti-auto-verrouillage l’emporte sur l’idempotence', async () => {
+    // LES DEUX REFUS SONT VRAIS, ET ILS NE DISENT PAS LA MÊME CHOSE. Un admin qui
+    // demande `role: 'admin'` sur son propre compte est à la fois :
+    //   · dans le cas « on ne touche pas à son propre compte » → 403 ;
+    //   · dans le cas « ce rôle est déjà le sien, rien à faire » → 200 idempotent.
+    //
+    // CE QUE L'ORDRE DÉCIDE : si le garde était posé DANS la transaction, après la
+    // comparaison des rôles, il serait CONTOURNABLE PAR UN CHANGEMENT NUL — un admin
+    // apprendrait que la règle ne s'applique pas toujours, ce qui est la pire forme
+    // de règle. Le garde doit porter sur QUI DEMANDE, jamais sur ce que la demande
+    // change : il s'exécute donc avant toute lecture.
+    const admin = await creerAdmin('ordre-garde');
+    const roleActuel = (await ligneCompte(admin.id)).role;
+    expect(roleActuel).toBe('admin');
+
+    const surSoi = await appeler('PATCH', `/v1/users/${admin.id}/role`, {
+      jeton: admin.jeton,
+      corps: { role: roleActuel },
+    });
+    expect(
+      surSoi.statut,
+      'Un 200 ici signifierait que le garde ne s’applique qu’aux changements RÉELS :\n' +
+        'la règle deviendrait « vous ne pouvez pas modifier votre compte, sauf quand ça\n' +
+        'ne change rien » — une règle qu’on ne peut ni expliquer ni faire respecter.',
+    ).toBe(403);
+    expect(surSoi.code).toBe('FORBIDDEN');
+
+    // ── CONTRE-ÉPREUVE : l'idempotence, elle, reste intacte sur AUTRUI ───────
+    // Sans elle, le 403 ci-dessus serait vert sur une route qui aurait perdu son
+    // traitement du changement nul et refuserait tout le monde.
+    const collegue = await creerAdmin('ordre-garde-collegue');
+    const surAutrui = await appeler('PATCH', `/v1/users/${collegue.id}/role`, {
+      jeton: admin.jeton,
+      corps: { role: 'admin' },
+    });
+    expect(surAutrui.statut, 'le même rôle, sur un AUTRE compte : succès idempotent').toBe(200);
+    expect(utilisateur(surAutrui).role).toBe('admin');
+    expect(
+      await journalDe(collegue.id),
+      'et toujours aucune ligne d’audit pour un rôle qui n’a pas changé',
+    ).toHaveLength(0);
+  });
+
+  it('@critique corps INVALIDE + compte inexistant → 400, la validation avant la base', async () => {
+    // LES DEUX REFUS SONT VRAIS : le corps est vide (donc invalide) ET la cible
+    // n'existe pas. Le 400 doit l'emporter, et ce n'est pas une préférence
+    // esthétique — l'ordre inverse signifierait que le serveur OUVRE UNE
+    // TRANSACTION et VERROUILLE UNE LIGNE (`FOR UPDATE`) avant d'avoir constaté
+    // qu'il ne saura rien en faire. Sur une route d'administration ouverte à
+    // 300 req/min, c'est du travail de base offert à qui envoie n'importe quoi.
+    const admin = await creerAdmin('ordre-validation');
+    const fantome = uuidv7();
+
+    const reponse = await appeler('PATCH', `/v1/users/${fantome}`, {
+      jeton: admin.jeton,
+      corps: {},
+    });
+    expect(reponse.statut).toBe(400);
+    expect(reponse.code).toBe('VALIDATION_FAILED');
+
+    // ── CONTRE-ÉPREUVE : le 404 existe bel et bien, dès que le corps est valide ──
+    const avecCorpsValide = await appeler('PATCH', `/v1/users/${fantome}`, {
+      jeton: admin.jeton,
+      corps: { name: 'Nom sans destinataire' },
+    });
+    expect(avecCorpsValide.statut).toBe(404);
+    expect(avecCorpsValide.code).toBe('NOT_FOUND');
+
+    // Et l'identifiant MAL FORMÉ est refusé avant tout le reste : 400, pas 404 —
+    // un `uuid` invalide n'a pas à atteindre une requête SQL pour y échouer sur un
+    // transtypage.
+    const malForme = await appeler('PATCH', '/v1/users/pas-un-uuid', {
+      jeton: admin.jeton,
+      corps: { name: 'Nom sans destinataire' },
+    });
+    expect(malForme.statut).toBe(400);
+    expect(malForme.code).toBe('VALIDATION_FAILED');
+  });
+});
