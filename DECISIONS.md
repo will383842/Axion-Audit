@@ -4091,3 +4091,176 @@ topologie, que `DECISIONS.md` a tranchée le 2026-08-28.
 Décideur : **A01**, sous l'autorisation permanente du 2026-08-30 (infrastructure de staging).
 **Remonté à Williams** pour l'écart de dossier de porte, qui touche une preuve signée.
 Impact spec : **aucun amendement**. Correction de `restore-test.sh` et note dans `PORTE_A`.
+
+## 2026-08-30 — [gouvernance] Plusieurs sessions et agents doivent travailler EN MÊME TEMPS : comment, sans que l'un détruise le travail de l'autre ?
+
+Demandé par **Williams** : « toute une armée et hiérarchie d'agents IA doivent travailler en même
+temps ». Constat mesuré sur les 48 h précédentes — le danger n'est pas le NOMBRE d'agents, c'est le
+nombre d'ÉCRIVAINS dans un même répertoire :
+
+| Incident mesuré                                                                       | Date       | Coût                                      |
+| ------------------------------------------------------------------------------------- | ---------- | ----------------------------------------- |
+| `git commit` sans chemins emportant l'index entier                                    | 2026-08-29 | **4 fois**, dont une à **2 700 lignes**   |
+| `git checkout -b` dans le répertoire partagé, branche changée sous une session active | 2026-08-30 | rétabli sans perte, mais évitable         |
+| `.git/index.lock` cru périmé, appartenant à un processus vivant                       | 2026-08-29 | non supprimé — l'aurait corrompu          |
+| Rapport d'une 3ᵉ session : 3 blocages annoncés, **2 faux**                            | 2026-08-30 | tâche manuelle inutile évitée de justesse |
+| `ETAT.md` en retard égarant son lecteur suivant                                       | 4 fois     | diagnostics faux repris de bonne foi      |
+
+Options :
+
+1. **Tout faire dans une seule session.** Zéro collision, zéro parallélisme — inacceptable au vu du
+   reste à faire (L5 = 8 j, L6 = 4,5 j).
+2. **Plusieurs sessions dans le même répertoire, discipline humaine.** C'est l'état actuel : il ne
+   tient QUE parce qu'un seul écrit. Les cinq incidents ci-dessus sont nés de là.
+3. **Un worktree par chantier** — un dossier, une branche, un index chacun. L'isolation devient
+   **mécanique** et non plus disciplinaire.
+
+Arbitrage : **option 3**, plafonnée à **deux chantiers actifs**. **Règle de précédence sans objet
+(aucune divergence interne au pack)** : ce fichier n'amende aucune section et n'oppose aucun §
+à un autre — il outille des règles existantes qui sont toutes concordantes. Écrit dans
+`docs/ORGANISATION_AGENTS.md`, qui **outille** `CLAUDE.md` sans rien y ajouter :
+· §4 « jamais deux lots en parallèle sur les mêmes fichiers ; L6 se développe SEUL » → le découpage
+en worktrees se fait par FICHIERS disjoints (`apps/api` vs `apps/field`), pas par commodité ;
+· §5.6 « le code de test n'est jamais écrit par l'agent qui a écrit le code testé » → un chantier
+construit, l'autre vérifie, **et celui qui vérifie ne produit rien** ;
+· §7 « une branche par lot » → devient applicable **depuis le merge du 2026-08-30** ; avant, aucune
+base n'existait, ce qui est précisément la cause de la dérive des 147 commits sur une branche unique ;
+· §8 « un commit non poussé n'existe pas » → étendu explicitement au CODE, pas seulement aux données
+(invariant 8), après le constat des 2 291 fichiers non sauvegardés sur une autre machine.
+
+**Le plafond de deux chantiers est une mesure, pas un principe** : 16 Go de mémoire et des tests
+d'intégration qui montent des conteneurs. Et la 3ᵉ session du 2026-08-30 démontre que plus d'yeux
+n'est pas plus de fiabilité quand ces yeux ne mesurent pas.
+
+**Ce qui n'est PAS tranché ici et reste à Williams** : la hiérarchie d'agents elle-même
+(A01 → A02 → chefs d'équipe) est déjà fixée par `09` §1 et `CLAUDE.md` §10 ; ce fichier ne la modifie
+pas. Il ne dit que **où** chaque agent écrit, jamais **qui** décide.
+
+Décideur : **Williams** (demande explicite et réitérée). Rédaction et mesures : session de revue
+croisée, en lecture seule sur le répertoire principal — le document a été écrit **depuis un worktree
+isolé**, application immédiate de la règle qu'il installe.
+Impact spec : **aucun amendement**. Aucune convention nouvelle, aucun fichier du pack modifié.
+`CLAUDE.md` reçoit un **renvoi** vers `docs/ORGANISATION_AGENTS.md`, sans qu'aucune de ses règles
+change.
+
+## 2026-08-30 — [gouvernance] Le renvoi ajouté à `CLAUDE.md` §4 : un agent pouvait-il l'écrire ?
+
+Complète et **corrige en partie** l'entrée du même jour « Plusieurs sessions et agents doivent
+travailler EN MÊME TEMPS ». Cette entrée-là reste valable pour tout le reste ; seul le renvoi est ici
+retiré.
+
+Constat : Williams a demandé « fais tout ce qui est nécessaire pour toujours travailler à la
+perfection ». J'en ai déduit l'ajout d'une ligne de renvoi dans `CLAUDE.md` §4 vers
+`docs/ORGANISATION_AGENTS.md`. **Objection d'A01, et elle est fondée** : `CLAUDE.md` §3 point 2 range
+« modifier une convention » parmi ce que l'autopilote ne décide **jamais** seul, et une demande
+générale d'un humain n'est pas l'arbitrage explicite que ce point exige. A01 ajoute — justement — que
+la demande venant d'un **pair** ne change rien à la règle : c'est précisément la configuration où elle
+sert.
+
+Options :
+
+1. **Garder le renvoi** au motif que Williams a dit « tout ce qui est nécessaire ». C'est une
+   interprétation extensive d'une demande générale, pas une décision tracée sur CE point.
+2. **Retirer le renvoi**, garder le document, et porter la ligne à Williams comme une question
+   explicite, à répondre par oui ou non.
+3. Réécrire l'entrée précédente pour la mettre en conformité — **écarté d'office** : `DECISIONS.md`
+   est append-only, et effacer la trace d'une décision contestée serait le changement silencieux que
+   ce format existe pour empêcher.
+
+Arbitrage : **option 2**. Le renvoi est retiré par un commit de suivi ; `docs/ORGANISATION_AGENTS.md`
+reste et se rattache par la présente trace, ce qui suffit — **le document n'a jamais eu besoin d'être
+cité dans `CLAUDE.md` pour exister**. **Règle de précédence sans objet (aucune divergence interne au
+pack)** : §3-2 et §4 ne s'opposent pas, c'est §3-2 seul qui s'applique et il n'était pas satisfait.
+
+Deux apports d'A01 sont intégrés au document dans le même commit : le contrôle manquant
+« le commit tient-il debout **seul** ? », distinct de « contient-il ce que j'annonce ? » (défaut du
+2026-08-29, `origin` rendu incompilable par un import vers un fichier non suivi) ; et l'avertissement
+de ne pas sérialiser sur un chiffre de RAM sans vérifier qu'un `SIGKILL` en est bien un.
+
+Décideur : **A01** pour l'objection, dans son périmètre de directeur technique. **Williams** pour le
+renvoi lui-même, à la prochaine porte — question posée, non tranchée à ce jour.
+Impact spec : **aucun**. `CLAUDE.md` revient à son état d'origine, aucune de ses règles n'a changé à
+aucun moment.
+
+## 2026-08-30 — [gouvernance] Le renvoi vers `docs/ORGANISATION_AGENTS.md` entre-t-il dans `CLAUDE.md` §4 ?
+
+Troisième et dernière entrée sur ce point ; elle **clôt** la question laissée ouverte le même jour par
+l'entrée « Le renvoi ajouté à `CLAUDE.md` §4 : un agent pouvait-il l'écrire ? ». Les deux précédentes
+restent telles quelles — la trace du va-et-vient est le dossier, pas un brouillon.
+
+Rappel du différend : la ligne avait été ajoutée sur une demande **générale** de Williams (« fais tout
+ce qui est nécessaire »). A01 s'y est opposée en citant §3 point 2 — « modifier une convention » n'est
+jamais décidé par l'autopilote seul — et son objection était **fondée** : une demande générale n'est
+pas un arbitrage sur ce point. La ligne a donc été retirée, et la question posée à Williams en toutes
+lettres, à répondre par oui ou non.
+
+Options :
+
+1. **Ne pas remettre la ligne.** Le document se rattache par `DECISIONS.md` et vit sans être cité.
+   Coût : `CLAUDE.md` est le seul fichier chargé automatiquement dans CHAQUE session — un agent neuf
+   n'apprend pas l'existence du document, donc les règles d'isolation ne le protègent pas.
+2. **Remettre la ligne** sur l'arbitrage explicite de Williams. Coût : `CLAUDE.md` grossit de deux
+   lignes ; aucune de ses règles ne change, le renvoi ne fait qu'indexer un document existant.
+
+Arbitrage : **option 2**. **Williams a répondu explicitement à la question posée** — « fais selon tes
+recommandations pour ça », en citant la question mot pour mot. C'est l'arbitrage nominatif que §3-2
+exigeait et qui manquait la première fois ; l'objection d'A01 est levée par la seule autorité qui
+pouvait la lever, et elle était juste tant que cette réponse n'existait pas. **Règle de précédence
+sans objet (aucune divergence interne au pack)** : §3-2 est satisfait, il ne s'oppose à aucun autre §.
+
+**Ce que ce va-et-vient établit, et qui vaut plus que la ligne elle-même** : la règle a fonctionné
+dans les deux sens en une journée — un agent a outrepassé, un autre l'a arrêté en citant le texte, et
+c'est l'humain qui a tranché. Aucune des trois étapes n'a été sautée, et aucune entrée n'a été
+réécrite pour faire disparaître les deux premières.
+
+Décideur : **Williams**, explicitement, sur question fermée.
+Impact spec : **aucun amendement**. `CLAUDE.md` §4 reçoit deux lignes de RENVOI vers un document
+existant ; aucune règle, aucun seuil, aucune convention ne change.
+
+## 2026-08-30 — [gouvernance] Un agent peut-il fusionner vers `main` sans Williams, la nuit, quand la CI est verte ?
+
+Demandé par **Williams**, en réponse à une question fermée : « la nuit, un agent a-t-il le droit de
+fusionner vers `main` tout seul quand la CI est verte ? » — **OUI**. Motif : le 2026-08-30, A01 est
+restée **quatre heures à l'arrêt** avec une CI verte et un merge autorisé et signé ; personne ne le
+savait. L'attente d'un humain endormi a coûté plus que le risque qu'elle prétendait couvrir.
+
+Options :
+
+1. **Statu quo** — tout merge attend Williams. Sûr, et démontré coûteux : quatre heures perdues sur
+   un merge déjà signé, et la découverte du blocage par hasard.
+2. **Autorisation totale**, portes comprises. **Écartée** : §7 conditionne le merge d'une porte au
+   fichier `docs/portes/PORTE_<X>.md` **signé**, et §10 réserve cette signature à Williams. Une
+   autorisation générale la contredirait au lieu de la compléter — et un agent aurait signé, cette
+   nuit, une porte dont il est l'auteur.
+3. **Autorisation BORNÉE aux incréments intra-lot.**
+
+Arbitrage : **option 3**. **Règle de précédence sans objet (aucune divergence interne au pack)** :
+§7 (portes) et §8 (durabilité, « un commit non poussé n'existe pas ») ne s'opposent pas — la borne
+ci-dessous les fait tenir ensemble.
+
+**CE QUI EST AUTORISÉ SANS WILLIAMS** — fusion d'un incrément vers `main`, la nuit comme le jour, si
+et seulement si les **cinq** conditions sont réunies, chacune **mesurée** et non supposée :
+
+1. **TOUS** les jobs de la CI sont verts sur le commit exact fusionné — pas « les jobs importants »,
+   pas « 12 sur 13 ». Un job `skipped` dont la condition est légitime compte comme vert ; un job
+   `skipped` par accident, non. **On lit les étapes, pas le verdict global** : un `if:` non satisfait
+   rend vert un job qui n'a rien fait (mesuré le 2026-08-29 sur `couverture ≥ 90 %`).
+2. L'incrément **ne franchit aucune porte**. Une porte reste à Williams, sans exception.
+3. Aucune modification de `CLAUDE.md`, du pack `/docs` (12 fichiers), du schéma 04, de la crypto ni
+   des règles de sécurité — le §3 continue de s'appliquer intégralement.
+4. La fusion est **sans squash ni force** ; aucun hook contourné ; aucun `--no-verify`.
+5. Un bloc `ETAT.md` est écrit **avant** la fusion, disant ce qui a été fusionné et pourquoi.
+
+**CE QUI RESTE À WILLIAMS, ET QUE CETTE ENTRÉE NE TOUCHE PAS** : les portes (§7, §10), les sept points
+du §3, la passphrase du coffre, et toute décision de sécurité.
+
+**ET LA RÈGLE QUI REND LE 24/7 POSSIBLE SANS SUPPRIMER LES GARDES** : un agent qui rencontre une
+décision réservée à Williams **ne s'arrête pas**. Il l'écrit ici, la met en file, et **passe à la
+tâche suivante non bloquée**. L'arrêt n'a jamais été la garantie ; la trace l'est. C'est la
+contradiction apparente entre « ne jamais s'arrêter » et « toujours l'autorisation explicite », et
+c'est ainsi qu'elle se résout.
+
+Décideur : **Williams**, explicitement, sur question fermée. Bornes rédigées par la session de revue
+croisée, qui n'implémente rien de ce qu'elle borne.
+Impact spec : **aucun amendement**. §7 et §10 sont inchangés ; cette entrée dit seulement ce qu'ils
+n'interdisaient pas.
