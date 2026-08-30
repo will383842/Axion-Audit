@@ -69,10 +69,12 @@ Interdiction de charger le pack entier dans un sous-agent (09 §5.8).
 
 ## 2bis. VERSIONS ÉPINGLÉES (11 §1 — `save-exact`, aucune montée majeure sans décision humaine)
 
-Node 22 LTS · pnpm 9 · TypeScript 5 (`strict`) · Fastify 5 · PostgreSQL 16 · Redis 7 · MinIO ·
+Node 22 LTS · pnpm 9 · TypeScript 5 (`strict`) · Fastify 5 (+ `@fastify/cookie`, ajouté le
+2026-08-31 sur décision de Williams — voir `DECISIONS.md`) · PostgreSQL 16 · Redis 7 · MinIO ·
 **Drizzle ORM** + migrations **SQL brut versionné** · Zod 4 (`packages/shared`) · React 18 + Vite +
 Tailwind + shadcn/ui · Dexie 4 · Workbox 7 · TanStack Query 5 (console uniquement) · BullMQ 5 ·
-pino 9 · Vitest 3 + Testcontainers · Playwright · k6 · `uuidv7` · `hash-wasm` (Argon2id navigateur) ·
+pino 9 · Vitest 3 + Testcontainers + `jsdom` + `@testing-library/react` + `@vitejs/plugin-react`
+(ajoutés le 2026-08-31 sur décision de Williams — voir `DECISIONS.md`) · Playwright · k6 · `uuidv7` · `hash-wasm` (Argon2id navigateur) ·
 date-fns · `@fontsource-variable/inter` (**police AUTO-HÉBERGÉE — jamais de CDN**) · cmdk (Phase 2).
 **Renovate/Dependabot DÉSACTIVÉS pendant toute la Phase 1.**
 
@@ -115,6 +117,10 @@ date-fns · `@fontsource-variable/inter` (**police AUTO-HÉBERGÉE — jamais de
 **Règle de croisement (09 §5.6) : le code de test n'est JAMAIS écrit par l'agent qui a écrit le code testé.**
 **Budget d'itération (09 §5.5) : un bug qui résiste à 3 tentatives = arrêt et escalade humaine.**
 **Jamais deux lots en parallèle sur les mêmes fichiers ; L6 (sync) se développe SEUL.**
+**Comment paralléliser sans collision : `docs/ORGANISATION_AGENTS.md`** — trois contraintes distinctes
+(collision de fichiers, mémoire, attention du pilote), un worktree par chantier, les interdits git.
+**À lire AVANT d'ouvrir une seconde session — ce renvoi ne répète AUCUN chiffre, délibérément : un
+plafond recopié à deux endroits dérive, et c'est le renvoi qu'une session lit en premier.**
 
 ---
 

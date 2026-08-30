@@ -1,7 +1,15 @@
 // =============================================================================
 // @axion/ui — design system Axion.
-// Au lot L0, ce paquet ne contient QUE les tokens (invariant 4). Les composants
-// (base shadcn + composants métier §33.5 + page /design) sont livrés par A21 en
-// parallèle des lots L2-L5 — voir 09 §6 (« en parallèle A21 pose packages/ui + /design »).
+// Les TOKENS portent l'invariant 4 ; les COMPOSANTS portent la grille §33 (les
+// quatre états, les ancres de cotation visibles, l'indicateur « Enregistré », le
+// mode écran partagé, les cibles tactiles) pour les écrans du lot L5.
+// Voir 09 §6 (« en parallèle A21 pose packages/ui + /design »).
+//
+// Deux feuilles de style à importer UNE FOIS dans le `main.tsx` de chaque front :
+//   import '@axion/ui/tokens.css';      // jetons + police Inter auto-hébergée
+//   import '@axion/ui/composants.css';  // styles des composants ci-dessous
+// L'ordre compte : `composants.css` ne fait QUE consommer les variables posées
+// par `tokens.css` — il n'en définit aucune.
 // =============================================================================
 export * from './tokens.js';
+export * from './composants/index.js';

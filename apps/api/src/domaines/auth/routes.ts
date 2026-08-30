@@ -28,6 +28,22 @@
 // Traçabilité : E33 (sécurité), E43 (conventions API épinglées).
 // =============================================================================
 import type { FastifyPluginAsync } from 'fastify';
+// MIGRATION DÉCLARATIVE — 2026-08-30, dette de L2 soldée avant la porte P-B.
+// Ces trois routes appelaient `schema.parse()` À LA MAIN dans leur corps, alors
+// que le socle déclaratif existait et était branché depuis le lot L0. Relevé :
+// 1 route sur 4 seulement déclarait son `schema:`.
+//
+// CE QUE LA FORME MANUELLE COÛTAIT, et ce n'est pas cosmétique :
+//   · `requete.body` restait `unknown` — le typage venait du `.parse()`, donc
+//     APRÈS coup, et rien n'empêchait de lire `requete.body` sans le valider ;
+//   · les erreurs de validation ne passaient pas par le compilateur, donc pas de
+//     `details[].path` typé par `httpPart` : une erreur d'entrée et une erreur
+//     de sortie devenaient indiscernables côté client ;
+//   · la validation de SORTIE dépendait d'un `.parse()` que rien n'obligeait à
+//     écrire. Une route qui l'oublie renvoie ce qu'elle veut, et le contrat
+//     n'est plus un contrat.
+// La convention est désormais sans exception (hors dispense L0 de `sante.ts`).
+import type { FournisseurZod } from '../../http/zod.js';
 import {
   AppError,
   loginRequestSchema,
@@ -157,55 +173,74 @@ export const routesAuth: FastifyPluginAsync = async (app) => {
    * requête : l'adresse est légale dans la TABLE (06 §10.4) et interdite dans pino
    * (11 §2) — deux journaux, deux régimes, et c'est la porte qui tient la frontière.
    */
-  app.post('/auth/login', { config: CONFIG_PUBLIQUE }, async (requete) => {
-    const entree = loginRequestSchema.parse(requete.body);
+  app.withTypeProvider<FournisseurZod>().post(
+    '/auth/login',
+    {
+      config: CONFIG_PUBLIQUE,
+      schema: { body: loginRequestSchema, response: { 200: loginResponseSchema } },
+    },
+    async (requete) => {
+      const session = await connecter(
+        requete.server,
+        { email: requete.body.email, motDePasse: requete.body.password },
+        contexteDepuisRequete(requete),
+      );
 
-    const session = await connecter(
-      requete.server,
-      { email: entree.email, motDePasse: entree.password },
-      contexteDepuisRequete(requete),
-    );
-
-    return loginResponseSchema.parse(versReponse(session));
-  });
+      return versReponse(session);
+    },
+  );
 
   /**
    * Rotation. Le jeton présenté est révoqué et remplacé DANS LA MÊME TRANSACTION ;
    * un jeton révoqué et rejoué hors fenêtre de grâce révoque toute la famille
    * (06 §10.1). Les six issues sont décrites dans `service.ts`.
    */
-  app.post('/auth/refresh', { config: CONFIG_PUBLIQUE }, async (requete) => {
-    const entree = refreshRequestSchema.parse(requete.body);
+  app.withTypeProvider<FournisseurZod>().post(
+    '/auth/refresh',
+    {
+      config: CONFIG_PUBLIQUE,
+      schema: { body: refreshRequestSchema, response: { 200: refreshResponseSchema } },
+    },
+    async (requete) => {
+      const session = await rafraichir(
+        requete.server,
+        requete.log,
+        requete.body.refreshToken,
+        contexteDepuisRequete(requete),
+      );
 
-    const session = await rafraichir(
-      requete.server,
-      requete.log,
-      entree.refreshToken,
-      contexteDepuisRequete(requete),
-    );
-
-    return refreshResponseSchema.parse(versReponse(session));
-  });
+      return versReponse(session);
+    },
+  );
 
   /**
    * Déconnexion — révoque LE SEUL jeton présenté, s'il appartient à l'appelant.
    * Idempotente : la réponse est constante (voir `logoutResponseSchema`).
    */
-  app.post('/auth/logout', { config: CONFIG_AUTHENTIFIEE }, async (requete) => {
-    const entree = logoutRequestSchema.parse(requete.body);
+  app.withTypeProvider<FournisseurZod>().post(
+    '/auth/logout',
+    {
+      config: CONFIG_AUTHENTIFIEE,
+      schema: { body: logoutRequestSchema, response: { 200: logoutResponseSchema } },
+    },
+    async (requete) => {
+      // Ceinture : sur une route `authentifie`, le crochet ③ a posé `utilisateur`
+      // ou a refusé la requête. S'il était nul malgré tout, on ne devine pas un
+      // propriétaire — on échoue. Un `logout` sans propriétaire connu ne pourrait
+      // révoquer que « le jeton de quelqu'un », ce qui est exactement l'attaque
+      // que l'authentification de cette route ferme.
+      const utilisateur = requete.utilisateur;
+      if (utilisateur === null) {
+        throw new AppError('INTERNAL_ERROR', 'Une erreur interne est survenue.');
+      }
 
-    // Ceinture : sur une route `authentifie`, le crochet ③ a posé `utilisateur` ou
-    // a refusé la requête. S'il était nul malgré tout, on ne devine pas un
-    // propriétaire — on échoue. Un `logout` sans propriétaire connu ne pourrait
-    // révoquer que « le jeton de quelqu'un », ce qui est exactement l'attaque que
-    // l'authentification de cette route ferme.
-    const utilisateur = requete.utilisateur;
-    if (utilisateur === null) {
-      throw new AppError('INTERNAL_ERROR', 'Une erreur interne est survenue.');
-    }
+      await deconnecter(utilisateur.id, requete.body.refreshToken, contexteDepuisRequete(requete));
 
-    await deconnecter(utilisateur.id, entree.refreshToken, contexteDepuisRequete(requete));
-
-    return logoutResponseSchema.parse({ loggedOut: true });
-  });
+      // `as const` : le schéma déclare le LITTÉRAL `true`, pas un booléen. Le
+      // compilateur l'exige désormais — la forme manuelle, elle, acceptait un
+      // `boolean` élargi et laissait passer un `false` que le contrat interdit.
+      // La migration a donc resserré une garantie, pas seulement déplacé du code.
+      return { loggedOut: true as const };
+    },
+  );
 };

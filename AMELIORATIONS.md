@@ -1163,3 +1163,111 @@ la 2 tant que l'obstacle des paquets privés n'est pas tranché, 15 min pour la 
 dans les 11 contextes exigés par la protection de `main` : le renommage ne débranche aucun garde.
 
 **Arbitrage attendu de Williams** : ABSORBÉE / PHASE 2 / REFUSÉE, séparément pour chacune.
+
+---
+
+## 2026-08-30 — [étage 2, PROPOSÉE] Une case cochée ne porte pas ce qu'elle a prouvé
+
+**Constat terrain, et c'est le plus grave de la journée.** Le critère 4 de la porte P-A a été **clos ce
+matin** — _« déploiement staging par la CI, vérifié »_ — sur le run `33292249119`. Ce déploiement était
+vert. Mais il tournait **avant** l'ajout du contrôle d'empreinte et de la vérification de prise
+d'effet, et la seule vérification alors prévue — l'étiquette OCI de révision — **ne pouvait jamais
+aboutir**, puisque l'orchestrateur construit ses images sans la poser.
+
+**Le dossier ne mentait pas. Il promettait plus que le mécanisme ne délivrait**, et **rien, dans sa
+lecture, ne permettait de s'en apercevoir.** Williams a engagé sa signature sur le mot « vérifié » en
+lui donnant son sens ordinaire.
+
+**Pourquoi c'est pire que les cinq murs du test de restauration.** Ceux-là étaient des gardes qui ne
+mesuraient rien : coûteux, mais internes au dépôt. Celui-ci est **une case cochée dans un document
+signé par un humain**, qui en tire des décisions.
+
+**Le remède ne peut pas être « mieux cocher ».** Une case ne porte pas ce qu'elle a prouvé. Ce qui
+l'aurait empêché : que chaque critère porte, à côté de son ✅, **le numéro de run, la date, et une
+phrase disant ce que cette preuve établit — ET CE QU'ELLE N'ÉTABLIT PAS.** Sur le critère 4, la ligne
+honnête du matin aurait été :
+
+> ✅ run `33292249119`, 2026-08-30 — _un déploiement a été déclenché par la CI et l'orchestrateur l'a
+> accepté. **Ne prouve PAS** que le code en service est celui du commit : la vérification d'étiquette
+> n'aboutit jamais (image construite par l'orchestrateur, sans étiquette OCI)._
+
+Écrite ainsi, **elle se serait dénoncée toute seule**. _Une case ne peut pas mentir sur ce qu'elle
+prouve si on lui fait dire ce qu'elle ne prouve pas._
+
+**Ce n'est pas une idée neuve : c'est la méthode déjà appliquée au code, remontée d'un étage.** C'est
+exactement ce qui est écrit dans `deploy-staging.sh` — « la voie `working_dir` prouve la PRISE
+D'EFFET, pas le CONTENU » — et dans `restore-test.sh`. Le script le dit de lui-même ; le dossier de
+porte, non.
+
+**Coût estimé** : la forme, 1 h. La **reprise des critères déjà cochés** de P-A, une demi-journée — et
+c'est elle qui compte, parce qu'une forme neuve appliquée aux seuls critères futurs laisserait
+intactes les cases déjà signées.
+**Impact schéma/API : aucun.**
+
+**Pourquoi ce n'est PAS implémenté d'office.** Le format des dossiers de porte est une **convention** :
+`CLAUDE.md` §3 point 2. Proposée par la session voisine, qui a **refusé de l'écrire elle-même** pour
+cette raison — le bon réflexe. **Arbitrage de Williams** : ABSORBÉE / PHASE 2 / REFUSÉE.
+
+**Appliqué dès aujourd'hui, sans attendre l'arbitrage, et la distinction est volontaire** : les
+critères 2 et 4 de P-A reçoivent leur ligne de preuve honnête. **Écrire ce qu'une preuve établit n'est
+pas changer le format du dossier** — c'est écrire une meilleure ligne dans le format existant. Rendre
+cette ligne **obligatoire pour tous les critères**, c'est la convention, et elle attend Williams.
+
+---
+
+## 2026-08-31 — [L2/T3, étage 2, PROPOSÉES] Sept constats du CRUD users — six remontés, aucun implémenté
+
+T3 (CRUD users) est livré. Ce que son écriture a fait apparaître et qui **n'est pas dans son
+périmètre** est listé ici plutôt que corrigé — c'est la règle 09 §5.9 (« proposer est un devoir,
+anticiper est une faute ») et `CLAUDE.md` §3.
+
+**1. `users` n'a AUCUN index qui serve `ORDER BY (created_at, id)`.** Le module de pagination
+(`apps/api/src/http/pagination.ts`) pose trois exigences à ses appelants ; celle-ci est la seule que
+`GET /v1/users` ne tient pas. La pagination reste **correcte** — elle est simplement servie par un
+tri en mémoire. Sans effet mesurable au volume de la Phase 1 (une poignée d'auditeurs), coûteux
+au-delà de quelques milliers de lignes. **Impact schéma : OUI** — `CREATE INDEX` dans le fichier 04
+(§7.1), donc escalade `CLAUDE.md` §3-2. Coût ≈ 0,1 j. **Le `schema:diff` virerait au rouge si on
+l'ajoutait sans amender le 04** : c'est exactement pourquoi ce n'est pas fait ici.
+
+**2. Il n'existe pas de RÉACTIVATION de compte.** `PATCH /v1/users/:id/deactivate` a été livrée
+parce que le catalogue du journal nomme `user.deactivate` ; **rien ne nomme le retour**. Le §34.4 ne
+décrit qu'une sortie. Conséquence concrète : une désactivation par erreur ne se répare que par
+`psql`. Deux formes possibles — une action `user.reactivate` au catalogue, ou l'ouverture de
+`is_active` dans `user.update` (que le catalogue autorise déjà : `is_active` figure dans
+`CHAMPS_UTILISATEUR_JOURNALISABLES`). **Le choix change ce que le journal sait nommer** : c'est une
+décision, pas une convention. **Impact API : oui.** Coût ≈ 0,2 j.
+
+**3. Rien ne garantit qu'il reste un administrateur actif.** T3 livre un garde étroit et
+déterministe — _on ne se désactive pas soi-même, on ne change pas son propre rôle_ — parce qu'il se
+déduit sans inventer. **Il ne couvre PAS deux administrateurs qui se rétrogradent mutuellement.** Une
+règle de cardinalité (« au moins un admin actif ») demande de répondre à : que rend-on au dernier
+admin, un 409 ? La compte-t-on sous verrou sérialisable ? Ce sont des questions de produit.
+**Impact API : un code d'erreur possible.** Coût ≈ 0,3 j.
+
+**4. L'« alerte » exigée par le §9.7 NE PEUT PAS entrer dans la table `alerts`.** Mesuré :
+`alerts.mission_id` est `NOT NULL` avec clé étrangère vers `missions` (`0006_rapport_cadrage_
+pilotage.sql`), or **une réinitialisation de mot de passe n'appartient à aucune mission**. T3 émet
+donc une trace d'exploitation nommée (`reinitialisation_mot_de_passe_forcee`, niveau `warn`) sur
+laquelle une supervision peut s'accrocher — le même dispositif que
+`journal_activite_ecriture_echouee`. **Ce n'est pas la cloche §20.4.** Rendre `mission_id` nullable
+touche le fichier 04 (escalade §3-2) ; le faire porter par la supervision suppose que la supervision
+existe — or l'observabilité est elle-même une fiche ouverte (2026-08-29). **À arbitrer ensemble.**
+
+**5. `GET /v1/users` n'a AUCUN filtre.** Ni par rôle, ni par activité, ni par habilitation, ni
+recherche par nom. Le pack n'en nomme aucun, donc aucun n'a été inventé. Dès que la console listera
+plus de vingt comptes, « qui n'est pas encore habilité ? » deviendra une question quotidienne (c'est
+littéralement l'étape 4 du §34.4). **Impact API : extension du schéma de requête uniquement**
+(`paginationQuerySchema.extend({ … })`), aucune reprise du dépôt. Coût ≈ 0,2 j.
+
+**6. Le README de `apps/api` ne documente ni les routes d'auth ni la route financière.** Livrées par
+T2 et T5, absentes du document — alors que le 11 §8-6 exige que toute route hors §8/§24.2 soit
+documentée. T3 a documenté LES SIENNES et **signalé le trou sans le combler** : compléter la
+documentation de routes qu'on n'a pas écrites, c'est décrire ce qu'on croit qu'elles font. Coût
+≈ 0,2 j, par leurs auteurs.
+
+**7. `packages/shared` porte maintenant TROIS listes de rôles.** `journal.ts`
+(`ROLES_JOURNALISABLES`, réutilisée par `users.ts` plutôt que recopiée) et `apps/api/src/db/
+schema.ts` (`ROLES_UTILISATEUR`). T3 n'en a **pas** ajouté une troisième — mais le nom
+`ROLES_JOURNALISABLES` est désormais faux, puisqu'il sert de contrat d'API. La consolidation était
+déjà proposée par `journal.ts` ; **elle gagne un consommateur, donc du poids.** Impact : `db/
+schema.ts`, fichier du lot L1. Coût ≈ 0,1 j.

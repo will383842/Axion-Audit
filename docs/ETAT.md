@@ -1709,3 +1709,233 @@ bruyant sur une branche.
 `644` (inatteignable, mesuré après objection) ; et j'ai « découvert » que l'orchestrateur ignore GHCR
 alors que c'était écrit dans le dépôt depuis le 2026-08-28. **Premier savoir écrit et non appliqué
 dont je suis l'auteur plutôt que le lecteur.**
+
+---
+
+## 2026-08-30 16h40 — [lot L0] — étape pipeline 6/7 — **LE CANAL EST PROUVÉ**
+
+Dernier commit vert : `e234756` sur `main` · Branche : `lot/l0e-dossier-porte` · Poussé : en cours
+Tâche en cours : consigner dans le dossier de porte ce que deux critères prouvaient vraiment.
+Prochaine action : ~~ouvrir L3~~ — **PÉRIMÉ, voir le bloc suivant. Ce fichier a induit en erreur une session d'audit qui a rapporté à Williams une contradiction inexistante : la séquence a changé dans l'heure qui a suivi ce bloc et il n'a pas été rafraîchi.** — note de conception écrite, socle cartographié, deux doutes de spécification tracés et bloquants pour deux incréments.
+Tests rouges connus : **aucun. Les deux rouges de `main` sont tombés.**
+
+📌 **LE TEST DE RESTAURATION NOCTURNE EST VERT PAR SON PROPRE CANAL** — run `33322880502`, `main` =
+`e234756`. **Toutes les étapes exécutées, aucune sautée.** C'est la distinction que je n'avais pas
+faite ce matin et que la session voisine a eu raison d'imposer : trois exécutions directes prouvaient
+le **script** ; elles ne disaient rien de la chaîne cron → environnement `ops` → clé restreinte →
+`command=`. **Les deux affirmations se rejoignent maintenant.**
+
+📌 **CHAQUE GARDE A TRANCHÉ, VÉRIFIÉ DANS LE JOURNAL — pas déduit du verdict global :**
+· le marqueur de restriction n'est pas ressorti : la clé est bien restreinte ;
+· l'empreinte du script distant est identique au fichier versionné ;
+· **le garde de divergence, à sa première exécution réelle** : « Le serveur a exécuté le commit
+`e234756` — le commit exécuté est bien celui de cette exécution » ;
+· les trois découvertes ont toutes fonctionné : dépôt pgBackRest, image Postgres, volume d'archives ;
+· Postgres restauré et **comparé table par table** ; MinIO démarré sur les données restaurées, trois
+buckets présents.
+
+📌 **CE QUE CELA REND VRAI, ET QUI NE L'ÉTAIT PAS CE MATIN.** L'invariant 8 exige une sauvegarde
+**testée**, au présent. Depuis le lot L0, cette exigence reposait sur une preuve **ponctuelle** du
+2026-08-28 et sur un garde nocturne qui **sautait ses étapes utiles à chaque exécution**. Elle repose
+désormais sur un mécanisme qui s'exécute, qui échoue bruyamment quand il ne peut pas conclure, et dont
+chaque contrôle a été vu tranchant.
+
+📌 **CE QUI RESTE, ET QU'IL NE FAUT PAS COCHER À LA PLACE DE WILLIAMS** : le critère 2 de P-A porte
+maintenant une ligne de preuve honnête, mais **la porte P-A elle-même reste signée « sous réserve »**.
+Lever la réserve est un geste humain, pas un geste d'autopilote.
+
+---
+
+## 2026-08-31 20h15 — [lot L2 / fermeture] — étape pipeline 5/7
+
+Dernier commit vert : `ac01df0` · Branche : `lot/l2c-declaratif` · Poussé : non (CI à lancer)
+Tâche en cours : fermeture de L2 — migration déclarative faite, tests L4 faits, quatre colonnes du schéma faites.
+Prochaine action : **pousser `lot/l2c-declaratif`, CI, fusion ; puis T3 (listing, création, modification, habilitation — PAS la réinitialisation) et la matrice E1-E47 ; puis porte P-B, qui est à Williams.**
+Tests rouges connus : aucun.
+
+⚠️ **CE FICHIER A INDUIT UN LECTEUR EN ERREUR AUJOURD'HUI, et c'est la raison d'être de ce bloc.**
+Le bloc de 16h40 annonçait « ouvrir L3 ». La séquence a changé dans l'heure — L2 → les trois dettes →
+P-B, confirmée par Williams — et **je n'ai pas rafraîchi le fichier dont la raison d'être est qu'une
+session neuve reprenne sans se tromper**. Une session d'audit l'a lu et a rapporté à Williams une
+contradiction qui n'existait plus. **Le défaut traqué depuis deux jours, logé dans le fichier de
+reprise lui-même.**
+
+📌 **CE QUI EST FAIT DEPUIS LA PORTE P-A**
+· **Migration déclarative des trois routes d'auth** — dette bloquante de L2. Elle a **resserré une
+garantie** : le typage a refusé un `boolean` élargi là où le contrat déclare le littéral `true`. 29
+tests d'un autre agent au vert.
+· **L4 avait ZÉRO test ; il en a 21.** Ils ont trouvé **deux vrais défauts** : les ancres §32.4 saisies
+en CRLF — la forme qu'Excel produit — étaient **rejetées par un contrôle bloquant**, et `empreinteQuestion`
+n'ordonnait pas `options`, ce qui aurait fait **dériver la banque à chaque ré-import**. Corrigés, et les
+tests qui les ferment ont été écrits par l'agent qui les a trouvés, **prouvés rouges avant correctif**.
+· **Les quatre colonnes du schéma** (S-1, S-3, S-4, S-6), ordonnées par Williams. Sceau régénéré après
+la trace. `schema-diff` 17/17 zéro écart, suite L1 57/57 cycle descente/montée compris.
+· **Les onze amendements du pack ratifiés** par Williams, tracés — le pack lui-même se réconcilie à P-D,
+c'est **sa propre procédure** (09 §5.2 et §4).
+
+📌 **CE QUE LE GARDE `schema-diff` M'A FAIT VOIR, ET QUI VAUT PLUS QUE LES COLONNES.** J'avais écrit
+`entity_type DEFAULT 'answer'`. La convention T12 l'interdit — *un défaut qui exprime un état métier
+vient du 04, ou n'existe pas*. **Avec ce défaut, une révision d'entretien dont l'écriture aurait omis
+le type serait devenue silencieusement une révision de réponse** : l'archive créée pour empêcher les
+pertes silencieuses les aurait produites elle-même.
+
+📌 **CE QUI ATTEND WILLIAMS**
+· **Les trois questions de T3** — réinitialisation du mot de passe (trois produits possibles, même
+garde-fou), code d'erreur du refus §9.7, cookies vs Bearer pour les routes admin. **Non tranchées.**
+· **L'ancien jeton Coolify** : mesuré non remplacé (`updated_at = 2026-08-28T03:16:50Z`).
+· **La passphrase du coffre** : détenteur unique. La chaîne fonctionne — coffre en trois exemplaires,
+expédié hors serveur 17 s après la passe — c'est la garde de la clé qui reste à un seul point.
+· **`packages/ui` a une semaine de retard** : §6 le place en semaine 1, il n'y a que les tokens.
+
+---
+
+## 2026-08-31 21h40 — [lot L2 / incrément L2e — T3 CRUD users] — étape pipeline 2/7
+
+Dernier commit vert : à créer sur cette branche · Branche : `lot/l2e-t3-users` · Poussé : non
+Tâche en cours : **T3 livré — sept routes `/v1/users`, toutes `admin`.** Code seul : aucun test écrit
+par cet agent (règle de croisement 09 §5.6).
+Prochaine action : **faire écrire les tests de T3 par un agent qui n'a produit aucune de ces lignes**
+(pagination sur `created_at` à la microseconde, garde-fou §9.7 dans ses deux branches, matrice
+rôle × route élargie aux sept routes, pureté d'`activity_log` après un scénario de compte).
+Tests rouges connus : aucun. Suites existantes rejouées : **unit 312/312, intégration 255/255**.
+
+📌 **CE QUI EST LIVRÉ**
+`GET /v1/users` (keyset `(created_at, id)`) · `POST /v1/users` · `PATCH /v1/users/:id` ·
+`PATCH …/role` · `PATCH …/deactivate` · `PATCH …/habilitate` · `PATCH …/password-reset`.
+Forme **déclarative** partout (`schema: { … }`, zéro `.parse()` manuel). Le mot de passe de la
+réinitialisation est **engendré et rendu une seule fois** ; le refus §9.7 sort sous un code dédié
+**`UNSYNCED_DATA_AT_RISK` (409)**, ajouté à `ERROR_CODES` sur l'arbitrage de Williams du 2026-08-31.
+Le catalogue du journal **n'a eu besoin d'aucune extension** : les cinq actions `user.*` y étaient
+déjà, `meta` compris.
+
+📌 **DEUX DÉFAUTS TROUVÉS EN EXÉCUTANT, PAS EN RELISANT** — les deux invisibles à la lecture.
+· **La pagination keyset sur un `timestamptz` est fausse si le curseur vient d'une `Date` JS.**
+Mesuré : base `…52.845874+00`, `Date` JS `…52.845Z`, et `ts > '…845Z'` rend **true** — la ligne
+frontière **se re-sert à chaque page**, et boucle indéfiniment si `limit` lignes partagent la même
+milliseconde. `GET /v1/users` lit donc la composante du curseur **en SQL** (`created_at::text`).
+**`http/pagination.ts` ne prévient pas de ce piège** ; il est le premier à le rencontrer.
+· **`drizzle-orm@0.44.7` n'expose pas l'erreur du pilote** : il lève une `DrizzleQueryError` et range
+la `DatabaseError` de `pg` dans `cause`. Un `catch` qui lit `erreur.code` ne voit **jamais** `23505` :
+une adresse en double sortait en **500** au lieu de **409**. Corrigé (remontée de la chaîne `cause`).
+
+📌 **CE QUI ATTEND WILLIAMS, ET QUI N'A PAS BOUGÉ**
+· **Cookies httpOnly + anti-CSRF pour les routes admin** (11 §3) : `@fastify/cookie` est hors de la
+liste épinglée §1. **T3 est livré en Bearer**, comme le dit l'arbitrage du 2026-08-31.
+· **Sept fiches `AMELIORATIONS.md`** ouvertes ce soir par T3 — dont l'index absent sur
+`users(created_at, id)`, l'absence de route de réactivation, et le fait que **l'alerte du §9.7 ne peut
+PAS entrer dans la table `alerts`** (`mission_id NOT NULL`).
+## 2026-08-31 23h00 — [lot L2 / intégration] — étape pipeline 5/7
+
+Dernier commit vert : `4195977` · Branche : `lot/l2-integration` · Poussé : oui
+Tâche en cours : fusion de l'intégration L2 sur `main`.
+Prochaine action : **fusionner, puis attendre que T3 tienne le seuil de branches (84,48 % aujourd'hui, un agent complète) ; ensuite monter le dossier P-B et S'ARRÊTER — une porte est à Williams.**
+Tests rouges connus : `lot/l2e-t3-users` rouge sur la **couverture de branches** de `domaines/users` (84,48 % < 90 %) · `lot/ui-design-system` rouge sur les **modules orphelins**, qui se refermera quand ses tests importeront les composants.
+
+📌 **CE QUE CETTE FUSION PORTE, ET CE QUE CHAQUE PREUVE ÉTABLIT — ou n'établit pas.**
+
+· **Le garde de l'invariant 7 est branché en CI ET réparé.** Il **exemptait la porte d'écriture en
+entier**, `UPDATE` et `DELETE` compris : le seul endroit où une réécriture silencieuse du journal est
+plausible était le seul qu'il ne regardait pas — et **son propre message d'erreur énonçait la règle
+qu'il n'appliquait pas**. Établi par quatre contre-épreuves (dépôt sain, mutation dans la porte, même
+texte en commentaire, insertion ailleurs). **N'établit PAS** que les mutations sont impossibles :
+seulement qu'elles ne peuvent plus être écrites sans être vues.
+
+· **La matrice E1-E47 dans les deux sens**, dont le sens `code → exigences` **jamais fait**. Une seule
+exigence passe à « couverte » — E21 — et **c'est le bon chiffre** : quatre autres ont beaucoup avancé
+sans tenir l'énoncé complet de leur libellé. **N'établit PAS** que le code est couvert : elle établit
+ce qui l'est et nomme un orphelin réel (`infra/scripts/empreinte-docker.sh`, câblé nulle part).
+
+· **L'enquête E45 : l'alerte était INFONDÉE**, et l'enquête a trouvé autre chose — L2 se donnait dans
+son plan de tests un critère **qu'il ne peut pas exécuter**, faute d'appelant. P-B aurait coché une
+case dont la preuve ne peut pas exister. Critère déplacé en L3d.
+
+· **`@fastify/cookie` épinglé**, les deux listes de versions amendées. **N'établit PAS** que
+l'authentification console est migrée : c'est L2b, T3 reste en Bearer, et c'est écrit.
+
+· **Le plafond des chantiers parallèles confondait trois contraintes** — collision, mémoire,
+attention. Trois règles distinctes désormais, et **le renvoi de `CLAUDE.md` ne cite plus aucun
+chiffre** : un plafond recopié à deux endroits dérive.
+
+📌 **CE QUI CHANGE CETTE NUIT, ET QU'IL FAUT SAVOIR EN LISANT LA SUITE.** Les sessions de
+recroisement se ferment. **En douze heures, ce recroisement a renversé quatre affirmations — deux des
+miennes, deux des leurs** — dont une alerte sur T3 et mon diagnostic mémoire du 2026-08-29. **Aucune
+n'aurait été vue par son auteur seul.** La discipline de mesure reste le seul garde : ne rien conclure
+d'un verdict global, lire les étapes, et écrire à côté de chaque « vérifié » ce que la preuve
+n'établit pas.
+
+## 2026-08-31 04h30 — [lot L2 / porte P-B] — étape pipeline 7/7 (porte, non franchie)
+
+Dernier commit vert : `daa1c86` (design system fusionné) · Branche : `chore/trace-sequence-l3-pb` · Poussé : oui
+Tâche en cours : dossier P-B monté et **non signé** ; PR #11 porte le dossier + le gel de L3a.
+Prochaine action : attendre la CI de la PR #11, la fusionner, puis **s'arrêter** — la porte P-B
+appartient au gardien A02 puis à Williams. Aucun lot L3 ne s'ouvre avant sa signature.
+Tests rouges connus : aucun. `main` vert sur `63fcc26` (20/20 jobs) et `daa1c86`.
+
+Faits du bloc :
+
+- **T3 fusionné** (`63fcc26`) — 41 tests (le message de commit dit 39, chiffre périmé ; rectifié au
+  §6 du dossier P-B). **Design system fusionné** (`daa1c86`) — 447 tests, projet vitest `interface`.
+- **Le dossier P-B dit ce qu'il ne peut pas cocher** : deux des trois membres du critère 09 §62 n'ont
+  **pas d'objet** aujourd'hui (isolation missions = dépôt L3 ; propriété de session = sync L6). Les
+  cocher aurait été le défaut central du projet. Trois options posées à Williams, une recommandée.
+- **L3a gelé** : constat d'un pair, tracé (99ᵉ entrée `DECISIONS.md`). A01 gèle ; A01 ne décide pas
+  que la séquence peut glisser.
+- **Amorce datée trouvée dans le balayage sentinelle** (§4.3 du dossier) : `missionId` et `sessionId`
+  sont cartographiés vers des UUID semés nulle part. Inoffensif aujourd'hui (bancs d'essai),
+  **désarme le garde le jour où L3 ajoute une route de produit portant ces noms.** Au brief de L3.
+
+## 2026-08-31 05h10 — [lot L2 / porte P-B] — étape pipeline 7/7 — ARRÊT DEVANT LA PORTE
+
+Dernier commit vert : `3601dfa` (dossier P-B + gel L3a) · Branche : `main` · Poussé : oui
+Tâche en cours : **aucune.** La session s'arrête devant la porte, délibérément.
+Prochaine action : **NE RIEN OUVRIR.** Le gardien A02 rend son contrôle d'acceptation sur
+`docs/portes/PORTE_B_2026-08-31.md` (matrice E1-E47 dans les DEUX sens), puis Williams arbitre le
+§4.4 (que faire des deux membres sans objet) et le §8 (la séquence L3 vs P-B). Aucun lot ne s'ouvre
+avant sa signature — **L3a est gelé, branche `lot/l3a-companies` intacte sur `1a6bf5f`.**
+Tests rouges connus : aucun. **CI de `main` sur `3601dfa` : 20/20 jobs `success`.**
+
+Faits du bloc :
+
+- **Trois fusions** : T3 (`63fcc26`, 41 tests), design system (`daa1c86`, 447 tests, projet vitest
+  `interface`), dossier P-B + gel L3a + constats croisés (`3601dfa`).
+- **Le dossier P-B est monté et NON SIGNÉ**, et il dit ce qu'il ne peut pas cocher : deux des trois
+  membres du critère 09 §62 n'ont pas d'objet (isolation missions = dépôt L3 ; propriété de session =
+  sync L6). Les cocher aurait été le défaut central du projet.
+- **`DECISIONS.md` : 100 entrées.** Les deux constats de l'agent croisé de T3 sont tracés **sans
+  qu'aucun ne soit tranché** — le code mort `lireUtilisateur` reste en place *exprès*, parce que
+  c'est la pièce à conviction que le gardien doit trouver lui-même.
+- **Ménage** : worktrees `_axui` et `_axion-wt-e45` supprimés après vérification que leur seul écart
+  avec `main` (`coverage-critical-paths.json`) était l'**ancienne** version. Branches locales et
+  distantes fusionnées supprimées. Restent `main` et `_axl3a` (gelé).
+
+## 2026-08-31 05h40 — [gouvernance / L0] — fusion de `lot/l0-organisation`, bloc écrit AVANT
+
+Dernier commit vert : `e846442` (`main`) · Branche : `lot/l0-organisation` · Poussé : en cours
+Tâche en cours : fusion de la branche de gouvernance de la session de revue croisée.
+Prochaine action : après la fusion, **NE RIEN OUVRIR** — la porte P-B attend A02 puis Williams.
+Tests rouges connus : aucun.
+
+**Ce bloc est écrit AVANT la fusion, et c'est la première fois** : la branche fusionnée apporte
+elle-même l'entrée du 2026-08-30 qui l'exige (condition 5 de l'autorisation de fusion nocturne).
+La raison de l'ordre est bonne — *un bloc écrit avant survit à une fusion qui se passe mal ; écrit
+après, il ne documente que les fusions réussies.* Mes trois blocs précédents de la nuit ont été
+écrits après ; c'est noté à la 105ᵉ entrée de `DECISIONS.md`.
+
+Ce qui est fusionné, et pourquoi :
+
+- **`docs/banque-questions/MODE_EMPLOI.md` + `modele-a-remplir.csv`** — de quoi que Williams rédige
+  la banque sans lire le pack, chaque règle **transcrite** de 03 M1.1/§32.1/§32.4/§36.4 et vérifiée
+  par le validateur `packages/shared/src/banque-questions.ts`. **Échéance 15/09** (07 §14 : « le vrai
+  chemin critique »). C'est le chantier contenu, **hors autopilote code** — donc hors périmètre P-B.
+- **Quatre entrées `DECISIONS.md`** de gouvernance, dont l'autorisation de fusion nocturne bornée
+  par cinq conditions, accordée par Williams sur question fermée.
+- **Aucun code.** Vérifié : le diff de la branche depuis sa base est `DECISIONS.md`,
+  `MODE_EMPLOI.md`, `modele-a-remplir.csv` — rien d'autre. La fusion ne touche **rien de ce que la
+  porte P-B évalue**, ce qui est la seule raison pour laquelle elle a lieu maintenant.
+- **Une entrée ajoutée par moi (105ᵉ)** : la condition 4 de cette autorisation interdit le squash,
+  que `CLAUDE.md` §7 impose et que la protection de branche est seule à autoriser. **Borne
+  inapplicable** ; lecture appliquée tracée, reformulation laissée à Williams.
+
+Conflit rencontré : `DECISIONS.md` (append-only), résolu en **gardant les deux côtés** — 4 entrées de
+la branche + 10 de `main`, comptées avant et après pour qu'aucune ne se perde. **104 entrées** après
+résolution, 105 avec la mienne.

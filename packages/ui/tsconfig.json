@@ -1,5 +1,9 @@
 {
+  "//": "`jsx: react-jsx` (transformation automatique de React 17+) : aucun fichier n'a besoin d'importer React pour compiler du JSX — seulement pour ses TYPES et ses hooks, ce qui est exactement ce que `verbatimModuleSyntax` sait vérifier. `DOM.Iterable` sert au piège à focus (parcours d'une NodeList).",
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "lib": ["ES2023", "DOM"] },
-  "include": ["src/**/*.ts"]
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx"
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
 }

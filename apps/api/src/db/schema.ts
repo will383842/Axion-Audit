@@ -586,14 +586,32 @@ export const answers = pgTable('answers', {
   updatedAt: horodatage('updated_at').notNull(),
 });
 
+/**
+ * L'ARCHIVE DES VALEURS ÉCRASÉES — et son nom est plus étroit que son contenu.
+ *
+ * Depuis l'amendement S-4 (2026-08-31), cette table archive les révisions des
+ * TROIS entités synchronisées : `answers`, `interviews`, `attachments`. §9.4
+ * étendait le dernier-écrit-gagne aux trois et ne nommait qu'une archive, dont la
+ * clé étrangère vers `answers` était obligatoire : la valeur perdante d'un
+ * entretien disparaissait sans trace, en violation de l'invariant 7.
+ *
+ * ELLE N'A PAS ÉTÉ RENOMMÉE, et ce n'est pas du confort : le pack la nomme trois
+ * fois (05 §9.3, §9.4, §9.9). La renommer mettrait le code en contradiction avec
+ * trois sections non amendées.
+ */
 export const answerRevisions = pgTable('answer_revisions', {
   id: uuid('id').primaryKey(),
-  answerId: uuid('answer_id').notNull(),
+  /** NULL dès que `entityType` n'est pas 'answer' — CHECK de cohérence en base. */
+  answerId: uuid('answer_id'),
   previousValue: jsonb('previous_value'),
   /** NOT NULL (0010) — invariant 7 : une révision sans auteur n'est pas tracée. */
   changedBy: uuid('changed_by').notNull(),
   changedAt: horodatage('changed_at').notNull(),
   changeOrigin: text('change_origin').$type<OrigineRevision>().notNull(),
+  /** S-4 — quelle entité a été écrasée. */
+  entityType: text('entity_type').$type<'answer' | 'interview' | 'attachment'>().notNull(),
+  /** S-4 — l'id de la ligne archivée, quelle que soit sa table. */
+  entityId: uuid('entity_id').notNull(),
 });
 
 export const attachments = pgTable('attachments', {
@@ -612,8 +630,43 @@ export const attachments = pgTable('attachments', {
   purgeAfter: date('purge_after'),
   clientCreatedAt: horodatage('client_created_at'),
   clientUpdatedAt: horodatage('client_updated_at'),
+  /**
+   * S-3 — LE PROPRIÉTAIRE D'UNE NOTE VOLANTE.
+   * §9.9 fonde la propriété sur `interviews.conducted_by`. Une note volante a
+   * `interviewId` ET `answerId` à NULL : la chaîne est rompue. Le pack ne dit
+   * NULLE PART de qui elle est — la règle « le rattachement s'il existe, sinon
+   * l'auteur » est une DÉCISION tracée, pas une lecture.
+   */
+  createdBy: uuid('created_by').notNull(),
   syncedAt: horodatage('synced_at'),
   createdAt: horodatage('created_at').notNull(),
+  /**
+   * S-1 — LE CURSEUR DE PULL S'APPUIE DESSUS.
+   * §9.5 : « Curseur par mission (`updated_at` SERVEUR max reçu) ». Sans cette
+   * colonne, une pièce jointe modifiée ne redescendait jamais au terrain.
+   */
+  updatedAt: horodatage('updated_at').notNull(),
+});
+
+/**
+ * S-6 — L'ÉTAT D'UN ENVOI PAR MORCEAUX (§9.6).
+ * Le pack exige une reprise qui « n'envoie QUE les manquants » et un 409 nommant
+ * « les chunks à réémettre », sans nommer aucune table. `chunksRecus` est un
+ * TABLEAU d'index et non un compteur : « n reçus » ne dirait pas « lesquels
+ * manquent », et aurait eu l'air de suffire.
+ */
+export const attachmentUploads = pgTable('attachment_uploads', {
+  attachmentId: uuid('attachment_id').primaryKey(),
+  missionId: uuid('mission_id').notNull(),
+  createdBy: uuid('created_by').notNull(),
+  chunkSizeBytes: integer('chunk_size_bytes').notNull(),
+  chunksAttendus: integer('chunks_attendus'),
+  chunksRecus: jsonb('chunks_recus').$type<number[]>().notNull(),
+  sha256Attendu: text('sha256_attendu'),
+  statut: text('statut').$type<'en_cours' | 'assemble' | 'echec'>().notNull(),
+  expireLe: horodatage('expire_le'),
+  createdAt: horodatage('created_at').notNull(),
+  updatedAt: horodatage('updated_at').notNull(),
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════

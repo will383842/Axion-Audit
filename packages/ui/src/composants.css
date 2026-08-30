@@ -1,0 +1,1069 @@
+/* ===========================================================================
+   FEUILLE DE STYLE DES COMPOSANTS — @axion/ui
+   Traçabilité : E27 (design moderne, charte, WCAG AA), E44 (UX/UI 2026-2027,
+   tokens, police locale), E13 (écran 3 zones, enregistrement continu).
+
+   INVARIANT 4, SANS EXCEPTION. Ce fichier n'est PAS dans la liste d'exclusion de
+   `scripts/check-invariants.mjs` (seuls `tokens.*` et `charte.*` y sont) : il ne
+   contient donc ni une couleur littérale, ni une longueur en unité absolue. Tout
+   passe par `var(--…)`. Si une valeur manque, elle s'ajoute à `tokens.ts` ET à
+   `tokens.css` — jamais ici.
+
+   POURQUOI DU CSS ÉCRIT À LA MAIN ET NON DU TAILWIND. Le contrat 11 §1 épingle
+   Tailwind et shadcn/ui, mais AUCUN des deux n'est installé dans le dépôt au jour
+   de ce lot, et les installer (tailwindcss, postcss, autoprefixer, les primitives
+   Radix, cva, clsx, tailwind-merge, lucide-react) est une escalade §3-1 qui
+   appartient à Williams. Le style vit donc dans une feuille unique consommée par
+   les deux fronts via `@axion/ui/composants.css`, exactement comme `tokens.css`.
+   La bascule vers Tailwind, le jour où il sera là, ne touchera que ce fichier :
+   les composants ne connaissent que des NOMS DE CLASSE.
+   =========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   Socle commun
+   --------------------------------------------------------------------------- */
+
+.axn-visuellement-masque {
+  position: absolute;
+  width: var(--taille-bordure-epaisseur);
+  height: var(--taille-bordure-epaisseur);
+  padding: 0;
+  margin: calc(-1 * var(--taille-bordure-epaisseur));
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Chiffres tabulaires partout où des nombres s'ALIGNENT (§19.2, §33.1) : un score
+   qui danse d'une ligne à l'autre se relit mal, et se compare encore plus mal. */
+.axn-chiffres {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* ---------------------------------------------------------------------------
+   Bouton
+   --------------------------------------------------------------------------- */
+
+.axn-bouton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--espacement-2);
+  min-height: var(--taille-cible-tactile-min);
+  padding: var(--espacement-2) var(--espacement-4);
+  border: var(--taille-bordure-epaisseur) solid transparent;
+  border-radius: var(--taille-rayon-moyen);
+  font-family: var(--typo-police-corps);
+  font-size: var(--typo-taille-base);
+  font-weight: var(--typo-graisse-semi);
+  line-height: var(--typo-interligne-serre);
+  text-align: center;
+  cursor: pointer;
+  transition:
+    background-color var(--mouvement-duree-rapide) var(--mouvement-courbe-standard),
+    border-color var(--mouvement-duree-rapide) var(--mouvement-courbe-standard);
+}
+
+.axn-bouton--large {
+  min-height: var(--taille-controle-hauteur-large);
+  padding: var(--espacement-3) var(--espacement-6);
+  font-size: var(--typo-taille-lg);
+}
+
+.axn-bouton--pleine-largeur {
+  width: 100%;
+}
+
+.axn-bouton--principal {
+  background: var(--couleur-action-fond);
+  border-color: var(--couleur-action-fond);
+  color: var(--couleur-texte-sur-action);
+}
+
+.axn-bouton--principal:hover:not(:disabled) {
+  background: var(--couleur-action-fond-survol);
+  border-color: var(--couleur-action-fond-survol);
+}
+
+.axn-bouton--principal:active:not(:disabled) {
+  background: var(--couleur-action-fond-actif);
+  border-color: var(--couleur-action-fond-actif);
+}
+
+.axn-bouton--secondaire {
+  background: var(--couleur-surface-carte);
+  border-color: var(--couleur-action-bordure);
+  color: var(--couleur-action-texte);
+}
+
+.axn-bouton--secondaire:hover:not(:disabled) {
+  background: var(--couleur-action-fond-doux);
+}
+
+.axn-bouton--discret {
+  background: transparent;
+  border-color: transparent;
+  color: var(--couleur-texte-secondaire);
+}
+
+.axn-bouton--discret:hover:not(:disabled) {
+  background: var(--couleur-surface-enfoncee);
+  color: var(--couleur-texte-principal);
+}
+
+/* « Danger » porte le rouge d'alerte — DISTINCT du terracotta d'action, pour qu'un
+   « Enregistrer » et un « Supprimer définitivement » ne se ressemblent jamais. */
+.axn-bouton--danger {
+  background: var(--couleur-surface-carte);
+  border-color: var(--couleur-alerte-bordure);
+  color: var(--couleur-alerte-texte);
+}
+
+.axn-bouton--danger:hover:not(:disabled) {
+  background: var(--couleur-alerte-fond);
+}
+
+/* L'état désactivé ne se joue PAS sur l'opacité : un texte à 50 % d'opacité perd
+   son contraste AA (§33.6). Il se joue sur deux jetons qui, eux, le tiennent. */
+.axn-bouton:disabled {
+  background: var(--couleur-surface-enfoncee);
+  border-color: var(--couleur-bordure-discrete);
+  color: var(--couleur-texte-tertiaire);
+  cursor: not-allowed;
+}
+
+.axn-bouton__icone {
+  display: inline-flex;
+  flex: none;
+}
+
+.axn-bouton--icone-seule {
+  padding: var(--espacement-2);
+  min-width: var(--taille-cible-tactile-min);
+}
+
+/* ---------------------------------------------------------------------------
+   Rotor d'attente — le SEUL mouvement continu de la bibliothèque, et il est
+   toujours EN LIGNE (dans un bouton, dans une pastille) : §33.2 interdit le
+   spinner plein écran, remplacé par des squelettes.
+   --------------------------------------------------------------------------- */
+
+.axn-rotor {
+  display: inline-block;
+  width: var(--typo-taille-base);
+  height: var(--typo-taille-base);
+  flex: none;
+  animation: axn-rotation 1s linear infinite;
+}
+
+@keyframes axn-rotation {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .axn-rotor {
+    animation-duration: 3s;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Champs de saisie (texte, notes, sélection)
+   --------------------------------------------------------------------------- */
+
+.axn-champ {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacement-1);
+}
+
+.axn-champ__libelle {
+  font-family: var(--typo-police-corps);
+  font-size: var(--typo-taille-sm);
+  font-weight: var(--typo-graisse-moyenne);
+  color: var(--couleur-texte-principal);
+}
+
+.axn-champ__obligatoire {
+  color: var(--couleur-alerte-texte);
+  margin-inline-start: var(--espacement-1);
+}
+
+.axn-champ__saisie {
+  width: 100%;
+  min-height: var(--taille-controle-hauteur);
+  padding: var(--espacement-2) var(--espacement-3);
+  background: var(--couleur-surface-carte);
+  border: var(--taille-bordure-epaisseur) solid var(--couleur-bordure-nette);
+  border-radius: var(--taille-rayon-moyen);
+  font-family: var(--typo-police-corps);
+  font-size: var(--typo-taille-base);
+  line-height: var(--typo-interligne-normal);
+  color: var(--couleur-texte-principal);
+}
+
+.axn-champ__saisie::placeholder {
+  color: var(--couleur-texte-tertiaire);
+}
+
+.axn-champ__saisie:disabled {
+  background: var(--couleur-surface-enfoncee);
+  color: var(--couleur-texte-tertiaire);
+  cursor: not-allowed;
+}
+
+/* L'erreur ne se dit PAS par la couleur seule (§33.6, invariant 4) : le filet
+   s'épaissit, ET un message écrit accompagne toujours le champ. */
+.axn-champ__saisie[aria-invalid='true'] {
+  border-color: var(--couleur-alerte-bordure);
+  border-width: var(--taille-bordure-epaisseur-forte);
+}
+
+.axn-champ__notes {
+  min-height: calc(var(--taille-controle-hauteur-large) * 2);
+  resize: vertical;
+}
+
+.axn-champ__aide {
+  font-size: var(--typo-taille-sm);
+  line-height: var(--typo-interligne-normal);
+  color: var(--couleur-texte-secondaire);
+}
+
+.axn-champ__erreur {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--espacement-1);
+  font-size: var(--typo-taille-sm);
+  line-height: var(--typo-interligne-normal);
+  color: var(--couleur-alerte-texte);
+}
+
+/* ---------------------------------------------------------------------------
+   Case à cocher et bascule
+   --------------------------------------------------------------------------- */
+
+.axn-case {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--espacement-3);
+  min-height: var(--taille-cible-tactile-min);
+  padding-block: var(--espacement-2);
+  cursor: pointer;
+}
+
+.axn-case__boite {
+  flex: none;
+  width: var(--typo-taille-2xl);
+  height: var(--typo-taille-2xl);
+  margin: 0;
+  accent-color: var(--couleur-action-fond);
+  cursor: pointer;
+}
+
+.axn-case__libelle {
+  font-family: var(--typo-police-corps);
+  font-size: var(--typo-taille-base);
+  line-height: var(--typo-interligne-normal);
+  color: var(--couleur-texte-principal);
+}
+
+.axn-bascule {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espacement-3);
+  min-height: var(--taille-cible-tactile-min);
+  padding: var(--espacement-1) var(--espacement-2);
+  background: transparent;
+  border: 0;
+  font-family: var(--typo-police-corps);
+  font-size: var(--typo-taille-base);
+  color: var(--couleur-texte-principal);
+  cursor: pointer;
+}
+
+.axn-bascule__piste {
+  position: relative;
+  flex: none;
+  width: var(--espacement-12);
+  height: var(--espacement-6);
+  background: var(--couleur-bordure-nette);
+  border-radius: var(--taille-rayon-surface);
+  transition: background-color var(--mouvement-duree-rapide) var(--mouvement-courbe-standard);
+}
+
+.axn-bascule[aria-checked='true'] .axn-bascule__piste {
+  background: var(--couleur-action-fond);
+}
+
+.axn-bascule__pion {
+  position: absolute;
+  top: var(--espacement-1);
+  inset-inline-start: var(--espacement-1);
+  width: var(--espacement-4);
+  height: var(--espacement-4);
+  background: var(--couleur-surface-carte);
+  border-radius: var(--taille-rayon-surface);
+  transition: transform var(--mouvement-duree-rapide) var(--mouvement-courbe-standard);
+}
+
+.axn-bascule[aria-checked='true'] .axn-bascule__pion {
+  transform: translateX(var(--espacement-6));
+}
+
+/* ---------------------------------------------------------------------------
+   Badge et message
+   --------------------------------------------------------------------------- */
+
+.axn-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espacement-1);
+  padding: var(--espacement-1) var(--espacement-2);
+  border: var(--taille-bordure-epaisseur) solid transparent;
+  border-radius: var(--taille-rayon-petit);
+  font-family: var(--typo-police-corps);
+  font-size: var(--typo-taille-xs);
+  font-weight: var(--typo-graisse-semi);
+  line-height: var(--typo-interligne-serre);
+  white-space: nowrap;
+}
+
+.axn-badge--neutre {
+  background: var(--couleur-surface-enfoncee);
+  border-color: var(--couleur-bordure-nette);
+  color: var(--couleur-texte-secondaire);
+}
+
+.axn-badge--action {
+  background: var(--couleur-action-fond-doux);
+  border-color: var(--couleur-action-bordure);
+  color: var(--couleur-action-texte);
+}
+
+.axn-badge--info {
+  background: var(--couleur-info-fond);
+  border-color: var(--couleur-info-bordure);
+  color: var(--couleur-info-texte);
+}
+
+.axn-badge--succes {
+  background: var(--couleur-succes-fond);
+  border-color: var(--couleur-succes-bordure);
+  color: var(--couleur-succes-texte);
+}
+
+.axn-badge--avertissement {
+  background: var(--couleur-avertissement-fond);
+  border-color: var(--couleur-avertissement-bordure);
+  color: var(--couleur-avertissement-texte);
+}
+
+.axn-badge--alerte {
+  background: var(--couleur-alerte-fond);
+  border-color: var(--couleur-alerte-bordure);
+  color: var(--couleur-alerte-texte);
+}
+
+.axn-message {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--espacement-3);
+  padding: var(--espacement-3) var(--espacement-4);
+  border: var(--taille-bordure-epaisseur) solid transparent;
+  border-inline-start-width: var(--taille-bordure-epaisseur-forte);
+  border-radius: var(--taille-rayon-moyen);
+  font-family: var(--typo-police-corps);
+  font-size: var(--typo-taille-base);
+  line-height: var(--typo-interligne-normal);
+}
+
+.axn-message--info {
+  background: var(--couleur-info-fond);
+  border-color: var(--couleur-info-bordure);
+  color: var(--couleur-info-texte);
+}
+
+.axn-message--succes {
+  background: var(--couleur-succes-fond);
+  border-color: var(--couleur-succes-bordure);
+  color: var(--couleur-succes-texte);
+}
+
+.axn-message--avertissement {
+  background: var(--couleur-avertissement-fond);
+  border-color: var(--couleur-avertissement-bordure);
+  color: var(--couleur-avertissement-texte);
+}
+
+.axn-message--alerte {
+  background: var(--couleur-alerte-fond);
+  border-color: var(--couleur-alerte-bordure);
+  color: var(--couleur-alerte-texte);
+}
+
+.axn-message__icone {
+  flex: none;
+  margin-block-start: var(--espacement-1);
+}
+
+.axn-message__corps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacement-1);
+  min-width: 0;
+}
+
+.axn-message__titre {
+  margin: 0;
+  font-size: var(--typo-taille-base);
+  font-weight: var(--typo-graisse-semi);
+}
+
+.axn-message__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espacement-2);
+  margin-block-start: var(--espacement-2);
+}
+
+/* ---------------------------------------------------------------------------
+   Squelettes — §33.2 : « aux dimensions FINALES, jamais de spinner plein écran ».
+   Un squelette de la mauvaise taille fait sauter la page à l'arrivée des données ;
+   c'est ce saut, pas l'attente, qui donne l'impression d'un outil lent.
+   --------------------------------------------------------------------------- */
+
+.axn-squelette {
+  display: block;
+  background: var(--couleur-surface-enfoncee);
+  border-radius: var(--taille-rayon-petit);
+  animation: axn-pulsation 1.4s ease-in-out infinite;
+}
+
+.axn-squelette--titre {
+  height: var(--typo-taille-2xl);
+  width: 60%;
+}
+
+.axn-squelette--ligne {
+  height: var(--typo-taille-base);
+  width: 100%;
+}
+
+.axn-squelette--ligne:last-child {
+  width: 70%;
+}
+
+.axn-squelette--pastille {
+  height: var(--typo-taille-xl);
+  width: var(--espacement-16);
+  border-radius: var(--taille-rayon-surface);
+}
+
+.axn-squelette--carte {
+  height: var(--taille-anneau-diametre-grand);
+  width: 100%;
+  border-radius: var(--taille-rayon-grand);
+}
+
+.axn-squelette-groupe {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacement-2);
+}
+
+@keyframes axn-pulsation {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .axn-squelette {
+    animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Les quatre états (§33.2) : vide · chargement · erreur · hors ligne
+   --------------------------------------------------------------------------- */
+
+.axn-etat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--espacement-3);
+  max-width: var(--taille-largeur-contenu-etroit);
+  margin-inline: auto;
+  padding: var(--espacement-8) var(--espacement-4);
+  text-align: center;
+  font-family: var(--typo-police-corps);
+  line-height: var(--typo-interligne-normal);
+  color: var(--couleur-texte-secondaire);
+}
+
+.axn-etat__icone {
+  color: var(--couleur-texte-tertiaire);
+}
+
+.axn-etat__titre {
+  margin: 0;
+  font-size: var(--typo-taille-xl);
+  font-weight: var(--typo-graisse-semi);
+  color: var(--couleur-texte-principal);
+}
+
+.axn-etat__texte {
+  margin: 0;
+}
+
+.axn-etat__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--espacement-2);
+}
+
+/* Le code technique existe (on en a besoin pour diagnostiquer) mais il est REPLIÉ :
+   §33.2 — « erreur : cause + action, français clair, code technique replié ». */
+.axn-etat__details {
+  align-self: stretch;
+  text-align: start;
+  font-size: var(--typo-taille-sm);
+}
+
+.axn-etat__details summary {
+  cursor: pointer;
+  color: var(--couleur-texte-tertiaire);
+  min-height: var(--taille-cible-tactile-min);
+  display: flex;
+  align-items: center;
+}
+
+.axn-etat__code {
+  display: block;
+  margin: 0;
+  padding: var(--espacement-2);
+  overflow-x: auto;
+  background: var(--couleur-surface-enfoncee);
+  border-radius: var(--taille-rayon-petit);
+  font-family: var(--typo-police-mono);
+  font-size: var(--typo-taille-xs);
+  color: var(--couleur-texte-secondaire);
+}
+
+.axn-etat__capacites {
+  margin: 0;
+  padding-inline-start: var(--espacement-5);
+  text-align: start;
+  align-self: stretch;
+}
+
+.axn-etat__capacites li {
+  margin-block: var(--espacement-1);
+}
+
+/* ---------------------------------------------------------------------------
+   Échelle ancrée (§33.3 : les ancres §32.4 s'affichent SOUS le curseur) et
+   segmenté Oui/Non/N-A. Les deux reposent sur de VRAIS boutons radio : le clavier,
+   le lecteur d'écran et le groupe de sélection viennent alors du navigateur, pas
+   d'une réimplémentation qu'il faudrait tester.
+   --------------------------------------------------------------------------- */
+
+.axn-choix {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacement-3);
+}
+
+.axn-choix__intitule {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-family: var(--typo-police-corps);
+  font-size: var(--typo-taille-base);
+  font-weight: var(--typo-graisse-moyenne);
+  color: var(--couleur-texte-principal);
+}
+
+.axn-choix__pistes {
+  display: flex;
+  gap: var(--espacement-2);
+}
+
+.axn-choix__option {
+  position: relative;
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--espacement-1);
+  min-height: var(--taille-controle-hauteur-large);
+  padding: var(--espacement-2);
+  background: var(--couleur-surface-carte);
+  border: var(--taille-bordure-epaisseur) solid var(--couleur-bordure-nette);
+  border-radius: var(--taille-rayon-moyen);
+  font-family: var(--typo-police-corps);
+  font-size: var(--typo-taille-lg);
+  font-weight: var(--typo-graisse-semi);
+  color: var(--couleur-texte-principal);
+  cursor: pointer;
+  transition:
+    background-color var(--mouvement-duree-rapide) var(--mouvement-courbe-standard),
+    border-color var(--mouvement-duree-rapide) var(--mouvement-courbe-standard);
+}
+
+.axn-choix__option:hover {
+  background: var(--couleur-surface-enfoncee);
+}
+
+/* Le choix retenu se voit par TROIS signaux cumulés — fond, filet épaissi, coche —
+   parce que « aucune information portée par la couleur seule » (§33.6) vaut aussi,
+   et surtout, pour l'information la plus importante de l'écran d'entretien. */
+.axn-choix__option:has(:checked) {
+  background: var(--couleur-action-fond-doux);
+  border-color: var(--couleur-action-bordure);
+  border-width: var(--taille-bordure-epaisseur-forte);
+}
+
+.axn-choix__option:has(:focus-visible) {
+  outline: var(--taille-focus-epaisseur) solid var(--couleur-focus-anneau);
+  outline-offset: var(--taille-focus-decalage);
+}
+
+.axn-choix__marque {
+  color: var(--couleur-action-texte);
+}
+
+.axn-choix__raccourci {
+  font-size: var(--typo-taille-xs);
+  font-weight: var(--typo-graisse-normale);
+  color: var(--couleur-texte-tertiaire);
+}
+
+.axn-choix__ancre {
+  min-height: calc(var(--typo-taille-sm) * var(--typo-interligne-large) * 2);
+  padding: var(--espacement-2) var(--espacement-3);
+  background: var(--couleur-surface-enfoncee);
+  border-radius: var(--taille-rayon-moyen);
+  font-family: var(--typo-police-corps);
+  font-size: var(--typo-taille-sm);
+  line-height: var(--typo-interligne-large);
+  color: var(--couleur-texte-secondaire);
+}
+
+.axn-choix__toutes-ancres {
+  font-size: var(--typo-taille-sm);
+  color: var(--couleur-texte-secondaire);
+}
+
+.axn-choix__toutes-ancres summary {
+  min-height: var(--taille-cible-tactile-min);
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--couleur-action-texte);
+}
+
+.axn-choix__liste-ancres {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--espacement-1) var(--espacement-3);
+}
+
+/* La paire ancre/texte n'existe que pour la clé de rendu React : `display: contents`
+   la retire de la grille, qui reste alignée sur deux colonnes. */
+.axn-choix__paire {
+  display: contents;
+}
+
+.axn-choix__liste-ancres dt {
+  font-weight: var(--typo-graisse-semi);
+  color: var(--couleur-texte-principal);
+}
+
+.axn-choix__liste-ancres dd {
+  margin: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   Saisie en fourchette (§27.4 — l'alternative proposée quand le chiffre exact
+   est refusé). Deux champs, jamais un seul : « entre 200 et 300 k€ » est une
+   donnée, « environ 250 » est une invention.
+   --------------------------------------------------------------------------- */
+
+.axn-fourchette__bornes {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--espacement-3);
+}
+
+.axn-fourchette__borne {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.axn-fourchette__jointure {
+  padding-block-end: var(--espacement-3);
+  font-family: var(--typo-police-corps);
+  font-size: var(--typo-taille-sm);
+  color: var(--couleur-texte-secondaire);
+}
+
+.axn-fourchette__unite {
+  padding-block-end: var(--espacement-3);
+  font-family: var(--typo-police-corps);
+  font-size: var(--typo-taille-base);
+  color: var(--couleur-texte-secondaire);
+}
+
+/* ---------------------------------------------------------------------------
+   Pastille de synchronisation — §19.2 : « toujours visible mais DISCRET (pastille,
+   jamais de bannière anxiogène) ».
+   --------------------------------------------------------------------------- */
+
+.axn-pastille-sync {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espacement-2);
+  min-height: var(--taille-cible-tactile-min);
+  padding: var(--espacement-1) var(--espacement-3);
+  border: var(--taille-bordure-epaisseur) solid transparent;
+  border-radius: var(--taille-rayon-surface);
+  font-family: var(--typo-police-corps);
+  font-size: var(--typo-taille-sm);
+  line-height: var(--typo-interligne-serre);
+}
+
+.axn-pastille-sync--synchronise {
+  background: var(--couleur-succes-fond);
+  border-color: var(--couleur-succes-bordure);
+  color: var(--couleur-succes-texte);
+}
+
+.axn-pastille-sync--en-cours,
+.axn-pastille-sync--en-attente {
+  background: var(--couleur-info-fond);
+  border-color: var(--couleur-info-bordure);
+  color: var(--couleur-info-texte);
+}
+
+/* Hors ligne n'est PAS une erreur : c'est le mode nominal de l'invariant 1. Il se
+   dit en neutre, pas en rouge — le rouge est réservé à ce qui exige un geste. */
+.axn-pastille-sync--hors-ligne {
+  background: var(--couleur-surface-enfoncee);
+  border-color: var(--couleur-bordure-nette);
+  color: var(--couleur-texte-secondaire);
+}
+
+.axn-pastille-sync--echec {
+  background: var(--couleur-alerte-fond);
+  border-color: var(--couleur-alerte-bordure);
+  color: var(--couleur-alerte-texte);
+}
+
+.axn-pastille-sync__compte {
+  font-weight: var(--typo-graisse-semi);
+}
+
+/* ---------------------------------------------------------------------------
+   Indicateur « Enregistré » — §33.3 : « pastille FURTIVE à chaque écriture
+   locale ; la confiance se voit ». Furtive : elle occupe sa place en permanence
+   (sinon la ligne saute à chaque frappe) et ne s'annonce qu'en changeant de texte.
+   --------------------------------------------------------------------------- */
+
+.axn-enregistrement {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espacement-1);
+  min-height: var(--typo-taille-xl);
+  font-family: var(--typo-police-corps);
+  font-size: var(--typo-taille-xs);
+  line-height: var(--typo-interligne-serre);
+  color: var(--couleur-texte-tertiaire);
+  transition: color var(--mouvement-duree-normale) var(--mouvement-courbe-standard);
+}
+
+.axn-enregistrement--enregistre {
+  color: var(--couleur-succes-texte);
+}
+
+/* ---------------------------------------------------------------------------
+   Bandeau « écran partagé » (§33.3) — l'état doit être visible EN PERMANENCE :
+   croire qu'on est en écran partagé alors qu'on ne l'est pas est exactement la
+   fuite que le mode existe pour empêcher.
+   --------------------------------------------------------------------------- */
+
+.axn-bandeau-partage {
+  position: sticky;
+  top: 0;
+  z-index: var(--taille-plan-bandeau);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espacement-3);
+  min-height: var(--taille-cible-tactile-min);
+  padding: var(--espacement-1) var(--espacement-4);
+  background: var(--couleur-surface-inverse);
+  color: var(--couleur-texte-sur-inverse);
+  font-family: var(--typo-police-corps);
+  font-size: var(--typo-taille-sm);
+  line-height: var(--typo-interligne-serre);
+}
+
+.axn-bandeau-partage__etat {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espacement-2);
+  font-weight: var(--typo-graisse-semi);
+}
+
+.axn-bandeau-partage__bouton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espacement-2);
+  min-height: var(--taille-cible-tactile-min);
+  padding: var(--espacement-1) var(--espacement-3);
+  background: transparent;
+  border: var(--taille-bordure-epaisseur) solid var(--couleur-texte-sur-inverse);
+  border-radius: var(--taille-rayon-moyen);
+  font-family: var(--typo-police-corps);
+  font-size: var(--typo-taille-sm);
+  font-weight: var(--typo-graisse-semi);
+  color: var(--couleur-texte-sur-inverse);
+  cursor: pointer;
+}
+
+.axn-bandeau-partage__raccourci {
+  font-weight: var(--typo-graisse-normale);
+}
+
+/* ---------------------------------------------------------------------------
+   Anneau de progression (§19.2)
+   --------------------------------------------------------------------------- */
+
+.axn-anneau {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--espacement-1);
+  font-family: var(--typo-police-corps);
+  text-align: center;
+}
+
+.axn-anneau__dessin {
+  width: var(--taille-anneau-diametre-petit);
+  height: var(--taille-anneau-diametre-petit);
+  transform: rotate(-90deg);
+}
+
+.axn-anneau--grand .axn-anneau__dessin {
+  width: var(--taille-anneau-diametre-grand);
+  height: var(--taille-anneau-diametre-grand);
+}
+
+.axn-anneau__piste {
+  fill: none;
+  stroke: var(--couleur-action-fond-doux);
+}
+
+.axn-anneau__part {
+  fill: none;
+  stroke: var(--couleur-action-fond);
+  stroke-linecap: round;
+  transition: stroke-dashoffset var(--mouvement-duree-normale) var(--mouvement-courbe-standard);
+}
+
+.axn-anneau__valeur {
+  font-size: var(--typo-taille-base);
+  font-weight: var(--typo-graisse-semi);
+  color: var(--couleur-texte-principal);
+}
+
+.axn-anneau--grand .axn-anneau__valeur {
+  font-size: var(--typo-taille-xl);
+}
+
+.axn-anneau__libelle {
+  font-size: var(--typo-taille-xs);
+  color: var(--couleur-texte-secondaire);
+}
+
+/* ---------------------------------------------------------------------------
+   Carte de synthèse d'entretien (§33.3 — écran de fin d'entretien)
+   --------------------------------------------------------------------------- */
+
+.axn-carte {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacement-4);
+  padding: var(--espacement-4);
+  background: var(--couleur-surface-carte);
+  border: var(--taille-bordure-epaisseur) solid var(--couleur-bordure-discrete);
+  border-radius: var(--taille-rayon-grand);
+  box-shadow: var(--ombre-sm);
+  font-family: var(--typo-police-corps);
+}
+
+.axn-carte__tete {
+  display: flex;
+  align-items: center;
+  gap: var(--espacement-4);
+}
+
+.axn-carte__titre {
+  margin: 0;
+  font-size: var(--typo-taille-lg);
+  font-weight: var(--typo-graisse-semi);
+  color: var(--couleur-texte-principal);
+}
+
+.axn-carte__sous-titre {
+  margin: 0;
+  font-size: var(--typo-taille-sm);
+  color: var(--couleur-texte-secondaire);
+}
+
+.axn-carte__mesures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(var(--taille-anneau-diametre-grand), 1fr));
+  gap: var(--espacement-3);
+  margin: 0;
+}
+
+.axn-carte__mesure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacement-1);
+  padding: var(--espacement-2);
+  background: var(--couleur-surface-fond);
+  border-radius: var(--taille-rayon-moyen);
+}
+
+.axn-carte__mesure-valeur {
+  font-size: var(--typo-taille-xl);
+  font-weight: var(--typo-graisse-semi);
+  line-height: var(--typo-interligne-serre);
+  color: var(--couleur-texte-principal);
+}
+
+.axn-carte__mesure-libelle {
+  font-size: var(--typo-taille-xs);
+  color: var(--couleur-texte-secondaire);
+}
+
+.axn-carte__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espacement-2);
+}
+
+/* ---------------------------------------------------------------------------
+   Superpositions : dialogue et panneau
+   --------------------------------------------------------------------------- */
+
+.axn-voile {
+  position: fixed;
+  inset: 0;
+  z-index: var(--taille-plan-voile);
+  display: flex;
+  background: var(--couleur-voile-superposition);
+}
+
+.axn-voile--centre {
+  align-items: center;
+  justify-content: center;
+  padding: var(--espacement-4);
+}
+
+.axn-voile--bas {
+  align-items: flex-end;
+}
+
+.axn-voile--cote {
+  align-items: stretch;
+  justify-content: flex-end;
+}
+
+.axn-superposition {
+  position: relative;
+  z-index: var(--taille-plan-superposition);
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacement-4);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: var(--espacement-5);
+  background: var(--couleur-surface-carte);
+  box-shadow: var(--ombre-md);
+  font-family: var(--typo-police-corps);
+  color: var(--couleur-texte-principal);
+}
+
+.axn-superposition--dialogue {
+  width: 100%;
+  max-width: var(--taille-largeur-contenu-etroit);
+  border-radius: var(--taille-rayon-grand);
+}
+
+.axn-superposition--bas {
+  width: 100%;
+  max-height: 85%;
+  border-start-start-radius: var(--taille-rayon-surface);
+  border-start-end-radius: var(--taille-rayon-surface);
+}
+
+.axn-superposition--cote {
+  width: 100%;
+  max-width: var(--taille-largeur-contenu-etroit);
+  border-start-start-radius: var(--taille-rayon-surface);
+  border-end-start-radius: var(--taille-rayon-surface);
+}
+
+.axn-superposition__tete {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--espacement-3);
+}
+
+.axn-superposition__titre {
+  margin: 0;
+  font-size: var(--typo-taille-xl);
+  font-weight: var(--typo-graisse-semi);
+}
+
+.axn-superposition__description {
+  margin: 0;
+  font-size: var(--typo-taille-sm);
+  line-height: var(--typo-interligne-normal);
+  color: var(--couleur-texte-secondaire);
+}
+
+.axn-superposition__corps {
+  flex: 1 1 auto;
+  min-height: 0;
+  line-height: var(--typo-interligne-normal);
+}
+
+.axn-superposition__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--espacement-2);
+}
+
+/* La poignée d'un panneau bas : elle dit « ceci se ferme » sans un mot, et c'est
+   le seul endroit où un ornement est utile plutôt que décoratif. */
+.axn-superposition__poignee {
+  align-self: center;
+  width: var(--espacement-10);
+  height: var(--espacement-1);
+  background: var(--couleur-bordure-nette);
+  border-radius: var(--taille-rayon-petit);
+}
