@@ -55,7 +55,22 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 MC_IMAGE="${MC_IMAGE:-minio/mc:RELEASE.2025-04-16T18-13-26Z}"
 MINIO_IMAGE="${MINIO_IMAGE:-minio/minio:RELEASE.2025-04-22T22-12-26Z}"
-PG_IMAGE="${PG_IMAGE:-axion-audit-postgres:16}"
+# PG_IMAGE : DÉCOUVERTE, comme le dépôt — et pour une raison plus forte que la
+# commodité. Ce script attendait « axion-audit-postgres:16 ». MESURÉ le
+# 2026-08-30 : l'image réelle est « axion-audit-postgres:16-coolify », et la
+# restauration échouait sur « pull access denied … repository does not exist ».
+# Même famille que le nom de volume : un nom DÉDUIT là où une VÉRITÉ est
+# observable sur la machine.
+#
+# CE QUI REND LA DÉCOUVERTE PLUS JUSTE, ET PAS SEULEMENT PLUS COMMODE : la
+# restauration doit s'exécuter avec LE MÊME binaire Postgres que la production.
+# Un test réussi avec une autre image ne prouverait rien sur celle qui sert — il
+# répondrait à une autre question que celle posée. Corriger le nom en dur aurait
+# marché aujourd'hui et menti demain, au premier changement de tag.
+#
+# Vide par défaut : la valeur est résolue par decouvrir_image_postgres(). La
+# variable d'environnement reste un moyen d'imposer une image à la main.
+PG_IMAGE="${PG_IMAGE:-}"
 ARCHIVE_DIR="${ARCHIVE_DIR:-/var/backups/axion/minio/archives}"
 # Image utilitaire : UNE SEULE définition, dans lib/common.sh (mineur de revue).
 ALPINE_IMAGE="${ALPINE_IMAGE:-$AXION_ALPINE_IMAGE}"
@@ -151,6 +166,45 @@ depot_porte_notre_stanza() {
     test -d "/depot/backup/${PGBACKREST_STANZA}" >/dev/null 2>&1
 }
 
+# -----------------------------------------------------------------------------
+# DÉCOUVRIR L'IMAGE POSTGRES DE LA PILE VIVANTE.
+# -----------------------------------------------------------------------------
+# Appelée APRÈS decouvrir_depot_pgbackrest(), qui renseigne PROJET_DECOUVERT :
+# on cherche le conteneur du service `postgres` DE CE PROJET-LÀ, et pas un
+# postgres quelconque de la machine — celle-ci en héberge d'autres, étrangers à
+# ce projet, et restaurer avec le binaire d'un voisin ne prouverait rien.
+decouvrir_image_postgres() {
+  if [[ -n "$PG_IMAGE" ]]; then
+    axion_log "Image Postgres imposée à la main : $PG_IMAGE"
+    return 0
+  fi
+  if [[ -z "$PROJET_DECOUVERT" ]]; then
+    axion_die "Impossible de découvrir l'image Postgres : le projet de la pile vivante n'a pas été identifié. Poser PG_IMAGE pour trancher à la main."
+  fi
+
+  local id
+  id="$(docker ps \
+    --filter "label=com.docker.compose.project=${PROJET_DECOUVERT}" \
+    --filter "label=com.docker.compose.service=postgres" \
+    --format '{{.ID}}' 2>/dev/null | head -1)"
+
+  if [[ -z "$id" ]]; then
+    axion_die "Aucun conteneur Postgres vivant dans le projet « ${PROJET_DECOUVERT} ». La restauration doit utiliser LE MÊME binaire que la production : sans lui, un test vert ne dirait rien de la base qui sert. Poser PG_IMAGE pour trancher à la main."
+  fi
+
+  PG_IMAGE="$(docker inspect "$id" --format '{{.Config.Image}}' 2>/dev/null || true)"
+  [[ -n "$PG_IMAGE" ]] || axion_die "Le conteneur Postgres « $id » n'annonce aucune image. Poser PG_IMAGE pour trancher à la main."
+
+  # L'image doit être PRÉSENTE localement : ces images sont construites sur la
+  # machine et n'existent dans aucun registre. Un `docker run` déclencherait un
+  # `pull` qui échouerait plus loin, avec un message trompeur parlant de droits
+  # d'accès — c'est exactement ce qui s'est produit le 2026-08-30.
+  docker image inspect "$PG_IMAGE" >/dev/null 2>&1 ||
+    axion_die "L'image « $PG_IMAGE » n'est pas présente localement. Elle est construite sur cette machine et n'existe dans aucun registre : un docker run tenterait un pull et échouerait sur un message de droits d'accès, sans rapport avec la cause."
+
+  axion_log "Image Postgres découverte : « $PG_IMAGE » (service postgres du projet « ${PROJET_DECOUVERT} »)."
+}
+
 decouvrir_depot_pgbackrest() {
   axion_require_env PGBACKREST_REPO_PATH PGBACKREST_STANZA
 
@@ -215,6 +269,7 @@ guard_not_production() {
   #    vivant, pas seulement celui qu'APP_ENV laisse supposer. Tant que le dépôt
   #    n'était que déduit, ce garde ne protégeait que d'un nom imaginaire.
   decouvrir_depot_pgbackrest
+  decouvrir_image_postgres
   # 1. Aucune ressource de test ne doit porter un nom de ressource vivante.
   for vol in "$PG_VOLUME" "$MINIO_VOLUME" "$CADDY_VOLUME"; do
     case "$vol" in
