@@ -1883,3 +1883,27 @@ Faits du bloc :
 - **Amorce datée trouvée dans le balayage sentinelle** (§4.3 du dossier) : `missionId` et `sessionId`
   sont cartographiés vers des UUID semés nulle part. Inoffensif aujourd'hui (bancs d'essai),
   **désarme le garde le jour où L3 ajoute une route de produit portant ces noms.** Au brief de L3.
+
+## 2026-08-31 05h10 — [lot L2 / porte P-B] — étape pipeline 7/7 — ARRÊT DEVANT LA PORTE
+
+Dernier commit vert : `3601dfa` (dossier P-B + gel L3a) · Branche : `main` · Poussé : oui
+Tâche en cours : **aucune.** La session s'arrête devant la porte, délibérément.
+Prochaine action : **NE RIEN OUVRIR.** Le gardien A02 rend son contrôle d'acceptation sur
+`docs/portes/PORTE_B_2026-08-31.md` (matrice E1-E47 dans les DEUX sens), puis Williams arbitre le
+§4.4 (que faire des deux membres sans objet) et le §8 (la séquence L3 vs P-B). Aucun lot ne s'ouvre
+avant sa signature — **L3a est gelé, branche `lot/l3a-companies` intacte sur `1a6bf5f`.**
+Tests rouges connus : aucun. **CI de `main` sur `3601dfa` : 20/20 jobs `success`.**
+
+Faits du bloc :
+
+- **Trois fusions** : T3 (`63fcc26`, 41 tests), design system (`daa1c86`, 447 tests, projet vitest
+  `interface`), dossier P-B + gel L3a + constats croisés (`3601dfa`).
+- **Le dossier P-B est monté et NON SIGNÉ**, et il dit ce qu'il ne peut pas cocher : deux des trois
+  membres du critère 09 §62 n'ont pas d'objet (isolation missions = dépôt L3 ; propriété de session =
+  sync L6). Les cocher aurait été le défaut central du projet.
+- **`DECISIONS.md` : 100 entrées.** Les deux constats de l'agent croisé de T3 sont tracés **sans
+  qu'aucun ne soit tranché** — le code mort `lireUtilisateur` reste en place *exprès*, parce que
+  c'est la pièce à conviction que le gardien doit trouver lui-même.
+- **Ménage** : worktrees `_axui` et `_axion-wt-e45` supprimés après vérification que leur seul écart
+  avec `main` (`coverage-critical-paths.json`) était l'**ancienne** version. Branches locales et
+  distantes fusionnées supprimées. Restent `main` et `_axl3a` (gelé).
