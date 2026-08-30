@@ -151,8 +151,23 @@ answers(id,                                      -- UUID v7 CÔTÉ CLIENT (clé 
         revision INT DEFAULT 1,
         client_created_at, client_updated_at, synced_at, created_at, updated_at)
 
-answer_revisions(id, answer_id FK, previous_value JSONB, changed_by FK, changed_at,
-                 change_origin CHECK IN ('terrain','sync_arbitrage','correction_siege') DEFAULT 'terrain')  -- V2.2 : traçabilité §9.3/§9.9
+answer_revisions(id, answer_id FK NULL, previous_value JSONB, changed_by FK, changed_at,
+                 change_origin CHECK IN ('terrain','sync_arbitrage','correction_siege') DEFAULT 'terrain',  -- V2.2 : traçabilité §9.3/§9.9
+                 -- ═══ AMENDEMENT S-4 (2026-08-31, DECISIONS.md) — L'ARCHIVE COUVRE LES TROIS ENTITÉS ═══
+                 -- §9.4 étend le dernier-écrit-gagne aux TROIS entités synchronisées (answers,
+                 -- interviews, attachments) et ne nommait qu'UNE archive, dont la FK vers `answers`
+                 -- était OBLIGATOIRE. Sur le scénario « deux appareils » — un critère d'acceptation
+                 -- @critique — la valeur perdante d'un ENTRETIEN ou d'une PIÈCE JOINTE disparaissait
+                 -- SANS TRACE. C'est l'invariant 7 : rien n'est jamais silencieusement écrasé.
+                 -- La table n'est PAS renommée, et ce n'est pas du confort : le pack la nomme trois
+                 -- fois (05 §9.3, §9.4, §9.9). La renommer mettrait le code en contradiction avec
+                 -- trois sections non amendées.
+                 entity_type CHECK IN ('answer','interview','attachment'),   -- SANS DEFAUT (convention T12 : un état métier ne s'hérite pas)
+                 entity_id,                        -- l'id de la ligne archivée, quelle que soit sa table
+                 -- Cohérence : `answer_id` n'est renseigné QUE pour entity_type='answer', et il l'est
+                 -- toujours dans ce cas. Sans ce CHECK, une révision de réponse pourrait perdre sa FK
+                 -- et devenir inaccessible par le chemin que le pack décrit.
+                 CHECK ((entity_type = 'answer') = (answer_id IS NOT NULL)))
 
 attachments(id,                                  -- UUID v7 côté client
             interview_id FK NULL, answer_id FK NULL, mission_id FK,
@@ -163,7 +178,60 @@ attachments(id,                                  -- UUID v7 côté client
             purge_after DATE NULL,               -- RGPD (audio)
             client_created_at, client_updated_at,   -- V2.9 : le rattachement d'une note volante est complétable après coup (P1-5)
                                                     -- = ligne modifiable → LWW §9.4 et op 'attachment_meta' (11 §4)
-            synced_at, created_at)
+            -- ═══ AMENDEMENT S-3 (2026-08-31, DECISIONS.md) — LE PROPRIÉTAIRE D'UNE NOTE VOLANTE ═══
+            -- §9.9 fonde la propriété sur UNE seule colonne : `interviews.conducted_by`. Pour une
+            -- pièce jointe RATTACHÉE, une jointure y mène. Pour une NOTE VOLANTE — `interview_id` ET
+            -- `answer_id` à NULL, cas que le pack crée et rend durable (§24.1 P1-5) — la chaîne est
+            -- ROMPUE, et cette table ne portait aucune colonne d'auteur. `mission_id` ne peut pas en
+            -- tenir lieu : §9.9 dit que les autres membres de la mission « consultent en LECTURE ».
+            -- LE PACK NE DIT NULLE PART DE QUI EST UNE NOTE VOLANTE. La règle ci-dessous est donc une
+            -- DÉCISION, pas une lecture — signalée comme telle dans DECISIONS.md :
+            --   propriétaire = le rattachement quand il existe, SINON `created_by`.
+            created_by FK users,
+            -- ═══ AMENDEMENT S-1 (2026-08-31, DECISIONS.md) — LE CURSEUR DE PULL A BESOIN DE CETTE COLONNE ═══
+            -- §9.5, mot pour mot : « Curseur par mission (`updated_at` SERVEUR max reçu) ». Cette
+            -- table s'arrêtait à `created_at` — alors que l'en-tête de CE fichier pose
+            -- « created_at/updated_at TIMESTAMPTZ PARTOUT » et que la ligne ci-dessus déclare la
+            -- ligne modifiable. Le fichier se contredisait donc lui-même, DEUX FOIS, et la
+            -- conséquence n'était pas cosmétique : UNE PIÈCE JOINTE MODIFIÉE NE SERAIT JAMAIS
+            -- REDESCENDUE AU TERRAIN.
+            synced_at, created_at, updated_at)
+
+-- ═══ AMENDEMENT S-6 (2026-08-31, DECISIONS.md) — L'ÉTAT D'UN ENVOI PAR MORCEAUX ═══
+-- §9.6 exige trois choses qu'aucune table ne portait :
+--   · `GET /v1/sync/attachments/:id/status` → « la liste des chunks reçus » ;
+--   · une reprise qui « n'envoie QUE les manquants » ;
+--   · un 409 accompagné de « la liste des chunks à réémettre ».
+-- Et le scénario §9.8 « reprise d'un envoi interrompu à 80 % » impose que cet état
+-- SURVIVE à une interruption — donc qu'il soit persistant, et non en mémoire.
+--
+-- LE PACK NE NOMME AUCUNE TABLE ET AUCUN CHAMP POUR CELA. La forme ci-dessous est
+-- une DÉCISION, signalée comme telle dans DECISIONS.md, et non une lecture du pack.
+--
+-- UN ENVOI PAR PIÈCE JOINTE : la clé primaire EST `attachment_id`. Deux envois
+-- concurrents du même id depuis deux appareils sont ainsi impossibles par
+-- construction plutôt que par convention — le pack ne tranche pas ce cas (§9.6),
+-- et une contrainte vaut mieux qu'un silence.
+--
+-- `chunks_recus` est un tableau d'index, pas un compteur : « n morceaux reçus » ne
+-- permettrait PAS de répondre « lesquels manquent », qui est exactement ce que le
+-- §9.6 demande. Un compteur aurait eu l'air de suffire.
+--
+-- `sha256_attendu` est NULL pendant tout l'envoi : le pack ne le fait arriver qu'au
+-- `complete`. Le serveur ne peut donc RIEN vérifier avant la fin — c'est une
+-- propriété du protocole, pas un manque de cette table.
+attachment_uploads(attachment_id PK FK attachments,
+                   mission_id FK,                -- portée RBAC et purge
+                   created_by FK users,          -- §9.9 appliquée aux routes de chunks (NON SPÉCIFIÉ par le pack)
+                   chunk_size_bytes INT,         -- 5 Mo (§9.6) ; stocké pour qu'une reprise après
+                                                 -- changement de constante reste cohérente
+                   chunks_attendus INT NULL,     -- NULL tant que le client ne l'a pas annoncé
+                   chunks_recus JSONB,           -- tableau d'index : [0,1,2,5] — la reprise lit CECI
+                   sha256_attendu TEXT NULL,     -- fourni au `complete` uniquement
+                   statut CHECK IN ('en_cours','assemble','echec'),   -- SANS DEFAUT (convention T12)
+                   expire_le TIMESTAMPTZ NULL,   -- un envoi abandonné ne doit pas retenir d'octets
+                                                 -- indéfiniment ; TTL NON SPÉCIFIÉ par le pack
+                   created_at, updated_at)
 
 -- ═══════════════ INVENTAIRES & AI ACT (§27.3, bloc 9) ═══════════════
 tools_inventory(id, mission_id FK, org_unit_id FK NULL, name,
@@ -315,7 +383,7 @@ app_settings(key PRIMARY KEY, value JSONB)       -- seuils, purges, URLs console
 ```
 
 ## 7.1 Index critiques (V2.2)
-`answers(interview_id)` · `answers(mission_question_id)` · index UNIQUE `answers(interview_id, mission_question_id)` · `interviews(mission_id)` · `interviews(org_unit_id)` · `interviews(conducted_by)` · `interviews(schedule_status)` · `org_units(mission_id)` · `org_units(parent_id)` · `missions(company_id)` · `missions(status)` · `missions(parent_mission_id)` · `questions(status, block_id)` · index UNIQUE partiel `questions(code, version) WHERE code IS NOT NULL` (V2.9) · GIN sur `questions.sectors`, `questions.profiles`, `questions.target_services` · index UNIQUE partiel `companies(siren) WHERE siren IS NOT NULL` · `findings(mission_id)` · `use_cases(mission_id)` · `roadmap_items(mission_id)` · `attachments(mission_id)` · `step_validations(mission_id, step_code)` · `alerts(mission_id, status)` · `work_assignments(mission_id)` · `document_requests(mission_id)` · `integration_events(status)` · `integration_events(nonce)` · `processed_ops(processed_at)` · `activity_log(entity_type, entity_id)` · `sync_log(user_id, started_at)`.
+`answers(interview_id)` · `answers(mission_question_id)` · index UNIQUE `answers(interview_id, mission_question_id)` · `interviews(mission_id)` · `interviews(org_unit_id)` · `interviews(conducted_by)` · `interviews(schedule_status)` · `org_units(mission_id)` · `org_units(parent_id)` · `missions(company_id)` · `missions(status)` · `missions(parent_mission_id)` · `questions(status, block_id)` · index UNIQUE partiel `questions(code, version) WHERE code IS NOT NULL` (V2.9) · GIN sur `questions.sectors`, `questions.profiles`, `questions.target_services` · index UNIQUE partiel `companies(siren) WHERE siren IS NOT NULL` · `findings(mission_id)` · `use_cases(mission_id)` · `roadmap_items(mission_id)` · `attachments(mission_id)` · `step_validations(mission_id, step_code)` · `alerts(mission_id, status)` · `work_assignments(mission_id)` · `document_requests(mission_id)` · `integration_events(status)` · `integration_events(nonce)` · `processed_ops(processed_at)` · `activity_log(entity_type, entity_id)` · `sync_log(user_id, started_at)` · **(amendements du 2026-08-31)** `attachments(created_by)` · `attachments(updated_at)` — le curseur de pull §9.5 le parcourt à chaque delta · `answer_revisions(entity_type, entity_id)` — sans lui, retrouver les révisions d'un entretien exigerait un balayage complet · `attachment_uploads(mission_id)` · `attachment_uploads(expire_le)` — la purge des envois abandonnés le parcourt.
 
 ## 7.2 Relations clés (décisions prises)
 Entreprise 1→n missions · mission ↔ utilisateurs via `mission_users` · mission 1→n unités (`org_units`, arbre) · mission 1→n sessions de collecte (`interviews`) · session 1→n réponses · bloc 1→n questions · mission mère 1→n missions filles (consolidation groupe, §32.3) · snapshot du questionnaire (texte + options + barème) dans `mission_questions` · snapshot du texte de question dans la réponse · propriétaire d'une session = `conducted_by` (règle d'écriture §9.9).
