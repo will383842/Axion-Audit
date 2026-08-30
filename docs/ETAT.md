@@ -1862,3 +1862,24 @@ miennes, deux des leurs** — dont une alerte sur T3 et mon diagnostic mémoire 
 n'aurait été vue par son auteur seul.** La discipline de mesure reste le seul garde : ne rien conclure
 d'un verdict global, lire les étapes, et écrire à côté de chaque « vérifié » ce que la preuve
 n'établit pas.
+
+## 2026-08-31 04h30 — [lot L2 / porte P-B] — étape pipeline 7/7 (porte, non franchie)
+
+Dernier commit vert : `daa1c86` (design system fusionné) · Branche : `chore/trace-sequence-l3-pb` · Poussé : oui
+Tâche en cours : dossier P-B monté et **non signé** ; PR #11 porte le dossier + le gel de L3a.
+Prochaine action : attendre la CI de la PR #11, la fusionner, puis **s'arrêter** — la porte P-B
+appartient au gardien A02 puis à Williams. Aucun lot L3 ne s'ouvre avant sa signature.
+Tests rouges connus : aucun. `main` vert sur `63fcc26` (20/20 jobs) et `daa1c86`.
+
+Faits du bloc :
+
+- **T3 fusionné** (`63fcc26`) — 41 tests (le message de commit dit 39, chiffre périmé ; rectifié au
+  §6 du dossier P-B). **Design system fusionné** (`daa1c86`) — 447 tests, projet vitest `interface`.
+- **Le dossier P-B dit ce qu'il ne peut pas cocher** : deux des trois membres du critère 09 §62 n'ont
+  **pas d'objet** aujourd'hui (isolation missions = dépôt L3 ; propriété de session = sync L6). Les
+  cocher aurait été le défaut central du projet. Trois options posées à Williams, une recommandée.
+- **L3a gelé** : constat d'un pair, tracé (99ᵉ entrée `DECISIONS.md`). A01 gèle ; A01 ne décide pas
+  que la séquence peut glisser.
+- **Amorce datée trouvée dans le balayage sentinelle** (§4.3 du dossier) : `missionId` et `sessionId`
+  sont cartographiés vers des UUID semés nulle part. Inoffensif aujourd'hui (bancs d'essai),
+  **désarme le garde le jour où L3 ajoute une route de produit portant ces noms.** Au brief de L3.

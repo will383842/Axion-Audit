@@ -4565,3 +4565,77 @@ n'est pas un fichier du pack.
 Décideur : **Williams**, sur la décomposition en trois règles. **A01** pour la rédaction et pour la
 décision de ne citer aucun chiffre dans le renvoi.
 Impact spec : **amendement de `docs/ORGANISATION_AGENTS.md` §2 et du renvoi de `CLAUDE.md` §4.**
+
+## 2026-08-31 — [L3a] L3 a été ouvert alors que la porte P-B, qui clôt L2, n'est pas franchie
+
+Options :
+Le constat vient d'un pair, pas de moi, et il est exact : la branche `lot/l3a-companies` existe
+(`1a6bf5f`, verte), et **le fichier 09 place `| P-B | Fin L2 |` entre L2 et L3**. Williams avait par
+ailleurs arbitré la séquence **L2 → les trois dettes → P-B** ; je l'avais choisie moi-même avant qu'il
+ne la confirme. Rien dans ce fichier ne trace une autorisation d'ouvrir L3 par-dessus.
+
+**Ce qui rend le constat sérieux plutôt qu'anecdotique : c'est EXACTEMENT le mécanisme des 147 commits
+sur une branche unique** (entrée du 2026-08-29). On n'ouvre pas le lot suivant parce que la porte est
+franchie ; on l'ouvre **parce que le travail est prêt**. Le motif est identique, seule l'échelle change.
+
+1. **Tenir que la branche non fusionnée n'ouvre pas le lot** — défendable au sens du pipeline (rien
+   n'est sur `main`), mais c'est une défense construite APRÈS coup : ce n'est pas la raison pour
+   laquelle L3a a été écrit, et une règle qu'on formule pour se couvrir n'est pas une règle.
+2. **Réécrire l'historique de la branche** — refusé par la même précédence que le 2026-08-29 : on ne
+   réécrit pas pour faire joli un historique dont le désordre est le fait établi.
+3. **Geler L3a où il est, et écrire le gel.** La branche reste, verte, non fusionnée ; **aucun commit
+   L3 supplémentaire, aucune fusion L3, tant que P-B n'est pas signée par Williams.**
+
+Arbitrage : **option 3.** Le travail déjà fait n'est pas détruit — il ne coûte rien à attendre, et le
+détruire coûterait sans rien prouver. Mais il **n'entre pas** avant la porte. Ce que je ne m'accorde
+pas : le droit de décider que la séquence peut glisser. **Cette décision-là est celle de Williams**, et
+elle lui est posée telle quelle à la porte P-B, avec le présent constat en pièce.
+
+**Et une conséquence de forme, relevée par le même pair et que je retiens contre moi** : mes décisions
+vivent des heures sur une branche avant d'atteindre `main`. Pour qui mesure `main` — le gardien, un
+audit, un pair — **la dépendance apparaît avant sa justification**. Ce n'est pas un défaut de
+traçabilité mais de séquence, et il se corrige en fusionnant plus souvent, pas en écrivant davantage.
+Précédence : `CLAUDE.md` §4 (pipeline, 7 étapes, aucun raccourci) et §7 (portes) ; fichier 09 §4bis.
+Décideur : **A01** pour le gel ; **Williams** pour la séquence elle-même, à la porte P-B.
+Impact spec : aucun.
+
+## 2026-08-31 — [L2] Deux constats de l'agent croisé de T3 : que fait-on avant la porte P-B ?
+
+Options :
+L'agent qui a écrit les tests de T3 — et qui n'a produit aucune des lignes testées (09 §5.6) — a
+remonté deux constats qu'il a **délibérément épinglés sans trancher**. C'est le bon geste, et il
+appelle une réponse écrite plutôt qu'une correction silencieuse.
+
+**CONSTAT 1 — `lireUtilisateur` (`users/depot.ts:170`) n'a AUCUN appelant dans tout le dépôt.**
+Écrite pour un `GET /v1/users/:id` jamais câblé : le CRUD a une liste et **pas de lecture unitaire**.
+Le 05 §22 écrit « CRUD /v1/users » sans détailler les verbes ; un « CRUD » complet comporte
+ordinairement la lecture unitaire, donc c'est **la route qui manque**, pas la fonction qui serait de
+trop. Deux issues seulement : câbler la route, ou supprimer la fonction.
+
+**CONSTAT 2 — `PATCH /v1/users/:id` pose `usageProfile: 'expert'` sur un compte NON habilité**, alors
+que 03 §19.1 décrit le mode expert comme celui d'un **auditeur habilité**. Le texte du pack ne dit
+pas si l'habilitation est une **condition** du profil expert ou une propriété **indépendante** qui se
+trouve la côtoyer. **C'est un doute de spec, pas un bug** — et un doute de spec ne se devine pas.
+
+1. **Trancher les deux maintenant** (câbler ou supprimer ; conditionner ou non le profil expert).
+2. **Corriger le plus simple et taire l'autre** — écarté sans discussion : c'est la définition du
+   ménage qui fait disparaître un signal.
+3. **Tracer les deux, n'en trancher aucun, et les porter à la porte.**
+
+Arbitrage : **option 3, et la raison tient en une phrase — je suis l'auteur du dossier P-B, et le
+constat 1 est précisément ce que ce dossier doit MONTRER au gardien.** Le §6 du contrat refuse le
+code orphelin ; si A01 supprime la fonction ce soir, la porte s'ouvre sur un dépôt propre **parce que
+son auteur a rangé la pièce à conviction**, pas parce que le défaut a été jugé. **Un gardien qui ne
+voit que ce que l'audité a bien voulu laisser sur la table ne garde rien.** Le constat 1 est donc
+inscrit au §5 du dossier, à l'état de constat, pour qu'A02 le range lui-même dans le sens
+code → exigences.
+
+Le constat 2 relève d'un **arbitrage humain** et de personne d'autre : il porte sur ce que le pack
+VEUT DIRE, pas sur ce que le code fait. **Aucun test n'est ajouté pour l'épingler**, et il faut le
+dire : un test qui fige le comportement actuel transformerait un doute en décision, par la porte de
+service. Le comportement est décrit, daté, et attend Williams.
+Précédence : `CLAUDE.md` §3 (« un doute de spec ne se devine pas ») et §5 (DoD : aucun TODO sans
+entrée `DECISIONS.md`) ; 09 §3-6 pour la lecture code → exigences.
+Décideur : **A01** pour le refus de trancher seul ; **Williams** pour le constat 2 et pour l'issue du
+constat 1, à la porte P-B.
+Impact spec : aucun. Le constat 2 pourra en produire un — précision de 03 §19.1.
