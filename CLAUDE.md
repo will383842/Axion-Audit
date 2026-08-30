@@ -73,7 +73,8 @@ Node 22 LTS · pnpm 9 · TypeScript 5 (`strict`) · Fastify 5 (+ `@fastify/cooki
 2026-08-31 sur décision de Williams — voir `DECISIONS.md`) · PostgreSQL 16 · Redis 7 · MinIO ·
 **Drizzle ORM** + migrations **SQL brut versionné** · Zod 4 (`packages/shared`) · React 18 + Vite +
 Tailwind + shadcn/ui · Dexie 4 · Workbox 7 · TanStack Query 5 (console uniquement) · BullMQ 5 ·
-pino 9 · Vitest 3 + Testcontainers · Playwright · k6 · `uuidv7` · `hash-wasm` (Argon2id navigateur) ·
+pino 9 · Vitest 3 + Testcontainers + `jsdom` + `@testing-library/react` + `@vitejs/plugin-react`
+(ajoutés le 2026-08-31 sur décision de Williams — voir `DECISIONS.md`) · Playwright · k6 · `uuidv7` · `hash-wasm` (Argon2id navigateur) ·
 date-fns · `@fontsource-variable/inter` (**police AUTO-HÉBERGÉE — jamais de CDN**) · cmdk (Phase 2).
 **Renovate/Dependabot DÉSACTIVÉS pendant toute la Phase 1.**
 
