@@ -4411,4 +4411,157 @@ Précédence : `CLAUDE.md` §3 point 1 (dépendance hors liste) et §2bis (versi
 précédence du pack **sans objet** : ajout au contrat, non divergence entre sections.
 Décideur : **Williams**, directement.
 Impact spec : **amendement horodaté de `11 §1` et de `CLAUDE.md` §2bis** ; sceau régénéré **après** la
+
+---
+
+## 2026-08-31 — [L2/L3] L2 se donne un critère de test qu'il ne peut pas exécuter
+
+Enquête déclenchée par la passe de traçabilité, qui relevait « **E45 : la colonne est lue, la règle
+n'est pas appliquée** ». **L'alerte est infirmée sur le fond, et l'enquête en a trouvé une autre.**
+
+**CE QUI EST INFIRMÉ, et il faut le dire aussi nettement que si ça l'avait été.** Le relevé portait sur
+`apps/api/src/domaines/auth/depot.ts` ; la ligne de traçabilité est dans `apps/api/src/auth/depot.ts`
+— **deux fichiers homonymes**. Et sur le fond : §34.4 ne refuse **que** l'affectation à `mission_users`
+— ni le login, ni le pull, ni l'accès API. Or **cette route n'existe pas et appartient à L3** : la note
+de conception L3 l'écrit elle-même, « garde `habilitated_at` §34.4 **appelée par la route
+`assignments` de L3** ». **En L2, il n'y a rien à refuser.** E45 « partiellement amorcée » est donc le
+bon verdict, et le rattachement du dépôt est légitime : il **approvisionne** la garde de L3 en lisant
+la colonne à chaque requête, pour qu'elle n'ait pas à rouvrir la base.
+
+**CE QUE L'ENQUÊTE A TROUVÉ À LA PLACE, et qui touche la porte P-B.** Deux notes de conception se
+contredisent :
+· **L3** dit que la garde est _appelée par la route `assignments` de L3_ ;
+· **L2** inscrit dans **son propre plan de tests** : « Habilitation : affectation `mission_users`
+refusée si `habilitated_at IS NULL` (§34.4) — intégration ».
+
+**L2 se donne donc un critère d'acceptation qu'il ne peut pas exécuter, faute d'appelant.** La porte
+P-B cocherait une case dont la preuve ne peut pas exister — exactement ce que l'addendum de P-A vient
+de corriger sur deux autres critères.
+
+Options :
+
+1. **Écrire un test L2 qui appelle directement le dépôt**, sans passer par une route. Refusé : il
+   prouverait qu'une fonction refuse, pas que **le chemin réel** refuse. C'est la distinction
+   contenu/canal qui a occupé toute la journée d'hier, et elle vaut ici aussi.
+2. **Retirer la ligne du plan de tests de L2.** Refusé seul : le critère disparaîtrait sans que
+   personne ne garantisse qu'il réapparaît en L3.
+3. **Déplacer le critère en L3, à l'endroit où il est exécutable, et le dire dans les deux notes.**
+
+Arbitrage : **option 3.** Un critère d'acceptation doit vivre là où **sa preuve peut exister**. Le
+laisser en L2 produirait soit une case cochée sans preuve, soit un test qui éprouve autre chose que ce
+qu'il annonce — les deux défauts que ce dépôt passe ses journées à démonter.
+
+**CE QUE CELA CHANGE POUR LA PORTE P-B, et qui doit être su avant qu'elle ne s'ouvre** : ce critère
+**n'est pas cochable en L2**, et son absence ne doit pas être lue comme un manque de L2. Il est reporté
+à L3d, avec la route qui le rend exécutable.
+
+**TROIS ÉLÉMENTS DÉCLARÉS ET JAMAIS ÉMIS, qui ne sont PAS des orphelins** : `NOT_HABILITATED`,
+`non_habilite` et l'action `user.habilitate`. Ils attendent la route `habilitate` de T3, en cours
+d'écriture. Le noter pour qu'une passe de traçabilité ultérieure ne les compte pas comme du code mort.
+
+Précédence : `CLAUDE.md` §4 étape 6 (le gardien coche les critères **avec la preuve**) — un critère
+sans preuve possible n'est pas un critère. Règle de précédence du pack **sans objet** : la
+contradiction est entre deux notes de conception, pas entre sections du pack.
+Décideur : **A01**. **Remonté à Williams** parce qu'il retire une ligne d'un plan de tests que la porte
+P-B allait lire.
+Impact spec : **aucun amendement du pack** ; deux notes de conception à aligner.
+
+## 2026-08-31 — [L2b] `@fastify/cookie` entre dans la liste épinglée — décidé par Williams
+
+**« OK pour @fastify/cookie, ajoute-le »** — Williams, directement, le 2026-08-31.
+
+**CETTE DÉCISION AVAIT ÉTÉ REFUSÉE LA VEILLE, ET IL FAUT DIRE POURQUOI.** Une session en lecture
+seule me la rapportait comme déjà tranchée par Williams. J'ai refusé de la prendre sur ce relais :
+ajouter une dépendance hors de la liste §1 relève de `CLAUDE.md` §3 **point 1** — ce que l'autopilote
+ne décide jamais seul — et **un pair qui relaie une décision n'est pas le décideur**. La règle protège
+Williams, pas l'autopilote. Les deux autres arbitrages du même relais, qui n'engageaient ni dépendance
+ni contrat de versions, avaient été pris ; celui-ci a attendu vingt minutes et un mot de lui.
+
+**LE MOTIF, QUI EST BON ET QUI RESTE LE SIEN.** Le §3 du contrat impose « cookies httpOnly
+SameSite=Lax + en-tête anti-CSRF » pour la console `apps/hq`. **La liste épinglée ne contenait aucun
+greffon capable de les poser.** Livrer T3 en Bearer aurait signifié **écrire l'authentification de la
+console deux fois** — une fois maintenant, une fois à L2b — et laisser entre-temps une incohérence
+entre le code et le contrat que rien n'aurait signalée.
+
+Options :
+
+1. **Livrer T3 en Bearer et reporter les cookies à L2b.** C'est ce que la note de conception L2 §4.2
+   proposait. Coût réel : l'authentification admin écrite deux fois, et une divergence code/contrat
+   pendant tout l'intervalle.
+2. **Écrire un mécanisme de cookies à la main**, sans dépendance. Refusé : réécrire l'analyse et la
+   signature de cookies est exactement le genre de code de sécurité que le §3 de `CLAUDE.md` interdit
+   d'improviser (« toucher à la sécurité autrement que spécifié »).
+3. **Ajouter le greffon, épinglé, et amender la liste.**
+
+Arbitrage : **option 3**, décidée par Williams.
+
 trace.
+· version **épinglée à l'exact** — `@fastify/cookie` **11.1.2**, sans `^` ni `~`. Vérifié après
+installation, pas supposé : `.npmrc` porte `save-exact=true` et l'a appliqué.
+· **la liste des versions épinglées est AMENDÉE, pas contournée** — `11 §1` et `CLAUDE.md` §2bis
+portent désormais le greffon avec la date et le décideur. Laisser ces listes en l'état aurait produit
+un document qui ment sur ce que le dépôt installe, c'est-à-dire le défaut que ce dépôt traque.
+
+**CE QUE CETTE ENTRÉE NE COUVRE PAS.** L'ajout du greffon **n'est pas** la migration de
+l'authentification console vers les cookies. Celle-ci reste **L2b** : elle touche le crochet
+d'identification, la forme du jeton de rafraîchissement côté console, et l'en-tête anti-CSRF. Elle
+sera conçue, implémentée et **testée par des agents distincts** (09 §5.6). **T3 reste en Bearer d'ici
+là**, et ce n'est pas une dette cachée : c'est écrit ici et dans la note de conception.
+
+Précédence : `CLAUDE.md` §3 point 1 (dépendance hors liste) et §2bis (versions épinglées,
+« aucune montée majeure sans décision humaine »). Règle de précédence du pack **sans objet** : il
+s'agit d'un ajout au contrat, non d'une divergence entre sections.
+Décideur : **Williams**, directement.
+Impact spec : **amendement horodaté de `11 §1` et de `CLAUDE.md` §2bis**. Le pack étant scellé, le
+sceau est régénéré **après** cette trace.
+
+---
+
+## 2026-08-31 — [gouvernance] Le plafond des chantiers parallèles confondait trois contraintes
+
+`docs/ORGANISATION_AGENTS.md` §2 écrivait « **deux chantiers actifs au maximum** », en un seul
+plafond. Le mot « chantier » y avait été écrit en pensant _lot sur fichiers disjoints_ ; le motif
+invoqué juste après était la **mémoire**, laquelle ne dépend pas du découpage. **Deux lectures
+défendables, parce que le texte ne tranchait pas.**
+
+**Le défaut s'est manifesté le soir même** : six worktrees ouverts, une session d'audit signalant une
+violation de la règle, et **aucun moyen de savoir laquelle des deux lectures faisait foi**. Ce n'était
+pas un défaut de pratique — c'était un défaut du document, et son auteur l'a reconnu.
+
+Options :
+
+1. **S'y conformer au plus strict** et fermer les worktrees. C'est ce que j'ai fait d'abord, en
+   répondant « la règle est la mienne et je m'y tiens ». **Insuffisant** : se conformer au jugé à un
+   texte ambigu ne lève pas l'ambiguïté, et le lecteur suivant retombera dessus.
+2. **Choisir une des deux lectures** et l'écrire. Refusé : les deux contraintes sont réelles et n'ont
+   ni le même objet ni le même plafond. En retenir une ferait disparaître l'autre.
+3. **Séparer les trois contraintes que la phrase confondait.**
+
+Arbitrage : **option 3.**
+
+**1. COLLISION — jamais deux LOTS sur les mêmes fichiers.** Objet : **les fichiers**. Ce n'est pas un
+plafond, c'est un **interdit** : il ne se compte pas. Il existe déjà en `CLAUDE.md` §4.
+
+**2. MÉMOIRE — au plus deux EXÉCUTIONS LOURDES simultanées.** Objet : **les processus qui tournent**,
+jamais les répertoires qui existent. C'est le motif mesuré (16 Go, conteneurs de test).
+**Corollaire assumé : le nombre de worktrees n'a PAS de plafond en soi** — un worktree inerte coûte du
+disque, pas de la mémoire.
+
+**3. ATTENTION — au plus deux CHANTIERS SUIVIS à la fois.** Objet : **ce qu'un pilote tient en tête**.
+Cette règle ne dérive d'aucune des deux autres, et c'est pourtant **elle** qui a mordu : _« six
+répertoires signifiaient six chantiers que je n'arrivais plus à suivre — et c'est une raison
+suffisante »_. Elle n'était écrite nulle part.
+
+**LE RENVOI DE `CLAUDE.md` PORTAIT LA MÊME PHRASE, ET C'EST LUI QU'ON LIT EN PREMIER.** Corriger le
+document sans corriger le renvoi n'aurait corrigé que la moitié de ce qui trompe — le fichier chargé
+dans **chaque** session aurait continué d'enseigner la règle ambiguë. **Le renvoi ne cite donc plus
+aucun chiffre** : un plafond recopié à deux endroits dérive, et un pointeur qui répète ce qu'il pointe
+finit par le contredire. C'est la forme minimale du correctif, et elle n'encode aucune décision
+nouvelle dans le fichier d'instructions.
+
+Précédence : `CLAUDE.md` §3 point 2 (modifier une convention) — c'est pourquoi ce point a été porté à
+Williams plutôt que tranché seul. Règle de précédence du pack **sans objet** : `ORGANISATION_AGENTS.md`
+n'est pas un fichier du pack.
+Décideur : **Williams**, sur la décomposition en trois règles. **A01** pour la rédaction et pour la
+décision de ne citer aucun chiffre dans le renvoi.
+Impact spec : **amendement de `docs/ORGANISATION_AGENTS.md` §2 et du renvoi de `CLAUDE.md` §4.**
