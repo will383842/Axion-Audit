@@ -18,6 +18,7 @@ import {
   TOKENS_TAILLE,
   TOKENS_TYPOGRAPHIE,
   TOKENS_MOUVEMENT,
+  TOKENS_OMBRE,
   type TokenCouleur,
 } from './tokens.js';
 
@@ -182,6 +183,20 @@ describe('un design system à deux vérités n’en est pas un', () => {
     },
   );
 
+  it.each(Object.entries(TOKENS_OMBRE))(
+    'l’ombre « %s » a la même valeur en CSS qu’en TypeScript',
+    (nom, valeur) => {
+      expect(declarations.get(`ombre-${nom}`)).toBe(valeur);
+    },
+  );
+
+  it('tient le plafond de DEUX niveaux d’ombre imposé par §33.1', () => {
+    // « Ombres : 2 niveaux max (sm, md) — élévation discrète. » Le plafond est la
+    // règle elle-même : une bibliothèque qui offre cinq élévations en voit
+    // apparaître cinq à l'écran, et l'interface calme promise devient un relief.
+    expect(Object.keys(TOKENS_OMBRE)).toEqual(['sm', 'md']);
+  });
+
   it('ne déclare aucune variable CSS orpheline (présente en CSS, absente en TS)', () => {
     const attendus = new Set([
       ...Object.keys(TOKENS_COULEUR).map((n) => `couleur-${n}`),
@@ -189,6 +204,7 @@ describe('un design system à deux vérités n’en est pas un', () => {
       ...Object.keys(TOKENS_TAILLE).map((n) => `taille-${n}`),
       ...Object.keys(TOKENS_TYPOGRAPHIE).map((n) => `typo-${n}`),
       ...Object.keys(TOKENS_MOUVEMENT).map((n) => `mouvement-${n}`),
+      ...Object.keys(TOKENS_OMBRE).map((n) => `ombre-${n}`),
     ]);
     const orphelines = [...declarations.keys()].filter((n) => !attendus.has(n));
     expect(orphelines).toEqual([]);
