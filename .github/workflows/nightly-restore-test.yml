@@ -46,7 +46,7 @@ concurrency:
 
 jobs:
   restauration:
-    name: SSH → infra/scripts/restore-test.sh
+    name: SSH → /opt/axion-audit/restore-test-ci.sh (clé restreinte)
     runs-on: ubuntu-latest
     # Environment `ops` — PAS `prod`. L'approbation manuelle de `prod`
     # (02 §30.4-3) protège les DÉPLOIEMENTS ; l'appliquer ici bloquerait un job
@@ -68,17 +68,21 @@ jobs:
           A_DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
           A_DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           A_DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          # `DEPLOY_PATH` = la COPIE DU DÉPÔT (`/opt/axion-audit/repo`), pas la
-          # racine d'exploitation `/opt/axion-audit` : `infra/scripts/` n'existe
-          # que sous `repo/` (`infra/README.md` §3).
-          A_DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          # `DEPLOY_PATH` A ÉTÉ RETIRÉ DE CE CONTRÔLE le 2026-08-30, et c'est
+          # volontaire. Il désignait la copie du dépôt sur le serveur, mais la
+          # directive `command=` de `authorized_keys` REMPLACE la commande du
+          # client : ce chemin ne parvenait jamais au serveur. Exiger un réglage
+          # que rien ne consomme fabrique une fausse certitude — on croit avoir
+          # vérifié quelque chose. Le chemin vit désormais dans
+          # `infra/scripts/restore-test-ci.sh`, sous revue croisée et sous
+          # contrôle d'empreinte. Le secret peut rester posé : il est inerte.
           A_TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           A_TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           set -euo pipefail
           manquants=""
           for nom in A_RESTORE_SSH_KEY A_DEPLOY_SSH_KNOWN_HOSTS A_DEPLOY_HOST \
-                     A_DEPLOY_USER A_DEPLOY_PATH A_TELEGRAM_BOT_TOKEN A_TELEGRAM_CHAT_ID; do
+                     A_DEPLOY_USER A_TELEGRAM_BOT_TOKEN A_TELEGRAM_CHAT_ID; do
             if [ -z "${!nom:-}" ]; then
               manquants="${manquants} ${nom#A_}"
             fi
@@ -88,7 +92,7 @@ jobs:
             exit 1
           fi
 
-      - name: Préparer l'accès SSH (clé restreinte à restore-test.sh)
+      - name: Préparer l'accès SSH (clé restreinte à restore-test-ci.sh)
         run: |
           set -euo pipefail
           umask 077
@@ -99,48 +103,104 @@ jobs:
           chmod 600 ~/.ssh/known_hosts
 
       # -----------------------------------------------------------------------
-      # FICHIER D'ENVIRONNEMENT — DEUX CONVENTIONS COEXISTAIENT, EN VOICI UNE
+      # CE QUE CETTE ETAPE DEMANDE, ET CE QUE LE SERVEUR FAIT REELLEMENT
       # -----------------------------------------------------------------------
-      # `restore-test.sh` prend le `.env` en PREMIER ARGUMENT et retombe sinon
-      # sur `$AXION_ROOT/.env`, soit `/opt/axion-audit/.env` (restore-test.sh
-      # l.43, lib/common.sh l.10). Appelé SANS argument, il visait donc le
-      # fichier PLAT, alors que le runbook prescrit un fichier PAR
-      # ENVIRONNEMENT (`infra/README.md` §4 : `/opt/axion-audit/prod/.env` et
-      # `/opt/axion-audit/staging/.env`), que `deploy.sh` résout la même forme
-      # par défaut (l.43), et que le runbook lance ce test précisément ainsi
-      # (§5.6 : `infra/scripts/restore-test.sh /opt/axion-audit/prod/.env`).
-      # C'est la forme PAR ENVIRONNEMENT qui fait foi : c'est elle qui porte la
-      # séparation stricte staging/prod du 02 §30.4-4.
+      # A LIRE AVANT DE MODIFIER LA COMMANDE CI-DESSOUS. La cle `ops` porte dans
+      # `authorized_keys` une directive `command="/opt/axion-audit/restore-test-ci.sh"`.
+      # Cette directive NE FILTRE PAS la commande du client : elle la REMPLACE.
+      # Tout ce qui est ecrit apres `ssh ... hote` est donc ignore par le serveur,
+      # qui execute son script et rien d autre.
       #
-      # PROD, et non staging : ce sont les sauvegardes de PRODUCTION dont la
-      # restauration conditionne le PRA (02 §11.4, critère L0). Le chemin reste
-      # surchargeable par la variable d'environment `RESTORE_TEST_ENV_FILE` si
-      # l'arborescence du serveur venait à différer ; aucun repli silencieux :
-      # `axion_load_env` refuse de démarrer sur un fichier illisible.
+      # CE QUI OCCUPAIT CETTE PLACE, ET POURQUOI C EST INSTRUCTIF. Vingt lignes de
+      # commentaire arbitraient ici entre `/opt/axion-audit/prod/.env` et
+      # `/opt/axion-audit/staging/.env`, concluaient « PROD, et non staging », et
+      # exposaient un reglage `RESTORE_TEST_ENV_FILE` pour surcharger le chemin.
+      # MESURE SUR LE SERVEUR LE 2026-08-30 : AUCUN DE CES TROIS FICHIERS N EXISTE
+      # — ni `prod/.env`, ni `staging/.env`, ni le fichier plat. Le seul `.env`
+      # reel est celui que Coolify tient pour l application. L arbitrage portait
+      # donc sur deux fichiers absents, le reglage de surcharge ne surchargeait
+      # rien, et le garde `test -x` sur `DEPLOY_PATH` ne s executait jamais.
+      #
+      # LA CONSEQUENCE A NE PAS ARRONDIR : ce commentaire annoncait une
+      # restauration des sauvegardes de PRODUCTION. Le serveur restaure le stanza
+      # decrit par le `.env` de Coolify, ou `APP_ENV=staging`. Le garde etait vrai
+      # sur ce qu il observait et repondait a une autre question que celle posee.
+      # Il n y a pas de tricherie derriere cet ecart : AXION AUDIT N A PAS ENCORE
+      # D ENVIRONNEMENT DE PRODUCTION. Le test prouve la chaine de restauration
+      # sur le seul environnement qui existe — ce qui est la garantie maximale
+      # disponible aujourd hui, et ce n est pas celle que le PRA exigera demain.
+      # LE JOUR OU UNE PRODUCTION APPARAIT, CE TEST NE LA SUIVRA PAS TOUT SEUL :
+      # il faudra une seconde cle, un second script, un second stanza. Trace dans
+      # DECISIONS.md le 2026-08-30 pour que cette echeance ne se perde pas.
+      #
+      # LES REGLAGES MORTS ONT ETE RETIRES plutot que laisses en place « au cas
+      # ou » : un bouton qui ne commande rien est pire qu un bouton absent, parce
+      # qu on croit l avoir tourne. Le chemin du `.env` se change desormais dans
+      # `infra/scripts/restore-test-ci.sh`, sous revue croisee, et l empreinte
+      # publiee par le script est comparee au fichier versionne.
+      #
+      # `DEPLOY_USER` et `DEPLOY_HOST` restent utiles : ils designent la machine.
+      # Le code de retour du script EST le verdict — aucun masquage, aucun `|| true`.
       # -----------------------------------------------------------------------
       - name: Restaurer Postgres + MinIO dans un conteneur jetable
         id: restore
         env:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-          RESTORE_TEST_ENV_FILE: ${{ vars.RESTORE_TEST_ENV_FILE }}
         run: |
           set -euo pipefail
-          fichier_env="${RESTORE_TEST_ENV_FILE:-/opt/axion-audit/prod/.env}"
-          echo "Fichier d'environnement visé sur le serveur : ${fichier_env}"
-          # restore-test.sh (A11) : restore pgBackRest dans un conteneur jetable
-          # + `mc mirror` de contrôle MinIO + requêtes de contrôle. Code de
-          # retour ≠ 0 = échec de PRA. Aucun masquage, aucun `|| true`.
-          ssh -i ~/.ssh/restore_key \
+
+          # La commande envoyee est un marqueur : le serveur la remplace. Elle est
+          # ecrite en clair pour qu un journal de CI montre l intention, et pour
+          # qu une cle NON restreinte — donc mal posee — execute quelque chose
+          # d inoffensif et de bruyant au lieu du script attendu.
+          SORTIE="$(ssh -i ~/.ssh/restore_key \
               -o StrictHostKeyChecking=yes \
               -o UserKnownHostsFile=~/.ssh/known_hosts \
+              -o IdentitiesOnly=yes \
+              -o BatchMode=yes \
               -o ConnectTimeout=20 \
               "${DEPLOY_USER}@${DEPLOY_HOST}" \
-              "set -euo pipefail; cd '${DEPLOY_PATH}'; \
-               test -x ./infra/scripts/restore-test.sh || { echo 'ERREUR : ./infra/scripts/restore-test.sh introuvable ou non exécutable sous '\''${DEPLOY_PATH}'\''. Le secret DEPLOY_PATH doit désigner la COPIE DU DÉPÔT (/opt/axion-audit/repo — infra/README.md §3).' >&2; exit 1; }; \
-               ./infra/scripts/restore-test.sh '${fichier_env}'" \
-              | tee restore-test.log
+              "echo 'CETTE-COMMANDE-AURAIT-DU-ETRE-REMPLACEE-PAR-command=' >&2; exit 97" 2>&1)" && CODE=0 || CODE=$?
+
+          printf '%s\n' "${SORTIE}" | tee restore-test.log
+
+          # ---------------------------------------------------------------------
+          # LA CLE EST-ELLE BIEN RESTREINTE ? On le VERIFIE, on ne le suppose pas.
+          # ---------------------------------------------------------------------
+          # Si le marqueur ci-dessus ressort, c est que `command=` n a pas joue :
+          # la cle posee en secret est alors une cle LIBRE sur ce serveur. Ce
+          # n est pas un incident de test, c est un defaut de securite, et il doit
+          # rougir avant toute conclusion sur la restauration.
+          if printf '%s' "${SORTIE}" | grep -q 'CETTE-COMMANDE-AURAIT-DU-ETRE-REMPLACEE'; then
+            echo "::error title=La cle de restauration n est PAS restreinte::Le serveur a execute la commande envoyee par la CI au lieu de /opt/axion-audit/restore-test-ci.sh. La directive command= est absente ou mal posee dans authorized_keys — la cle RESTORE_SSH_KEY donne donc plus de pouvoir que prevu. Corriger authorized_keys AVANT de rejouer ce test."
+            exit 1
+          fi
+
+          # ---------------------------------------------------------------------
+          # LE SCRIPT EN SERVICE EST-IL CELUI QUI A ETE RELU ?
+          # ---------------------------------------------------------------------
+          # Meme raison que pour le deploiement : `command=` impose un chemin
+          # local, le script vit donc en deux copies, et deux copies derivent. Il
+          # publie sa propre empreinte en premiere ligne ; on la compare ici.
+          empreinte_distante="$(printf '%s' "${SORTIE}" | grep -oE '^EMPREINTE_SCRIPT=[0-9a-f]{64}$' | head -1 | cut -d= -f2)"
+          empreinte_depot="$(sha256sum infra/scripts/restore-test-ci.sh | cut -d' ' -f1)"
+
+          if [ -z "${empreinte_distante}" ]; then
+            echo "::error title=Empreinte du script distant absente::Le script de restauration en service n a pas annonce son empreinte. Soit il est anterieur a ce controle, soit quelqu un l a remplace. On ne peut pas affirmer que le code execute est celui qui a ete relu."
+            exit 1
+          fi
+
+          if [ "${empreinte_distante}" != "${empreinte_depot}" ]; then
+            echo "::error title=Le script de restauration en service N EST PAS celui du depot::distante=${empreinte_distante} · depot=${empreinte_depot}. Redeployer le fichier versionne, ou expliquer l ecart dans DECISIONS.md."
+            exit 1
+          fi
+          echo "Script distant verifie : identique au fichier versionne (${empreinte_depot:0:16}…)."
+
+          if [ "${CODE}" -ne 0 ]; then
+            echo "::error title=Restauration echouee::Le script distant a rendu ${CODE}. Sa sortie est ci-dessus — elle nomme la cause. Un retour non nul est un echec de plan de reprise."
+            exit 1
+          fi
 
       - name: Conserver le journal de restauration (preuve pour la porte)
         if: always()
