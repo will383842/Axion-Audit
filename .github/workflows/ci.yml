@@ -1256,8 +1256,25 @@ jobs:
   # Il dépend de TOUS les garde-fous : rien ne se construit sur une base non
   # vérifiée.
   # ---------------------------------------------------------------------------
+  # ⚠️ CE QUE CE JOB PROUVE, ET CE QU'IL NE PROUVE PAS — MESURÉ LE 2026-08-30.
+  # Il construit et pousse quatre images sur GHCR. **AUCUNE N'EST DÉPLOYÉE.**
+  # L'image en service sur le staging est `axion-audit-api:coolify` : Coolify
+  # construit lui-même depuis le dépôt et ignore GHCR. Le tag `sha-<commit>` que
+  # ce job transmet au déploiement ne sert qu'au message Telegram.
+  #
+  # POURQUOI LE NOM CHANGE. « build (4 images GHCR) » vert laissait croire à un
+  # lecteur de porte que ce qui est testé est ce qui est livré. C'est faux, et
+  # c'est la famille de défaut que ce dépôt traque : une étape vraie sur ce
+  # qu'elle fait, qui répond à une autre question que celle qu'on lui pose. Le
+  # nom dit désormais la garantie réelle — la constructibilité — et rien de plus.
+  #
+  # Renommage sans risque : vérifié le 2026-08-30, ce job n'est PAS dans les
+  # 11 contextes exigés par la protection de `main`. Le renommer ne débranche
+  # aucun garde. Les trois issues de fond (faire déployer les images de GHCR,
+  # garder ce job comme simple contrôle, ou le retirer) sont dans
+  # AMELIORATIONS.md — elles engagent le plan de reprise, donc Williams.
   build:
-    name: 7 · build (4 images GHCR)
+    name: 7 · constructibilité des 4 images (NON déployées — voir AMELIORATIONS)
     needs: [schema-diff, coverage, gitleaks, shellcheck, invariants, anti-skip]
     uses: ./.github/workflows/build-images.yml
     permissions:

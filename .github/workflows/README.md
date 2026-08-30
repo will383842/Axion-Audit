@@ -293,12 +293,7 @@ et certains garde-fous du pack ne s'appliquent tout simplement pas.
 ### 4.2 Protection de la branche `main` (02 §30.5)
 
 - [ ] **Merge uniquement par pull request** — jamais de commit direct (11 §9bis).
-- [ ] **Checks obligatoires** (à cocher une fois qu'ils sont apparus au moins une fois) :
-      `1 · lint`, `2 · typecheck`, `3 · unit`, `4 · integration (postgres, redis, minio)`,
-      `5 · e2e (chromium)`, `6 · schema-diff (vs fichier 04)`,
-      `gitleaks (bloquant — 02 §30.4-5)`, `shellcheck (infra/scripts/*.sh)`,
-      `aucun test désactivé (11 §2 / 09 §5.7)`, `couverture ≥ 90 % (modules critiques — 09 §3)`,
-      `7 · build (4 images GHCR)`.
+- [ ] **Checks obligatoires** — voir le relevé « Ce qui est réellement exigé » juste après cette liste.
 - [ ] **Require branches to be up to date before merging**.
 - [ ] **Pas de force-push**, **pas de suppression** de `main`.
 - [ ] **Historique linéaire obligatoire** (cohérent avec le **squash merge**, 11 §9bis).
@@ -306,6 +301,31 @@ et certains garde-fous du pack ne s'appliquent tout simplement pas.
 - [ ] _(après avoir corrigé `CODEOWNERS`)_ Require review from Code Owners.
 - [ ] **Ne pas** cocher « Allow administrators to bypass » : la CI verte est une condition du pack
       (02 §30.5), pas une préférence.
+
+#### Ce qui est réellement exigé — relevé sur le dépôt le 2026-08-30
+
+⚠️ **La liste que ce document donnait était une INTENTION, pas un CONSTAT**, et l'écart n'était pas
+neutre. Les **11 contextes réellement exigés** par la protection de `main` sont :
+
+`0 · jonction (appelant → appelé)` · `1 · lint` · `2 · typecheck` · `3 · unit` ·
+`4 · integration (postgres, redis, minio)` · `5 · e2e (chromium)` · `6 · schema-diff (vs fichier 04)` ·
+`gitleaks (bloquant — 02 §30.4-5)` · `shellcheck (infra/scripts/*.sh)` ·
+`invariants du dépôt (CLAUDE.md §1)` · `aucun test désactivé ni orphelin (11 §2 / 09 §5.7)`.
+
+**Deux écarts avec ce qui était annoncé, et le premier compte.**
+
+**`couverture ≥ 90 % (modules critiques — 09 §3)` n'est PAS exigé.** La DoD transverse
+(`CLAUDE.md` §5) en fait une condition de fin de lot, et ce document l'annonçait comme obligatoire —
+**mais une couverture rouge n'empêche aujourd'hui aucune fusion.** Ce job a été mesuré pour la
+première fois le 2026-08-30 ; le rendre exigé est **une case à cocher**, et c'est une décision de
+gouvernance qui revient à Williams, pas à l'autopilote.
+
+**Le job de construction d'images n'est pas exigé non plus**, ce qui est cohérent : les images qu'il
+produit **ne sont pas celles qui sont déployées** (voir `AMELIORATIONS.md`). C'est d'ailleurs pourquoi
+il a été renommé `7 · constructibilité des 4 images (NON déployées)`.
+
+**La leçon, et elle vaut au-delà de cette liste** : une case cochée dans un document ne coche rien
+dans le dépôt. Ce qui précède doit être **relu sur le dépôt** avant d'être coché ici.
 
 ### 4.3 Environments (Settings → Environments)
 
