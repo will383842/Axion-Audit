@@ -4146,3 +4146,73 @@ Précédence : `CLAUDE.md` §3 (ce que l'autopilote ne décide jamais seul) — 
 relèvent, et c'est précisément pourquoi ils attendaient Williams.
 Décideur : **Williams**, directement, le 2026-08-30.
 Impact spec : **amendement de `CLAUDE.md` §4** (renvoi vers `docs/ORGANISATION_AGENTS.md`).
+
+---
+
+## 2026-08-30 — [L2/T3] Le CRUD users n'est pas spécifié : onze silences, et ce qui se décide sans Williams
+
+Avant d'écrire la première ligne de T3, le pack a été lu en entier sur ce point (11 §3, 05 §8.1-8.2 et
+§9.7, 03 §34.1/§34.3/§34.4, 04 table `users`, note de conception L2). **Résultat : le pack écrit
+`CRUD /v1/users` sur une ligne, et rien d'autre.** Une seule route est nommée noir sur blanc —
+`GET /v1/users`, désignée « premier consommateur réel » de la pagination keyset, curseur
+**`(created_at, id)`**. Tout le reste est muet.
+
+**CE QUI SE DÉCIDE ICI, PARCE QUE CE SONT DES CONVENTIONS ET NON DES CHOIX DE PRODUIT.**
+
+| Point                                     | Arbitrage                                                                                              | Ce qui le fonde — jamais mon goût                                                                                                                                                                                                                                                                                                                    |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Pas de route de suppression**           | `DELETE` n'existe pas                                                                                  | Le « D » de CRUD n'est **jamais instancié** dans le pack ; `users` **n'a pas de `deleted_at`** (04) ; et le cycle de sortie §34.4 dit « révocation + retrait des `mission_users` », **jamais** suppression. En créer une exigerait un amendement du 04.                                                                                              |
+| **`PATCH` pour la modification**          | `PATCH`, pas `PUT`                                                                                     | Les **seules** routes de modification nommées dans tout le fichier 05 sont des `PATCH` (`/v1/answers/:id`, `/v1/interviews/:id/reassign`). Convention observée, pas inventée.                                                                                                                                                                        |
+| **Quatre actes distincts, quatre routes** | `role`, `deactivate`, `habilitate`, `password-reset` ne sont **pas** des champs d'un `PATCH` générique | **Le catalogue du journal les distingue déjà** (`user.role_change`, `user.deactivate`, `user.habilitate`, `user.password_reset`). Les fondre dans un `PATCH` rendrait le journal **incapable de nommer ce qui s'est passé** — or l'invariant 7 exige que toute correction soit tracée. C'est le journal qui impose la forme de l'API, pas l'inverse. |
+| **`passwordHash` jamais en sortie**       | absent de toute réponse                                                                                | L'interdiction écrite ne porte que sur le **journal**. Son absence de l'API n'était écrite nulle part : elle l'est maintenant.                                                                                                                                                                                                                       |
+| **Politique de mot de passe**             | **12 caractères minimum**, Argon2id `m=19456, t=3, p=1`                                                | **Mesuré : ce n'était PAS un silence.** Le fichier 06 l'écrit — « Politique de mot de passe : 12+ caractères » — et les paramètres sont déjà dans le code livré. Le premier relevé le donnait pour absent faute d'avoir lu le 06 ; **la correction vaut d'être notée : un silence supposé n'est pas un silence mesuré.**                             |
+
+**CE QUI REMONTE À WILLIAMS, PARCE QUE ÇA CHANGE LE PRODUIT.**
+
+1. **Comment un mot de passe est réinitialisé.** Le pack décrit **le garde-fou** (§9.7) d'une route
+   qu'il **ne nomme jamais**. Mot de passe choisi par l'admin ? engendré et affiché une fois ? lien
+   d'invitation ? **Trois produits différents**, et le garde-fou est identique dans les trois. Aucune
+   n'est déductible.
+2. **Le code d'erreur du refus §9.7.** Aucun code existant ne nomme « outbox non vide ». `CONFLICT`
+   passerait, **au prix de rendre le cas indistinguable d'un conflit ordinaire** — or le front doit
+   savoir qu'un forçage explicite est possible. Ajouter un code est une décision d'API (11 §8-6).
+3. **L'authentification de ces routes admin en L2.** Le contrat exige cookies httpOnly + anti-CSRF
+   pour la console ; la note L2 §4.2 a déjà escaladé que `@fastify/cookie` est hors de la liste
+   épinglée §1, et proposé un « L2b ». **T3 livrerait donc des routes admin en Bearer**, ce que le
+   contrat ne prévoit pas pour la console.
+
+**CE QUE JE FAIS EN ATTENDANT, ET POURQUOI CE N'EST PAS UN BLOCAGE.** Les points 1 à 3 concernent la
+**réinitialisation** et l'**exposition** ; ils ne bloquent ni le listing, ni la création, ni la
+modification, ni l'habilitation. **T3 est donc découpé** : ce qui est fondé se construit, la
+réinitialisation attend. Bloquer l'ensemble sur trois questions qui n'en touchent qu'une partie
+serait transformer un doute en arrêt — l'inverse de ce que la règle demande.
+
+**ET UN CONSTAT QUI DÉPASSE T3, à porter en porte.** Un lot du noyau strict, chiffré à sa durée dans
+le plan, **n'a pas de contrat d'API dans le pack**. Le fichier 07 le tenait pour spécifié. Ce n'est
+pas une faute de rédaction : c'est **le même défaut que ceux traqués toute la journée** — un document
+qui, lu vite, a l'air de dire ce qu'il ne dit pas. Il faut s'attendre à le retrouver sur L3 et L7.
+
+Options :
+
+1. **Tout remonter à Williams et suspendre T3.** Onze silences, onze questions, et un lot arrêté
+   jusqu'à sa réponse. Refusé : la moitié de ces silences se comblent par une convention **observable
+   dans le pack ou dans le code déjà livré**, et transformer un doute en arrêt est précisément ce que
+   la règle ne demande pas. C'est aussi la voie qui a produit quatre heures d'arrêt ce matin.
+2. **Tout décider seul** et documenter après coup. Refusé : trois de ces points **inventent un
+   comportement produit** — comment un mot de passe se réinitialise n'est pas une convention, c'est
+   une décision de Williams, et la deviner engagerait ses missions.
+3. **Trancher ce qui se déduit, remonter ce qui s'invente, et découper T3 en conséquence.**
+
+Arbitrage : **option 3.** Le partage suit une règle et non un jugement : **ce qui se déduit d'une
+convention observable se décide ici** (le pack ne nomme que des `PATCH` ; le catalogue du journal
+distingue déjà quatre actes, donc l'API doit les distinguer aussi ; `users` n'a pas de `deleted_at`,
+donc pas de suppression) ; **ce qui exige d'inventer un comportement remonte** (les trois points
+ci-dessus). T3 est **découpé** : listing, création, modification et habilitation se construisent ; la
+réinitialisation attend l'arbitrage.
+
+Précédence : `CLAUDE.md` §3 (« un doute de spec ne se devine pas ») — appliqué, et **borné** par la
+règle ci-dessus. **Règle de précédence du pack sans objet** : il n'y a ici aucune divergence interne à
+arbitrer, mais un **silence**, ce qui n'est pas la même chose et ne se tranche pas par la hiérarchie
+des sections.
+Décideur : **A01** pour ce qui se déduit, **Williams** pour les trois points remontés.
+Impact spec : **aucun amendement** du 04 ; les routes retenues seront documentées comme l'exige 11 §8-6.
