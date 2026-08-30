@@ -45,6 +45,10 @@ export default defineConfig({
           include: ['packages/*/src/**/*.test.tsx', 'apps/*/src/**/*.test.tsx'],
           exclude: ['**/node_modules/**', '**/dist/**'],
           environment: 'jsdom',
+          // Le nettoyage du DOM entre deux tests ne dépend plus de la mémoire de
+          // celui qui écrit le fichier : voir l'en-tête de cette amorce, et le
+          // piège qu'elle ferme (25 fichiers sur 26 l'appelaient à la main).
+          setupFiles: ['./vitest.setup.interface.ts'],
           // Plus généreux que `unit` : monter un DOM coûte, rendre un arbre React
           // aussi. Reste très en deçà de l'intégration, qui démarre des conteneurs.
           testTimeout: 10_000,
