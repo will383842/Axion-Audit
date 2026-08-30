@@ -3860,3 +3860,67 @@ Décideur : A02 pour la carte et le garde-fou. **A01 pour la ratification du rat
 et du plafond d'exemptions. Williams pour la maille lâche de l'invariant 3, à la porte P-B.**
 Impact spec : **aucun amendement**. `docs/TRACABILITE_E1-E47.md` et `docs/08_TRACABILITE.md` sont
 **inchangés** — c'est le code qui a été corrigé, pas la référence.
+
+---
+
+## 2026-08-30 — [gouvernance] Autorisation permanente accordée par Williams : jusqu'où l'autopilote décide seul ?
+
+Williams constatait que l'autopilote s'arrêtait trop souvent, et demandait ce qu'il fallait lever
+« pour ne plus être bloqué ». La réponse honnête distinguait **ce qui bloque inutilement** de **ce qui
+protège**, et il a tranché sur la première catégorie seulement.
+
+**Ce qu'il accorde, mot pour mot** : _« Autorisation permanente : secrets du staging, amendements du
+04 tracés, ménage des conteneurs. Jamais la production. »_
+
+Options :
+
+1. **Statu quo** — l'autopilote s'arrête à chaque manipulation de secret, chaque amendement du schéma,
+   chaque suppression de conteneur. Sûr, et paralysant : trois arrêts en une journée, dont deux sur
+   des actes sans conséquence.
+2. **Tout lever**, portes comprises. Rapide, et aveugle : Williams perdrait le seul moment où il voit
+   ce qui a été fait.
+3. **Lever les trois blocages nommés, garder les portes et la production.**
+
+Arbitrage : **option 3, telle que Williams l'a formulée.**
+
+**CE QUI EST LEVÉ, ET CE QUE CHACUN COÛTAIT :**
+
+| Levé                                  | Ce que le blocage coûtait                                                                                        | Ce qui le remplace                                                                       |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| **Secrets du staging**                | Trois arrêts en une journée, dont un pour lire un fichier que Coolify possédait déjà                             | La règle « une seule copie » : on pointe vers l'existant, on n'en fabrique pas un second |
+| **Amendements du fichier 04, TRACÉS** | Six colonnes en attente, et le lot L3 en appelait d'autres                                                       | L'obligation de tracer — un amendement non écrit dans `DECISIONS.md` reste interdit      |
+| **Ménage des conteneurs**             | 25 orphelins saturant la machine, mettant des tests en `skipped` — une violation de la DoD causée par la machine | Rien : c'est un acte sans conséquence sur du jetable                                     |
+
+**CE QUI N'EST PAS LEVÉ, ET QUE J'AI RECOMMANDÉ DE NE PAS LEVER :**
+
+· **Les portes.** Elles sont le seul moment où Williams voit un travail qu'il ne relit pas ligne à
+ligne. Les supprimer ferait gagner quelques heures et perdre la vue.
+· **La production `axion-ia.com`.** Aucune autorisation permanente ne doit exister là-dessus. La
+consigne de Williams est antérieure et reste absolue : _« tu ne dois surtout jamais toucher à Axion
+IA »_. Elle n'a jamais été enfreinte — à chaque intervention sur ce serveur, cette production a été
+vérifiée avant et après, et **aucun de ses fichiers n'a jamais été ouvert**, y compris quand un agent
+cherchait un jeton et que les seuls résultats s'y trouvaient.
+· **Les découvertes qui doivent remonter avant d'agir.** Ce n'est pas un blocage mais son contraire :
+c'est ainsi que Williams a appris cette nuit que sa sauvegarde du 02h30 était incomplète, et que la
+passphrase de son coffre n'a qu'un seul détenteur.
+
+**LA LIMITE QUE CETTE AUTORISATION NE DÉPLACE PAS.** Elle porte sur la **permission**, jamais sur la
+**méthode**. Elle n'autorise ni à contourner un hook, ni à forcer un merge par privilège
+d'administrateur, ni à ouvrir un port pour se simplifier la tâche — trois choses refusées les
+2026-08-29 et 30 alors que l'outil les proposait en une option à chaque fois. _Pouvoir agir sans
+demander ne veut pas dire pouvoir agir autrement que bien._
+
+**ET UNE CONSÉQUENCE POUR LA SUITE, à ne pas perdre de vue** : cette autorisation rend l'autopilote
+plus rapide et **moins observé**. Le contrepoids n'est pas la prudence — c'est la trace. Chaque acte
+couvert par elle doit rester lisible dans `DECISIONS.md`, `ETAT.md` et les messages de commit, faute
+de quoi Williams aurait échangé des interruptions contre de l'opacité.
+
+Précédence : `CLAUDE.md` §3 (ce que l'autopilote ne décide jamais seul) est **amendé** sur ses points
+1-bis (secrets du staging), 2 (le fichier 04, sous condition de traçage) et sur le ménage machine.
+Les points 4 (sécurité autrement que spécifié), 5 (désactiver un test), 6 (route non documentée) et 7
+(étage 2 avant arbitrage) sont **inchangés**. Règle de précédence du pack sans objet — il s'agit d'un
+amendement de gouvernance, non d'une divergence interne.
+
+Décideur : **Williams**, explicitement, le 2026-08-30.
+Impact spec : **amendement horodaté du `CLAUDE.md` §3**, valable pour le staging Axion Audit
+uniquement, jamais pour la production ni pour `axion-ia`.
