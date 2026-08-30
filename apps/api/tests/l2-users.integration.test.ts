@@ -2262,3 +2262,161 @@ describe('deux refus simultanés : lequel l’emporte', () => {
     expect(malForme.code).toBe('VALIDATION_FAILED');
   });
 });
+
+// =============================================================================
+// LE DÉPÔT À SA PROPRE FRONTIÈRE — LA CEINTURE « ligne absente » DES ÉCRITURES
+// =============================================================================
+describe('dépôt `users` — le contrat `| null` des cinq écritures', () => {
+  // ═══════════════════════════════════════════════════════════════════════════
+  // POURQUOI CES DEUX TESTS N'APPELLENT PAS L'API, ET POURQUOI CE N'EST PAS UN
+  // ÉTAT FABRIQUÉ.
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Les cinq écritures du dépôt déclarent `Promise<LigneUtilisateur | null>`. Ce
+  // `| null` EST leur contrat publié : il dit « si aucune ligne ne correspond, je
+  // rends `null` plutôt que d'inventer ». Aujourd'hui, aucun appelant ne peut le
+  // déclencher — tous lisent la ligne en `FOR UPDATE` sur la même clé primaire,
+  // dans la même transaction, avant d'écrire. Mesuré : par l'API, ces cinq bras
+  // sont injoignables.
+  //
+  // MAIS « INJOIGNABLE PAR LES APPELANTS ACTUELS » N'EST PAS « MORT ». Cette
+  // ceinture existe pour le jour où un appelant futur — le lot L3, une tâche de
+  // fond, une reprise de sync — écrira sans verrouiller d'abord. Ce jour-là, elle
+  // doit rendre `null` et non lever une exception obscure ou, pire, prétendre
+  // avoir écrit. On l'éprouve donc LÀ OÙ ELLE EST ÉCRITE : à la frontière de la
+  // fonction, dans sa propre transaction, avec un identifiant qui n'existe pas.
+  //
+  // Ce n'est pas contourner le manque de couverture, et ce n'est pas non plus
+  // fabriquer un état impossible : un identifiant inconnu passé à une fonction
+  // exportée est une entrée parfaitement ordinaire, et c'est précisément l'entrée
+  // que son type annonce savoir traiter. Une ceinture qu'on n'a JAMAIS vue se
+  // déclencher n'est pas une ceinture mesurée — c'est une intention.
+
+  /** Empreinte FACTICE (11 §2) : aucun mot de passe ne la satisfait. */
+  const EMPREINTE_FACTICE = '$argon2id$v=19$m=19456,t=3,p=1$c2VsZmFjdGljZQ$empreinte-de-test';
+
+  it('@critique les cinq écritures rendent `null` sur un identifiant inconnu, sans rien créer', async () => {
+    const depot = await import('../src/domaines/users/depot.js');
+    const { db } = await import('../src/db.js');
+
+    const absent = uuidv7();
+    const maintenant = new Date();
+
+    const avant = await bd().query<{ nombre: string }>(
+      'SELECT count(*)::text AS nombre FROM users',
+    );
+
+    // Une seule transaction, comme un appelant réel : c'est le contexte dans lequel
+    // ces fonctions vivent, et le seul où le verdict a du sens.
+    const resultats = await db.transaction(async (tx) => ({
+      mettreAJourUtilisateur: await depot.mettreAJourUtilisateur(
+        tx,
+        absent,
+        { name: 'Nom sans destinataire' },
+        maintenant,
+      ),
+      changerRoleUtilisateur: await depot.changerRoleUtilisateur(tx, absent, 'lecteur', maintenant),
+      desactiverUtilisateur: await depot.desactiverUtilisateur(tx, absent, maintenant),
+      habiliterUtilisateur: await depot.habiliterUtilisateur(tx, absent, maintenant),
+      remplacerEmpreinteMotDePasse: await depot.remplacerEmpreinteMotDePasse(
+        tx,
+        absent,
+        EMPREINTE_FACTICE,
+        maintenant,
+      ),
+    }));
+
+    const bavardes = Object.entries(resultats)
+      .filter(([, ligne]) => ligne !== null)
+      .map(([nom]) => nom);
+    expect(
+      bavardes,
+      'Chacune de ces fonctions promet `LigneUtilisateur | null`. Rendre autre chose\n' +
+        'que `null` sur une ligne absente ferait croire à son appelant qu’une écriture\n' +
+        'a eu lieu — et le service, qui journalise APRÈS le succès de la transaction,\n' +
+        'écrirait une ligne d’audit décrivant un acte qui n’est jamais arrivé\n' +
+        '(invariant 7).',
+    ).toStrictEqual([]);
+
+    const apres = await bd().query<{ nombre: string }>(
+      'SELECT count(*)::text AS nombre FROM users',
+    );
+    expect(
+      apres.rows[0]?.nombre,
+      'Un `UPDATE … WHERE id = $1` sur un identifiant absent ne doit RIEN créer :\n' +
+        'ni ligne fantôme, ni compte à demi rempli.',
+    ).toBe(avant.rows[0]?.nombre);
+  });
+
+  it('@critique CONTRE-ÉPREUVE : sur un identifiant CONNU, chacune rend la ligne ET écrit', async () => {
+    // SANS CE TEST, LE PRÉCÉDENT SERAIT VERT SUR CINQ FONCTIONS QUI RENDRAIENT
+    // TOUJOURS `null` — c'est-à-dire sur un dépôt entièrement cassé. Le contrat a
+    // deux moitiés, et « rend `null` quand il n'y a rien » ne vaut que si l'on
+    // montre aussi « rend la ligne, et écrit, quand il y a quelque chose ».
+    const depot = await import('../src/domaines/users/depot.js');
+    const { db } = await import('../src/db.js');
+
+    const cible = await creerCompte('frontiere-depot', { role: 'consultant' });
+    const nouveauNom = 'Nom pose par le depot';
+    const maintenant = new Date();
+
+    const applique = await db.transaction(async (tx) => ({
+      mettreAJourUtilisateur: await depot.mettreAJourUtilisateur(
+        tx,
+        cible.id,
+        { name: nouveauNom },
+        maintenant,
+      ),
+      changerRoleUtilisateur: await depot.changerRoleUtilisateur(
+        tx,
+        cible.id,
+        'lecteur',
+        maintenant,
+      ),
+      desactiverUtilisateur: await depot.desactiverUtilisateur(tx, cible.id, maintenant),
+      habiliterUtilisateur: await depot.habiliterUtilisateur(tx, cible.id, maintenant),
+      remplacerEmpreinteMotDePasse: await depot.remplacerEmpreinteMotDePasse(
+        tx,
+        cible.id,
+        EMPREINTE_FACTICE,
+        maintenant,
+      ),
+    }));
+
+    const muettes = Object.entries(applique)
+      .filter(([, ligne]) => ligne === null)
+      .map(([nom]) => nom);
+    expect(muettes, 'sur une ligne qui EXISTE, aucune ne doit rendre `null`').toStrictEqual([]);
+
+    // Chaque `RETURNING` rend l'état APRÈS son écriture, pas l'état d'avant.
+    expect(applique.mettreAJourUtilisateur?.name).toBe(nouveauNom);
+    expect(applique.changerRoleUtilisateur?.role).toBe('lecteur');
+    expect(applique.desactiverUtilisateur?.isActive).toBe(false);
+    expect(applique.habiliterUtilisateur?.habilitatedAt).not.toBeNull();
+
+    // Et la base porte bien le résultat : le `RETURNING` ne raconte pas une écriture
+    // que la transaction aurait annulée.
+    const enBase = await ligneCompte(cible.id);
+    expect(enBase.name).toBe(nouveauNom);
+    expect(enBase.role).toBe('lecteur');
+    expect(enBase.is_active).toBe(false);
+    expect(enBase.habilitated_at).not.toBeNull();
+    expect(enBase.password_hash).toBe(EMPREINTE_FACTICE);
+
+    // ── LA PREMIÈRE DES TROIS CEINTURES CONTRE LA FUITE D'EMPREINTE ──────────
+    // Les tests d'API éprouvent la troisième (le sérialiseur Zod) et la deuxième
+    // (le schéma `strictObject`). Celle-ci est la PREMIÈRE : la projection
+    // `COLONNES_UTILISATEUR` du dépôt, qui ne SÉLECTIONNE jamais `password_hash`.
+    // On la vérifie ici, à sa frontière, sur un objet que rien n'a encore filtré —
+    // le seul endroit où son échec serait visible avant les deux autres.
+    for (const [nom, ligne] of Object.entries(applique)) {
+      const clefs = Object.keys(ligne ?? {});
+      expect(clefs, `${nom} ne doit pas exposer l’empreinte`).not.toContain('passwordHash');
+      expect(clefs, `${nom} ne doit pas exposer l’empreinte`).not.toContain('password_hash');
+      expect(
+        JSON.stringify(ligne),
+        `${nom} : « on ne charge pas ce qu’on n’autorise pas » — l’empreinte n’a pas à\n` +
+          'quitter la base, même dans un objet interne qui ne sera jamais sérialisé.',
+      ).not.toContain(EMPREINTE_FACTICE);
+    }
+  });
+});
