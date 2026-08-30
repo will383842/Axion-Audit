@@ -1664,3 +1664,48 @@ déploiements, il ne le pourrait plus. **Le prochain déploiement est l'épreuve
 son environnement, la cause est ici. **Et « la pile est saine, l'ordre du script protège le cas
 courant » est une PRÉDICTION, pas une mesure** — relevé par la session voisine, et c'est juste. Rien
 ne doit l'inscrire comme acquise avant que `8 · deploy-staging` soit vert sur `main`.
+
+---
+
+## 2026-08-30 16h20 — [lot L0 / incrément L0d — restauration] — étape pipeline 5/7
+
+Dernier commit vert : `60ffaaf` sur `main` · Branche : `lot/l0d-restauration` · Poussé : oui
+Tâche en cours : CI sur `lot/l0d-restauration`, puis fusion.
+Prochaine action : **quand la CI est verte, fusionner, remettre `/opt/axion-audit/repo` à niveau depuis `main`, puis lancer `nightly-restore-test.yml` SUR `main` — c'est le seul endroit où le CANAL peut être prouvé.**
+Tests rouges connus : aucun en CI. Le test de restauration nocturne reste rouge sur `main` **par conception** tant que cet incrément n'est pas fusionné.
+
+📌 **CE QUI EST ACQUIS AUJOURD'HUI, ET QUI NE L'ÉTAIT PAS CE MATIN.**
+· **Le test de restauration passe, code 0, mesuré trois fois sur la vraie pile.** Postgres restauré
+depuis la sauvegarde de 02h30 (32,1 Mo, 1502 fichiers), cluster promu, et **chaque table comparée
+entre le restauré et la production** — `schema_migrations` 12/12, `sectors` 8/8, `services` 11/11,
+`users` 1/1. MinIO : archive déchiffrée, **serveur démarré dessus**, trois buckets présents.
+· **Le déploiement de `main` est vert et VÉRIFIÉ** : « Vérifié (prise d'effet) », avec l'avertissement
+explicite sur ce qu'il ne prouve pas. Le `.env` est resté à `600` à travers un déploiement réel — le
+risque signalé ce matin **ne s'est pas matérialisé, et c'est maintenant mesuré, plus prédit.**
+
+📌 **LA DISTINCTION QUI RESTE À FERMER, ET ELLE N'EST PAS UN DÉTAIL.** J'ai prouvé le **contenu** — le
+script — par exécution directe. Le **canal** — cron 03h00, environnement `ops`, clé restreinte,
+`command=` — **n'est jamais sorti vert** : cinq exécutions, cinq échecs. « Le script réussit » et « le
+garde nocturne réussit » ne sont pas la même affirmation. **Ne pas écrire la seconde avant le dispatch
+sur `main`.**
+
+📌 **LA CAUSE COMMUNE DES SIX MURS, découverte au sixième** : deux dispositifs de sauvegarde
+coexistent dans le dépôt, et le test éprouvait **celui qui ne tourne pas**. On ne franchissait pas des
+obstacles vers une cible — on avançait vers une cible qui n'était pas là.
+
+📌 **TROIS DÉDUCTIONS REMPLACÉES PAR TROIS DÉCOUVERTES**, toutes vérifiées en conditions réelles et
+toutes **bornées au projet de la pile vivante** : le dépôt pgBackRest, l'image Postgres, le volume
+d'archives. Jamais « le premier trouvé » — cette machine héberge une production étrangère au projet.
+
+📌 **DEUX DÉFAUTS QUI NE CASSAIENT RIEN, ET QUI ONT SURVÉCU POUR CETTE RAISON.**
+· **Vingt minutes perdues à chaque fusion** : la boucle d'attente du déploiement sortait sur une liste
+de statuts, le contrôle suivant en acceptait une autre. Mesuré : deux exécutions de **exactement**
+vingt minutes, soit la borne complète, alors que les conteneurs étaient sains depuis un quart d'heure.
+· **Lancer le test nocturne depuis une branche ne teste pas la branche** : le clone du serveur suit
+`main`. Le garde posé refuse désormais l'illusion — échec sur `main` en cas de dérive, avertissement
+bruyant sur une branche.
+
+📌 **CE QUE J'AI EU FAUX AUJOURD'HUI, et qui est écrit ailleurs en détail** : la gravité du `.env` en
+`644` (inatteignable, mesuré après objection) ; et j'ai « découvert » que l'orchestrateur ignore GHCR
+alors que c'était écrit dans le dépôt depuis le 2026-08-28. **Premier savoir écrit et non appliqué
+dont je suis l'auteur plutôt que le lecteur.**
