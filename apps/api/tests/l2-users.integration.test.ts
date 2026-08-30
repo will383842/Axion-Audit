@@ -366,6 +366,7 @@ async function journalDe(cibleId: string): Promise<LigneJournal[]> {
 }
 
 interface LigneCompte {
+  readonly name: string;
   readonly role: Role;
   readonly is_active: boolean;
   readonly habilitated_at: Date | null;
@@ -376,7 +377,7 @@ interface LigneCompte {
 
 async function ligneCompte(id: string): Promise<LigneCompte> {
   const resultat = await bd().query<LigneCompte>(
-    `SELECT role, is_active, habilitated_at, updated_at, password_hash,
+    `SELECT name, role, is_active, habilitated_at, updated_at, password_hash,
             created_at::text AS created_at_texte
        FROM users WHERE id = $1`,
     [id],
@@ -1863,5 +1864,263 @@ describe('POST /v1/users — unicité de l’adresse', () => {
       expect(reponse.statut, acte.nom).toBe(404);
       expect(reponse.code).toBe('NOT_FOUND');
     }
+  });
+});
+
+// =============================================================================
+// LES TROIS CHAMPS DE `PATCH /v1/users/:id` — LE PROFIL D'USAGE COMPRIS
+// =============================================================================
+describe('PATCH /v1/users/:id — les trois champs modifiables', () => {
+  it('@critique le profil d’usage bascule, et le journal le nomme `usage_profile`', async () => {
+    // LE CHAMP QU'ON OUBLIE. `name` et `email` se testent d'eux-mêmes parce qu'on les
+    // manipule partout ; `usage_profile` est le troisième, et c'est celui qui décide
+    // de ce que l'auditeur VOIT sur le terrain — mode guidé strict ou mode expert
+    // (03 §19.1). Une bascule qui ne s'appliquerait pas, ou qui s'appliquerait sans
+    // laisser de trace, changerait le déroulé d'une mission sans que personne ne
+    // puisse dire qui l'a décidé.
+    //
+    // Le NOM journalisé compte autant que la bascule : `activity_log` porte le champ
+    // en `snake_case` (colonne du 04) alors que l'API parle `camelCase` (11 §3). Une
+    // traduction ratée écrirait `usageProfile` dans le journal — le catalogue le
+    // refuserait, la ligne partirait avec `meta` écartée, et l'acte deviendrait muet
+    // sur ce qu'il a fait.
+    const admin = await creerAdmin('profil');
+    const cible = await creerCompte('profil-cible');
+
+    const avant = await ligneCompte(cible.id);
+
+    const bascule = await appeler('PATCH', `/v1/users/${cible.id}`, {
+      jeton: admin.jeton,
+      corps: { usageProfile: 'expert' },
+    });
+    expect(bascule.statut).toBe(200);
+    expect(utilisateur(bascule).usageProfile).toBe('expert');
+
+    const lignes = (await journalDe(cible.id)).filter((l) => l.action === 'user.update');
+    expect(lignes).toHaveLength(1);
+    expect(
+      lignes[0]?.meta,
+      'Le journal doit nommer `usage_profile` — la colonne du 04 —, pas `usageProfile`.\n' +
+        'Le catalogue est fermé sur cette liste : un nom en `camelCase` ferait écarter\n' +
+        'la charge utile et l’acte perdrait ce qu’il décrit.',
+    ).toStrictEqual({ champs: ['usage_profile'] });
+
+    expect(
+      (await ligneCompte(cible.id)).updated_at.getTime(),
+      'CONTRE-ÉPREUVE des tests d’idempotence : une modification RÉELLE, elle, DOIT\n' +
+        'bousculer `updated_at`. Sans ce cas, « `updated_at` n’a pas bougé » serait vert\n' +
+        'sur un service qui ne l’écrirait jamais.',
+    ).toBeGreaterThan(avant.updated_at.getTime());
+
+    // Et la bascule est idempotente comme les autres actes.
+    const repetee = await appeler('PATCH', `/v1/users/${cible.id}`, {
+      jeton: admin.jeton,
+      corps: { usageProfile: 'expert' },
+    });
+    expect(repetee.statut).toBe(200);
+    expect((await journalDe(cible.id)).filter((l) => l.action === 'user.update')).toHaveLength(1);
+  });
+
+  it('COMPORTEMENT CONSTATÉ — le mode expert se pose sur un compte NON habilité', async () => {
+    // QUESTION OUVERTE, à porter en porte plutôt qu'à trancher ici. 03 §19.1 décrit le
+    // mode expert comme celui d'un auditeur HABILITÉ, et §34.4 fait de l'habilitation
+    // l'acte qui clôt le parcours d'entrée (bac à sable, cotation croisée). Or rien,
+    // dans `PATCH /v1/users/:id`, ne regarde `habilitated_at` : un compte créé il y a
+    // dix secondes peut être mis en mode expert.
+    //
+    // Ce n'est pas nécessairement un défaut — l'auteur a explicitement laissé à L3 la
+    // règle « affectation refusée si `habilitated_at IS NULL` », et le mode d'usage
+    // n'est pas une affectation. Mais ce test FIGE le comportement d'aujourd'hui pour
+    // qu'un changement soit VOULU : s'il rougit, c'est que quelqu'un a ajouté la
+    // condition — qu'il l'écrive alors dans `DECISIONS.md` plutôt que de la découvrir
+    // en clientèle.
+    const admin = await creerAdmin('profil-non-habilite');
+    const cible = await creerCompte('profil-non-habilite-cible');
+    expect((await ligneCompte(cible.id)).habilitated_at, 'le compte n’est PAS habilité').toBeNull();
+
+    const reponse = await appeler('PATCH', `/v1/users/${cible.id}`, {
+      jeton: admin.jeton,
+      corps: { usageProfile: 'expert' },
+    });
+    expect(reponse.statut).toBe(200);
+    expect(utilisateur(reponse).habilitatedAt).toBeNull();
+    expect(utilisateur(reponse).usageProfile).toBe('expert');
+  });
+
+  it('@critique trois champs d’un coup : le journal les nomme TOUS, et aucune VALEUR', async () => {
+    // Le cas où la trace se dégrade sans qu'on le voie. `user.update` porte une liste
+    // de NOMS de champs (`min(1)`), et deux dérives sont possibles :
+    //   · n'en nommer qu'un — « j'ai modifié quelque chose, je ne sais pas quoi » ;
+    //   · y glisser les valeurs — et `activity_log`, qui promet de ne contenir aucune
+    //     donnée personnelle et vit douze mois sous régime RGPD (06 §10.4), devient un
+    //     annuaire nominatif tenu par le produit lui-même.
+    // On vérifie les deux, et la seconde sur le CONTENU BRUT de `meta`.
+    const admin = await creerAdmin('trois-champs');
+    const cible = await creerCompte('trois-champs-cible');
+    const nouveauNom = 'Nom entierement remplace';
+    const nouvelleAdresse = `compte.remplace.${uuidv7()}@exemple.test`;
+
+    const reponse = await appeler('PATCH', `/v1/users/${cible.id}`, {
+      jeton: admin.jeton,
+      corps: { name: nouveauNom, email: nouvelleAdresse, usageProfile: 'expert' },
+    });
+    expect(reponse.statut).toBe(200);
+
+    const apres = utilisateur(reponse);
+    expect(apres.name).toBe(nouveauNom);
+    expect(apres.email).toBe(nouvelleAdresse);
+    expect(apres.usageProfile).toBe('expert');
+
+    const lignes = (await journalDe(cible.id)).filter((l) => l.action === 'user.update');
+    expect(
+      lignes,
+      'UNE seule ligne pour UNE requête : trois lignes raconteraient trois actes.',
+    ).toHaveLength(1);
+    expect(
+      lignes[0]?.meta,
+      'Les TROIS champs, dans l’ordre stable où le service les examine. Un seul nom\n' +
+        'manquant et la trace ne permet plus de reconstituer ce qui a changé.',
+    ).toStrictEqual({ champs: ['name', 'email', 'usage_profile'] });
+
+    const brut = JSON.stringify(lignes[0]?.meta);
+    for (const valeur of [nouveauNom, nouvelleAdresse, cible.nom, cible.email]) {
+      expect(
+        brut.includes(valeur),
+        `La valeur « ${valeur.slice(0, 24)} » est dans \`meta\`. Le journal dit CE QUI a\n` +
+          'changé, jamais VERS QUOI : l’avant comme l’après sont des données personnelles.',
+      ).toBe(false);
+    }
+  });
+});
+
+// =============================================================================
+// QUAND LA BASE REFUSE POUR UNE AUTRE RAISON QUE L'ADRESSE
+// =============================================================================
+describe('violation d’unicité qui n’est PAS l’adresse', () => {
+  /**
+   * Nom réservé au témoin, et INDEX PARTIEL sur lui seul.
+   *
+   * On n'ajoute PAS un `UNIQUE (name)` global : les comptes semés par ce fichier
+   * porteraient alors une contrainte qu'ils n'ont jamais eu à respecter, et la
+   * création de l'index échouerait sur un doublon accidentel — un échec qui ne
+   * parlerait pas du sujet. L'index partiel ne concerne qu'une seule valeur, choisie.
+   */
+  const NOM_TEMOIN = 'Doublon de nom volontaire';
+  const INDEX_TEMOIN = 'users_nom_temoin_key';
+
+  /** Pose l'index, joue le scénario, et le RETIRE quoi qu'il arrive. */
+  async function avecIndexTemoin(action: () => Promise<void>): Promise<void> {
+    await bd().query(
+      `CREATE UNIQUE INDEX ${INDEX_TEMOIN} ON users (name) WHERE name = '${NOM_TEMOIN}'`,
+    );
+    try {
+      await action();
+    } finally {
+      // `finally` et non un simple appel en fin de test : un échec au milieu du
+      // scénario laisserait sinon l'index en place, et TOUS les tests suivants de ce
+      // fichier échoueraient pour une raison qui n'est pas la leur.
+      await bd().query(`DROP INDEX IF EXISTS ${INDEX_TEMOIN}`);
+    }
+  }
+
+  it('@critique elle ne se déguise PAS en « cette adresse est déjà prise »', async () => {
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CE TEST GARDE UNE DÉCISION, PAS UNE LIGNE DE CODE.
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Le dépôt ne traite pas tout `23505` comme un conflit d'adresse : il exige AUSSI
+    // que la contrainte violée soit `users_email_key`. La simplification tentante —
+    // « code 23505 ⇒ adresse déjà prise » — est plus courte, passe tous les tests
+    // existants, et ment le jour où une seconde contrainte unique apparaît sur
+    // `users`. L'administrateur lirait alors « cette adresse est déjà prise » alors
+    // que l'adresse est libre, et il chercherait au mauvais endroit — ce qui coûte
+    // plus cher qu'un message absent.
+    //
+    // Ce jour-là est SIMULÉ ici : un index unique partiel sur `name`, une création
+    // parfaitement légitime côté adresse, et une violation qui n'a rien à voir. La
+    // réponse attendue n'est pas belle — c'est un 500 — mais elle est HONNÊTE : le
+    // produit ne sait pas nommer cette cause, et il ne prétend pas la connaître.
+    const admin = await creerAdmin('unicite-autre');
+
+    await avecIndexTemoin(async () => {
+      // ── ① CONTRE-ÉPREUVE : le chemin nominal passe MALGRÉ l'index ────────────
+      // Sans elle, le refus de ② serait vert même si l'index bloquait tout, ou si la
+      // route était cassée : on ne saurait pas que c'est bien le SECOND appel qui
+      // fâche la base.
+      const premier = await appeler('POST', '/v1/users', {
+        jeton: admin.jeton,
+        corps: {
+          name: NOM_TEMOIN,
+          email: `compte.temoin.a.${uuidv7()}@exemple.test`,
+          password: 'mot-de-passe-factice-du-temoin',
+          role: 'lecteur',
+        },
+      });
+      expect(premier.statut, 'la première création doit réussir : l’index n’est pas violé').toBe(
+        201,
+      );
+
+      // ── ② La violation qui n'est PAS celle de l'adresse ─────────────────────
+      const second = await appeler('POST', '/v1/users', {
+        jeton: admin.jeton,
+        corps: {
+          name: NOM_TEMOIN,
+          email: `compte.temoin.b.${uuidv7()}@exemple.test`,
+          password: 'mot-de-passe-factice-du-temoin',
+          role: 'lecteur',
+        },
+      });
+
+      expect(
+        second.code,
+        'LE CŒUR DU TEST. Un `CONFLICT` ici signifie que le dépôt a cessé de LIRE LE\n' +
+          'NOM de la contrainte et traite tout `23505` comme un doublon d’adresse.\n' +
+          'L’adresse envoyée est pourtant libre : le message enverrait l’administrateur\n' +
+          'la corriger indéfiniment.',
+      ).not.toBe('CONFLICT');
+      expect(second.statut).toBe(500);
+      expect(second.code).toBe('INTERNAL_ERROR');
+      expect(
+        second.corps.toLowerCase().includes('adresse'),
+        'Et le message ne doit pas davantage PARLER d’adresse.',
+      ).toBe(false);
+      expect(
+        second.corps.includes(INDEX_TEMOIN),
+        'Ni divulguer le nom de la contrainte : la structure de la base ne sort pas\n' +
+          'de la base, même dans une erreur interne.',
+      ).toBe(false);
+
+      // ── ③ LE MÊME DÉFAUT PAR L'AUTRE CHEMIN D'ÉCRITURE ──────────────────────
+      // `POST` insère hors transaction, `PATCH` met à jour DEDANS : deux `catch`
+      // distincts, que rien n'oblige à traiter l'erreur de la même façon. Le second
+      // est même le plus exposé, l'erreur y traversant en plus l'enveloppe de
+      // transaction.
+      const cible = await creerCompte('unicite-autre-cible');
+      const parPatch = await appeler('PATCH', `/v1/users/${cible.id}`, {
+        jeton: admin.jeton,
+        corps: { name: NOM_TEMOIN },
+      });
+      expect(parPatch.code, 'même exigence sur le chemin `PATCH`').not.toBe('CONFLICT');
+      expect(parPatch.statut).toBe(500);
+      expect(
+        (await ligneCompte(cible.id)).name === NOM_TEMOIN,
+        'et la transaction a bien été annulée : le nom n’a pas changé',
+      ).toBe(false);
+      expect(await journalDe(cible.id), 'un échec n’est pas une modification').toHaveLength(0);
+    });
+
+    // ── ④ L'INDEX RETIRÉ, LA MÊME CRÉATION PASSE ──────────────────────────────
+    // La preuve que le refus venait bien de l'index et de rien d'autre. Sans ce
+    // dernier pas, un 500 provoqué par n'importe quelle autre panne aurait satisfait
+    // tout ce qui précède.
+    const apresRetrait = await appeler('POST', '/v1/users', {
+      jeton: admin.jeton,
+      corps: {
+        name: NOM_TEMOIN,
+        email: `compte.temoin.c.${uuidv7()}@exemple.test`,
+        password: 'mot-de-passe-factice-du-temoin',
+        role: 'lecteur',
+      },
+    });
+    expect(apresRetrait.statut).toBe(201);
   });
 });
