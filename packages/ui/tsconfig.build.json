@@ -7,7 +7,7 @@
     "rootDir": "src",
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["src/**/*.test.ts"],
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"],
   "//tsBuildInfoFile": "Le cache d'incrémentalité vit DANS dist/. S'il vivait à côté, supprimer dist (nettoyage, cache de CI restauré partiellement) laisserait tsc croire que tout est à jour : il rapporterait « Done » SANS RIEN ÉMETTRE, et la construction suivante échouerait sur un module introuvable. Défaut réel, trouvé en simulant un clone neuf."
 }

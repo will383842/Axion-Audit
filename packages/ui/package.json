@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Design system Axion — tokens de la charte (invariant 4 : aucune couleur en dur ailleurs).",
+  "description": "Design system Axion — tokens de la charte (invariant 4) et composants de la grille §33.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -12,6 +12,7 @@
       "import": "./dist/index.js"
     },
     "./tokens.css": "./src/tokens.css",
+    "./composants.css": "./src/composants.css",
     "./polices.css": "./src/polices.css"
   },
   "scripts": {
@@ -19,8 +20,13 @@
     "dev": "tsc --project tsconfig.build.json --watch --preserveWatchOutput",
     "typecheck": "tsc --noEmit"
   },
+  "peerDependencies": {
+    "react": "18.3.1"
+  },
   "devDependencies": {
-    "@types/node": "22.20.1"
+    "@types/node": "22.20.1",
+    "@types/react": "18.3.31",
+    "react": "18.3.1"
   },
   "files": [
     "dist",

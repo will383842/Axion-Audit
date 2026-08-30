@@ -9,5 +9,11 @@
   "extends": "./tsconfig.base.json",
   "// lib": "DOM est nécessaire : le code passé à page.evaluate() s'exécute DANS LE NAVIGATEUR, pas dans Node.",
   "compilerOptions": { "types": ["node"], "lib": ["ES2023", "DOM"] },
-  "include": ["vitest.config.ts", "playwright.config.ts", "scripts/**/*.ts", "e2e/**/*.ts"]
+  "include": [
+    "vitest.config.ts",
+    "vitest.setup.interface.ts",
+    "playwright.config.ts",
+    "scripts/**/*.ts",
+    "e2e/**/*.ts"
+  ]
 }

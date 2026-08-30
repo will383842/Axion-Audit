@@ -62,6 +62,15 @@ export const TOKENS_COULEUR = {
   'action-fond': COULEURS_CHARTE.terracotta,
   'action-fond-survol': '#a83e16',
   'action-fond-actif': '#8d3412',
+  /**
+   * DÉRIVÉE — teinte tendre de terracotta. Fond d'un choix RETENU (échelle 1-5,
+   * segmenté Oui/Non/N-A) et piste d'un anneau de progression. Le terracotta plein
+   * reste réservé à l'ACTION ; une réponse cochée n'est pas une action, c'est un
+   * état — la remplir de terracotta poserait cinq « boutons principaux » sur un
+   * même écran, contre la règle « une seule action principale par écran » (§19.2).
+   * Le texte principal s'y lit très au-delà de AA (fond quasi ivoire).
+   */
+  'action-fond-doux': '#f7e9e2',
   'action-texte': COULEURS_CHARTE.terracotta,
   'action-bordure': COULEURS_CHARTE.terracotta,
 
@@ -89,6 +98,12 @@ export const TOKENS_COULEUR = {
   'bordure-nette': '#c9c0b1',
   /** Anneau de focus : visible, jamais supprimé (accessibilité A28). */
   'focus-anneau': COULEURS_CHARTE.terracotta,
+  /**
+   * DÉRIVÉE — voile posé DERRIÈRE une boîte de dialogue ou un panneau. Mocha à
+   * ~55 % d'opacité (notation hexadécimale à 8 chiffres) : le voile assombrit
+   * sans virer au noir, et laisse deviner l'écran d'entretien qu'on n'a pas quitté.
+   */
+  'voile-superposition': '#2a25208c',
 } as const;
 
 export type TokenCouleur = keyof typeof TOKENS_COULEUR;
@@ -117,9 +132,36 @@ export const TOKENS_ESPACEMENT = {
 export const TOKENS_TAILLE = {
   'cible-tactile-min': '44px',
   'controle-hauteur': '2.75rem',
+  /**
+   * Hauteur d'un contrôle à FRAPPER — le Oui/Non/N-A et les crans 1-5 d'une échelle,
+   * qui se touchent debout, à une main, parfois avec des gants (§33.1/§33.3 :
+   * « gros boutons tactiles »). 44 px est le PLANCHER légal d'A27, pas un confort ;
+   * ces trois contrôles-là sont frappés des centaines de fois par entretien.
+   */
+  'controle-hauteur-large': '3.5rem',
+  /** Épaisseur d'un filet. Une bordure est une décision de charte, donc un jeton. */
+  'bordure-epaisseur': '1px',
+  /** Filet PORTEUR DE SENS (choix retenu, erreur) : il doit se voir sans la couleur. */
+  'bordure-epaisseur-forte': '2px',
   'rayon-petit': '0.25rem',
+  /** §33.1 — 8 px : les CONTRÔLES (boutons, champs, segments). */
   'rayon-moyen': '0.5rem',
+  /** §33.1 — 12 px : les CARTES. */
   'rayon-grand': '0.75rem',
+  /** §33.1 — 16 px : les SURFACES et les panneaux (sheets). */
+  'rayon-surface': '1rem',
+  /** Diamètre d'un anneau de progression en ligne (carte de synthèse, liste). */
+  'anneau-diametre-petit': '2.5rem',
+  /** Diamètre d'un anneau de progression en vedette (écran « Aujourd'hui »). */
+  'anneau-diametre-grand': '5rem',
+  /**
+   * Plans d'empilement. Sans jetons, chaque écran réinvente son `z-index` et le
+   * voile finit un jour AU-DESSUS de sa propre boîte de dialogue. Trois plans
+   * suffisent, et l'ordre est le seul contrat : bandeau < voile < superposition.
+   */
+  'plan-bandeau': '80',
+  'plan-voile': '90',
+  'plan-superposition': '100',
   /**
    * Largeur maximale d'une colonne de texte. ~65 caractères : au-delà, l'œil perd
    * la ligne en revenant à la marge. Vaut autant pour un écran d'entretien que
@@ -164,6 +206,20 @@ export const TOKENS_MOUVEMENT = {
   'duree-rapide': '120ms',
   'duree-normale': '200ms',
   'courbe-standard': 'cubic-bezier(0.2, 0, 0, 1)',
+} as const;
+
+/**
+ * Ombres — §33.1 : « 2 niveaux MAX (sm, md), élévation discrète ».
+ * Le plafond fait partie du jeton : une bibliothèque qui offre cinq élévations en
+ * voit apparaître cinq à l'écran, et l'interface calme promise devient un relief.
+ *   · `sm` — une carte posée sur l'ivoire (repos) ;
+ *   · `md` — une surface qui FLOTTE au-dessus du reste (dialogue, panneau).
+ * La couleur de l'ombre est le mocha translucide et non un noir : un noir pur sur
+ * fond ivoire donne un gris sale, visible dès le premier écran d'entretien.
+ */
+export const TOKENS_OMBRE = {
+  sm: '0 1px 2px #2a25201a, 0 1px 3px #2a252014',
+  md: '0 2px 4px #2a25201a, 0 8px 24px #2a252024',
 } as const;
 
 /** Nom de la variable CSS correspondant à un token de couleur. */

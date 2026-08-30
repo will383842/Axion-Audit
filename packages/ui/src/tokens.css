@@ -31,6 +31,9 @@
   --couleur-action-fond: #c24a1b;
   --couleur-action-fond-survol: #a83e16;
   --couleur-action-fond-actif: #8d3412;
+  /* Choix RETENU (échelle 1-5, segmenté Oui/Non/N-A), piste d'anneau. Le terracotta
+     plein reste réservé à l'ACTION : un état n'est pas une action (§19.2). */
+  --couleur-action-fond-doux: #f7e9e2;
   --couleur-action-texte: #c24a1b;
   --couleur-action-bordure: #c24a1b;
 
@@ -56,6 +59,9 @@
   --couleur-bordure-discrete: #e4ded2;
   --couleur-bordure-nette: #c9c0b1;
   --couleur-focus-anneau: #c24a1b;
+  /* Voile derrière un dialogue / un panneau : mocha à ~55 % (hexadécimal 8 chiffres).
+     Assombrit sans virer au noir — l'entretien qu'on n'a pas quitté reste devinable. */
+  --couleur-voile-superposition: #2a25208c;
 
   /* --- Espacement (base 4 px) --- */
   --espacement-0: 0;
@@ -73,9 +79,22 @@
   /* --- Tailles (A27 : cible tactile ≥ 44 px) --- */
   --taille-cible-tactile-min: 44px;
   --taille-controle-hauteur: 2.75rem;
+  /* Contrôle à FRAPPER (Oui/Non/N-A, crans 1-5) : 44 px est le plancher d'A27,
+     pas un confort — ces trois contrôles sont touchés des centaines de fois. */
+  --taille-controle-hauteur-large: 3.5rem;
+  --taille-bordure-epaisseur: 1px;
+  --taille-bordure-epaisseur-forte: 2px;
   --taille-rayon-petit: 0.25rem;
+  /* §33.1 — 8 px contrôles · 12 px cartes · 16 px surfaces et panneaux. */
   --taille-rayon-moyen: 0.5rem;
   --taille-rayon-grand: 0.75rem;
+  --taille-rayon-surface: 1rem;
+  --taille-anneau-diametre-petit: 2.5rem;
+  --taille-anneau-diametre-grand: 5rem;
+  /* Plans d'empilement — l'ORDRE est le contrat : bandeau < voile < superposition. */
+  --taille-plan-bandeau: 80;
+  --taille-plan-voile: 90;
+  --taille-plan-superposition: 100;
   --taille-largeur-contenu-etroit: 32rem;
   --taille-largeur-contenu-large: 64rem;
   --taille-focus-epaisseur: 3px;
@@ -108,6 +127,13 @@
   --mouvement-duree-rapide: 120ms;
   --mouvement-duree-normale: 200ms;
   --mouvement-courbe-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* --- Ombres — §33.1 : DEUX niveaux MAXIMUM, élévation discrète.
+         `sm` = une carte posée sur l'ivoire · `md` = une surface qui FLOTTE
+         (dialogue, panneau). Le mocha translucide plutôt qu'un noir : sur fond
+         ivoire, un noir pur rend un gris sale dès le premier écran. --- */
+  --ombre-sm: 0 1px 2px #2a25201a, 0 1px 3px #2a252014;
+  --ombre-md: 0 2px 4px #2a25201a, 0 8px 24px #2a252024;
 }
 
 /* §33 — accessibilité : l'animation est un confort, jamais une condition d'usage. */
