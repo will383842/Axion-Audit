@@ -1786,3 +1786,44 @@ garde-fou), code d'erreur du refus §9.7, cookies vs Bearer pour les routes admi
 · **La passphrase du coffre** : détenteur unique. La chaîne fonctionne — coffre en trois exemplaires,
 expédié hors serveur 17 s après la passe — c'est la garde de la clé qui reste à un seul point.
 · **`packages/ui` a une semaine de retard** : §6 le place en semaine 1, il n'y a que les tokens.
+
+---
+
+## 2026-08-31 23h00 — [lot L2 / intégration] — étape pipeline 5/7
+
+Dernier commit vert : `4195977` · Branche : `lot/l2-integration` · Poussé : oui
+Tâche en cours : fusion de l'intégration L2 sur `main`.
+Prochaine action : **fusionner, puis attendre que T3 tienne le seuil de branches (84,48 % aujourd'hui, un agent complète) ; ensuite monter le dossier P-B et S'ARRÊTER — une porte est à Williams.**
+Tests rouges connus : `lot/l2e-t3-users` rouge sur la **couverture de branches** de `domaines/users` (84,48 % < 90 %) · `lot/ui-design-system` rouge sur les **modules orphelins**, qui se refermera quand ses tests importeront les composants.
+
+📌 **CE QUE CETTE FUSION PORTE, ET CE QUE CHAQUE PREUVE ÉTABLIT — ou n'établit pas.**
+
+· **Le garde de l'invariant 7 est branché en CI ET réparé.** Il **exemptait la porte d'écriture en
+entier**, `UPDATE` et `DELETE` compris : le seul endroit où une réécriture silencieuse du journal est
+plausible était le seul qu'il ne regardait pas — et **son propre message d'erreur énonçait la règle
+qu'il n'appliquait pas**. Établi par quatre contre-épreuves (dépôt sain, mutation dans la porte, même
+texte en commentaire, insertion ailleurs). **N'établit PAS** que les mutations sont impossibles :
+seulement qu'elles ne peuvent plus être écrites sans être vues.
+
+· **La matrice E1-E47 dans les deux sens**, dont le sens `code → exigences` **jamais fait**. Une seule
+exigence passe à « couverte » — E21 — et **c'est le bon chiffre** : quatre autres ont beaucoup avancé
+sans tenir l'énoncé complet de leur libellé. **N'établit PAS** que le code est couvert : elle établit
+ce qui l'est et nomme un orphelin réel (`infra/scripts/empreinte-docker.sh`, câblé nulle part).
+
+· **L'enquête E45 : l'alerte était INFONDÉE**, et l'enquête a trouvé autre chose — L2 se donnait dans
+son plan de tests un critère **qu'il ne peut pas exécuter**, faute d'appelant. P-B aurait coché une
+case dont la preuve ne peut pas exister. Critère déplacé en L3d.
+
+· **`@fastify/cookie` épinglé**, les deux listes de versions amendées. **N'établit PAS** que
+l'authentification console est migrée : c'est L2b, T3 reste en Bearer, et c'est écrit.
+
+· **Le plafond des chantiers parallèles confondait trois contraintes** — collision, mémoire,
+attention. Trois règles distinctes désormais, et **le renvoi de `CLAUDE.md` ne cite plus aucun
+chiffre** : un plafond recopié à deux endroits dérive.
+
+📌 **CE QUI CHANGE CETTE NUIT, ET QU'IL FAUT SAVOIR EN LISANT LA SUITE.** Les sessions de
+recroisement se ferment. **En douze heures, ce recroisement a renversé quatre affirmations — deux des
+miennes, deux des leurs** — dont une alerte sur T3 et mon diagnostic mémoire du 2026-08-29. **Aucune
+n'aurait été vue par son auteur seul.** La discipline de mesure reste le seul garde : ne rien conclure
+d'un verdict global, lire les étapes, et écrire à côté de chaque « vérifié » ce que la preuve
+n'établit pas.

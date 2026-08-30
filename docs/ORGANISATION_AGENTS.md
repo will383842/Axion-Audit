@@ -43,10 +43,37 @@ fichier. `apps/api` (L3) et `apps/field` (L5a) sont disjoints : c'est un bon dé
 `CLAUDE.md` §4 impose deux exceptions : **jamais deux lots sur les mêmes fichiers**, et
 **L6 (sync) se développe SEUL**.
 
-**Deux chantiers actifs au maximum.** Contrainte mesurée, pas de principe : 16 Go de mémoire, et les
-tests d'intégration montent des conteneurs. Au-delà, la machine pagine — et une troisième session
-n'ajoute pas de fiabilité (2026-08-30 : une troisième session a produit un rapport de trois blocages
-dont **deux étaient faux**, faute de mesurer avant d'affirmer).
+### TROIS CONTRAINTES, TROIS RÈGLES — et pourquoi les confondre a coûté une soirée
+
+> **Amendement du 2026-08-31, arbitré par Williams.** Ce paragraphe disait « **deux chantiers actifs
+> au maximum** », en un seul plafond. Le mot « chantier » y avait été écrit en pensant *lot sur
+> fichiers disjoints*, alors que le motif invoqué était la **mémoire** — laquelle ne dépend pas du
+> découpage. **Deux lectures défendables, parce que le texte ne tranchait pas.**
+>
+> Le défaut s'est manifesté le soir même : six worktrees ouverts, une session d'audit signalant une
+> violation, et **aucun moyen de savoir laquelle des deux lectures faisait foi**. Ce n'était pas un
+> défaut de pratique, c'était un défaut du document.
+
+**1. COLLISION — jamais deux LOTS sur les mêmes fichiers.**
+Objet : **les fichiers**. Ce n'est pas un plafond, c'est un **interdit** : il ne se compte pas et ne
+se négocie pas. Il existe déjà en `CLAUDE.md` §4.
+
+**2. MÉMOIRE — au plus DEUX EXÉCUTIONS LOURDES simultanées.**
+Objet : **les processus qui tournent**, jamais les répertoires qui existent. Contrainte mesurée :
+16 Go, et les tests d'intégration montent des conteneurs. Au-delà, la machine pagine.
+**Corollaire assumé : le nombre de worktrees n'a PAS de plafond en soi.** Un worktree inerte coûte du
+disque, pas de la mémoire — confondre les deux fait refuser un travail qui ne coûte rien.
+
+**3. ATTENTION — au plus DEUX CHANTIERS SUIVIS à la fois.**
+Objet : **ce qu'un pilote arrive à tenir en tête**. Cette règle ne dérive d'aucune des deux autres, et
+c'est pourtant elle qui a mordu le 2026-08-31 : *« six répertoires signifiaient six chantiers que je
+n'arrivais plus à suivre — et c'est une raison suffisante »*. Elle n'était écrite nulle part.
+Une troisième session n'ajoute d'ailleurs pas de fiabilité (2026-08-30 : une troisième session a
+produit un rapport de trois blocages dont **deux étaient faux**, faute de mesurer avant d'affirmer).
+
+> **Ce que cet amendement enseigne au-delà de son objet** : un plafond dont le motif ne correspond pas
+> à ce qu'il compte finit par être appliqué au jugé, puis contesté, puis ignoré. **Trois règles nettes
+> valent mieux qu'un chiffre qui a l'air simple.**
 
 **Le nombre d'AGENTS par chantier, lui, n'a pas ce plafond.** Élargir en amont, sérialiser à
 l'exécution : dix agents peuvent écrire dix fichiers de tests en parallèle, ils ne peuvent pas les
