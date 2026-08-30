@@ -4598,3 +4598,44 @@ traçabilité mais de séquence, et il se corrige en fusionnant plus souvent, pa
 Précédence : `CLAUDE.md` §4 (pipeline, 7 étapes, aucun raccourci) et §7 (portes) ; fichier 09 §4bis.
 Décideur : **A01** pour le gel ; **Williams** pour la séquence elle-même, à la porte P-B.
 Impact spec : aucun.
+
+## 2026-08-31 — [L2] Deux constats de l'agent croisé de T3 : que fait-on avant la porte P-B ?
+
+Options :
+L'agent qui a écrit les tests de T3 — et qui n'a produit aucune des lignes testées (09 §5.6) — a
+remonté deux constats qu'il a **délibérément épinglés sans trancher**. C'est le bon geste, et il
+appelle une réponse écrite plutôt qu'une correction silencieuse.
+
+**CONSTAT 1 — `lireUtilisateur` (`users/depot.ts:170`) n'a AUCUN appelant dans tout le dépôt.**
+Écrite pour un `GET /v1/users/:id` jamais câblé : le CRUD a une liste et **pas de lecture unitaire**.
+Le 05 §22 écrit « CRUD /v1/users » sans détailler les verbes ; un « CRUD » complet comporte
+ordinairement la lecture unitaire, donc c'est **la route qui manque**, pas la fonction qui serait de
+trop. Deux issues seulement : câbler la route, ou supprimer la fonction.
+
+**CONSTAT 2 — `PATCH /v1/users/:id` pose `usageProfile: 'expert'` sur un compte NON habilité**, alors
+que 03 §19.1 décrit le mode expert comme celui d'un **auditeur habilité**. Le texte du pack ne dit
+pas si l'habilitation est une **condition** du profil expert ou une propriété **indépendante** qui se
+trouve la côtoyer. **C'est un doute de spec, pas un bug** — et un doute de spec ne se devine pas.
+
+1. **Trancher les deux maintenant** (câbler ou supprimer ; conditionner ou non le profil expert).
+2. **Corriger le plus simple et taire l'autre** — écarté sans discussion : c'est la définition du
+   ménage qui fait disparaître un signal.
+3. **Tracer les deux, n'en trancher aucun, et les porter à la porte.**
+
+Arbitrage : **option 3, et la raison tient en une phrase — je suis l'auteur du dossier P-B, et le
+constat 1 est précisément ce que ce dossier doit MONTRER au gardien.** Le §6 du contrat refuse le
+code orphelin ; si A01 supprime la fonction ce soir, la porte s'ouvre sur un dépôt propre **parce que
+son auteur a rangé la pièce à conviction**, pas parce que le défaut a été jugé. **Un gardien qui ne
+voit que ce que l'audité a bien voulu laisser sur la table ne garde rien.** Le constat 1 est donc
+inscrit au §5 du dossier, à l'état de constat, pour qu'A02 le range lui-même dans le sens
+code → exigences.
+
+Le constat 2 relève d'un **arbitrage humain** et de personne d'autre : il porte sur ce que le pack
+VEUT DIRE, pas sur ce que le code fait. **Aucun test n'est ajouté pour l'épingler**, et il faut le
+dire : un test qui fige le comportement actuel transformerait un doute en décision, par la porte de
+service. Le comportement est décrit, daté, et attend Williams.
+Précédence : `CLAUDE.md` §3 (« un doute de spec ne se devine pas ») et §5 (DoD : aucun TODO sans
+entrée `DECISIONS.md`) ; 09 §3-6 pour la lecture code → exigences.
+Décideur : **A01** pour le refus de trancher seul ; **Williams** pour le constat 2 et pour l'issue du
+constat 1, à la porte P-B.
+Impact spec : aucun. Le constat 2 pourra en produire un — précision de 03 §19.1.
