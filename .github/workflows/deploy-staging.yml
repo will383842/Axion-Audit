@@ -316,6 +316,37 @@ jobs:
           fi
           echo "uuid_deploiement=${uuid_deploiement}" >> "$GITHUB_OUTPUT"
 
+          # ---------------------------------------------------------------------
+          # LE SCRIPT DISTANT EST-IL BIEN CELUI QUI A ÉTÉ RELU ?
+          # ---------------------------------------------------------------------
+          # `command=` ne peut pointer que vers un chemin local : le script vit donc
+          # AUSSI sur le serveur, en /opt/axion-audit/deploy-staging.sh. Deux copies,
+          # et deux copies dérivent.
+          #
+          # Le 2026-08-30, ce script a été modifié DEUX FOIS directement en
+          # production — sans revue croisée, sans historique, sans sauvegarde. Il
+          # n'existait alors que sur le serveur. C'est exactement le défaut que ce
+          # dépôt corrige partout ailleurs, logé dans le mécanisme de déploiement
+          # lui-même.
+          #
+          # Le script imprime désormais SA PROPRE EMPREINTE en première ligne. On la
+          # compare ici à celle du fichier versionné. Un écart fait ÉCHOUER l'étape :
+          # une version en service qui n'a pas été relue ne déploie pas.
+          # ---------------------------------------------------------------------
+          empreinte_distante="$(printf '%s' "${SORTIE}" | grep -oE '^EMPREINTE_SCRIPT=[0-9a-f]{64}$' | head -1 | cut -d= -f2)"
+          empreinte_depot="$(sha256sum infra/scripts/deploy-staging.sh | cut -d' ' -f1)"
+
+          if [ -z "${empreinte_distante}" ]; then
+            echo "::error title=Empreinte du script distant absente::Le script en service n'a pas annoncé son empreinte. Soit il est antérieur à ce contrôle, soit quelqu'un l'a remplacé par une version qui ne la publie pas. Dans les deux cas, on ne peut pas affirmer que le code exécuté est celui qui a été relu — donc on ne déploie pas."
+            exit 1
+          fi
+
+          if [ "${empreinte_distante}" != "${empreinte_depot}" ]; then
+            echo "::error title=Le script en service N'EST PAS celui du dépôt::distante=${empreinte_distante} · dépôt=${empreinte_depot}. Quelqu'un a modifié /opt/axion-audit/deploy-staging.sh sans passer par le dépôt — donc sans revue croisée ni historique. Redéployer le fichier versionné, ou expliquer l'écart dans DECISIONS.md."
+            exit 1
+          fi
+          echo "Script distant vérifié : identique au fichier versionné (${empreinte_depot:0:16}…)."
+
       # L'attente et la vérification du commit RÉELLEMENT en service vivent
       # désormais dans le script distant, où elles ont accès au conteneur.
       # C'est ce qui permet de ne PAS croire le champ `status` de l'API Coolify :
