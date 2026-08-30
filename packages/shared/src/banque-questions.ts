@@ -303,7 +303,27 @@ export const VALEURS_OUI_NON = ['oui', 'non'] as const;
 export const ANCRES_REQUISES = [1, 3, 5] as const;
 
 /** Séparateurs d'ancres tolérés dans `guidance_fr` (le pack emploie « · »). */
-const SEPARATEURS_ANCRES = /[·•;\n|]+/;
+// `\r` EST DANS CETTE CLASSE, ET CE N'EST PAS UNE PRÉCAUTION DÉCORATIVE.
+// Défaut mesuré le 2026-08-31 par l'agent qui a écrit les tests de L4 — donc par
+// quelqu'un qui n'avait pas écrit ce code, ce qui est précisément l'intérêt de la
+// règle de croisement (09 §5.6).
+//
+// Sans `\r`, le découpage laissait le retour chariot en fin de fragment, et la
+// regex d'ancre échouait deux fois : `.` ne matche pas `\r` (terminateur de ligne
+// en JS) et `$` non multiligne exige la vraie fin de chaîne. Mesuré :
+//     '1 = a · 3 = b · 5 = c'      → [1, 3, 5]  ✓
+//     '1 = a\n3 = b\n5 = c'        → [1, 3, 5]  ✓
+//     '1 = a\r\n3 = b\r\n5 = c'    → [5]        ✗
+//
+// CE QUE CE DÉFAUT COÛTAIT, ET POURQUOI IL EST DU PIRE GENRE : Excel écrit du
+// CRLF. Une échelle CORRECTEMENT ANCRÉE, dont les ancres sont saisies sur trois
+// lignes dans la cellule — la façon la plus naturelle de les écrire — était
+// REJETÉE par un contrôle BLOQUANT, avec le message « niveaux 1, 3 sans
+// définition ». L'administrateur ne pouvait pas importer une question valide et
+// n'avait aucun moyen de comprendre pourquoi. Un faux refus sur un contrôle
+// bloquant est pire qu'un faux passage : il accuse la donnée d'un défaut qui est
+// celui du lecteur.
+const SEPARATEURS_ANCRES = /[·•;\r\n|]+/;
 
 /** Une ancre lue : le niveau coté et le libellé qui le définit. */
 export interface AncreDeCotation {
@@ -1214,7 +1234,19 @@ export function empreinteQuestion(question: QuestionImportee): string {
     question.textFr,
     question.guidanceFr,
     question.answerType,
-    question.options,
+    // `options` PASSE PAR `ordonnerProfond`, COMME `scoring` — corrigé le 2026-08-31.
+    // Défaut relevé par l'agent qui a écrit les tests de L4. `scoring` était
+    // normalisé, `options` non, alors que les deux sont des `jsonb` relus depuis
+    // PostgreSQL — lequel NORMALISE l'ordre des clés (longueur puis octets), donc
+    // rend toujours `{code, label, score}`.
+    //
+    // CONSÉQUENCE, et elle est sérieuse : un fichier dont les options sont écrites
+    // dans un autre ordre — `{label, score, code}`, parfaitement légitime en JSON —
+    // ne pouvait JAMAIS être reconnu « inchangé ». Chaque `--versionner` aurait créé
+    // une version+1 et ARCHIVÉ une ligne que des `mission_questions` figées citent.
+    // Un ré-import sans modification réelle aurait fait dériver la banque, en silence
+    // et à chaque passage.
+    ordonnerProfond(question.options),
     question.allowRange,
     question.weight,
     question.scoring === null ? null : ordonnerProfond(question.scoring),
