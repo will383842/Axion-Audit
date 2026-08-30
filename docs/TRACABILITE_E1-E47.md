@@ -43,6 +43,7 @@ L0-b (opérations, 2026-08-28)** · **Gardien : A02**
 | **1ʳᵉ** | **L1** | **`bf7f6ca`** | **figé côté code** (`git status` : seul `docs/ETAT.md` modifié) ; revue croisée rendue **trois fois** (CONFORME AVEC RÉSERVES, réserves fermées, le réviseur ne recommande pas de 4ᵉ passe) — **étape 4 close, l'étape 6 se tient enfin dans l'ordre** | **ACCEPTÉ SOUS RÉSERVE** — voir §F |
 | **1ʳᵉ** | **L0-b** | **`462ba70`** | **propre** (`git status` vide) ; contrôle mené **sur le dépôt ET sur la machine** `axionia-web`, projet `wrunr6mwq2oxqq392i4myzjn`. ⚠️ Deux README ont été réécrits **pendant la passe** par un agent parallèle (§G.6-4) | **REFUSÉ** — voir **§G** |
 | **2ᵉ** | **L0 + L1 + L0-b — REJEU INTÉGRAL DE LA PORTE (09 §4bis)** | **`1c56759`** | **propre** (`git status` vide) et **poussé** (`origin/lot/l0-infra` au même SHA) ; **aucun agent en parallèle** ; 37 commits depuis la passe précédente ; contrôle mené sur le dépôt, sur une base PostgreSQL 16 **créée par le gardien**, et sur `axionia-web` **en lecture seule stricte** | **🟡 ACCEPTÉ SOUS RÉSERVE** — voir **§H** et `docs/portes/PORTE_A_2026-08-27.md` **§9-10** |
+| **1ʳᵉ** | **L2 · L3a · L4 · L0-c/d/e** | **`6b9cc7c`** (`main`) | **propre à l'ouverture** (`git status` vide sur `main`), **et NON à la clôture** : un autre lot (T3, `lot/l2e-t3-users`) a ouvert une branche et écrit dans le **même répertoire de travail** pendant la passe — §B.11.7 bis-2. Le contrôle porte sur le **commit** `6b9cc7c`, jamais sur l'arbre. 61 commits depuis la passe précédente ; aucune mesure sur `axionia-web` | **🟡 ACCEPTÉ SOUS RÉSERVE** — voir **§A.quinquies**, **§B.11** et **§I** |
 
 > **Ce que la 1ʳᵉ passe a appris, et qui vaut règle.** Un contrôle d'acceptation ne se tient pas sur
 > un arbre qui bouge, ni avant la revue croisée. Les deux conditions sont réunies pour la 2ᵉ passe.
@@ -66,6 +67,17 @@ qu'**aucune exigence dont L0 avait la charge n'a été oubliée**.
 > dit **le cœur**, qui est ailleurs. Le lecteur qui confondrait « table créée » et « exigence
 > couverte » se tromperait de 90 % du travail, et le §A.ter chiffre exactement cette distinction.
 
+> **AMENDEMENT DU 2026-08-31 — lots L2, L3a, L4 et incréments L0-c/L0-d/L0-e.** Le tableau ci-dessous
+> porte l'état **après L0-b** (2026-08-28, commit `1c56759`). Il n'est pas réécrit — le mode d'emploi
+> §1 l'interdit — mais il est **AMENDÉ par le §A.quinquies**, qui fait foi pour les 17 exigences qu'il
+> nomme. Deux lignes seulement changent d'**état** et sont donc reprises **en place** ci-dessous :
+> **E21** (→ `couverte`) et **E45** (dont la colonne « reste à faire » promettait L2 et que L2 n'a
+> pas tenue). Pour toutes les autres, la ligne du tableau reste vraie et devient **incomplète** : le
+> §A.quinquies dit ce que L2/L3a/L4 y ajoutent.
+>
+> **Pourquoi cette forme plutôt qu'une réécriture.** Une matrice qui se réécrit perd la seule chose
+> qu'elle sait faire : montrer qu'une exigence a reculé. C'est le mécanisme déjà employé au §H.0.
+
 | #   | Exigence (abrégé)                          | État après **L1**         | Preuve / emplacement                                                                                            | Reste à faire → lot           |
 | --- | ------------------------------------------ | ------------------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------- |
 | E1  | Méthodologie 8+1 blocs                     | **partiellement amorcée** | **Seed exécuté par moi** (`node apps/api/scripts/seed.mjs`) : `blocks=9` (`bloc_1`…`bloc_9`, le 9ᵉ portant l'AI Act) · `services=11` (les 11 fonctions de la taxonomie). DDL : `apps/api/drizzle/0003_questionnaire.sql` (`blocks`), `0001_referentiels.sql` (`services`). Gardé par `apps/api/tests/l1-seed.integration.test.ts` (13 tests verts) | Ciblage par bloc → L3 (M2) · import banque → L4 · restitution par bloc → L10 |
@@ -88,7 +100,7 @@ qu'**aucune exigence dont L0 avait la charge n'a été oubliée**.
 | E18 | Liaison console axion-ia.com               | partiellement amorcée     | L0 : file **`webhooks`** (clés Redis `axion:webhooks:…`) inerte — **nom rectifié au L0-b, §B.3**. L1 : `companies.external_ref` (« id client console, NULL si local ») · `integration_events` (anti-rejeu, `attempts`) | L13                           |
 | E19 | Avant-vente : cadrage → devis              | partiellement amorcée     | `scoping_estimates` · `estimation_params` **seedées (29 clés normées)** — le contrat 11 §5 en réserve la validation à Williams (porté à la porte P-A, point 4) | Simulateur et devis → L2 (étanchéité) · Phase 2 |
 | E20 | Suivi avance/retard temps réel             | partiellement amorcée     | Socle : `mission_rebaselines` (`decision` ∈ `absorbe`/`avenant`/`descope`, §25.1) · `work_assignments.planned_days` | Projection de fin → Phase 2   |
-| E21 | Auditeurs jamais d'accès aux montants      | partiellement amorcée     | La table à cloisonner existe et est **isolée par construction** : `scoping_financials` a pour PK `scoping_estimate_id` (aucune donnée financière dans `missions` ni `scoping_estimates`). **Vérifié par moi en base** : `daily_rates`, `travel_costs`, `total_amount`, `currency` ne vivent que là | **L2** — RBAC serveur, routes admin exclusivement, tentatives d'intrusion croisées (porte **P-B**). **L1 ne prouve rien de l'étanchéité** : il n'y a aucune route |
+| E21 | Auditeurs jamais d'accès aux montants      | ~~partiellement amorcée~~ **`couverte` au 2026-08-31 (§A.quinquies, ligne E21)** | ~~La table à cloisonner existe et est **isolée par construction** : `scoping_financials` a pour PK `scoping_estimate_id` (aucune donnée financière dans `missions` ni `scoping_estimates`). **Vérifié par moi en base** : `daily_rates`, `travel_costs`, `total_amount`, `currency` ne vivent que là~~ — **toujours vrai, mais ce n'est plus le sujet.** Le lot L2 (T5) a livré la route, le dépôt unique et **cinq ceintures** ; la preuve est au §A.quinquies et l'inventaire au §B.11.3 | ~~**L2** — RBAC serveur, routes admin exclusivement, tentatives d'intrusion croisées (porte **P-B**). **L1 ne prouve rien de l'étanchéité** : il n'y a aucune route~~ **FAIT.** Ce qui reste n'est pas du travail, c'est une **vigilance** : la garantie est une propriété du dépôt, pas un livrable clos (§A.quinquies) |
 | E22 | Console de pilotage 7 espaces              | non commencée             | Coquille annotée : `apps/hq/src/App.tsx`, `apps/hq/vite.config.ts` (base `/hq/`)                                  | L7-min · Phase 2              |
 | E23 | Hyper intuitif, novice < 30 min            | non commencée             | —                                                                                                                 | L5 (porte P-C, A54)           |
 | E24 | Validation obligatoire de chaque étape     | partiellement amorcée     | `step_validations` avec **énumération FERMÉE** `step_code` ∈ 8 codes (§32.2, P1-1), `was_override` + `override_reason` (dérogation tracée) · `users.usage_profile` DEFAULT `'guide_strict'` (§19.1) — **valeur par défaut vérifiée en base** | Verrous et transitions gardées → L3/L5 |
@@ -112,7 +124,7 @@ qu'**aucune exigence dont L0 avait la charge n'a été oubliée**.
 | E42 | RGPD renforcé (pseudonymisation, rétention)| partiellement amorcée     | L0 : redaction pino, file **`purges`** (clés Redis `axion:purges:…`) — **nom rectifié au L0-b, §B.3**. **L1 : les supports de purge et de rétention existent** — `activity_log` (§10.4), `attachments.purge_after DATE NULL` (purge audio), `processed_ops.processed_at` (rétention 30 j), `llm_calls`. `app_settings` porte les seuils et durées de purge | **Politique de rétention `activity_log` réellement appliquée → L2** (un job, pas une colonne) · pseudonymisation 2 passes → L11 |
 | E43 | **Exécutabilité autopilote**               | **partiellement amorcée** | **APPORT L0-b, et c'est le défaut le plus coûteux du dépôt qui tombe ici.** L'image de l'API **déclarait `db:migrate` sans embarquer ni `scripts/` ni `drizzle/`** ; or `infra/scripts/deploy.sh` appelle exactement cette commande à son étape 2/5 (`deploy.sh:125` en dry-run, `:131` en application) — **l'étape de migration du déploiement n'aurait jamais fonctionné, ni en staging NI EN PRODUCTION**. **Vérifié réparé par moi dans l'image en ligne** : `ls` dans le conteneur `api` du staging montre `scripts/{migrations,seed,db-generate}.mjs` et les **12** fichiers `drizzle/*.sql`. Deuxième apport : `scripts/prepare-husky.mjs` (78 l.) lève l'**hypothèse non écrite** sur l'environnement de construction (Coolify pose `NODE_ENV=production`, pnpm saute alors TOUTES les dépendances de développement — `tsc` compris) ; la CI ne posait pas cette variable, le défaut était donc invisible. Troisième : `check-jonction.mjs` cesse de lire la **prose** comme du code — un garde-fou qui punit ceux qui documentent. L0 : versions épinglées, conventions API §3, 40 gabarits, `ETAT.md`. **L1 : les seeds sont codables et rejouables** (`apps/api/scripts/seed.mjs` — **empreinte md5 par table identique aux passages 1, 2 et 3, mesurée par moi**), l'exécuteur de migrations est réversible et transactionnel (`apps/api/scripts/migrations.mjs`, `--check`/`--down`/`--down-to 0`), `processed_ops` (contrat d'ops 11 §4) est en base, et `apps/api/scripts/db-generate.mjs` refuse une migration sans descente | Contrat d'ops exploité → L6 · format export de secours → L5c |
 | E44 | UX/UI 2026-2027 (tokens, police locale)    | partiellement amorcée     | `packages/ui/src/tokens.ts` (tokens chiffrés) · garde-fou **CT-1-CDN vert** (police auto-hébergée, aucun CDN)      | Grille §33 (4 états, raccourcis, écran partagé) → L5 · desktop-first → L7 |
-| E45 | Pilotage humain (habilitation, cockpit)    | **partiellement amorcée** — **part L1 satisfaite et prouvée** | `users.habilitated_at TIMESTAMPTZ NULL` livré (`0001_referentiels.sql`), et **posé par le seed sur le compte admin fondateur** — l'anti auto-verrouillage du §34.4. **Vérifié par moi après un seed neuf** : `role=admin habilitated_at=2026-08-27 20:47:13+00 is_active=true`. Sans cela, personne n'aurait pu s'affecter la première mission. Aussi : `mission_users.role_on_mission` (`lead`…), `work_assignments` (plan de charge §34) | Refus serveur d'affectation si `habilitated_at` NULL → **L2** · cockpit « Aujourd'hui » → L5 (§34.2) · espace Équipe → Phase 2 |
+| E45 | Pilotage humain (habilitation, cockpit)    | **partiellement amorcée** — **part L1 satisfaite et prouvée** | `users.habilitated_at TIMESTAMPTZ NULL` livré (`0001_referentiels.sql`), et **posé par le seed sur le compte admin fondateur** — l'anti auto-verrouillage du §34.4. **Vérifié par moi après un seed neuf** : `role=admin habilitated_at=2026-08-27 20:47:13+00 is_active=true`. Sans cela, personne n'aurait pu s'affecter la première mission. Aussi : `mission_users.role_on_mission` (`lead`…), `work_assignments` (plan de charge §34) | ⚠️ **PROMESSE NON TENUE PAR L2, mesurée le 2026-08-31.** ~~Refus serveur d'affectation si `habilitated_at` NULL → **L2**~~ — **L2 a livré la LECTURE, pas le REFUS.** `apps/api/src/auth/depot.ts` projette `habilitatedAt` dans `UtilisateurAuthentifie.habiliteLe`, et **`grep -rn habiliteLe apps/api/src` ne rend que les deux lignes de sa propre déclaration** : aucun chemin de code ne le consulte. La tâche T3 (CRUD users, habilitation §34.4) n'est **pas livrée** et ses trois silences de spécification attendent Williams (`DECISIONS.md` 2026-08-30 « Le CRUD users n'est pas spécifié : onze silences »). **Reporté à L2b** · cockpit « Aujourd'hui » → L5 (§34.2) · espace Équipe → Phase 2 |
 | E46 | Bout en bout opérationnel (calendrier, CSV)| partiellement amorcée     | Burn-down tenu (`docs/journal/2026-08-27.md`, **désormais suivi par git** — le défaut relevé en §D.6 est levé) · `org_units` (cible de l'import CSV) | Format CSV d'arbre → L3 · butoir L8 |
 | E47 | Profondeur fonctionnelle + conventions     | partiellement amorcée     | L0 : conventions git/DECISIONS matérialisées, sceau du pack. **L1 : la gouvernance `DECISIONS.md` est MÉCANISÉE** — `pnpm check:decisions` (**44 entrées, toutes au format 11 §9bis**, mesuré par moi ; **éprouvé** : entrée hors format injectée → RC=1). C'est exactement ce que le §D.4bis appelait de ses vœux, et ce qui manquait au L0. · `questions.code`/`version` (support de l'import §36.4) | **Écart de gouvernance F-7 : le lot L1 a été développé sur la branche `lot/l0-infra`** · export ZIP §36.3 → L7-min · import banque §36.4 → L4 |
 
@@ -177,6 +189,60 @@ Ce qui change est ailleurs, et c'est ce que la ligne L0 du fichier 07 engageait 
 **Le mouvement net du lot est donc à deux sens, et il faut les nommer tous les deux** : E17, E33, E36
 et E43 avancent réellement et par mesure ; **E35 recule**, parce qu'un déploiement réel a montré que
 la chaîne de sauvegarde, prouvée en bac à sable, ne s'installe pas d'elle-même sur une machine.
+
+## A.quinquies — ÉTAT APRÈS L2, L3a, L4 ET L0-c/d/e (2026-08-31) — **la table qui fait foi pour les 17 exigences ci-dessous**
+
+**Périmètre : `1c56759..HEAD`, 61 commits, 59 fichiers ajoutés et 65 modifiés.** Méthode inchangée
+depuis le lot L0 : **l'annotation `// Traçabilité : E__` ne vaut pas preuve.** Ce qui est neuf à cette
+passe, et qui change la nature du contrôle, c'est qu'une partie des rattachements de L2 **a déjà été
+arbitrée nominativement** — `DECISIONS.md` du 2026-08-29, « À quelle exigence se rattache le socle
+d'autorisation, et que faire des 25 fichiers qui citaient E5 ? ». Je ne réouvre pas cet arbitrage : je
+vérifie que le code livré s'y conforme, et je dis là où il le dépasse.
+
+**Conditions de mesure.** Poste de développement, **Node v24.19.0 — toujours hors de l'épingle 11 §1**
+(`>=22.11.0 <23`) ; Docker 29.7.2 ; aucune mesure sur `axionia-web` à cette passe (aucun accès pris).
+Ce qui n'a pas été mesuré est dit au §B.11.7, pas passé sous silence.
+
+| #   | Exigence (abrégé)                          | État au 2026-08-31 | Ce que L2 / L3a / L4 / L0-c-d-e y ajoutent — et ce qui manque encore |
+| --- | ------------------------------------------ | ------------------ | -------------------------------------------------------------------- |
+| E6  | Hors ligne total, PC ET tablette           | partiellement amorcée | **Socle de données seul, et il s'élargit.** Migration `0013` livre `attachment_uploads` (05 §9.6, envoi par morceaux) : le pack exigeait « la liste des chunks reçus », une reprise « qui n'envoie QUE les manquants » et un 409 portant les chunks à réémettre — **aucune table ne portait cet état**, et le scénario §9.8 « reprise d'un envoi interrompu à 80 % » impose qu'il **survive** à une coupure, donc qu'il soit persistant. La colonne est **un tableau d'index reçus, pas un compteur** : « n morceaux reçus » ne permettrait pas de dire *lesquels*. Le pack ne nommant ni table ni champ, la forme est une **décision** tracée (`DECISIONS.md` 2026-08-31). **Rien de la PWA n'existe** : ni Workbox, ni Dexie, ni écran → L5 |
+| E7  | Remontée continue dès qu'il y a du réseau  | partiellement amorcée | Socle élargi par `0013` : `answer_revisions` est **généralisée en place** (`answer_id` nullable, `entity_type`/`entity_id`) au lieu d'être renommée — l'archive du §9.3 couvre désormais autre chose qu'une réponse. ⚠️ **Défaut évité et instructif** : `entity_type DEFAULT 'answer'` avait été écrit, et la convention T12 l'interdit ; avec ce défaut, une révision d'entretien dont l'écriture aurait omis le type **serait devenue silencieusement une révision de réponse** — l'archive créée pour empêcher les pertes silencieuses les aurait produites. C'est `pnpm schema:diff` qui l'a vu. Moteur de sync → **L6** |
+| E9  | Multi-consultants, sync sans conflit       | partiellement amorcée | **Le vocabulaire de la propriété existe ; aucune route ne l'emploie encore.** `apps/api/src/auth/politique.ts` déclare `proprietaire_session {parametreSession}` comme l'un des cinq types de politique, et le crochet `onRoute` **refuse le démarrage** si le paramètre nommé n'est pas dans l'URL. Mais la politique dit *qui entre*, pas *ce que le SQL ramène* : le fichier l'écrit lui-même — « une porte fermée ne trie pas le courrier ». `attachment_uploads.created_by NOT NULL` applique §9.9 aux chunks, **par décision** (le pack ne dit pas si la règle de propriété couvre les morceaux binaires ; la lecture qui protège a été retenue). Arbitrage LWW et isolation par lignes → **L6** |
+| E10 | Banque de questions unique versionnée      | partiellement amorcée | **APPORT L4, et le critère du fichier 07 est tenu.** `apps/api/scripts/import-banque-questions.mjs` (764 l.) importe CSV/JSON **en deux passes** : passe 1 valide l'intégralité en mémoire et **n'écrit rien**, passe 2 écrit en **une seule transaction** si et seulement si zéro erreur — l'atomicité §36.4 est une propriété de construction, pas une intention. `--versionner` crée une **nouvelle ligne** `version+1` et archive l'ancienne (jamais de modification en place, ce dont le figeage M2 dépendra). Jeu de recette livré : **9 fixtures** (`recette-complete.csv`/`.json` couvrant les 11 types de réponse, `recette-virgule-bom.csv`, et **6 fixtures de REFUS** — entêtes, structure, atomicité, barème, ancres, numéro de ligne). **21 tests d'intégration, dont 18 `@critique`**, écrits après coup par un autre agent : **ils ont trouvé deux vrais défauts**, dont les ancres §32.4 saisies en CRLF — *la forme qu'Excel produit* — rejetées par un contrôle bloquant. Back-office → L9 · les ~200 questions réelles ne sont **pas** un critère du lot (07 §35.1) |
+| E13 | Écran 3 zones, enregistrement continu      | partiellement amorcée | Socle élargi par `0013` : `attachments.updated_at` (déduit du 05) et `attachments.created_by NOT NULL` avec la règle de propriété « le rattachement sinon l'auteur » (**décision**, le pack ne tranchait pas). Écrans → **L5** |
+| E17 | Stack imposée (Hetzner, Docker, PG, Fastify, Vite/React) | partiellement amorcée | **APPORT L3a** : Zod est branché sur **les deux** compilateurs de Fastify (`setValidatorCompiler` / `setSerializerCompiler`, `apps/api/src/http/zod.ts`) — les routes déclarent des schémas **nus**, sans JSON Schema ni double déclaration. Fastify 5 ne sert plus deux sondes mais **six routes réelles** (§B.11.1). ⚠️ **Réserve neuve, §I.3** : l'en-tête de `zod.ts` justifie l'absence du crochet d'obligation par une prémisse **devenue fausse** |
+| E19 | Avant-vente : cadrage → devis              | partiellement amorcée | Première lecture réelle du volet financier d'un cadrage (`GET /v1/scoping/:id/financials`), et le contrat de forme est partagé (`packages/shared/src/scoping.ts`). Les `NUMERIC` restent des **chaînes** de bout en bout : les convertir en `number` perdrait de la précision **sur un devis signé**, et le ferait silencieusement. Les **29 `estimation_params`** seedées ne sont toujours lues par **aucun** code : simulateur et devis → Phase 2 |
+| E21 | Auditeurs jamais d'accès aux montants      | ✅ **couverte** | **SEULE EXIGENCE QUI CHANGE D'ÉTAT À CETTE PASSE.** Le libellé du fichier 08 est « RBAC routes + colonnes, **testé** » — les trois termes sont tenus. **Cinq ceintures**, nommées à l'identique dans les trois fichiers concernés : ① la route porte `roles:['admin'], financier:true` et le socle **refuse de démarrer** si une route n'a pas de politique ; ② `lireFinanciersDuCadrage(_contexte: ContexteAdmin, …)` — l'argument **n'est lu par aucune ligne** de la fonction, sa seule raison d'être est la signature : la jointure ne se refuse pas à l'exécution, **elle ne compile pas** chez un appelant sans la marque, et cette marque est un `unique symbol` **non exporté** (un booléen `estAdmin:true` se passe de bonne foi, une marque se **reçoit**) ; ③ balayage des sources — `scopingFinancials` n'est nommé que par ce dépôt ; ④ **balayage sentinelle à l'exécution** sur le registre `onRoute`, qui interroge **les routes qui existent** et non celles auxquelles on a pensé, avec cartographie obligatoire des paramètres pour ne pas verdir sur une pluie de 404 ; ⑤ `response[200]` en `strictObject`. **Preuve exécutée** : `apps/api/tests/l2-crochets.integration.test.ts`, **38 cas dont 17 `@critique`** — `consultant`, `analyste` et `lecteur` sont refusés en **403 et jamais 401** (un 401 dirait « authentifie-toi », donc « réessaie ») ; ceinture 4 `@critique` : « aucune route ne laisse sortir un montant ». Et le vrai piège est fermé : ce n'est pas la table interdite, c'est **sa voisine** `scoping_estimates`, à **une jointure** des montants, que toute route de cadrage à venir lira légitimement | **Rien n'est dû — mais rien n'est acquis.** E21 n'est pas un livrable clos, c'est une **propriété** que les ceintures ③ et ④ re-prouvent à chaque lot. Elle **retombe** à `partiellement amorcée` le jour où une route de cadrage atteint `scoping_financials` hors du dépôt unique, ou publie un montant. Le seuil de couverture 90 % s'applique aux deux globs (`domaines/scoping/**` **et** `routes/scoping.ts`) |
+| E31 | Généricité absolue (aucune réf. client)    | partiellement amorcée | Le garde-fou mécanique a **cessé d'être une déclaration** : `scripts/check-invariants.mjs` est désormais gardé par **49 cas d'injection** (`scripts/garde-fous-invariants.test.ts`, écrits par A75) qui l'exécutent depuis un dépôt git **jetable** — témoin sain vert, chaque mutation rouge. Les 9 fixtures L4 sont génériques (`REC-*`, aucun nom d'entreprise). ⚠️ **R-6 INCHANGÉE et toujours due par Williams** : le job `invariants` lit `AXION_CLIENTS_SURVEILLES` depuis un secret de dépôt et **échoue volontairement** sans liste — **tant que le secret n'existe pas, la CI est rouge au merge** |
+| E33 | Sécurité / RGPD                            | partiellement amorcée | **L'APPORT LE PLUS LOURD DE LA PASSE, et il est réel.** Domaine d'authentification complet : Argon2id (`hash-wasm`, m=19456/t=3/p=1) avec **empreinte-leurre consommée dans TOUS les cas**, y compris compte inconnu — l'oracle temporel avait été **mesuré** (450 ms contre 203 ms) avant d'être fermé par un préchauffage à l'enregistrement des routes ; jeton d'accès JWT HS256 portant **l'identité et jamais les droits** ; jeton de rafraîchissement **opaque** (32 octets, empreinte HMAC-SHA256 pour rester cherchable par égalité indexée) ; rotation dans **une seule transaction** avec `SELECT … FOR UPDATE`, et un rejeu hors fenêtre de grâce **révoque toute la famille** (06 §10.1). Le socle relit `users` **en base à chaque requête authentifiée** — un jeton de 15 min ne permet pas la désactivation « instantanée » qu'exige 06 §10.1 ; compte inconnu et compte désactivé rendent le **même** message. Quota `/v1/auth/*` 10 req/min **par IP**, et il n'est réel que parce que `trusted_proxies` est posé **sur les deux blocs** du Caddyfile : sans cela Caddy ≥ 2.7 remplace `X-Forwarded-For`, `request.ip` devient constant et le plafond n'est plus qu'un **seau global** — un déni de service à coût nul. **R-4 EST LEVÉE** : `packages/shared/src/redaction.ts` (796 l.), qui n'avait **aucun test** à la porte P-A, en a **29 dont 19 `@critique`** (`apps/api/src/redaction-journal.test.ts`). ⚠️ **Ce qui reste dû, et qui n'est pas mince** : chiffrement local terrain → L5 · consentements et purges → L11 · **l'authentification de la console (cookies httpOnly + en-tête anti-CSRF, 11 §3) n'est PAS livrée** — seul le Bearer existe, `@fastify/cookie` est hors de la liste §1 et le point est escaladé à Williams sous l'étiquette « L2b » (`DECISIONS.md` 2026-08-30) · contrôle nominatif des 12 familles §30.3 (Williams) |
+| E35 | Scalabilité + sauvegardes 3-2-1 testées chaque nuit | partiellement amorcée | **APPORT L0-d, et il ferme un faux vert qui durait depuis le lot L0.** Le workflow `nightly-restore-test.yml` existait ; ses **deux étapes utiles étaient sautées à chaque exécution**, faute des réglages de l'environnement `ops` — « le garde portait le nom d'une garantie et n'avait jamais exécuté une seule ligne utile ». `infra/scripts/restore-test-ci.sh` (76 l.) est l'enveloppeur que la directive `command=` d'`authorized_keys` rend nécessaire ; il **publie sa propre empreinte SHA-256 en première ligne**, que la CI compare au fichier versionné. Run **`33322880502`** sur `main` = `e234756` : **toutes les étapes exécutées, aucune sautée**, clé confirmée restreinte, empreinte identique, Postgres restauré et **comparé table par table**, MinIO redémarré sur les données restaurées. `restore-test.sh` a été réécrit pour éprouver le **dispositif déployé** (conteneur `axion-sauvegarde`) et non plus un dispositif qui ne tourne nulle part. ⚠️ **R-2 EST TOUJOURS OUVERTE, et je l'ai remesurée moi-même : voir §I.1** |
+| E36 | Exécutable par lots avec critères          | partiellement amorcée | **312 tests unitaires exécutés par moi, 11 fichiers, RC=0, aucun skippé** (`pnpm test:unit`, 25,4 s) — contre 179 à la porte P-A. Le dépôt compte désormais **14 garde-fous** contre 10. ⚠️ **Et c'est là que la mesure est mauvaise : R-5 a EMPIRÉ, pas progressé — voir §I.4.** Trois écarts de câblage neufs, mesurés : `check:porte-journal` n'est **dans aucun workflow ni aucun hook** ; `check:executabilite`, `schema:diff` et `check:schema-inventaire` sont en CI mais **absents de `pnpm verify`** ; `infra/scripts/empreinte-docker.sh` (392 l.) n'est câblé **nulle part** |
+| E37 | Scoring intégralement spécifié             | partiellement amorcée | **APPORT L4, exactement la part que le fichier 07 confie à L4 : le contrôle BLOQUANT à l'import.** `packages/shared/src/banque-questions.ts` (1 275 l.) est le **seul** garde-fou de forme du JSONB `questions.scoring` : 11 types de réponse, barème refusé si le poids n'est pas > 0, **ancres de cotation 1/3/5 exigées sur toute échelle** (§32.4), drapeaux rouges. `analyserLigneBanque` rend **tous** les défauts d'une ligne et jamais le premier seulement — un rapport qui s'arrête à la première erreur fait recommencer l'opérateur autant de fois qu'il y a de fautes. Second défaut réel trouvé par les tests : `empreinteQuestion` **n'ordonnait pas `options`**, ce qui aurait fait **dériver la banque à chaque ré-import** ; corrigé par `ordonnerProfond` sur `options` **et** `scoring`. Barème, agrégation, complétude, divergence → **L8** |
+| E42 | RGPD renforcé (pseudonymisation, rétention)| partiellement amorcée | **APPORT L2 (T4) : `activity_log` a une porte d'écriture UNIQUE, et c'est une propriété prouvée.** `domaines/journal/depot.ts` est le seul fichier du dépôt qui écrive dans la table, et il n'expose **qu'un `INSERT`** — ni `update`, ni `delete` : l'invariant 7 est tenu par **absence de surface**, pas par une contrainte SQL (`REVOKE UPDATE, DELETE` est du DDL, donc du fichier 04, et il est **porté à Williams**). `packages/shared/src/journal.ts` (500 l.) ferme le piège que personne ne voit : `meta` est du JSONB, il accepte tout, et **la redaction de pino ne protège rien sur un `INSERT`**. Deux ceintures : une **union discriminée par `action`** en `strictObject` (12 actions, une clé non prévue est *refusée*, pas ignorée) et un contrôle de **forme** indépendant du schéma — 64 caractères maximum (couvre un UUID, exclut un JWT), motif `[A-Za-z0-9_.:/-]`, profondeur 3, 32 éléments. Une `meta` refusée est remplacée par `META_REFUSEE` **mais la ligne est écrite quand même** : perdre l'événement entier est exactement ce qu'un attaquant chercherait à provoquer. **11 tests d'intégration** (`l2-journal`), dont la « pureté d'`activity_log` » que la note L2 §5 promettait et que personne n'avait écrite. ⚠️ **Le garde-fou de cette propriété, `scripts/check-porte-journal.mjs` (268 l.), n'est câblé NI en CI NI dans le hook de pré-commit** : rien ne le déclenche sur une *pull request* (§I.2). Rétention 12 mois et anonymisation à 90 j = **un job, pas une colonne** : non livré · pseudonymisation 2 passes → L11 |
+| E43 | Exécutabilité autopilote                   | partiellement amorcée | **Les conventions d'API du 11 §3 cessent d'être un texte.** `errors.ts` porte 17 `ERROR_CODES` et leur table de statuts — aucun littéral libre ; la locale française de Zod est appliquée **idempotemment** ; le gestionnaire d'erreurs rend les **chemins** fautifs et jamais les valeurs. Keyset : le contrat de fil vit dans `packages/shared/src/pagination.ts` (30 l., importable par le navigateur) et sa moitié serveur dans `apps/api/src/http/pagination.ts` (287 l.) — curseur **composite** parce qu'un tri sur `created_at` seul n'a pas d'ordre total et ferait sauter ou répéter des lignes, c'est-à-dire le défaut même qu'on reproche au décalage. **APPORT L0-c** : `scripts/check-executabilite-scripts.mjs` — les **seize** scripts du dépôt étaient enregistrés en mode `100644` (le dépôt se développe sous Windows, où le bit d'exécution n'existe pas) : **aucun clone Linux ne pouvait en exécuter un seul**, et cela touchait `sauvegarde.sh` et `backup-postgres.sh`. ⚠️ Ce garde-fou est **le seul du dépôt sans aucune ligne de traçabilité** (§B.11.6) |
+| E45 | Pilotage humain (habilitation, cockpit)    | partiellement amorcée | ⚠️ **RECUL PAR RAPPORT À CE QUI ÉTAIT PROMIS — voir la ligne E45 du tableau §A, reprise en place.** L2 devait livrer le refus serveur d'affectation si `habilitated_at` est NULL ; **il a livré la lecture et pas le refus**. Le socle cite pourtant E45 dans deux en-têtes (`auth/depot.ts`, `auth/politique.ts`) et `check:tracabilite` les accepte — c'est **exactement l'angle mort n° 1 que ce garde-fou déclare lui-même** : il juge la cohérence d'une glose, jamais la réalité d'un comportement (§I.5) |
+| E47 | Profondeur fonctionnelle + conventions     | partiellement amorcée | **Le format d'import de la banque (§36.4) est livré et éprouvé** — c'est nommément l'un des objets d'E47 au fichier 08 (« format d'import de la banque, contrôle des ancres »). Gouvernance : `check:decisions` sur **94 entrées**, toutes au format 11 §9bis. Et **le sens 2 de la présente matrice est mécanisé pour la première fois** : `scripts/check-tracabilite-exigences.mjs` (404 l.) refuse un numéro d'exigence inexistant (C1) et une **glose** qui ne partage aucun mot avec le libellé officiel (C2). Il est né d'un défaut réel : **25 fichiers du socle d'authentification citaient `E5 (RBAC serveur systématique)`** — E5 désigne « scoring par unité, heatmap ». La matrice aurait validé un socle d'autorisation contre une carte de chaleur. Export ZIP §36.3 → L7-min |
+
+### A.quinquies bis — Synthèse chiffrée au 2026-08-31
+
+| État                    | Nombre | Écart depuis le 2026-08-28 |
+| ----------------------- | ------ | -------------------------- |
+| `couverte`              | **1**  | **+1** — E21, et c'est la première du projet |
+| `partiellement amorcée` | **44** | −1 (E21 en sort) |
+| `non commencée`         | **2**  | inchangé — E22 (console 7 espaces), E23 (novice < 30 min) |
+
+**Une seule exigence passe à `couverte` en trois lots, et ce chiffre est le bon.** Il serait facile
+d'en annoncer quatre ou cinq : E10 a son import, E42 sa porte d'écriture, E37 son contrôle bloquant,
+E33 son socle d'authentification. Aucune ne tient l'énoncé complet de son libellé — E10 n'a pas de
+back-office, E42 n'a **pas** de job de rétention, E37 n'a ni barème ni agrégation, E33 n'a ni
+chiffrement local ni purges ni authentification de console. Le vocabulaire de ce fichier n'a que trois
+valeurs **précisément pour rendre cette inflation impossible**. E21 passe parce que son libellé — « RBAC
+routes + colonnes, testé » — est intégralement satisfait et éprouvé, pas parce qu'elle a beaucoup avancé.
+
+**Ce que la ligne L2 du fichier 07 exigeait et qui n'est PAS livré**, dit ici plutôt que découvert à la
+porte : le **CRUD users** (tâche T3) avec le garde-fou de réinitialisation §9.7 et la règle
+d'affectation §34.4. Le fichier 07 en fait un critère d'acceptation du lot (« reset refusé si outbox
+non vide signalé »). **La porte P-B ne peut pas cocher ce critère.**
 
 ---
 
@@ -555,6 +621,186 @@ est un rattachement qui n'a pas eu lieu.
 
 ---
 
+# B.11 — INVENTAIRE DES LOTS L2, L3a, L4 ET DES INCRÉMENTS L0-c/d/e (`1c56759..6b9cc7c`)
+
+**Périmètre du contrôle : `git diff --name-status 1c56759..HEAD` → 59 fichiers ajoutés, 65 modifiés,
+61 commits.** Méthode inchangée depuis le lot L0.
+
+> **Ce que cette passe fait pour la première fois, et pourquoi elle a coûté cher.** Les passes
+> précédentes ont toutes tenu le sens 2 sur le **diff d'un lot**. Celle-ci le tient en plus sur
+> **l'état complet du dépôt** : les **130 fichiers de code** de `apps/*/src`, `apps/*/tests`,
+> `apps/api/{scripts,drizzle}`, `packages/*/src`, `infra/scripts`, `scripts/` et `e2e/` ont été
+> énumérés mécaniquement, et **l'en-tête de traçabilité de chacun a été lu**. Résultat brut, avant
+> toute interprétation : **84 fichiers portent une ligne `Traçabilité :`, 46 n'en portent aucune.**
+>
+> **Ce chiffre n'est pas un verdict** — il ne dit pas qu'il y a 46 orphelins. La plupart de ces 46
+> fichiers sont rattachés **ailleurs** : les 13 migrations et les 11 suites L1 le sont au §B.9, les
+> 3 fichiers du worker au §B.10, les 12 scripts d'`infra/scripts/` au §B.4 par une ligne
+> `Applique : <sections du pack>` qui joue le même rôle sous un autre nom. **Mais il dit une chose
+> vraie et gênante** : `pnpm check:tracabilite`, le seul instrument mécanique du sens 2, ne voit
+> **aucun** de ces 46 fichiers — il n'a pas de citation à vérifier. C'est l'angle mort n° 6 que le
+> script déclare lui-même, et il porte sur **35 % du code du dépôt**.
+
+## B.11.1 — LES SIX ROUTES (contrôle 11 §8.6)
+
+Le dépôt passe de **2 routes à 6**. C'est le premier lot où le 11 §8.6 a réellement quelque chose à
+contrôler. Vérifié par balayage exhaustif de `apps/api/src` : aucune autre déclaration de route
+n'existe, et le worker n'expose **aucun** serveur HTTP.
+
+| Méthode + chemin | Fichier | Politique d'accès | Rattachement | Au pack ? |
+| --- | --- | --- | --- | --- |
+| `GET /v1/health` | `routes/sante.ts:83` | `public`, quota **exempté** | **E17, E35** | Non listée §8/§24.2 — **documentée** (11 §8.6) : en-tête du fichier + `apps/api/README.md`. Rattachée au L0 (§B.2) |
+| `GET /v1/health/ready` | `routes/sante.ts:102` | `public`, quota exempté | **E17, E35** | idem |
+| `POST /v1/auth/login` | `domaines/auth/routes.ts:176` | `public`, 10 req/min/IP | **E33, E43** | **OUI — 05 §8.1** |
+| `POST /v1/auth/refresh` | `domaines/auth/routes.ts:198` | `public`, 10 req/min/IP | **E33, E43** | **OUI — 05 §8.1** |
+| `POST /v1/auth/logout` | `domaines/auth/routes.ts:220` | **`authentifie`**, 10 req/min/IP | **E33, E43** | **OUI — 05 §8.1.** Le choix « authentifiée » plutôt que « publique » est arbitré (`DECISIONS.md` 2026-08-29) ; **la note de conception `LOT_L2.md` est périmée sur ce point**, et le dit |
+| `GET /v1/scoping/:id/financials` | `routes/scoping.ts:71` | `roles:['admin']` + `financier:true` | **E21**, E19, E33, E43 | **OUI — 05 §8** (« `/v1/scoping` (+ `/financials`, admin only) ») |
+
+**Six routes livrées, six rattachées, zéro orpheline.** Deux précisions que le contrôle a produites et
+qui ne se devinent pas :
+
+1. **La surface réelle est de 9 entrées, pas 6.** Fastify engendre un `HEAD` pour chaque `GET`, et ces
+   `HEAD` **entrent dans le registre `onRoute`** — donc dans le champ du crochet d'autorisation et du
+   balayage sentinelle. Un contrôle qui aurait compté 6 aurait laissé 3 entrées hors de sa vue.
+   `auth/socle.test.ts` fige la liste des routes **publiques** par un instantané commité
+   (`ROUTES_PUBLIQUES_ATTENDUES`, 6 entrées, `HEAD` compris) : en ouvrir une nouvelle oblige à
+   modifier une liste versionnée, donc à passer en revue croisée.
+2. **Aucune route ne peut naître sans politique.** `enregistrerSocleAutorisation` refuse le démarrage
+   si une route n'a pas de `config.acces`, si une route a été déclarée **avant** le socle
+   (`app.printRoutes()` comparé à `'(empty tree)'`), ou si une entrée du registre est restée
+   `protegee: false`. Ce n'est donc pas une convention : **une route sans politique empêche l'API de
+   démarrer.**
+
+## B.11.2 — LE SOCLE D'AUTHENTIFICATION ET D'AUTORISATION (L2, T1-T2)
+
+**Rattachement déjà arbitré** par `DECISIONS.md` du 2026-08-29 (« À quelle exigence se rattache le
+socle d'autorisation ? »). Je le rappelle parce qu'il est la clé de lecture de tout ce bloc, et parce
+qu'il tranche une question que ce fichier avait laissée ouverte : **aucune des 47 exigences ne
+s'intitule « RBAC ».** « RBAC serveur systématique » est un **invariant** (00_INDEX n° 3), pas une
+exigence. Le mot n'apparaît qu'**une seule fois** dans les 47 libellés, à **E21**. Un socle
+d'autorisation générique n'a donc **pas de domicile propre** : il se rattache honnêtement à
+**E21 + E33 + E45**, jamais à une seule. *Ce n'est pas du code orphelin — c'est une maille lâche de la
+spécification, et elle est portée à Williams à la porte P-B.*
+
+| Artefact | Rattachement | Vérification du gardien | Verdict |
+| --- | --- | --- | --- |
+| `auth/politique.ts` (389 l.) | **E21, E33, E45** | Le socle déclaratif. Vocabulaire en **union discriminée** (`public` · `authentifie` · `roles{roles[],financier?}` · `mission{parametreMission}` · `proprietaire_session{parametreSession}`) — et non un sac d'options facultatives qui autoriserait `type:'roles'` **sans** `roles`. Trois alternatives sont écartées par écrit, dont le décorateur par route (« un opt-in échoue par omission »). L'ordre ① identification → ② quota → ③ autorisation est **garanti par la signature** (le quota est passé en argument, pas posé par un appel voisin) : ③ posé en crochet d'instance passerait **avant** le quota et les jetons invalides cesseraient d'être comptés. La branche `default` est un **échec fermé doublé** — `const politiqueInconnue: never` pour la compilation **et** un `throw FORBIDDEN` pour l'exécution : sans elle, un `type` hors union ne matchait aucun `case`, la fonction se terminait normalement et **la requête passait** | **rattaché** |
+| `auth/contexte.ts` (58 l.) | **E21, E33** | `unique symbol` **non exporté** — la marque `ContexteAdmin` est infabricable hors du module, même par assertion de type. Son unique producteur rend `null` pour tout rôle ≠ `admin` | **rattaché** |
+| `auth/identite.ts` (120 l.) | **E33** | Crochet ① : lit le Bearer, pose `request.identite`, **et ne refuse jamais** — l'échec est *mémorisé* pour que ③ le lève **après** le quota. Sans cela, un flot de jetons invalides ne serait pas compté | **rattaché** |
+| `auth/jetons.ts` (151 l.) | **E33, E43** | JWT HS256 en liste blanche, `requiredClaims: ['sub','exp']`, vérification cryptographique **puis** validation Zod de la charge. Le jeton porte l'identité, **jamais les droits**. Porte `FENETRE_GRACE_ROTATION_MS = 60_000` — pansement **daté**, réexamen porte L6a / 2026-11-29, arbitré parce que le code citait auparavant un arbitrage **qui n'existait pas** (`DECISIONS.md` 2026-08-29) | **rattaché** |
+| `auth/erreurs-jeton.ts` (70 l.) | **E33, E43** | Reconnaît les erreurs **par code** (`FST_JWT_*`), pas par statut. Module séparé pour rester importable par `erreurs.ts` sans tirer `config.ts` | **rattaché** |
+| `auth/depot.ts` (62 l.) | **E33**, ~~E45~~ | Lecture du **chemin chaud** : `id, role, is_active, habilitated_at` par clé primaire à chaque requête. Ne charge ni `email`, ni `name`, ni `password_hash` — « on ne charge pas ce qu'on n'autorise pas ». ⚠️ **La citation E45 est en AVANCE sur le code : `habiliteLe` est projeté et n'est consulté par aucun chemin d'exécution (§I.5).** Le fichier reste rattaché par E33 | **rattaché**, citation E45 **prématurée** |
+| `domaines/auth/depot.ts` (259 l.) | **E33** | Dépôt de connexion et de `refresh_tokens`. **Ce n'est pas un doublon du précédent**, et l'en-tête porte une section « Pourquoi ce dépôt n'est pas `auth/depot.ts` » : élargir la lecture du chemin chaud pour y ajouter `password_hash` ferait **circuler un secret dans tous les gestionnaires de routes** au bénéfice d'une route sur cent. `lireJetonPourRotation` porte le `FOR UPDATE` ; `revoquerJetonDeLUtilisateur` porte la propriété **dans le `WHERE`** | **rattaché** |
+| `domaines/auth/mots-de-passe.ts` (134 l.) | **E33** | Argon2id `hash-wasm` (11 §1), empreinte-**leurre** consommée y compris sur compte inconnu, préchauffage à l'enregistrement des routes. **L'oracle temporel a été mesuré avant d'être fermé** : 450 ms contre 203 ms. Rend `false` et jamais une exception sur empreinte illisible | **rattaché** |
+| `domaines/auth/jetons-rafraichissement.ts` (126 l.) | **E33** | Jeton **opaque** (32 octets), empreinte HMAC-SHA256 déterministe pour rester cherchable par égalité indexée. Poivre = réemploi de `JWT_REFRESH_SECRET`, arbitré comme **dette de Phase 2** assumée (`DECISIONS.md` 2026-08-29) | **rattaché** |
+| `domaines/auth/service.ts` (413 l.) | **E33, E43** | Les six issues de la rotation rendues comme un **verdict** (`succes|inconnu|expire|grace|reutilisation`) traduit en `AppError` **hors** transaction — pour que la révocation de famille soit **validée avant** d'être annoncée | **rattaché** |
+| `domaines/auth/routes.ts` (247 l.) | **E33, E43** | Voir §B.11.1. Migration déclarative du 2026-08-30 : les `parse()` manuels ont disparu au profit de `schema: {body, response}`. **Elle a resserré une garantie** — le typage a refusé un `boolean` élargi là où le contrat déclare le littéral `true` | **rattaché** |
+| `packages/shared/src/auth.ts` (164 l.) | **E33, E43** | Contrat des 3 routes. `authSessionSchema` n'expose **que `userId`** de l'utilisateur | **rattaché** |
+| 5 fichiers de test unitaire (`socle`, `crochets`, `jetons`, `quota`, `jetons-rafraichissement`) + `l2-auth-routes` (29 cas) + `l2-crochets` (38 cas) | **E33, E21, E36** | **Exécutés par moi, verts** (§C.quater). Le croisement 09 §5.6 est **déclaré** dans les en-têtes, pas prouvé : les commits portent un auteur git unique (§B.11.7-4) | **rattachés** |
+
+## B.11.3 — L'ÉTANCHÉITÉ FINANCIÈRE (L2, T5) — la seule exigence qui passe à `couverte`
+
+| Artefact | Rattachement | Vérification | Verdict |
+| --- | --- | --- | --- |
+| `domaines/scoping/financiers.depot.ts` (117 l.) | **E21**, E19, E33 | **Le seul fichier du dépôt qui nomme `scopingFinancials`** — propriété vérifiée, pas convention. `SELECT` **énuméré colonne par colonne** : un `select()` implicite ramènerait toute colonne ajoutée demain au fichier 04. `daily_rates` (JSONB, rendu `unknown` par Drizzle) est **validé** par un schéma au lieu d'un `as`. Ne journalise pas — une lecture qui échoue n'est pas une consultation | **rattaché** |
+| `routes/scoping.ts` (125 l.) | **E21**, E19, E33, E43 | Ceinture d'exécution : `contexteAdmin === null` ⇒ échec, **on ne fabrique pas un contexte**. Cadrage inconnu et cadrage sans volet financier rendent le **même** `NOT_FOUND` — la distinction n'aurait aucune valeur pour un administrateur et obligerait à lire la table voisine. Journalise `financier.consultation` **après** succès et **jamais le montant** | **rattaché** |
+| `packages/shared/src/scoping.ts` (131 l.) | **E21**, E33, E43 | Les `NUMERIC` restent des **chaînes**. Porte les listes que les garde-fous interrogent (`CHAMPS_FINANCIERS_SURVEILLES`, deux graphies) | **rattaché** |
+| `tests/aide/etancheite-sources.ts` (225 l.) · `tests/aide/sentinelle-financiere.ts` (389 l.) | **E21, E36** | **Des moteurs, pas des tests** : aucun `expect`, aucun `it` — ils *rapportent*, les assertions vivent dans le fichier de test écrit par un autre agent (09 §5.6). La sentinelle ferme nommément le défaut du balayage naïf : substituer un UUID quelconque aux paramètres d'URL rend **404 partout**, aucune sentinelle n'apparaît, et le test est **vert parce qu'il n'a rien traversé** | **rattachés** |
+
+## B.11.4 — LE JOURNAL D'ACTIVITÉ (L2, T4)
+
+| Artefact | Rattachement | Vérification | Verdict |
+| --- | --- | --- | --- |
+| `domaines/journal/depot.ts` (98 l.) | **E42**, E33 | **La seule écriture d'`activity_log` du dépôt, et elle n'expose qu'un `INSERT`** — invariant 7 tenu par absence de surface. `id` en UUID v7 **applicatif** (11 §2) | **rattaché** |
+| `domaines/journal/service.ts` (201 l.) | **E42**, E33 | La porte unique. Cinq étapes, dont `normaliserIp` — `request.ip` n'est **pas** validé par Fastify, et la colonne est sous régime RGPD (06 §10.4) depuis une route **publique**. **Ne lève jamais** ; ne journalise dans pino que `{action, entityType, entityId}` | **rattaché** |
+| `packages/shared/src/journal.ts` (500 l.) | **E42**, E33 | Le catalogue fermé. **Deux journaux, deux régimes** : `ip` est masquée dans pino et **écrite** en base. L'interdiction de tracer l'adresse tentée sur un échec de connexion — « un échec sur une adresse inconnue créerait une trace sur une **non-personne** » — est rendue **inexprimable** : aucune variante du catalogue n'a de champ d'adresse | **rattaché** |
+| `scripts/check-porte-journal.mjs` (269 l.) | **E42**, E33 | Le balayage qui ferme la porte de derrière : le type protège ce qui compile, pas le SQL brut ni l'assertion. `UPDATE`/`DELETE` n'ont **aucun** fichier autorisé. ⚠️ **NON CÂBLÉ EN CI (§I.2)** | **rattaché**, non déclenché |
+| `apps/api/tests/l2-journal.integration.test.ts` (11 cas, 7 `@critique`) | **E42, E36** | Livre le contrôle de « pureté d'`activity_log` » que la note L2 §5 promettait et que personne n'avait écrit. Le glob a été déclaré **sous le seuil** (74,67 % lignes) et **CI rouge assumée**, puis tenu par des **tests** — 93,33 % / 95,24 % — jamais par un rétrécissement de périmètre | **rattaché** |
+| `apps/api/src/redaction-journal.test.ts` (29 cas, 19 `@critique`) | **E33, E42** | **Ferme la réserve R-4 de la porte P-A** : `redaction.ts` était la politique de journalisation unique de l'API *et* du worker, 796 lignes, **zéro test** | **rattaché** |
+
+## B.11.5 — SOCLE HTTP (L3a), IMPORT DE LA BANQUE (L4), MIGRATION `0013`
+
+| Artefact | Rattachement | Vérification | Verdict |
+| --- | --- | --- | --- |
+| `apps/api/src/http/zod.ts` (161 l.) | **E43**, E17 | Branché et **réellement consommé** par `app.ts` et les deux greffons de routes. Reconnaît un schéma **par capacité** (`safeParse`) et non par `instanceof`. La validation d'entrée rend `{error}` et ne `throw` jamais — sinon 500. ⚠️ **Sa justification est périmée (§I.3)** | **rattaché** |
+| `apps/api/src/http/pagination.ts` (287 l.) | **E43** | Moitié **serveur** du keyset ; **pas** un doublon de `packages/shared/src/pagination.ts` (30 l.), qui est le contrat de fil importable par le navigateur et qu'il **importe**. Curseur composite, sur-lecture `limit+1`, plafond **revérifié** (un service appelé en code contournerait sinon la borne). ⚠️ **AUCUN CONSOMMATEUR À CE JOUR** — couvert par la soupape, voir §B.11.7-1 | **rattaché**, **non consommé** |
+| `apps/api/scripts/import-banque-questions.mjs` (765 l.) | **E10, E37, E47** | Rattachement **arbitré** (`DECISIONS.md` 2026-08-29) : ces deux fichiers citaient auparavant `E4` (« arbre organisationnel »). Import **en deux passes** — la passe 1 n'écrit rien, la passe 2 est une transaction unique : l'atomicité §36.4 est une propriété de construction | **rattaché** |
+| `packages/shared/src/banque-questions.ts` (1 276 l.) | **E10, E37, E47**, E43 | Seul garde-fou de forme du JSONB `scoring`. **Consommé uniquement par le script d'import** — aucune route ne le lit (M2 est en L3d) : socle anticipé, pas orphelin | **rattaché**, consommateur unique |
+| **9 fixtures** `apps/api/fixtures/banque-questions/` | **E10, E37** · critère L4 du 07 (« JEU DE RECETTE ») | 2 fixtures de recette (dont une en `,`+BOM, la forme qu'Excel produit) et **6 de REFUS**. Génériques (`REC-*`) : invariant 2 respecté | **rattachées** |
+| `apps/api/tests/l4-import-banque.integration.test.ts` (21 cas, 18 `@critique`) | **E10, E37, E36** | **Le lot L4 avait été livré sans aucun test.** Ceux-ci, écrits après coup par un autre agent, ont trouvé **deux vrais défauts**, prouvés **rouges avant correctif** | **rattaché** |
+| `apps/api/drizzle/0013_sync_colonnes_manquantes.sql` (206 l.) | **E6, E7, E9, E13**, E42 | **Amendement du fichier 04**, ordonné par Williams et tracé **avant** régénération du sceau. La migration distingue par écrit ce qui **se déduit** du pack et ce qui **se décide** — « les fondre ferait passer une décision pour une lecture ». Livre la **44ᵉ table**, `attachment_uploads`. Motif de calendrier assumé : ajoutées ici, ces colonnes coûtent une migration sur une base **vide** ; découvertes au L6, elles la coûteraient sur des données de collecte réelles | **rattachée** |
+
+## B.11.6 — L'OUTILLAGE : GARDE-FOUS ET SCRIPTS D'INFRASTRUCTURE (L0-c, L0-d, L0-e)
+
+| Artefact | Rattachement | Vérification | Verdict |
+| --- | --- | --- | --- |
+| `scripts/check-tracabilite-exigences.mjs` (405 l.) | **E36, E43, E47** | **Mécanise le sens 2 de ce fichier, pour la première fois.** Il est né d'un défaut réel et mesuré. Sa valeur est d'exiger une **glose en français** plutôt qu'un fichier de correspondance : la glose transforme une citation *invérifiable* en citation *falsifiable* sans créer de seconde source de vérité. Échappatoire `citation-exemple` **plafonnée à 12** et **toujours comptée, même en vert**. **Exécuté par moi, RC=0** | **rattaché** |
+| `scripts/check-graphe-modules.mjs` (1 003 l.) | **E36, E43, E47** | Le graphe d'imports dans les deux sens : C1 « le pendu » (import vers un chemin que git ignore) et C2 « l'orphelin » (module de `src/` que personne n'importe). C1 ferme un défaut **réel** (`b24b98c`) passé au vert sous un `typecheck` de pré-commit — *`tsc` lit le disque, pas l'index*. **Fiche `AMELIORATIONS.md` du 2026-08-29 (étage 1, ~0,3 j)** | **rattaché** |
+| `scripts/modules-en-attente.md` (44 l.) | **la soupape elle-même** | **Donnée**, pas code : unique lecteur `check-graphe-modules.mjs`. Suit l'idiome `CLAUDE.md` §6 — un registre, un plafond (**5 entrées**), un arbitre : péremption **14 jours**, et une entrée dont le module est *désormais atteint* est **refusée** (« retire la ligne »), seul mécanisme qui empêche une entrée de dormir. Motif du refus de `DECISIONS.md` : ce registre doit **rétrécir**, or `DECISIONS.md` est append-only | **rattaché** |
+| `scripts/garde-fous-proxy-de-confiance.test.ts` (965 l., 29 cas) | **E33** (invariant 3, plafonds serveur), E17, E43 | Garde **deux fichiers pour une seule garantie** (`Caddyfile` + `app.ts`). Deux verrous anti-faux-vert : les cas « état du dépôt » exigent d'avoir trouvé ≥ 1 `reverse_proxy`, et deux blocs rejouent le défaut sur des fichiers synthétiques **pour prouver que le lecteur mord** | **rattaché** |
+| `infra/scripts/restore-test-ci.sh` (77 l.) | **E35** · invariant 8 · critère 2 de P-A | Voir §A.quinquies E35. **Publie sa propre empreinte SHA-256 en première ligne** ; clé SSH sans shell, sans lecture de fichier, sans redirection de port — **trois clés, trois pouvoirs disjoints**. ⚠️ **Aucune ligne `Traçabilité :` ni `Applique :` (§B.11.7-2)** | **rattaché**, non déclaré |
+| `infra/scripts/deploy-staging.sh` (215 l.) | **E36** (critère L0 n° 4), E33 | Lit trois lignes sur **stdin, validées une par une**, et **rien** de `SSH_ORIGINAL_COMMAND` (« surface d'injection pour zéro gain »). Empreinte publiée et **comparée par la CI**, qui échoue en cas d'écart — la parade au fait que « quelqu'un peut modifier la version en production sans qu'aucune trace n'en subsiste ». ⚠️ **Aucune ligne `Traçabilité :` ni `Applique :`** | **rattaché**, non déclaré |
+| `scripts/check-executabilite-scripts.mjs` (118 l.) | **E43, E36** *(proposé, non déclaré)* | Les **seize** scripts du dépôt étaient en `100644` : aucun clone Linux n'en exécutait un seul, `sauvegarde.sh` et `backup-postgres.sh` compris. En CI (`ci.yml:566`), **absent de `pnpm verify`**. ⚠️ **Seul garde-fou du dépôt sans AUCUNE ligne de traçabilité (§B.11.7-3)** | **NON DÉCLARÉ** |
+| `.claude/settings.json` (6 l.) | **E43** · `DECISIONS.md` 2026-08-30 | Autorise `Bash(gh secret set:*)`. **Ce n'est pas la fiche A-001** (hooks `PreToolUse`, étage 2, non arbitrée — la confusion serait grave, 11 §8-7). C'est un élargissement de permission couvert par l'autorisation permanente accordée par Williams le 2026-08-30 (« secrets du staging »). **Rattaché, mais silencieusement** : le fichier ne porte aucune trace de l'arbitrage qui l'autorise | **rattaché**, non déclaré |
+
+## B.11.7 — **CODE ORPHELIN — À RATTACHER OU À RETIRER**
+
+> **La règle (09 §3.6) et sa contrepartie.** *Tout code livré se rattache à une exigence E1-E47 ou à
+> une fiche `AMELIORATIONS.md` — le code orphelin est REFUSÉ.* La contrepartie, qui vaut règle pour la
+> suite : **un rattachement inventé est pire qu'un orphelin déclaré**, parce qu'il fait disparaître la
+> question. Rien de ce qui suit n'est forcé ; ce que je ne sais pas rattacher, je le nomme.
+
+**Un seul véritable orphelin, et six réserves de déclaration.**
+
+| # | Artefact | Constat | Ce que je propose, et ce que je ne décide pas |
+| --- | --- | --- | --- |
+| **1** | `apps/api/src/http/pagination.ts` (287 l.) | **Livré, correct, et sans aucun appelant** — aucune des 6 routes n'est une route de liste | **PAS ORPHELIN, et c'est mécanisé** : entrée unique de `scripts/modules-en-attente.md`, consommateur nommé (L3b, `GET /v1/companies` puis `GET /v1/missions`), déclarée le **2026-08-29**, donc **périmée le 2026-09-12**. Passée cette date, `check:graphe-modules` refuse — c'est le bon dispositif, et il n'a pas besoin de moi |
+| **2** | `infra/scripts/restore-test-ci.sh` · `infra/scripts/deploy-staging.sh` | Deux scripts **neufs** qui, seuls parmi les 12 d'`infra/scripts/`, ne portent **ni** `Traçabilité :` **ni** `Applique : <section>`. Leurs 10 voisins en portent une | Le rattachement est **établi par leur prose** (invariant 8 et critère 2 de P-A pour l'un ; 02 §30.6 et le critère L0 n° 4 via le workflow appelant pour l'autre) — **il n'est simplement pas déclaré**. Je propose **E35** et **E36** ; *la ligne se pose dans le fichier, pas ici* |
+| **3** | `scripts/check-executabilite-scripts.mjs` (118 l.) | **Aucune ligne de traçabilité, aucune entrée `DECISIONS.md`, aucune fiche `AMELIORATIONS.md`.** Ses 13 frères en portent tous une. Il est pourtant câblé en CI et ferme un défaut mesuré (16 scripts inexécutables) | Rattachement **évident par famille** — **E43** (exécutabilité) et **E36** (outillage de lot) — mais *évident* n'est pas *déclaré*, et le §B.10.3 a déjà établi qu'**un rattachement par contagion est un rattachement qui n'a pas eu lieu**. **À écrire dans le fichier avant la porte P-B** |
+| **4** | `infra/scripts/empreinte-docker.sh` (393 l.) | **LE SEUL VRAI ORPHELIN.** Trois constats cumulés : (a) il n'est câblé **nulle part** — ni script `package.json`, ni étape de CI, ni cron ; il n'est *cité* qu'en commentaire (`deploy-staging.yml:99`) et dans `infra/README.md` ; (b) son ancre principale est **`infra/COHABITATION_AXIONIA_WEB.md §3bis`**, un document **interne au dépôt et non une section du pack** — il est le seul artefact dans ce cas ; (c) aucune fiche `AMELIORATIONS.md` ne le couvre (la fiche du 2026-08-29 qui le mentionne dit qu'il « mesure le disque, pas le déploiement », ce qui le constate sans le rattacher) | **RATTACHEMENT NON ÉTABLI.** Je ne le force pas vers E17 ou E33 : la chaîne qui l'y mènerait passe par un document que le pack ne connaît pas, et c'est précisément le raisonnement qui avait fait tomber `axion:sauvegardes` au lot L0 (§B.3). **Trois issues, et elles appartiennent à A01/Williams** : lui donner une ancre de pack, ouvrir une fiche `AMELIORATIONS.md` d'étage 2, ou **le retirer** |
+| **5** | `packages/shared/src/index.ts` · `packages/ui/src/index.ts` | Barrels sans en-tête de traçabilité | **Non orphelins** : un barrel n'a pas d'exigence propre, il hérite de ce qu'il réexporte. Aucune action |
+| **6** | `packages/ui/src/tokens.css` · `polices.css` | Aucun en-tête de traçabilité, mais des en-têtes **narratifs** explicites (invariant 4, 11 §1, §33.1) | **Rattachés à E27/E44** par `tokens.ts`, dont ils sont le miroir, et **gardés par un test** (`tokens.test.ts` échoue si les deux fichiers divergent). Aucune action |
+| **7** | Les **13 migrations** `apps/api/drizzle/*.sql` | Aucune ne porte de ligne `Traçabilité :` | **Rattachées table par table au §B.9.1** (43 tables) et ici pour `0013` (44ᵉ). Aucune action — mais c'est **le plus gros bloc invisible à `check:tracabilite`** |
+
+### B.11.7 bis — Deux constats de gouvernance que le sens 2 a produits
+
+1. **La règle de croisement (09 §5.6) n'est toujours pas vérifiable par moi.** Comme au §H.8, les
+   61 commits portent un auteur git unique. Les fichiers de test **déclarent** leur auteur croisé
+   (« écrit par A75, qui n'est l'auteur d'aucun des deux scripts testés ») — une déclaration, pas une
+   preuve. Elle vaut mieux que le silence, et elle ne vaut pas davantage.
+2. **Deux lots ont travaillé simultanément dans le MÊME répertoire de travail pendant cette passe.**
+   Constaté, non déduit : au démarrage `git status` était vide sur `main` ; en fin de passe l'arbre est
+   sur une branche `lot/l2e-t3-users` **créée pendant mon contrôle**, avec `packages/shared/src/users.ts`
+   et `apps/api/src/domaines/users/` non suivis, et `packages/shared/src/index.ts` modifié. **Effet
+   mesuré** : `pnpm check:graphe-modules` sort en **RC=1** sur cet arbre (`index.ts:15 → ./users.js`,
+   fichier présent sur le disque et **absent de l'index git**). **Ce rouge n'est PAS celui de `main`** —
+   `git show main:packages/shared/src/index.ts` n'exporte pas `./users.js`, et le garde-fou est vert sur
+   le commit contrôlé. **Mais c'est exactement le défaut que C1 a été écrit pour attraper**, et le
+   `CLAUDE.md` §4 l'interdit en toutes lettres : *« jamais deux lots en parallèle sur les mêmes
+   fichiers »*. **À porter à la porte P-B.**
+
+## B.11.8 — VERDICT ANTI-ORPHELIN DES LOTS L2 / L3a / L4 / L0-c-d-e
+
+**Artefacts soumis à la règle (routes, tables, écrans, jobs) : 6 routes + 1 table (`attachment_uploads`)
++ 4 colonnes + 0 écran + 0 job = 11. Rattachés : 11. Orphelins : 0.**
+
+**Artefacts hors du champ strict, inventoriés quand même** — 44 modules de source, 9 fixtures,
+13 fichiers de test, 4 garde-fous nouveaux, 2 scripts d'infrastructure, 1 fichier de configuration
+d'autopilote : **1 orphelin déclaré** (`infra/scripts/empreinte-docker.sh`, §B.11.7-4) et
+**3 réserves de déclaration** (§B.11.7-2 et 3).
+
+**Ce que le contrôle a coûté, et pourquoi il fallait le payer.** Le rattachement le plus difficile n'a
+pas été un fichier : c'est la constatation qu'**aucune exigence ne s'appelle « RBAC »** alors que
+25 fichiers en citaient une. Le dépôt avait déjà le rattachement juste — `E21` est cité par
+`0006_rapport_cadrage_pilotage.sql:96` depuis le lot L1 ; **c'est le lot L2 qui a inventé le sien**, et
+il l'a fait dans la direction la plus coûteuse : une citation qui *a l'air* faisant autorité et qui
+pointe ailleurs transfère au lecteur une confiance qu'elle n'a pas gagnée. Le garde-fou né de ce
+défaut ne le rattraperait pas deux fois de la même façon — mais il déclare lui-même qu'il ne
+distingue **jamais** un rattachement juste d'un rattachement faux. **Le sens 2 reste un travail humain ;
+la machine n'en a mécanisé que la moitié la plus facile.**
+
+---
+
 # C. DEFINITION OF DONE TRANSVERSE — QUAND CHAQUE LIGNE DEVIENT EXIGIBLE
 
 Une DoD dont on ne sait pas quand elle s'applique ne s'applique jamais. Ce tableau est le
@@ -625,6 +871,33 @@ assorties d'une réserve** (README non relu par le gardien, migrations mesurées
 > de DoD : c'est l'état de la machine sur laquelle ces lignes ont été mesurées (§G.2). Une DoD toute
 > verte au-dessus d'un PostgreSQL qui redémarre toutes les dix secondes est le même genre d'objet que
 > « Up 13 hours (healthy) » au-dessus d'un worker mort.
+
+## C.quater — LA DoD RECOCHÉE AU 2026-08-31 (L2 / L3a / L4 / L0-c-d-e), PAR EXÉCUTION
+
+**Ce que j'ai lancé moi-même, et ce que je n'ai pas lancé, est distingué ligne à ligne.** Une DoD
+recopiée d'une passe précédente n'est pas une DoD recochée.
+
+| Ligne de la DoD (09 §3) | Verdict au 2026-08-31 | Preuve exécutée par moi, ou motif |
+| --- | --- | --- |
+| lint + typecheck stricts = 0 erreur | ⬜ **NON RECOCHÉE PAR MOI** | Je ne les ai **pas** lancés, et je préfère le dire : l'arbre de travail portait, en fin de passe, le code non commité d'un **autre lot** (§B.11.7 bis-2). Un `lint` vert ou rouge sur cet arbre n'aurait rien dit du commit contrôlé. **À rejouer sur un arbre propre avant la porte P-B** |
+| tous les tests verts, **aucun skippé** | ✅ **COCHÉE — et le chiffre a bougé : 356 → 567** | **567 tests lancés par moi, RC=0** : `pnpm test:unit` → **312** tests / **11** fichiers (25,4 s) · `pnpm test:integration` → **255** tests / **16** fichiers (465,0 s). `check:no-skipped-tests` → **vert, 30 fichiers analysés, liste d'exceptions vide** ; `check:test-projects` → **vert, 30 fichiers, tous captés** (unit 11 · integration 16 · playwright 3), **aucun orphelin**. **Non lancé : `pnpm test:e2e`** (Playwright, 3 fichiers) — il exige une construction complète, et l'arbre n'était pas propre |
+| **couverture ≥ 90 % sur les modules critiques — MESURÉE** | 🟡 **EXIGIBLE POUR LA PREMIÈRE FOIS, ET NON MESURÉE PAR MOI** | **C'est la ligne neuve de cette porte** : elle était « sans objet » depuis le lot L0 faute de module critique, et **L2 en livre cinq**. `.github/coverage-critical-paths.json` est **alimenté** — `apps/api/src/auth/**`, `domaines/auth/**`, `domaines/scoping/**`, `routes/scoping.ts`, `domaines/journal/**` — et la **ceinture 2** du job `coverage` a fait son travail : elle a **signalé au lot L2 que du code critique était livré hors liste**. Deux points que le fichier documente lui-même et qu'il faut lire : (a) le glob `journal` a été déclaré **sous le seuil** (74,67 % lignes / 46,15 % branches), **CI rouge assumée**, puis tenu **par des tests** (93,33 % / 95,24 %) et jamais par un rétrécissement ; (b) ⚠️ **TROU DE MESURE CONNU** — `packages/shared` s'exporte par `./dist/index.js`, les tests exécutent donc le **JS compilé** et **tous** les fichiers de `packages/shared/src/**` sont rapportés à **0,00 %**. `journal.ts` (500 l.) et `redaction.ts` (796 l.) **ne peuvent pas** être soumis au seuil aujourd'hui. Leur absence de la liste est un **défaut remonté**, pas une dispense. **Je n'ai pas relancé `pnpm test:coverage`** |
+| migrations up/down exécutées **sur staging** | ⬜ **non rejouée par moi** | Aucune mesure sur `axionia-web` à cette passe. La chaîne up/down/up est en revanche **rejouée en local dans les 255 tests d'intégration** (`l1-migrations`, 6 cas, dont le dry-run `db:migrate:check` qui n'applique rien sur une base vierge) |
+| tout écran livré avec ses 4 états (§33.2) | ➖ **sans objet — exigible à L5** | **Vérifié, non supposé** : `git diff --name-only 1c56759..HEAD -- apps/field/src apps/hq/src` → **0 fichier**. Les deux `App.tsx` sont les coquilles du lot L0 |
+| axe-core vert | ➖ **sans objet — exigible à L5** | Même motif |
+| `@filrouge` vert sur **FIL-TPE ET FIL-GC** | ✅ **COCHÉE** | Les tests `@filrouge` sont dans les 255 d'intégration relancés par moi (`l1-filrouge`, vert). **F-2 reste levée** : `check:test-projects` ne cherche plus les deux missions dans la concaténation de tous les tests, mais **uniquement dans les fichiers portant `@filrouge`** |
+| README de l'app à jour | ⬜ **non vérifié par moi** | Non mécanisable, et je préfère le dire plutôt que de le laisser croire — c'est la même réserve qu'au §G.6 et au §H.9-3 |
+| aucun TODO/FIXME sans entrée DECISIONS/AMELIORATIONS | 🟡 **COCHÉE SOUS RÉSERVE — recomptée : toujours 3** | **Ni plus ni moins qu'aux deux passes précédentes**, et **les lots L2/L3a/L4 n'en ajoutent aucun**. `infra/scripts/smoke-test.sh:141` `TODO(L2)` adossé à sa décision — **et il devient exigible** : le lot L2 est livré, l'étape « login » du §30.6 peut désormais s'écrire. `apps/api/scripts/db-generate.mjs:108` et `:112` `TODO(A12)` restent des **marqueurs de gabarit** dans la chaîne que le générateur écrit. **Reste à régulariser** |
+| diff schéma-vs-04 = **zéro écart** | ✅ **COCHÉE, et le schéma a bougé** | Le lot amende le fichier 04 (migration `0013`, 4 colonnes + 1 table), sceau du pack **régénéré après la trace, jamais avant**. `schema:diff` **17/17 zéro écart** et suite L1 **57/57**, cycle descente/montée compris, rapportés à `docs/ETAT.md` ; de mon côté, `l1-schema-diff` (méta-test, 25 mutations) et `l1-schema-drizzle` sont **verts dans les 255**. **Je n'ai pas relancé `pnpm schema:diff` seul** (il exige une base peuplée hors Testcontainers) |
+
+**Bilan au 2026-08-31 : 4 lignes cochées · 2 cochées sous réserve · 2 sans objet avec leur lot ·
+3 non recochées par moi et nommées comme telles · 0 NON SATISFAITE.**
+
+> **Et une phrase qu'il faut écrire, comme au §C.ter.** « Zéro ligne NON SATISFAITE » est exact et
+> **incomplet**. Ce qui manque à cette porte n'est pas une ligne de DoD : c'est **un critère
+> d'acceptation du fichier 07** — le CRUD users (T3) que la ligne L2 exige nommément, avec son
+> garde-fou de réinitialisation §9.7. Une DoD verte au-dessus d'un lot dont un cinquième du périmètre
+> n'est pas livré est le même genre d'objet que « Up 13 hours (healthy) » au-dessus d'un worker mort.
 
 ---
 
@@ -1402,6 +1675,9 @@ la porte ne peut pas être signée tant qu'ils tiennent.**
 | 2026-08-27 | 1ʳᵉ | **L1** | **`bf7f6ca`** | **ACCEPTÉ SOUS RÉSERVE** — les **4 critères du fichier 07 cochés avec preuve exécutée** · **43 tables livrées, 43 rattachées, 0 orpheline** · tous les chiffres recomptés, **aucun faux** · 38 mutations injectées, **38 détectées** · **3 écarts** : **F-1** (invariant 2 non contrôlé en CI — le plus grave), **F-2** (garde-fou `@filrouge` partiellement décoratif), **F-3** (`test:e2e:filrouge` en échec) · 1 écart de gouvernance **F-7** (branche) · 1 ligne de DoD **NON SATISFAITE** (migrations sur staging, dépend de L0-b) |
 | 2026-08-28 | 1ʳᵉ | **L0-b** | **`462ba70`** | **REFUSÉ** — **24 artefacts livrés, 24 rattachés, 0 orphelin** ; **180 tests verts, 0 skippé** ; migrations up/down **rejouées par moi sur staging** ; isolation réseau et sonde du worker **éprouvées par injection sur la machine** — *le code du lot est bon*. **Mais l'environnement qu'il livre ne l'est pas** : le **PostgreSQL du staging se réinitialise 275 fois en 46 minutes** (stanza pgBackRest jamais créée), **archivage WAL à zéro**, **et Docker le déclare `healthy`** — la troisième sonde menteuse du projet (**§G.2**). Le dossier annonçait « 9 services, tous sains ». **Critère L0 n° 1 NON RECOCHÉ** (§G.1) · **critère n° 3 NON SATISFAIT**, `.env` en 644 (§G.5) · garde-fous neufs : **2 injections sur 8 non détectées** dans les versions du lot, **corrigées par deux réécritures NON COMMITÉES** que j'ai rejouées (11/11) mais qui n'ont pas de revue croisée (§G.3) · 3 chiffres faux ou non reproductibles (§G.0) · **contrôle tenu sur un arbre qui bouge — récidive de l'écart V3** (§G.3.4) |
 
+| 2026-08-28 | 2ᵉ | L0+L1+L0-b — **rejeu intégral P-A** | `1c56759` | **🟡 ACCEPTÉ SOUS RÉSERVE** — voir **§H**. 15 artefacts nouveaux, **15 rattachés, 0 orphelin** · F-1/F-2/F-3/F-7 levées · **R-2** (chaîne de sauvegarde absente du chemin de production) et **R-4/R-5** ouvertes |
+| **2026-08-31** | **1ʳᵉ** | **L2 · L3a · L4 · L0-c/d/e** | **`6b9cc7c`** | **🟡 ACCEPTÉ SOUS RÉSERVE — les DEUX sens tenus, et le second sur le DÉPÔT ENTIER pour la première fois.** **6 routes, 6 rattachées** (11 §8.6) · 1 table + 4 colonnes rattachées · **130 fichiers de code énumérés, en-tête lu un par un** · **567 tests exécutés par moi, RC=0, 0 skippé** (312 unitaires + 255 d'intégration) · **E21 passe à `couverte`** — la première du projet. **1 code ORPHELIN déclaré** (`infra/scripts/empreinte-docker.sh`, §B.11.7-4) et **3 réserves de déclaration**. **Réserves** : **(R-9)** E45 — L2 devait livrer le refus d'affectation sur `habilitated_at`, il a livré la **lecture** et le socle cite E45 quand même (§I.5) · **(R-10)** le critère L2 « CRUD users + garde-fou §9.7 » **n'est pas livré** — la porte P-B ne peut pas le cocher · **(R-2 inchangée)** aucun `sauvegarde` ni `createstanza` sur le chemin de production (§I.1) · **(R-5 AGGRAVÉE)** **9 garde-fous sur 14 sans aucun test**, contre 5 sur 10 à P-A (§I.4) · **(R-11)** `check:porte-journal` n'est **dans aucun workflow ni aucun hook** (§I.2) · **(R-12)** deux lots ont travaillé **dans le même répertoire** pendant la passe (§B.11.7 bis-2) |
+
 **Signature du gardien de la spécification :** A02 — **2026-08-28, sur `462ba70` : REFUSÉ.**
 
 **Étape 6 du pipeline NON FRANCHIE pour le lot L0-b.** Le refus ne porte pas sur le travail livré — il
@@ -1622,3 +1898,160 @@ le compose de base ou la surcharge `prod`**, soit **écrire noir sur blanc que l
 cette chaîne** — et en tirer la conséquence sur E35 et l'invariant 8. Le détail du
 verdict, ce qui est réservé et ce qui ne l'est pas, et les six points qui attendent Williams hors du
 dossier, sont dans `docs/portes/PORTE_A_2026-08-27.md` **§9-10**.
+
+---
+
+# I. CE QUE LE SENS 2 A TROUVÉ ET QUE LE SENS 1 NE POUVAIT PAS VOIR (2026-08-31)
+
+> **Pourquoi cette section existe.** Le sens 1 part de l'exigence et cherche le code : il trouve ce
+> qui **manque**. Le sens 2 part du code et cherche l'exigence : il trouve ce qui **ment** — un module
+> qui cite une exigence qu'il ne sert pas, un garde-fou que rien ne déclenche, une justification dont
+> la prémisse a cessé d'être vraie. Les six constats ci-dessous n'auraient été produits par aucun
+> autre chemin. **Deux d'entre eux corrigent ce fichier lui-même.**
+
+## I.1 — **R-2 CONFIRMÉE, ET UNE DE MES PROPRES AFFIRMATIONS ÉTAIT FAUSSE** (E35, invariant 8)
+
+**Le constat de fond tient, et je l'ai remesuré.** Le service `sauvegarde` — passe planifiée, archive
+chiffrée, expédition R2, **sonde**, **coffre des secrets** — est défini dans
+`infra/docker-compose.coolify.yml` et **nulle part ailleurs**. Services de
+`infra/docker-compose.prod.yml` : `postgres`, `redis`, `minio`, `api`, `worker`, `field`, `hq`,
+`caddy`. **Pas de `sauvegarde`.** E35 reste prouvée **sur une cible sur cinq**.
+
+**Mais le §H.3 énonce ce constat avec un argument qui est FAUX, et je le retire.** Il écrit :
+« *aucun de ces trois scripts ne contient une ligne d'expédition hors serveur, de sonde ou de coffre
+(recherche `R2|rclone|mc mirror|expedi` → aucun résultat)* ». **Mesuré aujourd'hui, la recherche rend
+des résultats** : `infra/scripts/backup-postgres.sh:85-87` copie vers la Storage Box Hetzner (étape
+3/5) et `:108-113` exécute un `rclone sync` hebdomadaire hors Hetzner (étape 4/5, sous
+`OFFSITE_RCLONE_REMOTE`) ; `backup-minio.sh` s'annonce dès sa troisième ligne comme une sauvegarde
+« par `mc mirror` ». **Le chemin de production a bien une expédition hors serveur.** De même, le
+`createstanza` que §H.3 laissait croire absent est présent dans le compose **de base**
+(`infra/docker-compose.yml:189`), donc hérité par la surcharge `prod`.
+
+**Ce qui reste vrai après correction est plus précis, et pas moins grave.** Le chemin de production
+n'a **ni sonde de sauvegarde, ni coffre des secrets** (0 occurrence de `passphrase`/`coffre` dans les
+trois scripts) — c'est-à-dire aucun des deux dispositifs qui font qu'une sauvegarde *qui a cessé de
+fonctionner* se remarque. Et il y a pire, que le dépôt écrit lui-même : `infra/README.md` classe le
+chemin « VPS dédié (prod future) » comme **« intégralement JAMAIS JOUÉ »**, et son tableau §7.4 marque
+`backup-postgres.sh`, `backup-minio.sh`, `backup-caddy.sh`, `install-cron.sh` et `restore-test.sh`
+**tous « JAMAIS JOUÉS »**, chacun avec la variable d'environnement qui manque.
+
+**Conséquence sur l'invariant 8**, qui exige une sauvegarde **testée, au présent** : elle est tenue
+sur le staging Coolify et **elle n'est pas tenue sur le chemin qu'une production suivrait**. R-2 ne se
+lève **ni par un redéploiement ni par une réécriture de texte** : il faut **porter le service
+`sauvegarde` sur le compose de base ou la surcharge `prod`**, ou **écrire noir sur blanc que la
+production n'aura pas cette chaîne** et en tirer la conséquence sur E35.
+
+## I.2 — **LE GARDE-FOU D'E42 N'EST DÉCLENCHÉ PAR RIEN** (R-11)
+
+`scripts/check-porte-journal.mjs` (269 l.) est **l'unique mécanisme** qui prouve la propriété centrale
+du lot L2/T4 : `activity_log` n'a qu'une porte d'écriture, et **aucun** fichier n'a le droit d'y faire
+un `UPDATE` ou un `DELETE` (invariant 7). C'est aussi le seul contrôle qui regarde les `.sql` et les
+`.mjs`, que ESLint n'analyse pas.
+
+**Mesuré** : `grep -rn "porte-journal" .github/ .husky/` → **aucune occurrence**. Il n'existe que dans
+l'agrégat local `pnpm verify`. **Rien ne le déclenche sur une *pull request*.**
+
+*C'est la réserve F-1 du lot L1 qui revient sous une autre forme.* F-1 disait : « un garde-fou existait
+et ne tournait nulle part ». La leçon avait été tirée au lot L0-b — les deux contrôles neufs y avaient
+été câblés **dans la CI**, et le §B.10.2 le célébrait. Trois lots plus tard, le garde-fou de l'invariant
+le plus austère du projet est de nouveau hors CI. **Une leçon tirée une fois n'est pas une leçon tenue :
+elle doit être réarmée à chaque lot, exactement comme le dit `.github/coverage-critical-paths.json` —
+« un garde-fou ne se répare pas une fois : il se réarme ».**
+
+Deux écarts jumeaux, moins graves mais de la même famille : `check:executabilite`, `schema:diff` et
+`check:schema-inventaire` sont **en CI et absents de `pnpm verify`** — l'agrégat que le contrat 11 §6
+désigne comme la commande de fin d'incrément **ne rejoue donc pas tout ce que la CI rejouera**. Et
+`infra/scripts/empreinte-docker.sh` (393 l.) n'est câblé **nulle part** (§B.11.7-4).
+
+## I.3 — **UNE JUSTIFICATION DONT LA PRÉMISSE EST DEVENUE FAUSSE** (E17, E43)
+
+`apps/api/src/http/zod.ts` explique pourquoi il ne pose **pas** le crochet `onRoute` qui rendrait la
+déclaration `schema:` in **et** out **obligatoire** sur chaque route (11 §3). Son motif, écrit :
+
+> « *les routes d'authentification du lot L2 valident leurs entrées/sorties DANS le gestionnaire
+> (`loginRequestSchema.parse(requete.body)`) et non dans `schema:`. Un tel crochet les refuserait alors
+> qu'elles tiennent l'exigence.* »
+
+**Cette prémisse n'est plus vraie.** La migration déclarative du 2026-08-30 a supprimé les `parse()`
+manuels : les trois routes de `domaines/auth/routes.ts` déclarent aujourd'hui
+`schema: { body: …, response: { 200: … } }`, et les six routes du dépôt sont désormais soit
+déclaratives, soit dispensées au titre du lot L0 (les deux sondes). **L'obstacle que le fichier invoque
+a disparu ; le fichier l'invoque encore.**
+
+C'est un défaut de traçabilité au sens strict : un lecteur — humain ou agent du lot L3b — ouvre ce
+fichier pour savoir si l'obligation est due, y lit une raison de ne pas la poser, et **ne peut pas
+deviner qu'elle est périmée**. `DECISIONS.md` du 2026-08-29 [L3a] avait pourtant écrit la condition de
+levée en toutes lettres : « *crochet `onRoute` branché seulement au moment de la migration des routes
+L2* ». **La migration a eu lieu. Le crochet est dû.** Ni le fichier ni `DECISIONS.md` ne portent la
+trace de cette échéance atteinte.
+
+## I.4 — **R-5 N'A PAS PROGRESSÉ, ELLE A EMPIRÉ** (E36)
+
+À la porte P-A, la réserve R-5 constatait : « **cinq garde-fous sur dix n'ont aucun test** ». Recompté
+aujourd'hui, garde-fou par garde-fou :
+
+| Ont un test d'injection | N'en ont AUCUN |
+| --- | --- |
+| `check:invariants` · `check:no-skipped-tests` (`garde-fous-invariants.test.ts`, 49 cas) · `check:compose-coolify` · `check:isolation-reseau` (`garde-fous-compose.test.ts`, 47 cas) · `schema:diff` (`l1-schema-diff`, méta-test, 25 mutations) | `check:pack` · `check:decisions` · `check:jonction` · `check:test-projects` · `check:schema-inventaire` **· `check:graphe-modules` · `check:porte-journal` · `check:tracabilite` · `check:executabilite`** |
+
+**5 sur 10 sont devenus 9 sur 14.** Les **quatre garde-fous nés depuis la porte P-A ont tous été livrés
+sans test**, et la liste des non-testés contient désormais :
+
+- **`check:test-projects`**, celui-là même dont F-2 avait démontré le faux vert — *réparé sans test de
+  non-régression*, ce que R-5 signalait déjà et que personne n'a fait depuis ;
+- **`check:porte-journal`**, qui n'a **ni test ni câblage** (§I.2) : il porte une garantie et n'est
+  éprouvé par rien, dans les deux sens du terme ;
+- **`check:tracabilite`**, c'est-à-dire **le garde-fou de ce fichier**. L'instrument qui décide si une
+  citation d'exigence est recevable n'est éprouvé par aucun cas d'injection. Un contrôle qui ne
+  distingue plus rien sortirait **vert**, et c'est exactement le mode de défaillance que ce dépôt
+  poursuit depuis cinq jours — celui de `pg_isready`, de `pgrep -f node` et du test de restauration
+  nocturne qui sautait ses étapes.
+
+**Le dépôt a donc doublé son outillage de garde et divisé par deux sa couverture de garde.**
+
+## I.5 — **UNE CITATION EN AVANCE SUR SON CODE** (E45, R-9)
+
+`apps/api/src/auth/depot.ts` porte `// Traçabilité : E33 (…), E45 (habilitation).` Le fichier lit bien
+`users.habilitated_at` et le projette dans `UtilisateurAuthentifie.habiliteLe`.
+
+**Mesuré** : `grep -rn "habiliteLe" apps/api/src --include=*.ts` rend **deux lignes, et ce sont les deux
+lignes de sa propre déclaration** (`depot.ts:37` le déclare, `depot.ts:54` le sélectionne). **Aucun
+chemin d'exécution ne le consulte.** Le crochet d'autorisation ne s'en sert pas ; aucune route ne
+refuse un compte non habilité.
+
+Or E45 dit, au fichier 08 : « habilitation **obligatoire** (`habilitated_at`) », et la ligne E45 du §A
+promettait explicitement « **refus serveur d'affectation si `habilitated_at` NULL → L2** ».
+**La colonne est lue, la règle n'est pas appliquée.**
+
+**Ce n'est pas de la mauvaise foi, et c'est ce qui le rend intéressant.** La citation est *anticipée* :
+l'auteur a livré la moitié dont il avait besoin (charger la donnée) et cité l'exigence entière. Et
+`pnpm check:tracabilite` **l'accepte**, parce que la glose « habilitation » partage un mot avec le
+libellé « habilitation obligatoire ». **C'est textuellement l'angle mort n° 1 que ce garde-fou déclare
+lui-même** : *« il ne distingue pas un rattachement JUSTE d'un rattachement FAUX […] `E33 (sécurité)`
+sur un fichier qui ne fait rien de sécurisé passera. Seule la revue croisée voit cela. »*
+
+**Le garde-fou avait raison sur sa propre limite, et cette passe en fournit le premier exemplaire réel.**
+La conséquence de gouvernance est simple et vaut règle : **citer une exigence dont on ne livre qu'une
+partie exige de dire laquelle** — la forme `E45 (habilitation : lecture seule, refus dû à L2b)` aurait
+été honnête ; `E45 (habilitation)` ne l'est pas.
+
+## I.6 — CE QUE JE N'AI PAS PU VÉRIFIER, ET QUI DOIT ÊTRE DIT
+
+1. **`pnpm lint`, `pnpm typecheck`, `pnpm test:e2e` et `pnpm test:coverage` n'ont pas été lancés.**
+   L'arbre de travail portait le code non commité d'un autre lot (§B.11.7 bis-2) ; un vert comme un
+   rouge y aurait été ininterprétable. **Ils sont dus sur un arbre propre avant la porte P-B.**
+2. **Aucune mesure sur `axionia-web`.** Tout ce que ce document affirme de la machine est **repris** de
+   la passe du 2026-08-28 (§H) ou de `docs/ETAT.md`, et jamais présenté comme mesuré par moi. Le
+   contrôle d'empreinte image-vs-dépôt, **toujours dû** depuis §H.4, reste dû.
+3. **La couverture ≥ 90 % n'est pas mesurée par moi** (§C.quater). Les chiffres cités
+   (93,33 % / 95,24 % sur `domaines/journal/**`) viennent de `.github/coverage-critical-paths.json`.
+   **C'est la première porte où cette ligne est exigible : elle doit être mesurée, pas reprise.**
+4. **Le contenu réel de `apps/api/fixtures/banque-questions/*` n'a pas été confronté aux ~200 questions
+   rédigées** — le fichier 07 §35.1 l'exclut explicitement du périmètre de L4, et je le note pour que
+   personne ne coche ce qui n'a pas été demandé.
+5. **La règle de croisement 09 §5.6 reste invérifiable** (§B.11.7 bis-1).
+
+**Signature du gardien de la spécification :** A02 — **2026-08-31, sur `6b9cc7c` : 🟡 ACCEPTÉ SOUS
+RÉSERVE**, avec **un code orphelin déclaré**, **trois réserves de déclaration**, **six réserves
+nommées (R-2, R-5 aggravée, R-9 à R-12)** et **un critère du fichier 07 non livré** (CRUD users, T3).
+Étape 6 du pipeline **franchie sous réserve**.
