@@ -1516,3 +1516,74 @@ le lit dans une boucle rend **silencieusement zéro résultat**. `| tr -d '\r'` 
 📌 **COORDINATION** : la session `…-00` reste en **lecture seule**, un seul pilote. Une session `…-85`
 est apparue et **n'appartient à aucune des deux** — Williams est interrogé ; le merge attend cette
 confirmation.
+
+---
+
+## 2026-08-30 — [PORTE P-A FRANCHIE · MERGE FAIT] — étape pipeline 7/7 close
+
+Dernier commit vert : c797dfc · **`origin/main` = c797dfc, 148 commits** · Tag **`v0.l0`** posé et poussé · PR **#1 MERGED**
+Branche de travail : lot/l0-infra (identique à `main`) · Arbre : propre
+Tâche en cours : aucune. **Le socle de Phase 1 est sur `main`.**
+Prochaine action : ouvrir **L3b** sur une branche `lot/l3b` branchée depuis `main` — la discipline « une branche par lot » du §7 devient enfin applicable, puisqu'il existe une base.
+Tests rouges connus : **aucun.** CI verte, 18 jobs sur 18 (`8 · deploy-staging` sauté hors de `main`, c'est sa condition).
+
+✅ **LA COUVERTURE A ÉTÉ MESURÉE POUR DE VRAI, POUR LA PREMIÈRE FOIS DE L'HISTOIRE DU DÉPÔT.**
+Vérifié étape par étape et non sur le verdict global du job — un `if:` non satisfait aurait rendu vert
+un job qui n'a rien fait :
+`Parité des variables` → **success** · `Mesurer la couverture et appliquer le seuil` → **success** ·
+`Aucun module critique encore livré (L0)` → **skipped** (c'est la bonne branche qui est sautée).
+Le seuil de 90 % tient sur les quatre globs critiques.
+
+⛔ **CE QUE LE BLOC DE 07h40 DISAIT ET QUI ÉTAIT FAUX — rappel, car il reste dans ce fichier.**
+Il diagnostique un blocage mémoire. **Il n'y en a jamais eu.** La cause était un écart de formatage sur
+`DECISIONS.md` : `lint-staged` tue les tâches concurrentes dès qu'une échoue, donc le `[SIGKILL]` sur
+eslint était la **conséquence**. *Le mot « tué » ne nomme pas son tueur.*
+
+🔎 **QUATRE DÉFAUTS EMPILÉS DERRIÈRE UNE SEULE LIGNE ROUGE**, chacun masquant le suivant — signature
+d'un contrôle qui n'a **jamais** fonctionné :
+1. un module critique livré hors seuil (corrigé le matin) ;
+2. le job de couverture **ne construisait pas les paquets** — l'étape que j'avais ajoutée le matin à
+   deux jobs sur trois, alors que **l'encadré que j'avais écrit au-dessus** décrivait mot pour mot le
+   symptôme. *Une correction qu'on n'applique pas partout où elle vaut n'est pas une correction, c'est
+   un déplacement du défaut* (deuxième occurrence en 24 h, après le détecteur de secrets) ;
+3. les treize variables du seed et les services absents ;
+4. le garde de présence du rapport **inatteignable** : il vivait après un `set -e` qui sortait avant
+   lui, donc son message n'a jamais pu s'afficher dans le seul cas où il servait.
+
+Et le garde de parité écrit pour empêcher la récidive portait **deux défauts de plus** : une borne
+ancrée sur le **contenu** d'une ligne (13 attendues → **43** dès qu'on y ajoute un drapeau), et
+**cinq apostrophes françaises que j'ai insérées dans un programme `awk` délimité par des
+apostrophes** — le garde mourait en code 2 avant tout verdict. **Ma vérification ne l'a pas vu parce
+qu'elle testait une RECONSTRUCTION de l'extraction, pas celle du fichier.** Corrigé, puis vérifié en
+**extrayant le script du YAML par le parseur et en l'exécutant** : « Parité vérifiée : 13 variable(s) ».
+
+📌 **LE MERGE : TROIS COUCHES DE PROTECTION, AUCUN CONTOURNEMENT.**
+CI de branche → CI de **pull request** (distincte, et exigée à juste titre) → réglages du dépôt →
+**historique linéaire** sur `main`, que personne n'avait vu. Les commits de fusion et le rebase sont
+interdits ; seul le squash restait, ce qui contredisait l'exception accordée par Williams.
+**Arbitré par Williams : poussée en avance rapide.** Motif décisif, et il est technique :
+`DECISIONS.md`, les dossiers de porte et ce fichier **citent des identifiants de commits**. Un rebase
+les aurait tous réécrits et rendus faux. **Vérifié après merge : `591ccbd`, `b24b98c` et `4687433`
+pointent toujours.** Une trace qui ne se vérifie plus n'est pas une trace.
+Les privilèges d'administrateur, proposés en une option à chaque refus, **n'ont jamais été utilisés**.
+
+📌 **DETTES, ÉCRITES PLUTÔT QUE TUES**
+· Le plafond de connexion par IP est vérifié **sur le papier, pas sur le fil** — la mesure in situ
+attend le déploiement que ce merge déclenche.
+· **Migration des routes d'authentification vers la forme déclarative des schémas — BLOQUANTE pour la
+porte L2.**
+· **La ceinture d'étanchéité financière est redondante avec un accident de rédaction** : la retirer
+ferait quand même échouer la route, mais par déréférencement de `null` au moment de journaliser. Vu du
+réseau, refus délibéré et chute fortuite sont indiscernables. À redresser dans le code, pas seulement
+dans le test.
+· `packages/shared` reste invisible au garde de couverture ; la correction étroite est de co-localiser
+ses tests en import relatif, **module par module** — jamais le glob en bloc, un `index.ts` consommé
+uniquement via `dist` sortirait à 0 % et ferait couler l'ensemble.
+· La borne du garde de parité compare des **noms**, jamais des **valeurs**.
+· **La garde de la passphrase du coffre : un seul détenteur, et tout le reste est dedans.** Décision
+de Williams, la seule dont l'échec ne se rattraperait pas.
+
+📌 **POUR QUI LIRA L'HISTORIQUE** : tous les commits portent le même auteur (configuration git de la
+machine). **Aucune trace git ne distingue les contributions** des sessions ni des agents. La seule
+chaîne de signature qui tienne est celle de `DECISIONS.md` et des dossiers de porte — jamais
+`git log --author`.
