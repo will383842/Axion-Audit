@@ -209,7 +209,7 @@ d'une annonce.
 | **Matrice rôle × route** : produit cartésien des routes **énumérées à l'exécution** × {anonyme, consultant, analyste, lecteur, admin, lead}, attendus **commités** | intégration | Une route non couverte : l'ajouter oblige à mettre à jour la matrice |
 | Rotation & réutilisation : 8 branches du tableau §2.3 | intégration | — |
 | Isolation : un consultant ne lit ni les missions ni les utilisateurs d'autrui | intégration | — |
-| Habilitation : affectation `mission_users` refusée si `habilitated_at IS NULL` (§34.4) | intégration | — |
+| ~~Habilitation : affectation `mission_users` refusée si `habilitated_at IS NULL` (§34.4)~~ **DÉPLACÉ EN L3d le 2026-08-31** — la route qui affecte n'existe pas en L2, et la note L3 dit elle-même que la garde est « appelée par la route `assignments` de L3 ». L2 se donnait un critère **qu'il ne pouvait pas exécuter** : la porte P-B aurait coché une case dont la preuve ne peut pas exister. Ce que L2 livre et qui reste testable : **la LECTURE** de `habilitated_at` à chaque requête. Voir `DECISIONS.md`. | — | déplacé |
 | Garde-fou §9.7 : réinitialisation refusée si le dernier `sync_log.outbox_remaining > 0` **ou si aucune sync n'est connue** ; forçage explicite → journal + alerte | intégration | — |
 | Quota par jeton (§3.2), dans les deux sens | intégration | La régression silencieuse vers l'IP |
 | Aucune erreur d'auth ne sort en 400 (assertion portée par la matrice) | intégration | La rechute de la branche 5 |

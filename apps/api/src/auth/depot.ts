@@ -16,7 +16,20 @@
 // pour supprimer.
 //
 // Drizzle ne sert QU'AUX REQUÊTES TYPÉES (11 §2) : aucun DDL ici, aucun SQL concaténé.
-// Traçabilité : E33 (sécurité : comptes désactivables 06 §10.1), E45 (habilitation).
+// Traçabilité : E33 (sécurité : comptes désactivables 06 §10.1),
+//               E45 (habilitation — ce dépôt LIT `habilitated_at` à chaque requête ;
+//                    il n'APPLIQUE pas la règle §34.4, qui refuse l'affectation à
+//                    `mission_users` et dont le point d'application est la route
+//                    `assignments` de L3. Lire, c'est la part de L2 : la garde de L3
+//                    trouve ainsi la valeur sans rouvrir la base.)
+//
+// POURQUOI CETTE PARENTHÈSE EST LONGUE : la ligne disait « E45 (habilitation) », sans
+// verbe, à côté d'un E33 qualifié. Un lecteur de la matrice pouvait en conclure que la
+// règle serveur du §34.4 était appliquée ICI — elle ne l'est pas, elle ne peut pas
+// l'être en L2, et son point d'application est ailleurs et plus tard. Le rattachement
+// n'était pas faux, il était SOUS-QUALIFIÉ : ce n'est pas E45 appliquée, c'est E45
+// approvisionnée. Relevé le 2026-08-31 par une enquête déclenchée par la passe de
+// traçabilité — dont l'alerte initiale, elle, était infondée.
 // =============================================================================
 import { eq } from 'drizzle-orm';
 import { db } from '../db.js';
