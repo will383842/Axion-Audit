@@ -1009,3 +1009,77 @@ qu'il peut encore voir.
 
 **Coût :** ~0,1 j, conforme à l'estimation de l'arbitrage. **Impact schéma / API / crypto / périmètre
 fonctionnel : aucun. Étage 1.**
+
+---
+
+## 2026-08-30 — [étage 2, PROPOSÉE] Le contrôle d'empreinte s'arrête à l'enveloppeur
+
+**Constat terrain.** Les deux clés restreintes exécutent un script enveloppeur qui publie son
+empreinte ; la CI la compare au fichier versionné et refuse d'agir en cas d'écart. Le mécanisme
+fonctionne : il a été posé après que le script de déploiement eut été modifié **deux fois directement
+en production** sans laisser de trace.
+
+**Ce qu'il ne couvre pas.** `restore-test-ci.sh` est vérifié ; `restore-test.sh`, qu'il **appelle**,
+ne l'est pas. Ce dernier vit dans le clone `/opt/axion-audit/repo`, dont le commit est **journalisé
+mais jamais comparé** à quoi que ce soit. Un clone resté en arrière exécuterait donc du code ancien
+sous une empreinte d'enveloppeur parfaitement conforme. **Le garde vérifie la porte et pas la pièce.**
+
+**Valeur pour l'auditeur.** Nulle en direct — c'est une garantie d'exploitation. Mais elle porte le
+plan de reprise : un test de restauration qui tourne sur une version périmée du script peut sortir
+vert sur des hypothèses qui n'ont plus cours.
+
+**Ce qui rend la fiche non triviale, et pourquoi elle n'est pas implémentée d'office.** La comparaison
+évidente — « le commit du clone doit égaler celui de la CI » — est **fausse dès qu'on lance le
+workflow depuis une branche** : le clone ne suit que `main`, délibérément, pour que la machine
+n'exécute que du code fusionné. Une règle naïve rendrait donc rouge un cas parfaitement sain, et
+l'on finirait par la désarmer. La règle juste distingue deux situations : sur `main`, un écart est une
+**dérive** et doit échouer ; sur une branche, c'est un **fait à annoncer** — le serveur exécute `main`,
+pas ce que vous testez — et cela doit s'écrire dans le journal sans faire rougir.
+
+**Coût estimé.** ~1 h. **Impact schéma/API : aucun.** Touche `restore-test-ci.sh` (publier une seconde
+empreinte) et `nightly-restore-test.yml` (comparer selon la référence).
+
+**Arbitrage attendu de Williams** : ABSORBÉE / PHASE 2 / REFUSÉE.
+
+---
+
+## 2026-08-30 — [étage 2, PROPOSÉE] Ce qui raccourcit vraiment le calendrier, et ce qui ne le raccourcit pas
+
+**Constat.** Williams trouve le rythme trop lent et demande plus d'agents. **Plus d'agents ne
+raccourcit pas ce calendrier-ci**, et le dire est plus utile que d'en lancer trente : `CLAUDE.md` §4
+impose **L6 SEUL** — sa durée est incompressible quel que soit l'effectif — et L5 dépend en partie de
+L3. Un chemin critique ne se parallélise pas ; il se **réordonne**.
+
+**Trois marges réelles, par ordre de gain décroissant.**
+
+1. **Écrire les 8 scénarios de sync (05 §9.8) AVANT l'ouverture de L6, pendant L3/L5.** C'est le seul
+   gain qui attaque le chemin critique lui-même : L6 démarre avec ses critères d'acceptation déjà
+   encodés en tests rouges, au lieu de les découvrir en chemin. **Et cela ne viole pas « L6 seul » :
+   écrire les tests de L6 n'est pas développer L6 — c'est même EXIGÉ par 09 §5.6, qui interdit que
+   l'implémenteur écrive ses propres tests.** La règle dit qui, jamais quand.
+2. **L4 (0,5 j) ne dépend que du schéma L1**, pas de L3. Il peut occuper le second chantier pendant
+   que L2/L3 avancent, au lieu d'attendre son tour dans la file.
+3. **La moitié locale de L5 ne dépend pas de l'API de L3** : coquille offline Workbox, migrations
+   Dexie versionnées, DEK/KEK et verrouillage, `storage.persist()`, composants de types de réponse.
+   Elle dépend du **schéma** et du **format de snapshot du questionnaire** — deux contrats, pas un
+   service en marche.
+
+**Ce que ces marges ne font pas, et qu'il faut dire dans le même souffle** : elles ne réduisent
+**aucune** durée de lot. Elles suppriment de l'**attente**. Si le calendrier déborde malgré elles, le
+levier restant n'est pas l'effectif — c'est le périmètre, et il appartient à Williams (P-DESCOPE).
+
+**LA RÉSERVE, ÉCRITE PLUTÔT QUE TUE — elle porte sur la marge n° 1.** Des tests écrits contre une
+spécification, avant que la moindre interface existe, se paient parfois en réécriture quand les
+signatures arrivent. **Le risque est faible ici et il faut dire pourquoi** : les 8 scénarios de 05
+§9.8 décrivent un **comportement observable** (« un push rejoué rend `duplicate` »), pas une forme
+d'appel, et ils viennent d'une spécification **écrite et figée**, pas d'une implémentation à observer.
+C'est précisément ce qui rend l'avance possible ici et ne la rendrait pas ailleurs. **Mais il n'est
+pas nul**, et Williams doit arbitrer sur un coût honnête plutôt que sur une promesse : compter une
+demi-journée de réajustement des tests au moment où les interfaces de L6 se figent.
+
+**Coût estimé.** Aucun code nouveau : c'est une **réorganisation de l'ordre d'exécution**, plus la
+demi-journée de réserve ci-dessus. **Impact schéma/API : aucun.**
+
+**Pourquoi ce n'est PAS implémenté d'office.** Cela touche l'ordonnancement des lots du fichier 07,
+donc une convention — `CLAUDE.md` §3 point 2. **Arbitrage attendu de Williams** :
+ABSORBÉE / PHASE 2 / REFUSÉE.

@@ -1635,3 +1635,32 @@ machine-là est précisément l'interdit.
 · **Trois autres `.env` du même orchestrateur sont en `644`.** Ils appartiennent à un autre projet :
   je n'y touche pas, et la décision revient à Williams.
 · Le `chmod 600` **ne tiendra pas seul** : l'orchestrateur réécrit ce fichier à chaque déploiement.
+
+---
+
+## 2026-08-30 15h20 — [lot L0] — étape pipeline 5/7 — **CORRECTION DU BLOC PRÉCÉDENT**
+
+Dernier commit vert : `73ac66f` · Branche : `lot/l0-infra` · Poussé : oui
+Tâche en cours : correction de dossier, puis attente de la CI de la PR #3.
+Prochaine action : **fusionner la PR #3 quand la CI est verte, mettre à jour `/opt/axion-audit/repo` ET `/opt/axion-audit/deploy-staging.sh` depuis `main` (leurs empreintes divergent DÉLIBÉRÉMENT depuis `73ac66f`), puis relancer le test de restauration.**
+Tests rouges connus : aucun en CI.
+
+⚠️ **LE BLOC DE 14h45 AFFIRME UNE CHOSE FAUSSE, ET LA VOICI CORRIGÉE.** Il écrit que le `.env` en
+`644` rendait la passphrase des archives *« lisible par n'importe quel compte du serveur »*. **Non.**
+`/data/coolify` et `/data/coolify/applications` sont en **`700`** ; la lecture par un compte non
+privilégié a été **testée réellement** et refusée ; **aucun compte humain non-root n'a de shell** sur
+cette machine. Le `644` était réel et **inatteignable**. Le `600` reste la bonne valeur — le runbook la
+prescrit — mais **sa gravité était inventée**, et l'invention est à moi.
+
+📌 **CE QUE CETTE ERREUR DIT, ET POURQUOI ELLE VAUT D'ÊTRE ÉCRITE ICI.** J'ai lu `644` sur un fichier
+de secrets et conclu « lisible par tous » **sans mesurer la chaîne de répertoires au-dessus**. Une
+observation vraie qui répond à une autre question que celle posée — **le défaut exact que ce dépôt
+traque depuis trois jours, commis en le documentant.** L'objection vient de la session voisine, qui a
+demandé de mesurer avant de conclure dans un sens ou dans l'autre. Elle avait raison.
+
+📌 **UN RISQUE QUE MA CORRECTION INTRODUIT.** Le fichier est `600 root:root` dans un répertoire
+appartenant à uid 9999. Si l'orchestrateur devait le **lire** sous son propre compte entre deux
+déploiements, il ne le pourrait plus. **Le prochain déploiement est l'épreuve** ; s'il échoue à lire
+son environnement, la cause est ici. **Et « la pile est saine, l'ordre du script protège le cas
+courant » est une PRÉDICTION, pas une mesure** — relevé par la session voisine, et c'est juste. Rien
+ne doit l'inscrire comme acquise avant que `8 · deploy-staging` soit vert sur `main`.

@@ -3976,3 +3976,52 @@ qui n'est pas encore instanciable.
 Décideur : **A01**, sous l'autorisation permanente du 2026-08-30 (secrets et infrastructure de
 staging). **Remonté à Williams** parce qu'il touche à la portée d'une garantie, pas à un réglage.
 Impact spec : **aucun amendement** — une dette d'échéance, à rouvrir à la création de la production.
+
+---
+
+## 2026-08-30 — [L0] CORRECTION : le `.env` en 644 n'était PAS lisible par « n'importe quel compte du serveur »
+
+**J'ai annoncé une faille plus grave qu'elle ne l'était**, dans le message de commit `73ac66f`, dans
+`docs/ETAT.md` et à Williams de vive voix : _« la passphrase qui déchiffre toutes les archives était
+lisible par n'importe quel compte du serveur »_. **C'est faux.** La session voisine a objecté que le
+`644` du 2026-08-28 avait déjà été rectifié — `/data/coolify` étant en `700` — et a demandé de
+mesurer avant de conclure dans un sens ou dans l'autre. Mesuré :
+
+| Élément                                            | Valeur mesurée                                                     |
+| -------------------------------------------------- | ------------------------------------------------------------------ |
+| `/data/coolify` et `/data/coolify/applications`    | **`700`, uid 9999** (le compte interne de l'orchestrateur)         |
+| Traversée par un compte non privilégié             | **refusée** — testée réellement sous uid 65534, lecture impossible |
+| Comptes humains non-root avec shell sur la machine | **aucun**                                                          |
+
+**Le `644` était donc réel et INATTEINGNABLE.** Deux répertoires en `700` au-dessus de lui rendaient
+le mode du fichier sans effet pour tout ce qui n'est ni root ni uid 9999.
+
+**CE QUI RESTE VRAI, ET QU'IL NE FAUT PAS JETER AVEC L'ERREUR** : le `600` reste la bonne valeur — le
+runbook la prescrit (02 §30.4-2), et elle retire au compte 9999 un accès en lecture dont rien
+n'établit qu'il ait besoin. La correction n'était pas inutile ; **c'est sa GRAVITÉ qui était inventée.**
+
+**CE QUE MON ERREUR ILLUSTRE, ET QUI EST EXACTEMENT LE DÉFAUT QUE CE DÉPÔT TRAQUE** : j'ai lu `644` sur
+un fichier de secrets et conclu « lisible par tous » **sans mesurer la chaîne de répertoires
+au-dessus**. Une observation vraie — le mode était bien `644` — répondant à une autre question que
+celle posée : _qui peut réellement lire ce fichier ?_ Le même défaut que je documente depuis trois
+jours, commis en le documentant.
+
+**ET UN RISQUE QUE MA CORRECTION INTRODUIT, écrit plutôt que tu** : le fichier est désormais
+`600 root:root` dans un répertoire appartenant à uid 9999. Si l'orchestrateur devait le **lire** sous
+son propre compte entre deux déploiements, il ne le pourrait plus. La pile est restée saine après le
+changement, et l'ordre du script protège le cas courant — l'orchestrateur écrit le fichier, **puis**
+le déploiement le referme. **Le prochain déploiement est la vraie épreuve** ; s'il échoue à lire son
+environnement, la cause est ici et non ailleurs.
+
+Options :
+
+1. **Laisser le commit `73ac66f` faire foi.** Refusé : il porte une affirmation fausse sur la sécurité.
+2. **Réécrire le message de commit.** Refusé : il est poussé, et réécrire une trace contestée est
+   précisément le changement silencieux que ce format existe pour empêcher.
+3. **Corriger par une entrée datée, qui cite l'erreur et la mesure qui la défait.**
+
+Arbitrage : **option 3.** Précédence : `CLAUDE.md` §1-7 (rien n'est jamais silencieusement écrasé) —
+elle vaut pour mes propres affirmations autant que pour les données.
+
+Décideur : **A01**, sur objection de la session voisine, qui avait raison.
+Impact spec : **aucun**. Correction de dossier.
