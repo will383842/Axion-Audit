@@ -67,8 +67,11 @@ import {
 } from '../domaines/users/service.js';
 
 /**
- * La politique, la même pour les sept routes. `admin` SEUL — le pack ne connaît
- * aucun rôle intermédiaire sur les comptes.
+ * La politique, la même pour les SEPT routes déclarées ici — et pour la HUITIÈME,
+ * que Fastify ajoute seul : `HEAD /v1/users`, compagne du `GET`. Elle hérite de
+ * cette politique sans être écrite nulle part, ce qui est le bon comportement et
+ * mérite d'être su : une matrice rôle × route rédigée à la main l'oublierait.
+ * `admin` SEUL — le pack ne connaît aucun rôle intermédiaire sur les comptes.
  */
 const CONFIG_ADMIN = { acces: { type: 'roles', roles: ['admin'] } } as const;
 
