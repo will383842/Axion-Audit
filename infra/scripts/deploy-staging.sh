@@ -98,14 +98,51 @@ esac
 CONTENEUR="$(docker ps --filter "name=api-${UUID}" --format '{{.Names}}' | head -1)"
 [ -n "$CONTENEUR" ] || echec "Aucun conteneur d API en service pour ${UUID} apres deploiement."
 
+# DEUX VOIES DE PREUVE, ET L ECHEC SI AUCUNE N EST DISPONIBLE.
+#
+# VOIE 1, la meilleure : l etiquette OCI de revision. MESURE LE 2026-08-30 : elle
+# n existe NI sur le conteneur, NI sur l image. L orchestrateur construit
+# lui-meme (`axion-audit-api:coolify`) et ne pose aucune etiquette OCI ; le
+# Dockerfile n en pose pas non plus. Cette voie ne pouvait donc JAMAIS aboutir —
+# le garde ecrit le 2026-08-28 contre les faux succes n a jamais rien verifie.
+# On la garde en premier : le jour ou le Dockerfile posera l etiquette, elle
+# reprendra la main sans qu on y touche.
+#
+# VOIE 2, mesuree et disponible AUJOURD HUI : l orchestrateur etiquette le
+# conteneur avec son repertoire de travail, nomme d apres l UUID DU DEPLOIEMENT —
+#     com.docker.compose.project.working_dir = /artifacts/<uuid-deploiement>
+# Or nous connaissons cet uuid : c est celui que nous venons de declencher. Si le
+# conteneur en service ne le porte pas, c est qu il vient d un AUTRE deploiement,
+# donc que le notre n a pas pris effet. C est exactement la question posee.
+#
+# CE QUE LA VOIE 2 PROUVE, ET CE QU ELLE NE PROUVE PAS — a lire avant de s en
+# contenter. Elle prouve que le conteneur en service a ete cree par CE
+# deploiement-ci. Elle NE prouve PAS quel commit l orchestrateur a clone : il
+# prend la tete de la branche au moment ou il clone, et une poussee glissee entre
+# notre declenchement et son clonage passerait inapercue. C est une preuve de
+# PRISE D EFFET, pas de CONTENU. Elle vaut infiniment mieux que le statut de
+# l API, qui a deja menti trois fois ; elle ne remplace pas l etiquette OCI, et
+# c est pourquoi la dette reste ouverte dans AMELIORATIONS.md.
 EN_SERVICE="$(docker inspect "$CONTENEUR" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' 2>/dev/null || true)"
+REPERTOIRE="$(docker inspect "$CONTENEUR" --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' 2>/dev/null || true)"
+
 if [ -n "$EN_SERVICE" ]; then
   case "$EN_SERVICE" in
-    "${COMMIT}"*) echo "Verifie : le conteneur en service porte bien ${COMMIT}." ;;
+    "${COMMIT}"*) echo "Verifie (etiquette OCI) : le conteneur en service porte bien ${COMMIT}." ;;
     *) echec "Le conteneur en service porte « ${EN_SERVICE} », pas « ${COMMIT} ». Le deploiement s est declare reussi sur un AUTRE commit." ;;
   esac
+elif [ -n "$REPERTOIRE" ]; then
+  case "$REPERTOIRE" in
+    *"${UUID_DEP}"*)
+      echo "Verifie (prise d effet) : le conteneur en service provient du deploiement ${UUID_DEP}."
+      echo "::warning::Preuve de PRISE D EFFET seulement — aucune etiquette OCI de revision n existe sur ce conteneur, donc le COMMIT reellement clone n est pas verifie. Voir AMELIORATIONS.md."
+      ;;
+    *)
+      echec "Le conteneur en service provient de « ${REPERTOIRE} », qui ne contient pas l uuid du deploiement declenche (${UUID_DEP}). Notre deploiement n a donc PAS pris effet : c est un ancien conteneur qui tourne, et le statut « reussi » de l API est trompeur — exactement le scenario du 2026-08-28."
+      ;;
+  esac
 else
-  echo "::warning::Aucune etiquette de revision sur le conteneur : le commit en service n a PAS pu etre verifie. Le statut Coolify seul ne prouve rien (cf. 2026-08-28)."
+  echec "AUCUNE des deux voies de verification n est disponible sur ce conteneur : ni etiquette OCI de revision, ni repertoire de travail. On ne peut donc PAS affirmer que le deploiement a pris effet, et un deploiement qu on ne peut pas verifier ne doit pas etre annonce reussi. Si l orchestrateur a change ses etiquettes, ce garde doit etre remis a jour AVANT de redeployer."
 fi
 
 # --- 4. REFERMER LES DROITS DU FICHIER DE SECRETS ---------------------------

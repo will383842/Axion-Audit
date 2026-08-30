@@ -1083,3 +1083,37 @@ demi-journée de réserve ci-dessus. **Impact schéma/API : aucun.**
 **Pourquoi ce n'est PAS implémenté d'office.** Cela touche l'ordonnancement des lots du fichier 07,
 donc une convention — `CLAUDE.md` §3 point 2. **Arbitrage attendu de Williams** :
 ABSORBÉE / PHASE 2 / REFUSÉE.
+
+---
+
+## 2026-08-30 — [étage 2, PROPOSÉE] La CI construit quatre images que personne ne déploie
+
+**Constat terrain, mesuré sur le serveur.** L'image en service est `axion-audit-api:coolify`, sans
+aucune étiquette OCI. L'orchestrateur **construit lui-même** depuis le dépôt ; il n'utilise pas les
+images que le job `7 · build (4 images GHCR)` pousse à chaque merge. Le tag `sha-<commit>` transmis au
+job de déploiement ne sert **qu'au message Telegram**.
+
+**Deux conséquences, et la seconde est la vraie.**
+· Du temps de CI dépensé à chaque merge pour des images que rien ne consomme — c'est le coût visible,
+et le moindre.
+· **La vérification du commit en service ne pouvait JAMAIS aboutir.** Elle lit
+`org.opencontainers.image.revision`, que ni l'image ni le conteneur ne portent. Ce garde avait été
+écrit le 2026-08-28 précisément parce que trois déploiements annoncés réussis avaient échoué — **et il
+n'a jamais rien vérifié depuis.** Il tombait en `::warning`, donc il ne mentait pas ; mais il occupait
+la place d'un contrôle et rassurait à sa place.
+
+**Ce qui a été fait tout de suite, faute de mieux.** Une seconde voie, mesurée et disponible
+aujourd'hui : le conteneur porte `com.docker.compose.project.working_dir = /artifacts/<uuid du
+déploiement>`, et nous connaissons cet uuid. **Elle prouve la PRISE D'EFFET, pas le CONTENU** — le
+commit réellement cloné reste invérifié, et une poussée glissée entre le déclenchement et le clonage
+passerait inaperçue. Le script échoue désormais si **aucune** des deux voies n'est disponible.
+
+**Ce que la fiche propose, et il faut choisir.**
+
+1. **Poser l'étiquette OCI au build** : `ARG` dans le `Dockerfile` + `LABEL org.opencontainers.image.revision`, alimenté par la variable de commit de l'orchestrateur. Rend la voie 1 opérante et **referme complètement** la question. Suppose de connaître le nom exact de cette variable — à **mesurer**, pas à supposer.
+2. **Cesser de pousser les 4 images sur GHCR** puisque rien ne les déploie. Gain de CI immédiat, **mais** cela supprime le seul artefact permettant un retour arrière rapide vers une version antérieure. À ne pas décider sans savoir ce qu'on veut du plan de reprise applicatif.
+
+**Les deux sont indépendantes** et n'ont pas le même arbitre : la 1 est technique, la 2 engage le plan
+de reprise. **Coût estimé** : 1 h pour la 1, 15 min pour la 2. **Impact schéma/API : aucun.**
+
+**Arbitrage attendu de Williams** : ABSORBÉE / PHASE 2 / REFUSÉE, séparément pour chacune.

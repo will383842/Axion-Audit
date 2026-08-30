@@ -162,6 +162,30 @@ jobs:
       # `/api/v1/deploy` — une URL relative, donc une erreur de protocole que
       # personne ne relie au secret manquant. Le diagnostic doit être rendu ici,
       # avec le NOM de ce qui manque et l'endroit où le poser.
+      # -----------------------------------------------------------------------
+      # POURQUOI CE JOB A BESOIN DU DÉPÔT, alors qu'il ne construit rien.
+      # -----------------------------------------------------------------------
+      # Il n'y avait AUCUN `checkout` ici, et c'était sans conséquence tant que ce
+      # job ne faisait qu'appeler une API. Depuis le 2026-08-30, il compare
+      # l'empreinte publiée par le script distant au FICHIER VERSIONNÉ — donc il
+      # lui faut le fichier. Au premier passage réel, la comparaison a échoué sur
+      #
+      #     sha256sum: infra/scripts/deploy-staging.sh: No such file or directory
+      #
+      # CE QUI EST INSTRUCTIF ICI, ET VAUT D'ÊTRE LU. Le garde a échoué
+      # BRUYAMMENT — c'est le bon comportement, et c'est `set -e` qui l'a produit.
+      # Mais il a échoué SANS ANNOTATION : le message venait de `sha256sum` sur la
+      # sortie d'erreur, pas d'un `::error`. Une lecture rapide du journal montrait
+      # « Deploiement du staging termine et verifie. » suivi d'un « exit code 1 »
+      # sans cause apparente — et la première hypothèse formulée par un lecteur
+      # (l'étiquette de révision manquante, qui n'est qu'un `::warning`) était
+      # FAUSSE. Un garde qui échoue sans nommer sa cause envoie chercher ailleurs.
+      # D'où le contrôle d'existence explicite ajouté plus bas, avant la comparaison.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # Un seul commit suffit : on ne lit qu'un fichier, jamais l'historique.
+          fetch-depth: 1
+
       - name: Contrôler la présence des réglages non versionnables
         id: reglages
         env:
@@ -334,6 +358,15 @@ jobs:
           # une version en service qui n'a pas été relue ne déploie pas.
           # ---------------------------------------------------------------------
           empreinte_distante="$(printf '%s' "${SORTIE}" | grep -oE '^EMPREINTE_SCRIPT=[0-9a-f]{64}$' | head -1 | cut -d= -f2)"
+          # Le fichier de référence existe-t-il seulement ? Sans ce contrôle,
+          # `sha256sum` échoue sur la sortie d'erreur et `set -e` interrompt
+          # l'étape SANS annotation — le journal montre alors un « exit code 1 »
+          # dont la cause est invisible, et l'on cherche ailleurs. C'est
+          # exactement ce qui s'est produit le 2026-08-30.
+          if [ ! -f infra/scripts/deploy-staging.sh ]; then
+            echo "::error title=Référence d'empreinte introuvable::Le fichier versionné infra/scripts/deploy-staging.sh est absent du runner. Ce job doit faire un checkout du dépôt pour pouvoir comparer l'empreinte du script en service à celle du fichier relu — sans lui, le contrôle ne peut pas conclure, et un contrôle qui ne conclut pas ne doit pas laisser déployer."
+            exit 1
+          fi
           empreinte_depot="$(sha256sum infra/scripts/deploy-staging.sh | cut -d' ' -f1)"
 
           if [ -z "${empreinte_distante}" ]; then
