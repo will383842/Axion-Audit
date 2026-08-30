@@ -4408,3 +4408,51 @@ contradiction est entre deux notes de conception, pas entre sections du pack.
 Décideur : **A01**. **Remonté à Williams** parce qu'il retire une ligne d'un plan de tests que la porte
 P-B allait lire.
 Impact spec : **aucun amendement du pack** ; deux notes de conception à aligner.
+## 2026-08-31 — [L2b] `@fastify/cookie` entre dans la liste épinglée — décidé par Williams
+
+**« OK pour @fastify/cookie, ajoute-le »** — Williams, directement, le 2026-08-31.
+
+**CETTE DÉCISION AVAIT ÉTÉ REFUSÉE LA VEILLE, ET IL FAUT DIRE POURQUOI.** Une session en lecture
+seule me la rapportait comme déjà tranchée par Williams. J'ai refusé de la prendre sur ce relais :
+ajouter une dépendance hors de la liste §1 relève de `CLAUDE.md` §3 **point 1** — ce que l'autopilote
+ne décide jamais seul — et **un pair qui relaie une décision n'est pas le décideur**. La règle protège
+Williams, pas l'autopilote. Les deux autres arbitrages du même relais, qui n'engageaient ni dépendance
+ni contrat de versions, avaient été pris ; celui-ci a attendu vingt minutes et un mot de lui.
+
+**LE MOTIF, QUI EST BON ET QUI RESTE LE SIEN.** Le §3 du contrat impose « cookies httpOnly
+SameSite=Lax + en-tête anti-CSRF » pour la console `apps/hq`. **La liste épinglée ne contenait aucun
+greffon capable de les poser.** Livrer T3 en Bearer aurait signifié **écrire l'authentification de la
+console deux fois** — une fois maintenant, une fois à L2b — et laisser entre-temps une incohérence
+entre le code et le contrat que rien n'aurait signalée.
+
+Options :
+
+1. **Livrer T3 en Bearer et reporter les cookies à L2b.** C'est ce que la note de conception L2 §4.2
+   proposait. Coût réel : l'authentification admin écrite deux fois, et une divergence code/contrat
+   pendant tout l'intervalle.
+2. **Écrire un mécanisme de cookies à la main**, sans dépendance. Refusé : réécrire l'analyse et la
+   signature de cookies est exactement le genre de code de sécurité que le §3 de `CLAUDE.md` interdit
+   d'improviser (« toucher à la sécurité autrement que spécifié »).
+3. **Ajouter le greffon, épinglé, et amender la liste.**
+
+Arbitrage : **option 3**, décidée par Williams.
+
+**CE QUE L'AJOUT OBLIGE, ET QUI EST FAIT :**
+· version **épinglée à l'exact** — `@fastify/cookie` **11.1.2**, sans `^` ni `~`. Vérifié après
+installation, pas supposé : `.npmrc` porte `save-exact=true` et l'a appliqué.
+· **la liste des versions épinglées est AMENDÉE, pas contournée** — `11 §1` et `CLAUDE.md` §2bis
+portent désormais le greffon avec la date et le décideur. Laisser ces listes en l'état aurait produit
+un document qui ment sur ce que le dépôt installe, c'est-à-dire le défaut que ce dépôt traque.
+
+**CE QUE CETTE ENTRÉE NE COUVRE PAS.** L'ajout du greffon **n'est pas** la migration de
+l'authentification console vers les cookies. Celle-ci reste **L2b** : elle touche le crochet
+d'identification, la forme du jeton de rafraîchissement côté console, et l'en-tête anti-CSRF. Elle
+sera conçue, implémentée et **testée par des agents distincts** (09 §5.6). **T3 reste en Bearer d'ici
+là**, et ce n'est pas une dette cachée : c'est écrit ici et dans la note de conception.
+
+Précédence : `CLAUDE.md` §3 point 1 (dépendance hors liste) et §2bis (versions épinglées,
+« aucune montée majeure sans décision humaine »). Règle de précédence du pack **sans objet** : il
+s'agit d'un ajout au contrat, non d'une divergence entre sections.
+Décideur : **Williams**, directement.
+Impact spec : **amendement horodaté de `11 §1` et de `CLAUDE.md` §2bis**. Le pack étant scellé, le
+sceau est régénéré **après** cette trace.
