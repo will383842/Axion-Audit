@@ -1039,6 +1039,25 @@ pas ce que vous testez — et cela doit s'écrire dans le journal sans faire rou
 **Coût estimé.** ~1 h. **Impact schéma/API : aucun.** Touche `restore-test-ci.sh` (publier une seconde
 empreinte) et `nightly-restore-test.yml` (comparer selon la référence).
 
+> ### ✅ FERMÉE LE 2026-08-30 — et c'est une remarque de la session voisine qui l'a rendue urgente
+>
+> Elle proposait de lancer le test nocturne **sur la branche** avant fusion, pour prouver le canal.
+> **Cela n'aurait rien prouvé, et aurait prouvé du faux** : le clone du serveur suit `main`, donc le
+> `ref` du dispatch ne choisit que le fichier de workflow — le `restore-test.sh` exécuté reste celui
+> de `main`. Un dispatch sur une branche aurait fait tourner l'ancien script en donnant l'impression
+> d'éprouver la nouvelle.
+>
+> **La dette théorique est devenue un piège concret**, et le garde est posé : le workflow extrait
+> désormais le commit que le serveur a RÉELLEMENT exécuté et le compare au `ref` demandé. **Sur
+> `main`, un écart ÉCHOUE** — c'est une dérive du clone, et le garde éprouverait autre chose que ce
+> qui est livré. **Sur une branche, il AVERTIT bruyamment** sans rougir : l'écart est voulu, mais un
+> vert obtenu là ne dit rien de la branche.
+>
+> **Ce qui reste ouvert, et il faut le dire** : le contrôle porte sur le **commit**, pas sur
+> l'**empreinte du fichier**. Un clone au bon commit mais modifié sur place passerait. C'est moins
+> grave — le clone est reconstruit par `reset --hard` à chaque mise à niveau — mais ce n'est pas rien,
+> et la fiche est fermée sur ce qu'elle traite, pas sur ce qu'elle laisse.
+
 **Arbitrage attendu de Williams** : ABSORBÉE / PHASE 2 / REFUSÉE.
 
 ---
