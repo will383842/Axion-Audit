@@ -11,10 +11,45 @@
 // crypto locale, scoring, RBAC/propriété) — MESURÉE, pas déclarée ».
 // =============================================================================
 import { defineConfig } from 'vitest/config';
+import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   test: {
     projects: [
+      // ═══════════════════════════════════════════════════════════════════════
+      // `interface` — LE PROJET QUI MANQUAIT, ET CE QUE SON ABSENCE COÛTAIT.
+      // ═══════════════════════════════════════════════════════════════════════
+      // Ajouté le 2026-08-31, sur décision de Williams (dépendances hors liste
+      // épinglée = escalade §3-1). MESURÉ avant de le proposer : ce dépôt ne
+      // pouvait tester AUCUN composant React. Trois raisons cumulées, et il
+      // fallait les trois pour que ce soit invisible —
+      //   · `include` ne captait que `*.test.ts`, jamais `.tsx` ;
+      //   · `environment: 'node'`, donc aucun DOM ;
+      //   · ni `jsdom` ni `@testing-library/react` installés.
+      //
+      // CE QUE CELA SIGNIFIAIT, dit sans l'arrondir : les 23 composants du design
+      // system NE POUVAIENT PAS ÊTRE LIVRÉS. La règle de croisement (09 §5.6)
+      // exige qu'un autre agent écrive leurs tests ; il aurait été bloqué au
+      // premier fichier. Et le garde des modules orphelins les refusait — à juste
+      // titre, puisque rien ne les atteignait, pas même un test.
+      //
+      // POURQUOI UN PROJET SÉPARÉ, et non `.tsx` ajouté à `unit` : `unit` tourne
+      // en `node` et doit rester rapide (« un test unitaire lent est un test
+      // d'intégration qui s'ignore »). Monter un DOM pour chaque test de logique
+      // pure le ralentirait sans rien prouver. Le découpage suit le besoin réel,
+      // pas la commodité.
+      {
+        plugins: [react()],
+        test: {
+          name: 'interface',
+          include: ['packages/*/src/**/*.test.tsx', 'apps/*/src/**/*.test.tsx'],
+          exclude: ['**/node_modules/**', '**/dist/**'],
+          environment: 'jsdom',
+          // Plus généreux que `unit` : monter un DOM coûte, rendre un arbre React
+          // aussi. Reste très en deçà de l'intégration, qui démarre des conteneurs.
+          testTimeout: 10_000,
+        },
+      },
       {
         test: {
           name: 'unit',
@@ -60,8 +95,20 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json-summary', 'lcov'],
       reportsDirectory: './coverage',
-      include: ['apps/*/src/**/*.ts', 'packages/*/src/**/*.ts'],
-      exclude: ['**/*.test.ts', '**/*.d.ts', '**/dist/**', '**/node_modules/**'],
+      // `.tsx` AJOUTÉ le 2026-08-31, et ce n'est pas un détail de configuration :
+      // sans lui, les 23 composants du design system auraient été INVISIBLES à la
+      // mesure de couverture. Le seuil de 90 % de la DoD se serait appliqué à un
+      // périmètre dont ils étaient absents — donc vert, et sans rapport avec eux.
+      // C'est la forme la plus discrète du défaut que ce dépôt traque : une mesure
+      // vraie sur ce qu'elle observe, qui répond à une autre question que celle
+      // posée.
+      include: [
+        'apps/*/src/**/*.ts',
+        'packages/*/src/**/*.ts',
+        'apps/*/src/**/*.tsx',
+        'packages/*/src/**/*.tsx',
+      ],
+      exclude: ['**/*.test.ts', '**/*.test.tsx', '**/*.d.ts', '**/dist/**', '**/node_modules/**'],
       // Seuils PAR CHEMIN, renseignés au fil des lots :
       //   L2  → apps/api/src/auth/**, apps/api/src/rbac/**    (RBAC / propriété §9.9)
       //   L5a → apps/field/src/crypto/**                      (DEK/KEK, crypto locale)

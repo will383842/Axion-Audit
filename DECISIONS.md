@@ -4354,3 +4354,61 @@ sections de rang différent.
 Décideur : **Williams** pour l'ordre de les faire ; **A01** pour la forme, avec les deux décisions
 signalées ci-dessus.
 Impact spec : **amendement horodaté du fichier 04**, sceau régénéré, migration `up`/`down` livrée.
+
+---
+
+## 2026-08-31 — [L5/UI] Ce dépôt ne pouvait tester aucun composant React, et personne ne l'avait vu
+
+**« ok pour les 3 paquets de test React »** — Williams, directement.
+
+**LE CONSTAT, MESURÉ AVANT D'ÊTRE PORTÉ.** Trois causes cumulées, et il fallait **les trois** pour que
+le manque soit invisible :
+· `vitest.config.ts` ne captait que `*.test.ts` — **jamais `.tsx`** ;
+· le projet `unit` tourne en `environment: 'node'`, donc **sans DOM** ;
+· ni `jsdom` ni `@testing-library/react` ni `@vitejs/plugin-react` n'étaient installés.
+
+**CE QUE CELA SIGNIFIAIT, sans l'arrondir : les 23 composants du design system NE POUVAIENT PAS ÊTRE
+LIVRÉS.** La règle de croisement (09 §5.6) exige qu'un autre agent écrive leurs tests ; il aurait été
+bloqué au premier fichier. Et le garde des modules orphelins les refusait — **à juste titre**, puisque
+rien ne les atteignait, **pas même un test**.
+
+**ET UN QUATRIÈME EFFET, LE PLUS DISCRET.** La mesure de couverture n'incluait que les `.ts`. Le seuil
+de 90 % de la DoD se serait donc appliqué à un périmètre **dont les composants étaient absents** —
+vert, et sans aucun rapport avec eux. C'est la forme la plus difficile à voir de la famille que ce
+dépôt traque : une mesure vraie sur ce qu'elle observe, qui répond à une autre question que celle
+posée.
+
+Options :
+
+1. **Écrire des tests sans DOM**, en n'éprouvant que les fonctions pures des composants. Refusé : un
+   composant d'interface se juge sur ce qu'il **rend** et sur ce qu'un lecteur d'écran en **perçoit**.
+   Tester tout sauf cela serait un garde qui annonce plus qu'il ne fait.
+2. **Livrer les composants sans tests**, en promettant de les couvrir plus tard. Refusé : c'est
+   exactement l'état de L4 avant cette nuit, et il a fallu 21 tests pour découvrir **deux vrais
+   défauts** que trois jours de relecture n'avaient pas vus.
+3. **Ajouter les trois briques, épinglées, et un projet de test dédié.**
+
+Arbitrage : **option 3**, décidée par Williams.
+
+**CE QUE L'AJOUT OBLIGE, ET QUI EST FAIT :**
+· versions **épinglées à l'exact** — `jsdom` 30.0.1, `@testing-library/react` 16.3.3,
+`@vitejs/plugin-react` 5.2.0. Vérifié après installation : aucun `^`, aucun `~` ;
+· **les deux listes de versions sont AMENDÉES, pas contournées** — `11 §1` et `CLAUDE.md` §2bis ;
+· **un projet `interface` SÉPARÉ**, et non `.tsx` ajouté à `unit` : `unit` tourne en `node` et doit
+rester rapide — _« un test unitaire lent est un test d'intégration qui s'ignore »_. Monter un DOM pour
+chaque test de logique pure le ralentirait sans rien prouver ;
+· **la couverture inclut désormais les `.tsx`**, sans quoi l'ajout aurait été cosmétique ;
+· **chaîne vérifiée par un témoin de fumée** — un composant rendu dans un DOM et interrogé **par son
+rôle d'accessibilité** — puis le témoin supprimé. Installer n'est pas brancher.
+
+**CE QUE CETTE ENTRÉE NE COUVRE PAS.** `11 §1` épingle aussi **Tailwind et shadcn/ui**, et **aucun des
+huit paquets correspondants n'est installé** — vérifié. Le design system a été écrit avec une feuille
+de style unique sans une seule valeur littérale (invariant 4 tenu, bascule limitée à ce fichier), mais
+**le contrat décrit sur ce point un dépôt qui n'existe pas**. Les installer ou amender le contrat sont
+deux décisions défendables ; **aucune ne m'appartient**, et celle-ci reste ouverte.
+
+Précédence : `CLAUDE.md` §3 point 1 (dépendance hors liste) et §2bis (versions épinglées). Règle de
+précédence du pack **sans objet** : ajout au contrat, non divergence entre sections.
+Décideur : **Williams**, directement.
+Impact spec : **amendement horodaté de `11 §1` et de `CLAUDE.md` §2bis** ; sceau régénéré **après** la
+trace.
