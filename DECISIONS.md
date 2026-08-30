@@ -3860,3 +3860,168 @@ Décideur : A02 pour la carte et le garde-fou. **A01 pour la ratification du rat
 et du plafond d'exemptions. Williams pour la maille lâche de l'invariant 3, à la porte P-B.**
 Impact spec : **aucun amendement**. `docs/TRACABILITE_E1-E47.md` et `docs/08_TRACABILITE.md` sont
 **inchangés** — c'est le code qui a été corrigé, pas la référence.
+
+---
+
+## 2026-08-30 — [gouvernance] Autorisation permanente accordée par Williams : jusqu'où l'autopilote décide seul ?
+
+Williams constatait que l'autopilote s'arrêtait trop souvent, et demandait ce qu'il fallait lever
+« pour ne plus être bloqué ». La réponse honnête distinguait **ce qui bloque inutilement** de **ce qui
+protège**, et il a tranché sur la première catégorie seulement.
+
+**Ce qu'il accorde, mot pour mot** : _« Autorisation permanente : secrets du staging, amendements du
+04 tracés, ménage des conteneurs. Jamais la production. »_
+
+Options :
+
+1. **Statu quo** — l'autopilote s'arrête à chaque manipulation de secret, chaque amendement du schéma,
+   chaque suppression de conteneur. Sûr, et paralysant : trois arrêts en une journée, dont deux sur
+   des actes sans conséquence.
+2. **Tout lever**, portes comprises. Rapide, et aveugle : Williams perdrait le seul moment où il voit
+   ce qui a été fait.
+3. **Lever les trois blocages nommés, garder les portes et la production.**
+
+Arbitrage : **option 3, telle que Williams l'a formulée.**
+
+**CE QUI EST LEVÉ, ET CE QUE CHACUN COÛTAIT :**
+
+| Levé                                  | Ce que le blocage coûtait                                                                                        | Ce qui le remplace                                                                       |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| **Secrets du staging**                | Trois arrêts en une journée, dont un pour lire un fichier que Coolify possédait déjà                             | La règle « une seule copie » : on pointe vers l'existant, on n'en fabrique pas un second |
+| **Amendements du fichier 04, TRACÉS** | Six colonnes en attente, et le lot L3 en appelait d'autres                                                       | L'obligation de tracer — un amendement non écrit dans `DECISIONS.md` reste interdit      |
+| **Ménage des conteneurs**             | 25 orphelins saturant la machine, mettant des tests en `skipped` — une violation de la DoD causée par la machine | Rien : c'est un acte sans conséquence sur du jetable                                     |
+
+**CE QUI N'EST PAS LEVÉ, ET QUE J'AI RECOMMANDÉ DE NE PAS LEVER :**
+
+· **Les portes.** Elles sont le seul moment où Williams voit un travail qu'il ne relit pas ligne à
+ligne. Les supprimer ferait gagner quelques heures et perdre la vue.
+· **La production `axion-ia.com`.** Aucune autorisation permanente ne doit exister là-dessus. La
+consigne de Williams est antérieure et reste absolue : _« tu ne dois surtout jamais toucher à Axion
+IA »_. Elle n'a jamais été enfreinte — à chaque intervention sur ce serveur, cette production a été
+vérifiée avant et après, et **aucun de ses fichiers n'a jamais été ouvert**, y compris quand un agent
+cherchait un jeton et que les seuls résultats s'y trouvaient.
+· **Les découvertes qui doivent remonter avant d'agir.** Ce n'est pas un blocage mais son contraire :
+c'est ainsi que Williams a appris cette nuit que sa sauvegarde du 02h30 était incomplète, et que la
+passphrase de son coffre n'a qu'un seul détenteur.
+
+**LA LIMITE QUE CETTE AUTORISATION NE DÉPLACE PAS.** Elle porte sur la **permission**, jamais sur la
+**méthode**. Elle n'autorise ni à contourner un hook, ni à forcer un merge par privilège
+d'administrateur, ni à ouvrir un port pour se simplifier la tâche — trois choses refusées les
+2026-08-29 et 30 alors que l'outil les proposait en une option à chaque fois. _Pouvoir agir sans
+demander ne veut pas dire pouvoir agir autrement que bien._
+
+**ET UNE CONSÉQUENCE POUR LA SUITE, à ne pas perdre de vue** : cette autorisation rend l'autopilote
+plus rapide et **moins observé**. Le contrepoids n'est pas la prudence — c'est la trace. Chaque acte
+couvert par elle doit rester lisible dans `DECISIONS.md`, `ETAT.md` et les messages de commit, faute
+de quoi Williams aurait échangé des interruptions contre de l'opacité.
+
+Précédence : `CLAUDE.md` §3 (ce que l'autopilote ne décide jamais seul) est **amendé** sur ses points
+1-bis (secrets du staging), 2 (le fichier 04, sous condition de traçage) et sur le ménage machine.
+Les points 4 (sécurité autrement que spécifié), 5 (désactiver un test), 6 (route non documentée) et 7
+(étage 2 avant arbitrage) sont **inchangés**. Règle de précédence du pack sans objet — il s'agit d'un
+amendement de gouvernance, non d'une divergence interne.
+
+Décideur : **Williams**, explicitement, le 2026-08-30.
+Impact spec : **amendement horodaté du `CLAUDE.md` §3**, valable pour le staging Axion Audit
+uniquement, jamais pour la production ni pour `axion-ia`.
+
+---
+
+## 2026-08-30 — [L0] Le test de restauration nocturne prouve le staging, pas la production — que faire de cet écart ?
+
+Le workflow `nightly-restore-test.yml` portait un commentaire de vingt lignes départageant
+`/opt/axion-audit/prod/.env` et `/opt/axion-audit/staging/.env`, concluant **« PROD, et non
+staging »**, et exposant un réglage `RESTORE_TEST_ENV_FILE` pour surcharger le chemin.
+
+**Mesuré sur le serveur le 2026-08-30 : aucun de ces trois fichiers n'existe** — ni `prod/.env`, ni
+`staging/.env`, ni le fichier plat `/opt/axion-audit/.env`. Le seul `.env` réel est celui que Coolify
+tient pour l'application, et il porte `APP_ENV=staging`. L'arbitrage portait donc sur deux fichiers
+absents ; et de toute façon la directive `command=` de `authorized_keys` **remplace** la commande du
+client au lieu de la filtrer, si bien qu'aucun de ces chemins n'atteignait le serveur.
+
+**Ce qui est grave n'est pas le code mort, c'est ce qu'il affirmait.** Un lecteur du workflow
+comprenait que la CI restaure chaque nuit les sauvegardes de **production**, et l'invariant 8 comme le
+critère L0 s'appuient sur cette lecture. Le garde était vrai sur ce qu'il observait et répondait à une
+autre question que celle posée — **la même famille de défaut, cette fois sur le plan de reprise.**
+
+Options :
+
+1. **Faire pointer le test vers la production.** Impossible : il n'y a pas de production. Axion Audit
+   n'a aujourd'hui qu'un seul environnement déployé.
+2. **Laisser le commentaire et le réglage en place** en attendant que la production existe. Refusé :
+   c'est précisément l'état qui a produit le défaut. Un bouton qui ne commande rien est pire qu'un
+   bouton absent, parce qu'on croit l'avoir tourné.
+3. **Dire ce que le test prouve réellement, retirer les réglages morts, et inscrire l'échéance.**
+
+Arbitrage : **option 3.** Le test prouve la chaîne de restauration sur **le seul environnement qui
+existe** — c'est la garantie maximale disponible aujourd'hui, et ce n'est pas celle que le PRA exigera
+demain. Les deux propositions sont vraies et doivent être écrites ensemble ; n'écrire que la première
+serait de la publicité, n'écrire que la seconde serait injuste envers un garde qui fonctionne.
+
+**L'ÉCHÉANCE, POUR QU'ELLE NE SE PERDE PAS.** Le jour où un environnement de production apparaît,
+**ce test ne le suivra pas tout seul.** Il faudra une seconde clé restreinte, un second script
+enveloppeur et un second stanza pgBackRest. Tant que ce n'est pas fait, aucun dossier de porte ne peut
+écrire que la restauration de production est testée. Inscrit ici et dans le workflow lui-même.
+
+**CE QUE CETTE DÉCOUVERTE A FAIT AJOUTER, et qui manquait plus que le reste :** la restriction de la
+clé n'était **vérifiée nulle part**. La CI envoie désormais un marqueur qui sort en 97 ; s'il ressort
+dans le journal, c'est que `command=` n'a pas joué — donc que la clé posée en secret est une clé
+**libre** sur ce serveur. Ce contrôle rougit **avant** toute conclusion sur la restauration. On
+vérifiait le résultat de la restauration sans jamais vérifier le pouvoir de la clé qui la déclenche.
+
+Précédence : invariant 8 (sauvegarde testée) — **honoré au niveau disponible, et l'écart est nommé**
+plutôt que masqué. Aucune divergence avec le pack : le fichier 02 §11.4 décrit un PRA de production
+qui n'est pas encore instanciable.
+
+Décideur : **A01**, sous l'autorisation permanente du 2026-08-30 (secrets et infrastructure de
+staging). **Remonté à Williams** parce qu'il touche à la portée d'une garantie, pas à un réglage.
+Impact spec : **aucun amendement** — une dette d'échéance, à rouvrir à la création de la production.
+
+---
+
+## 2026-08-30 — [L0] CORRECTION : le `.env` en 644 n'était PAS lisible par « n'importe quel compte du serveur »
+
+**J'ai annoncé une faille plus grave qu'elle ne l'était**, dans le message de commit `73ac66f`, dans
+`docs/ETAT.md` et à Williams de vive voix : _« la passphrase qui déchiffre toutes les archives était
+lisible par n'importe quel compte du serveur »_. **C'est faux.** La session voisine a objecté que le
+`644` du 2026-08-28 avait déjà été rectifié — `/data/coolify` étant en `700` — et a demandé de
+mesurer avant de conclure dans un sens ou dans l'autre. Mesuré :
+
+| Élément                                            | Valeur mesurée                                                     |
+| -------------------------------------------------- | ------------------------------------------------------------------ |
+| `/data/coolify` et `/data/coolify/applications`    | **`700`, uid 9999** (le compte interne de l'orchestrateur)         |
+| Traversée par un compte non privilégié             | **refusée** — testée réellement sous uid 65534, lecture impossible |
+| Comptes humains non-root avec shell sur la machine | **aucun**                                                          |
+
+**Le `644` était donc réel et INATTEINGNABLE.** Deux répertoires en `700` au-dessus de lui rendaient
+le mode du fichier sans effet pour tout ce qui n'est ni root ni uid 9999.
+
+**CE QUI RESTE VRAI, ET QU'IL NE FAUT PAS JETER AVEC L'ERREUR** : le `600` reste la bonne valeur — le
+runbook la prescrit (02 §30.4-2), et elle retire au compte 9999 un accès en lecture dont rien
+n'établit qu'il ait besoin. La correction n'était pas inutile ; **c'est sa GRAVITÉ qui était inventée.**
+
+**CE QUE MON ERREUR ILLUSTRE, ET QUI EST EXACTEMENT LE DÉFAUT QUE CE DÉPÔT TRAQUE** : j'ai lu `644` sur
+un fichier de secrets et conclu « lisible par tous » **sans mesurer la chaîne de répertoires
+au-dessus**. Une observation vraie — le mode était bien `644` — répondant à une autre question que
+celle posée : _qui peut réellement lire ce fichier ?_ Le même défaut que je documente depuis trois
+jours, commis en le documentant.
+
+**ET UN RISQUE QUE MA CORRECTION INTRODUIT, écrit plutôt que tu** : le fichier est désormais
+`600 root:root` dans un répertoire appartenant à uid 9999. Si l'orchestrateur devait le **lire** sous
+son propre compte entre deux déploiements, il ne le pourrait plus. La pile est restée saine après le
+changement, et l'ordre du script protège le cas courant — l'orchestrateur écrit le fichier, **puis**
+le déploiement le referme. **Le prochain déploiement est la vraie épreuve** ; s'il échoue à lire son
+environnement, la cause est ici et non ailleurs.
+
+Options :
+
+1. **Laisser le commit `73ac66f` faire foi.** Refusé : il porte une affirmation fausse sur la sécurité.
+2. **Réécrire le message de commit.** Refusé : il est poussé, et réécrire une trace contestée est
+   précisément le changement silencieux que ce format existe pour empêcher.
+3. **Corriger par une entrée datée, qui cite l'erreur et la mesure qui la défait.**
+
+Arbitrage : **option 3.** Précédence : `CLAUDE.md` §1-7 (rien n'est jamais silencieusement écrasé) —
+elle vaut pour mes propres affirmations autant que pour les données.
+
+Décideur : **A01**, sur objection de la session voisine, qui avait raison.
+Impact spec : **aucun**. Correction de dossier.

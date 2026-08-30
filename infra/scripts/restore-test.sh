@@ -28,11 +28,25 @@
 # sans argument, le script REFUSE de tourner et affiche la convention — il ne
 # devine aucun chemin (revue croisée M-11).
 #
-# ⚠️ PÉRIMÈTRE — CE SCRIPT S'ADRESSE AU MONTAGE « VPS DÉDIÉ » (docker compose
-# lancé par nous, projet `axion-audit-<env>`). Il NE SAIT PAS parler à la pile de
-# STAGING déployée par Coolify sur `axionia-web`, dont le projet Compose est un
-# uuid imposé et les volumes portent d'autres noms (infra/README.md §4.3 et §6.2).
-# Il n'a JAMAIS été exécuté à ce jour, sur aucune machine.
+# PÉRIMÈTRE — AMENDÉ LE 2026-08-30, APRÈS LA PREMIÈRE EXÉCUTION RÉELLE.
+# Ce qui était écrit ici jusqu'à cette date, et qui était vrai :
+#   « CE SCRIPT S'ADRESSE AU MONTAGE VPS DÉDIÉ […]. Il NE SAIT PAS parler à la
+#     pile de STAGING déployée par un orchestrateur, dont le projet Compose est
+#     un uuid imposé et les volumes portent d'autres noms […]. Il n'a JAMAIS été
+#     exécuté à ce jour, sur aucune machine. »
+# Or le workflow nocturne pointait vers lui depuis le lot L0, en promettant une
+# « sauvegarde testée » au titre de l'invariant 8. L'aveu et la promesse ont
+# cohabité dans le dépôt pendant trois jours sans se rencontrer, parce que ce
+# workflow SAUTAIT ses étapes utiles : personne n'a jamais lu le désaccord.
+#
+# CE QUI A CHANGÉ : le dépôt pgBackRest n'est plus DÉDUIT d'APP_ENV, il est
+# DÉCOUVERT sur la machine puis vérifié par son CONTENU (voir
+# `decouvrir_depot_pgbackrest` plus bas). Le script s'adresse donc aux DEUX
+# montages, et ne dépend plus d'aucune convention de nommage d'orchestrateur.
+#
+# CE QUI N'A PAS CHANGÉ, et qu'il ne faut pas surestimer : il restaure le stanza
+# décrit par le `.env` qu'on lui donne. Ce n'est pas une propriété de ce script,
+# c'est une propriété de son argument.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -63,7 +77,14 @@ mkdir -p "$AXION_LOG_DIR"
 AXION_LOG_FILE="$AXION_LOG_DIR/restore-test-$TS.log"
 export AXION_LOG_FILE
 
+# LIVE_PROJECT est le nom ATTENDU du montage « VPS dédié » (docker compose lancé
+# par nous). Ce n'est PAS une vérité sur la machine : sur le staging Coolify, le
+# projet Compose est un uuid imposé. Il ne sert plus qu'au diagnostic et au
+# garde-fou de collision de noms. Le dépôt pgBackRest, lui, est DÉCOUVERT.
 LIVE_PROJECT="$(axion_project_name)"
+# Rempli par decouvrir_depot_pgbackrest(), jamais deviné.
+DEPOT_PGBACKREST=""
+PROJET_DECOUVERT=""
 PG_CONTAINER="${RESTORE_ID}-pg"
 MINIO_CONTAINER="${RESTORE_ID}-minio"
 PG_VOLUME="${RESTORE_ID}-pgdata"
@@ -97,15 +118,113 @@ fail() {
 }
 
 # -----------------------------------------------------------------------------
+# DÉCOUVRIR LE DÉPÔT pgBACKREST — ET POURQUOI ON NE LE DÉDUIT PLUS.
+# -----------------------------------------------------------------------------
+# Ce script déduisait le nom du volume depuis APP_ENV :
+# « axion-audit-<env>_pgbackrest_repo ». MESURÉ le 2026-08-30, à la première
+# exécution réelle de ce script sur une machine : le volume s'appelle
+# « <uuid-orchestrateur>_pgbackrest-repo ». La déduction était fausse DEUX FOIS —
+# sur le préfixe (uuid imposé par l'orchestrateur) et sur le séparateur
+# (« -repo » et non « _repo »). L'en-tête de ce fichier l'annonçait déjà en
+# toutes lettres : « Il NE SAIT PAS parler à la pile de STAGING déployée par
+# Coolify […] Il n'a JAMAIS été exécuté à ce jour ». Le savoir était écrit ; il
+# n'avait pas été appliqué. Quatrième fois en trois jours.
+#
+# ON DÉCOUVRE DONC, AU LIEU DE DÉDUIRE : le dépôt est le volume qu'un conteneur
+# VIVANT monte sur $PGBACKREST_REPO_PATH. C'est une vérité observée sur la
+# machine, indépendante de l'orchestrateur et de ses conventions de nommage.
+#
+# ⚠️ MAIS UNE DÉCOUVERTE NON CONTRAINTE SERAIT PIRE QUE LA DÉDUCTION. Cette
+# machine héberge AUSSI une production étrangère à ce projet. Un volume trouvé
+# « au hasard » pourrait être le sien, et l'on restaurerait les sauvegardes de
+# quelqu'un d'autre en croyant tester les nôtres. Deux verrous, donc :
+#   · le candidat doit CONTENIR « backup/$PGBACKREST_STANZA » — un contrôle de
+#     CONTENU, pas de nom : un dépôt sans notre stanza n'est pas le nôtre ;
+#   · s'il reste PLUSIEURS candidats après ce filtre, on REFUSE. Choisir serait
+#     deviner, et deviner sur cette machine-là est précisément l'interdit.
+# AXION_PGBACKREST_VOLUME permet de trancher à la main ; ce réglage passe par les
+# MÊMES vérifications, sans quoi il ne serait qu'un moyen de les taire.
+# -----------------------------------------------------------------------------
+depot_porte_notre_stanza() {
+  local vol="$1"
+  docker run --rm -v "${vol}:/depot:ro" "$ALPINE_IMAGE" \
+    test -d "/depot/backup/${PGBACKREST_STANZA}" >/dev/null 2>&1
+}
+
+decouvrir_depot_pgbackrest() {
+  axion_require_env PGBACKREST_REPO_PATH PGBACKREST_STANZA
+
+  local candidats=""
+
+  if [[ -n "${AXION_PGBACKREST_VOLUME:-}" ]]; then
+    if ! docker volume inspect "$AXION_PGBACKREST_VOLUME" >/dev/null 2>&1; then
+      axion_die "AXION_PGBACKREST_VOLUME désigne « $AXION_PGBACKREST_VOLUME », qui n'existe pas sur cette machine. Un réglage manuel qui pointe vers rien est plus dangereux que pas de réglage du tout."
+    fi
+    candidats="$AXION_PGBACKREST_VOLUME"
+    axion_log "Dépôt imposé à la main : $AXION_PGBACKREST_VOLUME (les vérifications de contenu s'appliquent quand même)."
+  else
+    local id nom
+    while read -r id; do
+      [[ -z "$id" ]] && continue
+      nom="$(docker inspect "$id" --format "{{range .Mounts}}{{if and (eq .Type \"volume\") (eq .Destination \"${PGBACKREST_REPO_PATH}\")}}{{.Name}}{{end}}{{end}}" 2>/dev/null || true)"
+      [[ -z "$nom" ]] && continue
+      case " $candidats " in *" $nom "*) continue ;; esac
+      candidats="$candidats $nom"
+    done < <(docker ps --format '{{.ID}}' 2>/dev/null || true)
+  fi
+
+  if [[ -z "${candidats// /}" ]]; then
+    axion_die "Aucun conteneur vivant ne monte de volume sur « $PGBACKREST_REPO_PATH » : il n'y a rien à restaurer, et ce n'est PAS un détail de configuration. Soit la pile est arrêtée, soit les sauvegardes n'écrivent pas là où ce script les cherche. Poser AXION_PGBACKREST_VOLUME pour trancher à la main."
+  fi
+
+  local retenus="" vol
+  for vol in $candidats; do
+    if depot_porte_notre_stanza "$vol"; then
+      retenus="$retenus $vol"
+    else
+      axion_log "Volume « $vol » écarté : il ne contient pas backup/${PGBACKREST_STANZA}."
+    fi
+  done
+
+  # shellcheck disable=SC2086
+  set -- $retenus
+  if [[ "$#" -eq 0 ]]; then
+    axion_die "Aucun dépôt trouvé ne contient « backup/${PGBACKREST_STANZA} ». Candidats examinés :${candidats}. Un dépôt sans notre stanza n'est pas le nôtre — on refuse de restaurer depuis les archives d'autrui, et on refuse tout autant de sortir vert sans avoir rien restauré."
+  fi
+  if [[ "$#" -gt 1 ]]; then
+    axion_die "PLUSIEURS dépôts portent « backup/${PGBACKREST_STANZA} » :${retenus}. Choisir serait deviner. Poser AXION_PGBACKREST_VOLUME pour désigner celui qui fait foi."
+  fi
+
+  DEPOT_PGBACKREST="$1"
+  PROJET_DECOUVERT="$(docker volume inspect "$DEPOT_PGBACKREST" --format '{{index .Labels "com.docker.compose.project"}}' 2>/dev/null || true)"
+  if [[ "$DEPOT_PGBACKREST" != "${LIVE_PROJECT}_pgbackrest_repo" ]]; then
+    axion_log "Dépôt découvert : « $DEPOT_PGBACKREST » (projet « ${PROJET_DECOUVERT:-inconnu} »). Le nom déduit d'APP_ENV aurait été « ${LIVE_PROJECT}_pgbackrest_repo » — il ne correspond pas, et c'est la découverte qui fait foi."
+  else
+    axion_log "Dépôt découvert : « $DEPOT_PGBACKREST » (conforme au nom déduit d'APP_ENV)."
+  fi
+}
+
+# -----------------------------------------------------------------------------
 # GARDE-FOU ANTI-PRODUCTION (exigence : « refuse de s'exécuter s'il détecte qu'il
 # pointe sur les volumes de prod »).
 # -----------------------------------------------------------------------------
 guard_not_production() {
   local vol
+  # 0. LA DÉCOUVERTE VIENT D'ABORD, et l'ordre n'est pas cosmétique : le contrôle
+  #    de collision ci-dessous doit connaître l'espace de nommage RÉELLEMENT
+  #    vivant, pas seulement celui qu'APP_ENV laisse supposer. Tant que le dépôt
+  #    n'était que déduit, ce garde ne protégeait que d'un nom imaginaire.
+  decouvrir_depot_pgbackrest
   # 1. Aucune ressource de test ne doit porter un nom de ressource vivante.
   for vol in "$PG_VOLUME" "$MINIO_VOLUME" "$CADDY_VOLUME"; do
     case "$vol" in
-      "${LIVE_PROJECT}_"*) axion_die "GARDE-FOU : volume de test « $vol » dans l'espace de nommage de production." ;;
+      "${LIVE_PROJECT}_"*) axion_die "GARDE-FOU : volume de test « $vol » dans l'espace de nommage déduit « $LIVE_PROJECT »." ;;
+    esac
+    # Et dans l'espace de nommage RÉELLEMENT découvert, quand il diffère. Le
+    # repli « §néant§ » est volontairement impossible à porter comme préfixe :
+    # une variable vide ferait correspondre « _* » à n'importe quoi.
+    case "$vol" in
+      "${PROJET_DECOUVERT:-§néant§}_"*) axion_die "GARDE-FOU : volume de test « $vol » dans l'espace de nommage de la pile vivante « $PROJET_DECOUVERT »." ;;
     esac
     if docker volume inspect "$vol" >/dev/null 2>&1; then
       axion_die "GARDE-FOU : le volume de test « $vol » existe déjà — refus d'écrire dessus."
@@ -122,11 +241,8 @@ guard_not_production() {
     /var/tmp/${RESTORE_PREFIX}-*) : ;;
     *) axion_die "GARDE-FOU : répertoire de travail non conforme : $WORK_DIR" ;;
   esac
-  # 4. Le dépôt pgBackRest de production doit exister ET n'être monté qu'en :ro.
-  if ! docker volume inspect "${LIVE_PROJECT}_pgbackrest_repo" >/dev/null 2>&1; then
-    axion_die "GARDE-FOU : dépôt pgBackRest « ${LIVE_PROJECT}_pgbackrest_repo » introuvable — rien à restaurer. Le nom est dérivé d'APP_ENV (projet Compose « $LIVE_PROJECT ») : si la pile est déployée par un orchestrateur qui impose son propre nom de projet (Coolify sur le staging), ce volume n'existe pas sous ce nom — voir infra/README.md §6.2, ce cas n'est PAS supporté."
-  fi
-  axion_log "Garde-fou anti-production : OK (dépôt monté en lecture seule, ressources jetables uniques)."
+  # 4. Le dépôt a été trouvé à l'étape 0 ; il ne sera monté qu'en « :ro ».
+  axion_log "Garde-fou anti-production : OK — dépôt « $DEPOT_PGBACKREST » monté en lecture seule, ressources jetables uniques."
 }
 
 # Reliquats d'exécutions interrompues (idempotence).
@@ -157,7 +273,7 @@ restore_postgres() {
     -e PGBACKREST_STANZA="$PGBACKREST_STANZA" \
     -e PGBACKREST_REPO1_PATH="$PGBACKREST_REPO_PATH" \
     -e PGBACKREST_REPO1_CIPHER_PASS="$PGBACKREST_CIPHER_PASS" \
-    -v "${LIVE_PROJECT}_pgbackrest_repo:${PGBACKREST_REPO_PATH}:ro" \
+    -v "${DEPOT_PGBACKREST}:${PGBACKREST_REPO_PATH}:ro" \
     -v "$PG_VOLUME:/var/lib/postgresql/data" \
     --entrypoint sleep \
     "$PG_IMAGE" 3600 >/dev/null

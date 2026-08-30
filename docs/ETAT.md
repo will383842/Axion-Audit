@@ -1587,3 +1587,80 @@ de Williams, la seule dont l'échec ne se rattraperait pas.
 machine). **Aucune trace git ne distingue les contributions** des sessions ni des agents. La seule
 chaîne de signature qui tienne est celle de `DECISIONS.md` et des dossiers de porte — jamais
 `git log --author`.
+
+---
+
+## 2026-08-30 14h45 — [lot L0 / clôture des gardes d'infrastructure] — étape pipeline 5/7
+
+Dernier commit vert : `369f486` (le workflow nocturne dit enfin ce qu'il fait) · Branche : `lot/l0-infra` · Poussé : oui
+Tâche en cours : faire fusionner la PR #3 sur `main`, puis mesurer la restauration contre la vraie pile.
+Prochaine action : **quand la CI de la PR #3 est verte, la fusionner en squash, mettre à jour le clone `/opt/axion-audit/repo` depuis `main`, relancer `nightly-restore-test.yml` et lire si la restauration aboutit RÉELLEMENT.**
+Tests rouges connus : aucun en CI. Le test de restauration nocturne est **rouge par conception** tant que le correctif `7be1295` n'est pas sur `main` — c'est la mesure, pas une régression.
+
+📌 **CE QUI S'EST PASSÉ ICI, ET QUI VAUT PLUS QUE LA LISTE DES COMMITS.**
+Le test de restauration nocturne **s'est exécuté pour la première fois** depuis sa création au lot L0.
+Jusqu'à aujourd'hui, ses deux étapes utiles étaient sautées à chaque nuit : le garde portait le nom
+d'une garantie de l'invariant 8 et n'avait jamais exécuté une ligne utile. Il a échoué — **et c'est
+exactement ce qu'on lui demandait de faire.**
+
+📌 **CE QU'IL A TROUVÉ, PAR ORDRE DE GRAVITÉ CROISSANTE.**
+
+1. **Le nom du dépôt de sauvegarde était déduit, et faux deux fois** : `axion-audit-staging_pgbackrest_repo`
+   contre `<uuid-orchestrateur>_pgbackrest-repo` — faux sur le préfixe ET sur le séparateur. Remplacé
+   par une **découverte** : le dépôt est le volume qu'un conteneur vivant monte sur le chemin attendu.
+2. **L'en-tête du script l'annonçait déjà** : « *Il NE SAIT PAS parler à la pile de STAGING déployée
+   par Coolify […] Il n'a JAMAIS été exécuté à ce jour* ». Cet aveu et la promesse de « sauvegarde
+   testée » **ont cohabité trois jours dans le dépôt sans se rencontrer**, parce que le workflow qui
+   les aurait confrontés sautait ses étapes. **Quatrième savoir écrit et non appliqué en trois jours.**
+3. **Le `.env` de l'application était en `644`.** La passphrase qui déchiffre **toutes** les archives
+   était lisible par n'importe quel compte du serveur. Remis à `600`, pile vérifiée saine après.
+
+📌 **CE QUE J'AI REFUSÉ DE FAIRE, ET POURQUOI C'EST LE POINT DÉLICAT.**
+Découvrir un volume « au hasard » **serait pire que le déduire** : cette machine héberge aussi une
+production étrangère à ce projet, et l'on restaurerait les archives d'autrui en croyant tester les
+nôtres. La découverte est donc contrainte par le **contenu** (`backup/$PGBACKREST_STANZA`), jamais par
+un nom, et **refuse s'il reste plusieurs candidats** — choisir serait deviner, et deviner sur cette
+machine-là est précisément l'interdit.
+
+📌 **CE QUE LE CORRECTIF NE RÉPARE PAS, ET QUI DOIT RESTER VISIBLE.**
+· Le test restaure le stanza du `.env` qu'on lui donne, où `APP_ENV=staging`. Le workflow prétendait
+  restaurer la **production**. **Il n'y a pas encore de production** — la garantie est la garantie
+  maximale disponible, et elle ne suivra pas toute seule le jour où une production existera. Tracé
+  dans `DECISIONS.md`.
+· **Le clone du serveur ne suit que `main`** : la machine ne peut exécuter que du code fusionné. C'est
+  une bonne propriété, elle a été **préservée plutôt que contournée** — d'où l'ordre imposé ici :
+  merge d'abord, mesure ensuite.
+· Le contrôle d'empreinte couvre l'**enveloppeur**, pas `restore-test.sh` qu'il appelle. Le commit du
+  clone est journalisé mais **non comparé** à celui de la CI. Dette nommée, non refermée.
+· **Trois autres `.env` du même orchestrateur sont en `644`.** Ils appartiennent à un autre projet :
+  je n'y touche pas, et la décision revient à Williams.
+· Le `chmod 600` **ne tiendra pas seul** : l'orchestrateur réécrit ce fichier à chaque déploiement.
+
+---
+
+## 2026-08-30 15h20 — [lot L0] — étape pipeline 5/7 — **CORRECTION DU BLOC PRÉCÉDENT**
+
+Dernier commit vert : `73ac66f` · Branche : `lot/l0-infra` · Poussé : oui
+Tâche en cours : correction de dossier, puis attente de la CI de la PR #3.
+Prochaine action : **fusionner la PR #3 quand la CI est verte, mettre à jour `/opt/axion-audit/repo` ET `/opt/axion-audit/deploy-staging.sh` depuis `main` (leurs empreintes divergent DÉLIBÉRÉMENT depuis `73ac66f`), puis relancer le test de restauration.**
+Tests rouges connus : aucun en CI.
+
+⚠️ **LE BLOC DE 14h45 AFFIRME UNE CHOSE FAUSSE, ET LA VOICI CORRIGÉE.** Il écrit que le `.env` en
+`644` rendait la passphrase des archives *« lisible par n'importe quel compte du serveur »*. **Non.**
+`/data/coolify` et `/data/coolify/applications` sont en **`700`** ; la lecture par un compte non
+privilégié a été **testée réellement** et refusée ; **aucun compte humain non-root n'a de shell** sur
+cette machine. Le `644` était réel et **inatteignable**. Le `600` reste la bonne valeur — le runbook la
+prescrit — mais **sa gravité était inventée**, et l'invention est à moi.
+
+📌 **CE QUE CETTE ERREUR DIT, ET POURQUOI ELLE VAUT D'ÊTRE ÉCRITE ICI.** J'ai lu `644` sur un fichier
+de secrets et conclu « lisible par tous » **sans mesurer la chaîne de répertoires au-dessus**. Une
+observation vraie qui répond à une autre question que celle posée — **le défaut exact que ce dépôt
+traque depuis trois jours, commis en le documentant.** L'objection vient de la session voisine, qui a
+demandé de mesurer avant de conclure dans un sens ou dans l'autre. Elle avait raison.
+
+📌 **UN RISQUE QUE MA CORRECTION INTRODUIT.** Le fichier est `600 root:root` dans un répertoire
+appartenant à uid 9999. Si l'orchestrateur devait le **lire** sous son propre compte entre deux
+déploiements, il ne le pourrait plus. **Le prochain déploiement est l'épreuve** ; s'il échoue à lire
+son environnement, la cause est ici. **Et « la pile est saine, l'ordre du script protège le cas
+courant » est une PRÉDICTION, pas une mesure** — relevé par la session voisine, et c'est juste. Rien
+ne doit l'inscrire comme acquise avant que `8 · deploy-staging` soit vert sur `main`.
