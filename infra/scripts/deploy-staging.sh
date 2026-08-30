@@ -108,4 +108,33 @@ else
   echo "::warning::Aucune etiquette de revision sur le conteneur : le commit en service n a PAS pu etre verifie. Le statut Coolify seul ne prouve rien (cf. 2026-08-28)."
 fi
 
+# --- 4. REFERMER LES DROITS DU FICHIER DE SECRETS ---------------------------
+# MESURE LE 2026-08-30 : ce fichier portait 644. Il contient
+# PGBACKREST_CIPHER_PASS — la passphrase qui dechiffre TOUTES les archives de
+# sauvegarde. Elle etait donc lisible par n importe quel compte du serveur.
+#
+# POURQUOI ICI, ET PAS UNE FOIS A LA MAIN : l orchestrateur REECRIT ce fichier a
+# chaque deploiement, avec ses droits par defaut. Un chmod pose une fois serait
+# defait au deploiement suivant — une correction qui ne tient pas n est pas une
+# correction, c est un repit. On le repose donc apres CHAQUE deploiement, la ou
+# la reecriture vient d avoir lieu.
+#
+# CE N EST PAS UNE CORRECTION COMPLETE, ET IL FAUT LE DIRE : entre la reecriture
+# par l orchestrateur et cette ligne, le fichier est brievement lisible. Fermer
+# cette fenetre demanderait d agir sur l orchestrateur lui-meme, ce qui deborde
+# de ce script et de ce projet. Reduire une exposition permanente a une exposition
+# de quelques secondes est un gain reel ; le presenter comme une etancheite serait
+# exactement le defaut que ce depot traque.
+FICHIER_ENV="/data/coolify/applications/${UUID}/.env"
+if [ -f "$FICHIER_ENV" ]; then
+  DROITS_AVANT="$(stat -c '%a' "$FICHIER_ENV" 2>/dev/null || echo inconnu)"
+  if [ "$DROITS_AVANT" != "600" ]; then
+    chmod 600 "$FICHIER_ENV" && echo "Droits du fichier de secrets refermes : ${DROITS_AVANT} -> 600."
+  else
+    echo "Droits du fichier de secrets : deja 600."
+  fi
+else
+  echo "::warning::Fichier de secrets introuvable en ${FICHIER_ENV} : ses droits n ont PAS pu etre verifies. Si l orchestrateur a change d arborescence, ce controle est devenu muet — et un controle muet ne protege rien."
+fi
+
 echo "Deploiement du staging termine et verifie."
