@@ -349,17 +349,27 @@ if (violations.length > 0) {
 // quarante exigences. La précaution existait dans le dépôt, à deux endroits, et
 // manquait ici — encore une leçon apprise ailleurs et pas là.
 //
-// Le seuil est délibérément BAS : il ne mesure pas la couverture, il détecte la
-// cécité. Le dépôt en balaie plusieurs centaines ; en trouver moins de dix signifie
-// que quelque chose a cassé dans la façon de les trouver, pas que le code est propre.
-const PLANCHER_FICHIERS = 10;
-if (fichiersLus < PLANCHER_FICHIERS) {
+// ⚠️ LE SEUIL EST ZÉRO, ET PAS DIX — corrigé le 2026-08-31, quelques minutes après
+// avoir été posé. J'avais d'abord écrit « moins de dix fichiers = cécité », en
+// raisonnant sur la taille de CE dépôt. **Ce seuil était inventé.** La CI l'a
+// immédiatement démenti : les tests de ce garde s'exécutent dans des dépôts jetables
+// de deux ou trois fichiers, parfaitement légitimes, et six d'entre eux ont rougi.
+//
+// Un seuil arbitraire transforme un garde en obstacle : il refuse des cas sains, et
+// la pression retombe alors sur le seuil — qu'on baisse, jusqu'à ce qu'il ne serve
+// plus à rien. Le précédent du dépôt était sous mes yeux et disait la bonne chose :
+// `check-graphe-modules` rejette `candidats.length === 0`. **Exactement zéro.**
+//
+// Ce que ce plancher attrape, dit sans l'arrondir : la cécité TOTALE — arborescence
+// renommée, `git ls-files` en échec, exécution hors du dépôt. Il n'attrape PAS une
+// cécité PARTIELLE, et aucun seuil ne le ferait sans refuser des dépôts sains.
+if (fichiersLus === 0) {
   console.error(
-    `${ROUGE}✗ porte-journal : ${String(fichiersLus)} fichier(s) balayé(s), moins que le plancher de ${String(PLANCHER_FICHIERS)}.${RAZ}\n` +
+    `${ROUGE}✗ porte-journal : AUCUN fichier balayé.${RAZ}\n` +
       "  Ce n'est PAS un succès : c'est un balayage qui n'a rien trouvé à contrôler.\n" +
       "  Un garde qui sort vert sans avoir rien lu affirme une garantie qu'il n'a pas vérifiée.\n" +
       '  Causes probables : arborescence renommée, `git ls-files` en échec, ou exécution\n' +
-      '  hors du dépôt. Corriger la cause — ne pas baisser le plancher.\n',
+      "  hors du dépôt. Corriger la cause — ce contrôle n'a pas de seuil à baisser.\n",
   );
   process.exit(2);
 }
