@@ -4146,3 +4146,211 @@ Précédence : `CLAUDE.md` §3 (ce que l'autopilote ne décide jamais seul) — 
 relèvent, et c'est précisément pourquoi ils attendaient Williams.
 Décideur : **Williams**, directement, le 2026-08-30.
 Impact spec : **amendement de `CLAUDE.md` §4** (renvoi vers `docs/ORGANISATION_AGENTS.md`).
+
+---
+
+## 2026-08-30 — [L2/T3] Le CRUD users n'est pas spécifié : onze silences, et ce qui se décide sans Williams
+
+Avant d'écrire la première ligne de T3, le pack a été lu en entier sur ce point (11 §3, 05 §8.1-8.2 et
+§9.7, 03 §34.1/§34.3/§34.4, 04 table `users`, note de conception L2). **Résultat : le pack écrit
+`CRUD /v1/users` sur une ligne, et rien d'autre.** Une seule route est nommée noir sur blanc —
+`GET /v1/users`, désignée « premier consommateur réel » de la pagination keyset, curseur
+**`(created_at, id)`**. Tout le reste est muet.
+
+**CE QUI SE DÉCIDE ICI, PARCE QUE CE SONT DES CONVENTIONS ET NON DES CHOIX DE PRODUIT.**
+
+| Point                                     | Arbitrage                                                                                              | Ce qui le fonde — jamais mon goût                                                                                                                                                                                                                                                                                                                    |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Pas de route de suppression**           | `DELETE` n'existe pas                                                                                  | Le « D » de CRUD n'est **jamais instancié** dans le pack ; `users` **n'a pas de `deleted_at`** (04) ; et le cycle de sortie §34.4 dit « révocation + retrait des `mission_users` », **jamais** suppression. En créer une exigerait un amendement du 04.                                                                                              |
+| **`PATCH` pour la modification**          | `PATCH`, pas `PUT`                                                                                     | Les **seules** routes de modification nommées dans tout le fichier 05 sont des `PATCH` (`/v1/answers/:id`, `/v1/interviews/:id/reassign`). Convention observée, pas inventée.                                                                                                                                                                        |
+| **Quatre actes distincts, quatre routes** | `role`, `deactivate`, `habilitate`, `password-reset` ne sont **pas** des champs d'un `PATCH` générique | **Le catalogue du journal les distingue déjà** (`user.role_change`, `user.deactivate`, `user.habilitate`, `user.password_reset`). Les fondre dans un `PATCH` rendrait le journal **incapable de nommer ce qui s'est passé** — or l'invariant 7 exige que toute correction soit tracée. C'est le journal qui impose la forme de l'API, pas l'inverse. |
+| **`passwordHash` jamais en sortie**       | absent de toute réponse                                                                                | L'interdiction écrite ne porte que sur le **journal**. Son absence de l'API n'était écrite nulle part : elle l'est maintenant.                                                                                                                                                                                                                       |
+| **Politique de mot de passe**             | **12 caractères minimum**, Argon2id `m=19456, t=3, p=1`                                                | **Mesuré : ce n'était PAS un silence.** Le fichier 06 l'écrit — « Politique de mot de passe : 12+ caractères » — et les paramètres sont déjà dans le code livré. Le premier relevé le donnait pour absent faute d'avoir lu le 06 ; **la correction vaut d'être notée : un silence supposé n'est pas un silence mesuré.**                             |
+
+**CE QUI REMONTE À WILLIAMS, PARCE QUE ÇA CHANGE LE PRODUIT.**
+
+1. **Comment un mot de passe est réinitialisé.** Le pack décrit **le garde-fou** (§9.7) d'une route
+   qu'il **ne nomme jamais**. Mot de passe choisi par l'admin ? engendré et affiché une fois ? lien
+   d'invitation ? **Trois produits différents**, et le garde-fou est identique dans les trois. Aucune
+   n'est déductible.
+2. **Le code d'erreur du refus §9.7.** Aucun code existant ne nomme « outbox non vide ». `CONFLICT`
+   passerait, **au prix de rendre le cas indistinguable d'un conflit ordinaire** — or le front doit
+   savoir qu'un forçage explicite est possible. Ajouter un code est une décision d'API (11 §8-6).
+3. **L'authentification de ces routes admin en L2.** Le contrat exige cookies httpOnly + anti-CSRF
+   pour la console ; la note L2 §4.2 a déjà escaladé que `@fastify/cookie` est hors de la liste
+   épinglée §1, et proposé un « L2b ». **T3 livrerait donc des routes admin en Bearer**, ce que le
+   contrat ne prévoit pas pour la console.
+
+**CE QUE JE FAIS EN ATTENDANT, ET POURQUOI CE N'EST PAS UN BLOCAGE.** Les points 1 à 3 concernent la
+**réinitialisation** et l'**exposition** ; ils ne bloquent ni le listing, ni la création, ni la
+modification, ni l'habilitation. **T3 est donc découpé** : ce qui est fondé se construit, la
+réinitialisation attend. Bloquer l'ensemble sur trois questions qui n'en touchent qu'une partie
+serait transformer un doute en arrêt — l'inverse de ce que la règle demande.
+
+**ET UN CONSTAT QUI DÉPASSE T3, à porter en porte.** Un lot du noyau strict, chiffré à sa durée dans
+le plan, **n'a pas de contrat d'API dans le pack**. Le fichier 07 le tenait pour spécifié. Ce n'est
+pas une faute de rédaction : c'est **le même défaut que ceux traqués toute la journée** — un document
+qui, lu vite, a l'air de dire ce qu'il ne dit pas. Il faut s'attendre à le retrouver sur L3 et L7.
+
+Options :
+
+1. **Tout remonter à Williams et suspendre T3.** Onze silences, onze questions, et un lot arrêté
+   jusqu'à sa réponse. Refusé : la moitié de ces silences se comblent par une convention **observable
+   dans le pack ou dans le code déjà livré**, et transformer un doute en arrêt est précisément ce que
+   la règle ne demande pas. C'est aussi la voie qui a produit quatre heures d'arrêt ce matin.
+2. **Tout décider seul** et documenter après coup. Refusé : trois de ces points **inventent un
+   comportement produit** — comment un mot de passe se réinitialise n'est pas une convention, c'est
+   une décision de Williams, et la deviner engagerait ses missions.
+3. **Trancher ce qui se déduit, remonter ce qui s'invente, et découper T3 en conséquence.**
+
+Arbitrage : **option 3.** Le partage suit une règle et non un jugement : **ce qui se déduit d'une
+convention observable se décide ici** (le pack ne nomme que des `PATCH` ; le catalogue du journal
+distingue déjà quatre actes, donc l'API doit les distinguer aussi ; `users` n'a pas de `deleted_at`,
+donc pas de suppression) ; **ce qui exige d'inventer un comportement remonte** (les trois points
+ci-dessus). T3 est **découpé** : listing, création, modification et habilitation se construisent ; la
+réinitialisation attend l'arbitrage.
+
+Précédence : `CLAUDE.md` §3 (« un doute de spec ne se devine pas ») — appliqué, et **borné** par la
+règle ci-dessus. **Règle de précédence du pack sans objet** : il n'y a ici aucune divergence interne à
+arbitrer, mais un **silence**, ce qui n'est pas la même chose et ne se tranche pas par la hiérarchie
+des sections.
+Décideur : **A01** pour ce qui se déduit, **Williams** pour les trois points remontés.
+Impact spec : **aucun amendement** du 04 ; les routes retenues seront documentées comme l'exige 11 §8-6.
+
+---
+
+## 2026-08-31 — [pack] Williams ratifie les onze amendements : où s'écrivent-ils, dans `DECISIONS.md` ou dans le pack ?
+
+**« OK pour les 11 »** — Williams, en réponse à la liste complète présentée en clair. Les onze clauses
+sont celles où **le code contredit le pack avec de meilleures raisons que lui** : sept étaient tracées
+depuis le 2026-08-28 et attendaient signature, quatre venaient de l'audit d'alignement.
+
+**LES ONZE, POUR QUE CETTE ENTRÉE SE SUFFISE À ELLE-MÊME :**
+
+| #   | Clause                                              | Ce que le code fait à la place                                                                                                                                                             |
+| --- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | 02 §30.1 — « pas de Coolify en V1 »                 | Coolify était l'ordonnanceur **préexistant** ; l'écart porte sur la date, pas sur la nature                                                                                                |
+| 2   | 02 §11.4 — Hetzner Storage Box + Scaleway           | **Cloudflare R2**, déjà en service et payé                                                                                                                                                 |
+| 3   | 02 §11.1 — CX32, 15-25 €/mois                       | CPX32, 35,49 €                                                                                                                                                                             |
+| 4   | 02 §30.5 — dépôt privé                              | dépôt **public**, pseudonymisé                                                                                                                                                             |
+| 5   | 02 §30.6 — `docker compose pull` depuis un registre | le staging **construit sur le serveur**                                                                                                                                                    |
+| 6   | 11 §7 — « `docker compose up` suffit »              | `pnpm infra:up`                                                                                                                                                                            |
+| 7   | 09 §4bis — fil rouge Playwright                     | test d'**intégration** tant qu'aucune interface n'existe, bascule datée au L3                                                                                                              |
+| 8   | 11 §1 — `drizzle-kit` nommé                         | **délibérément exclu** : il dériverait le SQL du TypeScript, créant une **seconde source de vérité face au 04** — l'interdit même du §2                                                    |
+| 9   | 11 §1 — le pilote `pg` absent de la liste           | à ajouter : Drizzle est une couche de requêtes, pas un pilote                                                                                                                              |
+| 10  | 06 §10.3 — UFW                                      | **mesuré** : le trafic conteneur est traduit puis routé, il ne traverse jamais la chaîne que UFW filtre. Le pack prescrivait ici **un garde-fou de la famille exacte que ce dépôt traque** |
+| 11  | 02 §11.4 — `pg_dump` toutes les 6 h                 | **pgBackRest**, strictement mieux — mais le **RPO doit être scindé** : local excellent, **hors serveur 24 h** là où le pack promet 6                                                       |
+
+**LA QUESTION QUE CETTE RATIFICATION POSE, ET QUI N'EST PAS RHÉTORIQUE** : ratifier, est-ce réécrire
+les quatre fichiers du pack concernés (02, 06, 09, 11) ?
+
+Options :
+
+1. **Réécrire le pack maintenant.** Le pack dirait enfin vrai. Mais il est **scellé**, et son propre
+   texte ne prévoit **qu'une révision légitime** : la revue de spec de la porte P-D, « où le pack est
+   confronté au code réel » (09 §4). Le sceau existe depuis qu'un `pnpm format` a réécrit les douze
+   fichiers en silence. Surtout : **une fois le pack comblé, plus personne ne pourra distinguer ce que
+   Williams a spécifié de ce que l'autopilote a déduit** — or c'est exactement cette comparaison qui
+   fait la valeur de P-D.
+2. **Ne rien écrire nulle part** et se souvenir. Refusé sans discussion.
+3. **Tracer l'amendement ici, marquer les onze RATIFIÉS dans le document d'alignement, et réécrire le
+   pack en une seule passe relue à P-D.**
+
+Arbitrage : **option 3**, qui est **la procédure que le pack prescrit lui-même** — 09 §5.2 : « Tout
+écart à la spec est soit refusé, soit **documenté comme amendement horodaté** — JAMAIS silencieux. »
+L'amendement horodaté, c'est cette entrée ; le pack se reconcilie à P-D.
+
+**CE QUE CETTE OPTION COÛTE, ÉCRIT PLUTÔT QUE TU** : d'ici P-D, un lecteur qui ouvre le fichier 02
+lira « pas de Coolify en V1 » et croira le pack. **La contrepartie n'est donc pas facultative** : le
+document d'alignement doit porter les onze comme ratifiés, et être **tenu à jour** — il ne l'a pas été
+depuis le 2026-08-28, ce qui est précisément le défaut que cette procédure risque de reproduire.
+
+**ET UN CONTRÔLE À POSER, sans quoi cette entrée n'est qu'une intention** : rien ne vérifie
+aujourd'hui qu'un amendement tracé ici figure bien dans le document d'alignement. Un garde jumeau de
+`check:pack` doit le faire, faute de quoi « on réconciliera à P-D » vaut exactement ce que valaient
+les garanties démontées toute la journée d'hier.
+
+Précédence : 09 §5.2 (amendement horodaté) et 09 §4 (revue de spec à P-D) — **c'est le pack qui tranche
+sa propre procédure de révision**, non l'autopilote. Règle de précédence des sections sans objet.
+Décideur : **Williams** pour les onze ratifications ; **A01** pour le moment de la réécriture.
+Impact spec : **onze amendements horodatés** des fichiers 02, 06, 09 et 11, à intégrer **en une seule
+passe relue à la porte P-D**. Le sceau du pack reste **inchangé jusque-là**.
+
+---
+
+## 2026-08-31 — [L1/L6] Quatre manques du schéma qui rendent inexécutables quatre promesses du fichier 05
+
+**« Fais les 4 colonnes du schéma »** — Williams. Le document d'alignement les tenait pour **le point
+le plus urgent**, et son motif est de coût, pas de principe : _ajoutées maintenant, elles coûtent une
+migration sur une base vide ; découvertes au lot de synchronisation, elles coûtent une migration sur
+des données de collecte réelles._
+
+**Le pack a été relu intégralement (05 §9.3 à §9.9) avant de dessiner quoi que ce soit.** Chacun des
+quatre manques rend une promesse écrite **inexécutable**, et aucun n'est une préférence
+d'implémentation.
+
+**S-1 — `attachments` n'a pas d'`updated_at`, et le curseur de pull s'appuie dessus.**
+§9.5, mot pour mot : _« Curseur par mission (`updated_at` **serveur** max reçu) »_. La table s'arrête
+à `created_at`, alors que **le fichier 04 se contredit deux fois** : son en-tête pose
+« `created_at`/`updated_at` TIMESTAMPTZ **partout** », et sa propre ligne 164 déclare la ligne
+modifiable — _« le rattachement d'une note volante est complétable après coup = ligne modifiable →
+LWW §9.4 »_. **Conséquence : une pièce jointe modifiée ne redescendrait JAMAIS au terrain.**
+→ **`updated_at TIMESTAMPTZ NOT NULL DEFAULT now()`**.
+
+**S-3 — une note volante n'a aucun propriétaire, et l'invariant 3 en dépend.**
+§9.9 fonde la propriété sur **une seule colonne** : `interviews.conducted_by`. Pour `answers` et pour
+une pièce jointe rattachée, une jointure y mène. **Une note volante a `interview_id` ET `answer_id` à
+NULL** — la chaîne est rompue, et `attachments` **ne porte aucune colonne d'auteur**. Le pack crée
+pourtant ce cas et le rend durable (§24.1 P1-5). **Le pack ne dit nulle part de qui est une note
+volante : NON SPÉCIFIÉ.** `mission_id` ne peut pas en tenir lieu — §9.9 dit que les autres membres de
+la mission « consultent en LECTURE ».
+→ **`created_by FK users NOT NULL`**, et la règle de propriété devient : _le rattachement quand il
+existe, sinon l'auteur_. **Cette règle est une DÉCISION, pas une lecture** — le pack ne l'écrit pas.
+
+**S-4 — l'écrasement d'un entretien ou d'une pièce jointe n'est archivé nulle part.**
+§9.4 étend le dernier-écrit-gagne aux **trois** entités (`answers`, `interviews`, `attachments`) et ne
+nomme **qu'une** archive : `answer_revisions`, dont la clé étrangère vers `answers` est **obligatoire**.
+Sur le scénario « deux appareils » — **un critère d'acceptation `@critique`** — la valeur perdante
+d'un entretien ou d'une pièce jointe disparaît **sans trace**. C'est **l'invariant 7** :
+_rien n'est jamais silencieusement écrasé_.
+→ **La table est généralisée EN PLACE, sans être renommée**, et le motif n'est pas le confort :
+**le pack la nomme trois fois** (§9.3, §9.4, §9.9). La renommer mettrait le code en contradiction avec
+trois sections que Williams n'a pas amendées — un amendement plus large que celui demandé.
+`answer_id` devient NULLABLE ; ajout de `entity_type CHECK IN ('answer','interview','attachment')` et
+`entity_id`, avec un CHECK liant les deux.
+
+**S-6 — rien ne porte l'état d'un envoi par morceaux.**
+§9.6 exige `GET …/status` rendant _« la liste des chunks reçus »_, une reprise qui _« n'envoie QUE les
+manquants »_, et un 409 accompagné de _« la liste des chunks à réémettre »_. Le scénario §9.8
+« **reprise d'un envoi interrompu à 80 %** » impose que cet état **survive à une interruption**.
+**Le pack ne nomme aucune table et aucun champ : NON SPÉCIFIÉ.**
+→ Table **`attachment_uploads`**, clé = l'attachement (un envoi par pièce jointe).
+
+Options :
+
+1. **Ne rien ajouter et laisser L6 trancher.** Refusé : c'est exactement le calendrier qui transforme
+   une migration gratuite en migration sur données de collecte réelles, et L6 se développe SEUL — il
+   n'aurait personne pour arbitrer.
+2. **Ajouter les quatre en inventant ce que le pack tait**, sans le signaler. Refusé : trois des
+   quatre reposent sur des points **NON SPÉCIFIÉS**, et les taire ferait passer une décision pour une
+   lecture.
+3. **Ajouter les quatre, en distinguant à chaque fois ce qui se DÉDUIT du pack de ce qui se DÉCIDE.**
+
+Arbitrage : **option 3.** S-1 et S-4 se **déduisent** — le pack se contredit lui-même dans un cas, et
+promet une archive qu'il rend structurellement impossible dans l'autre. S-3 et S-6 se **décident** :
+la règle de propriété d'une note volante et la forme de l'état d'envoi sont des choix, et ils sont
+signalés comme tels ici plutôt que fondus dans le schéma.
+
+**POURQUOI LE FICHIER 04 EST AMENDÉ MAINTENANT, alors que les onze autres attendent P-D.** Ce n'est
+pas une commodité : le garde `6 · schema-diff` **compare le code livré au fichier 04** et les force à
+bouger ensemble. Un schéma modifié sans amendement du 04 ferait **échouer la CI** — le 04 n'est pas un
+document narratif, c'est la source exécutable. Les fichiers 02, 06, 09 et 11 n'ont pas de garde qui
+les confronte au code : eux se réconcilient à P-D.
+
+Précédence : **invariant 7** (rien n'est silencieusement écrasé) pour S-4 ; **invariant 3** (propriété
+serveur) pour S-3 ; §9.5 pour S-1 ; §9.6 et §9.8 pour S-6. Règle de précédence des sections **sans
+objet** : il s'agit de silences et d'une contradiction interne au 04, non d'une divergence entre
+sections de rang différent.
+Décideur : **Williams** pour l'ordre de les faire ; **A01** pour la forme, avec les deux décisions
+signalées ci-dessus.
+Impact spec : **amendement horodaté du fichier 04**, sceau régénéré, migration `up`/`down` livrée.

@@ -1716,7 +1716,7 @@ dont je suis l'auteur plutôt que le lecteur.**
 
 Dernier commit vert : `e234756` sur `main` · Branche : `lot/l0e-dossier-porte` · Poussé : en cours
 Tâche en cours : consigner dans le dossier de porte ce que deux critères prouvaient vraiment.
-Prochaine action : **ouvrir L3 sur `lot/l3` depuis `main`** — note de conception écrite, socle cartographié, deux doutes de spécification tracés et bloquants pour deux incréments.
+Prochaine action : ~~ouvrir L3~~ — **PÉRIMÉ, voir le bloc suivant. Ce fichier a induit en erreur une session d'audit qui a rapporté à Williams une contradiction inexistante : la séquence a changé dans l'heure qui a suivi ce bloc et il n'a pas été rafraîchi.** — note de conception écrite, socle cartographié, deux doutes de spécification tracés et bloquants pour deux incréments.
 Tests rouges connus : **aucun. Les deux rouges de `main` sont tombés.**
 
 📌 **LE TEST DE RESTAURATION NOCTURNE EST VERT PAR SON PROPRE CANAL** — run `33322880502`, `main` =
@@ -1743,3 +1743,46 @@ chaque contrôle a été vu tranchant.
 📌 **CE QUI RESTE, ET QU'IL NE FAUT PAS COCHER À LA PLACE DE WILLIAMS** : le critère 2 de P-A porte
 maintenant une ligne de preuve honnête, mais **la porte P-A elle-même reste signée « sous réserve »**.
 Lever la réserve est un geste humain, pas un geste d'autopilote.
+
+---
+
+## 2026-08-31 20h15 — [lot L2 / fermeture] — étape pipeline 5/7
+
+Dernier commit vert : `ac01df0` · Branche : `lot/l2c-declaratif` · Poussé : non (CI à lancer)
+Tâche en cours : fermeture de L2 — migration déclarative faite, tests L4 faits, quatre colonnes du schéma faites.
+Prochaine action : **pousser `lot/l2c-declaratif`, CI, fusion ; puis T3 (listing, création, modification, habilitation — PAS la réinitialisation) et la matrice E1-E47 ; puis porte P-B, qui est à Williams.**
+Tests rouges connus : aucun.
+
+⚠️ **CE FICHIER A INDUIT UN LECTEUR EN ERREUR AUJOURD'HUI, et c'est la raison d'être de ce bloc.**
+Le bloc de 16h40 annonçait « ouvrir L3 ». La séquence a changé dans l'heure — L2 → les trois dettes →
+P-B, confirmée par Williams — et **je n'ai pas rafraîchi le fichier dont la raison d'être est qu'une
+session neuve reprenne sans se tromper**. Une session d'audit l'a lu et a rapporté à Williams une
+contradiction qui n'existait plus. **Le défaut traqué depuis deux jours, logé dans le fichier de
+reprise lui-même.**
+
+📌 **CE QUI EST FAIT DEPUIS LA PORTE P-A**
+· **Migration déclarative des trois routes d'auth** — dette bloquante de L2. Elle a **resserré une
+garantie** : le typage a refusé un `boolean` élargi là où le contrat déclare le littéral `true`. 29
+tests d'un autre agent au vert.
+· **L4 avait ZÉRO test ; il en a 21.** Ils ont trouvé **deux vrais défauts** : les ancres §32.4 saisies
+en CRLF — la forme qu'Excel produit — étaient **rejetées par un contrôle bloquant**, et `empreinteQuestion`
+n'ordonnait pas `options`, ce qui aurait fait **dériver la banque à chaque ré-import**. Corrigés, et les
+tests qui les ferment ont été écrits par l'agent qui les a trouvés, **prouvés rouges avant correctif**.
+· **Les quatre colonnes du schéma** (S-1, S-3, S-4, S-6), ordonnées par Williams. Sceau régénéré après
+la trace. `schema-diff` 17/17 zéro écart, suite L1 57/57 cycle descente/montée compris.
+· **Les onze amendements du pack ratifiés** par Williams, tracés — le pack lui-même se réconcilie à P-D,
+c'est **sa propre procédure** (09 §5.2 et §4).
+
+📌 **CE QUE LE GARDE `schema-diff` M'A FAIT VOIR, ET QUI VAUT PLUS QUE LES COLONNES.** J'avais écrit
+`entity_type DEFAULT 'answer'`. La convention T12 l'interdit — *un défaut qui exprime un état métier
+vient du 04, ou n'existe pas*. **Avec ce défaut, une révision d'entretien dont l'écriture aurait omis
+le type serait devenue silencieusement une révision de réponse** : l'archive créée pour empêcher les
+pertes silencieuses les aurait produites elle-même.
+
+📌 **CE QUI ATTEND WILLIAMS**
+· **Les trois questions de T3** — réinitialisation du mot de passe (trois produits possibles, même
+garde-fou), code d'erreur du refus §9.7, cookies vs Bearer pour les routes admin. **Non tranchées.**
+· **L'ancien jeton Coolify** : mesuré non remplacé (`updated_at = 2026-08-28T03:16:50Z`).
+· **La passphrase du coffre** : détenteur unique. La chaîne fonctionne — coffre en trois exemplaires,
+expédié hors serveur 17 s après la passe — c'est la garde de la clé qui reste à un seul point.
+· **`packages/ui` a une semaine de retard** : §6 le place en semaine 1, il n'y a que les tokens.

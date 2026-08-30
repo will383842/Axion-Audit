@@ -890,11 +890,13 @@
       "section": "COLLECTE — traçabilité §9.3/§9.9 (invariant 7)",
       "columns": {
         "id": "uuid NOT NULL",
-        "answer_id": "uuid NOT NULL",
+        "answer_id": "uuid",
         "previous_value": "jsonb",
         "changed_by": "uuid NOT NULL",
         "changed_at": "timestamptz NOT NULL DEFAULT now()",
-        "change_origin": "text NOT NULL DEFAULT 'terrain'"
+        "change_origin": "text NOT NULL DEFAULT 'terrain'",
+        "entity_type": "text NOT NULL",
+        "entity_id": "uuid NOT NULL"
       },
       "primaryKey": {
         "name": "answer_revisions_pkey",
@@ -925,6 +927,17 @@
           "kind": "enum",
           "column": "change_origin",
           "values": ["terrain", "sync_arbitrage", "correction_siege"]
+        },
+        {
+          "name": "answer_revisions_entity_type_check",
+          "kind": "enum",
+          "column": "entity_type",
+          "values": ["answer", "interview", "attachment"]
+        },
+        {
+          "name": "answer_revisions_answer_id_coherence_check",
+          "kind": "expression",
+          "expression": "(((entity_type = 'answer'::text) = (answer_id IS NOT NULL)))"
         }
       ]
     },
@@ -946,7 +959,9 @@
         "client_created_at": "timestamptz",
         "client_updated_at": "timestamptz",
         "synced_at": "timestamptz",
-        "created_at": "timestamptz NOT NULL DEFAULT now()"
+        "created_at": "timestamptz NOT NULL DEFAULT now()",
+        "created_by": "uuid NOT NULL",
+        "updated_at": "timestamptz NOT NULL DEFAULT now()"
       },
       "primaryKey": {
         "name": "attachments_pkey",
@@ -975,6 +990,14 @@
           "columns": ["mission_id"],
           "references": {
             "table": "missions",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "attachments_created_by_fkey",
+          "columns": ["created_by"],
+          "references": {
+            "table": "users",
             "columns": ["id"]
           }
         }
@@ -2190,6 +2213,66 @@
       "unique": [],
       "foreignKeys": [],
       "checks": []
+    },
+    "attachment_uploads": {
+      "section": "SYNC — état d'un envoi par morceaux (§9.6, amendement S-6 du 2026-08-31)",
+      "columns": {
+        "attachment_id": "uuid NOT NULL",
+        "mission_id": "uuid NOT NULL",
+        "created_by": "uuid NOT NULL",
+        "chunk_size_bytes": "integer NOT NULL",
+        "chunks_attendus": "integer",
+        "chunks_recus": "jsonb NOT NULL DEFAULT '[]'::jsonb",
+        "sha256_attendu": "text",
+        "statut": "text NOT NULL",
+        "expire_le": "timestamptz",
+        "created_at": "timestamptz NOT NULL DEFAULT now()",
+        "updated_at": "timestamptz NOT NULL DEFAULT now()"
+      },
+      "primaryKey": {
+        "name": "attachment_uploads_pkey",
+        "columns": ["attachment_id"]
+      },
+      "unique": [],
+      "foreignKeys": [
+        {
+          "name": "attachment_uploads_attachment_id_fkey",
+          "columns": ["attachment_id"],
+          "references": {
+            "table": "attachments",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "attachment_uploads_mission_id_fkey",
+          "columns": ["mission_id"],
+          "references": {
+            "table": "missions",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "attachment_uploads_created_by_fkey",
+          "columns": ["created_by"],
+          "references": {
+            "table": "users",
+            "columns": ["id"]
+          }
+        }
+      ],
+      "checks": [
+        {
+          "name": "attachment_uploads_statut_check",
+          "kind": "enum",
+          "column": "statut",
+          "values": ["en_cours", "assemble", "echec"]
+        },
+        {
+          "name": "attachment_uploads_chunks_recus_check",
+          "kind": "expression",
+          "expression": "((jsonb_typeof(chunks_recus) = 'array'::text))"
+        }
+      ]
     }
   },
   "indexCritiques": [
@@ -2389,6 +2472,45 @@
       "table": "sync_log",
       "columns": ["user_id", "started_at"],
       "source": "04 §7.1"
+    },
+    {
+      "name": "idx_attachments_created_by",
+      "table": "attachments",
+      "columns": ["created_by"],
+      "source": "04 §7.1 — amendement du 2026-08-31 (DECISIONS.md)"
+    },
+    {
+      "name": "idx_attachments_updated_at",
+      "table": "attachments",
+      "columns": ["updated_at"],
+      "source": "04 §7.1 — amendement du 2026-08-31 (DECISIONS.md)",
+      "$motif": "§9.5 — le curseur de pull parcourt cette colonne a chaque delta."
+    },
+    {
+      "name": "idx_answer_revisions_entity",
+      "table": "answer_revisions",
+      "columns": ["entity_type", "entity_id"],
+      "source": "04 §7.1 — amendement du 2026-08-31 (DECISIONS.md)",
+      "$motif": "Sans lui, retrouver les revisions d'un entretien exigerait un balayage complet de l'archive."
+    },
+    {
+      "name": "idx_attachment_uploads_mission_id",
+      "table": "attachment_uploads",
+      "columns": ["mission_id"],
+      "source": "04 §7.1 — amendement du 2026-08-31 (DECISIONS.md)"
+    },
+    {
+      "name": "idx_attachment_uploads_created_by",
+      "table": "attachment_uploads",
+      "columns": ["created_by"],
+      "source": "04 §7.1 — amendement du 2026-08-31 (DECISIONS.md)"
+    },
+    {
+      "name": "idx_attachment_uploads_expire_le",
+      "table": "attachment_uploads",
+      "columns": ["expire_le"],
+      "source": "04 §7.1 — amendement du 2026-08-31 (DECISIONS.md)",
+      "$motif": "La purge des envois abandonnes parcourt cette colonne."
     }
   ],
   "indexEtablisParConvention": [
@@ -2687,7 +2809,11 @@
         "answer_revisions.changed_at",
         "answers.created_at",
         "answers.updated_at",
+        "attachment_uploads.chunks_recus",
+        "attachment_uploads.created_at",
+        "attachment_uploads.updated_at",
         "attachments.created_at",
+        "attachments.updated_at",
         "companies.countries",
         "companies.created_at",
         "companies.updated_at",
@@ -2796,7 +2922,11 @@
         "regle": "compteur entier incrémenté par le serveur → 0",
         "motif": "Un compteur qui démarre à zéro n'exprime aucun choix fonctionnel, c'est de l'arithmétique. Ne s'applique JAMAIS à une quantité métier collectée sur le terrain (headcount, users_count, answers_count, items_count…), pour laquelle NULL — « non renseigné » — et 0 sont deux faits distincts.",
         "colonnes": ["integration_events.attempts"]
-      }
+      },
+      "attachments.updated_at": "T3 (horodatages) — DEFAULT now(). Amendement S-1 du 2026-08-31 : sans cette colonne, le curseur de pull §9.5 n'avait rien sur quoi s'appuyer pour les pieces jointes.",
+      "attachment_uploads.created_at": "T3 (horodatages) — DEFAULT now().",
+      "attachment_uploads.updated_at": "T3 (horodatages) — DEFAULT now().",
+      "attachment_uploads.chunks_recus": "T2 (collections JSONB) — DEFAULT '[]'. Un envoi commence sans aucun morceau recu ; c'est un fait technique, pas un etat metier."
     },
     "retiresParLesMigrations0011et0012": {
       "$lecture": "TRACE de l'arbitrage A01, conservée pour que la porte P-A voie la correction et non seulement son résultat. Ces 10 colonnes restent NOT NULL : sans défaut, l'insertion devient EXPLICITE, et une ligne qui omet son état échoue à l'écriture au lieu d'hériter d'un choix que personne n'a fait. Le lot qui écrira chaque machine à états choisira son état d'entrée en connaissance de cause.",
