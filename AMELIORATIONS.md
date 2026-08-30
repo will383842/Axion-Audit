@@ -1163,3 +1163,52 @@ la 2 tant que l'obstacle des paquets privés n'est pas tranché, 15 min pour la 
 dans les 11 contextes exigés par la protection de `main` : le renommage ne débranche aucun garde.
 
 **Arbitrage attendu de Williams** : ABSORBÉE / PHASE 2 / REFUSÉE, séparément pour chacune.
+
+---
+
+## 2026-08-30 — [étage 2, PROPOSÉE] Une case cochée ne porte pas ce qu'elle a prouvé
+
+**Constat terrain, et c'est le plus grave de la journée.** Le critère 4 de la porte P-A a été **clos ce
+matin** — _« déploiement staging par la CI, vérifié »_ — sur le run `33292249119`. Ce déploiement était
+vert. Mais il tournait **avant** l'ajout du contrôle d'empreinte et de la vérification de prise
+d'effet, et la seule vérification alors prévue — l'étiquette OCI de révision — **ne pouvait jamais
+aboutir**, puisque l'orchestrateur construit ses images sans la poser.
+
+**Le dossier ne mentait pas. Il promettait plus que le mécanisme ne délivrait**, et **rien, dans sa
+lecture, ne permettait de s'en apercevoir.** Williams a engagé sa signature sur le mot « vérifié » en
+lui donnant son sens ordinaire.
+
+**Pourquoi c'est pire que les cinq murs du test de restauration.** Ceux-là étaient des gardes qui ne
+mesuraient rien : coûteux, mais internes au dépôt. Celui-ci est **une case cochée dans un document
+signé par un humain**, qui en tire des décisions.
+
+**Le remède ne peut pas être « mieux cocher ».** Une case ne porte pas ce qu'elle a prouvé. Ce qui
+l'aurait empêché : que chaque critère porte, à côté de son ✅, **le numéro de run, la date, et une
+phrase disant ce que cette preuve établit — ET CE QU'ELLE N'ÉTABLIT PAS.** Sur le critère 4, la ligne
+honnête du matin aurait été :
+
+> ✅ run `33292249119`, 2026-08-30 — _un déploiement a été déclenché par la CI et l'orchestrateur l'a
+> accepté. **Ne prouve PAS** que le code en service est celui du commit : la vérification d'étiquette
+> n'aboutit jamais (image construite par l'orchestrateur, sans étiquette OCI)._
+
+Écrite ainsi, **elle se serait dénoncée toute seule**. _Une case ne peut pas mentir sur ce qu'elle
+prouve si on lui fait dire ce qu'elle ne prouve pas._
+
+**Ce n'est pas une idée neuve : c'est la méthode déjà appliquée au code, remontée d'un étage.** C'est
+exactement ce qui est écrit dans `deploy-staging.sh` — « la voie `working_dir` prouve la PRISE
+D'EFFET, pas le CONTENU » — et dans `restore-test.sh`. Le script le dit de lui-même ; le dossier de
+porte, non.
+
+**Coût estimé** : la forme, 1 h. La **reprise des critères déjà cochés** de P-A, une demi-journée — et
+c'est elle qui compte, parce qu'une forme neuve appliquée aux seuls critères futurs laisserait
+intactes les cases déjà signées.
+**Impact schéma/API : aucun.**
+
+**Pourquoi ce n'est PAS implémenté d'office.** Le format des dossiers de porte est une **convention** :
+`CLAUDE.md` §3 point 2. Proposée par la session voisine, qui a **refusé de l'écrire elle-même** pour
+cette raison — le bon réflexe. **Arbitrage de Williams** : ABSORBÉE / PHASE 2 / REFUSÉE.
+
+**Appliqué dès aujourd'hui, sans attendre l'arbitrage, et la distinction est volontaire** : les
+critères 2 et 4 de P-A reçoivent leur ligne de preuve honnête. **Écrire ce qu'une preuve établit n'est
+pas changer le format du dossier** — c'est écrire une meilleure ligne dans le format existant. Rendre
+cette ligne **obligatoire pour tous les critères**, c'est la convention, et elle attend Williams.
