@@ -71,6 +71,30 @@ export const ERROR_CODES = {
   NOT_FOUND: 'NOT_FOUND',
   CONFLICT: 'CONFLICT',
   ILLEGAL_STATE_TRANSITION: 'ILLEGAL_STATE_TRANSITION',
+  /**
+   * REFUS DU GARDE-FOU 05 §9.7 — lot L2/T3, ajouté sur arbitrage de Williams
+   * (DECISIONS.md 2026-08-31 « Comment un mot de passe se réinitialise »).
+   *
+   * Rendu quand une réinitialisation de mot de passe détruirait des données que
+   * personne n'a encore reçues : la KEK de l'appareil dérive du mot de passe, donc
+   * tout ce qui reste dans l'outbox devient DÉFINITIVEMENT illisible. La condition
+   * est celle du 05 §9.7, mot pour mot : « dernier `sync_log.outbox_remaining` > 0
+   * OU aucune sync connue de l'appareil ».
+   *
+   * ── POURQUOI UN CODE À LUI, ET NON `CONFLICT` ────────────────────────────────
+   * Le refus est SURMONTABLE : l'admin peut confirmer « perte locale possible » et
+   * forcer. Sous `CONFLICT`, le front ne pourrait pas distinguer ce refus-là d'un
+   * conflit ordinaire — donc ne saurait pas qu'il a une confirmation à proposer, et
+   * le garde-fou deviendrait un mur muet. Or il existe précisément pour que
+   * l'administrateur sache CE QU'IL DÉTRUIT avant de le détruire.
+   *
+   * ── POURQUOI LE STATUT 409 MALGRÉ TOUT ──────────────────────────────────────
+   * La requête est bien formée (400 serait faux) et l'appelant a bien les droits
+   * (403 serait faux) : c'est l'ÉTAT de la ressource — des données non synchronisées
+   * — qui s'y oppose, ce qui est la définition de 409. Le statut classe la famille,
+   * le code nomme la cause ; c'est déjà la répartition de `ILLEGAL_STATE_TRANSITION`.
+   */
+  UNSYNCED_DATA_AT_RISK: 'UNSYNCED_DATA_AT_RISK',
 
   // --- 413 / 415 / 429 -------------------------------------------------------
   PAYLOAD_TOO_LARGE: 'PAYLOAD_TOO_LARGE',
@@ -154,6 +178,7 @@ export const HTTP_STATUS_BY_ERROR_CODE: Record<ErrorCode, number> = {
   NOT_FOUND: 404,
   CONFLICT: 409,
   ILLEGAL_STATE_TRANSITION: 409,
+  UNSYNCED_DATA_AT_RISK: 409,
   PAYLOAD_TOO_LARGE: 413,
   UNSUPPORTED_MEDIA_TYPE: 415,
   RATE_LIMITED: 429,

@@ -33,11 +33,8 @@
     "",
     "Tracabilite E36/E43 — lot L0 (07 §12), agent A52 ; alimente au lot L2."
   ],
-
   "seuilMinimalPourcent": 90,
-
   "metriquesControlees": ["lines", "statements", "functions", "branches"],
-
   "cheminsCritiques": [
     {
       "lot": "L2",
@@ -133,19 +130,7 @@
         "« Purete d'`activity_log` » que la note L2 §5 promettait et que personne",
         "n'avait ecrit. Mesure apres tests : 93,33 % lignes, 95,24 % branches."
       ]
-    }
-  ],
-
-  "_cheminsAttendus_mode_emploi": [
-    "Chaque entree ci-dessous decrit un module critique NON ENCORE LIVRE, le lot",
-    "qui l'alimente, et le glob attendu. Quand le lot livre son code, l'agent du",
-    "lot DEPLACE l'entree dans `cheminsCritiques` (en corrigeant le glob si",
-    "l'arborescence reelle differe). La CI echoue si du code correspondant a un",
-    "glob attendu existe alors que `cheminsCritiques` est encore vide.",
-    "Les globs sont au format `git ls-files` (pathspec)."
-  ],
-
-  "cheminsAttendus": [
+    },
     {
       "lot": "L2 (T3)",
       "module": "Domaine `users` — habilitation §34.4 et garde-fou de reinitialisation §9.7",
@@ -160,8 +145,19 @@
         "dans `cheminsCritiques` — c'est-a-dire exactement le trou que la ceinture 2",
         "vient d'attraper sur `apps/api/src/auth/**`. Un garde-fou ne se repare pas",
         "une fois : il se reparme."
-      ]
-    },
+      ],
+      "$motif": "Déplacé de cheminsAttendus le 2026-08-31 : T3 est LIVRÉ (7 routes + 32 tests). Le garde a refusé de laisser un module critique livré échapper au seuil de 90 % — c est exactement ce pour quoi il existe."
+    }
+  ],
+  "_cheminsAttendus_mode_emploi": [
+    "Chaque entree ci-dessous decrit un module critique NON ENCORE LIVRE, le lot",
+    "qui l'alimente, et le glob attendu. Quand le lot livre son code, l'agent du",
+    "lot DEPLACE l'entree dans `cheminsCritiques` (en corrigeant le glob si",
+    "l'arborescence reelle differe). La CI echoue si du code correspondant a un",
+    "glob attendu existe alors que `cheminsCritiques` est encore vide.",
+    "Les globs sont au format `git ls-files` (pathspec)."
+  ],
+  "cheminsAttendus": [
     {
       "lot": "L5a",
       "module": "Crypto locale terrain (DEK/KEK, WebCrypto, Argon2id)",

@@ -60,8 +60,15 @@ export const MOT_DE_PASSE_PRESENTE_LONGUEUR_MAX = 256;
  * fabriquerait un compte inaccessible plutôt qu'un compte plus facile à joindre.
  * (Fiche AMELIORATIONS proposée avec ce lot — la correction touche le fichier 04,
  * donc une escalade, CLAUDE.md §3-2.)
+ *
+ * ⚠ EXPORTÉ DEPUIS T3, ET C'EST LE POINT IMPORTANT : `users.ts` en a besoin pour la
+ * création et la modification d'un compte. Le recopier là-bas aurait dupliqué une
+ * décision de NORMALISATION — « on rogne les espaces, on ne met JAMAIS en
+ * minuscules » — dont les deux moitiés doivent rester d'accord : une adresse
+ * normalisée à l'écriture et pas à la lecture (ou l'inverse) fabrique un compte
+ * inaccessible. Un seul schéma, donc une seule décision.
  */
-const emailSchema = z.string().trim().pipe(z.email().max(EMAIL_LONGUEUR_MAX));
+export const emailUtilisateurSchema = z.string().trim().pipe(z.email().max(EMAIL_LONGUEUR_MAX));
 
 // -----------------------------------------------------------------------------
 // ENTRÉES
@@ -69,7 +76,7 @@ const emailSchema = z.string().trim().pipe(z.email().max(EMAIL_LONGUEUR_MAX));
 
 /** `POST /v1/auth/login` — entrée. */
 export const loginRequestSchema = z.object({
-  email: emailSchema,
+  email: emailUtilisateurSchema,
   password: z.string().min(1).max(MOT_DE_PASSE_PRESENTE_LONGUEUR_MAX),
 });
 
