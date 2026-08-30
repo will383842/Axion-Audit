@@ -31,6 +31,7 @@
     "check:jonction": "node scripts/check-jonction.mjs",
     "check:graphe-modules": "node scripts/check-graphe-modules.mjs",
     "check:porte-journal": "node scripts/check-porte-journal.mjs",
+    "check:executabilite": "node scripts/check-executabilite-scripts.mjs",
     "check:tracabilite": "node scripts/check-tracabilite-exigences.mjs",
     "check:pack": "node scripts/check-pack-integrity.mjs",
     "check:decisions": "node scripts/check-decisions.mjs",

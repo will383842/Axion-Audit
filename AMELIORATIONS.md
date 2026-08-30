@@ -1083,3 +1083,64 @@ demi-journée de réserve ci-dessus. **Impact schéma/API : aucun.**
 **Pourquoi ce n'est PAS implémenté d'office.** Cela touche l'ordonnancement des lots du fichier 07,
 donc une convention — `CLAUDE.md` §3 point 2. **Arbitrage attendu de Williams** :
 ABSORBÉE / PHASE 2 / REFUSÉE.
+
+---
+
+## 2026-08-30 — [étage 2, PROPOSÉE] La CI construit quatre images que personne ne déploie
+
+**Constat terrain, mesuré sur le serveur.** L'image en service est `axion-audit-api:coolify`, sans
+aucune étiquette OCI. L'orchestrateur **construit lui-même** depuis le dépôt ; il n'utilise pas les
+images que le job `7 · build (4 images GHCR)` pousse à chaque merge. Le tag `sha-<commit>` transmis au
+job de déploiement ne sert **qu'au message Telegram**.
+
+**Deux conséquences, et la seconde est la vraie.**
+· Du temps de CI dépensé à chaque merge pour des images que rien ne consomme — c'est le coût visible,
+et le moindre.
+· **La vérification du commit en service ne pouvait JAMAIS aboutir.** Elle lit
+`org.opencontainers.image.revision`, que ni l'image ni le conteneur ne portent. Ce garde avait été
+écrit le 2026-08-28 précisément parce que trois déploiements annoncés réussis avaient échoué — **et il
+n'a jamais rien vérifié depuis.** Il tombait en `::warning`, donc il ne mentait pas ; mais il occupait
+la place d'un contrôle et rassurait à sa place.
+
+**Ce qui a été fait tout de suite, faute de mieux.** Une seconde voie, mesurée et disponible
+aujourd'hui : le conteneur porte `com.docker.compose.project.working_dir = /artifacts/<uuid du
+déploiement>`, et nous connaissons cet uuid. **Elle prouve la PRISE D'EFFET, pas le CONTENU** — le
+commit réellement cloné reste invérifié, et une poussée glissée entre le déclenchement et le clonage
+passerait inaperçue. Le script échoue désormais si **aucune** des deux voies n'est disponible.
+
+> ### ⚠️ CORRECTION DE CETTE FICHE, LE MÊME JOUR — ET ELLE ME VISE
+>
+> J'ai présenté ci-dessus comme une **découverte** que l'orchestrateur construit ses propres images
+> et ignore GHCR. **C'était déjà écrit dans le dépôt depuis le 2026-08-28**, dans
+> `.github/workflows/README.md` §1, avec sa cause — _« les paquets GHCR sont privés et le tirage
+> anonyme est refusé »_ — et sa conséquence — _« `tag_image` est journalisé et notifié pour
+> traçabilité, il ne pilote pas encore l'image servie »_.
+>
+> **Je n'avais pas lu le document que je corrigeais.** C'est le sixième « savoir écrit et non
+> appliqué » de la semaine, et le premier dont je suis l'auteur plutôt que le lecteur.
+>
+> **Ce que la correction change au fond, et ce n'est pas cosmétique** : faire déployer les images de
+> GHCR n'est PAS une décision ouverte à faible coût. Elle a **déjà été écartée** pour une raison
+> technique mesurée. La rouvrir suppose de résoudre **cet** obstacle — rendre les paquets publics,
+> ou donner un jeton de tirage au serveur — ce qui est une décision de **sécurité**, pas
+> d'ergonomie de CI.
+>
+> **Ce que la correction NE change PAS** : la vérification du commit en service ne fonctionnait
+> toujours pas, et le nom du job induisait toujours en erreur un lecteur de porte.
+
+**Ce que la fiche propose, et il faut choisir.**
+
+1. **Poser l'étiquette OCI au build** : `ARG` dans le `Dockerfile` + `LABEL org.opencontainers.image.revision`, alimenté par la variable de commit de l'orchestrateur. **C'est la seule option qui referme vraiment la question, et elle ne dépend PAS de GHCR** — elle porte sur l'image que l'orchestrateur construit lui-même. Suppose de connaître le nom exact de la variable de commit qu'il passe au build : à **mesurer**, pas à supposer.
+2. **Faire déployer les images de GHCR.** Le seul chemin honnête de bout en bout — ce qui est testé serait ce qui est livré. **Mais il est bloqué par un obstacle déjà mesuré** (paquets privés, tirage anonyme refusé) dont la levée est une décision de sécurité.
+3. **Cesser de pousser les 4 images sur GHCR** puisque rien ne les déploie. Gain de CI immédiat, **mais** cela supprime le seul artefact permettant un retour arrière rapide, et **referme définitivement l'option 2**.
+
+**Les trois n'ont pas le même arbitre** : la 1 est technique et peut être absorbée ; la 2 est une
+décision de sécurité ; la 3 engage le plan de reprise. **Coût estimé** : 1 h pour la 1, inconnu pour
+la 2 tant que l'obstacle des paquets privés n'est pas tranché, 15 min pour la 3.
+**Impact schéma/API : aucun.**
+
+**Fait d'office en attendant (étage 1)** : le job a été **renommé**
+`7 · constructibilité des 4 images (NON déployées — voir AMELIORATIONS)`. Vérifié qu'il n'est pas
+dans les 11 contextes exigés par la protection de `main` : le renommage ne débranche aucun garde.
+
+**Arbitrage attendu de Williams** : ABSORBÉE / PHASE 2 / REFUSÉE, séparément pour chacune.
