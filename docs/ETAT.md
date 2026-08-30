@@ -1709,3 +1709,37 @@ bruyant sur une branche.
 `644` (inatteignable, mesuré après objection) ; et j'ai « découvert » que l'orchestrateur ignore GHCR
 alors que c'était écrit dans le dépôt depuis le 2026-08-28. **Premier savoir écrit et non appliqué
 dont je suis l'auteur plutôt que le lecteur.**
+
+---
+
+## 2026-08-30 16h40 — [lot L0] — étape pipeline 6/7 — **LE CANAL EST PROUVÉ**
+
+Dernier commit vert : `e234756` sur `main` · Branche : `lot/l0e-dossier-porte` · Poussé : en cours
+Tâche en cours : consigner dans le dossier de porte ce que deux critères prouvaient vraiment.
+Prochaine action : **ouvrir L3 sur `lot/l3` depuis `main`** — note de conception écrite, socle cartographié, deux doutes de spécification tracés et bloquants pour deux incréments.
+Tests rouges connus : **aucun. Les deux rouges de `main` sont tombés.**
+
+📌 **LE TEST DE RESTAURATION NOCTURNE EST VERT PAR SON PROPRE CANAL** — run `33322880502`, `main` =
+`e234756`. **Toutes les étapes exécutées, aucune sautée.** C'est la distinction que je n'avais pas
+faite ce matin et que la session voisine a eu raison d'imposer : trois exécutions directes prouvaient
+le **script** ; elles ne disaient rien de la chaîne cron → environnement `ops` → clé restreinte →
+`command=`. **Les deux affirmations se rejoignent maintenant.**
+
+📌 **CHAQUE GARDE A TRANCHÉ, VÉRIFIÉ DANS LE JOURNAL — pas déduit du verdict global :**
+· le marqueur de restriction n'est pas ressorti : la clé est bien restreinte ;
+· l'empreinte du script distant est identique au fichier versionné ;
+· **le garde de divergence, à sa première exécution réelle** : « Le serveur a exécuté le commit
+`e234756` — le commit exécuté est bien celui de cette exécution » ;
+· les trois découvertes ont toutes fonctionné : dépôt pgBackRest, image Postgres, volume d'archives ;
+· Postgres restauré et **comparé table par table** ; MinIO démarré sur les données restaurées, trois
+buckets présents.
+
+📌 **CE QUE CELA REND VRAI, ET QUI NE L'ÉTAIT PAS CE MATIN.** L'invariant 8 exige une sauvegarde
+**testée**, au présent. Depuis le lot L0, cette exigence reposait sur une preuve **ponctuelle** du
+2026-08-28 et sur un garde nocturne qui **sautait ses étapes utiles à chaque exécution**. Elle repose
+désormais sur un mécanisme qui s'exécute, qui échoue bruyamment quand il ne peut pas conclure, et dont
+chaque contrôle a été vu tranchant.
+
+📌 **CE QUI RESTE, ET QU'IL NE FAUT PAS COCHER À LA PLACE DE WILLIAMS** : le critère 2 de P-A porte
+maintenant une ligne de preuve honnête, mais **la porte P-A elle-même reste signée « sous réserve »**.
+Lever la réserve est un geste humain, pas un geste d'autopilote.
