@@ -220,201 +220,108 @@ jobs:
       # `force=true` : on redéploie même si Coolify juge que rien n'a changé.
       # Sans lui, un run relancé à la main pourrait ne RIEN faire tout en
       # rendant 200 — un succès sans déploiement.
-      - name: Déclencher le déploiement Coolify
+      # -----------------------------------------------------------------------
+      # DÉPLOIEMENT PAR SSH — et pourquoi ce n'est PAS un appel direct à Coolify.
+      # -----------------------------------------------------------------------
+      # Les deux étapes précédentes appelaient `${COOLIFY_URL}/api/v1/deploy`
+      # DEPUIS INTERNET. Au premier passage réel de ce job — le 2026-08-30, après
+      # le tout premier merge sur `main` — elles ont échoué :
+      #
+      #     ::error::Coolify injoignable — l'appel à ***/api/v1/deploy n'a pas
+      #     abouti (erreur réseau ou délai dépassé).
+      #
+      # LA CAUSE N'ÉTAIT PAS UN DÉFAUT, C'ÉTAIT UN CORRECTIF. Le pare-feu Hetzner
+      # ferme le port 8000 depuis le 2026-08-28 ; `docs/portes/PORTE_A` l'inscrit
+      # comme la correction du risque « console Coolify exposée en HTTP clair »,
+      # preuve à l'appui. Deux exigences vraies se contredisaient :
+      #   · fermer le 8000 à Internet = la bonne correction de sécurité ;
+      #   · déployer par la CI       = un appel depuis Internet sur le 8000.
+      # Personne ne pouvait voir la collision : ce job ne tourne que sur `main`,
+      # et rien n'y avait jamais été mergé. Le blocage circulaire de la porte
+      # cachait sa propre conséquence.
+      #
+      # CE QUI A ÉTÉ ÉCARTÉ, et pourquoi :
+      #   · ROUVRIR LE 8000 aux plages GitHub — des milliers de plages mouvantes,
+      #     et la console d'administration qui pilote AUSSI `axion-ia.com`
+      #     redeviendrait joignable depuis un espace immense. Refusé.
+      #   · PUBLIER COOLIFY EN HTTPS derrière le proxy — TLS protège le transport,
+      #     pas la surface : la console resterait exposée à Internet, chiffrée.
+      #     Cela déplace le risque, ne le supprime pas. Refusé.
+      #   · LA CLÉ D'ADMINISTRATION de Williams en secret — elle donnerait un
+      #     accès root complet, production comprise, à quiconque peut modifier ce
+      #     fichier. Refusé.
+      #
+      # CE QUI EST FAIT : une clé DÉDIÉE, dont `authorized_keys` restreint
+      # l'usage à UNE SEULE commande côté serveur —
+      #     command="/opt/axion-audit/deploy-staging.sh",restrict
+      # Elle ne peut ni ouvrir un shell, ni lire un fichier, ni rediriger un port.
+      # Prouvé par tentative réelle le 2026-08-30 : `whoami; cat /etc/shadow` et
+      # la lecture d'un fichier d'`axion-ia` ont TOUS DEUX été refusés — le
+      # serveur exécute le script quoi qu'on lui demande.
+      #
+      # Aucun port n'est ouvert : le 22 est déjà le canal d'administration, et le
+      # 8000 reste fermé. Le correctif du 2026-08-28 est intact.
+      #
+      # Le jeton Coolify ne quitte pas la mémoire : il transite par stdin, jamais
+      # par la ligne de commande — `ps` d'un autre utilisateur ne le verrait pas.
+      # -----------------------------------------------------------------------
+      - name: Déclencher le déploiement Coolify (par SSH, en boucle locale)
         id: declenchement
-        timeout-minutes: 5
         env:
-          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
-          COOLIFY_URL: ${{ secrets.COOLIFY_URL }}
-          UUID_APPLICATION: ${{ steps.reglages.outputs.uuid_application }}
-          TAG_IMAGE: ${{ inputs.tag_image }}
+          CLE_SSH: ${{ secrets.DEPLOY_SSH_KEY }}
+          JETON: ${{ secrets.COOLIFY_API_TOKEN }}
+          UUID_APP: ${{ vars.COOLIFY_APP_UUID }}
+          COMMIT: ${{ github.sha }}
+          # L'adresse n'est PAS un secret : elle figure déjà en clair dans les
+          # variables du dépôt et dans `infra/COHABITATION_AXIONIA_WEB.md`. La
+          # mettre en secret donnerait l'illusion de protéger ce qui ne l'est pas.
+          HOTE: 178.105.55.15
         run: |
           set -euo pipefail
-          base="${COOLIFY_URL%/}"
-          reponse=/tmp/coolify-declenchement.json
 
-          echo "Déclenchement du déploiement de l application ${UUID_APPLICATION} (tag attendu : ${TAG_IMAGE})."
-
-          # Le jeton voyage en EN-TÊTE, jamais dans l'URL : une URL se retrouve
-          # dans les journaux d'accès du serveur, un en-tête non (02 §30.4-1).
-          if ! code_http="$(curl -sS -G \
-                --max-time 60 \
-                -o "${reponse}" \
-                -w '%{http_code}' \
-                -H "Authorization: Bearer ${COOLIFY_API_TOKEN}" \
-                -H 'Accept: application/json' \
-                --data-urlencode "uuid=${UUID_APPLICATION}" \
-                --data-urlencode 'force=true' \
-                "${base}/api/v1/deploy")"; then
-            echo "::error title=Coolify injoignable::L appel à ${base}/api/v1/deploy n a pas abouti (erreur réseau ou délai dépassé). Vérifier que le service Coolify écoute et que COOLIFY_URL est joignable depuis GitHub Actions."
+          if [ -z "${CLE_SSH}" ]; then
+            echo "::error title=Clé de déploiement absente::Le secret DEPLOY_SSH_KEY n'est pas posé sur ce dépôt. Sans lui, la CI ne peut pas atteindre Coolify — le port 8000 est fermé à Internet DÉLIBÉRÉMENT (correctif du 2026-08-28)."
             exit 1
           fi
 
-          case "${code_http}" in
-            2??) ;;
-            401 | 403)
-              echo "::error title=Jeton Coolify refusé::HTTP ${code_http} sur /api/v1/deploy. Le secret COOLIFY_API_TOKEN est invalide, expiré, ou son équipe n a pas accès à cette application."
-              exit 1
-              ;;
-            404)
-              echo "::error title=Application Coolify introuvable::HTTP 404 sur /api/v1/deploy pour l uuid ${UUID_APPLICATION}. Vérifier COOLIFY_APP_UUID (DECISIONS.md, 2026-08-28)."
-              exit 1
-              ;;
-            *)
-              echo "::error title=Déclenchement refusé::HTTP ${code_http} sur /api/v1/deploy."
-              echo '──── Réponse de Coolify ────'
-              cat "${reponse}"
-              exit 1
-              ;;
-          esac
+          CLE="$(mktemp)"; trap 'rm -f "${CLE}"' EXIT
+          printf '%s\n' "${CLE_SSH}" > "${CLE}"
+          chmod 600 "${CLE}"
 
-          # Coolify v4 rend `{"deployments":[{"deployment_uuid":"…"}]}` ; les
-          # versions antérieures rendaient l'objet à plat. On lit les deux.
-          uuid_deploiement="$(jq -r '(.deployments[0].deployment_uuid // .deployment_uuid) // empty' "${reponse}")"
+          # `IdentitiesOnly` : on n'essaie QUE cette clé. Sans lui, un agent
+          # présent sur le runner pourrait en proposer une autre et l'on croirait
+          # avoir prouvé que la clé restreinte fonctionne.
+          # L'empreinte de l'hôte est acceptée à la première connexion : le
+          # runner est éphémère, il n'a pas de `known_hosts` à conserver.
+          SORTIE="$(printf '%s\n%s\n%s\n' "${JETON}" "${UUID_APP}" "${COMMIT}" \
+            | ssh -i "${CLE}" \
+                  -o IdentitiesOnly=yes \
+                  -o BatchMode=yes \
+                  -o StrictHostKeyChecking=accept-new \
+                  -o ConnectTimeout=20 \
+                  -o ServerAliveInterval=30 \
+                  "root@${HOTE}" 2>&1)" && CODE=0 || CODE=$?
 
-          # SANS cet uuid, l'étape 3 n'a rien à surveiller — et un workflow qui
-          # « déploie » sans pouvoir constater le résultat est précisément le
-          # vert mensonger que ce dépôt refuse. C'est donc un ÉCHEC, pas un
-          # avertissement : on ne passe pas à la suite en fermant les yeux.
+          printf '%s\n' "${SORTIE}"
+
+          if [ "${CODE}" -ne 0 ]; then
+            echo "::error title=Déploiement échoué::Le script distant a rendu ${CODE}. Sa sortie est ci-dessus — elle nomme la cause."
+            exit 1
+          fi
+
+          uuid_deploiement="$(printf '%s' "${SORTIE}" | grep -oE 'Deploiement declenche : [a-z0-9]+' | awk '{print $4}' | head -1)"
           if [ -z "${uuid_deploiement}" ]; then
-            echo "::error title=Déploiement non traçable::Coolify a accepté l appel (HTTP ${code_http}) mais n a rendu aucun deployment_uuid. Impossible de vérifier l issue du déploiement — le job échoue plutôt que d annoncer un succès non constaté."
-            echo '──── Réponse de Coolify ────'
-            cat "${reponse}"
+            echo "::error title=Aucun identifiant de déploiement::Le script est sorti en 0 sans annoncer d'identifiant. Un succès qu'on ne peut pas rattacher à un déploiement n'est pas un succès."
             exit 1
           fi
-
-          echo "Déploiement mis en file : ${uuid_deploiement}"
           echo "uuid_deploiement=${uuid_deploiement}" >> "$GITHUB_OUTPUT"
 
-      # -----------------------------------------------------------------------
-      # 3/4 — ATTENDRE LA FIN, ET ÉCHOUER SI LE DÉPLOIEMENT ÉCHOUE
-      # -----------------------------------------------------------------------
-      # L'étape 2 ne prouve qu'une chose : Coolify a ACCEPTÉ la demande. Ce qui
-      # décide du sort du staging, c'est le statut final du déploiement. On le
-      # lit à la source, jusqu'à un état terminal ou une borne de temps.
-      - name: Attendre l issue du déploiement (borne 20 min)
-        id: attente
-        timeout-minutes: 25
-        env:
-          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
-          COOLIFY_URL: ${{ secrets.COOLIFY_URL }}
-          UUID_DEPLOIEMENT: ${{ steps.declenchement.outputs.uuid_deploiement }}
-        run: |
-          set -euo pipefail
-          base="${COOLIFY_URL%/}"
-          reponse=/tmp/coolify-suivi.json
-
-          # 20 min : le déploiement attendu est un `pull` d'images GHCR suivi
-          # d'un redémarrage — quelques minutes. Une borne plus large ne rend
-          # pas le déploiement plus sûr, elle retarde seulement le constat.
-          echeance=$((SECONDS + 1200))
-          intervalle=15
-          # Une file Coolify gelée reste indéfiniment en `queued` (bug connu du
-          # répartiteur Horizon, mesuré sur le projet voisin). Rester bloqué
-          # 20 min pour l'apprendre est une perte sèche : au bout de 5 min sans
-          # avoir jamais vu `in_progress`, on tranche.
-          serie_en_file=0
-          serie_en_file_max=20
-          # Une interrogation qui n'aboutit pas est un incident RÉSEAU, pas un
-          # verdict : on retente. Mais on ne retente pas indéfiniment — sinon
-          # une panne de Coolify se lirait comme un déploiement lent.
-          echecs_interrogation=0
-          echecs_interrogation_max=8
-
-          journaliser_echec() {
-            echo '──── Journal du déploiement Coolify (200 dernières entrées) ────'
-            jq -r '
-              .logs
-              | (fromjson? // .)
-              | if type == "array" then .[-200:] else [] end
-              | .[]
-              | "[\(.order // "?")] \(.type // "?") : \(.output // "")"
-            ' "${reponse}" || echo '(journal illisible — Coolify n a pas rendu de champ `logs` exploitable)'
-            echo '──── Fin du journal ────'
-          }
-
-          while [ "${SECONDS}" -lt "${echeance}" ]; do
-            # Pas de `|| true` : un échec d'interrogation est TRAITÉ (compté,
-            # journalisé, retenté), il n'est pas effacé.
-            if ! curl -fsS --max-time 20 \
-                  -o "${reponse}" \
-                  -H "Authorization: Bearer ${COOLIFY_API_TOKEN}" \
-                  -H 'Accept: application/json' \
-                  "${base}/api/v1/deployments/${UUID_DEPLOIEMENT}"; then
-              echecs_interrogation=$((echecs_interrogation + 1))
-              echo "::warning::Coolify n a pas répondu à l interrogation du déploiement (${echecs_interrogation}/${echecs_interrogation_max})."
-              if [ "${echecs_interrogation}" -ge "${echecs_interrogation_max}" ]; then
-                echo "::error title=Suivi impossible::${echecs_interrogation} interrogations consécutives sans réponse de Coolify. L issue du déploiement ne peut pas être constatée : le job échoue."
-                exit 1
-              fi
-              sleep "${intervalle}"
-              continue
-            fi
-            echecs_interrogation=0
-
-            # Une réponse 200 qui n'est pas du JSON est une anomalie franche
-            # (portail captif, page d'erreur d'un proxy). `jq` s'arrête, donc
-            # le job s'arrête : mieux vaut un échec net qu'un statut deviné.
-            statut="$(jq -r '.status // empty' "${reponse}")"
-            commit="$(jq -r '.commit // empty' "${reponse}")"
-            restant=$((echeance - SECONDS))
-            echo "[$(date -u +%H:%M:%S)] statut=${statut:-<vide>} commit=${commit:-<inconnu>} — ${restant} s avant la borne."
-
-            case "${statut}" in
-              finished)
-                echo "Déploiement TERMINÉ avec succès en ${SECONDS} s."
-                exit 0
-                ;;
-              failed | cancelled | cancelled-by-user)
-                echo "::error title=Déploiement en échec::Coolify rapporte le statut « ${statut} » pour le déploiement ${UUID_DEPLOIEMENT}."
-                journaliser_echec
-                exit 1
-                ;;
-              queued)
-                serie_en_file=$((serie_en_file + 1))
-                if [ "${serie_en_file}" -ge "${serie_en_file_max}" ]; then
-                  echo "::error title=File Coolify gelée::Le déploiement est resté en file ${serie_en_file} interrogations de suite (~5 min) sans jamais démarrer. C est la signature d une file bloquée côté Coolify, pas d un déploiement lent."
-                  journaliser_echec
-                  exit 1
-                fi
-                sleep "${intervalle}"
-                ;;
-              in_progress | running)
-                serie_en_file=0
-                sleep "${intervalle}"
-                ;;
-              '')
-                echo '::warning::Coolify rend un statut vide — nouvelle interrogation.'
-                sleep "${intervalle}"
-                ;;
-              *)
-                echo "::warning::Statut inconnu « ${statut} » — nouvelle interrogation."
-                sleep "${intervalle}"
-                ;;
-            esac
-          done
-
-          echo "::error title=Déploiement hors délai::Le déploiement ${UUID_DEPLOIEMENT} n a pas atteint d état terminal en 20 min. Il est considéré comme ÉCHOUÉ (rollback : voir le bandeau de ce fichier)."
-          journaliser_echec
-          exit 1
-
-      # -----------------------------------------------------------------------
-      # 4/4 — VÉRIFIER QUE LE SERVICE RÉPOND, DEPUIS L'EXTÉRIEUR
-      # -----------------------------------------------------------------------
-      # Seconde ceinture : « déploiement terminé » est ce que Coolify se dit à
-      # lui-même. Ce qui compte est qu'un client joigne le service.
-      #
-      # ROUTE : `/api/v1/health/ready`, et non `/api/health`. Traefik termine
-      # TLS puis passe la main à notre routeur interne, dont le `handle_path
-      # /api/*` RETIRE le préfixe : l'API reçoit `/v1/…`. Et
-      # `apps/api/src/routes/sante.ts` enregistre les sondes sous `prefix:
-      # '/v1'`. `/api/health` arriverait donc à l'API comme `/health` — 404.
-      #
-      # On sonde la PRÉPARATION (`/health/ready`), pas la seule vivacité : après
-      # un déploiement, la question n'est pas « le processus est-il né » mais
-      # « la base répond-elle ». Une API vivante devant une base absente est
-      # exactement le faux vert qu'on cherche à éviter — et cette sonde-là rend
-      # 503 dans ce cas (`sante.ts`).
+      # L'attente et la vérification du commit RÉELLEMENT en service vivent
+      # désormais dans le script distant, où elles ont accès au conteneur.
+      # C'est ce qui permet de ne PAS croire le champ `status` de l'API Coolify :
+      # le 2026-08-28, trois déploiements annoncés « réussis » avaient échoué
+      # (DECISIONS.md). Le script lit l'étiquette de révision du conteneur en
+      # service et échoue si ce n'est pas le commit demandé.
       - name: Contrôle de santé public (hors serveur)
         timeout-minutes: 10
         env:
