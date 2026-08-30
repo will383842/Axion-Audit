@@ -19,6 +19,7 @@ import { enregistrerCompilateursZod } from './http/zod.js';
 import { routesAuth } from './domaines/auth/routes.js';
 import { routesSante } from './routes/sante.js';
 import { routesScoping } from './routes/scoping.js';
+import { routesUsers } from './routes/users.js';
 
 // =============================================================================
 // PÉRIMÈTRE DE CONFIANCE DES EN-TÊTES DE PROXY — correctif de sécurité.
@@ -185,6 +186,12 @@ export async function construireApp(): Promise<FastifyInstance> {
   // `scoping_financials`, et le balayage sentinelle vérifie que ça reste vrai à
   // l'exécution, sur le registre `onRoute` plutôt que sur une liste écrite à la main.
   await app.register(routesScoping, { prefix: '/v1' });
+
+  // Comptes (07, ligne L2 : « CRUD users ») — lot L2/T3. Les SEPT routes sont
+  // `admin` (03 §34.1 « la console est ADMIN SEUL », §34.3 « JAMAIS […] les
+  // comptes » pour le lead). `GET /v1/users` est le PREMIER appelant réel de la
+  // pagination keyset de `http/pagination.ts` — curseur `(created_at, id)`.
+  await app.register(routesUsers, { prefix: '/v1' });
 
   return app;
 }

@@ -1786,3 +1786,41 @@ garde-fou), code d'erreur du refus §9.7, cookies vs Bearer pour les routes admi
 · **La passphrase du coffre** : détenteur unique. La chaîne fonctionne — coffre en trois exemplaires,
 expédié hors serveur 17 s après la passe — c'est la garde de la clé qui reste à un seul point.
 · **`packages/ui` a une semaine de retard** : §6 le place en semaine 1, il n'y a que les tokens.
+
+---
+
+## 2026-08-31 21h40 — [lot L2 / incrément L2e — T3 CRUD users] — étape pipeline 2/7
+
+Dernier commit vert : à créer sur cette branche · Branche : `lot/l2e-t3-users` · Poussé : non
+Tâche en cours : **T3 livré — sept routes `/v1/users`, toutes `admin`.** Code seul : aucun test écrit
+par cet agent (règle de croisement 09 §5.6).
+Prochaine action : **faire écrire les tests de T3 par un agent qui n'a produit aucune de ces lignes**
+(pagination sur `created_at` à la microseconde, garde-fou §9.7 dans ses deux branches, matrice
+rôle × route élargie aux sept routes, pureté d'`activity_log` après un scénario de compte).
+Tests rouges connus : aucun. Suites existantes rejouées : **unit 312/312, intégration 255/255**.
+
+📌 **CE QUI EST LIVRÉ**
+`GET /v1/users` (keyset `(created_at, id)`) · `POST /v1/users` · `PATCH /v1/users/:id` ·
+`PATCH …/role` · `PATCH …/deactivate` · `PATCH …/habilitate` · `PATCH …/password-reset`.
+Forme **déclarative** partout (`schema: { … }`, zéro `.parse()` manuel). Le mot de passe de la
+réinitialisation est **engendré et rendu une seule fois** ; le refus §9.7 sort sous un code dédié
+**`UNSYNCED_DATA_AT_RISK` (409)**, ajouté à `ERROR_CODES` sur l'arbitrage de Williams du 2026-08-31.
+Le catalogue du journal **n'a eu besoin d'aucune extension** : les cinq actions `user.*` y étaient
+déjà, `meta` compris.
+
+📌 **DEUX DÉFAUTS TROUVÉS EN EXÉCUTANT, PAS EN RELISANT** — les deux invisibles à la lecture.
+· **La pagination keyset sur un `timestamptz` est fausse si le curseur vient d'une `Date` JS.**
+Mesuré : base `…52.845874+00`, `Date` JS `…52.845Z`, et `ts > '…845Z'` rend **true** — la ligne
+frontière **se re-sert à chaque page**, et boucle indéfiniment si `limit` lignes partagent la même
+milliseconde. `GET /v1/users` lit donc la composante du curseur **en SQL** (`created_at::text`).
+**`http/pagination.ts` ne prévient pas de ce piège** ; il est le premier à le rencontrer.
+· **`drizzle-orm@0.44.7` n'expose pas l'erreur du pilote** : il lève une `DrizzleQueryError` et range
+la `DatabaseError` de `pg` dans `cause`. Un `catch` qui lit `erreur.code` ne voit **jamais** `23505` :
+une adresse en double sortait en **500** au lieu de **409**. Corrigé (remontée de la chaîne `cause`).
+
+📌 **CE QUI ATTEND WILLIAMS, ET QUI N'A PAS BOUGÉ**
+· **Cookies httpOnly + anti-CSRF pour les routes admin** (11 §3) : `@fastify/cookie` est hors de la
+liste épinglée §1. **T3 est livré en Bearer**, comme le dit l'arbitrage du 2026-08-31.
+· **Sept fiches `AMELIORATIONS.md`** ouvertes ce soir par T3 — dont l'index absent sur
+`users(created_at, id)`, l'absence de route de réactivation, et le fait que **l'alerte du §9.7 ne peut
+PAS entrer dans la table `alerts`** (`mission_id NOT NULL`).
