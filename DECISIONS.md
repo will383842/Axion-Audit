@@ -3924,3 +3924,55 @@ amendement de gouvernance, non d'une divergence interne.
 Décideur : **Williams**, explicitement, le 2026-08-30.
 Impact spec : **amendement horodaté du `CLAUDE.md` §3**, valable pour le staging Axion Audit
 uniquement, jamais pour la production ni pour `axion-ia`.
+
+---
+
+## 2026-08-30 — [L0] Le test de restauration nocturne prouve le staging, pas la production — que faire de cet écart ?
+
+Le workflow `nightly-restore-test.yml` portait un commentaire de vingt lignes départageant
+`/opt/axion-audit/prod/.env` et `/opt/axion-audit/staging/.env`, concluant **« PROD, et non
+staging »**, et exposant un réglage `RESTORE_TEST_ENV_FILE` pour surcharger le chemin.
+
+**Mesuré sur le serveur le 2026-08-30 : aucun de ces trois fichiers n'existe** — ni `prod/.env`, ni
+`staging/.env`, ni le fichier plat `/opt/axion-audit/.env`. Le seul `.env` réel est celui que Coolify
+tient pour l'application, et il porte `APP_ENV=staging`. L'arbitrage portait donc sur deux fichiers
+absents ; et de toute façon la directive `command=` de `authorized_keys` **remplace** la commande du
+client au lieu de la filtrer, si bien qu'aucun de ces chemins n'atteignait le serveur.
+
+**Ce qui est grave n'est pas le code mort, c'est ce qu'il affirmait.** Un lecteur du workflow
+comprenait que la CI restaure chaque nuit les sauvegardes de **production**, et l'invariant 8 comme le
+critère L0 s'appuient sur cette lecture. Le garde était vrai sur ce qu'il observait et répondait à une
+autre question que celle posée — **la même famille de défaut, cette fois sur le plan de reprise.**
+
+Options :
+
+1. **Faire pointer le test vers la production.** Impossible : il n'y a pas de production. Axion Audit
+   n'a aujourd'hui qu'un seul environnement déployé.
+2. **Laisser le commentaire et le réglage en place** en attendant que la production existe. Refusé :
+   c'est précisément l'état qui a produit le défaut. Un bouton qui ne commande rien est pire qu'un
+   bouton absent, parce qu'on croit l'avoir tourné.
+3. **Dire ce que le test prouve réellement, retirer les réglages morts, et inscrire l'échéance.**
+
+Arbitrage : **option 3.** Le test prouve la chaîne de restauration sur **le seul environnement qui
+existe** — c'est la garantie maximale disponible aujourd'hui, et ce n'est pas celle que le PRA exigera
+demain. Les deux propositions sont vraies et doivent être écrites ensemble ; n'écrire que la première
+serait de la publicité, n'écrire que la seconde serait injuste envers un garde qui fonctionne.
+
+**L'ÉCHÉANCE, POUR QU'ELLE NE SE PERDE PAS.** Le jour où un environnement de production apparaît,
+**ce test ne le suivra pas tout seul.** Il faudra une seconde clé restreinte, un second script
+enveloppeur et un second stanza pgBackRest. Tant que ce n'est pas fait, aucun dossier de porte ne peut
+écrire que la restauration de production est testée. Inscrit ici et dans le workflow lui-même.
+
+**CE QUE CETTE DÉCOUVERTE A FAIT AJOUTER, et qui manquait plus que le reste :** la restriction de la
+clé n'était **vérifiée nulle part**. La CI envoie désormais un marqueur qui sort en 97 ; s'il ressort
+dans le journal, c'est que `command=` n'a pas joué — donc que la clé posée en secret est une clé
+**libre** sur ce serveur. Ce contrôle rougit **avant** toute conclusion sur la restauration. On
+vérifiait le résultat de la restauration sans jamais vérifier le pouvoir de la clé qui la déclenche.
+
+Précédence : invariant 8 (sauvegarde testée) — **honoré au niveau disponible, et l'écart est nommé**
+plutôt que masqué. Aucune divergence avec le pack : le fichier 02 §11.4 décrit un PRA de production
+qui n'est pas encore instanciable.
+
+Décideur : **A01**, sous l'autorisation permanente du 2026-08-30 (secrets et infrastructure de
+staging). **Remonté à Williams** parce qu'il touche à la portée d'une garantie, pas à un réglage.
+Impact spec : **aucun amendement** — une dette d'échéance, à rouvrir à la création de la production.
