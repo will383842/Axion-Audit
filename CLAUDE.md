@@ -116,8 +116,10 @@ date-fns · `@fontsource-variable/inter` (**police AUTO-HÉBERGÉE — jamais de
 **Règle de croisement (09 §5.6) : le code de test n'est JAMAIS écrit par l'agent qui a écrit le code testé.**
 **Budget d'itération (09 §5.5) : un bug qui résiste à 3 tentatives = arrêt et escalade humaine.**
 **Jamais deux lots en parallèle sur les mêmes fichiers ; L6 (sync) se développe SEUL.**
-**Comment paralléliser sans collision : `docs/ORGANISATION_AGENTS.md`** — un worktree par chantier,
-deux chantiers actifs au maximum, les interdits git. **À lire AVANT d'ouvrir une seconde session.**
+**Comment paralléliser sans collision : `docs/ORGANISATION_AGENTS.md`** — trois contraintes distinctes
+(collision de fichiers, mémoire, attention du pilote), un worktree par chantier, les interdits git.
+**À lire AVANT d'ouvrir une seconde session — ce renvoi ne répète AUCUN chiffre, délibérément : un
+plafond recopié à deux endroits dérive, et c'est le renvoi qu'une session lit en premier.**
 
 ---
 

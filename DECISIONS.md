@@ -4457,3 +4457,54 @@ s'agit d'un ajout au contrat, non d'une divergence entre sections.
 Décideur : **Williams**, directement.
 Impact spec : **amendement horodaté de `11 §1` et de `CLAUDE.md` §2bis**. Le pack étant scellé, le
 sceau est régénéré **après** cette trace.
+
+---
+
+## 2026-08-31 — [gouvernance] Le plafond des chantiers parallèles confondait trois contraintes
+
+`docs/ORGANISATION_AGENTS.md` §2 écrivait « **deux chantiers actifs au maximum** », en un seul
+plafond. Le mot « chantier » y avait été écrit en pensant _lot sur fichiers disjoints_ ; le motif
+invoqué juste après était la **mémoire**, laquelle ne dépend pas du découpage. **Deux lectures
+défendables, parce que le texte ne tranchait pas.**
+
+**Le défaut s'est manifesté le soir même** : six worktrees ouverts, une session d'audit signalant une
+violation de la règle, et **aucun moyen de savoir laquelle des deux lectures faisait foi**. Ce n'était
+pas un défaut de pratique — c'était un défaut du document, et son auteur l'a reconnu.
+
+Options :
+
+1. **S'y conformer au plus strict** et fermer les worktrees. C'est ce que j'ai fait d'abord, en
+   répondant « la règle est la mienne et je m'y tiens ». **Insuffisant** : se conformer au jugé à un
+   texte ambigu ne lève pas l'ambiguïté, et le lecteur suivant retombera dessus.
+2. **Choisir une des deux lectures** et l'écrire. Refusé : les deux contraintes sont réelles et n'ont
+   ni le même objet ni le même plafond. En retenir une ferait disparaître l'autre.
+3. **Séparer les trois contraintes que la phrase confondait.**
+
+Arbitrage : **option 3.**
+
+**1. COLLISION — jamais deux LOTS sur les mêmes fichiers.** Objet : **les fichiers**. Ce n'est pas un
+plafond, c'est un **interdit** : il ne se compte pas. Il existe déjà en `CLAUDE.md` §4.
+
+**2. MÉMOIRE — au plus deux EXÉCUTIONS LOURDES simultanées.** Objet : **les processus qui tournent**,
+jamais les répertoires qui existent. C'est le motif mesuré (16 Go, conteneurs de test).
+**Corollaire assumé : le nombre de worktrees n'a PAS de plafond en soi** — un worktree inerte coûte du
+disque, pas de la mémoire.
+
+**3. ATTENTION — au plus deux CHANTIERS SUIVIS à la fois.** Objet : **ce qu'un pilote tient en tête**.
+Cette règle ne dérive d'aucune des deux autres, et c'est pourtant **elle** qui a mordu : _« six
+répertoires signifiaient six chantiers que je n'arrivais plus à suivre — et c'est une raison
+suffisante »_. Elle n'était écrite nulle part.
+
+**LE RENVOI DE `CLAUDE.md` PORTAIT LA MÊME PHRASE, ET C'EST LUI QU'ON LIT EN PREMIER.** Corriger le
+document sans corriger le renvoi n'aurait corrigé que la moitié de ce qui trompe — le fichier chargé
+dans **chaque** session aurait continué d'enseigner la règle ambiguë. **Le renvoi ne cite donc plus
+aucun chiffre** : un plafond recopié à deux endroits dérive, et un pointeur qui répète ce qu'il pointe
+finit par le contredire. C'est la forme minimale du correctif, et elle n'encode aucune décision
+nouvelle dans le fichier d'instructions.
+
+Précédence : `CLAUDE.md` §3 point 2 (modifier une convention) — c'est pourquoi ce point a été porté à
+Williams plutôt que tranché seul. Règle de précédence du pack **sans objet** : `ORGANISATION_AGENTS.md`
+n'est pas un fichier du pack.
+Décideur : **Williams**, sur la décomposition en trois règles. **A01** pour la rédaction et pour la
+décision de ne citer aucun chiffre dans le renvoi.
+Impact spec : **amendement de `docs/ORGANISATION_AGENTS.md` §2 et du renvoi de `CLAUDE.md` §4.**
