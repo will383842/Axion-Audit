@@ -35,7 +35,26 @@ set -uo pipefail
 printf 'EMPREINTE_SCRIPT=%s\n' "$(sha256sum "${BASH_SOURCE[0]}" | cut -d' ' -f1)"
 
 RACINE="/opt/axion-audit/repo"
-FICHIER_ENV="${1:-/opt/axion-audit/.env}"
+# LE .env : ON POINTE VERS CELUI QUI EXISTE, ON N EN FABRIQUE PAS UN SECOND.
+#
+# `restore-test.sh` a besoin de 8 variables reelles, dont PGBACKREST_CIPHER_PASS
+# — la passphrase qui dechiffre les archives. MESURE le 2026-08-30 : le fichier
+# que Coolify possede deja les porte TOUTES les huit. Les trois autres que le
+# script utilise ont des valeurs par defaut dans `lib/common.sh`.
+#
+# TROIS VOIES ONT ETE PESEES, et celle-ci est la seule a n en creer aucune :
+#   · fabriquer un second .env      -> DEUX copies du secret sur la meme machine ;
+#   · le passer par l entree standard -> zero copie au repos, mais un transport
+#     par GitHub chaque nuit ET un analyseur a ecrire, dont une erreur
+#     retournerait la restriction `command=` contre elle-meme ;
+#   · POINTER VERS L EXISTANT        -> une seule copie, aucun transport, aucun
+#     code nouveau. On ne construit pas un mecanisme quand une lecture suffit.
+#
+# LA RESERVE, ECRITE PLUTOT QUE TUE : cela couple ce test a l emplacement interne
+# de Coolify. Si une mise a jour deplace ce chemin, le test echouera — mais
+# BRUYAMMENT, en nommant le fichier absent, ce qui est le bon comportement. Un
+# test qui passerait au vert faute de trouver ses secrets serait bien pire.
+FICHIER_ENV="${1:-/data/coolify/applications/wrunr6mwq2oxqq392i4myzjn/.env}"
 
 echec() {
   echo "::error::$*" >&2
