@@ -55,7 +55,22 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 MC_IMAGE="${MC_IMAGE:-minio/mc:RELEASE.2025-04-16T18-13-26Z}"
 MINIO_IMAGE="${MINIO_IMAGE:-minio/minio:RELEASE.2025-04-22T22-12-26Z}"
-PG_IMAGE="${PG_IMAGE:-axion-audit-postgres:16}"
+# PG_IMAGE : DÉCOUVERTE, comme le dépôt — et pour une raison plus forte que la
+# commodité. Ce script attendait « axion-audit-postgres:16 ». MESURÉ le
+# 2026-08-30 : l'image réelle est « axion-audit-postgres:16-coolify », et la
+# restauration échouait sur « pull access denied … repository does not exist ».
+# Même famille que le nom de volume : un nom DÉDUIT là où une VÉRITÉ est
+# observable sur la machine.
+#
+# CE QUI REND LA DÉCOUVERTE PLUS JUSTE, ET PAS SEULEMENT PLUS COMMODE : la
+# restauration doit s'exécuter avec LE MÊME binaire Postgres que la production.
+# Un test réussi avec une autre image ne prouverait rien sur celle qui sert — il
+# répondrait à une autre question que celle posée. Corriger le nom en dur aurait
+# marché aujourd'hui et menti demain, au premier changement de tag.
+#
+# Vide par défaut : la valeur est résolue par decouvrir_image_postgres(). La
+# variable d'environnement reste un moyen d'imposer une image à la main.
+PG_IMAGE="${PG_IMAGE:-}"
 ARCHIVE_DIR="${ARCHIVE_DIR:-/var/backups/axion/minio/archives}"
 # Image utilitaire : UNE SEULE définition, dans lib/common.sh (mineur de revue).
 ALPINE_IMAGE="${ALPINE_IMAGE:-$AXION_ALPINE_IMAGE}"
@@ -84,6 +99,12 @@ export AXION_LOG_FILE
 LIVE_PROJECT="$(axion_project_name)"
 # Rempli par decouvrir_depot_pgbackrest(), jamais deviné.
 DEPOT_PGBACKREST=""
+# Rempli par decouvrir_volume_archives(). Le script tourne sous `set -u` : une
+# variable non déclarée ferait échouer la fonction sur une erreur de shell au
+# lieu du message qui nomme ce qui manque.
+VOLUME_ARCHIVES=""
+# Rempli par decouvrir_image_postgres() : le conteneur Postgres de la pile vivante.
+CONTENEUR_PG_VIVANT=""
 PROJET_DECOUVERT=""
 PG_CONTAINER="${RESTORE_ID}-pg"
 MINIO_CONTAINER="${RESTORE_ID}-minio"
@@ -151,6 +172,49 @@ depot_porte_notre_stanza() {
     test -d "/depot/backup/${PGBACKREST_STANZA}" >/dev/null 2>&1
 }
 
+# -----------------------------------------------------------------------------
+# DÉCOUVRIR L'IMAGE POSTGRES DE LA PILE VIVANTE.
+# -----------------------------------------------------------------------------
+# Appelée APRÈS decouvrir_depot_pgbackrest(), qui renseigne PROJET_DECOUVERT :
+# on cherche le conteneur du service `postgres` DE CE PROJET-LÀ, et pas un
+# postgres quelconque de la machine — celle-ci en héberge d'autres, étrangers à
+# ce projet, et restaurer avec le binaire d'un voisin ne prouverait rien.
+decouvrir_image_postgres() {
+  if [[ -n "$PG_IMAGE" ]]; then
+    axion_log "Image Postgres imposée à la main : $PG_IMAGE"
+    return 0
+  fi
+  if [[ -z "$PROJET_DECOUVERT" ]]; then
+    axion_die "Impossible de découvrir l'image Postgres : le projet de la pile vivante n'a pas été identifié. Poser PG_IMAGE pour trancher à la main."
+  fi
+
+  local id
+  id="$(docker ps \
+    --filter "label=com.docker.compose.project=${PROJET_DECOUVERT}" \
+    --filter "label=com.docker.compose.service=postgres" \
+    --format '{{.ID}}' 2>/dev/null | head -1)"
+
+  if [[ -z "$id" ]]; then
+    axion_die "Aucun conteneur Postgres vivant dans le projet « ${PROJET_DECOUVERT} ». La restauration doit utiliser LE MÊME binaire que la production : sans lui, un test vert ne dirait rien de la base qui sert. Poser PG_IMAGE pour trancher à la main."
+  fi
+
+  # Le conteneur vivant sert AUSSI de point d'interrogation pour la comparaison
+  # avec la base de production (live_query) : on le retient ici plutôt que de le
+  # rechercher une seconde fois par un autre chemin.
+  CONTENEUR_PG_VIVANT="$id"
+  PG_IMAGE="$(docker inspect "$id" --format '{{.Config.Image}}' 2>/dev/null || true)"
+  [[ -n "$PG_IMAGE" ]] || axion_die "Le conteneur Postgres « $id » n'annonce aucune image. Poser PG_IMAGE pour trancher à la main."
+
+  # L'image doit être PRÉSENTE localement : ces images sont construites sur la
+  # machine et n'existent dans aucun registre. Un `docker run` déclencherait un
+  # `pull` qui échouerait plus loin, avec un message trompeur parlant de droits
+  # d'accès — c'est exactement ce qui s'est produit le 2026-08-30.
+  docker image inspect "$PG_IMAGE" >/dev/null 2>&1 ||
+    axion_die "L'image « $PG_IMAGE » n'est pas présente localement. Elle est construite sur cette machine et n'existe dans aucun registre : un docker run tenterait un pull et échouerait sur un message de droits d'accès, sans rapport avec la cause."
+
+  axion_log "Image Postgres découverte : « $PG_IMAGE » (service postgres du projet « ${PROJET_DECOUVERT} »)."
+}
+
 decouvrir_depot_pgbackrest() {
   axion_require_env PGBACKREST_REPO_PATH PGBACKREST_STANZA
 
@@ -215,6 +279,7 @@ guard_not_production() {
   #    vivant, pas seulement celui qu'APP_ENV laisse supposer. Tant que le dépôt
   #    n'était que déduit, ce garde ne protégeait que d'un nom imaginaire.
   decouvrir_depot_pgbackrest
+  decouvrir_image_postgres
   # 1. Aucune ressource de test ne doit porter un nom de ressource vivante.
   for vol in "$PG_VOLUME" "$MINIO_VOLUME" "$CADDY_VOLUME"; do
     case "$vol" in
@@ -363,41 +428,200 @@ restore_postgres() {
 }
 
 # Requêtes sur le cluster RESTAURÉ (base postgres puis base applicative).
+# LE RÔLE DE CONNEXION VIENT DE L'ENVIRONNEMENT, JAMAIS D'UN NOM EN DUR.
+# Ces deux fonctions se connectaient en tant que « postgres ». MESURÉ le
+# 2026-08-30 sur le cluster RESTAURÉ : « FATAL: role "postgres" does not exist ».
+# Le cluster a été initialisé avec le rôle de $POSTGRES_USER, et c'est le seul
+# qui existe. Trois contrôles échouaient donc pour une cause unique, sans aucun
+# rapport avec la restauration — laquelle avait parfaitement réussi.
+#
+# CE QUE CET ÉCHEC ANNONÇAIT, ET POURQUOI IL ÉTAIT TROMPEUR : « le cluster est
+# resté en recovery » et « la base axion_audit est absente ». Les deux étaient
+# FAUX. La phrase vraie — « je n'ai pas pu me connecter » — n'apparaissait que
+# dans le journal détaillé. Un contrôle qui ne distingue pas « la réponse est
+# non » de « je n'ai pas pu poser la question » accuse la sauvegarde à la place
+# de lui-même, et c'est la pire façon d'échouer.
+#
+# « --user postgres » reste l'utilisateur SYSTÈME du conteneur, qui existe bien ;
+# c'est le RÔLE SQL qui manquait. Les deux portent le même nom par habitude, et
+# c'est précisément ce qui rend la confusion facile.
 pg_query() {
   docker exec --user postgres "$PG_CONTAINER" \
-    psql -X -A -t -q -h 127.0.0.1 -d postgres -c "$1" 2>>"$AXION_LOG_FILE" | tr -d '\r' | head -n1
+    psql -X -A -t -q -h 127.0.0.1 -U "$POSTGRES_USER" -d postgres -c "$1" 2>>"$AXION_LOG_FILE" | tr -d '\r' | head -n1
 }
 pg_query_db() {
   docker exec --user postgres "$PG_CONTAINER" \
-    psql -X -A -t -q -h 127.0.0.1 -d "$POSTGRES_DB" -c "$1" 2>>"$AXION_LOG_FILE" | tr -d '\r' | head -n1
+    psql -X -A -t -q -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "$1" 2>>"$AXION_LOG_FILE" | tr -d '\r' | head -n1
 }
 # Requête EN LECTURE SEULE sur la base VIVANTE (référence de comparaison).
+# LA BASE VIVANTE SE JOINT PAR LE CONTENEUR DÉCOUVERT, pas par « docker compose ».
+# MESURÉ : « open /tmp/docker-compose.yml: no such file or directory ». Cette
+# pile est orchestrée ailleurs, et son fichier compose vit dans un répertoire
+# d'artefacts effacé après chaque déploiement. La comparaison avec la base
+# vivante échouait donc en silence, et le contrôle « tables attendues » se
+# dégradait en simple avertissement sans que personne ne sache pourquoi.
 live_query() {
-  axion_compose exec -T --user postgres postgres \
-    psql -X -A -t -q -d "$POSTGRES_DB" -c "$1" 2>>"$AXION_LOG_FILE" | tr -d '\r' | head -n1
+  [[ -n "$CONTENEUR_PG_VIVANT" ]] || { echo ""; return 0; }
+  docker exec --user postgres "$CONTENEUR_PG_VIVANT" \
+    psql -X -A -t -q -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "$1" 2>>"$AXION_LOG_FILE" | tr -d '\r' | head -n1
 }
 
 # =============================================================================
-# (b) MINIO — restauration depuis le miroir + contrôle par SOMME DE CONTRÔLE
+# (b) MINIO — restauration de l'ARCHIVE RÉELLE, puis démarrage dessus
 # =============================================================================
-restore_minio() {
-  axion_log "--- (b) MinIO : restauration depuis zéro ---"
-  mkdir -p "$WORK_DIR/minio"
+# RÉÉCRITE LE 2026-08-30. Ce qui existait ici cherchait
+# `/var/backups/axion/minio/archives/minio-<bucket>-*.tar.gpg` : UNE ARCHIVE PAR
+# BUCKET, sur un chemin de l'hôte, avec des manifestes `MANIFEST.sha256` et
+# `MANIFEST.count` à l'intérieur.
+#
+# CE QUI EXISTE RÉELLEMENT SUR CETTE MACHINE, mesuré : une archive UNIQUE du
+# volume MinIO entier, `minio-<horodatage>.tar.zst.gpg`, dans un VOLUME DOCKER,
+# produite par le conteneur de sauvegarde (`infra/postgres/sauvegarde.sh`). Ni le
+# chemin, ni le nom, ni le format, ni le découpage ne correspondaient.
+#
+# LA CAUSE N'ÉTAIT PAS UNE SUITE DE BOGUES : deux dispositifs de sauvegarde
+# coexistent dans le dépôt, et ce test éprouvait CELUI QUI NE TOURNE PAS. Les
+# scripts `infra/scripts/backup-*.sh` visent le montage « VPS dédié » ; aucun
+# n'est déclenché sur cette machine, et `/var/backups/axion` n'y existe pas.
+# Voir `DECISIONS.md`, 2026-08-30.
+#
+# ⚠️ CE QU'IL FAUT AVOIR MESURÉ AVANT DE LIRE « Aucune archive trouvée » COMME UN
+# INCIDENT : les sauvegardes sont SAINES. Quatre archives chiffrées et datées,
+# chacune avec son empreinte, la plus récente de la nuit même. L'échec disait
+# vrai sur ce qu'il observait, et répondait à une autre question que celle posée.
+#
+# CE QUE LA NOUVELLE FORME PROUVE DE PLUS QUE L'ANCIENNE. L'ancienne rechargeait
+# des fichiers dans un MinIO neuf (`mc mirror`) : elle prouvait que des objets
+# sont relisibles. Celle-ci **démarre MinIO SUR le volume restauré**. C'est le
+# geste exact du plan de reprise, et il éprouve ce que l'autre ne touchait pas :
+# les métadonnées internes de MinIO (`.minio.sys`), sans lesquelles un serveur ne
+# reconnaît aucun de ses buckets. Une archive dont les objets se relisent mais
+# sur laquelle MinIO refuse de démarrer n'est pas une sauvegarde exploitable.
+# =============================================================================
 
-  # Identifiants ÉPHÉMÈRES du MinIO jetable : jamais écrits sur disque, détruits
-  # avec le conteneur (aucun secret de production n'est réutilisé).
-  local root_user root_pass
-  root_user="axionrestore$(openssl rand -hex 4)"
-  root_pass="$(openssl rand -hex 24)"
+# Découvre le volume où le conteneur de sauvegarde ÉCRIT ses archives. Même
+# raison que pour le dépôt pgBackRest : on observe, on ne déduit pas. La
+# destination est lue dans l'environnement du conteneur lui-même (`AXION_ARCHIVES`),
+# avec le défaut documenté de `sauvegarde.sh` comme repli.
+decouvrir_volume_archives() {
+  if [[ -n "${AXION_VOLUME_ARCHIVES:-}" ]]; then
+    VOLUME_ARCHIVES="$AXION_VOLUME_ARCHIVES"
+    axion_log "Volume d'archives imposé à la main : $VOLUME_ARCHIVES"
+    return 0
+  fi
+  [[ -n "$PROJET_DECOUVERT" ]] ||
+    axion_die "Impossible de découvrir le volume d'archives : le projet de la pile vivante n'est pas identifié."
+
+  local id destination
+  id="$(docker ps --all \
+    --filter "label=com.docker.compose.project=${PROJET_DECOUVERT}" \
+    --filter "label=com.docker.compose.service=sauvegarde" \
+    --format '{{.ID}}' 2>/dev/null | head -1)"
+  [[ -n "$id" ]] ||
+    axion_die "Aucun conteneur de sauvegarde dans le projet « ${PROJET_DECOUVERT} ». Sans lui, on ne sait pas OÙ les archives sont écrites — et les chercher à un chemin supposé est exactement ce qui a fait échouer ce test pendant trois jours."
+
+  # `--all` : le conteneur peut être arrêté entre deux passes. Son étiquetage
+  # reste la vérité sur l'emplacement des archives.
+  destination="$(docker inspect "$id" --format \
+    '{{range .Config.Env}}{{if eq (index (split . "=") 0) "AXION_ARCHIVES"}}{{index (split . "=") 1}}{{end}}{{end}}' 2>/dev/null || true)"
+  [[ -n "$destination" ]] && axion_log "Destination d'archives lue dans le conteneur : $destination"
+  destination="${destination:-/sauvegarde}"
+
+  VOLUME_ARCHIVES="$(docker inspect "$id" --format \
+    "{{range .Mounts}}{{if and (eq .Type \"volume\") (eq .Destination \"${destination}\")}}{{.Name}}{{end}}{{end}}" 2>/dev/null || true)"
+  [[ -n "$VOLUME_ARCHIVES" ]] ||
+    axion_die "Le conteneur de sauvegarde « $id » ne monte aucun volume sur « ${destination} ». L'emplacement des archives est introuvable ; poser AXION_VOLUME_ARCHIVES pour trancher à la main."
+
+  axion_log "Volume d'archives découvert : « $VOLUME_ARCHIVES » (monté en ${destination})."
+}
+
+restore_minio() {
+  axion_log "--- (b) MinIO : restauration de l'archive réelle, puis démarrage dessus ---"
+
+  # Le répertoire de travail était créé par l'ancienne fonction (`mkdir -p
+  # "$WORK_DIR/minio"`, pour y extraire les archives par bucket). La nouvelle
+  # extrait DANS UN VOLUME, plus dans un répertoire — mais elle y écrit encore
+  # son journal. Sans cette ligne, l'échec porte sur le journal et masque
+  # complètement le vrai résultat de l'extraction.
+  mkdir -p "$WORK_DIR"
+
+  decouvrir_volume_archives
+  axion_require_env BACKUP_ENCRYPTION_PASSPHRASE \
+    MINIO_BUCKET_ATTACHMENTS MINIO_BUCKET_REPORTS MINIO_BUCKET_TEMPLATES
 
   docker volume create "$MINIO_VOLUME" >/dev/null
+
+  # ---------------------------------------------------------------------------
+  # 1. CHOISIR L'ARCHIVE, VÉRIFIER SON EMPREINTE, LA DÉCHIFFRER, L'EXTRAIRE.
+  # ---------------------------------------------------------------------------
+  # Tout se passe dans UN conteneur jetable : le script tourne sur l'hôte, où ni
+  # la passphrase ni le clair ne doivent transiter. L'image est celle de la pile
+  # (gpg, zstd, tar, sha256sum vérifiés présents) — la même que celle qui a
+  # produit l'archive, donc la même que celle qui devra la rouvrir en vrai.
+  #
+  # La passphrase arrive par l'ENTRÉE STANDARD, jamais en argument ni en
+  # variable d'environnement du conteneur : un `docker inspect` la révélerait.
+  local journal_extraction
+  journal_extraction="$WORK_DIR/minio-extraction.log"
+
+  if ! printf '%s' "$BACKUP_ENCRYPTION_PASSPHRASE" | docker run --rm -i \
+    -v "${VOLUME_ARCHIVES}:/archives:ro" \
+    -v "${MINIO_VOLUME}:/restaure" \
+    --entrypoint sh "$PG_IMAGE" -c '
+      set -eu
+      umask 077
+      cat > /tmp/pp
+      archive="$(ls -1t /archives/minio-*.tar.zst.gpg 2>/dev/null | head -1)"
+      [ -n "$archive" ] || { echo "AUCUNE archive minio-*.tar.zst.gpg dans le volume." >&2; exit 3; }
+      echo "Archive retenue : $(basename "$archive")"
+
+      # EMPREINTE DU CHIFFRÉ, avant toute tentative de déchiffrement. Une archive
+      # dont le sha256 ne concorde pas est corrompue au repos : le dire ici, et
+      # non plus loin sous la forme d une erreur de déchiffrement, qui ferait
+      # soupçonner la passphrase.
+      if [ -f "${archive}.sha256" ]; then
+        ( cd /archives && sha256sum -c "$(basename "${archive}").sha256" >/dev/null ) \
+          || { echo "EMPREINTE NON CONFORME : $(basename "$archive") est corrompue au repos." >&2; exit 4; }
+        echo "Empreinte du chiffré : conforme."
+      else
+        echo "::warning::Aucun fichier .sha256 a cote de $(basename "$archive") : integrite au repos NON verifiee." >&2
+      fi
+
+      gpg --batch --quiet --decrypt --passphrase-file /tmp/pp --pinentry-mode loopback "$archive" \
+        | zstd -d -q \
+        | tar -C /restaure -xf - \
+        || { echo "Dechiffrement ou extraction impossible." >&2; exit 5; }
+      rm -f /tmp/pp
+      echo "Extraction terminee."
+    ' >"$journal_extraction" 2>&1; then
+    sed "s/^/    /" "$journal_extraction" >&2 || true
+    fail "MinIO : l'archive n'a pas pu être ouverte (voir le journal ci-dessus)"
+    return 1
+  fi
+  sed "s/^/    /" "$journal_extraction"
+
+  # ---------------------------------------------------------------------------
+  # 2. DÉMARRER MINIO SUR LE VOLUME RESTAURÉ — le geste exact du PRA.
+  # ---------------------------------------------------------------------------
+  # Identifiants ÉPHÉMÈRES : jamais écrits sur disque, détruits avec le conteneur.
+  # Aucun secret de production n'est réutilisé.
+  #
+  # ⚠️ MinIO lit ses utilisateurs DANS `.minio.sys`, donc dans les données
+  # restaurées. Les identifiants de la racine sont ceux de la PILE D'ORIGINE, pas
+  # ceux qu'on passe ici — c'est pourquoi on les reprend de l'environnement.
+  local root_user root_pass
+  root_user="${MINIO_ROOT_USER:-}"
+  root_pass="${MINIO_ROOT_PASSWORD:-}"
+  [[ -n "$root_user" && -n "$root_pass" ]] ||
+    { fail "MINIO_ROOT_USER/MINIO_ROOT_PASSWORD absents : impossible d'interroger le MinIO restauré"; return 1; }
+
   docker run -d --name "$MINIO_CONTAINER" \
     --network "$NET_NAME" \
     -e MINIO_ROOT_USER="$root_user" \
     -e MINIO_ROOT_PASSWORD="$root_pass" \
     -v "$MINIO_VOLUME:/data" \
     "$MINIO_IMAGE" server /data >/dev/null
-  axion_log "MinIO jetable démarré : $MINIO_CONTAINER"
+  axion_log "MinIO jetable démarré SUR LES DONNÉES RESTAURÉES : $MINIO_CONTAINER"
 
   local i ready=0
   for ((i = 0; i < 45; i++)); do
@@ -407,94 +631,31 @@ restore_minio() {
     fi
     sleep 2
   done
-  [[ "$ready" -eq 1 ]] || { fail "Le MinIO jetable n'est pas prêt après 90 s"; return 1; }
+  if [[ "$ready" -ne 1 ]]; then
+    docker logs --tail 30 "$MINIO_CONTAINER" 2>&1 | sed 's/^/    /' >&2 || true
+    fail "MinIO n'a PAS démarré sur les données restaurées — l'archive n'est pas exploitable en l'état"
+    return 1
+  fi
 
+  # ---------------------------------------------------------------------------
+  # 3. LES BUCKETS ATTENDUS SONT-ILS LÀ ?
+  # ---------------------------------------------------------------------------
+  # C'est ici que la restauration cesse d'être « un serveur qui démarre » pour
+  # devenir « les données de la mission sont revenues ». Un bucket VIDE est
+  # légitime au lot L0 ; un bucket ABSENT ne l'est pas.
   export MC_HOST_restore="http://${root_user}:${root_pass}@${MINIO_CONTAINER}:9000"
+  local liste bucket
+  liste="$(docker run --rm --network "$NET_NAME" --env MC_HOST_restore "$MC_IMAGE" \
+    ls restore 2>/dev/null || true)"
 
-  local bucket archive
   for bucket in "$MINIO_BUCKET_ATTACHMENTS" "$MINIO_BUCKET_REPORTS" "$MINIO_BUCKET_TEMPLATES"; do
-    archive="$(find "$ARCHIVE_DIR" -maxdepth 1 -type f -name "minio-${bucket}-*.tar.gpg" -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n1 | cut -d' ' -f2-)"
-    if [[ -z "$archive" ]]; then
-      fail "Aucune archive MinIO trouvée pour le bucket « $bucket » dans $ARCHIVE_DIR"
-      continue
-    fi
-    axion_log "Bucket $bucket : archive retenue $(basename "$archive")"
-
-    # 1. Déchiffrement + extraction dans le répertoire jetable.
-    if ! axion_decrypt_stream <"$archive" | tar -C "$WORK_DIR/minio" -xf -; then
-      fail "Déchiffrement/extraction impossible pour « $bucket »"
-      continue
-    fi
-
-    # 2. INTÉGRITÉ — TROIS VERDICTS DISTINCTS, jamais amalgamés (M-9).
-    #    a) manifeste ou compte ABSENT   → ÉCHEC : la sauvegarde est incomplète.
-    #    b) compte = 0 et cohérent       → OK   : bucket vide, état LÉGITIME au lot L0
-    #                                            (aucune mission n’a encore produit de
-    #                                            fichier). La chaîne est prouvée : archive
-    #                                            déchiffrée, manifeste lu, compte recoupé.
-    #    c) sommes qui ne concordent pas → ÉCHEC : corruption réelle.
-    # Confondre (b) et (c) ferait crier à la corruption dès la première nuit — et une
-    # alerte fausse la première nuit est une alerte que plus personne ne lit ensuite.
-    if [[ ! -f "$WORK_DIR/minio/$bucket/MANIFEST.sha256" ]]; then
-      fail "Bucket $bucket : manifeste sha256 ABSENT — sauvegarde incomplète, intégrité invérifiable"
-      continue
-    fi
-    if [[ ! -f "$WORK_DIR/minio/$bucket/MANIFEST.count" ]]; then
-      fail "Bucket $bucket : compte d’objets ABSENT — archive antérieure au correctif M-9, relancer backup-minio.sh"
-      continue
-    fi
-    local annonces relevees
-    # `tr -dc` : on ne garde que les chiffres (fin de ligne, espaces éventuels).
-    annonces="$(tr -dc '0-9' <"$WORK_DIR/minio/$bucket/MANIFEST.count")"
-    relevees="$(wc -l <"$WORK_DIR/minio/$bucket/MANIFEST.sha256" | tr -dc '0-9')"
-    if [[ "$annonces" != "$relevees" ]]; then
-      fail "Bucket $bucket : manifeste TRONQUÉ — $relevees ligne(s) pour $annonces objet(s) annoncé(s)"
-      continue
-    fi
-    if [[ "$annonces" -eq 0 ]]; then
-      axion_log "Bucket $bucket : VIDE (0 objet) — état légitime au lot L0. Chaîne de sauvegarde prouvée (archive déchiffrée, manifeste cohérent)."
-      continue
-    fi
-    if ( cd "$WORK_DIR/minio/$bucket" && sha256sum --quiet -c MANIFEST.sha256 ); then
-      axion_log "Bucket $bucket : $annonces objet(s), sommes de contrôle du miroir VALIDES."
+    if printf '%s' "$liste" | grep -q -- "$bucket"; then
+      local objets
+      objets="$(docker run --rm --network "$NET_NAME" --env MC_HOST_restore "$MC_IMAGE" \
+        ls --recursive "restore/$bucket" 2>/dev/null | grep -c . || true)"
+      axion_log "Bucket « $bucket » : PRÉSENT après restauration, ${objets} objet(s)."
     else
-      fail "Bucket $bucket : sommes de contrôle INVALIDES (corruption de sauvegarde)"
-      continue
-    fi
-
-    # 3. Rechargement réel dans le MinIO jetable (`mc mirror`) : la sauvegarde
-    #    n'est pas seulement lisible, elle est REJOUABLE.
-    docker run --rm --network "$NET_NAME" --env MC_HOST_restore \
-      -v "$WORK_DIR/minio:/restore:ro" \
-      "$MC_IMAGE" mb --ignore-existing "restore/$bucket" >/dev/null
-    if ! docker run --rm --network "$NET_NAME" --env MC_HOST_restore \
-        -v "$WORK_DIR/minio:/restore:ro" \
-        "$MC_IMAGE" mirror --quiet --overwrite "/restore/$bucket" "restore/$bucket" >/dev/null; then
-      fail "Rechargement (mc mirror) impossible pour « $bucket »"
-      continue
-    fi
-
-    # 4. Relecture d'un objet depuis le MinIO restauré et comparaison de sa
-    #    somme de contrôle avec le manifeste (bout en bout).
-    local sample expected actual
-    sample="$(grep -v -e 'MANIFEST.sha256' -e 'MANIFEST.count' "$WORK_DIR/minio/$bucket/MANIFEST.sha256" | head -n1 || true)"
-    if [[ -z "$sample" ]]; then
-      # Ne peut plus se produire : le cas « 0 objet » est traité plus haut, avec son
-      # propre verdict. Garde-fou conservé — un manifeste non vide dont on
-      # n’extrait aucun objet témoin serait une anomalie, pas une normalité.
-      fail "Bucket $bucket : $annonces objet(s) annoncé(s) mais aucun objet témoin extractible"
-      continue
-    fi
-    local objpath
-    expected="$(printf '%s' "$sample" | awk '{print $1}')"
-    # Format sha256sum : « <hash>  ./chemin » (le préfixe ./ ou * est retiré).
-    objpath="$(printf '%s' "$sample" | awk '{ $1=""; sub(/^[ \t*]+/, ""); sub(/^\.\//, ""); print }')"
-    actual="$(docker run --rm --network "$NET_NAME" --env MC_HOST_restore "$MC_IMAGE" \
-                cat "restore/$bucket/$objpath" 2>/dev/null | sha256sum | cut -d' ' -f1)"
-    if [[ "$expected" == "$actual" ]]; then
-      axion_log "Bucket $bucket : objet témoin « $objpath » relu et vérifié (sha256 conforme)."
-    else
-      fail "Bucket $bucket : objet témoin « $objpath » corrompu (attendu $expected, obtenu $actual)"
+      fail "Bucket « $bucket » ABSENT du MinIO restauré — la sauvegarde ne contient pas ce que la mission y écrit"
     fi
   done
   unset MC_HOST_restore

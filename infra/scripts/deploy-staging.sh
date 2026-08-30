@@ -68,7 +68,24 @@ echo "Deploiement declenche : ${UUID_DEP}"
 # --- 2. Attendre la fin ------------------------------------------------------
 # Une sonde qui abandonne en silence est pire que pas de sonde : le delai
 # depasse est un ECHEC explicite, jamais un succes par defaut.
-STATUT=""; N=0
+# DEUX LISTES QUI DEVAIENT S ACCORDER ET NE S ACCORDAIENT PAS — corrige le
+# 2026-08-30. La boucle sortait sur « finished|failed|cancelled|error », mais le
+# controle juste apres acceptait AUSSI « running:healthy ». Quand l API rendait
+# cette derniere valeur — ce qu elle fait, puisqu elle decrit l APPLICATION et
+# non le DEPLOIEMENT — la boucle n en sortait jamais et tournait ses 120 tours.
+#
+# MESURE : deux executions consecutives ont dure EXACTEMENT 20 minutes, soit la
+# borne complete. Pendant ce temps, les conteneurs etaient recrees et sains
+# depuis un quart d heure. Vingt minutes perdues a CHAQUE fusion, et personne ne
+# pouvait le voir : le job finissait vert, simplement tres lent. Un defaut qui ne
+# casse rien et ne coute que du temps est celui qui survit le plus longtemps.
+#
+# ON CESSE DE CROIRE LE STATUT ET L ON OBSERVE LA MACHINE. La question posee
+# n est pas « que dit l API » mais « mon deploiement a-t-il pris effet ». Le
+# conteneur d API porte le repertoire de travail du deploiement qui l a cree :
+# des qu il porte le NOTRE, l attente n a plus d objet. On sort donc sur le fait
+# lui-meme, et non sur son recit.
+STATUT=""; N=0; PRIS_EFFET=0
 while [ "$N" -lt 120 ]; do
   ETAT="$(curl -sS --max-time 15 -H "Authorization: Bearer ${JETON}" \
           "${API}/deployments/${UUID_DEP}" 2>/dev/null)" || true
@@ -76,9 +93,24 @@ while [ "$N" -lt 120 ]; do
   case "$STATUT" in
     finished|failed|cancelled|error) break ;;
   esac
+
+  CANDIDAT="$(docker ps --filter "name=api-${UUID}" --format '{{.Names}}' | head -1)"
+  if [ -n "$CANDIDAT" ]; then
+    OU="$(docker inspect "$CANDIDAT" \
+          --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' 2>/dev/null || true)"
+    case "$OU" in
+      *"${UUID_DEP}"*) PRIS_EFFET=1; break ;;
+    esac
+  fi
+
   sleep 10; N=$((N+1))
 done
-[ -n "$STATUT" ] || echec "Aucun statut lisible apres 20 minutes — l attente ne conclut pas au succes."
+
+if [ "$PRIS_EFFET" -eq 1 ]; then
+  echo "Prise d effet observee sur la machine apres $((N * 10)) s : le conteneur en service provient du deploiement ${UUID_DEP}."
+else
+  [ -n "$STATUT" ] || echec "Aucun statut lisible apres 20 minutes, et aucune prise d effet observee sur la machine — l attente ne conclut pas au succes."
+fi
 # Coolify rend « running:healthy » pour une application en service, et
 # « finished » pour un deploiement acheve. Le 2026-08-30, ce script a lu
 # « running:healthy » et l a pris pour un echec, alors que le VRAI echec etait
@@ -86,10 +118,15 @@ done
 # qui repond a une AUTRE question — la famille de defaut que ce depot traque.
 # On accepte donc les deux formes d achevement, et l on ne conclut JAMAIS sur ce
 # statut seul : c est la verification du commit en service, plus bas, qui decide.
-case "$STATUT" in
-  finished|running:healthy) : ;;
-  *) echec "Deploiement termine en « ${STATUT} » — ni « finished » ni « running:healthy »." ;;
-esac
+# Si la prise d effet a ete OBSERVEE sur la machine, ce statut n a plus voix au
+# chapitre : un fait mesure prime sur le recit d une API qui a deja menti trois
+# fois sur ce projet (2026-08-28). On ne le controle donc que faute de mieux.
+if [ "$PRIS_EFFET" -ne 1 ]; then
+  case "$STATUT" in
+    finished|running:healthy) : ;;
+    *) echec "Deploiement termine en « ${STATUT} » — ni « finished » ni « running:healthy », et aucune prise d effet observee sur la machine." ;;
+  esac
+fi
 
 # --- 3. VERIFIER QUE C EST BIEN CE COMMIT QUI TOURNE -------------------------
 # Le champ `status` de l API a DEJA menti sur ce projet : le 2026-08-28, trois

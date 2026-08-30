@@ -197,6 +197,50 @@ jobs:
           fi
           echo "Script distant verifie : identique au fichier versionne (${empreinte_depot:0:16}…)."
 
+          # ---------------------------------------------------------------------
+          # QUEL COMMIT LE SERVEUR EXECUTE-T-IL REELLEMENT ?
+          # ---------------------------------------------------------------------
+          # L empreinte ci-dessus couvre l ENVELOPPEUR. Elle ne dit RIEN de
+          # `restore-test.sh`, qui vit dans le clone /opt/axion-audit/repo et fait
+          # tout le travail. Or ce clone suit `main` — volontairement, pour que la
+          # machine n execute que du code fusionne.
+          #
+          # LA CONSEQUENCE, RELEVEE LE 2026-08-30 ET QUI N ETAIT DITE NULLE PART :
+          # lancer ce workflow depuis une BRANCHE ne teste PAS cette branche. Le
+          # `ref` ne choisit que le fichier de workflow ; le script execute reste
+          # celui de `main`. Un dispatch qui ment sur ce qu il teste est pire
+          # qu un dispatch impossible — on croit avoir verifie, et l on fusionne.
+          #
+          # DEUX REGIMES, ET LA DISTINCTION N EST PAS COSMETIQUE :
+          #   · sur `main`, un ecart est une DERIVE (le clone est en retard) et
+          #     doit faire ECHOUER : le garde testerait autre chose que ce qui est
+          #     livre ;
+          #   · sur une branche, l ecart est NORMAL et attendu — on l annonce
+          #     bruyamment, sans rougir, pour que personne ne prenne ce vert pour
+          #     une preuve concernant sa branche.
+          # ---------------------------------------------------------------------
+          commit_serveur="$(printf '%s' "${SORTIE}" | grep -oE 'depot /opt/axion-audit/repo \(commit [0-9a-f]+\)' | head -1 | grep -oE '[0-9a-f]+\)$' | tr -d ')')"
+
+          if [ -z "${commit_serveur}" ]; then
+            echo "::error title=Commit du serveur inconnu::Le script distant n'a pas annoncé le commit de son clone. On ne peut donc pas dire QUEL code a été exécuté — et un test de restauration dont on ignore la version ne prouve rien de datable."
+            exit 1
+          fi
+
+          echo "Le serveur a exécuté le commit ${commit_serveur} (clone de main)."
+
+          case "${GITHUB_SHA}" in
+            "${commit_serveur}"*)
+              echo "Le commit exécuté est bien celui de cette exécution."
+              ;;
+            *)
+              if [ "${GITHUB_REF_NAME}" = "main" ]; then
+                echo "::error title=Le clone du serveur est en retard sur main::Le serveur a exécuté ${commit_serveur}, cette exécution porte sur ${GITHUB_SHA}. Le garde éprouverait donc un code différent de celui qui est livré. Mettre le clone à niveau (git -C /opt/axion-audit/repo fetch && reset --hard origin/main) avant de conclure quoi que ce soit."
+                exit 1
+              fi
+              echo "::warning title=Ce test ne porte PAS sur cette branche::Le serveur exécute ${commit_serveur} (le clone suit main), pas ${GITHUB_SHA}. C'est le comportement voulu — la machine n'exécute que du code fusionné — mais un vert obtenu ici ne dit RIEN de la branche ${GITHUB_REF_NAME}. Pour éprouver une modification de restore-test.sh, il faut la fusionner d'abord."
+              ;;
+          esac
+
           if [ "${CODE}" -ne 0 ]; then
             echo "::error title=Restauration echouee::Le script distant a rendu ${CODE}. Sa sortie est ci-dessus — elle nomme la cause. Un retour non nul est un echec de plan de reprise."
             exit 1

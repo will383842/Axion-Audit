@@ -4025,3 +4025,69 @@ elle vaut pour mes propres affirmations autant que pour les données.
 
 Décideur : **A01**, sur objection de la session voisine, qui avait raison.
 Impact spec : **aucun**. Correction de dossier.
+
+---
+
+## 2026-08-30 — [L0] Le test de restauration éprouve un dispositif de sauvegarde qui n'est pas celui qui tourne
+
+Six murs successifs ont fait tomber le test de restauration, chacun invisible avant que le précédent
+ne cède. Le sixième a révélé la cause commune, et elle n'est pas une somme de bogues.
+
+**DEUX DISPOSITIFS DE SAUVEGARDE COEXISTENT DANS LE DÉPÔT, et le test éprouve le mauvais.**
+
+|                                     | Dispositif « VPS dédié »                                                            | Dispositif **DÉPLOYÉ**                                                                               |
+| ----------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Où                                  | `infra/scripts/backup-*.sh`, sur l'hôte                                             | conteneur `axion-sauvegarde` (`infra/postgres/sauvegarde.sh`)                                        |
+| Archives MinIO                      | `/var/backups/axion/minio/archives`, **une par bucket**, `.tar.gpg`                 | volume `sauvegarde-archives` monté en `/sauvegarde`, **une seule archive pour tous**, `.tar.zst.gpg` |
+| Coffre des secrets                  | absent                                                                              | `secrets-<horodatage>.coffre.gpg`                                                                    |
+| Expédition hors serveur             | absente                                                                             | `mc mirror` vers Cloudflare R2                                                                       |
+| Magasin TLS Caddy                   | archivé                                                                             | **non archivé**                                                                                      |
+| **Tourne-t-il sur cette machine ?** | **NON** — aucune entrée cron, aucun timer, et `/var/backups/axion` **n'existe pas** | **OUI**, chaque nuit à 02h30                                                                         |
+
+`restore-test.sh` lit le chemin, le nom et le format du **premier**. Il a donc échoué sur « Aucune
+archive MinIO trouvée », ce qui se lit comme une absence de sauvegarde.
+
+**MESURÉ AVANT DE CONCLURE, ET C'EST LE POINT LE PLUS IMPORTANT : LES SAUVEGARDES SONT SAINES.** Le
+volume contient **quatre archives MinIO chiffrées et datées**, chacune avec son empreinte SHA-256, la
+plus récente de ce matin 02h30, plus trois coffres de secrets et les deux marqueurs de passe et
+d'expédition. **Ce n'est pas un incident, c'est un défaut de chemin.** La troisième lecture possible —
+« les pièces jointes, rapports et gabarits ne sont pas sauvegardés » — est **écartée par la mesure**.
+
+**LE MAGASIN TLS DE CADDY N'EST PAS SAUVEGARDÉ, ET C'EST CORRECT ICI.** Mesuré : notre Caddy n'a
+**aucun volume `/data`** dans cette topologie, et c'est `coolify-proxy` qui détient 80/443 et termine
+TLS. Il n'y a donc aucun certificat à sauvegarder. La section correspondante du test éprouve quelque
+chose qui n'existe pas sur ce déploiement.
+
+**ET UN ÉCART DE DOSSIER DE PORTE, QUE JE SIGNALE SANS L'ACCUSER.** `PORTE_A` porte le critère 2 comme
+✅ — _« restauration Postgres ET MinIO testée depuis zéro »_ — prouvé par identité d'empreintes le
+2026-08-28. **Cette preuve est réelle.** Mais elle a emprunté le coffre R2, pas le chemin que lit le
+test nocturne. **Un lecteur futur croira que le nocturne rejoue ce qui a été prouvé à la main. Il ne
+le rejoue pas.** L'écart doit être écrit dans le dossier, faute de quoi le critère promet une
+récurrence que rien n'assure.
+
+Options :
+
+1. **Faire tourner le dispositif « VPS dédié » sur cette machine** pour que le test retrouve ses
+   chemins. Refusé : cela ferait **deux** dispositifs de sauvegarde concurrents sur la même machine,
+   écrivant les mêmes données à deux endroits, avec deux rétentions et deux passphrases.
+2. **Réécrire `restore-test.sh` pour éprouver le dispositif déployé** : découvrir le volume
+   d'archives, lire le nom et le format réels, ouvrir avec la passphrase du coffre, et **retirer la
+   section Caddy** en disant pourquoi.
+3. Laisser le test rouge et documenter. Refusé : un garde durablement rouge cesse d'être lu.
+
+Arbitrage : **option 2.** Motif : le test doit éprouver **ce qui protège réellement les données**, pas
+ce que le dépôt décrivait avant que la topologie ne soit tranchée. Un test qui réussirait sur le
+dispositif « VPS dédié » ne dirait rien de la nuit prochaine.
+
+**CE QUE L'OPTION 2 NE FAIT PAS, et qu'il faut écrire dans le même souffle** : elle ne supprime pas
+les scripts `backup-*.sh`. Ils restent le chemin de la **production** (`deploy-prod.yml`), qui n'existe
+pas encore. Les garder sans les faire tourner est **tenable**, à condition que rien n'affirme qu'ils
+protègent quoi que ce soit aujourd'hui.
+
+Précédence : invariant 8 (sauvegarde **testée**) — c'est lui qui impose que le test porte sur le
+dispositif réel. Aucune divergence de pack : le fichier 02 §11.4 décrit le PRA sans trancher la
+topologie, que `DECISIONS.md` a tranchée le 2026-08-28.
+
+Décideur : **A01**, sous l'autorisation permanente du 2026-08-30 (infrastructure de staging).
+**Remonté à Williams** pour l'écart de dossier de porte, qui touche une preuve signée.
+Impact spec : **aucun amendement**. Correction de `restore-test.sh` et note dans `PORTE_A`.
