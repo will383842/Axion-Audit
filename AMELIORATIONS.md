@@ -651,6 +651,46 @@ fiche est découpée : elle peut être absorbée **en partie**.
 le dépôt — l'agent est défini, il n'a jamais rien livré. C'est un choix à faire, pas un oubli à
 rattraper au jugé.
 
+### ✅ O-2 LIVRÉE le 2026-08-31 — `infra/scripts/sonde-alertes.sh`, planifiée par `install-cron.sh`
+
+Zéro dépendance nouvelle (`axion_notify` + `curl` existants). **Ce qui est réellement fermé, seuil
+par seuil, et ce qui ne l'est pas — la distinction est le livrable autant que le script :**
+
+| Seuil                       | Donnée qui le nourrit                | État RÉEL de cette donnée au 2026-08-31                                                                          |
+| --------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `ALERT_DISK_USAGE_PERCENT`  | `df` sur l'hôte                      | **DISPONIBLE.** Contrôle pleinement opérant, éprouvé sur un disque réel à 97 %.                                  |
+| `ALERT_CERT_EXPIRY_DAYS`    | magasin ACME de Caddy (`caddy_data`) | **DISPONIBLE** dès qu'un certificat existe. Éprouvé sur un volume portant un certificat à 9 j.                   |
+| `ALERT_SYNC_SILENT_HOURS`   | `sync_log` (04, migration 0007)      | **TABLE PRÉSENTE, AUCUN ÉCRIVAIN avant L6.** La requête est juste et s'exécute ; elle ne trouvera rien avant L6. |
+| `ALERT_LLM_JOB_MAX_MINUTES` | `llm_calls.duration_ms` (idem)       | **TABLE PRÉSENTE, AUCUN ÉCRIVAIN avant L11**, et mesure **POST HOC** (voir le point 1 ci-dessous).               |
+
+**La sonde ne rend jamais un vert sur une donnée absente.** Un contrôle dit trois choses : VERT,
+ALERTE, ou **AVEUGLEMENT** — et un aveuglement part sur le canal comme une alerte. `sync_log` vide
+alors qu'une mission est ouverte est traité comme une ALERTE ; `sync_log` vide sans aucune mission
+ouverte est journalisé « RIEN À SURVEILLER », explicitement pas comme un « tout va bien ».
+
+**Aucune donnée personnelle ne sort.** `sync_log.device_id` est du texte libre remonté par le client
+et rien n'interdit « iPad de <prénom> ». Un `device_id` conforme à un motif technique étroit sort tel
+quel ; **tout le reste sort en `emp:<12 hex>`** — empreinte SHA-256 tronquée, stable donc corrélable,
+non réversible. L'assainissement vit **dans la requête SQL**, au plus près de la source.
+
+#### Deux manques que cette livraison NE ferme PAS — proposés, jamais anticipés (09 §5.9, étage 2)
+
+1. **Un job LLM BLOQUÉ reste invisible.** `duration_ms` n'est écrit qu'à la FIN d'un appel : la sonde
+   voit les appels qui ONT été trop longs, jamais celui qui est en train de l'être — c'est-à-dire
+   probablement le cas que le 02 §11.3 vise. Voir les jobs EN VOL demande de lire les structures
+   internes de BullMQ dans Redis. Coût estimé : ~0,25 j. Impact schéma : aucun. À faire au lot L11,
+   avec le code qui produira enfin ces jobs.
+2. **La pile Coolify — le chemin ÉPROUVÉ — n'exécute pas cette sonde.** `install-cron.sh` vit sur
+   l'hôte ; Coolify n'en donne pas. Le portage exige de remplacer `docker exec` par une connexion
+   réseau à `postgres` et le conteneur jetable par un montage lecture seule de `caddy_data` (donner
+   le socket Docker à un side-car est refusé, même raisonnement que pour le service `sauvegarde`).
+   Coût estimé : ~0,25 j. Impact schéma : aucun ; impact compose : un service. **C'est le point qui
+   décide si l'invariant 8 est tenu sur le chemin DÉCRIT ou sur le chemin EXPLOITÉ.**
+
+**O-1 reste NON ARBITRÉE et rien de ce qui précède ne la prépare** (CLAUDE.md §3-7). La limite
+qu'elle seule lève est écrite en tête du script : cette sonde s'exécute sur la machine qu'elle
+surveille, et un système ne peut pas signaler sa propre absence.
+
 ---
 
 ## 2026-08-29 — [L0-b] Étage 1 — un jeton JWT **nu** dans un message d'erreur sortait en clair

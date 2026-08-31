@@ -24,7 +24,7 @@ field_count="$(printf '%s\n' "$RESTORE_TEST_CRON" | awk '{print NF}')"
 [[ "$field_count" -eq 5 ]] || axion_die "RESTORE_TEST_CRON invalide (5 champs attendus) : « $RESTORE_TEST_CRON »"
 
 # --- Prérequis d'exécution ----------------------------------------------------
-for s in backup-postgres.sh backup-minio.sh backup-caddy.sh restore-test.sh; do
+for s in backup-postgres.sh backup-minio.sh backup-caddy.sh restore-test.sh sonde-alertes.sh; do
   [[ -x "$SCRIPT_DIR/$s" ]] || axion_die "Script non exécutable : $SCRIPT_DIR/$s (chmod +x)"
 done
 mkdir -p "$AXION_LOG_DIR"
@@ -55,6 +55,17 @@ MAILTO=""
 
 # TEST DE RESTAURATION NOCTURNE (critère d’acceptation L0) — RESTORE_TEST_CRON
 $RESTORE_TEST_CRON root $SCRIPT_DIR/restore-test.sh $ENV_FILE >/dev/null 2>&1
+
+# SONDE D'ALERTES — les quatre seuils \${ALERT_*} du 02 §11.3 et de l'invariant 8
+# (fiche AMELIORATIONS.md « O-2 », ABSORBÉE le 2026-08-31 par Williams).
+# CADENCE HORAIRE, ET NON QUOTIDIENNE : le plus court des quatre seuils se compte
+# en minutes (job LLM > 5 min) et le plus long en heures (sync muette > 24 h). Une
+# passe par jour ferait découvrir un disque plein jusqu'à 24 h trop tard.
+# À LA MINUTE 17, délibérément : les quatre autres tâches partent à 0, 30 et 45 —
+# une sonde qui tourne PENDANT une sauvegarde mesurerait le pic qu'elle provoque.
+# Le code de sortie est ignoré ici (comme pour les autres tâches) : la sonde
+# n'informe PAS par le cron, elle informe par le canal Telegram et par son journal.
+17 * * * * root $SCRIPT_DIR/sonde-alertes.sh $ENV_FILE >/dev/null 2>&1
 EOF
 
 chown root:root "$CRON_FILE"
