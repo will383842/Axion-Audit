@@ -4902,3 +4902,46 @@ qu'elle marche dans les deux sens.
 Précédence : sans objet — précision factuelle sur une entrée `DECISIONS.md`, aucune divergence de spec.
 Décideur : **A01**, sur mesure ; réserve du pair retirée par lui après contre-mesure.
 Impact spec : aucun.
+
+## 2026-08-31 — [infra/C3] Comment garder la rétention distante après avoir retiré `mc mirror --remove` ?
+
+Options :
+Le défaut du 2026-08-29 (`backup.info` écrit puis retiré de R2, README d'infra §5.7ter) a été
+**reproduit en bac à sable** le 2026-08-31 : `mc mirror --remove` décide ses suppressions sur un
+listage VIVANT de la source, retire à destination tout ce qui en est absent **à cet instant**, et
+sort en 0. `$DEPOT` étant un dépôt pgBackRest vivant parcouru pendant ~30 s, tout état transitoire
+devenait une suppression distante définitive.
+
+1. **Retirer `--remove` et s'arrêter là.** Le plus simple, et le plus faux : la rétention distante
+   n'est portée par personne d'autre (aucune règle de cycle de vie Cloudflare — elle vivrait hors de
+   `git`, invisible à une reconstruction). Le bucket croîtrait sans fin ; l'en-tête de
+   `sauvegarde.sh` chiffre déjà 30 copies complètes d'un MinIO de 10 Go à ~300 Go, soit ~4,5 $/mois
+   qui ne redescendent jamais seuls.
+2. **Garder `--remove` et l'entourer de conditions.** On garderait la primitive qui a causé la perte,
+   en pariant que les conditions couvrent tous ses états transitoires. On ne sait pas les énumérer.
+3. **Purge en passe SÉPARÉE, pilotée par inventaire** — `distant − (inventaire local AVANT ∪
+   inventaire local APRÈS)`, objets vitaux exclus par leur nom, plafond de volume, le tout gardé par
+   `depot_local_sain`.
+4. Versionnage d'objets côté R2. La vraie réponse à la corruption silencieuse, mais elle se décide
+   chez Cloudflare et coûte du stockage : hors mandat de ce chantier.
+
+Arbitrage : **option 3.** La propriété qui tranche est vérifiable en une phrase : *un objet présent
+dans l'un des deux inventaires locaux ne peut pas être purgé*, donc **la passe ne peut pas retirer ce
+qu'elle vient d'écrire** — ce qui rend le défaut du 2026-08-29 impossible par construction et non par
+prudence. Une absence transitoire devrait désormais enjamber deux listages indépendants séparés par
+toute la durée du miroir. Contre-épreuve jouée dans les deux sens (README §5.7ter) : le code de
+`main` supprime `backup.info` de R2 dans cette situation, le code corrigé le laisse intact.
+Précédence : CLAUDE.md **invariant 8** (sauvegarde éprouvée, alerte automatique) et l'interdiction du
+garde-fou qui annonce plus qu'il ne fait.
+
+Deux variables d'exploitation sont créées, **avec valeurs par défaut, donc sans reprise du `.env`** :
+`AXION_R2_PURGE_MAX_PCT` (50) et `AXION_R2_PURGE_PLANCHER` (20). Au-delà du plafond, la passe ne
+supprime RIEN, journalise et alerte — un bucket qui grossit d'une nuit se rattrape, un bucket vidé
+non. L'option 4 reste ouverte et n'appartient toujours pas à un agent.
+
+Décideur : A50 (chantier C3) — **à contresigner A01 au passage en porte**, avec la réserve écrite
+ci-dessous.
+Impact spec : aucun sur `/docs`. Amendement horodaté de `infra/README.md` §5.7 point 7 et §5.7ter.
+**Réserve** : rien n'a tourné sur `axionia-web` ni contre le vrai bucket R2 (aucun accès demandé ni
+utilisé) ; le bac à sable est MinIO, pas R2. Le §6 du README reste entier — ce script n'a jamais
+tourné sur le serveur.

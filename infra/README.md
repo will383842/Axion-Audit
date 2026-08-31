@@ -1014,12 +1014,12 @@ la perte du serveur. **La règle 3-2-1 du 02 §11.4 n'est pas tenue.**
    `secrets-*.coffre.gpg` devient un fichier définitivement illisible — et les archives MinIO et le
    dépôt pgBackRest avec lui, puisque leurs passphrases sont **dedans**. **Aucune quantité de
    sauvegardes ne compense cela.** Décision humaine, §5.7bis.
-7. 🔴 **`mc mirror --remove` a supprimé de R2 un objet qu'il venait d'y écrire.** Mesuré le
-   2026-08-29 : après la passe de 02:30, `backup.info` — **le fichier sans lequel aucune restauration
-   pgBackRest ne démarre** — était absent du bucket alors que le journal du miroir affichait son
-   transfert, suivi d'une ligne de suppression à source vide. `mc cp` du même fichier a fonctionné et
-   s'est relu à l'identique : **le chemin d'envoi est sain, c'est la phase `--remove` du miroir qui
-   retire.** Voir §5.7ter.
+7. ~~🔴 `mc mirror --remove` a supprimé de R2 un objet qu'il venait d'y écrire~~ → **CORRIGÉ le
+   2026-08-31**, cause reproduite en bac à sable et garde-fou refait. Le miroir ne porte plus
+   `--remove` ; la rétention distante est une passe séparée pilotée par inventaire, et la relecture
+   par échantillon de trois objets est remplacée par une **comparaison d'inventaires complets**.
+   §5.7ter réécrit ci-dessous. **Reste non vérifié** : rien de tout cela n'a tourné sur `axionia-web`
+   ni contre le vrai bucket R2 — voir la fin du §5.7ter.
 
 ### 5.7bis ESCALADE — LE DÉPÔT DE LA PASSPHRASE DU COFFRE (pour Williams)
 
@@ -1073,16 +1073,91 @@ une passe peut se déclarer **réussie** en laissant un trou ailleurs dans les 1
 exactement le garde-fou menteur que le reste de ce lot a passé son temps à démonter.**
 
 **Ce qui a été fait le 2026-08-29** : `backup.info` a été re-déposé par `mc cp` et **relu depuis R2 à
-l'empreinte identique** (`e94aa1d76384b8f8…`). Le trou est fermé **pour cette passe**. Rien n'a été
-changé dans le script : le défaut se reproduira.
+l'empreinte identique** (`e94aa1d76384b8f8…`). Le trou était fermé **pour cette passe**, et rien
+n'avait été changé dans le script : cette section a longtemps porté la phrase « le défaut se
+reproduira ». **Elle n'est plus vraie depuis le 2026-08-31, et voici ce qui la remplace.**
 
-**Ce qu'il reste à instruire** (escalade, non tranché ici — cela touche à la fiabilité de la copie
-hors serveur, pas à un réglage) : (a) remplacer la relecture par **échantillon de 3** par une
-**comparaison exhaustive des noms** local↔distant en fin d'expédition — le coût est un `ls
---recursive`, déjà payé par le comptage d'objets de l'étape 6 ; (b) déterminer si `--remove` doit
-être dissocié du miroir et joué en **passe séparée**, après vérification, plutôt que dans la même
-invocation que les envois. Tant que (a) n'est pas fait, **« expédition terminée » ne prouve la
-présence que de trois objets sur mille six cents.**
+#### La cause, REPRODUITE — pas déduite (2026-08-31)
+
+Bac à sable local : MinIO jetable + **le `mc` exact du Dockerfile** (`RELEASE.2025-04-16T18-13-26Z`),
+dépôt pgBackRest reconstitué à **1 572 objets**, passe de ~30 s. Trois hypothèses ont été éprouvées
+et **écartées par la mesure** : désynchronisation d'ordre entre le listeur système de fichiers et le
+listeur S3 (les deux ordres sont identiques), réécriture atomique concurrente de `backup.info`
+(sans effet), passe idempotente sur cible peuplée (aucune suppression). **Ce qui reproduit le défaut,
+lui, est simple :**
+
+- `mc mirror --remove` décide ses suppressions sur un **listage VIVANT de la source** et retire à
+  destination tout objet absent de ce listage — **puis sort en 0** ;
+- un objet retiré de la source à t+5 s d'une passe de 36 s est **encore transféré** par cette passe ;
+- la passe **suivante** émet, verbatim, la ligne du journal du 2026-08-29 :
+  `{"status":"success","source":"","target":"…/backup.info", …}` — « suppression à source vide » est
+  la forme normale d'un enregistrement de suppression de `mc`, et le champ `source` vide en est la
+  signature.
+
+Et **deux passes par nuit sont ordinaires ici** : `doit_rattraper_expedition` rejoue `expedier_r2` à
+chaque redémarrage du conteneur, c'est-à-dire à chaque hoquet de R2. Les deux lignes atterrissent donc
+dans le même journal. **Condition nécessaire et suffisante de la perte : qu'un objet soit présent à
+destination et absent de la source à l'instant où `mc` la liste.** Or `$DEPOT` est un dépôt pgBackRest
+**vivant**, parcouru pendant des dizaines de secondes ; n'importe quel état transitoire de ce
+répertoire devenait une suppression distante définitive.
+
+**Contre-épreuve directe** : le code de `main`, avec `backup.info` absent du local pendant le miroir,
+**supprime l'objet de R2**. Le code corrigé, dans la même situation, journalise « rien à purger » et
+laisse l'objet **intact**.
+
+#### ① Le miroir ne porte plus `--remove`
+
+Retirer `--remove` et s'arrêter là aurait fait croître le bucket sans fin : la rétention distante
+n'est portée par personne d'autre (aucune règle de cycle de vie Cloudflare — elle vivrait hors de
+`git`). La purge est donc devenue une **passe séparée, pilotée par inventaire** :
+
+1. inventaire local **avant** le miroir ; 2. miroir **en copie seule** ; 3. inventaires local **après**
+et distant ; 4. on ne purge que `distant − (avant ∪ après)` — **un objet que la passe vient d'écrire
+est intouchable** ; 5. les objets vitaux sont exclus **par leur nom** en plus ; 6. un **plafond**
+(`AXION_R2_PURGE_MAX_PCT`, 50 % par défaut, plancher `AXION_R2_PURGE_PLANCHER` = 20 objets) : au-delà,
+**aucune suppression**, le journal le dit et l'alerte part.
+
+#### ② Le garde ne relit plus 3 objets sur 1 600, il compare des inventaires
+
+C'est la moitié qui comptait le plus : l'échantillon de trois avait attrapé le cas du 2026-08-29
+**par chance**, la victime étant l'un des trois. Le contrôle compare désormais les **inventaires
+complets** (`mc find` local↔distant, le listage que le comptage payait déjà) et vérifie en plus, **par
+leur nom et un par un**, `backup.info`, `backup.info.copy`, `archive.info`, `archive.info.copy`. La
+relecture d'empreintes est conservée : l'inventaire prouve la **présence**, la relecture prouve le
+**contenu**. **La comparaison d'inventaires n'est pas désactivable** — `AXION_R2_VERIFIER_RELECTURE`
+ne commande que les empreintes.
+
+#### La contre-épreuve du garde — rouge AVANT vert
+
+| Essai                                                       | Attendu | Mesuré                                                                            |
+| ----------------------------------------------------------- | ------- | ---------------------------------------------------------------------------------- |
+| Ancien garde, **1 objet WAL** retiré à destination           | rouge   | 🔴 **VERT** — « expédition terminée — 1573 objet(s) », 3 relectures conformes      |
+| Nouveau garde, **le même** objet                             | rouge   | ✅ code 2, objet **nommé** au journal, « 1 objet sur 1574 attendus manque »        |
+| Nouveau garde, `backup.info` retiré **après** l'inventaire   | rouge   | ✅ code 2, « l'objet VITAL … est ABSENT »                                          |
+| Nouveau garde, trous rebouchés                               | vert    | ✅ code 0, « inventaire conforme — 1574 objet(s) », « objets vitaux présents »     |
+| Purge légitime (50 WAL expirés localement)                   | purge   | ✅ « purge de 50 objet(s) », distant ramené à 1524                                 |
+| Purge de masse (900 objets)                                  | refus   | ✅ « purge REFUSÉE — 900 … dépassent le plafond de 762 », alerte, **0 suppression** |
+
+**Deux pièges de `mc` découverts par cette contre-épreuve, et corrigés avant livraison** — ils
+méritent d'être écrits parce qu'ils font des garde-fous verts sur du vide :
+
+- **`mc ls <objet-absent>` sort en 0** avec une sortie vide ;
+- **`mc stat <objet>` traite son argument comme un PRÉFIXE.** Mesuré : `backup.info` supprimé,
+  `backup.info.copy` présent → `mc stat …/backup.info` **sort en 0 et affiche `backup.info.copy`**.
+  La première version de la vérification nommée était bâtie dessus : elle a été **prise en défaut par
+  sa propre contre-épreuve**. Seul `mc cat` exige l'objet exact, et c'est lui qui est utilisé ;
+- accessoirement, **`mc rm` sur un objet inexistant écrit une erreur et sort en 0** : son code de
+  sortie ne prouve pas la suppression.
+
+#### Ce qui n'a PAS été vérifié
+
+Rien de ceci n'a tourné sur `axionia-web` ni contre le vrai bucket R2 — **aucun accès n'a été demandé
+ni utilisé**. Le bac à sable est **MinIO, pas R2** : la pagination de listage, les quotas de requêtes
+et les codes d'erreur de Cloudflare ne sont pas éprouvés ici. `depot_local_sain` n'a pas été exercé
+pour de vrai (pas de `pgbackrest` dans le bac : la fonction a été simulée à « sain »). Et le
+§6 reste entier : **ce script n'a jamais tourné sur le serveur**. La première passe réelle après
+déploiement reste le seul contrôle qui vaille — elle dira « inventaire conforme — N objet(s) », et
+c'est ce N qu'il faudra comparer à la main, une fois.
 
 ---
 

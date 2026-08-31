@@ -1271,3 +1271,35 @@ schema.ts` (`ROLES_UTILISATEUR`). T3 n'en a **pas** ajouté une troisième — m
 `ROLES_JOURNALISABLES` est désormais faux, puisqu'il sert de contrat d'API. La consolidation était
 déjà proposée par `journal.ts` ; **elle gagne un consommateur, donc du poids.** Impact : `db/
 schema.ts`, fichier du lot L1. Coût ≈ 0,1 j.
+
+---
+
+## 2026-08-31 — [infra/C3, étage 2, PROPOSÉE] `shellcheck` ne voit pas le script qui porte toute la sauvegarde
+
+**Constat, mesuré.** Le job `shellcheck` de la CI (`.github/workflows/ci.yml`, ligne ~152) analyse
+`git ls-files 'infra/scripts/*.sh'`. Or **le script de sauvegarde n'est pas là** : il vit dans
+`infra/postgres/sauvegarde.sh` (2 300 lignes), avec `sauvegarde-healthcheck.sh`, `healthcheck.sh` et
+`stanza-create.sh`. **Le seul code shell qui décide si les données quittent la machine est le seul
+que le garde-fou shell ne regarde pas.** Son nom même — « shellcheck (infra/scripts/\*.sh) » — dit
+exactement ce qu'il fait ; il ne ment pas, il est simplement posé au mauvais endroit.
+
+**Preuve.** `shellcheck --severity=warning --shell=bash infra/postgres/sauvegarde.sh` rend
+**7 constats** sur la version `main` (6 × SC2010 `ls | grep`, 1 × SC2046 mot non protégé, aux lignes
+1279, 1314, 1763, 1837, 1848, 1927, 1988 de `main`). Aucun n'est grave — les noms de fichiers du
+répertoire d'archives sont contraints par `MOTIF_MINIO`/`MOTIF_COFFRE`, donc `ls | grep` y est sans
+danger — **mais aucun n'a jamais été vu par la CI.**
+
+**Pourquoi ce n'est PAS de l'étage 1 et pourquoi le chantier C3 ne l'a pas fait au passage.** Élargir
+le glob à `infra/postgres/*.sh` rend la CI **rouge sur 7 constats préexistants**, dans du code que ce
+chantier n'a ni écrit ni mesuré. Les corriger d'office serait toucher, sans mandat, à la rotation des
+archives et au garde-fou de santé du dépôt local — exactement le genre de « pendant que j'y suis »
+que le pipeline interdit. Le correctif du miroir R2 livré ce jour **n'ajoute aucun de ces 7 constats**
+(vérifié : même liste avant et après).
+
+**Valeur.** Le jour où un `$` non protégé se glisse dans le chemin d'une purge distante, c'est la CI
+qui doit le dire, pas la nuit du sinistre.
+
+**Coût estimé.** ≈ 0,3 j : élargir le glob à `infra/postgres/*.sh` **et** traiter les 7 constats
+(remplacer les `ls | grep` par une boucle `for f in "$ARCHIVES"/*` avec test, protéger le `$(sb_ssh_opts)`).
+
+**Impact schéma / API : aucun.** Impact CI : un job élargi. Impact `infra/postgres/*.sh` : 7 sites.
