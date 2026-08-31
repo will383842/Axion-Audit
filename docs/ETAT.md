@@ -1939,3 +1939,39 @@ Ce qui est fusionné, et pourquoi :
 Conflit rencontré : `DECISIONS.md` (append-only), résolu en **gardant les deux côtés** — 4 entrées de
 la branche + 10 de `main`, comptées avant et après pour qu'aucune ne se perde. **104 entrées** après
 résolution, 105 avec la mienne.
+
+## 2026-08-31 06h20 — [fin de session propre] — ARRÊT DEVANT LA PORTE P-B
+
+Dernier commit vert : `9a3998a` (`main`) · Branche : `chore/etat-fin-de-session` · Poussé : oui
+Tâche en cours : aucune. **Fin de session délibérée, pas une limite de contexte atteinte.**
+Prochaine action : **NE RIEN OUVRIR.** A02 rend son contrôle d'acceptation sur
+`docs/portes/PORTE_B_2026-08-31.md`, puis Williams arbitre. `lot/l3a-companies` reste **gelée** sur
+`1a6bf5f`.
+Tests rouges connus : aucun.
+
+**Cinq fusions cette nuit, toutes vertes** : `63fcc26` (T3, 41 tests) · `daa1c86` (design system,
+447 tests) · `3601dfa` (dossier P-B + gel L3a) · `e846442` (état) · `9a3998a` (banque de questions +
+la borne de fusion qui ne tient pas). `DECISIONS.md` : **105 entrées**.
+
+**CE QUI ATTEND UNE DÉCISION HUMAINE — cinq points, aucun ne peut être deviné :**
+
+1. **`PORTE_B` §4** — deux des trois membres du critère 09 §62 n'ont **pas d'objet** (isolation
+   missions = dépôt L3 ; propriété de session = sync L6). Trois options, une recommandée. **A02 puis
+   Williams.**
+2. **`PORTE_B` §8** — la séquence L3 vs P-B. A01 a gelé ; A01 n'a pas arbitré.
+3. **La condition 4 de l'autorisation de fusion nocturne** interdit le squash que `CLAUDE.md` §7
+   impose et que la protection de branche est seule à autoriser. Borne inapplicable, lecture tracée
+   (105ᵉ entrée), reformulation à Williams.
+4. **Le profil `expert` sur un compte non habilité** — doute de spec 03 §19.1. **Aucun test ajouté
+   exprès** : figer le comportement transformerait le doute en décision par la porte de service.
+5. **`lireUtilisateur`, code mort, laissé en place exprès** — c'est la pièce à conviction que le
+   gardien doit trouver lui-même, pas celle que l'audité a rangée avant l'inspection.
+
+**Amorce datée à ne pas perdre** : le balayage sentinelle est **déjà désarmé pour L3** (`missionId`
+et `sessionId` cartographiés vers des UUID semés nulle part). Inoffensif aujourd'hui, faux-vert le
+jour où L3 ajoute une route de produit. **Au brief de L3**, §4.3 du dossier.
+
+**Ménage** : worktrees `_axui` et `_axion-wt-e45` supprimés après vérification qu'ils ne portaient
+rien que `main` n'ait. Restent `main`, `_axl3a` (gelé) et `organisation-agents` — **verrouillé par
+une autre session, donc laissé intact** : un worktree inerte coûte du disque, pas de la mémoire, et
+un verrou posé par un tiers ne se force pas.
