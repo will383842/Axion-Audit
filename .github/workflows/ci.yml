@@ -97,6 +97,45 @@ jobs:
   # ultérieur reste dans l'historique et doit être vu, quel que soit le chemin
   # par lequel ce commit arrive.
   # ---------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  # AVIS DE SÉCURITÉ DES DÉPENDANCES — 06 §10.2, « npm audit en CI ».
+  #
+  # POURQUOI CE JOB EXISTE, et le motif vaut mieux que la règle qu'il applique.
+  # L'audit A51 du 2026-08-31 a trouvé un avis HAUT (CVSS 7.5, CWE-89) sur une
+  # dépendance de PRODUCTION, publié le 2026-04-08 et resté **invisible cinq
+  # mois**. Son exploitabilité chez nous était NULLE — ce n'est donc pas la
+  # faille qui était le défaut, c'est qu'aucun des vingt jobs de la CI ne
+  # regardait. Le pack l'exigeait pourtant depuis le début.
+  #
+  # ── BLOQUANT, ET SUR `--prod` SEULEMENT ─────────────────────────────────────
+  # `--prod` écarte l'outillage de développement : un avis sur une dépendance qui
+  # ne part jamais en production bloquerait des merges sans rien protéger, et un
+  # garde qui crie à tort finit désarmé (leçon du 2026-08-28). Le périmètre est
+  # donc ce qui s'exécute réellement chez le client.
+  #
+  # ── AUCUN `|| true`, AUCUN `continue-on-error` ─────────────────────────────
+  # Règle fondatrice de ce fichier : un contrôle qui ne peut pas rendre ROUGE
+  # n'est pas un contrôle. Le jour où un avis sort et qu'il n'est pas
+  # exploitable, la réponse est une entrée `DECISIONS.md` — jamais un
+  # contournement dans le workflow.
+  audit-dependances:
+    name: avis de sécurité des dépendances (bloquant — 06 §10.2)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      # L'action composite du dépôt, pas une mise en place réécrite à la main :
+      # une seconde façon d'installer Node et pnpm est une seconde source de
+      # vérité, et elle dérive. (Ma première rédaction la réécrivait ; le garde
+      # `check:jonction` l'a vue avant la CI.)
+      - uses: ./.github/actions/setup-node-pnpm
+
+      - name: Avis de sécurité sur les dépendances de PRODUCTION
+        run: |
+          set -euo pipefail
+          pnpm audit --prod
+
   gitleaks:
     name: gitleaks (bloquant — 02 §30.4-5)
     runs-on: ubuntu-latest

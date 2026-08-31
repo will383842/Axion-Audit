@@ -64,12 +64,28 @@ Objet : **les processus qui tournent**, jamais les répertoires qui existent. Co
 **Corollaire assumé : le nombre de worktrees n'a PAS de plafond en soi.** Un worktree inerte coûte du
 disque, pas de la mémoire — confondre les deux fait refuser un travail qui ne coûte rien.
 
-**3. ATTENTION — au plus DEUX CHANTIERS SUIVIS à la fois.**
+**3. ATTENTION — au plus DEUX CHANTIERS SUIVIS à la fois, TROIS si chacun a un chef d'équipe.**
 Objet : **ce qu'un pilote arrive à tenir en tête**. Cette règle ne dérive d'aucune des deux autres, et
 c'est pourtant elle qui a mordu le 2026-08-31 : *« six répertoires signifiaient six chantiers que je
 n'arrivais plus à suivre — et c'est une raison suffisante »*. Elle n'était écrite nulle part.
 Une troisième session n'ajoute d'ailleurs pas de fiabilité (2026-08-30 : une troisième session a
 produit un rapport de trois blocages dont **deux étaient faux**, faute de mesurer avant d'affirmer).
+
+> **AMENDEMENT DU 2026-08-31 — Williams, confirmé directement après transmission par un pair.**
+> **Le plafond passe à TROIS chantiers, à UNE condition qui est le cœur de l'amendement et non son
+> ornement : chacun est tenu par un CHEF D'ÉQUIPE qui rend compte à A01.** Sans chef nommé, **le
+> plafond reste à deux** — la borne est dans l'amendement lui-même.
+>
+> **Pourquoi ça tient, alors que le motif du plafond n'a pas changé.** Le plafond mesure ce qu'un
+> pilote tient en tête, et jusqu'ici A01 pilotait les agents **directement** : trois chantiers, c'était
+> vingt agents à suivre. Avec un chef par chantier, **A01 suit trois chefs, pas vingt agents** —
+> c'est exactement la chaîne `agent → chef d'équipe → A01 → Williams` du 09 §1, qui existait et
+> n'était pas utilisée. **Ce n'est pas le plafond qu'on relâche, c'est l'intermédiaire qu'on branche.**
+>
+> **Ce qui NE bouge PAS** : la règle 2 (mémoire) — **deux exécutions lourdes au maximum**, tous
+> chantiers confondus. Et **pas de nouvelle session** : trois chantiers ≠ trois sessions. Le pilote
+> reste unique ; un chantier = un worktree + un chef lancé depuis la session du pilote. Le partage se
+> fait **en agents, pas en pilotes** — trois sessions ont produit deux rapports faux le 2026-08-30.
 
 > **Ce que cet amendement enseigne au-delà de son objet** : un plafond dont le motif ne correspond pas
 > à ce qu'il compte finit par être appliqué au jugé, puis contesté, puis ignoré. **Trois règles nettes

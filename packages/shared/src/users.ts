@@ -117,7 +117,7 @@ const motDePasseSchema = z.string().min(MOT_DE_PASSE_LONGUEUR_MIN).max(MOT_DE_PA
 // PARAMÈTRE D'URL
 // -----------------------------------------------------------------------------
 
-/** `:id` des cinq routes qui visent UN compte. */
+/** `:id` des sept routes qui visent UN compte. */
 export const userParamsSchema = z.strictObject({
   id: z.uuid(),
 });

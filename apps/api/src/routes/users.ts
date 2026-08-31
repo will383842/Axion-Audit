@@ -1,7 +1,7 @@
 // =============================================================================
 // ROUTES DES COMPTES — `/v1/users`. Lot L2, tâche T3.
 //
-// ── LES SEPT ROUTES, ET D'OÙ CHACUNE VIENT ──────────────────────────────────
+// ── LES HUIT ROUTES DÉCLARÉES (+ deux `HEAD` engendrées par Fastify), ET D'OÙ CHACUNE VIENT ──────────────────────────────────
 //   GET    /v1/users                       ← la SEULE nommée par le pack (07, L2 ;
 //                                            note L2 §4.5 : « premier consommateur
 //                                            réel » de la pagination keyset)

@@ -4961,3 +4961,170 @@ Décideur : **Williams**, sur les cinq points, en réponse à une question ferm�
 Impact spec : **amendements** — 03 §19.1 (l'habilitation devient un prérequis explicite du mode
 expert) et 05 §22 (le verbe `GET /v1/users/:id` est nommé). Reformulation de la condition 4 de
 l'entrée du 2026-08-30.
+
+## 2026-08-31 — [gouvernance] Trois chantiers au lieu de deux, à condition qu'un chef d'équipe tienne chacun
+
+Options :
+Amendement **transmis par un pair au nom de Williams**. Je ne l'ai pas appliqué sur transmission :
+**une autorisation relayée n'est pas une autorisation**, et ce dépôt a déjà connu deux rapports
+relayés faux cette semaine. Confirmation demandée à Williams directement, obtenue : « Oui, c'est
+bien moi ». **Le pair lui-même demandait cette confirmation** — c'est la bonne forme, et elle est
+notée comme telle.
+
+Le plafond de deux chantiers mesure **ce qu'un pilote arrive à tenir en tête** (règle 3 du
+2026-08-31). Le motif n'a pas changé ; ce qui change est l'intermédiaire.
+
+1. **Laisser le plafond à deux.** Sûr, et il coûte : deux chantiers sur trois disponibles restaient à
+   l'arrêt alors qu'aucun ne collisionnait avec l'autre.
+2. **Retirer le plafond.** Refusé : le motif tient toujours, et il a mordu il y a vingt-quatre heures.
+3. **Passer à trois, CONDITIONNÉ à un chef d'équipe par chantier.**
+
+Arbitrage : **option 3.** Jusqu'ici A01 pilotait les agents **directement** — trois chantiers, c'était
+vingt agents à suivre. Avec un chef par chantier, **A01 suit trois chefs, pas vingt agents** : c'est
+exactement la chaîne `agent → chef d'équipe → A01 → Williams` du 09 §1, qui **existait et n'était pas
+utilisée**. Ce n'est donc pas le plafond qu'on relâche, **c'est l'intermédiaire qu'on branche**.
+**Sans chef nommé, le plafond reste à deux** — la borne est dans l'amendement, pas dans la bonne
+volonté de celui qui l'applique.
+
+**CONFIGURATION NOMMÉE CE JOUR :**
+· **C1 — L3, chef A10.** **BLOQUÉ**, et pas par un oubli : Williams a confirmé ce matin que rien ne
+repart avant la signature de P-B. `lot/l3a-companies` reste gelée sur `1a6bf5f`.
+· **C2 — L5, chef A20. Première et SEULE tâche autorisée : la note de conception `docs/conception/
+LOT_L5.md`.** Le §1bis la rend obligatoire **avant la première ligne de code**, et c'est elle qui
+fixe les interfaces L5a/L5b/L5c — donc c'est elle qui rend L5 parallélisable. Trois agents lâchés sur
+`apps/field` sans elle se marcheraient dessus.
+· **C3 — qualité/sécurité, chef A50.** Aucun fichier de production, collision impossible. Deux
+tâches : le contrôle d'acceptation **A02** sur `PORTE_B` (en cours) et le **verdict A51, jamais rendu
+depuis L0 et signalé quatre fois**.
+
+**UNE OBJECTION QUE JE ME FAIS À MOI-MÊME, PARCE QU'ELLE EST LA MÊME QUE CELLE DE CE MATIN.** J'ai
+gelé L3a ce matin au motif qu'on n'ouvre pas le lot suivant avant la porte. **Ouvrir L5 est un lot
+PLUS LOIN encore.** La distinction que je retiens, et je la pose au lieu de la supposer : _L3a était
+du CODE, qui avance le lot et se fusionne ; une note de conception est un DOCUMENT que le pack exige
+AVANT tout code, et qui ne se fusionne pas comme un incrément._ La borne est donc explicite : **la
+note, et rien d'autre. Aucune ligne de code L5, aucune branche L5 portant du code, avant P-C.** Si
+Williams
+juge que la distinction ne tient pas, C2 s'arrête et la note attend.
+
+> **TRANCHÉ le 2026-08-31, dans l'heure, par Williams** : _« la note c'est bon, ça ne fusionne pas de
+> code »_. **La distinction tient, et c'est CELLE-LÀ qui fait la borne** — pas le numéro du lot. Un
+> document que le pack exige avant tout code n'ouvre pas le lot ; du code qui se fusionne, oui. La
+> règle devient donc formulable sans compter les lots : **ce qui se fusionne dans `main` comme
+> incrément attend la porte ; ce que le pack exige AVANT le code ne l'attend pas.** C'est une règle
+> plus courte que celle qu'elle remplace, et elle ne se re-teste pas à chaque lot.
+
+**Ce qui NE bouge PAS** : la règle 2 (mémoire) — **deux exécutions lourdes maximum**, tous chantiers
+confondus. Et **pas de nouvelle session** : trois chantiers ≠ trois sessions ; le partage se fait en
+agents, pas en pilotes.
+Précédence : 09 §1 (chaîne de signature `agent → chef d'équipe → A01 → Williams`) et `CLAUDE.md` §4
+(renvoi vers `ORGANISATION_AGENTS.md`, **qui ne cite aucun chiffre** — c'est ce qui rend cet
+amendement gratuit : un seul fichier à toucher, aucune empreinte à recalculer). Règle de précédence
+du pack **sans objet** : `ORGANISATION_AGENTS.md` n'est pas un fichier du pack.
+Décideur : **Williams**, confirmé directement après transmission par un pair.
+Impact spec : **amendement de `docs/ORGANISATION_AGENTS.md` §2 règle 3.** `CLAUDE.md` inchangé.
+
+## 2026-08-31 — [gouvernance/L3] Williams dégèle L3 en ÉCRITURE, tranche le positionnement et la montée de version
+
+Options :
+Trois arbitrages, dont **un qui renverse une instruction que Williams m'avait donnée en direct deux
+heures plus tôt**. Transmis par un pair ; **je ne l'ai pas appliqué sur transmission** et j'ai
+demandé confirmation directe, en nommant la contradiction. Obtenue sur les trois.
+
+**① LE GEL DE L3 EST LEVÉ — MAIS SUR L'ÉCRITURE SEULEMENT.**
+Ce matin, Williams avait confirmé « on ne repart pas tant que je n'ai pas signé ». Il précise
+aujourd'hui : **L3 reprend l'écriture, aucune fusion L3 vers `main` avant la signature de P-B.**
+`lot/l3a-companies` est dégelée ; **C1 (L3, chef A10) démarre.**
+**Le motif est meilleur que ma prudence, et je le retiens contre moi** : la porte P-B évalue **L2**.
+Geler l'ÉCRITURE de L3 ne rend P-B ni plus vraie ni plus sûre — ça coûte des heures pour zéro
+garantie. Ce que la porte doit interdire, c'est que L3 **entre dans `main`** avant d'être signée, et
+cela reste entier. **J'avais confondu « ne pas franchir la porte » avec « ne rien faire »** ; ce sont
+deux choses, et seule la première est une règle.
+**Part au brief de L3** : le balayage sentinelle est **pré-désarmé** (§4.3 du dossier P-B), et A02 a
+montré que c'est **pire que je ne l'écrivais** — le paramètre dangereux est `id`, cartographié vers un
+cadrage réel, pas `missionId`. **Retirer `missionId`/`sessionId` n'aurait rien fermé.**
+
+**② POSITIONNEMENT — le repositionnement commercial d'Axion-IA NE SE PROPAGE PAS au produit.**
+« Un audit doit fonctionner pour tous types d'entreprises. » **Aucun amendement, aucune migration** :
+`size_tiers` reste tel quel, FIL-TPE reste une mission canonique, les quatre paliers gardent leur
+périmètre. **L3 peut figer les paliers sans attendre.**
+**Question posée par Williams et répondue par la mesure** — « il y a les grands groupes aussi non ? » :
+oui, et sans rien changer. Quatre paliers au seed (11 §5) : `micro` 1-10 · `pme` 11-249 · `eti`
+250-4999 · **`grand_compte` 5000+, SANS BORNE HAUTE**. Un groupe de 200 000 personnes y entre tel
+quel. C'est exactement la lecture qui sert **l'invariant 2 et E31** : ce qui varie est une donnée de
+mission, jamais une hypothèse dans le code.
+
+**③ `drizzle-orm` MONTE de 0.44.7 à 0.45.2**, malgré le gel des versions en Phase 1.
+Motif : CVE-2026-39356 / GHSA-gpj5-g38j-94v9 (CVSS 7.5, CWE-89), dépendance de **production**,
+publiée le **2026-04-08**. **Exploitabilité chez nous mesurée NULLE** par A51 — un seul `sql.raw`, et
+son argument est lu sur le schéma Drizzle, pas sur une entrée. **Ce n'est donc pas le risque qui
+motive la montée, c'est ce que l'avis révèle** : 06 §10.2 exige « npm audit en CI », les 20 jobs du
+dernier run n'en comportent **aucun**, et l'avis est resté **invisible cinq mois**. Le correctif de
+fond est le job, pas la version — mais laisser sciemment une dépendance vulnérable une fois qu'on l'a
+vue serait le pire des deux.
+Arbitrage : **les trois ci-dessus (①, ②, ③), confirmés directement par Williams après que la
+contradiction du ① lui a été nommée.** Règle de précédence du pack **sans objet** : aucune de ces
+trois décisions ne tranche une divergence interne au pack — ① porte sur la conduite d'un lot, ② dit
+que le pack n'a PAS à changer, ③ amende une liste de versions.
+Précédence : `CLAUDE.md` §3 (points 1 et 3 — dépendance et montée de version réservées à Williams) ;
+§7 (portes) pour l'interdiction de fusion maintenue ; invariant 2 et E31 pour le positionnement.
+Décideur : **Williams**, sur les trois, en réponse à des questions fermées après contradiction signalée.
+Impact spec : **aucun** pour ① et ②. ③ amende la liste des versions épinglées de `11 §1`.
+
+## 2026-08-31 — [L2J] L'agent croisé reprend l'auteur du code sur six points : lesquels sont vrais
+
+Options :
+Rapport de l'agent croisé de L2J (`0e3aeae`, 50 tests verts, couverture remontée sur les quatre
+métriques). Il relève six choses contre le code et contre moi. **Chacune est jugée ici plutôt que
+rangée**, parce que trois sont exactes et que deux d'entre elles sont des fautes de ma main.
+
+**① VRAI, ET C'EST UNE FAUTE — `ba9f258` a été commité AVEC UNE SUITE ROUGE**, sous le préfixe
+`feat(l2j)`. Quatre tests rouges, et le seuil `functions` du glob critique tombé à **88,46 %** parce
+que j'avais câblé `lireUnCompte` sans qu'aucun test ne l'appelle. **`CLAUDE.md` §7 réserve les commits
+intermédiaires non verts au préfixe `wip:`**, que le squash efface. Je ne réécris pas l'historique
+pour le maquiller — le commit reste, et cette entrée est sa rectification. **La règle a cédé parce que
+j'étais pressé de livrer avant de déléguer les tests : exactement le motif que je reproche ailleurs.**
+
+**② VRAI, DEUX FOIS — deux documents de gouvernance affirment le contraire du dépôt.**
+`docs/ETAT.md` (« **Aucun test ajouté exprès** ») et `ALIGNEMENT_PACK_CODE.md` A-5 (« aucun test n'a
+été écrit pour figer le comportement observé »). **C'était faux : le test existait** — `l2-users:1924`,
+« COMPORTEMENT CONSTATÉ », et c'est précisément lui qui est passé au rouge. Ce que je voulais dire —
+« _je_ n'en ai pas ajouté de nouveau » — n'est pas ce que j'ai écrit. Seul le §5 du dossier P-B est
+juste (« épinglé sans être tranché »). **Deux enregistrements sur trois contredisaient le code ;
+corrigés dans le même commit que cette entrée.**
+
+**③ VRAI, ET LA RÉDACTION DE LA 107ᵉ ENTRÉE EST TROP LARGE.** Elle écrit « `usageProfile: 'expert'`
+est refusé sur un compte dont `habilitated_at` est nul ». **L'implémentation est un garde de
+TRANSITION, pas une règle d'ÉTAT** : elle n'entre que si le profil CHANGE. Un compte **déjà expert et
+non habilité** reçoit donc **200**. Mesuré par l'agent, pas supposé. **Aucune route ne produit plus
+cet état** (POST fermé, PATCH fermé, le seed n'écrit que `guide_strict` — vérifié), donc ce n'est pas
+un trou. **Mais le corollaire est réel et je l'inscris : aucun chemin ne RÉPARE un tel compte.** Le
+garde ferme la porte d'entrée, il ne nettoie pas ce qui serait déjà dedans. La 107ᵉ n'est pas
+réécrite — append-only — **la présente entrée la précise**.
+
+**④ VRAI — mon brief à l'agent lui a affirmé une contre-vérité.** Je lui ai écrit que le seuil de
+couverture couvrait `apps/api/src/routes/users.ts`. Il ne le couvrait pas : seul
+`apps/api/src/domaines/users/**` est déclaré. **Asymétrie avec T5**, où la route `scoping.ts` a été
+ajoutée en second glob avec la note « un seuil qui mesure le dépôt mais pas la route mesure la moitié
+qui ne décide de rien ». L'agent a refusé de modifier la configuration seul et **il a eu raison de
+demander**. **Arbitrage A01 : le glob est ajouté** — il ne fait que RESSERRER le seuil, le fichier
+passe déjà (98,77 / 98,77 / 100 / 95,65), et le précédent T5 est explicite. Signalé à Williams sans
+attendre sa réponse, parce qu'un contrôle qu'on resserre ne peut pas nuire.
+
+**⑤ VRAI — dérive documentaire dans le code**, corrigée : l'en-tête de `routes/users.ts` annonçait
+« LES SEPT ROUTES », il y en a huit plus deux `HEAD` ; `shared/src/users.ts:120` disait « cinq
+routes », il y en a sept.
+
+**⑥ VRAI, ET C'EST MA COLLISION.** L'agent a vu `DECISIONS.md` et `ORGANISATION_AGENTS.md` changer
+**sous lui, dans son propre répertoire de travail**, pendant qu'il travaillait. C'était moi. Il a eu
+le bon réflexe : ne commiter que son fichier et laisser les autres intacts. **Les trois autres agents
+de la nuit ont travaillé en worktree isolé ; le pilote, non.** La règle 1 (« un seul écrivain par
+dossier ») vaut pour moi comme pour eux, et c'est le pilote qui l'a enfreinte.
+
+Arbitrage : **les six constats sont retenus.** ① et ⑥ sont des fautes de conduite du pilote, tracées
+sans réécriture d'historique. ② et ⑤ sont corrigés dans ce commit. ③ précise la 107ᵉ. ④ est appliqué.
+**Aucun n'est écarté**, et c'est la valeur du croisement : cinq des six trouvailles majeures de la
+semaine viennent d'un agent qui n'avait pas écrit le code, et celles-ci en sont six de plus.
+Précédence : `CLAUDE.md` §7 (préfixe `wip:`), §4 (croisement 09 §5.6), règle 1 de
+`ORGANISATION_AGENTS.md`. Règle de précédence du pack **sans objet** — aucune divergence interne au pack.
+Décideur : **A01** sur les six ; ④ signalé à **Williams**, appliqué sans attendre car il resserre.
+Impact spec : aucun. Rectification de `docs/ETAT.md` et de `ALIGNEMENT_PACK_CODE.md` A-5.

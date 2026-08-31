@@ -1975,3 +1975,36 @@ jour où L3 ajoute une route de produit. **Au brief de L3**, §4.3 du dossier.
 rien que `main` n'ait. Restent `main`, `_axl3a` (gelé) et `organisation-agents` — **verrouillé par
 une autre session, donc laissé intact** : un worktree inerte coûte du disque, pas de la mémoire, et
 un verrou posé par un tiers ne se force pas.
+
+## 2026-08-31 08h00 — [L2J + trois chantiers] — étape pipeline 5/7 (tests du lot)
+
+Dernier commit vert : `0e3aeae` (50 tests verts sur `l2-users`) · Branche : `lot/l2j-arbitrages-porte-b` · Poussé : en cours
+Tâche en cours : correction des six constats de l'agent croisé, puis push et CI.
+Prochaine action : pousser `lot/l2j-arbitrages-porte-b`, obtenir la CI verte — **c'est ce qui lève la
+réserve bloquante R-B3 du gardien** — puis remettre la porte à Williams pour signature.
+Tests rouges connus : aucun. Intégration complète : **17 fichiers, 305 tests, 0 échec**.
+
+**RECTIFICATION D'UN BLOC PRÉCÉDENT — le fichier étant append-only, elle s'écrit ici et pas là-bas.**
+Le bloc de 05h10, point 4, dit « **Aucun test ajouté exprès** » à propos du profil `expert`. **C'est
+faux tel qu'écrit.** Ce que je voulais dire est « je n'en ai ajouté aucun de NOUVEAU » ; or **un test
+existait déjà** — `l2-users:1924`, « COMPORTEMENT CONSTATÉ » — et c'est précisément lui qui figeait le
+comportement, et lui qui est passé au rouge quand Williams a tranché. Relevé par l'agent croisé.
+`ALIGNEMENT_PACK_CODE.md` A-5 portait la même erreur, rectifié sur place avec sa date.
+
+Faits du bloc :
+
+- **Cinq arbitrages de Williams appliqués** : périmètre P-B (option 1), gel L3 levé **en écriture
+  seule**, condition 4 reformulée, mode expert réservé aux habilités, positionnement inchangé
+  (mesuré : `grand_compte` 5000+ **sans borne haute**, rien à amender). `drizzle-orm` monte à 0.45.2.
+- **Trois chantiers en vigueur** : C1 (L3, A10, **dégelé**) · C2 (L5, A20, note de conception
+  **livrée**) · C3 (qualité, A50 — **verdict A02 rendu**, **verdict A51 rendu, le premier depuis L0**).
+- **Le gardien A02 a démonté quatre affirmations de mon dossier P-B** : preuve sur le mauvais commit,
+  mesure `mission_users` fausse (39 occurrences, pas 7), sens code → exigences présenté comme fait
+  alors qu'il ne l'était pas, comptage de tests incomplet. **Verdict 🟡 ACCEPTÉE SOUS RÉSERVE**,
+  12 réserves, **une seule bloquante (R-B3)**.
+- **A51 : la redaction RGPD est contournable par tout objet portant un `toJSON()`** — une URL avec
+  e-mail et jeton sort **en clair**. Latent aujourd'hui, actif à L6c. Et **`@fastify/cookie` est
+  installé mais jamais enregistré** : les cookies httpOnly de la console n'existent pas.
+- **Deux fautes de conduite du pilote, tracées** (110ᵉ entrée) : `ba9f258` commité avec une suite
+  rouge sous le préfixe `feat` au lieu de `wip:` ; et des écritures dans le répertoire de travail
+  d'un agent actif, alors que les trois autres agents, eux, travaillaient en worktree isolé.

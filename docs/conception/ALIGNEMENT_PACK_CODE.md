@@ -107,8 +107,9 @@ compte le jour où la machine disparaît.
 **A-5 · 03 §19.1 — l'habilitation devient un PRÉREQUIS explicite du mode expert.**
 Le pack décrivait le mode expert comme celui d'un « auditeur habilité » **sans dire si c'était une
 condition ou une description**. Le code, lui, laissait poser `usageProfile: 'expert'` sur un compte
-non habilité. **Le doute a été porté à Williams plutôt que deviné**, et aucun test n'a été écrit pour
-figer le comportement observé — *un test qui fige un comportement non tranché transforme un doute en
+non habilité. **Le doute a été porté à Williams plutôt que deviné**, et aucun test NOUVEAU n'a été écrit pour figer le
+comportement observé — **rectification du 2026-08-31 : un test l'épinglait déjà**
+(`l2-users:1924`, « COMPORTEMENT CONSTATÉ »), et c'est lui qui est passé au rouge à l'arbitrage — *un test qui fige un comportement non tranché transforme un doute en
 décision par la porte de service*. Arbitrage : **c'est un prérequis.** Motif : un profil expert posé
 sur un compte non habilité est **un état que rien ne rattrape ensuite** — ni l'habilitation, qui ne
 regarde pas le profil, ni l'affectation §34.4, qui regarde l'habilitation et pas le mode d'usage.
