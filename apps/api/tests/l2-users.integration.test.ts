@@ -1,9 +1,15 @@
 // =============================================================================
 // LOT L2 / T3 — LE CRUD DES COMPTES, ÉPROUVÉ SUR UNE BASE RÉELLE.
 //
-// `GET /v1/users` · `POST /v1/users` · `PATCH /v1/users/:id` ·
-// `PATCH /v1/users/:id/role` · `.../deactivate` · `.../habilitate` ·
-// `.../password-reset`.
+// `GET /v1/users` · `GET /v1/users/:id` · `POST /v1/users` ·
+// `PATCH /v1/users/:id` · `PATCH /v1/users/:id/role` · `.../deactivate` ·
+// `.../habilitate` · `.../password-reset`.
+//
+// `GET /v1/users/:id` a été CÂBLÉE le 2026-08-31 (arbitrage de Williams,
+// 107ᵉ entrée de `DECISIONS.md`) : `lireUtilisateur` vivait dans le dépôt sans
+// aucun appelant. Elle entre dans la matrice `ACTES` ci-dessous — donc dans le
+// RBAC par rôle ET dans la non-divulgation de `password_hash` — au lieu d'être
+// nommée à part, où elle n'aurait hérité de rien.
 //
 // Écrit par le testeur d'intégration, qui n'a produit AUCUNE des lignes testées
 // (09 §5.6). Les attentes viennent de la SPÉCIFICATION et des arbitrages tracés —
@@ -420,7 +426,7 @@ async function semerSync(
 }
 
 // -----------------------------------------------------------------------------
-// LES SEPT ROUTES, ÉNUMÉRÉES UNE FOIS
+// LES NEUF ROUTES, ÉNUMÉRÉES UNE FOIS
 // -----------------------------------------------------------------------------
 /**
  * Le tableau qui suit est la MATRICE des tests RBAC et de non-divulgation. Il est
@@ -428,6 +434,14 @@ async function semerSync(
  * de tout contrôle, et c'est précisément pourquoi le nombre d'entrées est ASSERTÉ
  * (voir le premier `it` de la section RBAC) contre le registre d'accès de
  * l'application — qui, lui, énumère les routes QUI EXISTENT.
+ *
+ * ── DEUX ENTRÉES AJOUTÉES LE 2026-08-31 ─────────────────────────────────────
+ * `GET /v1/users/:id` et sa compagne `HEAD /v1/users/:id`, que Fastify engendre
+ * d'office. Elles sont posées ICI, dans la matrice, et non dans la liste écrite à
+ * la main du premier `it` : une route nommée là-bas serait DÉCLARÉE connue sans
+ * pour autant traverser le RBAC par rôle, le 401 anonyme, ni le contrôle de
+ * non-divulgation de `password_hash`. Nommer une route sans l'éprouver est
+ * exactement la forme de vert par vacuité que l'en-tête de ce fichier refuse.
  */
 interface Acte {
   readonly nom: string;
@@ -436,6 +450,14 @@ interface Acte {
   readonly corps: (marqueur: string) => Readonly<Record<string, unknown>> | undefined;
   /** Ce que l'admin doit obtenir — la contre-épreuve du refus. */
   readonly statutAdmin: number;
+  /**
+   * `true` pour les routes `HEAD`, dont la réponse n'a JAMAIS de corps — par
+   * construction du protocole, pas par choix du produit. Les boucles qui vérifient
+   * le CODE d'erreur (`FORBIDDEN`, `UNAUTHENTICATED`) attendent alors `null` : on
+   * asserte l'absence de corps au lieu de la contourner par un filtre, et le STATUT,
+   * lui, reste vérifié comme pour les autres.
+   */
+  readonly sansCorpsDeReponse?: true;
 }
 
 const ACTES: readonly Acte[] = [
@@ -445,6 +467,21 @@ const ACTES: readonly Acte[] = [
     url: () => '/v1/users?limit=5',
     corps: () => undefined,
     statutAdmin: 200,
+  },
+  {
+    nom: 'GET /v1/users/:id',
+    methode: 'GET',
+    url: (cibleId) => `/v1/users/${cibleId}`,
+    corps: () => undefined,
+    statutAdmin: 200,
+  },
+  {
+    nom: 'HEAD /v1/users/:id',
+    methode: 'HEAD',
+    url: (cibleId) => `/v1/users/${cibleId}`,
+    corps: () => undefined,
+    statutAdmin: 200,
+    sansCorpsDeReponse: true,
   },
   {
     nom: 'POST /v1/users',
@@ -539,7 +576,7 @@ afterAll(async () => {
 // =============================================================================
 // RBAC — LE REFUS EST UN 403, ET IL A UNE CONTRE-ÉPREUVE
 // =============================================================================
-describe('RBAC des sept routes de comptes (03 §34.1, invariant 3)', () => {
+describe('RBAC des neuf routes de comptes (03 §34.1, invariant 3)', () => {
   it('la matrice de ce fichier couvre TOUTES les routes `/v1/users` enregistrées', async () => {
     // LE PIÈGE FERMÉ ICI : une huitième route ajoutée demain à `routesUsers` serait
     // hors de tout ce qui suit, et la section RBAC resterait verte en la laissant
@@ -552,6 +589,12 @@ describe('RBAC des sept routes de comptes (03 §34.1, invariant 3)', () => {
     // compagne de chaque `GET` (`exposeHeadRoutes`). Elle est nommée ICI plutôt
     // qu'écartée par un filtre, parce qu'une route qu'un filtre masque est une route
     // que plus personne ne contrôle — et celle-ci répond sur les MÊMES données.
+    //
+    // Elle reste la SEULE nommée à la main, et ce n'est pas une commodité : elle a
+    // son propre `it` plus bas (401/403/200). Sa jumelle `HEAD /v1/users/:id`, née
+    // du câblage du 2026-08-31, est entrée dans `ACTES` — donc dans toutes les
+    // boucles — parce qu'ajouter une seconde ligne ici aurait fait grandir la liste
+    // des routes CONNUES sans faire grandir celle des routes ÉPROUVÉES.
     const attendues = [...ACTES.map((acte) => acte.nom), 'HEAD /v1/users'].sort((a, b) =>
       a.localeCompare(b),
     );
@@ -582,7 +625,7 @@ describe('RBAC des sept routes de comptes (03 §34.1, invariant 3)', () => {
     await Promise.resolve();
   });
 
-  it('@critique consultant, analyste et lecteur reçoivent 403 sur les SEPT routes — jamais 401', async () => {
+  it('@critique consultant, analyste et lecteur reçoivent 403 sur les NEUF routes — jamais 401', async () => {
     // ═══════════════════════════════════════════════════════════════════════════
     // POURQUOI « JAMAIS 401 » N'EST PAS UN DÉTAIL DE STATUT.
     // ═══════════════════════════════════════════════════════════════════════════
@@ -604,7 +647,10 @@ describe('RBAC des sept routes de comptes (03 §34.1, invariant 3)', () => {
           jeton: acteur.jeton,
           corps: acte.corps(`${role}-${acte.methode}`),
         });
-        if (reponse.statut !== 403 || reponse.code !== 'FORBIDDEN') {
+        // Une réponse `HEAD` n'a pas de corps, donc pas de code d'erreur à lire :
+        // on attend `null`, et le STATUT reste vérifié comme partout ailleurs.
+        const codeAttendu = acte.sansCorpsDeReponse === true ? null : 'FORBIDDEN';
+        if (reponse.statut !== 403 || reponse.code !== codeAttendu) {
           anomalies.push(
             `${role} → ${acte.nom} : ${String(reponse.statut)} ${reponse.code ?? '(sans code)'}`,
           );
@@ -630,7 +676,7 @@ describe('RBAC des sept routes de comptes (03 §34.1, invariant 3)', () => {
     );
   });
 
-  it('@critique CONTRE-ÉPREUVE : un admin passe sur les sept routes', async () => {
+  it('@critique CONTRE-ÉPREUVE : un admin passe sur les neuf routes', async () => {
     // SANS CE TEST, LE PRÉCÉDENT SERAIT VERT SUR UNE API TOTALEMENT CASSÉE : une
     // route qui rendrait 403 à tout le monde — un crochet mal branché, une politique
     // vide, une régression du registre — satisferait « consultant refusé » à la
@@ -667,7 +713,7 @@ describe('RBAC des sept routes de comptes (03 §34.1, invariant 3)', () => {
         corps: acte.corps('anonyme'),
       });
       expect(reponse.statut, `${acte.nom} sans jeton`).toBe(401);
-      expect(reponse.code).toBe('UNAUTHENTICATED');
+      expect(reponse.code).toBe(acte.sansCorpsDeReponse === true ? null : 'UNAUTHENTICATED');
     }
   });
 
@@ -719,7 +765,7 @@ describe('RBAC des sept routes de comptes (03 §34.1, invariant 3)', () => {
 // `password_hash` — LE CORPS BRUT, JAMAIS L'OBJET TYPÉ
 // =============================================================================
 describe('non-divulgation de l’empreinte (DECISIONS.md 2026-08-30)', () => {
-  it('@critique aucune des sept réponses ne porte `password_hash`, sous aucune forme', async () => {
+  it('@critique aucune des neuf réponses ne porte `password_hash`, sous aucune forme', async () => {
     // ═══════════════════════════════════════════════════════════════════════════
     // POURQUOI ON LIT LE CORPS BRUT ET NON L'OBJET ANALYSÉ.
     // ═══════════════════════════════════════════════════════════════════════════
@@ -737,6 +783,12 @@ describe('non-divulgation de l’empreinte (DECISIONS.md 2026-08-30)', () => {
     //     aujourd'hui mais qui a franchi le contrat ;
     //   · le préfixe PHC `$argon2id$` — la fuite d'une empreinte qui ne serait pas
     //     celle qu'on avait semée (celle d'un compte créé par la route elle-même).
+    //
+    // ⚠ `HEAD /v1/users/:id` traverse cette boucle avec un corps VIDE : le contrôle
+    // de fuite y est donc trivialement satisfait, et il faut le dire plutôt que de
+    // laisser croire qu'il prouve quelque chose. Ce que la boucle éprouve VRAIMENT
+    // pour elle, c'est son STATUT (200, ligne ci-dessous) — la preuve que la route
+    // répond bien et que le 403/401 des tests RBAC n'est pas un 404 déguisé.
     const admin = await creerAdmin('empreinte');
     const cible = await creerCompte('empreinte-cible', { avecMotDePasse: true });
     const empreinteEnBase = (await ligneCompte(cible.id)).password_hash;
@@ -1884,8 +1936,15 @@ describe('PATCH /v1/users/:id — les trois champs modifiables', () => {
     // traduction ratée écrirait `usageProfile` dans le journal — le catalogue le
     // refuserait, la ligne partirait avec `meta` écartée, et l'acte deviendrait muet
     // sur ce qu'il a fait.
+    // `habilite: true` DEPUIS LE 2026-08-31, et ce n'est pas un contournement. Le
+    // garde `exigerHabilitationPourExpert` refuse désormais le mode expert sur un
+    // compte non habilité (arbitrage de Williams) : sans habilitation préalable, ce
+    // test rendrait 403 et n'éprouverait plus RIEN de ce qu'il vise — la bascule du
+    // champ, le nom journalisé, le `updated_at` bousculé. Le refus, lui, a son propre
+    // test (« le mode expert est REFUSÉ … »), avec sa contre-épreuve. On habilite donc
+    // la cible pour rester sur le sujet, on ne neutralise pas le garde.
     const admin = await creerAdmin('profil');
-    const cible = await creerCompte('profil-cible');
+    const cible = await creerCompte('profil-cible', { habilite: true });
 
     const avant = await ligneCompte(cible.id);
 
@@ -1921,30 +1980,68 @@ describe('PATCH /v1/users/:id — les trois champs modifiables', () => {
     expect((await journalDe(cible.id)).filter((l) => l.action === 'user.update')).toHaveLength(1);
   });
 
-  it('COMPORTEMENT CONSTATÉ — le mode expert se pose sur un compte NON habilité', async () => {
-    // QUESTION OUVERTE, à porter en porte plutôt qu'à trancher ici. 03 §19.1 décrit le
-    // mode expert comme celui d'un auditeur HABILITÉ, et §34.4 fait de l'habilitation
-    // l'acte qui clôt le parcours d'entrée (bac à sable, cotation croisée). Or rien,
-    // dans `PATCH /v1/users/:id`, ne regarde `habilitated_at` : un compte créé il y a
-    // dix secondes peut être mis en mode expert.
+  it('@critique le mode expert est REFUSÉ en 403 sur un compte NON habilité', async () => {
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CE TEST A CHANGÉ DE CAMP LE 2026-08-31, ET IL FAUT DIRE LEQUEL.
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Il s'appelait « COMPORTEMENT CONSTATÉ — le mode expert se pose sur un compte
+    // NON habilité » et il ÉPINGLAIT le contraire de ce qu'il exige aujourd'hui :
+    // `PATCH /v1/users/:id` rendait 200 et posait `usage_profile = 'expert'` sur un
+    // compte dont `habilitated_at` était nul.
     //
-    // Ce n'est pas nécessairement un défaut — l'auteur a explicitement laissé à L3 la
-    // règle « affectation refusée si `habilitated_at IS NULL` », et le mode d'usage
-    // n'est pas une affectation. Mais ce test FIGE le comportement d'aujourd'hui pour
-    // qu'un changement soit VOULU : s'il rougit, c'est que quelqu'un a ajouté la
-    // condition — qu'il l'écrive alors dans `DECISIONS.md` plutôt que de la découvrir
-    // en clientèle.
+    // CE N'ÉTAIT PAS UN TEST DE CONFORMITÉ, ET C'ÉTAIT SA VALEUR. 03 §19.1 décrit le
+    // mode expert comme celui d'un auditeur « habilité » sans dire si l'habilitation
+    // en est une CONDITION ou une simple description. Le testeur n'avait pas à
+    // trancher une question de produit : il a figé le comportement observé pour
+    // qu'un changement soit VOULU et non découvert en clientèle, et il a porté la
+    // question à la porte.
+    //
+    // WILLIAMS A TRANCHÉ (107ᵉ entrée de `DECISIONS.md`, 2026-08-31) : c'en est une
+    // condition. Le motif retenu est qu'un profil expert posé sur un compte non
+    // habilité est un état QUE RIEN NE RATTRAPE ENSUITE — ni l'habilitation, qui ne
+    // regarde pas le profil, ni l'affectation §34.4, qui regarde l'habilitation et
+    // pas le mode d'usage. Le test bascule donc du constat à l'exigence : ce n'est
+    // pas le test qui a changé d'avis, c'est la spécification qui a été écrite.
     const admin = await creerAdmin('profil-non-habilite');
     const cible = await creerCompte('profil-non-habilite-cible');
-    expect((await ligneCompte(cible.id)).habilitated_at, 'le compte n’est PAS habilité').toBeNull();
+    const avant = await ligneCompte(cible.id);
+    expect(avant.habilitated_at, 'le compte n’est PAS habilité').toBeNull();
 
     const reponse = await appeler('PATCH', `/v1/users/${cible.id}`, {
       jeton: admin.jeton,
       corps: { usageProfile: 'expert' },
     });
-    expect(reponse.statut).toBe(200);
-    expect(utilisateur(reponse).habilitatedAt).toBeNull();
-    expect(utilisateur(reponse).usageProfile).toBe('expert');
+
+    expect(reponse.statut).toBe(403);
+    expect(
+      reponse.code,
+      '`NOT_HABILITATED` et non un code neuf : l’appelant a le droit d’agir, c’est\n' +
+        'l’état de la CIBLE qui s’y oppose — la même forme que la règle d’affectation\n' +
+        'du §34.4, pour laquelle ce code a été frappé.',
+    ).toBe('NOT_HABILITATED');
+
+    // ── LE REFUS N'A RIEN ÉCRIT — ni le champ, ni l'horodatage, ni le journal ──
+    // Un 403 rendu APRÈS une écriture déjà partie serait un refus de façade. Le garde
+    // est posé DANS la transaction, sur l'état lu sous verrou : la transaction doit
+    // donc être annulée en entier.
+    const apres = await ligneCompte(cible.id);
+    expect(apres.updated_at.getTime(), '`updated_at` n’a pas bougé').toBe(
+      avant.updated_at.getTime(),
+    );
+    expect(apres.habilitated_at).toBeNull();
+    expect(
+      (
+        await bd().query<{ usage_profile: string }>(
+          'SELECT usage_profile FROM users WHERE id = $1',
+          [cible.id],
+        )
+      ).rows[0]?.usage_profile,
+      'la base doit porter le profil d’ORIGINE : un refus qui laisse la trace de ce\n' +
+        'qu’il a refusé n’est pas un refus.',
+    ).toBe('guide_strict');
+    expect(await journalDe(cible.id), 'un refus ne se journalise pas comme un acte').toHaveLength(
+      0,
+    );
   });
 
   it('@critique trois champs d’un coup : le journal les nomme TOUS, et aucune VALEUR', async () => {
@@ -1955,8 +2052,14 @@ describe('PATCH /v1/users/:id — les trois champs modifiables', () => {
     //     donnée personnelle et vit douze mois sous régime RGPD (06 §10.4), devient un
     //     annuaire nominatif tenu par le produit lui-même.
     // On vérifie les deux, et la seconde sur le CONTENU BRUT de `meta`.
+    // `habilite: true` : la cible passe en mode expert dans ce `PATCH`, et le garde
+    // du 2026-08-31 le refuserait sinon. Le sujet de ce test est la TRACE (les trois
+    // noms, aucune valeur), pas la règle d'habilitation — on lui donne donc les
+    // conditions d'exister au lieu de retirer le champ qui la rend intéressante :
+    // `usage_profile` est justement celui dont la traduction `camelCase` →
+    // `snake_case` peut rater.
     const admin = await creerAdmin('trois-champs');
-    const cible = await creerCompte('trois-champs-cible');
+    const cible = await creerCompte('trois-champs-cible', { habilite: true });
     const nouveauNom = 'Nom entierement remplace';
     const nouvelleAdresse = `compte.remplace.${uuidv7()}@exemple.test`;
 
@@ -1989,6 +2092,373 @@ describe('PATCH /v1/users/:id — les trois champs modifiables', () => {
         `La valeur « ${valeur.slice(0, 24)} » est dans \`meta\`. Le journal dit CE QUI a\n` +
           'changé, jamais VERS QUOI : l’avant comme l’après sont des données personnelles.',
       ).toBe(false);
+    }
+  });
+});
+
+// =============================================================================
+// LE MODE EXPERT EXIGE L'HABILITATION — les DEUX portes d'écriture du profil
+// =============================================================================
+// Arbitrage de Williams du 2026-08-31 (107ᵉ entrée de `DECISIONS.md`). Le profil
+// d'usage s'écrit par DEUX chemins — `POST /v1/users` et `PATCH /v1/users/:id` —
+// et une règle posée sur un seul des deux ne serait pas une règle : elle serait un
+// détour à connaître. Les deux sont éprouvés ici, chacun avec sa CONTRE-ÉPREUVE,
+// sans quoi un service qui refuserait TOUTE création et TOUTE bascule passerait ces
+// tests sans faute.
+describe('le mode expert exige l’habilitation (DECISIONS.md 2026-08-31)', () => {
+  /** Compte le nombre de comptes portant cette adresse — 0 ou 1, jamais plus. */
+  async function comptesAvecAdresse(email: string): Promise<number> {
+    const resultat = await bd().query<{ nombre: string }>(
+      'SELECT count(*)::text AS nombre FROM users WHERE email = $1',
+      [email],
+    );
+    return Number(resultat.rows[0]?.nombre ?? '-1');
+  }
+
+  /** Le profil d'usage TEL QUE LA BASE le porte — la seule vérité sur l'écriture. */
+  async function profilEnBase(id: string): Promise<string | undefined> {
+    const resultat = await bd().query<{ usage_profile: string }>(
+      'SELECT usage_profile FROM users WHERE id = $1',
+      [id],
+    );
+    return resultat.rows[0]?.usage_profile;
+  }
+
+  it('@critique POST /v1/users en mode expert est refusé, et AUCUN compte n’est créé', async () => {
+    // LE POINT QUI COMPTE EST LA SECONDE MOITIÉ. Un 403 rendu APRÈS l'insertion
+    // laisserait en base exactement le compte que la règle interdit — et il y
+    // resterait, puisque aucun chemin ne repasse vérifier la cohérence
+    // profil/habilitation (c'est le motif même de l'arbitrage). On vérifie donc EN
+    // BASE, pas seulement le statut : un refus qui laisse sa trace n'est pas un refus.
+    const admin = await creerAdmin('creation-expert');
+    const adresse = `compte.expert.refuse.${uuidv7()}@exemple.test`;
+
+    const reponse = await appeler('POST', '/v1/users', {
+      jeton: admin.jeton,
+      corps: {
+        name: 'Auditeur presume expert',
+        email: adresse,
+        password: 'mot-de-passe-factice-de-creation',
+        role: 'consultant',
+        usageProfile: 'expert',
+      },
+    });
+
+    expect(reponse.statut).toBe(403);
+    expect(reponse.code).toBe('NOT_HABILITATED');
+    expect(
+      reponse.corps.includes('habilit'),
+      'Le message doit dire à l’administrateur CE QU’IL DOIT FAIRE (habiliter le\n' +
+        'compte d’abord). Un 403 muet l’enverrait chercher un problème de droits qui\n' +
+        'n’existe pas.',
+    ).toBe(true);
+
+    expect(
+      await comptesAvecAdresse(adresse),
+      'Un compte créé puis refusé serait un compte expert NON habilité que rien ne\n' +
+        'rattrape ensuite — l’état exact que l’arbitrage du 2026-08-31 interdit.',
+    ).toBe(0);
+  });
+
+  it('CONTRE-ÉPREUVE : la même création en `guide_strict` passe, et la base porte le profil', async () => {
+    // SANS ELLE, LE TEST PRÉCÉDENT SERAIT VERT SUR UNE ROUTE DE CRÉATION ENTIÈREMENT
+    // CASSÉE : un garde qui lèverait sur TOUT profil satisferait « expert refusé » à
+    // la perfection. On montre donc que le seul profil visé par la règle est `expert`.
+    const admin = await creerAdmin('creation-guide');
+    const adresse = `compte.guide.accepte.${uuidv7()}@exemple.test`;
+
+    const reponse = await appeler('POST', '/v1/users', {
+      jeton: admin.jeton,
+      corps: {
+        name: 'Auditeur en mode guide',
+        email: adresse,
+        password: 'mot-de-passe-factice-de-creation',
+        role: 'consultant',
+        usageProfile: 'guide_strict',
+      },
+    });
+
+    expect(reponse.statut).toBe(201);
+    const cree = utilisateur(reponse);
+    expect(cree.usageProfile).toBe('guide_strict');
+    expect(cree.habilitatedAt, '§34.4 : un compte naît NON habilité').toBeNull();
+    expect(await profilEnBase(cree.id), 'et la base le porte vraiment').toBe('guide_strict');
+  });
+
+  it('@critique PATCH refusé sur un compte non habilité, ACCEPTÉ une fois l’habilitation prononcée', async () => {
+    // ═══════════════════════════════════════════════════════════════════════════
+    // LA CONTRE-ÉPREUVE LA PLUS IMPORTANTE DE CETTE SECTION.
+    // ═══════════════════════════════════════════════════════════════════════════
+    // « expert refusé sur un compte non habilité » est vert sur un service qui
+    // refuserait le mode expert À TOUT LE MONDE, habilités compris — c'est-à-dire sur
+    // une fonctionnalité entièrement morte, dont plus personne ne s'apercevrait avant
+    // qu'un auditeur habilité réclame son mode expert en clientèle. On rejoue donc le
+    // MÊME appel, sur le MÊME compte, après le seul acte qui change son état, et on
+    // exige qu'il passe — puis on relit la BASE, pas la réponse.
+    const admin = await creerAdmin('bascule-apres-habilitation');
+    const cible = await creerCompte('bascule-apres-habilitation-cible');
+
+    const refuse = await appeler('PATCH', `/v1/users/${cible.id}`, {
+      jeton: admin.jeton,
+      corps: { usageProfile: 'expert' },
+    });
+    expect(refuse.statut).toBe(403);
+    expect(refuse.code).toBe('NOT_HABILITATED');
+    expect(await profilEnBase(cible.id)).toBe('guide_strict');
+
+    // L'HABILITATION PAR SA ROUTE, pas par un `UPDATE` direct : c'est le parcours
+    // réel du §34.4, et c'est ce qui prouve que le garde lit l'état que cette
+    // route-là écrit — pas un état fabriqué par le test.
+    const habilitation = await appeler('PATCH', `/v1/users/${cible.id}/habilitate`, {
+      jeton: admin.jeton,
+      corps: {},
+    });
+    expect(habilitation.statut).toBe(200);
+    expect(utilisateur(habilitation).habilitatedAt).not.toBeNull();
+
+    const accepte = await appeler('PATCH', `/v1/users/${cible.id}`, {
+      jeton: admin.jeton,
+      corps: { usageProfile: 'expert' },
+    });
+    expect(
+      accepte.statut,
+      'Le garde doit lire `habilitated_at` SUR L’ÉTAT LU SOUS VERROU, donc voir\n' +
+        'l’habilitation qui vient d’être prononcée. Un 403 ici signifierait que la\n' +
+        'règle ne se lève JAMAIS — une porte sans clé.',
+    ).toBe(200);
+    expect(utilisateur(accepte).usageProfile).toBe('expert');
+    expect(
+      await profilEnBase(cible.id),
+      'La réponse dit ce que le service croit ; la base dit ce qui est écrit. C’est\n' +
+        'la seconde qui décide de ce que l’auditeur verra sur le terrain.',
+    ).toBe('expert');
+
+    // Et la trace : le refus n'a rien journalisé, la bascule a écrit UNE ligne.
+    const actions = (await journalDe(cible.id)).map((l) => l.action);
+    expect(
+      actions,
+      'Deux lignes exactement : l’habilitation, puis la modification. Le refus\n' +
+        'n’en est pas une — un refus journalisé comme un acte fausserait l’audit.',
+    ).toStrictEqual(['user.habilitate', 'user.update']);
+  });
+
+  it('un compte DÉJÀ expert et NON habilité échappe au garde — comportement CONSTATÉ, et REMONTÉ', async () => {
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CE TEST NE JUGE PAS : IL CONSTATE, ET IL EXPOSE.
+    // ═══════════════════════════════════════════════════════════════════════════
+    // `modifierUnCompte` n'entre dans le garde QUE si le profil CHANGE
+    // (`corps.usageProfile !== avant.usageProfile`). Un compte déjà `expert` et non
+    // habilité traverse donc `PATCH {usageProfile:'expert'}` sans être vu : la
+    // requête est un non-changement, elle rend 200, et rien n'est écrit.
+    //
+    // EST-CE UN DÉFAUT ? Pas en soi : ce `PATCH`-là ne CRÉE pas l'état incohérent, il
+    // le laisse tel quel — et le refuser reviendrait à faire échouer une requête qui
+    // ne demande rien. Mais l'état lui-même, `expert` + `habilitated_at IS NULL`,
+    // n'est plus atteignable par AUCUNE route depuis le 2026-08-31 : il ne peut venir
+    // que d'un semis, d'une migration, ou d'un `psql`. Ce test le FABRIQUE
+    // délibérément en base pour montrer ce que le produit en fait, et pour que la
+    // réponse cesse d'être une supposition.
+    //
+    // Ce qui est REMONTÉ au rapport de porte, et n'est pas tranché ici : aucun chemin
+    // ne REPARE un tel compte. Le garde ferme la porte d'entrée ; il ne nettoie pas
+    // ce qui serait déjà à l'intérieur.
+    const admin = await creerAdmin('deja-expert');
+    const cible = await creerCompte('deja-expert-cible');
+    await bd().query("UPDATE users SET usage_profile = 'expert' WHERE id = $1", [cible.id]);
+
+    const avant = await ligneCompte(cible.id);
+    expect(avant.habilitated_at, 'l’état fabriqué est bien l’état incohérent').toBeNull();
+
+    const identique = await appeler('PATCH', `/v1/users/${cible.id}`, {
+      jeton: admin.jeton,
+      corps: { usageProfile: 'expert' },
+    });
+    expect(
+      identique.statut,
+      'Le garde n’est pas atteint : la comparaison avant/après le court-circuite.',
+    ).toBe(200);
+    expect(utilisateur(identique).usageProfile).toBe('expert');
+    expect(
+      (await ligneCompte(cible.id)).updated_at.getTime(),
+      'un non-changement n’écrit rien, garde ou pas',
+    ).toBe(avant.updated_at.getTime());
+    expect(await journalDe(cible.id)).toHaveLength(0);
+
+    // ── LE RETOUR EN ARRIÈRE, LUI, RESTE OUVERT ──────────────────────────────
+    // Le garde ne vise que `expert` : quitter le mode expert n'exige rien. C'est la
+    // preuve que la règle n'enferme pas un compte dans un profil dont il ne pourrait
+    // plus sortir — et le seul moyen, aujourd'hui, de réparer l'état ci-dessus.
+    const retour = await appeler('PATCH', `/v1/users/${cible.id}`, {
+      jeton: admin.jeton,
+      corps: { usageProfile: 'guide_strict' },
+    });
+    expect(retour.statut).toBe(200);
+    expect(await profilEnBase(cible.id)).toBe('guide_strict');
+  });
+});
+
+// =============================================================================
+// GET /v1/users/:id — LA LECTURE UNITAIRE, CÂBLÉE LE 2026-08-31
+// =============================================================================
+// La route existe parce que `lireUtilisateur` vivait dans le dépôt SANS APPELANT et
+// que le 05 §22 écrit « CRUD /v1/users » (arbitrage de Williams). Elle est déjà dans
+// `ACTES`, donc déjà soumise au RBAC par rôle, au 401 anonyme et au contrôle de
+// non-divulgation. Ce qui suit éprouve ce que la matrice ne sait pas dire : le
+// CONTENU rendu, le 404, le 400, et la comparaison avec ce que la LISTE laisse voir.
+describe('GET /v1/users/:id — lecture unitaire', () => {
+  it('@critique un admin lit un compte, et le corps est exactement le contrat', async () => {
+    const admin = await creerAdmin('lecture-unitaire');
+    const cible = await creerCompte('lecture-unitaire-cible', {
+      role: 'analyste',
+      habilite: true,
+      avecMotDePasse: true,
+    });
+
+    const reponse = await appeler('GET', `/v1/users/${cible.id}`, { jeton: admin.jeton });
+    expect(reponse.statut).toBe(200);
+
+    const lu = utilisateur(reponse);
+    expect(lu.id).toBe(cible.id);
+    expect(lu.email).toBe(cible.email);
+    expect(lu.name).toBe(cible.nom);
+    expect(lu.role).toBe('analyste');
+    expect(lu.usageProfile).toBe('guide_strict');
+    expect(lu.isActive).toBe(true);
+    expect(lu.habilitatedAt).not.toBeNull();
+    expect(lu.lastLoginAt, 'aucune connexion : la colonne est nulle, pas absente').toBeNull();
+
+    // 11 §3 : ISO 8601 **UTC** en API. Un horodatage rendu dans le fuseau du serveur
+    // se lirait sans erreur et désignerait un autre instant.
+    for (const [nom, valeur] of [
+      ['createdAt', lu.createdAt],
+      ['updatedAt', lu.updatedAt],
+      ['habilitatedAt', lu.habilitatedAt],
+    ] as const) {
+      expect(valeur, `${nom} doit être en UTC (suffixe Z)`).toMatch(
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/,
+      );
+    }
+
+    // ── L'EMPREINTE, SUR LE CORPS BRUT ───────────────────────────────────────
+    // Le compte a une VRAIE empreinte Argon2id en base : sans elle, ce contrôle
+    // chercherait une chaîne qui n'existe nulle part et serait vert pour rien.
+    const empreinteEnBase = (await ligneCompte(cible.id)).password_hash;
+    expect(empreinteEnBase.startsWith('$argon2id$')).toBe(true);
+    for (const sentinelle of ['passwordHash', 'password_hash', '$argon2id$', empreinteEnBase]) {
+      expect(reponse.corps.includes(sentinelle), `« ${sentinelle.slice(0, 24)} »`).toBe(false);
+    }
+  });
+
+  it('@critique la lecture unitaire ne rend RIEN DE PLUS que la liste', async () => {
+    // ═══════════════════════════════════════════════════════════════════════════
+    // LA QUESTION EXACTE QUE POSE UNE ROUTE AJOUTÉE APRÈS COUP.
+    // ═══════════════════════════════════════════════════════════════════════════
+    // `GET /v1/users` et `GET /v1/users/:id` passent par la même projection
+    // `versReponse`, mais par deux requêtes DIFFÉRENTES du dépôt : la liste ajoute
+    // `curseurCreatedAt` (la composante textuelle du curseur), l'unitaire non. Rien
+    // ne garantit structurellement que les deux surfaces coïncident — sauf ce test.
+    // On compare les CLÉS, pas les valeurs : c'est la surface exposée qui est en jeu.
+    const admin = await creerAdmin('surface-unitaire');
+    const cible = await creerCompte('surface-unitaire-cible', { habilite: true });
+
+    const unitaire = await appeler('GET', `/v1/users/${cible.id}`, { jeton: admin.jeton });
+    expect(unitaire.statut).toBe(200);
+
+    const liste = await appeler('GET', '/v1/users?limit=200', { jeton: admin.jeton });
+    expect(liste.statut).toBe(200);
+
+    // `looseObject` et non `object` : Zod 4 RETIRE les clés non déclarées d'un
+    // `z.object`, et c'est justement une clé non déclarée qu'on cherche. Analyser
+    // avec un schéma strict rendrait ce test vert par construction.
+    const enveloppe = z
+      .object({ items: z.array(z.looseObject({ id: z.string() })) })
+      .parse(JSON.parse(liste.corps));
+    const memeCompte = enveloppe.items.find((item) => item.id === cible.id);
+    expect(memeCompte, 'le compte doit être dans la liste, sinon rien n’est comparé').toBeDefined();
+
+    const clesUnitaire = Object.keys(z.looseObject({}).parse(JSON.parse(unitaire.corps))).sort(
+      (a, b) => a.localeCompare(b),
+    );
+    const clesListe = Object.keys(memeCompte ?? {}).sort((a, b) => a.localeCompare(b));
+
+    expect(
+      clesUnitaire,
+      'Une route de lecture ajoutée après coup est exactement l’endroit où une\n' +
+        'colonne de plus se glisse sans que personne ne la cherche. Les deux surfaces\n' +
+        'doivent être IDENTIQUES.',
+    ).toStrictEqual(clesListe);
+    expect(
+      clesUnitaire,
+      '`curseurCreatedAt` est une composante TECHNIQUE du curseur : elle ne fait\n' +
+        'partie d’aucun contrat d’API et n’a rien à faire dans une réponse.',
+    ).not.toContain('curseurCreatedAt');
+  });
+
+  it('@critique un identifiant INCONNU rend 404 NOT_FOUND — et `HEAD` avec lui', async () => {
+    // `uuidv7()` fournit un identifiant BIEN FORMÉ mais absent : c'est le seul cas qui
+    // distingue le 404 du 400 sur l'UUID. Un 200 sur un corps vide, ou un 500 sur une
+    // lecture nulle, seraient deux façons différentes de mentir à la console.
+    const admin = await creerAdmin('lecture-absente');
+    const fantome = uuidv7();
+
+    const reponse = await appeler('GET', `/v1/users/${fantome}`, { jeton: admin.jeton });
+    expect(reponse.statut).toBe(404);
+    expect(reponse.code).toBe('NOT_FOUND');
+
+    const tete = await appeler('HEAD', `/v1/users/${fantome}`, { jeton: admin.jeton });
+    expect(
+      tete.statut,
+      'La compagne `HEAD` traverse le MÊME gestionnaire : un 200 ici confirmerait\n' +
+        'l’existence d’un compte qui n’existe pas.',
+    ).toBe(404);
+
+    // ── CONTRE-ÉPREUVE : le 404 n'est pas la réponse à tout ──────────────────
+    const existant = await creerCompte('lecture-absente-temoin');
+    expect((await appeler('GET', `/v1/users/${existant.id}`, { jeton: admin.jeton })).statut).toBe(
+      200,
+    );
+    expect((await appeler('HEAD', `/v1/users/${existant.id}`, { jeton: admin.jeton })).statut).toBe(
+      200,
+    );
+  });
+
+  it('un identifiant MAL FORMÉ est refusé en 400, avant toute requête SQL', async () => {
+    // La validation des paramètres passe AVANT le gestionnaire : un `uuid` invalide
+    // n'a pas à atteindre PostgreSQL pour y échouer sur un transtypage — ce serait un
+    // 500 là où l'appelant a simplement mal formé son URL.
+    const admin = await creerAdmin('lecture-mal-formee');
+
+    const reponse = await appeler('GET', '/v1/users/pas-un-uuid', { jeton: admin.jeton });
+    expect(reponse.statut).toBe(400);
+    expect(reponse.code).toBe('VALIDATION_FAILED');
+  });
+
+  it('@critique 401 anonyme, 403 pour consultant, analyste et lecteur — sur `GET` comme sur `HEAD`', async () => {
+    // La matrice `ACTES` couvre déjà ces deux routes ; ce test les reprend NOMMÉMENT
+    // parce que la politique d'une route câblée après coup est exactement ce qu'une
+    // relecture oublie de vérifier. Il tient debout tout seul si quelqu'un touche à la
+    // matrice — et le 403, ici comme ailleurs, n'est signifiant que parce que le 401
+    // existe VRAIMENT à côté de lui.
+    const cible = await creerCompte('lecture-rbac-cible');
+    const admin = await creerAdmin('lecture-rbac');
+    const url = `/v1/users/${cible.id}`;
+
+    for (const methode of ['GET', 'HEAD'] as const) {
+      expect((await appeler(methode, url)).statut, `${methode} anonyme`).toBe(401);
+
+      for (const role of ['consultant', 'analyste', 'lecteur'] as const) {
+        const intrus = await creerCompte(`lecture-rbac-${role}`, { role });
+        expect(
+          (await appeler(methode, url, { jeton: intrus.jeton })).statut,
+          `${methode} ${role}`,
+        ).toBe(403);
+      }
+
+      expect(
+        (await appeler(methode, url, { jeton: admin.jeton })).statut,
+        `${methode} admin — sans cette contre-épreuve, les refus ci-dessus seraient\n` +
+          'verts sur une route qui n’existerait pas.',
+      ).toBe(200);
     }
   });
 });

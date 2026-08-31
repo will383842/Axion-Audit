@@ -147,6 +147,30 @@
         "une fois : il se reparme."
       ],
       "$motif": "Déplacé de cheminsAttendus le 2026-08-31 : T3 est LIVRÉ (7 routes + 32 tests). Le garde a refusé de laisser un module critique livré échapper au seuil de 90 % — c est exactement ce pour quoi il existe."
+    },
+    {
+      "lot": "L2 (T3)",
+      "module": "Routes `users` — la MOITIE QUI DECIDE, absente du seuil jusqu au 2026-08-31",
+      "glob": "apps/api/src/routes/users.ts",
+      "reference": "05 §22 · 03 §34.4 · 09 §3 (DoD : couverture ≥ 90 % sur modules critiques)",
+      "_note_glob": [
+        "SECOND GLOB, ET IL REPARE UNE ASYMETRIE MESUREE. T5 avait deja fait ce",
+        "constat pour `scoping` : « un seuil qui mesure le depot mais pas la route",
+        "mesure la moitie qui ne decide de rien ». La meme correction n avait PAS ete",
+        "faite pour `users` — le depot etait sous seuil, la route non.",
+        "",
+        "COMMENT LE TROU A ETE VU, et ce n est pas par un garde : l agent croise de",
+        "L2J a recu un brief affirmant que ce fichier etait deja couvert. Il a",
+        "VERIFIE au lieu de croire, et a rapporte que c etait faux. Le brief venait",
+        "de A01. Aucun controle du depot ne pouvait attraper ca : la ceinture 2 ne",
+        "compare qu aux entrees de `cheminsAttendus`, ou aucune ne visait ce fichier.",
+        "",
+        "AJOUT SANS ATTENDRE L ARBITRAGE, ET LE MOTIF EST QU IL NE PEUT PAS NUIRE :",
+        "ce glob RESSERRE le seuil, il ne le relache pas. Le fichier passe deja",
+        "(98,77 lignes / 98,77 instructions / 100 fonctions / 95,65 branches, mesure",
+        "sur 0e3aeae). Signale a Williams, applique immediatement."
+      ],
+      "$motif": "Ajoute le 2026-08-31 (DECISIONS.md, « L agent croise reprend l auteur du code sur six points », constat 4)."
     }
   ],
   "_cheminsAttendus_mode_emploi": [
