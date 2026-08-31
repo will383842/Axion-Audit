@@ -1907,3 +1907,35 @@ Faits du bloc :
 - **Ménage** : worktrees `_axui` et `_axion-wt-e45` supprimés après vérification que leur seul écart
   avec `main` (`coverage-critical-paths.json`) était l'**ancienne** version. Branches locales et
   distantes fusionnées supprimées. Restent `main` et `_axl3a` (gelé).
+
+## 2026-08-31 05h40 — [gouvernance / L0] — fusion de `lot/l0-organisation`, bloc écrit AVANT
+
+Dernier commit vert : `e846442` (`main`) · Branche : `lot/l0-organisation` · Poussé : en cours
+Tâche en cours : fusion de la branche de gouvernance de la session de revue croisée.
+Prochaine action : après la fusion, **NE RIEN OUVRIR** — la porte P-B attend A02 puis Williams.
+Tests rouges connus : aucun.
+
+**Ce bloc est écrit AVANT la fusion, et c'est la première fois** : la branche fusionnée apporte
+elle-même l'entrée du 2026-08-30 qui l'exige (condition 5 de l'autorisation de fusion nocturne).
+La raison de l'ordre est bonne — *un bloc écrit avant survit à une fusion qui se passe mal ; écrit
+après, il ne documente que les fusions réussies.* Mes trois blocs précédents de la nuit ont été
+écrits après ; c'est noté à la 105ᵉ entrée de `DECISIONS.md`.
+
+Ce qui est fusionné, et pourquoi :
+
+- **`docs/banque-questions/MODE_EMPLOI.md` + `modele-a-remplir.csv`** — de quoi que Williams rédige
+  la banque sans lire le pack, chaque règle **transcrite** de 03 M1.1/§32.1/§32.4/§36.4 et vérifiée
+  par le validateur `packages/shared/src/banque-questions.ts`. **Échéance 15/09** (07 §14 : « le vrai
+  chemin critique »). C'est le chantier contenu, **hors autopilote code** — donc hors périmètre P-B.
+- **Quatre entrées `DECISIONS.md`** de gouvernance, dont l'autorisation de fusion nocturne bornée
+  par cinq conditions, accordée par Williams sur question fermée.
+- **Aucun code.** Vérifié : le diff de la branche depuis sa base est `DECISIONS.md`,
+  `MODE_EMPLOI.md`, `modele-a-remplir.csv` — rien d'autre. La fusion ne touche **rien de ce que la
+  porte P-B évalue**, ce qui est la seule raison pour laquelle elle a lieu maintenant.
+- **Une entrée ajoutée par moi (105ᵉ)** : la condition 4 de cette autorisation interdit le squash,
+  que `CLAUDE.md` §7 impose et que la protection de branche est seule à autoriser. **Borne
+  inapplicable** ; lecture appliquée tracée, reformulation laissée à Williams.
+
+Conflit rencontré : `DECISIONS.md` (append-only), résolu en **gardant les deux côtés** — 4 entrées de
+la branche + 10 de `main`, comptées avant et après pour qu'aucune ne se perde. **104 entrées** après
+résolution, 105 avec la mienne.
