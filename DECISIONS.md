@@ -5128,3 +5128,64 @@ Précédence : `CLAUDE.md` §7 (préfixe `wip:`), §4 (croisement 09 §5.6), rè
 `ORGANISATION_AGENTS.md`. Règle de précédence du pack **sans objet** — aucune divergence interne au pack.
 Décideur : **A01** sur les six ; ④ signalé à **Williams**, appliqué sans attendre car il resserre.
 Impact spec : aucun. Rectification de `docs/ETAT.md` et de `ALIGNEMENT_PACK_CODE.md` A-5.
+
+## 2026-08-31 — [gouvernance] Nouveau régime de décision : le silence vaut accord, et l'arrêt silencieux est interdit
+
+Options :
+Williams pose un régime de fonctionnement. Il est reproduit ici **mot pour mot** avant d'être
+interprété, parce que c'est le texte qui fera foi et non ma reformulation.
+
+> 1. **SILENCE VAUT ACCORD.** Quand tu as besoin d'une décision de moi, tu proposes une option par
+>    défaut et tu l'appliques après 30 minutes sans réponse. Tu traces toujours. Je peux revenir
+>    dessus, rien n'est irréversible.
+> 2. **TU NE T'ARRÊTES JAMAIS EN SILENCE.** Bloquée plus de 15 minutes : tu m'écris immédiatement,
+>    avec la question ET ta recommandation.
+> 3. **PORTES** : tu rédiges le bloc de signature complet avec ton verdict recommandé. Je réponds
+>    « signé » ou « non ». **Tu ne rédiges pas ma signature toi-même.**
+> 4. **PRÉ-AUTORISÉ SANS MOI** : dépendances de développement seulement, routes déjà impliquées par
+>    une fonctionnalité spécifiée, et fiches étage 2 sous 0,5 j qui **RÉPARENT** un défaut. Le reste
+>    du §3 reste à moi.
+
+1. **Appliquer tel quel.**
+2. **Demander des bornes avant d'appliquer** — écarté : ce serait ouvrir une négociation sur un
+   régime dont le point 2 dit précisément qu'on n'attend pas.
+
+Arbitrage : **option 1, appliqué immédiatement**, avec quatre lectures que j'écris maintenant plutôt
+que de les découvrir en défaut :
+
+**LE POINT 1 NE COUVRE PAS CE QUE LE §3 RÉSERVE.** « Silence vaut accord » s'applique à ce que je
+pouvais déjà proposer, pas à ce qui est réservé. Le point 4 le dit en le bornant explicitement — « le
+reste du §3 reste à moi » — et **une lecture large du point 1 annulerait le point 4**, qui est écrit
+dans le même message. Donc : schéma 04, crypto, sécurité, pack, `CLAUDE.md`, montées de version,
+dépendances de production, **et les portes** ne passent PAS par le silence. Ils attendent, et le
+point 2 dit quoi faire pendant ce temps : **écrire, et passer à la tâche suivante non bloquée.**
+
+**LE POINT 1 EXIGE UNE HORLOGE, ET JE N'EN AI PAS.** Je n'ai aucun moyen fiable de mesurer trente
+minutes écoulées : je ne perçois le temps qu'à travers les horodatages des outils que j'appelle. La
+lecture appliquée est donc **« après avoir proposé, avoir poursuivi autre chose, et être revenu sans
+réponse »** — c'est-à-dire un tour de travail complet, pas un compteur. **Si Williams voulait une
+durée stricte, il faut un mécanisme, pas une bonne volonté** ; je le signale plutôt que de prétendre
+tenir un délai que je ne sais pas mesurer.
+
+**LE POINT 3 EST UNE BORNE, PAS UNE PERMISSION.** Je rédige le bloc **et mon verdict recommandé** ;
+la ligne de signature reste vide jusqu'à sa réponse. Quand il répond « je signe », **j'enregistre sa
+parole en la citant** — ce n'est pas rédiger sa signature, c'est consigner une décision qu'il a
+prise. La nuance tient à qui décide, pas à qui tape.
+
+**LE POINT 4 SE LIT AU MOT « RÉPARENT ».** Une fiche d'étage 2 sous 0,5 j qui **ajoute** une capacité
+n'est pas pré-autorisée, même petite ; seule celle qui **ferme un défaut** l'est. Et « routes déjà
+impliquées par une fonctionnalité spécifiée » signifie que le pack décrit la fonction et pas le
+verbe — comme `GET /v1/users/:id` sous « CRUD /v1/users ». **Une route qu'aucune fonctionnalité
+spécifiée n'appelle reste une escalade.**
+
+**CE QUE CE RÉGIME CHANGE VRAIMENT, ET POURQUOI IL EST BON.** L'ancien coût mesuré est écrit dans
+l'entrée du 2026-08-30 : _quatre heures à l'arrêt avec une CI verte et un merge signé, et personne ne
+le savait_. Le point 2 est le vrai correctif — **ce n'est pas l'attente qui coûtait, c'est l'attente
+muette**. Le point 1 en est le corollaire, et sa sûreté vient de sa dernière phrase : _« rien n'est
+irréversible »_. Tout ce qui l'est vraiment — le schéma, la crypto, les portes — est justement ce que
+le point 4 laisse à Williams.
+Précédence : `CLAUDE.md` §3 (les sept points réservés, **explicitement préservés par le point 4**) et
+§10 (chaîne de signature, préservée par le point 3). Règle de précédence du pack **sans objet** — la
+gouvernance de session n'est pas dans le pack.
+Décideur : **Williams**, en énoncé direct.
+Impact spec : aucun amendement du pack. Régime de session, applicable immédiatement.

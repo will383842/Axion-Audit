@@ -122,7 +122,7 @@ et on lit sa sortie.
 
 ---
 
-## 4. LES TROIS INTERDITS GIT
+## 4. LES INTERDITS GIT
 
 **a. `git commit` sans chemins emporte l'index ENTIER**, donc le travail qu'un voisin vient
 d'indexer. *Arrivé quatre fois le 2026-08-29, dont une où 2 700 lignes du travail de trois agents
@@ -151,6 +151,36 @@ Le contrôle qui manque, et que le §4-a ne remplace pas : après avoir lu
 `git diff --cached --name-only`, vérifier qu'aucun fichier indexé n'appelle un fichier **non suivi**.
 *L'orphelin (personne ne l'importe) et le pendu (il importe ce qui n'existe pas dans git) sont le même
 graphe lu dans les deux sens.*
+
+**e. `git stash` A UNE PILE UNIQUE, PARTAGÉE PAR TOUS LES WORKTREES DU DÉPÔT.**
+_2026-08-31 : un agent travaillant dans son worktree isolé a fait `git stash pop` et **a reçu le
+travail en cours du chantier L3**, empilé depuis un autre worktree. Rien n'a été perdu — le chantier
+L3 a conservé l'intégralité de son travail, vérifié fichier par fichier — mais l'isolation par
+worktree, qui est TOUTE la protection de ce document, **ne protège pas du stash**._
+C'est le piège le plus traître des cinq, parce qu'il **survit à la bonne pratique** : l'agent avait
+fait exactement ce qu'on lui demandait — worktree dédié, aucun `checkout`, aucune écriture chez le
+voisin — et il a quand même reçu le travail d'un autre. **Un mécanisme global dans un dispositif qui
+se croit local est invisible jusqu'au jour où il mord.**
+**La règle : ne pas utiliser `git stash` quand plusieurs worktrees sont actifs.** Pour mettre du
+travail de côté : un commit `wip:` sur sa propre branche, qui est local, daté, nommé, et que le
+squash effacera. `git stash pop` est un `git commit` sans chemins qui aurait la pile en plus.
+
+**f. UN NOMBRE DANS UN TITRE DÉRIVE — celui-ci l'a fait.**
+Cette section s'est appelée « LES TROIS INTERDITS GIT » **alors qu'elle en portait quatre**, entre le
+2026-08-29 et le 2026-08-31. Le titre est désormais sans chiffre, pour la même raison que le renvoi
+de `CLAUDE.md` §4 : _un plafond recopié à deux endroits dérive_, et un titre qui compte son propre
+contenu est un compteur que personne ne remet à jour.
+
+> ⚠️ **SUR L'INTERDIT (c), UNE PRÉCISION DUE PAR LE PILOTE, ET ELLE LE MET EN CAUSE.**
+> Le 2026-08-31, A01 **a supprimé un `.git/index.lock`** — ce que (c) interdit sans réserve. Il avait
+> mesuré avant : le verrou venait d'un `git commit` que le harnais avait tué, et `tasklist` ne
+> montrait **aucun processus git vivant**. Le motif écrit de (c) — _« il appartenait à un processus
+> vivant »_ — était donc vérifié comme absent.
+> **Mais le texte de (c) est absolu et le geste ne l'était pas.** Deux lectures possibles : soit (c)
+> devient _« ne jamais supprimer un `index.lock` SANS avoir mesuré qu'aucun processus git ne tourne,
+> et l'écrire »_, soit il reste absolu et le geste du 31 était une faute. **Cette réécriture n'est
+> pas celle du pilote** — c'est le même cas que la condition 4 de la borne nocturne, où un texte
+> disait plus que son motif : constat écrit, arbitrage à Williams.
 
 ---
 

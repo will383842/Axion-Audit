@@ -618,14 +618,38 @@ quitte pas le fichier où il est né ne devient jamais une décision._
 
 ### Coût estimé
 
-| Incrément                                                                                                                                                  | Coût     |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| **O-1** Supervision externe + alerting Telegram : Uptime Kuma (ou équivalent), sondes sur `/health/ready` des deux fronts et de l'API, certificats, disque | ~0,5 j   |
-| **O-2** Les quatre seuils deviennent du code : une sonde périodique qui LIT `ALERT_*` et notifie sur le canal existant                                     | ~0,5 j   |
-| **O-3** Point `/metrics` sur l'API et le worker (latence, files, échecs de sync, coûts LLM)                                                                | ~0,5 j   |
-| **O-4** Page d'état interne dans `apps/hq`                                                                                                                 | ~0,5 j   |
-| **O-5** Centralisation des journaux                                                                                                                        | ~1 j     |
-| **Total**                                                                                                                                                  | **~3 j** |
+| Incrément                                                                                                                                                                 | Coût     |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| **O-1** Supervision externe + alerting Telegram : Uptime Kuma (ou équivalent), sondes sur `/health/ready` des deux fronts et de l'API, certificats, disque                | ~0,5 j   |
+| **O-2** ✅ **ABSORBÉE le 2026-08-31 — décideur Williams.** Les quatre seuils deviennent du code : une sonde périodique qui LIT `ALERT_*` et notifie sur le canal existant | ~0,5 j   |
+| **O-3** Point `/metrics` sur l'API et le worker (latence, files, échecs de sync, coûts LLM)                                                                               | ~0,5 j   |
+| **O-4** Page d'état interne dans `apps/hq`                                                                                                                                | ~0,5 j   |
+| **O-5** Centralisation des journaux                                                                                                                                       | ~1 j     |
+| **Total**                                                                                                                                                                 | **~3 j** |
+
+> ### ⬛ ARBITRAGE DU 2026-08-31 — **O-2 ABSORBÉE, O-1 NON ARBITRÉE**
+>
+> **Décideur : Williams**, en réponse à une question fermée. **Portée exacte : O-2 SEULE.**
+>
+> **O-1 (supervision externe type Uptime Kuma) n'est PAS arbitrée et ne suit pas.** Elle reste une
+> proposition d'étage 2 en attente. Étendre l'arbitrage d'O-2 à O-1 parce qu'elles sont « le cœur »
+> dans la même phrase serait exactement la faute que `CLAUDE.md` §3 point 7 nomme : _anticiper une
+> fiche d'étage 2 avant son arbitrage est une faute_. Uptime Kuma est certes **nommé par le pack**
+> (02 §11.3) — ce n'est donc pas une décision de dépendance — **mais son coût reste du budget, et le
+> budget est arbitré, pas déduit.**
+>
+> **CE QU'O-2 FERME, ET POURQUOI C'EST LE SEUL 🔴 D'UN DOSSIER DE PORTE.** `ALERT_SYNC_SILENT_HOURS=24`
+> **existe dans la configuration et n'est lue par AUCUNE ligne de code.** L'invariant 8 exige « sync
+> ≥ 1×/jour **+ alerte automatique au-delà** » : la première moitié est tenue, **la seconde n'existe
+> pas**. Un appareil qui cesse de synchroniser en pleine mission ne déclenche **rien** — alors qu'il
+> porte, par construction, **les seules copies de la collecte du jour**.
+>
+> C'est la forme la plus coûteuse du défaut que ce dépôt traque : **un seuil écrit dans un fichier de
+> configuration a exactement l'air d'un garde-fou**, il se relit, il se documente, il rassure — et il
+> ne s'exécute jamais. Quatre seuils `ALERT_*` étaient dans ce cas.
+>
+> **Zéro dépendance nouvelle** : la fonction d'envoi vers le canal existe déjà dans
+> `infra/scripts/lib/common.sh`, et `curl` suffit.
 
 **O-1 et O-2 sont le cœur** (~1 j) : ils ferment l'invariant 8 et le trou « silence » de la
 sauvegarde. O-3 gagne à être posé **avant** le lot L6, dont il mesure précisément les objets. O-4 et
@@ -1271,3 +1295,72 @@ schema.ts` (`ROLES_UTILISATEUR`). T3 n'en a **pas** ajouté une troisième — m
 `ROLES_JOURNALISABLES` est désormais faux, puisqu'il sert de contrat d'API. La consolidation était
 déjà proposée par `journal.ts` ; **elle gagne un consommateur, donc du poids.** Impact : `db/
 schema.ts`, fichier du lot L1. Coût ≈ 0,1 j.
+
+---
+
+## 2026-08-31 — [L17, étage 2, PROPOSÉE] Le ré-audit duplique la mission : questionnaire d'hier ou banque d'aujourd'hui ?
+
+**Constat.** `01 §6.4` pose le ré-audit ainsi : « le ré-audit **duplique la mission** et affiche la
+**progression des scores** (avant/après) — la preuve chiffrée de la valeur ». La duplication reprend
+donc le questionnaire **figé** de la mission d'origine, c'est-à-dire les colonnes `*_snapshot` de
+`mission_questions`.
+
+**Ce que personne n'a tranché.** Entre deux audits séparés de 6 à 12 mois, la banque aura bougé :
+questions reformulées, **ancres de cotation affinées**, questions neuves, questions archivées. Deux
+exigences se contredisent alors :
+
+- **Comparabilité** — pour que « 2,1/5 → 3,4/5 » veuille dire quelque chose, il faut avoir posé **les
+  mêmes questions avec les mêmes ancres**. Une ancre affinée entre-temps déplace le score **sans que
+  l'entreprise ait changé** : la « preuve chiffrée » devient un artefact de rédaction.
+- **Qualité** — ré-auditer avec des questions qu'on sait moins bonnes, c'est vendre une photographie
+  volontairement datée et se priver de ce que la banque a appris.
+
+**Trois formes, sans en trancher aucune :**
+
+1. **Gel strict** — reprise des snapshots à l'identique. Comparabilité parfaite, qualité figée.
+2. **Rafraîchissement intégral** — régénération depuis la banque courante. Qualité maximale,
+   **progression non comparable** : le score devrait alors être marqué « base modifiée », et le dire
+   au client.
+3. **Mixte tracé** — les questions inchangées gardent leur snapshot ; celles dont la version a bougé
+   sont reprises en neuf **et signalées** ; la progression s'affiche sur le **sous-ensemble commun**.
+
+**Valeur pour l'auditeur.** Le ré-audit est décrit comme « opportunité commerciale récurrente » et
+comme la réponse au reproche « des audits qui s'arrêtent au rapport ». Sa valeur tient **entièrement**
+à la crédibilité de la progression affichée. Un client qui découvre qu'une part de son amélioration
+vient d'une reformulation de question perd confiance dans le chiffre **et dans l'audit d'origine**.
+
+> ### ⚠️ CORRECTION D'A01 AVANT ENREGISTREMENT — la fiche affirmait une urgence qui n'existe pas
+>
+> **Texte proposé** : _« la forme 3 est la seule qui demande une donnée nouvelle […] si elle est
+> retenue, la donnée doit exister dès que le premier questionnaire est figé, c'est-à-dire dès L3 »_,
+> et c'était présenté comme **la raison d'ouvrir la fiche maintenant**.
+>
+> **Mesuré, et c'est faux.** `mission_questions` porte **déjà** `question_id` **et**
+> `question_version` (`04` ligne 101 ; `0003_questionnaire.sql:100-101` ; `db/schema.ts:511-512`).
+> Deux lignes sont donc comparables **si et seulement si** elles partagent ces deux valeurs — c'est
+> calculable sur les données existantes, **sans colonne nouvelle, sans amendement du 04, et sans rien
+> exiger de L3**.
+>
+> **Ce qui reste vrai après la mesure** : `question_version` est **nullable**, et le `NULL` a une
+> raison — une question `added_ad_hoc` n'a pas de version de banque. Ces lignes-là ne sont comparables
+> à rien, ce qui est correct : une question inventée pour une mission ne devrait pas peser dans une
+> progression inter-missions. **C'est une propriété acquise, pas un trou.**
+>
+> **Pourquoi je corrige plutôt que d'enregistrer tel quel.** La fiche demandait, sur la foi de cette
+> phrase, une vigilance en Phase 1 sur un lot déjà chargé. Une anticipation fondée sur une donnée
+> absente **qui existe** est exactement ce que `CLAUDE.md` §3 point 7 nomme : _proposer est un devoir,
+> anticiper est une faute_. Le rédacteur avait demandé qu'on le contredise s'il surestimait ; il
+> surestimait, et il avait raison de le demander.
+
+**Impact schéma / API : AUCUN, pour les trois formes.** La forme 3 elle-même se calcule sur
+`(question_id, question_version)`. Ce n'est donc **pas** une escalade `CLAUDE.md` §3-2.
+
+**Coût estimé.** Décision : quelques minutes. Forme 1 : nul (comportement par défaut de la
+duplication). Forme 2 : ≈ 0,2 j. Forme 3 : ≈ 0,4 j, **sans amendement du 04**.
+
+**Quand la trancher : avant L17 (Phase 3), et pas avant.** Rien dans les lots de Phase 1 ne dépend de
+cette décision — c'est le sens de la correction ci-dessus.
+
+**Origine.** Question de Williams le 2026-08-31 en examinant l'adaptation des questionnaires par
+entreprise. Rédigée par la session d'audit en lecture seule ; **corrigée et enregistrée par A01** ;
+**non implémentée** (09 §5.9).
