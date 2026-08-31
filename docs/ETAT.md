@@ -1890,3 +1890,90 @@ code connu → secteur rempli, **les deux dans le même test**, sinon il serait 
 `companies(name, id)` au §7.1 du fichier 04 (tri en mémoire — sans effet en Phase 1) ; et
 `uq_companies_siren` **n'exclut pas les lignes supprimées**, donc le jour où une suppression
 existera, le 409 désignera une fiche que la liste ne montre plus. Les deux touchent le 04.
+
+## 2026-08-31 06h00 — [lot L3 / incréments L3a + L3b] — étape pipeline 3/7 (auto-revue faite)
+
+Dernier commit vert : (ce commit) · Branche : lot/l3a-companies · Poussé : oui
+Tâche en cours : L3a reçoit enfin ses tests ; L3b livre la machine à états §32.2 en TDD croisé.
+Prochaine action : **libérer Docker, puis exécuter `pnpm test:integration`** — 20 tests d'intégration
+`companies` et la ceinture 4 corrigée n'ont JAMAIS tourné. Commencer par l'assertion `gabaritsMuets`
+vide de `l2-crochets`, la plus exposée du lot (A32 l'a prévue à la main, pas mesurée).
+Tests rouges connus : `apps/api/src/auth/quota.test.ts` — **flakiness de contention, pas une
+régression** : 3/3 verts en isolation, rouge par intermittence dans la suite complète. Voir ci-dessous.
+
+📌 **CE QUI EST LIVRÉ.** La suite unitaire passe de **367 à 474 tests** (+107).
+
+· **L3a n'avait AUCUN test** — la branche était verte par vacuité, et le bloc précédent le disait
+  lui-même. Trois agents qui n'ont pas écrit le code (09 §5.6) l'ont éprouvé : **37 tests unitaires
+  purs** (`packages/shared/src/companies.test.ts`, VERTS, exécutés) sur SIREN/Luhn, NAF, nom, et les
+  schémas Zod du contrat ; **20 tests d'intégration** (`apps/api/tests/l3a-companies.integration.test.ts`,
+  1 349 lignes, 9 `@critique`) couvrant les quatre points que l'auteur avait lui-même déclarés non
+  prouvés, plus la matrice RBAC 4 routes × 4 sujets, la double graphie « SAS »/« S.A.S. », le SIREN
+  malformé vs pris, et `deleted_at`. **Ces 20-là n'ont pas tourné : Docker est tenu par un autre
+  chantier.** Ils sont écrits pour l'être, pas prouvés.
+· **L3b — machine à états §32.2** : `packages/shared/src/missions.ts`, table `TRANSITIONS_MISSION` de
+  7 lignes (4 avances, 3 retours admin motivés, `cloturee` terminal par ABSENCE de ligne), plus
+  `evaluerTransitionMission` (fonction pure). **72 tests VERTS, écrits AVANT le code par un autre
+  agent**, dont l'énumération des 20 couples hors identités + les 5 identités. Aucun test n'a été
+  touché pour faire passer le code.
+· **Le balayage sentinelle financier est réarmé** (voir ci-dessous).
+
+📌 **LE DÉFAUT CENTRAL DE LA SESSION : LE BALAYAGE SENTINELLE ÉTAIT PRÉ-DÉSARMÉ POUR TOUT L3.**
+Son en-tête promettait qu'« une route `/v1/missions/:id/interview-plan` ajoutée demain oblige son
+auteur à semer une mission réelle, sans quoi le balayage rougit ». **C'était faux.** La cartographie
+des paramètres était un `Record<nom, valeur>` **plat** : le paramètre dangereux n'était pas
+`missionId` mais **`id`**, déjà mappé vers un cadrage financier réel. Toute route L3 en `:id` aurait
+reçu l'id d'un `scoping_estimate`, rendu 404, été comptée « non exercée », et
+`parametresNonCartographies` serait resté VIDE — vert sur une route jamais traversée. **Vérifié sur
+le dépôt réel** : `/v1/companies/:id`, arrivée avec L3a, était déjà dans ce cas.
+Pire que le constat initial : `missionId` et `sessionId` étaient mappés vers des **UUID fabriqués,
+jamais semés** — la promesse « une valeur RÉELLE, semée » était déjà rompue pour deux paramètres
+sur trois.
+**Correctif** : cartographie par **(gabarit, paramètre)**, le débordement devient inexprimable ;
+`declarationsInutiles` dénonce une ligne dont le gabarit a disparu ; et le `non_exerce` silencieux
+devient une anomalie nommée (`gabaritsMuets`), séparée par la fonction pure `natureDuSilence` de ce
+qui est **structurellement** non traversable (405, 415, 400 sur méthode à corps).
+
+📌 **UN DÉFAUT TROUVÉ EN CHEMIN, QUI AURAIT DÉBRANCHÉ LE NOUVEAU GARDE EN QUINZE JOURS.** Le quota
+`/v1/auth/*` (10 req/min/IP) **bâillonnait le balayage** : 3 routes × 4 porteurs = 12 requêtes depuis
+une IP unique, les deux dernières en 429 — et c'étaient exactement `lecteur` et `anonyme` sur
+`POST /v1/auth/logout`, c'est-à-dire **le seul refus 401 que cette route pouvait prouver**. Invisible
+tant que 429 était compté « non exercé » ; le mécanisme corrigé en aurait fait un faux positif
+permanent. Le moteur étale désormais une adresse par appel.
+
+📌 **QUATRE DÉFAUTS TROUVÉS DANS L'EXISTANT PAR DES RELECTEURS QUI N'AVAIENT RIEN ÉCRIT.**
+
+· **Un `PATCH` de code APE vers une division inconnue EFFACE un secteur choisi à la main**
+  (`companies/service.ts`). Le commentaire trois lignes au-dessus affirme l'inverse. C'est
+  l'invariant 7 (« rien n'est jamais silencieusement écrasé »). **Arbitré** ce jour ; correction et
+  retournement du test portés à L3b, pour qu'ils s'exécutent ensemble.
+· **La « ceinture 5 » de l'étanchéité financière ne fait pas ce que `scoping.ts` écrit.** Son en-tête
+  dit « le sérialiseur Zod **retire** tout champ non déclaré » ; mesuré, `z.strictObject` **REFUSE**
+  (`unrecognized_keys`). La garantie est en fait **plus forte** que promise — mais quiconque a relu du
+  code en se fiant à cette phrase a raisonné sur un mécanisme qui n'existe pas. En-tête à corriger
+  (fichier du lot L2, non touché ici).
+· **`companies.external_ref` n'a aucune contrainte d'unicité** alors que c'est la clé de liaison M8.1
+  avec la console. Le fichier 04 §7.1 est silencieux → **escaladé à Williams**.
+· **`modifierUneEntreprise` balaie toute la table avant de savoir si la fiche existe** : un `PATCH`
+  sur un id inventé déclenche un balayage sans borne, puis sort en 404.
+
+📌 **TROIS QUESTIONS DE SPEC ÉCRITES, PAS DEVINÉES** (`DECISIONS.md`, 106 entrées) : le pouvoir de
+FORCER une transition (§32.2 le nomme une fois, §17.3 deux fois) ; **qui a le droit de faire AVANCER
+une mission** — le §32.2 écrit « admin **uniquement** » sur les seuls retours, et ce qualificatif n'a
+de sens que si les avances ne le sont pas, d'où : la TABLE porte la règle métier, la ROUTE porte la
+restriction V1 « console = admin seul » ; et **`interviews.conducted_by NOT NULL`** vs un plan
+§32.4 qui ne produit aucun auditeur → **escaladé à Williams** (le manifeste relu à la porte P-A le
+fige ; la piste `work_assignments` ne tient pas seule, la table n'a aucune dimension profil).
+
+📌 **UNE JONCTION QUE PERSONNE N'AVAIT FAITE, PORTÉE À A01.** La bascule du fil rouge vers Playwright
+est **datée au lot L3** par `DECISIONS.md` du 2026-08-27 — et L3 ne livre **aucun écran** :
+`apps/hq/src` contient deux fichiers, ce qui est conforme au 07 (la console est L7-min). La substance
+de l'engagement est tenue (le parcours grandit à ce lot), l'enveloppe non.
+
+📌 **LA FRAGILITÉ QUI DOIT ÊTRE TRAITÉE AVANT LA PORTE.** La suite unitaire est **intermittente** :
+`auth/quota.test.ts` (et, comme au bloc précédent, `auth/socle.test.ts` / `auth/crochets.test.ts` sur
+un `beforeAll` de 10 s) tombent par contention, jamais en isolation — **3/3 verts seuls, rouges par
+intermittence dans la suite**. Ce n'est pas une régression de L3 : c'est une fragilité préexistante
+que les 107 tests ajoutés rendent simplement plus fréquente. **La DoD exige « tous les tests verts » :
+en l'état, ce critère n'est pas mesurable de façon stable.** À traiter comme un défaut à part entière,
+pas comme du bruit.
