@@ -43,6 +43,7 @@ import {
   habiliterUtilisateur,
   insererUtilisateur,
   lireDerniersEtatsDeSync,
+  lireUtilisateur,
   lireUtilisateurPourEcriture,
   listerUtilisateurs,
   mettreAJourUtilisateur,
@@ -57,6 +58,68 @@ type ChampJournalisable = (typeof CHAMPS_UTILISATEUR_JOURNALISABLES)[number];
 
 /** Message unique du compte introuvable. */
 const MESSAGE_COMPTE_INTROUVABLE = "Ce compte n'existe pas.";
+
+// -----------------------------------------------------------------------------
+// LE MODE EXPERT EXIGE L'HABILITATION — arbitrage de Williams, 2026-08-31
+// -----------------------------------------------------------------------------
+// 03 §19.1 décrivait le mode expert comme celui d'un « auditeur habilité » SANS
+// dire si l'habilitation en était une CONDITION ou une simple description. Le
+// doute a été porté à Williams plutôt que deviné : c'en est une.
+//
+// MOTIF RETENU, et il tient en une phrase : un profil expert posé sur un compte
+// non habilité est un état QUE RIEN NE RATTRAPE ENSUITE. Aucune étape ultérieure
+// ne repasse le vérifier — ni l'habilitation, qui ne regarde pas le profil, ni
+// l'affectation §34.4, qui regarde l'habilitation et pas le mode d'usage. Une
+// incohérence qu'aucun chemin ne relit est une incohérence définitive.
+//
+// ── POURQUOI `NOT_HABILITATED` (403) ET NON UN CODE NEUF ─────────────────────
+// Le code existe déjà, minté pour la règle d'affectation du §34.4, et il décrit
+// EXACTEMENT la même forme : l'appelant a le droit d'agir, c'est l'état de la
+// CIBLE qui s'y oppose. Le dépôt a donc déjà tranché que cette forme rend 403 ;
+// en inventer un second dirait la même chose deux fois, et deux codes pour une
+// même condition finissent par diverger.
+//
+// ── CE QUE CETTE RÈGLE N'A PAS BESOIN DE COUVRIR, ET C'EST MESURÉ ────────────
+// « Et si l'habilitation est RETIRÉE d'un compte déjà expert ? » — la question
+// est juste, et la réponse est qu'AUCUN CHEMIN NE LA PRODUIT : `habilitated_at`
+// n'est écrit qu'à un seul endroit (`habiliterUtilisateur`, depot.ts), qui le
+// POSE et ne le remet jamais à nul ; le service refuse même de le reposer. Il
+// n'existe donc aucun compte capable de perdre son habilitation. Écrire ici un
+// garde pour cet état serait écrire un garde DONT AUCUN PRODUCTEUR N'EXISTE —
+// la famille exacte de garde-fou que ce lot passe son temps à retirer. Le jour
+// où une route de retrait d'habilitation apparaîtra, c'est ELLE qui devra
+// relire le profil ; ce commentaire est la trace qui le lui dira.
+const MESSAGE_EXPERT_SANS_HABILITATION =
+  "Le mode expert est réservé aux comptes habilités. Habilitez ce compte d'abord.";
+
+/**
+ * Refuse le profil `expert` sur un compte dont `habilitated_at` est nul.
+ *
+ * `habilitatedAt` est passé explicitement plutôt que la ligne entière : à la
+ * CRÉATION il n'y a pas encore de ligne, et la valeur est connue — `null`. Un
+ * paramètre qui accepterait `LigneUtilisateur` forcerait l'appelant de création
+ * à fabriquer une fausse ligne pour interroger le garde.
+ */
+function exigerHabilitationPourExpert(
+  profilVoulu: ProfilUsage | undefined,
+  habilitatedAt: Date | null,
+): void {
+  if (profilVoulu === 'expert' && habilitatedAt === null) {
+    throw new AppError('NOT_HABILITATED', MESSAGE_EXPERT_SANS_HABILITATION);
+  }
+}
+
+/**
+ * Lecture unitaire d'un compte. Route câblée sur arbitrage de Williams
+ * (2026-08-31) : `lireUtilisateur` existait dans le dépôt SANS AUCUN APPELANT, et
+ * le 05 §22 écrit « CRUD /v1/users » — c'était donc LA ROUTE qui manquait, pas la
+ * fonction qui était de trop. Relevé par l'agent croisé de T3, pas par l'auteur.
+ */
+export async function lireUnCompte(cibleId: string): Promise<LigneUtilisateur> {
+  const ligne = await lireUtilisateur(cibleId);
+  if (ligne === null) throw new AppError('NOT_FOUND', MESSAGE_COMPTE_INTROUVABLE);
+  return ligne;
+}
 
 /**
  * Rendu quand un `UPDATE … RETURNING` ne rend rien alors que la ligne vient d'être
@@ -133,6 +196,12 @@ export async function creerUnCompte(
   entree: CreateUserRequest,
   contexte: ContexteJournal,
 ): Promise<LigneUtilisateur> {
+  // Un compte qui vient d'être créé n'est JAMAIS habilité : `insererUtilisateur`
+  // pose `habilitated_at` à nul, et l'habilitation est un acte d'admin POSTÉRIEUR
+  // (§34.4, après le bac à sable §17.5). Le refus est donc inconditionnel ici — on
+  // passe le littéral `null`, pas une lecture, parce qu'il n'y a rien à lire.
+  exigerHabilitationPourExpert(entree.usageProfile, null);
+
   const empreinte = await hacherMotDePasse(entree.password);
 
   const ligne = await insererUtilisateur(
@@ -201,6 +270,10 @@ export async function modifierUnCompte(
       touches.push('email');
     }
     if (corps.usageProfile !== undefined && corps.usageProfile !== avant.usageProfile) {
+      // Sur l'état LU SOUS VERROU (`avant`), jamais sur celui de la requête : entre
+      // la lecture et l'écriture, une habilitation concurrente ne doit pas pouvoir
+      // se glisser — c'est la raison d'être du `FOR UPDATE` de `lireUtilisateurPourEcriture`.
+      exigerHabilitationPourExpert(corps.usageProfile, avant.habilitatedAt);
       champs.usageProfile = corps.usageProfile;
       touches.push('usage_profile');
     }

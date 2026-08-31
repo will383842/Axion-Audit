@@ -61,6 +61,7 @@ import {
   creerUnCompte,
   desactiverUnCompte,
   habiliterUnCompte,
+  lireUnCompte,
   listerLesComptes,
   modifierUnCompte,
   reinitialiserLeMotDePasse,
@@ -133,6 +134,35 @@ export const routesUsers: FastifyPluginAsync = async (app) => {
       const page = await listerLesComptes(requete.query);
       return { items: page.items.map(versReponse), nextCursor: page.nextCursor };
     },
+  );
+
+  /**
+   * `GET /v1/users/:id` — lecture unitaire.
+   *
+   * CETTE ROUTE A ÉTÉ CÂBLÉE APRÈS COUP, ET LE MOTIF MÉRITE D'ÊTRE ÉCRIT ICI.
+   * `lireUtilisateur` vivait dans le dépôt depuis la livraison de T3 SANS AUCUN
+   * APPELANT — du code orphelin au sens du contrat §6, relevé par l'agent croisé
+   * qui écrivait les tests, jamais par l'auteur ni par une relecture. Deux issues
+   * seulement : supprimer la fonction, ou câbler la route. Le 05 §22 écrit « CRUD
+   * /v1/users » sans détailler les verbes, et un CRUD sans lecture unitaire est un
+   * manque, pas un choix — arbitrage de Williams, 2026-08-31.
+   *
+   * La fonction N'A PAS ÉTÉ SUPPRIMÉE PENDANT LE MONTAGE DU DOSSIER P-B, et c'est
+   * délibéré : A01 était l'auteur de ce dossier, et ranger la pièce à conviction
+   * avant l'inspection aurait ouvert la porte sur un dépôt propre parce que
+   * l'audité avait fait le ménage.
+   *
+   * Même politique admin que le reste du CRUD : rien ici ne justifie une exception.
+   * Fastify engendrera aussi `HEAD /v1/users/:id`, qui hérite de `config` — donc
+   * de la politique et du crochet (éprouvé par `l2-crochets`).
+   */
+  instance.get(
+    '/users/:id',
+    {
+      config: CONFIG_ADMIN,
+      schema: { params: userParamsSchema, response: { 200: userResponseSchema } },
+    },
+    async (requete) => versReponse(await lireUnCompte(requete.params.id)),
   );
 
   /** `POST /v1/users` — création. `201`, et l'emplacement du compte créé dans le corps. */

@@ -4902,3 +4902,62 @@ qu'elle marche dans les deux sens.
 Précédence : sans objet — précision factuelle sur une entrée `DECISIONS.md`, aucune divergence de spec.
 Décideur : **A01**, sur mesure ; réserve du pair retirée par lui après contre-mesure.
 Impact spec : aucun.
+
+## 2026-08-31 — [L2/porte P-B] Williams arbitre les cinq points en attente de la porte
+
+Options :
+Les cinq points avaient été posés dans le chat, reformulés en langage clair après un premier
+énoncé que Williams a déclaré incompréhensible — **le reproche était juste, et il est noté : une
+question qu'un décideur ne peut pas lire n'est pas une question, c'est un rapport.** Réponses
+rendues en une ligne : « 1-oui, 2-oui, 3-oui, 4-oui, 5-brancher ».
+
+**1. PÉRIMÈTRE DE LA PORTE P-B — ce qui n'a pas d'objet est DATÉ, pas coché.**
+Le critère 09 §62 a trois membres. L'étanchéité financière est prouvée. Les deux autres n'ont rien à
+traverser : `mission_users` n'existe dans aucun code de production (dépôt missions = **L3**), et
+`sync_sessions` n'existe pas dans les migrations (push = **L6**).
+**Arbitrage : option 1 du §4.4 du dossier.** La porte est jugée sur ce qui a un objet ; le critère 2
+est rejoué **à la livraison de L3**, le critère 4 **à la porte P-D**. Le §4 du dossier P-B est joint
+en pièce aux deux portes concernées pour que personne ne les redécouvre.
+**Ce que cet arbitrage NE FAIT PAS** : il ne rend pas le verdict. Le contrôle d'acceptation du
+gardien **A02** (matrice E1-E47 dans les deux sens) reste dû, et la signature de la porte est
+postérieure à ce contrôle (09 §1). **Williams a tranché le PÉRIMÈTRE, pas la conformité.**
+
+**2. SÉQUENCE — le gel de L3a est confirmé.**
+Aucun commit L3, aucune fusion L3 avant la signature de P-B. `lot/l3a-companies` reste verte et
+intacte sur `1a6bf5f`. **La règle cesse d'être re-testable à chaque lot** : ce n'est plus une lecture
+prudente d'A01, c'est une décision.
+
+**3. LA CONDITION 4 DE L'AUTORISATION DE FUSION NOCTURNE EST REFORMULÉE.**
+Ancienne rédaction : « La fusion est **sans squash ni force** ; aucun hook contourné ; aucun
+`--no-verify` » — elle interdisait le seul mode de fusion disponible sur `main`.
+**Nouvelle rédaction arbitrée : « La fusion ne contourne AUCUN contrôle : pas de `--force`, pas de
+hook désactivé, pas de `--no-verify`. »** Le squash-merge par PR reste le mode prescrit par
+`CLAUDE.md` §7. **L'entrée du 2026-08-30 n'est pas modifiée** (append-only) : la présente entrée la
+remplace sur ce point précis, et c'est elle qui fait foi.
+
+**4. LE MODE EXPERT EXIGE L'HABILITATION.**
+03 §19.1 décrivait le mode expert comme celui d'un auditeur habilité sans dire si c'était un
+prérequis. **C'en est un.** `usageProfile: 'expert'` est désormais refusé sur un compte dont
+`habilitated_at` est nul. Motif retenu : _un profil expert posé sur un compte non habilité est un
+état que rien ne rattrape ensuite_ — aucune étape ultérieure ne repasse le vérifier.
+**Une conséquence que j'avais annoncée et que la mesure a démentie, écrite ici plutôt que
+corrigée en silence** : j'ai d'abord écrit que la règle devait « aussi valoir quand l'habilitation
+est RETIRÉE d'un compte déjà expert ». **Mesuré : aucun chemin ne produit cet état.**
+`habilitated_at` n'est écrit qu'à un seul endroit (`habiliterUtilisateur`), qui le POSE et ne le
+remet jamais à nul — le service refuse même de le reposer. Poser un garde pour cet état aurait été
+poser **un garde dont aucun producteur n'existe**, c'est-à-dire exactement la famille de garde-fou
+que ce lot passe son temps à retirer. La contrainte est donc **inscrite en commentaire à l'endroit
+où elle mordra** : le jour où une route de retrait d'habilitation apparaîtra, c'est ELLE qui devra
+relire le profil.
+
+**5. LA ROUTE MANQUANTE EST CÂBLÉE.**
+`lireUtilisateur` n'avait aucun appelant : c'était la **route** qui manquait, pas la fonction qui
+était de trop. `GET /v1/users/:id` est créée, sous la même politique admin que le reste du CRUD.
+Le 05 §22 écrit « CRUD /v1/users » sans détailler les verbes : la route est **documentée** au titre
+du `CLAUDE.md` §3 point 6, et cette entrée en tient lieu.
+Précédence : `CLAUDE.md` §3 (les sept points réservés à Williams : dépendance, spec, sécurité,
+route non listée) et §7 (portes) ; 09 §1 pour la chaîne de signature, §4bis pour le rejeu.
+Décideur : **Williams**, sur les cinq points, en réponse à une question fermée.
+Impact spec : **amendements** — 03 §19.1 (l'habilitation devient un prérequis explicite du mode
+expert) et 05 §22 (le verbe `GET /v1/users/:id` est nommé). Reformulation de la condition 4 de
+l'entrée du 2026-08-30.

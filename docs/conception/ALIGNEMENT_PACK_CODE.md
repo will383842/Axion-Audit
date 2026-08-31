@@ -58,7 +58,7 @@ qui ne vit aujourd'hui que dans **un commentaire de migration**.
 Onze clauses où **le code a raison contre le pack**. Sept étaient déjà tracées et attendent
 ratification ; quatre sont nouvelles.
 
-### Déjà tracés, en attente de votre signature
+### Déjà tracés — **RATIFIÉS par Williams le 2026-08-31** (`DECISIONS.md`, entrée « Williams ratifie les onze amendements »)
 
 | Clause | Ce que le pack dit | Ce que la machine fait — et pourquoi c'est mieux |
 | --- | --- | --- |
@@ -70,7 +70,7 @@ ratification ; quatre sont nouvelles.
 | 11 §7 | « `docker compose up` suffit » | `pnpm infra:up` — les fichiers vivent dans `infra/` |
 | 09 §4bis | fil rouge = test **Playwright** | test d'**intégration** tant qu'aucune interface n'existe, bascule datée au L3 |
 
-### Nouveaux, découverts par cet audit
+### Nouveaux, découverts par cet audit — **RATIFIÉS par Williams le 2026-08-31**
 
 **A-1 · 11 §1 — `drizzle-kit` est délibérément EXCLU.** Le contrat le nomme ; il n'est ni installé ni
 dans le verrou de dépendances. **Et la raison est meilleure que la clause** : `drizzle-kit generate`
@@ -92,6 +92,34 @@ lui-même à la famille de défauts que ce dépôt traque.**
 de restauration continu). **Mais le RPO doit être scindé en deux** : le RPO *local* est excellent ;
 le **RPO hors serveur est de 24 h**, alors que le pack en promet 6 — et c'est le RPO hors serveur qui
 compte le jour où la machine disparaît.
+
+
+---
+
+### Ratifiés le 2026-08-31 à la porte P-B — deux amendements de plus
+
+> **Pourquoi cette section existe séparément.** L'entrée « Williams ratifie les onze amendements »
+> avertissait elle-même du risque : *« le document d'alignement doit porter les onze comme ratifiés,
+> et être tenu à jour — il ne l'a pas été depuis le 2026-08-28, ce qui est précisément le défaut que
+> cette procédure risque de reproduire. »* Les deux ci-dessous y entrent **le jour où ils sont
+> décidés**, et les onze au-dessus reçoivent enfin leur marque de ratification.
+
+**A-5 · 03 §19.1 — l'habilitation devient un PRÉREQUIS explicite du mode expert.**
+Le pack décrivait le mode expert comme celui d'un « auditeur habilité » **sans dire si c'était une
+condition ou une description**. Le code, lui, laissait poser `usageProfile: 'expert'` sur un compte
+non habilité. **Le doute a été porté à Williams plutôt que deviné**, et aucun test n'a été écrit pour
+figer le comportement observé — *un test qui fige un comportement non tranché transforme un doute en
+décision par la porte de service*. Arbitrage : **c'est un prérequis.** Motif : un profil expert posé
+sur un compte non habilité est **un état que rien ne rattrape ensuite** — ni l'habilitation, qui ne
+regarde pas le profil, ni l'affectation §34.4, qui regarde l'habilitation et pas le mode d'usage.
+Refus rendu en `NOT_HABILITATED` (403), code **déjà minté** pour la même forme au §34.4.
+
+**A-6 · 05 §22 — le verbe `GET /v1/users/:id` est nommé.**
+Le pack écrit « CRUD /v1/users » sans détailler les verbes. Le dépôt portait `lireUtilisateur`
+**sans aucun appelant** — du code orphelin au sens du contrat §6, relevé par l'agent croisé qui
+écrivait les tests, **jamais par l'auteur ni par une relecture**. Deux issues : supprimer la fonction
+ou câbler la route. Arbitrage : **câbler**, un CRUD sans lecture unitaire étant un manque et non un
+choix. La route est déclarée ici au titre du `CLAUDE.md` §3 point 6 (route non listée aux §8/§24.2).
 
 ---
 
