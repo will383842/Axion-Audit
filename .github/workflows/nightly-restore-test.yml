@@ -219,30 +219,59 @@ jobs:
           #     bruyamment, sans rougir, pour que personne ne prenne ce vert pour
           #     une preuve concernant sa branche.
           # ---------------------------------------------------------------------
+          # ---------------------------------------------------------------------
+          # DEUX QUESTIONS, DEUX VERDICTS — SEPARES LE 2026-08-31.
+          # ---------------------------------------------------------------------
+          # Cette etape repond a DEUX questions independantes : « la restauration
+          # a-t-elle abouti ? » et « la machine executait-elle le code livre ? ».
+          # Chacune des deux, jusqu ici, faisait `exit 1` sur place — et comme la
+          # seconde etait evaluee AVANT la premiere, un clone en retard MASQUAIT
+          # completement le verdict de la restauration. C est exactement ce qui
+          # s est produit au run 33378083192 : l annotation ne nommait que le
+          # retard du clone, et l echec REEL de la restauration (« le conteneur
+          # de sauvegarde ne monte aucun volume sur /sauvegarde ») ne vivait plus
+          # que dans le corps du journal, ou personne n allait le chercher.
+          #
+          # ON N ASSOUPLIT RIEN : les deux gardes echouent toujours, et pour les
+          # memes raisons. On les EVALUE TOUS LES DEUX avant de conclure, pour
+          # que le journal nomme toutes les causes d un coup. Un garde qui
+          # s arrete a la premiere cause fait rejouer la nuit suivante pour
+          # decouvrir la seconde.
+          # ---------------------------------------------------------------------
+          defauts=0
+
           commit_serveur="$(printf '%s' "${SORTIE}" | grep -oE 'depot /opt/axion-audit/repo \(commit [0-9a-f]+\)' | head -1 | grep -oE '[0-9a-f]+\)$' | tr -d ')')"
 
           if [ -z "${commit_serveur}" ]; then
             echo "::error title=Commit du serveur inconnu::Le script distant n'a pas annoncé le commit de son clone. On ne peut donc pas dire QUEL code a été exécuté — et un test de restauration dont on ignore la version ne prouve rien de datable."
-            exit 1
+            defauts=$((defauts + 1))
+          else
+            echo "Le serveur a exécuté le commit ${commit_serveur} (clone de main)."
+
+            case "${GITHUB_SHA}" in
+              "${commit_serveur}"*)
+                echo "Le commit exécuté est bien celui de cette exécution."
+                ;;
+              *)
+                if [ "${GITHUB_REF_NAME}" = "main" ]; then
+                  echo "::error title=Le clone du serveur est en retard sur main::Le serveur a exécuté ${commit_serveur}, cette exécution porte sur ${GITHUB_SHA}. Le garde éprouverait donc un code différent de celui qui est livré. RIEN NE MET CE CLONE A NIVEAU AUTOMATIQUEMENT — c'est le défaut de fond, escaladé dans DECISIONS.md (2026-08-31) ; en attendant l'arbitrage, la mise à niveau est un geste humain sur le serveur."
+                  defauts=$((defauts + 1))
+                else
+                  echo "::warning title=Ce test ne porte PAS sur cette branche::Le serveur exécute ${commit_serveur} (le clone suit main), pas ${GITHUB_SHA}. C'est le comportement voulu — la machine n'exécute que du code fusionné — mais un vert obtenu ici ne dit RIEN de la branche ${GITHUB_REF_NAME}. Pour éprouver une modification de restore-test.sh, il faut la fusionner d'abord."
+                fi
+                ;;
+            esac
           fi
-
-          echo "Le serveur a exécuté le commit ${commit_serveur} (clone de main)."
-
-          case "${GITHUB_SHA}" in
-            "${commit_serveur}"*)
-              echo "Le commit exécuté est bien celui de cette exécution."
-              ;;
-            *)
-              if [ "${GITHUB_REF_NAME}" = "main" ]; then
-                echo "::error title=Le clone du serveur est en retard sur main::Le serveur a exécuté ${commit_serveur}, cette exécution porte sur ${GITHUB_SHA}. Le garde éprouverait donc un code différent de celui qui est livré. Mettre le clone à niveau (git -C /opt/axion-audit/repo fetch && reset --hard origin/main) avant de conclure quoi que ce soit."
-                exit 1
-              fi
-              echo "::warning title=Ce test ne porte PAS sur cette branche::Le serveur exécute ${commit_serveur} (le clone suit main), pas ${GITHUB_SHA}. C'est le comportement voulu — la machine n'exécute que du code fusionné — mais un vert obtenu ici ne dit RIEN de la branche ${GITHUB_REF_NAME}. Pour éprouver une modification de restore-test.sh, il faut la fusionner d'abord."
-              ;;
-          esac
 
           if [ "${CODE}" -ne 0 ]; then
             echo "::error title=Restauration echouee::Le script distant a rendu ${CODE}. Sa sortie est ci-dessus — elle nomme la cause. Un retour non nul est un echec de plan de reprise."
+            defauts=$((defauts + 1))
+          else
+            echo "La restauration elle-même s'est terminée sans erreur (code 0)."
+          fi
+
+          if [ "${defauts}" -ne 0 ]; then
+            echo "::error title=Test de restauration nocturne en echec::${defauts} verdict(s) en defaut — les annotations ci-dessus les nomment TOUS. Ne pas corriger le premier en croyant avoir tout traite."
             exit 1
           fi
 
