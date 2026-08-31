@@ -4861,3 +4861,44 @@ impact spec déclaré. Règle de précédence du pack sans objet — le conflit 
 pas au pack.
 Décideur : **A01** pour la lecture appliquée cette nuit ; **Williams** pour la rédaction de la borne.
 Impact spec : aucun. Une reformulation de la condition 4 de l'entrée du 2026-08-30 est proposée.
+
+## 2026-08-31 — [gouvernance] PRÉCISION à l'entrée précédente : « squash seul » vient de DEUX réglages, pas d'un
+
+Options :
+L'entrée précédente écrit « la protection de branche du dépôt est configurée en squash seul ».
+**Le résultat est exact — le squash est bien le seul mode disponible sur `main` — mais la phrase
+attribue à un seul mécanisme ce qui vient de deux.** Mesuré :
+
+```
+repos/will383842/Axion-Audit    → squash: true · merge_commit: true · rebase: FALSE
+branches/main/protection        → required_linear_history: true
+```
+
+Les deux réglages **se composent** : `merge_commit` est autorisé par le dépôt et **bloqué par la
+protection** ; `rebase` est **bloqué par le dépôt** et n'atteint jamais la protection. Reste le squash.
+
+1. **Laisser la phrase telle quelle** — elle est vraie sur le résultat, et c'est le résultat qui
+   compte pour l'arbitrage de la condition 4.
+2. **Ajouter la précision**, en append-only.
+
+Arbitrage : **option 2, et le motif n'est pas la justesse : c'est la durée.** Quiconque reformule la
+condition 4 en s'appuyant sur la phrase précédente croira que la contrainte est **tenue par la
+protection de branche**. Elle ne l'est qu'à moitié : **réactiver le rebase est un clic dans les
+réglages du dépôt et ne touche à aucune protection.** Une règle écrite sur une garantie qu'on croit
+plus solide qu'elle ne l'est se défait sans que personne ne voie passer la décision — c'est la même
+famille que tout ce que ce lot a corrigé : _un garde-fou qui annonce plus qu'il ne fait_, ici sous la
+forme d'une phrase qui annonce une protection plus forte que celle qui existe.
+
+**Comment cette précision est arrivée, parce qu'elle vaut mieux que son contenu.** Un pair a corrigé
+l'entrée précédente en affirmant que `required_linear_history` laissait « squash ET rebase ». La
+correction était **mesurée, citée, prudente dans sa formulation — et fausse** : elle concluait sur ce
+que la protection permet sans regarder ce que le dépôt autorise en amont. J'ai mesuré au lieu de la
+croire ; le pair a mesuré à son tour et l'a retirée. **Une erreur qui a la forme d'une vérification
+est plus difficile à arrêter qu'une affirmation nue**, parce qu'elle porte déjà les marques de la
+rigueur. Sur les six occasions de la semaine où vérifier un rapport a changé une conclusion, **cinq
+allaient dans l'autre sens** : c'est la première où le pair avait tort. La règle de croisement §5.6
+ne dit pas que l'autre a raison, elle dit qu'il faut regarder — et elle n'a de valeur que parce
+qu'elle marche dans les deux sens.
+Précédence : sans objet — précision factuelle sur une entrée `DECISIONS.md`, aucune divergence de spec.
+Décideur : **A01**, sur mesure ; réserve du pair retirée par lui après contre-mesure.
+Impact spec : aucun.
