@@ -680,12 +680,51 @@ non réversible. L'assainissement vit **dans la requête SQL**, au plus près de
    probablement le cas que le 02 §11.3 vise. Voir les jobs EN VOL demande de lire les structures
    internes de BullMQ dans Redis. Coût estimé : ~0,25 j. Impact schéma : aucun. À faire au lot L11,
    avec le code qui produira enfin ces jobs.
-2. **La pile Coolify — le chemin ÉPROUVÉ — n'exécute pas cette sonde.** `install-cron.sh` vit sur
-   l'hôte ; Coolify n'en donne pas. Le portage exige de remplacer `docker exec` par une connexion
-   réseau à `postgres` et le conteneur jetable par un montage lecture seule de `caddy_data` (donner
-   le socket Docker à un side-car est refusé, même raisonnement que pour le service `sauvegarde`).
-   Coût estimé : ~0,25 j. Impact schéma : aucun ; impact compose : un service. **C'est le point qui
-   décide si l'invariant 8 est tenu sur le chemin DÉCRIT ou sur le chemin EXPLOITÉ.**
+2. ~~**La pile Coolify — le chemin ÉPROUVÉ — n'exécute pas cette sonde.**~~ **FERMÉ le 2026-08-31
+   même jour** (voir ci-dessous) : une sonde qui ne tourne que sur un chemin JAMAIS JOUÉ tenait
+   l'invariant 8 sur le papier — c'est-à-dire qu'elle déplaçait d'un cran le défaut qu'elle ferme.
+
+### ✅ PORTAGE COOLIFY, 2026-08-31 — service `sonde` de `docker-compose.coolify.yml`
+
+Le MÊME script, la MÊME minute, les MÊMES seuils ; seuls les trois accès aux données changent,
+parce qu'un side-car n'a pas d'hôte et **ne doit jamais avoir le socket Docker** (refus déjà opposé
+au service `sauvegarde` — le portage ne revient pas dessus) :
+
+|               | chemin VPS (`MODE=hote`)               | pile Coolify (`MODE=pile`)                                                                                           |
+| ------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| déclenchement | `cron` (`install-cron.sh`)             | boucle interne du service                                                                                            |
+| environnement | `.env` en argument                     | processus (Coolify l'injecte)                                                                                        |
+| PostgreSQL    | `docker compose exec`                  | **réseau interne**, mot de passe par `PGPASSWORD` (jamais un argument : invisible dans `ps`)                         |
+| disque        | `df` sur les montages de l'hôte        | `df /` — l'overlay, porté par le système de fichiers qui porte AUSSI les volumes ; **aucun volume de données monté** |
+| certificat    | volume `caddy_data`, conteneur jetable | **sans objet** (voir le point 3)                                                                                     |
+
+**IL N'EXISTE AUCUN ORDONNANCEUR GÉNÉRAL DANS CETTE PILE, et on n'en a pas fabriqué.** La seule
+chose planifiée y est le service `sauvegarde`, dont la planification vit DANS son script — forme
+arbitrée en tête de `sauvegarde.sh` contre BullMQ et contre les tâches planifiées de Coolify
+(« invisibles à git, absentes d'une reconstruction »). On reprend ce motif ; on ne demande pas
+d'arbitrer deux fois la même question.
+
+**Zéro dépendance nouvelle, et un mur mesuré en chemin.** L'image de la pile
+(`postgres:16-bookworm`) **n'a ni `curl` ni `wget`** : `axion_notify`, qui n'appelait que `curl`,
+aurait journalisé « échec de l'envoi » à chaque alerte, indéfiniment — un canal branché, conforme à
+la lecture, et muet à l'exécution. `sauvegarde.sh` avait déjà rencontré ce mur et l'avait franchi
+seul, avec un client HTTPS écrit sur `openssl s_client`. **Ce transport est remonté dans
+`lib/common.sh`** plutôt que recopié une troisième fois : `curl` s'il existe, `openssl` sinon, et un
+refus explicite d'envoyer si le magasin de confiance manque — on ne dégrade jamais la vérification
+TLS pour faire partir un message portant un jeton de robot.
+
+#### Ce que le portage NE ferme PAS, et qui est nouveau
+
+3. **Sur la pile Coolify, `ALERT_CERT_EXPIRY_DAYS` n'est honoré par PERSONNE.** Mesuré, pas supposé :
+   `CADDY_SITE_ADDRESS: ':8080'` fait écouter Caddy en HTTP simple — son propre encadré écrit qu'« il
+   ne tente aucun ACME et ne présente aucun certificat » — et TLS est terminé par **Traefik**, dont le
+   magasin vit dans les données de Coolify. Cette pile n'y a aucun accès, et **doit** n'en avoir
+   aucun : `/data/coolify` porte aussi les secrets d'`axion-ia.com`. Monter `caddy_data` ne dirait
+   rien (il est vide de certificats par construction) et produirait un aveuglement permanent —
+   c'est-à-dire un cri sans cause, la façon la plus sûre de faire désactiver une sonde. La sonde
+   déclare donc ce contrôle **« sans objet »** à chaque passe : ni vert, ni aveuglement, jamais
+   silencieux. **Fermer ce trou est une décision d'infrastructure sur la supervision de Traefik —
+   elle n'appartient pas à cet agent.** infra/README.md §8, ligne 2j.
 
 **O-1 reste NON ARBITRÉE et rien de ce qui précède ne la prépare** (CLAUDE.md §3-7). La limite
 qu'elle seule lève est écrite en tête du script : cette sonde s'exécute sur la machine qu'elle

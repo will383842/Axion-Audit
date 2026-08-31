@@ -142,20 +142,93 @@ axion_project_name() {
 # Alerte d'exploitation — Telegram (02 §11.3, canal interne Axion-IA existant).
 # Ne fait JAMAIS échouer l'appelant : une alerte non partie ne doit pas masquer
 # l'erreur d'origine. L'échec d'envoi est journalisé.
+#
+# ── DEUX TRANSPORTS, ET LE SECOND N'EST PAS UN LUXE (mesuré le 2026-08-31) ────
+# Cette fonction n'avait que `curl`. Or l'image de la pile Coolify —
+# `postgres:16-bookworm`, qui porte le service `sauvegarde` et désormais le
+# service `sonde` — N'A NI `curl` NI `wget` :
+#     curl ABSENT · wget ABSENT · psql /usr/bin/psql · openssl 3.0.20 · timeout OK
+# Un script d'exploitation appelant `axion_notify` depuis cette image aurait donc
+# journalisé « Échec de l'envoi » à chaque alerte, indéfiniment. C'est
+# exactement le mode de panne que ce dépôt traque : un canal d'alerte branché,
+# conforme à la lecture, et muet à l'exécution.
+#
+# `infra/postgres/sauvegarde.sh` avait déjà rencontré le mur et l'avait franchi
+# SEUL, avec un client HTTPS écrit à la main sur `openssl s_client`. Le second
+# transport ci-dessous est cette implémentation-là, remontée dans la
+# bibliothèque commune plutôt que recopiée une troisième fois. On n'ajoute AUCUN
+# paquet : ni `curl` dans l'image (escalade 11 §8-1), ni dépendance nouvelle.
+#
+# ⚠️ LA VÉRIFICATION TLS EST OBLIGATOIRE ET NON NÉGOCIABLE sur ce transport :
+# `-verify_return_error -verify 5 -verify_hostname`. Sans elle, `openssl
+# s_client` se connecte JOYEUSEMENT à n'importe quel certificat et le jeton du
+# robot part chez qui répond. Ne jamais « simplifier » ces trois options.
+# Le jeton n'apparaît que dans la requête poussée sur l'entrée standard : ni
+# dans la table des processus, ni dans un fichier.
 # -----------------------------------------------------------------------------
+
+# Nom du transport utilisable ici, ou 'aucun'. Sert AUSSI aux messages : dire
+# « alerte non envoyée » sans dire par quoi elle serait partie n'aide personne.
+axion_transport_notification() {
+  if command -v curl >/dev/null 2>&1; then
+    echo 'curl'
+  elif command -v openssl >/dev/null 2>&1 && command -v timeout >/dev/null 2>&1; then
+    echo 'openssl'
+  else
+    echo 'aucun'
+  fi
+}
+
 axion_notify() {
   local message="$1"
+  local transport
+  transport="$(axion_transport_notification)"
+
   if [[ -z "${TELEGRAM_BOT_TOKEN:-}" || -z "${TELEGRAM_CHAT_ID:-}" ]]; then
-    axion_warn "Alerte NON envoyée (TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID absents) : $message"
+    axion_warn "Alerte NON envoyée (TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID absents ; transport disponible : $transport) : $message"
     return 0
   fi
-  if ! curl -fsS --max-time 15 \
-      -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-      --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-      --data-urlencode "text=[Axion Audit / ${APP_ENV:-?}] ${message}" \
-      -o /dev/null; then
-    axion_warn "Échec de l'envoi de l'alerte Telegram : $message"
-  fi
+
+  local texte="[Axion Audit / ${APP_ENV:-?}] ${message}"
+
+  case "$transport" in
+    curl)
+      if ! curl -fsS --max-time 15 \
+        -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+        --data-urlencode "text=${texte}" \
+        -o /dev/null; then
+        axion_warn "Échec de l'envoi de l'alerte Telegram (curl) : $message"
+      fi
+      ;;
+    openssl)
+      local hote='api.telegram.org'
+      local magasin="${AXION_MAGASIN_CA:-/etc/ssl/certs/ca-certificates.crt}"
+      if [[ ! -s "$magasin" ]]; then
+        # Sans magasin de confiance, la vérification ne peut pas avoir lieu — et
+        # on n'envoie PAS sans vérifier. On le dit, on ne le contourne pas.
+        axion_warn "Alerte NON envoyée (magasin de certificats introuvable : $magasin) : $message"
+        return 0
+      fi
+      local corps reponse
+      corps="chat_id=$(axion_urlencode "$TELEGRAM_CHAT_ID")&text=$(axion_urlencode "$texte")"
+      reponse="$(
+        printf 'POST /bot%s/sendMessage HTTP/1.1\r\nHost: %s\r\nUser-Agent: axion-audit\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s' \
+          "$TELEGRAM_BOT_TOKEN" "$hote" "${#corps}" "$corps" |
+          timeout 20 openssl s_client -connect "${hote}:443" \
+            -servername "$hote" -CAfile "$magasin" \
+            -verify_return_error -verify 5 -verify_hostname "$hote" \
+            -quiet -ign_eof 2>/dev/null
+      )" || reponse=''
+      case "$reponse" in
+        *'"ok":true'*) : ;;
+        *) axion_warn "Échec de l'envoi de l'alerte Telegram (openssl) : $message" ;;
+      esac
+      ;;
+    *)
+      axion_warn "Alerte NON envoyée (AUCUN transport HTTPS dans cette image : ni curl, ni openssl+timeout) : $message"
+      ;;
+  esac
   return 0
 }
 

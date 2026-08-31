@@ -54,20 +54,88 @@
 #    qu'à la FIN d'un appel : un job LLM BLOQUÉ reste invisible tant qu'il n'est
 #    pas terminé. Voir l'encadré du contrôle 4.
 #
-# USAGE : ./sonde-alertes.sh [/opt/axion-audit/<env>/.env]
-# Planifiée toutes les heures par `install-cron.sh`.
-# CODES DE SORTIE : 0 = tout vert · 1 = au moins une alerte · 2 = au moins un
-# aveuglement et aucune alerte. (Le cron ignore le code ; un humain non.)
+# -----------------------------------------------------------------------------
+# DEUX MODES, PARCE QU'IL Y A DEUX CHEMINS DE DÉPLOIEMENT — ET LE SECOND EST LE
+# SEUL QUI TOURNE
+# -----------------------------------------------------------------------------
+# `AXION_SONDE_MODE=hote` (DÉFAUT) — chemin « VPS dédié ». La sonde s'exécute SUR
+#   L'HÔTE, lancée par `cron` (`install-cron.sh`), lit son `.env` passé en
+#   argument, parle à PostgreSQL par `docker compose exec` et lit le magasin TLS
+#   par un conteneur jetable. C'est le chemin DÉCRIT — et `infra/README.md` §7
+#   le marque JAMAIS JOUÉ.
+#
+# `AXION_SONDE_MODE=pile` — chemin COOLIFY, le chemin ÉPROUVÉ. La sonde est un
+#   SERVICE de la pile : pas d'hôte, pas de `cron`, pas de socket Docker. Elle
+#   lit donc son environnement dans SON PROPRE PROCESSUS (Coolify l'injecte),
+#   parle à PostgreSQL par le RÉSEAU interne, et se planifie elle-même par une
+#   boucle. Les trois accès aux données changent d'un coup ; c'est pourquoi la
+#   contre-épreuve a été rejouée en entier dans cette configuration.
+#
+#   ⚠️ AUCUN SOCKET DOCKER DANS CE MODE, JAMAIS. Le donner à un side-car serait
+#   une élévation de privilège — le service `sauvegarde` a été tranché sur ce
+#   raisonnement, et il vaut ici mot pour mot.
+#
+#   ⚠️ POURQUOI UNE BOUCLE ET NON « L'ORDONNANCEUR DE LA PILE » : IL N'Y EN A
+#   PAS. Cette pile n'a AUCUN ordonnanceur général. La seule chose planifiée y
+#   est le service `sauvegarde`, dont la planification vit DANS son script
+#   (`while true; sleep $(secondes_avant_creneau)`), forme explicitement arbitrée
+#   en tête de `infra/postgres/sauvegarde.sh` CONTRE BullMQ (le worker n'a pas
+#   les accès) et CONTRE les tâches planifiées de Coolify (« leur définition vit
+#   dans la base de Coolify, pas dans ce dépôt ; elle serait invisible à git,
+#   absente d'une reconstruction, et personne ne verrait qu'elle a disparu »).
+#   On REPREND ce motif, on n'en invente pas un second.
+#
+# USAGE : ./sonde-alertes.sh [/opt/axion-audit/<env>/.env]   (mode `hote`)
+#         AXION_SONDE_MODE=pile /usr/local/bin/axion-sonde-alertes  (mode `pile`)
+# CODES DE SORTIE (mode `hote` ; en mode `pile` la boucle ne rend jamais la main) :
+# 0 = tout vert · 1 = au moins une alerte · 2 = au moins un aveuglement et aucune
+# alerte. (Le cron ignore le code ; un humain non.)
 # =============================================================================
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=infra/scripts/lib/common.sh
-. "$SCRIPT_DIR/lib/common.sh"
+# LA BIBLIOTHÈQUE COMMUNE, CHERCHÉE À DEUX ENDROITS. Dans le dépôt elle est à
+# côté du script ; dans l'image Coolify le script est installé en
+# `/usr/local/bin/axion-sonde-alertes` et la bibliothèque en
+# `/usr/local/lib/axion/common.sh` — un `dirname` n'y mènerait pas. On échoue
+# bruyamment si aucune des deux n'existe : une sonde sans son journal ni son
+# émetteur d'alertes ne doit pas démarrer « quand même ».
+AXION_COMMON_TROUVE=''
+for _candidat in "$SCRIPT_DIR/lib/common.sh" /usr/local/lib/axion/common.sh; do
+  if [[ -r "$_candidat" ]]; then
+    # shellcheck source=infra/scripts/lib/common.sh
+    . "$_candidat"
+    AXION_COMMON_TROUVE="$_candidat"
+    break
+  fi
+done
+if [[ -z "$AXION_COMMON_TROUVE" ]]; then
+  echo "sonde-alertes : bibliothèque common.sh introuvable (cherchée dans $SCRIPT_DIR/lib/ et /usr/local/lib/axion/)." >&2
+  exit 1
+fi
 
-ENV_FILE="${1:-$(axion_env_file_default)}"
-axion_load_env "$ENV_FILE"
-axion_require_env APP_ENV
+MODE="${AXION_SONDE_MODE:-hote}"
+case "$MODE" in
+  hote | pile) : ;;
+  *)
+    echo "sonde-alertes : AXION_SONDE_MODE invalide (« $MODE ») — attendu hote|pile." >&2
+    exit 1
+    ;;
+esac
+
+if [[ "$MODE" == 'pile' ]]; then
+  # Coolify injecte le `.env` de l'application dans l'environnement de CHAQUE
+  # conteneur (mesuré, encadré « COFFRE DES SECRETS » du compose) : il n'existe
+  # aucun fichier à charger, et en réclamer un ferait échouer le service au
+  # démarrage. On EXIGE en revanche explicitement ce dont on a besoin, plutôt
+  # que d'inventer des valeurs par défaut sur des variables d'exploitation.
+  ENV_FILE='(environnement du processus — pile Coolify)'
+  axion_require_env APP_ENV POSTGRES_USER POSTGRES_DB
+else
+  ENV_FILE="${1:-$(axion_env_file_default)}"
+  axion_load_env "$ENV_FILE"
+  axion_require_env APP_ENV
+fi
 
 mkdir -p "$AXION_LOG_DIR"
 # UN SEUL fichier, en ajout, et non un fichier horodaté par passe : la sonde
@@ -86,23 +154,57 @@ chmod 750 "$ETAT_DIR" 2>/dev/null || true
 # rappel par passe. La PREMIÈRE occurrence part toujours immédiatement.
 INTERVALLE_H="${AXION_SONDE_ALERTE_INTERVALLE_H:-24}"
 
-# Conteneur PostgreSQL interrogé. Vide (cas nominal) = le service `postgres` de la
-# pile Compose de $APP_ENV. Renseigné = `docker exec` direct sur ce conteneur :
-# c'est la couture par laquelle la contre-épreuve locale et les tests
-# d'intégration interrogent une base jetable sans monter la pile entière.
+# Conteneur PostgreSQL interrogé (mode `hote` uniquement). Vide (cas nominal) = le
+# service `postgres` de la pile Compose de $APP_ENV. Renseigné = `docker exec`
+# direct sur ce conteneur : c'est la couture par laquelle la contre-épreuve locale
+# et les tests d'intégration interrogent une base jetable sans monter la pile.
 PG_CONTENEUR="${AXION_SONDE_PG_CONTENEUR:-}"
 
-# Points de montage surveillés. Ceux qui n'existent pas sont ignorés en silence
-# (une machine de développement n'a ni /var/backups ni /opt/axion-audit) ; si
-# AUCUN n'existe, c'est un aveuglement, pas un vert.
-CHEMINS_DISQUE="${AXION_SONDE_CHEMINS_DISQUE:-/ $AXION_ROOT /var/lib/docker /var/backups}"
+# Hôte et port de PostgreSQL en mode `pile` — le nom de service du réseau interne.
+PG_HOTE="${AXION_SONDE_PG_HOTE:-postgres}"
+PG_PORT="${AXION_SONDE_PG_PORT:-5432}"
+
+# ── POINTS DE MONTAGE SURVEILLÉS ────────────────────────────────────────────
+# Ceux qui n'existent pas sont ignorés en silence (une machine de développement
+# n'a ni /var/backups ni /opt/axion-audit) ; si AUCUN n'existe, c'est un
+# aveuglement, pas un vert.
+#
+# EN MODE `pile`, LE DÉFAUT EST `/` ET CE CHOIX MÉRITE SA PHRASE. Le side-car ne
+# monte AUCUN volume de données : lui donner `postgres_data` en lecture seule
+# pour y faire un `df` lui ouvrirait les fichiers bruts de la base pour mesurer
+# un pourcentage. Or `/` dans le conteneur est la couche overlay, portée par le
+# système de fichiers de `/var/lib/docker` — CELUI QUI PORTE AUSSI LES VOLUMES,
+# donc celui qui se remplit. La mesure est juste avec zéro accès aux données.
+# ⚠️ SA LIMITE, à connaître : si les volumes étaient déplacés sur un autre disque,
+# cette mesure porterait sur le mauvais. L'exploitant doit alors renseigner
+# AXION_SONDE_CHEMINS_DISQUE avec un point de montage de ce disque.
+if [[ "$MODE" == 'pile' ]]; then
+  CHEMINS_DISQUE="${AXION_SONDE_CHEMINS_DISQUE:-/}"
+else
+  CHEMINS_DISQUE="${AXION_SONDE_CHEMINS_DISQUE:-/ $AXION_ROOT /var/lib/docker /var/backups}"
+fi
+
+# Répertoire du magasin TLS lu DIRECTEMENT (montage en lecture seule), sans
+# conteneur jetable ni socket Docker. Renseigné ⇒ c'est cette source qui sert,
+# dans les deux modes. Voir l'encadré du contrôle 2 pour ce qu'il en est sur la
+# pile Coolify — où il n'y a, mesure à l'appui, aucun certificat à lire.
+CADDY_CHEMIN="${AXION_SONDE_CADDY_CHEMIN:-}"
+
+# Cadence de la boucle en mode `pile` : la minute de l'heure à laquelle la passe
+# se déclenche. MÊME VALEUR que la ligne cron posée par `install-cron.sh` — les
+# deux chemins doivent sonner au même moment, sinon comparer leurs journaux
+# devient un exercice de traduction.
+MINUTE_DE_PASSE="${AXION_SONDE_MINUTE:-17}"
 
 TS="$(axion_ts)"
 
-# --- Accumulateurs ------------------------------------------------------------
+# --- Accumulateurs (remis à zéro à CHAQUE passe : en mode `pile` le processus
+#     vit des semaines, et des accumulateurs qui grossissent feraient enfler le
+#     bilan jusqu'à le rendre faux) ---------------------------------------------
 declare -a ALERTES=()
 declare -a AVEUGLEMENTS=()
 declare -a VERTS=()
+declare -a SANS_OBJET=()
 
 # =============================================================================
 # OUTILLAGE
@@ -199,18 +301,47 @@ retablir() {
 # ⚠️ Toute colonne susceptible de contenir du texte libre est ASSAINIE PAR LA
 #    REQUÊTE ELLE-MÊME (voir le contrôle 3), jamais ici : l'assainissement doit
 #    vivre au plus près de la source, sinon un futur appelant l'oubliera.
+#
+# TROIS CHEMINS D'ACCÈS, UN SEUL JEU DE REQUÊTES. Le mode `pile` passe par le
+# RÉSEAU interne : pas de socket Docker, pas de `docker exec`. Le mot de passe
+# voyage par `PGPASSWORD` — une VARIABLE D'ENVIRONNEMENT du seul appel `psql`,
+# jamais un argument : la table des processus de l'hôte ne le voit pas.
 sonde_sql() {
   local requete="$1"
-  if [[ -n "$PG_CONTENEUR" ]]; then
-    docker exec -i --user postgres "$PG_CONTENEUR" \
-      psql -X -A -t -q -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "$requete"
-  else
-    axion_compose exec -T --user postgres postgres \
-      psql -X -A -t -q -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "$requete"
-  fi
+  case "$MODE" in
+    pile)
+      PGPASSWORD="${POSTGRES_PASSWORD:-}" \
+        psql -X -A -t -q -v ON_ERROR_STOP=1 \
+        -h "$PG_HOTE" -p "$PG_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+        -c "$requete"
+      ;;
+    *)
+      if [[ -n "$PG_CONTENEUR" ]]; then
+        docker exec -i --user postgres "$PG_CONTENEUR" \
+          psql -X -A -t -q -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "$requete"
+      else
+        axion_compose exec -T --user postgres postgres \
+          psql -X -A -t -q -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "$requete"
+      fi
+      ;;
+  esac
 }
 
-axion_log "=== Sonde d'alertes — début ($TS, $APP_ENV, seuils du $ENV_FILE) ==="
+# ENREGISTRE un contrôle SANS OBJET — ni vert, ni alerte, ni aveuglement.
+# La quatrième catégorie existe parce que les trois autres mentiraient : un
+# contrôle qui n'a rien à surveiller SUR CE CHEMIN-LÀ n'est pas « vert » (il n'a
+# rien vu) et n'est pas « aveugle » (il n'a rien raté). Elle est journalisée à
+# CHAQUE passe, jamais en silence : un contrôle désactivé qu'on oublie
+# redevient, au bout de quelques semaines, un seuil qui a l'air d'un garde-fou.
+sans_objet() {
+  local message="$1"
+  SANS_OBJET+=("$message")
+  axion_warn "SANS OBJET — $message"
+}
+
+# Nom du volume effectivement lu par le contrôle 2 quand il passe par un
+# conteneur jetable. Déclaré ici pour que `set -u` ne le découvre pas au vol.
+CADDY_VOLUME_LU=''
 
 # =============================================================================
 # CONTRÔLE 1 — DISQUE (ALERT_DISK_USAGE_PERCENT, 02 §11.3 « disque > 80 % »)
@@ -277,51 +408,109 @@ controle_disque() {
 
 # =============================================================================
 # CONTRÔLE 2 — CERTIFICAT TLS (ALERT_CERT_EXPIRY_DAYS, « certificat < 15 j »)
-# DONNÉE : le magasin ACME de Caddy, volume `<projet>_caddy_data` — le MÊME que
-# `backup-caddy.sh` sauvegarde. Elle existe dès qu'un certificat a été émis.
-# En staging la pile n'a pas de frontal (arbitrage du 2026-08-27) : le contrôle
-# est SANS OBJET, ce qui n'est ni un vert ni un aveuglement, et se dit tel quel.
+#
+# DEUX SOURCES POSSIBLES, ET UNE TROISIÈME SITUATION QUI N'EN A AUCUNE :
+#  · `AXION_SONDE_CADDY_CHEMIN` renseigné → le magasin est LU DIRECTEMENT dans un
+#    montage en lecture seule. Aucun conteneur jetable, aucun socket Docker.
+#    C'est la forme utilisable depuis un side-car, et elle sert dans les deux modes.
+#  · sinon, mode `hote` → volume `<projet>_caddy_data` via un conteneur jetable,
+#    exactement comme `backup-caddy.sh` lit le même volume depuis le lot L0.
+#  · mode `pile` SANS chemin → SANS OBJET, et l'encadré ci-dessous dit pourquoi.
+#
+# ┌───────────────────────────────────────────────────────────────────────────┐
+# │ ⚠️ SUR LA PILE COOLIFY, IL N'Y A AUCUN CERTIFICAT À LIRE — MESURÉ, PAS     │
+# │ SUPPOSÉ. `docker-compose.coolify.yml` impose `CADDY_SITE_ADDRESS: ':8080'`,│
+# │ et son propre encadré « ADRESSES DE SITE » l'explique : une adresse SANS   │
+# │ nom d'hôte fait écouter Caddy en HTTP SIMPLE, « il ne tente aucun ACME et  │
+# │ ne présente aucun certificat », parce que TLS est terminé par Traefik en   │
+# │ amont (DECISIONS.md 2026-08-28). Le volume `caddy_data` de cette pile est  │
+# │ donc VIDE DE CERTIFICATS par construction, et le monter n'apprendrait      │
+# │ rien : le contrôle produirait un aveuglement permanent, c'est-à-dire un    │
+# │ cri sans cause — la façon la plus sûre de faire désactiver une sonde.      │
+# │                                                                           │
+# │ LE CERTIFICAT QUI COMPTE VRAIMENT SUR CE CHEMIN EST CELUI DE TRAEFIK, ET   │
+# │ IL N'EST PAS À NOUS. Son magasin vit dans les données de Coolify, que      │
+# │ cette pile ne monte pas et ne peut pas monter : elle n'a aucun accès à     │
+# │ `/data/coolify` ni au réseau `coolify`, et le lui donner serait exactement │
+# │ l'élévation de privilège refusée au service `sauvegarde`. **CONSÉQUENCE À  │
+# │ PORTER À L'ARBITRAGE : sur le chemin exploité, `ALERT_CERT_EXPIRY_DAYS`    │
+# │ n'est honoré par PERSONNE — ni par cette sonde, ni par autre chose.** Ce   │
+# │ n'est pas un trou que ce script peut fermer ; c'est un trou qu'il nomme,   │
+# │ à chaque passe, dans son journal.                                         │
+# └───────────────────────────────────────────────────────────────────────────┘
+#
+# En staging (chemin VPS) la pile n'a pas de frontal (arbitrage du 2026-08-27) :
+# même verdict, autre raison.
 # =============================================================================
 controle_certificat() {
-  if [[ "$APP_ENV" == 'staging' ]]; then
-    axion_log 'Certificats : sans objet en staging (pile sans frontal ; les certificats des DEUX domaines vivent dans le caddy_data de la PROD).'
+  if [[ "$APP_ENV" == 'staging' && "$MODE" == 'hote' ]]; then
+    sans_objet 'Certificats : pile de staging sans frontal (arbitrage du 2026-08-27) ; les certificats des DEUX domaines vivent dans le caddy_data de la PROD.'
     return 0
   fi
   if ! seuil_valide ALERT_CERT_EXPIRY_DAYS; then
     aveugler 'certificat' "ALERT_CERT_EXPIRY_DAYS absent ou non entier (« ${ALERT_CERT_EXPIRY_DAYS:-} ») — voir .env.example"
     return 0
   fi
-  if ! command -v docker >/dev/null 2>&1 || ! command -v openssl >/dev/null 2>&1; then
-    aveugler 'certificat' 'commande `docker` ou `openssl` absente'
+  if ! command -v openssl >/dev/null 2>&1; then
+    aveugler 'certificat' 'commande `openssl` absente'
     return 0
   fi
 
-  local volume="${AXION_SONDE_CADDY_VOLUME:-$(axion_project_name)_caddy_data}"
-  if ! docker volume inspect "$volume" >/dev/null 2>&1; then
-    # Volontairement un AVEUGLEMENT et non un vert : « aucun certificat » et
-    # « je ne trouve pas le magasin » se ressemblent, et l'un des deux est une
-    # panne. `backup-caddy.sh` tranche de la même façon depuis le lot L0.
-    aveugler 'certificat' "volume « $volume » introuvable (frontal jamais démarré, volume détruit, ou nom de projet inattendu)"
+  # --- Source 1 : montage direct (side-car, ou hôte qui préfère un chemin) ----
+  local -a fichiers=()
+  local source
+  if [[ -n "$CADDY_CHEMIN" ]]; then
+    source="$CADDY_CHEMIN"
+    if [[ ! -d "$CADDY_CHEMIN" ]]; then
+      aveugler 'certificat' "AXION_SONDE_CADDY_CHEMIN pointe sur « $CADDY_CHEMIN », qui n'est pas un répertoire (montage absent ?)"
+      return 0
+    fi
+    local f
+    while IFS= read -r f; do [[ -n "$f" ]] && fichiers+=("$f"); done \
+      < <(find "$CADDY_CHEMIN" -type f -name '*.crt' 2>/dev/null || true)
+  elif [[ "$MODE" == 'pile' ]]; then
+    sans_objet "Certificats : aucun magasin à lire dans cette pile — Caddy y écoute en HTTP simple (:8080) et n'émet aucun certificat ; TLS est terminé par Traefik, dont le magasin ne nous appartient pas et ne doit pas nous être ouvert. ALERT_CERT_EXPIRY_DAYS=${ALERT_CERT_EXPIRY_DAYS} n'est donc honoré par PERSONNE sur ce chemin (à arbitrer). Renseigner AXION_SONDE_CADDY_CHEMIN si un magasin lisible existe un jour."
     return 0
+  else
+    # --- Source 2 : volume Docker via conteneur jetable (chemin VPS dédié) ----
+    if ! command -v docker >/dev/null 2>&1; then
+      aveugler 'certificat' 'commande `docker` absente et AXION_SONDE_CADDY_CHEMIN non renseigné'
+      return 0
+    fi
+    local volume="${AXION_SONDE_CADDY_VOLUME:-$(axion_project_name)_caddy_data}"
+    source="volume $volume"
+    if ! docker volume inspect "$volume" >/dev/null 2>&1; then
+      # Volontairement un AVEUGLEMENT et non un vert : « aucun certificat » et
+      # « je ne trouve pas le magasin » se ressemblent, et l'un des deux est une
+      # panne. `backup-caddy.sh` tranche de la même façon depuis le lot L0.
+      aveugler 'certificat' "volume « $volume » introuvable (frontal jamais démarré, volume détruit, ou nom de projet inattendu)"
+      return 0
+    fi
+    local liste
+    if ! liste="$(docker run --rm -v "$volume:/data:ro" "$AXION_ALPINE_IMAGE" \
+      find /data -type f -name '*.crt' 2>/dev/null)"; then
+      aveugler 'certificat' "lecture du volume « $volume » impossible (démon Docker ou image $AXION_ALPINE_IMAGE)"
+      return 0
+    fi
+    local l
+    while IFS= read -r l; do [[ -n "$l" ]] && fichiers+=("$l"); done <<<"$liste"
+    CADDY_VOLUME_LU="$volume"
   fi
 
-  local fichiers
-  if ! fichiers="$(docker run --rm -v "$volume:/data:ro" "$AXION_ALPINE_IMAGE" \
-    find /data -type f -name '*.crt' 2>/dev/null)"; then
-    aveugler 'certificat' "lecture du volume « $volume » impossible (démon Docker ou image $AXION_ALPINE_IMAGE)"
-    return 0
-  fi
-  if [[ -z "$fichiers" ]]; then
-    aveugler 'certificat' "aucun fichier .crt dans « $volume » — en production, aucun certificat émis est une anomalie"
+  if [[ "${#fichiers[@]}" -eq 0 ]]; then
+    aveugler 'certificat' "aucun fichier .crt dans « $source » — là où un frontal émet des certificats, n'en trouver aucun est une anomalie"
     return 0
   fi
 
   local -a proches=()
   local fichier pem fin_epoch maintenant_epoch jours nom total=0
   maintenant_epoch="$(date -u +%s)"
-  while IFS= read -r fichier; do
-    [[ -n "$fichier" ]] || continue
-    pem="$(docker run --rm -v "$volume:/data:ro" "$AXION_ALPINE_IMAGE" cat "$fichier" 2>/dev/null || true)"
+  for fichier in "${fichiers[@]}"; do
+    if [[ -n "$CADDY_CHEMIN" ]]; then
+      pem="$(cat "$fichier" 2>/dev/null || true)"
+    else
+      pem="$(docker run --rm -v "${CADDY_VOLUME_LU}:/data:ro" "$AXION_ALPINE_IMAGE" cat "$fichier" 2>/dev/null || true)"
+    fi
     [[ -n "$pem" ]] || continue
     local fin
     fin="$(printf '%s\n' "$pem" | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2- || true)"
@@ -337,10 +526,10 @@ controle_certificat() {
     if [[ "$jours" -lt "$ALERT_CERT_EXPIRY_DAYS" ]]; then
       proches+=("$nom expire dans ${jours} j (le ${fin})")
     fi
-  done <<<"$fichiers"
+  done
 
   if [[ "$total" -eq 0 ]]; then
-    aveugler 'certificat' "aucun des fichiers .crt de « $volume » n'a pu être lu par openssl"
+    aveugler 'certificat' "aucun des fichiers .crt de « $source » n'a pu être lu par openssl"
     return 0
   fi
   if [[ "${#proches[@]}" -gt 0 ]]; then
@@ -573,22 +762,88 @@ SQL
 }
 
 # =============================================================================
-# PASSE
+# UNE PASSE
 # =============================================================================
-controle_disque
-controle_certificat
-controle_sync
-controle_job_llm
+passe() {
+  # Remise à zéro OBLIGATOIRE : en mode `pile` ce processus vit des semaines.
+  ALERTES=()
+  AVEUGLEMENTS=()
+  VERTS=()
+  SANS_OBJET=()
+  TS="$(axion_ts)"
 
-axion_log "--- Bilan : ${#VERTS[@]} contrôle(s) vert(s), ${#ALERTES[@]} alerte(s), ${#AVEUGLEMENTS[@]} aveuglement(s) ---"
+  axion_log "=== Sonde d'alertes — début ($TS · $APP_ENV · mode $MODE · seuils : $ENV_FILE) ==="
 
-if [[ "${#ALERTES[@]}" -gt 0 ]]; then
-  axion_log "=== Sonde d'alertes — TERMINÉE AVEC ALERTES ==="
-  exit 1
+  controle_disque
+  controle_certificat
+  controle_sync
+  controle_job_llm
+
+  # LE MARQUEUR DE VIVACITÉ — il est écrit APRÈS les quatre contrôles, donc il
+  # atteste d'une passe TERMINÉE, pas d'un processus qui respire. C'est sur lui
+  # que s'appuie la sonde de santé du conteneur (compose Coolify) : un service
+  # `Up 6 days` dont plus aucune passe ne se termine est exactement la panne
+  # silencieuse que `sauvegarde-healthcheck.sh` attrape sur le même chemin.
+  : >"$ETAT_DIR/.derniere-passe"
+
+  axion_log "--- Bilan : ${#VERTS[@]} vert(s) · ${#ALERTES[@]} alerte(s) · ${#AVEUGLEMENTS[@]} aveuglement(s) · ${#SANS_OBJET[@]} sans objet ---"
+
+  if [[ "${#ALERTES[@]}" -gt 0 ]]; then
+    axion_log "=== Sonde d'alertes — passe TERMINÉE AVEC ALERTES ==="
+    return 1
+  fi
+  if [[ "${#AVEUGLEMENTS[@]}" -gt 0 ]]; then
+    axion_log "=== Sonde d'alertes — passe TERMINÉE AVEC AVEUGLEMENTS (des contrôles n'ont PAS eu lieu) ==="
+    return 2
+  fi
+  axion_log "=== Sonde d'alertes — passe TERMINÉE, tous les contrôles exécutés et verts ==="
+  return 0
+}
+
+# =============================================================================
+# DÉCLENCHEMENT
+# =============================================================================
+
+# Secondes jusqu'à la prochaine occurrence de `MINUTE_DE_PASSE`. RECALCULÉ à
+# chaque tour depuis l'horloge murale, jamais accumulé : `sauvegarde.sh` a payé
+# une dérive de `sleep` en 2026-08-28, la leçon est reprise ici.
+secondes_avant_passe() {
+  local maintenant minute_courante delta
+  maintenant="$(date -u +%s)"
+  minute_courante=$(((maintenant / 60) % 60))
+  delta=$(((MINUTE_DE_PASSE - minute_courante + 60) % 60))
+  [[ "$delta" -eq 0 ]] && delta=60
+  echo $((delta * 60 - maintenant % 60))
+}
+
+if [[ "$MODE" == 'pile' ]]; then
+  case "$MINUTE_DE_PASSE" in
+    '' | *[!0-9]*) axion_die "AXION_SONDE_MINUTE invalide (« $MINUTE_DE_PASSE ») — un entier de 0 à 59 est attendu." ;;
+  esac
+  [[ "$MINUTE_DE_PASSE" -le 59 ]] || axion_die "AXION_SONDE_MINUTE hors bornes (« $MINUTE_DE_PASSE »)."
+
+  axion_log "Service de sonde démarré — une passe par heure à la minute ${MINUTE_DE_PASSE} (UTC), transport d'alerte : $(axion_transport_notification)."
+
+  # PREMIÈRE PASSE IMMÉDIATE, et ce n'est pas du confort : une pile fraîchement
+  # déployée n'a aucune raison d'attendre jusqu'à une heure avant de découvrir
+  # qu'un disque est plein ou qu'aucun appareil ne synchronise. C'est le même
+  # geste que le « rattrapage » de `sauvegarde.sh`.
+  #
+  # `|| true` : UNE PASSE QUI ALERTE N'EST PAS UNE PANNE DU SERVICE. Sans lui,
+  # `set -e` ferait sortir le processus, Docker redémarrerait le conteneur, et
+  # chaque redémarrage rejouerait une passe — c'est-à-dire une tempête de
+  # messages sur le canal exactement le jour où quelque chose ne va pas. Le
+  # service ne meurt que sur ce qu'il ne sait pas faire (voir `axion_die`).
+  passe || true
+  while true; do
+    attente="$(secondes_avant_passe)"
+    case "$attente" in
+      '' | *[!0-9]*) axion_die "délai avant la prochaine passe incalculable (« $attente »)." ;;
+    esac
+    sleep "$attente"
+    passe || true
+  done
 fi
-if [[ "${#AVEUGLEMENTS[@]}" -gt 0 ]]; then
-  axion_log "=== Sonde d'alertes — TERMINÉE AVEC AVEUGLEMENTS (des contrôles n'ont PAS eu lieu) ==="
-  exit 2
-fi
-axion_log "=== Sonde d'alertes — TERMINÉE, tous les contrôles exécutés et verts ==="
-exit 0
+
+passe && exit 0
+exit $?

@@ -23,6 +23,18 @@ axion_require_env RESTORE_TEST_CRON
 field_count="$(printf '%s\n' "$RESTORE_TEST_CRON" | awk '{print NF}')"
 [[ "$field_count" -eq 5 ]] || axion_die "RESTORE_TEST_CRON invalide (5 champs attendus) : « $RESTORE_TEST_CRON »"
 
+# --- Minute de passe de la sonde d'alertes ------------------------------------
+# LA MÊME VARIABLE que celle du service `sonde` de la pile Coolify : les deux
+# chemins exécutent le même script et doivent sonner à la même minute, sinon
+# comparer leurs journaux devient un exercice de traduction. Écrite une fois au
+# `.env.example`, lue ici ET par le compose — jamais recopiée en dur des deux
+# côtés, où elle dériverait.
+SONDE_MINUTE="${AXION_SONDE_MINUTE:-17}"
+case "$SONDE_MINUTE" in
+  '' | *[!0-9]*) axion_die "AXION_SONDE_MINUTE invalide (« $SONDE_MINUTE ») : un entier de 0 à 59 est attendu." ;;
+esac
+[[ "$SONDE_MINUTE" -le 59 ]] || axion_die "AXION_SONDE_MINUTE hors bornes (« $SONDE_MINUTE »)."
+
 # --- Prérequis d'exécution ----------------------------------------------------
 for s in backup-postgres.sh backup-minio.sh backup-caddy.sh restore-test.sh sonde-alertes.sh; do
   [[ -x "$SCRIPT_DIR/$s" ]] || axion_die "Script non exécutable : $SCRIPT_DIR/$s (chmod +x)"
@@ -61,11 +73,13 @@ $RESTORE_TEST_CRON root $SCRIPT_DIR/restore-test.sh $ENV_FILE >/dev/null 2>&1
 # CADENCE HORAIRE, ET NON QUOTIDIENNE : le plus court des quatre seuils se compte
 # en minutes (job LLM > 5 min) et le plus long en heures (sync muette > 24 h). Une
 # passe par jour ferait découvrir un disque plein jusqu'à 24 h trop tard.
-# À LA MINUTE 17, délibérément : les quatre autres tâches partent à 0, 30 et 45 —
-# une sonde qui tourne PENDANT une sauvegarde mesurerait le pic qu'elle provoque.
+# À LA MINUTE \${AXION_SONDE_MINUTE} (17 par défaut), délibérément : les quatre
+# autres tâches partent à 0, 30 et 45 — une sonde qui tourne PENDANT une
+# sauvegarde mesurerait le pic qu'elle provoque. C'est la MÊME minute que la
+# boucle du service \`sonde\` de la pile Coolify, qui exécute le MÊME script.
 # Le code de sortie est ignoré ici (comme pour les autres tâches) : la sonde
 # n'informe PAS par le cron, elle informe par le canal Telegram et par son journal.
-17 * * * * root $SCRIPT_DIR/sonde-alertes.sh $ENV_FILE >/dev/null 2>&1
+$SONDE_MINUTE * * * * root $SCRIPT_DIR/sonde-alertes.sh $ENV_FILE >/dev/null 2>&1
 EOF
 
 chown root:root "$CRON_FILE"
