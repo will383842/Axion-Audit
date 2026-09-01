@@ -1113,10 +1113,10 @@ n'est portée par personne d'autre (aucune règle de cycle de vie Cloudflare —
 `git`). La purge est donc devenue une **passe séparée, pilotée par inventaire** :
 
 1. inventaire local **avant** le miroir ; 2. miroir **en copie seule** ; 3. inventaires local **après**
-et distant ; 4. on ne purge que `distant − (avant ∪ après)` — **un objet que la passe vient d'écrire
-est intouchable** ; 5. les objets vitaux sont exclus **par leur nom** en plus ; 6. un **plafond**
-(`AXION_R2_PURGE_MAX_PCT`, 50 % par défaut, plancher `AXION_R2_PURGE_PLANCHER` = 20 objets) : au-delà,
-**aucune suppression**, le journal le dit et l'alerte part.
+   et distant ; 4. on ne purge que `distant − (avant ∪ après)` — **un objet que la passe vient d'écrire
+   est intouchable** ; 5. les objets vitaux sont exclus **par leur nom** en plus ; 6. un **plafond**
+   (`AXION_R2_PURGE_MAX_PCT`, 50 % par défaut, plancher `AXION_R2_PURGE_PLANCHER` = 20 objets) : au-delà,
+   **aucune suppression**, le journal le dit et l'alerte part.
 
 #### ② Le garde ne relit plus 3 objets sur 1 600, il compare des inventaires
 
@@ -1130,14 +1130,14 @@ ne commande que les empreintes.
 
 #### La contre-épreuve du garde — rouge AVANT vert
 
-| Essai                                                       | Attendu | Mesuré                                                                            |
-| ----------------------------------------------------------- | ------- | ---------------------------------------------------------------------------------- |
-| Ancien garde, **1 objet WAL** retiré à destination           | rouge   | 🔴 **VERT** — « expédition terminée — 1573 objet(s) », 3 relectures conformes      |
-| Nouveau garde, **le même** objet                             | rouge   | ✅ code 2, objet **nommé** au journal, « 1 objet sur 1574 attendus manque »        |
-| Nouveau garde, `backup.info` retiré **après** l'inventaire   | rouge   | ✅ code 2, « l'objet VITAL … est ABSENT »                                          |
-| Nouveau garde, trous rebouchés                               | vert    | ✅ code 0, « inventaire conforme — 1574 objet(s) », « objets vitaux présents »     |
-| Purge légitime (50 WAL expirés localement)                   | purge   | ✅ « purge de 50 objet(s) », distant ramené à 1524                                 |
-| Purge de masse (900 objets)                                  | refus   | ✅ « purge REFUSÉE — 900 … dépassent le plafond de 762 », alerte, **0 suppression** |
+| Essai                                                      | Attendu | Mesuré                                                                              |
+| ---------------------------------------------------------- | ------- | ----------------------------------------------------------------------------------- |
+| Ancien garde, **1 objet WAL** retiré à destination         | rouge   | 🔴 **VERT** — « expédition terminée — 1573 objet(s) », 3 relectures conformes       |
+| Nouveau garde, **le même** objet                           | rouge   | ✅ code 2, objet **nommé** au journal, « 1 objet sur 1574 attendus manque »         |
+| Nouveau garde, `backup.info` retiré **après** l'inventaire | rouge   | ✅ code 2, « l'objet VITAL … est ABSENT »                                           |
+| Nouveau garde, trous rebouchés                             | vert    | ✅ code 0, « inventaire conforme — 1574 objet(s) », « objets vitaux présents »      |
+| Purge légitime (50 WAL expirés localement)                 | purge   | ✅ « purge de 50 objet(s) », distant ramené à 1524                                  |
+| Purge de masse (900 objets)                                | refus   | ✅ « purge REFUSÉE — 900 … dépassent le plafond de 762 », alerte, **0 suppression** |
 
 **Deux pièges de `mc` découverts par cette contre-épreuve, et corrigés avant livraison** — ils
 méritent d'être écrits parce qu'ils font des garde-fous verts sur du vide :
