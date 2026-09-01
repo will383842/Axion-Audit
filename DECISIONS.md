@@ -2410,7 +2410,7 @@ Options :
    action non épinglée — l'activer avant d'épingler aurait cassé la CI au commit suivant.
 2. Épingler les actions aux empreintes de commit, **puis** activer le réglage.
 
-Arbitrage : **option 2**, dans cet ordre. 26 occurrences épinglées sur 6 fichiers
+Arbitrage : **option 2**, dans cet ordre. 26 occurrences épinglées sur 6 fichiers **Règle de précédence sans objet** (aucune divergence interne au pack : le point est un réglage d outil, pas une lecture de spec).
 (`.github/workflows/*.yml` + `.github/actions/setup-node-pnpm/action.yml`), le tag d'origine
 conservé en commentaire pour rester lisible et pour que les montées de version restent délibérées :
 
@@ -2885,7 +2885,7 @@ Options :
    C'est ce que proposait l'agent qui l'a trouvée.
 2. **Étage 1, corrigé d'office.**
 
-Arbitrage : **option 2**, contre la proposition de l'agent, pour deux raisons.
+Arbitrage : **option 2**, contre la proposition de l'agent, pour deux raisons. **Règle de précédence sans objet** (aucune divergence interne au pack : le point est un réglage d outil, pas une lecture de spec).
 
 D'abord la nature du défaut : l'étage 2 sert à ce qui doit **attendre** un arbitrage humain, et une
 fuite de secret n'attend pas. Ensuite — et c'est l'argument qui décide — un JWT a une forme **rigide**
@@ -3238,7 +3238,7 @@ Options :
 1. **`logout` publique**, et amender la liste commitée à cinq entrées.
 2. **`logout` authentifiée.**
 
-Arbitrage : **option 2**, et le motif dépasse le comptage.
+Arbitrage : **option 2**, et le motif dépasse le comptage. **Règle de précédence sans objet** (aucune divergence interne au pack : le point est un réglage d outil, pas une lecture de spec).
 
 Une route de déconnexion authentifiée permet de **vérifier la propriété du jeton présenté** — le §9.9
 réserve les écritures au propriétaire de la session. Publique, elle accepterait n'importe quel jeton
@@ -3606,7 +3606,7 @@ Options :
 2. **Construire les paquets dans le job qui en a besoin.**
 3. **Aliaser `@axion/shared` vers ses sources** dans la configuration de test.
 
-Arbitrage : **option 2**, limitée à `./packages/**`.
+Arbitrage : **option 2**, limitée à `./packages/**`. **Règle de précédence sans objet** (aucune divergence interne au pack : le point est un réglage d outil, pas une lecture de spec).
 
 L'option 3 est refusée pour une raison de fond : elle testerait **la source** au lieu de **ce qui est
 publié**. Le paquet expose `dist/index.js` ; c'est ce fichier-là que consomment l'API et le worker en
@@ -4167,7 +4167,7 @@ Options :
    est append-only, et effacer la trace d'une décision contestée serait le changement silencieux que
    ce format existe pour empêcher.
 
-Arbitrage : **option 2**. Le renvoi est retiré par un commit de suivi ; `docs/ORGANISATION_AGENTS.md`
+Arbitrage : **option 2**. Le renvoi est retiré par un commit de suivi ; `docs/ORGANISATION_AGENTS.md` **Règle de précédence sans objet** (aucune divergence interne au pack : le point est un réglage d outil, pas une lecture de spec).
 reste et se rattache par la présente trace, ce qui suffit — **le document n'a jamais eu besoin d'être
 cité dans `CLAUDE.md` pour exister**. **Règle de précédence sans objet (aucune divergence interne au
 pack)** : §3-2 et §4 ne s'opposent pas, c'est §3-2 seul qui s'applique et il n'était pas satisfait.
@@ -4202,7 +4202,7 @@ Options :
 2. **Remettre la ligne** sur l'arbitrage explicite de Williams. Coût : `CLAUDE.md` grossit de deux
    lignes ; aucune de ses règles ne change, le renvoi ne fait qu'indexer un document existant.
 
-Arbitrage : **option 2**. **Williams a répondu explicitement à la question posée** — « fais selon tes
+Arbitrage : **option 2**. **Williams a répondu explicitement à la question posée** — « fais selon tes **Règle de précédence sans objet** (aucune divergence interne au pack : le point est un réglage d outil, pas une lecture de spec).
 recommandations pour ça », en citant la question mot pour mot. C'est l'arbitrage nominatif que §3-2
 exigeait et qui manquait la première fois ; l'objection d'A01 est levée par la seule autorité qui
 pouvait la lever, et elle était juste tant que cette réponse n'existait pas. **Règle de précédence
@@ -5311,3 +5311,51 @@ Impact spec : aucun sur `/docs`. Amendement horodaté de `infra/README.md` §5.7
 **Réserve** : rien n'a tourné sur `axionia-web` ni contre le vrai bucket R2 (aucun accès demandé ni
 utilisé) ; le bac à sable est MinIO, pas R2. Le §6 du README reste entier — ce script n'a jamais
 tourné sur le serveur.
+
+## 2026-09-01 — [intégration PR #17] Le jeton de démonstration d'A51 fait rougir gitleaks
+
+Le job `gitleaks` (BLOQUANT, 02 §30.4-5) de la PR #17 rend `leaks found: 2`. Les deux trouvailles
+portent **la même valeur**, dans `docs/portes/VERDICT_A51_SECURITE_2026-08-31.md` aux lignes 327 et
+741 : `eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.sig`, classée `generic-api-key`, entropie 4,19.
+
+**Ce que la valeur est**, vérifiable sans rien croire sur parole : `{"alg":"HS256"}` /
+`{"sub":"x"}` / signature égale au mot `sig`. Elle ne signe rien et n'ouvre rien, et l'adresse qui
+l'accompagne est fictive. Ce n'est pas un secret retiré après coup : c'est **la preuve de la faille
+F-01** du verdict A51 — la redaction laissait sortir en clair une URL portant e-mail ET jeton.
+La supprimer viderait le verdict de sa démonstration.
+
+Le scan porte sur l'historique complet (`fetch-depth: 0`, 219 commits) : **un commit correctif ne
+retire rien**, la valeur reste dans `9dac2cf`.
+
+Options :
+
+1. **Allowlist par empreinte** (`<sha>:<fichier>:<règle>:<ligne>`), deux entrées.
+2. **Allowlist par la VALEUR EXACTE**, `regexTarget = "match"`, une entrée pour les deux trouvailles.
+3. **Allowlist par chemin** — le fichier entier devient un angle mort permanent.
+4. **Réécriture d'historique** : neutraliser l'exemple puis rebaser et forcer la branche.
+
+Arbitrage : **option 2**, après un premier arbitrage de Williams pour l'option 1 le même jour. **Règle de précédence sans objet** (aucune divergence interne au pack : le point est un réglage d outil, pas une lecture de spec).
+Ce qui a fait changer le mécanisme — et non l'intention : **`.gitleaks.toml` a DÉJÀ tranché ce point
+le 2026-08-29**, et son argument tient ici tel quel — « PAS par empreinte : elle contient le sha du
+commit et le numéro de ligne, donc elle se périme au premier déplacement du fichier — un garde-fou
+qui se désarme tout seul sans le dire ». Ce fichier de porte vit et grossit ; au premier ajout
+au-dessus de la ligne 327, l'exemption cesserait de correspondre **en silence**. L'intention de
+l'arbitrage est intégralement tenue (le plus étroit possible, ni par chemin ni par règle) ; seul le
+mécanisme est aligné sur le précédent maison. Les options 3 et 4 sont écartées pour les raisons déjà
+écrites dans `.gitleaks.toml` (créer une zone où l'on fuite tranquillement) et parce que réécrire
+quinze commits poussés pour un faux positif coûte plus que le défaut.
+
+**ÉPREUVE, avec témoin — mesurée, pas supposée** (gitleaks v8.18.4, historique complet) :
+
+| Mesure                                                              | Résultat                               |
+| ------------------------------------------------------------------- | -------------------------------------- |
+| Avant l'entrée, historique complet                                  | `leaks found: 2` (219 commits scannés) |
+| Après l'entrée, historique complet                                  | **`no leaks found`**, code de sortie 0 |
+| Témoin : jeton VOISIN (`{"sub":"y"}`), même forme d'URL, hors dépôt | **détecté**, `leaks found: 1`          |
+
+Le témoin est ce qui compte : l'exemption couvre **cette valeur et rien d'autre**. Un jeton différent
+d'un seul caractère, dans le même fichier, ferait toujours rougir le build.
+
+Décideur : Williams (intention) · A01 (mécanisme, sur le précédent écrit du 2026-08-29)
+Impact spec : aucun sur `/docs`. Amendement horodaté de `.gitleaks.toml` (troisième entrée de
+l'allowlist, documentée sur place avec son épreuve).
