@@ -17,6 +17,11 @@ import { z } from 'zod';
 // « Invalid ISO datetime ». Un message d'erreur d'API affiché tel quel EST de
 // l'interface : l'invariant 5 s'y applique sans exception.
 //
+// « Sans exception » est à prendre au mot, et c'est pour le tenir qu'`errorDetailSchema`
+// porte un champ `code` SÉPARÉ (amendement du 2026-08-29, posé au lot L3b) : ce qui
+// est destiné à une machine — un état exact, un code de défaut d'import — y va, et
+// `message` reste une phrase française. Voir le schéma pour le détail du partage.
+//
 // Zod 4 EMBARQUE la locale française (`z.locales.fr`, présent dans le paquet épinglé
 // 4.4.3 — vérifié avant d'écrire une ligne). AUCUNE dépendance ajoutée : l'escalade
 // 11 §8-1 ne s'applique pas.
@@ -162,10 +167,57 @@ export function messageValidationFrancais(message: string): string {
     : message;
 }
 
-/** Détail d'erreur : sert à pointer le champ fautif d'une validation Zod. */
+/**
+ * Détail d'erreur : pointe le champ fautif d'une validation Zod, et — depuis
+ * l'amendement du 2026-08-29 — peut porter un CODE de défaut lisible par une machine.
+ *
+ * ══════════════════════════════════════════════════════════════════════════════
+ * `message` ET `code` NE S'ADRESSENT PAS AU MÊME LECTEUR, ET C'EST TOUT LEUR SENS.
+ * ══════════════════════════════════════════════════════════════════════════════
+ *   · **`message` est de l'INTERFACE.** Il est affiché TEL QUEL (voir l'en-tête de
+ *     ce fichier), donc **l'invariant 5 s'y applique sans exception** : une phrase
+ *     française, lisible par un auditeur en clientèle. C'est la raison d'être de
+ *     la locale `z.locales.fr` posée plus haut ;
+ *   · **`code` est pour une MACHINE, et n'est JAMAIS rendu à un humain.** Il porte
+ *     un identifiant technique stable — un code de défaut métier, une valeur
+ *     d'énumération — sur lequel un front branche sans avoir à analyser une phrase.
+ *     Il est **optionnel** : la grande majorité des détails, ceux qui viennent du
+ *     compilateur Zod, n'en ont pas.
+ *
+ * Écrire un identifiant technique dans `message` « parce que le support en a
+ * besoin » revient à afficher `en_analyse` à un utilisateur ; l'écrire dans `code`
+ * sert le support **sans** toucher à ce que l'utilisateur lit. Les deux besoins
+ * cohabitent sur la même ligne de `details`, chacun dans son champ.
+ *
+ * ── D'OÙ VIENT CE CHAMP, ET POURQUOI IL ARRIVE MAINTENANT ───────────────────
+ * `DECISIONS.md` du **2026-08-29** (« Les quatre codes d'erreur du lot ») le retient
+ * comme amendement de convention 11 §3, au motif que le rapport ligne à ligne du
+ * 03 §35.2 (`{ligne, colonne, code, message}`) est autrement **inexprimable**, et
+ * que `banque-questions.ts` promet déjà que « les codes voyageront dans `details[]`,
+ * inchangés ». `DECISIONS.md` du **2026-08-31** constate qu'il était resté sur le
+ * papier et le déclare **« dû aux lots L3c et L9, qui le poseront avec leur premier
+ * usage »** — un code sans appelant étant précisément le « code mort » que la
+ * première entrée refuse. **Ce premier usage est arrivé** : le refus de transition
+ * du 03 §32.2 (`domaines/missions/service.ts`) a besoin de rendre les états EXACTS
+ * au support sans dégrader le message français. Poser ce champ ici n'est donc pas
+ * une décision, c'est l'exécution d'un arbitrage daté — même geste, et même
+ * raison, que `COMPANY_DUPLICATE` au lot L3a.
+ *
+ * ⚠ CE QUE `code` N'EST PAS : un code d'erreur HTTP ni une valeur d'`ERROR_CODES`.
+ * Celui-là vit dans `error.code`, une seule fois par réponse. Confondre les deux
+ * ferait croire à un front qu'une ligne de détail peut changer le sens de la
+ * réponse entière.
+ *
+ * ⚠ CE QUI N'EST **PAS** POSÉ ICI, DÉLIBÉRÉMENT : le statut **422** et
+ * `IMPORT_REJECTED`, seconds amendements de la même entrée du 2026-08-29. Ils
+ * appartiennent à l'import CSV (L3c) et à l'import de banque (L9), qui les
+ * poseront avec LEUR premier appelant. Même règle, même motif.
+ */
 export const errorDetailSchema = z.object({
   path: z.string(),
   message: z.string(),
+  /** Identifiant technique, pour une machine. JAMAIS affiché. Voir ci-dessus. */
+  code: z.string().optional(),
 });
 
 /** L'enveloppe d'erreur, identique sur TOUTES les routes. */

@@ -95,6 +95,18 @@ const jetons: Record<keyof typeof comptes, string> = {
  * cadrage déclaré pour `/v1/scoping/:id/financials`.
  */
 const entrepriseSemee = uuidv7();
+/**
+ * Une MISSION réellement semée, pour les gabarits `/v1/missions/:id` et
+ * `/v1/missions/:id/status` livrés par L3b.
+ *
+ * Elle n'existe que pour la cartographie du balayage : aucun test de ce fichier ne
+ * l'interroge. C'est pourtant une LIGNE EN BASE et pas un UUID fabriqué, parce que
+ * l'inverse est précisément le défaut que le mécanisme ① existe pour fermer — une
+ * valeur qui ne désigne rien fait tomber la route en 404 avant qu'elle n'ait pu
+ * fuiter quoi que ce soit, et le balayage est alors vert pour n'avoir rien traversé.
+ * Titre fictif : invariant 2, aucune référence client, fixture comprise.
+ */
+const missionSemee = uuidv7();
 /** Un cadrage AVEC volet financier — celui que l'administrateur a le droit de lire. */
 const cadrageAvecFinancier = uuidv7();
 /** Un cadrage SANS volet financier — il doit rendre la MÊME chose qu'un inconnu. */
@@ -221,6 +233,17 @@ beforeAll(async () => {
   await bd().query(`INSERT INTO companies (id, name) VALUES ($1, 'Entreprise de démonstration')`, [
     entrepriseSemee,
   ]);
+  // La mission des gabarits `/v1/missions/:id` et `/v1/missions/:id/status` (L3b).
+  // Les routes sont `admin` seul : les porteurs du balayage seront tous refusés
+  // (403) et n'atteindront jamais le gestionnaire. La ligne est semée quand même —
+  // « valeur RÉELLEMENT semée » est une propriété de la cartographie, pas une
+  // propriété du seul chemin qu'on croit qu'elle empruntera.
+  await bd().query(
+    `INSERT INTO missions (id, company_id, title, geo_scope, audit_level, status, created_by)
+     VALUES ($1, $2, 'Mission fictive de balayage', 'france', 'diagnostic_cadrage',
+             'preparation', $3)`,
+    [missionSemee, entrepriseSemee, comptes.admin],
+  );
   for (const cadrageId of [
     cadrageAvecFinancier,
     cadrageSansFinancier,
@@ -1106,6 +1129,33 @@ describe('T5 — les ceintures 3 et 4 : sources et exécution', () => {
   const cartographieDesParametres = {
     '/v1/scoping/:id/financials': { id: cadrageAvecFinancier },
     '/v1/companies/:id': { id: entrepriseSemee },
+    // ── LES MISSIONS (L3b) ────────────────────────────────────────────────────
+    // Une mission RÉELLEMENT semée en `beforeAll`. Les deux gabarits sont deux
+    // lignes : `/v1/missions/:id/status` n'hérite RIEN de `/v1/missions/:id`, et
+    // c'est tout l'objet du mécanisme ①.
+    '/v1/missions/:id': { id: missionSemee },
+    '/v1/missions/:id/status': { id: missionSemee },
+    // ── LES COMPTES (L2/T3) ───────────────────────────────────────────────────
+    // Ces cinq gabarits existent depuis L2 et n'avaient JAMAIS été cartographiés.
+    // Ce n'est pas un oubli de rédaction, c'est un angle mort de fusion, et il vaut
+    // d'être écrit ici : la branche qui a MONTÉ ces routes dans `construireApp` et
+    // celle qui a remplacé la cartographie PLATE par la cartographie par (gabarit,
+    // paramètre) sont deux branches sœurs, dont aucune ne voyait l'autre. Sur la
+    // première, `:id` avait encore une valeur de repli universelle et les comptes
+    // étaient donc silencieusement « couverts » ; sur la seconde, les routes
+    // n'étaient pas montées, donc absentes du registre. Ni l'une ni l'autre ne
+    // rougissait — leur FUSION, si. Un défaut qu'aucun des deux parents ne porte
+    // seul est exactement ce qu'une suite qui ne tourne qu'avant la fusion ne peut
+    // pas voir.
+    //
+    // La valeur est un compte réellement semé (`comptes.lecteur`), jamais supprimé
+    // ni désactivé par ce fichier — les tests de cycle de vie ont leurs propres
+    // comptes (`aDesactiver`, `aSupprimer`) pour cette raison précise.
+    '/v1/users/:id': { id: comptes.lecteur },
+    '/v1/users/:id/role': { id: comptes.lecteur },
+    '/v1/users/:id/deactivate': { id: comptes.lecteur },
+    '/v1/users/:id/habilitate': { id: comptes.lecteur },
+    '/v1/users/:id/password-reset': { id: comptes.lecteur },
     // La route du produit RE-montée sous le préfixe du banc « socle cassé » : c'est
     // un gabarit distinct, donc une ligne distincte. La verbosité est le prix de la
     // propriété qu'on achète — rien ne déborde d'un gabarit à l'autre.
@@ -1215,8 +1265,30 @@ describe('T5 — les ceintures 3 et 4 : sources et exécution', () => {
       porteurs: { lecteur: jetons.lecteur },
       cartographieDeParametres: {
         '/v1/scoping/:id/financials': { id: cadrageAvecFinancier },
-        // Un gabarit qui n'existe pas au registre — la route rêvée, ou renommée.
-        '/v1/missions/:id': { id: uuidv7() },
+        // ═══════════════════════════════════════════════════════════════════════
+        // LE GABARIT FAUTIF DOIT ÊTRE INCAPABLE DE DEVENIR VRAI. LEÇON DATÉE.
+        // ═══════════════════════════════════════════════════════════════════════
+        // Cette ligne portait `/v1/missions/:id`, commentée « la route rêvée, ou
+        // renommée ». L3b a livré cette route le jour même : la contre-épreuve
+        // déclarait alors un gabarit BIEN RÉEL, `declarationsInutiles` revenait vide
+        // — à juste titre — et le test rougissait sans qu'aucun défaut n'existe.
+        // C'est la SECONDE fois dans la même journée qu'un test se casse pour avoir
+        // visé un chemin que le produit a fini par servir (un méta-test de L2
+        // greffait `/v1/missions/:missionId` sur l'app réelle), d'où la règle,
+        // écrite ici une fois pour toutes :
+        //
+        //   UN CAS-TÉMOIN NÉGATIF NE SE CONSTRUIT JAMAIS SUR UN CHEMIN PLAUSIBLE.
+        //   Une route « qui n'existe pas encore » n'est pas une absence : c'est un
+        //   délai. Le témoin doit être hors de tout espace de nommage que le produit
+        //   puisse atteindre, sans quoi le test a une date de péremption que
+        //   personne n'a écrite.
+        //
+        // Pourquoi CE gabarit-ci est sûr : il ne vit ni sous `/v1` (le seul préfixe
+        // que `construireApp` monte) ni sous `/essai` (celui des bancs de ce
+        // fichier) ; il ne nomme aucun domaine métier, donc aucun lot ne peut le
+        // livrer par hasard ; et son segment `__temoin-negatif__` est RÉSERVÉ par le
+        // présent commentaire — l'y voir apparaître ailleurs serait déjà l'anomalie.
+        '/__temoin-negatif__/aucune-route-ici/:id': { id: uuidv7() },
       },
     });
 
@@ -1238,7 +1310,7 @@ describe('T5 — les ceintures 3 et 4 : sources et exécution', () => {
       aOeilleres.declarationsInutiles,
       'Une ligne de cartographie désignant un gabarit ABSENT du registre doit être\n' +
         'dénoncée : sans quoi la table dérive et l’on croit semer une route disparue.',
-    ).toContain('/v1/missions/:id → :id');
+    ).toContain('/__temoin-negatif__/aucune-route-ici/:id → :id');
   });
 
   it('@critique CEINTURE 4 — la frontière du silence est éprouvée PAR SES DEUX CÔTÉS', () => {

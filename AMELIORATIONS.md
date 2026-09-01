@@ -1473,3 +1473,38 @@ qui doit le dire, pas la nuit du sinistre.
 (remplacer les `ls | grep` par une boucle `for f in "$ARCHIVES"/*` avec test, protéger le `$(sb_ssh_opts)`).
 
 **Impact schéma / API : aucun.** Impact CI : un job élargi. Impact `infra/postgres/*.sh` : 7 sites.
+
+## 2026-09-01 — [L3, étage 2, PROPOSÉE] Le cadrage RBAC par mission n'est alimenté par aucune route
+
+**Constat, mesuré par A10 en préparant le brief L3d, pas déduit.** Le pack porte deux tables voisines
+et le lot L3 n'en écrit qu'une. `/v1/missions/:id/assignments` écrit **`work_assignments`** — c'est
+`03 §18.2` qui nomme cette table, il n'y a pas d'ambiguïté. Mais **`mission_users`**, la table qui
+porte le cadrage RBAC « qui a le droit de voir cette mission », **n'est écrite par aucune route de
+L0 à L3**.
+
+**Ce que ça coûte aujourd'hui, dit sans dramatiser.** Rien en production : le RBAC serveur est en
+place, les rôles fonctionnent, et l'étanchéité financière est éprouvée sur quatre ceintures. Ce qui
+manque est le **peuplement** du cadrage par mission. Conséquence directe et vérifiable : les tests
+qui veulent éprouver « un consultant affecté à la mission A ne voit pas la mission B » doivent
+**écrire `mission_users` en SQL direct**, puisqu'aucune route ne le fait. Un test qui doit contourner
+l'API pour se mettre en scène éprouve la base, pas le produit.
+
+**Valeur pour l'auditeur.** Le jour où une mission a deux consultants et un lead, c'est cette table
+qui dit qui entre. Tant qu'elle n'est peuplée que par des scripts, l'affectation d'un auditeur à une
+mission n'existe pas comme geste de produit.
+
+**Pourquoi ce n'est PAS de l'étage 1, et pourquoi L3 ne l'a pas fait au passage.** Cette route n'est
+**pas dans la ligne L3 du fichier 07**, qui est le seul brief du lot. L'ajouter serait du périmètre
+inventé par un agent — précisément ce que le canal d'amélioration existe pour empêcher (09 §5.9 :
+proposer est un devoir, anticiper est une faute). Elle touche en outre au **droit d'accès**, donc à
+la sécurité : `CLAUDE.md` §3-4 l'exclut d'office d'une décision d'autopilote.
+
+**Coût estimé.** ≈ 0,25 j : un dépôt, un service, deux routes (`POST` et `DELETE` d'une affectation),
+leurs schémas Zod, et les tests de rôle qui vont avec.
+
+**Impact schéma : aucun** — la table existe au 04, elle n'est simplement jamais remplie.
+**Impact API** : deux routes nouvelles, à documenter par une entrée `DECISIONS.md` (11 §8-6) puisque
+les §8/§24.2 ne les listent pas.
+
+**Trace** : `DECISIONS.md` 2026-09-01 « Aucune route n'écrit `mission_users` : faut-il en ouvrir
+une ? » — option 2 retenue, arbitrage de Williams attendu à la porte suivante.

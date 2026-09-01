@@ -104,6 +104,7 @@
 // Traçabilité : E21 (auditeurs jamais d'accès aux montants), E33.
 // =============================================================================
 import type { FastifyInstance } from 'fastify';
+import { CHAMPS_FINANCIERS_SURVEILLES, TABLE_FINANCIERE } from '@axion/shared';
 import type { EntreeRegistreAcces } from '../../src/auth/politique.js';
 
 /**
@@ -132,6 +133,82 @@ export const VALEURS_SENTINELLES: readonly string[] = [
   SENTINELLES_FINANCIERES.profilTauxJournalier,
   SENTINELLES_FINANCIERES.tauxJournalier,
 ];
+
+/**
+ * Les NOMS interdits dans une réponse qui n'est pas la route financière : les
+ * colonnes surveillées ET la table, dans leurs deux graphies.
+ *
+ * POURQUOI CETTE LISTE VIT ICI, ET NULLE PART AILLEURS. Un test qui vérifie qu'une
+ * réponse ne NOMME aucun champ financier — même à `null`, même vide — doit citer ces
+ * noms. S'il les RECOPIE, deux choses arrivent : il devient lui-même une infraction à
+ * la ceinture 3 (le balayage des sources lit du texte, il ne sait pas distinguer un
+ * test vertueux d'une jointure), et sa copie dérive au premier champ ajouté au
+ * contrat. La liste est donc DÉRIVÉE de `packages/shared` et exposée par ce
+ * fichier-ci, qui est sur la liste blanche — comme les sondes de
+ * `etancheite-sources.ts`, et pour exactement la même raison.
+ */
+export const NOMS_FINANCIERS_INTERDITS: readonly string[] = [
+  ...CHAMPS_FINANCIERS_SURVEILLES,
+  ...TABLE_FINANCIERE,
+];
+
+/**
+ * Le strict nécessaire d'un client SQL. Déclaré structurellement pour que ce module
+ * n'impose ni `pg`, ni un pool, ni un ordre d'import à ses appelants — et pour qu'il
+ * n'ait AUCUN import applicatif à faire (les tests d'intégration posent
+ * `process.env` avant de charger quoi que ce soit de l'app).
+ */
+export interface ExecuteurSql {
+  query(texte: string, valeurs: readonly unknown[]): Promise<unknown>;
+}
+
+/**
+ * SÈME le volet financier sentinelle d'un cadrage DÉJÀ EXISTANT.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * L'UNIQUE PORTE DE TEST VERS `scoping_financials` — ET POURQUOI ELLE MANQUAIT
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * Ce fichier était sur la liste blanche sans exposer AUCUN moyen de semer : il
+ * donnait les valeurs à chercher, jamais le geste pour les poser. Deux lots (L3b et
+ * L3c) ont donc écrit chacun leur `INSERT` en SQL brut, sans se concerter, et la
+ * ceinture 3 les a dénoncés — à raison : la garantie « une seule porte » vaut ce que
+ * vaut le chemin le plus laxiste, et il y en avait trois.
+ *
+ * La leçon, écrite ici plutôt que redécouverte : un garde-fou qui INTERDIT sans
+ * OFFRIR le chemin légitime ne tient pas. Il se contourne, et le contournement est
+ * de bonne foi. Tout lot qui doit semer des montants appelle cette fonction ;
+ * personne d'autre ne nomme la table.
+ *
+ * CE QU'ELLE NE FAIT PAS : créer le `scoping_estimate`. Le cadrage porte des
+ * colonnes propres à chaque lot (`mission_id` en L3b, `created_by` ou non), il ne
+ * nomme AUCUN champ financier, et son insertion reste donc légitimement chez
+ * l'appelant. Seul le volet financier passe par ici.
+ *
+ * ⚠ Les montants posés sont les SENTINELLES : des leurres de test, jamais un secret
+ * (11 §2).
+ */
+export async function semerVoletFinancierSentinelle(
+  client: ExecuteurSql,
+  cadrageId: string,
+  misAJourPar: string,
+): Promise<void> {
+  await client.query(
+    `INSERT INTO scoping_financials
+       (scoping_estimate_id, daily_rates, travel_costs, total_amount, currency, updated_by)
+     VALUES ($1, $2::jsonb, $3, $4, 'EUR', $5)`,
+    [
+      cadrageId,
+      JSON.stringify({
+        [SENTINELLES_FINANCIERES.profilTauxJournalier]: Number(
+          SENTINELLES_FINANCIERES.tauxJournalier,
+        ),
+      }),
+      SENTINELLES_FINANCIERES.travelCosts,
+      SENTINELLES_FINANCIERES.totalAmount,
+      misAJourPar,
+    ],
+  );
+}
 
 /** Ce qu'est devenu un appel du balayage. */
 export type IssueAppel =

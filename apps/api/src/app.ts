@@ -21,6 +21,7 @@ import { routesSante } from './routes/sante.js';
 import { routesScoping } from './routes/scoping.js';
 import { routesUsers } from './routes/users.js';
 import { routesCompanies } from './routes/companies.js';
+import { routesMissions } from './routes/missions.js';
 
 // =============================================================================
 // PÉRIMÈTRE DE CONFIANCE DES EN-TÊTES DE PROXY — correctif de sécurité.
@@ -206,6 +207,21 @@ export async function construireApp(): Promise<FastifyInstance> {
   // R3, NAF→secteur R4 ») — lot L3/L3a. Les quatre routes sont `admin` seul ; le
   // crochet `onRoute` refuse le démarrage si l'une d'elles perdait `config.acces`.
   await app.register(routesCompanies, { prefix: '/v1' });
+  // Missions (07, table des lots : « API missions/companies » et « machine à états
+  // mission §32.2 ») — lot L3/L3b. CINQ routes déclarées, SEPT enregistrées :
+  // Fastify ajoute d'office les `HEAD` compagnes des deux `GET`, qui héritent de
+  // `config.acces` (le même écart « écrit vs enregistré » que pour les comptes,
+  // relevé plus haut).
+  //
+  // ⚠ ORDRE D'ENREGISTREMENT SANS IMPORTANCE ICI, et il vaut mieux l'écrire :
+  // `/v1/missions/:id/status` et `/v1/missions/:id` ne se recouvrent pas — le
+  // routeur de Fastify est un arbre de segments, pas une liste de motifs essayés
+  // dans l'ordre. Aucune des deux ne peut donc masquer l'autre.
+  //
+  // Toutes sont `admin` seul (03 §34.1, « la console est ADMIN SEUL » en V1) —
+  // moitié « route » de la décision en deux couches du 2026-08-31 sur les rôles de
+  // la machine à états ; l'autre moitié vit dans `TRANSITIONS_MISSION`.
+  await app.register(routesMissions, { prefix: '/v1' });
 
   return app;
 }

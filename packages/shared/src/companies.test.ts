@@ -49,6 +49,12 @@ import type { z } from 'zod';
 // gestionnaire d'erreurs de l'API, plutôt que de compter sur un effet de bord
 // d'import qui reste vrai jusqu'au jour où quelqu'un réorganise les imports.
 import { appliquerLocaleFrancaiseZod } from './errors.js';
+// Les noms de champs financiers viennent du CONTRAT, jamais d'une liste recopiée :
+// une liste recopiée fait de ce fichier une infraction à la ceinture 3
+// (`apps/api/tests/aide/etancheite-sources.ts` balaie le TEXTE des sources et ne
+// distingue pas un test vertueux d'une jointure), et elle vieillit au premier champ
+// ajouté au contrat. C'est le raisonnement déjà écrit dans les sondes du balayage.
+import { CHAMPS_FINANCIERS_SURVEILLES } from './scoping.js';
 import {
   EFFECTIF_MAX,
   LONGUEUR_DIVISION_NAF,
@@ -815,7 +821,7 @@ describe('§E5 — schémas de RÉPONSE : ce que le sérialiseur laisse passer',
     // financière devient une panne visible plutôt qu'un silence.
     expect(donneesValidees(companyResponseSchema, FICHE_VALIDE)).toEqual(FICHE_VALIDE);
 
-    for (const clef of ['totalAmount', 'dailyRates', 'travelCosts', 'deletedAt']) {
+    for (const clef of [...CHAMPS_FINANCIERS_SURVEILLES, 'deletedAt']) {
       const refus = refusDe(companyResponseSchema, { ...FICHE_VALIDE, [clef]: 'x' });
       expect(refus.codes, `champ non déclaré ${clef}`).toContain('unrecognized_keys');
     }
@@ -855,9 +861,15 @@ describe('§E5 — schémas de RÉPONSE : ce que le sérialiseur laisse passer',
     });
     expect(courant.doublonsNomPossibles).toEqual([]);
 
+    // Le contrôle strict porte AUSSI à l'intérieur de `company` : on y glisse TOUS
+    // les champs financiers du contrat — la clé vient de la liste partagée, pas d'un
+    // littéral recopié (voir l'import en tête).
+    const fuiteFinanciere = Object.fromEntries(
+      CHAMPS_FINANCIERS_SURVEILLES.map((champ) => [champ, 'x']),
+    );
     expect(
       refusDe(companyWriteResponseSchema, {
-        company: { ...FICHE_VALIDE, dailyRates: { consultant: 900 } },
+        company: { ...FICHE_VALIDE, ...fuiteFinanciere },
         secteurAQualifier: false,
         doublonsNomPossibles: [],
       }).codes,

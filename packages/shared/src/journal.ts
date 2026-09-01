@@ -44,6 +44,12 @@
 // Traçabilité : E33 (sécurité), E42 (RGPD renforcé : rétention activity_log).
 // =============================================================================
 import { z } from 'zod';
+// Le vocabulaire des statuts vient de la machine à états, jamais d'une seconde
+// liste : une action `mission.status_change` qui accepterait un statut absent du
+// 03 §32.2 écrirait dans la table d'audit un état que le produit ne connaît pas.
+// L'arête est SANS CYCLE À L'EXÉCUTION — `missions.ts` ne prend de ce fichier
+// qu'un `import type`, effacé à la compilation.
+import { STATUTS_MISSION } from './missions.js';
 
 // =============================================================================
 // LE VOCABULAIRE ADMISSIBLE — la ceinture 2
@@ -202,6 +208,17 @@ export const ACTIONS_JOURNAL = [
   //     `companies.deleted_at`, et le catalogue ne nomme que ce qui existe.
   'company.create',
   'company.update',
+  // ── missions (lot L3, incrément L3b) ───────────────────────────────────────
+  // TROIS actions, et la troisième est une EXIGENCE du pack, pas un confort :
+  // 03 §32.2 écrit que les retours arrière sont « tracés `activity_log` ». Sans
+  // `mission.status_change` au catalogue, la porte d'écriture du journal (fermée
+  // par construction) refuserait l'événement et la trace n'existerait pas.
+  //   · pas de `mission.read` : même raison que `company.read` ;
+  //   · pas de `mission.delete` : aucune route de ce lot n'écrit
+  //     `missions.deleted_at`, et le catalogue ne nomme que ce qui existe.
+  'mission.create',
+  'mission.update',
+  'mission.status_change',
 ] as const;
 
 export type ActionJournal = (typeof ACTIONS_JOURNAL)[number];
@@ -212,7 +229,7 @@ export type ActionJournal = (typeof ACTIONS_JOURNAL)[number];
  * entité rendraient toute recherche d'audit incomplète — et une recherche d'audit
  * incomplète ne se voit pas, elle rend simplement moins de lignes.
  */
-export const ENTITES_JOURNAL = ['user', 'scoping_estimate', 'company'] as const;
+export const ENTITES_JOURNAL = ['user', 'scoping_estimate', 'company', 'mission'] as const;
 export type EntiteJournal = (typeof ENTITES_JOURNAL)[number];
 
 /**
@@ -272,6 +289,36 @@ export const CHAMPS_ENTREPRISE_JOURNALISABLES = [
   'sites_count',
   'countries',
   'notes',
+] as const;
+
+/**
+ * Champs d'une mission modifiables par `mission.update` — le NOM de la colonne,
+ * jamais sa valeur. En `snake_case`, comme les deux listes ci-dessus, et pour la
+ * même raison : une ligne d'audit doit se relire dans un `psql` sans traduction.
+ *
+ * ⚠ **`status` N'Y FIGURE PAS, ET C'EST STRUCTUREL.** Le statut ne se modifie pas
+ * par `PATCH` (`updateMissionRequestSchema` refuse la clé) : il a sa propre action,
+ * `mission.status_change`, qui dit d'OÙ l'on venait et où l'on va. L'admettre ici
+ * rendrait exprimable une ligne d'audit disant « le statut a changé » sans dire en
+ * quoi — c'est-à-dire précisément la trace que le §32.2 refuse.
+ * `company_id` n'y figure pas non plus : aucune route ne le modifie après coup.
+ */
+export const CHAMPS_MISSION_JOURNALISABLES = [
+  'title',
+  'parent_mission_id',
+  'geo_scope',
+  'country_code',
+  'size_tier_id',
+  'active_sectors',
+  'active_blocks',
+  'audit_level',
+  'commercial_offer',
+  'timezone',
+  'nda_ref',
+  'nda_signed_at',
+  'llm_provider',
+  'start_planned',
+  'end_planned',
 ] as const;
 
 /** Pourquoi le crochet d'autorisation a refusé (note §2.4 : routes admin et financières). */
@@ -417,6 +464,56 @@ export const evenementJournalSchema = z.discriminatedUnion('action', [
     entrepriseId: z.uuid(),
     /** Les NOMS des colonnes touchées. Jamais l'avant, jamais l'après. */
     champs: z.array(z.enum(CHAMPS_ENTREPRISE_JOURNALISABLES)).min(1),
+  }),
+
+  // ── missions (lot L3, incrément L3b) ───────────────────────────────────────
+  z.strictObject({
+    action: z.literal('mission.create'),
+    utilisateurId: idUtilisateur,
+    missionId: z.uuid(),
+    /** L'entreprise auditée — un identifiant, jamais son nom ni son SIREN. */
+    entrepriseId: z.uuid(),
+    /**
+     * L'unité racine a-t-elle été créée d'office (03 §16.2) ? Toujours `true`
+     * aujourd'hui ; le booléen existe pour que le jour où une création SANS racine
+     * deviendra possible, les lignes d'avant restent lisibles sans deviner.
+     */
+    avecRacine: z.boolean(),
+  }),
+  z.strictObject({
+    action: z.literal('mission.update'),
+    utilisateurId: idUtilisateur,
+    missionId: z.uuid(),
+    /** Les NOMS des colonnes touchées. Jamais l'avant, jamais l'après. */
+    champs: z.array(z.enum(CHAMPS_MISSION_JOURNALISABLES)).min(1),
+  }),
+  z.strictObject({
+    action: z.literal('mission.status_change'),
+    utilisateurId: idUtilisateur,
+    missionId: z.uuid(),
+    /**
+     * D'OÙ et VERS OÙ. Les deux, toujours : « le statut a changé » n'est pas une
+     * trace, et le §32.2 exige que les retours arrière soient tracés — donc
+     * reconnaissables comme tels à la relecture, ce que `sens` rend explicite.
+     */
+    statutAvant: z.enum(STATUTS_MISSION),
+    statutApres: z.enum(STATUTS_MISSION),
+    sens: z.enum(['avant', 'retour']),
+    /** Une dérogation §17.3 a-t-elle RÉELLEMENT porté la décision ? */
+    surcharge: z.boolean(),
+    /**
+     * ⚠ **UN BOOLÉEN, PAS LE MOTIF.** Le §32.2 exige un motif « obligatoire » et
+     * une trace `activity_log` ; `activity_log.meta` est la seule colonne libre du
+     * 04, et la ceinture 2 de ce fichier (`verifierValeursAtomiques`) n'y accepte
+     * que du VOCABULAIRE TECHNIQUE — un motif rédigé en français y serait refusé
+     * en bloc, emportant avec lui `statutAvant` et `statutApres` (voir
+     * `META_REFUSEE`). Le texte du motif n'a donc, à ce jour, AUCUN endroit où se
+     * poser : ni colonne dédiée dans `missions` (04), ni exception à la ceinture.
+     * On enregistre donc QU'IL Y EN A EU UN, on refuse la transition quand il
+     * manque — et on remonte le trou plutôt que de l'enterrer : c'est un candidat
+     * `DECISIONS.md` de l'incrément L3b, pas une décision d'agent.
+     */
+    avecMotif: z.boolean(),
   }),
 ]);
 
@@ -567,6 +664,39 @@ export function versLigneJournal(evenement: EvenementJournal): ContenuLigneJourn
         entityType: 'company',
         entityId: evenement.entrepriseId,
         meta: { champs: [...evenement.champs] },
+      };
+
+    case 'mission.create':
+      return {
+        action: evenement.action,
+        utilisateurId: evenement.utilisateurId,
+        entityType: 'mission',
+        entityId: evenement.missionId,
+        meta: { entreprise_id: evenement.entrepriseId, avec_racine: evenement.avecRacine },
+      };
+
+    case 'mission.update':
+      return {
+        action: evenement.action,
+        utilisateurId: evenement.utilisateurId,
+        entityType: 'mission',
+        entityId: evenement.missionId,
+        meta: { champs: [...evenement.champs] },
+      };
+
+    case 'mission.status_change':
+      return {
+        action: evenement.action,
+        utilisateurId: evenement.utilisateurId,
+        entityType: 'mission',
+        entityId: evenement.missionId,
+        meta: {
+          statut_avant: evenement.statutAvant,
+          statut_apres: evenement.statutApres,
+          sens: evenement.sens,
+          surcharge: evenement.surcharge,
+          avec_motif: evenement.avecMotif,
+        },
       };
   }
 }

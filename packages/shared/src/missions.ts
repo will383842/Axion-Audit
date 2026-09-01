@@ -17,9 +17,13 @@
 // service `apps/api` qui les mesure sur `step_validations`, `mission_questions`
 // et le plan. Un `CHECK` SQL ou un trigger ne le pourrait pas, et ferait vivre la
 // règle métier hors de la couche typée.
-// Traçabilité : E43 (conventions d'API), critère n° 3 du lot L3 (fichier 07 :
+// Traçabilité : E39 (Machine à états mission) · E43 (Exécutabilité autopilote —
+// conventions d'API), critère n° 3 du lot L3 (fichier 07 :
 // « toute transition de statut interdite est rejetée avec motif »).
 // =============================================================================
+import { z } from 'zod';
+import { codePaysSchema } from './companies.js';
+import { fuseauIanaSchema, isoUtcSchema } from './temps.js';
 import type { ROLES_JOURNALISABLES } from './journal.js';
 
 /** Les cinq valeurs de `missions.status` (04, CHECK fermé). Ordre = 03 §32.2. */
@@ -386,3 +390,431 @@ export function evaluerTransitionMission(
   // banalise la dérogation.
   return { ok: true, transition, surchargeUtilisee: false };
 }
+
+// =============================================================================
+// CONTRAT D'API DES MISSIONS — `/v1/missions`. Lot L3, incrément L3b.
+//
+// Tout ce qui précède est la MACHINE À ÉTATS, pure et sans base. Tout ce qui suit
+// est le CONTRAT DE FIL des cinq routes que `docs/conception/LOT_L3.md` §2 nomme :
+//   GET   /v1/missions          ┐
+//   POST  /v1/missions          │ 05 §8.3 (« CRUD /v1/missions »)
+//   GET   /v1/missions/:id      │
+//   PATCH /v1/missions/:id      ┘
+//   POST  /v1/missions/:id/status   05 §8.3 (« transitions contrôlées »)
+//
+// Les deux moitiés vivent dans le MÊME fichier parce qu'elles se lisent ensemble :
+// `missionStatusRequestSchema` n'a de sens qu'en regard de `TRANSITIONS_MISSION`,
+// et la console qui grise un bouton lit les deux dans le même import.
+//
+// ── CE QUE CE CONTRAT REFUSE À L'APPELANT, ET POURQUOI ───────────────────────
+//   · **`status` à la création** : une mission naît en `preparation`, jamais
+//     ailleurs. La table des transitions est une CHAÎNE qui part de `preparation`
+//     (aucune ligne « avant » ne vise `preparation` — seul un retour arrière depuis
+//     `en_cours` y ramène) ; laisser choisir l'état initial permettrait de créer une
+//     mission directement `cloturee`, c'est-à-dire de contourner la machine à états
+//     par sa porte d'entrée. Le §32.2 dit « toute autre = rejetée » : une création
+//     qui saute quatre transitions est exactement cela.
+//   · **`status` dans le `PATCH`** : même raison. Le statut a SA route
+//     (`POST /:id/status`), qui seule mesure les conditions, exige le motif des
+//     retours arrière et écrit la trace `activity_log` que le §32.2 impose. Un
+//     `PATCH {status}` serait un contournement silencieux de tout cela.
+//   · **`id`, `createdAt`, `updatedAt`, `deletedAt`, `createdBy`** : appartiennent
+//     au serveur. Une mission n'est pas une entité créable hors ligne (l'invariant 1
+//     vise la collecte terrain) ; l'UUID v7 est frappé côté serveur (11 §2).
+// Traçabilité : E39 (Machine à états mission) · E24 (Validation obligatoire de
+// chaque étape — les codes d'étape §32.2) · E43 (Exécutabilité autopilote —
+// conventions d'API) · E30 (3 niveaux d'audit) · E32 (Fuseaux, devises,
+// interface française).
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// LES ÉNUMÉRATIONS DU 04, TRANSCRITES POUR LE FIL
+// -----------------------------------------------------------------------------
+//
+// Elles doublent celles de `apps/api/src/db/schema.ts`, comme `STATUTS_MISSION`
+// le fait déjà plus haut, et pour la même raison : `packages/shared` est importé
+// par les DEUX fronts, qui n'ont aucun accès au schéma Drizzle du serveur. La
+// source des deux transcriptions reste le fichier 04 (CHECK fermés de `missions`),
+// et le `schema:diff` de la CI compare le schéma au 04 — jamais l'un à l'autre.
+
+/** `missions.geo_scope` — périmètre COMMERCIAL de la mission (04 · V2.9). */
+export const PERIMETRES_GEO_MISSION = ['france', 'multi_pays'] as const;
+export type PerimetreGeoMission = (typeof PERIMETRES_GEO_MISSION)[number];
+
+/** `missions.audit_level` — 03 §20.1 ; clé du gabarit de rapport (§32.6-3). */
+export const NIVEAUX_AUDIT_MISSION = [
+  'diagnostic_cadrage',
+  'operationnel',
+  'strategique_groupe',
+] as const;
+export type NiveauAuditMission = (typeof NIVEAUX_AUDIT_MISSION)[number];
+
+/** `missions.commercial_offer` — NULL légitime (une mission peut n'être vendue sous aucune offre). */
+export const OFFRES_COMMERCIALES_MISSION = [
+  'audit_flash',
+  'audit_cible',
+  'mission_pme',
+  'mission_eti',
+  'grand_programme',
+] as const;
+export type OffreCommercialeMission = (typeof OFFRES_COMMERCIALES_MISSION)[number];
+
+/** `missions.llm_provider` — DEFAULT 'anthropic' EN BASE (04), jamais dans ce code. */
+export const FOURNISSEURS_LLM_MISSION = ['anthropic', 'ue_hosted'] as const;
+export type FournisseurLlmMission = (typeof FOURNISSEURS_LLM_MISSION)[number];
+
+/** `org_units.kind` — 03 §26.3, jusqu'à `poste` (brief L3 du fichier 07). */
+export const TYPES_UNITE_ORG = [
+  'groupe',
+  'filiale',
+  'etablissement',
+  'direction',
+  'service',
+  'equipe',
+  'poste',
+] as const;
+export type TypeUniteOrg = (typeof TYPES_UNITE_ORG)[number];
+
+/**
+ * L'ÉTAT INITIAL d'une mission. `preparation`, et il n'y a pas de choix à faire :
+ * c'est le seul statut qu'aucune transition « avant » ne vise (voir
+ * `TRANSITIONS_MISSION`), donc le seul point d'entrée possible de la chaîne.
+ */
+export const STATUT_MISSION_INITIAL: StatutMission = 'preparation';
+
+/**
+ * Le `kind` de l'unité racine créée d'office avec la mission (03 §16.2 : « une
+ * racine est créée par défaut »).
+ *
+ * ⚠ **LE PACK NE LE DIT PAS.** `etablissement` est retenu pour deux raisons, et
+ * elles sont écrites parce qu'elles sont discutables : (1) c'est ce que porte la
+ * fixture canonique FIL-TPE livrée au L1 (`apps/api/tests/aide/fil-rouge.ts`,
+ * racine « Établissement unique »), et une valeur par défaut qui contredirait la
+ * fixture de référence serait un piège ; (2) c'est le `kind` qui décrit le cas
+ * MINIMAL du §16.2 (« boulanger 5 personnes → 1 seule unité racine »), là où
+ * `groupe` présumerait d'une structure. La racine par défaut est de toute façon
+ * ABSORBÉE par l'import CSV (LOT_L3.md §3c) et renommable au L3c.
+ * Candidat `DECISIONS.md` — remonté au rapport de l'incrément.
+ */
+export const TYPE_UNITE_RACINE_DEFAUT: TypeUniteOrg = 'etablissement';
+
+// -----------------------------------------------------------------------------
+// BORNES DE SAISIE
+// -----------------------------------------------------------------------------
+//
+// `missions.title` et `nda_ref` sont des `TEXT` sans borne au fichier 04 : les
+// bornes sont donc APPLICATIVES, et elles existent pour la même raison que celles
+// de `companies` — refuser une entrée démesurée AVANT la base, sans jamais refuser
+// une saisie réelle.
+
+export const TITRE_MISSION_LONGUEUR_MAX = 300;
+
+/** Référence du NDA (§20.2/§27.4) : un identifiant de contrat, pas un texte. */
+export const REF_NDA_LONGUEUR_MAX = 128;
+
+/**
+ * Longueur maximale d'un motif de transition. Généreuse : c'est la SEULE phrase
+ * où un administrateur explique pourquoi il rouvre une collecte, et la tronquer
+ * viderait la trace du §32.2 de sa substance.
+ */
+export const MOTIF_TRANSITION_LONGUEUR_MAX = 2000;
+
+/**
+ * Nombre maximal de codes dans `active_sectors` / `active_blocks`. Borne de
+ * VRAISEMBLANCE (8 secteurs et 9 blocs sont seedés), pas une règle métier : elle
+ * écarte un JSONB qui gonflerait sans fin, sans jamais borner le référentiel.
+ */
+export const CODES_ACTIFS_MAX = 100;
+
+/**
+ * Un code de référentiel (`sectors.code`, `blocks.code`) tel qu'il est stocké dans
+ * les JSONB `active_sectors` / `active_blocks` : minuscules, chiffres, tirets bas.
+ * Le seed écrit `services`, `industrie`, `bloc_1` — ce motif les couvre tous.
+ *
+ * ⚠ **CE SCHÉMA NE VÉRIFIE PAS L'EXISTENCE DU CODE.** Aucune contrainte d'intégrité
+ * ne le peut : les deux colonnes sont des JSONB, pas des clés étrangères (04). Un
+ * code inconnu passe donc, et c'est le moteur M2 (L3d) qui le rendra visible en ne
+ * trouvant aucune question. Le refuser ici exigerait de lire les référentiels
+ * depuis un paquet partagé qui n'a pas de base — le contrat le dit plutôt que de
+ * laisser croire à une garantie qu'il n'offre pas.
+ */
+export const codeReferentielSchema = z
+  .string()
+  .trim()
+  .pipe(
+    z
+      .string()
+      .regex(
+        /^[a-z0-9_]{1,64}$/,
+        'Un code de référentiel ne contient que des minuscules, des chiffres et des tirets bas.',
+      ),
+  );
+
+/**
+ * Une date CIVILE (`DATE` au fichier 04 : `nda_signed_at`, `start_planned`,
+ * `end_planned`), au format `AAAA-MM-JJ`.
+ *
+ * ⚠ CE N'EST PAS UN HORODATAGE, et les confondre serait une faute de fuseau. Une
+ * date de signature de NDA ou de début planifié n'a pas d'heure : la porter en
+ * ISO 8601 UTC la ferait basculer d'un jour à l'affichage au fuseau de mission
+ * (§22.2) pour tout fuseau à l'ouest de Greenwich. Le 04 écrit `DATE`, l'API rend
+ * une date, et le pilote PostgreSQL la transporte telle quelle.
+ */
+export const dateCivileSchema = z.iso.date();
+
+const titreMissionSchema = z
+  .string()
+  .trim()
+  .pipe(z.string().min(1).max(TITRE_MISSION_LONGUEUR_MAX));
+
+const refNdaSchema = z.string().trim().pipe(z.string().min(1).max(REF_NDA_LONGUEUR_MAX));
+
+/**
+ * Les codes tels qu'ils sont RELUS depuis les JSONB `active_sectors` /
+ * `active_blocks`.
+ *
+ * Volontairement plus TOLÉRANT que `codeReferentielSchema` : il n'exige qu'un
+ * tableau de chaînes. Une ligne écrite avant ce lot (le seed, une fixture, un
+ * import) ne doit pas rendre la mission illisible — un contrat de LECTURE strict
+ * transformerait une donnée historique en panne 500 sur une route de consultation.
+ * L'écriture, elle, reste stricte : c'est là que la forme se décide. Même geste, et
+ * mêmes mots, que `codesPaysStockesSchema`.
+ */
+export const codesReferentielStockesSchema = z.array(z.string());
+
+// -----------------------------------------------------------------------------
+// PARAMÈTRE D'URL
+// -----------------------------------------------------------------------------
+
+/** `:id` des trois routes qui visent UNE mission. */
+export const missionParamsSchema = z.strictObject({
+  id: z.uuid(),
+});
+
+export type MissionParams = z.infer<typeof missionParamsSchema>;
+
+// -----------------------------------------------------------------------------
+// SORTIE — la seule forme sous laquelle une mission sort de l'API
+// -----------------------------------------------------------------------------
+
+/**
+ * La mission, telle qu'elle est rendue. `strictObject` : une clé non déclarée est
+ * REFUSÉE, pas ignorée — le sérialiseur repasse la réponse par ce schéma.
+ *
+ * **`deletedAt` n'y figure pas** : aucune route de ce lot ne rend une mission
+ * supprimée (toutes les lectures filtrent `deleted_at IS NULL`), le champ ne
+ * porterait donc jamais que `null`. Même raisonnement, et mêmes mots, que
+ * `companyResponseSchema`.
+ *
+ * **Aucun champ financier** : `scoping_financials` est réservé à ses routes admin
+ * dédiées (invariant 3), et rien de cette table ne transite ici.
+ */
+export const missionResponseSchema = z.strictObject({
+  id: z.uuid(),
+  companyId: z.uuid(),
+  /** §32.3 — consolidation groupe : la mission mère référence ses filles. */
+  parentMissionId: z.uuid().nullable(),
+  title: z.string().min(1).max(TITRE_MISSION_LONGUEUR_MAX),
+  geoScope: z.enum(PERIMETRES_GEO_MISSION),
+  /** V2.9 — une fille de déclinaison garde `multi_pays` ET porte son pays. */
+  countryCode: z.string().nullable(),
+  sizeTierId: z.uuid().nullable(),
+  activeSectors: z.array(z.string()),
+  activeBlocks: z.array(z.string()),
+  auditLevel: z.enum(NIVEAUX_AUDIT_MISSION),
+  commercialOffer: z.enum(OFFRES_COMMERCIALES_MISSION).nullable(),
+  /** §22.2 — le fuseau de la mission, hérité par les unités qui n'en portent pas. */
+  timezone: z.string().min(1),
+  ndaRef: z.string().nullable(),
+  ndaSignedAt: dateCivileSchema.nullable(),
+  /** Le PIVOT du §32.2. Ne se modifie que par `POST /v1/missions/:id/status`. */
+  status: z.enum(STATUTS_MISSION),
+  llmProvider: z.enum(FOURNISSEURS_LLM_MISSION),
+  startPlanned: dateCivileSchema.nullable(),
+  endPlanned: dateCivileSchema.nullable(),
+  /** Posé à la PREMIÈRE entrée en `livree`, jamais effacé (invariant 7). */
+  deliveredAt: isoUtcSchema.nullable(),
+  createdBy: z.uuid().nullable(),
+  createdAt: isoUtcSchema,
+  updatedAt: isoUtcSchema,
+});
+
+export type MissionResponse = z.infer<typeof missionResponseSchema>;
+
+/**
+ * La réponse de `POST /v1/missions` — la mission ET l'identifiant de l'unité
+ * racine créée d'office (03 §16.2 : « une racine est créée par défaut »).
+ *
+ * ── POURQUOI L'IDENTIFIANT SEUL, ET PAS L'UNITÉ ENTIÈRE ─────────────────────
+ * Le contrat de fil des `org_units` appartient à l'incrément L3c, qui n'est pas
+ * écrit. Rendre ici une forme d'unité obligerait L3c soit à la reprendre telle
+ * quelle — donc à hériter d'un contrat décidé sans lui — soit à en publier une
+ * seconde, et l'API aurait alors DEUX formes d'unité. L'identifiant suffit à
+ * l'appelant : il lui permet de renommer la racine dès que L3c expose
+ * `PATCH /v1/org-units/:id`.
+ */
+export const missionCreationResponseSchema = z.strictObject({
+  mission: missionResponseSchema,
+  uniteRacineId: z.uuid(),
+});
+
+export type MissionCreationResponse = z.infer<typeof missionCreationResponseSchema>;
+
+/**
+ * La réponse de `POST /v1/missions/:id/status` — la mission après coup, ET ce que
+ * la transition a été.
+ *
+ * `depuis` est rendu parce que l'appelant ne l'avait pas forcément : la console a
+ * pu afficher un statut périmé, et ne lui renvoyer que le nouvel état la laisserait
+ * ignorer d'où l'on venait — donc incapable de dire à l'utilisateur ce qui vient de
+ * se passer. `surchargeUtilisee` dit si une dérogation §17.3 a RÉELLEMENT porté la
+ * décision (voir `ResultatTransitionMission`, plus haut dans ce fichier).
+ */
+export const missionStatusResponseSchema = z.strictObject({
+  mission: missionResponseSchema,
+  depuis: z.enum(STATUTS_MISSION),
+  vers: z.enum(STATUTS_MISSION),
+  sens: z.enum(['avant', 'retour']),
+  surchargeUtilisee: z.boolean(),
+});
+
+export type MissionStatusResponse = z.infer<typeof missionStatusResponseSchema>;
+
+// -----------------------------------------------------------------------------
+// ENTRÉES
+// -----------------------------------------------------------------------------
+
+/**
+ * `POST /v1/missions` — création.
+ *
+ * ── LES DEUX CHAMPS SANS VALEUR PAR DÉFAUT ICI, ET C'EST VOULU ──────────────
+ * `timezone` et `llmProvider` sont OPTIONNELS **sans défaut dans ce schéma**. Le
+ * fichier 04 leur en donne un EN BASE (`DEFAULT 'Europe/Paris'`,
+ * `DEFAULT 'anthropic'`) ; le recopier ici en ferait une seconde source de vérité,
+ * qu'un jour on oublierait de tenir à jour — et surtout, `Europe/Paris` dans une
+ * constante TypeScript est exactement le genre de valeur « qui varie par mission »
+ * que l'invariant 2 refuse de voir en dur. Quand l'appelant se tait, le dépôt
+ * N'ÉCRIT PAS la colonne et PostgreSQL applique le défaut du 04.
+ */
+export const createMissionRequestSchema = z.strictObject({
+  companyId: z.uuid(),
+  parentMissionId: z.uuid().nullable().default(null),
+  title: titreMissionSchema,
+  geoScope: z.enum(PERIMETRES_GEO_MISSION),
+  countryCode: codePaysSchema.nullable().default(null),
+  sizeTierId: z.uuid().nullable().default(null),
+  activeSectors: z.array(codeReferentielSchema).max(CODES_ACTIFS_MAX).default([]),
+  activeBlocks: z.array(codeReferentielSchema).max(CODES_ACTIFS_MAX).default([]),
+  auditLevel: z.enum(NIVEAUX_AUDIT_MISSION),
+  commercialOffer: z.enum(OFFRES_COMMERCIALES_MISSION).nullable().default(null),
+  timezone: fuseauIanaSchema.optional(),
+  ndaRef: refNdaSchema.nullable().default(null),
+  ndaSignedAt: dateCivileSchema.nullable().default(null),
+  llmProvider: z.enum(FOURNISSEURS_LLM_MISSION).optional(),
+  startPlanned: dateCivileSchema.nullable().default(null),
+  endPlanned: dateCivileSchema.nullable().default(null),
+});
+
+export type CreateMissionRequest = z.infer<typeof createMissionRequestSchema>;
+
+/**
+ * `PATCH /v1/missions/:id` — modification.
+ *
+ * `undefined` = « ne touche pas » · `null` = « efface ». Les confondre rendrait
+ * impossible de retirer une référence de NDA saisie par erreur — et l'invariant 7
+ * (« toute correction est une révision tracée ») suppose que la correction soit
+ * possible par l'API.
+ *
+ * **`status` est ABSENT de cette liste, et c'est la garantie centrale de ce lot** :
+ * `strictObject` REFUSE une clé non déclarée, donc `PATCH {status}` sort en 400
+ * sans jamais atteindre le service. La machine à états n'a ainsi qu'une seule
+ * porte, `POST /:id/status` — celle qui mesure les conditions, exige le motif des
+ * retours arrière et écrit la trace du §32.2.
+ *
+ * **`companyId` est absent aussi** : rattacher une mission à une AUTRE entreprise
+ * après coup invaliderait tout ce qui en dépend (arbre, questionnaire figé,
+ * scoring) sans qu'aucune section du pack ne dise ce qu'il faudrait en faire.
+ */
+export const updateMissionRequestSchema = z
+  .strictObject({
+    parentMissionId: z.uuid().nullable().optional(),
+    title: titreMissionSchema.optional(),
+    geoScope: z.enum(PERIMETRES_GEO_MISSION).optional(),
+    countryCode: codePaysSchema.nullable().optional(),
+    sizeTierId: z.uuid().nullable().optional(),
+    activeSectors: z.array(codeReferentielSchema).max(CODES_ACTIFS_MAX).optional(),
+    activeBlocks: z.array(codeReferentielSchema).max(CODES_ACTIFS_MAX).optional(),
+    auditLevel: z.enum(NIVEAUX_AUDIT_MISSION).optional(),
+    commercialOffer: z.enum(OFFRES_COMMERCIALES_MISSION).nullable().optional(),
+    timezone: fuseauIanaSchema.optional(),
+    ndaRef: refNdaSchema.nullable().optional(),
+    ndaSignedAt: dateCivileSchema.nullable().optional(),
+    llmProvider: z.enum(FOURNISSEURS_LLM_MISSION).optional(),
+    startPlanned: dateCivileSchema.nullable().optional(),
+    endPlanned: dateCivileSchema.nullable().optional(),
+  })
+  .refine((corps) => Object.keys(corps).length > 0, {
+    message: 'Indiquez au moins un champ à modifier.',
+  });
+
+export type UpdateMissionRequest = z.infer<typeof updateMissionRequestSchema>;
+
+/**
+ * `POST /v1/missions/:id/status` — LA porte de la machine à états.
+ *
+ * Le vocabulaire est celui de `DemandeTransitionMission`, plus haut dans ce même
+ * fichier : `vers`, `motif`, `surcharge`. Écrire `newStatus` ici obligerait à
+ * traduire d'un bout à l'autre du chemin, et une traduction est un endroit où l'on
+ * se trompe. `depuis` n'est PAS demandé : il est LU sous verrou sur la ligne, parce
+ * qu'un `depuis` fourni par l'appelant serait une supposition que la base pourrait
+ * démentir entre l'affichage de l'écran et le clic.
+ *
+ * `motif` est déclaré optionnel ICI et exigé PAR LA TABLE : sa nécessité dépend de
+ * la transition visée (obligatoire sur les trois retours arrière, obligatoire aussi
+ * dès qu'une surcharge §17.3 est mobilisée). Zod ne peut pas trancher cela sans
+ * connaître l'état courant de la mission — c'est donc le service qui refuse.
+ */
+export const missionStatusRequestSchema = z.strictObject({
+  vers: z.enum(STATUTS_MISSION),
+  motif: z.string().trim().pipe(z.string().min(1).max(MOTIF_TRANSITION_LONGUEUR_MAX)).optional(),
+  /**
+   * L'admin demande-t-il explicitement de FORCER (03 §17.3) ? Jamais implicite :
+   * une transition ne se force pas « parce qu'on est admin ». Défaut `false`.
+   */
+  surcharge: z.boolean().default(false),
+});
+
+export type MissionStatusRequest = z.infer<typeof missionStatusRequestSchema>;
+
+// =============================================================================
+// LIBELLÉS FRANÇAIS DES ÉTATS — DONNÉE PARTAGÉE, PAS CHAÎNE RECOPIÉE
+// =============================================================================
+// Ce dictionnaire vivait dans `apps/api/src/domaines/missions/service.ts`, où il
+// est né avec le message de refus de transition. Il est monté ici le 2026-09-01
+// sur constat du testeur A16 (`DECISIONS.md`, « Où vivent les libellés français
+// des états de mission ? »).
+//
+// LE MOTIF, ET IL N'EST PAS COSMÉTIQUE. La console (L7) affichera ces mêmes
+// états. Si le libellé reste côté API, elle en écrira une seconde version — et
+// le jour où les deux diffèrent, c'est l'auditeur qui lit deux mots pour une
+// seule chose, sans que rien ne signale la dérive. C'est le raisonnement déjà
+// tenu pour `TRANSITIONS_MISSION` : une donnée partagée, jamais un `if` recopié.
+// Le 11 §3 impose que « le front importe LES MÊMES schémas » ; un libellé d'état
+// est du même ordre.
+//
+// C'est un DICTIONNAIRE D'AFFICHAGE : il ne dit rien de ce qui est permis, il
+// traduit un identifiant technique en français (invariant 5). Écrire « la
+// transition preparation → en_cours est refusée » exposerait le vocabulaire de la
+// base ; le §32.2 lui-même parle de « Préparation » et de « Collecte ».
+//
+// `Record<StatutMission, string>` est EXHAUSTIF PAR LE TYPE : ajouter un sixième
+// statut au 04 ne compilera plus tant que son libellé manque. C'est le garde-fou
+// qui remplace la vigilance.
+// =============================================================================
+export const LIBELLES_STATUT_MISSION: Record<StatutMission, string> = {
+  preparation: 'préparation',
+  en_cours: 'collecte en cours',
+  en_analyse: 'analyse',
+  livree: 'livrée',
+  cloturee: 'clôturée',
+};

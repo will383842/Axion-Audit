@@ -5883,3 +5883,454 @@ fichier : `GET /v1/users` est le premier, `GET /v1/companies` le second.
 
 Décideur : Williams (séquence) · A01 (base technique de la branche)
 Impact spec : aucun. Amendement horodaté d'aucun fichier du pack.
+
+## 2026-09-01 — [L3d] La date de figeage du questionnaire n'existe pas en base
+
+L'arbitrage du 2026-08-29 exige qu'un refus de re-figeage porte « le compte ET la date ». Or
+`mission_questions` (04) n'a **aucune colonne temporelle**, et le 04 est inviolable hors révision de
+spec P-D (11 §8).
+
+Options :
+
+1. Lire la date dans `activity_log`, qui trace déjà l'acte de figeage.
+2. Amender le 04 d'une colonne de date de figeage — signature de Williams obligatoire.
+3. Rendre un 409 sans date, contre l'arbitrage du 2026-08-29.
+
+Arbitrage : **option 1.** Le message reste complet et le 04 reste intact. Le coût est une jointure sur
+`activity_log` au moment du refus — un chemin froid, jamais un chemin chaud. L'option 3 est écartée :
+un arbitrage antérieur ne se défait pas par commodité d'implémentation. **Règle de précédence sans
+objet** (aucune divergence interne au pack ; le 04 ne dit rien, il ne contredit rien).
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-01 — [L3d] Aucune route n'écrit `mission_users` : faut-il en ouvrir une ?
+
+`/v1/missions/:id/assignments` écrit `work_assignments` (03 §18.2 nomme la table). Conséquence
+mesurée par A10 : **le cadrage RBAC par mission n'est alimenté par aucune route**, et n'est donc
+testable qu'en SQL direct.
+
+Options :
+
+1. Ouvrir une écriture de `mission_users` dans L3d (+0,25 j).
+2. Ne pas l'ouvrir ; fiche `AMELIORATIONS.md`, arbitrage à la porte suivante.
+
+Arbitrage : **option 2.** Cette route n'est **pas dans la ligne L3 du fichier 07**, qui est le seul
+brief du lot. L'ajouter serait du périmètre inventé par un agent — exactement ce que le canal
+d'amélioration étage 2 existe pour empêcher (09 §5.9 : proposer est un devoir, anticiper est une
+faute). **Règle de précédence sans objet.**
+
+Décideur : A01 — **à arbitrer par Williams à la porte suivante**
+Impact spec : aucun. Fiche ouverte dans `AMELIORATIONS.md`.
+
+## 2026-09-01 — [L3d] Le profil de l'interlocuteur est absent du 04
+
+Le plan d'entretiens est spécifié « par unité **et par profil** » (03 §17.3, §18.1.2). La colonne qui
+porterait le profil de l'interlocuteur n'existe pas dans `interviews` au 04.
+
+Options :
+
+1. Générer le plan **listé** par unité, sans chiffrage par profil.
+2. Amender le 04 — signature de Williams.
+3. Chiffrer par profil en le déduisant d'une autre colonne.
+
+Arbitrage : **option 1.** L'option 3 inventerait une donnée que personne n'a saisie : un chiffre faux
+est pire qu'un chiffre absent, et il ne se signale pas. Le critère du 07 (« plan d'entretiens généré
+conforme aux n minimaux §32.4 ») reste tenu. **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun. La limite est écrite dans `docs/conception/LOT_L3D_BRIEF.md`.
+
+## 2026-09-01 — [L3d] L'ordre des questions dans un bloc n'est spécifié nulle part
+
+M2 §2 dit « ordre dans le bloc ». La table `questions` (04) n'a **aucune colonne de position**. Sans
+règle, deux générations du même questionnaire peuvent rendre deux ordres différents — et le figeage
+capturerait l'un des deux au hasard.
+
+Options :
+
+1. Trier par position du bloc, puis code (les codes absents en dernier), puis identifiant —
+   déterministe, sans colonne nouvelle.
+2. Ajouter une colonne de position sur `questions` au 04 — signature de Williams.
+3. Laisser l'ordre au SGBD.
+
+Arbitrage : **option 1.** L'option 3 est refusée sans discussion : un ordre non déterministe dans une
+capture figée est une dérive silencieuse, la famille de défauts que ce dépôt démonte depuis L0.
+**Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-01 — [L3b] Quel code HTTP pour un motif de transition manquant ?
+
+Le §32.2 impose un motif sur les 3 retours arrière. Le pack ne dit pas ce que rend un appel qui l'omet.
+
+Options :
+
+1. `400 VALIDATION_FAILED` — un champ requis manque, c'est une faute de forme.
+2. `409 ILLEGAL_STATE_TRANSITION` — la transition n'est pas permise dans cet état d'appel.
+
+Arbitrage : **option 2**, comme y penche `docs/conception/LOT_L3.md` §3.b. Le motif n'est pas un champ
+de forme : il **conditionne l'autorisation** de la transition, au même titre que le rôle. Un 400
+dirait au front « ta requête est mal écrite » quand la vérité est « cette transition-là exige que tu
+dises pourquoi ». **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-01 — [L3b] Sens de tri de la liste des missions
+
+Le curseur keyset est la paire date de création / identifiant ; le pack ne dit pas si la page se lit
+du plus récent au plus ancien ou l'inverse.
+
+Options :
+
+1. Décroissant — la mission la plus récente en tête.
+2. Croissant — l'ordre de création.
+
+Arbitrage : **option 1.** L'écran qui consomme cette route est le portefeuille du siège (03 §18) : on
+y cherche ce qui vit, pas ce qui a commencé. **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-01 — [L3b] Qui pose la date de livraison, et qu'advient-il au retour arrière ?
+
+Le contrat partagé documente une date de livraison « posée à la PREMIÈRE entrée en `livree` ». Aucune
+section du pack ne la relie à la transition, et rien ne dit ce qu'elle devient quand un admin fait
+revenir la mission de `livree` à `en_analyse`.
+
+Options :
+
+1. Posée à la première entrée en `livree`, **jamais effacée** par un retour arrière.
+2. Posée à chaque entrée en `livree` (écrasée).
+3. Effacée au retour arrière.
+
+Arbitrage : **option 1**, et c'est l'**invariant 7** qui tranche, pas une préférence : « rien n'est
+jamais silencieusement écrasé ou supprimé ». Une date de livraison effacée par un retour arrière
+ferait disparaître le fait qu'une livraison a eu lieu. **Précédence : invariant 7 du `CLAUDE.md` §1,
+qui prime sur le silence du pack.**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-01 — [L3b] Le type et le nom de l'unité racine créée d'office
+
+03 §16.2 dit « une racine est créée par défaut » sans dire de quel type ni sous quel nom.
+
+Options :
+
+1. Type `etablissement`, nom = celui de l'entreprise auditée.
+2. Type `groupe` — le sommet de l'énumération du 04.
+3. Laisser l'auditeur choisir à la création.
+
+Arbitrage : **option 1.** `groupe` présumerait une structure de groupe pour une TPE qui n'en a pas ;
+`etablissement` est vrai d'une TPE comme d'une filiale de grand compte, et c'est le seul niveau de
+l'énumération qui ne suppose rien. Le nom vient de la **donnée de mission** (l'entreprise), jamais
+d'une constante — invariant 2. L'option 3 ajouterait un champ obligatoire à la création d'une mission,
+donc du frottement, pour un choix que l'auditeur peut corriger ensuite. **Règle de précédence sans
+objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-01 — [L3b] OU VIT LE TEXTE DU MOTIF D'UN RETOUR ARRIÈRE — ESCALADE
+
+Le §32.2 exige un motif sur les 3 retours arrière ET sa trace dans `activity_log`. Or le contrat du
+journal (64 caractères, alphabet restreint, ni espace ni arobase) **interdit d'y écrire une phrase
+libre** — c'est un emplacement à CODE, pas à texte. Et aucune table de révision ne couvre `missions`.
+**Le motif exigé par la spec n'a aujourd'hui aucun endroit où être conservé.**
+
+Options :
+
+1. Amender le 04 : une colonne de motif sur `missions`, ou une table de révision des transitions.
+2. Élargir le champ du journal au texte libre — **fait sauter une garantie de redaction**, puisque ce
+   champ deviendrait un endroit où une donnée personnelle peut être écrite à la main.
+3. Ne conserver qu'un motif **codé** (vocabulaire fermé), et perdre le texte libre.
+4. Exiger le motif à l'appel, le valider, et ne pas le conserver — la spec est alors tenue à moitié.
+
+Arbitrage : **AUCUN — escalade à Williams.** Les options 1 et 2 touchent l'une le schéma 04, l'autre
+la politique de redaction : `CLAUDE.md` §3 interdit à l'autopilote de décider seul dans les deux cas.
+L'option 4 est ce que le code fait **aujourd'hui par défaut**, et elle ne peut pas rester : un motif
+exigé puis jeté est un garde-fou qui annonce plus qu'il ne fait. Recommandation : **option 3** si l'on
+veut rester dans le 04 actuel, **option 1** si le texte libre a une vraie valeur d'audit.
+**Règle de précédence sans objet** (le pack ne se contredit pas : il est muet sur le lieu de stockage).
+
+Décideur : **Williams — EN ATTENTE**
+Impact spec : à déterminer par l'arbitrage. Amendement du 04 possible.
+
+## 2026-09-01 — [L3c] Par quel transport le CSV de l'arbre arrive-t-il ?
+
+Le §35.2 normalise le CONTENU du fichier et se tait sur son acheminement.
+
+Options :
+
+1. `application/json`, corps `{ csv: "<contenu>" }`.
+2. `multipart/form-data` — **exige `@fastify/multipart`, qui n'est pas installé**.
+3. Corps brut `text/csv`.
+
+Arbitrage : **option 1.** L'option 2 ajouterait une dépendance hors de la liste épinglée du 11 §1, ce
+que `CLAUDE.md` §3-1 interdit à l'autopilote. L'option 3 se heurte au 11 §3 : « chaque route déclare
+son schéma Zod in/out » — un corps brut n'a pas de schéma. **Conséquence assumée, écrite plutôt que
+tue** : un fichier mal encodé (latin-1, octets invalides) ne peut pas arriver jusqu'à la route, donc
+son rejet n'est ni implémenté ni testé. Le jour où un auditeur téléversera un export Excel en
+latin-1, ce sera le navigateur qui décidera, pas nous. **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun. La limite d'encodage est notée dans `AMELIORATIONS.md` si elle mord.
+
+## 2026-09-01 — [L3c] Comment les lignes sont-elles numérotées dans le rapport d'erreurs ?
+
+Le critère du 07 exige un « rapport d'erreurs » ; ni le §35.2 ni le 04 ne disent si la ligne 1 est
+l'en-tête ou le premier enregistrement.
+
+Options :
+
+1. Numérotation **tableur** : l'en-tête est la ligne 1, le premier enregistrement la ligne 2.
+2. Index d'enregistrement : le premier enregistrement est la ligne 1.
+
+Arbitrage : **option 1**, sur le précédent maison explicite de l'import de la banque de questions
+(« le numéro attendu est celui du TABLEUR »). La raison est terrain : la personne qui lit le rapport
+a le fichier ouvert dans un tableur, et c'est ce numéro-là qu'elle cherche. **Deux imports du même
+produit qui numéroteraient différemment seraient un défaut à eux seuls. Règle de précédence sans
+objet.**
+
+Décideur : A01
+Impact spec : aucun. À réappliquer tel quel au lot L9.
+
+## 2026-09-01 — [L3c] Une colonne inconnue dans l'en-tête : tolérée ou refusée ?
+
+Le §35.2 dit « en-têtes OBLIGATOIRES » sans dire si la liste est exhaustive.
+
+Options :
+
+1. Les 9 colonnes doivent être présentes ; **toute colonne inconnue fait refuser le fichier**, en la
+   nommant.
+2. Les colonnes inconnues sont ignorées en silence.
+
+Arbitrage : **option 1.** L'option 2 transforme une **faute de frappe dans un en-tête** en perte de
+données silencieuse : `headcont` au lieu de `headcount` et l'effectif de tout l'arbre disparaît sans
+que rien ne le dise. C'est exactement la famille de défauts que ce dépôt démonte depuis L0 — le
+garde-fou qui laisse passer en ayant l'air de contrôler. Le coût est une ligne de rapport, le prix de
+l'erreur est un arbre faux. **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-01 — [L3c] Que fait l'import d'une ligne vide ?
+
+Le §35.2 ne dit rien. Un export de tableur en produit couramment en fin de fichier.
+
+Options :
+
+1. Ignorée, et **comptée dans le rapport** (« n lignes vides ignorées »).
+2. Refusée avec son numéro de ligne.
+
+Arbitrage : **option 1.** Refuser un fichier parce qu'un tableur a laissé une ligne blanche à la fin
+serait un refus que l'auditeur ne comprendrait pas, sur un défaut qui n'en est pas un. Mais l'ignorer
+**en silence** serait l'autre faute : le rapport dit toujours combien ont été sautées, de sorte qu'un
+fichier à 100 lignes dont 40 sont vides se voie. **Dans les deux options, l'invariant tenu est le
+même et c'est lui qui compte : jamais d'unité fantôme. Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-01 — [L3c] Qui accède aux routes `org_units` de la console en V1 ?
+
+Deux phrases du même fichier 03 se lisent différemment. §34.3 donne au lead le pouvoir de qualifier
+les unités proposées (§25.3). §34.1 écrit « la console est **ADMIN SEUL** » et « le lead y entre en
+**Phase 2** ».
+
+Options :
+
+1. **Admin seul** en V1, sur les 7 routes, lecture comprise. Le pouvoir du lead décrit au §34.3
+   s'exerce en Phase 2, quand son interface existera.
+2. Ouvrir `validate` et `merge` au lead dès la V1.
+
+Arbitrage : **option 1.** §34.1 tranche le PÉRIMÈTRE de la V1 ; §34.3 décrit une RÉPARTITION DE
+POUVOIRS qui n'a pas encore d'interface pour s'exercer — le pack ne dit nulle part par quel écran le
+lead ferait ce geste en V1. Ouvrir un droit sans l'écran qui le porte, c'est ouvrir une surface
+d'attaque pour une fonctionnalité qui n'existe pas. Le consultant membre lit l'arbre de sa mission
+**par le pull de sync (05 §9.5)**, pas par cette route : il n'est donc pas privé de la donnée.
+**Règle de précédence sans objet** (les deux phrases ne se contredisent pas : l'une borne la V1,
+l'autre décrit un rôle).
+
+Décideur : A01 — **à confirmer par Williams s'il veut le lead en V1**
+Impact spec : aucun.
+
+## 2026-09-01 — [L3c] Le nom du champ qui porte la cible d'une fusion
+
+§25.3 décrit la fusion d'une unité proposée dans une unité existante. Le nom du champ de la requête
+n'est nulle part.
+
+Options :
+
+1. `mergedIntoId` — le camelCase de la colonne `org_units.merged_into_id` du 04.
+2. `targetId`.
+
+Arbitrage : **option 1.** Le 11 §3 fixe la règle sans exception : `snake_case` en base ↔ `camelCase`
+en TS, jamais de mélange. `targetId` inventerait un troisième vocabulaire pour désigner la même
+chose, et c'est ainsi qu'une API devient illisible. **Précédence : 11 §3 (convention de nommage).**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-01 — [L3c] Existe-t-il un ordre imposé entre les 7 types d'unité ?
+
+Un `poste` peut-il porter un `service` ? Ni le §35.2, ni le §26.3, ni le 04 ne définissent d'ordre
+entre `groupe · filiale · etablissement · direction · service · equipe · poste`.
+
+Options :
+
+1. **Aucun ordre imposé** : l'arbre est libre, seule la cohérence structurelle (pas de cycle, parent
+   dans la même mission) est contrôlée.
+2. Imposer l'ordre de l'énumération.
+
+Arbitrage : **option 1.** L'option 2 inventerait une règle que le pack ne porte pas, et elle
+refuserait des arbres légitimes : une direction rattachée à un établissement d'un groupe est
+ordinaire, une équipe directement sous un groupe l'est aussi dans une TPE. **Un contrôle inventé qui
+refuse du vrai coûte plus cher qu'un contrôle absent.** Le testeur a explicitement refusé de deviner
+ici, et il a eu raison. **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-01 — [L3c] Quel statut HTTP rend un import réussi ?
+
+Options :
+
+1. **200**, avec le rapport en corps.
+2. 201, comme une création.
+
+Arbitrage : **option 1.** Un 201 engage un en-tête `Location` vers **la** ressource créée ; un import
+en crée n cent, et ce qu'il rend n'est pas une ressource mais un **rapport**. Le mode à blanc
+(`?verification=true`) rend le même rapport sans rien écrire : un statut unique garde les deux modes
+symétriques pour l'appelant, qui sait de toute façon lequel il a demandé, puisqu'il a posé le
+paramètre. **Aucun précédent maison ne s'y oppose : l'import de la banque de questions est un
+script, pas une route. Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun. À figer pour tout import du produit.
+
+## 2026-09-01 — [L3c] Un non-membre reçoit-il 403 ou 404 ?
+
+C'est une décision de **divulgation d'existence** : un 403 confirme que la mission existe, un 404 ne
+dit rien.
+
+Options :
+
+1. **403**, le refus du crochet RBAC, qui s'exécute avant tout accès au dépôt.
+2. 404, qui masque l'existence de la ressource.
+
+Arbitrage : **option 1**, et le motif est mécanique autant que doctrinal : les routes `org_units` de
+la console sont **admin seul** en V1 (décision du même jour). Le refus est donc prononcé par le
+crochet d'autorisation, sur le RÔLE, **avant que la moindre requête ne touche la mission** — le
+serveur ne sait pas encore si elle existe, il ne peut donc rien en divulguer. Le 404 supposerait de
+lire la ressource pour décider de la cacher, ce qui est l'inverse du but. **Précédence : invariant 3
+(RBAC serveur systématique).**
+
+Décideur : A01
+Impact spec : aucun. À réexaminer si des routes non-admin s'ouvrent en Phase 2.
+
+## 2026-09-01 — [L3c] Que devient la racine créée d'office lors du premier import CSV ?
+
+Toute mission naît avec une unité racine (03 §16.2). Le premier import apporte un arbre qui a sa
+propre racine. La note de conception invente une « absorption » que le §35.2 ne décrit pas.
+
+Options :
+
+1. **Refuser tout ré-import sur un arbre non vide** (409), et ne rien inventer sur l'absorption.
+2. Absorber la racine par défaut dans la racine du fichier.
+3. Vider l'arbre puis importer.
+
+Arbitrage : **option 1.** L'option 3 est écartée par l'**invariant 7** : rien n'est jamais
+silencieusement supprimé. L'option 2 demanderait de décider ce qu'on fait des unités déjà rattachées
+à la racine par défaut, ce que le pack ne dit pas — et une règle inventée sur le rattachement d'un
+arbre organisationnel est une règle qui produira des arbres faux sans le dire. **La moitié dure est
+donc seule retenue : import refusé si l'arbre porte autre chose que sa racine d'office, arbre
+inchangé au bit près.** L'absorption reste ouverte, à spécifier avant que le terrain ne la rencontre.
+**Précédence : invariant 7 du `CLAUDE.md` §1.**
+
+Décideur : A01 — l'absorption reste **à spécifier**, fiche à ouvrir si le terrain la réclame
+Impact spec : aucun. Le §35.2 gagnerait à trancher l'absorption.
+
+## 2026-09-01 — [L3b] Sens de tri de la liste des missions — JE ME SUIS TROMPÉ, ET VOICI LA CORRECTION
+
+Cette entrée **remplace** celle du même jour intitulée « Sens de tri de la liste des missions », qui
+retenait l'ordre **décroissant**. Le fichier étant append-only, la correction s'écrit ici et pas
+là-bas : rien n'est effacé au-dessus, ce qui change est daté.
+
+**Ce que j'avais fait, et l'erreur.** J'ai tranché « décroissant, la mission la plus récente en tête »
+en raisonnant sur l'ergonomie d'un écran — le portefeuille du siège (03 §18). **Je n'ai pas regardé
+le précédent maison avant de décider.** L'agent d'implémentation, lui, l'a regardé : `GET /v1/users`
+pagine en **ascendant** sur un curseur de forme **identique** (`created_at, id`). Ma décision aurait
+donc produit deux listes de même forme triées à l'envers l'une de l'autre.
+
+Options :
+
+1. **Ascendant**, comme `users` — une seule règle à retenir pour tous les curseurs `(created_at, id)`.
+2. Décroissant, pour l'ergonomie du portefeuille.
+
+Arbitrage : **option 1.** Ce qui tranche n'est pas la préférence d'écran mais la **cohérence de
+l'API** : une exception par ressource est une exception que chaque client doit mémoriser, et celui
+qui l'oublie n'obtient pas une erreur, il obtient des données à l'envers — un défaut silencieux.
+L'ergonomie du portefeuille est un problème de **présentation**, qui se résoudra à L7 quand la console
+existera, au besoin par un paramètre de tri explicite. Aucun écran ne consomme cette route
+aujourd'hui : décider pour lui maintenant, c'est décider sans lui. **Règle de précédence sans objet.**
+
+Décideur : A01 — correction de son propre arbitrage du même jour, sur constat de l'agent A15
+Impact spec : aucun. Le code n'a pas été modifié : il était déjà juste.
+
+## 2026-09-01 — [transverse] `details[].code` devient la convention, et L3b en est le premier usage
+
+L'arbitrage du 2026-08-29 avait retenu un champ `code` optionnel sur `errorDetailSchema` ; celui du
+2026-08-31 l'a laissé « dû aux lots L3c et L9, qui le poseront avec leur premier usage ». **C'est L3b
+qui l'a posé**, en réglant une friction que l'implémenteur a signalée : l'en-tête d'`errors.ts`
+promet que `details[].message` est **affiché tel quel par la PWA terrain**, invariant 5 « sans
+exception ». Y écrire un code brut (`en_analyse`) afficherait ce code à un auditeur en clientèle.
+
+Le testeur relève que ce premier usage **fait précédent** pour L3c et L9, et que le produit risque
+d'avoir deux façons de dire la même chose si on ne tranche pas maintenant.
+
+Options :
+
+1. **La règle vaut partout** : dès qu'une entrée de `details` porte un identifiant destiné à une
+   machine, il vit dans `code` ; `message` reste une phrase française affichable.
+2. La règle ne vaut que pour les transitions de mission, et chaque lot décide pour lui.
+
+Arbitrage : **option 1.** L'option 2 produirait exactement le défaut que le testeur décrit : trois
+lots, trois conventions, et un front qui doit savoir laquelle s'applique à quelle route. La règle
+s'énonce en une phrase et se vérifie à la lecture : **`message` est de l'interface et l'invariant 5
+s'y applique ; `code` est de la machine et n'est jamais rendu à un humain.**
+
+**Conséquence immédiate, à appliquer dans L3b** : les entrées de `conditions_non_remplies`, qui
+portent aujourd'hui les codes de condition (`etape_collecte_validee`…) dans un champ non tranché,
+suivent la même règle. **Conséquence pour L3c et L9** : le rapport d'import (`ligne`, `colonne`,
+`code`, `message` du §35.2) s'écrit avec `code` pour la cause machine et `message` pour la phrase
+lue par l'auditeur. **Précédence : invariant 5 du `CLAUDE.md` §1, et 11 §3 (format d'erreur unique).**
+
+Décideur : A01, sur constat croisé de l'implémenteur A15 et du testeur A16
+Impact spec : aucun amendement du pack. Convention §3 précisée dans l'en-tête d'`errors.ts`.
+
+## 2026-09-01 — [L3b] Où vivent les libellés français des états de mission ?
+
+Les états de mission ont désormais une traduction française dans l'API (« préparation », « collecte
+en cours », « analyse », « livrée », « clôturée »), née du message de refus de transition. Le testeur
+signale le risque : si elle vit dans le service missions, la console la réécrira de son côté à L7, et
+les deux dériveront sans que rien ne le dise.
+
+Options :
+
+1. **Dans `packages/shared`**, à côté de `TRANSITIONS_MISSION` : une seule source, importée par l'API
+   comme par la console.
+2. Dans le service missions, et la console fera la sienne.
+
+Arbitrage : **option 1.** C'est le même raisonnement que pour la machine à états, qui est une **donnée
+partagée** et non un `if` recopié : deux traductions du même état finiraient par différer, et le jour
+où elles diffèrent, c'est l'auditeur qui lit deux mots pour une seule chose. Le coût est nul
+aujourd'hui — le libellé existe déjà, il change de fichier — et il croît à chaque lot qui l'ignore.
+Le 11 §3 impose déjà que « le front importe LES MÊMES schémas » ; un libellé d'état est du même
+ordre. **Précédence : 11 §3.**
+
+Décideur : A01, sur constat du testeur A16
+Impact spec : aucun.
