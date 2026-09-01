@@ -237,12 +237,22 @@ function contenu(chemin: string): string[] {
     .filter((l) => l !== '');
 }
 
-/** Prépare un répertoire d'archives vierge et rend son chemin. */
+/**
+ * Le seau du faux `mc` pour un répertoire d'archives donné — MÊME DÉRIVATION que
+ * `aide/faux-mc.sh`, et il faut que les deux bougent ensemble. Le seau vit À CÔTÉ
+ * des archives et jamais DEDANS : `inventaire_local` balaie `AXION_ARCHIVES`
+ * récursivement, et un seau rangé là se réclamerait lui-même à destination.
+ */
+function seauDe(archives: string): string {
+  return `/tmp/faux-r2${archives.replaceAll('/', '-')}`;
+}
+
+/** Prépare un répertoire d'archives vierge — ET son seau distant — et rend son chemin. */
 let compteurRepertoires = 0;
 function repertoireNeuf(): string {
   compteurRepertoires += 1;
   const chemin = `/tmp/archives-${String(compteurRepertoires)}`;
-  dansConteneur(`rm -rf ${chemin} && mkdir -p ${chemin}`);
+  dansConteneur(`rm -rf ${chemin} ${seauDe(chemin)} && mkdir -p ${chemin}`);
   return chemin;
 }
 
@@ -361,11 +371,7 @@ beforeAll(async () => {
       // passe (`set -e`). Le code 143 est celui d'un `sleep` interrompu — il se
       // lit comme tel dans le journal.
       `printf '#!/bin/sh\\nexit 143\\n' > ${FAUX}/sleep`,
-      // `mc` NEUTRALISÉ : il rend 0 et, pour un `ls`, fait mine de voir un objet
-      // distant — c'est ce que `expedier_r2` compte pour se déclarer réussie.
-      // Il ne prouve RIEN sur R2 (avertissement en tête de fichier).
-      `printf '#!/bin/sh\\nfor a in "$@"; do [ "$a" = ls ] && { echo "[faux mc] 1B objet-factice"; break; }; done\\nexit 0\\n' > ${FAUX}/mc`,
-      `chmod 0755 ${FAUX}/pgbackrest ${FAUX}/sleep ${FAUX}/mc`,
+      `chmod 0755 ${FAUX}/pgbackrest ${FAUX}/sleep`,
       `head -c 65536 /dev/urandom > ${DONNEES_MINIO}/dossier/objet.bin`,
       `printf 'repere\\n' > ${DONNEES_MINIO}/repere.txt`,
       `chown -R postgres:postgres ${DONNEES_MINIO}`,
@@ -373,6 +379,26 @@ beforeAll(async () => {
     ].join(' && '),
   ]);
   expect(preparation.code, `Préparation du banc impossible :\n${preparation.sortie}`).toBe(0);
+
+  // ---------------------------------------------------------------------------
+  // LE FAUX `mc` EST UN FICHIER RELU, PAS UN `printf` D'UNE LIGNE.
+  //
+  // Il tenait sur une ligne tant que la passe se contentait de COMPTER les
+  // objets distants. Depuis `fix/miroir-backup-info`, elle COMPARE deux
+  // inventaires (`mc find`) : un faux qui ne connaît que `ls` rend un inventaire
+  // distant vide, et la passe s'arrête sur « le seau ne contient AUCUN objet »
+  // avant d'avoir rien fait de mal. Le faux vit donc dans `aide/faux-mc.sh`, où
+  // il se relit et se révise — son en-tête dit ce qu'il prouve et ce qu'il ne
+  // prouve pas.
+  // ---------------------------------------------------------------------------
+  const copieFauxMc = docker([
+    'cp',
+    resolve(RACINE_DEPOT, 'apps', 'api', 'tests', 'aide', 'faux-mc.sh'),
+    `${CONTENEUR}:${FAUX}/mc`,
+  ]);
+  expect(copieFauxMc.code, `Copie du faux mc impossible :\n${copieFauxMc.sortie}`).toBe(0);
+  const droitsFauxMc = dansConteneur(`chmod 0755 ${FAUX}/mc`, {}, 'root');
+  expect(droitsFauxMc.code, `Droits du faux mc :\n${droitsFauxMc.sortie}`).toBe(0);
 }, 900_000);
 
 /**
@@ -1463,6 +1489,59 @@ describe('sauvegarde.sh — pannes d’environnement', () => {
 // 11. LE DOCKERFILE — ce que l'image doit porter pour que tout ce qui précède
 // puisse seulement démarrer.
 // =============================================================================
+// =============================================================================
+// L'INVENTAIRE DISTANT — LA GARDE QUE `fix/miroir-backup-info` A LIVRÉE SANS TEST
+//
+// CE QUI S'EST PASSÉ, ET QU'IL FAUT ÉCRIRE PLUTÔT QUE TAIRE. La branche a
+// remplacé « le seau contient au moins un objet » (un échantillon de trois
+// objets sur ~1 600) par une comparaison d'inventaires complets. Le renforcement
+// est réel et le code de production est juste. Mais la branche n'a **ni rejoué
+// la suite L0 existante** (pipeline étape 5 : non-régression de tous les lots
+// précédents) **ni écrit un seul cas pour sa propre garde**. Résultat mesuré à
+// l'intégration : 19 cas rouges ici et 2 suites en échec — pour un faux `mc` de
+// banc resté à `ls`, pas pour un défaut du script.
+//
+// Ces trois cas paient la dette. Ils sont écrits par un agent qui n'a pas écrit
+// la garde (09 §5.6), et le témoin compte autant que les deux pannes : une garde
+// qu'on n'a pas vue refuser ne prouve rien de plus qu'une garde qu'on n'a pas vue
+// accepter.
+// =============================================================================
+describe('sauvegarde.sh — inventaire distant (comparaison complète)', () => {
+  it('@critique un objet ATTENDU et ABSENT à destination fait ÉCHOUER la passe, et le journal le NOMME', () => {
+    const archives = repertoireNeuf();
+    // Le miroir laisse les `.sha256` derrière lui ET se déclare réussi. L'archive
+    // elle-même part : le seau n'est donc PAS vide, et c'est bien la COMPARAISON
+    // qui doit attraper le trou, pas le vieux comptage `> 0`.
+    const { sortie } = jouerUnePasse(archives, { AXION_FAUX_R2_PERDRE: '*.sha256' });
+
+    expect(sortie).not.toContain('passe terminée avec succès');
+    expect(sortie).toContain('inventaire NON CONFORME');
+    expect(sortie).toContain('manquant → minio/');
+    // La phrase qui rattache la garde à l'incident qui l'a motivée. Si elle
+    // disparaît du script, ce cas doit le dire.
+    expect(sortie).toContain('une passe verte avec un trou dedans');
+  }, 300_000);
+
+  it('@critique un seau VIDE est refusé, et pas confondu avec un inventaire incomplet', () => {
+    const archives = repertoireNeuf();
+    const { sortie } = jouerUnePasse(archives, { AXION_FAUX_R2_PERDRE: '*' });
+
+    expect(sortie).not.toContain('passe terminée avec succès');
+    expect(sortie).toContain('ne contient AUCUN objet');
+    // Les deux pannes ont deux messages distincts : un seau vide et un seau
+    // troué ne se diagnostiquent pas de la même façon à 3 h du matin.
+    expect(sortie).not.toContain('inventaire NON CONFORME');
+  }, 300_000);
+
+  it('témoin — sans injection, la passe est verte ET déclare son inventaire conforme', () => {
+    const archives = repertoireNeuf();
+    const { sortie } = jouerUnePasse(archives);
+
+    expect(sortie).toContain('passe terminée avec succès');
+    expect(sortie).toContain('R2 : inventaire conforme');
+  }, 300_000);
+});
+
 describe('Dockerfile — le script et son point de montage', () => {
   it('@critique `/sauvegarde` existe, appartient à `postgres`, et est en 0700', () => {
     const { code, sortie } = dansConteneur("stat -c '%a %U:%G' /sauvegarde", {}, 'root');

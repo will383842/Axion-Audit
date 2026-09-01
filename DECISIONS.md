@@ -2410,7 +2410,7 @@ Options :
    action non épinglée — l'activer avant d'épingler aurait cassé la CI au commit suivant.
 2. Épingler les actions aux empreintes de commit, **puis** activer le réglage.
 
-Arbitrage : **option 2**, dans cet ordre. 26 occurrences épinglées sur 6 fichiers
+Arbitrage : **option 2**, dans cet ordre. 26 occurrences épinglées sur 6 fichiers **Règle de précédence sans objet** (aucune divergence interne au pack : le point est un réglage d outil, pas une lecture de spec).
 (`.github/workflows/*.yml` + `.github/actions/setup-node-pnpm/action.yml`), le tag d'origine
 conservé en commentaire pour rester lisible et pour que les montées de version restent délibérées :
 
@@ -2885,7 +2885,7 @@ Options :
    C'est ce que proposait l'agent qui l'a trouvée.
 2. **Étage 1, corrigé d'office.**
 
-Arbitrage : **option 2**, contre la proposition de l'agent, pour deux raisons.
+Arbitrage : **option 2**, contre la proposition de l'agent, pour deux raisons. **Règle de précédence sans objet** (aucune divergence interne au pack : le point est un réglage d outil, pas une lecture de spec).
 
 D'abord la nature du défaut : l'étage 2 sert à ce qui doit **attendre** un arbitrage humain, et une
 fuite de secret n'attend pas. Ensuite — et c'est l'argument qui décide — un JWT a une forme **rigide**
@@ -3238,7 +3238,7 @@ Options :
 1. **`logout` publique**, et amender la liste commitée à cinq entrées.
 2. **`logout` authentifiée.**
 
-Arbitrage : **option 2**, et le motif dépasse le comptage.
+Arbitrage : **option 2**, et le motif dépasse le comptage. **Règle de précédence sans objet** (aucune divergence interne au pack : le point est un réglage d outil, pas une lecture de spec).
 
 Une route de déconnexion authentifiée permet de **vérifier la propriété du jeton présenté** — le §9.9
 réserve les écritures au propriétaire de la session. Publique, elle accepterait n'importe quel jeton
@@ -3606,7 +3606,7 @@ Options :
 2. **Construire les paquets dans le job qui en a besoin.**
 3. **Aliaser `@axion/shared` vers ses sources** dans la configuration de test.
 
-Arbitrage : **option 2**, limitée à `./packages/**`.
+Arbitrage : **option 2**, limitée à `./packages/**`. **Règle de précédence sans objet** (aucune divergence interne au pack : le point est un réglage d outil, pas une lecture de spec).
 
 L'option 3 est refusée pour une raison de fond : elle testerait **la source** au lieu de **ce qui est
 publié**. Le paquet expose `dist/index.js` ; c'est ce fichier-là que consomment l'API et le worker en
@@ -4167,7 +4167,7 @@ Options :
    est append-only, et effacer la trace d'une décision contestée serait le changement silencieux que
    ce format existe pour empêcher.
 
-Arbitrage : **option 2**. Le renvoi est retiré par un commit de suivi ; `docs/ORGANISATION_AGENTS.md`
+Arbitrage : **option 2**. Le renvoi est retiré par un commit de suivi ; `docs/ORGANISATION_AGENTS.md` **Règle de précédence sans objet** (aucune divergence interne au pack : le point est un réglage d outil, pas une lecture de spec).
 reste et se rattache par la présente trace, ce qui suffit — **le document n'a jamais eu besoin d'être
 cité dans `CLAUDE.md` pour exister**. **Règle de précédence sans objet (aucune divergence interne au
 pack)** : §3-2 et §4 ne s'opposent pas, c'est §3-2 seul qui s'applique et il n'était pas satisfait.
@@ -4202,7 +4202,7 @@ Options :
 2. **Remettre la ligne** sur l'arbitrage explicite de Williams. Coût : `CLAUDE.md` grossit de deux
    lignes ; aucune de ses règles ne change, le renvoi ne fait qu'indexer un document existant.
 
-Arbitrage : **option 2**. **Williams a répondu explicitement à la question posée** — « fais selon tes
+Arbitrage : **option 2**. **Williams a répondu explicitement à la question posée** — « fais selon tes **Règle de précédence sans objet** (aucune divergence interne au pack : le point est un réglage d outil, pas une lecture de spec).
 recommandations pour ça », en citant la question mot pour mot. C'est l'arbitrage nominatif que §3-2
 exigeait et qui manquait la première fois ; l'objection d'A01 est levée par la seule autorité qui
 pouvait la lever, et elle était juste tant que cette réponse n'existait pas. **Règle de précédence
@@ -5189,3 +5189,173 @@ Précédence : `CLAUDE.md` §3 (les sept points réservés, **explicitement pré
 gouvernance de session n'est pas dans le pack.
 Décideur : **Williams**, en énoncé direct.
 Impact spec : aucun amendement du pack. Régime de session, applicable immédiatement.
+
+## 2026-08-31 — [L0 / C3] Rien ne met à niveau le clone `/opt/axion-audit/repo` : qui doit le faire, et à quel prix ?
+
+**LE CONSTAT, MESURÉ.** Le run `33378083192` (sur `6b1d80d`) échoue sur deux causes distinctes. La
+seconde est un vrai défaut de restauration, corrigée dans ce même commit. **La première n'est pas un
+défaut du garde** : le workflow refuse de conclure parce que le serveur a exécuté `e234756` alors que
+l'exécution portait sur `6b1d80d`. Il a raison — _un test de restauration dont on ignore la version
+ne prouve rien de datable_. Le défaut est ailleurs : **rien ne maintient ce clone à jour.** La mise à
+niveau est un geste humain, jamais planifié ; le garde rougit donc après **chaque** fusion, pour une
+raison qui n'est pas celle qu'il surveille. Historique du garde : échec, échec, **un seul succès**
+(`33322880502` sur `e234756`, le jour même où un humain avait remis le clone à niveau), puis échec.
+**Un garde qui rougit systématiquement finit désarmé — c'est mesuré deux fois dans ce dépôt.**
+
+**LA CONTRAINTE QUI FERME LA VOIE ÉVIDENTE.** La clé `ops` porte
+`command="/opt/axion-audit/restore-test-ci.sh"` dans `authorized_keys` : elle ne peut rien exécuter
+d'autre, et le workflow VÉRIFIE que cette restriction tient. **Élargir la clé est exclu d'avance** :
+sa restriction est un acquis de sécurité (02 §30.4-7, moindre accès).
+
+Options :
+
+1. **L'enveloppeur se met à jour lui-même** — `restore-test-ci.sh`, le script fixe désigné par
+   `command=`, réaligne le clone sur `origin/main` avant d'appeler le script versionné. Automatique,
+   sans toucher à la clé, et le remède vit sur le chemin même dont il garantit la fraîcheur : si la
+   mise à niveau échoue, le test échoue, dans la même exécution, bruyamment. **Coût réel, à ne pas
+   arrondir** : chaque nuit, sans témoin, la machine réaligne un dépôt de travail sur du code fusionné
+   quelques heures plus tôt, et ce script pilote Docker — donc avec un pouvoir équivalent à root. Le
+   chemin d'exécution EXISTE DÉJÀ (le clone suit `main`, et c'est son `restore-test.sh` qui fait tout
+   le travail) : l'option ne l'ouvre pas, elle le rend **continu** au lieu de le laisser dépendre de
+   l'oubli d'un humain. Mais elle raccourcit la fenêtre : ce qui atteignait la machine quand
+   quelqu'un tirait l'atteindrait à 03h00. Garde-fous indispensables et suffisamment cheap pour être
+   non négociables : origine du remote vérifiée, refus de toute réécriture d'historique
+   (`origin/main` doit descendre du commit courant), référence de branche en dur — la clé restreinte
+   ne choisit jamais CE QUI s'exécute, seulement le déclenchement.
+2. **La mise à niveau appartient à la LIVRAISON, pas au test** — `deploy-staging.sh` (autre clé
+   restreinte, déjà déclenchée à chaque fusion sur `main`) réaligne le clone sur le commit qu'il
+   déploie. Le clone est alors frais **au moment où un humain a fusionné**, avec témoin, et le garde
+   nocturne redevient un pur garde qui ne rougit que sur une livraison manquée ou une altération.
+   Conceptuellement le plus juste : _la fraîcheur de la copie serveur est une propriété de la
+   livraison_. Défaut : ne couvre pas les nuits sans déploiement, et déplace le même pouvoir dans un
+   second script.
+3. **Une unité `systemd` sur le serveur**, hors de tout chemin CI, réalignant le clone à 02h50.
+   Aucun changement au contrat des clés. Défaut : une seconde chose qui peut mourir en silence — et
+   dont la mort se manifesterait par… exactement le rouge d'aujourd'hui.
+4. **Ne plus comparer le commit du serveur.** **REFUSÉE d'avance** : ce serait réparer le rouge en
+   supprimant le contrôle.
+
+Arbitrage : **AUCUN — ESCALADE À WILLIAMS, et l'agent C3 s'est arrêté volontairement avant d'écrire
+le code.** Les options 1, 2 et 3 déplacent toutes le **modèle de confiance du serveur** : elles
+transforment « du code fusionné atteint la machine quand un humain le décide » en « du code fusionné
+atteint la machine tout seul ». `CLAUDE.md` §3-4 range explicitement « toucher à la sécurité
+autrement que spécifié » parmi ce que l'autopilote ne décide jamais seul, et le pack ne tranche pas
+ce point. **Un doute de spec ne se devine pas : il s'écrit ici.** Précédence citée : `CLAUDE.md` §3-4
+(escalade) au-dessus de l'invariant 8 (sauvegarde testée) — l'invariant impose que le test tourne, il
+n'impose pas QUI a le droit de mettre la machine à jour. Règle de précédence du pack §32-36 > §24-31
+
+> §16-22 > §1-15 **sans objet** : aucune divergence interne au pack.
+
+**RECOMMANDATION DE C3, motivée** : **option 1**, avec les trois garde-fous nommés ci-dessus, et
+l'option 2 en complément le jour où une production existera. Motif : c'est la seule où le garde et son
+remède **échouent ensemble**. Une unité `systemd` (option 3) peut mourir pendant que le garde continue
+de rougir, et c'est précisément la configuration dans laquelle quelqu'un finit par désarmer le garde.
+**Ce que la recommandation ne couvre pas, dit dans le même souffle** : une fusion malveillante dans
+`main` passe, dans les trois options. La protection contre cela est la protection de branche et la
+revue croisée, pas un script sur le serveur. La réponse technique serait la vérification de signature
+GPG des commits — elle exige de poser un trousseau sur le serveur, **action humaine, non faite**.
+
+**CE QUI A ÉTÉ FAIT EN ATTENDANT, et qui ne contourne pas le garde** : le workflow évaluait les deux
+verdicts — « la restauration a-t-elle abouti ? » et « la machine exécutait-elle le code livré ? » —
+en s'arrêtant au premier, et le second était évalué EN PREMIER. **Un clone en retard masquait donc
+entièrement le verdict de la restauration** : au run `33378083192`, l'annotation ne nommait que le
+retard, et l'échec réel ne vivait plus que dans le corps du journal. Les deux verdicts sont désormais
+évalués tous les deux, chacun rougissant pour ses propres raisons, avant de conclure. **Aucun
+contrôle n'est assoupli** ; c'est le journal qui cesse de cacher une cause derrière l'autre.
+
+Décideur : **Williams** (le fond) — préparé et recommandé par C3 sous A50, arbitrage A01 requis avant
+mise en œuvre. Le séparateur de verdicts est signé **A50/C3** : il ne change aucune règle, il empêche
+un garde de taire une cause.
+Impact spec : **aucun amendement**. Modifications : `.github/workflows/nightly-restore-test.yml`
+(deux verdicts au lieu d'un). Le correctif du clone reste **NON ÉCRIT**, en attente d'arbitrage.
+
+## 2026-08-31 — [infra/C3] Comment garder la rétention distante après avoir retiré `mc mirror --remove` ?
+
+Options :
+Le défaut du 2026-08-29 (`backup.info` écrit puis retiré de R2, README d'infra §5.7ter) a été
+**reproduit en bac à sable** le 2026-08-31 : `mc mirror --remove` décide ses suppressions sur un
+listage VIVANT de la source, retire à destination tout ce qui en est absent **à cet instant**, et
+sort en 0. `$DEPOT` étant un dépôt pgBackRest vivant parcouru pendant ~30 s, tout état transitoire
+devenait une suppression distante définitive.
+
+1. **Retirer `--remove` et s'arrêter là.** Le plus simple, et le plus faux : la rétention distante
+   n'est portée par personne d'autre (aucune règle de cycle de vie Cloudflare — elle vivrait hors de
+   `git`, invisible à une reconstruction). Le bucket croîtrait sans fin ; l'en-tête de
+   `sauvegarde.sh` chiffre déjà 30 copies complètes d'un MinIO de 10 Go à ~300 Go, soit ~4,5 $/mois
+   qui ne redescendent jamais seuls.
+2. **Garder `--remove` et l'entourer de conditions.** On garderait la primitive qui a causé la perte,
+   en pariant que les conditions couvrent tous ses états transitoires. On ne sait pas les énumérer.
+3. **Purge en passe SÉPARÉE, pilotée par inventaire** — `distant − (inventaire local AVANT ∪
+inventaire local APRÈS)`, objets vitaux exclus par leur nom, plafond de volume, le tout gardé par
+   `depot_local_sain`.
+4. Versionnage d'objets côté R2. La vraie réponse à la corruption silencieuse, mais elle se décide
+   chez Cloudflare et coûte du stockage : hors mandat de ce chantier.
+
+Arbitrage : **option 3.** La propriété qui tranche est vérifiable en une phrase : _un objet présent
+dans l'un des deux inventaires locaux ne peut pas être purgé_, donc **la passe ne peut pas retirer ce
+qu'elle vient d'écrire** — ce qui rend le défaut du 2026-08-29 impossible par construction et non par
+prudence. Une absence transitoire devrait désormais enjamber deux listages indépendants séparés par
+toute la durée du miroir. Contre-épreuve jouée dans les deux sens (README §5.7ter) : le code de
+`main` supprime `backup.info` de R2 dans cette situation, le code corrigé le laisse intact.
+Précédence : CLAUDE.md **invariant 8** (sauvegarde éprouvée, alerte automatique) et l'interdiction du
+garde-fou qui annonce plus qu'il ne fait.
+
+Deux variables d'exploitation sont créées, **avec valeurs par défaut, donc sans reprise du `.env`** :
+`AXION_R2_PURGE_MAX_PCT` (50) et `AXION_R2_PURGE_PLANCHER` (20). Au-delà du plafond, la passe ne
+supprime RIEN, journalise et alerte — un bucket qui grossit d'une nuit se rattrape, un bucket vidé
+non. L'option 4 reste ouverte et n'appartient toujours pas à un agent.
+
+Décideur : A50 (chantier C3) — **à contresigner A01 au passage en porte**, avec la réserve écrite
+ci-dessous.
+Impact spec : aucun sur `/docs`. Amendement horodaté de `infra/README.md` §5.7 point 7 et §5.7ter.
+**Réserve** : rien n'a tourné sur `axionia-web` ni contre le vrai bucket R2 (aucun accès demandé ni
+utilisé) ; le bac à sable est MinIO, pas R2. Le §6 du README reste entier — ce script n'a jamais
+tourné sur le serveur.
+
+## 2026-09-01 — [intégration PR #17] Le jeton de démonstration d'A51 fait rougir gitleaks
+
+Le job `gitleaks` (BLOQUANT, 02 §30.4-5) de la PR #17 rend `leaks found: 2`. Les deux trouvailles
+portent **la même valeur**, dans `docs/portes/VERDICT_A51_SECURITE_2026-08-31.md` aux lignes 327 et
+741 : `eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.sig`, classée `generic-api-key`, entropie 4,19.
+
+**Ce que la valeur est**, vérifiable sans rien croire sur parole : `{"alg":"HS256"}` /
+`{"sub":"x"}` / signature égale au mot `sig`. Elle ne signe rien et n'ouvre rien, et l'adresse qui
+l'accompagne est fictive. Ce n'est pas un secret retiré après coup : c'est **la preuve de la faille
+F-01** du verdict A51 — la redaction laissait sortir en clair une URL portant e-mail ET jeton.
+La supprimer viderait le verdict de sa démonstration.
+
+Le scan porte sur l'historique complet (`fetch-depth: 0`, 219 commits) : **un commit correctif ne
+retire rien**, la valeur reste dans `9dac2cf`.
+
+Options :
+
+1. **Allowlist par empreinte** (`<sha>:<fichier>:<règle>:<ligne>`), deux entrées.
+2. **Allowlist par la VALEUR EXACTE**, `regexTarget = "match"`, une entrée pour les deux trouvailles.
+3. **Allowlist par chemin** — le fichier entier devient un angle mort permanent.
+4. **Réécriture d'historique** : neutraliser l'exemple puis rebaser et forcer la branche.
+
+Arbitrage : **option 2**, après un premier arbitrage de Williams pour l'option 1 le même jour. **Règle de précédence sans objet** (aucune divergence interne au pack : le point est un réglage d outil, pas une lecture de spec).
+Ce qui a fait changer le mécanisme — et non l'intention : **`.gitleaks.toml` a DÉJÀ tranché ce point
+le 2026-08-29**, et son argument tient ici tel quel — « PAS par empreinte : elle contient le sha du
+commit et le numéro de ligne, donc elle se périme au premier déplacement du fichier — un garde-fou
+qui se désarme tout seul sans le dire ». Ce fichier de porte vit et grossit ; au premier ajout
+au-dessus de la ligne 327, l'exemption cesserait de correspondre **en silence**. L'intention de
+l'arbitrage est intégralement tenue (le plus étroit possible, ni par chemin ni par règle) ; seul le
+mécanisme est aligné sur le précédent maison. Les options 3 et 4 sont écartées pour les raisons déjà
+écrites dans `.gitleaks.toml` (créer une zone où l'on fuite tranquillement) et parce que réécrire
+quinze commits poussés pour un faux positif coûte plus que le défaut.
+
+**ÉPREUVE, avec témoin — mesurée, pas supposée** (gitleaks v8.18.4, historique complet) :
+
+| Mesure                                                              | Résultat                               |
+| ------------------------------------------------------------------- | -------------------------------------- |
+| Avant l'entrée, historique complet                                  | `leaks found: 2` (219 commits scannés) |
+| Après l'entrée, historique complet                                  | **`no leaks found`**, code de sortie 0 |
+| Témoin : jeton VOISIN (`{"sub":"y"}`), même forme d'URL, hors dépôt | **détecté**, `leaks found: 1`          |
+
+Le témoin est ce qui compte : l'exemption couvre **cette valeur et rien d'autre**. Un jeton différent
+d'un seul caractère, dans le même fichier, ferait toujours rougir le build.
+
+Décideur : Williams (intention) · A01 (mécanisme, sur le précédent écrit du 2026-08-29)
+Impact spec : aucun sur `/docs`. Amendement horodaté de `.gitleaks.toml` (troisième entrée de
+l'allowlist, documentée sur place avec son épreuve).

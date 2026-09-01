@@ -195,6 +195,32 @@ COPY postgres/sauvegarde.sh /usr/local/bin/axion-sauvegarde
 COPY postgres/sauvegarde-healthcheck.sh /usr/local/bin/axion-sauvegarde-healthcheck
 
 # -----------------------------------------------------------------------------
+# LA SONDE D'ALERTES — fiche O-2, ABSORBÉE le 2026-08-31 (Williams).
+#
+# POURQUOI ELLE ATTERRIT DANS CETTE IMAGE ET PAS DANS UNE AUTRE. Elle a besoin de
+# `psql` (pour lire `sync_log` et `llm_calls` par le RÉSEAU interne, sans socket
+# Docker) et d'`openssl` (pour émettre sur le canal Telegram : cette image n'a NI
+# `curl` NI `wget` — relevé du 2026-08-28, reconfirmé le 2026-08-31). Elle a les
+# deux, elle est DÉJÀ construite par la pile, et le service `sauvegarde` prouve
+# qu'un side-car y tourne. Aucune image nouvelle, aucun paquet nouveau, aucune
+# dépendance ajoutée à la liste 11 §1.
+#
+# ⚠️ ELLE VIT DANS `config-embarquee` ET NON DANS `socle`, POUR LA MÊME RAISON QUE
+# LA SAUVEGARDE : seule la pile Coolify porte des side-cars. Sur le chemin « VPS
+# dédié », la sonde est lancée depuis le DÉPÔT par `cron` (`install-cron.sh`) et
+# n'aurait rien à faire dans une image.
+#
+# LA BIBLIOTHÈQUE PART AVEC ELLE, À UN CHEMIN FIXE. Le script cherche `common.sh`
+# à côté de lui PUIS dans `/usr/local/lib/axion/` : installé dans
+# `/usr/local/bin`, seul le second chemin peut aboutir. Sans elle, ni journal ni
+# alerte — le script refuse alors de démarrer plutôt que de tourner muet.
+#
+# ⚠️ MÊME CONSÉQUENCE QUE POUR LES DEUX FICHIERS DE CONFIGURATION : MODIFIER LA
+# SONDE DANS LE DÉPÔT N'A AUCUN EFFET TANT QUE L'IMAGE N'EST PAS RECONSTRUITE.
+COPY scripts/sonde-alertes.sh /usr/local/bin/axion-sonde-alertes
+COPY scripts/lib/common.sh /usr/local/lib/axion/common.sh
+
+# -----------------------------------------------------------------------------
 # `mc` — LE CLIENT S3 DE L'EXPÉDITION HORS SERVEUR, ET CE N'EST PAS UNE
 # DÉPENDANCE NOUVELLE.
 #
@@ -318,6 +344,17 @@ RUN set -eux; \
     chown postgres:postgres /sauvegarde; \
     chmod 700 /sauvegarde
 
+# POINT DE MONTAGE DE L'ÉTAT DE LA SONDE — même mécanisme, même raison que
+# `/sauvegarde` ci-dessus : le volume nommé hérite du propriétaire que l'image
+# porte au point de montage, et la sonde tourne sous `postgres`.
+# Ce qu'on y écrit : le journal, les marqueurs anti-harcèlement (fichiers VIDES,
+# datés par leur seul mtime) et `.derniere-passe`, que lit la sonde de santé du
+# conteneur. AUCUNE donnée métier n'y transite, par construction.
+RUN set -eux; \
+    mkdir -p /sonde/etat; \
+    chown -R postgres:postgres /sonde; \
+    chmod 700 /sonde /sonde/etat
+
 # Exécutables par tous, modifiables par personne : le service tourne sous
 # `postgres` et la sonde sous l'utilisateur du conteneur. `chmod` explicite — le
 # bit +x d'un fichier versionné sous Windows ne survit pas au clone
@@ -333,10 +370,24 @@ RUN set -eux; \
 # fichiers et ne compare que des entiers et des empreintes — aucun tube à
 # protéger, donc aucune raison d'exiger `bash`. Une sonde doit être la chose la
 # plus simple du conteneur.
+#
+# `axion-sonde-alertes` et `common.sh` : `bash -n` aussi. La bibliothèque n'est
+# jamais exécutée (elle est SOURCÉE) — elle reste donc en 0644, comme dans le
+# dépôt, où `check:executabilite` l'exempte pour cette raison exacte.
+#
+# `test -x` sur la sonde ET `test -r` sur la bibliothèque : le lien entre les
+# deux est un chemin en dur (`/usr/local/lib/axion/common.sh`) que rien ne
+# vérifie à l'exécution avant qu'il ne soit trop tard. On le vérifie ici.
 RUN set -eux; \
     chmod 0755 /usr/local/bin/axion-sauvegarde /usr/local/bin/axion-sauvegarde-healthcheck; \
     sh -n /usr/local/bin/axion-sauvegarde-healthcheck; \
-    bash -n /usr/local/bin/axion-sauvegarde
+    bash -n /usr/local/bin/axion-sauvegarde; \
+    chmod 0755 /usr/local/bin/axion-sonde-alertes; \
+    chmod 0644 /usr/local/lib/axion/common.sh; \
+    bash -n /usr/local/lib/axion/common.sh; \
+    bash -n /usr/local/bin/axion-sonde-alertes; \
+    test -x /usr/local/bin/axion-sonde-alertes; \
+    test -r /usr/local/lib/axion/common.sh
 
 # -----------------------------------------------------------------------------
 # Cible PAR DÉFAUT (la dernière) — image sans configuration embarquée.

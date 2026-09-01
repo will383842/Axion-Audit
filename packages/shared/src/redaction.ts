@@ -67,6 +67,12 @@
 // 8 laisse trois niveaux de marge et borne le coût du parcours sur un objet cyclique
 // ou anormalement profond.
 //
+// CE QUE LE PARCOURS NE PEUT PAS SUPPOSER : que pino émettra ce qu'il a inspecté.
+// Un objet peut détourner sa sérialisation par un `toJSON()`, ou n'être qu'un sac
+// d'octets bruts — dans les deux cas, examiner ses propriétés énumérables ne dit
+// RIEN de ce qui part sur le réseau. C'est le défaut F-01 (A51, 2026-08-31), fermé
+// au §7, où la règle est écrite comme une liste d'AUTORISÉS.
+//
 // UN SEUL ENDROIT : l'API et le worker consomment `OPTIONS_REDACTION_JOURNAL` tel quel.
 // Ajouter un champ ici le masque PARTOUT. Deux copies d'une politique RGPD divergent
 // toujours, et divergent en silence.
@@ -94,6 +100,14 @@
 //   · Ce qui est journalisé HORS de ces trois instances pino (`console.log`,
 //     `process.stdout`, un transport tiers). La redaction est une propriété du logger,
 //     pas du processus.
+//   · Un `toJSON()` à EFFET DE BORD, ou dont le résultat dépend de la clé que le
+//     moteur lui passe (§7 l'appelle sans argument). Le premier est appelé une fois
+//     de plus qu'avant ; le second peut rendre autre chose que ce que `JSON.stringify`
+//     aurait obtenu — mais c'est la valeur CENSURÉE qui est émise, jamais la sienne.
+//   · Un sac d'octets qui n'est ni un `ArrayBuffer` ni une vue sur un `ArrayBuffer`
+//     (un tableau de nombres construit à la main, par exemple). Rien ne le distingue
+//     d'une série de mesures : c'est une donnée métier tant qu'un type ne dit pas
+//     le contraire.
 // =============================================================================
 
 /** Marqueur substitué à la valeur masquée. Explicite : on doit voir qu'on masque. */
@@ -104,6 +118,20 @@ export const CENSEUR_PROFONDEUR_JOURNAL = '[masqué:profondeur]';
 
 /** Marqueur des identités retirées d'une chaîne conservée (URL, message d'erreur). */
 export const CENSEUR_TEXTE_JOURNAL = '[masqué]';
+
+/**
+ * Marqueur d'un contenu BINAIRE refusé en bloc (§7). La LONGUEUR en octets survit :
+ * « le morceau reçu fait 0 octet » est le diagnostic entier d'un envoi de pièce
+ * jointe raté (05 §9.6), et une longueur n'identifie personne.
+ */
+export const CENSEUR_BINAIRE_JOURNAL = '[masqué:binaire]';
+
+/**
+ * Marqueur d'un objet dont la sérialisation alternative a LEVÉ (§7). On ne rend
+ * alors PAS l'objet d'origine : un `toJSON()` qui échoue laisse un objet dont on ne
+ * sait rien, et rendre l'inconnu en clair est exactement le défaut qu'on ferme.
+ */
+export const CENSEUR_SERIALISATION_JOURNAL = '[masqué:sérialisation]';
 
 /** Profondeur maximale parcourue. Au-delà, le sous-arbre est masqué en bloc. */
 export const PROFONDEUR_MAX_JOURNAL = 8;
@@ -684,10 +712,137 @@ function estObjet(valeur: unknown): valeur is Record<string, unknown> {
   return typeof valeur === 'object' && valeur !== null;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// 7. SÉRIALISATIONS QUI NE PASSENT PAS PAR LES PROPRIÉTÉS ÉNUMÉRABLES
+//
+// -----------------------------------------------------------------------------
+// LE DÉFAUT FERMÉ ICI — A51, finding F-01, 2026-08-31
+// -----------------------------------------------------------------------------
+// C'est la forme la plus pure du défaut que ce dépôt traque, et il faut la dire
+// telle quelle : LA CENSURE AVAIT BIEN TOURNÉ, ET SON RÉSULTAT ÉTAIT VRAI — POUR
+// L'OBJET QU'ELLE AVAIT EXAMINÉ. Cet objet n'était simplement pas celui qui partait
+// sur le réseau. Un garde-fou qui rend un verdict juste sur la mauvaise valeur ne
+// se distingue d'un garde-fou correct par AUCUN symptôme : ni erreur, ni lenteur,
+// ni test rouge. C'est pourquoi il a fallu une sonde pour le voir.
+//
+// Mesuré à la sonde, sur ces options exactes (`OPTIONS_REDACTION_JOURNAL`) :
+//   new URL('…?email=…&token=eyJ…')       → "cible":"https://…?email=jean.…&token=eyJ…"
+//   Buffer.from('person_name=Sophie …')   → "morceau":{"type":"Buffer","data":[112,101,…]}
+//
+// LE MÉCANISME : `parcourir` itérait `Object.entries`. Sur une `URL`, toute la
+// donnée vit derrière des accesseurs de PROTOTYPE — aucune clé propre énumérable,
+// donc rien à masquer, `modifie` restait faux et la MÊME RÉFÉRENCE était rendue.
+// C'est ensuite le `JSON.stringify` de pino qui appelait `toJSON()`, APRÈS la
+// censure, sur un objet que la censure avait laissé intact. La chaîne réellement
+// émise n'avait jamais été examinée.
+//
+// -----------------------------------------------------------------------------
+// LA PROPRIÉTÉ GARDÉE — et pourquoi ce n'est PAS une liste de types
+// -----------------------------------------------------------------------------
+// Exempter `URL` et `Buffer` nommément aurait reproduit le défaut sous une autre
+// forme : la prochaine classe à `toJSON` (une enveloppe de bibliothèque tierce, un
+// `Temporal.*`, un type maison de L6) serait repassée en clair, en silence, et
+// personne ne l'aurait su. Le dépôt a déjà réécrit son garde anti-skip pour
+// exactement cette raison (`scripts/check-no-skipped-tests.mjs` : liste
+// d'AUTORISÉS, refus par défaut de l'inconnu) ; on applique ici la même posture.
+//
+// La propriété se formule sans citer un seul type, parce qu'elle EST la fourche de
+// l'algorithme de `JSON.stringify` sur une valeur objet — il n'y a que trois issues :
+//
+//   1. l'objet porte un `toJSON` appelable        → c'est SON RÉSULTAT qui est émis ;
+//   2. c'est un tableau                            → ses ÉLÉMENTS sont émis ;
+//   3. sinon                                       → ses PROPRIÉTÉS PROPRES
+//                                                    ÉNUMÉRABLES à clé chaîne.
+//
+// Le parcours d'avant ne couvrait que 2 et 3. Il couvre désormais 1 en censurant le
+// RÉSULTAT de la sérialisation au lieu de l'objet qui la porte — donc `URL`,
+// `Buffer`, et tout ce qui n'existe pas encore. Après ce correctif, l'ensemble de ce
+// que pino peut émettre est exactement l'ensemble de ce que `parcourir` a examiné.
+//
+// UN QUATRIÈME CAS, DISTINCT, QUE LA SONDE A CONFONDU AVEC LE PREMIER : le sac
+// d'OCTETS BRUTS. A51 range `Buffer` avec `URL`, mais fermer la route 1 ne suffit
+// pas pour lui : `Buffer.prototype.toJSON()` rend `{type:'Buffer', data:[112,101,…]}`,
+// que la route 3 examine consciencieusement pour n'y trouver AUCUN nom de champ à
+// masquer — et les octets repartent en clair, décodables. (Un `Uint8Array` nu, lui,
+// fuit directement par la route 3 : `{"0":112,"1":101,…}`.) La politique par NOM DE
+// CHAMP est structurellement incapable de qualifier un octet : il n'a ni nom, ni
+// forme, ni gabarit. Or à L6c ces octets seront des morceaux de pièces jointes — une
+// photo d'atelier, un verbatim audio. On les refuse donc en bloc, en gardant la
+// LONGUEUR, qui est le seul diagnostic qu'ils portaient.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+type ConstructeurExempte = abstract new (...parametres: never[]) => object;
+
+/**
+ * LISTE D'AUTORISÉS — les SEULS objets rendus TELS QUELS, sans examen.
+ * Refus par défaut de l'inconnu : tout ce qui n'est pas ici passe par la règle
+ * générale ci-dessus. Oublier un autorisé fait crier à tort et se corrige ; oublier
+ * un interdit laisse passer une fuite et ne se sait jamais.
+ *
+ * Ces deux-là étaient déjà exemptés AVANT le correctif, et ils le RESTENT — mais
+ * pour deux raisons différentes, qu'il faut écrire pour qu'on ne les élargisse pas
+ * par analogie :
+ *
+ *   · `Date` porte bien un `toJSON`, et c'est un membre de la famille fautive. Il
+ *     est exempt parce que sa sérialisation est CLOSE : elle rend un ISO 8601
+ *     dérivé du SEUL nombre de millisecondes que porte l'objet. Aucune donnée du
+ *     graphe journalisé ne peut y transiter — il n'y a rien à examiner. L'exempter
+ *     n'est pas une tolérance, c'est une conséquence. Et l'invariant 5 exige ces
+ *     horodatages UTC : les faire passer par l'assainisseur de chaînes les
+ *     exposerait à un motif (le numéro de téléphone, notamment) pour zéro gain.
+ *
+ *   · `RegExp` n'a AUCUN `toJSON` : `JSON.stringify(/x/)` rend `{}`, sa source
+ *     n'atteint jamais le journal. Il n'est donc pas exempté de la règle nouvelle —
+ *     il ne la rencontre pas. Il est exempté du PARCOURS, qui n'aurait rien à
+ *     parcourir (zéro propriété propre énumérable) et rendrait la même référence de
+ *     toute façon. C'est un raccourci, pas une dérogation.
+ *
+ * Ajouter un type ici exige de démontrer LA MÊME CHOSE que pour `Date` : que sa
+ * sérialisation est close sur des données non personnelles. « C'est un type
+ * standard » n'est pas une démonstration — `URL` en est un.
+ */
+const SERIALISATIONS_SANS_DONNEE: readonly ConstructeurExempte[] = [Date, RegExp];
+
+/**
+ * Boucle et non `.some()` : ce test est sur le chemin chaud (une fois par objet
+ * journalisé, piles d'appels comprises) et une fermeture y serait allouée à chaque
+ * appel. Même raison que `estLigneDePersonne` ci-dessus.
+ */
+function estSerialisationSansDonnee(valeur: object): boolean {
+  for (const constructeur of SERIALISATIONS_SANS_DONNEE) {
+    if (valeur instanceof constructeur) return true;
+  }
+  return false;
+}
+
+/**
+ * Vrai si la valeur est un SAC D'OCTETS BRUTS. Prédicat STRUCTUREL, pas énumération :
+ * `ArrayBuffer.isView` est la définition même de « vue sur de la mémoire binaire » et
+ * couvre `Buffer`, les onze `TypedArray` et `DataView` — y compris ceux qu'une future
+ * version de Node ajouterait.
+ */
+function estOctetsBruts(valeur: object): valeur is ArrayBufferView | ArrayBuffer {
+  return ArrayBuffer.isView(valeur) || valeur instanceof ArrayBuffer;
+}
+
+/**
+ * Vrai si la valeur détourne sa sérialisation par un `toJSON` (propre ou hérité) —
+ * la route 1 de `JSON.stringify`. C'est le test que fait le moteur lui-même : on ne
+ * devine pas le type, on regarde ce que le moteur regardera.
+ */
+function aUneSerialisationAlternative(valeur: object): valeur is { toJSON: () => unknown } {
+  return typeof (valeur as { toJSON?: unknown }).toJSON === 'function';
+}
+
 /**
  * Parcours récursif d'une valeur journalisée. Retourne la MÊME référence quand rien
  * n'a changé : le cas courant (une ligne de journal sans donnée personnelle) ne paie
  * aucune copie.
+ *
+ * COROLLAIRE DEVENU UNE RÈGLE (§7) : rendre la même référence n'est sûr que si pino
+ * sérialisera cette référence par les chemins que ce parcours a inspectés. Tout objet
+ * qui détourne sa sérialisation est donc remplacé par une valeur NEUVE — un objet
+ * neuf ne porte plus de `toJSON`, donc plus de porte dérobée.
  */
 function parcourir(
   valeur: unknown,
@@ -697,12 +852,39 @@ function parcourir(
 ): unknown {
   if (typeof valeur === 'string') return nettoyerTexteJournal(valeur);
   if (!estObjet(valeur)) return valeur;
-  if (valeur instanceof Date || valeur instanceof RegExp) return valeur;
+  // §7 — LISTE D'AUTORISÉS : les deux seuls objets rendus sans examen.
+  if (estSerialisationSansDonnee(valeur)) return valeur;
   if (profondeur >= PROFONDEUR_MAX_JOURNAL) return CENSEUR_PROFONDEUR_JOURNAL;
   if (vus.has(valeur)) return '[cycle]';
   vus.add(valeur);
 
   try {
+    // §7 — SAC D'OCTETS BRUTS. Avant le `toJSON`, car `Buffer` porte les deux et
+    // sa sérialisation n'est qu'un déguisement du même déversement.
+    if (estOctetsBruts(valeur)) return `${CENSEUR_BINAIRE_JOURNAL} ${String(valeur.byteLength)} o`;
+
+    // §7 — SÉRIALISATION ALTERNATIVE. Placé avant le tableau et avant l'erreur parce
+    // que c'est l'ordre du moteur : `JSON.stringify` consulte `toJSON` EN PREMIER,
+    // y compris sur une sous-classe de `Array` ou d'`Error`. On censure le RÉSULTAT.
+    //
+    // `vus` contient déjà `valeur` : un `toJSON()` qui se rend lui-même est arrêté
+    // par la détection de cycle, et `profondeur + 1` borne les chaînes de renvois.
+    //
+    // Le moteur passe la CLÉ à `toJSON(cle)` ; on appelle sans argument. Divergence
+    // assumée et bornée : aucune sérialisation standard n'en dépend, et la valeur
+    // émise sera la NÔTRE, jamais celle qu'un second appel du moteur produirait.
+    if (aUneSerialisationAlternative(valeur)) {
+      let serialise: unknown;
+      try {
+        serialise = valeur.toJSON();
+      } catch {
+        // Une sérialisation qui lève laisse un objet dont on ne sait RIEN. Le rendre
+        // tel quel rouvrirait la porte exacte qu'on ferme.
+        return CENSEUR_SERIALISATION_JOURNAL;
+      }
+      return parcourir(serialise, parentNormalise, profondeur + 1, vus);
+    }
+
     if (Array.isArray(valeur)) {
       let modifieTableau = false;
       const copieTableau: unknown[] = new Array<unknown>(valeur.length);
