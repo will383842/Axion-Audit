@@ -2149,3 +2149,40 @@ commit `255d750`, poussée. Le chemin critique du 15/09 ne dépend plus d'un `gi
 **CE QUI ATTEND WILLIAMS N'A PAS CHANGÉ** : signer P-B · remettre à niveau le clone du serveur ·
 les deux secrets JWT · les arbitrages en file. Et les 100 questions, qui restent le seul chemin
 critique que personne ne peut prendre à sa place.
+
+## 2026-09-01 14h05 — [intégration PR #17] — étape pipeline 6/7 (contrôle d'acceptation)
+
+Dernier commit vert : `2d02116` (bloc d'intégration) · Branche : `integration/sept-branches` · Poussé : oui
+Tâche en cours : plus aucune. **La PR #17 est verte et prête ; elle attend une main humaine.**
+Prochaine action : **fusionner la PR #17** (`gh pr merge 17 --squash --delete-branch`), **puis obtenir
+de Williams son verdict de porte P-B et son arbitrage du §8**, puis poser `v0.l2`.
+Tests rouges connus : aucun. Le nocturne reste rouge pour sa raison EXTERNE connue (clone du serveur).
+
+**LA CI DE LA PR #17 EST INTÉGRALEMENT VERTE** — run `33502466266` : les 20 contrôles passent,
+`8 · deploy-staging` sauté par construction (il ne tourne qu'au merge sur `main`). État GitHub :
+`MERGEABLE` / `CLEAN`. Les quatre échecs du run précédent sont traités et tracés (`6fb3774`,
+`4c6857e`, `c4ac929`).
+
+**POURQUOI LE MERGE N'A PAS EU LIEU, ET CE N'EST PAS UN OUBLI.** Williams a donné une autorisation
+explicite ; le bac à sable de la session a refusé `gh pr merge`. Je n'ai pas cherché à le contourner —
+un merge est une action sortante irréversible, et un garde-fou qui dit non se respecte même quand on
+a le droit pour soi. **La commande est à jouer à la main, ou la permission à ouvrir.**
+
+**CE QUI EST CONSTITUTIVEMENT RÉSERVÉ À WILLIAMS, et qu'aucune autorisation ne me transfère** :
+la SIGNATURE de la porte P-B. Le pack confie cet acte à une personne (09 §1, `CLAUDE.md` §10) ;
+la signer à sa place, même autorisé, remplacerait la chaîne de signature par une fiction. Le dossier
+est prêt : R-B3, seule réserve bloquante, est **levée** (correctif fusionné en `6b1d80d`, traçabilité
+revérifiée le 2026-09-01 : 370 citations, 245 fichiers, aucune incohérence). Restent deux tableaux à
+compléter (§9 et §10.10) et l'arbitrage du §8 (séquence L3 vs P-B).
+
+**RECTIFICATION D'UNE ERREUR QUE J'AI DITE À WILLIAMS AUJOURD'HUI.** J'ai annoncé que le tag `v0.l1`
+manquait et qu'il fallait le rattraper. **C'est faux** : le fichier 09 (ligne 61) définit **`P-A` =
+fin L0-L1**. Il n'existe pas de porte L1, donc pas de tag L1. Le seul tag dû à ce jour est `v0.l2`,
+après signature. Vérifié avant de l'écrire, ce que je n'avais pas fait la première fois.
+
+**UN FAIT DE CALENDRIER QUI N'EST NULLE PART DANS CE FICHIER, ET QUI DEVRAIT L'ÊTRE** : le 15/09
+porte DEUX échéances, pas une — le jalon des 100 questions **et** la porte **P-DESCOPE** (09 §89),
+qui arbitre la réduction du périmètre sur le burn-down. Au 2026-09-01 : ~8,1 j-h consommés sur 26,
+soit **≈31 % du noyau strict**, dont L5 (8 j) à ~10 % et L6 (4,5 j) à 0. Ce chiffre n'engage pas ce
+bloc — il vient de la mesure du 2026-09-01 03h08 — mais il sera l'entrée de P-DESCOPE, et personne
+ne l'avait rapproché de la date.
