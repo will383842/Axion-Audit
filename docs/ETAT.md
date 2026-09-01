@@ -2092,3 +2092,60 @@ Tests rouges connus : le nocturne, **pour une raison externe** (voir ci-dessous)
 
 **LE VRAI CHEMIN CRITIQUE, qui ne dépend d'aucun agent** : les 100 questions du 15/09. Le mode
 d'emploi est sur `main` (`docs/banque-questions/MODE_EMPLOI.md` + `modele-a-remplir.csv`).
+
+## 2026-09-01 13h20 — [intégration PR #17] — étape pipeline 5/7 (tests du lot)
+
+Dernier commit vert : `c4ac929` (le banc mesurait le mauvais script) · Branche : `integration/sept-branches` · Poussé : oui
+Tâche en cours : rendre la CI de la PR d'intégration verte — **les quatre échecs sont traités**.
+Prochaine action : **vérifier la CI de la PR #17, la fusionner, puis présenter le bloc de signature
+de la porte P-B à Williams.** Inchangée depuis le bloc précédent — c'est ce qui la bloquait qui a changé.
+Tests rouges connus : aucun en local. Le nocturne reste rouge pour la raison EXTERNE du bloc précédent
+(le clone `/opt/axion-audit/repo` n'est pas à niveau) — rien de neuf, et rien qu'un agent puisse faire.
+
+**LE BLOC PRÉCÉDENT LAISSAIT CROIRE QUE LA CI TOURNAIT ENCORE. ELLE AVAIT FINI, ET ELLE ÉTAIT ROUGE**
+sur quatre contrôles : `1 · lint`, `4 · integration`, `couverture ≥ 90 %`, `gitleaks`. La phrase
+« sa CI tourne » était vraie à la seconde où elle a été écrite et fausse quatre minutes plus tard ;
+une session neuve l'a lue comme un feu vert. C'est le défaut que ce fichier existe pour éviter.
+
+**LES QUATRE ÉCHECS SE RÉDUISAIENT À TROIS DÉFAUTS.**
+
+| Contrôle | Défaut | Traitement | Commit |
+| --- | --- | --- | --- |
+| `1 · lint` | `infra/README.md` non formaté | prettier | `6fb3774` |
+| `gitleaks` | 2 faux positifs figés dans l'historique | exemption par la VALEUR, épreuve avec témoin | `4c6857e` |
+| `4 · integration` + `couverture` | **un seul défaut**, le banc de test | faux `mc` refait en fixture + 3 cas | `c4ac929` |
+
+**LE DÉFAUT SÉRIEUX, ET CE QU'IL DIT DU PIPELINE.** `fix/miroir-backup-info` a remplacé le comptage
+des objets distants par une comparaison d'inventaires complets (`mc find`). **Le code de production
+est juste** — c'est un vrai renforcement. Mais le faux `mc` du banc ne connaissait que `ls` : il
+rendait un inventaire distant vide, et la passe s'arrêtait sur « le seau ne contient AUCUN objet ».
+19 cas sur 58 et une seconde suite sont tombés **sans qu'une ligne de la logique locale ait changé**.
+
+Ce qui compte davantage que le correctif : **la branche n'a ni rejoué la suite L0 existante
+(étape 5 : non-régression de tous les lots précédents), ni écrit un seul cas pour sa propre garde.**
+Elle était verte seule parce que personne n'a mesuré. C'est un constat pour le gardien A02, à joindre
+au §10 de la porte P-B — pas un reproche à un agent, un trou dans l'application du pipeline.
+
+**CE QUI A ÉTÉ MESURÉ, ET NON SUPPOSÉ** (Docker local, cette machine) :
+
+| Suite | Résultat |
+| --- | --- |
+| `l0-sauvegarde` | **61/61** (58 d'origine + 3 nouveaux) |
+| `l0-restauration` | **8/8** |
+| Intégration complète, 17 fichiers | **308/308** |
+| Unitaire | **390/390**, aucun sauté |
+| gitleaks, historique complet | `no leaks found` (219 commits) |
+| Les huit gardes du dépôt | verts |
+
+Une instabilité de banc à signaler, qui n'est PAS une régression : `l1-empreinte-seed` est tombé une
+fois en lot de quatre fichiers (contention Testcontainers sur cette machine) et repasse vert seul,
+13/13. La suite d'intégration lancée d'un bloc a été **tuée deux fois** avant de rendre son verdict ;
+les 17 fichiers ont donc été joués en six lots. La CI reste seule juge.
+
+**LES 56 QUESTIONS DE LA BANQUE SONT MISES À L'ABRI** — elles vivaient uniquement sur le disque, non
+suivies, dans le worktree où la session code fait ses fusions. Branche `contenu/banque-questions-vague-1`,
+commit `255d750`, poussée. Le chemin critique du 15/09 ne dépend plus d'un `git reset` malheureux.
+
+**CE QUI ATTEND WILLIAMS N'A PAS CHANGÉ** : signer P-B · remettre à niveau le clone du serveur ·
+les deux secrets JWT · les arbitrages en file. Et les 100 questions, qui restent le seul chemin
+critique que personne ne peut prendre à sa place.
