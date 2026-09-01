@@ -1443,6 +1443,7 @@ cette décision — c'est le sens de la correction ci-dessus.
 **Origine.** Question de Williams le 2026-08-31 en examinant l'adaptation des questionnaires par
 entreprise. Rédigée par la session d'audit en lecture seule ; **corrigée et enregistrée par A01** ;
 **non implémentée** (09 §5.9).
+
 ## 2026-08-31 — [infra/C3, étage 2, PROPOSÉE] `shellcheck` ne voit pas le script qui porte toute la sauvegarde
 
 **Constat, mesuré.** Le job `shellcheck` de la CI (`.github/workflows/ci.yml`, ligne ~152) analyse

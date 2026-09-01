@@ -5189,6 +5189,7 @@ Précédence : `CLAUDE.md` §3 (les sept points réservés, **explicitement pré
 gouvernance de session n'est pas dans le pack.
 Décideur : **Williams**, en énoncé direct.
 Impact spec : aucun amendement du pack. Régime de session, applicable immédiatement.
+
 ## 2026-08-31 — [L0 / C3] Rien ne met à niveau le clone `/opt/axion-audit/repo` : qui doit le faire, et à quel prix ?
 
 **LE CONSTAT, MESURÉ.** Le run `33378083192` (sur `6b1d80d`) échoue sur deux causes distinctes. La
@@ -5267,6 +5268,7 @@ mise en œuvre. Le séparateur de verdicts est signé **A50/C3** : il ne change 
 un garde de taire une cause.
 Impact spec : **aucun amendement**. Modifications : `.github/workflows/nightly-restore-test.yml`
 (deux verdicts au lieu d'un). Le correctif du clone reste **NON ÉCRIT**, en attente d'arbitrage.
+
 ## 2026-08-31 — [infra/C3] Comment garder la rétention distante après avoir retiré `mc mirror --remove` ?
 
 Options :
@@ -5284,13 +5286,13 @@ devenait une suppression distante définitive.
 2. **Garder `--remove` et l'entourer de conditions.** On garderait la primitive qui a causé la perte,
    en pariant que les conditions couvrent tous ses états transitoires. On ne sait pas les énumérer.
 3. **Purge en passe SÉPARÉE, pilotée par inventaire** — `distant − (inventaire local AVANT ∪
-   inventaire local APRÈS)`, objets vitaux exclus par leur nom, plafond de volume, le tout gardé par
+inventaire local APRÈS)`, objets vitaux exclus par leur nom, plafond de volume, le tout gardé par
    `depot_local_sain`.
 4. Versionnage d'objets côté R2. La vraie réponse à la corruption silencieuse, mais elle se décide
    chez Cloudflare et coûte du stockage : hors mandat de ce chantier.
 
-Arbitrage : **option 3.** La propriété qui tranche est vérifiable en une phrase : *un objet présent
-dans l'un des deux inventaires locaux ne peut pas être purgé*, donc **la passe ne peut pas retirer ce
+Arbitrage : **option 3.** La propriété qui tranche est vérifiable en une phrase : _un objet présent
+dans l'un des deux inventaires locaux ne peut pas être purgé_, donc **la passe ne peut pas retirer ce
 qu'elle vient d'écrire** — ce qui rend le défaut du 2026-08-29 impossible par construction et non par
 prudence. Une absence transitoire devrait désormais enjamber deux listages indépendants séparés par
 toute la durée du miroir. Contre-épreuve jouée dans les deux sens (README §5.7ter) : le code de
