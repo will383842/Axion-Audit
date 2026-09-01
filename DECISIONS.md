@@ -5189,3 +5189,81 @@ Précédence : `CLAUDE.md` §3 (les sept points réservés, **explicitement pré
 gouvernance de session n'est pas dans le pack.
 Décideur : **Williams**, en énoncé direct.
 Impact spec : aucun amendement du pack. Régime de session, applicable immédiatement.
+## 2026-08-31 — [L0 / C3] Rien ne met à niveau le clone `/opt/axion-audit/repo` : qui doit le faire, et à quel prix ?
+
+**LE CONSTAT, MESURÉ.** Le run `33378083192` (sur `6b1d80d`) échoue sur deux causes distinctes. La
+seconde est un vrai défaut de restauration, corrigée dans ce même commit. **La première n'est pas un
+défaut du garde** : le workflow refuse de conclure parce que le serveur a exécuté `e234756` alors que
+l'exécution portait sur `6b1d80d`. Il a raison — _un test de restauration dont on ignore la version
+ne prouve rien de datable_. Le défaut est ailleurs : **rien ne maintient ce clone à jour.** La mise à
+niveau est un geste humain, jamais planifié ; le garde rougit donc après **chaque** fusion, pour une
+raison qui n'est pas celle qu'il surveille. Historique du garde : échec, échec, **un seul succès**
+(`33322880502` sur `e234756`, le jour même où un humain avait remis le clone à niveau), puis échec.
+**Un garde qui rougit systématiquement finit désarmé — c'est mesuré deux fois dans ce dépôt.**
+
+**LA CONTRAINTE QUI FERME LA VOIE ÉVIDENTE.** La clé `ops` porte
+`command="/opt/axion-audit/restore-test-ci.sh"` dans `authorized_keys` : elle ne peut rien exécuter
+d'autre, et le workflow VÉRIFIE que cette restriction tient. **Élargir la clé est exclu d'avance** :
+sa restriction est un acquis de sécurité (02 §30.4-7, moindre accès).
+
+Options :
+
+1. **L'enveloppeur se met à jour lui-même** — `restore-test-ci.sh`, le script fixe désigné par
+   `command=`, réaligne le clone sur `origin/main` avant d'appeler le script versionné. Automatique,
+   sans toucher à la clé, et le remède vit sur le chemin même dont il garantit la fraîcheur : si la
+   mise à niveau échoue, le test échoue, dans la même exécution, bruyamment. **Coût réel, à ne pas
+   arrondir** : chaque nuit, sans témoin, la machine réaligne un dépôt de travail sur du code fusionné
+   quelques heures plus tôt, et ce script pilote Docker — donc avec un pouvoir équivalent à root. Le
+   chemin d'exécution EXISTE DÉJÀ (le clone suit `main`, et c'est son `restore-test.sh` qui fait tout
+   le travail) : l'option ne l'ouvre pas, elle le rend **continu** au lieu de le laisser dépendre de
+   l'oubli d'un humain. Mais elle raccourcit la fenêtre : ce qui atteignait la machine quand
+   quelqu'un tirait l'atteindrait à 03h00. Garde-fous indispensables et suffisamment cheap pour être
+   non négociables : origine du remote vérifiée, refus de toute réécriture d'historique
+   (`origin/main` doit descendre du commit courant), référence de branche en dur — la clé restreinte
+   ne choisit jamais CE QUI s'exécute, seulement le déclenchement.
+2. **La mise à niveau appartient à la LIVRAISON, pas au test** — `deploy-staging.sh` (autre clé
+   restreinte, déjà déclenchée à chaque fusion sur `main`) réaligne le clone sur le commit qu'il
+   déploie. Le clone est alors frais **au moment où un humain a fusionné**, avec témoin, et le garde
+   nocturne redevient un pur garde qui ne rougit que sur une livraison manquée ou une altération.
+   Conceptuellement le plus juste : _la fraîcheur de la copie serveur est une propriété de la
+   livraison_. Défaut : ne couvre pas les nuits sans déploiement, et déplace le même pouvoir dans un
+   second script.
+3. **Une unité `systemd` sur le serveur**, hors de tout chemin CI, réalignant le clone à 02h50.
+   Aucun changement au contrat des clés. Défaut : une seconde chose qui peut mourir en silence — et
+   dont la mort se manifesterait par… exactement le rouge d'aujourd'hui.
+4. **Ne plus comparer le commit du serveur.** **REFUSÉE d'avance** : ce serait réparer le rouge en
+   supprimant le contrôle.
+
+Arbitrage : **AUCUN — ESCALADE À WILLIAMS, et l'agent C3 s'est arrêté volontairement avant d'écrire
+le code.** Les options 1, 2 et 3 déplacent toutes le **modèle de confiance du serveur** : elles
+transforment « du code fusionné atteint la machine quand un humain le décide » en « du code fusionné
+atteint la machine tout seul ». `CLAUDE.md` §3-4 range explicitement « toucher à la sécurité
+autrement que spécifié » parmi ce que l'autopilote ne décide jamais seul, et le pack ne tranche pas
+ce point. **Un doute de spec ne se devine pas : il s'écrit ici.** Précédence citée : `CLAUDE.md` §3-4
+(escalade) au-dessus de l'invariant 8 (sauvegarde testée) — l'invariant impose que le test tourne, il
+n'impose pas QUI a le droit de mettre la machine à jour. Règle de précédence du pack §32-36 > §24-31
+
+> §16-22 > §1-15 **sans objet** : aucune divergence interne au pack.
+
+**RECOMMANDATION DE C3, motivée** : **option 1**, avec les trois garde-fous nommés ci-dessus, et
+l'option 2 en complément le jour où une production existera. Motif : c'est la seule où le garde et son
+remède **échouent ensemble**. Une unité `systemd` (option 3) peut mourir pendant que le garde continue
+de rougir, et c'est précisément la configuration dans laquelle quelqu'un finit par désarmer le garde.
+**Ce que la recommandation ne couvre pas, dit dans le même souffle** : une fusion malveillante dans
+`main` passe, dans les trois options. La protection contre cela est la protection de branche et la
+revue croisée, pas un script sur le serveur. La réponse technique serait la vérification de signature
+GPG des commits — elle exige de poser un trousseau sur le serveur, **action humaine, non faite**.
+
+**CE QUI A ÉTÉ FAIT EN ATTENDANT, et qui ne contourne pas le garde** : le workflow évaluait les deux
+verdicts — « la restauration a-t-elle abouti ? » et « la machine exécutait-elle le code livré ? » —
+en s'arrêtant au premier, et le second était évalué EN PREMIER. **Un clone en retard masquait donc
+entièrement le verdict de la restauration** : au run `33378083192`, l'annotation ne nommait que le
+retard, et l'échec réel ne vivait plus que dans le corps du journal. Les deux verdicts sont désormais
+évalués tous les deux, chacun rougissant pour ses propres raisons, avant de conclure. **Aucun
+contrôle n'est assoupli** ; c'est le journal qui cesse de cacher une cause derrière l'autre.
+
+Décideur : **Williams** (le fond) — préparé et recommandé par C3 sous A50, arbitrage A01 requis avant
+mise en œuvre. Le séparateur de verdicts est signé **A50/C3** : il ne change aucune règle, il empêche
+un garde de taire une cause.
+Impact spec : **aucun amendement**. Modifications : `.github/workflows/nightly-restore-test.yml`
+(deux verdicts au lieu d'un). Le correctif du clone reste **NON ÉCRIT**, en attente d'arbitrage.

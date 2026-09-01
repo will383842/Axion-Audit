@@ -2008,3 +2008,41 @@ Faits du bloc :
 - **Deux fautes de conduite du pilote, tracées** (110ᵉ entrée) : `ba9f258` commité avec une suite
   rouge sous le préfixe `feat` au lieu de `wip:` ; et des écritures dans le répertoire de travail
   d'un agent actif, alors que les trois autres agents, eux, travaillaient en worktree isolé.
+
+## 2026-08-31 10h30 — [C3 qualité / A50 — test de restauration nocturne] — étape pipeline 3/7 (auto-revue)
+
+Dernier commit vert : `6b1d80d` (base) · Branche : `fix/nocturne` · Poussé : **non** (consigne : ne pas pousser)
+Tâche en cours : réparation du test de restauration nocturne — **cause B corrigée et éprouvée**, **cause A escaladée**.
+Prochaine action : **revue croisée par un agent qui n'a pas écrit ce code**, qui doit AUSSI écrire le
+test de non-régression permanent de `decouvrir_volume_archives()` (`CLAUDE.md` §4 / 09 §5.6 : le test
+n'est jamais écrit par l'agent qui a écrit le code testé) ; puis arbitrage de Williams sur la 111ᵉ
+entrée de `DECISIONS.md` — **rien ne met à niveau le clone `/opt/axion-audit/repo`**.
+Tests rouges connus : aucun localement. **Le nocturne restera ROUGE sur `main` tant que le clone du
+serveur n'est pas remis à niveau à la main** — c'est le sujet de l'escalade, pas un défaut du code.
+
+**Cause B, mesurée puis rejouée.** `decouvrir_volume_archives()` posait trois hypothèses tacites
+(un seul conteneur de service via `head -1` · le montage est un volume NOMMÉ · la destination est
+celle qu'on attend) ; il suffisait qu'une seule tombe pour que le message accuse l'absence des
+archives. Mesure du dépôt : **`AXION_ARCHIVES` n'est déclarée nulle part** dans
+`infra/docker-compose.coolify.yml` — la lecture d'environnement dont la fonction se réclamait ne
+rendait jamais rien, et le repli `/sauvegarde` était la seule branche vivante. La découverte se fait
+désormais **par le contenu** (`minio-*.tar.zst.gpg`), comme celle du dépôt pgBackRest quinze lignes
+plus haut, bornée aux montages des conteneurs `sauvegarde` **de notre projet**, et le message d'échec
+**énumère les montages observés**.
+
+**Contre-épreuve exécutée sur Docker local, six scénarios** : B1 (destination différente), B2
+(reliquat plus récent masquant le bon conteneur), B3 (bind au lieu d'un volume) — **les trois
+rouges** avant, avec le message exact du run `33378083192`, **les trois verts** après ; B0 (cas sain)
+vert des deux côtés ; **B4** (aucune archive) et **B5** (deux sources candidates) **restent rouges
+après correctif** — le garde sait toujours dire non, et le dit désormais avec son inventaire.
+
+**Cause A : arrêt volontaire devant le code.** La piste évaluée — que `restore-test-ci.sh` réaligne
+lui-même le clone sur `origin/main` — change le **modèle de confiance du serveur** (`CLAUDE.md` §3-4).
+Elle est instruite, chiffrée et recommandée dans `DECISIONS.md`, **pas implémentée**. Ce qui A été
+fait, et qui ne contourne rien : le workflow évaluait ses deux verdicts en s'arrêtant au premier, et
+le retard du clone **masquait entièrement** l'échec réel de la restauration. Les deux sont désormais
+évalués, chacun rougissant pour ses propres raisons.
+
+**Vérifications** : `shellcheck --severity=warning` sur les 11 scripts d'infra = 0 constat ·
+`check:jonction`, `check:decisions`, `check:executabilite`, `check:invariants`, `check:porte-journal`,
+`check:tracabilite`, `format:check` = verts · `pnpm build:packages` = OK.
