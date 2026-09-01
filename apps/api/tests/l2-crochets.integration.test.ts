@@ -34,6 +34,7 @@ import {
   balayerSentinellesFinancieres,
   decrireRapport,
   detecterSentinelles,
+  natureDuSilence,
   SENTINELLES_FINANCIERES,
   VALEURS_SENTINELLES,
 } from './aide/sentinelle-financiere.js';
@@ -84,6 +85,16 @@ const jetons: Record<keyof typeof comptes, string> = {
 // -----------------------------------------------------------------------------
 // Cadrages semés pour la route financière (T5)
 // -----------------------------------------------------------------------------
+/**
+ * L'entreprise porteuse des cadrages.
+ *
+ * HISSÉE au module (elle vivait dans `beforeAll`) parce que le balayage sentinelle
+ * en a besoin : depuis que la cartographie des paramètres est indexée par (gabarit,
+ * paramètre), `/v1/companies/:id` réclame un identifiant d'ENTREPRISE réellement
+ * semé, et n'hérite plus — c'est tout l'objet du correctif — de l'identifiant de
+ * cadrage déclaré pour `/v1/scoping/:id/financials`.
+ */
+const entrepriseSemee = uuidv7();
 /** Un cadrage AVEC volet financier — celui que l'administrateur a le droit de lire. */
 const cadrageAvecFinancier = uuidv7();
 /** Un cadrage SANS volet financier — il doit rendre la MÊME chose qu'un inconnu. */
@@ -207,9 +218,8 @@ beforeAll(async () => {
   // non-administrateur ne les laisse sortir. Ce sont des leurres de test, jamais
   // un secret (11 §2). Le nom d'entreprise est générique — invariant 2 : aucune
   // référence client dans le code, fixture comprise.
-  const entrepriseId = uuidv7();
   await bd().query(`INSERT INTO companies (id, name) VALUES ($1, 'Entreprise de démonstration')`, [
-    entrepriseId,
+    entrepriseSemee,
   ]);
   for (const cadrageId of [
     cadrageAvecFinancier,
@@ -221,7 +231,7 @@ beforeAll(async () => {
       `INSERT INTO scoping_estimates
          (id, company_id, workload_days, team_size, calendar_days, status)
        VALUES ($1, $2, 12, 2, 30, 'brouillon')`,
-      [cadrageId, entrepriseId],
+      [cadrageId, entrepriseSemee],
     );
   }
   await bd().query(
@@ -1063,6 +1073,47 @@ describe('T5 — les ceintures 3 et 4 : sources et exécution', () => {
     ).toBe(true);
   });
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // LA CARTOGRAPHIE DES PARAMÈTRES D'URL — UNE LIGNE PAR (GABARIT, PARAMÈTRE).
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Elle était PLATE (`{ id, missionId, sessionId }`), et c'était le défaut :
+  // la valeur déclarée pour `:id` — un `scoping_estimate` — servait de repli à TOUT
+  // `:id` du dépôt. `/v1/companies/:id`, arrivée en L3, recevait donc un id de
+  // cadrage, rendait 404, et `parametresNonCartographies` restait VIDE : le balayage
+  // était vert sur une route qu'il n'avait jamais traversée.
+  //
+  // Désormais chaque gabarit sème LE SIEN. Écrire une route à paramètre sans
+  // ajouter sa ligne ici fait rougir ce test — c'est l'effet recherché, et c'est
+  // l'auteur de la route qui le voit, pas le lot suivant.
+  //
+  // ⚠ CETTE TABLE EST FERMÉE DANS LES DEUX SENS. Un gabarit manquant est remonté
+  // dans `parametresNonCartographies` ; une ligne qui ne correspond à aucun gabarit
+  // du registre (route renommée, supprimée) est remontée dans
+  // `declarationsInutiles`. Les deux sont assérés plus bas.
+  //
+  // POURQUOI LES DEUX BANCS ONT UNE VALEUR SANS RÉFÉRENT EN BASE, ET POURQUOI CE
+  // N'EST PLUS LE DÉFAUT D'AVANT : `/essai/missions/:missionId` et
+  // `/essai/sessions/:sessionId` sont des bancs de POLITIQUE. Les variantes
+  // `mission` et `proprietaire_session` du crochet ③ vérifient l'identité et le
+  // compte, RIEN D'AUTRE — la propriété de la ligne est portée par le dépôt et par
+  // le service de sync (auth/politique.ts le dit noir sur blanc). Ces gestionnaires
+  // ne déréférencent donc jamais l'identifiant. Deux choses ont changé : (1) la
+  // valeur ne DÉBORDE plus — le jour où `/v1/missions/:missionId` existera, elle
+  // n'en héritera pas et son auteur devra semer une mission réelle ; (2) elle n'est
+  // plus une promesse mais une propriété MESURÉE : une valeur morte rendrait ces
+  // gabarits muets pour tous les porteurs, et `gabaritsMuets` — asséré vide plus
+  // bas — les dénoncerait.
+  const cartographieDesParametres = {
+    '/v1/scoping/:id/financials': { id: cadrageAvecFinancier },
+    '/v1/companies/:id': { id: entrepriseSemee },
+    // La route du produit RE-montée sous le préfixe du banc « socle cassé » : c'est
+    // un gabarit distinct, donc une ligne distincte. La verbosité est le prix de la
+    // propriété qu'on achète — rien ne déborde d'un gabarit à l'autre.
+    '/essai/socle-casse/scoping/:id/financials': { id: cadrageAvecFinancier },
+    '/essai/missions/:missionId': { missionId: uuidv7() },
+    '/essai/sessions/:sessionId': { sessionId: uuidv7() },
+  };
+
   it('@critique CEINTURE 4 — balayage sentinelle : aucune route ne laisse sortir un montant', async () => {
     const rapport = await balayerSentinellesFinancieres({
       app: api(),
@@ -1075,11 +1126,7 @@ describe('T5 — les ceintures 3 et 4 : sources et exécution', () => {
         lecteur: jetons.lecteur,
         anonyme: null,
       },
-      valeursDeParametre: {
-        id: cadrageAvecFinancier,
-        missionId: '018f0000-0000-7000-8000-00000000aaaa',
-        sessionId: '018f0000-0000-7000-8000-00000000bbbb',
-      },
+      cartographieDeParametres: cartographieDesParametres,
     });
 
     expect(
@@ -1089,8 +1136,17 @@ describe('T5 — les ceintures 3 et 4 : sources et exécution', () => {
 
     expect(
       rapport.parametresNonCartographies,
-      'Des paramètres d’URL n’ont pas de valeur réelle : le balayage a tapé dans le\n' +
-        'vide sur ces routes, et son silence ne vaut rien pour elles.',
+      'Un gabarit à paramètre n’a AUCUNE valeur déclarée pour lui : le balayage a tapé\n' +
+        'dans le vide sur cette route, et son silence ne vaut rien pour elle. Ajouter la\n' +
+        'ligne manquante à `cartographieDesParametres` — avec une valeur RÉELLEMENT\n' +
+        `semée, jamais un UUID de complaisance.\n${decrireRapport(rapport)}`,
+    ).toStrictEqual([]);
+
+    expect(
+      rapport.declarationsInutiles,
+      'La cartographie sème un gabarit qui n’existe plus au registre : on croit couvrir\n' +
+        'une route, on ne couvre rien. C’est la dérive silencieuse que l’autre moitié du\n' +
+        `mécanisme ① ferme.\n${decrireRapport(rapport)}`,
     ).toStrictEqual([]);
 
     expect(
@@ -1103,6 +1159,21 @@ describe('T5 — les ceintures 3 et 4 : sources et exécution', () => {
       rapport.couverture.exerces,
       'Aucun appel n’a rendu 2xx : le balayage n’a lu aucun corps, il est vert par\n' + 'vacuité.',
     ).toBeGreaterThan(0);
+
+    // ── AUCUNE ROUTE NE DOIT ÊTRE ANORMALEMENT MUETTE ─────────────────────────
+    // `non_exerce` n'est plus un compteur : un couple (gabarit, méthode) qu'aucun
+    // porteur n'a fait refuser (401/403) ni servir (2xx) n'a RIEN prouvé, et le
+    // moteur le nomme. Cette liste-ci est assérée EN BLOC, contrairement aux
+    // anomalies — elle ne porte aucun cas délibéré : les silences légitimes (un
+    // `POST` auquel le balayage n'envoie qu'un corps vide, une méthode non servie)
+    // partent dans `gabaritsNonTraversables`, qui est rapporté sans être compté.
+    expect(
+      rapport.gabaritsMuets,
+      'Une route n’a été ni refusée ni servie par AUCUN porteur : 404 pour tous (la\n' +
+        'valeur cartographiée ne désigne rien), 429 (le balayage a été étranglé par le\n' +
+        'quota) ou 5xx (la route tombe). Dans les trois cas le vert du balayage sur cette\n' +
+        `route ne vaut rien.\n${decrireRapport(rapport)}`,
+    ).toStrictEqual([]);
 
     // ── LA ROUTE DU PRODUIT DOIT REFUSER TOUT LE MONDE, SANS EXCEPTION ─────────
     // On n'assère PAS `anomaliesDeCouverture` en bloc, et il faut dire pourquoi
@@ -1121,6 +1192,93 @@ describe('T5 — les ceintures 3 et 4 : sources et exécution', () => {
       surLaRouteDuProduit,
       `La route financière du produit a été ATTEINTE sans refus :\n${decrireRapport(rapport)}`,
     ).toStrictEqual([]);
+  });
+
+  it('@critique CEINTURE 4 — la cartographie NE DÉBORDE PAS d’un gabarit à l’autre', async () => {
+    // ═════════════════════════════════════════════════════════════════════════
+    // LA CONTRE-ÉPREUVE DU MÉCANISME ① — sans elle, le test précédent est vert
+    // par vacuité, exactement comme il l'a été jusqu'au 2026-08-31.
+    // ═════════════════════════════════════════════════════════════════════════
+    // On relance le balayage avec des ŒILLÈRES : `:id` n'est déclaré que pour LA
+    // route financière, et une ligne périmée désigne un gabarit qui n'existe pas.
+    // Le rapport DOIT alors dénoncer les deux — les autres porteurs de `:id`
+    // (dont `/v1/companies/:id`) comme NON cartographiés, et la ligne périmée
+    // comme inutile.
+    //
+    // Si `parametresNonCartographies` revenait VIDE, cela signifierait que la
+    // valeur du cadrage a de nouveau servi de repli aux autres gabarits : le
+    // repli global serait revenu par une porte dérobée, et l'assertion « liste
+    // vide » du test précédent ne pourrait plus jamais rougir. C'est LE défaut
+    // qu'A02 a mesuré ; il ne se referme que par cette épreuve.
+    const aOeilleres = await balayerSentinellesFinancieres({
+      app: api(),
+      porteurs: { lecteur: jetons.lecteur },
+      cartographieDeParametres: {
+        '/v1/scoping/:id/financials': { id: cadrageAvecFinancier },
+        // Un gabarit qui n'existe pas au registre — la route rêvée, ou renommée.
+        '/v1/missions/:id': { id: uuidv7() },
+      },
+    });
+
+    expect(
+      aOeilleres.parametresNonCartographies,
+      'Le balayage n’a dénoncé AUCUN gabarit non cartographié alors qu’il en reste\n' +
+        'plusieurs porteurs de `:id`. La valeur déclarée pour la route financière a donc\n' +
+        'servi de repli aux autres : le mécanisme ① est mort, et l’assertion « liste\n' +
+        'vide » du test précédent ne peut plus rougir.',
+    ).toContain('/v1/companies/:id → :id');
+
+    expect(
+      aOeilleres.parametresNonCartographies,
+      'Le gabarit EXPLICITEMENT cartographié ne doit évidemment pas être dénoncé :\n' +
+        'un mécanisme qui crie sur tout est débranché sous quinze jours.',
+    ).not.toContain('/v1/scoping/:id/financials → :id');
+
+    expect(
+      aOeilleres.declarationsInutiles,
+      'Une ligne de cartographie désignant un gabarit ABSENT du registre doit être\n' +
+        'dénoncée : sans quoi la table dérive et l’on croit semer une route disparue.',
+    ).toContain('/v1/missions/:id → :id');
+  });
+
+  it('@critique CEINTURE 4 — la frontière du silence est éprouvée PAR SES DEUX CÔTÉS', () => {
+    // `natureDuSilence` est exportée pour la même raison que `detecterSentinelles` :
+    // prouver la sensibilité du classificateur sans dépendre d'une route. Un
+    // classificateur qui dirait « anormal » à tout rendrait le test rouge en
+    // permanence, donc débranché ; un qui dirait « structurel » à tout ramènerait
+    // le compteur muet d'avant. Les deux côtés, donc, pas l'un ou l'autre.
+    expect(
+      natureDuSilence('GET', [404, 404, 404]),
+      'Un 404 pour TOUS les porteurs est le défaut historique : la valeur substituée\n' +
+        'ne désigne rien, et le balayage n’a traversé aucune route.',
+    ).toBe('anormal');
+    expect(
+      natureDuSilence('GET', [400]),
+      'Un 400 sur une méthode SANS corps ne peut venir que d’un paramètre malformé —\n' +
+        'donc d’une cartographie fausse, pas d’un refus du produit.',
+    ).toBe('anormal');
+    expect(
+      natureDuSilence('GET', [429]),
+      'Un balayage étranglé par le quota est vert par étranglement.',
+    ).toBe('anormal');
+    expect(natureDuSilence('GET', [500])).toBe('anormal');
+    expect(
+      natureDuSilence('GET', []),
+      'Aucun appel = aucune preuve. Le silence total est le pire des silences.',
+    ).toBe('anormal');
+
+    expect(
+      natureDuSilence('POST', [400, 400]),
+      'Le balayage envoie un corps VIDE : une route à schéma le refuse légitimement et\n' +
+        'son gestionnaire n’a jamais tourné. Compter cela comme une anomalie rendrait le\n' +
+        'garde-fou rouge en permanence — donc inutile.',
+    ).toBe('structurel');
+    expect(natureDuSilence('GET', [405])).toBe('structurel');
+    expect(
+      natureDuSilence('POST', [400, 404]),
+      'Un seul statut inexplicable suffit : la frontière est conjonctive, sinon un 404\n' +
+        'se cacherait derrière un 400 légitime.',
+    ).toBe('anormal');
   });
 
   it('@critique le détecteur de sentinelles est SENSIBLE, y compris au format français', () => {

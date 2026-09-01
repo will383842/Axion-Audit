@@ -20,6 +20,7 @@ import { routesAuth } from './domaines/auth/routes.js';
 import { routesSante } from './routes/sante.js';
 import { routesScoping } from './routes/scoping.js';
 import { routesUsers } from './routes/users.js';
+import { routesCompanies } from './routes/companies.js';
 
 // =============================================================================
 // PÉRIMÈTRE DE CONFIANCE DES EN-TÊTES DE PROXY — correctif de sécurité.
@@ -201,6 +202,10 @@ export async function construireApp(): Promise<FastifyInstance> {
   // comptes » pour le lead). `GET /v1/users` est le PREMIER appelant réel de la
   // pagination keyset de `http/pagination.ts` — curseur `(created_at, id)`.
   await app.register(routesUsers, { prefix: '/v1' });
+  // Référentiel client (07, table des lots : « API missions/companies — dédup SIREN
+  // R3, NAF→secteur R4 ») — lot L3/L3a. Les quatre routes sont `admin` seul ; le
+  // crochet `onRoute` refuse le démarrage si l'une d'elles perdait `config.acces`.
+  await app.register(routesCompanies, { prefix: '/v1' });
 
   return app;
 }

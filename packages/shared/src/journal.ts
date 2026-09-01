@@ -192,6 +192,16 @@ export const ACTIONS_JOURNAL = [
   'user.password_reset',
   'rbac.refus',
   'financier.consultation',
+  // ── companies (lot L3, incrément L3a) ──────────────────────────────────────
+  // DEUX actions, et deux seulement.
+  //   · pas de `company.read` : le catalogue ne trace aucune consultation
+  //     ordinaire — une liste se rafraîchit à chaque ouverture d'écran et noierait
+  //     la table. La seule consultation tracée du produit reste
+  //     `financier.consultation`, parce que 06 §10.5 l'exige nommément ;
+  //   · pas de `company.delete` : aucune route de ce lot n'écrit
+  //     `companies.deleted_at`, et le catalogue ne nomme que ce qui existe.
+  'company.create',
+  'company.update',
 ] as const;
 
 export type ActionJournal = (typeof ACTIONS_JOURNAL)[number];
@@ -202,7 +212,7 @@ export type ActionJournal = (typeof ACTIONS_JOURNAL)[number];
  * entité rendraient toute recherche d'audit incomplète — et une recherche d'audit
  * incomplète ne se voit pas, elle rend simplement moins de lignes.
  */
-export const ENTITES_JOURNAL = ['user', 'scoping_estimate'] as const;
+export const ENTITES_JOURNAL = ['user', 'scoping_estimate', 'company'] as const;
 export type EntiteJournal = (typeof ENTITES_JOURNAL)[number];
 
 /**
@@ -236,6 +246,32 @@ export const CHAMPS_UTILISATEUR_JOURNALISABLES = [
   'usage_profile',
   'is_active',
   'password_hash',
+] as const;
+
+/**
+ * Champs d'une fiche client modifiables par `company.update` — le NOM du champ,
+ * jamais sa valeur.
+ *
+ * ⚠ CETTE LISTE EST EN `snake_case` PARCE QU'ELLE NOMME DES COLONNES, pas des
+ * propriétés TypeScript : c'est ce que `CHAMPS_UTILISATEUR_JOURNALISABLES` fait
+ * déjà, et c'est ce qui rend une ligne d'audit relisible par un `psql` huit mois
+ * plus tard, sans traduction mentale.
+ *
+ * `siren` y figure — le NOM du champ, jamais le numéro. Un SIREN est une donnée
+ * IDENTIFIANTE du client : le journaliser reviendrait à recopier une cellule du
+ * dossier client dans une table d'audit, exactement ce que la décision du
+ * 2026-08-29 refuse pour le rapport d'import CSV.
+ */
+export const CHAMPS_ENTREPRISE_JOURNALISABLES = [
+  'name',
+  'siren',
+  'naf_code',
+  'sector_id',
+  'external_ref',
+  'headcount',
+  'sites_count',
+  'countries',
+  'notes',
 ] as const;
 
 /** Pourquoi le crochet d'autorisation a refusé (note §2.4 : routes admin et financières). */
@@ -352,6 +388,35 @@ export const evenementJournalSchema = z.discriminatedUnion('action', [
     utilisateurId: idUtilisateur,
     cadrageId: z.uuid(),
     // Aucun montant, aucun taux journalier. Jamais. Voir la note §2.4.
+  }),
+
+  // ── companies (câblé par L3a) ──────────────────────────────────────────────
+  z.strictObject({
+    action: z.literal('company.create'),
+    utilisateurId: idUtilisateur,
+    entrepriseId: z.uuid(),
+    /**
+     * `true` si la fiche naît AVEC un SIREN. Un BOOLÉEN, jamais le numéro : la
+     * question à laquelle le journal doit répondre est « cette fiche a-t-elle été
+     * créée sans clé de rapprochement ? » (R3), pas « quel est son SIREN ? ». Le
+     * numéro appartient à la fiche ; la table d'audit n'a aucune raison d'en tenir
+     * une seconde copie, avec une rétention et un régime d'accès différents.
+     */
+    avecSiren: z.boolean(),
+    /**
+     * `true` quand la création a levé l'alerte de doublon de nom (R3, « nom en
+     * second »). C'est la moitié « création tracée » de la note de conception L3
+     * §3d : sans elle, rien ne distinguerait a posteriori une fiche créée en toute
+     * connaissance d'un homonyme d'une fiche créée dans l'ignorance.
+     */
+    doublonNomSignale: z.boolean(),
+  }),
+  z.strictObject({
+    action: z.literal('company.update'),
+    utilisateurId: idUtilisateur,
+    entrepriseId: z.uuid(),
+    /** Les NOMS des colonnes touchées. Jamais l'avant, jamais l'après. */
+    champs: z.array(z.enum(CHAMPS_ENTREPRISE_JOURNALISABLES)).min(1),
   }),
 ]);
 
@@ -481,6 +546,27 @@ export function versLigneJournal(evenement: EvenementJournal): ContenuLigneJourn
         entityType: 'scoping_estimate',
         entityId: evenement.cadrageId,
         meta: null,
+      };
+
+    case 'company.create':
+      return {
+        action: evenement.action,
+        utilisateurId: evenement.utilisateurId,
+        entityType: 'company',
+        entityId: evenement.entrepriseId,
+        meta: {
+          avec_siren: evenement.avecSiren,
+          doublon_nom_signale: evenement.doublonNomSignale,
+        },
+      };
+
+    case 'company.update':
+      return {
+        action: evenement.action,
+        utilisateurId: evenement.utilisateurId,
+        entityType: 'company',
+        entityId: evenement.entrepriseId,
+        meta: { champs: [...evenement.champs] },
       };
   }
 }

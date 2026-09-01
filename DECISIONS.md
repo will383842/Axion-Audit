@@ -5359,3 +5359,527 @@ d'un seul caractère, dans le même fichier, ferait toujours rougir le build.
 Décideur : Williams (intention) · A01 (mécanisme, sur le précédent écrit du 2026-08-29)
 Impact spec : aucun sur `/docs`. Amendement horodaté de `.gitleaks.toml` (troisième entrée de
 l'allowlist, documentée sur place avec son épreuve).
+---
+
+## 2026-08-31 — [L3a] Quel rôle accède au référentiel client ? Le pack ne le dit nulle part
+
+`docs/conception/LOT_L3.md` §2 nomme les quatre routes `companies` mais ne leur donne aucune
+politique d'accès. Le pack a été relu sur ce point avant d'écrire la première ligne : **05 §8 et
+§24.2 ne listent pas `/v1/companies`** (elles ne nomment que `/v1/missions`, `/v1/scoping`,
+`/v1/answers`…), et la matrice **03 §34.1** ne comporte aucune ligne « fiche client ». C'est un
+silence, pas une négligence de lecture — et `apps/api/src/auth/politique.ts` refuse le démarrage
+d'une route sans `config.acces` : il fallait donc trancher pour livrer.
+
+Options :
+
+1. `roles: ['admin']` — le plus restrictif.
+2. `roles: ['admin', 'consultant']` — un consultant crée la fiche du client qu'il va auditer.
+3. `type: 'authentifie'` — tout compte actif lit le référentiel client.
+
+Arbitrage : **option 1, `admin` seul, et l'ouverture reste possible ; l'inverse ne l'était pas.**
+
+Trois éléments orientent, aucun ne prescrit :
+· **03 §34.1 : « la console est ADMIN SEUL »** en V1. Une fiche client est un objet de console — la
+PWA terrain ne connaît que des missions, jamais le référentiel qui les porte (05 §9.5 : le pull de
+sync ne descend pas `companies`) ;
+· **03 §34.3** borne le lead de mission et l'exclut nommément des « comptes » et du financier ; rien
+n'y étend son périmètre au référentiel client ;
+· `companies.external_ref` est **la clé de liaison avec la console commerciale axion-ia.com** (04,
+E18). L'ouvrir plus largement ouvrirait la lecture de cette liaison, dont le §20.6 fait un objet
+d'administration.
+
+**La règle qui décide, et elle n'est pas de goût** : un droit qu'on ouvre ne se reprend pas sans
+casser un usage installé, alors qu'un droit qu'on élargit ne casse rien. Sur un silence, le coût
+d'erreur est donc asymétrique — et la doctrine du dépôt sur les silences d'accès est déjà écrite
+(`domaines/scoping/financiers.depot.ts` : « une porte fermée ne trie pas le courrier »). L'option 2
+sera légitime le jour où un besoin terrain réel l'appellera ; elle sera alors **une ligne** dans
+`CONFIG_ADMIN` et une entrée ici.
+
+⚠ **CONSÉQUENCE À CONNAÎTRE, ÉCRITE PLUTÔT QUE DÉCOUVERTE EN RECETTE** : un consultant ne peut ni
+créer ni lire une fiche client. Si le parcours de préparation d'une mission (L3b) suppose qu'un
+consultant crée l'entreprise avant la mission, **il faudra rouvrir cette décision** — et non
+contourner la route.
+
+Précédence : `CLAUDE.md` invariant 3 (RBAC serveur systématique) · §3-6 (documenter ce que le pack ne
+liste pas) · 03 §34.1 comme texte le plus proche. Règle de précédence du pack **sans objet** : il n'y
+a pas divergence entre deux textes, il y a absence de texte.
+
+Décideur : A01, sur constat de l'agent L3a.
+Impact spec : aucun amendement du pack. Politique d'accès des quatre routes `companies` documentée
+ici et dans `apps/api/src/routes/companies.ts`.
+
+---
+
+## 2026-08-31 — [L3a] `COMPANY_DUPLICATE` était arbitré depuis deux jours et n'existait pas dans le code
+
+L'entrée du 2026-08-29 (« Les quatre codes d'erreur du lot ») retient « `COMPANY_DUPLICATE` · 409 ·
+périmètre réduit au SIREN ». **Mesuré au moment d'écrire L3a : `packages/shared/src/errors.ts` porte
+17 codes, et celui-là n'y est pas.** Le brief du lot interdit par ailleurs tout code hors de ce
+fichier — la route ne pouvait donc pas être écrite telle qu'elle est arbitrée.
+
+Le même relevé montre que **deux autres amendements de la même journée sont restés sur le papier** :
+le champ `code` optionnel d'`errorDetailSchema` et le statut **422** (tous deux annoncés « Impact
+spec » de l'entrée du 2026-08-29). Ils appartiennent à l'import CSV (L3c) et à l'import de banque
+(L9), pas à `companies`.
+
+Options :
+
+1. S'arrêter et rendre le lot non livrable tant que le code n'est pas posé par un autre.
+2. Ramener le conflit de SIREN au `CONFLICT` générique et ignorer l'arbitrage.
+3. **Poser le seul code que l'arbitrage du 2026-08-29 nomme pour ce périmètre, et signaler les deux
+   amendements restants sans les faire.**
+
+Arbitrage : **option 3.**
+
+L'option 2 contredirait une décision d'A01 déjà prise, datée et motivée — et le motif tient : 05 §8.3
+annonce un second conflit possible sur ces routes (référentiel partagé `external_ref`), qui rendrait
+un branchement front bâti sur un conflit nu **faux en silence**. L'option 1 confondrait « décider »
+et « exécuter » : ajouter un code d'erreur **déjà arbitré, à son statut arbitré, sur son périmètre
+arbitré** est de l'exécution. Ce qui aurait exigé un arrêt, c'est un code dont personne n'aurait
+tranché l'existence — et ce n'est pas le cas ici.
+
+**Ce qui n'a PAS été fait, délibérément** : ni le `code` d'`errorDetailSchema`, ni le statut 422. Ils
+n'ont aucun appelant dans ce lot, et un code d'erreur sans appelant est exactement le « code mort »
+que l'entrée du 2026-08-29 refuse. Ils sont **dus aux lots L3c et L9**, qui les poseront avec leur
+premier usage.
+
+**Même geste, même raison, pour le catalogue du journal** : `packages/shared/src/journal.ts` ne
+connaissait ni l'entité `company` ni ses actions. Deux actions (`company.create`, `company.update`),
+l'entité `company`, et `CHAMPS_ENTREPRISE_JOURNALISABLES` sont ajoutés. Aucune action de
+consultation : le catalogue n'en trace aucune hors du financier (06 §10.5), et une liste qui se
+rafraîchit à chaque ouverture d'écran noierait la table. `activity_log.entity_type` est un `TEXT`
+**sans CHECK** (migration `0007`) : l'ajout ne touche donc pas le fichier 04.
+
+Précédence : `CLAUDE.md` §9 (les codes vivent dans `packages/shared`, statut HTTP cohérent) · §3-6
+(une décision d'API se documente) · invariant 7 (toute correction est tracée). La règle de précédence
+du pack est **sans objet** : l'écart est entre une décision et le code, pas entre deux textes.
+
+Décideur : A01, par l'entrée du 2026-08-29 qu'il ne s'agit ici que d'exécuter.
+Impact spec : aucun amendement du pack. `ERROR_CODES` passe de 17 à 18 entrées ; `ACTIONS_JOURNAL` de
+12 à 14 ; `ENTITES_JOURNAL` de 2 à 3.
+
+---
+
+## 2026-08-31 — [L3a] Trois silences de forme du CRUD companies : le curseur, la place de l'avertissement, la suppression
+
+Trois questions que ni le pack ni la note de conception ne tranchent, rencontrées en écrivant les
+quatre routes. Elles sont groupées parce qu'elles ont la même nature — de la FORME d'API, jamais du
+produit — et le même arbitre.
+
+Options :
+
+1. Les trancher au fil du code sans les écrire.
+2. **Les trancher en les écrivant, chacune sur son propre motif.**
+
+Arbitrage : **option 2 — trois arbitrages distincts.**
+
+**a. LE CURSEUR EST `(name, id)`, PAS `(created_at, id)`.** La note de conception L3 §2 le fige
+(« `companies`: `name,id` ») et `apps/api/src/http/pagination.ts` en porte déjà la trace dans son
+en-tête, avant toute ligne de ce lot. Le brief de l'agent rappelait à juste titre le précédent de
+`users` — mais ce précédent porte sur la **forme** (curseur composite, dernière clé unique), pas sur
+le **choix des colonnes**, que le contrat 11 §3 confie explicitement à chaque route (« curseur
+documenté par route »). Le motif est fonctionnel : un référentiel client se cherche par ordre
+alphabétique. ⚠ **Le piège des microsecondes reste vrai et reste écrit** : il vient de la conversion
+`TIMESTAMPTZ` → `Date` du pilote, il ne s'applique pas à une colonne `TEXT`, et le dépôt le dit à
+l'endroit exact où le lecteur suivant se demandera pourquoi le `::text` de `users` a disparu.
+**Dette REMONTÉE** : aucun index ne sert `companies(name, id)` au §7.1 du fichier 04 — le tri est
+fait en mémoire. Sans effet en Phase 1 ; l'ajouter est un amendement du 04, donc Williams.
+
+**b. L'AVERTISSEMENT VIT DANS LA RÉPONSE DE L'ÉCRITURE, PAS DANS LA FICHE.** L'entrée du 2026-08-29 a
+substitué au 409 sur le nom un « 201 avec un champ d'avertissement » sans en fixer la forme.
+`POST` et `PATCH` rendent donc `{ company, secteurAQualifier, doublonsNomPossibles }`, tandis que
+`GET` rend la fiche à plat. **L'asymétrie est le prix d'une distinction juste** : ces deux champs
+sont des constats sur l'ACTE d'écriture, pas des propriétés de l'entreprise ; les aplatir obligerait
+la lecture à rescanner les homonymes à chaque affichage, ou à les rendre faux. Le nom
+`secteurAQualifier` est repris **verbatim** de la note de conception §3d ; il jure avec les champs
+anglais voisins, et cet écart est assumé plutôt que corrigé en douce — la note lie ce lot, et
+renommer un champ contractuel n'est pas de l'exécution. **À reprendre au moment où la console
+consommera ces routes**, si le mélange gêne à l'usage.
+
+**c. IL N'Y A PAS DE ROUTE DE SUPPRESSION, ALORS QUE LA COLONNE EXISTE.** `companies.deleted_at` est
+au fichier 04, et pourtant aucune section fonctionnelle ne dit ce que supprimer une fiche
+signifierait pour les missions qui la référencent (`missions.company_id` est **NOT NULL**). Créer la
+route exigerait de trancher cela : c'est du produit, pas une convention. Les lectures filtrent
+néanmoins `deleted_at IS NULL` dès aujourd'hui — le filtre est écrit **une fois**, dans le dépôt.
+⚠ **Conséquence à connaître le jour où la suppression arrivera** : l'index unique partiel
+`uq_companies_siren` **n'exclut pas les lignes supprimées**. Une fiche supprimée retiendra donc son
+SIREN, et le 409 désignera une fiche que la liste ne montre plus. Le corriger demanderait de changer
+l'index, donc le fichier 04.
+
+Précédence : `CLAUDE.md` §9 (pagination keyset, curseur documenté par route ; nommage camelCase) ·
+§3-2 (le schéma 04 est la signature de Williams) · §0 (la note de conception du lot lie l'agent).
+Règle de précédence du pack **sans objet** pour a et c ; pour b, la note de conception ne peut ni
+étendre ni réduire ce que le pack fixe, mais le pack ne fixe rien ici.
+
+Décideur : A01, sur dossier de l'agent L3a.
+Impact spec : aucun amendement du pack. Deux dettes remontées à Williams (index
+`companies(name, id)` ; portée de `uq_companies_siren` vis-à-vis de `deleted_at`).
+
+---
+
+## 2026-08-31 — [L3b] Le pouvoir de FORCER une transition : le §32.2 le nomme une fois, le §17.3 deux fois
+
+Rencontré en fixant le contrat de `TRANSITIONS_MISSION` (`packages/shared/src/missions.ts`), avant
+toute ligne d'implémentation. La note de conception `LOT_L3.md` §3b fige la forme d'une ligne de la
+table — `{depuis, vers, sens, roles, conditions, motifRequis}` — et cette forme **ne sait pas exprimer
+la surcharge admin**, que le pack nomme pourtant deux fois, à deux portées différentes :
+
+· 03 §32.2, verbatim : `en_cours → en_analyse` (« étape collecte validée, **ou override admin
+motivé** ») — une seule transition nommée ;
+· 03 §17.3, verbatim : « passer « **en analyse** » ou « **livrée** » affiche les manques (seuils
+§M5.3) ; l'admin peut forcer, avec motif journalisé » — deux transitions.
+
+Le §32.2 est muet sur `en_analyse → livree`. **Muet n'est pas contraire** : la règle de précédence
+(§32-36 > §24-31 > §16-22) ne s'arme que sur une DIVERGENCE, et il n'y en a pas ici. Un agent pressé
+lirait « le §32.2 prévaut, donc une seule transition forçable » — ce serait faire dire au silence
+l'inverse de ce que dit la seule section qui parle.
+
+Options :
+
+1. Ne modéliser que `en_cours → en_analyse`, au motif que §32.2 prévaut.
+2. Rendre TOUTE transition forçable par un admin motivé — la surcharge devient un pouvoir général.
+3. **Un champ par ligne (`surchargeAdminMotivee`), vrai sur les DEUX transitions nommées par le
+   §17.3, faux partout ailleurs.**
+
+Arbitrage : **option 3.**
+
+L'option 1 supprime une capacité que le pack accorde explicitement, sur la foi d'un silence.
+L'option 2 est la faute inverse, et la plus coûteuse : elle rendrait `livree → cloturee` et surtout
+`preparation → en_cours` forçables, c'est-à-dire qu'un admin pourrait lancer une collecte **sans
+questionnaire figé** — le terrain partirait avec zéro question, et l'invariant 6 (« le terrain
+collecte, le siège produit ») deviendrait inexécutable. Ni §32.2 ni §17.3 n'accordent cela : les deux
+ne parlent que des transitions **vers l'aval de la collecte**, là où les manques sont un jugement
+d'auditeur, jamais un défaut de préparation. La surcharge est donc une propriété **de la ligne**, pas
+du rôle.
+
+Deux conséquences écrites plutôt que sous-entendues :
+· la surcharge exige un motif **même quand `motifRequis` est faux** — forcer sans dire pourquoi est
+exactement ce que le §17.3 interdit (« avec motif journalisé ») ;
+· la surcharge est **sans effet pour un non-admin**. Un consultant qui la demande sur une condition
+fausse reçoit `conditions_non_remplies`, pas `role_insuffisant` : le refus doit nommer ce qui
+manque, pas ce que le demandeur n'est pas.
+
+Précédence : 03 §32.2 et §17.3, **sans divergence — la règle de précédence du pack est donc sans
+objet**. `CLAUDE.md` §0 (la note de conception du lot lie l'agent, mais ne peut ni étendre ni réduire
+ce que le pack fixe : la forme de `LOT_L3.md` §3b est complétée, pas contredite).
+
+Décideur : A10 (chef d'équipe du chantier C1), à ratifier par A01 à la revue croisée de L3b.
+Impact spec : aucun amendement du pack. Un champ ajouté à la forme de ligne proposée par
+`docs/conception/LOT_L3.md` §3b.
+
+---
+
+## 2026-08-31 — [L3d → Williams] `interviews.conducted_by` est NOT NULL : le plan d'entretiens §32.4 ne produit aucun auditeur
+
+**Ceci est une ESCALADE, pas un arbitrage.** `CLAUDE.md` §3-2 : modifier le fichier 04 est réservé à
+Williams. L'entrée existe pour que la question soit posée, pas pour la trancher.
+
+Mesuré : `apps/api/drizzle/0004_collecte.sql` ligne 26 déclare `conducted_by UUID NOT NULL`, et
+`apps/api/src/db/schema.ts` ligne 534 le reflète. Le fichier 04 (ligne 115) écrit seulement
+`conducted_by FK users` — il ne dit **ni** `NULL` **ni** `NOT NULL`. La non-nullité est donc une
+décision prise au lot L1, dans le silence du 04, et le manifeste de comparaison schéma-vs-04 la fige
+désormais : la relâcher est un amendement, pas une correction.
+
+Le §32.4 spécifie un plan d'entretiens **par unité et par profil** (« ≤ 10 pers. → 1-2 entretiens ·
+11-50 → 3 · 51-200 → 4-6 + 1 observation · > 200 → 6-10 + observation + démonstration + relevé »).
+Ce plan est une **CIBLE** : il ne nomme aucun auditeur, et il ne peut pas en nommer un — au cadrage,
+l'équipe n'est pas constituée. Une ligne `interviews` planifiée est donc, par nature, une ligne sans
+propriétaire, et la colonne la refuse.
+
+Piste proposée à l'examen, et **son défaut** : dériver `conducted_by` de `work_assignments`, porteur
+de l'affectation selon 03 §34.3 (« ajuster le plan d'entretiens **et** les `work_assignments` de sa
+mission » — deux objets, cités côte à côte). Elle ne tient pas seule : `work_assignments` est
+`(mission_id, user_id, org_unit_id)` et n'a **aucune dimension profil**, alors que le plan est
+spécifié par unité ET par profil ; et au moment où le plan se génère, il peut n'exister aucune
+affectation. Dériver produirait donc soit un propriétaire faux, soit rien. **À ne pas confondre avec
+le §34.4**, qui ne parle que d'habilitation (`habilitated_at`) et ne porte aucune affectation.
+
+Ce que cela ne bloque PAS aujourd'hui, et c'est ce qui rend l'escalade non urgente : `DECISIONS.md`
+du 2026-08-29 (« les quatre routes hors §8/§24.2 ») a déjà **reporté `POST …/interview-plan/apply`**
+en fiche d'étage 2, faute de table où poser le plan. Le critère n° 4 du fichier 07 dit « plan
+d'entretiens **généré** », pas « persisté » : **L3 livre le générateur, fonction pure et testée, et ne
+persiste rien.** La présente entrée existe pour que le jour où `/apply` sera arbitré, le blocage soit
+déjà instruit au lieu d'être redécouvert.
+
+Options soumises à Williams :
+
+1. Rendre `interviews.conducted_by` NULLABLE — une session planifiée sans auditeur est une ligne
+   légitime. **Coût caché à mesurer** : 05 §9.9 fonde toute la propriété d'écriture de sync sur cette
+   colonne. Un `NULL` y deviendrait un cas à traiter dans le moteur de sync (L6), et « propriétaire
+   inconnu » ne doit jamais s'y lire « tout le monde ».
+2. Créer une table de plan d'entretiens (unité × profil × cible), ce que la conception appelait de ses
+   vœux — amendement du 04, et le blocage reste double tant que `interviews.interlocutor_profile_id`
+   n'existe pas (04 : la colonne manque, LOT_L3.md §5-1).
+3. Ne rien changer : le plan reste une fonction pure, jamais persisté, jusqu'à la Phase 2.
+
+Arbitrage : **AUCUN — la question est portée à Williams.** Aucune ligne de code L3 ne présuppose une
+issue : le générateur est écrit comme une fonction pure, sans écriture.
+
+Précédence : `CLAUDE.md` §3-2 (le fichier 04 est la signature de Williams) · §0 (le 07 fait foi pour
+le périmètre : « plan d'entretiens généré »). Règle de précédence du pack sans objet — le pack ne se
+contredit pas, il est **silencieux** sur la nullité de la colonne.
+
+Décideur : **Williams** (en attente). Instruit par A10, chantier C1.
+Impact spec : amendement du fichier 04 **si** l'option 1 ou 2 est retenue ; aucun sinon.
+
+---
+
+## 2026-08-31 — [L3 → A01] La migration du fil rouge vers Playwright est datée au L3, et L3 ne livre aucun écran
+
+Relevé au brief de reprise de L3, en confrontant deux textes que rien ne rapprochait.
+
+`DECISIONS.md` du 2026-08-27 (« Le fil rouge naît en tests d'intégration, il passe à Playwright au lot
+L3 ») écrit, verbatim : « **Migration imposée au lot L3**, dès que "création mission → import arbre →
+questionnaire figé" existe : le fil rouge devient alors un test Playwright […]. Sans cette date
+écrite, le fil rouge resterait au niveau d'intégration par inertie, et la porte P-C réclamerait un
+Playwright que personne n'aurait écrit. » `docs/conception/LOT_L3.md` §4 le reprend : « `@filrouge`
+vert sur les deux, c'est la bascule Playwright annoncée « au L3 ». »
+
+**Mesuré ce jour** : `apps/hq/src` contient **deux fichiers** — `App.tsx` et `main.tsx`. Aucun écran,
+aucune route de navigation, aucun formulaire. Et c'est conforme : la table des lots du fichier 07
+donne à L3 « API missions/companies […] » — **aucune interface** — et place la console en **L7-min**
+(« Console minimale : portefeuille, avancement mission, couverture, export »).
+
+La migration est donc datée d'un lot qui, par son propre périmètre, ne produit rien que Playwright
+puisse piloter. Ce n'est ni une erreur de l'un ni de l'autre : c'est une jonction que personne n'a
+faite, et elle se paie à la porte P-C si on la laisse dormir — exactement le risque que l'entrée du
+2026-08-27 disait vouloir éviter.
+
+Options :
+
+1. **Écrire le Playwright en L3 sur le `request` fixture** (appels HTTP pilotés par Playwright, sans
+   navigateur). Le tag `@filrouge` serait porté par du Playwright — mais ce serait un test
+   d'intégration déguisé, plus lent, sans DOM, sans offline : on aurait satisfait la lettre en
+   perdant ce que Playwright apporte. Le 07 §13 décrit le fil rouge comme un « parcours complet »
+   incluant « sessions hors ligne (contexte offline) », qu'aucune fixture `request` ne rejoue.
+2. **Livrer en L3 des écrans de console** (création de mission, import d'arbre, prévisualisation) pour
+   que Playwright ait quelque chose à piloter. C'est **hors périmètre du 07** pour L3, donc un
+   descope de fait sur un autre lot, et l'affaire de la porte, pas de l'autopilote.
+3. **Décaler la migration au premier lot qui livre une interface** — L5 pour le terrain (PWA
+   complète), L7-min pour la console — en gardant le fil rouge au niveau intégration d'ici là,
+   ENRICHI à chaque lot comme le §4bis l'exige (« le parcours **disponible à date** »).
+
+Arbitrage : **AUCUN — porté à A01.** Le point touche la date d'un engagement pris par une décision
+d'A01 et le périmètre de deux lots ; il n'appartient pas au chef d'équipe de le déplacer.
+
+**Ce que L3 fait en attendant, et qui n'est pas une attente** : le fil rouge d'intégration
+(`apps/api/tests/l1-filrouge.integration.test.ts`, fixtures `tests/aide/fil-rouge.ts`) est **étendu**
+au parcours que L3 rend disponible — création de mission, import d'arbre, figeage du questionnaire —
+sur FIL-TPE **et** FIL-GC. Le parcours grandit donc bien à ce lot ; seule la TECHNOLOGIE du harnais
+reste en question. Formulé autrement : la substance de l'engagement du 2026-08-27 est tenue par L3,
+son enveloppe ne l'est pas, et confondre les deux ferait soit un faux vert, soit un faux retard.
+
+Précédence : `CLAUDE.md` §0 (le brief d'un lot vient EXCLUSIVEMENT de la table du fichier 07) ·
+09 §4bis (« le parcours de bout en bout **disponible à date** »). Règle de précédence du pack **sans
+objet** : la tension est entre une décision d'exécution et la table des lots, pas entre deux sections
+du pack.
+
+Décideur : **A01** (en attente). Instruit par A10, chantier C1.
+Impact spec : aucun. Une date d'engagement à confirmer ou à déplacer.
+
+---
+
+## 2026-08-31 — [L3b] Qui a le droit de faire AVANCER une mission ? Le §32.2 ne le dit que pour les retours
+
+Trouvé par A16 en écrivant les tests de la machine à états **avant** l'implémentation (09 §3-2) — ce
+qui est exactement ce que le TDD est censé produire : la question sort du contrat, pas du code. Mon
+propre brief présupposait une réponse sans l'avoir instruite ; A16 a refusé de la deviner et l'a
+signalée. La correction m'incombe.
+
+`03 §32.2` nomme les rôles **une seule fois** : « Retours arrière (**admin uniquement**, motif
+obligatoire) ». Les quatre transitions « avant » n'ont aucun rôle attaché. Deux textes tirent en sens
+inverse :
+
+· `03 §34.1` : « **Décision V1 : la console est ADMIN SEUL** […] Le cockpit du consultant, c'est la
+PWA : il n'a JAMAIS besoin de la console pour travailler. » Or `POST /v1/missions/:id/status` est
+une route de console (05 §8.3, rubrique « Clients & missions »).
+· `03 §32.2` lui-même : écrire « admin **uniquement** » sur les retours n'a de sens que si les
+transitions avant ne le sont **pas**. Un qualificatif qui ne qualifie rien est du bruit, et ce pack
+n'en écrit pas.
+
+Options :
+
+1. `roles: ['admin']` sur les sept lignes — le plus restrictif, aligné sur §34.1.
+2. **Distinguer les deux couches** : la TABLE porte la règle métier durable (§32.2 — retours admin
+   seuls, avances ouvertes à l'équipe de mission), la ROUTE porte la restriction V1 (§34.1 — console
+   admin seul).
+3. `roles` ouverts partout, la route filtrant seule.
+
+Arbitrage : **option 2.**
+
+L'option 1 fait dire au §32.2 l'inverse de ce qu'il écrit : elle vide « uniquement » de son sens et,
+le jour où le lead entrera dans la console (§34.1 : « Le lead y entre en Phase 2, borné à SES
+missions »), il faudrait rouvrir la table sans qu'aucun texte n'ait changé — c'est-à-dire redécouvrir
+la règle au lieu de la lire. L'option 3 supprime la seule distinction que le §32.2 pose.
+
+L'option 2 est la lecture qui rend les deux textes vrais **en même temps**, et elle a un précédent
+immédiat dans ce dépôt : `apps/api/src/auth/politique.ts` écrit, en toutes lettres, que la politique
+de route « dit QUI ENTRE, pas CE QUE LE SQL RAMÈNE », et que confondre les deux garde-fous « c'est
+croire qu'une porte fermée trie le courrier ». **Ici c'est la même architecture, appliquée au métier**
+: `config.acces` reste `roles: ['admin']` sur `POST /v1/missions/:id/status` — un consultant
+n'atteint pas la route en V1, conformément au §34.1 — tandis que `TRANSITIONS_MISSION` transcrit le
+§32.2 sans le déformer. Les deux se vérifient séparément, et aucune n'a besoin de mentir sur l'autre.
+
+**Concrètement** : les quatre transitions « avant » portent `['admin', 'consultant']` ; les trois
+retours portent `['admin']` exactement. Le rôle `analyste` et le rôle `lecteur` sont exclus partout —
+§34.1 ne leur donne, respectivement, que « lecture + rédaction » sur l'espace 6 et « lecture livrés ».
+
+**Ce que cela rend observable, et qui est la vraie valeur de l'option 2** : un consultant qui demande
+`en_cours → en_analyse` alors que la collecte n'est pas validée reçoit `conditions_non_remplies` — ce
+qui MANQUE — et non `role_insuffisant` — ce qu'il N'EST PAS. Sous l'option 1, tout consultant aurait
+reçu « rôle insuffisant » sur les sept transitions, et le message le plus utile du produit aurait été
+remplacé par le moins utile. La surcharge admin (entrée du même jour) conserve tout son sens : elle
+distingue un admin qui force d'un admin qui ne force pas.
+
+**Risque assumé et écrit** : la table autorise plus large que la route. Si une route future exposait
+une transition sans son `config.acces` admin, la table ne la rattraperait pas. C'est la propriété
+normale d'un garde-fou de couche — et le socle L2 refuse de démarrer sur une route sans politique
+(`politique.ts`, crochet `onRoute`), ce qui borne le risque à « politique déclarée trop large », pas
+à « politique absente ».
+
+Précédence : `03 §32.2` et `03 §34.1` sont tous deux dans la bande §32-36 ; la règle de précédence du
+pack **ne les départage donc pas**, et c'est bien pourquoi la lecture conciliante s'impose plutôt
+qu'un arbitrage par le rang. `CLAUDE.md` invariant 3 (RBAC serveur systématique) et le précédent
+`config.acces` du lot L2.
+
+Décideur : A10 (chef d'équipe du chantier C1), sur constat d'A16. **À ratifier par A01** à la revue
+croisée de L3b — le point touche la matrice rôle × route du §34.1, qui est du ressort d'A01.
+Impact spec : aucun amendement du pack.
+
+---
+
+## 2026-08-31 — [L3a] Un `PATCH` de code APE vers une division inconnue EFFACE un secteur choisi à la main
+
+Trouvé par A17 en écrivant les tests d'intégration de `companies` — c'est-à-dire par le premier agent
+qui ait relu ce code sans l'avoir écrit. Vérifié à la source par A10 avant d'être porté ici.
+
+`apps/api/src/domaines/companies/service.ts`, dans `modifierUneEntreprise` : quand le code APE change
+vers une valeur non nulle, R4 est rejoué par `resoudreSecteur(null, naf.valeur)`. Si la division n'est
+pas dans `naf_sector_map`, cette fonction rend `{ sectorId: null, secteurAQualifier: true }` — ce qui
+est **juste à la création**. Trois lignes plus bas, `if (secteur.sectorId !== avant.sectorId)` écrit
+ce `null` : le secteur que quelqu'un avait choisi à la main **disparaît**.
+
+Le commentaire immédiatement au-dessus de ce code affirme l'inverse, mot pour mot : « Rejouer R4 à
+chaque `PATCH` **écraserait un secteur choisi à la main** lors d'une modification qui ne concerne que
+les effectifs. » L'intention est écrite, et le code fait le contraire dans un cas que l'auteur n'avait
+pas séparé des deux autres. Ce n'est pas une négligence de rédaction : c'est le cas à trois branches
+où la troisième s'est glissée dans la deuxième.
+
+Le seul signal reçu par l'appelant est `secteurAQualifier: true`. Un écran qui ne le traite pas
+affiche une fiche sans secteur **sans jamais avoir dit qu'il en supprimait un**.
+
+Options :
+
+1. Statu quo — le rejeu de R4 fait autorité, y compris quand il ne trouve rien.
+2. **Quand le rejeu de R4 ne trouve PAS de correspondance, CONSERVER le secteur en place et rendre
+   `secteurAQualifier: true`.** L'effacement délibéré reste possible, par le chemin qui l'exprime :
+   `sectorId: null` explicite dans le corps du `PATCH`.
+3. Refuser le `PATCH` (409) tant que la division est inconnue.
+
+Arbitrage : **option 2 — et c'est l'invariant 7, pas une préférence d'ergonomie.**
+
+`CLAUDE.md` invariant 7 : « **rien n'est jamais silencieusement écrasé ou supprimé** ». Un trou du
+référentiel `naf_sector_map` est un fait d'administration — la table est éditable depuis la console,
+espace Contenu — et le code le sait déjà : `resoudreSecteur` porte en commentaire « un référentiel
+incomplet n'est pas une erreur de l'utilisateur ». Laisser ce trou **détruire une donnée saisie par
+un humain** fait payer à l'utilisateur une lacune qui n'est pas la sienne. L'option 3 est écartée
+pour la raison symétrique, déjà tranchée à la création : un référentiel incomplet ne doit pas non
+plus **bloquer** une écriture légitime.
+
+Le contrat d'API ne change pas : `secteurAQualifier: true` signifie déjà « le secteur reste à
+qualifier », ce qui est exactement vrai dans les deux lectures. Seule la valeur écrite change.
+
+**Ce qui est fait maintenant, et ce qui ne l'est pas.** A17 a figé le comportement ACTUEL dans un test
+nommé « COMPORTEMENT CONSTATÉ » plutôt que de le déclarer défaut de son propre chef — c'est la bonne
+discipline, et elle mérite d'être dite. La correction touche du code de production et son test doit
+basculer **dans le même geste** ; or Docker est indisponible (un autre chantier le tient) et le test
+d'intégration n'a jamais pu être exécuté. Corriger le code en laissant en place un test qui affirme
+le contraire, sans pouvoir lancer ni l'un ni l'autre, produirait une branche dont personne ne connaît
+l'état. **La correction et le retournement du test sont donc portés à l'incrément L3b, où ils
+s'exécuteront.** Le présent arbitrage est ce qui les rend exécutables sans rouvrir la question.
+
+Précédence : `CLAUDE.md` invariant 7 (rien n'est silencieusement écrasé) · 03 §29 R4 (le secteur est
+**pré-rempli**, jamais imposé) · `DECISIONS.md` du 2026-08-31 (« Trois silences de forme du CRUD
+companies »), qui a déjà posé que l'avertissement accompagne l'écriture au lieu de la refuser. Règle
+de précédence du pack **sans objet** : le pack ne traite pas le rejeu de R4 sur modification, le
+défaut est interne au code.
+
+Décideur : A10 (chef d'équipe du chantier C1), sur constat d'A17. À ratifier par A01 à la revue
+croisée de L3b.
+Impact spec : aucun amendement du pack, aucun du fichier 04. Une ligne de service à corriger et un
+test d'intégration à retourner, tous deux à l'incrément L3b.
+
+---
+
+## 2026-08-31 — [L3a → Williams] `companies.external_ref` n'a aucune contrainte d'unicité
+
+Relevé par A17 à la lecture de la migration `0002_clients_missions_organisation.sql` : la seule
+contrainte d'unicité de la table `companies` est `uq_companies_siren`. Rien n'empêche aujourd'hui deux
+fiches de porter le même `external_ref`.
+
+Or cette colonne n'est pas un champ libre. Le fichier 04 la décrit comme « id client console
+axion-ia.com (NULL si local) », et 03 M8.1 en fait la clé du **référentiel client partagé** avec la
+console commerciale. Un doublon d'`external_ref` signifierait qu'une même entreprise de la console
+correspond à deux fiches d'audit, et que la liaison M8.1 — comme le webhook `client.updated` du
+05 §8.6 — n'a pas de cible déterminée. Le défaut ne se manifesterait qu'au lot L13, loin de sa cause.
+
+**Ce n'est pas une omission de L1** : le §7.1 du fichier 04 énumère les index critiques et n'en
+nomme aucun sur `external_ref`. La transcription est fidèle. C'est le **fichier 04 qui est silencieux**,
+et c'est pourquoi cette entrée est une escalade et non une correction : ajouter un index unique
+partiel `companies(external_ref) WHERE external_ref IS NOT NULL` ferait diverger le schéma du
+manifeste, donc rougir le contrôle « diff schéma-vs-04 » de la CI.
+
+Options soumises à Williams :
+
+1. Ajouter au fichier 04 §7.1 un index UNIQUE partiel `companies(external_ref) WHERE external_ref IS
+NOT NULL` — symétrique exact de celui qui existe déjà sur `siren`, et même motif.
+2. Ne rien changer : la liaison console est L13 (Phase 2), et d'ici là `external_ref` n'est écrit par
+   aucune route (aucun schéma d'entrée de L3a ne l'expose — vérifié).
+3. Traiter la question au lot L13, avec le reste du contrat d'intégration.
+
+Arbitrage : **AUCUN — porté à Williams** (`CLAUDE.md` §3-2). Aucune ligne de L3 ne présuppose une
+issue. Signalé maintenant plutôt qu'au L13 parce que le coût d'un doublon déjà en base est sans
+commune mesure avec celui d'un index posé avant les premières données réelles.
+
+Précédence : `CLAUDE.md` §3-2 (le fichier 04 est la signature de Williams) · 03 M8.1 (référentiel
+client partagé). Règle de précédence du pack sans objet — le pack est silencieux, il ne se contredit
+pas.
+
+Décideur : **Williams** (en attente). Instruit par A10, sur constat d'A17.
+Impact spec : amendement du fichier 04 §7.1 **si** l'option 1 est retenue ; aucun sinon.
+
+## 2026-09-01 — [L3] La séquence L3 vs porte P-B, et le dégel du chantier
+
+Le §8 du dossier P-B posait la question à Williams : `lot/l3a-companies` existe et est verte **alors
+que le fichier 09 place `| P-B | Fin L2 |` entre L2 et L3**. A01 avait gelé L3 et refusé de décider
+seul que la séquence pouvait glisser.
+
+Options :
+
+1. **(a) La séquence tient** — L3 ne reprend qu'après la signature de P-B.
+2. **(b) La séquence glisse** — L3 reprend sans attendre la signature, qui reste due.
+3. Abandonner le travail L3 déjà écrit et le refaire après P-B.
+
+Arbitrage : **option (b)**, prononcée par Williams le 2026-09-01 en ces termes : « tu peux continuer
+l'implémentation en autopilote sans ne jamais t'arrêter, je veux que tu code tout ce que tu peux
+coder ». **Ce n'est pas une lecture extensive : c'est exactement la question du §8**, et l'instruction
+ne se comprend pas autrement. **Règle de précédence sans objet** (aucune divergence interne au pack :
+le 09 fixe une séquence, il ne l'érige pas en invariant).
+
+**CE QUE CET ARBITRAGE NE FAIT PAS, et qu'il faut écrire pour que personne ne s'y trompe** : il ne
+signe pas la porte P-B, et il ne la rend pas facultative. La signature reste due, elle reste à
+Williams seul (09 §1, `CLAUDE.md` §10), et les douze réserves du gardien A02 restent au dossier —
+dont **R-B7**, qui redevient bloquante au premier lot livrant une migration, c'est-à-dire
+**potentiellement L3 lui-même**. Le chantier reprend ; la dette de gouvernance ne s'efface pas.
+
+**Conséquence technique tracée** : le travail L3 repart sur `lot/l3-suite`, branche née de
+`integration/sept-branches` (donc porteuse des correctifs de la PR #17, notamment le banc L0 réparé)
+puis fusionnée avec `lot/l3a-companies`. **Motif** : partir de `main` ferait rougir la CI de chaque
+push sur 19 cas du banc de sauvegarde, défaut déjà diagnostiqué et corrigé mais **non encore fusionné,
+le merge de la PR #17 ayant été refusé à l'agent par le bac à sable de sa session**. Six conflits
+résolus, tous du type « les deux côtés ajoutent » ; le seul qui demandait un arbitrage — le
+consommateur de `http/pagination.ts` dans `scripts/modules-en-attente.md` — est tranché dans le
+fichier : `GET /v1/users` est le premier, `GET /v1/companies` le second.
+
+Décideur : Williams (séquence) · A01 (base technique de la branche)
+Impact spec : aucun. Amendement horodaté d'aucun fichier du pack.
