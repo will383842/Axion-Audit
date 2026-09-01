@@ -56,6 +56,7 @@
 // MinIO testée depuis zéro ») · 09 §5.6.
 // =============================================================================
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -88,9 +89,25 @@ const R2_FACTICE =
   'BACKUP_R2_BUCKET=seau-factice-de-test BACKUP_R2_ENDPOINT=compte-factice.r2.cloudflarestorage.com ' +
   'BACKUP_R2_ACCESS_KEY=acces-factice-de-test BACKUP_R2_SECRET_KEY=secret-factice-de-test ' +
   'AXION_R2_VERIFIER_RELECTURE=non';
-/** Fragment shell qui écrit le faux `mc` dans un répertoire de PATH prioritaire. */
-const FAUX_MC =
-  'printf \'#!/bin/sh\\nfor a in "$@"; do [ "$a" = ls ] && { echo "1B objet-factice"; break; }; done\\nexit 0\\n\'';
+/**
+ * Fragment shell qui écrit le faux `mc` dans un répertoire de PATH prioritaire.
+ *
+ * LA SOURCE DE VÉRITÉ EST `aide/faux-mc.sh`, ET ELLE EST UNIQUE — c'est le point
+ * de ce bloc. Ce fichier portait sa PROPRE copie du faux, en une ligne, qui ne
+ * connaissait que `ls`. Quand `fix/miroir-backup-info` a remplacé le comptage
+ * d'objets distants par une comparaison d'inventaires (`mc find`), les deux
+ * copies sont devenues fausses en même temps, et cette suite est tombée avec
+ * l'autre. Deux faux à réviser, c'est un faux qu'on oublie.
+ *
+ * L'encodage base64 n'est pas une coquetterie : le fragment est concaténé dans
+ * une commande shell, elle-même passée à `docker exec` depuis une chaîne
+ * JavaScript. Trois niveaux de citation sur un script qui contient guillemets,
+ * apostrophes et `$` — le base64 traverse les trois sans qu'aucun ne le morde,
+ * et le fichier écrit est celui du dépôt À L'OCTET PRÈS.
+ */
+const FAUX_MC = `printf '%s' '${readFileSync(
+  resolve(import.meta.dirname, 'aide', 'faux-mc.sh'),
+).toString('base64')}' | base64 -d`;
 
 const MINIO_MOT_DE_PASSE = 'motdepasse-minio-factice';
 
