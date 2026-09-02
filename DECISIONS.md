@@ -7098,3 +7098,34 @@ fusion verrouille **par identifiant croissant** — l'ABBA disparaît par constr
 
 Décideur : A01, sur revue A51
 Impact spec : aucun.
+
+## 2026-09-02 — [L3] Rejeu A51 : FUSIONNABLE SOUS RÉSERVE — F-11..F-14 fermés, trois majeurs nouveaux (F-19, F-20, F-21), deux doutes tranchés
+
+A51 a rejoué son verdict sur `ed8a852` par sondes pures (aucune base). Fermés : F-11 (bornes et mémoire,
+1 Mo de `\n` → 35 ms au lieu de 693), F-12 (cas nominal, `cause` ×2, `AggregateError`, `req.params`
+reste lisible), F-13 (même transaction, aucune sérialisation inter-missions), F-14. Nouveaux, **non
+introduits par le correctif** : **F-19** `fuseauIanaSchema` construit un `Intl.DateTimeFormat` PAR
+LIGNE — 5 000 fuseaux légitimes = 1,4 s sous le verrou de mission ; **F-20** `RX_DRIZZLE_PARAMS`
+s'arrête sur `\n    at ` — un terminateur qu'une cellule CSV entre guillemets peut contenir (retour à
+la ligne admis, RFC 4180), et tout ce qui suit repart en clair au journal ; **F-21** `merge` vers une
+unité DESCENDANTE de la source écrit `C.parent_id = C` (aucun garde-fou de graphe, aucun `CHECK` en base).
+
+Options :
+
+1. **Fermer les trois dans l'incrément.** F-19 : mémoïser le formateur par fuseau (un `Map` au
+   module). F-20 : ne jamais chercher un terminateur dans du texte que l'appelant contrôle — masquer
+   jusqu'à la fin de chaîne. F-21 : **refuser** (409, `cible_descendante`) une fusion dont la cible
+   descend de la source ; l'administrateur reparente d'abord.
+2. F-21 par reparentage implicite (la cible prend la place de la source).
+3. Interdire le saut de ligne dans une cellule CSV (fermer le vecteur de F-20 plutôt que la fuite).
+
+Arbitrage : **option 1.** L'option 2 invente une sémantique que personne n'a demandée ; refuser et le
+dire vaut mieux qu'un arbre réécrit en silence (invariant 7). L'option 3 traite le symptôme : la
+redaction doit tenir face à N'IMPORTE QUEL contenu, pas seulement face aux CSV bien élevés — et un
+`CHECK (parent_id <> id)` en base serait un amendement du 04, escaladé à part si Williams le veut.
+Trois affirmations trop larges dans les commentaires (F-13 « pas un ABBA », F-14 « la classe entière »,
+F-11 « quelques millisecondes ») sont remises à l'état vrai. **Précédence : 11 §2** (aucune donnée
+personnelle dans les logs — F-20) et **invariant 7** (F-21).
+
+Décideur : A01, sur revue A51
+Impact spec : aucun. Doute F-18 inchangé, à Williams.

@@ -518,8 +518,18 @@ export const LIGNES_CSV_ARBRE_MAX = 5000;
  *
  * **Le double du plafond d'unités** : autant de lignes vides que d'unités, ce
  * qu'aucun tableur ne produit — la queue de lignes blanches d'un export se compte en
- * dizaines. Un fichier de 10 000 lignes coûte quelques millisecondes ; le million est
- * refusé avant qu'un seul enregistrement ne soit construit.
+ * dizaines.
+ *
+ * ── LES CHIFFRES, PLUTÔT QU'UN ADVERBE ─────────────────────────────────────
+ * Mesuré sur ce dépôt, et redit ici parce qu'« instantané » ne se vérifie pas :
+ * un corps de 1 Mo bourré d'un million de fins de ligne était analysé en 764 ms à
+ * 1 s (319 Mo de tas crête) et **importé sans erreur** ; il est désormais REFUSÉ en
+ * **9 ms**, avant qu'un seul enregistrement ne soit construit. A51 mesure 35 ms sur
+ * sa propre sonde — l'écart tient à la machine et au contenu, l'ordre de grandeur
+ * est le même : deux décimales gagnées, pas une impression.
+ *
+ * Le fichier LÉGITIME, lui, ne paie rien : 5 000 unités suivies de 20 lignes vides
+ * s'analysent en 47 ms, sans erreur — la tolérance de queue du tableur est intacte.
  */
 export const LIGNES_BRUTES_MAX = 2 * LIGNES_CSV_ARBRE_MAX;
 
@@ -1387,8 +1397,8 @@ export function analyserCsvArbre(contenu: string): AnalyseCsvArbre {
   // ═════════════════════════════════════════════════════════════════════════════
   // A51, F-11 : borner le RÉSULTAT ne borne pas le COÛT. Ces deux refus-ci coûtent
   // une lecture linéaire de la chaîne — aucune allocation, aucun objet — et rendent
-  // un fichier pathologique refusable en quelques millisecondes, là où le découpage
-  // complet demandait jusqu'à une seconde de CPU et 319 Mo de tas.
+  // un fichier pathologique refusable en 9 ms MESURÉES, là où le découpage complet
+  // demandait 764 ms à 1 s de CPU et 319 Mo de tas.
   //
   // ⚠ AUCUN DÉCOUPAGE ICI, ET C'EST LE POINT : découper le contenu en lignes allouerait
   // un tableau d'un million de chaînes pour compter jusqu'à un million — c'est-à-dire

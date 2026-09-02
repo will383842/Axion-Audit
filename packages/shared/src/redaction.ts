@@ -657,14 +657,20 @@ const RX_JSON_INVALIDE = /"[^\n]*"(\.\.\.)? is not valid JSON/g;
  * comprendre un lot qui échoue, « lesquelles » ne l'est jamais assez pour valoir une
  * fuite.
  *
- * ── LE BORNAGE, QUI N'EST PAS BORNÉ À LA LIGNE ──────────────────────────────
- * Contrairement aux gabarits PostgreSQL, celui-ci NE PEUT PAS se borner à une seule
- * ligne : une valeur de paramètre peut elle-même contenir un saut de ligne — un nom
- * d'unité saisi entre guillemets dans un CSV, précisément le cas d'usage du lot L3.
- * On prend donc tout jusqu'à la PILE D'APPELS ou la fin de la chaîne : c'est ce qui
- * rend le nettoyage correct sur une pile comme sur un message nu.
+ * ── LE BORNAGE : JUSQU'À LA FIN DE LA CHAÎNE, ET C'EST UN CORRECTIF ────────
+ * La première version s'arrêtait sur la forme d'une trame de pile (`\n    at `).
+ * A51 (F-20) a montré que ce terminateur est DANS LE TEXTE QUE L'APPELANT CONTRÔLE :
+ * une cellule de CSV entre guillemets peut porter un saut de ligne (RFC 4180, admis
+ * par `analyserCsvArbre`), donc une valeur peut contenir une FAUSSE trame — et tout
+ * ce qui la suivait repartait en clair. **On ne borne jamais un masquage par un
+ * motif que la donnée peut contenir** : le segment est donc masqué jusqu'à la fin de
+ * la chaîne, sans exception et sans condition.
+ *
+ * Les trames de pile ne sont pas perdues pour autant : elles sont récupérées par une
+ * borne que l'appelant ne contrôle pas — la LONGUEUR du message, propriété distincte
+ * de l'erreur. Voir `nettoyerPileJournal`, et le pourquoi complet qui y est écrit.
  */
-const RX_DRIZZLE_PARAMS = /\nparams:[\s\S]*?(?=\n\s+at |$)/g;
+const RX_DRIZZLE_PARAMS = /\nparams:[\s\S]*$/;
 
 /**
  * Emplacements de paramètres d'une requête préparée (`$1`, `$42`).
@@ -778,6 +784,60 @@ export function nettoyerTexteJournal(texte: string): string {
   }
   if (resultat.length >= 10) resultat = resultat.replace(RX_TELEPHONE, CENSEUR_TEXTE_JOURNAL);
   return resultat;
+}
+
+/**
+ * Marge de recherche de l'en-tête d'une pile V8 : « RangeError: » et ses voisins
+ * tiennent très en deçà. Elle borne un balayage dont la longueur serait sinon
+ * choisie par l'appelant.
+ */
+const MARGE_ENTETE_PILE = 256;
+
+/**
+ * NETTOIE UNE PILE D'APPELS EN PRÉSERVANT SES TRAMES — sans jamais chercher un
+ * terminateur DANS la donnée.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * LE DÉFAUT QUE CETTE FONCTION FERME (A51, F-20) : UN TERMINATEUR FALSIFIABLE.
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * La première version de `RX_DRIZZLE_PARAMS` s'arrêtait sur `\n    at ` — la forme
+ * d'une trame de pile. Or ce terminateur EST DANS LE TEXTE QUE L'APPELANT CONTRÔLE :
+ * une cellule de CSV entre guillemets peut légitimement contenir un saut de ligne
+ * (RFC 4180, admis par `analyserCsvArbre`), donc une valeur peut porter
+ * `"Direction\n    at feint (/app/x.js:1:1)\nla suite"` — et tout ce qui suit la
+ * fausse trame repartait EN CLAIR, dans `message` comme dans `stack`. Un garde-fou
+ * dont la borne est choisie par l'attaquant n'est pas un garde-fou.
+ *
+ * ── LA RÈGLE, ET ELLE VAUT AU-DELÀ DE CE CAS ────────────────────────────────
+ * **On ne borne jamais un masquage par un motif que la donnée peut contenir.** Le
+ * motif masque donc désormais jusqu'à la FIN DE LA CHAÎNE. Les trames, elles, ne
+ * sont pas perdues pour autant : elles sont récupérées par une borne que l'appelant
+ * ne contrôle PAS — la LONGUEUR du message, qui est une propriété distincte de
+ * l'erreur. V8 construit `stack` comme « Nom: message » suivi des trames ; couper à
+ * la fin du message sépare donc exactement ce que l'appelant a écrit de ce que le
+ * moteur a produit.
+ *
+ * Les deux moitiés sont ensuite nettoyées SÉPARÉMENT : si une fausse trame a été
+ * glissée dans le message, elle est dans la première moitié, donc masquée ; les
+ * vraies trames sont dans la seconde, donc préservées.
+ *
+ * ⚠ REPLI SÛR : si le message est introuvable dans la pile (forme inattendue, pile
+ * réécrite, moteur non-V8), on masque la pile ENTIÈRE par le nettoyage ordinaire. On
+ * ne préserve rien qu'on ne sait pas délimiter.
+ */
+export function nettoyerPileJournal(message: string, pile: string): string {
+  if (message.length === 0) return nettoyerTexteJournal(pile);
+
+  // Recherche BORNÉE : le message d'une erreur V8 commence dans les tout premiers
+  // caractères de la pile (« RangeError: » et consorts). Chercher dans la pile
+  // entière ferait payer un balayage proportionnel au produit des deux longueurs sur
+  // une charge utile que l'appelant choisit.
+  const zone = pile.slice(0, message.length + MARGE_ENTETE_PILE);
+  const debut = zone.indexOf(message);
+  if (debut < 0) return nettoyerTexteJournal(pile);
+
+  const coupure = debut + message.length;
+  return nettoyerTexteJournal(pile.slice(0, coupure)) + nettoyerTexteJournal(pile.slice(coupure));
 }
 
 /** Vrai si la clé désigne une valeur à masquer intégralement, dans ce contexte. */
@@ -1008,12 +1068,22 @@ function parcourir(
       return {
         type: valeur.name,
         message: nettoyerTexteJournal(valeur.message),
-        stack: typeof valeur.stack === 'string' ? nettoyerTexteJournal(valeur.stack) : undefined,
+        stack:
+          typeof valeur.stack === 'string'
+            ? nettoyerPileJournal(valeur.message, valeur.stack)
+            : undefined,
       };
     }
 
     const ligneDePersonne = estLigneDePersonne(valeur);
     const valeurDeConfig = estValeurDeConfig(valeur);
+    // ── UNE ERREUR DÉJÀ SÉRIALISÉE PORTE SA PILE COMME UNE CLÉ ORDINAIRE ───────
+    // pino appelle son sérialiseur d'erreur AVANT la redaction : ce qui arrive ici
+    // n'est donc pas une `Error` mais un objet `{ type, message, stack, … }`, et la
+    // branche `instanceof Error` ci-dessus ne le voit jamais. Sans ce cas-ci, `stack`
+    // serait nettoyée comme une chaîne quelconque — donc masquée jusqu'à sa fin,
+    // trames comprises. On récupère le message VOISIN pour délimiter (A51, F-20).
+    const messageVoisin = typeof valeur.message === 'string' ? valeur.message : null;
     let modifie = false;
     const copie: Record<string, unknown> = {};
     for (const [cle, sousValeur] of Object.entries(valeur)) {
@@ -1021,6 +1091,12 @@ function parcourir(
       if (estMasque(cleNormalisee, parentNormalise, ligneDePersonne, valeurDeConfig)) {
         copie[cle] = CENSEUR_JOURNAL;
         modifie = true;
+        continue;
+      }
+      if (cleNormalisee === 'stack' && messageVoisin !== null && typeof sousValeur === 'string') {
+        const pile = nettoyerPileJournal(messageVoisin, sousValeur);
+        if (pile !== sousValeur) modifie = true;
+        copie[cle] = pile;
         continue;
       }
       const assaini = parcourir(sousValeur, cleNormalisee, profondeur + 1, vus);

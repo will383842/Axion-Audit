@@ -35,6 +35,7 @@ import {
   CHAMPS_MASQUES_JOURNAL,
   OPTIONS_REDACTION_JOURNAL,
   assainirJournal,
+  nettoyerPileJournal,
   nettoyerTexteJournal,
 } from './redaction.js';
 
@@ -84,7 +85,7 @@ describe('redaction — le gabarit `Failed query: … / params: …` de Drizzle 
     expect(nettoye).not.toContain('@exemple.fr');
   });
 
-  it("s'arrête à la pile d'appels au lieu de l'avaler", () => {
+  it("masque jusqu'à la fin de la chaîne, trames comprises — et c'est le correctif F-20", () => {
     const avecPile =
       messageDrizzle('Sophie Bernard,12') +
       '\n    at Object.<anonymous> (/app/apps/api/src/domaines/org-units/depot.js:1:1)' +
@@ -93,9 +94,49 @@ describe('redaction — le gabarit `Failed query: … / params: …` de Drizzle 
     const nettoye = nettoyerTexteJournal(avecPile);
 
     expect(nettoye).not.toContain('Sophie Bernard');
-    // La pile est le diagnostic d'exploitation : elle doit survivre intacte.
-    expect(nettoye).toContain('org-units/depot.js:1:1');
-    expect(nettoye).toContain('processTicksAndRejections');
+    // ⚠ CETTE ASSERTION A CHANGÉ DE SENS, ET C'EST LE CŒUR DE F-20. La version
+    // précédente vérifiait que les trames SURVIVAIENT à ce nettoyage-ci — le motif
+    // s'arrêtait alors sur `\n    at `, un terminateur qu'une cellule de CSV peut
+    // contenir. Sur une CHAÎNE NUE, rien ne distingue une vraie trame d'une fausse :
+    // on masque donc jusqu'au bout. Les vraies trames sont récupérées AILLEURS, par
+    // `nettoyerPileJournal`, qui dispose d'une borne que l'appelant ne contrôle pas.
+    expect(nettoye).not.toContain('depot.js:1:1');
+    expect(nettoye).toContain('params: [4 paramètres masqués]');
+  });
+
+  it('ne se laisse pas terminer par une fausse trame glissée dans une valeur (A51, F-20)', () => {
+    // Une cellule de CSV entre guillemets peut porter un saut de ligne (RFC 4180,
+    // admis par `analyserCsvArbre`) : l'appelant peut donc écrire ce qui RESSEMBLE à
+    // une trame de pile, puis continuer. Tout ce qui suivait repartait en clair.
+    const piegee = 'Direction\n    at feint (/app/x.js:1:1)\nSophie Bernard,SECRET-42';
+    const nettoye = nettoyerTexteJournal(messageDrizzle('0199-uuid,' + piegee));
+
+    expect(nettoye).not.toContain('Sophie Bernard');
+    expect(nettoye).not.toContain('SECRET-42');
+    expect(nettoye).not.toContain('feint');
+  });
+
+  it('préserve les VRAIES trames par la longueur du message, pas par un motif', () => {
+    const message = messageDrizzle('0199-uuid,Sophie Bernard,12');
+    const pile =
+      'DrizzleQueryError: ' +
+      message +
+      '\n    at Object.<anonymous> (/app/apps/api/src/domaines/org-units/depot.js:12:9)' +
+      '\n    at run (/app/y.js:2:2)';
+
+    const nettoyee = nettoyerPileJournal(message, pile);
+
+    expect(nettoyee).not.toContain('Sophie Bernard');
+    // La borne est la LONGUEUR du message — une propriété de l'erreur, pas un motif
+    // que la donnée pourrait imiter. Les trames réelles survivent donc intactes.
+    expect(nettoyee).toContain('org-units/depot.js:12:9');
+    expect(nettoyee).toContain('at run (/app/y.js:2:2)');
+  });
+
+  it('masque la pile ENTIÈRE quand le message est introuvable dedans', () => {
+    // Repli sûr : on ne préserve rien qu'on ne sait pas délimiter.
+    const nettoyee = nettoyerPileJournal('un message absent', messageDrizzle('Sophie Bernard'));
+    expect(nettoyee).not.toContain('Sophie Bernard');
   });
 
   it('retire une valeur qui contient elle-même un saut de ligne', () => {
