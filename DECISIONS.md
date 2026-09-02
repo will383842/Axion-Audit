@@ -6996,3 +6996,30 @@ pour forcer. **Règle de précédence sans objet.**
 
 Décideur : A01
 Impact spec : aucun.
+
+## 2026-09-02 — [L3] Revue croisée A17 : REFUSÉ, quatre bloquants — verdict accepté, B-4 arbitré
+
+A17 a relu le diff `main..lot/l3-suite` (52 fichiers) contre les 8 invariants, le contrat 11, la note
+L3 et chaque décision datée. Verdict **REFUSÉ**, quatre constats bloquants : B-1 arbitrage du
+2026-08-31 (R4 conserve le secteur manuel) renvoyé à L3b et jamais appliqué, test figeant l'ancien
+comportement · B-2 garde de ré-import non sérialisé (deux imports concurrents = deux arbres) · B-3
+règle « conduite ⇒ auditeur » exportée sans test, clause (d) de Williams tenue à moitié · B-4 fil
+rouge non étendu au parcours L3 alors qu'ETAT l'affirmait. Sept constats non bloquants R-L3-1 à 7.
+
+Options :
+
+1. **Accepter le verdict tel quel**, corriger les quatre bloquants et les non-bloquants à coût nul dans
+   l'incrément, rejouer la revue sur le correctif.
+2. Contester B-4 (lecture de l'entrée du 2026-08-31 comme suspendue à l'enveloppe Playwright).
+
+Arbitrage : **option 1.** Sur B-4, A17 a raison de lecture : l'intertitre de l'entrée dit « ce que L3
+fait en attendant, **et qui n'est pas une attente** » — la substance (le parcours grandit à ce lot)
+était présentée comme indépendante de la technologie du harnais. ETAT.md l'affirmait tenue ; le diff
+dit non. **Une affirmation d'état contredite par le diff se corrige par le diff**, pas par une
+relecture accommodante. Les trois autres bloquants sont des écarts mesurables entre une décision
+écrite et le code : ils ne se discutent pas. **Règle de précédence sans objet.**
+
+Décideur : A01, sur revue A17
+Impact spec : aucun. Correctifs : B-1 `companies/service.ts` + retournement du test ; B-2 verrou
+`FOR UPDATE` sur la mission dans l'import + test `Promise.all` ; B-3 test unitaire de la garde pure ;
+B-4 fil rouge étendu (création → import → figeage) sur FIL-TPE et FIL-GC.
