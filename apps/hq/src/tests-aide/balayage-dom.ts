@@ -5,7 +5,7 @@
 // Quatre questions posées à un écran rendu sous jsdom :
 //   1. porte-t-il une couleur ou une taille EN DUR (invariant 4) ? — attributs
 //      `style`, attributs de présentation SVG, classes Tailwind à valeur arbitraire
-//      (`text-[#c24a1b]`, `w-[12px]`), balises `<style>` injectées ;
+//      (`text-[<hex>]`, `w-[<n>px]`), balises `<style>` injectées ;
 //   2. chaque `var(--…)` qu'il consomme existe-t-elle dans `tokens.css` ? Un jeton
 //      inventé (`--couleur-rouge-vif`) n'est pas « une couleur en dur » pour un
 //      motif hexadécimal, mais c'est exactement la même faute : une valeur qui ne
@@ -38,7 +38,7 @@ import {
 const HEXADECIMAL = /#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})\b/gi;
 const FONCTION_COULEUR = /\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color-mix)\s*\(/gi;
 const LONGUEUR_ABSOLUE = /(?<![\w.-])(?!0(?![\d.]))\d+(?:\.\d+)?(?:px|pt|pc|in|cm|mm|Q)\b/g;
-/** Classe Tailwind à valeur ARBITRAIRE : `text-[#c24a1b]`, `w-[12px]`, `h-[2rem]` est toléré. */
+/** Classe Tailwind à valeur ARBITRAIRE : `text-[<hex>]`, `w-[<n>px]`, `h-[2rem]` est toléré. */
 const CLASSE_ARBITRAIRE = /\[(?:#[0-9a-f]{3,8}|\d+(?:\.\d+)?(?:px|pt|pc|in|cm|mm|Q))\]/gi;
 const JETON_CONSOMME = /var\(\s*(--[a-z0-9-]+)/gi;
 
