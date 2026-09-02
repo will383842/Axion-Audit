@@ -90,6 +90,15 @@ const MESSAGE_RECONNEXION =
   'Reconnexion requise pour synchroniser — vos données sont en sécurité sur cet appareil. ' +
   'La collecte continue normalement hors ligne ; seule la remontée vers le siège attend une reconnexion.';
 
+/**
+ * Un jeton présent mais indéchiffrable n'est PAS une simple déconnexion : c'est le
+ * signe que le chiffrement local a mal tourné, et ce même chiffrement protège les
+ * réponses d'audit. On le dit, au lieu de proposer de se reconnecter.
+ */
+const MESSAGE_JETON_ILLISIBLE =
+  'Le jeton de connexion enregistré sur cet appareil est illisible. Vos données de collecte ne sont pas perdues et rien n’a été supprimé, ' +
+  'mais signalez-le avant de continuer : exportez une sauvegarde de secours, puis reconnectez-vous.';
+
 export function EcranAccueil(): ReactNode {
   const { base, jetonSiege, rafraichirStockage } = useTerrain();
   const [embarquement, setEmbarquement] = useState<ResultatEmbarquement | null>(null);
@@ -149,6 +158,12 @@ export function EcranAccueil(): ReactNode {
       {(jetonSiege === 'absent' || jetonSiege === 'expire') && (
         <Message ton="info" titre="Connexion au siège">
           {MESSAGE_RECONNEXION}
+        </Message>
+      )}
+
+      {jetonSiege === 'illisible' && (
+        <Message ton="alerte" titre="Jeton de connexion illisible">
+          {MESSAGE_JETON_ILLISIBLE}
         </Message>
       )}
 

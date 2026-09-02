@@ -20,7 +20,7 @@
 // =============================================================================
 import { z } from 'zod';
 import { CLES_META, ecrireMeta, effacerMeta, lireMeta, type BaseLocale } from './base.js';
-import type { Coffre } from './coffre.js';
+import { DonneeLocaleCorrompueError, type Coffre } from './coffre.js';
 import { estEnveloppe } from './enveloppe.js';
 
 const jetonSchema = z.object({
@@ -46,10 +46,13 @@ export async function enregistrerJetonRafraichissement(
 /**
  * Rend le jeton, ou `null` s'il n'y en a pas.
  *
- * Une enveloppe illisible LÈVE (`DonneeLocaleCorrompueError` du coffre) : la
- * traiter comme « pas de jeton » masquerait une corruption de la base derrière un
- * simple écran de reconnexion, et personne ne saurait jamais que le chiffrement a
- * cessé de fonctionner.
+ * **`null` veut dire ABSENT, et rien d'autre.** Une valeur présente mais qui
+ * n'est pas une enveloppe chiffrée LÈVE, tout comme une enveloppe que le coffre
+ * n'arrive pas à ouvrir. Le code rendait `null` dans le premier cas, à rebours de
+ * ce paragraphe : le testeur l'a relevé, et l'écart n'était pas cosmétique — un
+ * jeton corrompu qui se lit « absent » envoie l'auditeur se reconnecter et
+ * personne n'apprend jamais que le chiffrement local a cessé de fonctionner. Or
+ * ce même chiffrement protège les réponses d'audit, pas seulement ce jeton.
  */
 export async function lireJetonRafraichissement(
   base: BaseLocale,
@@ -57,7 +60,11 @@ export async function lireJetonRafraichissement(
 ): Promise<JetonRafraichissement | null> {
   const brut = await lireMeta(base, CLES_META.jetonRafraichissement);
   if (brut === undefined || brut === null) return null;
-  if (!estEnveloppe(brut)) return null;
+  if (!estEnveloppe(brut)) {
+    throw new DonneeLocaleCorrompueError(
+      'le jeton de connexion enregistré sur cet appareil n’est pas une enveloppe chiffrée',
+    );
+  }
   return coffre.dechiffrer(brut, jetonSchema);
 }
 

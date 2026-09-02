@@ -45,7 +45,18 @@
   line-height: var(--typo-interligne-serre);
 }
 
+/* Le fond est peint ICI, sur le <main>, et pas seulement sur le conteneur
+   `.axn-coquille`. Deux raisons, et aucune n'est cosmetique :
+   - un conteneur qui peint pendant que le repere principal reste TRANSPARENT
+     laisse la couleur de la charte dependre de ce qu'il y a derriere ;
+   - c'est le <main> que le controle de socle inspecte (e2e/socle.e2e.ts,
+     `document.querySelector('main')`), parce que c'est le repere que voit un
+     lecteur d'ecran. Un token declare mais non applique ne prouve rien.
+   La valeur vient du MEME jeton que `.axn-coquille` : invariant 4, une couleur
+   n'a qu'une source, meme quand deux elements la portent. */
 .axn-coquille__corps {
+  background: var(--couleur-surface-fond);
+  color: var(--couleur-texte-principal);
   flex: 1 1 auto;
   width: 100%;
   max-width: var(--taille-largeur-contenu-large);

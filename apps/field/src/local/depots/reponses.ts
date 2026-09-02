@@ -58,12 +58,21 @@ export const depotReponses = {
    * contrainte UNIQUE du 04 (§32.6) : « UNE réponse par question et par session ;
    * toute re-réponse est une révision ». Le terrain n'émet JAMAIS d'op de
    * révision (05 §9.3, V2.9) — il ré-upserte, et c'est le serveur qui archive.
+   *
+   * **Une réponse SUPPRIMÉE (`supprimeLe` posé) n'est pas rendue**, exactement
+   * comme `parSession` l'exclut déjà. L'incohérence inverse a existé ici, et le
+   * testeur l'a attrapée : deux lectures du même dépôt qui ne voient pas le même
+   * jeu de lignes, c'est un écran qui affiche une réponse que la liste d'à côté
+   * ne montre plus. La ligne, elle, reste en base — invariant 7, `delete_soft`
+   * n'efface rien, il marque. Le jour où un appelant devra voir les supprimées,
+   * ce sera une option NOMMÉE, pas un oubli.
    */
   async parQuestion(interviewId: string, missionQuestionId: string): Promise<ReponseLocale | null> {
     const { base } = contexteLocal();
     const ligne = await base.answers
       .where('[interviewId+missionQuestionId]')
       .equals([interviewId, missionQuestionId])
+      .filter((candidate) => candidate.supprimeLe === null)
       .first();
     if (ligne === undefined) return null;
     const [reponse] = await dechiffrer([ligne]);

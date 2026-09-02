@@ -104,6 +104,14 @@ export const CLES_META = {
   prefixeDescenteConservee: 'sync:conservees:',
   /** Missions dont `storage.persist()` a été accordé (05 §31-2). */
   prefixeEmbarquement: 'mission:embarquee:',
+  /**
+   * La version de schéma qui a RÉELLEMENT écrit cette base.
+   *
+   * Écrite à chaque ouverture par le code qui vient de poser (ou de retrouver) le
+   * schéma. C'est le marqueur du garde-fou 05 §31-1 — voir `ouvrirBaseLocale`,
+   * qui explique pourquoi Dexie ne peut plus nous le dire lui-même.
+   */
+  versionSchema: 'schema:version',
 } as const;
 
 /** Clé du curseur de pull d'une mission donnée. */
@@ -220,11 +228,24 @@ export class BaseLocale extends Dexie {
  */
 export class BaseTropRecenteError extends Error {
   override readonly name = 'BaseTropRecenteError';
-  constructor(readonly versionAttendue: number) {
+  /** La version de schéma trouvée sur l'appareil. */
+  readonly versionTrouvee: number;
+  /** Celle que ce code sait lire. */
+  readonly versionAttendue: number;
+
+  // Champs déclarés puis affectés, plutôt que des propriétés de paramètre
+  // (`constructor(readonly x)`) : ces dernières sont une construction TypeScript
+  // qui EXIGE une transpilation complète. Sans elles, ce module s'exécute tel
+  // quel sous le mode « strip-only » de Node — ce qui permet de MESURER le
+  // garde-fou ci-dessous avec `fake-indexeddb` et trois lignes de script, au
+  // lieu de le croire sur parole.
+  constructor(versionTrouvee: number, versionAttendue: number = VERSION_SCHEMA_LOCAL) {
     super(
       'Les données de cet appareil ont été enregistrées par une version plus récente de l’application. ' +
         'Rien n’a été supprimé. Mettez l’application à jour (rechargez la page) avant de reprendre la collecte.',
     );
+    this.versionTrouvee = versionTrouvee;
+    this.versionAttendue = versionAttendue;
   }
 }
 
@@ -236,6 +257,59 @@ export class BaseTropRecenteError extends Error {
  * autre erreur remonte telle quelle : masquer une panne d'ouverture ferait croire
  * à une base vide, et une base vide invite à re-saisir par-dessus.
  */
+/**
+ * La version de schéma que la base DÉCLARE elle-même, ou `null` si elle ne le
+ * déclare pas encore.
+ *
+ * ── POURQUOI CE MARQUEUR, ET PAS LA VERSION D'INDEXEDDB ─────────────────────
+ * La version brute (`base.backendDB().version`) a été essayée puis REJETÉE, sur
+ * mesure et non sur principe. Dexie encode sa version dans celle d'IndexedDB en
+ * la multipliant par dix (mesuré : schémas 1 / 2 / 3 → bases 10 / 20 / 30), mais
+ * il s'autorise aussi à l'incrémenter lui-même pour rattraper un schéma étendu
+ * sans changement de numéro — la base tombe alors sur une valeur qui n'est plus
+ * un multiple, et tout calcul qui en dépend devient faux. Un garde-fou assis sur
+ * une convention interne qu'on a vue bouger en trois manipulations n'est pas un
+ * garde-fou.
+ *
+ * Le marqueur ci-dessous est NOTRE donnée, à notre sémantique, et il est écrit
+ * par `ouvrirBaseLocale` — le seul chemin d'ouverture de cette base (voir
+ * l'en-tête du fichier). Une version future n'a donc rien à « penser à faire » :
+ * elle hérite du marquage en passant par la porte commune.
+ *
+ * **L'angle mort, nommé plutôt que masqué** : une base migrée par un code qui
+ * contournerait `ouvrirBaseLocale` ne porterait pas de marqueur, et ne serait pas
+ * détectée. Aucune mesure disponible côté navigateur ne comble ce trou ; ce qui
+ * le ferme, c'est la règle d'ouverture unique, pas une astuce.
+ */
+async function versionDeclareeParLaBase(base: BaseLocale): Promise<number | null> {
+  const marque = await lireMeta(base, CLES_META.versionSchema);
+  return typeof marque === 'number' && Number.isInteger(marque) ? marque : null;
+}
+
+/**
+ * Ouvre la base locale, et REFUSE une base plus récente que ce code (05 §31-1).
+ *
+ * ── POURQUOI `Dexie.VersionError` NE SUFFIT PAS, ET C'EST MESURÉ ─────────────
+ * Ce garde-fou reposait sur `Dexie.VersionError`. **Dexie 4 ne le lève plus.**
+ * Mesure faite sur `dexie` 4.4.5 avec `fake-indexeddb`, base créée en version 2
+ * puis rouverte par un code qui ne déclare que la version 1 :
+ *   - aucune erreur : `open()` réussit et `isOpen()` rend `true` ;
+ *   - `base.verno` rend **1**, c'est-à-dire la version DÉCLARÉE par le code et
+ *     non celle du disque : il ne peut rien détecter du tout ;
+ *   - les données de la table inconnue SURVIVENT — rien n'est détruit.
+ *
+ * Rien n'était donc perdu, mais l'application tournait EN AVEUGLE sur un schéma
+ * qu'elle ne connaît pas : elle lit des lignes dont elle ignore la forme et en
+ * écrit que la version récente relira de travers. C'est la famille de défauts que
+ * ce dépôt traque — un garde-fou qui annonce plus qu'il ne fait — et c'est le
+ * TESTEUR qui l'a prouvée, pas la relecture.
+ *
+ * Le `catch` reste : `VersionError` peut encore survenir sur d'autres chemins, et
+ * le traduire coûte trois lignes. Il n'est simplement plus la seule défense.
+ *
+ * **Aucun chemin de cette fonction n'appelle `delete()`** : une base qu'on ne
+ * sait pas lire n'est pas une base à jeter (invariant 7).
+ */
 export async function ouvrirBaseLocale(nom: string = NOM_BASE_LOCALE): Promise<BaseLocale> {
   const base = new BaseLocale(nom);
   try {
@@ -243,10 +317,26 @@ export async function ouvrirBaseLocale(nom: string = NOM_BASE_LOCALE): Promise<B
   } catch (erreur) {
     if (erreur instanceof Dexie.VersionError) {
       base.close();
-      throw new BaseTropRecenteError(VERSION_SCHEMA_LOCAL);
+      // La version exacte est inconnue sur ce chemin ; elle est forcément
+      // supérieure à la nôtre, c'est tout ce que l'écran a besoin de dire.
+      throw new BaseTropRecenteError(VERSION_SCHEMA_LOCAL + 1);
     }
     throw erreur;
   }
+
+  const declaree = await versionDeclareeParLaBase(base);
+  if (declaree !== null && declaree > VERSION_SCHEMA_LOCAL) {
+    base.close();
+    throw new BaseTropRecenteError(declaree);
+  }
+
+  // La base est lisible : on marque la version qui vient de la poser. Écrit
+  // seulement s'il change — dont le cas d'une base créée avant l'existence de ce
+  // marqueur, qui se met ainsi en règle d'elle-même au premier démarrage.
+  if (declaree !== VERSION_SCHEMA_LOCAL) {
+    await ecrireMeta(base, CLES_META.versionSchema, VERSION_SCHEMA_LOCAL);
+  }
+
   return base;
 }
 

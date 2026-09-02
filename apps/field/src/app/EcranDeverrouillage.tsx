@@ -62,7 +62,7 @@ export function EcranDeverrouillage(): ReactNode {
   );
 
   return (
-    <main className="axn-pile axn-pile--large" aria-labelledby={`${identifiant}-titre`}>
+    <section className="axn-pile axn-pile--large" aria-labelledby={`${identifiant}-titre`}>
       <h1 id={`${identifiant}-titre`}>
         {premierUsage ? 'Préparer cet appareil' : 'Déverrouiller la collecte'}
       </h1>
@@ -112,6 +112,6 @@ export function EcranDeverrouillage(): ReactNode {
           {premierUsage ? 'Créer la protection de cet appareil' : 'Déverrouiller'}
         </Bouton>
       </form>
-    </main>
+    </section>
   );
 }

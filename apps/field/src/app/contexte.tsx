@@ -71,9 +71,12 @@ export type PhaseSocle = 'chargement' | 'erreur' | 'verrouille' | 'ouvert';
  * façon de dire « vous pouvez collecter » et « vous ne pourrez pas synchroniser »
  * dans la même phrase, ce que le pack exige mot pour mot.
  *
- * `inconnu` = coffre encore fermé, donc jeton illisible — et non « absent ».
+ * `inconnu` = coffre encore fermé, donc jeton non lu — et non « absent ».
+ * `illisible` = un jeton EST là mais ne se déchiffre pas : ce n'est ni « absent »
+ * ni « expiré », et le confondre avec l'un des deux masquerait une corruption du
+ * chiffrement local derrière un banal écran de reconnexion.
  */
-export type EtatJetonSiege = 'inconnu' | 'absent' | 'valide' | 'expire';
+export type EtatJetonSiege = 'inconnu' | 'absent' | 'valide' | 'expire' | 'illisible';
 
 /** Le jeton est chiffré sous la DEK : cette lecture n'est possible que coffre OUVERT. */
 function evaluerJeton(jeton: JetonRafraichissement | null): EtatJetonSiege {
@@ -219,7 +222,17 @@ export function FournisseurTerrain({ children }: { readonly children: ReactNode 
       verrou.signalerDeverrouillage();
       // Le jeton de sync est chiffré sous la DEK : c'est ICI, coffre tout juste
       // ouvert, qu'il devient lisible — et nulle part ailleurs.
-      setJetonSiege(evaluerJeton(await lireJetonRafraichissement(base, coffre)));
+      //
+      // Un jeton CORROMPU ne bloque pas le déverrouillage : 05 §31-3 exige que la
+      // collecte se poursuive quoi qu'il arrive au lien avec le siège, et
+      // l'invariant 1 en fait une règle absolue. Mais il ne se tait pas non plus,
+      // et c'est tout l'objet de l'état `illisible` : la corruption est ANNONCÉE,
+      // au lieu de se déguiser en « reconnectez-vous ».
+      try {
+        setJetonSiege(evaluerJeton(await lireJetonRafraichissement(base, coffre)));
+      } catch {
+        setJetonSiege('illisible');
+      }
       setStockage(await evaluerStockage());
     },
     [base, premierUsage, verrou],

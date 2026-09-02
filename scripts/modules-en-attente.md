@@ -24,15 +24,10 @@ et **un garde qui bloque à tort finit désactivé** — ce qui est pire que pas
 
 ## Format — quatre colonnes, une ligne par module
 
-| module                                   | incrément consommateur | déclaré le | justification                                                                                                                                                       |
-| ---------------------------------------- | ---------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| apps/field/src/local/depots/sessions.ts  | L5b                    | 2026-09-02 | Interface publiée le premier jour par L5a (LOT_L5.md §2) pour que L5b n attende pas : l écran 3 zones lit les sessions du jour et la session en cours par ce dépôt. |
-| apps/field/src/local/depots/reponses.ts  | L5b                    | 2026-09-02 | Interface publiée le premier jour par L5a (LOT_L5.md §2) : l écran 3 zones lit et compte les réponses d une session par ce dépôt (avancement, à-revoir).            |
-| apps/field/src/local/depots/questions.ts | L5b                    | 2026-09-02 | Interface publiée le premier jour par L5a (LOT_L5.md §2) : le questionnaire figé et la recherche hors-parcours (03 §25.4) passent par ce dépôt.                     |
-| apps/field/src/local/depots/outbox.ts    | L5b                    | 2026-09-02 | Interface publiée le premier jour par L5a (LOT_L5.md §2) : le compteur d opérations en attente alimente l indicateur d enregistrement de L5b, puis le push de L6a.  |
-| apps/field/src/session/machine.ts        | L5b                    | 2026-09-02 | Interface publiée le premier jour par L5a (LOT_L5.md §2) : terminer et valider un entretien (03 §19.1 V2.10) sont des gestes de l écran L5b, pas du socle.          |
+| module | incrément consommateur | déclaré le | justification |
+| ------ | ---------------------- | ---------- | ------------- |
 
-_(**Cinq entrées, toutes L5a → L5b, déclarées le 2026-09-02.** Elles sont le cas normal que cette
+_(**Aucune entrée. Cinq modules L5a y sont entrés le 2026-09-02 (les quatre dépôts locaux et la machine à états de session, publiés pour L5b) et en sont SORTIS le même jour : les tests du socle les ont atteints, et la soupape a réclamé le retrait — comme pour `pagination.ts` avant eux.** Elles sont le cas normal que cette
 soupape décrit : `LOT_L5.md` §2 fait publier par L5a, le premier jour, les interfaces que L5b et L5c
 consommeront — sans quoi les deux incréments suivants attendraient. Les DEUX modules L5a qui
 n'étaient PAS dans ce cas (`local/jetons.ts`, `local/embarquement.ts`) ont été CÂBLÉS dans la coquille
