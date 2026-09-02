@@ -5479,3 +5479,24 @@ chantiers L3/A10 · L5/A20 · L7/A30 (`ORGANISATION_AGENTS.md` §9). Précédenc
 (ces mesures ne touchent ni schéma, ni API, ni crypto) ; règle du pack sans objet.
 Décideur : Williams (« mets tout ça en place », 2026-09-02).
 Impact spec : aucun. Amendements de `CLAUDE.md` §4, §7, §8 et `ORGANISATION_AGENTS.md` §9.
+
+## 2026-09-02 — [gouvernance/docs] Le statut du §30.6 est daté, les doctrines entrent au 03, le pack est rescellé
+
+Options :
+
+1. **Dater la phrase du 02 §30.6 et écrire les cinq doctrines dans le 03 §32.4, puis resceller** —
+   retenue : la phrase « plus aucune décision d'infrastructure ouverte » est fausse depuis le 28/08
+   (`ALIGNEMENT_PACK_CODE.md` §6 le demandait), et l'entrée du 02/09 laissait l'amendement du 03
+   « À FAIRE ».
+2. Retirer la phrase du 02 — écarté : le pack ne s'efface pas, il se date (règle du 04 : amendements
+   `═══` datés, texte d'origine conservé).
+
+Arbitrage : option 1, sur commande de Williams (« prends les trois dans une PR à part », 2026-09-02).
+Aucun contenu nouveau : le 03 reçoit mot pour mot l'arbitrage « 1a…5a » du 02/09 ; le 02 reçoit la
+liste des décisions ratifiées le 31/08 et renvoie à `ALIGNEMENT_PACK_CODE.md` §2 comme liste qui fait
+foi. Sceau régénéré (`node scripts/check-pack-integrity.mjs --sceller`) APRÈS cette entrée, comme le
+garde l'exige. Même PR : `CHANGELOG.md` créé (v0.l0, v0.l2) et `TRACABILITE_E1-E47.md` §J (report
+du §10.2 de la fiche P-B, réserve R-B12 levée). Précédence : 09 §5.2 (amendement horodaté) ;
+règle du pack sans objet — aucune section en conflit, deux sections complétées.
+Décideur : Williams.
+Impact spec : amendements horodatés de 02 §30.6 et 03 §32.4 ; sceau régénéré.
