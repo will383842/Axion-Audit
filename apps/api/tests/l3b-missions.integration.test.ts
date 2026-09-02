@@ -126,9 +126,11 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
   ERROR_CODES,
+  MOTIFS_RETOUR_ARRIERE,
   TRANSITIONS_MISSION,
   verifierValeursAtomiques,
   type CodeConditionMission,
+  type MotifRetourArriere,
   type StatutMission,
 } from '@axion/shared';
 import {
@@ -669,7 +671,7 @@ async function changerStatut(
   jeton: string | undefined,
   missionId: string,
   vers: StatutMission,
-  options: { readonly motif?: string; readonly surcharge?: boolean } = {},
+  options: { readonly motif?: MotifRetourArriere; readonly surcharge?: boolean } = {},
 ): Promise<Reponse> {
   return appeler('POST', `/v1/missions/${missionId}/status`, {
     ...(jeton === undefined ? {} : { jeton }),
@@ -1174,7 +1176,7 @@ describe('POST /v1/missions/:id/status — les transitions AUTORISÉES (§32.2)'
         // Un motif est fourni même quand il n'est pas requis : sa présence ne peut
         // JAMAIS être une cause de refus, donc elle n'affaiblit aucun verdict —
         // tandis que son absence en aurait été une sur les trois retours.
-        motif: 'Motif fictif de transition, saisi par le pilote de mission.',
+        motif: 'demande_du_client',
       });
 
       expect(
@@ -1202,7 +1204,7 @@ describe('POST /v1/missions/:id/status — les transitions AUTORISÉES (§32.2)'
     await placerStatut(creee.id, 'en_cours');
 
     const reponse = await changerStatut(admin.jeton, creee.id, 'preparation', {
-      motif: 'Retour en preparation pour completer le cadrage.',
+      motif: 'perimetre_a_reprendre',
     });
     expect(reponse.statut).toBe(200);
     expect(
@@ -1250,7 +1252,7 @@ describe('POST /v1/missions/:id/status — les transitions INTERDITES (§32.2 : 
       await semerConditions(creee.id, couple.vers, admin.id);
 
       const reponse = await changerStatut(admin.jeton, creee.id, couple.vers, {
-        motif: 'Motif fictif fourni pour isoler la cause du refus.',
+        motif: 'erreur_de_manipulation',
       });
 
       expect(
@@ -1340,17 +1342,33 @@ describe('POST /v1/missions/:id/status — les transitions INTERDITES (§32.2 : 
 // =============================================================================
 // 5. LE MOTIF DES RETOURS ARRIÈRE — INVARIANT 7 RENDU EXÉCUTABLE
 // =============================================================================
+// ARBITRAGE DE WILLIAMS du 2026-09-02 : le motif n’est plus un texte libre, c’est
+// un CODE d’un vocabulaire fermé (`MOTIFS_RETOUR_ARRIERE`, `packages/shared`),
+// doublé d’un libellé français. Deux conséquences que cette section éprouve :
+//   · l’ABSENCE de motif sur un retour reste un refus d’ÉTAT (409) : la requête
+//     est bien formée, c’est la transition visée qui exige une justification ;
+//   · un motif HORS VOCABULAIRE ou en texte libre est un refus de FORME (400) :
+//     Zod le rejette avant que le service ne voie la demande — et c’est ce qui
+//     garantit qu’aucune phrase saisie par un humain n’atteindra jamais
+//     `activity_log` (11 §2 : aucune donnée personnelle dans les journaux).
+// La liste est IMPORTÉE, jamais recopiée : un test qui la recopierait dériverait.
 describe('POST /v1/missions/:id/status — motif obligatoire sur les retours (§32.2)', () => {
   const retours = TRANSITIONS_ATTENDUES.filter((ligne) => ligne.motifRequis);
 
+  /**
+   * Un code du vocabulaire — le premier, quel qu’il soit, pris dans la liste
+   * partagée (tuple `as const` : l’index 0 est typé, une liste vide ne compile pas).
+   */
+  const unMotifDuVocabulaire = (): MotifRetourArriere => MOTIFS_RETOUR_ARRIERE[0];
+
   for (const retour of retours) {
-    it(`@critique ${retour.depuis} → ${retour.vers} SANS motif est refusée`, async () => {
+    it(`@critique ${retour.depuis} → ${retour.vers} SANS motif est refusée (409), AVEC un code elle passe`, async () => {
       // QUELLE IMPLÉMENTATION PLAUSIBLE MAIS FAUSSE CE CAS ATTRAPE-T-IL ?
-      // Celle qui déclare `motif` optionnel dans le schéma Zod « parce qu'il ne
-      // l'est pas sur les quatre transitions avant », et qui ne le REVÉRIFIE pas
+      // Celle qui déclare `motif` optionnel dans le schéma Zod « parce qu’il ne
+      // l’est pas sur les quatre transitions avant », et qui ne le REVÉRIFIE pas
       // dans le service. Le retour arrière passe alors sans justification : la
-      // ligne d'`activity_log` du §32.2 dirait QU'ON est revenu en arrière,
-      // jamais POURQUOI — et l'invariant 7 (« toute correction de donnée =
+      // ligne d’`activity_log` du §32.2 dirait QU’ON est revenu en arrière,
+      // jamais POURQUOI — et l’invariant 7 (« toute correction de donnée =
       // révision tracée ») perd la moitié qui vaut quelque chose.
       const admin = await creerCompte('admin', `motif-${retour.depuis}`);
       const creee = await creerMission(admin.jeton, 'motif');
@@ -1359,57 +1377,99 @@ describe('POST /v1/missions/:id/status — motif obligatoire sur les retours (§
       const sansMotif = await changerStatut(admin.jeton, creee.id, retour.vers);
       expect(
         sansMotif.statut,
-        'Un retour arrière sans motif doit être REFUSÉ. 400 (le corps est incomplet) ou\n' +
-          '409 (l’état ne permet pas ce passage sans justification) sont l’un et l’autre\n' +
-          'défendables ; un 200 ne l’est pas.',
-      ).toBeGreaterThanOrEqual(400);
+        'Un retour arrière sans motif est un refus d’ÉTAT : la requête est bien formée,\n' +
+          'c’est la transition visée qui exige une justification (arbitrage A01 du\n' +
+          '2026-09-01, confirmé le 2026-09-02).',
+      ).toBe(409);
+      expect(sansMotif.code).toBe(ERROR_CODES.ILLEGAL_STATE_TRANSITION);
       expect(await statutEnBase(creee.id)).toBe(retour.depuis);
 
-      // Un motif fait UNIQUEMENT d'espaces n'est pas un motif : c'est un champ
-      // qu'on valide à la barre d'espace, et la trace exigée ne porte alors plus
-      // rien.
-      const motifVide = await changerStatut(admin.jeton, creee.id, retour.vers, { motif: '   ' });
-      expect(
-        motifVide.statut,
-        'Un motif réduit à des espaces doit être refusé comme un motif absent.',
-      ).toBeGreaterThanOrEqual(400);
-      expect(await statutEnBase(creee.id)).toBe(retour.depuis);
-
-      // La CONTRE-ÉPREUVE, sans laquelle les deux refus ci-dessus seraient verts
-      // sur une route qui refuse tout.
+      // La CONTRE-ÉPREUVE, sans laquelle le refus ci-dessus serait vert sur une
+      // route qui refuse tout.
       const avecMotif = await changerStatut(admin.jeton, creee.id, retour.vers, {
-        motif: 'Reouverture demandee par le pilote de mission.',
+        motif: unMotifDuVocabulaire(),
       });
       expect(avecMotif.statut, `refus d’un retour pourtant motivé : ${avecMotif.corps}`).toBe(200);
       expect(await statutEnBase(creee.id)).toBe(retour.vers);
     });
   }
 
-  it('le code du refus d’un motif manquant est stable et vient d’`ERROR_CODES`', async () => {
-    // ISOLÉ DU TEST PRÉCÉDENT, ET C'EST DÉLIBÉRÉ. Le pack ne tranche pas entre
-    // `400 VALIDATION_FAILED` (le corps est incomplet) et `409
-    // ILLEGAL_STATE_TRANSITION` (LOT_L3 §3b : « rejet = 409 »). La SUBSTANCE —
-    // le refus, et le statut inchangé — est prouvée à côté ; ici on exige
-    // seulement que le code appartienne au catalogue partagé et ne soit pas un
-    // littéral libre (11 §3). Si ce test rougit, l’arbitrage se trace dans
-    // `DECISIONS.md` — il ne se règle pas en alignant le test sur le code.
-    const admin = await creerCompte('admin', 'motif-code');
-    const creee = await creerMission(admin.jeton, 'motif-code');
-    await placerStatut(creee.id, 'livree');
+  it('@critique un motif HORS VOCABULAIRE est refusé en 400, et le statut en base n’a pas bougé', async () => {
+    // ═══════════════════════════════════════════════════════════════════════════
+    // LA PORTE PAR LAQUELLE UNE PHRASE ENTRERAIT DANS LE JOURNAL.
+    // ═══════════════════════════════════════════════════════════════════════════
+    // QUELLE IMPLÉMENTATION PLAUSIBLE MAIS FAUSSE CE CAS ATTRAPE-T-IL ?
+    // Celle qui a gardé `motif: z.string()` — ou un `z.string().min(1)` — et qui
+    // journalise la valeur telle quelle. Elle accepterait « Reprise demandée par
+    // M. Untel, tél. 06… », et cette phrase irait dans `activity_log.meta`, une
+    // table sans régime de redaction. Le vocabulaire fermé n’existe QUE pour
+    // fermer cette porte : s’il laisse passer une seule chaîne hors liste, il
+    // n’existe pas.
+    //
+    // Quatre formes sont éprouvées, parce qu’un `z.enum` mal posé peut en
+    // laisser passer une sans laisser passer les autres : un code plausible mais
+    // absent, une phrase, une chaîne vide, une chaîne d’espaces.
+    const admin = await creerCompte('admin', 'motif-hors-liste');
+    const creee = await creerMission(admin.jeton, 'motif-hors-liste');
+    await placerStatut(creee.id, 'en_analyse');
 
-    const refus = await changerStatut(admin.jeton, creee.id, 'en_analyse');
-    const codesConnus: readonly string[] = Object.values(ERROR_CODES);
+    const intrus = [
+      { quoi: 'code plausible mais absent de la liste', valeur: 'retour_client' },
+      { quoi: 'texte libre', valeur: 'Reprise demandee par le client apres la reunion.' },
+      { quoi: 'chaîne vide', valeur: '' },
+      { quoi: 'espaces', valeur: '   ' },
+    ];
+    const codesConnus: readonly string[] = MOTIFS_RETOUR_ARRIERE;
     expect(
-      codesConnus.includes(refus.code ?? ''),
-      `Le code « ${String(refus.code)} » n’est pas dans ERROR_CODES : le front ne peut\n` +
-        'pas s’y brancher, et 11 §3 interdit le littéral libre.',
-    ).toBe(true);
-    expect([ERROR_CODES.VALIDATION_FAILED, ERROR_CODES.ILLEGAL_STATE_TRANSITION]).toContain(
-      refus.code,
-    );
+      intrus.filter((cas) => codesConnus.includes(cas.valeur)),
+      'Une valeur « intruse » figure dans le vocabulaire : le test n’éprouverait plus\n' +
+        'un refus mais une acceptation légitime.',
+    ).toStrictEqual([]);
+
+    const acceptes: string[] = [];
+    for (const cas of intrus) {
+      const reponse = await appeler('POST', `/v1/missions/${creee.id}/status`, {
+        jeton: admin.jeton,
+        charge: { vers: 'en_cours', motif: cas.valeur },
+      });
+      if (reponse.statut !== 400 || reponse.code !== ERROR_CODES.VALIDATION_FAILED) {
+        acceptes.push(`${cas.quoi} → ${String(reponse.statut)} ${String(reponse.code)}`);
+      }
+    }
+    expect(
+      acceptes,
+      'Un motif hors vocabulaire a franchi la validation. C’est la porte par laquelle\n' +
+        'une phrase — donc un nom, un numéro, un montant — entre dans `activity_log`.',
+    ).toStrictEqual([]);
+
+    expect(
+      await statutEnBase(creee.id),
+      'LA SUBSTANCE : aucune des quatre tentatives ne doit avoir écrit le statut.',
+    ).toBe('en_analyse');
+  });
+
+  it('les neuf codes du vocabulaire sont TOUS acceptés sur un retour arrière', async () => {
+    // La contre-épreuve du cas précédent, élargie : sans elle, un `z.enum` qui
+    // n’accepterait que le premier code serait vert sur les deux tests d’avant.
+    // Chaque code est joué sur une mission neuve, pour que l’échec nomme le code
+    // fautif et lui seul.
+    const admin = await creerCompte('admin', 'motif-tous');
+    const refuses: string[] = [];
+    for (const code of MOTIFS_RETOUR_ARRIERE) {
+      const creee = await creerMission(admin.jeton, `motif-${code}`);
+      await placerStatut(creee.id, 'livree');
+      const reponse = await changerStatut(admin.jeton, creee.id, 'en_analyse', { motif: code });
+      if (reponse.statut !== 200 || (await statutEnBase(creee.id)) !== 'en_analyse') {
+        refuses.push(`${code} → ${String(reponse.statut)} ${String(reponse.code)}`);
+      }
+    }
+    expect(
+      refuses,
+      'Un code du vocabulaire partagé est refusé par la route : la console proposera\n' +
+        'un choix que le serveur n’accepte pas.',
+    ).toStrictEqual([]);
   });
 });
-
 // =============================================================================
 // 6. LA SURCHARGE ADMIN MOTIVÉE — DEUX LIGNES SEULEMENT, ET PAS UNE DE PLUS
 // =============================================================================
@@ -1437,7 +1497,7 @@ describe('POST /v1/missions/:id/status — surcharge admin (§32.2 « override a
     await validerEtape(creee.id, 'preparation', admin.id);
 
     const force = await changerStatut(admin.jeton, creee.id, 'en_cours', {
-      motif: 'Le client attend, je force le lancement de la collecte.',
+      motif: 'demande_du_client',
       surcharge: true,
     });
 
@@ -1497,7 +1557,7 @@ describe('POST /v1/missions/:id/status — surcharge admin (§32.2 « override a
 
     const force = await changerStatut(admin.jeton, creee.id, 'en_analyse', {
       surcharge: true,
-      motif: 'Collecte interrompue par le client, analyse lancee sur le partiel.',
+      motif: 'manques_assumes',
     });
     expect(
       force.statut,
@@ -1524,7 +1584,7 @@ describe('POST /v1/missions/:id/status — surcharge admin (§32.2 « override a
 
     const force = await changerStatut(admin.jeton, creee.id, 'livree', {
       surcharge: true,
-      motif: 'Livraison forcee : le comite client a valide en seance.',
+      motif: 'demande_du_client',
     });
     expect(
       force.statut,
@@ -1695,7 +1755,7 @@ describe('activity_log — la trace des retours arrière (§32.2, invariant 7)',
     );
 
     const reponse = await changerStatut(admin.jeton, creee.id, 'en_cours', {
-      motif: 'Reouverture de la collecte : deux unites manquantes.',
+      motif: 'collecte_a_completer',
     });
     expect(reponse.statut, `retour arrière refusé : ${reponse.corps.slice(0, 400)}`).toBe(200);
 
@@ -1719,48 +1779,84 @@ describe('activity_log — la trace des retours arrière (§32.2, invariant 7)',
     ).toBe(true);
   });
 
-  it('@critique aucune ligne de journal écrite par une transition ne sort du vocabulaire du journal', async () => {
+  it('@critique `meta.motif` porte EXACTEMENT le code envoyé, et rien d’autre que ce code', async () => {
     // ═══════════════════════════════════════════════════════════════════════════
-    // CE TEST ATTRAPE LE MOTIF RECOPIÉ EN CLAIR DANS `meta`.
+    // CE QUE LE VOCABULAIRE FERMÉ ACHÈTE, ET CE TEST EST SON REÇU.
     // ═══════════════════════════════════════════════════════════════════════════
-    // Un motif de retour arrière est du TEXTE LIBRE saisi par un humain : il peut
-    // contenir un nom de personne, une adresse, un montant, un verbatim de
-    // réunion. `packages/shared/src/journal.ts` interdit exactement cela — 64
-    // caractères, `[A-Za-z0-9_.:/-]`, ni espace ni `@` — et 11 §2 l'interdit une
-    // seconde fois (« aucune donnée personnelle dans les logs »).
-    //
-    // On applique donc la règle PARTAGÉE à ce que la base contient réellement,
-    // plutôt que de deviner le nom des clés : le test reste vrai quel que soit le
-    // schéma de `meta` retenu par l'implémenteur.
+    // Arbitrage de Williams du 2026-09-02 : le motif est un CODE, donc il PEUT
+    // vivre dans `activity_log.meta` — c’est un mot technique, ni une phrase ni
+    // une identité. La propriété qui protège la redaction (11 §2) reste entière
+    // et se mesure ici de trois façons :
+    //   1. la ligne `mission.status_change` existe et `meta.motif` vaut le code,
+    //      ni un libellé français, ni une reformulation ;
+    //   2. TOUT `meta` respecte le vocabulaire technique du journal
+    //      (`verifierValeursAtomiques`, contrat partagé) — un code y passe, une
+    //      phrase n’y passe pas ;
+    //   3. sur une PROGRESSION, `meta.motif` est `null` : un motif inventé pour
+    //      « remplir la case » serait une trace qui ment.
+    // Le nom des clés (`motif`) et de l’action (`mission.status_change`) sont ceux
+    // du contrat publié, pas une devinette.
     const admin = await creerCompte('admin', 'journal-vocabulaire');
     const creee = await creerMission(admin.jeton, 'journal-motif');
     await placerStatut(creee.id, 'livree');
 
-    const motif = 'Correction du rapport demandee par le comite de pilotage du client.';
-    const reponse = await changerStatut(admin.jeton, creee.id, 'en_analyse', { motif });
-    expect(reponse.statut).toBe(200);
+    const code: MotifRetourArriere = 'rapport_a_corriger';
+    const retour = await changerStatut(admin.jeton, creee.id, 'en_analyse', { motif: code });
+    expect(retour.statut, `retour arrière refusé : ${retour.corps.slice(0, 400)}`).toBe(200);
 
-    const lignes = await bd().query<{ meta: unknown }>(
-      'SELECT meta FROM activity_log WHERE entity_id = $1',
-      [creee.id],
+    const metaSchema = z.object({ motif: z.string().nullable() });
+    const lireLignes = async (): Promise<{ action: string; motif: string | null }[]> => {
+      const resultat = await bd().query<{ action: string; meta: unknown }>(
+        `SELECT action, meta FROM activity_log WHERE entity_id = $1 ORDER BY created_at`,
+        [creee.id],
+      );
+      return resultat.rows.map((ligne) => {
+        const analyse = metaSchema.safeParse(ligne.meta);
+        return { action: ligne.action, motif: analyse.success ? analyse.data.motif : null };
+      });
+    };
+
+    const apresRetour = (await lireLignes()).filter(
+      (ligne) => ligne.action === 'mission.status_change',
     );
+    expect(
+      apresRetour.map((ligne) => ligne.motif),
+      'La ligne `mission.status_change` du retour arrière doit porter `meta.motif` =\n' +
+        `« ${code} » — le CODE, pas son libellé français ni une paraphrase. Un libellé\n` +
+        'serait une seconde source de vérité ; une paraphrase, du texte libre.',
+    ).toContain(code);
 
-    const violations = lignes.rows.flatMap((ligne) => verifierValeursAtomiques(ligne.meta));
+    const violations = (
+      await bd().query<{ meta: unknown }>('SELECT meta FROM activity_log WHERE entity_id = $1', [
+        creee.id,
+      ])
+    ).rows.flatMap((ligne) => verifierValeursAtomiques(ligne.meta));
     expect(
       violations,
-      'Une valeur du journal sort du vocabulaire technique de `packages/shared`. Le cas\n' +
-        'le plus probable est le MOTIF recopié tel quel : c’est du texte libre saisi par\n' +
-        'un humain, donc un endroit où un nom de personne ou un montant peut arriver —\n' +
-        'et `activity_log` n’a ni la rétention ni le régime d’accès pour ça.',
+      'Une valeur du journal sort du vocabulaire technique de `packages/shared` : une\n' +
+        'phrase, un espace, une adresse, un montant décimal. Le vocabulaire fermé des\n' +
+        'motifs existe précisément pour que cette liste reste vide.',
     ).toStrictEqual([]);
 
-    const texte = JSON.stringify(lignes.rows);
+    // 3. Une PROGRESSION ne porte AUCUN motif : `null`, jamais un code de\n
+    //    complaisance. `en_analyse → livree` a besoin de la validation humaine de\n
+    //    livraison ; elle est semée.
+    await validerEtape(creee.id, 'livraison', admin.id);
+    const progression = await changerStatut(admin.jeton, creee.id, 'livree');
+    expect(progression.statut, `progression refusée : ${progression.corps.slice(0, 400)}`).toBe(
+      200,
+    );
+    const toutes = (await lireLignes()).filter((ligne) => ligne.action === 'mission.status_change');
     expect(
-      texte.includes(motif),
-      'Le motif figure VERBATIM dans le journal. Voir ci-dessus : ce champ est du\n' +
-        'texte libre. Où le motif doit vivre est une question ouverte — elle se tranche\n' +
-        'dans `DECISIONS.md`, pas en le déversant dans `meta`.',
-    ).toBe(false);
+      toutes.length,
+      'Deux transitions ont eu lieu : deux lignes `mission.status_change` sont dues.',
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      toutes[toutes.length - 1]?.motif,
+      'La progression vient d’être journalisée avec un motif. Une progression n’en a\n' +
+        'pas (§32.2 ne l’exige que sur les retours) : `null`, sinon la trace prétend à\n' +
+        'une justification que personne n’a donnée.',
+    ).toBeNull();
   });
 });
 
@@ -1800,7 +1896,7 @@ describe('RBAC des cinq routes missions (§34.1, invariant 3)', () => {
       {
         methode: 'POST' as const,
         url: `/v1/missions/${cible.id}/status`,
-        charge: { vers: 'preparation', motif: 'Transition qui ne doit jamais avoir lieu.' },
+        charge: { vers: 'preparation', motif: 'erreur_de_manipulation' },
       },
     ];
 
@@ -1882,7 +1978,7 @@ describe('RBAC des cinq routes missions (§34.1, invariant 3)', () => {
 
     await placerStatut(cible.id, 'en_cours');
     const transition = await changerStatut(admin.jeton, cible.id, 'preparation', {
-      motif: 'Retour en preparation apres renommage.',
+      motif: 'perimetre_a_reprendre',
     });
     expect(transition.statut).toBe(200);
   });
@@ -2006,7 +2102,7 @@ describe('PATCH /v1/missions/:id', () => {
     expect(modifiee.statut).toBe(404);
 
     const transition = await changerStatut(admin.jeton, uuidv7(), 'en_cours', {
-      motif: 'sans objet',
+      motif: 'erreur_de_manipulation',
     });
     expect(
       transition.statut,
@@ -2134,7 +2230,7 @@ describe('étanchéité de `scoping_financials` sur les routes missions', () => 
     const liste = await appeler('GET', '/v1/missions?limit=50', { jeton: admin.jeton });
     await placerStatut(creee.id, 'en_cours');
     const transition = await changerStatut(admin.jeton, creee.id, 'preparation', {
-      motif: 'Retour arriere pour eprouver la reponse de la route de transition.',
+      motif: 'donnees_a_corriger',
     });
     const modification = await appeler('PATCH', `/v1/missions/${creee.id}`, {
       jeton: admin.jeton,

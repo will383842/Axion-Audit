@@ -6680,3 +6680,122 @@ non listée. **Précédence : 11 §7 (budgets A28) contre une lettre de note de 
 
 Décideur : A01
 Impact spec : aucun sur `/docs`. Amendement horodaté de `docs/conception/LOT_L5.md` §3.2.
+
+## 2026-09-02 — [L3b/L3d] Le motif d'un retour arrière et d'une réaffectation est un CODE, pas un texte — tranché par Williams
+
+Escalade du 2026-09-01 (« Où vit le texte du motif d'un retour arrière »), rattachée le 2026-09-02
+par L3d pour `reassign` (§34.4). Le journal est un emplacement à code (64 caractères, alphabet
+restreint) ; aucune table de révision ne couvre `missions` ni `interviews`.
+
+Options :
+
+1. Amender le 04 (colonne de motif ou table de révision).
+2. Élargir le champ du journal au texte libre — fait sauter une garantie de redaction.
+3. **Un motif CODÉ, vocabulaire fermé**, pas de texte libre.
+4. Exiger le motif puis le jeter.
+
+Arbitrage : **option 3**, prononcée par Williams le 2026-09-02, en ces termes exacts, relayés par
+la session de vérification : « **motif codé** ». Aucune colonne ni table nouvelle. Le motif est
+**exigé à l'appel**, **validé contre le vocabulaire** (400 s'il est absent ou hors liste), et **tracé
+dans `activity_log` par `journaliserActivite`** — une valeur codée passe la ceinture de redaction par
+construction. Le vocabulaire des motifs est une **donnée du code partagée** dans `packages/shared`,
+comme `TRANSITIONS_MISSION` et les libellés d'état : une seule source, importée par l'API et par la
+console. L'option 4, qui était l'état du code, cesse. **Règle de précédence sans objet.**
+
+Décideur : **Williams**
+Impact spec : aucun sur le schéma. Le vocabulaire est du code partagé.
+
+## 2026-09-02 — [L5a] Paramètres Argon2id : le profil OWASP est CONFIRMÉ par Williams
+
+L'entrée du même jour « Paramètres Argon2id : le pack impose l'algorithme et ne dit rien des
+paramètres — ESCALADE SOUS DÉFAUT » appliquait le profil OWASP (`m = 47 104 Kio, t = 1, p = 1`,
+32 octets, stocké avec le coffre) sous la règle « silence vaut accord », en le signalant
+expressément parce que la crypto est une décision humaine (`CLAUDE.md` §3-4).
+
+Options :
+
+1. **Confirmer** le profil OWASP, stocké avec le coffre.
+2. Le remplacer par un profil plus lourd ou plus léger.
+
+Arbitrage : **option 1**, prononcée par Williams le 2026-09-02 : « **profil OWASP confirmé** ». Le
+défaut appliqué sous silence devient une décision explicite. **Ce qui reste dû, et qui l'était
+déjà** : la mesure A28 de la dérivation (< 1 s sur iPad, 11 §7) — un profil confirmé n'est pas un
+profil mesuré. **Règle de précédence sans objet.**
+
+Décideur : **Williams**
+Impact spec : aucun.
+
+## 2026-09-02 — [L3d] `interviews.conducted_by` devient NULLABLE — amendement du 04 tranché par Williams
+
+Escalade du 2026-08-31, portée à Williams par L3d : le plan d'entretiens §32.4 produit des sessions
+**planifiées** pour lesquelles aucun auditeur n'est encore affecté ; `interviews.conducted_by NOT
+NULL` (04) interdit de les persister. Tant qu'elle était ouverte, le plan restait une fonction pure
+non persistée, et la route `/interview-plan/apply` était reportée.
+
+Options :
+
+1. **La colonne devient NULLABLE** — amendement du 04.
+2. Inventer un auditeur « à affecter » (compte sentinelle) — une fausse donnée en base.
+3. Laisser le plan non persistable et reporter `/apply` à un lot ultérieur.
+
+Arbitrage : **option 1**, prononcée par Williams le 2026-09-02 : « **conducted_by nullable** ».
+C'est une modification du fichier 04, et elle se fait **complètement ou pas du tout** :
+(a) amendement horodaté du 04, § de la table `interviews`, avec la date et le motif — le plan §32.4
+produit des sessions planifiées sans auditeur affecté ; (b) migration SQL **up/down littérale** par
+A12 ; (c) manifeste de schéma et diff schéma-vs-04 mis à jour **dans le même incrément** ; (d) **la
+règle métier explicite dans le service, et testée** : une session **planifiée** peut n'avoir aucun
+auditeur ; une session **conduite** (statut au-delà de planifiée) doit en avoir un — contrainte posée
+dans le code, pas seulement relâchée dans la colonne. L'option 2 est écartée sans discussion :
+une donnée fausse en base est la famille de défauts que ce dépôt refuse. **Règle de précédence sans
+objet** (le 04 est amendé, pas contredit).
+
+Décideur : **Williams**
+Impact spec : **amendement horodaté du fichier 04** — `interviews.conducted_by NULL`. Migration à
+suivre dans l'incrément L3d.
+
+## 2026-09-02 — [L3b] Le vocabulaire codé des motifs sert AUSSI le forçage §17.3, sur le même champ
+
+L'arbitrage de Williams du même jour (« motif codé ») nomme les **retours arrière** du §32.2. Or
+`TRANSITIONS_MISSION` exige un motif dans **deux** cas, pas un : les trois retours (`motifRequis`)
+et la **surcharge admin** du §17.3 (« passer en analyse ou livrée affiche les manques ; l'admin peut
+forcer, **avec motif journalisé** »). Les deux passent par le MÊME champ de requête,
+`missionStatusRequestSchema.motif`.
+
+Options :
+
+1. Un troisième vocabulaire `MOTIFS_SURCHARGE`, distinct — le service choisirait lequel valider
+   APRÈS avoir lu l'état de la mission, c'est-à-dire répondrait 409 à ce qui est un 400.
+2. **Un seul vocabulaire `MOTIFS_RETOUR_ARRIERE` couvrant les deux usages**, dont deux codes écrits
+   pour le forçage (`manques_assumes`, `demande_du_client`).
+3. Laisser le forçage sans motif codé — il redeviendrait le seul texte libre du produit.
+
+Arbitrage : **option 2, appliquée par défaut et signalée**. Elle tient la promesse de l'arbitrage
+(« pas de texte libre », validation par Zod donc 400) sans multiplier les vocabulaires sur un champ
+unique. Son seul défaut est un NOM qui annonce moins que la liste ne couvre : c'est écrit en tête du
+vocabulaire plutôt que laissé à découvrir. **Règle de précédence sans objet** : §32.2 et §17.3 ne se
+contredisent pas, l'un est muet là où l'autre parle — même lecture qu'au 2026-08-31 sur
+`surchargeAdminMotivee`.
+
+Décideur : **A01 — À CONFIRMER** (application par défaut par A15, le 2026-09-02)
+Impact spec : aucun. Le vocabulaire est du code partagé (`packages/shared/src/motifs.ts`).
+
+## 2026-09-02 — [L3c] Le motif d'une FUSION d'unités reste un booléen — hors de la lettre de l'arbitrage
+
+`org_unit.merge` porte le même `avecMotif: boolean` que portaient `mission.status_change` et
+`interview.reassign`, et pour la même raison (la ceinture technique du journal). L'arbitrage de
+Williams du 2026-09-02 nomme le retour arrière et la réaffectation ; il ne nomme pas la fusion.
+
+Options :
+
+1. Étendre le motif codé à la fusion d'unités par analogie, dans le même incrément.
+2. **Ne rien changer à `org_unit.merge` et poser la question**, la fusion appartenant à L3c
+   (livré, revu, testé) et non au périmètre de l'arbitrage.
+
+Arbitrage : **option 2**. Étendre une décision humaine « parce que c'est pareil » est exactement ce
+que `CLAUDE.md` §3 interdit à un agent, et la fusion n'a pas la même nature qu'un retour arrière :
+elle est déjà tracée par ce qu'elle a DÉPLACÉ (deux décomptes, la cible, `merged_into_id`), là où un
+retour arrière n'a que son motif. **Règle de précédence sans objet.** Si Williams veut l'étendre, le
+vocabulaire existe et l'ajout est mécanique (une variante, une projection, un service).
+
+Décideur : **Williams — EN ATTENTE**
+Impact spec : aucun en l'état.

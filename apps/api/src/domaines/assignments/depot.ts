@@ -89,8 +89,20 @@ export interface LigneSession {
   readonly id: string;
   readonly missionId: string;
   readonly orgUnitId: string;
-  /** PROPRIÉTAIRE de la session : seul habilité à écrire via sync (05 §9.9). */
-  readonly conductedBy: string;
+  /**
+   * PROPRIÉTAIRE de la session : seul habilité à écrire via sync (05 §9.9).
+   *
+   * ⚠ **`null` DEPUIS L'AMENDEMENT DU 04 DU 2026-09-02** — une session PLANIFIÉE
+   * issue du plan §32.4 n'a pas encore d'auditeur. Le type le dit ; la règle métier
+   * qui l'encadre vit dans `service.ts` (`exigerAuditeurSiSessionConduite`), parce
+   * que le 04 l'a explicitement confiée au SERVICE et non à un `CHECK`.
+   *
+   * ⚠⚠ **POUR L6a (sync) : `conducted_by IS NULL` NE SE LIT JAMAIS « INSCRIPTIBLE
+   * PAR TOUT LE MONDE ».** La règle d'écriture du 05 §9.9 est « le propriétaire de
+   * la session, et lui seul » ; un propriétaire INCONNU est un refus, pas une
+   * permission ouverte. Le 04 l'écrit dans le même amendement.
+   */
+  readonly conductedBy: string | null;
   readonly status: StatutSessionApi;
   readonly scheduleStatus: StatutPlanificationApi;
   readonly updatedAt: Date;

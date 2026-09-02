@@ -10,6 +10,10 @@ export * from './pagination.js';
 export * from './temps.js';
 export * from './env.js';
 export * from './redaction.js';
+// Les deux vocabulaires de motifs viennent AVANT le journal : c'est une feuille du
+// graphe (elle n'importe rien), et `journal.ts` la consomme (arbitrage Williams du
+// 2026-09-02, « motif codé »).
+export * from './motifs.js';
 export * from './journal.js';
 export * from './scoping.js';
 export * from './users.js';

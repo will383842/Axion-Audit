@@ -54,6 +54,11 @@ import { STATUTS_MISSION, TYPES_UNITE_ORG } from './missions.js';
 // viennent du contrat de `org_units`, pas d'une liste recopiée. `org-units.ts` ne
 // prend RIEN de ce fichier — l'arête ne se referme pas.
 import { STATUTS_UNITE_ORG_CREABLES } from './org-units.js';
+// Les deux vocabulaires de MOTIFS (arbitrage Williams du 2026-09-02, « motif
+// codé »). `motifs.ts` est une FEUILLE : il n'importe rien, donc l'arête ne se
+// referme pas — et c'est ce qui permet à la vérification ci-dessous de vivre ICI,
+// du côté de la ceinture, avec le motif RÉEL et non une copie.
+import { MOTIFS_REAFFECTATION, MOTIFS_RETOUR_ARRIERE } from './motifs.js';
 
 // =============================================================================
 // LE VOCABULAIRE ADMISSIBLE — la ceinture 2
@@ -79,6 +84,30 @@ export const LONGUEUR_MAX_VALEUR_JOURNAL = 64;
  *   · au-delà de 64 caractères → un JWT, un jeton opaque, un contenu de réponse.
  */
 export const MOTIF_VALEUR_JOURNAL = /^[A-Za-z0-9_.:/-]{1,64}$/;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LES MOTIFS CODÉS PASSENT CETTE CEINTURE — VÉRIFIÉ AU CHARGEMENT, PAS ESPÉRÉ.
+// ─────────────────────────────────────────────────────────────────────────────
+// L'arbitrage du 2026-09-02 (« motif codé ») repose ENTIÈREMENT sur une prémisse :
+// « une valeur codée passe la ceinture de redaction par construction ». Un code
+// ajouté un jour avec un espace ou un accent ferait tomber `verifierValeursAtomiques`
+// et, avec elle, la `meta` ENTIÈRE de la transition (voir `META_REFUSEE`) : la
+// trace du §32.2 disparaîtrait au moment précis où elle sert, sans qu'aucun test
+// de motif ne rougisse — c'est la famille de défaut que ce dépôt traque.
+//
+// Trois lignes le rendent impossible. Elles s'exécutent au CHARGEMENT du paquet,
+// donc au premier import de n'importe quel test, de l'API ou d'un front ; elles
+// utilisent le motif RÉEL, pas une copie qui dériverait ; et elles NOMMENT les
+// codes fautifs (ce sont des identifiants techniques, jamais des données).
+const CODES_MOTIFS_NON_CONFORMES = [...MOTIFS_RETOUR_ARRIERE, ...MOTIFS_REAFFECTATION].filter(
+  (code) => !MOTIF_VALEUR_JOURNAL.test(code),
+);
+if (CODES_MOTIFS_NON_CONFORMES.length > 0) {
+  throw new Error(
+    'Motifs codés hors du vocabulaire technique du journal ' +
+      `(${String(MOTIF_VALEUR_JOURNAL)}) : ${CODES_MOTIFS_NON_CONFORMES.join(', ')}.`,
+  );
+}
 
 /** Profondeur maximale d'un `meta`. Au-delà, on ne journalise plus : on stocke. */
 const PROFONDEUR_MAX_META = 3;
@@ -584,18 +613,23 @@ export const evenementJournalSchema = z.discriminatedUnion('action', [
     /** Une dérogation §17.3 a-t-elle RÉELLEMENT porté la décision ? */
     surcharge: z.boolean(),
     /**
-     * ⚠ **UN BOOLÉEN, PAS LE MOTIF.** Le §32.2 exige un motif « obligatoire » et
-     * une trace `activity_log` ; `activity_log.meta` est la seule colonne libre du
-     * 04, et la ceinture 2 de ce fichier (`verifierValeursAtomiques`) n'y accepte
-     * que du VOCABULAIRE TECHNIQUE — un motif rédigé en français y serait refusé
-     * en bloc, emportant avec lui `statutAvant` et `statutApres` (voir
-     * `META_REFUSEE`). Le texte du motif n'a donc, à ce jour, AUCUN endroit où se
-     * poser : ni colonne dédiée dans `missions` (04), ni exception à la ceinture.
-     * On enregistre donc QU'IL Y EN A EU UN, on refuse la transition quand il
-     * manque — et on remonte le trou plutôt que de l'enterrer : c'est un candidat
-     * `DECISIONS.md` de l'incrément L3b, pas une décision d'agent.
+     * ⚠ **LE MOTIF LUI-MÊME, EN CODE** — arbitrage Williams du 2026-09-02, « le
+     * motif d'un retour arrière est un CODE, pas un texte ». Ce champ portait un
+     * BOOLÉEN (`avecMotif`) tant que le texte libre n'avait aucun endroit où se
+     * poser : la ceinture 2 de ce fichier n'accepte que du vocabulaire technique,
+     * et une phrase française aurait fait écarter la `meta` entière (voir
+     * `META_REFUSEE`). Un code de `MOTIFS_RETOUR_ARRIERE` la passe par
+     * construction — vérifié au chargement, plus haut dans ce fichier.
+     *
+     * **OPTIONNEL, et c'est la lecture exacte de `TRANSITIONS_MISSION`** : les
+     * quatre progressions du §32.2 n'exigent aucun motif. `undefined` ici veut donc
+     * dire « aucun motif n'était exigé, aucun n'a été donné » ; la projection
+     * l'écrit `null`, pour que la forme de `meta` reste la même sur les sept
+     * transitions et qu'un `GROUP BY` n'ait pas à distinguer clé absente et clé
+     * nulle. Il n'existe AUCUN cas où un motif est exigé et absent : la transition
+     * est alors refusée en 409, et rien n'est journalisé.
      */
-    avecMotif: z.boolean(),
+    motif: z.enum(MOTIFS_RETOUR_ARRIERE).optional(),
   }),
 
   // ── org_units (lot L3, incrément L3c) ──────────────────────────────────────
@@ -708,18 +742,30 @@ export const evenementJournalSchema = z.discriminatedUnion('action', [
      * réalisées restent à leur auteur » (§34.4) n'a de sens vérifiable que si l'on
      * sait qui était l'auteur avant. Aucun nom, aucune adresse — ni de l'auditeur,
      * ni de la personne rencontrée (11 §2).
+     *
+     * ⚠ **`auditeurAvant` EST NULLABLE depuis l'amendement du 2026-09-02** :
+     * `interviews.conducted_by` accepte NULL pour une session PLANIFIÉE sans
+     * auditeur (plan §32.4), et `reassign` est la porte qui en pose un — la ligne
+     * de journal dit alors « personne → quelqu'un », ce qui est une PREMIÈRE
+     * AFFECTATION et non un changement de mains. La distinction se lit dans la
+     * table d'audit sans rien deviner, ce qui est le seul but de ce champ.
+     * `null` traverse la ceinture 2 (`verifierValeursAtomiques` l'admet
+     * explicitement) ; `auditeurApres`, lui, ne peut PAS être nul : on ne réaffecte
+     * pas une session à personne.
      */
-    auditeurAvant: idUtilisateur,
+    auditeurAvant: idUtilisateur.nullable(),
     auditeurApres: idUtilisateur,
     /**
-     * ⚠ **UN BOOLÉEN, PAS LE MOTIF** — même limite, même raison et même escalade
-     * que `mission.status_change` et `org_unit.merge`. Le §34.4 exige un motif ;
-     * `verifierValeursAtomiques` n'accepte que du vocabulaire technique et une
-     * phrase française ferait écarter la `meta` entière. Le motif est donc
-     * OBLIGATOIRE à l'appel (400 s'il manque) et son TEXTE n'est écrit nulle part
-     * — escalade `DECISIONS.md` du 2026-09-01, rattachée au §34.4 le 2026-09-02.
+     * ⚠ **LE MOTIF LUI-MÊME, EN CODE** — même arbitrage que
+     * `mission.status_change` (Williams, 2026-09-02 : « motif codé »), appliqué au
+     * §34.4 qui exige un motif à la réaffectation et sa trace `activity_log`.
+     *
+     * **OBLIGATOIRE ici**, contrairement au motif de transition : le §34.4 n'a pas
+     * de cas « réaffectation sans motif », et le schéma de requête le refuse en
+     * 400 avant d'atteindre le service. Une ligne `interview.reassign` sans motif
+     * n'est donc pas seulement improbable : elle est inexprimable.
      */
-    avecMotif: z.boolean(),
+    motif: z.enum(MOTIFS_REAFFECTATION),
   }),
 ]);
 
@@ -901,7 +947,11 @@ export function versLigneJournal(evenement: EvenementJournal): ContenuLigneJourn
           statut_apres: evenement.statutApres,
           sens: evenement.sens,
           surcharge: evenement.surcharge,
-          avec_motif: evenement.avecMotif,
+          // `?? null` plutôt qu'une clé omise : `meta` garde la MÊME forme sur les
+          // sept transitions, et « aucun motif n'était exigé » se lit sans deviner
+          // si la clé manque parce qu'il n'y en avait pas ou parce qu'un appelant
+          // l'a oubliée. La ceinture 2 admet `null` explicitement.
+          motif: evenement.motif ?? null,
         },
       };
 
@@ -991,7 +1041,7 @@ export function versLigneJournal(evenement: EvenementJournal): ContenuLigneJourn
           mission_id: evenement.missionId,
           auditeur_avant: evenement.auditeurAvant,
           auditeur_apres: evenement.auditeurApres,
-          avec_motif: evenement.avecMotif,
+          motif: evenement.motif,
         },
       };
   }

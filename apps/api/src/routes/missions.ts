@@ -297,6 +297,12 @@ export const routesMissions: FastifyPluginAsync = async (app) => {
    * motif » : le motif est dans le message, et le détail des conditions manquantes
    * dans `details[]`, une entrée par condition.
    *
+   * ⚠ **DEUX REFUS DE MOTIF, DEUX STATUTS** — arbitrage Williams du 2026-09-02
+   * (« motif codé ») croisé avec celui d'A01 du 2026-09-01 : le motif ABSENT sur
+   * une transition qui l'exige sort en **409** (c'est l'état qui l'exige, pas la
+   * forme) ; un motif HORS du vocabulaire `MOTIFS_RETOUR_ARRIERE` sort en **400
+   * `VALIDATION_FAILED`**, prononcé par le schéma, sans que le service soit appelé.
+   *
    * **`POST` et non `PATCH`** : c'est le verbe qu'écrit le 05 §8.3
    * (`POST /v1/missions/:id/status`). Une transition n'est pas la modification d'un
    * champ, c'est un ACTE — et il a des effets de bord (la trace `activity_log`, la

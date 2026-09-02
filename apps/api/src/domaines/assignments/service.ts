@@ -2,7 +2,7 @@
 // SERVICE DES AFFECTATIONS ET DE LA RÉAFFECTATION — les règles du §34.3 et du
 // §34.4, appliquées là où elles se vérifient. Lot L3, incrément L3d, tâche T5.
 //
-// ── TROIS RÈGLES VIVENT ICI, ET AUCUNE NE POUVAIT VIVRE AILLEURS ────────────
+// ── QUATRE RÈGLES VIVENT ICI, ET AUCUNE NE POUVAIT VIVRE AILLEURS ──────────
 //  1. **« lead de CETTE mission »** (§34.3). « lead » n'est PAS un rôle global : il
 //     est porté par `mission_users.role_on_mission` et ne peut donc pas s'exprimer
 //     dans `config.acces`, dont `PolitiqueAcces` est une union exclusive
@@ -19,6 +19,11 @@
 //  3. **Les sessions RÉALISÉES restent à leur auteur** (§34.4) : `status ∈
 //     (en_cours, termine)` refuse la réaffectation. « L'historique d'un audit ne se
 //     réécrit jamais. »
+//  4. **Une session CONDUITE a un auditeur** (04, amendement du 2026-09-02, tranché
+//     par Williams) : `conducted_by` est devenu NULLABLE pour que le plan §32.4
+//     puisse persister des sessions planifiées sans auditeur, et le 04 confie
+//     EXPLICITEMENT au service la contrainte que la colonne ne porte plus —
+//     `exigerAuditeurSiSessionConduite`, plus bas, exportée pour L6a.
 //
 // ── DEUX REFUS, DEUX CODES, UNE RÈGLE (`DECISIONS.md` 2026-09-02) ───────────
 // Refusé sur le RÔLE (le crochet, avant toute lecture) → **403**. Refusé sur
@@ -44,6 +49,7 @@ import { uuidv7 } from 'uuidv7';
 import {
   AppError,
   STATUTS_SESSION_NON_REAFFECTABLES,
+  estSessionConduite,
   type CreateAssignmentRequest,
   type InterviewReassignRequest,
   type PaginationQuery,
@@ -216,10 +222,96 @@ export async function creerUneAffectation(
 // `PATCH /v1/interviews/:id/reassign` (§34.4)
 // -----------------------------------------------------------------------------
 
-/** Ce que rend une réaffectation : la session après coup, et QUI elle a quitté. */
+// -----------------------------------------------------------------------------
+// LA RÈGLE MÉTIER DE `conducted_by` (amendement du 04, 2026-09-02)
+// -----------------------------------------------------------------------------
+
+/**
+ * Le couple que la règle regarde : l'ÉTAT d'une session et son PROPRIÉTAIRE.
+ *
+ * Une interface structurelle minimale, et non `LigneSession` : L6a (sync) lira ces
+ * deux colonnes dans SA propre forme de ligne, et devoir passer par le type du
+ * dépôt des affectations pour appeler une règle d'`interviews` l'aurait poussée à
+ * réécrire la règle plutôt qu'à l'appeler.
+ */
+export interface CoupleEtatProprieteSession {
+  readonly status: StatutSessionApi;
+  readonly conductedBy: string | null;
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * UNE SESSION CONDUITE DOIT AVOIR UN AUDITEUR — la contrainte que le 04 a
+ * DÉLIBÉRÉMENT confiée au code.
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * `DECISIONS.md` du 2026-09-02 (« `interviews.conducted_by` devient NULLABLE »,
+ * tranché par Williams), point (d) : « **la règle métier explicite dans le service,
+ * et testée** : une session **planifiée** peut n'avoir aucun auditeur ; une session
+ * **conduite** (statut au-delà de planifiée) doit en avoir un — contrainte posée
+ * dans le code, pas seulement relâchée dans la colonne. »
+ *
+ * Les statuts « conduits » ne sont pas devinés : le 04 les nomme dans le corps même
+ * de l'amendement (« status en_cours/termine »), et ils vivent en donnée partagée
+ * (`STATUTS_SESSION_CONDUITE`), pas en littéral recopié ici.
+ *
+ * ── POURQUOI 409 ET NON 400 ─────────────────────────────────────────────────
+ * Même raisonnement que le motif manquant d'une transition de mission (`DECISIONS.md`
+ * du 2026-09-01) : la requête peut être parfaitement formée. Ce qui s'y oppose est
+ * l'ÉTAT de la ressource — « cette session n'a personne pour la conduire ». Le
+ * `details[].code` porte l'identifiant machine (`auditeur_requis`) et
+ * `details[].message` la phrase française affichable, convention transverse du
+ * 2026-09-01.
+ *
+ * ── QUI DOIT L'APPELER, ET QUAND ────────────────────────────────────────────
+ * **Toute écriture qui fait passer une session au-delà de `non_demarre`, ou qui
+ * touche `conducted_by`.** Aujourd'hui, dans cette API, la seule écriture des deux
+ * colonnes est `reaffecterSession` (ci-dessous) : **aucune route ne fait démarrer
+ * ni terminer une session** — c'est L5/L6 qui l'écriront, par la sync (05 §9).
+ * Cette fonction est donc exportée AVANT son appelant principal, et c'est
+ * volontaire : la règle existe pour que L6a l'appelle, pas pour qu'il la retrouve.
+ *
+ * ⚠⚠ **L6a, LE PIÈGE À NE PAS TOMBER DEDANS** : `conducted_by IS NULL` ne se lit
+ * **JAMAIS** « inscriptible par tout le monde ». Le 05 §9.9 réserve les écritures
+ * de sync au PROPRIÉTAIRE de la session ; un propriétaire inconnu est un REFUS, pas
+ * une permission ouverte. Le 04 l'écrit dans le même amendement, en toutes lettres.
+ * Une session sans auditeur ne se pousse pas depuis le terrain : elle s'affecte
+ * d'abord, par `PATCH /v1/interviews/:id/reassign`.
+ */
+export function exigerAuditeurSiSessionConduite(session: CoupleEtatProprieteSession): void {
+  if (!estSessionConduite(session.status)) return;
+  if (session.conductedBy !== null) return;
+
+  throw new AppError(
+    'ILLEGAL_STATE_TRANSITION',
+    `Une session ${libelleStatutSession(session.status)} doit avoir un auditeur : ` +
+      'affectez-la avant de la faire démarrer.',
+    [
+      {
+        path: 'conductedBy',
+        code: 'auditeur_requis',
+        message: 'Cette session doit être affectée à un auditeur avant de démarrer.',
+      },
+    ],
+  );
+}
+
+/** Ce que rend une réaffectation : la session après coup, et QUI elle a quittée. */
 export interface ResultatReaffectation {
   readonly session: LigneSession;
-  readonly conductedByAvant: string;
+  /**
+   * `null` = la session n'avait AUCUN auditeur : c'est une PREMIÈRE AFFECTATION,
+   * pas un changement de mains (arbitrage A01 du 2026-09-02 — `reassign` est
+   * aujourd'hui la seule porte qui pose un auditeur sur une session planifiée par
+   * le plan §32.4, `/interview-plan/apply` n'existant pas encore).
+   */
+  readonly conductedByAvant: string | null;
+  /**
+   * JAMAIS `null` : réaffecter POSE un auditeur, la requête en exige un
+   * (`newUserId`). Le champ existe pour porter ce rétrécissement UNE fois, ici,
+   * plutôt que de laisser la route ou le journal le refaire depuis
+   * `session.conductedBy`, désormais nullable.
+   */
+  readonly conductedByApres: string;
 }
 
 /** Un état de session en français, ou le code brut s'il est inconnu du dictionnaire. */
@@ -307,6 +399,10 @@ export async function reaffecterUneSession(
       );
     }
 
+    // ⚠ `null === corps.newUserId` est FAUX, et c'est exactement ce qu'il faut :
+    // une session SANS auditeur qu'on affecte pour la première fois n'est pas un
+    // « déjà propriétaire ». Le refus ci-dessous ne vise que le geste qui
+    // n'apprend rien — réaffecter X à X (arbitrage A01 du 2026-09-02).
     if (avant.conductedBy === corps.newUserId) {
       throw new AppError('CONFLICT', 'Cette session est déjà conduite par cet auditeur.', [
         {
@@ -346,7 +442,31 @@ export async function reaffecterUneSession(
     const apres = await reaffecterSession(tx, interviewId, corps.newUserId, new Date());
     if (apres === null) throw new AppError('INTERNAL_ERROR', 'Une erreur interne est survenue.');
 
-    return { session: apres, conductedByAvant: avant.conductedBy };
+    // ⑥ — LA CEINTURE DU COUPLE (état, propriétaire), amendement du 04 du 2026-09-02.
+    //
+    // Cette écriture ne touche que la MOITIÉ `conducted_by` du couple, et elle ne
+    // peut pas le rompre aujourd'hui : le temps ③ a déjà refusé les sessions
+    // `en_cours` et `termine`, et `newUserId` est un UUID exigé par le schéma. On
+    // vérifie quand même — c'est le seul endroit de l'API qui écrit une des deux
+    // colonnes, et une ceinture posée là attrapera le jour où le temps ③ changera
+    // (par exemple si le §34.4 s'assouplit) sans que personne ne se souvienne de la
+    // règle du 04. Le contrôle est en base de transaction : s'il refuse, l'écriture
+    // est annulée.
+    exigerAuditeurSiSessionConduite(apres);
+
+    // Rétrécissement, PAS une croyance : `reaffecterSession` vient d'écrire
+    // `corps.newUserId`, non nul par le schéma. Si la colonne relue est nulle, la
+    // base a dit autre chose que ce qu'on lui a demandé — c'est une incohérence
+    // interne, pas un cas métier, et elle sort en 500 plutôt qu'en `null` silencieux.
+    if (apres.conductedBy === null) {
+      throw new AppError('INTERNAL_ERROR', 'Une erreur interne est survenue.');
+    }
+
+    return {
+      session: apres,
+      conductedByAvant: avant.conductedBy,
+      conductedByApres: apres.conductedBy,
+    };
   });
 
   await journaliserActivite(
@@ -356,12 +476,13 @@ export async function reaffecterUneSession(
       interviewId,
       missionId: resultat.session.missionId,
       auditeurAvant: resultat.conductedByAvant,
-      auditeurApres: resultat.session.conductedBy,
-      // Le FAIT qu'il y en ait eu un, JAMAIS son texte — `activity_log.meta`
-      // n'accepte que du vocabulaire technique, et une phrase française y ferait
-      // écarter la `meta` entière (voir `META_REFUSEE`). Même limite, même
-      // remontée, que le motif d'un retour arrière (`DECISIONS.md` 2026-09-01).
-      avecMotif: true,
+      auditeurApres: resultat.conductedByApres,
+      // LE MOTIF LUI-MÊME, en code — arbitrage Williams du 2026-09-02, « motif
+      // codé ». `MOTIFS_REAFFECTATION` est du vocabulaire technique : il passe la
+      // ceinture d'`activity_log.meta` par construction, là où la phrase française
+      // qu'on exigeait hier était jetée. La valeur vient du schéma de requête, qui
+      // l'a déjà validée contre le vocabulaire (400 sinon) : rien à revalider ici.
+      motif: corps.motif,
     },
     contexte,
   );

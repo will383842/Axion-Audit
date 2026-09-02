@@ -160,7 +160,12 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Client } from 'pg';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { ERROR_CODES, verifierValeursAtomiques } from '@axion/shared';
+import {
+  ERROR_CODES,
+  MOTIFS_REAFFECTATION,
+  verifierValeursAtomiques,
+  type MotifReaffectation,
+} from '@axion/shared';
 import {
   appliquerMontee,
   connecter,
@@ -696,7 +701,12 @@ async function semerUnite(semis: SemisUnite): Promise<string> {
 interface SemisEntretien {
   readonly missionId: string;
   readonly orgUnitId: string;
-  readonly conduitPar: string;
+  /**
+   * `null` = session PLANIFIÉE sans auditeur — légitime depuis l'amendement du 04 du
+   * 2026-09-02 (migration 0014 : `conducted_by` DROP NOT NULL). Une session CONDUITE
+   * en a toujours un : cette règle est portée par le service, pas par la base.
+   */
+  readonly conduitPar: string | null;
   readonly statut?: 'non_demarre' | 'en_cours' | 'termine';
   readonly statutAgenda?:
     'a_planifier' | 'planifie' | 'confirme' | 'realise' | 'reporte' | 'annule';
@@ -804,8 +814,19 @@ async function reaffecter(
   });
 }
 
-/** Un motif plausible, en français, sans donnée personnelle (invariant 2, 11 §2). */
-const MOTIF_FACTICE = 'Auditeur indisponible sur la periode : reprise par un collegue.';
+/**
+ * LE MOTIF EST UN CODE, PAS UN TEXTE — arbitrage de Williams du 2026-09-02.
+ *
+ * L'escalade L3b « où vit le texte du motif » est tranchée par l'option 3 : un
+ * vocabulaire FERMÉ (`MOTIFS_REAFFECTATION`, sept codes, `packages/shared/src/motifs.ts`),
+ * dont le français vit dans `LIBELLES_MOTIF_REAFFECTATION`. Conséquence pour le
+ * journal : `meta.motif` porte exactement le code, et le vocabulaire technique de
+ * `journal.ts` n'est plus contourné — il est satisfait par construction.
+ *
+ * La valeur est TYPÉE par le contrat partagé : si le vocabulaire change, ce fichier
+ * ne compile plus, ce qui vaut mieux qu'un 400 découvert à l'exécution.
+ */
+const MOTIF_REAFFECTATION: MotifReaffectation = 'indisponibilite_auditeur';
 
 // =============================================================================
 // MISE EN PLACE
@@ -1960,7 +1981,7 @@ describe('PATCH /v1/interviews/:id/reassign — ce qui est autorisé', () => {
 
     const reponse = await reaffecter(admin.jeton, entretien, {
       newUserId: nouveau.id,
-      motif: MOTIF_FACTICE,
+      motif: MOTIF_REAFFECTATION,
     });
 
     expect(
@@ -2002,7 +2023,7 @@ describe('PATCH /v1/interviews/:id/reassign — ce qui est autorisé', () => {
 
     const reponse = await reaffecter(lead.jeton, entretien, {
       newUserId: nouveau.id,
-      motif: MOTIF_FACTICE,
+      motif: MOTIF_REAFFECTATION,
     });
 
     expect(
@@ -2055,7 +2076,7 @@ describe('PATCH /v1/interviews/:id/reassign — ce qui est refusé', () => {
 
       const reponse = await reaffecter(admin.jeton, entretien, {
         newUserId: nouveau.id,
-        motif: MOTIF_FACTICE,
+        motif: MOTIF_REAFFECTATION,
       });
 
       expect(
@@ -2098,7 +2119,7 @@ describe('PATCH /v1/interviews/:id/reassign — ce qui est refusé', () => {
 
     const reponse = await reaffecter(admin.jeton, entretien, {
       newUserId: novice.id,
-      motif: MOTIF_FACTICE,
+      motif: MOTIF_REAFFECTATION,
     });
 
     expect(reponse.statut).toBe(403);
@@ -2125,17 +2146,27 @@ describe('PATCH /v1/interviews/:id/reassign — ce qui est refusé', () => {
 
     const reponse = await reaffecter(admin.jeton, entretien, {
       newUserId: etranger.id,
-      motif: MOTIF_FACTICE,
+      motif: MOTIF_REAFFECTATION,
     });
 
     expect(reponse.statut).toBe(403);
     expect(await proprietaireEnBase(entretien)).toBe(ancien.id);
   });
 
-  it('@critique un motif absent ou vide est refusé en 400 — un geste destructeur sans motif n’existe pas', async () => {
+  it('@critique un motif absent, vide, en texte libre ou hors vocabulaire est refusé en 400', async () => {
     // §34.4 écrit la route avec son motif : `{new_user_id, motif}`. Un motif
     // facultatif rendrait la trace inutilisable — « qui » sans « pourquoi » ne
     // permet ni de contester ni de comprendre après coup.
+    //
+    // ARBITRAGE DU 2026-09-02 : le motif est un CODE de `MOTIFS_REAFFECTATION`.
+    // QUELLE IMPLÉMENTATION PLAUSIBLE MAIS FAUSSE CE CAS ATTRAPE-T-IL ?
+    //   · celle qui garde `z.string().min(1)` « pour ne pas casser les appelants » :
+    //     un texte libre passe, arrive dans `meta.motif`, et le journal redevient
+    //     l'endroit où un nom de personne peut être écrit à la main — exactement ce
+    //     que l'option 2 de l'escalade refusait ;
+    //   · celle qui accepte un code PLAUSIBLE mais absent de la liste
+    //     (`indisponibilite`, `depart`) : deux orthographes pour un même motif, et
+    //     toute recherche d'audit par motif devient incomplète sans le dire.
     const admin = await creerCompte('admin', 'reassign-motif');
     const ancien = await creerCompte('consultant', 'reassign-motif-ancien');
     const nouveau = await creerCompte('consultant', 'reassign-motif-nouveau');
@@ -2144,10 +2175,15 @@ describe('PATCH /v1/interviews/:id/reassign — ce qui est refusé', () => {
     await rattacher(mission.id, nouveau.id, 'consultant');
     const uniteId = await semerUnite({ missionId: mission.id, effectif: 20, position: 1 });
 
+    // Texte libre PLAUSIBLE : c'est l'ancien contrat, et c'est le refus qui compte.
+    const texteLibre = 'Auditeur indisponible sur la periode : reprise par un collegue.';
     for (const corps of [
       { newUserId: nouveau.id },
       { newUserId: nouveau.id, motif: '' },
       { newUserId: nouveau.id, motif: '   ' },
+      { newUserId: nouveau.id, motif: texteLibre },
+      { newUserId: nouveau.id, motif: 'indisponibilite' },
+      { newUserId: nouveau.id, motif: 'INDISPONIBILITE_AUDITEUR' },
     ]) {
       const entretien = await semerEntretien({
         missionId: mission.id,
@@ -2157,12 +2193,129 @@ describe('PATCH /v1/interviews/:id/reassign — ce qui est refusé', () => {
       const reponse = await reaffecter(admin.jeton, entretien, corps);
       expect(
         reponse.statut,
-        `Corps ${JSON.stringify(corps)} : le motif est obligatoire (§34.4). Un motif fait\n` +
-          'uniquement d’espaces est un motif absent qui a passé la validation.',
+        `Corps ${JSON.stringify(corps)} : le motif est obligatoire (§34.4) et doit être un\n` +
+          `code de MOTIFS_REAFFECTATION (${MOTIFS_REAFFECTATION.join(', ')}). Un texte libre,\n` +
+          'un code approchant ou une casse différente sont des motifs qui ont passé la\n' +
+          'validation sans appartenir au vocabulaire.',
       ).toBe(400);
       expect(reponse.code).toBe(ERROR_CODES.VALIDATION_FAILED);
       expect(await proprietaireEnBase(entretien)).toBe(ancien.id);
     }
+  });
+
+  it('@critique une session PLANIFIÉE SANS AUDITEUR reçoit son premier auditeur par `reassign` — trace avec `auditeurAvant: null`', async () => {
+    // ═══════════════════════════════════════════════════════════════════════════
+    // L'AMENDEMENT DU 04 DU 2026-09-02, ÉPROUVÉ LÀ OÙ IL CHANGE QUELQUE CHOSE.
+    // ═══════════════════════════════════════════════════════════════════════════
+    // `interviews.conducted_by` est désormais NULLABLE (migration 0014) : une
+    // session planifiée peut n'avoir aucun auditeur — c'est la ligne que le plan
+    // §32.4 produira le jour où `/apply` existera. `reassign` sur une telle session
+    // est une PREMIÈRE AFFECTATION, permise.
+    //
+    // QUELLE IMPLÉMENTATION PLAUSIBLE MAIS FAUSSE CE CAS ATTRAPE-T-IL ?
+    //   · celle qui lit `conducted_by` comme un `string` et refuse le `null` en 409
+    //     ou plante en 500 : la session sans auditeur devient INAFFECTABLE, et le
+    //     seul chemin qui restait est un UPDATE à la main ;
+    //   · celle qui journalise `auditeurAvant` avec un identifiant INVENTÉ (celui de
+    //     l'appelant, ou une chaîne vide) parce que le schéma « veut un uuid » :
+    //     la trace dit qu'un auditeur a été dépossédé alors qu'il n'y en avait pas ;
+    //   · celle qui, comparant `null === newUserId`, tombe dans la branche « même
+    //     auditeur → 409 » par un `??` mal placé.
+    const admin = await creerCompte('admin', 'premiere-affectation');
+    const nouveau = await creerCompte('consultant', 'premiere-affectation-cible');
+    const mission = await semerMission({ statut: 'en_cours' });
+    await rattacher(mission.id, nouveau.id, 'consultant');
+    const uniteId = await semerUnite({ missionId: mission.id, effectif: 20, position: 1 });
+    const entretien = await semerEntretien({
+      missionId: mission.id,
+      orgUnitId: uniteId,
+      conduitPar: null,
+      statut: 'non_demarre',
+      statutAgenda: 'planifie',
+    });
+    expect(
+      await proprietaireEnBase(entretien),
+      'prérequis : la base accepte NULL (0014)',
+    ).toBeNull();
+
+    const reponse = await reaffecter(admin.jeton, entretien, {
+      newUserId: nouveau.id,
+      motif: 'repartition_revue',
+    });
+    expect(
+      reponse.statut,
+      `La première affectation d'une session sans auditeur doit passer (arbitrage du\n` +
+        `2026-09-02). Réponse : ${String(reponse.statut)} ${reponse.corps.slice(0, 500)}`,
+    ).toBe(200);
+
+    const corps = z
+      .object({ conductedByAvant: z.uuid().nullable(), conductedByApres: z.uuid() })
+      .safeParse(JSON.parse(reponse.corps));
+    expect(
+      corps.success,
+      'La réponse doit porter `conductedByAvant` (nullable) et `conductedByApres`.\n' +
+        `Corps reçu : ${reponse.corps.slice(0, 400)}`,
+    ).toBe(true);
+    if (corps.success) {
+      expect(
+        corps.data.conductedByAvant,
+        '`conductedByAvant` doit être `null` : il n’y avait personne. Un identifiant ici\n' +
+          'est un auditeur inventé.',
+      ).toBeNull();
+      expect(corps.data.conductedByApres).toBe(nouveau.id);
+    }
+    expect(await proprietaireEnBase(entretien)).toBe(nouveau.id);
+
+    const lignes = (await lignesJournal(entretien)).filter((l) => l.entity_type === 'interview');
+    expect(lignes.length, 'une première affectation est tracée comme toute réaffectation').toBe(1);
+    const meta = z
+      .object({ auditeurAvant: z.uuid().nullable(), auditeurApres: z.uuid(), motif: z.string() })
+      .safeParse(lignes[0]?.meta);
+    expect(
+      meta.success,
+      `\`meta\` doit porter auditeurAvant (nullable), auditeurApres et motif. Reçu :\n` +
+        JSON.stringify(lignes[0]?.meta),
+    ).toBe(true);
+    if (meta.success) {
+      expect(
+        meta.data.auditeurAvant,
+        '`auditeurAvant: null` — personne n’a été dépossédé',
+      ).toBeNull();
+      expect(meta.data.auditeurApres).toBe(nouveau.id);
+      expect(meta.data.motif).toBe('repartition_revue');
+    }
+  });
+
+  it('@critique réaffecter vers l’auditeur DÉJÀ en place est refusé en 409 — sauf depuis une session sans auditeur', async () => {
+    // Une réaffectation vers soi-même n'est pas un geste : elle ne change rien, mais
+    // elle laisserait une trace disant qu'un changement a eu lieu. Le refus protège
+    // le journal d'événements vides. La CONTRE-ÉPREUVE (depuis `null`) est portée
+    // par le cas précédent : ici, on vérifie que le 409 ne déborde pas sur elle.
+    const admin = await creerCompte('admin', 'reassign-meme');
+    const auditeur = await creerCompte('consultant', 'reassign-meme-auditeur');
+    const mission = await semerMission({ statut: 'en_cours' });
+    await rattacher(mission.id, auditeur.id, 'consultant');
+    const uniteId = await semerUnite({ missionId: mission.id, effectif: 20, position: 1 });
+    const entretien = await semerEntretien({
+      missionId: mission.id,
+      orgUnitId: uniteId,
+      conduitPar: auditeur.id,
+    });
+
+    const reponse = await reaffecter(admin.jeton, entretien, {
+      newUserId: auditeur.id,
+      motif: MOTIF_REAFFECTATION,
+    });
+    expect(
+      reponse.statut,
+      'Réaffecter une session à l’auditeur qui la détient déjà est un 409 (arbitrage du\n' +
+        '2026-09-02) : rien ne change, rien ne doit être tracé.',
+    ).toBe(409);
+    expect(await proprietaireEnBase(entretien)).toBe(auditeur.id);
+    expect(
+      (await lignesJournal(entretien)).filter((l) => l.entity_type === 'interview'),
+      'Un refus « même auditeur » ne laisse aucune trace d’entité.',
+    ).toStrictEqual([]);
   });
 
   it('@critique une session inexistante rend 404, sans rien apprendre de plus', async () => {
@@ -2184,7 +2337,7 @@ describe('PATCH /v1/interviews/:id/reassign — ce qui est refusé', () => {
     // le cas serait vert précisément quand la route n'existe pas.
     const nominale = await reaffecter(admin.jeton, existante, {
       newUserId: nouveau.id,
-      motif: MOTIF_FACTICE,
+      motif: MOTIF_REAFFECTATION,
     });
     expect(
       nominale.statut,
@@ -2195,7 +2348,7 @@ describe('PATCH /v1/interviews/:id/reassign — ce qui est refusé', () => {
 
     const reponse = await reaffecter(admin.jeton, uuidv7(), {
       newUserId: nouveau.id,
-      motif: MOTIF_FACTICE,
+      motif: MOTIF_REAFFECTATION,
     });
     expect(reponse.statut).toBe(404);
     expect(reponse.code).toBe(ERROR_CODES.NOT_FOUND);
@@ -2241,7 +2394,7 @@ describe('reassign — ce qui est TRACÉ (invariant 7, 11 §2)', () => {
 
     const reponse = await reaffecter(admin.jeton, entretien, {
       newUserId: nouveau.id,
-      motif: MOTIF_FACTICE,
+      motif: MOTIF_REAFFECTATION,
     });
     expect(reponse.statut, `réaffectation refusée : ${reponse.corps.slice(0, 400)}`).toBe(200);
 
@@ -2279,16 +2432,18 @@ describe('reassign — ce qui est TRACÉ (invariant 7, 11 §2)', () => {
     ).toBe(true);
   });
 
-  it('@critique la trace ne contient AUCUNE donnée personnelle, motif compris (11 §2)', async () => {
+  it('@critique la trace porte le CODE du motif, et AUCUNE donnée personnelle (11 §2)', async () => {
     // ═══════════════════════════════════════════════════════════════════════════
-    // LA LIMITE ARBITRÉE, ÉPROUVÉE SANS PRÉJUGER DE SON ARBITRAGE.
+    // L'ARBITRAGE DU 2026-09-02, ÉPROUVÉ DANS LES DEUX SENS.
     // ═══════════════════════════════════════════════════════════════════════════
-    // Où vit le TEXTE d'un motif est une ESCALADE OUVERTE (`DECISIONS.md`
-    // 2026-09-01, L3b : le journal est un emplacement à CODE, 64 caractères,
-    // alphabet restreint, ni espace ni arobase). Ce test ne tranche pas cette
-    // question : il éprouve la seule propriété qui vaut quel que soit l'arbitrage
-    // — le journal ne doit contenir NI le motif verbatim, NI le nom, NI l'adresse
-    // de la personne interviewée.
+    // Williams a tranché l'escalade « où vit le texte du motif » : le motif est un
+    // CODE d'un vocabulaire fermé, et c'est ce code — exactement lui — qui va dans
+    // `meta.motif`. Deux propriétés en découlent, et il faut les deux :
+    //   · POSITIVE : le code est dans la trace (une réaffectation sans son
+    //     « pourquoi » ne permet ni de contester ni de comprendre après coup) ;
+    //   · NÉGATIVE : rien d'autre que des identifiants et des codes — ni le
+    //     libellé français du motif, ni le nom, ni l'adresse de la personne
+    //     interviewée.
     //
     // La session semée porte volontairement `person_name` et `person_email` : ce
     // sont les deux champs que 11 §2 nomme explicitement, et une implémentation
@@ -2312,12 +2467,22 @@ describe('reassign — ce qui est TRACÉ (invariant 7, 11 §2)', () => {
       courrielPersonne,
     });
 
-    const motif = 'Absence prolongee : dossier repris par le referent du site.';
+    const motif: MotifReaffectation = 'depart_auditeur';
     expect(
       (await reaffecter(admin.jeton, entretien, { newUserId: nouveau.id, motif })).statut,
     ).toBe(200);
 
     const lignes = await lignesJournal(entretien);
+    const motifsJournalises = lignes
+      .filter((ligne) => ligne.entity_type === 'interview')
+      .map((ligne) => z.object({ motif: z.string() }).safeParse(ligne.meta))
+      .map((analyse) => (analyse.success ? analyse.data.motif : null));
+    expect(
+      motifsJournalises,
+      'La trace de réaffectation doit porter `meta.motif` = LE CODE envoyé, exactement.\n' +
+        'Sans lui, le journal dit qui a réaffecté et vers qui, jamais pourquoi — et le\n' +
+        '§34.4 exige le motif ET sa trace.',
+    ).toStrictEqual([motif]);
     const violations = lignes.flatMap((ligne) => verifierValeursAtomiques(ligne.meta));
     expect(
       violations,
@@ -2330,10 +2495,10 @@ describe('reassign — ce qui est TRACÉ (invariant 7, 11 §2)', () => {
 
     const texte = JSON.stringify(lignes);
     expect(
-      texte.includes(motif),
-      'Le motif figure VERBATIM dans le journal. Où il doit vivre est une escalade\n' +
-        'OUVERTE (`DECISIONS.md` 2026-09-01) : elle se tranche chez Williams, pas en le\n' +
-        'déversant dans `meta`.',
+      texte.includes('Départ de l’auditeur'),
+      'Le LIBELLÉ français du motif figure dans le journal. Le journal porte le CODE ;\n' +
+        'le français vit dans `LIBELLES_MOTIF_REAFFECTATION` et se rend à l’AFFICHAGE\n' +
+        '(invariant 5) — recopié en base, il dériverait à la première retouche.',
     ).toBe(false);
     expect(
       texte.includes(nomPersonne),
@@ -2366,7 +2531,7 @@ describe('reassign — ce qui est TRACÉ (invariant 7, 11 §2)', () => {
 
     const reponse = await reaffecter(admin.jeton, entretien, {
       newUserId: nouveau.id,
-      motif: MOTIF_FACTICE,
+      motif: MOTIF_REAFFECTATION,
     });
     expect(reponse.statut).toBe(409);
 
@@ -2396,10 +2561,12 @@ describe('reassign — ce qui est TRACÉ (invariant 7, 11 §2)', () => {
     });
 
     expect(
-      (await reaffecter(admin.jeton, entretien, { newUserId: b.id, motif: MOTIF_FACTICE })).statut,
+      (await reaffecter(admin.jeton, entretien, { newUserId: b.id, motif: MOTIF_REAFFECTATION }))
+        .statut,
     ).toBe(200);
     expect(
-      (await reaffecter(admin.jeton, entretien, { newUserId: c.id, motif: MOTIF_FACTICE })).statut,
+      (await reaffecter(admin.jeton, entretien, { newUserId: c.id, motif: MOTIF_REAFFECTATION }))
+        .statut,
     ).toBe(200);
 
     expect(await proprietaireEnBase(entretien)).toBe(c.id);
@@ -2586,7 +2753,7 @@ describe('RBAC des quatre routes L3d (§34.1, §34.3, §18.3, invariant 3)', () 
           attendu: sujet.reassign,
           reponse: await reaffecter(sujet.jeton, entretien, {
             newUserId: membre.id,
-            motif: MOTIF_FACTICE,
+            motif: MOTIF_REAFFECTATION,
           }),
         },
       ];
@@ -2754,7 +2921,10 @@ describe('étanchéité financière sur les routes L3d', () => {
       await appeler('GET', `/v1/missions/${mission.id}/assignments?limit=50`, {
         jeton: consultant.jeton,
       }),
-      await reaffecter(consultant.jeton, entretien, { newUserId: admin.id, motif: MOTIF_FACTICE }),
+      await reaffecter(consultant.jeton, entretien, {
+        newUserId: admin.id,
+        motif: MOTIF_REAFFECTATION,
+      }),
     ];
     // ── CONTRÔLE DE VACUITÉ ────────────────────────────────────────────────
     // Une sentinelle qui ne cherche que dans des corps de 404 est verte pour
@@ -2940,7 +3110,7 @@ describe('conventions d’API (11 §3) sur les routes L3d', () => {
       await lirePlan(mission.id, undefined),
       await appeler('GET', `/v1/missions/${mission.id}/assignments`, { jeton: lecteur.jeton }),
       await creerAffectation(admin.jeton, mission.id, { userId: 'pas-un-uuid' }),
-      await reaffecter(admin.jeton, uuidv7(), { newUserId: uuidv7(), motif: MOTIF_FACTICE }),
+      await reaffecter(admin.jeton, uuidv7(), { newUserId: uuidv7(), motif: MOTIF_REAFFECTATION }),
       await lirePlan(uuidv7(), admin.jeton),
     ];
 

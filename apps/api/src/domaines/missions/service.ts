@@ -691,9 +691,14 @@ export async function transitionnerMission(
       statutApres: resultat.ligne.status,
       sens: resultat.transition.sens,
       surcharge: resultat.surchargeUtilisee,
-      // Le FAIT qu'il y en ait eu un, jamais son texte — voir la variante
-      // `mission.status_change` de `packages/shared/src/journal.ts`.
-      avecMotif: corps.motif !== undefined,
+      // LE MOTIF LUI-MÊME, en code — arbitrage Williams du 2026-09-02, « motif
+      // codé ». Ce n'est plus « il y en a eu un » mais LEQUEL : `perimetre_a_reprendre`
+      // et `erreur_de_manipulation` ne racontent pas la même mission, et le booléen
+      // qui vivait ici les confondait. La clé n'est AJOUTÉE que si le motif existe
+      // (`exactOptionalPropertyTypes` : la variante le déclare optionnel, pas
+      // nullable) ; la projection du journal écrit `null` en son absence, pour que
+      // la forme de `meta` reste la même sur les sept transitions.
+      ...(corps.motif === undefined ? {} : { motif: corps.motif }),
     },
     contexte,
   );

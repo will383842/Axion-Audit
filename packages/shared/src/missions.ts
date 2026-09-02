@@ -25,6 +25,9 @@ import { z } from 'zod';
 import { codePaysSchema } from './companies.js';
 import { fuseauIanaSchema, isoUtcSchema } from './temps.js';
 import type { ROLES_JOURNALISABLES } from './journal.js';
+// Le vocabulaire FERMÉ des motifs (arbitrage Williams du 2026-09-02, « motif
+// codé »). `motifs.ts` n'importe rien : l'arête ne peut pas se refermer.
+import { MOTIFS_RETOUR_ARRIERE } from './motifs.js';
 
 /** Les cinq valeurs de `missions.status` (04, CHECK fermé). Ordre = 03 §32.2. */
 export const STATUTS_MISSION = [
@@ -122,7 +125,20 @@ export interface DemandeTransitionMission {
   readonly depuis: StatutMission;
   readonly vers: StatutMission;
   readonly role: RoleMission;
-  /** Le motif fourni par le demandeur. `undefined` = aucun motif. */
+  /**
+   * Le motif fourni par le demandeur. `undefined` = aucun motif.
+   *
+   * ⚠ **`string`, ET NON `MotifRetourArriere` — c'est un choix, pas un oubli.**
+   * Depuis l'arbitrage du 2026-09-02, la ROUTE n'accepte plus qu'un code du
+   * vocabulaire fermé (`missionStatusRequestSchema`). Mais cette fonction-ci ne
+   * juge pas le VOCABULAIRE : elle juge la PRÉSENCE, parce que c'est tout ce dont
+   * la machine à états a besoin pour décider, et parce que les deux refus n'ont ni
+   * le même statut HTTP ni le même responsable — un motif hors liste est une faute
+   * de forme (400, prononcé par Zod, à la frontière), un motif absent est un refus
+   * d'état (409, prononcé ici). Narrower ce type déplacerait la validation du
+   * vocabulaire dans le juge d'état, c'est-à-dire APRÈS la lecture de la mission :
+   * on répondrait 409 à ce qui est un 400.
+   */
   readonly motif?: string;
   /** L'admin demande-t-il explicitement de FORCER (03 §17.3) ? */
   readonly surcharge?: boolean;
@@ -512,12 +528,12 @@ export const TITRE_MISSION_LONGUEUR_MAX = 300;
 /** Référence du NDA (§20.2/§27.4) : un identifiant de contrat, pas un texte. */
 export const REF_NDA_LONGUEUR_MAX = 128;
 
-/**
- * Longueur maximale d'un motif de transition. Généreuse : c'est la SEULE phrase
- * où un administrateur explique pourquoi il rouvre une collecte, et la tronquer
- * viderait la trace du §32.2 de sa substance.
- */
-export const MOTIF_TRANSITION_LONGUEUR_MAX = 2000;
+// ⚠ `MOTIF_TRANSITION_LONGUEUR_MAX` A DISPARU LE 2026-09-02, et son absence est
+// une information. Le motif d'un changement de statut n'est plus une PHRASE dont
+// il faudrait borner la longueur : c'est un CODE de `MOTIFS_RETOUR_ARRIERE`
+// (arbitrage Williams, `DECISIONS.md` du 2026-09-02). Garder une borne de 2 000
+// caractères aurait laissé croire qu'un texte libre est encore attendu quelque
+// part — un contrat qui décrit une porte murée est pire qu'un contrat muet.
 
 /**
  * Nombre maximal de codes dans `active_sectors` / `active_blocks`. Borne de
@@ -773,10 +789,26 @@ export type UpdateMissionRequest = z.infer<typeof updateMissionRequestSchema>;
  * la transition visée (obligatoire sur les trois retours arrière, obligatoire aussi
  * dès qu'une surcharge §17.3 est mobilisée). Zod ne peut pas trancher cela sans
  * connaître l'état courant de la mission — c'est donc le service qui refuse.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * `motif` EST UN CODE, PLUS UNE PHRASE — arbitrage Williams du 2026-09-02.
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * `DECISIONS.md`, « Le motif d'un retour arrière et d'une réaffectation est un
+ * CODE, pas un texte » : vocabulaire fermé (`MOTIFS_RETOUR_ARRIERE`), pas de texte
+ * libre, et la valeur codée part telle quelle dans `activity_log.meta`.
+ *
+ * **DEUX REFUS QUI NE SE CONFONDENT PAS, ET LA FRONTIÈRE EST ICI :**
+ *   · motif **ABSENT** sur une transition qui l'exige → **409
+ *     `ILLEGAL_STATE_TRANSITION`** (arbitrage A01 du 2026-09-01) : ce n'est pas la
+ *     requête qui est mal écrite, c'est l'ÉTAT de la mission qui exige qu'on dise
+ *     pourquoi. Ce refus vient du service, jamais de Zod — d'où le `.optional()` ;
+ *   · motif **HORS VOCABULAIRE** → **400 `VALIDATION_FAILED`**, prononcé par cette
+ *     ligne : un code inconnu est une faute de FORME, au même titre qu'un `vers`
+ *     qui ne serait pas un statut. Le service ne le voit jamais.
  */
 export const missionStatusRequestSchema = z.strictObject({
   vers: z.enum(STATUTS_MISSION),
-  motif: z.string().trim().pipe(z.string().min(1).max(MOTIF_TRANSITION_LONGUEUR_MAX)).optional(),
+  motif: z.enum(MOTIFS_RETOUR_ARRIERE).optional(),
   /**
    * L'admin demande-t-il explicitement de FORCER (03 §17.3) ? Jamais implicite :
    * une transition ne se force pas « parce qu'on est admin ». Défaut `false`.

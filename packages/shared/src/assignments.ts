@@ -26,6 +26,7 @@
 // =============================================================================
 import { z } from 'zod';
 import { dateCivileSchema } from './missions.js';
+import { MOTIFS_REAFFECTATION } from './motifs.js';
 import { isoUtcSchema } from './temps.js';
 
 // -----------------------------------------------------------------------------
@@ -62,8 +63,53 @@ export const STATUTS_SESSION_NON_REAFFECTABLES = ['en_cours', 'termine'] as cons
 
 export type StatutSessionNonReaffectable = (typeof STATUTS_SESSION_NON_REAFFECTABLES)[number];
 
-/** Longueur maximale du motif de réaffectation — même ordre que le motif §32.2. */
-export const MOTIF_REAFFECTATION_LONGUEUR_MAX = 2000;
+/**
+ * Les statuts d'une session **CONDUITE** — celle qui a commencé, donc celle qui
+ * DOIT avoir un auditeur.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * LA RÈGLE MÉTIER DE L'AMENDEMENT DU 04 DU 2026-09-02, ÉCRITE COMME UNE DONNÉE.
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * `interviews.conducted_by` est devenu NULLABLE (arbitrage Williams, `DECISIONS.md`
+ * du 2026-09-02) parce que le plan d'entretiens §32.4 produit des sessions
+ * PLANIFIÉES pour lesquelles aucun auditeur n'est encore affecté : au cadrage,
+ * l'équipe n'est pas constituée. Le 04 dit alors, mot pour mot : « une session
+ * PLANIFIÉE (status 'non_demarre') peut n'avoir aucun auditeur ; une session
+ * CONDUITE (status en_cours/termine) doit en avoir un. **RÈGLE MÉTIER portée par le
+ * SERVICE, pas par une contrainte CHECK.** »
+ *
+ * Une contrainte SQL ne pouvait pas la porter sans interdire aussi la séquence
+ * légitime « je crée la session planifiée, j'affecte ensuite » ; c'est donc le code
+ * qui la tient — et pour qu'il la tienne AILLEURS QU'ICI (L6a écrira des statuts de
+ * session par la sync), la liste vit dans le contrat partagé, pas dans un service.
+ *
+ * ⚠ **MÊMES MEMBRES QUE `STATUTS_SESSION_NON_REAFFECTABLES`, ET POURTANT DEUX
+ * LISTES.** Ce n'est pas un doublon par distraction : ce sont deux RÈGLES
+ * DIFFÉRENTES, tirées de deux phrases différentes du pack — « réaffectation
+ * autorisée UNIQUEMENT si `status ≠ en_cours/termine` » (§34.4) d'un côté, « une
+ * session conduite doit avoir un auditeur » (04, amendement) de l'autre. Les fondre
+ * ferait qu'un jour où l'une des deux bouge, l'autre bougerait en silence avec elle.
+ * Leur coïncidence actuelle a une cause commune — une session qui a commencé ne
+ * change plus de mains et ne peut pas avoir commencé sans personne — mais une cause
+ * commune n'est pas une identité.
+ */
+export const STATUTS_SESSION_CONDUITE = ['en_cours', 'termine'] as const;
+
+export type StatutSessionConduite = (typeof STATUTS_SESSION_CONDUITE)[number];
+
+/**
+ * Une session est-elle CONDUITE au sens ci-dessus ? Écrit une fois, ici, plutôt que
+ * répété en `.some(...)` dans chaque appelant : la console (L7) doit pouvoir griser
+ * les mêmes actions que le serveur refuse, avec la même définition.
+ */
+export function estSessionConduite(statut: StatutSessionApi): boolean {
+  return STATUTS_SESSION_CONDUITE.some((conduit) => conduit === statut);
+}
+
+// ⚠ `MOTIF_REAFFECTATION_LONGUEUR_MAX` A DISPARU LE 2026-09-02, exactement comme
+// `MOTIF_TRANSITION_LONGUEUR_MAX` dans `missions.ts` : le motif d'une réaffectation
+// n'est plus une phrase à borner, c'est un CODE de `MOTIFS_REAFFECTATION`
+// (arbitrage Williams, `DECISIONS.md` du 2026-09-02, « motif codé »).
 
 // -----------------------------------------------------------------------------
 // `work_assignments`
@@ -147,20 +193,29 @@ export type InterviewParams = z.infer<typeof interviewParamsSchema>;
 /**
  * Le corps de la réaffectation.
  *
- * **`motif` est OBLIGATOIRE**, et vide vaut absent : le §34.4 exige un motif, et
- * l'exiger « sauf si la chaîne est vide » reviendrait à ne pas l'exiger. Le champ
+ * **`motif` est OBLIGATOIRE** : le §34.4 l'exige. La chaîne vide, qui devait jadis
+ * être refusée à part (« l'exiger sauf si elle est vide reviendrait à ne pas
+ * l'exiger »), n'est plus un cas : elle n'appartient pas au vocabulaire. Le champ
  * est nommé `newUserId` en camelCase (11 §3) ; le 05 §24.2 l'écrit `new_user_id`
  * parce qu'il décrit la charge utile en style base, pas le contrat TypeScript.
  *
- * ⚠ **Le TEXTE du motif n'est écrit nulle part** : `activity_log.meta` n'accepte
- * que du vocabulaire technique (`verifierValeursAtomiques`), et aucune colonne du
- * 04 ne l'accueille. Le journal enregistre QU'IL Y EN A EU UN. C'est la même
- * escalade que le motif de retour arrière (`DECISIONS.md` 2026-09-01 [L3b],
- * rattachée au §34.4 le 2026-09-02) — en attente de Williams.
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * `motif` EST UN CODE, PLUS UNE PHRASE — arbitrage Williams du 2026-09-02.
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * L'escalade « le TEXTE du motif n'est écrit nulle part » est CLOSE : le motif est
+ * un code du vocabulaire fermé `MOTIFS_REAFFECTATION` (§34.4), et cette valeur
+ * codée entre telle quelle dans `activity_log.meta`, que la ceinture technique du
+ * journal accepte par construction. Plus rien n'est jeté.
+ *
+ * **UN SEUL REFUS, ET C'EST UN 400** : absent OU hors vocabulaire, la requête est
+ * mal formée (`VALIDATION_FAILED`) — le §34.4 n'a pas de réaffectation sans motif,
+ * donc rien ici ne dépend de l'état de la session. C'est la différence avec
+ * `missionStatusRequestSchema`, où l'ABSENCE dépend de la transition visée et sort
+ * en 409.
  */
 export const interviewReassignRequestSchema = z.strictObject({
   newUserId: z.uuid(),
-  motif: z.string().trim().pipe(z.string().min(1).max(MOTIF_REAFFECTATION_LONGUEUR_MAX)),
+  motif: z.enum(MOTIFS_REAFFECTATION),
 });
 
 export type InterviewReassignRequest = z.infer<typeof interviewReassignRequestSchema>;
@@ -181,7 +236,14 @@ export const interviewReassignResponseSchema = z.strictObject({
   id: z.uuid(),
   missionId: z.uuid(),
   orgUnitId: z.uuid(),
-  conductedByAvant: z.uuid(),
+  /**
+   * ⚠ **NULLABLE depuis l'amendement du 2026-09-02** (`interviews.conducted_by`
+   * devient NULL) : une session issue du plan §32.4 n'a AUCUN auditeur tant que
+   * personne ne la reprend, et `reassign` est aujourd'hui la seule porte qui en
+   * pose un — c'est donc une PREMIÈRE AFFECTATION, permise (arbitrage A01 du
+   * 2026-09-02), et `null` y est la vérité de l'avant, pas une donnée manquante.
+   */
+  conductedByAvant: z.uuid().nullable(),
   conductedByApres: z.uuid(),
   status: z.enum(STATUTS_SESSION),
   /** Inchangé par la réaffectation (§34.4) : rendu pour qu'on puisse le vérifier. */

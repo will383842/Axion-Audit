@@ -65,7 +65,7 @@ function versReponse(resultat: ResultatReaffectation): InterviewReassignResponse
     missionId: resultat.session.missionId,
     orgUnitId: resultat.session.orgUnitId,
     conductedByAvant: resultat.conductedByAvant,
-    conductedByApres: resultat.session.conductedBy,
+    conductedByApres: resultat.conductedByApres,
     status: resultat.session.status,
     scheduleStatus: resultat.session.scheduleStatus,
     updatedAt: resultat.session.updatedAt.toISOString(),
@@ -95,11 +95,19 @@ export const routesInterviews: FastifyPluginAsync = async (app) => {
    * (`conducted_by`), pas l'état de la session — `schedule_status` et `status` ne
    * bougent pas, et le nouvel auditeur « récupère la session à son prochain pull ».
    *
-   * **`motif` est obligatoire** : vide vaut absent, et le schéma le refuse en `400`
-   * avant d'atteindre le service. Son TEXTE n'est écrit nulle part — `activity_log`
-   * n'accepte que du vocabulaire technique et aucune colonne du 04 ne l'accueille ;
-   * le journal enregistre QU'IL Y EN A EU UN. Escalade en attente (`DECISIONS.md`
-   * 2026-09-01 [L3b], rattachée au §34.4 le 2026-09-02).
+   * **`motif` est obligatoire, et c'est un CODE** de `MOTIFS_REAFFECTATION`
+   * (arbitrage Williams du 2026-09-02, « motif codé ») : absent OU hors
+   * vocabulaire, le schéma le refuse en `400 VALIDATION_FAILED` avant d'atteindre
+   * le service. La valeur codée, elle, va jusque dans `activity_log.meta` : la
+   * ceinture technique du journal l'accepte par construction, et l'escalade « le
+   * texte du motif n'est écrit nulle part » est close.
+   *
+   * ⚠ **UNE SESSION SANS AUDITEUR SE RÉAFFECTE**, et c'est une PREMIÈRE
+   * AFFECTATION : `conducted_by` est nullable depuis l'amendement du 04 du
+   * 2026-09-02, le plan §32.4 produit des sessions planifiées sans auditeur, et
+   * cette route est aujourd'hui la seule porte qui en pose un (arbitrage A01 du
+   * 2026-09-02). `conductedByAvant` vaut alors `null` dans la réponse comme dans
+   * `activity_log` ; le refus `deja_proprietaire` ne s'applique évidemment pas.
    *
    * Refus possibles : `404` session inconnue **ou** demandeur hors mission ·
    * `403` consultant membre non lead, destinataire hors mission, compte désactivé,
