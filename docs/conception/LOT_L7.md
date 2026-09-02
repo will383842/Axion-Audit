@@ -123,3 +123,191 @@ colonne par colonne, `@filrouge` allongé jusqu'à l'export.
 
 _Rédigée par A30, chef d'équipe console. Signature de fin d'incrément L7a : après revue A37 et suite
 A36 verte SANS cale (point 5-1). Chaîne : A30 → A02 (traçabilité) → A01 (passage en porte) → Williams (P-E)._
+
+---
+
+## 6. BRIEF L7b — la couverture, et pourquoi elle a DEUX axes qu'on ne peut pas confondre
+
+> **Écrit par A30 le 2026-09-02, pendant l'attente de la fusion L3.** Le brief vient de la table du
+> fichier 07, ligne **L7-min** : « couverture par unité **ET** par type de source §27.1 » ; critère :
+> « la couverture reflète le plan d'entretiens ». **Code : A32. Tests : A36.** Jamais le même agent
+> pour les deux (09 §5.6). A30 ne code pas ici.
+
+### 6.1 Le piège nommé — deux axes, deux vocabulaires, et ils N'ONT PAS LA MÊME LONGUEUR
+
+Le §27.1 se lit vite comme un seul écran. Il en porte deux, et la mesure le prouve : le dépôt
+contient **deux énumérations distinctes**, pas une.
+
+| Axe | Question posée | Source de vérité | Valeurs |
+| --- | --- | --- | --- |
+| **A — par UNITÉ** (§16.6) | « ce service a-t-il été audité ? » | `interviews` par `org_unit_id` | une ligne par unité `in_scope` |
+| **B — par TYPE DE SOURCE** (§27.1) | « l'a-t-on audité AUTREMENT qu'en parlant ? » | `interviews.kind` — `TYPES_SESSION` | **6** : entretien, observation, demonstration, analyse_documentaire, releve_donnees, **atelier** |
+| _(L7c, à ne pas confondre)_ | « d'où vient CETTE réponse ? » | `answers.source` — `SOURCES_DONNEE` | **5** : entretien, observation, demonstration, **document**, **releve** |
+
+**6 n'est pas 5, et la correspondance n'est pas bijective** : `analyse_documentaire` va vers
+`document`, `releve_donnees` vers `releve`, et **`atelier` n'a aucune provenance de réponse**. Coter
+la couverture sur `answers.source` ferait donc disparaître les ateliers de l'écran, silencieusement.
+Le §36.3 tranche d'ailleurs sans le dire : `reponses.csv` porte « session + type + **provenance
+(`source`)** » — **trois** colonnes, donc deux vocabulaires assumés. **Arbitrage A30 : l'axe B de la
+COUVERTURE est `interviews.kind` (6 valeurs) ; `answers.source` (5) est l'axe de PROVENANCE de
+l'agrégation L7c.** À porter en DECISIONS.md après le rebase (voir §6.6).
+
+### 6.2 « Prévu » est ambigu, et il vaut mieux trois colonnes qu'une moyenne
+
+Trois notions coexistent dans le dépôt, et les fondre en un seul « prévu » perdrait de l'information :
+
+1. **PRÉVU (cible)** — le plan §32.4, `GET …/interview-plan`. C'est une **cible calculée qui n'écrit
+   rien** (`sessionProposeeSchema` ; `POST …/apply` REPORTÉE) : elle est publiée par unité **et par
+   `kind`**, donc elle EST directement l'axe B du prévu. C'est elle que vise le critère du 07
+   « la couverture reflète le plan d'entretiens ».
+2. **PLANIFIÉ (agenda)** — lignes `interviews` à `schedule_status` planifié. **Peut être vide alors
+   que le plan existe**, puisque `apply` est reportée : afficher 0/0 serait faux.
+3. **RÉALISÉ** — lignes `interviews` à `status` terminé.
+
+**Arbitrage A30 : trois colonnes distinctes (prévu / planifié / réalisé)**, jamais un ratio unique.
+L'écart prévu vers planifié est un défaut d'agenda ; l'écart planifié vers réalisé est un défaut de
+terrain : ce ne sont pas les mêmes alertes, et elles ne s'adressent pas aux mêmes personnes.
+
+**Consigne de la session pilote (2026-09-02), et elle est structurante** : « la couverture se confronte
+au plan d'entretiens de L3, **elle ne se recalcule pas dans son coin** ». Concrètement, pour A32 : la
+colonne « prévu » **appelle le service de plan de L3** (`apps/api/src/domaines/plan-entretiens/`) et
+n'en réimplémente **aucune** règle §32.4. Une seconde implémentation des tranches d'effectif
+divergerait de la première au premier amendement, et la couverture affirmerait alors un prévu que le
+plan ne reconnaît pas. Si le service de L3 n'expose pas la forme utile, on l'**étend** — on ne le
+recopie pas.
+
+### 6.3 Contrat de la route — `GET /v1/missions/:id/coverage`
+
+Schémas **dans `packages/shared/src/pilotage.ts`**, ré-exportés par `src/api/contrats.ts` : A37 a
+retiré 127 lignes de copie, **aucune redéfinition locale ne revient** (11 §3).
+
+- **Pagination keyset** sur les unités (`?limit=50&after=<curseur>`), **jamais d'offset** ; curseur
+  opaque, ordre stable = ordre de l'arbre, documenté par route (11 §3).
+- **Les marges ne se paginent pas.** Les totaux par `kind` de la mission sont calculés **côté serveur
+  sur la mission entière**, jamais sur la page courante : une marge calculée sur une page est un
+  chiffre faux qui a l'air juste. Elles voyagent hors du tableau paginé.
+- **Agrégation en SQL, pas dans le navigateur** (invariant 6, le siège produit) : 150 unités × 6 types
+  font 900 cellules ; les recompter à chaque rendu tuerait le p95.
+- **RBAC serveur** (invariant 3) : membre de la mission ou admin ; **aucun champ financier ne s'approche
+  de cette réponse** — la couverture porte des effectifs et des noms d'unités, jamais un montant.
+- **Route absente des §8/§24.2, donc à documenter** (11 §8-6), comme déjà noté au §5-3.
+
+Forme proposée, à figer par A32 dans `packages/shared` en `strictObject` : par unité
+`{ orgUnitId, ref, nom, inScope, effectif, parSource: [{ kind, prevu, planifie, realise }],
+profilsRencontres: string[], blocsNonCouverts: string[], aucuneSession: boolean }` ; marges de mission
+`{ parSource: [{ kind, prevu, planifie, realise }], unitesInScope, unitesSansAucuneSession }`.
+**Les six entrées de `parSource` sont TOUJOURS présentes, même à zéro** : un type absent laisserait
+croire qu'il n'est pas exigé — même raison que les quatre règles toujours publiées du plan
+(`applicationRegleSchema`).
+
+### 6.4 Écran — `apps/hq/src/ecrans/couverture/**` (A32)
+
+Tableau dense §33.4 (lignes 40 px), desktop à partir de 1280 px. Une ligne par unité `in_scope`, six
+colonnes de type, une colonne d'alerte. **Les quatre états (§33.2)** : vide (« aucune unité dans le
+périmètre — définissez l'arbre »), chargement (squelettes aux dimensions finales, `role=status`),
+erreur (`role=alert`, français, code technique replié), hors ligne (pastille discrète — **et pas le
+texte terrain de `EtatHorsLigne`, fiche A-010**). **Alerte visuelle sur toute unité `in_scope` sans
+aucune session** (§16.6) : rouge d'alerte **par token** — l'invariant 4 rappelle que « l'alerte est un
+rouge distinct », donc ni le terracotta d'action, ni un hex. **Aucune couleur ni taille en dur**,
+100 % français, horodatages au **fuseau de mission** à l'affichage (invariant 5).
+
+### 6.5 Plan de tests A36 — deux fixtures symétriques qui rendent la confusion IMPOSSIBLE
+
+C'est le cœur de ce brief. Un écran qui ne livre que l'axe A passe tous les tests « couverture »
+naïfs. Ces deux-là le rattrapent :
+
+1. **FIXTURE « tout en entretiens »** — chaque unité `in_scope` a au moins une session, **toutes de
+   `kind` entretien**. Attendu : **axe A entièrement couvert, axe B en défaut sur les cinq autres
+   types**. Un build qui n'a implémenté que l'axe A affiche « couverture complète » — et **échoue ici**.
+2. **FIXTURE « tout sur une unité »** — les six types présents dans la mission, tous concentrés sur
+   une unité sur dix. Attendu : **axe B complet en marge, axe A en défaut sur neuf unités**, alerte
+   §16.6 comprise. Un build qui n'a implémenté que l'axe B **échoue ici**.
+
+Plus : une session `atelier` reste visible sur l'axe B (le test qui protège du glissement vers
+`answers.source`) · **keyset `@critique`** (curseur rendu, jamais offset/page/skip) · **les marges
+sont identiques page 1 et page 3** (le test qui attrape une marge calculée sur la page) ·
+**étanchéité `@critique`** admin / consultant / anonyme, sentinelle financière sur le JSON sérialisé
+ET sur le DOM rendu · quatre états par écran · axe-core vert · **FIL-GC, 150 unités : p95 sous
+100 ms**, mesuré et non supposé.
+
+### 6.6 Ce que L7b NE fait PAS — le périmètre L7-min est tenu
+
+Hors périmètre, et proposés en fiche AMELIORATIONS étage 2 si le besoin se confirme — jamais
+implémentés avant arbitrage de Williams (CLAUDE.md §3.7) : **heatmap unités × blocs** (§22.3, espace 2),
+**courbe prévu/réel** et **avance/retard** (§18.3), **flux d'activité en direct**, **centre d'alertes
+agrégées** (§20.4), **réaffectation d'unités**. Aucun n'est exigé par la ligne L7-min du fichier 07 ni
+par la porte P-E. Jalon **P-DESCOPE du 15/09** : tout différable non entamé glisse en Phase 2.
+
+**À porter en DECISIONS.md après le rebase** — ces fichiers append-only sont remués par le rebase, on
+ne les écrit donc pas avant (ordre de fusion figé) : l'arbitrage §6.1 (axe B = `interviews.kind`, six
+valeurs) et l'arbitrage §6.2 (trois colonnes prévu / planifié / réalisé).
+
+## 7. BRIEF L7c — l'agrégation et l'export, tenus par UN critère qui est un test
+
+> **Code : A31** (API export + écran) et **A35** (tableau d'agrégation). **Tests : A36.** Jamais le
+> même agent (09 §5.6). Recopié du fichier 07, ligne L7-min, et c'est la barre exacte : « Export
+> conforme au format §36.3 : **le rapport §20.3 peut être rédigé EN ENTIER depuis le ZIP, sans
+> retourner dans l'outil** ; la couverture reflète le plan d'entretiens. »
+
+### 7.1 Le critère n'est pas une intention, c'est une recette exécutable
+
+« Sans retourner dans l'outil » se vérifie, et A36 le vérifie ainsi : on prend la trame §20.3, on
+ouvre **le ZIP seul**, et on coche chapitre par chapitre ce qu'on peut écrire. Toute case qui exige de
+rouvrir la console est un **défaut d'export**, pas une limite du rapport. Deux conséquences exigées
+par la session pilote (2026-09-02), et elles ne sont pas négociables :
+
+1. **La provenance est VISIBLE dans l'agrégation par question** — `answers.source` (les **cinq**
+   valeurs, §6.1), affichée à l'écran ET portée en colonne dans `reponses.csv`. Le §27.2 en dépend :
+   « tout finding s'appuie sur au moins une source tracée, idéalement deux de types différents » ; un
+   rapport qui ne sait pas d'où vient une réponse ne peut pas écrire cette phrase.
+2. **Le « non communiqué » est VISIBLE** (§27.4) — `withheld` **et** `withheld_reason`, distincts de
+   « N/A » (`not_applicable` + `na_reason`) et de « à revoir » (`flag_review`). **Trois états qu'on ne
+   fond pas** : un refus n'est pas un « sans objet », et aucun des deux n'est une question à creuser.
+   Le §27.4 en tire l'indice de complétude et la rubrique « Limites et réserves » du rapport.
+
+### 7.2 Ce que le §36.3 impose et qu'on n'improvise pas
+
+`export_mission_<ref>_<AAAAMMJJ>.zip`, **UTF-8 avec BOM** (Excel FR), séparateur **`;`**. Onze
+entrées : `mission.json`, `arbre.csv`, `sessions.csv`, **`reponses.csv`**, `constats.csv`,
+`cas_usage.csv`, `inventaire_outils.csv`, `registre_ia.csv`, `unites_hors_perimetre.csv`,
+`scores.csv`, `pieces_jointes/manifest.csv`. Points où une implémentation dérive silencieusement :
+
+- **`reponses.csv` est trié bloc → unité → question**, et porte **`unite_in_scope`** : les réponses des
+  unités sorties du périmètre §25.1 **SONT dans le fichier**, marquées `false`. **Jamais deux fichiers
+  de réponses** — `unites_hors_perimetre.csv` ne liste que les unités et leurs motifs.
+- **Valeur APLATIE LISIBLE** : choix = libellés (pas d'identifiants), fourchette = « 20 – 30 »,
+  tableau = JSON. Un UUID dans une cellule est un défaut : personne ne rédige un rapport avec ça.
+- **Trois colonnes distinctes** : session, **type de session** (`interviews.kind`, 6) et **provenance**
+  (`answers.source`, 5). Voir §6.1 — c'est la même confusion, à l'autre bout de la chaîne.
+- **`scores.csv` est ABSENT ET SIGNALÉ** tant que L8 n'est pas livré (`mission.json` porte la présence
+  ou non des scores). Absent et signalé, jamais absent en silence, jamais présent et vide.
+- **Pièces jointes** : `manifest.csv` toujours ; les **fichiers** sont une **option cochée**.
+- **Le ZIP se produit côté API et se streame** (invariant 6 : le siège produit) ; **jamais d'accès
+  direct à MinIO** (11 §2). RBAC serveur : membre de la mission ou admin.
+- **Étanchéité (invariant 3)** : `scoping_financials` **n'entre dans aucune entrée du ZIP** — le §36.3
+  ne le liste pas, et un export est exactement l'endroit où une donnée admin fuit vers un consultant.
+  A36 passe la sentinelle financière sur **le contenu décompressé de chaque fichier**, export demandé
+  **par un consultant**, pas seulement sur la réponse HTTP.
+
+### 7.3 Tests A36 — rejoués sur FIL-TPE ET FIL-GC
+
+ZIP relu **colonne par colonne** contre le §36.3 (noms, ordre, BOM, séparateur) · une réponse
+`withheld` et une `not_applicable` et une `flag_review` **dans le même jeu**, distinctes à l'écran et
+dans le CSV · une unité hors périmètre présente dans `reponses.csv` à `unite_in_scope=false` · une
+fourchette rendue « 20 – 30 » · `scores.csv` absent **et** signalé dans `mission.json` · export
+consultant vs admin, sentinelle financière sur le décompressé · `@filrouge` **allongé jusqu'à
+l'export**, vert sur **FIL-TPE et FIL-GC**. Aucun de ces tests n'est écrit par A31 ni par A35.
+
+### 7.4 Conformité à la décision D1 (2026-09-02)
+
+**`X-Axion-Client` est RATIFIÉ** par la session pilote, nom retenu tel quel : L7 s'y conforme et le
+cite. **L'entrée `DECISIONS.md` est tracée par A10 sur `lot/l3-suite`** (sujet backend, fiche A-006) —
+**elle n'est pas dupliquée ici**. Le point §5-6 de cette note est donc CLOS : l'en-tête que
+`src/api/auth.ts` envoie déjà sur toute requête est le bon.
+
+### 7.5 Le descope ne passe pas par L7-min
+
+Rappel de la session pilote : **L7-min se livre EN ENTIER** ; le levier de descope du chantier est
+**L8**, que le fichier 07 marque déjà DIFFÉRABLE avec **butoir dur au dernier jour de collecte**
+(§35.3). Tout ce qui déborde de la ligne L7-min part donc en **fiche AMELIORATIONS d'étage 2 —
+proposée, jamais implémentée avant arbitrage** (CLAUDE.md §3.7 et §6), et non en rognage de L7-min.
