@@ -1005,8 +1005,10 @@ la perte du serveur. **La règle 3-2-1 du 02 §11.4 n'est pas tenue.**
    Reste ouvert, et c'est le trou principal : **aucune sonde EXTERNE**. La sonde et l'alerte
    s'exécutent sur la machine qu'elles surveillent — VPS éteint, plus d'alerte. Uptime Kuma
    (02 §11.3) n'est pas déployé.
-4. **Le test de restauration reste MANUEL.** L'automatiser suppose de trancher §6.2 (nom de projet
-   Compose imposé par l'orchestrateur). La procédure de §5.4 est reproductible telle quelle.
+4. ~~**Le test de restauration reste MANUEL.**~~ → **automatisé depuis le 2026-08-30** (workflow
+   nocturne → clé restreinte → `/opt/axion-audit/repo`), et **depuis le 2026-09-02 le clone qu'il
+   exécute suit la livraison** au lieu d'attendre un humain — §6.3. La procédure de §5.4 reste
+   reproductible telle quelle.
 5. **La rétention MinIO à 30 archives complètes ne passera pas l'échelle** dès que les missions
    produiront des pièces jointes (§5.3).
 6. 🔴 **LA PASSPHRASE DU COFFRE N'A QU'UN SEUL DÉTENTEUR** (D-3, question annexe non tranchée). Le
@@ -1249,6 +1251,74 @@ l'orchestrateur. Le rendre paramétrable est une modification du contrat d'explo
 > (b) un `restore-test-coolify.sh` distinct qui parle à `docker` sans passer par Compose,
 > (c) renoncer au test de restauration sur le staging Coolify et ne le tenir que sur la prod. »_
 > A57 n'a pas écrit cette entrée lui-même : `DECISIONS.md` est en cours d'édition par un autre agent.
+
+### 6.3 Le clone `/opt/axion-audit/repo` SUIT LA LIVRAISON — amendement du 2026-09-02
+
+> **Ce paragraphe date le « fait central » du §6.** Depuis le 2026-08-30, une copie du dépôt existe
+> sur `axionia-web`, en `/opt/axion-audit/repo` : c'est elle que le test de restauration nocturne
+> exécute (`restore-test-ci.sh` → `./infra/scripts/restore-test.sh`). Jusqu'au 2026-09-02, **rien ne
+> la mettait à niveau** : le garde nocturne comparait son commit à celui de `main` et rougissait après
+> chaque fusion (trois nuits de suite), pour une raison qui n'était pas celle qu'il surveille
+> (`DECISIONS.md`, 2026-08-31 « Rien ne met à niveau le clone »). **Williams a tranché le 2026-09-02**
+> (« fais tout selon tes recommandations ») ; voici ce qui tourne désormais, et ce qu'il faut savoir.
+
+**Le mécanisme, en trois lignes.**
+
+1. **La livraison remet le clone à niveau.** À chaque fusion sur `main`, le job `8 · deploy-staging`
+   déclenche `/opt/axion-audit/deploy-staging.sh` par sa clé restreinte ; ce script, **en dernière
+   étape** (après que le déploiement a pris effet), fait `git fetch origin main` puis
+   `git checkout --detach <sha livré>` dans `/opt/axion-audit/repo` — **le sha, jamais une branche** :
+   le clone est exactement ce que la CI a livré. Il publie `CLONE_SERVEUR=<sha40>` ; le workflow
+   vérifie que c'est bien `github.sha`, sinon rouge **en nommant le clone** (le staging, lui, est déjà
+   en service).
+2. **Le nocturne vérifie AVANT d'éprouver.** Le workflow lit le sha de `main` (`git ls-remote`) et
+   l'envoie sur l'entrée standard de `restore-test-ci.sh`. Si le clone n'y est pas, le script **refuse
+   avant toute restauration** (`REFUS_CLONE_HORS_MAIN attendu=… serveur=…`, code 3) et le journal dit
+   « RESTAURATION NON TENTÉE » — il n'y a pas de verdict de restauration cette nuit-là, et c'est écrit.
+3. **Le test à blanc** : `bash infra/scripts/test-garde-clone.sh` joue les deux sens (clone à jour ⇒
+   éprouve ; clone en retard ⇒ refus nommé, avant tout) et chaque garde-fou de l'alignement, sur un
+   dépôt git jetable — 31 cas, jamais sur le serveur, jamais sur ce dépôt.
+
+**Ce que la clé restreinte n'a PAS gagné : rien.** `authorized_keys` porte toujours
+`command="/opt/axion-audit/deploy-staging.sh",restrict` ; la clé ne peut toujours exécuter que ce
+fichier, dont l'empreinte est comparée au dépôt avant toute conclusion. C'est **le script** qui a gagné
+un pouvoir (écrire dans le clone), d'où ses garde-fous, tous refusants et tous joués par le test :
+origine `origin` vérifiée (le dépôt public `will383842/Axion-Audit`, rien d'autre) · branche **en dur**
+(`main`) · le sha doit être **atteignable depuis `origin/main`** et **descendre du commit courant** du
+clone (aucune réécriture d'historique suivie) · **modifications locales ⇒ refus**, rien n'est écrasé en
+silence (invariant 7) · sha **complet** (40 hexa) exigé — `deploy-staging.sh` refuse désormais un sha
+abrégé, ce qui ne change rien pour la CI, qui a toujours envoyé `github.sha`.
+
+**Ce que cela ne couvre pas, dit au même endroit.** Une nuit où `main` a avancé sans que le job de
+déploiement ait tourné vert (CI rouge sur `main`, Coolify en panne) est une **livraison manquée** : le
+nocturne rougit, et c'est la bonne raison. Une fusion malveillante dans `main` passe — la parade est
+la protection de branche et la revue croisée, pas ce script (entrée du 31/08, inchangée).
+
+**À FAIRE À LA MAIN SUR LE SERVEUR, UNE FOIS, AVANT LA PREMIÈRE EXÉCUTION.** Les deux enveloppeurs
+vivent en copie hors du clone et sont contrôlés par empreinte : tant que les copies serveur sont les
+anciennes, **le job de déploiement rougira sur l'empreinte et n'alignera rien**, et le nocturne
+rougira de même. Ordre : **copier, PUIS fusionner** (entre les deux, aucun déploiement ne doit tourner).
+
+```bash
+# 1. Pré-contrôles du clone (état mesuré le 2026-09-02 : HEAD = e234756, ancêtre de main — la
+#    première mise à niveau se fera donc SEULE au premier déploiement vert, si ces trois lignes passent)
+git -C /opt/axion-audit/repo remote get-url origin   # doit être https://github.com/will383842/Axion-Audit.git
+git -C /opt/axion-audit/repo status --porcelain --untracked-files=no   # doit être VIDE
+git -C /opt/axion-audit/repo fetch --dry-run origin main               # réseau sortant vers github.com
+
+# 2. Poser les deux enveloppeurs versionnés (depuis la branche fusionnée, ou main après fusion)
+install -m 755 infra/scripts/deploy-staging.sh  /opt/axion-audit/deploy-staging.sh
+install -m 755 infra/scripts/restore-test-ci.sh /opt/axion-audit/restore-test-ci.sh
+sha256sum infra/scripts/deploy-staging.sh /opt/axion-audit/deploy-staging.sh      # identiques
+sha256sum infra/scripts/restore-test-ci.sh /opt/axion-audit/restore-test-ci.sh    # identiques
+```
+
+Si `remote get-url` rend une URL SSH (`git@github.com:…`), le garde refusera : le corriger par
+`git -C /opt/axion-audit/repo remote set-url origin https://github.com/will383842/Axion-Audit.git`
+(dépôt public, aucun identifiant requis). Le clone reste ensuite en **HEAD détachée** au sha livré —
+c'est voulu ; pour le remettre à niveau à la main : `git -C /opt/axion-audit/repo fetch origin main &&
+git -C /opt/axion-audit/repo checkout --detach <sha>`. **Non joué sur le serveur** à la date de cet
+amendement : seul le test à blanc a tourné.
 
 ---
 

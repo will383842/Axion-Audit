@@ -7201,3 +7201,34 @@ nommant « interface — 26 fichier(s) ».
 
 Décideur : Williams (délégation du 2026-09-02 à la session pilote)
 Impact spec : aucun — `vitest.config.ts` et les 26 fichiers sont inchangés
+
+## 2026-09-02 — [L0 / infra] Le clone `/opt/axion-audit/repo` suit la livraison ; le nocturne vérifie avant d'éprouver
+
+Options : celles de l'entrée du 2026-08-31 « Rien ne met à niveau le clone » — (1) l'enveloppeur du
+nocturne se réaligne lui-même ; (2) la livraison réaligne le clone sur le sha qu'elle déploie ;
+(3) une unité `systemd` ; (4) ne plus comparer — refusée d'avance.
+
+Arbitrage : **Williams, le 2026-09-02, sur cette entrée : « fais tout selon tes recommandations »**,
+relayé par la session de vérification (13h35) sous la forme : la mise à niveau appartient à la
+**livraison** (option 2), et le nocturne **vérifie que le clone est au sha de `main` avant
+d'éprouver**, sinon refus nommé, avant toute restauration. Mis en œuvre tel que relayé :
+`deploy-staging.sh` fait, en dernière étape, `fetch origin main` + `checkout --detach <sha livré>`
+(le sha, jamais une branche) et publie `CLONE_SERVEUR=` que le job compare à `github.sha` ;
+`restore-test-ci.sh` reçoit le sha de `main` sur stdin et refuse (`REFUS_CLONE_HORS_MAIN`, code 3)
+avant de restaurer ; `test-garde-clone.sh` prouve les deux sens sur un dépôt jetable (31 cas verts).
+Les trois garde-fous de l'entrée du 31/08 sont posés et joués : origine vérifiée, branche en dur,
+refus de réécriture d'historique — plus le refus d'écraser des modifications locales (invariant 7).
+**Écart nommé, non arbitré par un agent** : la recommandation écrite de C3 portait sur l'option 1,
+l'option 2 « en complément » ; ce qui est livré est l'option 2 seule. Le défaut propre à l'option 2
+(« ne couvre pas les nuits sans déploiement ») devient un rouge pour la bonne raison — livraison
+manquée — au lieu d'un rouge inexpliqué. **La clé restreinte ne gagne aucun droit** : c'est le
+script, contrôlé par empreinte, qui écrit dans le clone. Le second point de l'entrée du 31/08
+(secrets nominatifs, coffre `.env`) reste à Williams lui-même — non touché. Règle de précédence du
+pack **sans objet** (aucune divergence interne ; `CLAUDE.md` §3-4 satisfait : l'humain a tranché).
+**Non joué sur le serveur** : les deux enveloppeurs doivent être recopiés à la main dans
+`/opt/axion-audit/` AVANT la fusion (README infra §6.3), sinon le contrôle d'empreinte rougit et
+n'aligne rien ; le clone étant à `e234756`, ancêtre de `main`, la première mise à niveau se fera
+seule au premier déploiement vert si l'origine est l'URL HTTPS et l'arbre propre.
+Décideur : **Williams** (préparé et mis en œuvre par A11).
+Impact spec : aucun sur `/docs` ; `infra/README.md` §5.7-4 et §6.3 amendés (datés), note datée dans
+`.github/workflows/README.md`.
