@@ -40,16 +40,25 @@ Tout est servi par Caddy sous **un seul domaine** (`http://localhost:8080`) : `/
 
 ## Commandes
 
-| Commande                                                     | Effet                                                      |
-| ------------------------------------------------------------ | ---------------------------------------------------------- |
-| `pnpm dev`                                                   | Toutes les apps en développement                           |
-| `pnpm build`                                                 | Paquets puis apps                                          |
-| `pnpm lint` · `pnpm typecheck`                               | 0 erreur exigé (DoD)                                       |
-| `pnpm test:unit` · `pnpm test:integration` · `pnpm test:e2e` | Suites séparées, comme en CI                               |
-| `pnpm test:coverage`                                         | ≥ 90 % sur les modules critiques (DoD)                     |
-| `pnpm check:invariants`                                      | Checklist automatisée des invariants (étape 3 du pipeline) |
-| `pnpm check:no-skipped-tests`                                | Aucun test désactivé — liste d'exceptions **vide**         |
-| `pnpm infra:restore-test`                                    | Test de restauration Postgres + MinIO depuis zéro          |
+| Commande                                                     | Effet                                                                                       |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| `pnpm dev`                                                   | Toutes les apps en développement                                                            |
+| `pnpm build`                                                 | Paquets puis apps                                                                           |
+| `pnpm lint` · `pnpm typecheck`                               | 0 erreur exigé (DoD)                                                                        |
+| `pnpm test:unit` · `pnpm test:integration` · `pnpm test:e2e` | Suites séparées, comme en CI                                                                |
+| `pnpm test:coverage`                                         | ≥ 90 % sur les modules critiques (DoD)                                                      |
+| `pnpm check:invariants`                                      | Checklist automatisée des invariants (étape 3 du pipeline)                                  |
+| `pnpm check:no-skipped-tests`                                | Aucun test désactivé — liste d'exceptions **vide**                                          |
+| `pnpm check:prose`                                           | Dernier bloc ETAT ≤ 25 lignes, dernière décision ≤ 40 lignes                                |
+| `pnpm verify:rapide`                                         | Tout ce que la CI vérifie sans conteneur — **joué par le hook `pre-push`**                  |
+| `pnpm verify`                                                | La CI complète en local, intégration et e2e compris — **obligatoire avant d'ouvrir une PR** |
+| `pnpm infra:restore-test`                                    | Test de restauration Postgres + MinIO depuis zéro                                           |
+
+**Deux hooks git** (`.husky/`, installés par `pnpm install`) : `pre-commit` (gardes du dépôt,
+lint-staged, typecheck) et `pre-push` (`verify:rapide`). Un push refusé par le hook est un push
+qui aurait rougi en CI ; `--no-verify` ne sert qu'à sauver un `wip:` avant une coupure, et ça
+s'écrit dans `docs/ETAT.md`. Un hook `Stop` de Claude Code (`scripts/hook-stop-durabilite.mjs`,
+câblé dans `.claude/settings.json`) refuse qu'une session rende la main avec du travail non poussé.
 
 ## Règles qui ne se négocient pas
 
