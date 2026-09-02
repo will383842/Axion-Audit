@@ -26,8 +26,9 @@
 // ou questionnaire vide) · erreur (session introuvable, cause + action) · hors
 // ligne (pastille dans l'en-tête, mode NOMINAL) · nominal.
 //
-// Traçabilité : E13 (écran 3 zones, enregistrement continu), E14 (à revoir,
-// N/A, notes, ad hoc), E30 (§27.4), E6 (hors ligne total), E44 (grille §33).
+// Traçabilité : E13 (écran 3 zones, enregistrement continu — notes, ad hoc),
+// E12 (entretiens par interlocuteur, à-revoir / N-A), E37 (scoring intégralement
+// spécifié — fourchettes §27.4), E6 (hors ligne total), E44 (UX/UI 2026-2027 — tokens, grille §33).
 // =============================================================================
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';

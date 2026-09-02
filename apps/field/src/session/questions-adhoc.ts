@@ -13,7 +13,8 @@
 // type de réponse — et `addedAdHoc: true`. Elle n'a ni barème ni poids : elle
 // alimente le rapport, jamais le score (03 §32.1, `weight = 0`).
 //
-// Traçabilité : E13, E14 (questions ad hoc), E7 (contrat d'ops).
+// Traçabilité : E13 (écran 3 zones, enregistrement continu — questions ad hoc),
+// E7 (remontée continue dès qu'il y a du réseau — contrat d'ops).
 // =============================================================================
 import { uuidv7 } from 'uuidv7';
 import type { TypeDeReponse } from '@axion/shared';

@@ -30,8 +30,10 @@
 // liste fermée. Tout refus lève AVANT `ecrireLocal` : ni ligne, ni op, et la
 // valeur valide déjà en base reste ce qu'elle est.
 //
-// Traçabilité : E13, E30 (§27.4), E14 (à revoir / N-A), E7 (chaque écriture
-// pousse une op).
+// Traçabilité : E13 (écran 3 zones, enregistrement continu), E37 (scoring
+// intégralement spécifié — fourchettes §27.4), E12 (entretiens par interlocuteur,
+// à-revoir / N-A), E7 (remontée continue dès qu'il y a du réseau — chaque
+// écriture pousse une op).
 // =============================================================================
 import { uuidv7 } from 'uuidv7';
 import { depotReponses, type ReponseLocale } from '../local/depots/reponses.js';

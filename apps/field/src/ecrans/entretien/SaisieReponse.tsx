@@ -23,7 +23,8 @@
 // Les nombres restent en CHAÎNE tant qu'on tape ; `nombreDepuisSaisie` tranche
 // (`session/valeurs.ts`). Une saisie illisible ne s'écrit pas et le champ le dit.
 //
-// Traçabilité : E13, E30 (§27.4), E44 (grille §33).
+// Traçabilité : E13 (écran 3 zones, enregistrement continu), E37 (scoring
+// intégralement spécifié — fourchettes §27.4), E44 (UX/UI 2026-2027 — tokens, grille §33).
 // =============================================================================
 import { useId, useState, type ReactNode } from 'react';
 import {

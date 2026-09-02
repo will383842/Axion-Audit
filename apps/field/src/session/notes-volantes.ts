@@ -12,7 +12,8 @@
 // forme que les dépôts, lecture seule, index en clair + charge déchiffrée.
 // L'écriture passe par `ecrireLocal` — entité `attachment_meta` (11 §4).
 //
-// Traçabilité : E13, E14 (notes volantes), E33 (contenu chiffré).
+// Traçabilité : E13 (écran 3 zones, enregistrement continu — notes volantes),
+// E33 (sécurité / RGPD — contenu chiffré).
 // =============================================================================
 import { uuidv7 } from 'uuidv7';
 import { contexteLocal } from '../local/contexte.js';
