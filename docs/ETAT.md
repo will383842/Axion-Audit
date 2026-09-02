@@ -2009,6 +2009,12 @@ Faits du bloc :
   rouge sous le préfixe `feat` au lieu de `wip:` ; et des écritures dans le répertoire de travail
   d'un agent actif, alors que les trois autres agents, eux, travaillaient en worktree isolé.
 
+## 2026-09-02 06h20 — [chantier CONTENU / banque de questions] — hors pipeline code
+Dernier commit vert : e120357 (docs(banque): les onze reecritures d ancres appliquees, les cinq doctrines posees dans DECISIONS.md)   ·   Branche : contenu/banque-questions-vague-1   ·   Poussé : oui
+Tâche en cours : chantier au repos — 100 questions écrites, testées en cotation croisée à blanc (deux coteurs isolés), 11 ancres réécrites sur go de Williams, Q-B4-005 documentée comme délibérée (poids 0 + criticité importante = relevé qui remonte au rapport sans compter au score, régime silence-vaut-accord du 31/08).
+Prochaine action : obtenir de Williams l'arbitrage des 5 doctrines de cotation (DECISIONS.md, entrée du 2026-09-02 — une réponse « 1a, 2a… » suffit), puis tenir la passe humaine du 15/09 : deux coteurs humains indépendants, matériel complet dans docs/banque-questions/ (COTATION_CROISEE.md — sa section 5 reste à l'animateur seul).
+Tests rouges connus : aucun sur ce chantier (contenu pur, la grille de contrôle des 100 questions passe à zéro écart ; la suite de code n'est pas concernée par cette branche).
+
 ## 2026-08-31 10h30 — [C3 qualité / A50 — test de restauration nocturne] — étape pipeline 3/7 (auto-revue)
 
 Dernier commit vert : `6b1d80d` (base) · Branche : `fix/nocturne` · Poussé : **non** (consigne : ne pas pousser)
@@ -2218,3 +2224,50 @@ arbitrer, seulement à signer.
   comprise, ≈ 24 %. P-DESCOPE dans 13 jours ; L5 + L6 + L7 = 14,5 j-h non entamés.
 - **Le journal `docs/journal/` s'arrête au 2026-08-28.** Quatre jours sans résumé ni burn-down,
   à rattraper par la session pilote à sa prochaine fin de journée (09 §5.4).
+
+## 2026-09-02 06h40 — [lot L2 / porte P-B] — étape pipeline 7/7 — PORTE FRANCHIE, `v0.l2` POSÉ
+
+Dernier commit vert : `fa30be1` (docs(porte): P-B signée par Williams, #19) · Branche : `main` · Poussé : oui
+Tâche en cours : aucune sur L2. **L2 est clos.** Journal des quatre jours manquants en PR #20 (auto-merge armé).
+Prochaine action : **la session pilote exécute l'ordre d'arrêt reçu à 06h20** (commit `wip:` + push de L3, sortie de L5a sur `lot/l5a`, CI verte sur `lot/l3-suite`, bloc ETAT exact) ; **puis la session de vérification rejoue la suite d'intégration de `lot/l3-suite` dans un worktree isolé** et rend son verdict avant toute PR L3.
+Tests rouges connus : aucun sur `main`. `lot/l3-suite` rouge en CI (l3c-org-units, code non poussé). Nocturne : verdict la nuit prochaine.
+
+**Faits du bloc, tous mesurés :**
+
+- **PR #19 fusionnée en squash par la session de vérification, sur autorisation explicite de
+  Williams** (« fais ce qui est nécessaire, je te donne l'autorisation », 2026-09-02). Commit de
+  `main` : `fa30be1`. La signature est celle de Williams (« signe P-B ») ; le geste de merge a été
+  délégué et il est tracé ici.
+- **Tag `v0.l2` posé sur `fa30be1` et poussé** (`git tag -l 'v0.*'` → `v0.l0`, `v0.l2`).
+- **Ordre d'arrêt transmis à la session pilote à 06h20**, par message inter-sessions, avec les trois
+  actions dans l'ordre et l'état mesuré de son worktree (73 fichiers non commités à 06h15, contre
+  26 à 05h26). Aucune réponse au moment d'écrire.
+- Le journal `docs/journal/2026-09-02.md` couvre le 29/08 → 02/09 avec le burn-down en trois
+  lectures ; PR #20, CI verte, auto-merge armé après mise à jour sur `main`.
+
+## 2026-09-02 08h00 — [gouvernance / vitesse] — hors pipeline de lot
+
+Dernier commit vert : `3984689` (PR #18 banque fusionnée) · Branche : `gouvernance/vitesse` · Poussé : oui (PR ouverte)
+Tâche en cours : cinq mesures de vitesse de Williams, mécanisées (DECISIONS du 2026-09-02).
+Prochaine action : fusionner la PR `gouvernance/vitesse` dès CI verte ; chaque session fait `git merge origin/main` et `pnpm install` pour recevoir le hook `pre-push` ; Williams colle le hook `Stop` dans `.claude/settings.json` (refusé à l'agent par le classificateur).
+Tests rouges connus : aucun sur `main`. `lot/l3-suite` verte (d055910), vérification isolée en cours. `lot/l5a` rouge (couverture, fond transparent).
+
+- Mesures : `check:prose` (CI + verify), `verify:rapide` + hook `pre-push`, `pnpm verify` avant PR,
+  `hook-stop-durabilite.mjs`, `allow_auto_merge` activé sur le dépôt, trois chantiers nommés
+  (`ORGANISATION_AGENTS.md` §9 : L3/A10 · L5/A20 · L7/A30). Règles dans `CLAUDE.md` §4, §7, §8.
+- État L3 (mesuré) : toutes les routes du fichier 07 présentes, CI verte 19/19, `apps/field` retiré.
+  Manquent : bloc ETAT exact sur la branche, les trois arbitrages de Williams non encore tracés.
+
+## 2026-09-02 09h30 — [gouvernance / docs de rattrapage] — hors pipeline de lot
+
+Dernier commit vert : `3984689` (PR #18) · Branche : `docs/rattrapage` · Poussé : oui (PR ouverte, auto-merge armé)
+Tâche en cours : trois rattrapages documentaires demandés par Williams, aucun code.
+Prochaine action : fusion automatique dès CI verte ; puis `lot/l3-suite` fait `git merge origin/main` avant tout rescellement du 04.
+Tests rouges connus : aucun sur `main`. Vérification isolée de `lot/l3-suite` @ `d055910` rendue : L3 206/206, L1-L2-L4-worker verts ; seul rouge = banc L0 restauration, expiré sous contention Docker (non concluant).
+
+- Pack amendé et rescellé : 02 §30.6 (statut daté, liste des décisions ratifiées), 03 §32.4 (les
+  cinq doctrines de cotation). Entrée DECISIONS du jour, sceau régénéré après elle.
+- `CHANGELOG.md` créé à la racine (v0.l0 P-A, v0.l2 P-B). `TRACABILITE_E1-E47.md` §J : report du
+  §10.2 de la fiche P-B, R-B12 levée, 370 citations / 245 fichiers, 14 routes sur `main`.
+- Gouvernance/vitesse : PR poussée après deux refus du hook `pre-push` (format prettier, puis verrou
+  git sous trois processus concurrents) — le hook fait ce pour quoi il existe.
