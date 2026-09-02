@@ -2186,3 +2186,35 @@ qui arbitre la réduction du périmètre sur le burn-down. Au 2026-09-01 : ~8,1 
 soit **≈31 % du noyau strict**, dont L5 (8 j) à ~10 % et L6 (4,5 j) à 0. Ce chiffre n'engage pas ce
 bloc — il vient de la mesure du 2026-09-01 03h08 — mais il sera l'entrée de P-DESCOPE, et personne
 ne l'avait rapproché de la date.
+
+## 2026-09-02 05h50 — [lot L2 / porte P-B] — étape pipeline 7/7 (porte signée, merge à jouer)
+
+Dernier commit vert : `800ce2f` (integration: les sept chantiers de la nuit, #17) · Branche : `porte/b-signature` · Poussé : oui (PR ouverte)
+Tâche en cours : la PR de signature P-B est ouverte ; **le squash merge est le geste de Williams**.
+Prochaine action : **Williams fusionne la PR `porte/b-signature` en squash**, puis poser `v0.l2` sur le commit de `main` résultant et pousser le tag.
+Tests rouges connus : aucun sur `main`. `lot/l3-suite` est **rouge en CI** (40 tests `l3c-org-units` : le code correspondant n'est pas commité dans le worktree L3). Nocturne rouge du 2026-09-01, cause externe, verdict la nuit prochaine.
+
+**LA PORTE P-B EST SIGNÉE PAR WILLIAMS** : parole « signe P-B » du 2026-09-02, sur verdict recommandé
+🟡 ACCEPTÉE SOUS RÉSERVE, consignée dans `docs/portes/PORTE_B_2026-08-31.md` (section « SIGNATURE
+HUMAINE — 2026-09-02 ») et dans `DECISIONS.md` (entrée du 2026-09-02). R-B3 est levée sur `800ce2f` ;
+les onze autres réserves ont chacune une échéance et un responsable.
+
+**CE QUE CE BLOC CORRIGE DU PRÉCÉDENT.** Le bloc du 2026-09-01 14h05 attendait « l'arbitrage du
+§8 » : il était **déjà rendu** le 2026-08-31 (dégel de L3 en écriture seule). Rien ne restait à
+arbitrer, seulement à signer.
+
+**ÉTAT DES AUTRES CHANTIERS, MESURÉ CE MATIN dans les worktrees, pas relu depuis ce fichier :**
+
+- **L3** (`_axl3`, `lot/l3-suite`) : dernier commit `386fd92` du 2026-09-01 23h44 ; **26 fichiers non
+  commités** dont l'arbre d'unités complet (`org-units`, ~2 100 lignes), l'assembleur de
+  questionnaire, le générateur de plan d'entretiens et deux fichiers de tests L3d. **Le socle L5a est
+  écrit dans le même worktree et la même branche** (`apps/field/src/local/**`, service worker) :
+  à sortir sur `lot/l5a` avant tout push. CI de la branche rouge depuis deux pushs.
+- **Banque de questions** (répertoire principal, `contenu/banque-questions-vague-1`, PR #18 verte) :
+  99 questions en brouillon sur ~200 visées ; cotation croisée en cours par deux coteurs isolés.
+- **Burn-down au 2026-09-02** (mesuré, pas déclaré) : L0 ~2 j · L1 2 j · L2 ~1,8 j · L3 ~1,35 j ·
+  L4 ~0,45 j · L5 ~0,8 j · L6 ~0,1 j · L7 ~0,05 j → **≈ 8,5 j-h consommés sur 26, ≈ 33 %**. Ce
+  qui est **fusionné sur `main`** vaut ≈ 25 % ; ce qui a **passé une porte signée** vaut, P-B
+  comprise, ≈ 24 %. P-DESCOPE dans 13 jours ; L5 + L6 + L7 = 14,5 j-h non entamés.
+- **Le journal `docs/journal/` s'arrête au 2026-08-28.** Quatre jours sans résumé ni burn-down,
+  à rattraper par la session pilote à sa prochaine fin de journée (09 §5.4).

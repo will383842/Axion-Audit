@@ -5359,3 +5359,36 @@ d'un seul caractère, dans le même fichier, ferait toujours rougir le build.
 Décideur : Williams (intention) · A01 (mécanisme, sur le précédent écrit du 2026-08-29)
 Impact spec : aucun sur `/docs`. Amendement horodaté de `.gitleaks.toml` (troisième entrée de
 l'allowlist, documentée sur place avec son épreuve).
+
+## 2026-09-02 — [L2/porte P-B] Williams signe la porte P-B : acceptée sous réserve, R-B3 levée, `v0.l2` autorisé
+
+Options :
+
+1. **Signer ACCEPTÉE SOUS RÉSERVE sur `800ce2f`** — les cinq critères du fichier 07 sont tranchés
+   (1 coché, 2 cochés sous réserve, 2 sans objet datés par l'arbitrage du 2026-08-31) ; la seule
+   réserve bloquante du gardien, R-B3, est levée par la fusion de la PR #15 et le run vert
+   `33552686236` ; les onze autres reçoivent chacune une échéance dans le bloc de signature.
+2. **Signer ACCEPTÉE sans réserve** — écarté : R-B1 (assertion de refus sur toute la matrice),
+   R-B7 (migrations non jouées sur staging par la CI, bloquante dès L3) et le cookie httpOnly jamais
+   enregistré (constat A51) sont des faits mesurés, pas des opinions ; les taire rendrait la porte
+   suivante plus chère.
+3. **Verdict ÉCHEC** — écarté : aucun critère n'est NON SATISFAIT ; le 09 §4bis réserve l'échec à un
+   critère non tenu, pas à une réserve datée.
+
+Arbitrage : **option 1.** Le bloc de signature complet, avec ce verdict recommandé, a été présenté à
+Williams le 2026-09-02 ; il a répondu **« signe P-B »**. Conformément au régime du 2026-08-31
+(point 3 : _« tu ne rédiges pas ma signature toi-même »_), sa parole est **citée**, pas rédigée ; la
+section « SIGNATURE HUMAINE — 2026-09-02 » de `docs/portes/PORTE_B_2026-08-31.md` la consigne, et
+le geste qui la rend effective est **son squash merge de la PR qui porte ce bloc**. Le tag `v0.l2`
+se pose sur le commit de `main` qui en résulte, pas avant. Précédence : `CLAUDE.md` §7 (« le merge de
+la porte est conditionné à ce fichier commité ») et §10 (chaîne de signature : la porte est à
+Williams) ; 09 §4bis pour le sens du verdict. Règle de précédence du pack sans objet : aucune
+divergence de spec n'est en jeu.
+
+Ce que cette décision NE couvre PAS, et qui est écrit dans le bloc : le cookie httpOnly de la console
+(dû au premier incrément de L7, fiche à ouvrir avant P-C), le nocturne rouge du 2026-09-01 (jugé la
+nuit suivante), et les lots L3, L4 et le design system livrés sur `main` par-dessus L2, jugés à leurs
+portes.
+
+Décideur : **Williams**, par la parole « signe P-B » du 2026-09-02, sur verdict recommandé.
+Impact spec : aucun.
