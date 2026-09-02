@@ -4589,7 +4589,7 @@ describe('POST /v1/org-units/:id/merge — la cible ne peut pas descendre de la 
     const racine = await semerUnite({
       missionId,
       nom: 'Unité factice racine',
-      kind: 'entreprise',
+      kind: 'groupe',
       position: 1,
     });
     const a = await semerUnite({
@@ -4665,7 +4665,7 @@ describe('POST /v1/org-units/:id/merge — la cible ne peut pas descendre de la 
     const racine = await semerUnite({
       missionId,
       nom: 'Unité factice racine contre-épreuve',
-      kind: 'entreprise',
+      kind: 'groupe',
       position: 1,
     });
     const a = await semerUnite({
