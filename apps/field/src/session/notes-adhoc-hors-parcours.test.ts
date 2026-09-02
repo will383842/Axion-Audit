@@ -43,10 +43,7 @@ import {
   demarrerEntretien as demarrerSession,
   ecrireNotesGenerales,
 } from './ecriture-session.js';
-import {
-  creerNoteVolante as capturerNoteVolante,
-  type DemandeNoteVolante,
-} from './notes-volantes.js';
+import { creerNoteVolante as capturerNoteVolante } from './notes-volantes.js';
 import { creerQuestionAdHoc } from './questions-adhoc.js';
 import type { ValeurTypee } from './valeurs.js';
 
@@ -126,7 +123,7 @@ function creerNoteVolante(demande: {
   readonly createdBy: string;
   readonly content: string;
 }): Promise<string> {
-  return capturerNoteVolante(demande as DemandeNoteVolante);
+  return capturerNoteVolante(demande);
 }
 
 /** Position « juste après » : celle qu'annonce l'hypothèse `apresPosition`. */
