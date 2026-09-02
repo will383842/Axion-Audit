@@ -2244,3 +2244,16 @@ Tests rouges connus : aucun sur `main`. `lot/l3-suite` rouge en CI (l3c-org-unit
   26 à 05h26). Aucune réponse au moment d'écrire.
 - Le journal `docs/journal/2026-09-02.md` couvre le 29/08 → 02/09 avec le burn-down en trois
   lectures ; PR #20, CI verte, auto-merge armé après mise à jour sur `main`.
+
+## 2026-09-02 08h00 — [gouvernance / vitesse] — hors pipeline de lot
+
+Dernier commit vert : `3984689` (PR #18 banque fusionnée) · Branche : `gouvernance/vitesse` · Poussé : oui (PR ouverte)
+Tâche en cours : cinq mesures de vitesse de Williams, mécanisées (DECISIONS du 2026-09-02).
+Prochaine action : fusionner la PR `gouvernance/vitesse` dès CI verte ; chaque session fait `git merge origin/main` et `pnpm install` pour recevoir le hook `pre-push` ; Williams colle le hook `Stop` dans `.claude/settings.json` (refusé à l'agent par le classificateur).
+Tests rouges connus : aucun sur `main`. `lot/l3-suite` verte (d055910), vérification isolée en cours. `lot/l5a` rouge (couverture, fond transparent).
+
+- Mesures : `check:prose` (CI + verify), `verify:rapide` + hook `pre-push`, `pnpm verify` avant PR,
+  `hook-stop-durabilite.mjs`, `allow_auto_merge` activé sur le dépôt, trois chantiers nommés
+  (`ORGANISATION_AGENTS.md` §9 : L3/A10 · L5/A20 · L7/A30). Règles dans `CLAUDE.md` §4, §7, §8.
+- État L3 (mesuré) : toutes les routes du fichier 07 présentes, CI verte 19/19, `apps/field` retiré.
+  Manquent : bloc ETAT exact sur la branche, les trois arbitrages de Williams non encore tracés.

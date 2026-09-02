@@ -260,5 +260,35 @@ commande de réparation dans ce cas : **copier le dossier ailleurs d'abord**, pu
 
 ---
 
+## 9. TROIS CHANTIERS NOMMÉS, ET CE QUI LES REND POSSIBLES (Williams, 2026-09-02)
+
+Mesuré le 2026-09-02 : le chantier avance à 1 à 1,5 j-h de noyau par jour calendaire, soit un
+développeur et demi. Le plafond de trois chantiers existe depuis le 2026-08-31 et n'était utilisé
+qu'à moitié : L3 et L5 ont partagé un worktree pendant six heures. Williams tranche : **trois
+chantiers vraiment disjoints, chacun dans son worktree, avec son chef, en parallèle.**
+
+| Chantier | Chef | Worktree | Fichiers | Ne touche jamais |
+| --- | --- | --- | --- | --- |
+| **C1 — L3 backend** (fin de lot, porte) | A10 | `_axl3` · `lot/l3-suite` | `apps/api/**`, `packages/shared/src/{companies,missions,org-units,questionnaire,plan-entretiens}.ts` | `apps/field`, `apps/hq` |
+| **C2 — L5 terrain** (L5a → L5c) | A20 | `_axl5a` · `lot/l5a` puis `lot/l5b`, `lot/l5c` | `apps/field/**`, `packages/shared/src/sync.ts` | `apps/api`, `apps/hq` |
+| **C3 — L7-min console** | A30 | `_axl7` · `lot/l7a` | `apps/hq/**` | `apps/api`, `apps/field` |
+
+**Ce qui est commun et qui se sérialise** : `packages/shared/src/index.ts`, `DECISIONS.md`,
+`docs/ETAT.md`, `AMELIORATIONS.md`, le lockfile. Règle : **on y écrit en append, on fusionne `main`
+avant de pousser, jamais deux PR ouvertes sur le même de ces fichiers sans rebase.**
+`packages/ui` est **figé** pendant les trois chantiers ; un composant manquant = une fiche étage 1,
+livrée par A21 dans une PR à part.
+
+**Ce qui ne change pas** : L6 (sync) se développe **seul** quand C2 a livré L5a. Deux exécutions
+lourdes au maximum sur la machine, une seule par chantier. La quatrième session est **interdite** :
+les trois chantiers sont trois chefs lancés depuis la session pilote ; la session de vérification
+mesure et ne produit rien.
+
+**Le chef rend compte** : à chaque incrément commité, une ligne dans ETAT.md (≤ 25 lignes par bloc,
+`check:prose`), et un message à A01 avec trois chiffres — tests écrits, tests verts, CI.
+
+---
+
 *Traçabilité : ce fichier outille `CLAUDE.md` §4, §5.6, §7 et §8. Il ne crée aucune convention
-nouvelle et n'amende aucune spécification. Arbitrage : `DECISIONS.md`, 2026-08-30.*
+nouvelle et n'amende aucune spécification. Arbitrage : `DECISIONS.md`, 2026-08-30 ; §9 :
+`DECISIONS.md`, 2026-09-02 (Williams).*

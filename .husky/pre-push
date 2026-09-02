@@ -1,0 +1,21 @@
+#!/usr/bin/env sh
+# =============================================================================
+# HOOK PRE-PUSH — « zéro push rouge évitable » (CLAUDE.md §8, décision de
+# Williams du 2026-09-02).
+# =============================================================================
+# Constat mesuré : chaque push rouge coûte 7 à 12 minutes de CI avant de savoir,
+# et les trois derniers pushs rouges de lot/l3-suite et lot/l5a tombaient sur des
+# gardes qui tournent en 30 secondes sur le poste. Ce hook rejoue AVANT le push
+# tout ce que la CI vérifie sans conteneur : les 14 gardes, lint, typecheck,
+# tests unitaires (`pnpm verify:rapide`). L'intégration et le e2e restent à la
+# CI et à `pnpm verify` (obligatoire avant d'ouvrir une PR).
+#
+# CONTOURNEMENT : `git push --no-verify` saute ce hook. Jamais pour un push
+# destiné à une PR ; toléré UNIQUEMENT pour sauvegarder un `wip:` avant une
+# coupure (CLAUDE.md §8 : un commit non poussé n'existe pas), et ça se dit
+# dans ETAT.md.
+# =============================================================================
+set -e
+echo "[pre-push] rejeu local de la CI sans conteneur : 14 gardes + lint + typecheck + unit…"
+pnpm verify:rapide
+echo "[pre-push] OK — ce push ne peut plus rougir sur un garde, un type ou un test unitaire."

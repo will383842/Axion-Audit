@@ -560,6 +560,12 @@ jobs:
       #   node scripts/check-tracabilite-exigences.mjs --angles-morts
       - name: pnpm check:tracabilite
         run: pnpm check:tracabilite
+      # Garde de prose (CLAUDE.md §7-§8, décision de Williams du 2026-09-02) :
+      # le dernier bloc d'ETAT.md ≤ 25 lignes, la dernière entrée de
+      # DECISIONS.md ≤ 40 lignes. Le temps d'écrire SUR le travail est pris
+      # sur le travail — mesuré : 117 décisions en six jours.
+      - name: pnpm check:prose (dernier bloc ETAT ≤ 25 l., dernière décision ≤ 40 l.)
+        run: pnpm check:prose
 
   # ---------------------------------------------------------------------------
   # 1/8 — LINT (11 §7)

@@ -5460,3 +5460,22 @@ Décideur : Williams
 Impact spec : amendement horodaté de 03 §32.4 À FAIRE — réservé au chantier gouvernance, le pack
 étant sous sceau (`check-pack-integrity`) : hors de portée de la branche de contenu. D'ici là,
 `MODE_EMPLOI.md` §5bis fait foi et renvoie à la présente entrée.
+
+## 2026-09-02 — [gouvernance] Cinq mesures de vitesse : prose bornée, zéro push rouge, trois chantiers, auto-merge docs, aucun arrêt silencieux
+
+Options :
+
+1. **Appliquer les cinq mesures, chacune avec son mécanisme** (garde, hook, réglage) — retenue.
+2. Les écrire comme règles seulement — écarté : le régime du 31/08 était écrit, une session s'est
+   arrêtée en silence le 02/09 à 07h02 avec 48 fichiers non commités.
+
+Arbitrage : option 1, sur constat mesuré (1 à 1,5 j-h de noyau par jour calendaire ; 117 décisions
+et 5 300 lignes de DECISIONS.md en six jours ; trois pushs rouges sur des gardes locaux ; P-B a
+attendu deux jours). Mécanismes : `check:prose` (dernier bloc ETAT ≤ 25 l., dernière décision
+≤ 40 l.) en CI et pre-commit ; hook `pre-push` = `pnpm verify:rapide` ; `pnpm verify` complet avant
+toute PR ; hook `Stop` `hook-stop-durabilite.mjs` (refuse l'arrêt avec du travail non poussé) ;
+`allow_auto_merge` activé sur le dépôt, PR de docs seule armée par la session qui l'ouvre ; trois
+chantiers L3/A10 · L5/A20 · L7/A30 (`ORGANISATION_AGENTS.md` §9). Précédence : `CLAUDE.md` §3
+(ces mesures ne touchent ni schéma, ni API, ni crypto) ; règle du pack sans objet.
+Décideur : Williams (« mets tout ça en place », 2026-09-02).
+Impact spec : aucun. Amendements de `CLAUDE.md` §4, §7, §8 et `ORGANISATION_AGENTS.md` §9.
