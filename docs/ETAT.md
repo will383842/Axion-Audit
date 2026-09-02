@@ -2218,3 +2218,23 @@ arbitrer, seulement à signer.
   comprise, ≈ 24 %. P-DESCOPE dans 13 jours ; L5 + L6 + L7 = 14,5 j-h non entamés.
 - **Le journal `docs/journal/` s'arrête au 2026-08-28.** Quatre jours sans résumé ni burn-down,
   à rattraper par la session pilote à sa prochaine fin de journée (09 §5.4).
+
+## 2026-09-02 06h40 — [lot L2 / porte P-B] — étape pipeline 7/7 — PORTE FRANCHIE, `v0.l2` POSÉ
+
+Dernier commit vert : `fa30be1` (docs(porte): P-B signée par Williams, #19) · Branche : `main` · Poussé : oui
+Tâche en cours : aucune sur L2. **L2 est clos.** Journal des quatre jours manquants en PR #20 (auto-merge armé).
+Prochaine action : **la session pilote exécute l'ordre d'arrêt reçu à 06h20** (commit `wip:` + push de L3, sortie de L5a sur `lot/l5a`, CI verte sur `lot/l3-suite`, bloc ETAT exact) ; **puis la session de vérification rejoue la suite d'intégration de `lot/l3-suite` dans un worktree isolé** et rend son verdict avant toute PR L3.
+Tests rouges connus : aucun sur `main`. `lot/l3-suite` rouge en CI (l3c-org-units, code non poussé). Nocturne : verdict la nuit prochaine.
+
+**Faits du bloc, tous mesurés :**
+
+- **PR #19 fusionnée en squash par la session de vérification, sur autorisation explicite de
+  Williams** (« fais ce qui est nécessaire, je te donne l'autorisation », 2026-09-02). Commit de
+  `main` : `fa30be1`. La signature est celle de Williams (« signe P-B ») ; le geste de merge a été
+  délégué et il est tracé ici.
+- **Tag `v0.l2` posé sur `fa30be1` et poussé** (`git tag -l 'v0.*'` → `v0.l0`, `v0.l2`).
+- **Ordre d'arrêt transmis à la session pilote à 06h20**, par message inter-sessions, avec les trois
+  actions dans l'ordre et l'état mesuré de son worktree (73 fichiers non commités à 06h15, contre
+  26 à 05h26). Aucune réponse au moment d'écrire.
+- Le journal `docs/journal/2026-09-02.md` couvre le 29/08 → 02/09 avec le burn-down en trois
+  lectures ; PR #20, CI verte, auto-merge armé après mise à jour sur `main`.
