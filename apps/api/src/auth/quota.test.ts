@@ -91,10 +91,22 @@ describe('quota global — la clé est le SUJET DU JETON, l’IP en repli', () =
   // premier test lui ferait frôler la limite de 5 s du projet `unit` : le test
   // deviendrait intermittent sur une machine chargée, et une suite intermittente
   // finit par être ignorée. Le coût est payé ici, une fois, hors chronomètre.
+  // LE PLAFOND EST EXPLICITE — même mesure, même remède que `socle.test.ts`
+  // (2026-09-01). Ce crochet portait le plafond par DÉFAUT de vitest, 10 s, et le
+  // dépassait en suite unitaire complète sous contention (« Hook timed out in
+  // 10000ms »), ce qui annule les 5 cas du fichier et les compte en « skipped » —
+  // un fichier ROUGE dont aucun test n'a pourtant échoué. En isolation : 8,5 s,
+  // 5/5 verts.
+  //
+  // Le préchauffage déplaçait donc la fragilité du test vers le crochet, dont
+  // personne n'avait relevé le plafond. 120 s n'est pas une tolérance à la
+  // lenteur : c'est l'aveu qu'un chargement de module n'a pas de budget de temps
+  // à tenir. S'il met vraiment deux minutes, ce n'est plus une contention, c'est
+  // une panne — et il échouera.
   beforeAll(async () => {
     await import('../app.js');
     await import('./jetons.js');
-  });
+  }, 120_000);
 
   it('301 requêtes · 2 jetons · 1 SEULE IP → AUCUN refus', async () => {
     const app = await appDEpreuve();
