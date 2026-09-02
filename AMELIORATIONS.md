@@ -1608,3 +1608,27 @@ Impact crypto : aucun** (le jeton est le même, seul le transport change).
 clause du contrat 11 §3 non encore tenue. À planifier par A30 au brief de L7.
 
 **Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-C_
+
+## 2026-09-02 — [L7a, étage 2, PROPOSÉES] Deux composants de `packages/ui` parlent terrain à une console
+
+`packages/ui` est **figé** pendant les trois chantiers (gouvernance du 2026-09-02) ; ces deux constats
+sont donc des fiches, et leur correctif une PR à part, hors des trois branches.
+
+### FICHE A-010 — `EtatHorsLigne` porte un texte terrain que la console ne peut pas paramétrer
+
+- **Constat** : le composant affiche « tout est enregistré sur cet appareil » — vrai pour la PWA
+  (invariant 1), faux pour la console, qui n'enregistre rien localement. L7a l'utilise tel quel pour
+  l'état hors-ligne (§33.2), et le texte ment.
+- **Valeur pour l'utilisateur** : un état hors-ligne qui ne promet pas une sauvegarde qui n'existe pas.
+- **Coût estimé** : 0,1 j — une prop `message` avec le texte terrain par défaut ; un test par front.
+- **Impact schéma/API** : aucun. `packages/ui` figé → PR dédiée après le dégel.
+
+### FICHE A-011 — `ChampTexte` n'a pas de nature « secret »
+
+- **Constat** : le mot de passe de la console (et du terrain) est composé à la main autour d'un
+  `ChampTexte` sans `type="password"`, `autocomplete` ni bascule d'affichage — deux copies du même
+  montage, qui divergeront.
+- **Valeur pour l'utilisateur** : un champ secret uniforme, lisible par les gestionnaires de mots de
+  passe (`autocomplete="current-password"`), avec l'affichage temporaire attendu sur tablette.
+- **Coût estimé** : 0,2 j — une nature `secret` sur `ChampTexte`, remplacement des deux montages.
+- **Impact schéma/API** : aucun. `packages/ui` figé → PR dédiée après le dégel.

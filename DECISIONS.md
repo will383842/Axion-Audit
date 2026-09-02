@@ -7070,3 +7070,59 @@ seront seuillés à L6 quand `assignments` deviendra le siège de la propriété
 
 Décideur : A01, sur mesure de la vérification isolée et réserve R-L3-4 d'A17
 Impact spec : aucun. `.github/coverage-critical-paths.json` : quatre entrées, chiffres à l'ajout.
+
+## 2026-09-02 — [L7a] Le client sur les cartes du portefeuille : un N+1 BORNÉ, accepté en V1
+
+Chaque carte de mission appelle `GET /v1/companies/:id` (dédupliqué par TanStack Query) : sur une page
+keyset de 50 missions, au plus 50 appels, en pratique bien moins (un client, plusieurs missions).
+
+Options :
+
+1. **Accepter en V1**, borné par la page keyset et la déduplication.
+2. Joindre `companyName` à la liste des missions — modifie `missionResponseSchema` (11 §8-2).
+3. Route de portefeuille dédiée, en L7b.
+
+Arbitrage : **option 1**, et l'option 3 est notée pour L7b (le tableau de bord 05 §8.3 aura de toute
+façon sa route). Modifier un schéma partagé pour un confort d'affichage inverse la précédence :
+l'API n'épouse pas l'écran. **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-02 — [L7a → A-006] Le nom de l'en-tête anti-CSRF de la console : `X-Axion-Client`, ratifié
+
+Le contrat 11 §3 impose « cookies httpOnly + en-tête anti-CSRF custom » sans nommer l'en-tête. A30
+propose `X-Axion-Client: console` sur toute requête, et `X-Axion-Csrf: <jeton>` en double-soumission
+sur les écritures quand le serveur déposera un cookie lisible `axion_csrf`.
+
+Options :
+
+1. **Ratifier les deux noms** ; les constantes vivent dans `apps/hq/src/api/auth.ts` jusqu'à A-006,
+   qui les déplace dans `packages/shared` au moment où le serveur les lit (un seul nom, deux côtés).
+2. Attendre A-006 pour nommer — la console ne peut pas parler une langue qui n'existe pas encore.
+3. Réutiliser `X-Requested-With`.
+
+Arbitrage : **option 1.** L'option 3 est le nom que tout l'écosystème connaît, donc celui qu'un
+formulaire piégé n'a pas besoin de deviner ; un nom propre au produit dit aussi QUI parle, ce dont
+A-006 a besoin pour n'émettre le cookie qu'à la console. Rien ici n'est un contrôle : la sécurité
+reste serveur (invariant 3), la console se contente de poser l'en-tête. **Précédence : 11 §3.**
+
+Décideur : A01 — à confirmer par Williams à la porte, avec A-006
+Impact spec : aucun (le contrat 11 §3 est précisé, pas modifié).
+
+## 2026-09-02 — [L7a] Trois routes plutôt que deux : le portefeuille est un écran, pas un onglet de l'accueil
+
+Le découpage L7-min prévoyait accueil + avancement ; A36 attendait `/hq/missions` = « Portefeuille »
+distinct de l'accueil (H1). L7a livre les trois.
+
+Options :
+
+1. **Trois routes** — accueil (tour de contrôle 03 §18), portefeuille (liste keyset), avancement.
+2. Deux routes, le portefeuille dans l'accueil.
+
+Arbitrage : **option 1.** La tour de contrôle est une page d'alertes et de chiffres ; une liste
+paginée au même endroit en fait un écran à deux états de chargement et deux vides (§33.2). L'espace 2
+s'intitule « Pilotage mission — portefeuille ». **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
