@@ -386,3 +386,91 @@ ambiguïté (`SOURCES_CONSTATEES` / `PROVENANCES_REPONSE`), **une seule définit
 le **prolongement direct de la correction B2**, pas une convention nouvelle : `packages/shared` est
 déjà, par le 11 §3, l'endroit où vivent les contrats que le front importe. Aucune valeur n'est
 inventée : ce sont les cinq du CHECK du fichier 04. **À exécuter par A32 dans L7b/L7c ; tests A36.**
+
+## 9. AMENDEMENT DU 2026-09-02 — l'arbitrage est RENDU, et il sépare deux écrans
+
+> **Décideur : Williams, par délégation du 2026-09-02 à la session pilote.** Cet amendement RECTIFIE
+> trois passages écrits plus haut dans cette note : le §6.1 (« arbitrage A30 … à porter en
+> DECISIONS.md »), le §6.3 (« les six entrées de `parSource` ») et le §8.3 (« divergence tracée, à
+> arbitrer »). Ce qui suit prime sur eux. Rien n'est retiré du périmètre : deux axes sont SÉPARÉS.
+
+### 9.1 Ce que le §27.1 établit, ligne par ligne — vérifié dans le fichier, pas repris de confiance
+
+| Ligne | Texte relevé | Ce qu'il établit |
+| --- | --- | --- |
+| **l. 548** | « Les **5 sources de collecte** d'un audit — **GÉNÉRALISE la table `interviews` en SESSIONS DE COLLECTE** » | Le pack pose lui-même l'équivalence : **une source de collecte EST un type de session.** |
+| **l. 549** | « Un audit comprend, service par service, **cinq types de sessions** » | La table qui suit a **cinq lignes**, et `atelier` n'y est pas — il arrive au §28.1 (et le §32.6, l. 673, le range dans les **6** `interviews.kind`). |
+| **l. 559** | « Le plan de mission (§17.3) **planifie les CINQ types** par unité … ; **l'écran de couverture (§16.6) contrôle la couverture PAR TYPE DE SOURCE** » | **Le même sujet gouverne les deux membres** : ce qui est planifié est ce qui est couvert. La même ligne réserve le mot **PROVENANCE** à `answers.source`. |
+
+**L'argument de fond qui emporte : ON NE PLANIFIE PAS UNE PROVENANCE.** La couverture est un écart
+prévu / planifié / réalisé, le critère du 07 exige qu'elle « reflète le plan d'entretiens », et le plan
+publie `{ orgUnitId, kind }`. Comptée sur `answers.source`, la couverture n'aurait **aucune colonne
+« prévu »** et le critère du 07 deviendrait **inexprimable**.
+
+### 9.2 L'arbitrage — deux écrans, deux vocabulaires, jamais fusionnés
+
+1. **COUVERTURE par unité et par source** (§27.1 / §16.6) → **`interviews.kind`**, les **cinq sources
+   de collecte**, confrontée au **plan**. C'est l'écran de L7b.
+2. **AGRÉGATION par question, provenance visible** (critère L7-min du 07) → **`answers.source`**, les
+   cinq valeurs `entretien | observation | demonstration | document | releve`. C'est l'écran de L7c.
+3. **Ils ne se fondent jamais** : c'est précisément leur **comparaison** qui fait le §27.6 (source
+   ATTENDUE `questions.expected_source` × source CONSTATÉE `answers.source`). Les fondre supprimerait
+   la comparaison au moment même où elle a de la valeur.
+
+### 9.3 `atelier` — un `kind` qui n'est pas une source de collecte, et qui ne disparaît pas
+
+**La règle, en une ligne** : la grille de couverture a **CINQ colonnes** (les cinq sources du §27.1,
+avec prévu / planifié / réalisé) ; **`atelier` est rendu À PART, hors de la grille**, dans une colonne
+terminale visuellement détachée intitulée « Atelier (hors grille §27.1) », qui **ne porte que
+`realise`** — le §32.4 n'en planifie aucun, donc afficher un « prévu » y serait une case vide qui
+ment. Il **n'entre pas** dans le calcul de complétude de la couverture : un atelier ne comble pas
+l'absence d'une observation. Et **il n'est jamais silencieux** — la marge de mission porte
+**toujours** le décompte des ateliers, **y compris à zéro** ; seule la colonne du tableau se replie
+quand la mission n'en compte aucun, pour ne pas encombrer 150 lignes d'une colonne vide.
+_Rectifie le §6.3_ : la grille publie **cinq** entrées `parSource` toujours présentes, **plus**
+`atelier` à part — et non « toujours les six » dans la même grille.
+
+_Réserve pour L7c, hors périmètre L7b_ : les réponses issues d'un atelier portent nécessairement l'une
+des **cinq** provenances (`answers.source` n'a pas de valeur `atelier`). **L7 AFFICHE ce qui est
+stocké, il ne décide pas** de la provenance à l'enregistrement — c'est une question de collecte (L5),
+pas de console. Si le terrain la laisse indéterminée, A32 la remonte : elle ne se devine pas ici.
+
+### 9.4 Entrée `DECISIONS.md` à déposer APRÈS le rebase — texte figé, prêt à coller
+
+Elle n'est pas écrite maintenant : `DECISIONS.md` est append-only et le rebase le remue (ordre de
+fusion figé). Le texte est arrêté ici pour qu'aucune reformulation ne l'affaiblisse — **une entrée qui
+cite le §27.1 se défend seule ; une qui dit « on a choisi `kind` » demande qu'on nous croie.**
+
+```
+## 2026-09-02 — [L7b] Sur quel vocabulaire se compte la « couverture par type de source » (§27.1) ?
+Options :
+  a) `answers.source` — 5 valeurs (entretien, observation, demonstration, document, releve).
+  b) `interviews.kind` — les 5 sources de collecte du §27.1 (atelier, 6e kind, traité à part).
+Arbitrage : b), et a) est RETENUE POUR L'AUTRE ÉCRAN (agrégation L7c, provenance par question).
+  Preuve dans le 03, vérifiée ligne à ligne : l. 548 « Les 5 sources de collecte — GÉNÉRALISE la
+  table `interviews` en SESSIONS DE COLLECTE » (le pack pose l'équivalence source = type de
+  session) ; l. 549 « cinq types de sessions », table à 5 lignes, `atelier` absent (il arrive au
+  §28.1 ; §32.6 l. 673 le range dans les 6 `interviews.kind`) ; l. 559 « le plan de mission
+  planifie les CINQ types … l'écran de couverture contrôle la couverture PAR TYPE DE SOURCE » —
+  même sujet des deux côtés, et la même ligne réserve le mot PROVENANCE à `answers.source`.
+  Raison de fond : ON NE PLANIFIE PAS UNE PROVENANCE. La couverture est un écart prévu/planifié/
+  réalisé et le critère L7-min du 07 exige qu'elle « reflète le plan d'entretiens » ; le plan publie
+  `{orgUnitId, kind}`. Comptée sur `answers.source`, elle n'aurait aucune colonne « prévu » et le
+  critère du 07 deviendrait inexprimable.
+  Précédence (CLAUDE.md) : §24-31 > §16-22 — le §27.1 prime sur la lecture courte du §16.6
+  (« entretiens menés / prévus ») ; et §32-36 confirme sans contredire — le §36.3 impose dans
+  `reponses.csv` « session + type + provenance », TROIS colonnes, donc deux vocabulaires assumés.
+  `atelier` : rendu hors de la grille des cinq, réalisé seulement, jamais silencieux (marge de
+  mission toujours affichée, y compris à zéro) — une session invisible est une session perdue.
+Décideur : Williams (délégation du 2026-09-02 à la session pilote)
+Impact spec : aucun — lecture du §27.1 confirmée, aucun amendement du pack ; note de conception
+  `docs/conception/LOT_L7.md` §9 mise à jour (rectifie ses §6.1, §6.3 et §8.3).
+```
+
+### 9.5 Ce qui change pour A32 et A36 — et ce qui ne change pas
+
+**Ne change pas** : les deux fixtures symétriques du §6.5 (« tout en entretiens » / « tout sur une
+unité »), le test des marges identiques page 1 / page 3, le keyset, l'étanchéité, les quatre états,
+le p95 FIL-GC. **Change** : la grille compte **cinq** colonnes et non six ; **s'ajoutent** deux cas à
+A36 — (a) un `atelier` réalisé **apparaît hors grille** et **ne compte pas** dans la complétude de
+couverture ; (b) mission **sans aucun atelier** → la marge affiche **0**, elle ne se tait pas.
