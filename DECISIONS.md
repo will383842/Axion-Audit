@@ -7159,3 +7159,45 @@ la réserve « `X-Axion-Client` à confirmer » du dernier bloc `ETAT.md` est si
 
 Décideur : Williams (délégation du 2026-09-02 à la session pilote)
 Impact spec : aucun
+
+## 2026-09-02 — [L3] `pnpm verify` ne lançait que deux des trois projets vitest : 26 fichiers invérifiables
+
+Mesuré sur `lot/l3-suite`, avant tout correctif :
+
+    $ grep -n "name: '" vitest.config.ts   → 3 projets : interface, unit, integration
+    $ node -e "…package.json"              → test    = test:unit && test:integration
+                                             verify  = … && test:unit && test:integration && test:e2e
+    $ find apps packages -name "*.test.tsx" | wc -l      → 26
+    $ npx vitest run --project interface   → 26 fichiers, 447 tests, 447 VERTS, 0 rouge, 17,9 s
+
+Le projet `interface` n'était démarré par AUCUN script : ni `pnpm test`, ni `verify`, ni le hook
+pre-push. Seul `test:coverage` (sans filtre de projet) les voyait — d'où une CI de lot rouge pendant
+qu'un décompte local paraissait vert. `check:test-projects` était vert et avait raison de l'être :
+ses cinq contrôles partent du FICHIER (« est-il capté par un projet ? »), aucun ne partait du PROJET
+(« ce projet est-il seulement lancé ? »).
+
+**Les 447 verts sont le fait le plus instructif** : le trou n'avait rien cassé, il avait rendu 26
+fichiers INVÉRIFIABLES. Un garde ne protège pas du rouge, il protège de l'ignorance.
+
+Options :
+
+1. Câbler `test:interface` dans `test`, `verify`, `verify:rapide`, et **durcir le garde** d'un
+   contrôle 6 qui refuse tout projet déclaré que `verify` ne lance pas.
+2. Câbler seulement, sans toucher au garde.
+3. Laisser en fiche `AMELIORATIONS.md` pour after-L3.
+
+Arbitrage : **option 1.** L'option 2 referme ce trou-ci et laisse ouverte la classe entière : un
+quatrième projet demain repasserait inaperçu. L'option 3 est exclue par la mesure — le geste est
+gratuit puisque tout est vert. Ce n'est PAS « désactiver un test » (§3-5) : c'est l'inverse exact,
+faire tourner des tests qui existent et que personne n'exécutait. **Précédence : 09 §5.7** (« une CI
+qui ment est pire que pas de CI ») et la DoD §5 (« tous les tests verts, AUCUN test skippé » — un
+test jamais lancé n'est ni vert ni skippé, il est absent).
+
+**NATURE DU GESTE, écrite sans la maquiller** : `verify` est le garde obligatoire avant toute PR, donc
+le modifier touche le **contrat d'ops que le §3-2 réserve à l'humain**. La direction est bonne et la
+mesure la défend, mais c'est la NATURE de l'acte qui doit rester visible pour Williams, pas seulement
+son sens. Bascule du garde prouvée : `test:interface` retiré de `verify` → contrôle 6 en sortie 1,
+nommant « interface — 26 fichier(s) ».
+
+Décideur : Williams (délégation du 2026-09-02 à la session pilote)
+Impact spec : aucun — `vitest.config.ts` et les 26 fichiers sont inchangés

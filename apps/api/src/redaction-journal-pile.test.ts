@@ -102,9 +102,10 @@ describe('journal — une fausse trame glissée dans une donnée ne termine pas 
     journal.error({ err: erreur }, 'Erreur interne');
 
     const brut = sortie();
-    expect(brut, 'le nom placé APRÈS la fausse trame ne doit pas atteindre le journal').not.toContain(
-      NOM,
-    );
+    expect(
+      brut,
+      'le nom placé APRÈS la fausse trame ne doit pas atteindre le journal',
+    ).not.toContain(NOM);
     expect(brut, 'ni la valeur qui le suit').not.toContain(SECRET);
     expect(brut, 'ni la fausse trame elle-même, qui est une donnée d’appelant').not.toContain(
       'feint',

@@ -183,7 +183,9 @@ describe('fuseauIanaSchema — la mémoïsation exigée par A51 (F-19)', () => {
     for (let i = 0; i < 1000; i += 1) {
       expect(fuseauIanaSchema.safeParse(`Europe/Inconnue${String(i)}`).success).toBe(false);
     }
-    expect(fuseauIanaSchema.safeParse(FUSEAU_LEGITIME).success, 'un valide reste valide').toBe(true);
+    expect(fuseauIanaSchema.safeParse(FUSEAU_LEGITIME).success, 'un valide reste valide').toBe(
+      true,
+    );
     expect(fuseauIanaSchema.safeParse('Europe/Atlantide').success, 'un inconnu reste refusé').toBe(
       false,
     );
