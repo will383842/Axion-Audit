@@ -26,7 +26,9 @@ function lireStdin() {
   }
 }
 function git(args, cwd) {
-  return execSync(`git ${args}`, { cwd, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+  return execSync(`git ${args}`, { cwd, stdio: ['ignore', 'pipe', 'ignore'] })
+    .toString()
+    .trim();
 }
 
 const entree = lireStdin();

@@ -54,4 +54,6 @@ if (echec) {
   );
   process.exit(1);
 }
-console.log('\x1b[32m✓\x1b[0m prose : dernier bloc ETAT ≤ 25 lignes, dernière décision ≤ 40 lignes.');
+console.log(
+  '\x1b[32m✓\x1b[0m prose : dernier bloc ETAT ≤ 25 lignes, dernière décision ≤ 40 lignes.',
+);
