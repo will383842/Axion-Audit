@@ -17,7 +17,13 @@ import 'fake-indexeddb/auto';
 import Dexie from 'dexie';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BaseLocale } from './base.js';
-import { embarquerMission, missionEmbarquee, preparerStockagePourMission } from './embarquement.js';
+import {
+  embarquerMission,
+  marquerMissionEmbarquee,
+  missionEmbarquee,
+  persistanceAccordee,
+  preparerStockagePourMission,
+} from './embarquement.js';
 import {
   SEUIL_ESPACE_CRITIQUE,
   SEUIL_ESPACE_TENDU,
@@ -189,7 +195,9 @@ describe('embarquement — preparerStockagePourMission / missionEmbarquee (05 §
       expect(resultat.motif).toBe('persistance_refusee');
       expect(resultat.guidage).toMatch(/[a-zéèêàç]/);
     }
+    expect(resultat.persistance).toBe('refusee');
     expect(await missionEmbarquee(base, MISSION_ID)).toBe(false);
+    expect(await persistanceAccordee(base, MISSION_ID)).toBe(false);
   });
 
   it('espace critique ⇒ refus `espace_insuffisant`, même si la persistance est accordée', async () => {
@@ -205,7 +213,9 @@ describe('embarquement — preparerStockagePourMission / missionEmbarquee (05 §
     expect(await missionEmbarquee(base, MISSION_ID)).toBe(false);
   });
 
-  it('@critique persistance accordée et espace ok ⇒ `embarquee`, marque posée dans `meta`, horodatée en UTC', async () => {
+  // Contrat amendé sur revue A29 (B4) : « embarquée » = DONNÉES présentes. Sans
+  // pull, l'étape 1 ne pose que la marque de PERSISTANCE, et le dit.
+  it('@critique persistance accordée et espace ok ⇒ persistance `accordee` marquée, mais la mission N’EST PAS « embarquée » tant qu’aucun pull n’a écrit ses données', async () => {
     simulerNavigateur({
       persist: () => Promise.resolve(true),
       persisted: () => Promise.resolve(true),
@@ -213,16 +223,32 @@ describe('embarquement — preparerStockagePourMission / missionEmbarquee (05 §
     });
     const base = await nouvelleBase();
     const resultat = await preparerStockagePourMission(base, MISSION_ID);
-    expect(resultat.statut).toBe('embarquee');
-    if (resultat.statut === 'embarquee') {
-      expect(resultat.missionId).toBe(MISSION_ID);
-      expect(resultat.embarqueeLe).toMatch(/Z$/);
-    }
+    expect(resultat.persistance).toBe('accordee');
+    expect(resultat.statut).toBe('refuse');
+    if (resultat.statut === 'refuse') expect(resultat.motif).toBe('premier_pull_indisponible');
+    expect(await persistanceAccordee(base, MISSION_ID)).toBe(true);
+    expect(await persistanceAccordee(base, '0191e2a0-0000-7000-8000-00000000f2de')).toBe(false);
+    expect(await missionEmbarquee(base, MISSION_ID)).toBe(false);
+  });
+
+  it('@critique marquerMissionEmbarquee (réservée au pull L6a) pose la marque « données présentes » — et REFUSE sans persistance accordée', async () => {
+    simulerNavigateur({
+      persist: () => Promise.resolve(true),
+      persisted: () => Promise.resolve(true),
+      estimate: () => Promise.resolve(estimation(0.5)),
+    });
+    const base = await nouvelleBase();
+    // Sans persistance : refus de mentir.
+    expect(await marquerMissionEmbarquee(base, MISSION_ID)).toBe(false);
+    expect(await missionEmbarquee(base, MISSION_ID)).toBe(false);
+    // Avec persistance : la marque se pose.
+    await preparerStockagePourMission(base, MISSION_ID);
+    expect(await marquerMissionEmbarquee(base, MISSION_ID)).toBe(true);
     expect(await missionEmbarquee(base, MISSION_ID)).toBe(true);
     expect(await missionEmbarquee(base, '0191e2a0-0000-7000-8000-00000000f2de')).toBe(false);
   });
 
-  it('espace tendu (non critique) n’empêche pas l’embarquement', async () => {
+  it('espace tendu (non critique) n’empêche pas la persistance d’être accordée', async () => {
     simulerNavigateur({
       persist: () => Promise.resolve(true),
       persisted: () => Promise.resolve(true),
@@ -230,8 +256,9 @@ describe('embarquement — preparerStockagePourMission / missionEmbarquee (05 §
     });
     const base = await nouvelleBase();
     const resultat = await preparerStockagePourMission(base, MISSION_ID);
-    expect(resultat.statut).toBe('embarquee');
+    expect(resultat.persistance).toBe('accordee');
     expect(resultat.etatStockage.niveau).toBe('tendu');
+    expect(await persistanceAccordee(base, MISSION_ID)).toBe(true);
   });
 
   // Le port inerte ne ment pas (LOT_L5.md §3.6) ; l'embarquement non plus : tant

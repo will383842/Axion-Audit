@@ -71,6 +71,9 @@ const { count, size, warnings } = await injectManifest({
     // dans le précache, le mode avion rend en police système et l'application a
     // l'air cassée exactement là où elle doit inspirer confiance (03 §33.1).
     'assets/**/*.{woff2,woff,svg,png,webp,ico}',
+    // Les icônes vivent à la racine (`public/`), pas dans `assets/` : sans cette
+    // ligne, l'app installée afficherait une icône vide en mode avion.
+    'icones/**/*.png',
   ],
   // Le service worker ne se précache jamais lui-même.
   globIgnores: ['sw.js', '**/*.map'],

@@ -11,7 +11,7 @@
 // ── CE QUE CE FICHIER NE FAIT PAS ────────────────────────────────────────────
 // Aucune logique : ni push, ni pull, ni backoff, ni file. Il ne déclare QUE la
 // forme des messages. Le moteur est L6 (05 §9.3) et le port terrain est déclaré
-// dans `apps/field/src/sync/port.ts`.
+// dans `apps/field/src/local/port-sync.ts`.
 //
 // ── NOMMAGE : snake_case dans le pack, camelCase ici ─────────────────────────
 // 11 §4 écrit l'op `{op_id, entity, entity_id, action, payload, client_updated_at}`

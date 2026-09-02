@@ -45,6 +45,7 @@ import {
   lireJetonRafraichissement,
   type JetonRafraichissement,
 } from '../local/jetons.js';
+import { depotSessions } from '../local/depots/sessions.js';
 import { evaluerStockage, type EtatStockage } from '../local/stockage.js';
 import {
   ETAT_NAVIGATION_INITIAL,
@@ -56,6 +57,7 @@ import {
   type ActionNavigation,
   type EtatNavigation,
 } from './navigation.js';
+import { declarerSourceSessionEnCours } from './service-worker-client.js';
 import { useVerrou, type EtatVerrou } from './verrou.js';
 import type { CodeVue } from './vues.js';
 
@@ -191,13 +193,20 @@ export function FournisseurTerrain({ children }: { readonly children: ReactNode 
   // Lecture d'INDEX uniquement — aucun déchiffrement, donc utilisable même à
   // chaque rendu. C'est précisément ce que la liste fermée du §3.2 rend possible.
   const sessionActive = useLiveQuery(
-    async () =>
-      base === null
-        ? false
-        : (await base.interviews.where('status').equals('en_cours').count()) > 0,
+    async () => (base === null ? false : depotSessions.sessionEnCours(base)),
     [base],
     false,
   );
+
+  // ── Le garde de mise à jour du service worker (05 §31-1) ─────────────────
+  // « Le service worker télécharge les nouvelles versions en arrière-plan mais
+  // ne les active JAMAIS pendant un entretien en cours. » Le garde vit dans
+  // `service-worker-client.ts`, mais sa SOURCE d'information est ici : c'est la
+  // coquille qui sait, et elle le lui dit. Sans cette déclaration, le garde
+  // refuse tout — défaut sûr, choisi après le bloquant B5 de la revue A29.
+  useEffect(() => {
+    declarerSourceSessionEnCours(() => sessionActive);
+  }, [sessionActive]);
 
   const fermer = useCallback(() => {
     retirerContexteLocal();

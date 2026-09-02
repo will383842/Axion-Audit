@@ -15,6 +15,7 @@
 //
 // Traçabilité : E12 (entretiens par interlocuteur, à-revoir), E6 (hors ligne total).
 // =============================================================================
+import type { BaseLocale } from '../base.js';
 import { contexteLocal } from '../contexte.js';
 import type { Enveloppe } from '../enveloppe.js';
 import {
@@ -125,8 +126,13 @@ export const depotSessions = {
    * d'activer une nouvelle version (05 §31-1). Compter par l'index `status` plutôt
    * que de charger les lignes : la question est posée à chaque interaction.
    */
-  async sessionEnCours(): Promise<boolean> {
-    const { base } = contexteLocal();
+  async sessionEnCours(baseFournie?: BaseLocale): Promise<boolean> {
+    // La base peut être FOURNIE, et ce n'est pas une commodité d'appel : le garde
+    // de mise à jour du service worker (05 §31-1) doit répondre même coffre
+    // fermé, alors que `contexteLocal()` lève dans cet état. Le prédicat reste
+    // unique — une seule définition de « une session est en cours » —, seule sa
+    // source de base varie.
+    const base = baseFournie ?? contexteLocal().base;
     return (await base.interviews.where('status').equals('en_cours').count()) > 0;
   },
 

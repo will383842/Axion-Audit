@@ -41,11 +41,27 @@ const abonnes = new Set<Abonne>();
  * Dexie, ni le coffre. Un service worker qui ouvrirait la base pour décider s'il
  * peut s'activer serait un second lecteur des données de mission, et l'invariant
  * de source unique tomberait.
+ *
+ * ── LE DÉFAUT EST `null`, ET IL REFUSE ─────────────────────────────────────
+ * Revue A29, bloquant B5 : la valeur de départ était `() => false`, c'est-à-dire
+ * « aucune session en cours », c'est-à-dire **activation autorisée** — et la
+ * source n'était branchée nulle part. Le garde du 05 §31-1 (« ne les active
+ * JAMAIS pendant un entretien en cours ») était donc ouvert en grand.
+ *
+ * Un garde-fou dont le défaut est permissif ne protège que les cas où on a pensé
+ * à le brancher — c'est-à-dire aucun de ceux qui comptent. `null` = « je ne sais
+ * pas », et on ne recharge pas l'application sous les doigts d'un auditeur sur
+ * un « je ne sais pas ».
  */
-let sessionEnCours: () => boolean = () => false;
+let sessionEnCours: (() => boolean) | null = null;
 
 export function declarerSourceSessionEnCours(source: () => boolean): void {
   sessionEnCours = source;
+}
+
+/** La mise à jour peut-elle être appliquée MAINTENANT ? (05 §31-1) */
+export function activationPermise(): boolean {
+  return sessionEnCours !== null && !sessionEnCours();
 }
 
 function diffuser(): void {
@@ -58,8 +74,9 @@ export function etatMiseAJour(): EtatMiseAJour {
     disponible: enAttente !== null,
     appliquer: async (): Promise<boolean> => {
       if (enAttente === null) return false;
-      // LE point du 05 §31-1. Jamais d'activation pendant un entretien.
-      if (sessionEnCours()) return false;
+      // LE point du 05 §31-1. Jamais d'activation pendant un entretien — ni sur
+      // une source d'information absente (voir `sessionEnCours`).
+      if (!activationPermise()) return false;
       enAttente.postMessage({ type: 'AXION_APPLIQUER_MISE_A_JOUR' });
       // Le rechargement est déclenché par `controllerchange`, une fois que le
       // nouveau service worker a réellement pris la main — pas avant, sinon on

@@ -64,6 +64,29 @@ import globals from 'globals';
 const MESSAGE_SANS_DECALAGE =
   'Interdit (contrat 11 §3) : la pagination est keyset PARTOUT (`?limit=50&after=<curseur>`), jamais par décalage. Sur une liste qui bouge pendant la pagination — une sync terrain qui pousse des réponses — le décalage saute ou duplique des lignes. Utilisez `conditionApresCurseur` / `ordreDuCurseur` / `paginerParCurseur` (apps/api/src/http/pagination.ts).';
 
+// =============================================================================
+// UUID V7 APPLICATIF — invariant 1, contrat 11 §2
+//
+// EXTRAIT EN CONSTANTE, et ce n'est pas de la cosmétique : en configuration à
+// plat, un bloc ultérieur qui redéclare `no-restricted-syntax` REMPLACE la règle
+// au lieu de sy ajouter. Les deux blocs « couche locale terrain » plus bas en
+// déclarent une ; sans cette constante à ré-étaler, `apps/field/src/**` perdrait
+// EN SILENCE les gardes UUID et anti-décalage. Le piège est déjà documenté en
+// bas de ce fichier pour la pagination ; il se referme ici pour de bon.
+// =============================================================================
+const UUID_APPLICATIF = [
+  {
+    selector: 'Literal[value=/uuid_generate_v7|uuidv7\\s*\\(\\)\\s*(?:::|AS|as)/i]',
+    message:
+      'Interdit (invariant 1, contrat 11 §2) : PostgreSQL 16 n’a PAS de fonction uuidv7() native. Les UUID v7 sont générés côté APPLICATIF avec la lib `uuidv7`, client ET serveur.',
+  },
+  {
+    selector: "CallExpression[callee.object.name='crypto'][callee.property.name='randomUUID']",
+    message:
+      'Interdit (invariant 1) : `crypto.randomUUID()` produit un UUID v4, non ordonnable. Toute entité créable hors ligne exige un UUID v7 (`uuidv7()` de la lib `uuidv7`).',
+  },
+];
+
 const PAGINATION_SANS_DECALAGE = [
   // `qb.offset(20)`, et toute lecture de la propriété.
   { selector: "MemberExpression[property.name='offset']", message: MESSAGE_SANS_DECALAGE },
@@ -101,6 +124,39 @@ const PAGINATION_SANS_DECALAGE = [
   {
     selector: 'TemplateElement[value.raw=/\\bOFFSET\\s+(?:\\d|\\$|:|$)/i]',
     message: MESSAGE_SANS_DECALAGE,
+  },
+];
+
+const MESSAGE_ECRITURE_DEXIE =
+  'Interdit (05 §9.2-2, docs/conception/LOT_L5.md §2) : toute écriture locale passe par `ecrireLocal` / `appliquerDescente` (`local/ecriture.ts`), qui écrivent la ligne ET son opération d’outbox dans UNE transaction. Un écran qui écrit directement produit une donnée que la synchronisation ne remontera jamais — perdue, et découverte au montage du rapport. Pour `meta`, utilisez `ecrireMeta` / `effacerMeta` de `local/base.ts`.';
+
+// =============================================================================
+// HORLOGE DE L’APPAREIL — 05 §9.2, et le scénario @critique 05 §9.8
+// =============================================================================
+const HORLOGE_DE_L_APPAREIL = [
+  {
+    selector: "NewExpression[callee.name='Date'][arguments.length=0]",
+    message:
+      'Interdit (05 §9.2) : `new Date()` lit l’horloge de l’APPAREIL. Utilisez `maintenant()` ou `instantMs()` de `local/horloge.ts`, qui appliquent le décalage serveur — sans lui, une tablette déréglée de +3 h gagne tous les arbitrages de conflit (05 §9.4). `new Date(valeur)` AVEC argument reste autorisé : c’est une conversion, pas une lecture d’horloge.',
+  },
+  {
+    selector: "CallExpression[callee.object.name='Date'][callee.property.name='now']",
+    message:
+      'Interdit (05 §9.2) : `Date.now()` lit l’horloge de l’APPAREIL. Utilisez `instantMs()` (corrigé du décalage serveur) ou `instantLocalMs()` (durées mesurées sur l’appareil) de `local/horloge.ts`.',
+  },
+];
+
+// =============================================================================
+// ÉCRITURE DEXIE — 05 §9.2-2 : « CHAQUE écriture pousse une opération dans l’outbox »
+// =============================================================================
+const ECRITURE_DEXIE = [
+  {
+    // Objet MemberExpression ou CallExpression uniquement : `base.answers.put(…)`,
+    // `db.table('x').delete(…)`. Un objet identifiant simple (`unSet.add(x)`) passe
+    // — voir les angles morts déclarés au bloc qui consomme cette constante.
+    selector:
+      'CallExpression[callee.object.type=/MemberExpression|CallExpression/][callee.property.name=/^(put|add|delete|update|clear|bulkPut|bulkAdd|bulkDelete)$/]',
+    message: MESSAGE_ECRITURE_DEXIE,
   },
 ];
 
@@ -197,21 +253,7 @@ export default tseslint.config(
       // --- Invariant 1 : UUID v7 généré CÔTÉ APPLICATIF ---------------------
       // PostgreSQL 16 n'a pas de uuidv7() native (PG18 seulement) : toute tentative
       // de génération en SQL est une bombe à retardement silencieuse.
-      'no-restricted-syntax': [
-        'error',
-        {
-          selector: 'Literal[value=/uuid_generate_v7|uuidv7\\s*\\(\\)\\s*(?:::|AS|as)/i]',
-          message:
-            'Interdit (invariant 1, contrat 11 §2) : PostgreSQL 16 n’a PAS de fonction uuidv7() native. Les UUID v7 sont générés côté APPLICATIF avec la lib `uuidv7`, client ET serveur.',
-        },
-        {
-          selector:
-            "CallExpression[callee.object.name='crypto'][callee.property.name='randomUUID']",
-          message:
-            'Interdit (invariant 1) : `crypto.randomUUID()` produit un UUID v4, non ordonnable. Toute entité créable hors ligne exige un UUID v7 (`uuidv7()` de la lib `uuidv7`).',
-        },
-        ...PAGINATION_SANS_DECALAGE,
-      ],
+      'no-restricted-syntax': ['error', ...UUID_APPLICATIF, ...PAGINATION_SANS_DECALAGE],
     },
   },
 
@@ -226,6 +268,85 @@ export default tseslint.config(
     },
   },
 
+  // ===========================================================================
+  // COUCHE LOCALE TERRAIN — les « interdits outillés » de docs/conception/LOT_L5.md §4
+  // ===========================================================================
+  // Deux interdits que la note de conception L5 réclamait nommément (§4, ligne
+  // « Interdits outillés ») et que la revue croisée A29 a relevés comme absents
+  // (réserve R-L5a-5) :
+  //   ① l’horloge de l’appareil ne se lit que dans `local/horloge.ts` ;
+  //   ② Dexie ne s’écrit que dans `local/ecriture.ts` et `local/base.ts`.
+  // Ce ne sont pas des préférences de style : ce sont les deux invariants du socle
+  // offline, et une consigne que rien ne vérifie ne survit pas à quarante fichiers
+  // écrits par trois mains.
+  //
+  // TROIS BLOCS ET NON DEUX, ET C’EST LE PIÈGE QUI A ÉTÉ MESURÉ. En configuration
+  // à plat, le DERNIER bloc qui déclare `no-restricted-syntax` REMPLACE la règle
+  // pour les fichiers qu’il couvre. Une première version posait un bloc « horloge »
+  // puis un bloc « écriture » sur le MÊME glob : le second effaçait le premier, et
+  // `new Date()` repassait — vérifié sur un fichier sonde, qui ne remontait que
+  // deux erreurs sur quatre. Les trois blocs ci-dessous portent donc des globs
+  // DISJOINTS, chacun ré-étalant l’intégralité des sélecteurs qui le concernent.
+  // C’est le même piège que celui documenté en bas de ce fichier pour la
+  // pagination ; il coûte trois blocs et se paie une fois.
+  //
+  // CE QUE CES RÈGLES NE VOIENT PAS, dit AVANT le code :
+  //   · l’écriture par alias — `const t = base.answers; t.put(…)` : l’objet devient
+  //     un simple identifiant et échappe au sélecteur. Choix CONSERVATEUR et
+  //     délibéré — viser aussi les identifiants ferait rougir `unSet.add(x)`
+  //     partout, et une règle qui crie à tort finit désactivée ;
+  //   · l’horloge lue par une bibliothèque tierce ;
+  //   · les fichiers de test, exclus : ils fabriquent des jeux de données et des
+  //     horodatages déterministes, c’est leur métier.
+  {
+    // ① + ② — le cas général : ni horloge, ni écriture Dexie.
+    files: ['apps/field/src/**/*.{ts,tsx}'],
+    ignores: [
+      'apps/field/src/local/horloge.ts',
+      'apps/field/src/local/ecriture.ts',
+      'apps/field/src/local/base.ts',
+      '**/*.{test,spec}.{ts,tsx}',
+    ],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...UUID_APPLICATIF,
+        ...PAGINATION_SANS_DECALAGE,
+        ...HORLOGE_DE_L_APPAREIL,
+        ...ECRITURE_DEXIE,
+      ],
+    },
+  },
+
+  {
+    // `horloge.ts` EST l’exception à ① : le seul endroit autorisé à lire l’heure
+    // de l’appareil (05 §9.2). ② continue de s’appliquer à lui.
+    files: ['apps/field/src/local/horloge.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...UUID_APPLICATIF,
+        ...PAGINATION_SANS_DECALAGE,
+        ...ECRITURE_DEXIE,
+      ],
+    },
+  },
+
+  {
+    // Le port d’écriture et la base : les DEUX seuls modules autorisés à écrire
+    // dans Dexie. `base.ts` porte `meta`, qui ne se synchronise pas et n’a donc pas
+    // d’op ; `ecriture.ts` porte tout le reste, ligne + op dans UNE transaction.
+    // ① continue de s’appliquer à eux.
+    files: ['apps/field/src/local/ecriture.ts', 'apps/field/src/local/base.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...UUID_APPLICATIF,
+        ...PAGINATION_SANS_DECALAGE,
+        ...HORLOGE_DE_L_APPAREIL,
+      ],
+    },
+  },
   // --- Tests : Vitest / Playwright ------------------------------------------
   {
     files: ['**/*.{test,spec}.{ts,tsx}', '**/tests/**/*.{ts,tsx}', '**/e2e/**/*.{ts,tsx}'],

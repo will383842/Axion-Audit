@@ -168,9 +168,9 @@ describe('appliquerDescente — conservation du travail local (invariant 7, 05 �
     await appliquerDescente(lot(id, 'ancienne', '2026-09-02T08:00:00.000Z'));
     await appliquerDescente(lot(id, 'récente', '2026-09-02T08:30:00.000Z'));
     expect(await valeurLocale(base, id)).toBe('récente');
-    expect(
-      await lireMeta(base, `${CLES_META.prefixeDescenteConservee}${MISSION_ID}`),
-    ).toBeUndefined();
+    expect((await lireMeta(base, `${CLES_META.prefixeDescenteConservee}${MISSION_ID}`)) ?? 0).toBe(
+      0,
+    );
   });
 
   it('une ligne locale dont l’op a déjà été poussée (statut ≠ en_attente) redevient écrasable par une descente plus récente', async () => {

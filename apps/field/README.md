@@ -32,6 +32,7 @@ sont L5c (A23).
 | `src/local/port-sync.ts`       | `PortSync` **déclaré** ; implémentation **inerte** — L6a la REMPLACE, sous `src/sync/`          |
 | `src/app/**`                   | coquille, verrou, navigation sans routeur, registre `vues.ts` **append-only**                   |
 | `sw/service-worker.ts`         | précache du shell, des polices et des icônes ; **aucun cache d'exécution de `/api`**            |
+| `scripts/build-icones.mjs`     | icônes PWA **provisoires**, générées depuis les jetons de la charte (voir ci-dessous)           |
 
 ### Deux règles de socle que tout écran doit respecter
 
@@ -48,9 +49,25 @@ sont L5c (A23).
 - `portSyncInerte` rend `{ statut: 'indisponible' }`. **Jamais une pastille verte** : une pastille
   qui verdit sans serveur annonce plus qu'elle ne fait, et le prix se paie en journée d'entretiens.
 
+### Les icônes sont PROVISOIRES, et générées
+
+`scripts/build-icones.mjs` fabrique `public/icones/*.png` (192, 512, maskable,
+`apple-touch-icon`) à partir de `COULEURS_CHARTE` — aucune couleur en dur, aucune dépendance
+nouvelle (encodeur PNG sur `node:zlib`). Elles sont **ignorées par git** : ce sont des artefacts
+de construction, régénérés par `pnpm --filter @axion/field build`.
+
+**Pourquoi elles existent quand même** : sans icône, le manifeste n'est pas installable ; sans
+installation « Sur l'écran d'accueil », pas de persistance durable d'IndexedDB sur iPad (03 §22.1) ;
+sans persistance, aucune mission n'est embarquable (05 §31-2). C'était le bloquant B2 de la revue
+croisée A29.
+
+**Le dessin reste celui de Williams** (`DECISIONS.md` 2026-09-02) : le manifeste porte
+`"_provisoire": true`, et le remplacement sera une substitution de fichiers, sans une ligne de code
+à toucher.
+
 ### Construction
 
-`pnpm --filter @axion/field build` enchaîne `tsc` (app + service worker), `vite build`, puis
+`pnpm --filter @axion/field build` enchaîne `tsc` (app + service worker), `build-icones`, `vite build`, puis
 `scripts/build-sw.mjs` — Workbox 7 en `injectManifest`, **sans `vite-plugin-pwa`** (hors liste 11 §1,
 arbitrage A01). Le manifeste de précache ne peut être calculé qu'APRÈS que `dist/` existe : l'ordre
 n'est pas négociable.

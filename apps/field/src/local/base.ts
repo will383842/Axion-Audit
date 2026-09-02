@@ -102,8 +102,22 @@ export const CLES_META = {
   prefixeCurseurPull: 'sync:since:',
   /** Préfixe des lignes descendantes CONSERVÉES au profit du local (invariant 7). */
   prefixeDescenteConservee: 'sync:conservees:',
-  /** Missions dont `storage.persist()` a été accordé (05 §31-2). */
+  /**
+   * Missions dont les DONNÉES sont présentes sur cet appareil.
+   *
+   * DECISIONS.md 2026-09-02, « Mission embarquée signifie données présentes,
+   * jamais persistance accordée » : la marque n'est posée qu'après un premier
+   * pull réussi. Elle répond à « puis-je collecter hors ligne sur cette
+   * mission ? », et la seule réponse honnête dépend des données, pas du quota.
+   */
   prefixeEmbarquement: 'mission:embarquee:',
+  /**
+   * Missions pour lesquelles `storage.persist()` a été ACCORDÉ (05 §31-2).
+   *
+   * État DISTINCT du précédent, et c'est tout l'objet de la décision ci-dessus :
+   * le stockage prêt est une condition de l'embarquement, jamais l'embarquement.
+   */
+  prefixePersistance: 'mission:persistance:',
   /**
    * La version de schéma qui a RÉELLEMENT écrit cette base.
    *
@@ -119,9 +133,14 @@ export function cleCurseurPull(missionId: string): string {
   return `${CLES_META.prefixeCurseurPull}${missionId}`;
 }
 
-/** Clé de l'état d'embarquement d'une mission (05 §31-2). */
+/** Clé de la présence des DONNÉES d'une mission sur cet appareil. */
 export function cleEmbarquement(missionId: string): string {
   return `${CLES_META.prefixeEmbarquement}${missionId}`;
+}
+
+/** Clé de la persistance de stockage accordée pour une mission (05 §31-2). */
+export function clePersistance(missionId: string): string {
+  return `${CLES_META.prefixePersistance}${missionId}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

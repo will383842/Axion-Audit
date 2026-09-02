@@ -1550,3 +1550,33 @@ Impact crypto : aucun** (le jeton est le même, seul le transport change).
 clause du contrat 11 §3 non encore tenue. À planifier par A30 au brief de L7.
 
 **Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-C_
+
+### FICHE A-008 — Le coffre terrain chiffre sans AAD : une enveloppe n'est pas liée à sa ligne
+
+**Constat terrain (A24, 2026-09-02, relevé par A29) :** AES-256-GCM sans données authentifiées
+additionnelles. Une enveloppe déchiffrable l'est **quelle que soit la ligne où on la colle** : un
+attaquant qui écrit déjà dans IndexedDB peut déplacer une réponse d'une question à une autre sans que
+le déchiffrement le voie. Lier l'enveloppe à sa ligne exigeait un troisième paramètre et cassait la
+signature publiée `dechiffrer(e, s)` en pleine rencontre tests × code.
+
+**Valeur pour l'auditeur :** un durcissement, pas une faille du modèle de menace 06 §10 — la menace
+suppose un attaquant qui a déjà passé le verrou et le coffre. Mais une réponse déplacée d'une question
+à une autre est une donnée fausse qui ne se signale pas.
+
+**Proposition (étage 2) :** AAD = `table:id:colonne`, posée par le port d'écriture, vérifiée par
+`dechiffrer`. Migration locale des enveloppes existantes au ré-enveloppement. À arbitrer à **P-C**.
+**Coût estimé :** ≈ 0,3 j. **Impact schéma / API : aucun.** Impact `apps/field/src/local/**` : coffre,
+port, tests. Trace : `DECISIONS.md` 2026-09-02 « Aucun AAD sur AES-GCM ».
+
+### FICHE A-009 — L'icône de la PWA terrain est PROVISOIRE : le dessin reste à Williams
+
+**Constat (A29, 2026-09-02, B2) :** le manifeste livré par L5a n'avait aucune icône — non installable,
+donc `storage.persist()` refusé sur iPad, donc aucune mission embarquable. La décision du 2026-08-28
+réserve le dessin de l'icône à Williams et interdit le demi-manifeste. **Défaut appliqué sous la règle
+« silence vaut accord »** (`DECISIONS.md` 2026-09-02) : un aplat aux couleurs des tokens (terracotta
+sur ivoire), généré par `apps/field/scripts/build-icones.mjs` à partir de `COULEURS_CHARTE`, 192 /
+512 / maskable / `apple-touch-icon`, marqué `"_provisoire": true` dans le manifeste.
+
+**Ce qui reste dû, à Williams :** l'icône de charte. Le remplacement est une substitution de
+fichiers PNG, sans code. À cocher à la porte **P-C**.
+**Coût estimé :** 0 j côté code. **Impact schéma / API : aucun.**

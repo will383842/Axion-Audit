@@ -5500,3 +5500,105 @@ du §10.2 de la fiche P-B, réserve R-B12 levée). Précédence : 09 §5.2 (amen
 règle du pack sans objet — aucune section en conflit, deux sections complétées.
 Décideur : Williams.
 Impact spec : amendements horodatés de 02 §30.6 et 03 §32.4 ; sceau régénéré.
+
+## 2026-09-02 — [L5a] Revue croisée A29 : REFUSÉ, cinq bloquants sur l'axe PWA — verdict accepté
+
+A29 a relu les 59 fichiers de `lot/l5a` @ `ce4b29b`. Le coffre, le port d'écriture, la base
+versionnée, l'horloge et le verrou sont approuvables ; **la PWA elle-même ne fonctionne pas en
+déploiement** : B1 l'infra Caddy sert 404 sur `/sw.js` et le manifeste (bloc L0 « à supprimer le jour
+où L5 livre la PWA ») et un E2E `@critique` l'exige · B2 manifeste sans icône, non installable, donc
+`storage.persist()` refusé sur iPad et aucune mission embarquable · B3 écran d'installation
+inatteignable · B4 marque « embarquée » posée sur un embarquement refusé · B5 garde de mise à jour
+permissif par défaut et jamais branché. Dix réserves R-L5a-1 à 10.
+
+Options :
+
+1. **Accepter le verdict**, corriger les cinq bloquants dans l'incrément (B1 : L5a retire le bloc
+   Caddy et retourne l'E2E — c'est L5a qui livre la PWA, à lui d'ouvrir la porte, avec relecture A11),
+   trancher les réserves qui appellent une décision, rejouer la revue.
+2. Livrer L5a sans PWA servie et reporter à L5c.
+
+Arbitrage : **option 1.** L'option 2 ferait passer une porte à un socle « offline-first » qui ne
+démarre pas hors ligne — la contradiction est dans les termes. **Règle de précédence sans objet.**
+
+Décideur : A01, sur revue A29
+Impact spec : aucun. `infra/caddy/fronts.static.caddy` : bloc `@pwa_non_livree` retiré par L5a.
+
+## 2026-09-02 — [L5a] Le manifeste PWA sans icône de charte : une icône PROVISOIRE, tracée — ESCALADE SOUS DÉFAUT
+
+La décision du 2026-08-28 réserve le dessin de l'icône à Williams et interdit le demi-manifeste. Les
+icônes n'existent pas ; sans elles l'app n'est pas installable (B2).
+
+Options :
+
+1. **Icône provisoire générée** — un aplat aux couleurs de la charte (terracotta sur ivoire, lettre
+   du produit), 192/512/maskable + `apple-touch-icon`, marquée provisoire dans le manifeste et dans
+   `AMELIORATIONS.md`, **remplacée dès que Williams livre la sienne**.
+2. Attendre l'icône de Williams — l'app reste non installable entre-temps.
+
+Arbitrage : **option 1, sous la règle « silence vaut accord » du 2026-08-31, et signalée à
+Williams** : le dessin reste le sien, le remplacement est une substitution de fichiers sans code.
+Un manifeste complet avec une icône laide vaut mieux qu'un manifeste incomplet et vert.
+**Règle de précédence sans objet.**
+
+Décideur : **Williams — à confirmer** · défaut appliqué par A01
+Impact spec : aucun.
+
+## 2026-09-02 — [L5a] « Mission embarquée » signifie « données présentes », jamais « persistance accordée »
+
+`embarquement.ts` posait la marque `mission:embarquee` dès que `storage.persist()` était accordé, puis
+refusait le pull : `missionEmbarquee()` répondait oui sur une mission sans une ligne (B4).
+
+Options :
+
+1. **La marque n'est posée qu'après un premier pull réussi** ; la persistance accordée est un état
+   distinct (`persistance: 'accordee'`), affiché comme tel.
+2. Garder la marque comme aujourd'hui.
+
+Arbitrage : **option 1.** La question que la marque répond est « puis-je collecter hors ligne sur
+cette mission ? » ; la seule réponse honnête dépend des données, pas du quota. **Précédence :
+invariant 8** (aucune donnée ne vit sur un seul appareil — la marque en est le témoin, elle ne peut
+pas mentir).
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-02 — [L5a] Une ligne dont l'op est en ÉCHEC n'est jamais écrasée par une descente
+
+`appliquerDescente` ne protège que les ops `en_attente` ; une ligne dont l'op est `rejetee` ou
+`a_examiner` peut être écrasée par une descente plus récente (R-L5a-2). Ces statuts existent pour
+que rien ne sorte de la file sans réponse serveur.
+
+Options :
+
+1. **Toute ligne portant une op non `appliquee`** (`en_attente`, `rejetee`, `a_examiner`) est
+   conservée face à une descente, et comptée dans `conservees`.
+2. Seules les `en_attente` sont protégées.
+
+Arbitrage : **option 1.** Une op en échec est une saisie de l'auditeur que le serveur n'a pas encore
+acceptée ; l'écraser par une version serveur, c'est perdre la saisie sans que personne ne l'ait
+décidé. **Précédence : invariant 7.** Obligation transmise à L6b, qui consomme ce code.
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-02 — [L5a] Liste fermée §3.2 : `answerType`, `criticality`, `parentId` entrent ; le premier pull est descopé vers L6a
+
+R-L5a-1 : trois colonnes en clair hors liste (`missionQuestions.answerType`, `criticality`,
+`orgUnits.parentId`) — métadonnées de question et structure d'arbre, aucune personnelle, toutes
+nécessaires à l'index (type de saisie à afficher, criticité, hiérarchie). R-L5a-10 : le premier pull
+(11 §6, « pull mission ») est refusé par L5a avec un motif en commentaire, sans décision.
+
+Options :
+
+1. Les trois colonnes entrent dans la liste fermée ; le premier pull est descopé vers L6a, tracé.
+2. Les trois colonnes passent dans la charge chiffrée ; le premier pull reste dû à L5a.
+
+Arbitrage : **les trois colonnes entrent dans la liste fermée §3.2** (amendement daté de la note,
+même motif que `supprimeLe`/`answerId` : filtrer et afficher sans déchiffrer) ; **le premier pull
+est descopé de L5a vers L6a**, qui livre l'endpoint serveur qu'il consomme — L3d (figeage) est
+livré, l'obstacle restant est côté API. Le balayage d'étanchéité doit couvrir **les sept tables**
+(R-L5a-1), pas trois. **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun sur `/docs`. `docs/conception/LOT_L5.md` §3.2 amendé, daté.
