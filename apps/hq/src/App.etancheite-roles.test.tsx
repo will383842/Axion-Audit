@@ -29,11 +29,12 @@
 // =============================================================================
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, screen, within } from '@testing-library/react';
-import { apiErrorSchema, ERROR_CODES } from '@axion/shared';
 import {
-  NOMS_FINANCIERS_INTERDITS,
-  VALEURS_SENTINELLES,
-} from '../../api/tests/aide/sentinelle-financiere.js';
+  apiErrorSchema,
+  CHAMPS_FINANCIERS_SURVEILLES,
+  ERROR_CODES,
+  TABLE_FINANCIERE,
+} from '@axion/shared';
 import {
   chercherDansLeHtml,
   codesBrutsVisibles,
@@ -59,6 +60,31 @@ const ECRANS: readonly (readonly [string, string])[] = [
   ['accueil', ROUTES_CONSOLE.accueil],
   ['portefeuille', ROUTES_CONSOLE.portefeuille],
   ['mission', ROUTES_CONSOLE.mission(ID.missionTpe)],
+];
+
+/**
+ * Les NOMS interdits : les colonnes surveillées ET la table, dans leurs deux graphies —
+ * DÉRIVÉS de `@axion/shared`, jamais recopiés (la même source que la sentinelle de
+ * l'API, `apps/api/tests/aide/sentinelle-financiere.ts`). La console ne l'importe PAS :
+ * l'image Docker de `hq` ne contient pas `apps/api`, et un test qui ne compile que dans
+ * le monorepo complet est un test que le build d'image fait rougir (CI du 2026-09-02).
+ */
+const NOMS_FINANCIERS_INTERDITS: readonly string[] = [
+  ...CHAMPS_FINANCIERS_SURVEILLES,
+  ...TABLE_FINANCIERE,
+];
+
+/**
+ * Les leurres cherchés dans le HTML — les mêmes valeurs que la sentinelle de l'API,
+ * improbables et textuellement reconnaissables. Le faux serveur ne les sert JAMAIS :
+ * ici elles prouvent que rien de la console ne les fabrique de lui-même, et le témoin
+ * (§ « le balayage lui-même ») prouve que le balayage saurait les voir.
+ */
+const VALEURS_SENTINELLES: readonly string[] = [
+  '987654.21',
+  '13579.02',
+  'sentinelle_tjm',
+  '1234.56',
 ];
 
 /** Vocabulaire d'un écran de chiffrage — absent de L7a par construction (§18.1.4). */
