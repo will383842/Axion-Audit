@@ -2008,3 +2008,9 @@ Faits du bloc :
 - **Deux fautes de conduite du pilote, tracées** (110ᵉ entrée) : `ba9f258` commité avec une suite
   rouge sous le préfixe `feat` au lieu de `wip:` ; et des écritures dans le répertoire de travail
   d'un agent actif, alors que les trois autres agents, eux, travaillaient en worktree isolé.
+
+## 2026-09-02 06h20 — [chantier CONTENU / banque de questions] — hors pipeline code
+Dernier commit vert : e120357 (docs(banque): les onze reecritures d ancres appliquees, les cinq doctrines posees dans DECISIONS.md)   ·   Branche : contenu/banque-questions-vague-1   ·   Poussé : oui
+Tâche en cours : chantier au repos — 100 questions écrites, testées en cotation croisée à blanc (deux coteurs isolés), 11 ancres réécrites sur go de Williams, Q-B4-005 documentée comme délibérée (poids 0 + criticité importante = relevé qui remonte au rapport sans compter au score, régime silence-vaut-accord du 31/08).
+Prochaine action : obtenir de Williams l'arbitrage des 5 doctrines de cotation (DECISIONS.md, entrée du 2026-09-02 — une réponse « 1a, 2a… » suffit), puis tenir la passe humaine du 15/09 : deux coteurs humains indépendants, matériel complet dans docs/banque-questions/ (COTATION_CROISEE.md — sa section 5 reste à l'animateur seul).
+Tests rouges connus : aucun sur ce chantier (contenu pur, la grille de contrôle des 100 questions passe à zéro écart ; la suite de code n'est pas concernée par cette branche).
