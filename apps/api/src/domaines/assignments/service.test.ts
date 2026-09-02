@@ -56,7 +56,9 @@ describe('estSessionConduite — un cas par statut de l’énumération du 04', 
 describe('exigerAuditeurSiSessionConduite — planifiée sans auditeur possible, conduite avec', () => {
   it('@critique une session PLANIFIÉE sans auditeur passe — c’est exactement ce que le plan §32.4 produit', async () => {
     const garde = await chargerGarde();
-    expect(() => { garde({ status: 'non_demarre', conductedBy: null }); }).not.toThrow();
+    expect(() => {
+      garde({ status: 'non_demarre', conductedBy: null });
+    }).not.toThrow();
   });
 
   it('@critique une session EN COURS sans auditeur est refusée : 409, code `auditeur_requis`, message français', async () => {
@@ -84,14 +86,20 @@ describe('exigerAuditeurSiSessionConduite — planifiée sans auditeur possible,
 
   it('@critique une session TERMINÉE sans auditeur est refusée de la même façon', async () => {
     const garde = await chargerGarde();
-    expect(() => { garde({ status: 'termine', conductedBy: null }); }).toThrow(AppError);
+    expect(() => {
+      garde({ status: 'termine', conductedBy: null });
+    }).toThrow(AppError);
   });
 
   it('une session conduite AVEC auditeur passe — la garde ne refuse que l’absence', async () => {
     // Attrape une garde inversée, ou une garde qui refuserait tout ce qui n'est
     // pas planifié.
     const garde = await chargerGarde();
-    expect(() => { garde({ status: 'en_cours', conductedBy: uuidv7() }); }).not.toThrow();
-    expect(() => { garde({ status: 'termine', conductedBy: uuidv7() }); }).not.toThrow();
+    expect(() => {
+      garde({ status: 'en_cours', conductedBy: uuidv7() });
+    }).not.toThrow();
+    expect(() => {
+      garde({ status: 'termine', conductedBy: uuidv7() });
+    }).not.toThrow();
   });
 });
