@@ -670,7 +670,7 @@ const RX_JSON_INVALIDE = /"[^\n]*"(\.\.\.)? is not valid JSON/g;
  * borne que l'appelant ne contrôle pas — la LONGUEUR du message, propriété distincte
  * de l'erreur. Voir `nettoyerPileJournal`, et le pourquoi complet qui y est écrit.
  */
-const RX_DRIZZLE_PARAMS = /\nparams:[\s\S]*?(?=\n {4}at |$)/;
+const RX_DRIZZLE_PARAMS = /\nparams:[\s\S]*$/;
 
 /**
  * Emplacements de paramètres d'une requête préparée (`$1`, `$42`).
