@@ -5189,3 +5189,44 @@ Précédence : `CLAUDE.md` §3 (les sept points réservés, **explicitement pré
 gouvernance de session n'est pas dans le pack.
 Décideur : **Williams**, en énoncé direct.
 Impact spec : aucun amendement du pack. Régime de session, applicable immédiatement.
+
+## 2026-09-02 — [contenu/banque] Cinq doctrines de cotation révélées par la passe à blanc — réservées à Williams
+
+La cotation croisée à blanc du 02/09 (deux coteurs isolés, `docs/banque-questions/DEPOUILLEMENT_2026-09-02.draft.md`)
+a produit 22 écarts dont la quasi-totalité remonte à cinq règles que la banque n'a pas. Le
+`MODE_EMPLOI.md` de la banque s'interdit d'inventer (« rien n'est inventé ; en cas de divergence,
+le validateur fait foi ») : y écrire ces règles créerait de la doctrine absente de 03 §32.4, donc
+un amendement de pack — décision réservée par CLAUDE.md §3.2, hors du périmètre « silence vaut
+accord » du régime du 2026-08-31 (son point 4 : « le reste du §3 reste à moi »).
+
+Options :
+Pour chaque doctrine, l'option a) est celle que je recommande et appliquerais sur arbitrage.
+
+1. **Le silence de l'entreprise : NC ou 1 ?** (6 écarts, le seul défaut qui fait diverger un
+   drapeau rouge) — a) une pratique attendue dont l'entreprise ne peut rien montrer se cote 1 ;
+   NC est réservé à l'information matériellement non obtenue (refus, interlocuteur absent, pièce
+   hors délai) · b) NC dès que la question n'a pas été instruite en séance · c) statu quo, au
+   jugé du coteur.
+2. **Le système de référence dans un parc hétérogène** — a) on cote le système le plus défavorable
+   parmi ceux relevés, sauf guidance désignant explicitement « le dernier mis en service » ·
+   b) toujours le dernier mis en service · c) la moyenne du parc.
+3. **La règle des notes 2 et 4** (9 écarts d'un point) — a) la note 2 (resp. 4) exige qu'au moins
+   un élément de l'ancre 3 (resp. 5) soit établi, sinon on reste à l'ancre inférieure · b) notes
+   paires interdites, on cote 1/3/5 seulement · c) interpolation libre, statu quo.
+4. **La frontière NA / 1** — a) NA n'est permis que si la guidance de la question nomme le
+   prérequis structurel qui la rend sans objet, à compléter question par question · b) NA
+   interdit, tout se cote · c) NA au jugé.
+5. **L'agrégation multi-unités** — a) l'unité la plus défavorable fait la note, l'exception
+   favorable va au rapport · b) la pratique majoritaire fait la note, l'exception défavorable va
+   au rapport en mention obligatoire · c) une note par unité, agrégée par la mission (03 §27.1).
+
+Arbitrage : **EN ATTENTE — réservé à Williams.** Aucune des cinq doctrines n'est appliquée : les
+onze réécritures d'ancres du dépouillement (défauts de formulation, sans invention de règle) sont,
+elles, appliquées sur son go explicite du 02/09. Règle de précédence : sans objet — il ne s'agit
+pas d'un conflit entre sections du pack mais d'un vide de 03 §32.4 ; c'est précisément pourquoi la
+décision est réservée.
+
+Décideur : Williams
+
+Impact spec : aucun à ce jour. Si les doctrines sont retenues, amendement horodaté de 03 §32.4 à
+prévoir, puis report dans `MODE_EMPLOI.md` (qui redeviendra alors une transcription fidèle).

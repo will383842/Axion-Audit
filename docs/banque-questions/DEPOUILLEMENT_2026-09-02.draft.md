@@ -115,3 +115,12 @@ avec mention obligatoire de l'exception au rapport.
 - **La passe humaine du 15/09 reste due.** Elle réutilise les mêmes dossiers — la feuille
   d'animation s'enrichit des quatre plantés ratés (T4, G3, G5, G6), qui deviennent ses points à
   soulever d'office.
+
+---
+
+**Mise à jour du 02/09/2026, sur go explicite de Williams** : les onze réécritures du §3 sont
+**appliquées** aux CSV de la banque (grille de contrôle repassée : zéro écart, 100 questions).
+Les cinq doctrines du §2 sont **posées dans `DECISIONS.md`** (entrée du 2026-09-02, arbitrage
+réservé à Williams, aucune appliquée). La feuille d'animation (`COTATION_CROISEE.md` §5.4) est
+enrichie pour la passe humaine : ancres réécrites où l'attendu s'inverse, quatre plantés ratés à
+soulever d'office, doctrines à ne pas normer en séance.

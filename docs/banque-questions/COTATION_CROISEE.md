@@ -124,6 +124,30 @@ vu, entendu, obtenu ou pas obtenu. Toute la cotation reste à faire.
    cours d'exercice** : tout se corrige après, d'un bloc, sinon les deux grilles ne sont plus
    comparables.
 
+### 5.4 État après la passe à blanc du 02/09/2026 — consignes pour la passe HUMAINE
+
+La passe à blanc (deux coteurs-agents isolés, `DEPOUILLEMENT_2026-09-02.draft.md`) a déjà consommé
+une partie des pièges. La passe humaine du 15/09 rejoue les MÊMES dossiers, mais l'animateur adapte
+sa lecture :
+
+- **Onze ancres ont été réécrites depuis** (commit du 02/09) — dont les défauts plantés T5, T6, G2,
+  G7 et les trouvailles Q-B4-009, Q-B9-002, Q-B8-001, Q-B2-004, Q-B4-011, Q-B1-003/010, Q-B5-003.
+  Sur ces lignes, l'attendu s'inverse : **les coteurs humains doivent maintenant CONVERGER.** Une
+  divergence qui persiste sur une ancre réécrite signifie que la correction ne suffit pas — c'est
+  le constat le plus important que la passe humaine puisse produire.
+- **Quatre plantés sont passés inaperçus à blanc et se soulèvent D'OFFICE au dépouillement**, même
+  sans écart : **T4** (le support de vœux vaut-il « objectif écrit » ?), **G3** (les deux ancres de
+  Q-B9-003 restent vraies en même temps : « incomplet » et « ayant servi »), **G5** (la bascule de
+  rôle de l'assistant documentaire, décrite par les deux coteurs, tranchée par aucun), **G6** (la
+  lisibilité de la mention machine — corps 10 gris clair — éclipsée par son existence).
+- **Cinq doctrines sont en attente d'arbitrage** (`DECISIONS.md`, entrée du 2026-09-02) : silence
+  NC/1, système de référence, règle des notes 2 et 4, frontière NA/1, agrégation multi-unités.
+  **L'animateur ne les norme PAS en séance** : il laisse les coteurs humains s'y cogner et consigne
+  leur lecture spontanée — c'est une donnée d'arbitrage pour Williams, pas un point à corriger.
+- La passe à blanc a montré que les **13 drapeaux rouges de FIL-TPE convergent** entre coteurs
+  corrélés. La passe humaine doit confirmer sur des coteurs indépendants — c'est SA valeur ajoutée
+  propre, avec la découverte de défauts qu'aucun des deux exercices précédents n'a vus.
+
 ---
 
 *Les deux dossiers sont fictifs de bout en bout. Toute ressemblance serait fortuite — et surtout,
