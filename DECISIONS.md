@@ -5392,3 +5392,71 @@ portes.
 
 Décideur : **Williams**, par la parole « signe P-B » du 2026-09-02, sur verdict recommandé.
 Impact spec : aucun.
+
+## 2026-09-02 — [contenu/banque] Cinq doctrines de cotation révélées par la passe à blanc — réservées à Williams
+
+La cotation croisée à blanc du 02/09 (deux coteurs isolés, `docs/banque-questions/DEPOUILLEMENT_2026-09-02.draft.md`)
+a produit 22 écarts dont la quasi-totalité remonte à cinq règles que la banque n'a pas. Le
+`MODE_EMPLOI.md` de la banque s'interdit d'inventer (« rien n'est inventé ; en cas de divergence,
+le validateur fait foi ») : y écrire ces règles créerait de la doctrine absente de 03 §32.4, donc
+un amendement de pack — décision réservée par CLAUDE.md §3.2, hors du périmètre « silence vaut
+accord » du régime du 2026-08-31 (son point 4 : « le reste du §3 reste à moi »).
+
+Options :
+Pour chaque doctrine, l'option a) est celle que je recommande et appliquerais sur arbitrage.
+
+1. **Le silence de l'entreprise : NC ou 1 ?** (6 écarts, le seul défaut qui fait diverger un
+   drapeau rouge) — a) une pratique attendue dont l'entreprise ne peut rien montrer se cote 1 ;
+   NC est réservé à l'information matériellement non obtenue (refus, interlocuteur absent, pièce
+   hors délai) · b) NC dès que la question n'a pas été instruite en séance · c) statu quo, au
+   jugé du coteur.
+2. **Le système de référence dans un parc hétérogène** — a) on cote le système le plus défavorable
+   parmi ceux relevés, sauf guidance désignant explicitement « le dernier mis en service » ·
+   b) toujours le dernier mis en service · c) la moyenne du parc.
+3. **La règle des notes 2 et 4** (9 écarts d'un point) — a) la note 2 (resp. 4) exige qu'au moins
+   un élément de l'ancre 3 (resp. 5) soit établi, sinon on reste à l'ancre inférieure · b) notes
+   paires interdites, on cote 1/3/5 seulement · c) interpolation libre, statu quo.
+4. **La frontière NA / 1** — a) NA n'est permis que si la guidance de la question nomme le
+   prérequis structurel qui la rend sans objet, à compléter question par question · b) NA
+   interdit, tout se cote · c) NA au jugé.
+5. **L'agrégation multi-unités** — a) l'unité la plus défavorable fait la note, l'exception
+   favorable va au rapport · b) la pratique majoritaire fait la note, l'exception défavorable va
+   au rapport en mention obligatoire · c) une note par unité, agrégée par la mission (03 §27.1).
+
+Arbitrage : **EN ATTENTE — réservé à Williams.** Aucune des cinq doctrines n'est appliquée : les
+onze réécritures d'ancres du dépouillement (défauts de formulation, sans invention de règle) sont,
+elles, appliquées sur son go explicite du 02/09. Règle de précédence : sans objet — il ne s'agit
+pas d'un conflit entre sections du pack mais d'un vide de 03 §32.4 ; c'est précisément pourquoi la
+décision est réservée.
+
+Décideur : Williams
+
+Impact spec : aucun à ce jour. Si les doctrines sont retenues, amendement horodaté de 03 §32.4 à
+prévoir, puis report dans `MODE_EMPLOI.md` (qui redeviendra alors une transcription fidèle).
+
+## 2026-09-02 — [contenu/banque] Arbitrage des cinq doctrines de cotation : option a) sur les cinq
+
+Options :
+Celles de l'entrée du même jour « Cinq doctrines de cotation révélées par la passe à blanc —
+réservées à Williams ». Avant de répondre, Williams a demandé que les cinq questions lui soient
+posées une à une, en clair, avec les exemples vécus de la passe à blanc — ce qui a été fait ; le
+« 1a…5a » donné d'abord en bloc a été confirmé question par question, en connaissance de cause.
+
+Arbitrage : **1a, 2a, 3a, 4a, 5a** —
+
+1. le silence se cote 1, NC réservé à l'information demandée et matériellement non obtenue ;
+2. le système le plus défavorable fait la note, sauf guidance désignant « le dernier mis en service » ;
+3. la note 2 (resp. 4) exige au moins un élément établi de l'ancre 3 (resp. 5) ;
+4. NA n'existe que là où la guidance nomme le prérequis qui neutralise la question ;
+5. l'unité la plus défavorable fait la note, les unités conformes vont au rapport.
+   Application immédiate : `MODE_EMPLOI.md` §5bis (avec exception explicite au principe « rien n'est
+   inventé », renvoyant ici) ; mentions NA posées sur Q-B1-006 et Q-B4-013, contre-mention sur
+   Q-B5-011 ; la passe systématique des 100 guidances (doctrine 4) se fera avec les corrections de la
+   cotation croisée humaine du 15/09. Règle de précédence : sans objet — comblement d'un vide de
+   03 §32.4, aucune section du pack en conflit.
+
+Décideur : Williams
+
+Impact spec : amendement horodaté de 03 §32.4 À FAIRE — réservé au chantier gouvernance, le pack
+étant sous sceau (`check-pack-integrity`) : hors de portée de la branche de contenu. D'ici là,
+`MODE_EMPLOI.md` §5bis fait foi et renvoie à la présente entrée.

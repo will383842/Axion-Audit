@@ -124,6 +124,36 @@ Un drapeau rouge n'est jamais masqué par un bon score global (03 §32.1).
 
 ---
 
+## 5bis. DOCTRINE DE COTATION (arbitrage Williams du 2026-09-02 — `DECISIONS.md`)
+
+> Ces cinq règles comblent un vide de 03 §32.4, révélé par la cotation croisée à blanc du
+> 02/09/2026 (`DEPOUILLEMENT_2026-09-02.draft.md`). Elles font foi pour TOUTE cotation.
+> C'est l'exception assumée au principe « rien n'est inventé » du présent fichier : ces règles-ci
+> sont **arbitrées** (entrées `DECISIONS.md` du 2026-09-02), pas transcrites ; l'amendement du
+> pack (03 §32.4) reste à faire par le chantier gouvernance.
+
+1. **Le silence se cote 1, pas NC.** Une pratique attendue dont l'entreprise ne peut rien montrer
+   vaut la note plancher : ne rien pouvoir montrer EST le constat. `NC` est réservé à l'information
+   **demandée et matériellement non obtenue** — refus, interlocuteur absent, pièce hors délai.
+2. **Le système le plus défavorable fait la note.** Quand le parc est hétérogène, on cote le système
+   le moins bien tenu parmi ceux relevés : un audit ne moyenne pas les vigilances. Les systèmes bien
+   tenus vont au rapport. Exception : une guidance qui désigne explicitement « le dernier mis en
+   service » prime.
+3. **Les notes 2 et 4 se gagnent par une preuve.** La note 2 (resp. 4) exige qu'au moins UN élément
+   de l'ancre 3 (resp. 5) soit établi — sinon on reste à l'ancre inférieure. Au dépouillement, la
+   question « quel élément ? » doit avoir une réponse.
+4. **NA n'existe que là où la banque le prévoit.** Une question ne se déclare « sans objet » que si
+   sa guidance nomme le prérequis structurel qui la neutralise (à ce jour : Q-B1-006 et Q-B4-013 ;
+   Q-B5-011 précise au contraire que l'absence de représentants du personnel ne la rend PAS sans
+   objet). Toute question muette sur ce point se cote obligatoirement. La passe systématique sur les
+   100 guidances se fait avec les corrections de la cotation croisée humaine.
+5. **L'unité la plus défavorable fait la note.** Même logique que la règle 2 pour un terrain
+   multi-sites : l'unité où la pratique a cessé est le risque réel. Les unités conformes vont au
+   rapport comme preuve que la bonne pratique existe et peut s'étendre ; la couverture par unité
+   reste l'affaire de la mission (03 §27.1).
+
+---
+
 ## 6. CE QUI EST INTERDIT, ET POURQUOI
 
 - **Aucun nom de client, nulle part** — ni dans un code, ni dans un libellé, ni dans un exemple
@@ -165,4 +195,6 @@ node apps/api/scripts/import-banque-questions.mjs <chemin du fichier>
 ---
 
 *Transcrit de 03 M1.1, §32.1, §32.4, §36.4 et du validateur `packages/shared/src/banque-questions.ts`.
-Aucune règle n'a été inventée ; en cas de divergence, le validateur fait foi et ce fichier a tort.*
+Aucune règle n'a été inventée — à l'unique exception du §5bis, arbitré par Williams le 2026-09-02
+et tracé dans `DECISIONS.md` ; en cas de divergence sur le reste, le validateur fait foi et ce
+fichier a tort.*
