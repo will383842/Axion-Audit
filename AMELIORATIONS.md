@@ -1632,3 +1632,40 @@ sont donc des fiches, et leur correctif une PR à part, hors des trois branches.
   passe (`autocomplete="current-password"`), avec l'affichage temporaire attendu sur tablette.
 - **Coût estimé** : 0,2 j — une nature `secret` sur `ChampTexte`, remplacement des deux montages.
 - **Impact schéma/API** : aucun. `packages/ui` figé → PR dédiée après le dégel.
+
+## 2026-09-02 — [L7a / CI, étage 2, PROPOSÉE] Une panne de Docker Hub peint la porte en rouge, et rien ne le dit
+
+**Constat, mesuré et non supposé.** Sur `lot/l7a` à `bef11cc`, le run CI 33647967069 est ressorti
+`failure` avec **un seul job en échec sur dix-sept** : « 7 · constructibilité des 4 images / worker »,
+sur `ERROR: failed to solve: node:22.21.0-alpine: unexpected status from HEAD request to
+registry-1.docker.io: 502 Bad Gateway`. Les seize autres (lint, typecheck, unit, integration,
+couverture ≥ 90 %, e2e chromium, schema-diff, gitleaks, invariants, images api/hq/field) étaient
+verts. `gh run rerun 33647967069 --failed`, **sans une ligne de code changée**, a rendu le run
+`success` : 19 jobs verts, 1 sauté (deploy-staging, main uniquement), 0 échec — job worker
+`success` en 27 s (https://github.com/will383842/Axion-Audit/actions/runs/33647967069/job/100411638777).
+Diagnostic : indisponibilité du registre amont, pas un défaut du dépôt.
+
+**Pourquoi c'est un vrai problème de gouvernance, pas un incident.** Le §9bis conditionne le merge
+d'une porte à une CI verte, et le §9ter fait des tests « la vérité terrain ». Une panne d'un tiers
+produit exactement la même couleur qu'un vrai défaut : rouge. Le coût n'est pas la minute de
+rejeu, c'est le doute — et le réflexe qu'il installe, « relance, ça repassera », qui est le début
+d'une CI qu'on ne croit plus. C'est aussi ce qui vient de rendre FAUX le bloc `ETAT.md` du jour
+(« Tests rouges connus : aucun ») : le fichier disait le code, la CI disait le registre.
+
+**Valeur.** Un rouge de CI redevient un signal sur NOTRE code. Et l'étape 7 cesse de dépendre de la
+santé d'un registre public au moment précis où on la regarde.
+
+**Coût estimé.** 0,3 j : (1) épingler les images de base par **digest** (`node:22.21.0-alpine@sha256:…`)
+dans les quatre Dockerfiles — reproductibilité en prime, dans l'esprit du §1 `save-exact` ; (2) une
+politique de re-tentative bornée sur la seule étape de résolution d'image (jamais sur les tests —
+un test flaky se corrige, il ne se rejoue pas) ; (3) une ligne de journal distinguant « échec amont »
+d'« échec de dépôt », pour que la prochaine session n'ait pas à refaire ce diagnostic.
+
+**Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun.** Périmètre : `.github/workflows`
+et les quatre `Dockerfile` — chantier infra, **hors des trois branches de lot** (gouvernance du
+2026-09-02), donc PR dédiée.
+
+**Recommandation A30.** **PHASE 2** si la porte P-E est proche ; ABSORBÉE seulement si un chantier
+infra s'ouvre avant. Rien n'est implémenté ici : la fiche est proposée, pas anticipée (CLAUDE.md §3.7).
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-E_

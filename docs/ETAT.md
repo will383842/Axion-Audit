@@ -2450,3 +2450,22 @@ par A30 (A37 rejeu bref sur 0892b0a si A30 l'exige), puis A02 (traçabilité E1-
 sens : `formaterPourcentage` retirée = plus d'orphelin), puis PR lot/l7a → main.
 Tests rouges connus : aucun. À Williams : confirmer le nom d'en-tête `X-Axion-Client` avec A-006.
 Point 5-1 de la note L7 (trois cales) : résolu par fusion de L3, tracé dans l'entrée A37.
+
+## 2026-09-02 20h30 — [lot L7 / incrément L7a] — étape pipeline 4/7 (correction d'un état faux)
+Dernier commit vert : bef11cc (chore(etat): bloc L7a — fin de session propre, ordre de fusion figé)   ·   Branche : lot/l7a   ·   Poussé : oui
+Tâche en cours : CORRECTION — le bloc de 17h15 affirmait « Tests rouges connus : aucun » alors que la
+CI de bef11cc était ROUGE (run 33647967069). Mesure : UN job sur dix-sept en échec, « 7 ·
+constructibilité des 4 images / worker », sur `502 Bad Gateway` de registry-1.docker.io au HEAD de
+`node:22.21.0-alpine` — panne du registre amont, pas un défaut de code. `gh run rerun --failed`,
+sans une ligne changée : run `success`, 19 verts / 1 sauté / 0 échec. Fiche AMELIORATIONS déposée
+(étage 2, PROPOSÉE : épingler les images de base par digest + re-tentative bornée sur la seule
+résolution d'image, jamais sur les tests) — non implémentée, arbitrage Williams à P-E.
+L'ordre de fusion reste FIGÉ (DECISIONS 2026-09-02 [L7a] A37) : L3 → main d'abord, puis lot/l7a
+rebasé sur main. AUCUNE PR L7a avant. Aucun rebase tant que le pilote n'a pas annoncé la fusion L3.
+Prochaine action : préparer le contenu L7b (couverture par unité ET par type de source §27.1 —
+DEUX axes distincts, agrégation, export §36.3) sans toucher aux fichiers que le rebase remuera ;
+au signal de fusion L3 : `git rebase origin/main`, résoudre DECISIONS/AMELIORATIONS/ETAT en
+append-only « main d'abord », rejouer `npx vitest run --project interface apps/hq` (80 attendus,
+mesurés), pousser, signature de fin d'incrément A30.
+Tests rouges connus : aucun — vérifié par rejeu, pas par souvenir (run 33647967069 = success).
+À Williams : confirmer le nom d'en-tête `X-Axion-Client` avec la fiche A-006.
