@@ -112,6 +112,17 @@ export const CLES_META = {
    * qui explique pourquoi Dexie ne peut plus nous le dire lui-même.
    */
   versionSchema: 'schema:version',
+  // ── L5b (A22) — raccordement strictement nécessaire, append-only ─────────
+  /**
+   * L'identité de l'auditeur de cet appareil (`{id, profil}`), CHIFFRÉE comme le
+   * jeton : c'est le `conducted_by` de toute session créée ici (05 §9.9) et le
+   * `created_by` d'une note volante. Écrite par la connexion au siège.
+   */
+  utilisateur: 'auth:utilisateur',
+  /** La session ouverte à l'écran d'entretien — reprise instantanée (03 §17.4). */
+  sessionCourante: 'session:courante',
+  /** Préfixe de la question courante, une entrée par session (03 §17.4). */
+  prefixeQuestionCourante: 'session:question:',
 } as const;
 
 /** Clé du curseur de pull d'une mission donnée. */

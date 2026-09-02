@@ -32,3 +32,40 @@ import { cleanup } from '@testing-library/react';
 afterEach(() => {
   cleanup();
 });
+
+// -----------------------------------------------------------------------------
+// `window.matchMedia` — jsdom ne l'implémente pas, et un composant qui lit
+// `prefers-reduced-motion` ou la largeur d'écran (les trois zones de la session,
+// 03 §33.3, se réordonnent sous 900 px) lèverait `TypeError` au premier rendu.
+// Le shim répond « aucune requête ne correspond » : le rendu par défaut est
+// celui d'un écran large sans préférence — l'iPad en paysage, la cible du 03 §22.1.
+// Un test qui veut l'autre branche remplace `window.matchMedia` lui-même.
+// -----------------------------------------------------------------------------
+if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    configurable: true,
+    value: (query: string): MediaQueryList => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      dispatchEvent: () => false,
+    }),
+  });
+}
+
+// -----------------------------------------------------------------------------
+// `Element.prototype.scrollIntoView` — jsdom ne l'implémente pas non plus, et
+// l'écran d'entretien fait défiler la question courante à chaque déplacement
+// (Suivant / Précédent / raccourci). Sans cette cale, 25 des 29 cas de l'écran
+// rougissent sur un `TypeError` qui n'a rien à voir avec ce qu'ils éprouvent.
+// Posée ici (réserve A26, rencontre L5b du 2026-09-02) et non dans un fichier de
+// test : la discipline qui repose sur le souvenir de chaque auteur a un trou.
+// -----------------------------------------------------------------------------
+if (typeof Element !== 'undefined' && typeof Element.prototype.scrollIntoView !== 'function') {
+  Element.prototype.scrollIntoView = () => undefined;
+}

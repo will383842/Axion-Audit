@@ -5500,3 +5500,74 @@ du §10.2 de la fiche P-B, réserve R-B12 levée). Précédence : 09 §5.2 (amen
 règle du pack sans objet — aucune section en conflit, deux sections complétées.
 Décideur : Williams.
 Impact spec : amendements horodatés de 02 §30.6 et 03 §32.4 ; sceau régénéré.
+
+## 2026-09-02 — [L5b] Rencontre tests A26 / code A22 : les tests adaptent leur ÉCHAFAUDAGE, jamais leurs assertions
+
+Écrits en parallèle sans se voir (règle de croisement 09 §5.6), les tests d'A26 supposaient un module
+`session/entretien.ts` (`demarrerEntretien`, `enregistrerReponse`, `typeSaisieReponse`) et un écran
+`<EcranEntretien missionId interviewId>` ; A22 a livré `ecriture-session.ts` / `ecriture-reponses.ts`
+(`ecrireReponse`) / `valeurs.ts`, et un écran SANS prop qui lit la session courante mémorisée
+(`position.ts` — la reprise là où l'auditeur s'est arrêté, 03 §17) derrière `AccesEntretien.tsx`.
+Première rencontre : 28/28 rouges sur l'écran, deux fichiers `session/` qui ne chargent pas — une seule
+cause, le contrat nominal.
+
+Options :
+
+1. **Les tests adaptent imports, props et amorçage** (mémoriser la session avant de monter) et gardent
+   chaque assertion ; tout ce qui rougit ensuite est un défaut d'A22, corrigé par A22.
+2. A22 ajoute une façade `entretien.ts` et des props à l'écran pour satisfaire les tests tels quels.
+3. Chacun corrige moitié-moitié.
+
+Arbitrage : **option 1.** Un test est le contrat du comportement observable, pas du nom d'un module
+ni de la façon dont un écran reçoit son contexte ; une façade écrite pour un test est du code de
+production sans consommateur réel (garde `graphe-modules`). La lecture de la session courante en
+mémoire locale est le mécanisme de reprise du 03 §17, pas un caprice. **Règle de précédence sans
+objet.**
+
+Décideur : A01
+Impact spec : aucun. `vitest.setup.interface.ts` : shim `matchMedia` (jsdom), étage 1.
+
+## 2026-09-02 — [L5b] La valeur d'une réponse oui/non est `'oui' | 'non'`, jamais un booléen
+
+Rencontre A26/A22 : `valeurs.ts` typait `yes_no` en `z.boolean()` ; le 04 §7.3 ne fixe la forme de `v`
+que par le barème (`{"map":{"oui":5,"non":0}}`), et `packages/shared` expose déjà `VALEURS_OUI_NON`.
+
+Options :
+
+1. **`'oui' | 'non'`**, la clé du barème partagé — scorable au siège sans traduction, affichable telle
+   quelle en descente.
+2. `true | false`, traduit au scoring.
+
+Arbitrage : **option 1.** Une valeur qui ne se score pas avec le barème du 04 sans une table de
+correspondance est une valeur dans la mauvaise forme ; la traduction est un endroit de plus où « oui »
+peut devenir 0. **Précédence : 04 §7.3** (le barème est la spec de la valeur).
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-02 — [L5b] Trois doutes de la rencontre tranchés : note volante orpheline, question ad hoc, garde à l'écriture
+
+Constats A26 : (a) `DemandeNoteVolante.interviewId: string` alors que le 04 (P1-5) et `IndexAttachment`
+admettent `null` ; (b) la question ad hoc est placée en fin de parcours par l'écran, « juste après la
+courante » par le test ; (c) 37 cas rouges pour une seule cause — `ecrireReponse` recopie `value` sans
+`valeurTypeeSchema`, sans contrôle du type de question, de `allowRangeSnapshot`, des bornes, ni du
+motif de non-communication contre la liste fermée.
+
+Options :
+
+1. **(a) `interviewId: string | null`** comme le 04 — la capture hors session est L5c, mais le type ne
+   doit pas interdire ce que la base admet ; **(b) la question ad hoc s'insère juste APRÈS la courante**
+   (03 §17.5 : elle naît d'une réponse, elle se pose dans la foulée) ; **(c) la validation est une garde
+   à l'ÉCRITURE**, pas un typage de lecture — une saisie refusée n'écrit rien et ne dégrade pas la
+   valeur valide.
+2. (a) garder `string` ; (b) fin de parcours ; (c) valider au push seulement.
+
+Arbitrage : **option 1 sur les trois.** Sur (c) : la PWA est la seule à connaître la question au
+moment de la saisie ; valider au push, c'est découvrir hors ligne, des heures plus tard, qu'une
+cotation n'existait pas. **Précédence : invariant 7** (rien n'est écrasé par une saisie invalide) et
+**05 §9.3** (le contrat d'ops porte des valeurs valides). Les trois autres défauts (fourchette
+incohérente émise par l'écran, note existante effacée à la reprise, état d'erreur transitoire au
+premier rendu) ne sont pas des doutes : ce sont des défauts, corrigés par A22.
+
+Décideur : A01
+Impact spec : aucun.
