@@ -54,10 +54,3 @@ export function formaterDateCivile(date: string): string {
   const utc = new Date(Date.UTC(Number(annee), Number(mois) - 1, Number(jour)));
   return new Intl.DateTimeFormat(LOCALE, { dateStyle: 'medium', timeZone: 'UTC' }).format(utc);
 }
-
-/** Un pourcentage entier : 84 → « 84 % » (espace insécable, typographie française). */
-export function formaterPourcentage(numerateur: number, denominateur: number): string {
-  if (denominateur <= 0) return '—';
-  const INSECABLE = ' ';
-  return `${String(Math.round((numerateur / denominateur) * 100))}${INSECABLE}%`;
-}

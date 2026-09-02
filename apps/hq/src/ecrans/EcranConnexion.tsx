@@ -123,7 +123,6 @@ export function EcranConnexion({
             name="password"
             autoComplete="current-password"
             required
-            data-saisie-libre="vrai"
             value={motDePasse}
             onChange={(evenement) => {
               setMotDePasse(evenement.currentTarget.value);

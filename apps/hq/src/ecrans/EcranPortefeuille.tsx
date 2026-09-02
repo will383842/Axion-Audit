@@ -98,7 +98,7 @@ export function EcranPortefeuille(): ReactNode {
         {missions.length > 0 && (
           <span className="axn-entete-ecran__compteur">
             {missions.length} mission{missions.length > 1 ? 's' : ''}
-            {requete.hasNextPage ? ' affichées' : ''}
+            {requete.hasNextPage ? (missions.length > 1 ? ' affichées' : ' affichée') : ''}
           </span>
         )}
       </div>

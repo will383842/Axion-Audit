@@ -7126,3 +7126,32 @@ s'intitule « Pilotage mission — portefeuille ». **Règle de précédence san
 
 Décideur : A01
 Impact spec : aucun.
+
+## 2026-09-02 — [L7a] Revue croisée A37 : ACCEPTÉ SOUS RÉSERVE — un commit de fusion déguisé, des schémas recopiés, et l'ordre de fusion figé
+
+A37 a relu 36 fichiers (`a9dba96..d76c0a1`). **B1** : `63646f2`, étiqueté `feat(l7a)`, est un commit de
+FUSION (parents `main` et `lot/l3-suite`) — `lot/l7a` embarque L3 sans `ed8a852` (correctifs A51) ;
+un squash de L7a avant L3 livrerait L3 sous une autre étiquette, sans sa porte, dans sa version
+d'avant A51. **B2** : `apps/hq/src/api/contrats.ts:65-181` redéfinit 90 lignes de schémas que
+`@axion/shared` exporte sur cette même branche (11 §3 : « le front importe LES MÊMES schémas »), avec
+une justification devenue fausse. Cinq réserves (~0,3 j) : contradiction « tout est enregistré sur cet
+appareil » / « rien n'est saisi dans la console » (A-010), `formaterPourcentage` orpheline, accord
+« 1 mission affichées », état vide muet de l'avancement, `data-saisie-libre` sur un mot de passe.
+Doute : la résolution du point 5-1 de la note L7 s'est faite par fusion, non par rebase, sans trace.
+
+Options :
+
+1. **Ordre de fusion figé : L3 → `main`, puis `lot/l7a` rebasé sur `main`** avant toute PR L7a ;
+   B2 par ré-export depuis `@axion/shared` ; la contradiction hors-ligne retirée CÔTÉ CONSOLE (la
+   console n'affiche pas la phrase terrain), A-010 restant une fiche ; les quatre autres réserves
+   fermées dans l'incrément.
+2. Dégeler `packages/ui` pour A-010 maintenant.
+
+Arbitrage : **option 1.** La fusion de L3 dans L7a était le moyen le plus court de lever trois cales
+(point 5-1) ; l'étiqueter `feat` était une faute de trace, déclarée ici — la substance (une seule
+source de vérité pour les schémas) reste due, et B2 la rend concrète. Le gel de `packages/ui` a été
+posé pour que trois chantiers n'y écrivent pas en même temps ; le lever pour une phrase, c'est le
+lever pour tout. **Précédence : 11 §3** (B2) et **CLAUDE.md §7** (B1).
+
+Décideur : A01, sur revue A37
+Impact spec : aucun.

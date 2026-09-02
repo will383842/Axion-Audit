@@ -27,8 +27,13 @@ export interface EtatRequete {
 }
 
 export interface OptionsEtat {
-  /** L'état vide dit QUOI FAIRE (§17.6), pas seulement qu'il n'y a rien. */
-  readonly vide: { titre: string; description: string; actions?: ReactNode };
+  /**
+   * L'état vide dit QUOI FAIRE (§17.6), pas seulement qu'il n'y a rien.
+   * Optionnel : un écran qui rend UN objet (une mission, une entreprise) n'a pas
+   * d'état vide — l'absence y est un 404, donc une erreur. Sans `vide`, une
+   * requête aboutie et vide est rendue comme nominale.
+   */
+  readonly vide?: { titre: string; description: string; actions?: ReactNode };
   /** Bouton « Réessayer » et consorts, pour l'erreur ET le hors-ligne. */
   readonly actions?: ReactNode;
   /** Ajouté aux actions pour un 404 seulement : « revenir au portefeuille ». */
@@ -60,12 +65,22 @@ function actionPourCode(code: string): string {
  * La console ne travaille QU'en ligne (03 §22.3) : « hors ligne » n'y est pas un
  * mode de travail, c'est un constat — et §33.2 exige qu'il soit dit, avec ce qui
  * reste possible. Ici : rien à saisir, donc rien à perdre.
+ *
+ * Revue croisée A37 (DECISIONS 2026-09-02, [L7a]) : l'état est rendu par le
+ * composant GÉNÉRIQUE cause + action, PAS par la nature `hors-ligne` de
+ * `ZoneEtat`. Celle-ci délègue à `EtatHorsLigne`, dont le texte fixe est celui
+ * du terrain (« tout est enregistré sur cet appareil… ») — vrai pour la PWA,
+ * faux pour la console, où rien ne vit sur l'appareil. La console n'affiche que
+ * SON texte (invariant 5 : une phrase juste, pas une phrase importée). Rendre
+ * ce texte paramétrable dans `packages/ui` (figé) est la fiche A-010.
  */
-const CAPACITES_HORS_LIGNE: readonly string[] = [
-  'Rien n’est saisi dans la console : aucune donnée n’est en attente ici.',
-  'Les écrans affichés sont les derniers reçus du serveur.',
-  'La collecte terrain continue sur les appareils, avec ou sans réseau.',
-];
+const HORS_LIGNE_CONSOLE = {
+  titre: 'Hors ligne — le serveur est injoignable',
+  cause:
+    'Rien n’est saisi dans la console : aucune donnée n’est en attente ici. Les écrans affichés sont les derniers reçus du serveur.',
+  action:
+    'Vérifiez que ce poste est relié au réseau, puis réessayez. La collecte terrain continue sur les appareils, avec ou sans réseau.',
+} as const;
 
 export function etatDeRequete(requete: EtatRequete, options: OptionsEtat): EtatZone {
   if (requete.enAttente) {
@@ -83,9 +98,8 @@ export function etatDeRequete(requete: EtatRequete, options: OptionsEtat): EtatZ
       erreur instanceof ErreurReseau || (typeof navigator !== 'undefined' && !navigator.onLine);
     if (horsLigne) {
       return {
-        nature: 'hors-ligne',
-        titre: 'Hors ligne — le serveur est injoignable',
-        capacites: CAPACITES_HORS_LIGNE,
+        nature: 'erreur',
+        ...HORS_LIGNE_CONSOLE,
         ...(options.actions === undefined ? {} : { actions: options.actions }),
       };
     }
@@ -123,7 +137,7 @@ export function etatDeRequete(requete: EtatRequete, options: OptionsEtat): EtatZ
     };
   }
 
-  if (requete.vide) {
+  if (requete.vide && options.vide !== undefined) {
     return { nature: 'vide', ...options.vide };
   }
 

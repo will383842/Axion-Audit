@@ -46,8 +46,11 @@ export const ESPACES = {
     livraison: 'phase_2',
   },
   /** §22.3 dit « Chiffrage & devis » ; le nom de M9 (§18.1) est retenu tant que
-   *  l'espace est fermé : aucun mot du vocabulaire financier ne doit apparaître
-   *  sur un écran de L7a, même dans une entrée grisée (A36, étanchéité). */
+   *  l'espace est fermé. Ce que L7a tient (A36, étanchéité, invariant 3) : aucune
+   *  DONNÉE de `scoping_financials`, aucun NOM de champ financier, aucune URL
+   *  d'une route admin n'apparaît sur un écran — même dans une entrée grisée.
+   *  Le mot « chiffrage » est le titre d'un espace fermé, pas un indice de
+   *  contenu : un consultant lit qu'il existe un espace, jamais ce qu'il porte. */
   chiffrage: {
     numero: 4,
     titre: 'Cadrage & chiffrage',

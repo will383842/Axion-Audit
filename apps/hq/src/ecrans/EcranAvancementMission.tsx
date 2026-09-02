@@ -155,7 +155,7 @@ export function EcranAvancementMission({ id }: { id: string }): ReactNode {
   const etat = etatDeRequete(
     { enAttente: requete.isPending, erreur: requete.error, vide: false },
     {
-      vide: { titre: '', description: '' },
+      // Pas d'état vide : une mission absente est un 404, rendu comme erreur.
       actions: (
         <Bouton variante="secondaire" onClick={() => void requete.refetch()}>
           Réessayer
