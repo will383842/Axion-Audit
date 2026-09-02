@@ -2493,3 +2493,23 @@ Tests rouges connus : aucun — mesuré, pas supposé (CI success + 80/80 en loc
 EN ATTENTE D'ARBITRAGE (A01/Williams) : axe B de la couverture = `interviews.kind` (A30) ou
 `answers.source` (contrôle de lecture) ; A30 maintient `kind` — on ne planifie pas une provenance, et
 le critère du 07 exige que la couverture reflète le PLAN. Divergence remontée, non tranchée seule.
+
+## 2026-09-02 23h40 — [lot L7 / incrément L7a] — étape pipeline 4/7 (arbitrage rendu)
+
+Dernier commit vert : db8192f (docs(l7a): arbitrage rendu — la couverture compte des SESSIONS) · Branche : lot/l7a · Poussé : oui (8f2f225..db8192f)
+Tâche en cours : le bloc de 23h00 disait « EN ATTENTE D'ARBITRAGE » — **c'est faux depuis**, et un
+fichier d'état qui retarde est exactement le défaut que la fiche du hook Stop dénonce ce soir.
+ARBITRAGE RENDU (Williams, délégation du 2026-09-02 à la session pilote), il SÉPARE deux écrans :
+COUVERTURE (§27.1/§16.6, L7b) = `interviews.kind`, les 5 sources de collecte, confrontée au plan ·
+AGRÉGATION (critère L7-min, L7c) = `answers.source`, les 5 provenances. Jamais fusionnés — c'est leur
+COMPARAISON qui fait le §27.6. Preuve relevée ligne à ligne dans le 03 (l.548 titre, l.549 table à
+cinq lignes, l.559 même sujet des deux côtés) ; raison de fond : on ne planifie pas une provenance.
+`atelier` (6e kind, §32.6 l.673) : rendu HORS grille, réalisé seulement, hors complétude, jamais
+silencieux (marge de mission toujours affichée, y compris à zéro).
+Note `docs/conception/LOT_L7.md` §9 : l'amendement RECTIFIE ses propres §6.1, §6.3 et §8.3 au lieu de
+les laisser se contredire ; le texte de l'entrée DECISIONS.md est FIGÉ, prêt à coller après le rebase.
+Prochaine action : **sur signal explicite du pilote uniquement** (L3 dans main — `origin/lot/l3-suite`
+est encore à 65c66d7, A10 ferme la sonde F-21), `git rebase origin/main`, résoudre
+DECISIONS/AMELIORATIONS/ETAT en append-only « main d'abord », déposer l'entrée DECISIONS.md du §9.4,
+rejouer la suite console (**80 attendus, mesurés**), pousser. AUCUN rebase avant, AUCUNE PR avant.
+Tests rouges connus : aucun — mesuré (CI 33647967069 rejouée → success ; 80/80 en local, 11,07 s).
