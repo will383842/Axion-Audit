@@ -5230,3 +5230,30 @@ Décideur : Williams
 
 Impact spec : aucun à ce jour. Si les doctrines sont retenues, amendement horodaté de 03 §32.4 à
 prévoir, puis report dans `MODE_EMPLOI.md` (qui redeviendra alors une transcription fidèle).
+
+## 2026-09-02 — [contenu/banque] Arbitrage des cinq doctrines de cotation : option a) sur les cinq
+
+Options :
+Celles de l'entrée du même jour « Cinq doctrines de cotation révélées par la passe à blanc —
+réservées à Williams ». Avant de répondre, Williams a demandé que les cinq questions lui soient
+posées une à une, en clair, avec les exemples vécus de la passe à blanc — ce qui a été fait ; le
+« 1a…5a » donné d'abord en bloc a été confirmé question par question, en connaissance de cause.
+
+Arbitrage : **1a, 2a, 3a, 4a, 5a** —
+
+1. le silence se cote 1, NC réservé à l'information demandée et matériellement non obtenue ;
+2. le système le plus défavorable fait la note, sauf guidance désignant « le dernier mis en service » ;
+3. la note 2 (resp. 4) exige au moins un élément établi de l'ancre 3 (resp. 5) ;
+4. NA n'existe que là où la guidance nomme le prérequis qui neutralise la question ;
+5. l'unité la plus défavorable fait la note, les unités conformes vont au rapport.
+   Application immédiate : `MODE_EMPLOI.md` §5bis (avec exception explicite au principe « rien n'est
+   inventé », renvoyant ici) ; mentions NA posées sur Q-B1-006 et Q-B4-013, contre-mention sur
+   Q-B5-011 ; la passe systématique des 100 guidances (doctrine 4) se fera avec les corrections de la
+   cotation croisée humaine du 15/09. Règle de précédence : sans objet — comblement d'un vide de
+   03 §32.4, aucune section du pack en conflit.
+
+Décideur : Williams
+
+Impact spec : amendement horodaté de 03 §32.4 À FAIRE — réservé au chantier gouvernance, le pack
+étant sous sceau (`check-pack-integrity`) : hors de portée de la branche de contenu. D'ici là,
+`MODE_EMPLOI.md` §5bis fait foi et renvoie à la présente entrée.
