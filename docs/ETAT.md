@@ -2450,3 +2450,29 @@ puis ouvrir la PR lot/l3-suite → main (Williams fusionne, tag v0.l3). L3 fusio
 Tests rouges connus : aucun (l0-restauration instable en CI, fiche A-012 sur lot/l5a — relancer une fois).
 Dettes : A-006 cookies httpOnly (backend, après PR L3) ; F-15..F-18 A51 ouverts (mineurs, F-18 = doute
 Williams) ; nom d'en-tête X-Axion-Client à confirmer par Williams avec A-006.
+
+## 2026-09-02 23h30 — [lot L3 / C1] — étape pipeline 6/7 (contrôle d'acceptation A02 fait)
+Dernier commit vert : e2e97b9 (chore(l3): verify lance enfin les trois projets vitest) · Branche : lot/l3-suite · Poussé : oui
+Tâche en cours : L3 fermé côté équipe. `pnpm verify` COMPLET vert, code 0 — unit 666/666, interface
+447/447, integration 563/563, e2e 36/36 = **1 712 tests, 0 rouge, 0 skippé**. Les trois sondes A51
+(F-19 chrono ×10, F-20 cellule piégée, F-21 arbre R→A→B→C) écrites par A16 et **prouvées par bascule**
+sur ed8a852 : chacune a rougi avec le message exact du défaut, F-21 rendant `expected 200 to be 409`
+avec `enfantsReattaches:1`. A02 : 🟢 ACCEPTÉ (§K bis de TRACABILITE_E1-E47.md), R-L3-1 à R-L3-5 levées
+sur preuve CI (runs 33638166614 et 33645714484, jobs couverture et schema-diff verts).
+Prochaine action : ouvrir la PR lot/l3-suite → main et transmettre son numéro au pilote — Williams
+seul fusionne et pose le tag v0.l3. L3 fusionne AVANT L7a et L5a.
+Tests rouges connus : aucun.
+DEUX SESSIONS ONT ÉCRIT DANS CE WORKTREE CE SOIR — à lire avant de reconstituer quoi que ce soit.
+Entre 22h37 et 22h39, la ligne 673 de packages/shared/src/redaction.ts a porté une variante absente de
+tout commit du dépôt, qui rouvrait F-20 (terminateur falsifiable). Un `git add -A` de sauvegarde l'a
+figée (cd19fb9) et un commit d'empreinte vide en a hérité l'arbre (e8fb708) : elle s'est donc trouvée
+EN TÊTE de branche, localement. RIEN N'A ÉTÉ POUSSÉ pendant l'incident — origin est resté à 65c66d7.
+Refermée par 7e5fa18, commit ADDITIF (ni reset, ni revert, ni restauration de mémoire : l'arbre de
+travail contenait déjà la bonne ligne). Depuis : indexation PAR CHEMINS, jamais `git add -A`.
+DÉFAUT DE GARDE FERMÉ AU PASSAGE : `pnpm verify` ne lançait que 2 des 3 projets vitest — les 26
+fichiers du projet `interface` n'étaient exécutés par aucun script (447 tests, tous verts, mais
+invérifiables). Câblé + contrôle 6 dans check:test-projects, bascule prouvée. Modifier `verify` touche
+le contrat d'ops du §3-2 : fait sous délégation de Williams, tracé dans DECISIONS.md.
+Dettes ouvertes, non bloquantes : F-15..F-18 (A51, mineurs, F-18 = doute Williams) · A-006 cookies
+httpOnly (son en-tête est tranché : X-Axion-Client) · R-B8 axe-core avant le premier écran L5 ·
+R-L3-10 enveloppe Playwright du fil rouge, à trancher par A01 avant P-C.

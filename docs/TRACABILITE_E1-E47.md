@@ -2187,3 +2187,83 @@ couverture, `schema:diff` ni les E2E — mandat sans Docker, et c'est écrit au 
 
 _Passe effectuée le 2026-09-02 par A02, gardien de la spécification. Aucune ligne datée antérieure
 n'a été modifiée._
+
+# K bis. LOT L3 — SECONDE PASSE A02, 2026-09-02, SUR `lot/l3-suite` @ `e2e97b9`
+
+**Ce que cette passe ajoute à §K** : §K portait sur `3742eef` et n'avait **exécuté ni l'intégration,
+ni la couverture, ni `schema:diff`, ni les E2E** (mandat sans Docker). Celle-ci les a tous exécutés.
+Elle couvre en outre les quatre commits postérieurs : les correctifs A51 (`ed8a852`, `58231bb`), les
+trois sondes qui les prouvent (`52aaa2e`) et la réparation du garde `verify` (`e2e97b9`).
+
+## K bis.1 — Sens 1 (exigences → code) : rien de neuf n'est dû
+
+Les quatre commits ne déplacent **aucune exigence** : ils ferment des défauts sur du code déjà
+rattaché. E33 (sécurité/RGPD) et E42 (RGPD renforcé) gagnent une **preuve exécutable** là où il n'y
+avait qu'un correctif — F-20 est désormais gardé par un pino réel, F-19 par un compteur, F-21 par une
+requête de graphe en base. E43 (conventions) est renforcé par le contrôle 6 de `check:test-projects`.
+
+## K bis.2 — Sens 2 (code → exigences) : trois fichiers neufs, trois rattachés
+
+| Fichier livré depuis `3742eef` | Exigences citées | Verdict |
+| --- | --- | --- |
+| `packages/shared/src/temps.test.ts` (191 l.) | E33, E43, E46 | **rattaché** — sonde A51 F-19 |
+| `apps/api/src/redaction-journal-pile.test.ts` (165 l.) | E33, E42, E46 | **rattaché** — sonde A51 F-20 |
+| `+152 l.` dans `l3c-org-units.integration.test.ts` | E46, E19, E45, E31, E33 (en-tête du fichier) | **rattaché** — sonde A51 F-21 |
+| `scripts/check-test-projects.mjs` (+73 l., contrôle 6) | E36, E43 (en-tête du fichier) | **rattaché** |
+
+**Aucun code orphelin.** `pnpm check:tracabilite` vert dans le `verify` complet.
+
+## K bis.3 — Le défaut que §K.4 avait sous les yeux sans le voir
+
+§K.4 écrit : « Fichiers de test du dépôt : **74** — interface 26 · unit 22 · integration 23 ·
+playwright 3, **tous captés** ». La ligne est **exacte et trompeuse** : les 26 fichiers `interface`
+étaient bien *captés par un projet*, et ce projet n'était **lancé par aucun script** — ni `pnpm test`,
+ni `verify`, ni le hook pre-push. Le gardien a donc compté, dans son propre tableau de synthèse, 26
+fichiers qu'aucun garde n'exécutait, et les a comptés comme couverts.
+
+Ce n'est pas un reproche au gardien : c'est la démonstration que le contrôle sur lequel il s'appuyait
+répondait à une **autre question que celle qu'il croyait poser**. Mesure du 2026-09-02 :
+`npx vitest run --project interface` → **26 fichiers, 447 tests, 447 verts, 0 rouge**. Le trou n'avait
+rien cassé ; il avait rendu 447 cas **invérifiables**. Fermé par `e2e97b9` (contrôle 6 + câblage),
+tracé dans `DECISIONS.md` du 2026-09-02.
+
+## K bis.4 — Levée de R-L3-1 et R-L3-2, sur preuve
+
+| Réserve | Verdict | Preuve citée |
+| --- | --- | --- |
+| **R-L3-1** — couverture ≥ 90 % déclarée dans un message de commit, pas mesurée | ✅ **LEVÉE** | Run CI **33638166614** (`ed8a852`), job **« couverture ≥ 90 % (modules critiques — 09 §3) » = success**, confirmé par le run **33645714484** (`65c66d7`), même job vert. La mesure n'est plus une déclaration : c'est un job bloquant, vert, sur deux commits |
+| **R-L3-2** (= R-B7) — descente de `0014` jamais exécutée | ✅ **LEVÉE** | `.github/workflows/ci.yml` porte désormais **trois garde-fous de migration** dans le job `6 · schema-diff` : descente de la dernière migration sur base vide (`--down`), cycle up → down → re-up comparé, et **descente de `0014` sur une base PEUPLÉE** — le seul cas qui compte, puisque cette descente est un `DO $$` qui compte les lignes et lève `not_null_violation`. Job **`6 · schema-diff` = success** sur les deux runs ci-dessus |
+| **R-L3-3** — README non touché, 21 routes non documentées | ✅ **LEVÉE** (dès `a9dba96`) | `grep -c "v1/missions\|v1/org-units" apps/api/README.md` → **19** ; plus aucune ligne « À venir » pour L3 |
+
+## K bis.5 — DoD transverse (CLAUDE.md §5), cochée par exécution
+
+| Critère | Verdict | Mesure |
+| --- | --- | --- |
+| lint + typecheck stricts = 0 erreur | ✅ | `pnpm verify` — segments `lint`, `format:check`, `typecheck` verts |
+| tous les tests verts, **aucun skippé** | ✅ | **1 712 tests** : unit **666/666** (25 f.) · interface **447/447** (26 f.) · integration **563/563** (23 f.) · e2e **36/36**. `check:no-skipped-tests` vert |
+| couverture ≥ 90 % modules critiques, **mesurée** | ✅ | job CI « couverture ≥ 90 % » vert (voir R-L3-1) |
+| migrations up/down exécutées | ✅ | job `6 · schema-diff` vert, trois garde-fous de migration (voir R-L3-2) |
+| 4 états par écran (§33.2) | ✅ sans objet à L3 | L3 ne livre aucun écran ; les 4 états sont gardés par `packages/ui` (`EtatVide`, `EtatErreur`, `EtatHorsLigne`, `Squelette`), **désormais réellement exécutés** |
+| axe-core vert | 🟡 **R-B8, sans objet à L3** | aucun écran livré ; échéance avant le premier écran L5 |
+| `@filrouge` vert sur FIL-TPE **ET** FIL-GC | ✅ | `l3-filrouge.integration.test.ts`, 11 tests verts sur les deux fixtures, dans le `verify` complet |
+| README de l'app à jour | ✅ | voir R-L3-3 |
+| aucun TODO/FIXME sans entrée | 🟡 **R-B9 inchangée** | 3 marqueurs, tous adossés à une décision ; aucun ajouté par L3 |
+| diff schéma-vs-04 = zéro écart | ✅ | job `6 · schema-diff` vert |
+
+## K bis.6 — Synthèse chiffrée au 2026-09-02, après `verify` complet
+
+| Mesure | Valeur | Source |
+| --- | --- | --- |
+| Fichiers de test | **77** — interface 26 · unit 25 · integration 23 · playwright 3, **tous captés ET tous lancés** | `pnpm check:test-projects` (contrôle 6 inclus) |
+| Tests exécutés, tous projets | **1 712 / 1 712** | `pnpm verify`, code de sortie **0**, 23h12 |
+| Tests désactivés ou annulés | **0** | `pnpm check:no-skipped-tests` |
+| Entrées `DECISIONS.md` | **182**, toutes au format 11 §9bis | `pnpm check:decisions` |
+| Projets vitest déclarés / lancés par `verify` | **3 / 3** (était 3 / 2) | contrôle 6, bascule prouvée |
+
+**Verdict A02, seconde passe : 🟢 ACCEPTÉ.** Les deux sens sont tenus, aucun code orphelin, la DoD est
+cochée par exécution et non par lecture, R-L3-1/2/3 sont levées sur preuve citable. Restent ouvertes
+et **non bloquantes pour L3** : R-B8 (axe-core, sans objet ici), R-B9 (3 TODO adossés), R-L3-10
+(enveloppe Playwright du fil rouge, à trancher par A01 avant P-C), F-15 à F-18 d'A51 (mineurs).
+
+_Passe effectuée le 2026-09-02 par A02, gardien de la spécification, sur mandat AVEC Docker. Aucune
+ligne datée antérieure n'a été modifiée._
