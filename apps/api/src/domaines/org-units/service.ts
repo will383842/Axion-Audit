@@ -75,6 +75,7 @@ import {
   positionMax,
   reattacherEntretiens,
   reparenterEnfants,
+  verrouillerMission,
   type LigneUniteOrg,
   type NouvelleUniteOrg,
 } from './depot.js';
@@ -97,9 +98,23 @@ function incoherenceInterne(): AppError {
   return new AppError('INTERNAL_ERROR', 'Une erreur interne est survenue.');
 }
 
-/** Refus commun quand la mission de l'URL n'existe pas (ou est supprimée). */
-async function exigerMission(executeur: ExecuteurSql, missionId: string): Promise<void> {
-  if (!(await missionVivante(executeur, missionId))) {
+/**
+ * Refus commun quand la mission de l'URL n'existe pas (ou est supprimée).
+ *
+ * `sousVerrou` lit la ligne `missions` `FOR UPDATE` au lieu de la lire simplement :
+ * réservé aux chemins qui DÉCIDENT ensuite d'une écriture d'après un décompte de
+ * l'arbre (voir `importerLArbre`, étape ①). Une lecture ordinaire ne le prend pas —
+ * verrouiller pour lister ferait attendre des consultations derrière une écriture.
+ */
+async function exigerMission(
+  executeur: ExecuteurSql,
+  missionId: string,
+  sousVerrou = false,
+): Promise<void> {
+  const vivante = sousVerrou
+    ? await verrouillerMission(executeur, missionId)
+    : await missionVivante(executeur, missionId);
+  if (!vivante) {
     throw new AppError('NOT_FOUND', MESSAGE_MISSION_INTROUVABLE);
   }
 }
@@ -818,7 +833,10 @@ function construireRapport(
  * fichier est-il bon, et peut-il l'importer — sans avoir touché à son arbre.
  *
  * ── L'ORDRE DES SIX ÉTAPES ──────────────────────────────────────────────────
- *  1. la mission existe (404 sinon) ;
+ *  1. la mission existe (404 sinon) — **et, en mode réel, sa ligne est lue
+ *     `FOR UPDATE` AVANT le décompte** : c'est ce verrou, et non le décompte, qui
+ *     rend le garde-fou vrai face à deux imports concurrents (le mode à blanc s'en
+ *     passe : il n'écrit rien) ;
  *  2. l'arbre est vide ou réduit à sa racine d'office — sinon **409 en mode réel**,
  *     et en mode à blanc on poursuit en notant l'obstacle ;
  *  3. **passe 1** — analyse pure du contenu, puis résolution des référentiels ;
@@ -838,8 +856,28 @@ export async function importerLArbre(
   const maintenant = new Date();
 
   const resultat = await db.transaction(async (tx) => {
-    // ① La mission.
-    await exigerMission(tx, missionId);
+    // ① La mission — et, EN MODE RÉEL, son VERROU.
+    //
+    // ═══════════════════════════════════════════════════════════════════════════
+    // LA RÈGLE, ÉCRITE ICI UNE FOIS : TOUTE ROUTE QUI DÉCIDE SUR UN DÉCOMPTE
+    // D'ARBRE LIT LA MISSION `FOR UPDATE`.
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Le garde-fou ② compte les unités PUIS décide d'en insérer : c'est un
+    // lire-décider-écrire, et `org_units` ne porte aucun `UNIQUE` qui rattraperait
+    // la course. Sans ce verrou, deux imports concurrents comptent tous deux « arbre
+    // vide », passent tous deux le garde-fou, et la mission se retrouve avec DEUX
+    // arbres — qu'aucune route ne sait réparer, et que l'invariant 7 interdit de
+    // corriger en supprimant l'un des deux. Le verrou porte sur la MISSION, comme au
+    // figeage (`questionnaire/depot.ts`, `lireMissionPourFigeage`), parce qu'on ne
+    // verrouille pas des lignes qui n'existent pas encore : le second appel attend le
+    // commit du premier, compte n non nul, et sort en 409.
+    //
+    // **Le mode à blanc ne le prend PAS, et c'est délibéré : il n'écrit rien.** Il
+    // n'a donc aucune décision d'écriture à sérialiser, et le verrouiller ferait
+    // attendre un simple contrôle de fichier derrière un import réel en cours.
+    //
+    // Posé le 2026-09-02 — revue croisée A17, constat B-2.
+    await exigerMission(tx, missionId, !verification);
 
     // ② Le garde-fou de ré-import.
     //

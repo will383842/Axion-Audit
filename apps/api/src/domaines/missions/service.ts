@@ -500,8 +500,10 @@ function nommerTransition(depuis: StatutMission, vers: StatutMission): string {
  * ── `details[]` : CE QUE CHAQUE REFUS Y MET, ET POURQUOI ─────────────────────
  *   · `conditions_non_remplies` — **CHAQUE** condition manquante, jamais la
  *     première seule (`LOT_L3.md` §3b) : s'arrêter au premier manque imposerait à
- *     l'utilisateur autant d'allers-retours qu'il y a de manques. `path` porte le
- *     CODE de la condition, `message` son libellé français ;
+ *     l'utilisateur autant d'allers-retours qu'il y a de manques. `path` vaut
+ *     `'conditions'` pour toutes, `code` porte le CODE de la condition et
+ *     `message` son libellé français — convention transverse du 2026-09-01,
+ *     appliquée le 2026-09-02 ;
  *   · `motif_manquant` — une entrée sur `path: 'motif'`, qui dit quel champ
  *     remplir ;
  *   · `transition_inexistante` — les deux états, `path` disant lequel (`depuis` /
@@ -563,8 +565,15 @@ function refusEnErreur(
       return new AppError(
         'ILLEGAL_STATE_TRANSITION',
         `Le passage ${trajet} est refusé : toutes les conditions ne sont pas remplies.`,
+        // `path` nomme le POINT de l'erreur, `code` la cause machine, `message` la
+        // phrase française affichable telle quelle : convention transverse du
+        // 2026-09-01 (« `details[].code` devient la convention »), appliquée ici le
+        // 2026-09-02 sur constat R-L3-2 de la revue croisée. Le code de condition
+        // vivait auparavant dans `path`, d'où aucun front ne pouvait le lire sans
+        // deviner la convention de la route.
         conditionsNonRemplies.map((code) => ({
-          path: code,
+          path: 'conditions',
+          code,
           message: LIBELLES_CONDITION[code],
         })),
       );

@@ -400,6 +400,58 @@ async function appeler(
   return { statut: reponse.statusCode, code, message, details, corps: reponse.body };
 }
 
+/**
+ * Exige qu'un refus `ILLEGAL_STATE_TRANSITION` nomme EXACTEMENT les conditions
+ * manquantes attendues — et rien qu'elles — sous la forme retenue à la revue
+ * croisée A17 (`DECISIONS.md` 2026-09-02) :
+ *
+ *   `{ path: 'conditions', code: <code de condition>, message: <libellé français> }`
+ *
+ * Trois choses sont tenues, et chacune attrape une implémentation différente :
+ *   · le CHEMIN est `conditions` — un `path` qui porterait le code lui-même
+ *     (l'ancienne forme) ou une chaîne libre ne passe pas ;
+ *   · le CODE est exact et l'ensemble est comparé trié : une condition en trop
+ *     (« pour être sûr ») échoue autant qu'une condition oubliée ;
+ *   · AUCUN code brut n'apparaît dans un `message`, ni celui de l'erreur ni celui
+ *     d'un détail — même règle que pour `depuis`/`vers` : ces textes sont
+ *     affichés tels quels en clientèle (invariant 5, en-tête de
+ *     `packages/shared/src/errors.ts`).
+ *
+ * Le `JSON.stringify(details).includes(code)` d'avant ne tenait aucune des
+ * trois : il était vert avec le code dans `path`, dans `message`, ou noyé dans
+ * une liste plus longue que celle attendue.
+ */
+function exigerConditionsManquantes(reponse: Reponse, attendues: readonly string[]): void {
+  const entrees = reponse.details.filter((une) => une.path === 'conditions');
+  const codes = entrees.map((une) => une.code).sort();
+  expect(
+    codes,
+    'Le refus doit nommer CHAQUE condition non remplie (LOT_L3 §3b), et RIEN\n' +
+      'd’autre, dans `details[]` sous le chemin `conditions`, avec le code exact\n' +
+      'dans `details[].code`. Un refus muet oblige l’utilisateur à deviner ; un refus\n' +
+      'qui en dit trop lui fait corriger ce qui n’est pas cassé.\n' +
+      `Attendu : ${JSON.stringify([...attendues].sort())}\n` +
+      `details reçus : ${JSON.stringify(reponse.details)}`,
+  ).toStrictEqual([...attendues].sort());
+
+  expect(
+    entrees.every((une) => une.message.trim().length > 0),
+    'Chaque détail porte un libellé français NON VIDE dans `message` : c’est lui,\n' +
+      'et lui seul, que l’écran affiche.',
+  ).toBe(true);
+
+  const textes = [reponse.message ?? '', ...reponse.details.map((une) => une.message)];
+  const codesEnClair = attendues.filter((code) => textes.some((texte) => texte.includes(code)));
+  expect(
+    codesEnClair,
+    'Un code de condition apparaît dans un texte destiné à être AFFICHÉ. `message`\n' +
+      '— celui de l’erreur comme celui d’un détail — est lu tel quel par un auditeur\n' +
+      'en clientèle (invariant 5) : il porte des libellés français, jamais des\n' +
+      'identifiants techniques.\n' +
+      `message : « ${reponse.message ?? ''} »\ndetails : ${JSON.stringify(reponse.details)}`,
+  ).toStrictEqual([]);
+}
+
 // -----------------------------------------------------------------------------
 // LE CONTRAT DE SORTIE — RÉÉCRIT depuis le 04, jamais importé du code testé
 // -----------------------------------------------------------------------------
@@ -1537,12 +1589,10 @@ describe('POST /v1/missions/:id/status — surcharge admin (§32.2 « override a
         'condition du §32.2 n’existe pas.',
     ).toBe(409);
     expect(sansRien.code).toBe(ERROR_CODES.ILLEGAL_STATE_TRANSITION);
-    expect(
-      JSON.stringify(sansRien.details),
-      'Le refus doit dire CE QUI MANQUE (LOT_L3 §3b : « dans details[], CHAQUE\n' +
-        'condition non remplie »). Un refus muet oblige l’utilisateur à deviner, et\n' +
-        'chaque devinette est un aller-retour avec le support.',
-    ).toContain('etape_collecte_validee');
+    // Le refus doit dire CE QUI MANQUE (LOT_L3 §3b : « dans details[], CHAQUE
+    // condition non remplie ») — et le dire dans la bonne case : le code dans
+    // `details[].code`, le français dans `details[].message`.
+    exigerConditionsManquantes(sansRien, ['etape_collecte_validee']);
 
     const forceSansMotif = await changerStatut(admin.jeton, creee.id, 'en_analyse', {
       surcharge: true,
@@ -1682,18 +1732,16 @@ describe('POST /v1/missions/:id/status — conditions non livrées (03 §17.2 V2
     expect(refus.statut).toBe(409);
     expect(refus.code).toBe(ERROR_CODES.ILLEGAL_STATE_TRANSITION);
 
-    const dit = JSON.stringify(refus.details) + (refus.message ?? '');
-    const oubliees = [
+    // Les TROIS manques, et seulement eux : s'arrêter au premier ferait corriger
+    // l'utilisateur en trois allers-retours là où un seul message suffisait ; en
+    // ajouter un quatrième (`plan_entretiens_etabli`, sans support en Phase 1) lui
+    // ferait chercher une fonctionnalité qui n'existe pas — c'est la règle
+    // « condition absente = satisfaite » du test précédent, vue depuis le refus.
+    exigerConditionsManquantes(refus, [
       'etape_cadrage_validee',
       'etape_preparation_validee',
       'questionnaire_fige',
-    ].filter((code) => !dit.includes(code));
-    expect(
-      oubliees,
-      'Le refus ne nomme pas toutes les conditions manquantes. L’utilisateur corrigera\n' +
-        'la première, se heurtera à la deuxième, puis à la troisième : trois refus là où\n' +
-        'un seul message suffisait.',
-    ).toStrictEqual([]);
+    ]);
     expect(await statutEnBase(creee.id)).toBe('preparation');
   });
 

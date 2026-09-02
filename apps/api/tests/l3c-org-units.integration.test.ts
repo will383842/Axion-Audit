@@ -1826,6 +1826,97 @@ describe('POST /v1/missions/:id/org-units/import — cas piégeux', () => {
         'personne ne saurait rattacher après coup.',
     );
   });
+
+  it('@critique deux imports SIMULTANÉS sur une mission neuve : un seul aboutit, et il n’y a qu’UN arbre', async () => {
+    // ═════════════════════════════════════════════════════════════════════════
+    // LE CAS QUE LE TEST PRÉCÉDENT NE COUVRE PAS : LA COURSE SUR UN ARBRE VIDE.
+    // ═════════════════════════════════════════════════════════════════════════
+    // Le test précédent prouve que le garde « arbre non vide → 409 » EXISTE. Il ne
+    // prouve pas qu'il est SÉRIALISÉ. Or l'implémentation plausible mais fausse est
+    // celle-ci, en trois temps : (1) `SELECT count(*) FROM org_units WHERE
+    // mission_id = …` → 0 ; (2) décider « le garde passe » ; (3) ouvrir la
+    // transaction et insérer. Un « lire-décider-écrire » SANS VERROU. Elle est
+    // correcte dans 99,9 % des exécutions et fausse dans le cas qui arrive
+    // vraiment : le DOUBLE-CLIC sur « Importer », ou le RETRY RÉSEAU d'un
+    // navigateur dont la première requête a été coupée après l'envoi mais avant la
+    // réponse. Deux requêtes lisent zéro, deux passent le garde, deux insèrent — et
+    // la mission se retrouve avec DEUX ARBRES COMPLETS, chaque unité en double sous
+    // deux identifiants distincts.
+    //
+    // POURQUOI C'EST PIRE ICI QU'AILLEURS. Il n'existe AUCUNE route pour réparer :
+    // pas de `DELETE /v1/org-units/:id`, pas de `deleted_at` sur `org_units` (04),
+    // et le ré-import est lui-même refusé sur un arbre habité (test précédent). Le
+    // double arbre est donc DÉFINITIF pour l'utilisateur : tout entretien conduit,
+    // tout score par unité, se rattacherait au hasard à l'un des deux jumeaux.
+    //
+    // CE QUE LE CODE DOIT FAIRE POUR PASSER (LOT_L3 §3.a, même remède que le
+    // figeage du questionnaire) : `SELECT … FOR UPDATE` sur la ligne `missions` EN
+    // TÊTE de la transaction d'import réel, AVANT le comptage. Le second import
+    // attend le verrou, relit un arbre plein, et refuse en `CONFLICT`.
+    //
+    // ── SUR LA NON-DÉTERMINATION DE LA COURSE ────────────────────────────────
+    // Avec `singleFork`, rien ne garantit que les deux requêtes s'entrelacent à
+    // chaque exécution : l'une peut avoir entièrement commité avant que l'autre ne
+    // lise. Les statuts `[200, 409]` sont alors vrais avec OU sans sérialisation.
+    // C'est pourquoi l'assertion QUI COMPTE est la dernière : le compte d'unités en
+    // base, qui est vrai que la course ait eu lieu ou non — et qui, le jour où elle
+    // a lieu, dénonce le double arbre. Un test dont le verdict dépend d'un hasard
+    // d'ordonnancement ne prouve rien ; un test qui assère la PROPRIÉTÉ FINALE
+    // prouve la même chose à chaque passage.
+    const admin = await creerCompte('admin', 'import-course');
+    const missionId = await semerMission('import-course', admin.id);
+
+    const lignes: readonly LigneCsv[] = [
+      { ref: 'ca', name: 'Racine factice de course', kind: 'groupe' },
+      { ref: 'cb', name: 'Filiale factice de course', kind: 'filiale', parent_ref: 'ca' },
+      { ref: 'cc', name: 'Direction factice de course', kind: 'direction', parent_ref: 'cb' },
+      { ref: 'cd', name: 'Service factice de course', kind: 'service', parent_ref: 'cc' },
+      { ref: 'ce', name: 'Équipe factice de course', kind: 'equipe', parent_ref: 'cd' },
+    ];
+    const contenu = fichierCsv(lignes);
+
+    // `semerMission` sème un arbre VIDE ; ce compte est relu plutôt que présumé,
+    // pour que l'attendu final s'exprime en « avant + fichier » : si une racine
+    // d'office existait sur la mission, elle serait comptée ici et non oubliée.
+    const compteAvant = await compterUnitesDeLaMission(missionId);
+    expect(compteAvant, 'la mission semée par SQL commence sans aucune unité').toBe(0);
+
+    const [premiere, seconde] = await Promise.all([
+      importer(missionId, contenu, { jeton: admin.jeton }),
+      importer(missionId, contenu, { jeton: admin.jeton }),
+    ]);
+
+    const statuts = [premiere.statut, seconde.statut].sort((a, b) => a - b);
+    expect(
+      statuts,
+      'Deux imports simultanés du MÊME fichier sur une mission neuve doivent donner\n' +
+        'EXACTEMENT un 200 et un 409. Deux 200 signifient que le garde n’est pas\n' +
+        'sérialisé (lire-décider-écrire sans verrou) ; deux 409 qu’aucun n’a abouti\n' +
+        '(le verrou refuse au lieu d’attendre) ; un 500 que la collision a été laissée\n' +
+        `remonter brute.\nCorps : ${premiere.corps.slice(0, 200)} | ${seconde.corps.slice(0, 200)}`,
+    ).toStrictEqual([200, 409]);
+
+    const refusee = premiere.statut === 409 ? premiere : seconde;
+    expect(
+      refusee.code,
+      'Le refus du second import est le garde « arbre non vide » du test précédent :\n' +
+        'code générique `CONFLICT` (arbitrage du 2026-08-29), pas un code inventé.',
+    ).toBe('CONFLICT');
+
+    // ── L'ASSERTION QUI COMPTE, vraie que la course ait eu lieu ou non ───────
+    expect(
+      await compterUnitesDeLaMission(missionId),
+      `La mission doit porter EXACTEMENT ${String(compteAvant + lignes.length)} unités : celles du\n` +
+        'fichier, importées UNE fois. Le double (' +
+        `${String(compteAvant + 2 * lignes.length)}) trahit deux arbres complets — et aucune route\n` +
+        'ne permet de les défaire (pas de DELETE, pas de `deleted_at` sur `org_units`).',
+    ).toBe(compteAvant + lignes.length);
+
+    // Un seul arbre, c'est aussi UNE seule racine : deux `parent_id IS NULL` sont la
+    // signature d'un double import même si un compte global avait été bricolé.
+    const racines = (await lireUnites(missionId)).filter((ligne) => ligne.parent_id === null);
+    expect(racines, 'un arbre importé une fois n’a qu’une racine').toHaveLength(1);
+  });
 });
 
 // =============================================================================

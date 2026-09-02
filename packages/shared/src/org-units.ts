@@ -1337,9 +1337,21 @@ export function analyserCsvArbre(contenu: string): AnalyseCsvArbre {
 
   // ⑤ Unicité des `ref`, et ⑥ table de résolution des `parent_ref`.
   //
-  // La table est construite sur TOUTES les lignes qui portent un `ref`, fautives
-  // comprises : c'est ce qui empêche une erreur de valeur de se propager en fausses
-  // erreurs de rattachement sur toute une branche.
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // LA TABLE ACCUEILLE TOUS LES `ref` DU FICHIER, Y COMPRIS CEUX DE LIGNES FAUTIVES.
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // C'est la condition pour qu'une erreur de VALEUR ne se propage pas en fausses
+  // erreurs de RATTACHEMENT sur toute une branche. Le défaut a été mesuré : un
+  // fichier où la ligne 2 oublie son nom et où la ligne 3 s'y rattache rendait
+  // `VALEUR_OBLIGATOIRE` **et** `PARENT_INTROUVABLE` — l'auditeur corrigeait la
+  // première, découvrait que la seconde n'avait jamais existé, et perdait confiance
+  // dans le rapport entier. Une ligne fautive garde donc le droit d'OCCUPER sa
+  // référence : elle est bien présente dans le fichier, c'est sa VALEUR qui cloche,
+  // et ce sont deux défauts distincts qui se corrigent à deux endroits distincts.
+  //
+  // `PARENT_INTROUVABLE` ne signale donc plus qu'une seule chose, et c'est
+  // exactement ce que son nom dit : **aucune ligne du fichier ne porte cette
+  // référence.**
   const parRef = new Map<string, number>();
   const refsVus = new Set<string>();
   donnees.forEach((enregistrement, index) => {
@@ -1360,7 +1372,10 @@ export function analyserCsvArbre(contenu: string): AnalyseCsvArbre {
       return;
     }
     refsVus.add(ref);
-    if (brouillon !== null) parRef.set(ref, index);
+    // INCONDITIONNEL — voir le bloc ci-dessus. En cas de `ref` dupliquée, c'est la
+    // PREMIÈRE occurrence qui occupe la référence (le `return` ci-dessus l'a déjà
+    // garanti) : un rattachement ne change pas de cible selon l'ordre des erreurs.
+    parRef.set(ref, index);
   });
 
   // ⑥ Résolution des rattachements.
@@ -1369,14 +1384,15 @@ export function analyserCsvArbre(contenu: string): AnalyseCsvArbre {
     if (brouillon?.parentRef == null) return;
     const cible = parRef.get(brouillon.parentRef);
     if (cible === undefined) {
-      // Le parent est introuvable OU sa ligne est elle-même fautive. Dans les deux
-      // cas l'import est rejeté ; on ne dit que ce qu'on sait.
+      // AUCUNE ligne du fichier ne porte cette référence — ni valide, ni fautive.
+      // C'est le seul cas où ce défaut est prononcé, et le message le dit sans
+      // nuance : l'auditeur cherche une référence qu'il n'a pas écrite.
       erreurs.push(
         defaut(
           brouillon.ligne,
           'parent_ref',
           'PARENT_INTROUVABLE',
-          `Le rattachement « ${brouillon.parentRef} » ne correspond à aucune ligne exploitable du fichier.`,
+          `Le rattachement « ${brouillon.parentRef} » ne correspond à aucune ligne du fichier.`,
         ),
       );
       brouillons[index] = null;
@@ -1386,6 +1402,13 @@ export function analyserCsvArbre(contenu: string): AnalyseCsvArbre {
   });
 
   // ⑦ Cycles. Remontée bornée : un arbre corrompu ne doit jamais faire boucler.
+  //
+  // ⚠ LIMITE ÉCRITE PLUTÔT QUE SUPPOSÉE : la remontée s'arrête sur une ligne
+  // FAUTIVE, qui n'a pas de parent résolu. Un cycle passant par une telle ligne
+  // n'est donc pas signalé — sans conséquence : le fichier porte déjà l'erreur qui
+  // l'a rendue fautive, donc l'import est rejeté en bloc, et cette ligne n'entre
+  // pas dans `lignes`. Le cycle se révélera au ré-import, une fois la valeur
+  // corrigée.
   brouillons.forEach((brouillon, index) => {
     if (brouillon === null) return;
     let courant = parents[index] ?? null;
@@ -1419,13 +1442,32 @@ export function analyserCsvArbre(contenu: string): AnalyseCsvArbre {
     }
   });
 
+  // Les indices manipulés jusqu'ici sont ceux des ENREGISTREMENTS lus ; `lignes` ne
+  // porte que les lignes retenues. Les deux numérotations divergent dès qu'une ligne
+  // est écartée, et `LigneArbreCsv.parentIndice` promet « un indice dans `lignes` » :
+  // on REMAPPE, au lieu de rendre un indice qui pointerait à côté.
+  //
+  // Un parent ÉCARTÉ (ligne fautive) rend `parentIndice: null`. Ce cas n'existe que
+  // lorsque `erreurs` n'est pas vide — donc quand l'import est de toute façon rejeté
+  // et que `lignes` n'a aucun usage. On préfère un `null` honnête à un indice qui
+  // désignerait une autre unité que celle voulue.
+  const retenus = brouillons.map((brouillon) => brouillon !== null);
+  const indiceDansLignes = new Map<number, number>();
+  let rang = 0;
+  retenus.forEach((retenu, index) => {
+    if (!retenu) return;
+    indiceDansLignes.set(index, rang);
+    rang += 1;
+  });
+
   const lignes: LigneArbreCsv[] = [];
   brouillons.forEach((brouillon, index) => {
     if (brouillon === null) return;
+    const parent = parents[index] ?? null;
     lignes.push({
       ligne: brouillon.ligne,
       ref: brouillon.ref,
-      parentIndice: parents[index] ?? null,
+      parentIndice: parent === null ? null : (indiceDansLignes.get(parent) ?? null),
       ...brouillon.valeurs,
     });
   });

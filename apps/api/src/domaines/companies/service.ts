@@ -99,6 +99,10 @@ interface SecteurResolu {
  * │ aucun code APE                 │ `null`       │ `false` — rien n'a été tenté │
  * └────────────────────────────────┴──────────────┴──────────────────────────────┘
  *
+ * Cette table décrit la CRÉATION. À la modification, la troisième ligne n'est pas
+ * reprise telle quelle : il y a un secteur en place à ne pas détruire — voir
+ * `modifierUneEntreprise`.
+ *
  * ── LES DEUX DÉCISIONS QUE CETTE TABLE PORTE ────────────────────────────────
  * **1. Le secteur explicite l'emporte sur R4.** « Pré-rempli » (03 §29) décrit une
  * commodité de saisie, pas une contrainte : un consultant qui choisit le secteur
@@ -316,6 +320,11 @@ function memesPays(a: readonly string[], b: readonly string[]): boolean {
  * lors d'une modification qui ne concerne que les effectifs — exactement le
  * comportement que la décision 1 de `resoudreSecteur` refuse à la création.
  *
+ * **Et le rejeu qui NE TROUVE RIEN n'écrase pas davantage** : division inconnue du
+ * référentiel ⇒ le secteur en place RESTE, la réponse porte `secteurAQualifier:
+ * true` (invariant 7 ; `DECISIONS.md` du 2026-08-31, option 2). Effacer un secteur
+ * reste possible, mais seulement en le demandant : `sectorId: null` dans le corps.
+ *
  * Transaction + `FOR UPDATE` : le lire-puis-écrire doit voir un état stable, sinon
  * la liste des champs journalisés décrit une transition qui n'a pas eu lieu.
  */
@@ -397,20 +406,33 @@ export async function modifierUneEntreprise(
     }
 
     // ── R4 REJOUÉ, ET SEULEMENT QUAND IL LE DOIT ───────────────────────────
-    // Trois cas, dans cet ordre de priorité :
+    // QUATRE cas, dans cet ordre de priorité :
     //   · l'appelant IMPOSE un secteur (y compris `null`, qui veut dire « efface »)
     //     — il l'emporte, comme à la création ;
-    //   · le code APE CHANGE pour une valeur non nulle — la correspondance se
-    //     rejoue, c'est exactement ce que R4 promet ;
+    //   · le code APE CHANGE pour une valeur non nulle et la division EST CONNUE
+    //     du référentiel — la correspondance se rejoue, c'est exactement ce que R4
+    //     promet ;
+    //   · le code APE CHANGE pour une valeur non nulle mais la division est
+    //     INCONNUE — le secteur en place est CONSERVÉ, et l'appelant reçoit
+    //     `secteurAQualifier: true`. (2026-09-02 — application de l'arbitrage
+    //     `DECISIONS.md` du 2026-08-31, « Un `PATCH` de code APE vers une division
+    //     inconnue EFFACE un secteur choisi à la main », option 2 : un trou de
+    //     `naf_sector_map` est un fait d'administration, le laisser détruire une
+    //     saisie humaine casserait l'invariant 7. L'effacement délibéré garde le
+    //     chemin qui l'exprime : `sectorId: null` explicite dans le corps.) ;
     //   · sinon — on garde le secteur en place. Rejouer R4 à chaque `PATCH`
     //     écraserait un secteur choisi à la main lors d'une modification qui ne
     //     concerne que les effectifs.
-    const secteur: SecteurResolu =
-      corps.sectorId !== undefined
-        ? { sectorId: corps.sectorId, secteurAQualifier: false }
-        : naf.change && naf.valeur !== null
-          ? await resoudreSecteur(null, naf.valeur)
-          : { sectorId: avant.sectorId, secteurAQualifier: false };
+    let secteur: SecteurResolu;
+    if (corps.sectorId !== undefined) {
+      secteur = { sectorId: corps.sectorId, secteurAQualifier: false };
+    } else if (naf.change && naf.valeur !== null) {
+      const rejoue = await resoudreSecteur(null, naf.valeur);
+      secteur =
+        rejoue.sectorId === null ? { sectorId: avant.sectorId, secteurAQualifier: true } : rejoue;
+    } else {
+      secteur = { sectorId: avant.sectorId, secteurAQualifier: false };
+    }
 
     if (secteur.sectorId !== avant.sectorId) {
       champs.sectorId = secteur.sectorId;

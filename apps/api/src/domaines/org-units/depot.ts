@@ -338,6 +338,44 @@ export async function missionVivante(executeur: ExecuteurSql, missionId: string)
 }
 
 /**
+ * La mission existe-t-elle, **et sa ligne est-elle verrouillée** jusqu'à la fin de
+ * la transaction ?
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * LA RÈGLE, ÉCRITE UNE FOIS : TOUTE ROUTE QUI DÉCIDE SUR UN DÉCOMPTE D'ARBRE LIT
+ * LA MISSION `FOR UPDATE`.
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * Un garde-fou qui compte des lignes filles pour décider d'en insérer d'autres est
+ * un lire-décider-écrire, et `org_units` ne porte aucun `UNIQUE` qui rattraperait
+ * la course : deux imports concurrents compteraient tous deux « arbre vide »,
+ * jugeraient tous deux légitime, et produiraient DEUX arbres dans la même mission —
+ * qu'aucune route ne sait ensuite réparer. Le verrou porte sur la MISSION et non
+ * sur les unités, pour la raison qui vaut déjà au figeage
+ * (`questionnaire/depot.ts`, `lireMissionPourFigeage`) : on ne verrouille pas des
+ * lignes qui n'existent pas encore. Le second appel attend, compte n non nul, et
+ * sort en 409.
+ *
+ * Le mode À BLANC ne l'utilise pas, et c'est volontaire : il n'écrit rien, il n'a
+ * donc aucune décision d'écriture à sérialiser — le verrou ferait attendre un
+ * contrôle de fichier derrière un import réel sans rien protéger.
+ *
+ * Posé le 2026-09-02 (revue croisée A17, constat B-2).
+ */
+export async function verrouillerMission(
+  executeur: ExecuteurSql,
+  missionId: string,
+): Promise<boolean> {
+  const lignes = await executeur
+    .select({ id: missions.id })
+    .from(missions)
+    .where(and(eq(missions.id, missionId), isNull(missions.deletedAt)))
+    .limit(1)
+    .for('update');
+
+  return lignes.length > 0;
+}
+
+/**
  * L'arbre d'une mission, réduit à ce qu'une détection de cycle a besoin de savoir.
  *
  * Deux colonnes, jamais la ligne entière : un reparentage n'a pas à charger 150

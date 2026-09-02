@@ -403,6 +403,20 @@ async function idSecteur(code: string): Promise<string> {
 }
 
 /**
+ * Lit `sector_id` DIRECTEMENT en base. Sert au cas « division inconnue » du
+ * `PATCH` : la réponse de l'API pourrait recopier l'ancienne valeur sans rien
+ * prouver sur ce qui a été écrit — seule la ligne fait foi.
+ */
+async function secteurEnBase(id: string): Promise<string | null> {
+  const resultat = await bd().query<{ sector_id: string | null }>(
+    'SELECT sector_id FROM companies WHERE id = $1',
+    [id],
+  );
+  if (resultat.rowCount !== 1) throw new Error(`fiche ${id} absente`);
+  return resultat.rows[0]?.sector_id ?? null;
+}
+
+/**
  * Pose `deleted_at` par SQL DIRECT, et il n'y a pas d'autre voie : aucune route
  * de suppression n'existe (le « D » de CRUD n'est jamais instancié par le pack).
  * Le filtre `deleted_at IS NULL` n'en est pas moins écrit dans le dépôt, et rien
@@ -1223,7 +1237,7 @@ describe('GET /v1/companies — curseur (name, id) (11 §3, conception L3 §2)',
 });
 
 // =============================================================================
-// 9. PATCH — CE QUI CHANGE, CE QUI NE CHANGE PAS, ET UN COMPORTEMENT CONSTATÉ
+// 9. PATCH — CE QUI CHANGE, CE QUI NE CHANGE PAS, ET UNE DÉCISION TENUE (INVARIANT 7)
 // =============================================================================
 describe('PATCH /v1/companies/:id', () => {
   it('une modification qui ne change RIEN ne bouscule pas `updated_at`', async () => {
@@ -1290,42 +1304,77 @@ describe('PATCH /v1/companies/:id', () => {
     expect(refus.code).toBe('VALIDATION_FAILED');
   });
 
-  it('COMPORTEMENT CONSTATÉ — changer le code APE pour une division INCONNUE efface un secteur choisi à la main', async () => {
-    // CE TEST NE JUGE PAS, IL FIGE — et il remonte le point à l’arbitrage.
+  it('@critique changer le code APE pour une division INCONNUE CONSERVE un secteur choisi à la main, et le signale (DECISIONS.md 2026-08-31)', async () => {
+    // TRANCHÉ — `DECISIONS.md` 2026-08-31, « [L3a] Un `PATCH` de code APE vers une
+    // division inconnue EFFACE un secteur choisi à la main », option 2, ratifiée à
+    // la revue croisée de L3b (2026-09-02).
     //
-    // La règle écrite est : « le secteur n’est re-résolu que si le code APE change
-    // ET que l’appelant n’impose pas de secteur », au motif que rejouer R4 à chaque
-    // `PATCH` écraserait un secteur choisi à la main. Mais quand le code APE change
-    // POUR UNE DIVISION ABSENTE du référentiel, R4 se rejoue bel et bien, rend
-    // `null`, et ce `null` REMPLACE le secteur en place. Un consultant qui corrige
-    // un code APE perd donc, dans le même geste, le secteur qu’il avait choisi.
+    // Ce cas figeait jusque-là un COMPORTEMENT CONSTATÉ : le rejeu de R4 sur un
+    // code APE dont la division est absente de `naf_sector_map` rendait `null`, et
+    // ce `null` remplaçait le secteur en place. La règle est désormais l'inverse,
+    // et c'est l'invariant 7 (« rien n'est jamais silencieusement écrasé ou
+    // supprimé ») qui la fonde : un trou du référentiel est un fait
+    // d'administration, il ne détruit pas une donnée saisie par un humain.
     //
-    // Ce n’est pas indéfendable — la réponse porte `secteurAQualifier: true`, donc
-    // l’écran est averti — mais ce n’est écrit nulle part, et la seule phrase du
-    // dépôt qui traite du sujet dit l’inverse. Si ce test rougit, c’est que
-    // quelqu’un a tranché : qu’il l’écrive alors dans `DECISIONS.md` plutôt que de
-    // le découvrir en clientèle.
+    // Ce que le test tient :
+    //   · le code APE est bien écrit (le `PATCH` n'est PAS refusé — option 3 écartée,
+    //     un référentiel incomplet ne bloque pas une écriture légitime) ;
+    //   · `sector_id` est INCHANGÉ — asserté sur la réponse ET en base, car une
+    //     réponse qui renverrait l'ancienne valeur en lisant « avant » ne prouverait
+    //     rien sur ce qui a été écrit ;
+    //   · `secteurAQualifier` vaut `true` : le contrat d'API ne change pas, le
+    //     signal « le secteur reste à qualifier » est exactement vrai ;
+    //   · l'effacement DÉLIBÉRÉ reste possible par le chemin qui l'exprime, un
+    //     `sectorId: null` explicite — contre-épreuve, sans laquelle « conserver »
+    //     pourrait aussi bien vouloir dire « ne plus jamais pouvoir retirer ».
     const admin = await creerCompte('admin', 'patch-r4');
     const impose = await idSecteur('sante');
     const creee = await creer(admin.jeton, {
       name: 'Entreprise factice Rhô',
       sectorId: impose,
     });
+    const id = creee.ecriture.company.id;
     expect(creee.ecriture.company.sectorId).toBe(impose);
+    expect(
+      await secteurDeLaDivision(DIVISION_NON_SEMEE),
+      'La division doit être RÉELLEMENT absente du référentiel, sinon le test\n' +
+        'éprouve le cas « code connu » sous le nom du cas « code inconnu ».',
+    ).toBeNull();
 
-    const modifiee = await appeler('PATCH', `/v1/companies/${creee.ecriture.company.id}`, {
+    const modifiee = await appeler('PATCH', `/v1/companies/${id}`, {
       jeton: admin.jeton,
       charge: { nafCode: APE_VALIDE_INCONNU },
     });
     expect(modifiee.statut).toBe(200);
     const apres = ecriture(modifiee);
-    expect(apres.company.nafCode).toBe(APE_VALIDE_INCONNU);
-    expect(apres.company.sectorId).toBeNull();
+    expect(apres.company.nafCode, 'le code APE est écrit : l’écriture n’est pas refusée').toBe(
+      APE_VALIDE_INCONNU,
+    );
+    expect(
+      apres.company.sectorId,
+      'Le secteur choisi à la main est CONSERVÉ dans la réponse (invariant 7).',
+    ).toBe(impose);
+    expect(
+      await secteurEnBase(id),
+      'Et CONSERVÉ EN BASE : c’est la valeur écrite qui compte, pas celle que la\n' +
+        'réponse recopie.',
+    ).toBe(impose);
     expect(
       apres.secteurAQualifier,
-      'Le seul signal que l’appelant reçoit de cette perte est ce booléen. Un écran\n' +
-        'qui l’ignorerait afficherait une fiche sans secteur sans jamais l’avoir dit.',
+      'Le contrat ne change pas : la division est inconnue, le secteur reste à\n' +
+        'qualifier, et l’écran doit le savoir.',
     ).toBe(true);
+
+    const effacement = await appeler('PATCH', `/v1/companies/${id}`, {
+      jeton: admin.jeton,
+      charge: { sectorId: null },
+    });
+    expect(effacement.statut).toBe(200);
+    expect(
+      ecriture(effacement).company.sectorId,
+      'L’effacement DÉLIBÉRÉ passe par un `sectorId: null` explicite — et lui seul.',
+    ).toBeNull();
+    expect(await secteurEnBase(id), 'effacé en base aussi').toBeNull();
   });
 
   it('une fiche inexistante rend 404, un identifiant non-UUID rend 400', async () => {
