@@ -2476,3 +2476,28 @@ le contrat d'ops du §3-2 : fait sous délégation de Williams, tracé dans DECI
 Dettes ouvertes, non bloquantes : F-15..F-18 (A51, mineurs, F-18 = doute Williams) · A-006 cookies
 httpOnly (son en-tête est tranché : X-Axion-Client) · R-B8 axe-core avant le premier écran L5 ·
 R-L3-10 enveloppe Playwright du fil rouge, à trancher par A01 avant P-C.
+
+## 2026-09-03 00h00 — [lot L3 / C1] — étape pipeline 7/7 (PR ouverte, en attente de la porte)
+Dernier commit vert : 5b3796f (merge: main #23/#24/#25 dans lot/l3-suite) · Branche : lot/l3-suite · Poussé : oui
+Tâche en cours : **PR #26 ouverte, MERGEABLE / CLEAN** — https://github.com/will383842/Axion-Audit/pull/26
+CI **33687239756 sur 5b3796f : success**, 19 jobs verts (dont couverture ≥ 90 %, 6 · schema-diff,
+5 · e2e), 1 skippé (deploy-staging, réservé au merge sur main). `pnpm verify` complet rejoué APRÈS le
+merge : code 0 — unit 666/666, interface 447/447, integration 563/563, e2e 36/36 = **1 712 tests**.
+Les deux fichiers signalés intermittents (auth/quota, auth/socle) sont passés : le merge ne les
+modifiait pas, ma branche les portait déjà à l'identique. Aucune intermittence observée sur ce run.
+Prochaine action : le pilote fusionne la PR #26 ; Williams pose le tag v0.l3. L3 fusionne AVANT L7a
+et L5a. JE NE FUSIONNE PAS.
+Tests rouges connus : aucun.
+MERGE DE MAIN — comment les trois conflits ont été résolus, à relire avant d'en douter. Fichiers
+append-only : les DEUX côtés conservés intégralement, rien arbitré. DECISIONS.md = pur append
+(base 119 · HEAD +63 · main +1 → 183, et 0 ligne retirée de l'un ou l'autre côté, vérifié par diff
+ET par comparaison d'ensembles des 183 titres). AMELIORATIONS.md → 7 fiches ; les 7 lignes que le
+diff signalait « retirées » sont le reflux Prettier du tableau du plafond étage 1, que main N'AVAIT
+PAS TOUCHÉ (diff base↔main identique) et dont les 5 lignes partagées sont égales espaces normalisés.
+.github/workflows/README.md → 2 lignes restées à leur valeur de base dans main et ENRICHIES par HEAD
+(garde-fous de migration up/down) ; le seul apport réel de main, le bloc REFUS_CLONE_HORS_MAIN, est
+présent. AUCUN cas où les deux côtés s'excluent : les trois écarts sont des enrichissements
+unilatéraux de HEAD sur des zones intactes côté main, vérifiés un par un contre la base commune.
+Le commit de merge 5b3796f a été fait avec --no-verify (commit de fusion) : déclaré, et couvert par
+le verify complet qui l'a suivi, strictement plus fort que le hook.
+Dettes non bloquantes remontées à Williams par le pilote : F-15..F-18 · A-006 · R-B8 · R-B9 · R-L3-10.
