@@ -1508,3 +1508,26 @@ les §8/§24.2 ne les listent pas.
 
 **Trace** : `DECISIONS.md` 2026-09-01 « Aucune route n'écrit `mission_users` : faut-il en ouvrir
 une ? » — option 2 retenue, arbitrage de Williams attendu à la porte suivante.
+
+### FICHE A-007 — Le garde anti-skip ne voit pas les cas ANNULÉS par un crochet expiré
+
+**Constat terrain (A01, 2026-09-01 et 2026-09-02) :** `check:no-skipped-tests` lit les **sources** et
+refuse tout `.skip`, `runIf`, `todo`. Il est vert. Pourtant, trois fois en deux jours, des rapports
+vitest ont porté des cas « skipped » sans qu'aucune source n'en contienne : `socle.test.ts` (12) et
+`quota.test.ts` (5) le 2026-09-01, `l0-restauration` (4) le 2026-09-02 — à chaque fois un `beforeAll`
+expiré sous contention (10 s par défaut, ou une passe Docker tuée à 600 s), et vitest **annule** les
+cas qu'il précède en les comptant « skipped ». Un fichier peut donc être **rouge sans test rouge**,
+ou **vert avec des annulations**, et le garde ne le voit pas : il n'y a rien à attraper dans la source.
+La session de vérification isolée l'a relu comme un `skipIf` d'environnement — c'est dire à quel
+point le rapport ressemble à un skip écrit.
+
+**Valeur pour l'auditeur :** la DoD dit « aucun test sauté » et le pipeline dit « les tests sont la
+vérité terrain ». Une annulation silencieuse est un skip qui ne dit pas son nom, et elle survient
+précisément sous la charge — là où un test intermittent finit par être ignoré.
+
+**Proposition (étage 2) :** un garde qui lit le **rapport JSON** de vitest (`--reporter=json`) et
+refuse tout cas `skipped` non porté par la source ; en CI, sur les jobs `unit` et `integration`. Le
+remède immédiat appliqué en attendant : plafonds explicites (120 s) sur les crochets de préchauffage.
+
+**Coût estimé :** ≈ 0,3 j (script + branchement CI + son propre test témoin).
+**Impact schéma / API : aucun.** Impact CI : deux jobs lisent un rapport de plus.

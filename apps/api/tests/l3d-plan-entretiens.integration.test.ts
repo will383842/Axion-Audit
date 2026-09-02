@@ -2203,7 +2203,7 @@ describe('PATCH /v1/interviews/:id/reassign — ce qui est refusé', () => {
     }
   });
 
-  it('@critique une session PLANIFIÉE SANS AUDITEUR reçoit son premier auditeur par `reassign` — trace avec `auditeurAvant: null`', async () => {
+  it('@critique une session PLANIFIÉE SANS AUDITEUR reçoit son premier auditeur par `reassign` — trace avec `auditeur_avant: null`', async () => {
     // ═══════════════════════════════════════════════════════════════════════════
     // L'AMENDEMENT DU 04 DU 2026-09-02, ÉPROUVÉ LÀ OÙ IL CHANGE QUELQUE CHOSE.
     // ═══════════════════════════════════════════════════════════════════════════
@@ -2216,7 +2216,7 @@ describe('PATCH /v1/interviews/:id/reassign — ce qui est refusé', () => {
     //   · celle qui lit `conducted_by` comme un `string` et refuse le `null` en 409
     //     ou plante en 500 : la session sans auditeur devient INAFFECTABLE, et le
     //     seul chemin qui restait est un UPDATE à la main ;
-    //   · celle qui journalise `auditeurAvant` avec un identifiant INVENTÉ (celui de
+    //   · celle qui journalise `auditeur_avant` avec un identifiant INVENTÉ (celui de
     //     l'appelant, ou une chaîne vide) parce que le schéma « veut un uuid » :
     //     la trace dit qu'un auditeur a été dépossédé alors qu'il n'y en avait pas ;
     //   · celle qui, comparant `null === newUserId`, tombe dans la branche « même
@@ -2269,20 +2269,26 @@ describe('PATCH /v1/interviews/:id/reassign — ce qui est refusé', () => {
     const lignes = (await lignesJournal(entretien)).filter((l) => l.entity_type === 'interview');
     expect(lignes.length, 'une première affectation est tracée comme toute réaffectation').toBe(1);
     const meta = z
-      .object({ auditeurAvant: z.uuid().nullable(), auditeurApres: z.uuid(), motif: z.string() })
+      .object({
+        auditeur_avant: z.uuid().nullable(),
+        auditeur_apres: z.uuid(),
+        motif: z.string(),
+        mission_id: z.uuid(),
+      })
       .safeParse(lignes[0]?.meta);
     expect(
       meta.success,
-      `\`meta\` doit porter auditeurAvant (nullable), auditeurApres et motif. Reçu :\n` +
+      `\`meta\` doit porter auditeur_avant (nullable), auditeur_apres, motif et mission_id — en snake_case : le journal PROJETTE les clés avant d’écrire (11 §3, snake_case en base), et cette lecture est faite EN BASE. Reçu :\n` +
         JSON.stringify(lignes[0]?.meta),
     ).toBe(true);
     if (meta.success) {
       expect(
-        meta.data.auditeurAvant,
-        '`auditeurAvant: null` — personne n’a été dépossédé',
+        meta.data.auditeur_avant,
+        '`auditeur_avant: null` — personne n’a été dépossédé',
       ).toBeNull();
-      expect(meta.data.auditeurApres).toBe(nouveau.id);
+      expect(meta.data.auditeur_apres).toBe(nouveau.id);
       expect(meta.data.motif).toBe('repartition_revue');
+      expect(meta.data.mission_id).toBe(mission.id);
     }
   });
 

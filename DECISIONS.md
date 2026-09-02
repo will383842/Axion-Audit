@@ -6940,3 +6940,59 @@ vocabulaire existe et l'ajout est mécanique (une variante, une projection, un s
 
 Décideur : **Williams — EN ATTENTE**
 Impact spec : aucun en l'état.
+
+## 2026-09-02 — [L3d] `reassign` sur une session sans auditeur est une PREMIÈRE AFFECTATION, permise
+
+`conducted_by` étant nullable, une session planifiée par le plan §32.4 n'a pas d'auditeur. `PATCH
+/v1/interviews/:id/reassign` est aujourd'hui la seule route qui écrit cette colonne.
+
+Options :
+
+1. **Permettre** : première affectation, réponse `conductedByAvant: null`, journal `auditeur_avant: null`.
+2. Refuser (409) et exiger `/interview-plan/apply` — qui n'existe pas encore.
+
+Arbitrage : **option 1.** L'option 2 laisserait les sessions planifiées sans aucune porte d'affectation
+jusqu'à `/apply`. Un `reassign` vers le même auditeur reste 409 — sauf depuis `null`, qui n'est pas un
+« déjà ». **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-02 — [L3d → L6a] La règle « session conduite = auditeur obligatoire » est posée SANS appelant
+
+`exigerAuditeurSiSessionConduite` (`assignments/service.ts`) refuse en 409 toute session `en_cours` ou
+`termine` sans `conducted_by`. Mesuré : **aucune route de L3 n'écrit `interviews.status`** — c'est la
+synchronisation (L6a) qui fera passer une session au-delà de `non_demarre`.
+
+Options :
+
+1. Poser la garde, exportée et documentée, et l'appeler au seul endroit de l'API qui écrit une moitié
+   du couple (`reassign`), en disant qu'elle ne peut pas rougir aujourd'hui.
+2. Attendre L6a pour l'écrire.
+
+Arbitrage : **option 1.** Une règle écrite au moment où la décision est prise, avec son appelant réel
+nommé, vaut mieux qu'une règle redécouverte au premier push. **Obligation transmise à L6a, et une
+seconde avec elle** (constat A12) : `conducted_by IS NULL` ne se lit **jamais** « inscriptible par
+tout le monde » — le 05 §9.9 réserve l'écriture au propriétaire, un propriétaire inconnu est un
+refus. **Précédence : invariant 3.**
+
+Décideur : A01
+Impact spec : aucun. Deux obligations transmises à L6a, écrites en JSDoc de la garde et de la colonne.
+
+## 2026-09-02 — [L3b] Le vocabulaire codé des motifs sert AUSSI le forçage §17.3 — CONFIRMÉ
+
+L'implémenteur A15 a posé un seul vocabulaire pour les trois retours arrière ET les forçages du §17.3
+(`surchargeAdminMotivee`), et a demandé confirmation.
+
+Options :
+
+1. **Un seul vocabulaire**, dont `manques_assumes` et `demande_du_client` sont écrits pour le forçage.
+2. Deux vocabulaires distincts.
+
+Arbitrage : **option 1**, confirmée. Deux vocabulaires obligeraient le service à valider le motif
+**après** avoir lu l'état pour savoir lequel s'applique — c'est-à-dire à répondre 409 à une faute de
+forme qui devrait être un 400. Un motif est une raison humaine ; la même raison vaut pour reculer ou
+pour forcer. **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
