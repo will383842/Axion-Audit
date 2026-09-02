@@ -7129,3 +7129,33 @@ personnelle dans les logs — F-20) et **invariant 7** (F-21).
 
 Décideur : A01, sur revue A51
 Impact spec : aucun. Doute F-18 inchangé, à Williams.
+
+## 2026-09-02 — [L2/L3] L'en-tête anti-CSRF de la console s'appelle `X-Axion-Client`
+
+Le 11 §3 impose « cookies httpOnly SameSite=Lax **+ en-tête anti-CSRF custom** » pour `apps/hq`, sans
+jamais NOMMER cet en-tête. Le nom traînait donc comme un doute ouvert (`X-Axion-Client` employé de
+fait, « à confirmer » dans le dernier bloc `ETAT.md`), et la fiche A-006 (cookies httpOnly) attendait
+la même réponse. Deux équipes — A10 sur l'API, A30 sur la console — allaient devoir l'écrire.
+
+Options :
+
+1. **`X-Axion-Client`**, ratifié tel quel. Un en-tête custom ne vaut pas par son nom mais par le fait
+   qu'un formulaire HTML ne peut pas l'émettre ; celui-là est déjà employé, il ne coûte aucune
+   réécriture.
+2. `X-CSRF-Token` avec une valeur à vérifier — le patron « double submit cookie ».
+3. Laisser le doute ouvert jusqu'à L7.
+
+Arbitrage : **option 1.** L'option 2 change de MÉCANISME, pas de nom : elle ajouterait un jeton à
+émettre, à stocker et à faire tourner là où le 11 §3 ne demande qu'un en-tête que le navigateur
+refuse d'envoyer en requête simple — ce serait « toucher à la sécurité autrement que spécifié »
+(CLAUDE.md §3-4), donc hors décision d'agent. L'option 3 laisse deux équipes écrire le même nom
+chacune de son côté, c'est-à-dire la divergence garantie. **Précédence : 11 §3** (conventions d'API),
+qui exige l'en-tête sans le nommer — le nom est donc bien une décision, pas une interprétation.
+
+Portée : le nom vaut pour l'API (garde anti-CSRF des routes console) ET pour la fiche **A-006**
+(bascule de `apps/hq` vers les cookies httpOnly), qui n'a plus d'inconnue de ce côté. A30 s'y conforme
+sans dupliquer cette entrée. Aucun code de L3 ne change : L3 ne livre aucune route console à cookie —
+la réserve « `X-Axion-Client` à confirmer » du dernier bloc `ETAT.md` est simplement LEVÉE.
+
+Décideur : Williams (délégation du 2026-09-02 à la session pilote)
+Impact spec : aucun
