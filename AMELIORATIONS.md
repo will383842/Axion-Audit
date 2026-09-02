@@ -1473,3 +1473,80 @@ qui doit le dire, pas la nuit du sinistre.
 (remplacer les `ls | grep` par une boucle `for f in "$ARCHIVES"/*` avec test, protéger le `$(sb_ssh_opts)`).
 
 **Impact schéma / API : aucun.** Impact CI : un job élargi. Impact `infra/postgres/*.sh` : 7 sites.
+
+---
+
+# RÉSERVES DE LA PORTE P-B PORTÉES EN FICHES (2026-09-02, session de vérification)
+
+> Le gardien A02 a posé douze réserves à P-B ; trois exigeaient « une fiche `AMELIORATIONS.md` »
+> et n'en avaient pas au moment de la signature. Les voici, sans rien décider : l'arbitrage est à
+> Williams, à la porte P-C. Numérotation : **A-004 à A-006** ; la session pilote numérote à partir
+> de **A-007** (fiche « garde anti-annulation vitest », annoncée le 2026-09-02).
+
+## ÉTAGE 1 — micro-amélioration due (réserve R-B4)
+
+### FICHE A-004 — `reinitialiserCachePreparation` est orpheline (R-B4)
+
+**Constat (A02, fiche P-B §10.7).** `apps/api/src/dependances.ts:349` exporte
+`reinitialiserCachePreparation` ; **aucun appelant** dans le code de production ni dans les tests,
+et son commentaire affirme un consommateur qui n'existe pas. `CLAUDE.md` §4 étape 6 : le code
+orphelin est refusé.
+
+**Valeur.** Nulle en soi ; le coût est celui d'une fausse promesse dans le code, et d'un garde
+(`check:graphe-modules`) qui ne voit pas les exports morts, seulement les imports pendus.
+
+**Coût estimé.** 0,1 j : soit la brancher dans les tests qui sondent la préparation (si elle sert
+à isoler des cas), soit la retirer. **Étage 1, avant P-C**, par l'équipe 1.
+
+**Impact schéma / API / crypto : aucun.**
+
+## ÉTAGE 2 — fiches en attente d'arbitrage (réserves R-B6 et cookie)
+
+### FICHE A-005 — `packages/shared/src/redaction.ts` n'est sous aucun seuil de couverture (R-B6)
+
+**Constat (A02, fiche P-B §10.7 ; A51, verdict du 2026-08-31).** Le module qui porte l'invariant
+« aucune donnée personnelle dans les logs » est rapporté à **0,00 %** de couverture : `packages/shared/**`
+n'est pas dans `.github/coverage-critical-paths.json`, et le défaut d'outillage y est **déclaré**
+sans être tracé. A51 a en outre montré que la redaction est **contournable par tout objet portant
+un `toJSON()`** (correctif fusionné en `#17`, `redaction-journal-serialisation.test.ts`) : c'est
+précisément le genre de trou qu'un seuil mesuré aurait rendu visible plus tôt.
+
+**Valeur pour l'auditeur.** Directe : c'est la garantie RGPD des journaux (06 §10, invariant du
+`CLAUDE.md` §2). À L6c, les journaux porteront pour la première fois des données de sync réelles.
+
+**Coût estimé.** 0,3 j : ajouter `packages/shared/src/redaction.ts` aux chemins critiques avec le
+seuil de 90 %, écrire les cas manquants (formes sérialisées, tableaux imbriqués, `toJSON`, clés en
+français), et faire tourner le projet vitest `interface`/`unit` sur `packages/shared` dans le job
+`couverture`.
+
+**Impact schéma / API / crypto : aucun.** Impact CI : un chemin critique de plus.
+
+**Recommandation.** **ABSORBÉE, avant L6c** — c'est une réparation d'un défaut déclaré, sous 0,5 j :
+pré-autorisée par le point 4 du régime du 2026-08-31 si Williams ne s'y oppose pas.
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-C_
+
+### FICHE A-006 — Les cookies httpOnly de la console n'existent pas : `@fastify/cookie` est installé, jamais enregistré
+
+**Constat (A51, verdict du 2026-08-31 ; revérifié le 2026-09-02 sur `main`).** `CLAUDE.md` §9 et
+06 §8.1 imposent pour la console (`apps/hq`) une authentification par **cookies httpOnly
+SameSite=Lax + en-tête anti-CSRF**. `@fastify/cookie` est épinglé (décision du 2026-08-31) et
+installé, mais **`app.ts` ne l'enregistre pas** : `git grep cookie -- apps/api/src/app.ts` ne rend
+rien. Le mode Bearer du terrain est le seul chemin d'authentification qui existe. Sans objet pour L2
+(aucun écran console), ce qui a permis de signer P-B ; **dû au premier incrément de L7**.
+
+**Valeur pour l'auditeur.** Indirecte mais bloquante : sans cookie, la console n'a pas
+d'authentification conforme, et L7-min ne peut pas être démontré à P-E.
+
+**Coût estimé.** 0,5 j : enregistrement du plugin avec les attributs `httpOnly`, `secure`,
+`sameSite=lax`, émission à `/v1/auth/login` quand le client est la console, lecture dans le crochet
+d'identité (cookie OU Bearer, jamais les deux), en-tête anti-CSRF custom vérifié sur les écritures,
+tests d'intégration rôle × chemin (cookie sans en-tête → refus).
+
+**Impact schéma : aucun. Impact API : un chemin d'authentification de plus sur des routes existantes.
+Impact crypto : aucun** (le jeton est le même, seul le transport change).
+
+**Recommandation.** **ABSORBÉE dans L7a** — ce n'est pas une fonctionnalité nouvelle, c'est une
+clause du contrat 11 §3 non encore tenue. À planifier par A30 au brief de L7.
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-C_
