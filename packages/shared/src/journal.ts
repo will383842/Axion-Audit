@@ -49,7 +49,11 @@ import { z } from 'zod';
 // 03 §32.2 écrirait dans la table d'audit un état que le produit ne connaît pas.
 // L'arête est SANS CYCLE À L'EXÉCUTION — `missions.ts` ne prend de ce fichier
 // qu'un `import type`, effacé à la compilation.
-import { STATUTS_MISSION } from './missions.js';
+import { STATUTS_MISSION, TYPES_UNITE_ORG } from './missions.js';
+// Même règle pour le vocabulaire de l'arbre : les statuts créables d'une unité
+// viennent du contrat de `org_units`, pas d'une liste recopiée. `org-units.ts` ne
+// prend RIEN de ce fichier — l'arête ne se referme pas.
+import { STATUTS_UNITE_ORG_CREABLES } from './org-units.js';
 
 // =============================================================================
 // LE VOCABULAIRE ADMISSIBLE — la ceinture 2
@@ -219,6 +223,45 @@ export const ACTIONS_JOURNAL = [
   'mission.create',
   'mission.update',
   'mission.status_change',
+  // ── org_units (lot L3, incrément L3c) ──────────────────────────────────────
+  // CINQ actions. Les deux dernières sont les gestes de qualification du 03 §25.3,
+  // et elles sont séparées de `org_unit.update` pour la même raison que
+  // `mission.status_change` est séparée de `mission.update` : un changement d'ÉTAT
+  // n'est pas une modification de champ, et une trace qui dirait « le statut a
+  // changé » sans dire en quoi ne serait pas une trace.
+  //   · pas de `org_unit.read` : le catalogue ne trace aucune consultation
+  //     ordinaire (même raison que `company.read`) ;
+  //   · pas de `org_unit.delete` : **aucune route ne supprime une unité**, et
+  //     `org_units` n'a même pas de `deleted_at` au fichier 04. Une fusion
+  //     CONSERVE la ligne source (invariant 7) ;
+  //   · `org_unit.import` porte sur la MISSION, pas sur une unité : un import en
+  //     crée n cent, et écrire n cent lignes de journal pour un seul acte
+  //     noierait la table sans rien apprendre de plus.
+  'org_unit.create',
+  'org_unit.update',
+  'org_unit.import',
+  'org_unit.validate',
+  'org_unit.merge',
+  // ── questionnaire et sessions (lot L3, incrément L3d) ──────────────────────
+  // DEUX actions, et chacune est une EXIGENCE, pas un confort :
+  //   · `mission.questionnaire_freeze` — le refus d'un second figeage doit porter
+  //     « le compte ET la date » (`DECISIONS.md` 2026-08-29), or `mission_questions`
+  //     n'a AUCUNE colonne de date au fichier 04. La date du figeage n'existe donc
+  //     que dans cette ligne de journal. L'entrée du 2026-09-02 le constate en
+  //     toutes lettres : « ma décision de la veille supposait que le journal traçait
+  //     déjà le figeage — la prémisse était fausse ». Elle devient vraie ici ;
+  //   · `interview.reassign` — 03 §34.4 écrit que la réaffectation est tracée dans
+  //     `activity_log`. Sans cette action au catalogue, la porte d'écriture (fermée
+  //     par construction) refuserait l'événement et la trace n'existerait pas.
+  // Et ce qui n'y est PAS : aucune action de PRÉVISUALISATION du questionnaire ni
+  // de génération du PLAN d'entretiens. Les deux sont des lectures, et le catalogue
+  // ne trace aucune consultation hors du financier (06 §10.5) ; surtout, le plan
+  // recopie des noms d'unités et des effectifs du client, que la table d'audit
+  // garantit de ne pas contenir (11 §2). Aucune action d'AFFECTATION non plus
+  // (`work_assignments`) : aucune section du pack ne l'exige, et une action sans
+  // appelant ni exigence est du code mort.
+  'mission.questionnaire_freeze',
+  'interview.reassign',
 ] as const;
 
 export type ActionJournal = (typeof ACTIONS_JOURNAL)[number];
@@ -229,7 +272,17 @@ export type ActionJournal = (typeof ACTIONS_JOURNAL)[number];
  * entité rendraient toute recherche d'audit incomplète — et une recherche d'audit
  * incomplète ne se voit pas, elle rend simplement moins de lignes.
  */
-export const ENTITES_JOURNAL = ['user', 'scoping_estimate', 'company', 'mission'] as const;
+export const ENTITES_JOURNAL = [
+  'user',
+  'scoping_estimate',
+  'company',
+  'mission',
+  'org_unit',
+  // Lot L3d : la réaffectation §34.4 porte sur la SESSION, pas sur la mission —
+  // une recherche d'audit part de la session dont on conteste le changement de
+  // main, et l'index `activity_log(entity_type, entity_id)` la sert directement.
+  'interview',
+] as const;
 export type EntiteJournal = (typeof ENTITES_JOURNAL)[number];
 
 /**
@@ -319,6 +372,35 @@ export const CHAMPS_MISSION_JOURNALISABLES = [
   'llm_provider',
   'start_planned',
   'end_planned',
+] as const;
+
+/**
+ * Champs d'une unité d'arbre modifiables par `org_unit.update` — le NOM de la
+ * colonne, jamais sa valeur. En `snake_case`, comme les trois listes ci-dessus.
+ *
+ * ⚠ **`status` ET `merged_into_id` N'Y FIGURENT PAS**, pour la raison exacte qui
+ * exclut `status` de `CHAMPS_MISSION_JOURNALISABLES` : les deux transitions d'état
+ * d'une unité (03 §25.3) ont leurs propres actions, `org_unit.validate` et
+ * `org_unit.merge`, qui disent d'où l'on vient et où l'on va. Les admettre ici
+ * rendrait exprimable une ligne d'audit muette sur le seul point qui compte.
+ * `mission_id` n'y figure pas non plus : une unité ne change jamais de mission.
+ *
+ * ⚠ **`name` EST LE NOM DU CHAMP, JAMAIS SA VALEUR.** Un nom d'unité est une
+ * donnée du client : le journaliser reviendrait à recopier une cellule du dossier
+ * client dans une table d'audit, ce que la décision du 2026-08-29 refuse déjà pour
+ * le rapport d'import.
+ */
+export const CHAMPS_UNITE_JOURNALISABLES = [
+  'name',
+  'kind',
+  'parent_id',
+  'country_code',
+  'timezone',
+  'headcount',
+  'service_ref_id',
+  'sector_id',
+  'in_scope',
+  'position',
 ] as const;
 
 /** Pourquoi le crochet d'autorisation a refusé (note §2.4 : routes admin et financières). */
@@ -515,6 +597,130 @@ export const evenementJournalSchema = z.discriminatedUnion('action', [
      */
     avecMotif: z.boolean(),
   }),
+
+  // ── org_units (lot L3, incrément L3c) ──────────────────────────────────────
+  z.strictObject({
+    action: z.literal('org_unit.create'),
+    utilisateurId: idUtilisateur,
+    uniteId: z.uuid(),
+    missionId: z.uuid(),
+    /**
+     * Le TYPE de l'unité (`groupe`, `service`, `poste`…) : un code d'énumération,
+     * pas une donnée du client. C'est ce qui permet de relire une mission et de
+     * voir la forme de l'arbre qu'on lui a construit, sans jamais lire un nom.
+     */
+    kind: z.enum(TYPES_UNITE_ORG),
+    /** L'unité naît-elle comme PROPOSITION (§25.3) ou comme unité du siège ? */
+    statut: z.enum(STATUTS_UNITE_ORG_CREABLES),
+    /**
+     * L'identifiant venait-il du CLIENT (UUID v7, règle P1-4 du 04) ou a-t-il été
+     * frappé par le serveur ? La question se pose le jour où deux appareils
+     * revendiquent la même unité ; sans ce booléen, elle est indécidable.
+     */
+    idFourniParLAppelant: z.boolean(),
+  }),
+  z.strictObject({
+    action: z.literal('org_unit.update'),
+    utilisateurId: idUtilisateur,
+    uniteId: z.uuid(),
+    /** Les NOMS des colonnes touchées. Jamais l'avant, jamais l'après. */
+    champs: z.array(z.enum(CHAMPS_UNITE_JOURNALISABLES)).min(1),
+  }),
+  z.strictObject({
+    action: z.literal('org_unit.import'),
+    utilisateurId: idUtilisateur,
+    /** L'import porte sur la MISSION : il crée n unités d'un seul geste. */
+    missionId: z.uuid(),
+    /** Combien d'unités l'arbre a reçues. Un décompte, jamais un contenu. */
+    unitesCreees: z.number().int().min(0),
+    /**
+     * ⚠ **LE RAPPORT D'ERREURS N'EST JAMAIS JOURNALISÉ**, et cette variante n'a
+     * aucun champ pour l'accueillir (`DECISIONS.md` du 2026-08-29) : il recopie des
+     * cellules du fichier client — noms d'unités, effectifs — et la table d'audit
+     * garantit de n'en contenir aucune. Un import REJETÉ ne produit d'ailleurs
+     * aucune ligne du tout : il n'a rien changé.
+     */
+  }),
+  z.strictObject({
+    action: z.literal('org_unit.validate'),
+    utilisateurId: idUtilisateur,
+    uniteId: z.uuid(),
+    missionId: z.uuid(),
+  }),
+  z.strictObject({
+    action: z.literal('org_unit.merge'),
+    utilisateurId: idUtilisateur,
+    /** La SOURCE — celle qui passe en `fusionnee` et qui SURVIT (invariant 7). */
+    uniteId: z.uuid(),
+    missionId: z.uuid(),
+    /** La CIBLE, `org_units.merged_into_id`. */
+    cibleId: z.uuid(),
+    /**
+     * Les deux décomptes de ce que la fusion a DÉPLACÉ.
+     *
+     * `docs/conception/LOT_L3.md` §3e demande une entrée portant
+     * `{interviewIds, avant, apres, motif}`. Les IDENTIFIANTS d'entretiens n'y
+     * entrent PAS : la ceinture 2 de ce fichier plafonne un tableau à 32 éléments,
+     * et une fusion peut en déplacer davantage — le journal perdrait alors sa
+     * `meta` ENTIÈRE (voir `META_REFUSEE`), donc aussi la cible et les décomptes.
+     * On garde ce qui répond à la question d'audit (« combien de données ont
+     * changé de rattachement ? ») ; le DÉTAIL reste lisible en base par
+     * `interviews.org_unit_id`, qui pointe désormais la cible, et par
+     * `org_units.merged_into_id`, qui dit d'où elles viennent. **L'ancien
+     * rattachement reste donc lisible par deux chemins indépendants.**
+     */
+    entretiensReattaches: z.number().int().min(0),
+    enfantsReattaches: z.number().int().min(0),
+    /**
+     * ⚠ **UN BOOLÉEN, PAS LE MOTIF** — même limite, même raison, et même remontée
+     * que `mission.status_change` : `verifierValeursAtomiques` n'accepte que du
+     * vocabulaire technique, une phrase française y ferait écarter la `meta`
+     * entière. Le texte du motif n'a aujourd'hui aucun endroit où se poser.
+     */
+    avecMotif: z.boolean(),
+  }),
+
+  // ── questionnaire et sessions (lot L3, incrément L3d) ──────────────────────
+  z.strictObject({
+    action: z.literal('mission.questionnaire_freeze'),
+    utilisateurId: idUtilisateur,
+    missionId: z.uuid(),
+    /**
+     * COMBIEN de questions ont été figées. Un décompte, jamais un contenu — ni les
+     * textes, ni les codes, ni les blocs : le questionnaire figé est lisible dans
+     * `mission_questions`, et la table d'audit n'a aucune raison d'en tenir une
+     * seconde copie sous un autre régime d'accès.
+     *
+     * ⚠ **C'EST LA DATE DE CETTE LIGNE QUI FAIT FOI** pour le refus d'un second
+     * figeage (`activity_log.created_at`) : `mission_questions` n'a aucune colonne
+     * de date au fichier 04, et en ajouter une serait la signature de Williams.
+     */
+    questionsFigees: z.number().int().min(1),
+  }),
+  z.strictObject({
+    action: z.literal('interview.reassign'),
+    /** L'admin ou le lead qui réaffecte — jamais la personne rencontrée. */
+    utilisateurId: idUtilisateur,
+    interviewId: z.uuid(),
+    missionId: z.uuid(),
+    /**
+     * D'OÙ et VERS OÙ, en IDENTIFIANTS. Les deux, toujours : « les sessions
+     * réalisées restent à leur auteur » (§34.4) n'a de sens vérifiable que si l'on
+     * sait qui était l'auteur avant. Aucun nom, aucune adresse — ni de l'auditeur,
+     * ni de la personne rencontrée (11 §2).
+     */
+    auditeurAvant: idUtilisateur,
+    auditeurApres: idUtilisateur,
+    /**
+     * ⚠ **UN BOOLÉEN, PAS LE MOTIF** — même limite, même raison et même escalade
+     * que `mission.status_change` et `org_unit.merge`. Le §34.4 exige un motif ;
+     * `verifierValeursAtomiques` n'accepte que du vocabulaire technique et une
+     * phrase française ferait écarter la `meta` entière. Le motif est donc
+     * OBLIGATOIRE à l'appel (400 s'il manque) et son TEXTE n'est écrit nulle part
+     * — escalade `DECISIONS.md` du 2026-09-01, rattachée au §34.4 le 2026-09-02.
+     */
+    avecMotif: z.boolean(),
+  }),
 ]);
 
 export type EvenementJournal = z.infer<typeof evenementJournalSchema>;
@@ -695,6 +901,96 @@ export function versLigneJournal(evenement: EvenementJournal): ContenuLigneJourn
           statut_apres: evenement.statutApres,
           sens: evenement.sens,
           surcharge: evenement.surcharge,
+          avec_motif: evenement.avecMotif,
+        },
+      };
+
+    case 'org_unit.create':
+      return {
+        action: evenement.action,
+        utilisateurId: evenement.utilisateurId,
+        entityType: 'org_unit',
+        entityId: evenement.uniteId,
+        meta: {
+          mission_id: evenement.missionId,
+          kind: evenement.kind,
+          statut: evenement.statut,
+          id_fourni: evenement.idFourniParLAppelant,
+        },
+      };
+
+    case 'org_unit.update':
+      return {
+        action: evenement.action,
+        utilisateurId: evenement.utilisateurId,
+        entityType: 'org_unit',
+        entityId: evenement.uniteId,
+        meta: { champs: [...evenement.champs] },
+      };
+
+    // L'IMPORT PORTE SUR LA MISSION, et son `entity_type` le dit : c'est la seule
+    // action `org_unit.*` dont la cible n'est pas une unité. Écrire ici l'id d'une
+    // des unités créées désignerait une ligne au hasard parmi cent.
+    case 'org_unit.import':
+      return {
+        action: evenement.action,
+        utilisateurId: evenement.utilisateurId,
+        entityType: 'mission',
+        entityId: evenement.missionId,
+        meta: { unites_creees: evenement.unitesCreees },
+      };
+
+    case 'org_unit.validate':
+      return {
+        action: evenement.action,
+        utilisateurId: evenement.utilisateurId,
+        entityType: 'org_unit',
+        entityId: evenement.uniteId,
+        meta: { mission_id: evenement.missionId },
+      };
+
+    case 'org_unit.merge':
+      return {
+        action: evenement.action,
+        utilisateurId: evenement.utilisateurId,
+        // La SOURCE, jamais la cible : c'est elle que la fusion a changée, et
+        // c'est sur elle qu'une recherche d'audit part (index `activity_log
+        // (entity_type, entity_id)`). La cible est dans `meta`.
+        entityType: 'org_unit',
+        entityId: evenement.uniteId,
+        meta: {
+          mission_id: evenement.missionId,
+          cible_id: evenement.cibleId,
+          entretiens_reattaches: evenement.entretiensReattaches,
+          enfants_reattaches: evenement.enfantsReattaches,
+          avec_motif: evenement.avecMotif,
+        },
+      };
+
+    // Le figeage porte sur la MISSION : c'est d'elle qu'on demandera « quand son
+    // questionnaire a-t-il été figé ? », et c'est cette ligne qui répond.
+    case 'mission.questionnaire_freeze':
+      return {
+        action: evenement.action,
+        utilisateurId: evenement.utilisateurId,
+        entityType: 'mission',
+        entityId: evenement.missionId,
+        meta: { questions_figees: evenement.questionsFigees },
+      };
+
+    // La réaffectation porte sur la SESSION, jamais sur l'un des deux auditeurs :
+    // une recherche d'audit part de la session dont on conteste le changement de
+    // main. Les deux auditeurs sont dans `meta`, en identifiants.
+    case 'interview.reassign':
+      return {
+        action: evenement.action,
+        utilisateurId: evenement.utilisateurId,
+        entityType: 'interview',
+        entityId: evenement.interviewId,
+        meta: {
+          mission_id: evenement.missionId,
+          auditeur_avant: evenement.auditeurAvant,
+          auditeur_apres: evenement.auditeurApres,
           avec_motif: evenement.avecMotif,
         },
       };

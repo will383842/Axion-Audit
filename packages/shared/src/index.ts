@@ -15,3 +15,7 @@ export * from './scoping.js';
 export * from './users.js';
 export * from './companies.js';
 export * from './missions.js';
+export * from './org-units.js';
+export * from './questionnaire.js';
+export * from './plan-entretiens.js';
+export * from './assignments.js';

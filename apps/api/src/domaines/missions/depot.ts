@@ -39,13 +39,7 @@ import {
   type TypeUniteOrg,
 } from '@axion/shared';
 import { db } from '../../db.js';
-import {
-  companies,
-  missionQuestions,
-  missions,
-  orgUnits,
-  stepValidations,
-} from '../../db/schema.js';
+import { companies, missions, orgUnits, stepValidations } from '../../db/schema.js';
 import {
   conditionApresCurseur,
   limiteAChercher,
@@ -55,6 +49,10 @@ import {
   type PageCurseur,
 } from '../../http/pagination.js';
 import type { ExecuteurSql } from '../auth/depot.js';
+// L'UNIQUE comptage des questions figées vit chez L3d (brief L3D §9-8) : ce dépôt
+// le CONSOMME, il ne le duplique pas. L'import ne crée aucun cycle — le dépôt du
+// questionnaire ne connaît pas celui des missions, il lit `missions` directement.
+import { compterQuestionsFigees } from '../questionnaire/depot.js';
 
 // -----------------------------------------------------------------------------
 // LA LIGNE
@@ -354,22 +352,28 @@ export async function lireEtapesValidees(
  * Le questionnaire de cette mission est-il FIGÉ ?
  *
  * `docs/conception/LOT_L3.md` §3a, verbatim : « Il n'y a **pas de colonne “figé”** :
- * l'existence des lignes EST la preuve ». Une seule ligne `mission_questions`
- * suffit donc, et on ne compte pas — un `COUNT(*)` sur les ~240 questions d'une
- * mission de grand compte coûterait un balayage pour répondre à une question
- * booléenne. `limit(1)` s'arrête à la première.
+ * l'existence des lignes EST la preuve ».
+ *
+ * ⚠ **LE COMPTAGE N'EST PLUS FAIT ICI** (lot L3d, brief §9-8, « une seule
+ * implémentation, chez L3d ; L3b la consomme, ne la duplique pas »). Cette fonction
+ * délègue à `compterQuestionsFigees` et se contente de traduire le nombre en
+ * booléen. Ce qu'on y gagne : le refus de figer deux fois (409, qui doit NOMMER le
+ * compte) et la condition `questionnaire_fige` du §32.2 répondent désormais à la
+ * même question par le même chemin — deux comptages auraient fini par diverger, et
+ * le jour où ils divergent, une mission passe en collecte avec un questionnaire que
+ * le figeage croit absent.
+ *
+ * Ce qu'on y perd, et il faut le dire : l'ancien `limit(1)` s'arrêtait à la première
+ * ligne là où `count(*)` parcourt l'index de `mission_id`. Sur les ~240 questions
+ * d'une mission de grand compte, c'est un index scan de quelques centaines
+ * d'entrées, sur un chemin emprunté une fois par transition de statut — mesurable
+ * en microsecondes, et payé pour une garantie d'unicité de la règle.
  */
 export async function questionnaireEstFige(
   executeur: ExecuteurSql,
   missionId: string,
 ): Promise<boolean> {
-  const lignes = await executeur
-    .select({ id: missionQuestions.id })
-    .from(missionQuestions)
-    .where(eq(missionQuestions.missionId, missionId))
-    .limit(1);
-
-  return lignes.length > 0;
+  return (await compterQuestionsFigees(executeur, missionId)) > 0;
 }
 
 /**

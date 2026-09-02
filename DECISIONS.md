@@ -6334,3 +6334,349 @@ ordre. **Précédence : 11 §3.**
 
 Décideur : A01, sur constat du testeur A16
 Impact spec : aucun.
+
+## 2026-09-02 — [L3d] Le journal ne trace AUCUN figeage — ma décision de la veille reposait sur une prémisse fausse
+
+L'entrée du 2026-09-01 « La date de figeage du questionnaire n'existe pas en base » retient : « lire
+la date dans `activity_log`, **qui trace déjà l'acte de figeage** ». Le testeur A16 a mesuré : le
+catalogue `ACTIONS_JOURNAL` (`packages/shared/src/journal.ts`) est **fermé** et ne contient aucune
+action de figeage. La porte d'écriture du journal refuserait l'événement. **La prémisse était fausse
+au moment où je l'ai écrite, et je ne l'avais pas vérifiée.**
+
+Options :
+
+1. Ajouter `mission.questionnaire_freeze` au catalogue, avec l'implémentation du figeage.
+2. Revenir sur la décision et amender le 04 d'une colonne de date.
+
+Arbitrage : **option 1.** Le catalogue s'étend à chaque lot avec son premier usage — c'est le
+précédent de `company.*` (L3a) et de `mission.*` (L3b), et le même motif : pas d'action sans
+appelant. La décision de la veille **tient** ; c'est sa justification qui devient vraie avec ce
+commit, au lieu de l'être avant. **Règle de précédence sans objet.**
+
+Décideur : A01 — correction de sa propre prémisse, sur mesure du testeur A16
+Impact spec : aucun. `ACTIONS_JOURNAL` gagne une action, posée par l'implémenteur de T3.
+
+## 2026-09-02 — [L3d] Où vit la re-vérification de `question_version` promise par la note L3 §3.a ?
+
+La note L3 §3.a et le brief L3D §4 promettent qu'à chaque **lecture**, `mission_questions.question_version`
+est re-vérifié contre la ligne pointée — divergence = `CONFLICT`, détecteur de corruption. Or
+**aucune route de L3d ne lit le questionnaire figé** : la table du brief §7 n'expose pas de lecteur.
+Le brief se contredit.
+
+Options :
+
+1. La re-vérification **vit dans le lecteur**, quel qu'il soit ; L3d n'en a pas, elle est **due au
+   premier lecteur** — le pull de mission (L5a embarquement / L6a côté serveur), et L9 `resync`.
+2. Ajouter à L3d une route de lecture pour porter la vérification.
+
+Arbitrage : **option 1.** L'option 2 inventerait une route hors du 07 pour héberger un contrôle qui n'a
+de sens qu'au moment où quelqu'un consomme la capture. Ce que L3d **doit** garantir, et que le test
+éprouve : après corruption de la ligne pointée, **les captures ne bougent ni ne se réparent**. La
+détection est une obligation **transmise**, écrite ici pour que L5a/L6a ne la découvrent pas.
+**Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun. Obligation transmise à L5a/L6a et L9, tracée dans le brief L3D.
+
+## 2026-09-02 — [L3d] Une mission sans palier (`size_tier_id` NULL) : que fait le filtre de palier ?
+
+`missions.size_tier_id` est nullable au 04 ; aucune section ne dit ce que devient le filtre de palier
+de l'assembleur M2 dans ce cas.
+
+Options :
+
+1. Le filtre de palier **n'est pas appliqué**, et un avertissement le dit.
+2. Aucune question ne passe.
+3. Le figeage est refusé.
+
+Arbitrage : **option 1**, comme l'assembleur livré le fait déjà. C'est la même lecture que pour
+`active_blocks` vide : **une absence de restriction n'est pas une restriction absolue.** L'option 2
+figerait un questionnaire vide en silence ; l'option 3 bloquerait une mission sur une donnée que le
+04 déclare facultative. L'avertissement est ce qui empêche l'option 1 d'être un silence.
+**Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-02 — [L3d] `active_blocks` / `active_sectors` vides, et la comparaison de palier
+
+Deux silences du pack que le brief L3D avait tranchés en recommandation, que les agents ont
+appliqués, et que le testeur demande de voir confirmés ou infirmés **explicitement** — il a raison :
+une règle qui vient d'un brief et non d'une décision est une règle que le prochain lot peut ignorer.
+
+Options :
+
+1. **Liste vide = aucune restriction** ; **palier = recouvrement d'intervalles** entre l'effectif du
+   client et les bornes du `size_tier`.
+2. Liste vide = rien ne passe ; palier = comparaison stricte de l'effectif aux bornes.
+
+Arbitrage : **option 1**, confirmée. Une mission dont l'admin n'a coché aucun bloc est une mission qui
+n'a encore rien restreint, pas une mission sans questionnaire. Le recouvrement d'intervalles est la
+seule lecture qui ne dépend pas d'un choix arbitraire de borne ouverte ou fermée.
+**Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-02 — [L3d] Figer un questionnaire hors du statut `preparation`
+
+Le brief impose que le figeage n'ait lieu qu'en `preparation`. Le code HTTP du refus n'est tranché
+nulle part.
+
+Options :
+
+1. `409 ILLEGAL_STATE_TRANSITION` — c'est l'**état** de la mission qui s'y oppose.
+2. `409 CONFLICT`, générique.
+
+Arbitrage : **option 1**, par cohérence avec l'arbitrage du 2026-09-01 sur le motif manquant : ce qui
+rend l'acte impossible est l'état de la ressource, et ce code-là le nomme. Un `CONFLICT` nu obligerait
+le front à lire le message pour savoir quoi proposer. **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-02 — [L3d] Le plan d'entretiens matérialise le n MINIMAL, et exclut les unités proposées
+
+Le §32.4 donne des fourchettes (« 4 à 6 entretiens ») sans dire si le plan généré pose le minimum ou
+le maximum. Et il ne dit pas si une unité encore `proposee` (§25.3) compte dans le dimensionnement.
+
+Options :
+
+1. **Le minimum est matérialisé en lignes, le maximum reste en donnée** ; les unités `proposee` ou
+   `fusionnee` sont **exclues** du dimensionnement, comme le générateur livré le fait.
+2. Le maximum en lignes.
+3. Les unités proposées comptent.
+
+Arbitrage : **option 1.** Le critère du 07 parle de « n **minimaux** §32.4 » — c'est le mot du brief.
+Une unité proposée n'est pas encore un fait de l'arbre : la faire compter produirait un plan sur une
+structure que personne n'a validée, et l'invalider ensuite laisserait des entretiens orphelins.
+**Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-02 — [L3d] Rôle → 403, appartenance → 404 : deux refus, deux codes, une règle
+
+Le précédent L3c (2026-09-01) tranche 403 pour un non-membre **parce que** le refus vient du crochet,
+sur le rôle, avant tout accès au dépôt. Le testeur du plan d'entretiens relève, à raison, que ce
+raisonnement ne transpose pas : sur les routes `type:'mission'`, le crochet laisse passer et c'est le
+**dépôt** qui filtre par appartenance. Le brief L3D §6 écrit d'ailleurs « consultant hors mission →
+**404** » pour `reassign`.
+
+Options :
+
+1. **Une règle par nature du refus** : refusé sur le **rôle** (crochet) → 403 ; refusé sur
+   l'**appartenance** (dépôt) → 404, l'existence de la mission n'est pas divulguée.
+2. 403 partout.
+3. 404 partout.
+
+Arbitrage : **option 1.** Elle n'est pas un compromis, elle est la lecture exacte des deux mécanismes :
+un refus prononcé avant de lire la ressource ne peut rien en divulguer (403 est honnête) ; un refus
+prononcé après l'avoir lue ne doit rien en divulguer (404 est nécessaire). Les options 2 et 3
+forceraient l'un des deux mécanismes à mentir. **Le lead et le consultant hors mission reçoivent
+donc 404 sur `interview-plan` et `reassign`, et 403 sur `assignments`** (admin seul, refus de rôle).
+**Précédence : invariant 3 (RBAC serveur systématique).**
+
+Décideur : A01, sur constat du testeur A16
+Impact spec : aucun. Le précédent L3c reste valable dans son cas.
+
+## 2026-09-02 — [L3d] Le lead et les affectations : §34.3 contre §34.1, même arbitrage qu'à L3c
+
+§34.3 donne au lead le pouvoir « d'ajuster le plan d'entretiens et les `work_assignments` de sa
+mission ». §34.1 : « la console est ADMIN SEUL, le lead y entre en Phase 2 ». Le brief L3D §7 tranche
+`roles:['admin']`.
+
+Options :
+
+1. **Admin seul** en V1 sur `GET|POST assignments` ; le pouvoir du lead attend son interface, Phase 2.
+2. Ouvrir au lead dès la V1.
+
+Arbitrage : **option 1**, identique à l'arbitrage `[L3c]` du 2026-09-01 et pour la même raison : §34.1
+borne la V1, §34.3 décrit un rôle qui n'a pas encore d'écran. Ouvrir un droit sans l'écran qui le
+porte ouvre une surface pour une fonctionnalité qui n'existe pas. **L'admin, lui, voit le plan de
+toute mission** — membre ou non — parce que la console est la sienne (§34.1) ; un admin qui devrait
+être « membre » d'une mission pour la piloter n'est pas un admin. **Règle de précédence sans objet.**
+
+Décideur : A01 — **à confirmer par Williams s'il veut le lead en V1**, comme pour L3c
+Impact spec : aucun.
+
+## 2026-09-02 — [L3d] Chaque unité `in_scope` compte sur son propre effectif, parents compris, sans agrégation
+
+§32.4 dit « unité » ; §17.3 dit « pour **chaque** unité in_scope ». Ni l'un ni l'autre ne dit si une
+unité parente compte, ni comment son effectif se compose avec celui de ses enfants. Le générateur
+livré et le testeur ont convergé, sans se lire, sur « toutes, parents compris, aucune agrégation » —
+et le testeur signale le risque : compter deux fois les mêmes personnes.
+
+Options :
+
+1. **Chaque unité `in_scope` et `active` reçoit sa fourchette sur son propre `headcount`**, parents
+   compris ; aucune agrégation n'est inventée.
+2. Exclure les unités parentes.
+3. Agréger les effectifs des enfants dans le parent.
+
+Arbitrage : **option 1.** C'est la lettre du §17.3, et les options 2 et 3 inventent chacune une règle
+que le pack ne porte pas — la 3 en produisant un chiffre que personne n'a saisi. **Le risque de double
+compte est réel et il est assumé, pas caché** : il tient au modèle de données de l'auditeur (un parent
+dont le `headcount` inclut ses enfants), et c'est à lui de saisir des effectifs disjoints s'il veut un
+total juste. La règle d'agrégation, si elle doit exister, est un amendement du §32.4 — pas une
+décision d'agent. **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun. Le §32.4 gagnerait à trancher l'agrégation ; posé pour la révision de spec P-D.
+
+## 2026-09-02 — [L3d] Effectif nul, effectif inconnu, et les compléments de la tranche > 200
+
+Trois silences du §32.4, sur lesquels le générateur et le testeur ont convergé sans se lire.
+
+Options :
+
+1. **Effectif `0`** → tranche ≤ 10 (la lettre) · **effectif NULL** → tranche minimale + drapeau
+   `effectifInconnu` + avertissement · **> 200** → observation, démonstration et relevé comptés
+   **1 chacun**, jamais une fourchette inventée.
+2. Refuser le plan sur un effectif nul ou inconnu.
+
+Arbitrage : **option 1.** Un plan refusé pour un effectif non renseigné bloquerait la préparation d'une
+mission sur une donnée que le 04 déclare facultative ; un plan qui compterait sans le dire serait le
+silence que le §17.3 interdit. Le drapeau et l'avertissement sont ce qui sépare les deux.
+**Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-02 — [L3d] Le motif de `reassign` : même escalade que le motif de retour arrière
+
+§34.4 exige un motif à la réaffectation et sa trace dans `activity_log`. L'escalade `[L3b]` du
+2026-09-01 (« où vit le texte du motif d'un retour arrière ») s'applique mot pour mot : le journal est
+un emplacement à code, 64 caractères, ni espace ni arobase.
+
+Options :
+
+1. Rouvrir une escalade distincte pour §34.4.
+2. **Rattacher §34.4 à l'escalade L3b existante**, une seule réponse pour les deux.
+
+Arbitrage : **option 2, et aucun arbitrage de fond** — c'est la même escalade, elle ne se dédouble pas.** En attendant, le code fait
+ce que le testeur exige et qui est vrai quel que soit l'arbitrage : le motif est **obligatoire à
+l'appel** (400 s'il manque), et **ni le motif, ni un nom, ni une adresse ne se retrouvent dans
+`activity_log`**. La réponse de Williams à l'escalade L3b vaudra pour §34.4. **Règle de précédence
+sans objet.**
+
+Décideur : **Williams — EN ATTENTE** (escalade du 2026-09-01, « motif : 3 » recommandé)
+Impact spec : à déterminer par l'arbitrage.
+
+## 2026-09-02 — [L5a / DoD] Deux dépendances de TEST hors liste, ajoutées sous la règle « silence vaut accord »
+
+Deux blocages du même ordre, posés à Williams le 2026-09-02 avec une option par défaut et un délai
+de 30 minutes, conformément au régime de décision qu'il a lui-même fixé le 2026-08-31 (« SILENCE
+VAUT ACCORD : tu proposes une option par défaut et tu l'appliques après 30 minutes sans réponse. Tu
+traces toujours. Je peux revenir dessus, rien n'est irréversible. »). Le délai est écoulé sans
+réponse ; la règle s'applique.
+
+1. **`fake-indexeddb`** — Dexie exige IndexedDB ; le projet `unit` tourne sous Node, qui n'en a pas,
+   et `jsdom` non plus. **Sans elle, aucun des 56 tests du socle L5a ne peut s'exécuter.**
+2. **`@axe-core/playwright`** — la DoD exige « axe-core vert » ; l'outil n'est installé nulle part
+   (constat du gardien A02 à P-B, réserve R-B8, et de la note L5 §5-2). Sans lui, la case de la porte
+   P-C est **incochable** — et cochable à vide, ce que ce dépôt refuse.
+
+Options :
+
+1. **Les ajouter en `devDependencies`, versions épinglées** (`save-exact`) : `fake-indexeddb 6.2.5`
+   dans `apps/field`, `@axe-core/playwright 4.13.0` à la racine.
+2. Attendre une réponse explicite — et laisser 56 tests inexécutables et une case de porte à vide.
+
+Arbitrage : **option 1.** Ce sont des dépendances de **test uniquement** : aucune ligne n'entre dans
+une image livrée, aucun octet ne va sur un appareil terrain. Le 11 §8-1 réserve l'ajout d'une
+dépendance à une décision humaine ; **la décision humaine a été prise en amont sous forme de règle**,
+et cette entrée en est l'application tracée. Williams peut la défaire d'un `pnpm remove`.
+**Règle de précédence sans objet.**
+
+Décideur : Williams, par la règle du 2026-08-31 · appliquée par A01
+Impact spec : amendement horodaté de la liste des versions épinglées (11 §1) — deux entrées de test.
+
+## 2026-09-02 — [L5a] Paramètres Argon2id : le pack impose l'algorithme et ne dit rien des paramètres — ESCALADE SOUS DÉFAUT
+
+05 §9.7 impose Argon2id pour dériver la KEK du mot de passe. Aucune section ne fixe la mémoire, les
+itérations ni le parallélisme. L'implémenteur A24 a retenu le **profil OWASP** (`m = 47 104 Kio,
+t = 1, p = 1`, sortie 32 octets), **stocké dans le coffre et destiné à l'en-tête `.axionbackup`**,
+pour rester changeable sans casser les coffres existants.
+
+Options :
+
+1. **Le profil OWASP, stocké avec le coffre** — appliqué par défaut, à confirmer.
+2. Un profil plus lourd (m = 64 Mio+) — plus de résistance, une dérivation qui risque de dépasser la
+   seconde sur iPad (budget A28 : dérivation < 1 s).
+3. Un profil plus léger — hors de question.
+
+Arbitrage : **option 1, appliquée sous la règle « silence vaut accord » du 2026-08-31 et EXPRESSÉMENT
+SIGNALÉE à Williams** : `CLAUDE.md` §3-4 réserve la crypto à une décision humaine, et un paramètre de
+dérivation en est une. Ce qui rend le défaut acceptable en attendant : les paramètres **voyagent
+avec le coffre**, donc les changer plus tard ne rend illisible aucun coffre existant — c'est le seul
+choix d'implémentation qui ne ferme pas la porte. Le budget A28 (< 1 s sur iPad) reste à mesurer.
+**Précédence : 11 §7 (budgets de performance) borne le paramètre par le haut.**
+
+Décideur : **Williams — à confirmer** · appliqué par défaut par A01 sur la règle du 2026-08-31
+Impact spec : aucun amendement ; le 05 §9.7 gagnerait à nommer le profil.
+
+## 2026-09-02 — [L5a] Aucun AAD sur AES-GCM : une enveloppe n'est pas liée à sa ligne
+
+Le coffre chiffre chaque valeur en AES-256-GCM sans données authentifiées additionnelles (AAD). Une
+enveloppe déchiffrable est donc déchiffrable **quelle que soit la ligne où on la colle** : un
+attaquant qui écrit dans IndexedDB peut déplacer une réponse d'une question à une autre sans que le
+déchiffrement le voie. L'implémenteur l'a signalé : lier l'enveloppe à sa ligne aurait exigé un
+troisième paramètre et cassé la signature publiée `dechiffrer(e, s)`.
+
+Options :
+
+1. Ne rien changer en L5a ; **fiche `AMELIORATIONS.md`**, durcissement arbitré à P-C.
+2. Ajouter l'AAD maintenant, et rompre le contrat §2 que le testeur a déjà pris pour base.
+
+Arbitrage : **option 1.** La menace suppose un attaquant qui écrit déjà dans le stockage local de
+l'appareil — c'est-à-dire qui a déjà passé le verrou et le coffre. Ce n'est pas rien, mais c'est un
+durcissement, pas une faille du modèle de menace du 06 §10. Rompre le contrat §2 en cours de rencontre
+tests × code coûterait plus qu'il ne protège aujourd'hui. **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun. Fiche à ouvrir dans `AMELIORATIONS.md` avant P-C.
+
+## 2026-09-02 — [L5a] L'état « validé » d'un entretien n'a aucune colonne au 04
+
+§19.1 distingue **terminer** et **valider** un entretien. Le 04 ne porte aucune colonne pour la
+validation : `interviews.status` s'arrête à `termine`. L'implémenteur a posé, en local, `status =
+'termine'` + `valideeLe` dans la charge chiffrée — et relève que **le pack ne dit pas comment une
+validation se synchronise**.
+
+Options :
+
+1. Local comme livré ; **la synchronisation de la validation est une question posée à L6a**, tracée
+   ici pour qu'elle ne soit pas découverte le jour du premier push.
+2. Amender le 04 — signature de Williams.
+
+Arbitrage : **option 1**, parce que L5a n'a pas de push et qu'aucune décision de schéma ne se prend
+sur un besoin qui ne s'exerce pas encore. Mais la question est **réelle et transmise** : L6a devra
+soit porter la validation dans la charge de l'op (sans colonne serveur, la console ne la verra pas),
+soit demander l'amendement. **Règle de précédence sans objet.**
+
+Décideur : A01 — obligation transmise à L6a
+Impact spec : aucun aujourd'hui ; amendement du 04 probable à L6a, à poser à Williams.
+
+## 2026-09-02 — [L5a] La liste fermée §3.2 des colonnes en clair admet `supprimeLe` et `answerId`
+
+La note L5 §3.2 fixe une liste FERMÉE des colonnes stockées en clair dans IndexedDB — tout le reste
+vit dans la charge chiffrée. Le testeur A26 en a fait un balayage : trois cas rouges, parce que le
+code pose deux colonnes de plus. Aucune n'est une donnée personnelle.
+
+Options :
+
+1. **Amender la liste** : `supprimeLe` (interviews, answers, attachments) et `answerId` (attachments)
+   y entrent ; la liste reste fermée.
+2. Retirer ces colonnes de l'index et les mettre dans la charge chiffrée.
+
+Arbitrage : **option 1.** `supprimeLe` permet de filtrer les lignes supprimées **sans déchiffrer** —
+une purge qui déchiffrerait chaque ligne pour savoir si elle est morte ne tiendrait pas le budget A28
+(< 50 ms par écriture, p95 interaction < 100 ms). `answerId` est la clé structurelle d'une pièce
+jointe vers sa réponse ; sans elle en clair, retrouver les pièces d'une réponse exige de tout
+déchiffrer. Elles sont du même ordre que `status` et `interviewId`, déjà admis pour la même raison.
+**La propriété qui compte est conservée** : la liste reste fermée, et le test rougit sur toute colonne
+non listée. **Précédence : 11 §7 (budgets A28) contre une lettre de note de conception.**
+
+Décideur : A01
+Impact spec : aucun sur `/docs`. Amendement horodaté de `docs/conception/LOT_L5.md` §3.2.

@@ -107,6 +107,14 @@ const entrepriseSemee = uuidv7();
  * Titre fictif : invariant 2, aucune référence client, fixture comprise.
  */
 const missionSemee = uuidv7();
+/**
+ * Une UNITÉ ORGANISATIONNELLE et un ENTRETIEN de `missionSemee`, pour les gabarits
+ * `org-units` (L3c) et `interviews` (L3d). Même règle que la mission : des lignes en
+ * base, jamais des UUID fabriqués — et aucune table financière n'est nommée pour
+ * les semer, la ceinture 3 veille.
+ */
+const uniteSemee = uuidv7();
+const entretienSeme = uuidv7();
 /** Un cadrage AVEC volet financier — celui que l'administrateur a le droit de lire. */
 const cadrageAvecFinancier = uuidv7();
 /** Un cadrage SANS volet financier — il doit rendre la MÊME chose qu'un inconnu. */
@@ -243,6 +251,20 @@ beforeAll(async () => {
      VALUES ($1, $2, 'Mission fictive de balayage', 'france', 'diagnostic_cadrage',
              'preparation', $3)`,
     [missionSemee, entrepriseSemee, comptes.admin],
+  );
+  // L'unité de `missionSemee` (gabarits `org-units`, L3c), puis l'entretien qui s'y
+  // rattache (gabarit `interviews`, L3d) — `conducted_by` est un compte réel, et
+  // `person_name` reste NUL : aucune donnée personnelle, même fictive, dans une
+  // fixture qui n'en a pas besoin.
+  await bd().query(
+    `INSERT INTO org_units (id, mission_id, kind, name, position)
+     VALUES ($1, $2, 'service', 'Unité fictive de balayage', 1)`,
+    [uniteSemee, missionSemee],
+  );
+  await bd().query(
+    `INSERT INTO interviews (id, mission_id, conducted_by, org_unit_id)
+     VALUES ($1, $2, $3, $4)`,
+    [entretienSeme, missionSemee, comptes.consultant, uniteSemee],
   );
   for (const cadrageId of [
     cadrageAvecFinancier,
@@ -1135,6 +1157,20 @@ describe('T5 — les ceintures 3 et 4 : sources et exécution', () => {
     // c'est tout l'objet du mécanisme ①.
     '/v1/missions/:id': { id: missionSemee },
     '/v1/missions/:id/status': { id: missionSemee },
+    // ── L'ARBRE, LE QUESTIONNAIRE, LE PLAN (L3c, L3d) ─────────────────────────
+    // Même mission ; l'unité et l'entretien sont semés à côté d'elle. Dix
+    // gabarits, dix lignes : le pilote en annonçait sept, le registre en porte
+    // dix — c'est le registre qui fait foi, jamais la liste qu'on a en tête.
+    '/v1/missions/:id/org-units': { id: missionSemee },
+    '/v1/missions/:id/org-units/import': { id: missionSemee },
+    '/v1/missions/:id/questionnaire-preview': { id: missionSemee },
+    '/v1/missions/:id/generate-questionnaire': { id: missionSemee },
+    '/v1/missions/:id/interview-plan': { id: missionSemee },
+    '/v1/missions/:id/assignments': { id: missionSemee },
+    '/v1/org-units/:id': { id: uniteSemee },
+    '/v1/org-units/:id/validate': { id: uniteSemee },
+    '/v1/org-units/:id/merge': { id: uniteSemee },
+    '/v1/interviews/:id/reassign': { id: entretienSeme },
     // ── LES COMPTES (L2/T3) ───────────────────────────────────────────────────
     // Ces cinq gabarits existent depuis L2 et n'avaient JAMAIS été cartographiés.
     // Ce n'est pas un oubli de rédaction, c'est un angle mort de fusion, et il vaut
