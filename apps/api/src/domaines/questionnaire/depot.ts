@@ -33,9 +33,9 @@
 // organisationnel : les unités in_scope commandent les paquets de service) · E43
 // (exécutabilité autopilote : conventions de dépôt, aucun SQL concaténé).
 // =============================================================================
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
+import type { ActionJournal } from '@axion/shared';
 import {
-  activityLog,
   blocks,
   interlocutorProfiles,
   missionQuestions,
@@ -46,6 +46,10 @@ import {
   sizeTiers,
 } from '../../db/schema.js';
 import type { ExecuteurSql } from '../auth/depot.js';
+// La date du figeage se lit par LA PORTE du journal, jamais sur la table : le
+// garde `check:porte-journal` (C2) interdit de la nommer hors de ce dossier, et il
+// ne distingue pas la lecture de l'écriture.
+import { lireDerniereActivite } from '../journal/depot.js';
 import type {
   LigneMissionAssemblage,
   LignePalierAssemblage,
@@ -169,20 +173,35 @@ export async function compterQuestionsFigees(
   return Number(lignes[0]?.total ?? 0);
 }
 
-/** L'action de journal qui date un figeage. Voir `lireDateDeFigeage`. */
-const ACTION_FIGEAGE = 'mission.questionnaire_freeze';
+/**
+ * L'action de journal qui date un figeage.
+ *
+ * Typée `ActionJournal` : elle ne peut donc désigner qu'une action du catalogue
+ * fermé, et c'est EXACTEMENT celle que le service écrit après le commit
+ * (`figerLeQuestionnaire`). Une chaîne libre aurait laissé lire une action que
+ * personne n'écrit — un refus qui aurait perdu sa date sans que rien ne le dise.
+ */
+const ACTION_FIGEAGE: ActionJournal = 'mission.questionnaire_freeze';
 
 /**
  * QUAND le questionnaire de cette mission a-t-il été figé ?
  *
  * ═══════════════════════════════════════════════════════════════════════════════
- * LA DATE VIT DANS `activity_log`, PARCE QUE `mission_questions` N'EN A AUCUNE.
+ * LA DATE VIT DANS LE JOURNAL, PARCE QUE `mission_questions` N'EN A AUCUNE.
  * ═══════════════════════════════════════════════════════════════════════════════
  * `DECISIONS.md` du 2026-08-29 veut que le refus porte « le compte ET la date » ;
- * le 2026-09-02 constate que le catalogue du journal ne connaissait aucune action
- * de figeage et la pose. La table `mission_questions` (04) n'a ni `created_at` ni
- * `frozen_at` — en ajouter une serait modifier le fichier 04, donc la signature de
- * Williams.
+ * l'entrée du 2026-09-02 constate que le catalogue du journal ne connaissait aucune
+ * action de figeage, et la pose. La table `mission_questions` (04) n'a ni
+ * `created_at` ni date de figeage — en ajouter une serait modifier le fichier 04,
+ * donc la signature de Williams.
+ *
+ * ⚠ **CE DÉPÔT NE NOMME PAS LA TABLE DU JOURNAL, ET IL NE LE PEUT PAS.** La lecture
+ * passe par `lireDerniereActivite`, dans le dépôt du journal : le garde-fou
+ * `check:porte-journal` (contrôle C2) refuse que la table soit nommée hors de ce
+ * dossier, et il ne distingue pas la lecture de l'écriture. La doctrine est celle
+ * du dépôt financier : une seule porte, sinon la garantie vaut ce que vaut le
+ * chemin le plus laxiste. La première version de cette fonction interrogeait la
+ * table directement — c'était sept atteintes, et la CI l'a dit avant la revue.
  *
  * ⚠ **CETTE LECTURE PEUT LÉGITIMEMENT RENDRE `null`**, et l'appelant doit le
  * supporter : un questionnaire figé avant que l'action n'existe (les fixtures de
@@ -191,27 +210,20 @@ const ACTION_FIGEAGE = 'mission.questionnaire_freeze';
  * juste — il est seulement moins précis. Un refus qui échouerait faute de date
  * serait bien pire : il laisserait figer deux fois.
  *
- * Elle n'est faite QUE sur le chemin du refus : un `SELECT` de plus sur un appel
- * qui a déjà échoué ne coûte rien à personne.
+ * L'`executeur` est transmis : cette lecture n'a lieu que sur le chemin du refus,
+ * DANS la transaction qui tient le `FOR UPDATE` de la mission. Lire par une autre
+ * connexion pendant qu'un verrou est tenu est la recette d'un interblocage.
  */
 export async function lireDateDeFigeage(
   executeur: ExecuteurSql,
   missionId: string,
 ): Promise<Date | null> {
-  const lignes = await executeur
-    .select({ createdAt: activityLog.createdAt })
-    .from(activityLog)
-    .where(
-      and(
-        eq(activityLog.action, ACTION_FIGEAGE),
-        eq(activityLog.entityType, 'mission'),
-        eq(activityLog.entityId, missionId),
-      ),
-    )
-    .orderBy(desc(activityLog.createdAt))
-    .limit(1);
+  const derniere = await lireDerniereActivite(
+    { entiteType: 'mission', entiteId: missionId, action: ACTION_FIGEAGE },
+    executeur,
+  );
 
-  return lignes[0]?.createdAt ?? null;
+  return derniere?.dateUtc ?? null;
 }
 
 // -----------------------------------------------------------------------------

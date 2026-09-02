@@ -1,89 +1,50 @@
 // =============================================================================
-// LA COQUILLE DE L'APPLICATION TERRAIN — lot L5a
+// Coquille de l'application terrain — lot L0.
 //
-// Elle n'affiche presque rien : elle décide QUEL écran est légitime selon l'état
-// du socle, et porte le seul élément qui doit exister sur toutes les vues — le
-// bouton de verrouillage d'un geste (05 §9.7 : « l'auditeur qui pose sa tablette
-// verrouille lui-même — c'est LUI le premier périmètre de sécurité »).
+// Ce composant existe pour que l'image se construise et que le conteneur serve
+// quelque chose de vérifiable. Les écrans réels (3 zones, types de réponse,
+// agenda, validation d'entretien) sont le lot L5 — les esquisser ici créerait du
+// code à jeter et enfreindrait la règle « jamais deux lots en parallèle ».
 //
-// ── LE VERROU EST STRUCTUREL, PAS VISUEL ────────────────────────────────────
-// Quand le coffre est fermé, l'écran de déverrouillage n'est pas POSÉ DEVANT les
-// données : les données ne sont pas lisibles du tout, parce que le contexte local
-// a été retiré (`local/contexte.ts`). C'est la différence entre un verrou et un
-// rideau.
-//
-// Traçabilité : E33 (sécurité / RGPD), E6 (hors ligne total, PC ET tablette).
+// Aucune couleur en dur (invariant 4) : tout passe par les variables de
+// packages/ui. C'est déjà vrai sur cet écran d'attente.
+// Traçabilité : E17.
 // =============================================================================
-import type { ReactNode } from 'react';
-import { Bouton, EtatErreur, Squelette } from '@axion/ui';
-import { EcranAccueil } from './app/EcranAccueil.js';
-import { EcranDeverrouillage } from './app/EcranDeverrouillage.js';
-import { EcranStockage } from './app/EcranStockage.js';
-import { useTerrain } from './app/contexte.js';
-import { VUES } from './app/vues.js';
+import type * as React from 'react';
 
-function ContenuCourant(): ReactNode {
-  const { vue } = useTerrain();
-  switch (vue) {
-    case 'deverrouillage':
-      return <EcranDeverrouillage />;
-    case 'stockage':
-      return <EcranStockage />;
-    case 'accueil':
-      return <EcranAccueil />;
-  }
-}
-
-export function App(): ReactNode {
-  const { phase, panne, vue, verrou, fermer } = useTerrain();
-
-  if (phase === 'chargement') {
-    return (
-      <div className="axn-coquille">
-        <main className="axn-coquille__corps axn-pile" aria-busy="true">
-          <Squelette forme="titre" />
-          <Squelette forme="ligne" lignes={3} />
-        </main>
-      </div>
-    );
-  }
-
-  if (phase === 'erreur') {
-    return (
-      <div className="axn-coquille">
-        <main className="axn-coquille__corps axn-pile axn-pile--large">
-          <EtatErreur
-            titre="Les données locales sont inaccessibles"
-            cause={panne?.cause ?? 'Cause inconnue.'}
-            action={panne?.action ?? 'Rechargez la page.'}
-          />
-        </main>
-      </div>
-    );
-  }
-
-  // Coffre fermé : une seule vue possible, et aucune donnée derrière elle.
-  if (phase === 'verrouille' || verrou.verrouille) {
-    return (
-      <div className="axn-coquille">
-        <main className="axn-coquille__corps">
-          <EcranDeverrouillage />
-        </main>
-      </div>
-    );
-  }
-
+export function App(): React.JSX.Element {
   return (
-    <div className="axn-coquille">
-      <header className="axn-coquille__entete">
-        <h1 className="axn-coquille__titre">{VUES[vue].titre}</h1>
-        <Bouton variante="discret" onClick={fermer}>
-          Verrouiller
-        </Bouton>
-      </header>
-      <main className="axn-coquille__corps">
-        <ContenuCourant />
-      </main>
-    </div>
+    <main
+      style={{
+        minHeight: '100dvh',
+        display: 'grid',
+        placeItems: 'center',
+        padding: 'var(--espacement-6)',
+        background: 'var(--couleur-surface-fond)',
+        color: 'var(--couleur-texte-principal)',
+        fontFamily: 'var(--typo-police-corps)',
+      }}
+    >
+      <div style={{ maxWidth: 'var(--taille-largeur-contenu-etroit)', textAlign: 'center' }}>
+        <h1
+          style={{
+            fontSize: 'var(--typo-taille-2xl)',
+            fontWeight: 'var(--typo-graisse-semi)',
+            lineHeight: 'var(--typo-interligne-serre)',
+            marginBottom: 'var(--espacement-3)',
+          }}
+        >
+          Axion Audit — Terrain
+        </h1>
+        <p
+          style={{
+            color: 'var(--couleur-texte-secondaire)',
+            lineHeight: 'var(--typo-interligne-normal)',
+          }}
+        >
+          Socle technique en place. Les écrans de collecte arrivent au lot L5.
+        </p>
+      </div>
+    </main>
   );
 }
