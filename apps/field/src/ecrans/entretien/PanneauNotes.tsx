@@ -19,6 +19,13 @@
 // suivante écraserait une note par une version plus ancienne. C'est le genre
 // de perte que l'invariant 7 interdit, et elle ne se voit qu'en entretien.
 //
+// Et chaque brouillon REFLÈTE la valeur lue tant que l'auditeur n'y a pas
+// touché : à la reprise d'un entretien, la note existante arrive APRÈS le
+// premier rendu (lecture IndexedDB), sans que la clé change. Un brouillon figé
+// sur la première valeur vue (`''`) l'aurait masquée, et la première frappe
+// l'aurait écrasée. Le brouillon ne devient la référence qu'à la première
+// frappe — et c'est alors le texte complet du champ, note existante comprise.
+//
 // Tout ce panneau est INTERNE : jamais rendu en écran partagé.
 // =============================================================================
 import { useState, type ReactNode } from 'react';
@@ -167,7 +174,11 @@ export function PanneauNotes(proprietes: ProprietesPanneauNotes): ReactNode {
   );
 }
 
-/** Une zone de texte qui tient son brouillon et remonte chaque frappe. */
+/**
+ * Une zone de texte qui reflète la valeur lue (`initial`) jusqu'à la première
+ * frappe, puis tient son brouillon et remonte chaque frappe. La clé posée par
+ * l'appelant remet le brouillon à zéro (changement de question ou de session).
+ */
 function Brouillon(proprietes: {
   readonly libelle: string;
   readonly initial: string;
@@ -178,17 +189,18 @@ function Brouillon(proprietes: {
   readonly onTexte: (texte: string) => void;
 }): ReactNode {
   const { libelle, initial, lignes, desactive, aide, id, onTexte } = proprietes;
-  const [texte, setTexte] = useState(initial);
+  /** `null` = jamais touché : le champ montre la valeur lue. */
+  const [brouillon, setBrouillon] = useState<string | null>(null);
   return (
     <ZoneNotes
       libelle={libelle}
-      value={texte}
+      value={brouillon ?? initial}
       rows={lignes}
       disabled={desactive}
       {...(aide === undefined ? {} : { aide })}
       {...(id === undefined ? {} : { id })}
       onChange={(evenement) => {
-        setTexte(evenement.target.value);
+        setBrouillon(evenement.target.value);
         onTexte(evenement.target.value);
       }}
     />

@@ -22,6 +22,14 @@
 // `valide` (verrouillée — 03 §19.1). Le refus est une erreur en français, que
 // l'écran affiche.
 //
+// ── AUCUNE ÉCRITURE D'UNE VALEUR QUE LA QUESTION N'ADMET PAS ────────────────
+// DECISIONS.md 2026-09-02 [L5b] : la validation est une garde à l'ÉCRITURE.
+// `validerValeurPourQuestion` (`valeurs.ts`) vérifie la forme, le type contre
+// celui de la question, la fourchette contre `allowRangeSnapshot`, les bornes,
+// les codes d'option ; le motif de non-communication est contrôlé contre la
+// liste fermée. Tout refus lève AVANT `ecrireLocal` : ni ligne, ni op, et la
+// valeur valide déjà en base reste ce qu'elle est.
+//
 // Traçabilité : E13, E30 (§27.4), E14 (à revoir / N-A), E7 (chaque écriture
 // pousse une op).
 // =============================================================================
@@ -32,13 +40,13 @@ import type { SessionLocale } from '../local/depots/sessions.js';
 import { ecrireLocal } from '../local/ecriture.js';
 import {
   drapeau,
-  type MOTIFS_NON_COMMUNIQUE,
+  MOTIFS_NON_COMMUNIQUE,
   type SOURCES_REPONSE,
   type TypeDeSession,
 } from '../local/formes.js';
 import { maintenant } from '../local/horloge.js';
 import { estVerrouilleeEnModification, etatSession } from './machine.js';
-import type { ValeurTypee } from './valeurs.js';
+import { validerValeurPourQuestion, ValeurRefusee, type ValeurTypee } from './valeurs.js';
 
 export type MotifNonCommunique = (typeof MOTIFS_NON_COMMUNIQUE)[number];
 export type SourceReponse = (typeof SOURCES_REPONSE)[number];
@@ -115,11 +123,18 @@ export async function ecrireReponse(
   const refus = motifRefusEcriture(session);
   if (refus !== null) throw new Error(refus);
 
+  // La garde : une valeur NOUVELLE est validée contre la question AVANT toute
+  // lecture ou écriture ; `undefined` (inchangée) et `null` (effacée) passent.
+  const value =
+    modification.value === undefined || modification.value === null
+      ? modification.value
+      : validerValeurPourQuestion(question, modification.value);
+
   const existante = await depotReponses.parQuestion(session.id, question.id);
   const id = existante?.id ?? uuidv7();
   const instant = maintenant();
 
-  const value = modification.value === undefined ? (existante?.value ?? null) : modification.value;
+  const valeurEcrite = value === undefined ? (existante?.value ?? null) : value;
   const note = modification.note === undefined ? (existante?.note ?? null) : modification.note;
   const flagReview = modification.flagReview ?? existante?.flagReview === 1;
   const notApplicable = modification.notApplicable ?? existante?.notApplicable === 1;
@@ -141,6 +156,12 @@ export async function ecrireReponse(
       ? (existante?.withheldReason ?? null)
       : modification.withheldReason
     : null;
+  // §27.4 : « non communiqué » se dit TOUJOURS avec un motif de la liste fermée.
+  if (withheld && !(MOTIFS_NON_COMMUNIQUE as readonly string[]).includes(withheldReason ?? '')) {
+    throw new ValeurRefusee(
+      'Une information non communiquée porte un motif : confidentiel, non disponible, hors périmètre ou autre.',
+    );
+  }
 
   const index = {
     interviewId: session.id,
@@ -151,7 +172,7 @@ export async function ecrireReponse(
     horsParcours: drapeau(horsParcours),
   };
   const charge = {
-    value,
+    value: valeurEcrite,
     note: note === '' ? null : note,
     reviewReason: reviewReason === '' ? null : reviewReason,
     naReason: naReason === '' ? null : naReason,

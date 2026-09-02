@@ -45,9 +45,9 @@ import {
 import { useTerrain } from '../../app/contexte.js';
 import type { BaseLocale } from '../../local/base.js';
 import { contexteLocal } from '../../local/contexte.js';
-import { depotQuestions } from '../../local/depots/questions.js';
+import { depotQuestions, type QuestionLocale } from '../../local/depots/questions.js';
 import { depotReponses, type ReponseLocale } from '../../local/depots/reponses.js';
-import { depotSessions } from '../../local/depots/sessions.js';
+import { depotSessions, type SessionLocale } from '../../local/depots/sessions.js';
 import type { IndexAnswer } from '../../local/formes.js';
 import { lireIdentiteAuditeur, PROFIL_PAR_DEFAUT } from '../../session/auditeur.js';
 import { ecrireReponse, motifRefusEcriture } from '../../session/ecriture-reponses.js';
@@ -98,6 +98,22 @@ const CAPACITES_HORS_LIGNE = [
   'Ajouter une question ad hoc ou en retrouver une hors parcours',
 ];
 
+/**
+ * L'ordre de parcours. Le dépôt trie par `position` ; à position ÉGALE, une
+ * question ad hoc passe AVANT la question siège : née de la question n, elle
+ * prend `n + 1` (DECISIONS.md 2026-09-02 [L5b] : « juste après la courante »)
+ * sans renuméroter les questions siège (05 §9.4). Deux ad hoc à la même
+ * position se suivent dans l'ordre de leur création (id v7).
+ */
+function ordonnerParcours(questions: readonly QuestionLocale[]): QuestionLocale[] {
+  return [...questions].sort(
+    (a, b) =>
+      a.position - b.position ||
+      Number(b.addedAdHoc) - Number(a.addedAdHoc) ||
+      (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+  );
+}
+
 /** L'index des réponses d'une session, SANS la charge : pour compter, pas pour lire. */
 async function lireIndexReponses(base: BaseLocale, interviewId: string): Promise<IndexAnswer[]> {
   const lignes = await base.answers
@@ -119,16 +135,32 @@ export function EcranEntretien(): ReactNode {
   const enLigne = useEnLigne();
 
   // ── Lectures vivantes ──────────────────────────────────────────────────────
+  // `useLiveQuery` GARDE son résultat précédent quand ses dépendances changent,
+  // jusqu'à ce que la nouvelle requête ait émis. Les lectures qui décident d'un
+  // ÉTAT (session, questionnaire, question mémorisée) sont donc TAGUÉES par la
+  // clé qu'elles ont lue : un résultat dont la clé n'est pas celle d'aujourd'hui
+  // vaut « pas encore lu » (`undefined`), jamais « lu : absent » (`null`). Sans
+  // cela, « Entretien introuvable » s'affichait un instant à CHAQUE ouverture —
+  // le `null` calculé quand la session courante n'était pas encore connue.
   const sessionId = useLiveQuery(
     async () => (base === null ? null : lireSessionCourante(base)),
     [base],
     undefined,
   );
-  const session = useLiveQuery(
-    async () => (typeof sessionId === 'string' ? depotSessions.parId(sessionId) : null),
+  const lectureSession = useLiveQuery(
+    async () =>
+      typeof sessionId === 'string'
+        ? { pour: sessionId, session: await depotSessions.parId(sessionId) }
+        : null,
     [sessionId],
     undefined,
   );
+  const session: SessionLocale | null | undefined =
+    sessionId === null
+      ? null
+      : typeof sessionId === 'string' && lectureSession?.pour === sessionId
+        ? lectureSession.session
+        : undefined;
   const missionId = session?.missionId;
   const mission = useLiveQuery(
     async () => (missionId === undefined ? null : lireMissionLocale(missionId)),
@@ -140,10 +172,23 @@ export function EcranEntretien(): ReactNode {
     [missionId],
     undefined,
   );
-  const questions = useLiveQuery(
-    async () => (missionId === undefined ? null : depotQuestions.parMission(missionId)),
+  const lectureQuestions = useLiveQuery(
+    async () =>
+      missionId === undefined
+        ? null
+        : { pour: missionId, questions: await depotQuestions.parMission(missionId) },
     [missionId],
     undefined,
+  );
+  // `null` = aucune mission à lire ; `undefined` = mission connue, pas encore lue.
+  const questions: QuestionLocale[] | null | undefined = useMemo(
+    () =>
+      missionId === undefined
+        ? null
+        : lectureQuestions?.pour === missionId
+          ? ordonnerParcours(lectureQuestions.questions)
+          : undefined,
+    [lectureQuestions, missionId],
   );
   const indexReponses = useLiveQuery(
     async () =>
@@ -156,12 +201,20 @@ export function EcranEntretien(): ReactNode {
     [sessionId],
     undefined,
   );
-  const questionMemorisee = useLiveQuery(
+  const lectureQuestionMemorisee = useLiveQuery(
     async () =>
-      base === null || typeof sessionId !== 'string' ? null : lireQuestionCourante(base, sessionId),
+      base === null || typeof sessionId !== 'string'
+        ? null
+        : { pour: sessionId, questionId: await lireQuestionCourante(base, sessionId) },
     [base, sessionId],
     undefined,
   );
+  const questionMemorisee: string | null | undefined =
+    typeof sessionId !== 'string'
+      ? null
+      : lectureQuestionMemorisee?.pour === sessionId
+        ? lectureQuestionMemorisee.questionId
+        : undefined;
   const identite = useLiveQuery(
     async () => (base === null ? null : lireIdentiteAuditeur(base, contexteLocal().coffre)),
     [base],
@@ -373,7 +426,13 @@ export function EcranEntretien(): ReactNode {
   const creerAdHoc = useCallback(
     async (saisie: SaisieQuestionAdHoc): Promise<void> => {
       if (session === null || session === undefined) return;
-      const position = listeQuestions.reduce((max, q) => Math.max(max, q.position), 0) + 1;
+      // Juste APRÈS la courante (03 §17.5 : elle naît d'une réponse, elle se pose
+      // dans la foulée) ; `ordonnerParcours` la place devant la question siège
+      // qui porte déjà ce numéro.
+      const position =
+        question === undefined
+          ? listeQuestions.reduce((max, q) => Math.max(max, q.position), 0) + 1
+          : question.position + 1;
       let nouvelId = '';
       await enregistrer(async () => {
         nouvelId = await creerQuestionAdHoc({
@@ -390,7 +449,7 @@ export function EcranEntretien(): ReactNode {
       setAdHoc(false);
       aller(nouvelId);
     },
-    [aller, enregistrer, listeQuestions, question?.blockCode, session],
+    [aller, enregistrer, listeQuestions, question, session],
   );
 
   const demarrer = useCallback(
@@ -410,6 +469,23 @@ export function EcranEntretien(): ReactNode {
       setPanneau('notes');
     }
   }, [troisColonnes]);
+
+  // Les fermetures de superposition sont STABLES : `Panneau`/`Dialogue` (design
+  // system) relancent leur gestion du focus quand `onFermer` change — un rappel
+  // recréé à chaque rendu de cet écran (et cet écran se rend à chaque lecture
+  // vivante) rendrait le focus à leur premier bouton en pleine frappe.
+  const fermerPanneau = useCallback((): void => {
+    setPanneau(null);
+  }, []);
+  const fermerDrapeau = useCallback((): void => {
+    setDrapeau(null);
+  }, []);
+  const fermerRecherche = useCallback((): void => {
+    setRecherche(false);
+  }, []);
+  const fermerAdHoc = useCallback((): void => {
+    setAdHoc(false);
+  }, []);
 
   const fermerEntretien = useCallback((): void => {
     void purger().then(async () => {
@@ -431,7 +507,7 @@ export function EcranEntretien(): ReactNode {
       },
       ouiNon: (choix) => {
         if (question?.answerType === 'yes_no' && ecritureRefusee === null) {
-          ecrireValeur({ type: 'yes_no', v: choix === 'oui' }, 'immediat');
+          ecrireValeur({ type: 'yes_no', v: choix }, 'immediat');
         }
       },
       sansObjet: () => {
@@ -502,7 +578,8 @@ export function EcranEntretien(): ReactNode {
               actions: <Bouton onClick={fermerEntretien}>Revenir à l’accueil</Bouton>,
             }
           : questions === null || questions.length === 0
-            ? {
+            ? // `null` n'arrive pas ici (la session lue porte sa mission) ; la garde tient le type.
+              {
                 nature: 'vide',
                 titre: 'Questionnaire vide sur cet appareil',
                 description:
@@ -699,9 +776,7 @@ export function EcranEntretien(): ReactNode {
             ouvert={panneau === 'blocs' && !partage}
             titre="Blocs et progression"
             position="cote"
-            onFermer={() => {
-              setPanneau(null);
-            }}
+            onFermer={fermerPanneau}
           >
             <ZoneBlocs
               questions={listeQuestions}
@@ -716,9 +791,7 @@ export function EcranEntretien(): ReactNode {
             ouvert={panneau === 'notes' && !partage}
             titre="Notes"
             position="bas"
-            onFermer={() => {
-              setPanneau(null);
-            }}
+            onFermer={fermerPanneau}
           >
             <PanneauNotes
               cleNoteDeQuestion={`panneau-${question.id}-${String(cleNotes)}`}
@@ -765,9 +838,7 @@ export function EcranEntretien(): ReactNode {
             }
             motifNonCommuniqueActuel={reponse?.withheldReason ?? null}
             onDecider={decider}
-            onFermer={() => {
-              setDrapeau(null);
-            }}
+            onFermer={fermerDrapeau}
           />
 
           <PaletteRecherche
@@ -776,18 +847,10 @@ export function EcranEntretien(): ReactNode {
             onChoisir={(id) => {
               aller(id, true);
             }}
-            onFermer={() => {
-              setRecherche(false);
-            }}
+            onFermer={fermerRecherche}
           />
 
-          <DialogueQuestionAdHoc
-            ouvert={adHoc}
-            onCreer={creerAdHoc}
-            onFermer={() => {
-              setAdHoc(false);
-            }}
-          />
+          <DialogueQuestionAdHoc ouvert={adHoc} onCreer={creerAdHoc} onFermer={fermerAdHoc} />
         </section>
       )}
     </ZoneEtat>

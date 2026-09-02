@@ -10,7 +10,8 @@
 // compilateur le vérifie à l'écriture (`ecriture-reponses.ts`), aucune assertion.
 //
 // ── LES FORMES, ET POURQUOI ─────────────────────────────────────────────────
-//   yes_no          v: boolean          — « Sans objet » n'est PAS une valeur : c'est
+//   yes_no          v: 'oui' | 'non'    — la clé du barème 04 §7.3 (`VALEURS_OUI_NON`) ;
+//                                         « Sans objet » n'est PAS une valeur : c'est
 //                                         le drapeau `notApplicable` (03 M3.1).
 //   scale_1_5       v: 1 … 5            — entier ; les ancres §32.4 sont dans la guidance.
 //   single_choice   v: code d'option    — `options_snapshot[].code`, jamais le libellé.
@@ -18,7 +19,7 @@
 //   free_text       v: string
 //   number          v: number
 //   percent         v: number           — en points de pourcentage (« 35 » = 35 %).
-//   duration        v: number           — dans l'UNITÉ que la question nomme (le
+//   duration        v: number ≥ 0       — dans l'UNITÉ que la question nomme (le
 //                                         barème §32.1 compare un nombre nu).
 //   money           v: number + currency (ISO 4217, défaut `EUR`, 03 §22.2).
 //   date            v: 'AAAA-MM-JJ'     — une date CIVILE ; pas d'heure, pas de fuseau.
@@ -31,6 +32,16 @@
 // conversion vit ici, à un seul endroit, et ne jette jamais silencieusement —
 // une saisie illisible rend `null`, et l'écran le dit.
 //
+// ── LA GARDE À L'ÉCRITURE (DECISIONS.md 2026-09-02, [L5b]) ──────────────────
+// Le typage ci-dessus est un contrat de COMPILATION ; `validerValeurPourQuestion`
+// est la garde d'EXÉCUTION que `ecrireReponse` appelle avant d'écrire quoi que
+// ce soit : forme (schéma), type de la VALEUR = type de la QUESTION, fourchette
+// admise par la question figée, bornes cohérentes, code d'option connu. Une
+// saisie refusée lève en français et n'écrit rien — la valeur valide déjà en
+// base reste intacte (invariant 7). La PWA est la seule à connaître la question
+// au moment de la saisie : valider au push, c'est découvrir hors ligne, des
+// heures plus tard, qu'une cotation n'existait pas.
+//
 // Traçabilité : E13 (écran 3 zones), E30 (informations non communiquées et
 // fourchettes, §27.4).
 // =============================================================================
@@ -38,10 +49,12 @@ import { z } from 'zod';
 import {
   optionsQuestionSchema,
   TYPES_NUMERIQUES,
+  VALEURS_OUI_NON,
   type OptionQuestion,
   type TypeDeReponse,
 } from '@axion/shared';
 import type { ValeurReponse } from '../local/contrat-sync.js';
+import type { QuestionLocale } from '../local/depots/questions.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LES FORMES
@@ -64,14 +77,14 @@ export const ligneTableauSchema = z.record(z.string(), z.string());
 export type LigneTableau = z.infer<typeof ligneTableauSchema>;
 
 export const valeurTypeeSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('yes_no'), v: z.boolean() }),
+  z.object({ type: z.literal('yes_no'), v: z.enum(VALEURS_OUI_NON) }),
   z.object({ type: z.literal('scale_1_5'), v: z.number().int().min(NOTE_MIN).max(NOTE_MAX) }),
   z.object({ type: z.literal('single_choice'), v: z.string().min(1) }),
   z.object({ type: z.literal('multi_choice'), v: z.array(z.string().min(1)) }),
   z.object({ type: z.literal('free_text'), v: z.string() }),
   z.object({ type: z.literal('number'), v: z.number() }),
   z.object({ type: z.literal('percent'), v: z.number() }),
-  z.object({ type: z.literal('duration'), v: z.number() }),
+  z.object({ type: z.literal('duration'), v: z.number().nonnegative() }),
   z.object({ type: z.literal('money'), v: z.number(), currency: deviseSchema }),
   z.object({ type: z.literal('date'), v: dateCivileSchema }),
   z.object({ type: z.literal('table'), v: z.array(ligneTableauSchema) }),
@@ -187,7 +200,7 @@ export function resumerValeur(
     options.find((option) => option.code === code)?.label ?? code;
   switch (valeur.type) {
     case 'yes_no':
-      return valeur.v ? 'Oui' : 'Non';
+      return valeur.v === 'oui' ? 'Oui' : 'Non';
     case 'scale_1_5':
       return `${String(valeur.v)} / ${String(NOTE_MAX)}`;
     case 'single_choice':
@@ -213,4 +226,94 @@ export function resumerValeur(
       return `entre ${bas} et ${haut}${valeur.currency === undefined ? '' : ` ${valeur.currency}`}`;
     }
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LA GARDE À L'ÉCRITURE — ce que `valeurTypeeSchema` seul ne sait pas
+// ─────────────────────────────────────────────────────────────────────────────
+/** Ce que la garde lit de la question figée. */
+export type QuestionPourValidation = Pick<
+  QuestionLocale,
+  'answerType' | 'allowRangeSnapshot' | 'optionsSnapshot'
+>;
+
+/** Une saisie que la question figée n'admet pas. Le message est prêt à afficher. */
+export class ValeurRefusee extends Error {
+  override readonly name = 'ValeurRefusee';
+}
+
+/**
+ * 03 §22.2, 04 : sur une question `money`, un montant ou une fourchette saisis
+ * SANS devise reçoivent `EUR` — avant la lecture, pour que le schéma (qui exige
+ * la devise sur un montant) voie la forme complète.
+ */
+function poserDeviseParDefaut(question: QuestionPourValidation, value: unknown): unknown {
+  if (question.answerType !== 'money' || typeof value !== 'object' || value === null) return value;
+  const brut: Record<string, unknown> = { ...value };
+  if ((brut.type === 'money' || brut.type === 'range') && brut.currency === undefined) {
+    return { ...brut, currency: DEVISE_PAR_DEFAUT };
+  }
+  return value;
+}
+
+function codesInconnus(
+  codes: readonly string[],
+  options: readonly OptionQuestion[],
+): readonly string[] {
+  const connus = new Set(options.map((option) => option.code));
+  return codes.filter((code) => !connus.has(code));
+}
+
+/**
+ * Valide une valeur CONTRE SA QUESTION et rend la forme à écrire (la devise
+ * par défaut posée sur une fourchette `money` qui n'en porte pas). Lève
+ * `ValeurRefusee` sinon — et alors rien ne doit être écrit.
+ */
+export function validerValeurPourQuestion(
+  question: QuestionPourValidation,
+  value: unknown,
+): ValeurTypee {
+  const lecture = valeurTypeeSchema.safeParse(poserDeviseParDefaut(question, value));
+  if (!lecture.success) {
+    throw new ValeurRefusee(
+      `Cette saisie n’a pas la forme attendue pour une réponse « ${LIBELLE_TYPE_DE_REPONSE[question.answerType]} » ; elle n’a pas été enregistrée.`,
+    );
+  }
+  const valeur = lecture.data;
+
+  if (valeur.type === 'range') {
+    if (!fourchetteAdmise(question.answerType, question.allowRangeSnapshot)) {
+      throw new ValeurRefusee(
+        'Cette question n’admet pas de réponse en fourchette : saisissez une valeur exacte, ou marquez-la non communiquée.',
+      );
+    }
+    if (valeur.low === null && valeur.high === null) {
+      throw new ValeurRefusee('Une fourchette sans aucune borne n’est pas une réponse.');
+    }
+    if (valeur.low !== null && valeur.high !== null && valeur.low > valeur.high) {
+      throw new ValeurRefusee('La borne basse doit être inférieure à la borne haute.');
+    }
+    if (question.answerType !== 'money' && valeur.currency !== undefined) {
+      throw new ValeurRefusee('Seul un montant porte une devise.');
+    }
+    return valeur;
+  }
+
+  if (valeur.type !== question.answerType) {
+    throw new ValeurRefusee(
+      `Cette question attend une réponse « ${LIBELLE_TYPE_DE_REPONSE[question.answerType]} », pas « ${LIBELLE_TYPE_DE_REPONSE[valeur.type]} ».`,
+    );
+  }
+
+  if (valeur.type === 'single_choice' || valeur.type === 'multi_choice') {
+    const codes = valeur.type === 'single_choice' ? [valeur.v] : valeur.v;
+    const inconnus = codesInconnus(codes, optionsDeQuestion(question.optionsSnapshot));
+    if (inconnus.length > 0) {
+      throw new ValeurRefusee(
+        `Le choix « ${inconnus.join(', ')} » ne fait pas partie des options de cette question.`,
+      );
+    }
+  }
+
+  return valeur;
 }

@@ -2271,3 +2271,18 @@ Tests rouges connus : aucun sur `main`. Vérification isolée de `lot/l3-suite` 
   §10.2 de la fiche P-B, R-B12 levée, 370 citations / 245 fichiers, 14 routes sur `main`.
 - Gouvernance/vitesse : PR poussée après deux refus du hook `pre-push` (format prettier, puis verrou
   git sous trois processus concurrents) — le hook fait ce pour quoi il existe.
+
+## 2026-09-02 17h05 — [lot L5 / incrément L5b] — étape pipeline 3/7 (fin de session propre)
+Dernier commit vert : (celui-ci) feat(l5b): rencontre A26/A22 — 162/162   ·   Branche : lot/l5b   ·   Poussé : oui
+Tâche en cours : L5b écrit des deux côtés (A22 code, A26 tests) et rencontré : 162/162 verts après
+six correctifs A22 (garde à l'écriture, fourchette, oui/non en 'oui'|'non', note à la reprise, état
+transitoire, focus palette). Décisions tracées (rencontre, oui/non, trois doutes). Base : ce4b29b =
+L5a AVANT ses correctifs A29 — lot/l5b devra intégrer main (après PR L5a) avant sa propre PR.
+Prochaine action : lancer la revue croisée A29 sur lot/l5b (diff lot/l5a..lot/l5b, lecture seule),
+puis A20 signe la fin d'incrément ; escalader à Williams la phrase PHRASE_SCRIPT_ACCORD (script
+d'accord de participation, session/ecriture-session.ts) — le refus sans accord est testé, le libellé
+non ; A28 : balayage axe des écrans L5a+L5b et mesure de dérivation < 1 s (R-L5a-6 ouverte).
+Tests rouges connus : aucun sur les trois fichiers L5b (unitaire complet non rejoué ce jour sur cette
+branche : à rejouer en premier — la vérité, ce sont les tests). Cales jsdom (matchMedia,
+scrollIntoView) dans vitest.setup.interface.ts.
+Doute serveur transmis à L6 : deux mission_questions à la même position (ad hoc « juste après »).

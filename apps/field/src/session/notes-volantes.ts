@@ -79,7 +79,8 @@ async function reecrire(note: NoteVolanteLocale, action: 'upsert' | 'delete_soft
 
 export interface DemandeNoteVolante {
   readonly missionId: string;
-  readonly interviewId: string;
+  /** `null` = capturée hors de toute session (04 P1-5) — la capture hors session est L5c ; le type ne l’interdit pas. */
+  readonly interviewId: string | null;
   readonly createdBy: string;
   readonly content: string;
 }

@@ -106,10 +106,10 @@ export function SaisieReponse(proprietes: ProprietesSaisieReponse): ReactNode {
       return (
         <SegmenteONA
           libelle="Votre réponse"
-          valeur={sansObjet ? 'na' : valeur?.type === 'yes_no' ? (valeur.v ? 'oui' : 'non') : null}
+          valeur={sansObjet ? 'na' : valeur?.type === 'yes_no' ? valeur.v : null}
           onChangement={(choix: ReponseONA) => {
             if (choix === 'na') onSansObjet();
-            else onChangement({ type: 'yes_no', v: choix === 'oui' }, 'immediat');
+            else onChangement({ type: 'yes_no', v: choix }, 'immediat');
           }}
           afficherRaccourcis={afficherRaccourcis}
           desactive={desactive}
@@ -421,6 +421,9 @@ function SaisieEnFourchette(proprietes: {
   const [haut, setHaut] = useState(saisieDepuisNombre(valeur?.high));
   const devise = valeur?.currency ?? (type === 'money' ? DEVISE_PAR_DEFAUT : undefined);
 
+  // N'ÉMET que ce que la garde à l'écriture accepterait : une fourchette
+  // illisible ou incohérente (basse > haute) reste à l'écran, signalée par
+  // `SaisieFourchette`, et la dernière fourchette valide reste en base.
   const emettre = (
     texteBas: string,
     texteHaut: string,
@@ -430,11 +433,16 @@ function SaisieEnFourchette(proprietes: {
       onChangement(null, 'differe');
       return;
     }
+    const low = nombreDepuisSaisie(texteBas);
+    const high = nombreDepuisSaisie(texteHaut);
+    if (texteBas.trim() !== '' && low === null) return;
+    if (texteHaut.trim() !== '' && high === null) return;
+    if (low !== null && high !== null && low > high) return;
     onChangement(
       {
         type: 'range',
-        low: nombreDepuisSaisie(texteBas),
-        high: nombreDepuisSaisie(texteHaut),
+        low,
+        high,
         ...(nouvelleDevise === undefined ? {} : { currency: nouvelleDevise }),
       },
       'differe',
