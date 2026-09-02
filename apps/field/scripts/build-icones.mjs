@@ -35,7 +35,8 @@ import { fileURLToPath } from 'node:url';
 import { COULEURS_CHARTE } from '@axion/ui';
 
 const RACINE_APP = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const SORTIE = resolve(RACINE_APP, 'public/icones');
+const RACINE_PUBLIC = resolve(RACINE_APP, 'public');
+const SORTIE = resolve(RACINE_PUBLIC, 'icones');
 
 // --- Encodeur PNG minimal (couleur vraie + alpha, 8 bits) --------------------
 const TABLE_CRC = Uint32Array.from({ length: 256 }, (_, n) => {
@@ -148,13 +149,17 @@ const FICHIERS = [
   { nom: 'icone-maskable-512.png', taille: 512, marge: 0.24 },
   // iOS ignore le manifeste pour l'icône d'accueil : il lit `apple-touch-icon`,
   // et il ne sait pas rogner — d'où une marge intermédiaire et un carré plein.
-  { nom: 'apple-touch-icon.png', taille: 180, marge: 0.12 },
+  // À LA RACINE, pas sous /icones : quand la page n'a pas encore été lue (signet,
+  // partage, onglet fermé), Safari va chercher `/apple-touch-icon.png` sans
+  // regarder aucune balise — c'est ce que l'E2E `pwa-servie` exige, et la CI du
+  // 2026-09-02 (run 33632437526) a rougi sur un 404 à cet endroit précis.
+  { nom: 'apple-touch-icon.png', taille: 180, marge: 0.12, racine: true },
 ];
 
 mkdirSync(SORTIE, { recursive: true });
 for (const fichier of FICHIERS) {
   const png = dessiner(fichier.taille, fichier.marge);
-  writeFileSync(resolve(SORTIE, fichier.nom), png);
+  writeFileSync(resolve(fichier.racine ? RACINE_PUBLIC : SORTIE, fichier.nom), png);
   console.log(
     `[icones] ${fichier.nom} — ${String(Math.round(png.length / 1024))} Kio (PROVISOIRE)`,
   );
