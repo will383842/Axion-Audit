@@ -487,19 +487,53 @@ export const SEPARATEUR_CSV_ARBRE_DEFAUT: SeparateurCsvArbre = ';';
 export const LIGNE_ENTETE_CSV = 1;
 
 /**
- * Nombre maximal de lignes d'enregistrement d'un import.
+ * Nombre maximal de lignes d'ENREGISTREMENT d'un import — la borne du RÉSULTAT.
  *
  * Borne de PROTECTION, pas règle métier : le fil rouge FIL-GC en compte 150, et un
- * organigramme jusqu'au `poste` d'un grand groupe reste très en deçà. Elle évite
- * qu'un fichier aberrant (un export complet d'annuaire) ne fasse tourner la
- * validation en mémoire sur des centaines de milliers de lignes. Le corps HTTP est
- * déjà borné par `bodyLimit` (2 Mio, `app.ts`) — cette borne-ci est la seconde.
+ * organigramme jusqu'au `poste` d'un grand groupe reste très en deçà. Les lignes
+ * vides n'y comptent PAS : un tableur en laisse en queue de fichier, et refuser un
+ * import pour cela serait un refus que l'auditeur ne comprendrait pas.
+ *
+ * ⚠ **ELLE NE BORNE PAS LE TRAVAIL, ET C'EST POURQUOI `LIGNES_BRUTES_MAX` EXISTE.**
+ * Voir ci-dessous : cette borne-ci se prononce APRÈS le découpage, donc après que le
+ * coût a été payé.
  */
 export const LIGNES_CSV_ARBRE_MAX = 5000;
 
 /**
- * Plafond de longueur du contenu CSV transmis. En deçà de `bodyLimit`, pour que le
- * refus soit une erreur de validation lisible plutôt qu'une coupure de connexion.
+ * Nombre maximal de lignes PHYSIQUES d'un contenu, vides comprises — la borne du
+ * TRAVAIL.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * BORNER LE RÉSULTAT NE BORNE PAS LE COÛT : LE DÉFAUT A ÉTÉ MESURÉ (A51, F-11).
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * `LIGNES_CSV_ARBRE_MAX` compte les enregistrements NON VIDES, et se prononce APRÈS
+ * le découpage complet. Un corps de 2 Mio composé d'UNE unité valide et d'un million
+ * de fins de ligne franchissait donc le garde-fou, était déclaré conforme et importé
+ * — après avoir construit un objet par ligne physique : **764 ms à 1 s de CPU
+ * synchrone et 319 Mo de tas crête, par requête**, contre un conteneur plafonné à
+ * 768 Mo sans swap et un quota qui autorise 300 requêtes par minute. La fin n'est
+ * pas un 429, c'est un OOM du noyau. Le quota borne une FRÉQUENCE, jamais un COÛT
+ * UNITAIRE (11 §3) : c'est au traitement de borner le sien.
+ *
+ * **Le double du plafond d'unités** : autant de lignes vides que d'unités, ce
+ * qu'aucun tableur ne produit — la queue de lignes blanches d'un export se compte en
+ * dizaines. Un fichier de 10 000 lignes coûte quelques millisecondes ; le million est
+ * refusé avant qu'un seul enregistrement ne soit construit.
+ */
+export const LIGNES_BRUTES_MAX = 2 * LIGNES_CSV_ARBRE_MAX;
+
+/**
+ * Plafond de longueur du contenu CSV transmis. En deçà de `bodyLimit` (2 Mio,
+ * `app.ts`), pour que le refus soit une erreur de validation lisible plutôt qu'une
+ * coupure de connexion.
+ *
+ * ⚠ **APPLIQUÉ AUX DEUX BOUTS, ET IL FAUT LES DEUX** : par
+ * `importArbreRequestSchema` sur le corps de la requête (donc par le compilateur
+ * Zod, avant que le service ne soit atteint), ET par `analyserCsvArbre` elle-même.
+ * Le second n'est pas redondant : cette fonction est PURE et exportée — la console
+ * l'appelle sur un fichier lu localement, sans passer par aucun schéma de requête.
+ * Une fonction dont la sûreté dépend de son appelant n'est pas sûre.
  */
 export const TAILLE_CSV_ARBRE_MAX = 1_000_000;
 
@@ -539,8 +573,17 @@ export const ERREURS_RAPPORTEES_MAX = 500;
 export const CODES_DEFAUT_IMPORT_ARBRE = [
   /** Le contenu ne porte aucune ligne exploitable. */
   'FICHIER_VIDE',
-  /** Plus de `LIGNES_CSV_ARBRE_MAX` enregistrements. */
+  /** Plus de `LIGNES_CSV_ARBRE_MAX` enregistrements — la borne du RÉSULTAT. */
   'TROP_DE_LIGNES',
+  /**
+   * Plus de `LIGNES_BRUTES_MAX` lignes physiques — la borne du TRAVAIL, prononcée
+   * AVANT tout découpage (A51, F-11). Distincte de `TROP_DE_LIGNES` parce que la
+   * cause l'est : là, l'utilisateur a trop d'unités ; ici, son fichier est
+   * pathologique et n'a peut-être aucune unité du tout.
+   */
+  'TROP_DE_LIGNES_BRUTES',
+  /** Contenu plus long que `TAILLE_CSV_ARBRE_MAX`, mesuré avant toute analyse. */
+  'FICHIER_TROP_VOLUMINEUX',
   /** Une des neuf colonnes du §35.2 manque à l'en-tête. */
   'ENTETE_MANQUANT',
   /** L'en-tête porte une colonne que le §35.2 ne connaît pas. */
@@ -1246,6 +1289,68 @@ function refDeSecours(
 }
 
 /**
+ * Compte les lignes PHYSIQUES d'un contenu **sans rien allouer**.
+ *
+ * Un contenu non vide porte au moins une ligne ; chaque `
+` en ouvre une de plus.
+ * Un `
+` final ne compte pas une ligne supplémentaire — sinon tout fichier bien
+ * terminé paraîtrait en porter une de trop, et la borne se déclencherait un cran
+ * trop tôt sur un fichier légitime.
+ */
+export function compterLignesPhysiques(contenu: string): number {
+  if (contenu.length === 0) return 0;
+
+  let lignes = 1;
+  // `for…of` sur une chaîne itère les POINTS DE CODE, pas les unités UTF-16 : un
+  // caractère hors du plan de base (un emoji dans un nom d'unité) compte pour un au
+  // lieu de deux. Sans effet sur le décompte des sauts de ligne, et cela évite la
+  // boucle indexée que la règle `prefer-for-of` refuse — à juste titre : l'indice ne
+  // sert à rien ici.
+  for (const caractere of contenu) {
+    if (caractere === '\n') lignes += 1;
+  }
+  // Le saut final terminait la dernière ligne : il n'en ouvre pas une nouvelle.
+  return contenu.endsWith('\n') ? lignes - 1 : lignes;
+}
+
+/**
+ * LES DEUX REFUS QUI BORNENT LE TRAVAIL — voir `LIGNES_BRUTES_MAX` (A51, F-11).
+ *
+ * Rend une analyse de refus, ou `null` quand le contenu est de taille traitable.
+ * Les décomptes rendus dans ce cas sont **volontairement à zéro** : rien n'a été lu,
+ * et annoncer un nombre de lignes qu'on n'a pas analysées serait un rapport qui
+ * prétend savoir. Seule la ligne d'en-tête est nommée, parce qu'il faut bien
+ * accrocher le défaut quelque part et que c'est le fichier ENTIER qui est refusé.
+ */
+function bornerLeTravail(contenu: string, separateur: SeparateurCsvArbre): AnalyseCsvArbre | null {
+  const refus = (code: CodeDefautImportArbre, message: string): AnalyseCsvArbre => ({
+    separateur,
+    lignesLues: 0,
+    lignesVidesIgnorees: 0,
+    lignes: [],
+    erreurs: [defaut(LIGNE_ENTETE_CSV, null, code, message)],
+  });
+
+  if (contenu.length > TAILLE_CSV_ARBRE_MAX) {
+    return refus(
+      'FICHIER_TROP_VOLUMINEUX',
+      `Le fichier pèse ${String(contenu.length)} caractères ; le maximum admis par import est ${String(TAILLE_CSV_ARBRE_MAX)}.`,
+    );
+  }
+
+  const lignesPhysiques = compterLignesPhysiques(contenu);
+  if (lignesPhysiques > LIGNES_BRUTES_MAX) {
+    return refus(
+      'TROP_DE_LIGNES_BRUTES',
+      `Le fichier compte ${String(lignesPhysiques)} lignes, vides comprises ; le maximum admis par import est ${String(LIGNES_BRUTES_MAX)}. Retirez les lignes vides avant de réessayer.`,
+    );
+  }
+
+  return null;
+}
+
+/**
  * ANALYSE COMPLÈTE D'UN CONTENU CSV — passe 1 de l'import, **entièrement en
  * mémoire, zéro écriture**.
  *
@@ -1259,6 +1364,9 @@ function refDeSecours(
  * zéro unité créée.
  *
  * ── L'ORDRE DES CONTRÔLES ───────────────────────────────────────────────────
+ *  0. **les bornes de TRAVAIL** — taille brute et nombre de lignes physiques,
+ *     prononcées avant tout découpage (A51, F-11 : borner le résultat ne borne pas
+ *     le coût) ;
  *  1. contenu non vide ;
  *  2. en-tête — s'il est invalide, on s'arrête : sans correspondance
  *     colonne → position, analyser les lignes reviendrait à inventer des erreurs
@@ -1273,6 +1381,22 @@ function refDeSecours(
  */
 export function analyserCsvArbre(contenu: string): AnalyseCsvArbre {
   const separateur = detecterSeparateurCsv(contenu);
+
+  // ═════════════════════════════════════════════════════════════════════════════
+  // ⓪ LES DEUX BORNES DE TRAVAIL — PRONONCÉES AVANT DE CONSTRUIRE QUOI QUE CE SOIT.
+  // ═════════════════════════════════════════════════════════════════════════════
+  // A51, F-11 : borner le RÉSULTAT ne borne pas le COÛT. Ces deux refus-ci coûtent
+  // une lecture linéaire de la chaîne — aucune allocation, aucun objet — et rendent
+  // un fichier pathologique refusable en quelques millisecondes, là où le découpage
+  // complet demandait jusqu'à une seconde de CPU et 319 Mo de tas.
+  //
+  // ⚠ AUCUN DÉCOUPAGE ICI, ET C'EST LE POINT : découper le contenu en lignes allouerait
+  // un tableau d'un million de chaînes pour compter jusqu'à un million — c'est-à-dire
+  // qu'il paierait précisément le coût qu'on refuse de payer. On compte les sauts de
+  // ligne en place.
+  const refusDeTravail = bornerLeTravail(contenu, separateur);
+  if (refusDeTravail !== null) return refusDeTravail;
+
   const erreurs: LigneRapportImport[] = [];
   const enregistrements = decouperEnregistrements(sansBom(contenu), separateur);
 

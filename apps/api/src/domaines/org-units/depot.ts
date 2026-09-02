@@ -385,9 +385,18 @@ export async function verrouillerMission(
  * L'arbre d'une mission, réduit à ce qu'une détection de cycle a besoin de savoir.
  *
  * Deux colonnes, jamais la ligne entière : un reparentage n'a pas à charger 150
- * noms d'unités en mémoire pour vérifier une propriété de graphe. `FOR UPDATE`
- * n'est pas posé — un cycle ne peut naître que d'un reparentage, et le reparentage
- * verrouille déjà la ligne qu'il modifie.
+ * noms d'unités en mémoire pour vérifier une propriété de graphe.
+ *
+ * ⚠ **`FOR UPDATE` N'EST PAS POSÉ ICI, ET CE N'EST PLUS UN OUBLI** : le verrou qui
+ * rend cette lecture décidable est pris **sur la MISSION**, en amont, par l'appelant
+ * (`modifierUneUnite`, branche de reparentage — A51, F-13). Le poser sur les lignes
+ * de l'arbre ne suffirait d'ailleurs pas : deux reparentages croisés verrouillent
+ * deux lignes distinctes et ne s'attendent jamais. Ce qu'il faut sérialiser, c'est
+ * la DÉCISION sur le graphe, pas la lecture de ses nœuds.
+ *
+ * La justification d'origine — « un cycle ne peut naître que d'un reparentage, et le
+ * reparentage verrouille déjà la ligne qu'il modifie » — était FAUSSE, et elle l'a
+ * été jusqu'au 2026-09-02 : elle confondait la ligne écrite et le graphe jugé.
  */
 export async function lireSquelette(
   executeur: ExecuteurSql,

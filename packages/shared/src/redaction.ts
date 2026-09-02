@@ -261,6 +261,23 @@ const SOEURS_CLE_CONFIG = ['key', 'cle'];
 // fréquents. Le prompt LLM contient ces réponses : il ne doit pas plus apparaître.
 // ═══════════════════════════════════════════════════════════════════════════════
 const CHAMPS_CONTENU = [
+  // ── Le tableau POSITIONNEL d'une requête préparée (A51, F-12) ──────────────
+  // `params` est la propriété propre que `DrizzleQueryError` expose en plus de son
+  // message. Il n'a AUCUNE clé : rien, dans son contenu, ne peut être reconnu par la
+  // politique par nom — c'est précisément ce qui la contournait intégralement.
+  //
+  // Masqué EN BLOC, et c'est le seul traitement honnête : un tableau de valeurs de
+  // colonnes porte aujourd'hui des identifiants et des codes, et portera
+  // `person_name` et `participants` dès que L5/L6 écriront ces tables. Le nettoyage
+  // de chaînes (§6) traite le MESSAGE ; ce masquage-ci traite le CHAMP. Il faut les
+  // deux : pino sérialise les deux, et l'un ne voit pas ce que l'autre voit.
+  //
+  // ⚠ EFFET DE BORD ASSUMÉ ET VÉRIFIÉ : `req.params` (les paramètres d'URL de
+  // Fastify) porte le même nom et sera masqué aussi. On y perd des identifiants de
+  // ressource dans le journal d'exploitation — l'`url` complète, elle, reste
+  // journalisée et nettoyée, donc le diagnostic ne disparaît pas. Un champ de trop
+  // masqué coûte une gêne ; un champ de moins coûte une divulgation.
+  'params',
   // answers / answer_revisions
   'value', // exempté sur la forme `(key, value NUMERIC)` — voir SOEURS_CLE_CONFIG
   'previous_value',
@@ -429,6 +446,12 @@ export const CHAMPS_NETTOYES_JOURNAL: readonly string[] = [
   // — donc `Key (…)=(…)` et `Failing row contains (…)`. Mesuré : c'est LÀ que vivait
   // la fuite de `person_name`, et non dans `err.message` comme on pouvait le croire.
   'detail',
+  // `query` : le SQL que `DrizzleQueryError` expose comme propriété propre. NETTOYÉ
+  // et non masqué — il ne porte que des identifiants SQL et des emplacements
+  // numérotés, et c'est le diagnostic entier d'un import qui échoue. Son jumeau
+  // `params`, lui, est MASQUÉ (voir §2, CHAMPS_CONTENU) : c'est un tableau
+  // POSITIONNEL, donc rien dans son contenu ne peut être reconnu.
+  'query',
 ];
 
 /** Tous les noms de champs masqués, forme canonique du fichier 04 (snake_case). */
@@ -603,6 +626,69 @@ const RX_PG_SYNTAXE_TYPE =
 const RX_JSON_INVALIDE = /"[^\n]*"(\.\.\.)? is not valid JSON/g;
 
 /**
+ * DRIZZLE — le message d'une requête échouée recopie **la requête ET TOUS SES
+ * PARAMÈTRES**. Vérifié dans `drizzle-orm`, `errors.js` : le constructeur concatène
+ * la requête et le tableau des paramètres dans le message, puis les expose en plus
+ * comme propriétés propres (`query`, `params`) — que le sérialiseur d'erreur de pino
+ * recopie telles quelles.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * CE CONTENANT-CI CONTOURNE INTÉGRALEMENT LE MASQUAGE PAR NOM DE CHAMP.
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * Relevé par la revue de sécurité A51 (F-12), MESURÉ sur une `DrizzleQueryError`
+ * reconstruite et passée à pino avec la politique de ce fichier : une cellule de
+ * fichier client ressortait **en clair**, deux fois — dans le message et dans
+ * `params`.
+ *
+ * Ce qui rend ce gabarit différent des trois précédents : `params` est un tableau
+ * **POSITIONNEL**. Il n'a pas de clés, donc il n'y a aucun nom de champ à
+ * reconnaître — toute la politique par nom (§1 à §4) est aveugle devant lui, quelle
+ * que soit la colonne concernée. Aujourd'hui il transporte des identifiants et des
+ * codes ; dès qu'un `INSERT` d'import échoue sur une erreur NON TRADUITE
+ * (interblocage `40P01`, rupture de connexion, `22001`, une contrainte future), il
+ * transporte **tout le lot de lignes du fichier client**. Et dès L5/L6, ces lignes
+ * porteront `person_name` et `participants`.
+ *
+ * ── CE QUI SURVIT, ET POURQUOI ──────────────────────────────────────────────
+ * **La REQUÊTE est conservée** : c'est le diagnostic entier — quelle table, quelles
+ * colonnes, quelle forme. Elle ne contient que des identifiants SQL et des
+ * emplacements numérotés, jamais une valeur. **Le segment des paramètres
+ * disparaît**, remplacé par un DÉCOMPTE : « combien de valeurs » reste utile pour
+ * comprendre un lot qui échoue, « lesquelles » ne l'est jamais assez pour valoir une
+ * fuite.
+ *
+ * ── LE BORNAGE, QUI N'EST PAS BORNÉ À LA LIGNE ──────────────────────────────
+ * Contrairement aux gabarits PostgreSQL, celui-ci NE PEUT PAS se borner à une seule
+ * ligne : une valeur de paramètre peut elle-même contenir un saut de ligne — un nom
+ * d'unité saisi entre guillemets dans un CSV, précisément le cas d'usage du lot L3.
+ * On prend donc tout jusqu'à la PILE D'APPELS ou la fin de la chaîne : c'est ce qui
+ * rend le nettoyage correct sur une pile comme sur un message nu.
+ */
+const RX_DRIZZLE_PARAMS = /\nparams:[\s\S]*?(?=\n\s+at |$)/g;
+
+/**
+ * Emplacements de paramètres d'une requête préparée (`$1`, `$42`).
+ * Sert UNIQUEMENT à compter : le décompte est lu sur la REQUÊTE, jamais sur les
+ * valeurs — un comptage par virgules serait faux dès qu'une valeur en contient une
+ * (« Direction, Sud »), et un décompte faux dans un journal est pire qu'aucun.
+ */
+const RX_EMPLACEMENT_PARAM = /\$(\d+)/g;
+
+/**
+ * Combien de paramètres la requête qui précède déclare-t-elle ?
+ * Le MAXIMUM des emplacements, et non leur nombre d'occurrences : un même
+ * emplacement peut être cité deux fois dans une requête.
+ */
+function compterParametres(requete: string): number {
+  let maximum = 0;
+  for (const trouve of requete.matchAll(RX_EMPLACEMENT_PARAM)) {
+    const rang = Number(trouve[1]);
+    if (Number.isFinite(rang) && rang > maximum) maximum = rang;
+  }
+  return maximum;
+}
+
+/**
  * PRÉFILTRE — un seul balayage pour écarter le cas courant.
  *
  * Mesuré, et c'est la raison d'être de cette ligne : garder chaque motif par son propre
@@ -616,7 +702,7 @@ const RX_JSON_INVALIDE = /"[^\n]*"(\.\.\.)? is not valid JSON/g;
  * suffit. Toute nouvelle alternative ajoutée ici doit rester un LITTÉRAL — une
  * alternative à quantificateur ferait perdre l'automate, donc tout le bénéfice.
  */
-const RX_INDICE_MOTIF = /\)=\(|row contains \(|invalid input |valid JSON|eyJ/;
+const RX_INDICE_MOTIF = /\)=\(|row contains \(|invalid input |valid JSON|eyJ|\nparams:/;
 
 /**
  * Retire les identités d'une chaîne QUE L'ON CONSERVE.
@@ -657,6 +743,25 @@ export function nettoyerTexteJournal(texte: string): string {
       resultat = resultat.replace(
         RX_JSON_INVALIDE,
         `"${CENSEUR_TEXTE_JOURNAL}"$1 is not valid JSON`,
+      );
+    }
+    // Drizzle : la requête survit, les paramètres deviennent un décompte. Placé
+    // APRÈS les gabarits PostgreSQL et AVANT le jeton nu : une erreur de requête peut
+    // porter les deux — le SQL de Drizzle et le DETAIL de PostgreSQL — et vider le
+    // segment des paramètres d'abord épargne aux motifs suivants de le retravailler.
+    if (resultat.includes('\nparams:')) {
+      resultat = resultat.replace(
+        RX_DRIZZLE_PARAMS,
+        (_coincidence: string, decalage: number, entier: string) => {
+          const nombre = compterParametres(entier.slice(0, decalage));
+          // L'accord suit le décompte : « 1 paramètre masqué », « 4 paramètres
+          // masqués ». Invariant 5 — une ligne de journal est lue par un humain,
+          // et un pluriel fautif dans un fichier d'exploitation se recopie ensuite
+          // dans une interface.
+          if (nombre === 0) return '\nparams: [paramètres masqués]';
+          const marque = nombre > 1 ? 's' : '';
+          return `\nparams: [${String(nombre)} paramètre${marque} masqué${marque}]`;
+        },
       );
     }
     // Le jeton nu partage le préfiltre. Le masquer AVANT `RX_PORTEUR` ne change rien

@@ -7070,3 +7070,31 @@ seront seuillés à L6 quand `assignments` deviendra le siège de la propriété
 
 Décideur : A01, sur mesure de la vérification isolée et réserve R-L3-4 d'A17
 Impact spec : aucun. `.github/coverage-critical-paths.json` : quatre entrées, chiffres à l'ajout.
+
+## 2026-09-02 — [L3] Revue sécurité A51 sur L3 : 0 critique, 3 majeurs, 5 mineurs — verdict accepté, F-11 à F-14 fermés dans l'incrément
+
+A51 a relu `lot/l3-suite` (ASVS L2, 19 points conformes) : `docs/portes/VERDICT_A51_L3_2026-09-02.md`.
+Trois majeurs : F-11 la borne de 5 000 lignes de l'import borne le résultat, pas le travail (999 878
+lignes vides = 1 s de CPU et 319 Mo de tas, importé sans erreur) · F-12 une erreur Drizzle non
+traduite republie au journal la requête ET ses paramètres (`Failed query: … / params: …`) · F-13 le
+garde-fou anti-cycle du `PATCH` décide sur une lecture non verrouillée. Un mineur retenu de suite :
+F-14 la fusion prend deux verrous dans l'ordre dicté par l'appelant (ABBA → `40P01` → 500, qui
+rallume F-12).
+
+Options :
+
+1. **Accepter le verdict**, fermer les trois majeurs et F-14 dans l'incrément, laisser F-15 à F-18
+   à la porte suivante (F-18 est un doute de spec, pas un défaut), rejouer A51 sur le correctif.
+2. Ne fermer que les majeurs et reporter F-14 comme les autres mineurs.
+
+Arbitrage : **option 1.** F-14 n'est pas un mineur isolé : son chemin d'échec passe par F-12, et un
+majeur qu'un mineur peut rallumer n'est pas fermé. Correctifs : F-11 `LIGNES_BRUTES_MAX` borne le
+contenu AVANT le découpage (le travail, pas le résultat) · F-12 `redaction.ts` connaît le contenant
+`DrizzleQueryError` (`query` gardée, `params` masqué — 12 tests purs) · F-13 `lireSquelette` sous
+`FOR UPDATE` de la mission · F-14 `40P01` traduit en 409 `CONFLICT` / `conflit_concurrent`, et la
+fusion verrouille **par identifiant croissant** — l'ABBA disparaît par construction. Le cas de test
+`40P01` est écrit par A01, pas par l'implémenteur (09 §5.6). **Précédence : invariant 7** (rien n'est
+écrasé — F-13) et **11 §3** (statut cohérent — F-14).
+
+Décideur : A01, sur revue A51
+Impact spec : aucun.

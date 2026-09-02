@@ -167,3 +167,27 @@ describe('traduireEchecDeContrainte — la chaîne `cause`, et tout le reste', (
     );
   });
 });
+
+// -----------------------------------------------------------------------------
+// F-14 du verdict A51 (2026-09-02) — l'interblocage n'est pas un 500.
+//
+// Écrit par le pilote A01, qui n'a pas écrit le traducteur (09 §5.6) ; l'implémenteur
+// a refusé d'écrire ce cas lui-même et a donné la sonde exacte qu'il avait jouée.
+// Ce que ce cas attrape : un `40P01` non traduit sortait en 500 ET faisait
+// journaliser l'objet d'erreur complet — le gabarit `Failed query: … / params: …`.
+// L'interblocage rallumait la fuite de journal (F-12). Les deux se corrigent ensemble.
+// -----------------------------------------------------------------------------
+describe('traduireEchecDeContrainte — l’interblocage (40P01)', () => {
+  it('@critique `deadlock_detected` ⇒ 409 CONFLICT, code `conflit_concurrent`, message français qui invite à réessayer', () => {
+    const erreur = capturer(
+      enveloppeDrizzle(Object.assign(new Error('deadlock detected'), { code: '40P01' })),
+    );
+    expect(erreur.code).toBe('CONFLICT');
+    expect(erreur.status).toBe(409);
+    expect(erreur.details?.[0]?.code).toBe('conflit_concurrent');
+    expect(erreur.message).toMatch(/réessayez/i);
+    // Aucun détail sur l'autre transaction : PostgreSQL le range dans `detail`,
+    // et le renseigner apprendrait à un appelant ce qu'un autre modifie.
+    expect(erreur.message).not.toMatch(/40P01|deadlock|Failed query|params/);
+  });
+});

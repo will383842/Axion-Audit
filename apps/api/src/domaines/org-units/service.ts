@@ -399,6 +399,32 @@ export async function modifierUneUnite(
 
     const parent = comparer(corps.parentId, avant.parentId);
     if (parent.change) {
+      // ═══════════════════════════════════════════════════════════════════════════
+      // LE VERROU DE MISSION — SANS LUI, DEUX `PATCH` CROISÉS COMMETTENT UN CYCLE.
+      // ═══════════════════════════════════════════════════════════════════════════
+      // A51, F-13. `lireUnitePourEcriture` ne verrouille QUE la ligne modifiée, or un
+      // reparentage ne décide pas sur cette ligne : il décide sur TOUT L'ARBRE. Deux
+      // requêtes concurrentes — « A devient enfant de B » et « B devient enfant de
+      // A » — verrouillent donc deux lignes DISTINCTES, lisent chacune un squelette
+      // qui ignore l'écriture non committée de l'autre, passent toutes deux le
+      // contrôle, et committent un cycle. Aucune contrainte du fichier 04 ne s'y
+      // oppose, et aucun `CHECK` ne pourrait l'exprimer — une propriété de graphe ne
+      // se dit pas ligne à ligne.
+      //
+      // C'est exactement la règle que `importerLArbre` applique déjà (décision B-2 de
+      // la revue croisée A17) : **toute route qui décide sur l'arbre lit la mission
+      // `FOR UPDATE`**. Le `PATCH` la contredisait ; il s'y range.
+      //
+      // ── COÛT, ET ORDRE DES VERROUS ────────────────────────────────────────────
+      // Coût NUL hors reparentage : le verrou n'est pris que dans cette branche — un
+      // simple changement de nom ne fait attendre personne. L'ordre est ici
+      // « ligne puis mission », alors que l'import prend la mission d'abord : ce
+      // n'est PAS un ABBA, parce que l'import ne verrouille aucune unité EXISTANTE
+      // (il insère), et que `merge` ne verrouille que des unités. Deux `PATCH`
+      // concurrents, eux, convergent sur LA MÊME mission et se sérialisent — ce qui
+      // est précisément l'effet recherché : le second relit un squelette à jour.
+      await exigerMission(tx, avant.missionId, true);
+
       if (parent.valeur !== null) {
         await exigerParentDeLaMission(tx, avant.missionId, parent.valeur);
         await exigerAbsenceDeCycle(tx, avant.missionId, uniteId, parent.valeur);
@@ -572,6 +598,11 @@ export interface ResultatFusion {
  *  4. **la cible n'est pas la source** — une unité fusionnée dans elle-même serait
  *     une ligne qui dit avoir disparu vers elle-même.
  *
+ * ── L'ORDRE DES DEUX VERROUS EST CANONIQUE, PAS CELUI DE LA REQUÊTE ────────
+ * A51, F-14 : les deux unités sont verrouillées **par identifiant croissant**, et
+ * non « celle de l'URL puis celle du corps ». Deux fusions symétriques concurrentes
+ * ne peuvent donc plus s'interbloquer — voir le commentaire au point du verrou.
+ *
  * ── L'ORDRE DES ÉCRITURES, DANS UNE SEULE TRANSACTION ──────────────────────
  * Les enfants sont re-parentés AVANT que la source ne passe `fusionnee` ; les
  * entretiens ensuite. L'ordre est indifférent au résultat (tout est dans la même
@@ -590,12 +621,9 @@ export async function fusionnerUneUnite(
   contexte: ContexteJournal,
 ): Promise<ResultatFusion> {
   const resultat = await db.transaction(async (tx) => {
-    const source = await lireUnitePourEcriture(tx, uniteId);
-    if (source === null) throw new AppError('NOT_FOUND', MESSAGE_UNITE_INTROUVABLE);
-
-    // ④ — vérifié en premier parce que c'est le seul cas où « source » et « cible »
-    // désignent la même ligne, donc le seul où un second `FOR UPDATE` serait un
-    // verrou sur soi-même.
+    // ④ — VÉRIFIÉ AVANT TOUT VERROU. C'est le seul cas où « source » et « cible »
+    // désignent la même ligne : le contrôler ici évite d'avoir à décider ce que
+    // signifierait un ordre canonique sur deux identifiants égaux.
     if (corps.mergedIntoId === uniteId) {
       throw new AppError(
         'VALIDATION_FAILED',
@@ -603,6 +631,43 @@ export async function fusionnerUneUnite(
         [{ path: 'mergedIntoId', message: 'Choisissez une unité cible différente.' }],
       );
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // LES DEUX VERROUS SONT PRIS DANS L'ORDRE DES IDENTIFIANTS, PAS DANS CELUI DE
+    // LA REQUÊTE.
+    // ═══════════════════════════════════════════════════════════════════════════
+    // A51, F-14. Verrouiller « d'abord l'unité de l'URL, puis celle du corps »
+    // laissait l'APPELANT choisir l'ordre d'acquisition : deux fusions symétriques
+    // concurrentes — `A→B` et `B→A` — prenaient donc les deux mêmes verrous dans des
+    // ordres opposés et s'interbloquaient (ABBA). PostgreSQL tranchait par un
+    // `40P01`, et la victime recevait une erreur là où elle n'avait rien fait de mal.
+    //
+    // **L'ordre canonique supprime la classe entière de défauts**, il ne la rend pas
+    // moins probable : deux transactions qui verrouillent les mêmes lignes dans le
+    // MÊME ordre ne peuvent pas s'attendre mutuellement. La seconde attend la
+    // première, puis relit un état à jour et sort en 409 — le refus lisible qu'on
+    // voulait. C'est la même doctrine que le verrou de mission du `PATCH` (F-13) :
+    // ce qu'on sérialise, c'est la décision, pas la ligne.
+    //
+    // L'ordre retenu est celui des identifiants, croissant. Il est ARBITRAIRE mais
+    // TOTAL et STABLE — les deux seules propriétés qui comptent : tout appelant, sur
+    // n'importe quelle paire, en déduit la même séquence sans se concerter.
+    //
+    // ⚠ La traduction du `40P01` reste en place (`erreurs-postgres.ts`) et n'est pas
+    // devenue inutile : cet ordre ne couvre que les fusions entre elles. Un
+    // interblocage reste possible avec un autre chemin d'écriture — un import qui
+    // tient la mission, une sync à venir — et une erreur non traduite rallumerait
+    // F-12 en journalisant la requête et ses paramètres.
+    const [premierId, secondId] =
+      uniteId < corps.mergedIntoId ? [uniteId, corps.mergedIntoId] : [corps.mergedIntoId, uniteId];
+
+    const premier = await lireUnitePourEcriture(tx, premierId);
+    const second = await lireUnitePourEcriture(tx, secondId);
+
+    const source = premierId === uniteId ? premier : second;
+    const cible = premierId === uniteId ? second : premier;
+
+    if (source === null) throw new AppError('NOT_FOUND', MESSAGE_UNITE_INTROUVABLE);
 
     // ① — seule une proposition se fusionne.
     if (source.status !== 'proposee') {
@@ -615,7 +680,6 @@ export async function fusionnerUneUnite(
       );
     }
 
-    const cible = await lireUnitePourEcriture(tx, corps.mergedIntoId);
     if (cible === null) {
       throw new AppError('VALIDATION_FAILED', "L'unité cible de la fusion n'existe pas.", [
         { path: 'mergedIntoId', message: "L'unité cible de la fusion n'existe pas." },
