@@ -29,10 +29,11 @@
 //
 // ── CE QU'ELLE N'EST PAS ────────────────────────────────────────────────────
 //   · Elle n'écrit RIEN. Le plan est une CIBLE, pas des lignes `interviews` :
-//     `interviews.conducted_by` est NOT NULL au 04 alors qu'un plan ne nomme
-//     aucun auditeur (escalade ouverte, `DECISIONS.md` 2026-08-31 [L3d]) — le
-//     statu quo arbitré est « fonction pure non persistée », et il est tenu ici
-//     par construction : ce module n'importe ni la base, ni un dépôt.
+//     `interviews.conducted_by` est NULLABLE depuis le 2026-09-02 (arbitrage
+//     de Williams, migration 0014), mais `POST …/interview-plan/apply` n'existe
+//     pas encore (fiche d'étage 2) — le plan reste « fonction pure non
+//     persistée », et c'est tenu ici par construction : ce module n'importe ni
+//     la base, ni un dépôt. Le jour où `/apply` arrive, c'est LUI qui écrit.
 //   · Elle ne chiffre RIEN PAR PROFIL. `interviews.interlocutor_profile_id`
 //     n'existe pas au 04 (arbitrage `DECISIONS.md` 2026-09-01 [L3d]) : le plan
 //     est listé PAR UNITÉ, et les profils sont LISTÉS (`profilsACouvrir`), sans

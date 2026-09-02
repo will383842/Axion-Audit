@@ -351,8 +351,9 @@ export const routesQuestionnaire: FastifyPluginAsync = async (app) => {
    * `GET /v1/missions/:id/interview-plan` — le plan §32.4.
    *
    * **NON PERSISTÉ** : le plan est une CIBLE, pas des lignes `interviews`
-   * (`DECISIONS.md` 2026-08-31 — `conducted_by` est NOT NULL et un plan ne nomme
-   * aucun auditeur ; `POST …/interview-plan/apply` est reportée avec l'escalade).
+   * (`conducted_by` est nullable depuis le 2026-09-02, migration 0014 ; c'est
+   * `POST …/interview-plan/apply`, non encore livrée — fiche d'étage 2 — qui
+   * persistera le plan, pas cette lecture).
    * **NON JOURNALISÉ** : il recopie des noms d'unités et des effectifs du client
    * (11 §2). **NON PAGINÉ** : un plan est un tout.
    */

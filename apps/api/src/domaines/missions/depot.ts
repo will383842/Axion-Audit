@@ -387,9 +387,9 @@ export async function questionnaireEstFige(
  * ABSENTE vaut SATISFAITE, seul un `false` EXPLICITE bloque (03 §17.2 V2.9 : « une
  * condition dont la fonctionnalité porteuse n'est pas livrée est réputée
  * satisfaite »). Les trois absentes ont chacune une raison NOMMÉE :
- *   · `plan_entretiens_etabli` — le plan d'entretiens **n'a aucune table où se
- *     poser** (`DECISIONS.md` du 2026-08-31 : `interviews.conducted_by` est
- *     NOT NULL, `/apply` est reportée) ;
+ *   · `plan_entretiens_etabli` — le plan d'entretiens **n'est pas encore
+ *     persisté** : `conducted_by` est nullable depuis le 2026-09-02 (migration
+ *     0014), mais `/apply` n'est pas livrée (fiche d'étage 2) ;
  *   · `export_realise` — l'export appartient à L7-min ;
  *   · `retrospective_faite` — **aucun code d'étape ne la porte** : les huit valeurs
  *     de `step_validations.step_code` (CHECK fermé du 04) ne comptent pas de

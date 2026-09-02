@@ -3,12 +3,12 @@
 // Lot L3, incrément L3d, tâche T5.
 //
 // ── IL N'Y A AUCUNE ÉCRITURE DANS CE FICHIER, ET C'EN EST LE SUJET ──────────
-// Le plan §32.4 est une CIBLE, pas des lignes `interviews` : `conducted_by` est
-// NOT NULL au fichier 04 alors qu'un plan ne nomme AUCUN auditeur, et
-// `POST …/interview-plan/apply` est REPORTÉE avec cette escalade (`DECISIONS.md`
-// 2026-08-31). Tant que l'escalade est ouverte, ce dépôt ne sait pas écrire — et
-// le fait qu'il ne contienne ni `insert`, ni `update`, ni `delete` est la forme la
-// plus courte de cette garantie.
+// Le plan §32.4 est une CIBLE, pas des lignes `interviews`. `conducted_by` est
+// NULLABLE depuis le 2026-09-02 (Williams, migration 0014) — l'obstacle de schéma
+// est levé — mais `POST …/interview-plan/apply` n'est pas encore livrée (fiche
+// d'étage 2, `DECISIONS.md` 2026-09-02) : ce dépôt ne sait pas écrire, et le fait
+// qu'il ne contienne ni `insert`, ni `update`, ni `delete` est la forme la plus
+// courte de cette garantie. `/apply` aura son propre dépôt d'écriture.
 //
 // ── LES DEUX FILTRAGES QU'IL NE FAIT PAS, ET POURQUOI ───────────────────────
 //   · **`in_scope` et `status`** : le générateur COMPTE ce qu'il écarte

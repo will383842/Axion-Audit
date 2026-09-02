@@ -21,13 +21,14 @@
 
 ## Compteur du plafond étage 1
 
-| Lot  | Consommé | Plafond | Reste                     |
-| ---- | -------- | ------- | ------------------------- |
-| L0   | ~0,5 j   | 0,5 j   | 0 j (**plafond atteint**) |
-| L1   | ~0,3 j   | 0,5 j   | ~0,2 j                    |
-| L0-b | ~0,25 j  | 0,5 j   | ~0,25 j                   |
-| L2   | ~0,3 j   | 0,5 j   | ~0,2 j                    |
-| L3a  | ~0,1 j   | 0,5 j   | ~0,4 j                    |
+| Lot   | Consommé | Plafond | Reste                                                                                                                                                     |
+| ----- | -------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| L0    | ~0,5 j   | 0,5 j   | 0 j (**plafond atteint**)                                                                                                                                 |
+| L1    | ~0,3 j   | 0,5 j   | ~0,2 j                                                                                                                                                    |
+| L0-b  | ~0,25 j  | 0,5 j   | ~0,25 j                                                                                                                                                   |
+| L2    | ~0,3 j   | 0,5 j   | ~0,2 j                                                                                                                                                    |
+| L3a   | ~0,1 j   | 0,5 j   | ~0,4 j                                                                                                                                                    |
+| L3b-d | ~0,15 j  | 0,5 j   | ~0,35 j — plafonds explicites (120 s) sur deux crochets de tests L2, port de sync L5a déplacé hors du glob réservé à L6a ; le reste est d'étage 2 (A-007) |
 
 ---
 
