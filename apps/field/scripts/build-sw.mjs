@@ -74,6 +74,11 @@ const { count, size, warnings } = await injectManifest({
     // Les icônes vivent à la racine (`public/`), pas dans `assets/` : sans cette
     // ligne, l'app installée afficherait une icône vide en mode avion.
     'icones/**/*.png',
+    // L'icône iOS est à la racine (build-icones.mjs, 2026-09-02) : Safari la
+    // cherche là sans lire aucune balise. Réserve N3 de la revue A29 : un glob
+    // qui l'oublie rend le commentaire ci-dessus faux pour la seule icône qu'un
+    // iPad regarde.
+    'apple-touch-icon.png',
   ],
   // Le service worker ne se précache jamais lui-même.
   globIgnores: ['sw.js', '**/*.map'],

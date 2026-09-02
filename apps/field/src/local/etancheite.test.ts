@@ -104,8 +104,9 @@ const COLONNES_EN_CLAIR = new Set([
   'parentId',
   // LOT_L5.md §3.2, phrase suivante : « Le texte figé des questions (*_snapshot)
   // n'est pas une donnée personnelle : il est indexé en clair » — `texteSnapshot`
-  // et ses jetons `motsCles` (03 §25.4) en sont l'application. Ils ne figurent
-  // pas dans l'énumération elle-même : à faire confirmer par A01.
+  // et ses jetons `motsCles` (03 §25.4) en sont l'application. Confirmé par A01
+  // le 2026-09-02 (DECISIONS.md, « `texteSnapshot` et `motsCles` sont du
+  // `*_snapshot` ») : dans l'exception, pas dans l'énumération.
   'texteSnapshot',
   'motsCles',
   'charge',

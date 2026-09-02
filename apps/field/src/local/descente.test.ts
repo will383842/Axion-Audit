@@ -173,7 +173,7 @@ describe('appliquerDescente — conservation du travail local (invariant 7, 05 �
     );
   });
 
-  it('une ligne locale dont l’op a déjà été poussée (statut ≠ en_attente) redevient écrasable par une descente plus récente', async () => {
+  it('une ligne locale dont l’op est SORTIE de la file (acceptée par le serveur) redevient écrasable par une descente plus récente', async () => {
     const base = await nouvelleBase();
     const id = uuidv7();
     await ecrireLocal({
@@ -196,6 +196,43 @@ describe('appliquerDescente — conservation du travail local (invariant 7, 05 �
 
     await appliquerDescente(lot(id, 'version serveur', '2099-01-01T00:00:00.000Z'));
     expect(await valeurLocale(base, id)).toBe('version serveur');
+  });
+
+  it('@critique une ligne dont l’op est en ÉCHEC (rejetee, a_examiner) n’est JAMAIS écrasée par une descente — et elle est comptée', async () => {
+    // Décision A01 du 2026-09-02 (« Une ligne dont l'op est en ÉCHEC n'est jamais
+    // écrasée par une descente », invariant 7) : ces statuts existent pour que rien
+    // ne sorte de la file sans réponse serveur. Ce cas attrape le
+    // `.where('statut').equals('en_attente')` qu'une optimisation poserait un jour :
+    // la suite resterait verte sans lui, et la saisie de l'auditeur serait perdue.
+    // Écrit par A01 sur réserve N1 de la revue A29 (09 §5.6 : pas l'auteur d'ecriture.ts).
+    const base = await nouvelleBase();
+    for (const statut of ['rejetee', 'a_examiner'] as const) {
+      const id = uuidv7();
+      await ecrireLocal({
+        entite: 'answer',
+        id,
+        missionId: MISSION_ID,
+        action: 'upsert',
+        index: {
+          interviewId: INTERVIEW_ID,
+          missionQuestionId: QUESTION_ID,
+          flagReview: 0,
+          notApplicable: 0,
+          withheld: 0,
+          horsParcours: 0,
+        },
+        charge: chargeReponse(`saisie ${statut}`),
+      });
+      // Ce que le moteur L6 fera d'une réponse serveur négative : l'op RESTE, son statut change.
+      await base.outbox.where('entiteId').equals(id).modify({ statut });
+
+      await appliquerDescente(lot(id, 'version serveur', '2099-01-01T00:00:00.000Z'));
+      expect(await valeurLocale(base, id), `statut ${statut}`).toBe(`saisie ${statut}`);
+      expect(
+        (await lireMeta(base, `${CLES_META.prefixeDescenteConservee}${MISSION_ID}`)) ?? 0,
+        `comptée (${statut})`,
+      ).toBeGreaterThanOrEqual(1);
+    }
   });
 
   it('le curseur `prochainSince` est écrit par mission, et `null` (fin du delta) se persiste tel quel', async () => {

@@ -5602,3 +5602,33 @@ livré, l'obstacle restant est côté API. Le balayage d'étanchéité doit couv
 
 Décideur : A01
 Impact spec : aucun sur `/docs`. `docs/conception/LOT_L5.md` §3.2 amendé, daté.
+
+## 2026-09-02 — [L5a] Rejeu de la revue croisée A29 : ACCEPTÉ SOUS RÉSERVE — réserves fermées, deux libellés reconstitués
+
+Rejeu sur `1892df3` : les cinq bloquants B1-B5 et les réserves R-L5a-1/2/3/4/5/7/8/10 sont fermés
+avec preuve `fichier:ligne`. Trois réserves nouvelles (N1 aucun test ne force `rejetee`/`a_examiner`
+face à une descente · N2 `formes.ts` recopie une liste fermée périmée, et `texteSnapshot`/`motsCles`
+attendaient une confirmation · N3 l'icône iOS déplacée à la racine n'est plus précachée), deux
+remarques transmises (N4 fenêtre d'amorçage de la garde de mise à jour → L5c ; N5 lecture de l'outbox
+hors transaction → contrat L6b), et un constat de gouvernance (N6) : **R-L5a-6 et R-L5a-9 n'ont
+jamais été tracées** — la revue REFUSÉE ne détaillait que huit réserves sur dix dans le dépôt.
+
+Options :
+
+1. **Fermer N1-N3 dans l'incrément, reconstituer R-L5a-6 et R-L5a-9 depuis la transcription** de la
+   revue (pas de mémoire), et dire ce qu'elles deviennent.
+2. Déclarer les deux réserves closes sans les relire.
+
+Arbitrage : **option 1.** Reconstituées mot pour mot : **R-L5a-6** — `@axe-core/playwright` est
+installé et n'est utilisé nulle part ; la dérogation 11 §8-1 était justifiée par « la case P-C est
+incochable sans lui », elle reste incochable → **OUVERTE**, fermée par A28 (balayage axe des trois
+écrans L5a, avec la mesure de dérivation < 1 s déjà due). **R-L5a-9** — les cinq décisions L5a
+(Argon2id, AAD, `validé`, liste fermée, dépendances de test) vivent sur `lot/l3-suite`, pas sur
+`lot/l5a` → **OUVERTE, fermée par l'ordre de fusion** : L3 → `main` → `main` dans `lot/l5a` AVANT la
+PR L5a, vérifié par `grep` à ce moment-là ; la fiche AAD (A-008) existe. N1 : cas de test écrit par
+A01 (pas l'auteur d'`ecriture.ts`). N2 : `texteSnapshot` et `motsCles` sont du `*_snapshot` de la
+note §3.2 — dans l'exception, pas dans l'énumération ; `formes.ts` renvoie à la note au lieu de la
+recopier. **Précédence : invariant 7** (N1) ; sans objet pour le reste.
+
+Décideur : A01, sur revue A29
+Impact spec : aucun.
