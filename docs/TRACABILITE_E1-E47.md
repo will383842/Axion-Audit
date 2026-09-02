@@ -2116,3 +2116,74 @@ La règle ne change pas : **une exigence ne passe à `couverte` que si son libel
 
 *Report effectué le 2026-09-02 par la session de vérification, sur autorisation de Williams, à partir
 de la fiche P-B signée. Aucune ligne datée n'a été modifiée.*
+
+---
+
+# K. LOT L3 — PASSE DU GARDIEN A02, 2026-09-02, SUR `lot/l3-suite` @ `3742eef`
+
+> Passe annoncée par le §J (« prochaine passe due : à la PR de `lot/l3-suite` »). **Append daté,
+> aucune ligne antérieure modifiée.** Dossier complet : `docs/portes/PORTE_L3_2026-09-02.md`.
+> Objet mesuré : diff `origin/main...HEAD` = **62 fichiers, +37 981 / −61**.
+> **Une correction au §J** : il annonçait « 15 routes de plus et 206 tests ». Mesure du jour :
+> **21 routes** et **251 cas d'intégration L3 annoncés** (221 `it(` statiques comptés + boucles
+> paramétrées). Le chiffre du §J datait d'un état antérieur de la branche.
+
+## K.1 — Sens 1 (exigences → code) : ce que L3 déplace
+
+| Exigence | Avant L3 | Après L3 | Preuve |
+| --- | --- | --- | --- |
+| **E4** — arbre organisationnel à profondeur libre | non commencée | **partiellement amorcée → substantielle** | `domaines/org-units/**` (dépôt 790 l., service 1 034 l.), 7 `kind` jusqu'à `poste`, statuts proposée/fusionnée, `PROFONDEUR_ARBRE_MAX` 64 |
+| **E46** — **format CSV d'import d'arbre (§35.2)** | non commencée | **tenue pour sa clause CSV** | 9 en-têtes transcrits, atomicité par transaction unique, rapport ligne à ligne, `FOR UPDATE` anti-ré-import |
+| **E11** — questionnaire généré, **figé par mission** | non commencée | **tenue pour L3** | `assembleur.ts` (745 l.), 8 colonnes `*_snapshot` capturées, second figeage refusé 409 |
+| **E39** — machine à états + transitions contrôlées | non commencée | **tenue** | `TRANSITIONS_MISSION` (7 lignes, transcription §32.2) + **matrice exhaustive des 25 couples**, `@critique` |
+| **E40** — règles d'échantillonnage | non commencée | **tenue pour sa clause échantillonnage** (ROI et ancres = L4/L8) | `generateur.ts:162-196`, quatre tranches littérales |
+| **E44** — prévisualisation du questionnaire §33.4 | non commencée | **tenue pour sa clause prévisualisation** | `GET /v1/missions/:id/questionnaire-preview`, non paginée, motif écrit |
+| **E45** — réaffectation tracée §34.4 | partielle (habilitation seule) | **+ `reassign` avec motif codé et `activity_log`** | `PATCH /v1/interviews/:id/reassign` |
+| **E31** — généricité, **4 archétypes** | 2 fixtures | **2 fixtures inchangées** (FIL-TPE, FIL-GC) | R-L3-7 : deux archétypes sur quatre |
+| **E18** — liaison console (`external_ref`) | non commencée | amorcée, **une escalade ouverte** | `companies.external_ref` **sans unicité**, `DECISIONS.md` 2026-08-31, non tranché |
+
+**Aucune exigence du périmètre L3 n'est oubliée.** Aucune ne passe à `couverte` : la règle du §J
+tient — un libellé entier, éprouvé, ou rien.
+
+## K.2 — Sens 2 (code → exigences) : **aucun orphelin**
+
+**21 routes**, toutes rattachées : 17 par **05 §8** ou **§24.2** (dont `/org-units` « + import CSV »
+et `/assignments`, nommés l. 117), **4 hors liste et DOCUMENTÉES** par `DECISIONS.md` du 2026-08-29
+au titre du 11 §8-6 — `questionnaire-preview`, `interview-plan`, `org-units/:id/validate`,
+`org-units/:id/merge`. **1 migration** (`0014`), rattachée à l'amendement du 04 tranché par Williams.
+**Aucune table nouvelle, aucun écran, aucun job.**
+
+Mécanique : `pnpm check:tracabilite` → **573 citations, 289 fichiers, aucune incohérence** (contre
+370 / 245 au §J.3). **Lecture manuelle des 55 fichiers `.ts`/`.sql` du diff** : **5 sans citation
+`E<n>`** — `tests/aide/fil-rouge.ts`, `l3-filrouge`, `l1-filrouge`, `packages/shared/src/index.ts`,
+`drizzle/0014_*.sql`. **Aucun n'est une route, une table, un écran ni un job** → pas des orphelins au
+sens du 09 §3, mais **R-L3-8** : `0014` et le fil rouge L3 devraient citer leur exigence.
+
+## K.3 — Réserves de la fiche P-B, état après L3
+
+| Réserve | État au 2026-09-02 |
+| --- | --- |
+| **R-B7** — migrations up/down sur staging | 🔴 **REDEVENUE BLOQUANTE**, comme la fiche P-B l'annonçait : L3 livre `0014`, et sa **descente n'a jamais été exécutée nulle part** (`ci.yml` sans `--down`, `deploy-staging.yml:82` : « aucune migration inverse n'est jouée ») |
+| **R-B8** — `axe-core` absent | ouverte, sans objet à L3, échéance **avant le premier écran L5** |
+| **R-B9** — `TODO(L2)` à entrée échue | ouverte, **deuxième porte consécutive** |
+| **R-B11** — balayage sentinelle trop désarmé | ✅ **LEVÉE par L3** — `tests/aide/sentinelle-financiere.ts:40-90` : cartographie `(gabarit, paramètre)` et **refus du `non_exerce` silencieux** |
+| **R-B12** — ce fichier périmé | ✅ **TENUE** — le présent §K |
+
+## K.4 — Synthèse chiffrée au 2026-09-02 (après L3, avant merge)
+
+| Mesure | Valeur | Source |
+| --- | --- | --- |
+| Routes `/v1` livrées, tous lots | **34** (13 avant L3 + 21) | `grep instance.<methode>` sur `apps/api/src/routes/**` |
+| Routes hors §8/§24.2 documentées | **4**, toutes du 2026-08-29 | `DECISIONS.md` |
+| Citations d'exigence dans le code | **573** sur **289 fichiers**, aucune incohérence | `pnpm check:tracabilite` |
+| Fichiers de test du dépôt | **74** — interface 26 · unit 22 · integration 23 · playwright 3, **tous captés** | `pnpm check:test-projects` |
+| Tests unitaires | **643 / 643**, 22 fichiers | `pnpm test:unit`, mesuré par A02 |
+| Tests désactivés | **0** | `pnpm check:no-skipped-tests` |
+| Entrées `DECISIONS.md` | **178**, toutes au format 11 §9bis | `pnpm check:decisions` |
+
+**Prochaine passe due** : à la fermeture de R-L3-1/2/3 (report des preuves CI dans la fiche de porte),
+puis à **P-C** pour L5. **Ce que cette passe NE dit pas** : elle n'a pas exécuté l'intégration, la
+couverture, `schema:diff` ni les E2E — mandat sans Docker, et c'est écrit au §6 de la fiche de porte.
+
+_Passe effectuée le 2026-09-02 par A02, gardien de la spécification. Aucune ligne datée antérieure
+n'a été modifiée._
