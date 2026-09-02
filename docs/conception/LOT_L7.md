@@ -311,3 +311,78 @@ Rappel de la session pilote : **L7-min se livre EN ENTIER** ; le levier de desco
 **L8**, que le fichier 07 marque déjà DIFFÉRABLE avec **butoir dur au dernier jour de collecte**
 (§35.3). Tout ce qui déborde de la ligne L7-min part donc en **fiche AMELIORATIONS d'étage 2 —
 proposée, jamais implémentée avant arbitrage** (CLAUDE.md §3.7 et §6), et non en rognage de L7-min.
+
+## 8. LES TROIS VOCABULAIRES DE SESSION — correction et durcissement du §6.1
+
+> Ajouté par A30 le 2026-09-02 après un contrôle de lecture de la session pilote. Le §6.1 en nommait
+> **deux** ; il y en a **trois**, et le troisième est celui contre lequel le pack met explicitement en
+> garde. **Tout est vérifié dans le dépôt, référence par référence — rien n'est repris de confiance.**
+
+### 8.1 Les trois, mesurés
+
+| # | Ce que ça nomme | Où c'est défini (vérifié) | Valeurs |
+| --- | --- | --- | --- |
+| 1 | **TYPE de session** | `packages/shared/src/plan-entretiens.ts` l. 52-59 | **6** : entretien, observation, demonstration, analyse_documentaire, releve_donnees, **atelier** |
+| 2 | **PROVENANCE d'une donnée** | `apps/api/src/db/schema.ts` l. 124-130 (`SOURCES_DONNEE`) | **5** : entretien, observation, demonstration, **document**, **releve** |
+| 3 | **MODE d'entretien** | `plan-entretiens.ts` l. 64 (`MODES_ENTRETIEN`) | **3** : sur_site, distanciel, **complementaire** — et **seulement si `kind='entretien'`** |
+
+### 8.2 Le mode n'est PAS un type — la faute que le pack anticipe nommément
+
+Le 03 l. 673 l'écrit en toutes lettres : « **Complémentaire est un mode, pas un type** » ; le §32.6
+distingue `interviews.kind` de `interviews.mode`. Conséquence directe pour A32, et c'est une consigne,
+pas un commentaire : **l'écran de couverture n'a PAS de septième colonne « complémentaire »**. Un
+entretien complémentaire est un entretien ; il compte dans la colonne `entretien`, et son mode se lit
+ailleurs. Le §36.3 le confirme à l'export : `sessions.csv` porte « id, **type**, **mode**, unité » —
+**deux colonnes distinctes, jamais fusionnées**. Test A36 correspondant : une session
+`kind=entretien, mode=complementaire` **n'ouvre aucune colonne** sur la couverture, et ressort en
+**deux** cellules dans `sessions.csv`.
+
+### 8.3 Sur quel vocabulaire se compte l'axe B — l'arbitrage §6.1 est MAINTENU, et voici pourquoi
+
+Un contrôle de lecture propose de compter l'axe B sur `answers.source` (n° 2). **A30 maintient
+`interviews.kind` (n° 1)**, sur trois éléments vérifiables :
+
+1. **On ne planifie pas une provenance.** La couverture est un écart **prévu / planifié / réalisé**
+   (§6.2), et le critère du 07 exige que « la couverture reflète **le plan d'entretiens** ». Or le plan
+   publie `sessionProposeeSchema{ orgUnitId, kind }` : il propose des **sessions**. Compté sur
+   `answers.source`, l'axe B n'aurait **aucune colonne « prévu »** — le critère du 07 deviendrait
+   inexprimable.
+2. **Le §16.6 compte des sessions** : « nombre d'entretiens **menés / prévus** », « unité `in_scope`
+   sans aucun **entretien** ». Une unité sans aucune session est l'alerte ; une réponse sans
+   provenance n'est pas un défaut de couverture.
+3. **Les « CINQ types » du §27.1 SONT des types de session.** La table du §27.1 liste
+   entretien / observation / demonstration / analyse_documentaire / releve_donnees — le vocabulaire
+   n° 1 **moins `atelier`** (ajouté ensuite par le §28.1), et **non** le vocabulaire n° 2, qui dit
+   `document` et `releve`. La phrase « le plan de mission planifie les CINQ types par unité » ne peut
+   désigner que des sessions : c'est ce que le plan produit.
+
+**Traitement d'`atelier`** : les **six** colonnes sont affichées (§6.3, « toujours les six, même à
+zéro »). Le plan §32.4 n'en propose jamais, donc `prevu = 0` ; mais un atelier **réellement tenu**
+doit se voir. L'afficher coûte une colonne à zéro ; l'omettre rend un travail fait invisible.
+
+**Divergence tracée, à arbitrer** : ce point est **remonté au pilote** et entrera en `DECISIONS.md`
+après le rebase. Si l'arbitrage retient `answers.source`, alors le §6.2 tombe avec lui : il faudra
+dire ce que devient la colonne « prévu ». **A30 ne devine pas** — la recommandation est ci-dessus,
+la décision appartient à A01 / Williams.
+
+### 8.4 Le piège d'implémentation de L7c — et les deux mauvaises sorties, écartées
+
+`answers.source` reste nécessaire à **L7c** (agrégation : provenance visible ; `reponses.csv`). Or
+`SOURCES_DONNEE` vit dans `apps/api/src/db/schema.ts`, **que la console n'importe pas** (ses
+dépendances sont `@axion/shared` et `@axion/ui`). Deux sorties tentantes, toutes deux refusées :
+
+- **Réutiliser `SOURCES_ATTENDUES`** (`packages/shared/src/banque-questions.ts` l. 70-76) parce qu'il
+  porte les mêmes cinq valeurs — **NON, c'est un mensonge de nommage.** Vérifié : ce constant sert
+  `questions.expected_source`, la source **ATTENDUE** (04 l. 88 : `expected_source CHECK IN (…) NULL
+  -- §27.6`), tandis que la couverture et l'agrégation parlent de `answers.source`, la provenance
+  **CONSTATÉE** (§27.1). Et **tout l'intérêt du §27.6 est de COMPARER les deux** : les fondre dans un
+  seul symbole rendrait cette comparaison inexprimable au moment même où on en aurait besoin.
+- **Recopier les cinq valeurs dans `apps/hq`** — **NON** : ce sont les 127 lignes de copie qu'A37
+  vient de retirer (réserve B2). On ne les rouvre pas trois commits plus tard.
+
+**La bonne sortie** : un export de **provenance** distinct dans `packages/shared` — nom sans
+ambiguïté (`SOURCES_CONSTATEES` / `PROVENANCES_REPONSE`), **une seule définition, deux consommateurs**
+(la console **et** l'API, qui cesse d'être la source d'un contrat que le front doit connaître). C'est
+le **prolongement direct de la correction B2**, pas une convention nouvelle : `packages/shared` est
+déjà, par le 11 §3, l'endroit où vivent les contrats que le front importe. Aucune valeur n'est
+inventée : ce sont les cinq du CHECK du fichier 04. **À exécuter par A32 dans L7b/L7c ; tests A36.**

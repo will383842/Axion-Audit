@@ -1669,3 +1669,52 @@ et les quatre `Dockerfile` — chantier infra, **hors des trois branches de lot*
 infra s'ouvre avant. Rien n'est implémenté ici : la fiche est proposée, pas anticipée (CLAUDE.md §3.7).
 
 **Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-E_
+
+## 2026-09-02 — [L7a / outillage, étage 1, PROPOSÉE] Le garde-fou de durabilité fabrique des commits VIDES quand le push est impossible
+
+**Origine du diagnostic** : session tierce, pendant l'incident de partage de worktrees du 2026-09-02 ;
+**reproduit et mesuré par A30 dans `_axl7` le même soir**. La fiche est écrite ici parce que le défaut
+a été observé ici ; le correctif, lui, est un chantier outillage.
+
+**Le mécanisme.** `.claude/settings.json` déclare un hook `Stop` qui lance
+`scripts/hook-stop-durabilite.mjs`. Le script compte `modifs` (fichiers non commités) et `nonPousses`
+(commits sans amont), et s'il en trouve, **il refuse la fin de tour** en dictant la marche à suivre
+(l. 71-73) : « 1) `git add` + commit (préfixe `wip:` …) ; 2) `git push` ; 3) un bloc dans ETAT.md ».
+
+**Le défaut : le script ne connaît qu'un seul monde, celui où le push réussit.** Il mesure « des
+commits ne sont pas poussés » et en déduit « la session n'a pas poussé ». Ce sont deux choses
+différentes. Quand le push est **refusé** — branche verrouillée, course entre deux sessions sur le
+même worktree, crochet `pre-push` en échec, réseau —, la session ne peut satisfaire que la **première
+moitié** de la consigne. Et comme la première moitié exige un commit alors que l'arbre est propre,
+elle produit **un commit `wip:` vide**. Le garde-fou censé prouver la durabilité fabrique alors du
+bruit dans l'historique **à la place** du signal « je n'ai pas pu pousser ».
+
+**L'exemple, mesuré, et il est de la maison.** Le 2026-09-02 dans `_axl7`, `git push` a été rejeté par
+le crochet `pre-push` (`husky - pre-push script failed (code 1)`). L'arbre était propre : le commit
+d'empreinte demandé n'a pu exister qu'en `--allow-empty` — c'est `8fba2b2`,
+`wip(l7a): sauvegarde de session — empreinte pilote`, **zéro fichier, zéro ligne**. Il est aujourd'hui
+sur `origin`, et le squash de la PR l'effacera : le dépôt n'en souffre pas. Ce qui compte est
+ailleurs — **pendant plusieurs minutes, l'historique affirmait « sauvegardé » alors que rien n'était
+parti sur `origin`.** C'est exactement l'inverse de ce que le §8 de `CLAUDE.md` cherche à garantir
+(« un commit non poussé n'existe pas »).
+
+**Valeur.** Le garde-fou dirait la vérité au moment où elle compte : un push impossible est un
+incident à REMONTER (verrou, course, `pre-push` rouge), pas une négligence à corriger par un commit
+de plus. Aujourd'hui les deux situations produisent la même injonction, donc la même réaction — et la
+seule qui soit fausse.
+
+**Correctif proposé.** Distinguer les trois états au lieu de deux : (1) _rien à sauvegarder_ → laisser
+passer ; (2) _non poussé, push possible_ → la consigne actuelle ; (3) **push tenté et REFUSÉ** →
+laisser passer **en affichant l'incident** (« push refusé : `<motif>` — remonter au pilote, ne pas
+empiler de commit »). Deux garde-fous secondaires : **ne jamais suggérer un commit quand l'arbre est
+propre** (un `wip:` vide n'est une sauvegarde de rien), et **borner** à un seul refus consécutif.
+
+**Coût estimé.** 0,2 j dans `scripts/hook-stop-durabilite.mjs` seul : une condition de plus et deux
+messages. **Impact schéma : aucun. API : aucun. Crypto : aucun. Périmètre fonctionnel : aucun.**
+D'où l'**étage 1** — c'est de la robustesse d'outillage, pas une fonctionnalité.
+
+**Ce qui N'A PAS été touché, et pourquoi.** `.claude/settings.json` **n'est pas modifié** : une
+configuration de session est un arbitrage humain (CLAUDE.md §3). La fiche décrit, elle ne répare pas.
+Le correctif vise le seul script, et hors des trois branches de lot (chantier outillage, PR dédiée).
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-E_
