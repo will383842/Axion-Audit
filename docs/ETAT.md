@@ -2434,3 +2434,19 @@ Tests rouges connus : aucun sur L3. Bancs L0 sauvegarde/restauration non conclua
 **Deux fautes de conduite** : 47 tests L3c poussés sans implémentation sous `feat` (deux CI rouges) ; `--no-verify` sur le wip `378c43a`. Depuis : hooks à chaque commit, un worktree par chantier.
 **Obligations transmises** : re-vérification `question_version` → premier lecteur (L6a/L5a pull) ; `conducted_by IS NULL` = inscriptible par personne via sync (05 §9.9) ; validation d'entretien sans colonne au 04 → L6a. Fiche à ouvrir A-007 : garde lisant le rapport vitest contre les « skipped » non écrits.
 **Attend Williams** : `org_unit.merge` garde `avecMotif: boolean` (l'arbitrage motif codé ne le nommait pas). Rien d'autre.
+
+## 2026-09-02 17h00 — [lot L3 / C1] — étape pipeline 5/7 (fin de session propre)
+Dernier commit vert : 58231bb (fix(l3): rejeu A51 — F-19/F-20/F-21 fermés)   ·   Branche : lot/l3-suite   ·   Poussé : oui
+Tâche en cours : L3 complet (L3a-d, 251 tests d'intégration, couverture ≥ 90 mesurée, CI verte sur
+ed8a852 avec migrations up/down). Revues : A17 rejeu ACCEPTÉ SOUS RÉSERVE · A51 rejeu FUSIONNABLE SOUS
+RÉSERVE → ses trois majeurs nouveaux F-19/20/21 sont fermés dans 58231bb (unitaires 659/659), mais
+SANS test d'intégration : les trois sondes exactes sont dans le rapport A15 recopié en tête de la
+dernière entrée DECISIONS « Rejeu A51 » (F-19 chrono ×10, F-20 cellule piégée, F-21 arbre R→A→B→C).
+Prochaine action : demander à A16 (testeur) d'écrire ces trois cas (F-21 dans l3c-org-units, F-19/F-20
+en purs), lancer `npx vitest run --project integration apps/api/tests/l3c-org-units` puis `pnpm verify`
+complet (annoncé à la session de vérification), puis A02 pour lever R-L3-1/R-L3-2 (preuve : run CI
+33638166614 vert, up/down inclus) et rejouer le contrôle d'acceptation sur PORTE_L3_2026-09-02.md,
+puis ouvrir la PR lot/l3-suite → main (Williams fusionne, tag v0.l3). L3 fusionne AVANT L7a et L5a.
+Tests rouges connus : aucun (l0-restauration instable en CI, fiche A-012 sur lot/l5a — relancer une fois).
+Dettes : A-006 cookies httpOnly (backend, après PR L3) ; F-15..F-18 A51 ouverts (mineurs, F-18 = doute
+Williams) ; nom d'en-tête X-Axion-Client à confirmer par Williams avec A-006.
