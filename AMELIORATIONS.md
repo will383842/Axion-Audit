@@ -21,13 +21,14 @@
 
 ## Compteur du plafond étage 1
 
-| Lot  | Consommé | Plafond | Reste                     |
-| ---- | -------- | ------- | ------------------------- |
-| L0   | ~0,5 j   | 0,5 j   | 0 j (**plafond atteint**) |
-| L1   | ~0,3 j   | 0,5 j   | ~0,2 j                    |
-| L0-b | ~0,25 j  | 0,5 j   | ~0,25 j                   |
-| L2   | ~0,3 j   | 0,5 j   | ~0,2 j                    |
-| L3a  | ~0,1 j   | 0,5 j   | ~0,4 j                    |
+| Lot   | Consommé | Plafond | Reste                                                                                                                                                     |
+| ----- | -------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| L0    | ~0,5 j   | 0,5 j   | 0 j (**plafond atteint**)                                                                                                                                 |
+| L1    | ~0,3 j   | 0,5 j   | ~0,2 j                                                                                                                                                    |
+| L0-b  | ~0,25 j  | 0,5 j   | ~0,25 j                                                                                                                                                   |
+| L2    | ~0,3 j   | 0,5 j   | ~0,2 j                                                                                                                                                    |
+| L3a   | ~0,1 j   | 0,5 j   | ~0,4 j                                                                                                                                                    |
+| L3b-d | ~0,15 j  | 0,5 j   | ~0,35 j — plafonds explicites (120 s) sur deux crochets de tests L2, port de sync L5a déplacé hors du glob réservé à L6a ; le reste est d'étage 2 (A-007) |
 
 ---
 
@@ -1474,6 +1475,63 @@ qui doit le dire, pas la nuit du sinistre.
 
 **Impact schéma / API : aucun.** Impact CI : un job élargi. Impact `infra/postgres/*.sh` : 7 sites.
 
+## 2026-09-01 — [L3, étage 2, PROPOSÉE] Le cadrage RBAC par mission n'est alimenté par aucune route
+
+**Constat, mesuré par A10 en préparant le brief L3d, pas déduit.** Le pack porte deux tables voisines
+et le lot L3 n'en écrit qu'une. `/v1/missions/:id/assignments` écrit **`work_assignments`** — c'est
+`03 §18.2` qui nomme cette table, il n'y a pas d'ambiguïté. Mais **`mission_users`**, la table qui
+porte le cadrage RBAC « qui a le droit de voir cette mission », **n'est écrite par aucune route de
+L0 à L3**.
+
+**Ce que ça coûte aujourd'hui, dit sans dramatiser.** Rien en production : le RBAC serveur est en
+place, les rôles fonctionnent, et l'étanchéité financière est éprouvée sur quatre ceintures. Ce qui
+manque est le **peuplement** du cadrage par mission. Conséquence directe et vérifiable : les tests
+qui veulent éprouver « un consultant affecté à la mission A ne voit pas la mission B » doivent
+**écrire `mission_users` en SQL direct**, puisqu'aucune route ne le fait. Un test qui doit contourner
+l'API pour se mettre en scène éprouve la base, pas le produit.
+
+**Valeur pour l'auditeur.** Le jour où une mission a deux consultants et un lead, c'est cette table
+qui dit qui entre. Tant qu'elle n'est peuplée que par des scripts, l'affectation d'un auditeur à une
+mission n'existe pas comme geste de produit.
+
+**Pourquoi ce n'est PAS de l'étage 1, et pourquoi L3 ne l'a pas fait au passage.** Cette route n'est
+**pas dans la ligne L3 du fichier 07**, qui est le seul brief du lot. L'ajouter serait du périmètre
+inventé par un agent — précisément ce que le canal d'amélioration existe pour empêcher (09 §5.9 :
+proposer est un devoir, anticiper est une faute). Elle touche en outre au **droit d'accès**, donc à
+la sécurité : `CLAUDE.md` §3-4 l'exclut d'office d'une décision d'autopilote.
+
+**Coût estimé.** ≈ 0,25 j : un dépôt, un service, deux routes (`POST` et `DELETE` d'une affectation),
+leurs schémas Zod, et les tests de rôle qui vont avec.
+
+**Impact schéma : aucun** — la table existe au 04, elle n'est simplement jamais remplie.
+**Impact API** : deux routes nouvelles, à documenter par une entrée `DECISIONS.md` (11 §8-6) puisque
+les §8/§24.2 ne les listent pas.
+
+**Trace** : `DECISIONS.md` 2026-09-01 « Aucune route n'écrit `mission_users` : faut-il en ouvrir
+une ? » — option 2 retenue, arbitrage de Williams attendu à la porte suivante.
+
+### FICHE A-007 — Le garde anti-skip ne voit pas les cas ANNULÉS par un crochet expiré
+
+**Constat terrain (A01, 2026-09-01 et 2026-09-02) :** `check:no-skipped-tests` lit les **sources** et
+refuse tout `.skip`, `runIf`, `todo`. Il est vert. Pourtant, trois fois en deux jours, des rapports
+vitest ont porté des cas « skipped » sans qu'aucune source n'en contienne : `socle.test.ts` (12) et
+`quota.test.ts` (5) le 2026-09-01, `l0-restauration` (4) le 2026-09-02 — à chaque fois un `beforeAll`
+expiré sous contention (10 s par défaut, ou une passe Docker tuée à 600 s), et vitest **annule** les
+cas qu'il précède en les comptant « skipped ». Un fichier peut donc être **rouge sans test rouge**,
+ou **vert avec des annulations**, et le garde ne le voit pas : il n'y a rien à attraper dans la source.
+La session de vérification isolée l'a relu comme un `skipIf` d'environnement — c'est dire à quel
+point le rapport ressemble à un skip écrit.
+
+**Valeur pour l'auditeur :** la DoD dit « aucun test sauté » et le pipeline dit « les tests sont la
+vérité terrain ». Une annulation silencieuse est un skip qui ne dit pas son nom, et elle survient
+précisément sous la charge — là où un test intermittent finit par être ignoré.
+
+**Proposition (étage 2) :** un garde qui lit le **rapport JSON** de vitest (`--reporter=json`) et
+refuse tout cas `skipped` non porté par la source ; en CI, sur les jobs `unit` et `integration`. Le
+remède immédiat appliqué en attendant : plafonds explicites (120 s) sur les crochets de préchauffage.
+
+**Coût estimé :** ≈ 0,3 j (script + branchement CI + son propre test témoin).
+**Impact schéma / API : aucun.** Impact CI : deux jobs lisent un rapport de plus.
 ---
 
 # RÉSERVES DE LA PORTE P-B PORTÉES EN FICHES (2026-09-02, session de vérification)

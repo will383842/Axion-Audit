@@ -5500,3 +5500,1573 @@ du §10.2 de la fiche P-B, réserve R-B12 levée). Précédence : 09 §5.2 (amen
 règle du pack sans objet — aucune section en conflit, deux sections complétées.
 Décideur : Williams.
 Impact spec : amendements horodatés de 02 §30.6 et 03 §32.4 ; sceau régénéré.
+---
+
+## 2026-08-31 — [L3a] Quel rôle accède au référentiel client ? Le pack ne le dit nulle part
+
+`docs/conception/LOT_L3.md` §2 nomme les quatre routes `companies` mais ne leur donne aucune
+politique d'accès. Le pack a été relu sur ce point avant d'écrire la première ligne : **05 §8 et
+§24.2 ne listent pas `/v1/companies`** (elles ne nomment que `/v1/missions`, `/v1/scoping`,
+`/v1/answers`…), et la matrice **03 §34.1** ne comporte aucune ligne « fiche client ». C'est un
+silence, pas une négligence de lecture — et `apps/api/src/auth/politique.ts` refuse le démarrage
+d'une route sans `config.acces` : il fallait donc trancher pour livrer.
+
+Options :
+
+1. `roles: ['admin']` — le plus restrictif.
+2. `roles: ['admin', 'consultant']` — un consultant crée la fiche du client qu'il va auditer.
+3. `type: 'authentifie'` — tout compte actif lit le référentiel client.
+
+Arbitrage : **option 1, `admin` seul, et l'ouverture reste possible ; l'inverse ne l'était pas.**
+
+Trois éléments orientent, aucun ne prescrit :
+· **03 §34.1 : « la console est ADMIN SEUL »** en V1. Une fiche client est un objet de console — la
+PWA terrain ne connaît que des missions, jamais le référentiel qui les porte (05 §9.5 : le pull de
+sync ne descend pas `companies`) ;
+· **03 §34.3** borne le lead de mission et l'exclut nommément des « comptes » et du financier ; rien
+n'y étend son périmètre au référentiel client ;
+· `companies.external_ref` est **la clé de liaison avec la console commerciale axion-ia.com** (04,
+E18). L'ouvrir plus largement ouvrirait la lecture de cette liaison, dont le §20.6 fait un objet
+d'administration.
+
+**La règle qui décide, et elle n'est pas de goût** : un droit qu'on ouvre ne se reprend pas sans
+casser un usage installé, alors qu'un droit qu'on élargit ne casse rien. Sur un silence, le coût
+d'erreur est donc asymétrique — et la doctrine du dépôt sur les silences d'accès est déjà écrite
+(`domaines/scoping/financiers.depot.ts` : « une porte fermée ne trie pas le courrier »). L'option 2
+sera légitime le jour où un besoin terrain réel l'appellera ; elle sera alors **une ligne** dans
+`CONFIG_ADMIN` et une entrée ici.
+
+⚠ **CONSÉQUENCE À CONNAÎTRE, ÉCRITE PLUTÔT QUE DÉCOUVERTE EN RECETTE** : un consultant ne peut ni
+créer ni lire une fiche client. Si le parcours de préparation d'une mission (L3b) suppose qu'un
+consultant crée l'entreprise avant la mission, **il faudra rouvrir cette décision** — et non
+contourner la route.
+
+Précédence : `CLAUDE.md` invariant 3 (RBAC serveur systématique) · §3-6 (documenter ce que le pack ne
+liste pas) · 03 §34.1 comme texte le plus proche. Règle de précédence du pack **sans objet** : il n'y
+a pas divergence entre deux textes, il y a absence de texte.
+
+Décideur : A01, sur constat de l'agent L3a.
+Impact spec : aucun amendement du pack. Politique d'accès des quatre routes `companies` documentée
+ici et dans `apps/api/src/routes/companies.ts`.
+
+---
+
+## 2026-08-31 — [L3a] `COMPANY_DUPLICATE` était arbitré depuis deux jours et n'existait pas dans le code
+
+L'entrée du 2026-08-29 (« Les quatre codes d'erreur du lot ») retient « `COMPANY_DUPLICATE` · 409 ·
+périmètre réduit au SIREN ». **Mesuré au moment d'écrire L3a : `packages/shared/src/errors.ts` porte
+17 codes, et celui-là n'y est pas.** Le brief du lot interdit par ailleurs tout code hors de ce
+fichier — la route ne pouvait donc pas être écrite telle qu'elle est arbitrée.
+
+Le même relevé montre que **deux autres amendements de la même journée sont restés sur le papier** :
+le champ `code` optionnel d'`errorDetailSchema` et le statut **422** (tous deux annoncés « Impact
+spec » de l'entrée du 2026-08-29). Ils appartiennent à l'import CSV (L3c) et à l'import de banque
+(L9), pas à `companies`.
+
+Options :
+
+1. S'arrêter et rendre le lot non livrable tant que le code n'est pas posé par un autre.
+2. Ramener le conflit de SIREN au `CONFLICT` générique et ignorer l'arbitrage.
+3. **Poser le seul code que l'arbitrage du 2026-08-29 nomme pour ce périmètre, et signaler les deux
+   amendements restants sans les faire.**
+
+Arbitrage : **option 3.**
+
+L'option 2 contredirait une décision d'A01 déjà prise, datée et motivée — et le motif tient : 05 §8.3
+annonce un second conflit possible sur ces routes (référentiel partagé `external_ref`), qui rendrait
+un branchement front bâti sur un conflit nu **faux en silence**. L'option 1 confondrait « décider »
+et « exécuter » : ajouter un code d'erreur **déjà arbitré, à son statut arbitré, sur son périmètre
+arbitré** est de l'exécution. Ce qui aurait exigé un arrêt, c'est un code dont personne n'aurait
+tranché l'existence — et ce n'est pas le cas ici.
+
+**Ce qui n'a PAS été fait, délibérément** : ni le `code` d'`errorDetailSchema`, ni le statut 422. Ils
+n'ont aucun appelant dans ce lot, et un code d'erreur sans appelant est exactement le « code mort »
+que l'entrée du 2026-08-29 refuse. Ils sont **dus aux lots L3c et L9**, qui les poseront avec leur
+premier usage.
+
+**Même geste, même raison, pour le catalogue du journal** : `packages/shared/src/journal.ts` ne
+connaissait ni l'entité `company` ni ses actions. Deux actions (`company.create`, `company.update`),
+l'entité `company`, et `CHAMPS_ENTREPRISE_JOURNALISABLES` sont ajoutés. Aucune action de
+consultation : le catalogue n'en trace aucune hors du financier (06 §10.5), et une liste qui se
+rafraîchit à chaque ouverture d'écran noierait la table. `activity_log.entity_type` est un `TEXT`
+**sans CHECK** (migration `0007`) : l'ajout ne touche donc pas le fichier 04.
+
+Précédence : `CLAUDE.md` §9 (les codes vivent dans `packages/shared`, statut HTTP cohérent) · §3-6
+(une décision d'API se documente) · invariant 7 (toute correction est tracée). La règle de précédence
+du pack est **sans objet** : l'écart est entre une décision et le code, pas entre deux textes.
+
+Décideur : A01, par l'entrée du 2026-08-29 qu'il ne s'agit ici que d'exécuter.
+Impact spec : aucun amendement du pack. `ERROR_CODES` passe de 17 à 18 entrées ; `ACTIONS_JOURNAL` de
+12 à 14 ; `ENTITES_JOURNAL` de 2 à 3.
+
+---
+
+## 2026-08-31 — [L3a] Trois silences de forme du CRUD companies : le curseur, la place de l'avertissement, la suppression
+
+Trois questions que ni le pack ni la note de conception ne tranchent, rencontrées en écrivant les
+quatre routes. Elles sont groupées parce qu'elles ont la même nature — de la FORME d'API, jamais du
+produit — et le même arbitre.
+
+Options :
+
+1. Les trancher au fil du code sans les écrire.
+2. **Les trancher en les écrivant, chacune sur son propre motif.**
+
+Arbitrage : **option 2 — trois arbitrages distincts.**
+
+**a. LE CURSEUR EST `(name, id)`, PAS `(created_at, id)`.** La note de conception L3 §2 le fige
+(« `companies`: `name,id` ») et `apps/api/src/http/pagination.ts` en porte déjà la trace dans son
+en-tête, avant toute ligne de ce lot. Le brief de l'agent rappelait à juste titre le précédent de
+`users` — mais ce précédent porte sur la **forme** (curseur composite, dernière clé unique), pas sur
+le **choix des colonnes**, que le contrat 11 §3 confie explicitement à chaque route (« curseur
+documenté par route »). Le motif est fonctionnel : un référentiel client se cherche par ordre
+alphabétique. ⚠ **Le piège des microsecondes reste vrai et reste écrit** : il vient de la conversion
+`TIMESTAMPTZ` → `Date` du pilote, il ne s'applique pas à une colonne `TEXT`, et le dépôt le dit à
+l'endroit exact où le lecteur suivant se demandera pourquoi le `::text` de `users` a disparu.
+**Dette REMONTÉE** : aucun index ne sert `companies(name, id)` au §7.1 du fichier 04 — le tri est
+fait en mémoire. Sans effet en Phase 1 ; l'ajouter est un amendement du 04, donc Williams.
+
+**b. L'AVERTISSEMENT VIT DANS LA RÉPONSE DE L'ÉCRITURE, PAS DANS LA FICHE.** L'entrée du 2026-08-29 a
+substitué au 409 sur le nom un « 201 avec un champ d'avertissement » sans en fixer la forme.
+`POST` et `PATCH` rendent donc `{ company, secteurAQualifier, doublonsNomPossibles }`, tandis que
+`GET` rend la fiche à plat. **L'asymétrie est le prix d'une distinction juste** : ces deux champs
+sont des constats sur l'ACTE d'écriture, pas des propriétés de l'entreprise ; les aplatir obligerait
+la lecture à rescanner les homonymes à chaque affichage, ou à les rendre faux. Le nom
+`secteurAQualifier` est repris **verbatim** de la note de conception §3d ; il jure avec les champs
+anglais voisins, et cet écart est assumé plutôt que corrigé en douce — la note lie ce lot, et
+renommer un champ contractuel n'est pas de l'exécution. **À reprendre au moment où la console
+consommera ces routes**, si le mélange gêne à l'usage.
+
+**c. IL N'Y A PAS DE ROUTE DE SUPPRESSION, ALORS QUE LA COLONNE EXISTE.** `companies.deleted_at` est
+au fichier 04, et pourtant aucune section fonctionnelle ne dit ce que supprimer une fiche
+signifierait pour les missions qui la référencent (`missions.company_id` est **NOT NULL**). Créer la
+route exigerait de trancher cela : c'est du produit, pas une convention. Les lectures filtrent
+néanmoins `deleted_at IS NULL` dès aujourd'hui — le filtre est écrit **une fois**, dans le dépôt.
+⚠ **Conséquence à connaître le jour où la suppression arrivera** : l'index unique partiel
+`uq_companies_siren` **n'exclut pas les lignes supprimées**. Une fiche supprimée retiendra donc son
+SIREN, et le 409 désignera une fiche que la liste ne montre plus. Le corriger demanderait de changer
+l'index, donc le fichier 04.
+
+Précédence : `CLAUDE.md` §9 (pagination keyset, curseur documenté par route ; nommage camelCase) ·
+§3-2 (le schéma 04 est la signature de Williams) · §0 (la note de conception du lot lie l'agent).
+Règle de précédence du pack **sans objet** pour a et c ; pour b, la note de conception ne peut ni
+étendre ni réduire ce que le pack fixe, mais le pack ne fixe rien ici.
+
+Décideur : A01, sur dossier de l'agent L3a.
+Impact spec : aucun amendement du pack. Deux dettes remontées à Williams (index
+`companies(name, id)` ; portée de `uq_companies_siren` vis-à-vis de `deleted_at`).
+
+---
+
+## 2026-08-31 — [L3b] Le pouvoir de FORCER une transition : le §32.2 le nomme une fois, le §17.3 deux fois
+
+Rencontré en fixant le contrat de `TRANSITIONS_MISSION` (`packages/shared/src/missions.ts`), avant
+toute ligne d'implémentation. La note de conception `LOT_L3.md` §3b fige la forme d'une ligne de la
+table — `{depuis, vers, sens, roles, conditions, motifRequis}` — et cette forme **ne sait pas exprimer
+la surcharge admin**, que le pack nomme pourtant deux fois, à deux portées différentes :
+
+· 03 §32.2, verbatim : `en_cours → en_analyse` (« étape collecte validée, **ou override admin
+motivé** ») — une seule transition nommée ;
+· 03 §17.3, verbatim : « passer « **en analyse** » ou « **livrée** » affiche les manques (seuils
+§M5.3) ; l'admin peut forcer, avec motif journalisé » — deux transitions.
+
+Le §32.2 est muet sur `en_analyse → livree`. **Muet n'est pas contraire** : la règle de précédence
+(§32-36 > §24-31 > §16-22) ne s'arme que sur une DIVERGENCE, et il n'y en a pas ici. Un agent pressé
+lirait « le §32.2 prévaut, donc une seule transition forçable » — ce serait faire dire au silence
+l'inverse de ce que dit la seule section qui parle.
+
+Options :
+
+1. Ne modéliser que `en_cours → en_analyse`, au motif que §32.2 prévaut.
+2. Rendre TOUTE transition forçable par un admin motivé — la surcharge devient un pouvoir général.
+3. **Un champ par ligne (`surchargeAdminMotivee`), vrai sur les DEUX transitions nommées par le
+   §17.3, faux partout ailleurs.**
+
+Arbitrage : **option 3.**
+
+L'option 1 supprime une capacité que le pack accorde explicitement, sur la foi d'un silence.
+L'option 2 est la faute inverse, et la plus coûteuse : elle rendrait `livree → cloturee` et surtout
+`preparation → en_cours` forçables, c'est-à-dire qu'un admin pourrait lancer une collecte **sans
+questionnaire figé** — le terrain partirait avec zéro question, et l'invariant 6 (« le terrain
+collecte, le siège produit ») deviendrait inexécutable. Ni §32.2 ni §17.3 n'accordent cela : les deux
+ne parlent que des transitions **vers l'aval de la collecte**, là où les manques sont un jugement
+d'auditeur, jamais un défaut de préparation. La surcharge est donc une propriété **de la ligne**, pas
+du rôle.
+
+Deux conséquences écrites plutôt que sous-entendues :
+· la surcharge exige un motif **même quand `motifRequis` est faux** — forcer sans dire pourquoi est
+exactement ce que le §17.3 interdit (« avec motif journalisé ») ;
+· la surcharge est **sans effet pour un non-admin**. Un consultant qui la demande sur une condition
+fausse reçoit `conditions_non_remplies`, pas `role_insuffisant` : le refus doit nommer ce qui
+manque, pas ce que le demandeur n'est pas.
+
+Précédence : 03 §32.2 et §17.3, **sans divergence — la règle de précédence du pack est donc sans
+objet**. `CLAUDE.md` §0 (la note de conception du lot lie l'agent, mais ne peut ni étendre ni réduire
+ce que le pack fixe : la forme de `LOT_L3.md` §3b est complétée, pas contredite).
+
+Décideur : A10 (chef d'équipe du chantier C1), à ratifier par A01 à la revue croisée de L3b.
+Impact spec : aucun amendement du pack. Un champ ajouté à la forme de ligne proposée par
+`docs/conception/LOT_L3.md` §3b.
+
+---
+
+## 2026-08-31 — [L3d → Williams] `interviews.conducted_by` est NOT NULL : le plan d'entretiens §32.4 ne produit aucun auditeur
+
+**Ceci est une ESCALADE, pas un arbitrage.** `CLAUDE.md` §3-2 : modifier le fichier 04 est réservé à
+Williams. L'entrée existe pour que la question soit posée, pas pour la trancher.
+
+Mesuré : `apps/api/drizzle/0004_collecte.sql` ligne 26 déclare `conducted_by UUID NOT NULL`, et
+`apps/api/src/db/schema.ts` ligne 534 le reflète. Le fichier 04 (ligne 115) écrit seulement
+`conducted_by FK users` — il ne dit **ni** `NULL` **ni** `NOT NULL`. La non-nullité est donc une
+décision prise au lot L1, dans le silence du 04, et le manifeste de comparaison schéma-vs-04 la fige
+désormais : la relâcher est un amendement, pas une correction.
+
+Le §32.4 spécifie un plan d'entretiens **par unité et par profil** (« ≤ 10 pers. → 1-2 entretiens ·
+11-50 → 3 · 51-200 → 4-6 + 1 observation · > 200 → 6-10 + observation + démonstration + relevé »).
+Ce plan est une **CIBLE** : il ne nomme aucun auditeur, et il ne peut pas en nommer un — au cadrage,
+l'équipe n'est pas constituée. Une ligne `interviews` planifiée est donc, par nature, une ligne sans
+propriétaire, et la colonne la refuse.
+
+Piste proposée à l'examen, et **son défaut** : dériver `conducted_by` de `work_assignments`, porteur
+de l'affectation selon 03 §34.3 (« ajuster le plan d'entretiens **et** les `work_assignments` de sa
+mission » — deux objets, cités côte à côte). Elle ne tient pas seule : `work_assignments` est
+`(mission_id, user_id, org_unit_id)` et n'a **aucune dimension profil**, alors que le plan est
+spécifié par unité ET par profil ; et au moment où le plan se génère, il peut n'exister aucune
+affectation. Dériver produirait donc soit un propriétaire faux, soit rien. **À ne pas confondre avec
+le §34.4**, qui ne parle que d'habilitation (`habilitated_at`) et ne porte aucune affectation.
+
+Ce que cela ne bloque PAS aujourd'hui, et c'est ce qui rend l'escalade non urgente : `DECISIONS.md`
+du 2026-08-29 (« les quatre routes hors §8/§24.2 ») a déjà **reporté `POST …/interview-plan/apply`**
+en fiche d'étage 2, faute de table où poser le plan. Le critère n° 4 du fichier 07 dit « plan
+d'entretiens **généré** », pas « persisté » : **L3 livre le générateur, fonction pure et testée, et ne
+persiste rien.** La présente entrée existe pour que le jour où `/apply` sera arbitré, le blocage soit
+déjà instruit au lieu d'être redécouvert.
+
+Options soumises à Williams :
+
+1. Rendre `interviews.conducted_by` NULLABLE — une session planifiée sans auditeur est une ligne
+   légitime. **Coût caché à mesurer** : 05 §9.9 fonde toute la propriété d'écriture de sync sur cette
+   colonne. Un `NULL` y deviendrait un cas à traiter dans le moteur de sync (L6), et « propriétaire
+   inconnu » ne doit jamais s'y lire « tout le monde ».
+2. Créer une table de plan d'entretiens (unité × profil × cible), ce que la conception appelait de ses
+   vœux — amendement du 04, et le blocage reste double tant que `interviews.interlocutor_profile_id`
+   n'existe pas (04 : la colonne manque, LOT_L3.md §5-1).
+3. Ne rien changer : le plan reste une fonction pure, jamais persisté, jusqu'à la Phase 2.
+
+Arbitrage : **AUCUN — la question est portée à Williams.** Aucune ligne de code L3 ne présuppose une
+issue : le générateur est écrit comme une fonction pure, sans écriture.
+
+Précédence : `CLAUDE.md` §3-2 (le fichier 04 est la signature de Williams) · §0 (le 07 fait foi pour
+le périmètre : « plan d'entretiens généré »). Règle de précédence du pack sans objet — le pack ne se
+contredit pas, il est **silencieux** sur la nullité de la colonne.
+
+Décideur : **Williams** (en attente). Instruit par A10, chantier C1.
+Impact spec : amendement du fichier 04 **si** l'option 1 ou 2 est retenue ; aucun sinon.
+
+---
+
+## 2026-08-31 — [L3 → A01] La migration du fil rouge vers Playwright est datée au L3, et L3 ne livre aucun écran
+
+Relevé au brief de reprise de L3, en confrontant deux textes que rien ne rapprochait.
+
+`DECISIONS.md` du 2026-08-27 (« Le fil rouge naît en tests d'intégration, il passe à Playwright au lot
+L3 ») écrit, verbatim : « **Migration imposée au lot L3**, dès que "création mission → import arbre →
+questionnaire figé" existe : le fil rouge devient alors un test Playwright […]. Sans cette date
+écrite, le fil rouge resterait au niveau d'intégration par inertie, et la porte P-C réclamerait un
+Playwright que personne n'aurait écrit. » `docs/conception/LOT_L3.md` §4 le reprend : « `@filrouge`
+vert sur les deux, c'est la bascule Playwright annoncée « au L3 ». »
+
+**Mesuré ce jour** : `apps/hq/src` contient **deux fichiers** — `App.tsx` et `main.tsx`. Aucun écran,
+aucune route de navigation, aucun formulaire. Et c'est conforme : la table des lots du fichier 07
+donne à L3 « API missions/companies […] » — **aucune interface** — et place la console en **L7-min**
+(« Console minimale : portefeuille, avancement mission, couverture, export »).
+
+La migration est donc datée d'un lot qui, par son propre périmètre, ne produit rien que Playwright
+puisse piloter. Ce n'est ni une erreur de l'un ni de l'autre : c'est une jonction que personne n'a
+faite, et elle se paie à la porte P-C si on la laisse dormir — exactement le risque que l'entrée du
+2026-08-27 disait vouloir éviter.
+
+Options :
+
+1. **Écrire le Playwright en L3 sur le `request` fixture** (appels HTTP pilotés par Playwright, sans
+   navigateur). Le tag `@filrouge` serait porté par du Playwright — mais ce serait un test
+   d'intégration déguisé, plus lent, sans DOM, sans offline : on aurait satisfait la lettre en
+   perdant ce que Playwright apporte. Le 07 §13 décrit le fil rouge comme un « parcours complet »
+   incluant « sessions hors ligne (contexte offline) », qu'aucune fixture `request` ne rejoue.
+2. **Livrer en L3 des écrans de console** (création de mission, import d'arbre, prévisualisation) pour
+   que Playwright ait quelque chose à piloter. C'est **hors périmètre du 07** pour L3, donc un
+   descope de fait sur un autre lot, et l'affaire de la porte, pas de l'autopilote.
+3. **Décaler la migration au premier lot qui livre une interface** — L5 pour le terrain (PWA
+   complète), L7-min pour la console — en gardant le fil rouge au niveau intégration d'ici là,
+   ENRICHI à chaque lot comme le §4bis l'exige (« le parcours **disponible à date** »).
+
+Arbitrage : **AUCUN — porté à A01.** Le point touche la date d'un engagement pris par une décision
+d'A01 et le périmètre de deux lots ; il n'appartient pas au chef d'équipe de le déplacer.
+
+**Ce que L3 fait en attendant, et qui n'est pas une attente** : le fil rouge d'intégration
+(`apps/api/tests/l1-filrouge.integration.test.ts`, fixtures `tests/aide/fil-rouge.ts`) est **étendu**
+au parcours que L3 rend disponible — création de mission, import d'arbre, figeage du questionnaire —
+sur FIL-TPE **et** FIL-GC. Le parcours grandit donc bien à ce lot ; seule la TECHNOLOGIE du harnais
+reste en question. Formulé autrement : la substance de l'engagement du 2026-08-27 est tenue par L3,
+son enveloppe ne l'est pas, et confondre les deux ferait soit un faux vert, soit un faux retard.
+
+Précédence : `CLAUDE.md` §0 (le brief d'un lot vient EXCLUSIVEMENT de la table du fichier 07) ·
+09 §4bis (« le parcours de bout en bout **disponible à date** »). Règle de précédence du pack **sans
+objet** : la tension est entre une décision d'exécution et la table des lots, pas entre deux sections
+du pack.
+
+Décideur : **A01** (en attente). Instruit par A10, chantier C1.
+Impact spec : aucun. Une date d'engagement à confirmer ou à déplacer.
+
+---
+
+## 2026-08-31 — [L3b] Qui a le droit de faire AVANCER une mission ? Le §32.2 ne le dit que pour les retours
+
+Trouvé par A16 en écrivant les tests de la machine à états **avant** l'implémentation (09 §3-2) — ce
+qui est exactement ce que le TDD est censé produire : la question sort du contrat, pas du code. Mon
+propre brief présupposait une réponse sans l'avoir instruite ; A16 a refusé de la deviner et l'a
+signalée. La correction m'incombe.
+
+`03 §32.2` nomme les rôles **une seule fois** : « Retours arrière (**admin uniquement**, motif
+obligatoire) ». Les quatre transitions « avant » n'ont aucun rôle attaché. Deux textes tirent en sens
+inverse :
+
+· `03 §34.1` : « **Décision V1 : la console est ADMIN SEUL** […] Le cockpit du consultant, c'est la
+PWA : il n'a JAMAIS besoin de la console pour travailler. » Or `POST /v1/missions/:id/status` est
+une route de console (05 §8.3, rubrique « Clients & missions »).
+· `03 §32.2` lui-même : écrire « admin **uniquement** » sur les retours n'a de sens que si les
+transitions avant ne le sont **pas**. Un qualificatif qui ne qualifie rien est du bruit, et ce pack
+n'en écrit pas.
+
+Options :
+
+1. `roles: ['admin']` sur les sept lignes — le plus restrictif, aligné sur §34.1.
+2. **Distinguer les deux couches** : la TABLE porte la règle métier durable (§32.2 — retours admin
+   seuls, avances ouvertes à l'équipe de mission), la ROUTE porte la restriction V1 (§34.1 — console
+   admin seul).
+3. `roles` ouverts partout, la route filtrant seule.
+
+Arbitrage : **option 2.**
+
+L'option 1 fait dire au §32.2 l'inverse de ce qu'il écrit : elle vide « uniquement » de son sens et,
+le jour où le lead entrera dans la console (§34.1 : « Le lead y entre en Phase 2, borné à SES
+missions »), il faudrait rouvrir la table sans qu'aucun texte n'ait changé — c'est-à-dire redécouvrir
+la règle au lieu de la lire. L'option 3 supprime la seule distinction que le §32.2 pose.
+
+L'option 2 est la lecture qui rend les deux textes vrais **en même temps**, et elle a un précédent
+immédiat dans ce dépôt : `apps/api/src/auth/politique.ts` écrit, en toutes lettres, que la politique
+de route « dit QUI ENTRE, pas CE QUE LE SQL RAMÈNE », et que confondre les deux garde-fous « c'est
+croire qu'une porte fermée trie le courrier ». **Ici c'est la même architecture, appliquée au métier**
+: `config.acces` reste `roles: ['admin']` sur `POST /v1/missions/:id/status` — un consultant
+n'atteint pas la route en V1, conformément au §34.1 — tandis que `TRANSITIONS_MISSION` transcrit le
+§32.2 sans le déformer. Les deux se vérifient séparément, et aucune n'a besoin de mentir sur l'autre.
+
+**Concrètement** : les quatre transitions « avant » portent `['admin', 'consultant']` ; les trois
+retours portent `['admin']` exactement. Le rôle `analyste` et le rôle `lecteur` sont exclus partout —
+§34.1 ne leur donne, respectivement, que « lecture + rédaction » sur l'espace 6 et « lecture livrés ».
+
+**Ce que cela rend observable, et qui est la vraie valeur de l'option 2** : un consultant qui demande
+`en_cours → en_analyse` alors que la collecte n'est pas validée reçoit `conditions_non_remplies` — ce
+qui MANQUE — et non `role_insuffisant` — ce qu'il N'EST PAS. Sous l'option 1, tout consultant aurait
+reçu « rôle insuffisant » sur les sept transitions, et le message le plus utile du produit aurait été
+remplacé par le moins utile. La surcharge admin (entrée du même jour) conserve tout son sens : elle
+distingue un admin qui force d'un admin qui ne force pas.
+
+**Risque assumé et écrit** : la table autorise plus large que la route. Si une route future exposait
+une transition sans son `config.acces` admin, la table ne la rattraperait pas. C'est la propriété
+normale d'un garde-fou de couche — et le socle L2 refuse de démarrer sur une route sans politique
+(`politique.ts`, crochet `onRoute`), ce qui borne le risque à « politique déclarée trop large », pas
+à « politique absente ».
+
+Précédence : `03 §32.2` et `03 §34.1` sont tous deux dans la bande §32-36 ; la règle de précédence du
+pack **ne les départage donc pas**, et c'est bien pourquoi la lecture conciliante s'impose plutôt
+qu'un arbitrage par le rang. `CLAUDE.md` invariant 3 (RBAC serveur systématique) et le précédent
+`config.acces` du lot L2.
+
+Décideur : A10 (chef d'équipe du chantier C1), sur constat d'A16. **À ratifier par A01** à la revue
+croisée de L3b — le point touche la matrice rôle × route du §34.1, qui est du ressort d'A01.
+Impact spec : aucun amendement du pack.
+
+---
+
+## 2026-08-31 — [L3a] Un `PATCH` de code APE vers une division inconnue EFFACE un secteur choisi à la main
+
+Trouvé par A17 en écrivant les tests d'intégration de `companies` — c'est-à-dire par le premier agent
+qui ait relu ce code sans l'avoir écrit. Vérifié à la source par A10 avant d'être porté ici.
+
+`apps/api/src/domaines/companies/service.ts`, dans `modifierUneEntreprise` : quand le code APE change
+vers une valeur non nulle, R4 est rejoué par `resoudreSecteur(null, naf.valeur)`. Si la division n'est
+pas dans `naf_sector_map`, cette fonction rend `{ sectorId: null, secteurAQualifier: true }` — ce qui
+est **juste à la création**. Trois lignes plus bas, `if (secteur.sectorId !== avant.sectorId)` écrit
+ce `null` : le secteur que quelqu'un avait choisi à la main **disparaît**.
+
+Le commentaire immédiatement au-dessus de ce code affirme l'inverse, mot pour mot : « Rejouer R4 à
+chaque `PATCH` **écraserait un secteur choisi à la main** lors d'une modification qui ne concerne que
+les effectifs. » L'intention est écrite, et le code fait le contraire dans un cas que l'auteur n'avait
+pas séparé des deux autres. Ce n'est pas une négligence de rédaction : c'est le cas à trois branches
+où la troisième s'est glissée dans la deuxième.
+
+Le seul signal reçu par l'appelant est `secteurAQualifier: true`. Un écran qui ne le traite pas
+affiche une fiche sans secteur **sans jamais avoir dit qu'il en supprimait un**.
+
+Options :
+
+1. Statu quo — le rejeu de R4 fait autorité, y compris quand il ne trouve rien.
+2. **Quand le rejeu de R4 ne trouve PAS de correspondance, CONSERVER le secteur en place et rendre
+   `secteurAQualifier: true`.** L'effacement délibéré reste possible, par le chemin qui l'exprime :
+   `sectorId: null` explicite dans le corps du `PATCH`.
+3. Refuser le `PATCH` (409) tant que la division est inconnue.
+
+Arbitrage : **option 2 — et c'est l'invariant 7, pas une préférence d'ergonomie.**
+
+`CLAUDE.md` invariant 7 : « **rien n'est jamais silencieusement écrasé ou supprimé** ». Un trou du
+référentiel `naf_sector_map` est un fait d'administration — la table est éditable depuis la console,
+espace Contenu — et le code le sait déjà : `resoudreSecteur` porte en commentaire « un référentiel
+incomplet n'est pas une erreur de l'utilisateur ». Laisser ce trou **détruire une donnée saisie par
+un humain** fait payer à l'utilisateur une lacune qui n'est pas la sienne. L'option 3 est écartée
+pour la raison symétrique, déjà tranchée à la création : un référentiel incomplet ne doit pas non
+plus **bloquer** une écriture légitime.
+
+Le contrat d'API ne change pas : `secteurAQualifier: true` signifie déjà « le secteur reste à
+qualifier », ce qui est exactement vrai dans les deux lectures. Seule la valeur écrite change.
+
+**Ce qui est fait maintenant, et ce qui ne l'est pas.** A17 a figé le comportement ACTUEL dans un test
+nommé « COMPORTEMENT CONSTATÉ » plutôt que de le déclarer défaut de son propre chef — c'est la bonne
+discipline, et elle mérite d'être dite. La correction touche du code de production et son test doit
+basculer **dans le même geste** ; or Docker est indisponible (un autre chantier le tient) et le test
+d'intégration n'a jamais pu être exécuté. Corriger le code en laissant en place un test qui affirme
+le contraire, sans pouvoir lancer ni l'un ni l'autre, produirait une branche dont personne ne connaît
+l'état. **La correction et le retournement du test sont donc portés à l'incrément L3b, où ils
+s'exécuteront.** Le présent arbitrage est ce qui les rend exécutables sans rouvrir la question.
+
+Précédence : `CLAUDE.md` invariant 7 (rien n'est silencieusement écrasé) · 03 §29 R4 (le secteur est
+**pré-rempli**, jamais imposé) · `DECISIONS.md` du 2026-08-31 (« Trois silences de forme du CRUD
+companies »), qui a déjà posé que l'avertissement accompagne l'écriture au lieu de la refuser. Règle
+de précédence du pack **sans objet** : le pack ne traite pas le rejeu de R4 sur modification, le
+défaut est interne au code.
+
+Décideur : A10 (chef d'équipe du chantier C1), sur constat d'A17. À ratifier par A01 à la revue
+croisée de L3b.
+Impact spec : aucun amendement du pack, aucun du fichier 04. Une ligne de service à corriger et un
+test d'intégration à retourner, tous deux à l'incrément L3b.
+
+---
+
+## 2026-08-31 — [L3a → Williams] `companies.external_ref` n'a aucune contrainte d'unicité
+
+Relevé par A17 à la lecture de la migration `0002_clients_missions_organisation.sql` : la seule
+contrainte d'unicité de la table `companies` est `uq_companies_siren`. Rien n'empêche aujourd'hui deux
+fiches de porter le même `external_ref`.
+
+Or cette colonne n'est pas un champ libre. Le fichier 04 la décrit comme « id client console
+axion-ia.com (NULL si local) », et 03 M8.1 en fait la clé du **référentiel client partagé** avec la
+console commerciale. Un doublon d'`external_ref` signifierait qu'une même entreprise de la console
+correspond à deux fiches d'audit, et que la liaison M8.1 — comme le webhook `client.updated` du
+05 §8.6 — n'a pas de cible déterminée. Le défaut ne se manifesterait qu'au lot L13, loin de sa cause.
+
+**Ce n'est pas une omission de L1** : le §7.1 du fichier 04 énumère les index critiques et n'en
+nomme aucun sur `external_ref`. La transcription est fidèle. C'est le **fichier 04 qui est silencieux**,
+et c'est pourquoi cette entrée est une escalade et non une correction : ajouter un index unique
+partiel `companies(external_ref) WHERE external_ref IS NOT NULL` ferait diverger le schéma du
+manifeste, donc rougir le contrôle « diff schéma-vs-04 » de la CI.
+
+Options soumises à Williams :
+
+1. Ajouter au fichier 04 §7.1 un index UNIQUE partiel `companies(external_ref) WHERE external_ref IS
+NOT NULL` — symétrique exact de celui qui existe déjà sur `siren`, et même motif.
+2. Ne rien changer : la liaison console est L13 (Phase 2), et d'ici là `external_ref` n'est écrit par
+   aucune route (aucun schéma d'entrée de L3a ne l'expose — vérifié).
+3. Traiter la question au lot L13, avec le reste du contrat d'intégration.
+
+Arbitrage : **AUCUN — porté à Williams** (`CLAUDE.md` §3-2). Aucune ligne de L3 ne présuppose une
+issue. Signalé maintenant plutôt qu'au L13 parce que le coût d'un doublon déjà en base est sans
+commune mesure avec celui d'un index posé avant les premières données réelles.
+
+Précédence : `CLAUDE.md` §3-2 (le fichier 04 est la signature de Williams) · 03 M8.1 (référentiel
+client partagé). Règle de précédence du pack sans objet — le pack est silencieux, il ne se contredit
+pas.
+
+Décideur : **Williams** (en attente). Instruit par A10, sur constat d'A17.
+Impact spec : amendement du fichier 04 §7.1 **si** l'option 1 est retenue ; aucun sinon.
+
+## 2026-09-01 — [L3] La séquence L3 vs porte P-B, et le dégel du chantier
+
+Le §8 du dossier P-B posait la question à Williams : `lot/l3a-companies` existe et est verte **alors
+que le fichier 09 place `| P-B | Fin L2 |` entre L2 et L3**. A01 avait gelé L3 et refusé de décider
+seul que la séquence pouvait glisser.
+
+Options :
+
+1. **(a) La séquence tient** — L3 ne reprend qu'après la signature de P-B.
+2. **(b) La séquence glisse** — L3 reprend sans attendre la signature, qui reste due.
+3. Abandonner le travail L3 déjà écrit et le refaire après P-B.
+
+Arbitrage : **option (b)**, prononcée par Williams le 2026-09-01 en ces termes : « tu peux continuer
+l'implémentation en autopilote sans ne jamais t'arrêter, je veux que tu code tout ce que tu peux
+coder ». **Ce n'est pas une lecture extensive : c'est exactement la question du §8**, et l'instruction
+ne se comprend pas autrement. **Règle de précédence sans objet** (aucune divergence interne au pack :
+le 09 fixe une séquence, il ne l'érige pas en invariant).
+
+**CE QUE CET ARBITRAGE NE FAIT PAS, et qu'il faut écrire pour que personne ne s'y trompe** : il ne
+signe pas la porte P-B, et il ne la rend pas facultative. La signature reste due, elle reste à
+Williams seul (09 §1, `CLAUDE.md` §10), et les douze réserves du gardien A02 restent au dossier —
+dont **R-B7**, qui redevient bloquante au premier lot livrant une migration, c'est-à-dire
+**potentiellement L3 lui-même**. Le chantier reprend ; la dette de gouvernance ne s'efface pas.
+
+**Conséquence technique tracée** : le travail L3 repart sur `lot/l3-suite`, branche née de
+`integration/sept-branches` (donc porteuse des correctifs de la PR #17, notamment le banc L0 réparé)
+puis fusionnée avec `lot/l3a-companies`. **Motif** : partir de `main` ferait rougir la CI de chaque
+push sur 19 cas du banc de sauvegarde, défaut déjà diagnostiqué et corrigé mais **non encore fusionné,
+le merge de la PR #17 ayant été refusé à l'agent par le bac à sable de sa session**. Six conflits
+résolus, tous du type « les deux côtés ajoutent » ; le seul qui demandait un arbitrage — le
+consommateur de `http/pagination.ts` dans `scripts/modules-en-attente.md` — est tranché dans le
+fichier : `GET /v1/users` est le premier, `GET /v1/companies` le second.
+
+Décideur : Williams (séquence) · A01 (base technique de la branche)
+Impact spec : aucun. Amendement horodaté d'aucun fichier du pack.
+
+## 2026-09-01 — [L3d] La date de figeage du questionnaire n'existe pas en base
+
+L'arbitrage du 2026-08-29 exige qu'un refus de re-figeage porte « le compte ET la date ». Or
+`mission_questions` (04) n'a **aucune colonne temporelle**, et le 04 est inviolable hors révision de
+spec P-D (11 §8).
+
+Options :
+
+1. Lire la date dans `activity_log`, qui trace déjà l'acte de figeage.
+2. Amender le 04 d'une colonne de date de figeage — signature de Williams obligatoire.
+3. Rendre un 409 sans date, contre l'arbitrage du 2026-08-29.
+
+Arbitrage : **option 1.** Le message reste complet et le 04 reste intact. Le coût est une jointure sur
+`activity_log` au moment du refus — un chemin froid, jamais un chemin chaud. L'option 3 est écartée :
+un arbitrage antérieur ne se défait pas par commodité d'implémentation. **Règle de précédence sans
+objet** (aucune divergence interne au pack ; le 04 ne dit rien, il ne contredit rien).
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-01 — [L3d] Aucune route n'écrit `mission_users` : faut-il en ouvrir une ?
+
+`/v1/missions/:id/assignments` écrit `work_assignments` (03 §18.2 nomme la table). Conséquence
+mesurée par A10 : **le cadrage RBAC par mission n'est alimenté par aucune route**, et n'est donc
+testable qu'en SQL direct.
+
+Options :
+
+1. Ouvrir une écriture de `mission_users` dans L3d (+0,25 j).
+2. Ne pas l'ouvrir ; fiche `AMELIORATIONS.md`, arbitrage à la porte suivante.
+
+Arbitrage : **option 2.** Cette route n'est **pas dans la ligne L3 du fichier 07**, qui est le seul
+brief du lot. L'ajouter serait du périmètre inventé par un agent — exactement ce que le canal
+d'amélioration étage 2 existe pour empêcher (09 §5.9 : proposer est un devoir, anticiper est une
+faute). **Règle de précédence sans objet.**
+
+Décideur : A01 — **à arbitrer par Williams à la porte suivante**
+Impact spec : aucun. Fiche ouverte dans `AMELIORATIONS.md`.
+
+## 2026-09-01 — [L3d] Le profil de l'interlocuteur est absent du 04
+
+Le plan d'entretiens est spécifié « par unité **et par profil** » (03 §17.3, §18.1.2). La colonne qui
+porterait le profil de l'interlocuteur n'existe pas dans `interviews` au 04.
+
+Options :
+
+1. Générer le plan **listé** par unité, sans chiffrage par profil.
+2. Amender le 04 — signature de Williams.
+3. Chiffrer par profil en le déduisant d'une autre colonne.
+
+Arbitrage : **option 1.** L'option 3 inventerait une donnée que personne n'a saisie : un chiffre faux
+est pire qu'un chiffre absent, et il ne se signale pas. Le critère du 07 (« plan d'entretiens généré
+conforme aux n minimaux §32.4 ») reste tenu. **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun. La limite est écrite dans `docs/conception/LOT_L3D_BRIEF.md`.
+
+## 2026-09-01 — [L3d] L'ordre des questions dans un bloc n'est spécifié nulle part
+
+M2 §2 dit « ordre dans le bloc ». La table `questions` (04) n'a **aucune colonne de position**. Sans
+règle, deux générations du même questionnaire peuvent rendre deux ordres différents — et le figeage
+capturerait l'un des deux au hasard.
+
+Options :
+
+1. Trier par position du bloc, puis code (les codes absents en dernier), puis identifiant —
+   déterministe, sans colonne nouvelle.
+2. Ajouter une colonne de position sur `questions` au 04 — signature de Williams.
+3. Laisser l'ordre au SGBD.
+
+Arbitrage : **option 1.** L'option 3 est refusée sans discussion : un ordre non déterministe dans une
+capture figée est une dérive silencieuse, la famille de défauts que ce dépôt démonte depuis L0.
+**Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-01 — [L3b] Quel code HTTP pour un motif de transition manquant ?
+
+Le §32.2 impose un motif sur les 3 retours arrière. Le pack ne dit pas ce que rend un appel qui l'omet.
+
+Options :
+
+1. `400 VALIDATION_FAILED` — un champ requis manque, c'est une faute de forme.
+2. `409 ILLEGAL_STATE_TRANSITION` — la transition n'est pas permise dans cet état d'appel.
+
+Arbitrage : **option 2**, comme y penche `docs/conception/LOT_L3.md` §3.b. Le motif n'est pas un champ
+de forme : il **conditionne l'autorisation** de la transition, au même titre que le rôle. Un 400
+dirait au front « ta requête est mal écrite » quand la vérité est « cette transition-là exige que tu
+dises pourquoi ». **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-01 — [L3b] Sens de tri de la liste des missions
+
+Le curseur keyset est la paire date de création / identifiant ; le pack ne dit pas si la page se lit
+du plus récent au plus ancien ou l'inverse.
+
+Options :
+
+1. Décroissant — la mission la plus récente en tête.
+2. Croissant — l'ordre de création.
+
+Arbitrage : **option 1.** L'écran qui consomme cette route est le portefeuille du siège (03 §18) : on
+y cherche ce qui vit, pas ce qui a commencé. **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-01 — [L3b] Qui pose la date de livraison, et qu'advient-il au retour arrière ?
+
+Le contrat partagé documente une date de livraison « posée à la PREMIÈRE entrée en `livree` ». Aucune
+section du pack ne la relie à la transition, et rien ne dit ce qu'elle devient quand un admin fait
+revenir la mission de `livree` à `en_analyse`.
+
+Options :
+
+1. Posée à la première entrée en `livree`, **jamais effacée** par un retour arrière.
+2. Posée à chaque entrée en `livree` (écrasée).
+3. Effacée au retour arrière.
+
+Arbitrage : **option 1**, et c'est l'**invariant 7** qui tranche, pas une préférence : « rien n'est
+jamais silencieusement écrasé ou supprimé ». Une date de livraison effacée par un retour arrière
+ferait disparaître le fait qu'une livraison a eu lieu. **Précédence : invariant 7 du `CLAUDE.md` §1,
+qui prime sur le silence du pack.**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-01 — [L3b] Le type et le nom de l'unité racine créée d'office
+
+03 §16.2 dit « une racine est créée par défaut » sans dire de quel type ni sous quel nom.
+
+Options :
+
+1. Type `etablissement`, nom = celui de l'entreprise auditée.
+2. Type `groupe` — le sommet de l'énumération du 04.
+3. Laisser l'auditeur choisir à la création.
+
+Arbitrage : **option 1.** `groupe` présumerait une structure de groupe pour une TPE qui n'en a pas ;
+`etablissement` est vrai d'une TPE comme d'une filiale de grand compte, et c'est le seul niveau de
+l'énumération qui ne suppose rien. Le nom vient de la **donnée de mission** (l'entreprise), jamais
+d'une constante — invariant 2. L'option 3 ajouterait un champ obligatoire à la création d'une mission,
+donc du frottement, pour un choix que l'auditeur peut corriger ensuite. **Règle de précédence sans
+objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-01 — [L3b] OU VIT LE TEXTE DU MOTIF D'UN RETOUR ARRIÈRE — ESCALADE
+
+Le §32.2 exige un motif sur les 3 retours arrière ET sa trace dans `activity_log`. Or le contrat du
+journal (64 caractères, alphabet restreint, ni espace ni arobase) **interdit d'y écrire une phrase
+libre** — c'est un emplacement à CODE, pas à texte. Et aucune table de révision ne couvre `missions`.
+**Le motif exigé par la spec n'a aujourd'hui aucun endroit où être conservé.**
+
+Options :
+
+1. Amender le 04 : une colonne de motif sur `missions`, ou une table de révision des transitions.
+2. Élargir le champ du journal au texte libre — **fait sauter une garantie de redaction**, puisque ce
+   champ deviendrait un endroit où une donnée personnelle peut être écrite à la main.
+3. Ne conserver qu'un motif **codé** (vocabulaire fermé), et perdre le texte libre.
+4. Exiger le motif à l'appel, le valider, et ne pas le conserver — la spec est alors tenue à moitié.
+
+Arbitrage : **AUCUN — escalade à Williams.** Les options 1 et 2 touchent l'une le schéma 04, l'autre
+la politique de redaction : `CLAUDE.md` §3 interdit à l'autopilote de décider seul dans les deux cas.
+L'option 4 est ce que le code fait **aujourd'hui par défaut**, et elle ne peut pas rester : un motif
+exigé puis jeté est un garde-fou qui annonce plus qu'il ne fait. Recommandation : **option 3** si l'on
+veut rester dans le 04 actuel, **option 1** si le texte libre a une vraie valeur d'audit.
+**Règle de précédence sans objet** (le pack ne se contredit pas : il est muet sur le lieu de stockage).
+
+Décideur : **Williams — EN ATTENTE**
+Impact spec : à déterminer par l'arbitrage. Amendement du 04 possible.
+
+## 2026-09-01 — [L3c] Par quel transport le CSV de l'arbre arrive-t-il ?
+
+Le §35.2 normalise le CONTENU du fichier et se tait sur son acheminement.
+
+Options :
+
+1. `application/json`, corps `{ csv: "<contenu>" }`.
+2. `multipart/form-data` — **exige `@fastify/multipart`, qui n'est pas installé**.
+3. Corps brut `text/csv`.
+
+Arbitrage : **option 1.** L'option 2 ajouterait une dépendance hors de la liste épinglée du 11 §1, ce
+que `CLAUDE.md` §3-1 interdit à l'autopilote. L'option 3 se heurte au 11 §3 : « chaque route déclare
+son schéma Zod in/out » — un corps brut n'a pas de schéma. **Conséquence assumée, écrite plutôt que
+tue** : un fichier mal encodé (latin-1, octets invalides) ne peut pas arriver jusqu'à la route, donc
+son rejet n'est ni implémenté ni testé. Le jour où un auditeur téléversera un export Excel en
+latin-1, ce sera le navigateur qui décidera, pas nous. **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun. La limite d'encodage est notée dans `AMELIORATIONS.md` si elle mord.
+
+## 2026-09-01 — [L3c] Comment les lignes sont-elles numérotées dans le rapport d'erreurs ?
+
+Le critère du 07 exige un « rapport d'erreurs » ; ni le §35.2 ni le 04 ne disent si la ligne 1 est
+l'en-tête ou le premier enregistrement.
+
+Options :
+
+1. Numérotation **tableur** : l'en-tête est la ligne 1, le premier enregistrement la ligne 2.
+2. Index d'enregistrement : le premier enregistrement est la ligne 1.
+
+Arbitrage : **option 1**, sur le précédent maison explicite de l'import de la banque de questions
+(« le numéro attendu est celui du TABLEUR »). La raison est terrain : la personne qui lit le rapport
+a le fichier ouvert dans un tableur, et c'est ce numéro-là qu'elle cherche. **Deux imports du même
+produit qui numéroteraient différemment seraient un défaut à eux seuls. Règle de précédence sans
+objet.**
+
+Décideur : A01
+Impact spec : aucun. À réappliquer tel quel au lot L9.
+
+## 2026-09-01 — [L3c] Une colonne inconnue dans l'en-tête : tolérée ou refusée ?
+
+Le §35.2 dit « en-têtes OBLIGATOIRES » sans dire si la liste est exhaustive.
+
+Options :
+
+1. Les 9 colonnes doivent être présentes ; **toute colonne inconnue fait refuser le fichier**, en la
+   nommant.
+2. Les colonnes inconnues sont ignorées en silence.
+
+Arbitrage : **option 1.** L'option 2 transforme une **faute de frappe dans un en-tête** en perte de
+données silencieuse : `headcont` au lieu de `headcount` et l'effectif de tout l'arbre disparaît sans
+que rien ne le dise. C'est exactement la famille de défauts que ce dépôt démonte depuis L0 — le
+garde-fou qui laisse passer en ayant l'air de contrôler. Le coût est une ligne de rapport, le prix de
+l'erreur est un arbre faux. **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-01 — [L3c] Que fait l'import d'une ligne vide ?
+
+Le §35.2 ne dit rien. Un export de tableur en produit couramment en fin de fichier.
+
+Options :
+
+1. Ignorée, et **comptée dans le rapport** (« n lignes vides ignorées »).
+2. Refusée avec son numéro de ligne.
+
+Arbitrage : **option 1.** Refuser un fichier parce qu'un tableur a laissé une ligne blanche à la fin
+serait un refus que l'auditeur ne comprendrait pas, sur un défaut qui n'en est pas un. Mais l'ignorer
+**en silence** serait l'autre faute : le rapport dit toujours combien ont été sautées, de sorte qu'un
+fichier à 100 lignes dont 40 sont vides se voie. **Dans les deux options, l'invariant tenu est le
+même et c'est lui qui compte : jamais d'unité fantôme. Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-01 — [L3c] Qui accède aux routes `org_units` de la console en V1 ?
+
+Deux phrases du même fichier 03 se lisent différemment. §34.3 donne au lead le pouvoir de qualifier
+les unités proposées (§25.3). §34.1 écrit « la console est **ADMIN SEUL** » et « le lead y entre en
+**Phase 2** ».
+
+Options :
+
+1. **Admin seul** en V1, sur les 7 routes, lecture comprise. Le pouvoir du lead décrit au §34.3
+   s'exerce en Phase 2, quand son interface existera.
+2. Ouvrir `validate` et `merge` au lead dès la V1.
+
+Arbitrage : **option 1.** §34.1 tranche le PÉRIMÈTRE de la V1 ; §34.3 décrit une RÉPARTITION DE
+POUVOIRS qui n'a pas encore d'interface pour s'exercer — le pack ne dit nulle part par quel écran le
+lead ferait ce geste en V1. Ouvrir un droit sans l'écran qui le porte, c'est ouvrir une surface
+d'attaque pour une fonctionnalité qui n'existe pas. Le consultant membre lit l'arbre de sa mission
+**par le pull de sync (05 §9.5)**, pas par cette route : il n'est donc pas privé de la donnée.
+**Règle de précédence sans objet** (les deux phrases ne se contredisent pas : l'une borne la V1,
+l'autre décrit un rôle).
+
+Décideur : A01 — **à confirmer par Williams s'il veut le lead en V1**
+Impact spec : aucun.
+
+## 2026-09-01 — [L3c] Le nom du champ qui porte la cible d'une fusion
+
+§25.3 décrit la fusion d'une unité proposée dans une unité existante. Le nom du champ de la requête
+n'est nulle part.
+
+Options :
+
+1. `mergedIntoId` — le camelCase de la colonne `org_units.merged_into_id` du 04.
+2. `targetId`.
+
+Arbitrage : **option 1.** Le 11 §3 fixe la règle sans exception : `snake_case` en base ↔ `camelCase`
+en TS, jamais de mélange. `targetId` inventerait un troisième vocabulaire pour désigner la même
+chose, et c'est ainsi qu'une API devient illisible. **Précédence : 11 §3 (convention de nommage).**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-01 — [L3c] Existe-t-il un ordre imposé entre les 7 types d'unité ?
+
+Un `poste` peut-il porter un `service` ? Ni le §35.2, ni le §26.3, ni le 04 ne définissent d'ordre
+entre `groupe · filiale · etablissement · direction · service · equipe · poste`.
+
+Options :
+
+1. **Aucun ordre imposé** : l'arbre est libre, seule la cohérence structurelle (pas de cycle, parent
+   dans la même mission) est contrôlée.
+2. Imposer l'ordre de l'énumération.
+
+Arbitrage : **option 1.** L'option 2 inventerait une règle que le pack ne porte pas, et elle
+refuserait des arbres légitimes : une direction rattachée à un établissement d'un groupe est
+ordinaire, une équipe directement sous un groupe l'est aussi dans une TPE. **Un contrôle inventé qui
+refuse du vrai coûte plus cher qu'un contrôle absent.** Le testeur a explicitement refusé de deviner
+ici, et il a eu raison. **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-01 — [L3c] Quel statut HTTP rend un import réussi ?
+
+Options :
+
+1. **200**, avec le rapport en corps.
+2. 201, comme une création.
+
+Arbitrage : **option 1.** Un 201 engage un en-tête `Location` vers **la** ressource créée ; un import
+en crée n cent, et ce qu'il rend n'est pas une ressource mais un **rapport**. Le mode à blanc
+(`?verification=true`) rend le même rapport sans rien écrire : un statut unique garde les deux modes
+symétriques pour l'appelant, qui sait de toute façon lequel il a demandé, puisqu'il a posé le
+paramètre. **Aucun précédent maison ne s'y oppose : l'import de la banque de questions est un
+script, pas une route. Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun. À figer pour tout import du produit.
+
+## 2026-09-01 — [L3c] Un non-membre reçoit-il 403 ou 404 ?
+
+C'est une décision de **divulgation d'existence** : un 403 confirme que la mission existe, un 404 ne
+dit rien.
+
+Options :
+
+1. **403**, le refus du crochet RBAC, qui s'exécute avant tout accès au dépôt.
+2. 404, qui masque l'existence de la ressource.
+
+Arbitrage : **option 1**, et le motif est mécanique autant que doctrinal : les routes `org_units` de
+la console sont **admin seul** en V1 (décision du même jour). Le refus est donc prononcé par le
+crochet d'autorisation, sur le RÔLE, **avant que la moindre requête ne touche la mission** — le
+serveur ne sait pas encore si elle existe, il ne peut donc rien en divulguer. Le 404 supposerait de
+lire la ressource pour décider de la cacher, ce qui est l'inverse du but. **Précédence : invariant 3
+(RBAC serveur systématique).**
+
+Décideur : A01
+Impact spec : aucun. À réexaminer si des routes non-admin s'ouvrent en Phase 2.
+
+## 2026-09-01 — [L3c] Que devient la racine créée d'office lors du premier import CSV ?
+
+Toute mission naît avec une unité racine (03 §16.2). Le premier import apporte un arbre qui a sa
+propre racine. La note de conception invente une « absorption » que le §35.2 ne décrit pas.
+
+Options :
+
+1. **Refuser tout ré-import sur un arbre non vide** (409), et ne rien inventer sur l'absorption.
+2. Absorber la racine par défaut dans la racine du fichier.
+3. Vider l'arbre puis importer.
+
+Arbitrage : **option 1.** L'option 3 est écartée par l'**invariant 7** : rien n'est jamais
+silencieusement supprimé. L'option 2 demanderait de décider ce qu'on fait des unités déjà rattachées
+à la racine par défaut, ce que le pack ne dit pas — et une règle inventée sur le rattachement d'un
+arbre organisationnel est une règle qui produira des arbres faux sans le dire. **La moitié dure est
+donc seule retenue : import refusé si l'arbre porte autre chose que sa racine d'office, arbre
+inchangé au bit près.** L'absorption reste ouverte, à spécifier avant que le terrain ne la rencontre.
+**Précédence : invariant 7 du `CLAUDE.md` §1.**
+
+Décideur : A01 — l'absorption reste **à spécifier**, fiche à ouvrir si le terrain la réclame
+Impact spec : aucun. Le §35.2 gagnerait à trancher l'absorption.
+
+## 2026-09-01 — [L3b] Sens de tri de la liste des missions — JE ME SUIS TROMPÉ, ET VOICI LA CORRECTION
+
+Cette entrée **remplace** celle du même jour intitulée « Sens de tri de la liste des missions », qui
+retenait l'ordre **décroissant**. Le fichier étant append-only, la correction s'écrit ici et pas
+là-bas : rien n'est effacé au-dessus, ce qui change est daté.
+
+**Ce que j'avais fait, et l'erreur.** J'ai tranché « décroissant, la mission la plus récente en tête »
+en raisonnant sur l'ergonomie d'un écran — le portefeuille du siège (03 §18). **Je n'ai pas regardé
+le précédent maison avant de décider.** L'agent d'implémentation, lui, l'a regardé : `GET /v1/users`
+pagine en **ascendant** sur un curseur de forme **identique** (`created_at, id`). Ma décision aurait
+donc produit deux listes de même forme triées à l'envers l'une de l'autre.
+
+Options :
+
+1. **Ascendant**, comme `users` — une seule règle à retenir pour tous les curseurs `(created_at, id)`.
+2. Décroissant, pour l'ergonomie du portefeuille.
+
+Arbitrage : **option 1.** Ce qui tranche n'est pas la préférence d'écran mais la **cohérence de
+l'API** : une exception par ressource est une exception que chaque client doit mémoriser, et celui
+qui l'oublie n'obtient pas une erreur, il obtient des données à l'envers — un défaut silencieux.
+L'ergonomie du portefeuille est un problème de **présentation**, qui se résoudra à L7 quand la console
+existera, au besoin par un paramètre de tri explicite. Aucun écran ne consomme cette route
+aujourd'hui : décider pour lui maintenant, c'est décider sans lui. **Règle de précédence sans objet.**
+
+Décideur : A01 — correction de son propre arbitrage du même jour, sur constat de l'agent A15
+Impact spec : aucun. Le code n'a pas été modifié : il était déjà juste.
+
+## 2026-09-01 — [transverse] `details[].code` devient la convention, et L3b en est le premier usage
+
+L'arbitrage du 2026-08-29 avait retenu un champ `code` optionnel sur `errorDetailSchema` ; celui du
+2026-08-31 l'a laissé « dû aux lots L3c et L9, qui le poseront avec leur premier usage ». **C'est L3b
+qui l'a posé**, en réglant une friction que l'implémenteur a signalée : l'en-tête d'`errors.ts`
+promet que `details[].message` est **affiché tel quel par la PWA terrain**, invariant 5 « sans
+exception ». Y écrire un code brut (`en_analyse`) afficherait ce code à un auditeur en clientèle.
+
+Le testeur relève que ce premier usage **fait précédent** pour L3c et L9, et que le produit risque
+d'avoir deux façons de dire la même chose si on ne tranche pas maintenant.
+
+Options :
+
+1. **La règle vaut partout** : dès qu'une entrée de `details` porte un identifiant destiné à une
+   machine, il vit dans `code` ; `message` reste une phrase française affichable.
+2. La règle ne vaut que pour les transitions de mission, et chaque lot décide pour lui.
+
+Arbitrage : **option 1.** L'option 2 produirait exactement le défaut que le testeur décrit : trois
+lots, trois conventions, et un front qui doit savoir laquelle s'applique à quelle route. La règle
+s'énonce en une phrase et se vérifie à la lecture : **`message` est de l'interface et l'invariant 5
+s'y applique ; `code` est de la machine et n'est jamais rendu à un humain.**
+
+**Conséquence immédiate, à appliquer dans L3b** : les entrées de `conditions_non_remplies`, qui
+portent aujourd'hui les codes de condition (`etape_collecte_validee`…) dans un champ non tranché,
+suivent la même règle. **Conséquence pour L3c et L9** : le rapport d'import (`ligne`, `colonne`,
+`code`, `message` du §35.2) s'écrit avec `code` pour la cause machine et `message` pour la phrase
+lue par l'auditeur. **Précédence : invariant 5 du `CLAUDE.md` §1, et 11 §3 (format d'erreur unique).**
+
+Décideur : A01, sur constat croisé de l'implémenteur A15 et du testeur A16
+Impact spec : aucun amendement du pack. Convention §3 précisée dans l'en-tête d'`errors.ts`.
+
+## 2026-09-01 — [L3b] Où vivent les libellés français des états de mission ?
+
+Les états de mission ont désormais une traduction française dans l'API (« préparation », « collecte
+en cours », « analyse », « livrée », « clôturée »), née du message de refus de transition. Le testeur
+signale le risque : si elle vit dans le service missions, la console la réécrira de son côté à L7, et
+les deux dériveront sans que rien ne le dise.
+
+Options :
+
+1. **Dans `packages/shared`**, à côté de `TRANSITIONS_MISSION` : une seule source, importée par l'API
+   comme par la console.
+2. Dans le service missions, et la console fera la sienne.
+
+Arbitrage : **option 1.** C'est le même raisonnement que pour la machine à états, qui est une **donnée
+partagée** et non un `if` recopié : deux traductions du même état finiraient par différer, et le jour
+où elles diffèrent, c'est l'auditeur qui lit deux mots pour une seule chose. Le coût est nul
+aujourd'hui — le libellé existe déjà, il change de fichier — et il croît à chaque lot qui l'ignore.
+Le 11 §3 impose déjà que « le front importe LES MÊMES schémas » ; un libellé d'état est du même
+ordre. **Précédence : 11 §3.**
+
+Décideur : A01, sur constat du testeur A16
+Impact spec : aucun.
+
+## 2026-09-02 — [L3d] Le journal ne trace AUCUN figeage — ma décision de la veille reposait sur une prémisse fausse
+
+L'entrée du 2026-09-01 « La date de figeage du questionnaire n'existe pas en base » retient : « lire
+la date dans `activity_log`, **qui trace déjà l'acte de figeage** ». Le testeur A16 a mesuré : le
+catalogue `ACTIONS_JOURNAL` (`packages/shared/src/journal.ts`) est **fermé** et ne contient aucune
+action de figeage. La porte d'écriture du journal refuserait l'événement. **La prémisse était fausse
+au moment où je l'ai écrite, et je ne l'avais pas vérifiée.**
+
+Options :
+
+1. Ajouter `mission.questionnaire_freeze` au catalogue, avec l'implémentation du figeage.
+2. Revenir sur la décision et amender le 04 d'une colonne de date.
+
+Arbitrage : **option 1.** Le catalogue s'étend à chaque lot avec son premier usage — c'est le
+précédent de `company.*` (L3a) et de `mission.*` (L3b), et le même motif : pas d'action sans
+appelant. La décision de la veille **tient** ; c'est sa justification qui devient vraie avec ce
+commit, au lieu de l'être avant. **Règle de précédence sans objet.**
+
+Décideur : A01 — correction de sa propre prémisse, sur mesure du testeur A16
+Impact spec : aucun. `ACTIONS_JOURNAL` gagne une action, posée par l'implémenteur de T3.
+
+## 2026-09-02 — [L3d] Où vit la re-vérification de `question_version` promise par la note L3 §3.a ?
+
+La note L3 §3.a et le brief L3D §4 promettent qu'à chaque **lecture**, `mission_questions.question_version`
+est re-vérifié contre la ligne pointée — divergence = `CONFLICT`, détecteur de corruption. Or
+**aucune route de L3d ne lit le questionnaire figé** : la table du brief §7 n'expose pas de lecteur.
+Le brief se contredit.
+
+Options :
+
+1. La re-vérification **vit dans le lecteur**, quel qu'il soit ; L3d n'en a pas, elle est **due au
+   premier lecteur** — le pull de mission (L5a embarquement / L6a côté serveur), et L9 `resync`.
+2. Ajouter à L3d une route de lecture pour porter la vérification.
+
+Arbitrage : **option 1.** L'option 2 inventerait une route hors du 07 pour héberger un contrôle qui n'a
+de sens qu'au moment où quelqu'un consomme la capture. Ce que L3d **doit** garantir, et que le test
+éprouve : après corruption de la ligne pointée, **les captures ne bougent ni ne se réparent**. La
+détection est une obligation **transmise**, écrite ici pour que L5a/L6a ne la découvrent pas.
+**Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun. Obligation transmise à L5a/L6a et L9, tracée dans le brief L3D.
+
+## 2026-09-02 — [L3d] Une mission sans palier (`size_tier_id` NULL) : que fait le filtre de palier ?
+
+`missions.size_tier_id` est nullable au 04 ; aucune section ne dit ce que devient le filtre de palier
+de l'assembleur M2 dans ce cas.
+
+Options :
+
+1. Le filtre de palier **n'est pas appliqué**, et un avertissement le dit.
+2. Aucune question ne passe.
+3. Le figeage est refusé.
+
+Arbitrage : **option 1**, comme l'assembleur livré le fait déjà. C'est la même lecture que pour
+`active_blocks` vide : **une absence de restriction n'est pas une restriction absolue.** L'option 2
+figerait un questionnaire vide en silence ; l'option 3 bloquerait une mission sur une donnée que le
+04 déclare facultative. L'avertissement est ce qui empêche l'option 1 d'être un silence.
+**Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-02 — [L3d] `active_blocks` / `active_sectors` vides, et la comparaison de palier
+
+Deux silences du pack que le brief L3D avait tranchés en recommandation, que les agents ont
+appliqués, et que le testeur demande de voir confirmés ou infirmés **explicitement** — il a raison :
+une règle qui vient d'un brief et non d'une décision est une règle que le prochain lot peut ignorer.
+
+Options :
+
+1. **Liste vide = aucune restriction** ; **palier = recouvrement d'intervalles** entre l'effectif du
+   client et les bornes du `size_tier`.
+2. Liste vide = rien ne passe ; palier = comparaison stricte de l'effectif aux bornes.
+
+Arbitrage : **option 1**, confirmée. Une mission dont l'admin n'a coché aucun bloc est une mission qui
+n'a encore rien restreint, pas une mission sans questionnaire. Le recouvrement d'intervalles est la
+seule lecture qui ne dépend pas d'un choix arbitraire de borne ouverte ou fermée.
+**Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-02 — [L3d] Figer un questionnaire hors du statut `preparation`
+
+Le brief impose que le figeage n'ait lieu qu'en `preparation`. Le code HTTP du refus n'est tranché
+nulle part.
+
+Options :
+
+1. `409 ILLEGAL_STATE_TRANSITION` — c'est l'**état** de la mission qui s'y oppose.
+2. `409 CONFLICT`, générique.
+
+Arbitrage : **option 1**, par cohérence avec l'arbitrage du 2026-09-01 sur le motif manquant : ce qui
+rend l'acte impossible est l'état de la ressource, et ce code-là le nomme. Un `CONFLICT` nu obligerait
+le front à lire le message pour savoir quoi proposer. **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-02 — [L3d] Le plan d'entretiens matérialise le n MINIMAL, et exclut les unités proposées
+
+Le §32.4 donne des fourchettes (« 4 à 6 entretiens ») sans dire si le plan généré pose le minimum ou
+le maximum. Et il ne dit pas si une unité encore `proposee` (§25.3) compte dans le dimensionnement.
+
+Options :
+
+1. **Le minimum est matérialisé en lignes, le maximum reste en donnée** ; les unités `proposee` ou
+   `fusionnee` sont **exclues** du dimensionnement, comme le générateur livré le fait.
+2. Le maximum en lignes.
+3. Les unités proposées comptent.
+
+Arbitrage : **option 1.** Le critère du 07 parle de « n **minimaux** §32.4 » — c'est le mot du brief.
+Une unité proposée n'est pas encore un fait de l'arbre : la faire compter produirait un plan sur une
+structure que personne n'a validée, et l'invalider ensuite laisserait des entretiens orphelins.
+**Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-02 — [L3d] Rôle → 403, appartenance → 404 : deux refus, deux codes, une règle
+
+Le précédent L3c (2026-09-01) tranche 403 pour un non-membre **parce que** le refus vient du crochet,
+sur le rôle, avant tout accès au dépôt. Le testeur du plan d'entretiens relève, à raison, que ce
+raisonnement ne transpose pas : sur les routes `type:'mission'`, le crochet laisse passer et c'est le
+**dépôt** qui filtre par appartenance. Le brief L3D §6 écrit d'ailleurs « consultant hors mission →
+**404** » pour `reassign`.
+
+Options :
+
+1. **Une règle par nature du refus** : refusé sur le **rôle** (crochet) → 403 ; refusé sur
+   l'**appartenance** (dépôt) → 404, l'existence de la mission n'est pas divulguée.
+2. 403 partout.
+3. 404 partout.
+
+Arbitrage : **option 1.** Elle n'est pas un compromis, elle est la lecture exacte des deux mécanismes :
+un refus prononcé avant de lire la ressource ne peut rien en divulguer (403 est honnête) ; un refus
+prononcé après l'avoir lue ne doit rien en divulguer (404 est nécessaire). Les options 2 et 3
+forceraient l'un des deux mécanismes à mentir. **Le lead et le consultant hors mission reçoivent
+donc 404 sur `interview-plan` et `reassign`, et 403 sur `assignments`** (admin seul, refus de rôle).
+**Précédence : invariant 3 (RBAC serveur systématique).**
+
+Décideur : A01, sur constat du testeur A16
+Impact spec : aucun. Le précédent L3c reste valable dans son cas.
+
+## 2026-09-02 — [L3d] Le lead et les affectations : §34.3 contre §34.1, même arbitrage qu'à L3c
+
+§34.3 donne au lead le pouvoir « d'ajuster le plan d'entretiens et les `work_assignments` de sa
+mission ». §34.1 : « la console est ADMIN SEUL, le lead y entre en Phase 2 ». Le brief L3D §7 tranche
+`roles:['admin']`.
+
+Options :
+
+1. **Admin seul** en V1 sur `GET|POST assignments` ; le pouvoir du lead attend son interface, Phase 2.
+2. Ouvrir au lead dès la V1.
+
+Arbitrage : **option 1**, identique à l'arbitrage `[L3c]` du 2026-09-01 et pour la même raison : §34.1
+borne la V1, §34.3 décrit un rôle qui n'a pas encore d'écran. Ouvrir un droit sans l'écran qui le
+porte ouvre une surface pour une fonctionnalité qui n'existe pas. **L'admin, lui, voit le plan de
+toute mission** — membre ou non — parce que la console est la sienne (§34.1) ; un admin qui devrait
+être « membre » d'une mission pour la piloter n'est pas un admin. **Règle de précédence sans objet.**
+
+Décideur : A01 — **à confirmer par Williams s'il veut le lead en V1**, comme pour L3c
+Impact spec : aucun.
+
+## 2026-09-02 — [L3d] Chaque unité `in_scope` compte sur son propre effectif, parents compris, sans agrégation
+
+§32.4 dit « unité » ; §17.3 dit « pour **chaque** unité in_scope ». Ni l'un ni l'autre ne dit si une
+unité parente compte, ni comment son effectif se compose avec celui de ses enfants. Le générateur
+livré et le testeur ont convergé, sans se lire, sur « toutes, parents compris, aucune agrégation » —
+et le testeur signale le risque : compter deux fois les mêmes personnes.
+
+Options :
+
+1. **Chaque unité `in_scope` et `active` reçoit sa fourchette sur son propre `headcount`**, parents
+   compris ; aucune agrégation n'est inventée.
+2. Exclure les unités parentes.
+3. Agréger les effectifs des enfants dans le parent.
+
+Arbitrage : **option 1.** C'est la lettre du §17.3, et les options 2 et 3 inventent chacune une règle
+que le pack ne porte pas — la 3 en produisant un chiffre que personne n'a saisi. **Le risque de double
+compte est réel et il est assumé, pas caché** : il tient au modèle de données de l'auditeur (un parent
+dont le `headcount` inclut ses enfants), et c'est à lui de saisir des effectifs disjoints s'il veut un
+total juste. La règle d'agrégation, si elle doit exister, est un amendement du §32.4 — pas une
+décision d'agent. **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun. Le §32.4 gagnerait à trancher l'agrégation ; posé pour la révision de spec P-D.
+
+## 2026-09-02 — [L3d] Effectif nul, effectif inconnu, et les compléments de la tranche > 200
+
+Trois silences du §32.4, sur lesquels le générateur et le testeur ont convergé sans se lire.
+
+Options :
+
+1. **Effectif `0`** → tranche ≤ 10 (la lettre) · **effectif NULL** → tranche minimale + drapeau
+   `effectifInconnu` + avertissement · **> 200** → observation, démonstration et relevé comptés
+   **1 chacun**, jamais une fourchette inventée.
+2. Refuser le plan sur un effectif nul ou inconnu.
+
+Arbitrage : **option 1.** Un plan refusé pour un effectif non renseigné bloquerait la préparation d'une
+mission sur une donnée que le 04 déclare facultative ; un plan qui compterait sans le dire serait le
+silence que le §17.3 interdit. Le drapeau et l'avertissement sont ce qui sépare les deux.
+**Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-02 — [L3d] Le motif de `reassign` : même escalade que le motif de retour arrière
+
+§34.4 exige un motif à la réaffectation et sa trace dans `activity_log`. L'escalade `[L3b]` du
+2026-09-01 (« où vit le texte du motif d'un retour arrière ») s'applique mot pour mot : le journal est
+un emplacement à code, 64 caractères, ni espace ni arobase.
+
+Options :
+
+1. Rouvrir une escalade distincte pour §34.4.
+2. **Rattacher §34.4 à l'escalade L3b existante**, une seule réponse pour les deux.
+
+Arbitrage : **option 2, et aucun arbitrage de fond** — c'est la même escalade, elle ne se dédouble pas.** En attendant, le code fait
+ce que le testeur exige et qui est vrai quel que soit l'arbitrage : le motif est **obligatoire à
+l'appel** (400 s'il manque), et **ni le motif, ni un nom, ni une adresse ne se retrouvent dans
+`activity_log`**. La réponse de Williams à l'escalade L3b vaudra pour §34.4. **Règle de précédence
+sans objet.**
+
+Décideur : **Williams — EN ATTENTE** (escalade du 2026-09-01, « motif : 3 » recommandé)
+Impact spec : à déterminer par l'arbitrage.
+
+## 2026-09-02 — [L5a / DoD] Deux dépendances de TEST hors liste, ajoutées sous la règle « silence vaut accord »
+
+Deux blocages du même ordre, posés à Williams le 2026-09-02 avec une option par défaut et un délai
+de 30 minutes, conformément au régime de décision qu'il a lui-même fixé le 2026-08-31 (« SILENCE
+VAUT ACCORD : tu proposes une option par défaut et tu l'appliques après 30 minutes sans réponse. Tu
+traces toujours. Je peux revenir dessus, rien n'est irréversible. »). Le délai est écoulé sans
+réponse ; la règle s'applique.
+
+1. **`fake-indexeddb`** — Dexie exige IndexedDB ; le projet `unit` tourne sous Node, qui n'en a pas,
+   et `jsdom` non plus. **Sans elle, aucun des 56 tests du socle L5a ne peut s'exécuter.**
+2. **`@axe-core/playwright`** — la DoD exige « axe-core vert » ; l'outil n'est installé nulle part
+   (constat du gardien A02 à P-B, réserve R-B8, et de la note L5 §5-2). Sans lui, la case de la porte
+   P-C est **incochable** — et cochable à vide, ce que ce dépôt refuse.
+
+Options :
+
+1. **Les ajouter en `devDependencies`, versions épinglées** (`save-exact`) : `fake-indexeddb 6.2.5`
+   dans `apps/field`, `@axe-core/playwright 4.13.0` à la racine.
+2. Attendre une réponse explicite — et laisser 56 tests inexécutables et une case de porte à vide.
+
+Arbitrage : **option 1.** Ce sont des dépendances de **test uniquement** : aucune ligne n'entre dans
+une image livrée, aucun octet ne va sur un appareil terrain. Le 11 §8-1 réserve l'ajout d'une
+dépendance à une décision humaine ; **la décision humaine a été prise en amont sous forme de règle**,
+et cette entrée en est l'application tracée. Williams peut la défaire d'un `pnpm remove`.
+**Règle de précédence sans objet.**
+
+Décideur : Williams, par la règle du 2026-08-31 · appliquée par A01
+Impact spec : amendement horodaté de la liste des versions épinglées (11 §1) — deux entrées de test.
+
+## 2026-09-02 — [L5a] Paramètres Argon2id : le pack impose l'algorithme et ne dit rien des paramètres — ESCALADE SOUS DÉFAUT
+
+05 §9.7 impose Argon2id pour dériver la KEK du mot de passe. Aucune section ne fixe la mémoire, les
+itérations ni le parallélisme. L'implémenteur A24 a retenu le **profil OWASP** (`m = 47 104 Kio,
+t = 1, p = 1`, sortie 32 octets), **stocké dans le coffre et destiné à l'en-tête `.axionbackup`**,
+pour rester changeable sans casser les coffres existants.
+
+Options :
+
+1. **Le profil OWASP, stocké avec le coffre** — appliqué par défaut, à confirmer.
+2. Un profil plus lourd (m = 64 Mio+) — plus de résistance, une dérivation qui risque de dépasser la
+   seconde sur iPad (budget A28 : dérivation < 1 s).
+3. Un profil plus léger — hors de question.
+
+Arbitrage : **option 1, appliquée sous la règle « silence vaut accord » du 2026-08-31 et EXPRESSÉMENT
+SIGNALÉE à Williams** : `CLAUDE.md` §3-4 réserve la crypto à une décision humaine, et un paramètre de
+dérivation en est une. Ce qui rend le défaut acceptable en attendant : les paramètres **voyagent
+avec le coffre**, donc les changer plus tard ne rend illisible aucun coffre existant — c'est le seul
+choix d'implémentation qui ne ferme pas la porte. Le budget A28 (< 1 s sur iPad) reste à mesurer.
+**Précédence : 11 §7 (budgets de performance) borne le paramètre par le haut.**
+
+Décideur : **Williams — à confirmer** · appliqué par défaut par A01 sur la règle du 2026-08-31
+Impact spec : aucun amendement ; le 05 §9.7 gagnerait à nommer le profil.
+
+## 2026-09-02 — [L5a] Aucun AAD sur AES-GCM : une enveloppe n'est pas liée à sa ligne
+
+Le coffre chiffre chaque valeur en AES-256-GCM sans données authentifiées additionnelles (AAD). Une
+enveloppe déchiffrable est donc déchiffrable **quelle que soit la ligne où on la colle** : un
+attaquant qui écrit dans IndexedDB peut déplacer une réponse d'une question à une autre sans que le
+déchiffrement le voie. L'implémenteur l'a signalé : lier l'enveloppe à sa ligne aurait exigé un
+troisième paramètre et cassé la signature publiée `dechiffrer(e, s)`.
+
+Options :
+
+1. Ne rien changer en L5a ; **fiche `AMELIORATIONS.md`**, durcissement arbitré à P-C.
+2. Ajouter l'AAD maintenant, et rompre le contrat §2 que le testeur a déjà pris pour base.
+
+Arbitrage : **option 1.** La menace suppose un attaquant qui écrit déjà dans le stockage local de
+l'appareil — c'est-à-dire qui a déjà passé le verrou et le coffre. Ce n'est pas rien, mais c'est un
+durcissement, pas une faille du modèle de menace du 06 §10. Rompre le contrat §2 en cours de rencontre
+tests × code coûterait plus qu'il ne protège aujourd'hui. **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun. Fiche à ouvrir dans `AMELIORATIONS.md` avant P-C.
+
+## 2026-09-02 — [L5a] L'état « validé » d'un entretien n'a aucune colonne au 04
+
+§19.1 distingue **terminer** et **valider** un entretien. Le 04 ne porte aucune colonne pour la
+validation : `interviews.status` s'arrête à `termine`. L'implémenteur a posé, en local, `status =
+'termine'` + `valideeLe` dans la charge chiffrée — et relève que **le pack ne dit pas comment une
+validation se synchronise**.
+
+Options :
+
+1. Local comme livré ; **la synchronisation de la validation est une question posée à L6a**, tracée
+   ici pour qu'elle ne soit pas découverte le jour du premier push.
+2. Amender le 04 — signature de Williams.
+
+Arbitrage : **option 1**, parce que L5a n'a pas de push et qu'aucune décision de schéma ne se prend
+sur un besoin qui ne s'exerce pas encore. Mais la question est **réelle et transmise** : L6a devra
+soit porter la validation dans la charge de l'op (sans colonne serveur, la console ne la verra pas),
+soit demander l'amendement. **Règle de précédence sans objet.**
+
+Décideur : A01 — obligation transmise à L6a
+Impact spec : aucun aujourd'hui ; amendement du 04 probable à L6a, à poser à Williams.
+
+## 2026-09-02 — [L5a] La liste fermée §3.2 des colonnes en clair admet `supprimeLe` et `answerId`
+
+La note L5 §3.2 fixe une liste FERMÉE des colonnes stockées en clair dans IndexedDB — tout le reste
+vit dans la charge chiffrée. Le testeur A26 en a fait un balayage : trois cas rouges, parce que le
+code pose deux colonnes de plus. Aucune n'est une donnée personnelle.
+
+Options :
+
+1. **Amender la liste** : `supprimeLe` (interviews, answers, attachments) et `answerId` (attachments)
+   y entrent ; la liste reste fermée.
+2. Retirer ces colonnes de l'index et les mettre dans la charge chiffrée.
+
+Arbitrage : **option 1.** `supprimeLe` permet de filtrer les lignes supprimées **sans déchiffrer** —
+une purge qui déchiffrerait chaque ligne pour savoir si elle est morte ne tiendrait pas le budget A28
+(< 50 ms par écriture, p95 interaction < 100 ms). `answerId` est la clé structurelle d'une pièce
+jointe vers sa réponse ; sans elle en clair, retrouver les pièces d'une réponse exige de tout
+déchiffrer. Elles sont du même ordre que `status` et `interviewId`, déjà admis pour la même raison.
+**La propriété qui compte est conservée** : la liste reste fermée, et le test rougit sur toute colonne
+non listée. **Précédence : 11 §7 (budgets A28) contre une lettre de note de conception.**
+
+Décideur : A01
+Impact spec : aucun sur `/docs`. Amendement horodaté de `docs/conception/LOT_L5.md` §3.2.
+
+## 2026-09-02 — [L3b/L3d] Le motif d'un retour arrière et d'une réaffectation est un CODE, pas un texte — tranché par Williams
+
+Escalade du 2026-09-01 (« Où vit le texte du motif d'un retour arrière »), rattachée le 2026-09-02
+par L3d pour `reassign` (§34.4). Le journal est un emplacement à code (64 caractères, alphabet
+restreint) ; aucune table de révision ne couvre `missions` ni `interviews`.
+
+Options :
+
+1. Amender le 04 (colonne de motif ou table de révision).
+2. Élargir le champ du journal au texte libre — fait sauter une garantie de redaction.
+3. **Un motif CODÉ, vocabulaire fermé**, pas de texte libre.
+4. Exiger le motif puis le jeter.
+
+Arbitrage : **option 3**, prononcée par Williams le 2026-09-02, en ces termes exacts, relayés par
+la session de vérification : « **motif codé** ». Aucune colonne ni table nouvelle. Le motif est
+**exigé à l'appel**, **validé contre le vocabulaire** (400 s'il est absent ou hors liste), et **tracé
+dans `activity_log` par `journaliserActivite`** — une valeur codée passe la ceinture de redaction par
+construction. Le vocabulaire des motifs est une **donnée du code partagée** dans `packages/shared`,
+comme `TRANSITIONS_MISSION` et les libellés d'état : une seule source, importée par l'API et par la
+console. L'option 4, qui était l'état du code, cesse. **Règle de précédence sans objet.**
+
+Décideur : **Williams**
+Impact spec : aucun sur le schéma. Le vocabulaire est du code partagé.
+
+## 2026-09-02 — [L5a] Paramètres Argon2id : le profil OWASP est CONFIRMÉ par Williams
+
+L'entrée du même jour « Paramètres Argon2id : le pack impose l'algorithme et ne dit rien des
+paramètres — ESCALADE SOUS DÉFAUT » appliquait le profil OWASP (`m = 47 104 Kio, t = 1, p = 1`,
+32 octets, stocké avec le coffre) sous la règle « silence vaut accord », en le signalant
+expressément parce que la crypto est une décision humaine (`CLAUDE.md` §3-4).
+
+Options :
+
+1. **Confirmer** le profil OWASP, stocké avec le coffre.
+2. Le remplacer par un profil plus lourd ou plus léger.
+
+Arbitrage : **option 1**, prononcée par Williams le 2026-09-02 : « **profil OWASP confirmé** ». Le
+défaut appliqué sous silence devient une décision explicite. **Ce qui reste dû, et qui l'était
+déjà** : la mesure A28 de la dérivation (< 1 s sur iPad, 11 §7) — un profil confirmé n'est pas un
+profil mesuré. **Règle de précédence sans objet.**
+
+Décideur : **Williams**
+Impact spec : aucun.
+
+## 2026-09-02 — [L3d] `interviews.conducted_by` devient NULLABLE — amendement du 04 tranché par Williams
+
+Escalade du 2026-08-31, portée à Williams par L3d : le plan d'entretiens §32.4 produit des sessions
+**planifiées** pour lesquelles aucun auditeur n'est encore affecté ; `interviews.conducted_by NOT
+NULL` (04) interdit de les persister. Tant qu'elle était ouverte, le plan restait une fonction pure
+non persistée, et la route `/interview-plan/apply` était reportée.
+
+Options :
+
+1. **La colonne devient NULLABLE** — amendement du 04.
+2. Inventer un auditeur « à affecter » (compte sentinelle) — une fausse donnée en base.
+3. Laisser le plan non persistable et reporter `/apply` à un lot ultérieur.
+
+Arbitrage : **option 1**, prononcée par Williams le 2026-09-02 : « **conducted_by nullable** ».
+C'est une modification du fichier 04, et elle se fait **complètement ou pas du tout** :
+(a) amendement horodaté du 04, § de la table `interviews`, avec la date et le motif — le plan §32.4
+produit des sessions planifiées sans auditeur affecté ; (b) migration SQL **up/down littérale** par
+A12 ; (c) manifeste de schéma et diff schéma-vs-04 mis à jour **dans le même incrément** ; (d) **la
+règle métier explicite dans le service, et testée** : une session **planifiée** peut n'avoir aucun
+auditeur ; une session **conduite** (statut au-delà de planifiée) doit en avoir un — contrainte posée
+dans le code, pas seulement relâchée dans la colonne. L'option 2 est écartée sans discussion :
+une donnée fausse en base est la famille de défauts que ce dépôt refuse. **Règle de précédence sans
+objet** (le 04 est amendé, pas contredit).
+
+Décideur : **Williams**
+Impact spec : **amendement horodaté du fichier 04** — `interviews.conducted_by NULL`. Migration à
+suivre dans l'incrément L3d.
+
+## 2026-09-02 — [L3b] Le vocabulaire codé des motifs sert AUSSI le forçage §17.3, sur le même champ
+
+L'arbitrage de Williams du même jour (« motif codé ») nomme les **retours arrière** du §32.2. Or
+`TRANSITIONS_MISSION` exige un motif dans **deux** cas, pas un : les trois retours (`motifRequis`)
+et la **surcharge admin** du §17.3 (« passer en analyse ou livrée affiche les manques ; l'admin peut
+forcer, **avec motif journalisé** »). Les deux passent par le MÊME champ de requête,
+`missionStatusRequestSchema.motif`.
+
+Options :
+
+1. Un troisième vocabulaire `MOTIFS_SURCHARGE`, distinct — le service choisirait lequel valider
+   APRÈS avoir lu l'état de la mission, c'est-à-dire répondrait 409 à ce qui est un 400.
+2. **Un seul vocabulaire `MOTIFS_RETOUR_ARRIERE` couvrant les deux usages**, dont deux codes écrits
+   pour le forçage (`manques_assumes`, `demande_du_client`).
+3. Laisser le forçage sans motif codé — il redeviendrait le seul texte libre du produit.
+
+Arbitrage : **option 2, appliquée par défaut et signalée**. Elle tient la promesse de l'arbitrage
+(« pas de texte libre », validation par Zod donc 400) sans multiplier les vocabulaires sur un champ
+unique. Son seul défaut est un NOM qui annonce moins que la liste ne couvre : c'est écrit en tête du
+vocabulaire plutôt que laissé à découvrir. **Règle de précédence sans objet** : §32.2 et §17.3 ne se
+contredisent pas, l'un est muet là où l'autre parle — même lecture qu'au 2026-08-31 sur
+`surchargeAdminMotivee`.
+
+Décideur : **A01 — À CONFIRMER** (application par défaut par A15, le 2026-09-02)
+Impact spec : aucun. Le vocabulaire est du code partagé (`packages/shared/src/motifs.ts`).
+
+## 2026-09-02 — [L3c] Le motif d'une FUSION d'unités reste un booléen — hors de la lettre de l'arbitrage
+
+`org_unit.merge` porte le même `avecMotif: boolean` que portaient `mission.status_change` et
+`interview.reassign`, et pour la même raison (la ceinture technique du journal). L'arbitrage de
+Williams du 2026-09-02 nomme le retour arrière et la réaffectation ; il ne nomme pas la fusion.
+
+Options :
+
+1. Étendre le motif codé à la fusion d'unités par analogie, dans le même incrément.
+2. **Ne rien changer à `org_unit.merge` et poser la question**, la fusion appartenant à L3c
+   (livré, revu, testé) et non au périmètre de l'arbitrage.
+
+Arbitrage : **option 2**. Étendre une décision humaine « parce que c'est pareil » est exactement ce
+que `CLAUDE.md` §3 interdit à un agent, et la fusion n'a pas la même nature qu'un retour arrière :
+elle est déjà tracée par ce qu'elle a DÉPLACÉ (deux décomptes, la cible, `merged_into_id`), là où un
+retour arrière n'a que son motif. **Règle de précédence sans objet.** Si Williams veut l'étendre, le
+vocabulaire existe et l'ajout est mécanique (une variante, une projection, un service).
+
+Décideur : **Williams — EN ATTENTE**
+Impact spec : aucun en l'état.
+
+## 2026-09-02 — [L3d] `reassign` sur une session sans auditeur est une PREMIÈRE AFFECTATION, permise
+
+`conducted_by` étant nullable, une session planifiée par le plan §32.4 n'a pas d'auditeur. `PATCH
+/v1/interviews/:id/reassign` est aujourd'hui la seule route qui écrit cette colonne.
+
+Options :
+
+1. **Permettre** : première affectation, réponse `conductedByAvant: null`, journal `auditeur_avant: null`.
+2. Refuser (409) et exiger `/interview-plan/apply` — qui n'existe pas encore.
+
+Arbitrage : **option 1.** L'option 2 laisserait les sessions planifiées sans aucune porte d'affectation
+jusqu'à `/apply`. Un `reassign` vers le même auditeur reste 409 — sauf depuis `null`, qui n'est pas un
+« déjà ». **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-02 — [L3d → L6a] La règle « session conduite = auditeur obligatoire » est posée SANS appelant
+
+`exigerAuditeurSiSessionConduite` (`assignments/service.ts`) refuse en 409 toute session `en_cours` ou
+`termine` sans `conducted_by`. Mesuré : **aucune route de L3 n'écrit `interviews.status`** — c'est la
+synchronisation (L6a) qui fera passer une session au-delà de `non_demarre`.
+
+Options :
+
+1. Poser la garde, exportée et documentée, et l'appeler au seul endroit de l'API qui écrit une moitié
+   du couple (`reassign`), en disant qu'elle ne peut pas rougir aujourd'hui.
+2. Attendre L6a pour l'écrire.
+
+Arbitrage : **option 1.** Une règle écrite au moment où la décision est prise, avec son appelant réel
+nommé, vaut mieux qu'une règle redécouverte au premier push. **Obligation transmise à L6a, et une
+seconde avec elle** (constat A12) : `conducted_by IS NULL` ne se lit **jamais** « inscriptible par
+tout le monde » — le 05 §9.9 réserve l'écriture au propriétaire, un propriétaire inconnu est un
+refus. **Précédence : invariant 3.**
+
+Décideur : A01
+Impact spec : aucun. Deux obligations transmises à L6a, écrites en JSDoc de la garde et de la colonne.
+
+## 2026-09-02 — [L3b] Le vocabulaire codé des motifs sert AUSSI le forçage §17.3 — CONFIRMÉ
+
+L'implémenteur A15 a posé un seul vocabulaire pour les trois retours arrière ET les forçages du §17.3
+(`surchargeAdminMotivee`), et a demandé confirmation.
+
+Options :
+
+1. **Un seul vocabulaire**, dont `manques_assumes` et `demande_du_client` sont écrits pour le forçage.
+2. Deux vocabulaires distincts.
+
+Arbitrage : **option 1**, confirmée. Deux vocabulaires obligeraient le service à valider le motif
+**après** avoir lu l'état pour savoir lequel s'applique — c'est-à-dire à répondre 409 à une faute de
+forme qui devrait être un 400. Un motif est une raison humaine ; la même raison vaut pour reculer ou
+pour forcer. **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-02 — [L3] Revue croisée A17 : REFUSÉ, quatre bloquants — verdict accepté, B-4 arbitré
+
+A17 a relu le diff `main..lot/l3-suite` (52 fichiers) contre les 8 invariants, le contrat 11, la note
+L3 et chaque décision datée. Verdict **REFUSÉ**, quatre constats bloquants : B-1 arbitrage du
+2026-08-31 (R4 conserve le secteur manuel) renvoyé à L3b et jamais appliqué, test figeant l'ancien
+comportement · B-2 garde de ré-import non sérialisé (deux imports concurrents = deux arbres) · B-3
+règle « conduite ⇒ auditeur » exportée sans test, clause (d) de Williams tenue à moitié · B-4 fil
+rouge non étendu au parcours L3 alors qu'ETAT l'affirmait. Sept constats non bloquants R-L3-1 à 7.
+
+Options :
+
+1. **Accepter le verdict tel quel**, corriger les quatre bloquants et les non-bloquants à coût nul dans
+   l'incrément, rejouer la revue sur le correctif.
+2. Contester B-4 (lecture de l'entrée du 2026-08-31 comme suspendue à l'enveloppe Playwright).
+
+Arbitrage : **option 1.** Sur B-4, A17 a raison de lecture : l'intertitre de l'entrée dit « ce que L3
+fait en attendant, **et qui n'est pas une attente** » — la substance (le parcours grandit à ce lot)
+était présentée comme indépendante de la technologie du harnais. ETAT.md l'affirmait tenue ; le diff
+dit non. **Une affirmation d'état contredite par le diff se corrige par le diff**, pas par une
+relecture accommodante. Les trois autres bloquants sont des écarts mesurables entre une décision
+écrite et le code : ils ne se discutent pas. **Règle de précédence sans objet.**
+
+Décideur : A01, sur revue A17
+Impact spec : aucun. Correctifs : B-1 `companies/service.ts` + retournement du test ; B-2 verrou
+`FOR UPDATE` sur la mission dans l'import + test `Promise.all` ; B-3 test unitaire de la garde pure ;
+B-4 fil rouge étendu (création → import → figeage) sur FIL-TPE et FIL-GC.
+
+## 2026-09-02 — [L3] Rejeu de la revue croisée A17 sur le correctif : ACCEPTÉ SOUS RÉSERVE
+
+A17 a relu le correctif `0108c2e...16102dd` (21 fichiers) contre son verdict REFUSÉ du matin. Les
+quatre bloquants sont fermés, chacun par le correctif exact qu'il appelait et par un test capable de
+rougir ; aucun contournement (ni test affaibli, ni assertion retirée, ni skip). Six non-bloquants
+traités. Réserve unique : **R-L3-4, la couverture de L3 à mesurer avant que A02 coche la DoD** — en
+cours de mesure par la vérification isolée. Cinq notes N-1 à N-5, dont deux à traiter à coût nul
+(en-tête de paternité du fil rouge L3 ; fixture du cas de course au plus près du nominal).
+
+Options :
+
+1. **Accepter le verdict**, traiter N-1 et N-3 dans l'incrément, seuiller la couverture sur les
+   chiffres mesurés, puis A02.
+2. Passer à A02 sans attendre la mesure.
+
+Arbitrage : **option 1.** Un seuil posé au jugé est un seuil qui ment — le réviseur l'écrit, et c'est
+la raison pour laquelle R-L3-4 n'a pas été fermé à l'aveugle. **Règle de précédence sans objet.**
+
+Décideur : A01, sur revue A17 (rejeu)
+Impact spec : aucun.
+
+## 2026-09-02 — [L3] Couverture : quatre modules seuillés sur mesure, deux sous le seuil — on remonte, on ne rétrécit pas
+
+La vérification isolée (16102dd) a mesuré la couverture par module de L3. La note L3 §4, signée par
+A01, exige ≥ 90 % mesuré sur questionnaire, org-units et la machine à états. Mesuré : plan-entretiens
+99/99/100/95 · questionnaire 97/97/100/**87** · org-units **87**/87/92/**76** · missions
+**84**/84/**85**/**75**. Deux modules sous le seuil en lignes, trois en branches.
+
+Options :
+
+1. **Seuiller les quatre modules L3 à 90 % dès maintenant, sur les chiffres mesurés, et faire monter
+   la couverture par des tests avant la PR** — la CI de la branche est rouge entre-temps, et c'est
+   le signal voulu.
+2. Déclarer `missions` et `org-units` « non critiques » et poser leurs seuils sur leurs chiffres.
+3. Seuiller après la PR.
+
+Arbitrage : **option 1.** L'option 2 contredirait la note de conception que le pilote a signée, et
+la lettre de `CLAUDE.md` §4 (TDD : machine à états) ; l'option 3 ferait cocher la DoD « couverture
+≥ 90 % mesurée » sur une case vide. La règle du fichier de seuils tranche : « un module sous le seuil
+se corrige par des tests, jamais par un rétrécissement de périmètre ». `companies` (91/91/91/84) et
+`assignments` (91/91/100/82) ne sont pas nommés par la note ; leurs chiffres sont tracés ici et
+seront seuillés à L6 quand `assignments` deviendra le siège de la propriété §9.9. **Précédence :
+`CLAUDE.md` §5 (DoD transverse), qui prime sur la vitesse.**
+
+Décideur : A01, sur mesure de la vérification isolée et réserve R-L3-4 d'A17
+Impact spec : aucun. `.github/coverage-critical-paths.json` : quatre entrées, chiffres à l'ajout.
