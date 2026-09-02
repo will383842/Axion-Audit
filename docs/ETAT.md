@@ -2469,3 +2469,27 @@ append-only « main d'abord », rejouer `npx vitest run --project interface apps
 mesurés), pousser, signature de fin d'incrément A30.
 Tests rouges connus : aucun — vérifié par rejeu, pas par souvenir (run 33647967069 = success).
 À Williams : confirmer le nom d'en-tête `X-Axion-Client` avec la fiche A-006.
+
+## 2026-09-02 23h00 — [lot L7 / incrément L7a] — étape pipeline 4/7 (briefs L7b et L7c posés)
+
+Dernier commit vert : 1845c07 (docs(l7a): il n y a pas deux vocabulaires de session mais TROIS) · Branche : lot/l7a · Poussé : oui
+Tâche en cours : L7a reste en attente de rebase (ordre de fusion FIGÉ, aucun rebase sans signal du
+pilote). Avancé sans toucher au code : brief **L7b** (couverture) et **L7c** (agrégation + export)
+dans `docs/conception/LOT_L7.md` §6-§8. Code A32/A31/A35, tests A36 — jamais le même agent (09 §5.6).
+Trois vocabulaires vérifiés au dépôt : TYPE de session (6, `plan-entretiens.ts` l.52-59), PROVENANCE
+(5, `schema.ts` l.124-130), MODE (3, l.64, seulement si `kind='entretien'`) → **pas de 7e colonne
+« complémentaire »** sur la couverture (03 l.673) ; `sessions.csv` porte type ET mode (§36.3).
+Mesures du soir : CI 33647967069 rejouée → **success** (19 verts / 1 sauté / 0 échec) ; le rouge était
+un 502 de Docker Hub, pas le code. Suite console mesurée : **80/80, 6 fichiers, 11,07 s**
+(`npx vitest run --project interface apps/hq`) — c'est la référence à retrouver après le rebase.
+Deux fiches AMELIORATIONS étage 2/1 déposées (flake de registre ; hook Stop qui fabrique un `wip:`
+vide quand le push est refusé — `.claude/settings.json` NON modifié, arbitrage humain, CLAUDE.md §3).
+Décision D1 : `X-Axion-Client` ratifié, tracé par A10 sur `lot/l3-suite`, **non dupliqué ici** → le
+point §5-6 de la note est clos.
+Prochaine action : sur signal explicite du pilote (L3 dans main), `git rebase origin/main`, résoudre
+DECISIONS/AMELIORATIONS/ETAT en append-only « main d'abord », rejouer la suite console (**80
+attendus, mesurés**), pousser, puis porter en DECISIONS.md les trois arbitrages en attente.
+Tests rouges connus : aucun — mesuré, pas supposé (CI success + 80/80 en local).
+EN ATTENTE D'ARBITRAGE (A01/Williams) : axe B de la couverture = `interviews.kind` (A30) ou
+`answers.source` (contrôle de lecture) ; A30 maintient `kind` — on ne planifie pas une provenance, et
+le critère du 07 exige que la couverture reflète le PLAN. Divergence remontée, non tranchée seule.
