@@ -2271,3 +2271,17 @@ Tests rouges connus : aucun sur `main`. Vérification isolée de `lot/l3-suite` 
   §10.2 de la fiche P-B, R-B12 levée, 370 citations / 245 fichiers, 14 routes sur `main`.
 - Gouvernance/vitesse : PR poussée après deux refus du hook `pre-push` (format prettier, puis verrou
   git sous trois processus concurrents) — le hook fait ce pour quoi il existe.
+
+## 2026-09-02 17h20 — [lot L5 / incrément L5a] — étape pipeline 5/7 (fin de session propre)
+Dernier commit vert : 069c46a (docs: fiche A-012)   ·   Branche : lot/l5a   ·   Poussé : oui
+Tâche en cours : L5a corrigé après A29 REFUSÉ, puis A29 REJEU = ACCEPTÉ SOUS RÉSERVE (0 bloquant) ;
+ses réserves N1-N3 fermées dans 2c754b2 (275+ tests verts, CI verte après relance — l0-restauration
+instable, fiche A-012, pas L5a). R-L5a-6 (axe-core inutilisé) et R-L5a-9 (décisions L5a sur
+lot/l3-suite) reconstituées et tracées : la première se ferme par A28, la seconde par l'ordre de
+fusion (L3 → main → main dans lot/l5a AVANT la PR L5a).
+Prochaine action : après la PR L3 fusionnée, `git merge origin/main` dans lot/l5a (append-only
+« main d'abord »), vérifier par grep que les cinq entrées [L5a] du 2026-09-02 (Argon2id, AAD,
+validé, liste fermée, dépendances) sont présentes, rejouer `pnpm test:unit` + interface, pousser,
+lancer A28 (axe sur les trois écrans + mesure de dérivation < 1 s), puis A20 signe, A02 contrôle,
+PR lot/l5a → main (Williams fusionne). lot/l5b (162/162) attend cette PR pour intégrer main.
+Tests rouges connus : aucun. À Williams : icône PWA provisoire (A-009), script d'accord (L5b).
