@@ -2434,3 +2434,19 @@ Tests rouges connus : aucun sur L3. Bancs L0 sauvegarde/restauration non conclua
 **Deux fautes de conduite** : 47 tests L3c poussés sans implémentation sous `feat` (deux CI rouges) ; `--no-verify` sur le wip `378c43a`. Depuis : hooks à chaque commit, un worktree par chantier.
 **Obligations transmises** : re-vérification `question_version` → premier lecteur (L6a/L5a pull) ; `conducted_by IS NULL` = inscriptible par personne via sync (05 §9.9) ; validation d'entretien sans colonne au 04 → L6a. Fiche à ouvrir A-007 : garde lisant le rapport vitest contre les « skipped » non écrits.
 **Attend Williams** : `org_unit.merge` garde `avecMotif: boolean` (l'arbitrage motif codé ne le nommait pas). Rien d'autre.
+
+## 2026-09-02 17h15 — [lot L7 / incrément L7a] — étape pipeline 4/7 (fin de session propre)
+Dernier commit vert : 0892b0a (fix(l7a): revue A37 — schémas ré-exportés, hors-ligne console…)   ·   Branche : lot/l7a   ·   Poussé : oui
+Tâche en cours : L7a (coquille, 3 routes, 4 états, portefeuille keyset, avancement, connexion) livré,
+80/80 tests A36 par rôle, CI verte sur d76c0a1. Revue croisée A37 : ACCEPTÉ SOUS RÉSERVE — B2
+(schémas recopiés) et les cinq réserves FERMÉS dans 0892b0a ; B1 = 63646f2 est une FUSION de L3
+déguisée en feat : lot/l7a contient L3 sans ed8a852 ni les correctifs A51 → ORDRE DE FUSION FIGÉ
+(DECISIONS 2026-09-02 [L7a] A37) : L3 → main d'abord, puis lot/l7a rebasé sur main. AUCUNE PR L7a
+avant. Trois arbitrages A30 tracés (N+1, X-Axion-Client, trois routes) ; fiches A-010/A-011.
+Prochaine action : quand main contient L3 (PR L3 fusionnée par Williams), `git rebase origin/main`
+sur lot/l7a (résoudre DECISIONS/AMELIORATIONS/ETAT append-only « main d'abord »), rejouer
+`npx vitest run --project interface apps/hq` (80 attendus), pousser, faire signer la fin d'incrément
+par A30 (A37 rejeu bref sur 0892b0a si A30 l'exige), puis A02 (traçabilité E1-E47 dans les deux
+sens : `formaterPourcentage` retirée = plus d'orphelin), puis PR lot/l7a → main.
+Tests rouges connus : aucun. À Williams : confirmer le nom d'en-tête `X-Axion-Client` avec A-006.
+Point 5-1 de la note L7 (trois cales) : résolu par fusion de L3, tracé dans l'entrée A37.
