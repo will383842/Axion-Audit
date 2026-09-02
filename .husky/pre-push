@@ -16,6 +16,12 @@
 # dans ETAT.md.
 # =============================================================================
 set -e
+# Git exporte GIT_DIR (et parfois GIT_INDEX_FILE, GIT_PREFIX) dans l'environnement
+# d'un hook. Les tests des gardes (`scripts/garde-fous-*.test.ts`) font un `git init`
+# dans un dossier temporaire : avec GIT_DIR hérité, ce `git init` vise LE DÉPÔT
+# PRINCIPAL et échoue sur `.git/config` (« could not lock config file »). Mesuré le
+# 2026-09-02 sur trois pushs de suite, diagnostiqué à tort comme une contention.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_COMMON_DIR
 echo "[pre-push] rejeu local de la CI sans conteneur : 14 gardes + lint + typecheck + unit…"
 pnpm verify:rapide
 echo "[pre-push] OK — ce push ne peut plus rougir sur un garde, un type ou un test unitaire."
