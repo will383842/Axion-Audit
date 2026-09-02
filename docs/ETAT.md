@@ -2244,3 +2244,17 @@ Tests rouges connus : aucun sur `main`. `lot/l3-suite` rouge en CI (l3c-org-unit
   26 à 05h26). Aucune réponse au moment d'écrire.
 - Le journal `docs/journal/2026-09-02.md` couvre le 29/08 → 02/09 avec le burn-down en trois
   lectures ; PR #20, CI verte, auto-merge armé après mise à jour sur `main`.
+
+## 2026-09-02 09h30 — [gouvernance / docs de rattrapage] — hors pipeline de lot
+
+Dernier commit vert : `3984689` (PR #18) · Branche : `docs/rattrapage` · Poussé : oui (PR ouverte, auto-merge armé)
+Tâche en cours : trois rattrapages documentaires demandés par Williams, aucun code.
+Prochaine action : fusion automatique dès CI verte ; puis `lot/l3-suite` fait `git merge origin/main` avant tout rescellement du 04.
+Tests rouges connus : aucun sur `main`. Vérification isolée de `lot/l3-suite` @ `d055910` rendue : L3 206/206, L1-L2-L4-worker verts ; seul rouge = banc L0 restauration, expiré sous contention Docker (non concluant).
+
+- Pack amendé et rescellé : 02 §30.6 (statut daté, liste des décisions ratifiées), 03 §32.4 (les
+  cinq doctrines de cotation). Entrée DECISIONS du jour, sceau régénéré après elle.
+- `CHANGELOG.md` créé à la racine (v0.l0 P-A, v0.l2 P-B). `TRACABILITE_E1-E47.md` §J : report du
+  §10.2 de la fiche P-B, R-B12 levée, 370 citations / 245 fichiers, 14 routes sur `main`.
+- Gouvernance/vitesse : PR poussée après deux refus du hook `pre-push` (format prettier, puis verrou
+  git sous trois processus concurrents) — le hook fait ce pour quoi il existe.
