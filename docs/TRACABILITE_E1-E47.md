@@ -2055,3 +2055,64 @@ partie exige de dire laquelle** — la forme `E45 (habilitation : lecture seule,
 RÉSERVE**, avec **un code orphelin déclaré**, **trois réserves de déclaration**, **six réserves
 nommées (R-2, R-5 aggravée, R-9 à R-12)** et **un critère du fichier 07 non livré** (CRUD users, T3).
 Étape 6 du pipeline **franchie sous réserve**.
+
+---
+
+# J. ÉTAT AU 2026-09-02 — APRÈS LA PORTE P-B SIGNÉE (report du contrôle A02 du §10.2 de la fiche P-B, réserve R-B12 levée)
+
+> **Pourquoi cette section existe.** Le gardien a écrit à la porte P-B (§10.2.1 de
+> `docs/portes/PORTE_B_2026-08-31.md`) que **ce fichier était périmé de trois commits** : le
+> §A.quinquies affirmait « le CRUD users n'est PAS livré » et le §B.11.1 « six routes, zéro
+> orpheline », alors que `main` portait le CRUD users (`63fcc26`) et le design system (`daa1c86`).
+> Il a passé les deux sens **dans la fiche de porte** et posé la réserve **R-B12 : reporter le §10.2.3
+> ici**. C'est fait ci-dessous, **sans réécrire les sections datées** (elles restent vraies à leur
+> date). Périmètre : `main` = `3984689` (P-B signée `fa30be1`, journal `6513e3d`, banque `3984689`).
+> **Ce que cette section ne couvre pas** : `lot/l3-suite` et `lot/l5a`, non fusionnées — elles seront
+> passées à leurs portes.
+
+## J.1 — Rectifications des affirmations périmées
+
+| Où | Ce qui était écrit (2026-08-31) | Ce qui est vrai sur `main` au 2026-09-02 | Source |
+| --- | --- | --- | --- |
+| §A.quinquies, sous la table | « le CRUD users (T3) n'est PAS livré… la porte P-B ne peut pas cocher ce critère » | **Livré** : `domaines/users/{depot,service,mots-de-passe}.ts`, `routes/users.ts` (7 routes + `HEAD`), `packages/shared/src/users.ts`, `l2-users.integration.test.ts` (50 tests). Critère 5 du 07 **coché sous réserve R-B2** | fiche P-B §10.1 et §10.2.3 |
+| §B.11.1 « LES SIX ROUTES » | « six routes livrées, six rattachées, zéro orpheline » | **Quatorze routes** au registre (`registreAcces`) : les 6 + les 8 de `/v1/users` ; **toutes rattachées** (E45, E43, E33, E42) | fiche P-B §10.2.3 |
+| §I.5 (R-9) | « une citation E45 en avance sur son code » | L'habilitation existe (`PATCH /v1/users/:id/habilitate`, `habilitated_at`, mode expert réservé aux habilités — arbitrage Williams 2026-08-31). **R-9 close** | `6b1d80d`, fiche P-B §10.1 |
+| §I.6-1 | « lint, typecheck, e2e, coverage non lancés » | Run CI `33552686236` sur `800ce2f` : **20 contrôles verts**, couverture mesurée 100 % sur `scoping/**`, `routes/scoping.ts` | fiche P-B, signature 2026-09-02 |
+| §I.6-3 | « la couverture n'est pas mesurée par moi » | Mesurée par le job `couverture` (24 chiffres, six modules) — fiche P-B §10.3 | run `33552686236` |
+
+## J.2 — Sens 2 (code → exigences) sur les deux commits que le §B.11 ne couvrait pas
+
+Report intégral du §10.2.3 de la fiche P-B (mesuré par A02, `46f547b..62193b8`), repris tel quel :
+
+| Groupe livré | Nb | Rattachement |
+| --- | ---: | --- |
+| `apps/api/src/domaines/users/{depot,service,mots-de-passe}.ts` | 3 | **E45** (habilitation) · **E33** (mot de passe engendré, Argon2id) · **E42** (journal) |
+| `apps/api/src/routes/users.ts` — 7 routes + `HEAD` | 1 | **E45, E43** — les 7 verbes documentés au titre du 11 §8.6 |
+| `packages/shared/src/users.ts`, extensions `auth.ts` / `errors.ts` | 3 | **E43** — conventions d'API, `ERROR_CODES` |
+| `packages/ui/src/composants/*.tsx` — 24 composants | 24 | **E27, E44**, **E13** pour six d'entre eux — vérifié fichier par fichier |
+| `packages/ui/src/{composants.css, tokens.css}`, `superposition.ts`, `utilitaires.ts` | 4 | **E27 / E44** — gardé par `tokens.test.ts` |
+| `vitest.setup.interface.ts` + projet vitest `interface` | 1 | **E36** |
+| 26 fichiers `*.test.tsx` + `l2-users.integration.test.ts` | 27 | outillage des groupes ci-dessus |
+
+**Orphelins** : deux constatés à `62193b8` (`lireUtilisateur`, `reinitialiserCachePreparation`).
+Le premier est **fermé** sur `main` par `6b1d80d` (appelant `domaines/users/service.ts:119`, PR #15).
+Le second reste ouvert sous **R-B4** (ligne `AMELIORATIONS.md` due avant P-C).
+
+## J.3 — Synthèse chiffrée au 2026-09-02
+
+| Mesure | Valeur | Commande |
+| --- | --- | --- |
+| Citations d'exigence dans le code | **370** sur **245 fichiers**, aucune incohérence, 4 lignes exemptées (plafond 12) | `pnpm check:tracabilite --verbeux`, 2026-09-02 |
+| Routes de produit sur `main` | **14** (auth 3, santé 2, financier 1, users 8) | registre `onRoute`, fiche P-B §10.1 |
+| Fichiers de tests d'intégration sur `main` | **15** | `ls apps/api/tests/*.integration.test.ts` |
+| `couverte` | **1** — E21 (inchangé : le libellé d'E45 exige le cockpit, pas seulement l'habilitation) | |
+| `partiellement amorcée` | **44** | |
+| `non commencée` | **2** — E22 (console 7 espaces), E23 (novice < 30 min) | |
+
+**Prochaine passe due** : à la PR de `lot/l3-suite` (E1-E5 missions et questionnaire, E9 propriété,
+E10 banque, E37 scoring — le lot apporte 15 routes de plus et 206 tests), puis à la porte P-C pour L5.
+La règle ne change pas : **une exigence ne passe à `couverte` que si son libellé entier est tenu et
+éprouvé**.
+
+*Report effectué le 2026-09-02 par la session de vérification, sur autorisation de Williams, à partir
+de la fiche P-B signée. Aucune ligne datée n'a été modifiée.*
