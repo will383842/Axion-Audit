@@ -7023,3 +7023,50 @@ Décideur : A01, sur revue A17
 Impact spec : aucun. Correctifs : B-1 `companies/service.ts` + retournement du test ; B-2 verrou
 `FOR UPDATE` sur la mission dans l'import + test `Promise.all` ; B-3 test unitaire de la garde pure ;
 B-4 fil rouge étendu (création → import → figeage) sur FIL-TPE et FIL-GC.
+
+## 2026-09-02 — [L3] Rejeu de la revue croisée A17 sur le correctif : ACCEPTÉ SOUS RÉSERVE
+
+A17 a relu le correctif `0108c2e...16102dd` (21 fichiers) contre son verdict REFUSÉ du matin. Les
+quatre bloquants sont fermés, chacun par le correctif exact qu'il appelait et par un test capable de
+rougir ; aucun contournement (ni test affaibli, ni assertion retirée, ni skip). Six non-bloquants
+traités. Réserve unique : **R-L3-4, la couverture de L3 à mesurer avant que A02 coche la DoD** — en
+cours de mesure par la vérification isolée. Cinq notes N-1 à N-5, dont deux à traiter à coût nul
+(en-tête de paternité du fil rouge L3 ; fixture du cas de course au plus près du nominal).
+
+Options :
+
+1. **Accepter le verdict**, traiter N-1 et N-3 dans l'incrément, seuiller la couverture sur les
+   chiffres mesurés, puis A02.
+2. Passer à A02 sans attendre la mesure.
+
+Arbitrage : **option 1.** Un seuil posé au jugé est un seuil qui ment — le réviseur l'écrit, et c'est
+la raison pour laquelle R-L3-4 n'a pas été fermé à l'aveugle. **Règle de précédence sans objet.**
+
+Décideur : A01, sur revue A17 (rejeu)
+Impact spec : aucun.
+
+## 2026-09-02 — [L3] Couverture : quatre modules seuillés sur mesure, deux sous le seuil — on remonte, on ne rétrécit pas
+
+La vérification isolée (16102dd) a mesuré la couverture par module de L3. La note L3 §4, signée par
+A01, exige ≥ 90 % mesuré sur questionnaire, org-units et la machine à états. Mesuré : plan-entretiens
+99/99/100/95 · questionnaire 97/97/100/**87** · org-units **87**/87/92/**76** · missions
+**84**/84/**85**/**75**. Deux modules sous le seuil en lignes, trois en branches.
+
+Options :
+
+1. **Seuiller les quatre modules L3 à 90 % dès maintenant, sur les chiffres mesurés, et faire monter
+   la couverture par des tests avant la PR** — la CI de la branche est rouge entre-temps, et c'est
+   le signal voulu.
+2. Déclarer `missions` et `org-units` « non critiques » et poser leurs seuils sur leurs chiffres.
+3. Seuiller après la PR.
+
+Arbitrage : **option 1.** L'option 2 contredirait la note de conception que le pilote a signée, et
+la lettre de `CLAUDE.md` §4 (TDD : machine à états) ; l'option 3 ferait cocher la DoD « couverture
+≥ 90 % mesurée » sur une case vide. La règle du fichier de seuils tranche : « un module sous le seuil
+se corrige par des tests, jamais par un rétrécissement de périmètre ». `companies` (91/91/91/84) et
+`assignments` (91/91/100/82) ne sont pas nommés par la note ; leurs chiffres sont tracés ici et
+seront seuillés à L6 quand `assignments` deviendra le siège de la propriété §9.9. **Précédence :
+`CLAUDE.md` §5 (DoD transverse), qui prime sur la vitesse.**
+
+Décideur : A01, sur mesure de la vérification isolée et réserve R-L3-4 d'A17
+Impact spec : aucun. `.github/coverage-critical-paths.json` : quatre entrées, chiffres à l'ajout.

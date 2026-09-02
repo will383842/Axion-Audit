@@ -99,9 +99,36 @@ export const NOM_UNITE_LONGUEUR_MAX = 300;
 export const REF_CSV_LONGUEUR_MAX = 128;
 
 /**
+ * LA PLUS GRANDE VALEUR QU'UN `INTEGER` DE POSTGRESQL PUISSE PORTER.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * CE N'EST PAS UNE BORNE MÉTIER : C'EST LE TYPE DE LA COLONNE, RENDU EXÉCUTABLE.
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * Le fichier 04 déclare `org_units.position INTEGER` et `headcount INTEGER`. Une
+ * valeur au-delà de cette borne n'est pas « trop grande » au sens du métier : elle
+ * est **impossible à stocker**, et PostgreSQL la refuse par un `22003`
+ * (numeric_value_out_of_range).
+ *
+ * ⚠ **MESURÉ, ET C'EST LE DÉFAUT QUE CETTE CONSTANTE FERME** : sans elle,
+ * `PATCH { position: 2147483648 }` traversait la validation Zod, atteignait la base,
+ * et sortait en **500 INTERNAL_ERROR** — une faute de saisie imputée au serveur. Le
+ * 11 §3 exige un statut cohérent : une valeur hors du type de sa colonne est une
+ * faute de FORME, donc un **400**, et il se prononce ici, avant tout aller-retour.
+ * Le dépôt traduit le `22003` en seconde ceinture (défense en profondeur : une
+ * valeur calculée en interne — l'import numérote `positionMax + 1` — ne passe par
+ * aucun schéma Zod).
+ */
+export const ENTIER_POSTGRES_MAX = 2_147_483_647;
+
+/**
  * Plafond d'effectif d'une unité. Borne de VRAISEMBLANCE, pas règle métier : elle
  * écarte la saisie accidentelle d'un montant dans la colonne `headcount`, sans
  * jamais refuser une unité réelle. Même valeur que `companies`.
+ *
+ * Elle est TRÈS EN DEÇÀ d'`ENTIER_POSTGRES_MAX` : `headcount` ne peut donc pas
+ * déborder son `INTEGER`, et le défaut mesuré sur `position` n'a jamais eu de
+ * jumeau ici. Écrit plutôt que supposé — c'est la question qu'on se pose en
+ * relisant, et la réponse doit être dans le fichier.
  */
 export const EFFECTIF_UNITE_MAX = 10_000_000;
 
@@ -237,14 +264,19 @@ const nomUniteSchema = z.string().trim().pipe(z.string().min(1).max(NOM_UNITE_LO
 const effectifSchema = z.number().int().min(0).max(EFFECTIF_UNITE_MAX);
 
 /**
- * La position d'une unité : un entier POSITIF.
+ * La position d'une unité : un entier POSITIF, dans les bornes de sa colonne.
  *
  * Bornée à 1 par le bas parce que la racine créée d'office avec la mission porte
  * `position = 1` (`domaines/missions/depot.ts`) : admettre 0 ou un négatif
  * mélangerait deux conventions de rang dans la même colonne, et un tri mélangé ne
  * se voit pas — il rend simplement l'arbre dans un ordre que personne n'a voulu.
+ *
+ * Bornée par le haut au TYPE de la colonne (`ENTIER_POSTGRES_MAX`), et pas à une
+ * valeur métier : rien ne dit qu'un arbre ne peut pas porter deux milliards
+ * d'unités, mais la colonne, elle, ne sait pas les numéroter. Voir
+ * `ENTIER_POSTGRES_MAX` pour le 500 que ce plafond remplace par un 400.
  */
-const positionSchema = z.number().int().min(1);
+const positionSchema = z.number().int().min(1).max(ENTIER_POSTGRES_MAX);
 
 // -----------------------------------------------------------------------------
 // ENTRÉES — création et modification
@@ -352,8 +384,15 @@ export type UpdateOrgUnitRequest = z.infer<typeof updateOrgUnitRequestSchema>;
  * naturellement un client pour un acte qui n'a pas de paramètre. `strictObject`
  * refuse quand même toute clé inattendue — accepter `{status: 'active'}` en
  * l'ignorant laisserait croire à un appelant qu'il choisit quelque chose.
+ *
+ * ⚠ `nullish` ET NON `optional`, ET LA NUANCE ÉTAIT UN DÉFAUT MESURÉ : quand une
+ * requête arrive **sans corps du tout**, Fastify ne passe pas `undefined` au
+ * validateur, il passe **`null`**. Un `.optional()` — qui n'admet que `undefined` —
+ * refusait donc exactement le cas que cette documentation promettait d'accepter, et
+ * rendait `400 « objet attendu, null reçu »`. Le contrat disait une chose et faisait
+ * l'autre ; `nullish` admet les deux absences, celle du langage et celle du réseau.
  */
-export const validateOrgUnitRequestSchema = z.strictObject({}).optional();
+export const validateOrgUnitRequestSchema = z.strictObject({}).nullish();
 
 export type ValidateOrgUnitRequest = z.infer<typeof validateOrgUnitRequestSchema>;
 

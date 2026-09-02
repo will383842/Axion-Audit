@@ -2687,3 +2687,578 @@ describe('GET /v1/missions — curseur (created_at, id)', () => {
     ).toStrictEqual([]);
   });
 });
+
+// =============================================================================
+// 14. `PATCH /v1/missions/:id` — CHAQUE CHAMP DU CONTRAT, ET SEULEMENT CE QUI
+//     CHANGE (invariant 7 : la trace dit CE QUI a été touché)
+// =============================================================================
+// Les tests de la section 10 n'exercent que `title`. Or le contrat partagé
+// (`updateMissionRequestSchema`) déclare QUINZE champs, et le journal
+// (`CHAMPS_MISSION_JOURNALISABLES`) exige que chacun soit nommé quand il bouge.
+// Un champ que personne n'a jamais modifié par l'API est un champ dont on ne
+// sait pas s'il s'écrit — ni s'il se journalise.
+
+/** Les colonnes de `missions` telles que la base les rend, pour les lectures de substance. */
+interface LigneMissionEnBase {
+  readonly parent_mission_id: string | null;
+  readonly title: string;
+  readonly geo_scope: string;
+  readonly country_code: string | null;
+  readonly size_tier_id: string | null;
+  readonly active_sectors: unknown;
+  readonly active_blocks: unknown;
+  readonly audit_level: string;
+  readonly commercial_offer: string | null;
+  readonly timezone: string;
+  readonly nda_ref: string | null;
+  readonly nda_signed_at: string | null;
+  readonly llm_provider: string;
+  readonly start_planned: string | null;
+  readonly end_planned: string | null;
+  readonly delivered_at: Date | null;
+  readonly updated_at: Date;
+}
+
+async function ligneEnBase(missionId: string): Promise<LigneMissionEnBase> {
+  const resultat = await bd().query<LigneMissionEnBase>(
+    `SELECT parent_mission_id, title, geo_scope, country_code, size_tier_id,
+            active_sectors, active_blocks, audit_level, commercial_offer, timezone,
+            nda_ref, to_char(nda_signed_at, 'YYYY-MM-DD') AS nda_signed_at, llm_provider,
+            to_char(start_planned, 'YYYY-MM-DD') AS start_planned,
+            to_char(end_planned, 'YYYY-MM-DD') AS end_planned,
+            delivered_at, updated_at
+       FROM missions WHERE id = $1`,
+    [missionId],
+  );
+  const ligne = resultat.rows[0];
+  if (ligne === undefined) throw new Error(`mission ${missionId} absente de la base`);
+  return ligne;
+}
+
+/** Les `meta.champs` des lignes `mission.update` d'une mission, dans l'ordre d'écriture. */
+async function champsJournalises(missionId: string): Promise<string[][]> {
+  const metaSchema = z.object({ champs: z.array(z.string()) });
+  const resultat = await bd().query<{ meta: unknown }>(
+    `SELECT meta FROM activity_log
+      WHERE entity_id = $1 AND action = 'mission.update' ORDER BY created_at, id`,
+    [missionId],
+  );
+  return resultat.rows.map((ligne) => {
+    const analyse = metaSchema.safeParse(ligne.meta);
+    return analyse.success ? analyse.data.champs : [];
+  });
+}
+
+describe('PATCH /v1/missions/:id — chaque champ modifiable, et seulement ce qui change', () => {
+  it('@critique les quinze champs du contrat s’écrivent, se relisent en base, et sont journalisés par leur nom de colonne', async () => {
+    // QUELLE IMPLÉMENTATION PLAUSIBLE MAIS FAUSSE CE CAS ATTRAPE-T-IL ?
+    // Celle qui compare et recopie les champs UN PAR UN — quinze blocs presque
+    // identiques — et en oublie un, ou en journalise un sous le nom d'un autre
+    // (copier-coller de `nda_ref` vers `nda_signed_at`). Le contrat partagé
+    // resterait vert : il ne dit rien de ce qui arrive en base.
+    const admin = await creerCompte('admin', 'patch-quinze');
+    const entreprise = await semerEntreprise();
+    const mere = await creerMission(admin.jeton, 'patch-mere', entreprise);
+    const creee = await creerMission(admin.jeton, 'patch-fille', entreprise);
+
+    const nouvelles = {
+      parentMissionId: mere.id,
+      title: 'Mission fictive entierement reprise',
+      geoScope: 'multi_pays',
+      countryCode: 'be',
+      sizeTierId: palierSeme,
+      activeSectors: ['services', 'industrie'],
+      activeBlocks: ['bloc_1', 'bloc_3'],
+      auditLevel: 'strategique_groupe',
+      commercialOffer: 'mission_eti',
+      timezone: 'Europe/Brussels',
+      ndaRef: 'NDA-FICTIF-0001',
+      ndaSignedAt: '2026-01-15',
+      llmProvider: 'ue_hosted',
+      startPlanned: '2026-03-01',
+      endPlanned: '2026-06-30',
+    } as const;
+
+    const reponse = await appeler('PATCH', `/v1/missions/${creee.id}`, {
+      jeton: admin.jeton,
+      charge: nouvelles,
+    });
+    expect(reponse.statut, `PATCH complet refusé : ${reponse.corps.slice(0, 600)}`).toBe(200);
+
+    const corps = objetJson(JSON.parse(reponse.corps));
+    // `countryCode` est NORMALISÉ en majuscules par le contrat : la réponse rend la
+    // valeur écrite, pas celle saisie.
+    expect(corps.countryCode).toBe('BE');
+    expect(corps.parentMissionId).toBe(mere.id);
+    expect(corps.activeBlocks).toStrictEqual(['bloc_1', 'bloc_3']);
+    expect(corps.llmProvider).toBe('ue_hosted');
+
+    const enBase = await ligneEnBase(creee.id);
+    expect(
+      {
+        parent_mission_id: enBase.parent_mission_id,
+        title: enBase.title,
+        geo_scope: enBase.geo_scope,
+        country_code: enBase.country_code,
+        size_tier_id: enBase.size_tier_id,
+        active_sectors: enBase.active_sectors,
+        active_blocks: enBase.active_blocks,
+        audit_level: enBase.audit_level,
+        commercial_offer: enBase.commercial_offer,
+        timezone: enBase.timezone,
+        nda_ref: enBase.nda_ref,
+        nda_signed_at: enBase.nda_signed_at,
+        llm_provider: enBase.llm_provider,
+        start_planned: enBase.start_planned,
+        end_planned: enBase.end_planned,
+      },
+      'Ce que la base porte après le PATCH doit être EXACTEMENT ce qui a été envoyé\n' +
+        '(au pays près, normalisé). Un champ manquant ici est un champ que la route\n' +
+        'accepte et ignore en silence.',
+    ).toStrictEqual({
+      parent_mission_id: mere.id,
+      title: 'Mission fictive entierement reprise',
+      geo_scope: 'multi_pays',
+      country_code: 'BE',
+      size_tier_id: palierSeme,
+      active_sectors: ['services', 'industrie'],
+      active_blocks: ['bloc_1', 'bloc_3'],
+      audit_level: 'strategique_groupe',
+      commercial_offer: 'mission_eti',
+      timezone: 'Europe/Brussels',
+      nda_ref: 'NDA-FICTIF-0001',
+      nda_signed_at: '2026-01-15',
+      llm_provider: 'ue_hosted',
+      start_planned: '2026-03-01',
+      end_planned: '2026-06-30',
+    });
+
+    const journal = await champsJournalises(creee.id);
+    expect(journal, 'un PATCH qui a écrit quinze champs laisse UNE ligne de journal').toHaveLength(
+      1,
+    );
+    expect(
+      [...(journal[0] ?? [])].sort(),
+      'La ligne `mission.update` nomme CHAQUE colonne touchée, en `snake_case`, et\n' +
+        'rien d’autre : c’est la seule trace qui dise CE QUI a changé (invariant 7).',
+    ).toStrictEqual(
+      [
+        'parent_mission_id',
+        'title',
+        'geo_scope',
+        'country_code',
+        'size_tier_id',
+        'active_sectors',
+        'active_blocks',
+        'audit_level',
+        'commercial_offer',
+        'timezone',
+        'nda_ref',
+        'nda_signed_at',
+        'llm_provider',
+        'start_planned',
+        'end_planned',
+      ].sort(),
+    );
+
+    // `null` = « efface » (contrat partagé). Huit champs sont effaçables ; chacun
+    // doit repasser à NULL en base et être journalisé — effacer EST une modification.
+    const effacement = await appeler('PATCH', `/v1/missions/${creee.id}`, {
+      jeton: admin.jeton,
+      charge: {
+        parentMissionId: null,
+        countryCode: null,
+        sizeTierId: null,
+        commercialOffer: null,
+        ndaRef: null,
+        ndaSignedAt: null,
+        startPlanned: null,
+        endPlanned: null,
+      },
+    });
+    expect(effacement.statut, `effacement refusé : ${effacement.corps.slice(0, 600)}`).toBe(200);
+    const effacee = await ligneEnBase(creee.id);
+    expect([
+      effacee.parent_mission_id,
+      effacee.country_code,
+      effacee.size_tier_id,
+      effacee.commercial_offer,
+      effacee.nda_ref,
+      effacee.nda_signed_at,
+      effacee.start_planned,
+      effacee.end_planned,
+    ]).toStrictEqual([null, null, null, null, null, null, null, null]);
+    expect(effacee.title, 'Un champ ABSENT du corps d’effacement (`title`) n’est pas touché.').toBe(
+      'Mission fictive entierement reprise',
+    );
+
+    const apresEffacement = await champsJournalises(creee.id);
+    expect(apresEffacement).toHaveLength(2);
+    expect([...(apresEffacement[1] ?? [])].sort()).toStrictEqual(
+      [
+        'parent_mission_id',
+        'country_code',
+        'size_tier_id',
+        'commercial_offer',
+        'nda_ref',
+        'nda_signed_at',
+        'start_planned',
+        'end_planned',
+      ].sort(),
+    );
+  });
+
+  it('@critique un PATCH qui renvoie les valeurs déjà en base n’écrit RIEN — ni `updated_at`, ni ligne de journal ; réordonner des codes, si', async () => {
+    // QUELLE IMPLÉMENTATION PLAUSIBLE MAIS FAUSSE CE CAS ATTRAPE-T-IL ?
+    // Celle qui écrit tout ce que le corps porte et journalise toutes les clés
+    // reçues. Une console qui renvoie le formulaire entier à chaque « Enregistrer »
+    // produirait alors une ligne `mission.update` par clic, nommant des champs
+    // qui n'ont pas bougé — et `updated_at` avancerait sans qu'aucune donnée n'ait
+    // changé, ce qui rend le curseur de delta (05 §9.5) inutilisable.
+    const admin = await creerCompte('admin', 'patch-identique');
+    const creee = await creerMission(admin.jeton, 'patch-identique');
+
+    const pose = await appeler('PATCH', `/v1/missions/${creee.id}`, {
+      jeton: admin.jeton,
+      charge: { activeSectors: ['services', 'industrie'], activeBlocks: ['bloc_1', 'bloc_2'] },
+    });
+    expect(pose.statut).toBe(200);
+    const avant = await ligneEnBase(creee.id);
+    const journalAvant = await champsJournalises(creee.id);
+    expect(journalAvant).toHaveLength(1);
+
+    // Tout est renvoyé À L'IDENTIQUE : le titre, le fuseau, les codes dans le même
+    // ordre, les nullables à `null` alors qu'ils le sont déjà.
+    const identique = await appeler('PATCH', `/v1/missions/${creee.id}`, {
+      jeton: admin.jeton,
+      charge: {
+        title: avant.title,
+        geoScope: avant.geo_scope,
+        auditLevel: avant.audit_level,
+        timezone: avant.timezone,
+        llmProvider: avant.llm_provider,
+        activeSectors: ['services', 'industrie'],
+        activeBlocks: ['bloc_1', 'bloc_2'],
+        parentMissionId: null,
+        countryCode: null,
+        sizeTierId: null,
+        commercialOffer: null,
+        ndaRef: null,
+        ndaSignedAt: null,
+        startPlanned: null,
+        endPlanned: null,
+      },
+    });
+    expect(
+      identique.statut,
+      'Un PATCH sans changement réel n’est pas une erreur : la mission est rendue\n' +
+        'telle quelle (200), et c’est en base et au journal que rien ne doit bouger.',
+    ).toBe(200);
+    expect(
+      mission(identique).updatedAt,
+      'La réponse rend la mission TELLE QU’ELLE EST, `updatedAt` compris.',
+    ).toBe(mission(pose).updatedAt);
+
+    const apres = await ligneEnBase(creee.id);
+    expect(
+      apres.updated_at.getTime(),
+      '`updated_at` a avancé alors qu’aucune valeur n’a changé.',
+    ).toBe(avant.updated_at.getTime());
+    expect(
+      await champsJournalises(creee.id),
+      'Une ligne `mission.update` a été écrite pour un PATCH qui n’a rien modifié :\n' +
+        'la trace prétend à un changement qui n’a pas eu lieu.',
+    ).toStrictEqual(journalAvant);
+
+    // CONTRE-ÉPREUVE : les MÊMES codes dans un AUTRE ordre. Les colonnes sont des
+    // JSONB — des tableaux, pas des ensembles : réordonner est une modification
+    // de la donnée stockée, et la taire laisserait une base qui ne correspond
+    // plus à la dernière écriture acceptée.
+    const reordonne = await appeler('PATCH', `/v1/missions/${creee.id}`, {
+      jeton: admin.jeton,
+      charge: { activeBlocks: ['bloc_2', 'bloc_1'] },
+    });
+    expect(reordonne.statut).toBe(200);
+    const apresReordre = await ligneEnBase(creee.id);
+    expect(apresReordre.active_blocks).toStrictEqual(['bloc_2', 'bloc_1']);
+    expect(apresReordre.updated_at.getTime()).toBeGreaterThan(avant.updated_at.getTime());
+    const journalFinal = await champsJournalises(creee.id);
+    expect(journalFinal).toHaveLength(2);
+    expect(journalFinal[1]).toStrictEqual(['active_blocks']);
+  });
+});
+
+// =============================================================================
+// 15. LES ÉCHECS DE CONTRAINTE DU DÉPÔT — 23503 ET 23514 TRADUITS, LE RESTE
+//     RELANCÉ TEL QUEL
+// =============================================================================
+// « Une entreprise inexistante est un 400 » (section 2) est tenu par une lecture
+// PRÉALABLE du service, pas par la clé étrangère. Les DEUX autres références que
+// l'appelant contrôle — `parent_mission_id`, `size_tier_id` — n'ont que la clé
+// étrangère pour les défendre : c'est PostgreSQL qui refuse, et c'est la
+// traduction de son erreur (`DrizzleQueryError` → `cause` → `DatabaseError`) qui
+// décide entre un 400 lisible et un 500 muet.
+
+/**
+ * Une contrainte posée SUR LA BASE ÉPHÉMÈRE de cette suite, retirée quoi qu'il
+ * arrive. Ce n'est pas une modification du schéma livré (le 04 reste la seule
+ * source) : c'est une mise en scène du jour où le 04 portera une règle que
+ * `packages/shared` ne connaît pas encore — et PostgreSQL l'applique pour de vrai.
+ */
+async function avecContrainte(
+  nom: string,
+  definition: string,
+  corps: () => Promise<void>,
+): Promise<void> {
+  await bd().query(`ALTER TABLE missions ADD CONSTRAINT ${nom} ${definition}`);
+  try {
+    await corps();
+  } finally {
+    await bd().query(`ALTER TABLE missions DROP CONSTRAINT IF EXISTS ${nom}`);
+  }
+}
+
+describe('traduction des échecs de contrainte du dépôt (23503 / 23514)', () => {
+  it('@critique une mission mère ou un palier inexistants sont des 400 nommant le champ — à la création ET à la modification — jamais un 500', async () => {
+    // QUELLE IMPLÉMENTATION PLAUSIBLE MAIS FAUSSE CE CAS ATTRAPE-T-IL ?
+    // Celle qui lit `erreur.code` sur l'enveloppe Drizzle : `undefined` à tous
+    // les coups, donc aucune traduction, donc un 500 « une erreur interne est
+    // survenue » là où l'utilisateur doit lire « la mission mère n'existe pas ».
+    const admin = await creerCompte('admin', 'fk-parent-palier');
+    const entreprise = await semerEntreprise();
+
+    const cas: readonly { readonly champ: 'parentMissionId' | 'sizeTierId' }[] = [
+      { champ: 'parentMissionId' },
+      { champ: 'sizeTierId' },
+    ];
+
+    for (const { champ } of cas) {
+      const creation = await appeler('POST', '/v1/missions', {
+        jeton: admin.jeton,
+        charge: { ...corpsMissionMinimal(entreprise, `fk-${champ}`), [champ]: uuidv7() },
+      });
+      expect(
+        creation.statut,
+        `POST avec un ${champ} inconnu : ${String(creation.statut)} ${creation.corps.slice(0, 400)}`,
+      ).toBe(400);
+      expect(creation.code).toBe(ERROR_CODES.VALIDATION_FAILED);
+      expect(
+        creation.details.map((detail) => detail.path),
+        'Le détail nomme LE champ fautif, et lui seul : c’est ce que l’écran met en\n' + 'rouge.',
+      ).toStrictEqual([champ]);
+    }
+
+    // Aucune mission de ces deux tentatives n'a survécu — et surtout AUCUNE racine
+    // `org_units` orpheline : la création est UNE transaction (03 §16.2).
+    const orphelines = await bd().query<{ total: string }>(
+      `SELECT count(*) AS total FROM missions WHERE company_id = $1`,
+      [entreprise],
+    );
+    expect(Number(orphelines.rows[0]?.total ?? '0')).toBe(0);
+
+    const creee = await creerMission(admin.jeton, 'fk-patch', entreprise);
+    const avant = await ligneEnBase(creee.id);
+    for (const { champ } of cas) {
+      const modification = await appeler('PATCH', `/v1/missions/${creee.id}`, {
+        jeton: admin.jeton,
+        charge: { [champ]: uuidv7() },
+      });
+      expect(
+        modification.statut,
+        `PATCH avec un ${champ} inconnu : ${String(modification.statut)} ${modification.corps.slice(0, 400)}`,
+      ).toBe(400);
+      expect(modification.code).toBe(ERROR_CODES.VALIDATION_FAILED);
+      expect(modification.details.map((detail) => detail.path)).toStrictEqual([champ]);
+    }
+    const apres = await ligneEnBase(creee.id);
+    expect(
+      apres.updated_at.getTime(),
+      'Un PATCH refusé par la clé étrangère ne doit rien avoir écrit.',
+    ).toBe(avant.updated_at.getTime());
+    expect(await champsJournalises(creee.id)).toStrictEqual([]);
+  });
+
+  it('un CHECK de `missions` que le contrat partagé ne connaît pas encore sort en 400 nommé, et la création reste atomique', async () => {
+    // Les cinq CHECK du 04 sont fermés par Zod : inatteignables par HTTP. Le cas
+    // qui compte est LE JOUR OÙ LE 04 AJOUTE UNE RÈGLE avant `packages/shared` —
+    // une transcription en retard. On le met en scène SUR LA BASE ÉPHÉMÈRE, par
+    // une contrainte réelle que PostgreSQL applique réellement, et on la retire.
+    const admin = await creerCompte('admin', 'check-missions');
+    const entreprise = await semerEntreprise();
+    const titreRefuse = 'Mission fictive au titre refuse par le modele';
+
+    await avecContrainte(
+      'missions_titre_refuse_check',
+      `CHECK (title <> '${titreRefuse}')`,
+      async () => {
+        const reponse = await appeler('POST', '/v1/missions', {
+          jeton: admin.jeton,
+          charge: { ...corpsMissionMinimal(entreprise, 'check'), title: titreRefuse },
+        });
+        expect(
+          reponse.statut,
+          `Un CHECK violé (23514) sur \`missions\` doit être traduit : ${reponse.corps.slice(0, 400)}`,
+        ).toBe(400);
+        expect(reponse.code).toBe(ERROR_CODES.VALIDATION_FAILED);
+        expect(reponse.details.map((detail) => detail.path)).toStrictEqual(['mission']);
+        expect(
+          reponse.details[0]?.message ?? '',
+          'Le détail NOMME la contrainte : c’est le symptôme d’une transcription en\n' +
+            'retard, et il vaut mieux qu’il se lise.',
+        ).toContain('missions_titre_refuse_check');
+
+        const restes = await bd().query<{ total: string }>(
+          `SELECT count(*) AS total FROM org_units WHERE mission_id IN
+             (SELECT id FROM missions WHERE company_id = $1)`,
+          [entreprise],
+        );
+        expect(
+          Number(restes.rows[0]?.total ?? '0'),
+          'Aucune racine ne survit à une création refusée.',
+        ).toBe(0);
+      },
+    );
+  });
+
+  it('@critique une transition refusée par un CHECK ne laisse ni statut modifié ni trace — la transition est UNE transaction', async () => {
+    // L'échec survient APRÈS le verdict favorable (verrou pris, conditions
+    // mesurées, motif validé). Ce qu'on éprouve : il ne laisse rien derrière lui —
+    // ni ligne `activity_log`, ni statut à moitié changé.
+    const admin = await creerCompte('admin', 'check-transition');
+    const creee = await creerMission(admin.jeton, 'check-transition');
+    await placerStatut(creee.id, 'en_cours');
+    const titrePiege = (await ligneEnBase(creee.id)).title;
+
+    await avecContrainte(
+      'missions_retour_piege_check',
+      `CHECK (NOT (status = 'preparation' AND title = '${titrePiege}'))`,
+      async () => {
+        const reponse = await changerStatut(admin.jeton, creee.id, 'preparation', {
+          motif: 'erreur_de_manipulation',
+        });
+        expect(reponse.statut, reponse.corps.slice(0, 400)).toBe(400);
+        expect(reponse.code).toBe(ERROR_CODES.VALIDATION_FAILED);
+        expect(reponse.details[0]?.message ?? '').toContain('missions_retour_piege_check');
+        expect(await statutEnBase(creee.id)).toBe('en_cours');
+
+        const traces = await bd().query<{ total: string }>(
+          `SELECT count(*) AS total FROM activity_log
+            WHERE entity_id = $1 AND action = 'mission.status_change'`,
+          [creee.id],
+        );
+        expect(
+          Number(traces.rows[0]?.total ?? '0'),
+          'Une transition qui a échoué en base a été journalisée comme réussie.',
+        ).toBe(0);
+      },
+    );
+  });
+
+  it('une contrainte qui n’appartient PAS à `missions` n’est pas déguisée en erreur de validation', async () => {
+    // La traduction est ÉTROITE par choix : un CHECK dont le nom ne commence pas
+    // par `missions_` n'est pas une règle du modèle de mission, et le présenter
+    // comme « une valeur n'est pas admise » attribuerait à l'utilisateur une
+    // faute qui n'est pas la sienne. L'erreur est relancée telle quelle : un 500,
+    // bruyant, que la supervision voit.
+    const admin = await creerCompte('admin', 'check-etranger');
+    const entreprise = await semerEntreprise();
+    const titreRefuse = 'Mission fictive refusee par une garde etrangere';
+
+    await avecContrainte(
+      'garde_etrangere_de_test_check',
+      `CHECK (title <> '${titreRefuse}')`,
+      async () => {
+        const reponse = await appeler('POST', '/v1/missions', {
+          jeton: admin.jeton,
+          charge: { ...corpsMissionMinimal(entreprise, 'etranger'), title: titreRefuse },
+        });
+        expect(reponse.statut).toBe(500);
+        expect(reponse.code).toBe(ERROR_CODES.INTERNAL_ERROR);
+        expect(
+          reponse.corps,
+          'Le nom de la contrainte ne sort pas dans un 500 : rien de la base ne\n' +
+            'transite vers le client quand ce n’est pas une erreur de validation.',
+        ).not.toContain('garde_etrangere_de_test_check');
+      },
+    );
+  });
+});
+
+// =============================================================================
+// 16. `delivered_at` — POSÉ À LA PREMIÈRE LIVRAISON, JAMAIS EFFACÉ (invariant 7)
+// =============================================================================
+describe('delivered_at — la date de PREMIÈRE livraison survit à un aller-retour', () => {
+  it('@critique `livree → en_analyse → livree` conserve le `delivered_at` d’origine', async () => {
+    // QUELLE IMPLÉMENTATION PLAUSIBLE MAIS FAUSSE CE CAS ATTRAPE-T-IL ?
+    // Celle qui écrit `delivered_at = now()` à CHAQUE entrée en `livree`. Un
+    // rapport corrigé après livraison perdrait alors la date à laquelle le client
+    // l'a reçu la première fois — c'est-à-dire la seule qui compte
+    // contractuellement — et rien ne le dirait (invariant 7).
+    const admin = await creerCompte('admin', 'delivered-at');
+    const creee = await creerMission(admin.jeton, 'delivered-at');
+    await placerStatut(creee.id, 'en_analyse');
+    expect((await ligneEnBase(creee.id)).delivered_at).toBeNull();
+
+    await validerEtape(creee.id, 'livraison', admin.id);
+    const premiere = await changerStatut(admin.jeton, creee.id, 'livree');
+    expect(premiere.statut, premiere.corps.slice(0, 400)).toBe(200);
+    const datePremiere = (await ligneEnBase(creee.id)).delivered_at;
+    expect(datePremiere, 'la première entrée en `livree` pose `delivered_at`').not.toBeNull();
+
+    const retour = await changerStatut(admin.jeton, creee.id, 'en_analyse', {
+      motif: 'rapport_a_corriger',
+    });
+    expect(retour.statut, retour.corps.slice(0, 400)).toBe(200);
+    expect(
+      (await ligneEnBase(creee.id)).delivered_at?.getTime(),
+      'Un retour arrière n’EFFACE pas la date de livraison.',
+    ).toBe(datePremiere?.getTime());
+
+    const seconde = await changerStatut(admin.jeton, creee.id, 'livree');
+    expect(seconde.statut, seconde.corps.slice(0, 400)).toBe(200);
+    expect(
+      (await ligneEnBase(creee.id)).delivered_at?.getTime(),
+      'La SECONDE livraison a réécrit `delivered_at` : la date de première remise\n' +
+        'au client est perdue.',
+    ).toBe(datePremiere?.getTime());
+  });
+});
+
+// =============================================================================
+// 17. UN JSONB CORROMPU SORT EN 500, JAMAIS EN LISTE VIDE
+// =============================================================================
+describe('active_sectors / active_blocks — une corruption se voit', () => {
+  it('une colonne qui ne porte pas un tableau de chaînes rend 500, et ne fait pas disparaître des blocs en silence', async () => {
+    // QUELLE IMPLÉMENTATION PLAUSIBLE MAIS FAUSSE CE CAS ATTRAPE-T-IL ?
+    // Celle qui lit le JSONB avec un repli « `[]` si ce n'est pas un tableau ».
+    // Une ligne corrompue (import, migration ratée, écriture manuelle) rendrait
+    // alors une mission SANS bloc actif, le figeage produirait un questionnaire
+    // amputé, et personne ne le verrait avant le terrain.
+    const admin = await creerCompte('admin', 'jsonb-corrompu');
+    const creee = await creerMission(admin.jeton, 'jsonb-corrompu');
+
+    const corruptions = ['"pas-un-tableau"', '[1, 2]', '{"bloc_1": true}'];
+    try {
+      for (const corruption of corruptions) {
+        await bd().query('UPDATE missions SET active_blocks = $2::jsonb WHERE id = $1', [
+          creee.id,
+          corruption,
+        ]);
+        const reponse = await appeler('GET', `/v1/missions/${creee.id}`, { jeton: admin.jeton });
+        expect(
+          reponse.statut,
+          `active_blocks = ${corruption} : ${String(reponse.statut)} ${reponse.corps.slice(0, 300)}`,
+        ).toBe(500);
+        expect(reponse.code).toBe(ERROR_CODES.INTERNAL_ERROR);
+        expect(reponse.corps, 'Le contenu corrompu ne transite pas vers le client.').not.toContain(
+          'pas-un-tableau',
+        );
+      }
+    } finally {
+      await bd().query("UPDATE missions SET active_blocks = '[]'::jsonb WHERE id = $1", [creee.id]);
+    }
+
+    const retablie = await appeler('GET', `/v1/missions/${creee.id}`, { jeton: admin.jeton });
+    expect(retablie.statut, 'la mission redevient lisible une fois la colonne saine').toBe(200);
+  });
+});

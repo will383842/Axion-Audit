@@ -580,6 +580,45 @@ async function affecter(
   );
 }
 
+/**
+ * Crée une mission PAR LA ROUTE `POST /v1/missions` (L3b) : c'est elle qui pose la
+ * racine d'office du §16.2. Rend la mission ET l'identifiant de cette racine.
+ *
+ * Réservé aux cas où l'état nominal du produit COMPTE (un import arrive toujours
+ * sur une mission qui a déjà sa racine) ; les autres cas continuent de semer par
+ * SQL, pour ne pas ancrer toute la suite à l'incrément voisin.
+ */
+const creationMissionSchema = z.looseObject({
+  mission: z.looseObject({ id: z.uuid() }),
+  uniteRacineId: z.uuid(),
+});
+
+let compteurMissionRoute = 0;
+
+async function creerMissionParLaRoute(
+  jeton: string,
+  marqueur: string,
+): Promise<{ readonly missionId: string; readonly uniteRacineId: string }> {
+  compteurMissionRoute += 1;
+  const entrepriseId = uuidv7();
+  await bd().query(`INSERT INTO companies (id, name) VALUES ($1, $2)`, [
+    entrepriseId,
+    `Entreprise factice route ${marqueur} ${String(compteurMissionRoute)}`,
+  ]);
+  const reponse = await appeler('POST', '/v1/missions', {
+    jeton,
+    charge: {
+      companyId: entrepriseId,
+      title: `Mission factice route ${marqueur} ${String(compteurMissionRoute)}`,
+      geoScope: 'france',
+      auditLevel: 'diagnostic_cadrage',
+    },
+  });
+  expect(reponse.statut, `création de mission par la route refusée : ${reponse.corps}`).toBe(201);
+  const creation = creationMissionSchema.parse(analyserJson(reponse.corps));
+  return { missionId: creation.mission.id, uniteRacineId: creation.uniteRacineId };
+}
+
 interface SemisUnite {
   readonly missionId: string;
   readonly nom: string;
@@ -1864,7 +1903,13 @@ describe('POST /v1/missions/:id/org-units/import — cas piégeux', () => {
     // d'ordonnancement ne prouve rien ; un test qui assère la PROPRIÉTÉ FINALE
     // prouve la même chose à chaque passage.
     const admin = await creerCompte('admin', 'import-course');
-    const missionId = await semerMission('import-course', admin.id);
+    // ── FIXTURE NOMINALE (revue A17, point N-3) ──────────────────────────────
+    // La mission est créée PAR LA ROUTE, pas semée par SQL : `POST /v1/missions`
+    // pose la racine d'office du §16.2, et c'est l'état dans lequel un import
+    // arrive RÉELLEMENT en production — jamais sur une mission sans aucune unité.
+    // Une course simulée sur un arbre que le produit ne fabrique pas ne prouverait
+    // la sérialisation que dans un monde qui n'existe pas.
+    const { missionId, uniteRacineId } = await creerMissionParLaRoute(admin.jeton, 'import-course');
 
     const lignes: readonly LigneCsv[] = [
       { ref: 'ca', name: 'Racine factice de course', kind: 'groupe' },
@@ -1875,11 +1920,17 @@ describe('POST /v1/missions/:id/org-units/import — cas piégeux', () => {
     ];
     const contenu = fichierCsv(lignes);
 
-    // `semerMission` sème un arbre VIDE ; ce compte est relu plutôt que présumé,
-    // pour que l'attendu final s'exprime en « avant + fichier » : si une racine
-    // d'office existait sur la mission, elle serait comptée ici et non oubliée.
+    // La racine d'office est COMPTÉE, pas présumée : l'attendu final s'exprime en
+    // « avant + fichier », et « avant » vaut exactement UN — la racine du §16.2.
     const compteAvant = await compterUnitesDeLaMission(missionId);
-    expect(compteAvant, 'la mission semée par SQL commence sans aucune unité').toBe(0);
+    expect(
+      compteAvant,
+      'Une mission créée par la route porte sa racine d’office (§16.2), et rien d’autre.',
+    ).toBe(1);
+    expect(
+      (await lireUnite(uniteRacineId))?.parent_id,
+      'la racine d’office est une racine',
+    ).toBeNull();
 
     const [premiere, seconde] = await Promise.all([
       importer(missionId, contenu, { jeton: admin.jeton }),
@@ -1912,10 +1963,20 @@ describe('POST /v1/missions/:id/org-units/import — cas piégeux', () => {
         'ne permet de les défaire (pas de DELETE, pas de `deleted_at` sur `org_units`).',
     ).toBe(compteAvant + lignes.length);
 
-    // Un seul arbre, c'est aussi UNE seule racine : deux `parent_id IS NULL` sont la
-    // signature d'un double import même si un compte global avait été bricolé.
+    // Un seul arbre importé, c'est UNE seule racine venue du fichier EN PLUS de la
+    // racine d'office : deux racines de fichier seraient la signature d'un double
+    // import même si un compte global avait été bricolé. On distingue les deux par
+    // leur identifiant — la racine d'office est connue depuis la création.
     const racines = (await lireUnites(missionId)).filter((ligne) => ligne.parent_id === null);
-    expect(racines, 'un arbre importé une fois n’a qu’une racine').toHaveLength(1);
+    const racinesDuFichier = racines.filter((ligne) => ligne.id !== uniteRacineId);
+    expect(
+      racines.map((ligne) => ligne.id),
+      'la racine d’office survit à l’import : elle n’est ni écrasée ni re-parentée',
+    ).toContain(uniteRacineId);
+    expect(
+      racinesDuFichier.map((ligne) => ligne.name),
+      'un arbre importé une fois n’ajoute qu’UNE racine à celle d’office',
+    ).toStrictEqual(['Racine factice de course']);
   });
 });
 
@@ -3757,5 +3818,737 @@ describe('format d’erreur unique et codes du lot (11 §3)', () => {
         'Une enveloppe qui varie d’une route à l’autre oblige le front à essayer\n' +
         'plusieurs formes — et il finit par afficher « une erreur est survenue » partout.',
     ).toStrictEqual([]);
+  });
+});
+
+// =============================================================================
+// 9. LES BRANCHES QUE LA MESURE A DÉNONCÉES — couverture ≥ 90 %, chiffrée
+// =============================================================================
+// `.github/coverage-critical-paths.json` (décision du 2026-09-02) place
+// `apps/api/src/domaines/org-units/**` sous le seuil de 90 % sur les QUATRE
+// métriques. Mesure isolée avant cette section : 87,3 lignes / 87,3 instructions /
+// 91,9 fonctions / 75,4 branches. Chaque cas ci-dessous exerce une branche que le
+// rapport v8 donnait à zéro — et assère un COMPORTEMENT, jamais un simple passage.
+// Le seuil se tient par des tests, jamais par un rétrécissement de périmètre.
+
+/** `updated_at` d'une unité — pour prouver qu'un PATCH sans effet n'écrit rien. */
+async function horodatageMiseAJour(id: string): Promise<string | undefined> {
+  const resultat = await bd().query<{ updated_at: Date }>(
+    'SELECT updated_at FROM org_units WHERE id = $1',
+    [id],
+  );
+  return resultat.rows[0]?.updated_at.toISOString();
+}
+
+/** Sème une chaîne de `longueur` unités, chacune fille de la précédente. Rend les ids, racine en tête. */
+async function semerChaine(missionId: string, longueur: number): Promise<string[]> {
+  const ids: string[] = [];
+  let parentId: string | null = null;
+  for (let niveau = 0; niveau < longueur; niveau += 1) {
+    const id = await semerUnite({
+      missionId,
+      nom: `Maillon factice ${String(niveau)}`,
+      kind: niveau === 0 ? 'groupe' : 'service',
+      parentId,
+      position: niveau + 1,
+    });
+    ids.push(id);
+    parentId = id;
+  }
+  return ids;
+}
+
+/** Les `path` des `details` d'une réponse d'erreur — vide si le corps n'en porte pas. */
+function cheminsDesDetails(reponse: Reponse): string[] {
+  const analyse = erreurSchema.safeParse(analyserJson(reponse.corps));
+  if (!analyse.success) return [];
+  return (analyse.data.error.details ?? []).map((detail) => detail.path);
+}
+
+describe('PATCH /v1/org-units/:id — chaque champ modifiable, un par un et tous ensemble', () => {
+  it('@critique les NEUF champs du PATCH atterrissent chacun dans sa colonne, et UNE trace les nomme', async () => {
+    // Un `PATCH` qui ne saurait écrire que `name` passerait « modifie ce qu'on lui
+    // donne, et rien d'autre » (section 5) — ce test-ci exige que CHAQUE colonne
+    // modifiable du 04 soit réellement atteinte : `kind`, `parent_id`,
+    // `country_code`, `timezone`, `headcount`, `service_ref_id`, `sector_id`,
+    // `in_scope`, `position`. Les valeurs sont toutes DIFFÉRENTES de l'existant,
+    // sans quoi la comparaison avant/après du service les laisserait de côté.
+    const admin = await creerCompte('admin', 'patch-neuf-champs');
+    const missionId = await semerMission('patch-neuf-champs', admin.id);
+    const racine = await semerUnite({
+      missionId,
+      nom: 'Racine factice',
+      kind: 'groupe',
+      position: 1,
+    });
+    const nouveauParent = await semerUnite({
+      missionId,
+      nom: 'Direction factice d’accueil',
+      kind: 'direction',
+      parentId: racine,
+      position: 2,
+    });
+    const cible = await semerUnite({
+      missionId,
+      nom: 'Service factice à déplacer',
+      kind: 'service',
+      parentId: racine,
+      position: 3,
+    });
+    const fonctionId = await idService('logistique_operations');
+    const secteurId = await idSecteur('industrie');
+
+    const reponse = await appeler('PATCH', `/v1/org-units/${cible}`, {
+      jeton: admin.jeton,
+      charge: {
+        name: 'Équipe factice déplacée',
+        kind: 'equipe',
+        parentId: nouveauParent,
+        countryCode: 'pt',
+        timezone: 'Europe/Lisbon',
+        headcount: 12,
+        serviceRefId: fonctionId,
+        sectorId: secteurId,
+        inScope: false,
+        position: 7,
+      },
+    });
+    expect(reponse.statut, `PATCH complet refusé : ${reponse.corps}`).toBe(200);
+
+    const apres = await lireUnite(cible);
+    expect(apres).toMatchObject({
+      name: 'Équipe factice déplacée',
+      kind: 'equipe',
+      parent_id: nouveauParent,
+      country_code: 'PT',
+      timezone: 'Europe/Lisbon',
+      headcount: 12,
+      service_ref_id: fonctionId,
+      sector_id: secteurId,
+      in_scope: false,
+      position: 7,
+      status: 'active',
+    });
+
+    // Invariant 7 : une correction est une révision TRACÉE — une seule entrée pour
+    // un seul geste, quel que soit le nombre de colonnes qu'il a touchées.
+    expect(await compterEntreesJournal(cible), 'un PATCH = une trace').toBe(1);
+  });
+
+  it('@critique `parentId: null` fait d’une fille une RACINE, et le re-parentage sous une tante ne forme pas d’anneau', async () => {
+    // Deux mouvements LÉGITIMES, en miroir des deux refus de la section 5 : le
+    // parcours d'ancêtres doit s'ARRÊTER à la racine (sinon il refuserait tout
+    // rattachement), et `null` doit être compris comme « plus de parent », pas
+    // comme « ne touche pas » (convention `null` efface / absent ne touche pas).
+    const admin = await creerCompte('admin', 'patch-parentage-legitime');
+    const missionId = await semerMission('patch-parentage-legitime', admin.id);
+    const a = await semerUnite({ missionId, nom: 'Aïeule factice', kind: 'groupe', position: 1 });
+    const b = await semerUnite({
+      missionId,
+      nom: 'Mère factice',
+      kind: 'direction',
+      parentId: a,
+      position: 2,
+    });
+    const tante = await semerUnite({
+      missionId,
+      nom: 'Tante factice',
+      kind: 'direction',
+      parentId: a,
+      position: 3,
+    });
+    const c = await semerUnite({
+      missionId,
+      nom: 'Fille factice',
+      kind: 'service',
+      parentId: b,
+      position: 4,
+    });
+
+    const sousLaTante = await appeler('PATCH', `/v1/org-units/${c}`, {
+      jeton: admin.jeton,
+      charge: { parentId: tante },
+    });
+    expect(sousLaTante.statut, `rattachement sous la tante refusé : ${sousLaTante.corps}`).toBe(
+      200,
+    );
+    expect((await lireUnite(c))?.parent_id).toBe(tante);
+
+    const detachee = await appeler('PATCH', `/v1/org-units/${b}`, {
+      jeton: admin.jeton,
+      charge: { parentId: null },
+    });
+    expect(detachee.statut, `détachement en racine refusé : ${detachee.corps}`).toBe(200);
+    expect((await lireUnite(b))?.parent_id, '`null` efface le parent').toBeNull();
+    expect(unite(detachee).parentId).toBeNull();
+  });
+
+  it('un PATCH qui répète les valeurs EXISTANTES ne réécrit rien et ne trace rien', async () => {
+    // « Rien n'est jamais silencieusement écrasé » a un jumeau : rien n'est
+    // jamais FAUSSEMENT modifié. Un PATCH sans changement qui poserait `updated_at`
+    // et une trace au journal ferait croire à une révision qui n'a pas eu lieu.
+    const admin = await creerCompte('admin', 'patch-sans-effet');
+    const missionId = await semerMission('patch-sans-effet', admin.id);
+    const id = await semerUnite({
+      missionId,
+      nom: 'Unité factice immobile',
+      kind: 'service',
+      position: 4,
+    });
+    const horodatageAvant = await horodatageMiseAJour(id);
+
+    const reponse = await appeler('PATCH', `/v1/org-units/${id}`, {
+      jeton: admin.jeton,
+      charge: { name: 'Unité factice immobile', kind: 'service', position: 4, inScope: true },
+    });
+    expect(reponse.statut, `PATCH sans changement refusé : ${reponse.corps}`).toBe(200);
+    expect(unite(reponse).name).toBe('Unité factice immobile');
+    expect(await horodatageMiseAJour(id), '`updated_at` ne bouge pas sans changement').toBe(
+      horodatageAvant,
+    );
+    expect(await compterEntreesJournal(id), 'aucune trace pour un geste sans effet').toBe(0);
+  });
+
+  it('@critique une unité FUSIONNÉE ne se modifie plus : 409, et sa trace de fusion est intacte', async () => {
+    // Une unité `fusionnee` est une TRACE (§25.3, invariant 7). La renommer ou la
+    // re-parenter modifierait ce que la fusion a figé. 409 et non 404 : la
+    // ressource existe, et le dire évite de faire croire à une suppression.
+    const admin = await creerCompte('admin', 'patch-fusionnee');
+    const missionId = await semerMission('patch-fusionnee', admin.id);
+    const cible = await semerUnite({
+      missionId,
+      nom: 'Cible factice',
+      kind: 'service',
+      position: 1,
+    });
+    const source = await semerUnite({
+      missionId,
+      nom: 'Source factice proposée',
+      kind: 'service',
+      status: 'proposee',
+      proposePar: admin.id,
+      position: 2,
+    });
+    const fusion = await appeler('POST', `/v1/org-units/${source}/merge`, {
+      jeton: admin.jeton,
+      charge: chargeFusion(cible, 'doublon constaté sur le terrain'),
+    });
+    expect(fusion.statut, `fusion préalable refusée : ${fusion.corps}`).toBe(200);
+    const photoAvant = await photographierArbre(missionId);
+
+    const tentative = await appeler('PATCH', `/v1/org-units/${source}`, {
+      jeton: admin.jeton,
+      charge: { name: 'Tentative de réécriture d’une trace' },
+    });
+    expect(tentative.statut, `une unité fusionnée ne se modifie plus : ${tentative.corps}`).toBe(
+      409,
+    );
+    expect(tentative.code).toBe('CONFLICT');
+    expect(tentative.corps, 'le refus nomme l’état qui s’oppose à la demande').toContain('fusionn');
+    await attendreArbreInchange(
+      missionId,
+      photoAvant,
+      'le refus ne touche ni la trace ni la cible',
+    );
+  });
+
+  it('@critique un `serviceRefId` ou un `sectorId` HORS RÉFÉRENTIEL est refusé en 400, jamais en 500', async () => {
+    // Le schéma d'entrée ne connaît que la FORME (un UUID). L'existence est
+    // arbitrée par la clé étrangère du 04 — et un échec de contrainte non traduit
+    // remonterait en 500, avec le nom de la contrainte dans le corps. Le refus doit
+    // être un 400 qui nomme le CHAMP fautif, pour que le front puisse le pointer.
+    const admin = await creerCompte('admin', 'patch-referentiel-inconnu');
+    const missionId = await semerMission('patch-referentiel-inconnu', admin.id);
+    const id = await semerUnite({
+      missionId,
+      nom: 'Unité factice à qualifier',
+      kind: 'service',
+      position: 1,
+    });
+    const photoAvant = await photographierArbre(missionId);
+
+    for (const champ of ['serviceRefId', 'sectorId'] as const) {
+      const reponse = await appeler('PATCH', `/v1/org-units/${id}`, {
+        jeton: admin.jeton,
+        charge: { [champ]: uuidv7() },
+      });
+      expect(reponse.statut, `${champ} inconnu : ${reponse.corps}`).toBe(400);
+      expect(reponse.code).toBe('VALIDATION_FAILED');
+      expect(cheminsDesDetails(reponse), `le refus nomme le champ « ${champ} »`).toContain(champ);
+      expect(reponse.corps, 'le nom de la contrainte SQL ne fuit pas').not.toContain('fkey');
+    }
+    await attendreArbreInchange(missionId, photoAvant, 'deux refus de référentiel n’écrivent rien');
+  });
+
+  it('une chaîne de rattachement plus profonde que le plafond de l’arbre est refusée, sans boucler', async () => {
+    // Le parcours d'ancêtres est BORNÉ (`PROFONDEUR_ARBRE_MAX`, `packages/shared`).
+    // Sans borne, un arbre corrompu ferait tourner la console indéfiniment ; avec
+    // elle, un rattachement dont la chaîne dépasse le plafond est REFUSÉ en 400 —
+    // et le refus dit pourquoi. ⚠ E4 promet un arbre « à profondeur libre » : le
+    // plafond est une constante du code, non un chiffre du pack. Remonté comme
+    // doute de spécification dans le rapport A16 ; le test assère le comportement
+    // TEL QU'IL EST, pour qu'un changement de plafond soit un choix et non un hasard.
+    const admin = await creerCompte('admin', 'patch-profondeur');
+    const missionId = await semerMission('patch-profondeur', admin.id);
+    const chaine = await semerChaine(missionId, 66);
+    const racine = chaine[0];
+    const feuille = chaine[chaine.length - 1];
+    if (racine === undefined || feuille === undefined) throw new Error('chaîne vide');
+    const photoAvant = await photographierArbre(missionId);
+
+    const reponse = await appeler('PATCH', `/v1/org-units/${racine}`, {
+      jeton: admin.jeton,
+      charge: { parentId: feuille },
+    });
+    expect(reponse.statut, `chaîne trop profonde : ${reponse.corps}`).toBe(400);
+    expect(reponse.code).toBe('VALIDATION_FAILED');
+    expect(reponse.corps).toContain('niveaux');
+    await attendreArbreInchange(missionId, photoAvant, 'un refus de profondeur ne re-parente rien');
+  });
+});
+
+describe('POST /v1/missions/:id/org-units — parent, rang, identifiant client, référentiel', () => {
+  it('@critique une unité créée SOUS un parent de la mission prend le rang suivant de l’arbre', async () => {
+    // Le cas nominal de §16.2 : l'auditeur ajoute une unité sous une autre. Sans
+    // `position`, elle se place APRÈS l'existant (`max + 1`) — recommencer à 1
+    // ferait cohabiter deux rangs égaux et l'ordre dépendrait de l'`id`.
+    const admin = await creerCompte('admin', 'post-sous-parent');
+    const missionId = await semerMission('post-sous-parent', admin.id);
+    const parent = await semerUnite({
+      missionId,
+      nom: 'Parent factice',
+      kind: 'direction',
+      position: 5,
+    });
+
+    const reponse = await appeler('POST', urlListe(missionId), {
+      jeton: admin.jeton,
+      charge: { name: 'Service factice sous parent', kind: 'service', parentId: parent },
+    });
+    expect(reponse.statut, `création sous parent refusée : ${reponse.corps}`).toBe(201);
+    const creee = unite(reponse);
+    expect(creee.parentId).toBe(parent);
+    const enBase = await lireUnite(creee.id);
+    expect(enBase?.parent_id).toBe(parent);
+    expect(enBase?.position, 'rang = max(position) + 1').toBe(6);
+  });
+
+  it('un `parentId` qui ne désigne AUCUNE unité est refusé en 400, et le refus nomme le champ', async () => {
+    const admin = await creerCompte('admin', 'post-parent-inconnu');
+    const missionId = await semerMission('post-parent-inconnu', admin.id);
+
+    const reponse = await appeler('POST', urlListe(missionId), {
+      jeton: admin.jeton,
+      charge: { name: 'Orpheline factice', kind: 'service', parentId: uuidv7() },
+    });
+    expect(reponse.statut, `parent inexistant : ${reponse.corps}`).toBe(400);
+    expect(reponse.code).toBe('VALIDATION_FAILED');
+    expect(cheminsDesDetails(reponse)).toContain('parentId');
+    expect(await compterUnitesDeLaMission(missionId)).toBe(0);
+  });
+
+  it('@critique un identifiant CLIENT déjà pris rend 409 et n’écrase RIEN (règle P1-4)', async () => {
+    // P1-4 : l'`id` peut venir du client (UUID v7 frappé hors ligne). Deux appareils,
+    // un même identifiant : c'est un CONFLIT, jamais un écrasement — l'upsert
+    // idempotent appartient au chemin de sync (05 §9.2), pas à une route de console.
+    // C'est la contrainte de clé primaire qui arbitre, et elle doit être TRADUITE :
+    // un 500 avec `org_units_pkey` dans le corps serait un défaut.
+    const admin = await creerCompte('admin', 'post-id-client');
+    const missionId = await semerMission('post-id-client', admin.id);
+    const idClient = uuidv7();
+
+    const premiere = await appeler('POST', urlListe(missionId), {
+      jeton: admin.jeton,
+      charge: { id: idClient, name: 'Unité factice du premier appareil', kind: 'service' },
+    });
+    expect(premiere.statut, `création avec id client refusée : ${premiere.corps}`).toBe(201);
+    expect(unite(premiere).id, 'l’identifiant fourni est CONSERVÉ').toBe(idClient);
+    const photoAvant = await photographierArbre(missionId);
+
+    const seconde = await appeler('POST', urlListe(missionId), {
+      jeton: admin.jeton,
+      charge: { id: idClient, name: 'Unité factice du second appareil', kind: 'equipe' },
+    });
+    expect(seconde.statut, `collision d’identifiant : ${seconde.corps}`).toBe(409);
+    expect(seconde.code).toBe('CONFLICT');
+    expect(seconde.corps, 'le nom de la contrainte SQL ne fuit pas').not.toContain('pkey');
+    await attendreArbreInchange(missionId, photoAvant, 'la collision n’a rien écrasé');
+    expect((await lireUnite(idClient))?.name).toBe('Unité factice du premier appareil');
+  });
+
+  it('un `serviceRefId` hors référentiel à la CRÉATION est refusé en 400, et rien n’est créé', async () => {
+    const admin = await creerCompte('admin', 'post-fonction-inconnue');
+    const missionId = await semerMission('post-fonction-inconnue', admin.id);
+
+    const reponse = await appeler('POST', urlListe(missionId), {
+      jeton: admin.jeton,
+      charge: { name: 'Unité factice mal qualifiée', kind: 'service', serviceRefId: uuidv7() },
+    });
+    expect(reponse.statut, `fonction inconnue : ${reponse.corps}`).toBe(400);
+    expect(reponse.code).toBe('VALIDATION_FAILED');
+    expect(cheminsDesDetails(reponse)).toContain('serviceRefId');
+    expect(await compterUnitesDeLaMission(missionId)).toBe(0);
+  });
+
+  it('@critique une mission INCONNUE rend 404 sur la liste, la création et l’import', async () => {
+    // Le refus commun `exigerMission` — un identifiant bien formé qui ne désigne
+    // rien. Trois routes, un seul verdict : 404 `NOT_FOUND`, sans rien écrire.
+    const admin = await creerCompte('admin', 'mission-inconnue');
+    const fantome = uuidv7();
+    const totalAvant = await compterToutesLesUnites();
+
+    const liste = await appeler('GET', urlListe(fantome), { jeton: admin.jeton });
+    const creation = await appeler('POST', urlListe(fantome), {
+      jeton: admin.jeton,
+      charge: { name: 'Unité factice sans mission', kind: 'service' },
+    });
+    const importation = await importer(
+      fantome,
+      fichierCsv([{ ref: 'xa', name: 'Racine factice sans mission', kind: 'groupe' }]),
+      { jeton: admin.jeton },
+    );
+
+    for (const reponse of [liste, creation, importation]) {
+      expect(reponse.statut, `mission inconnue : ${reponse.corps}`).toBe(404);
+      expect(reponse.code).toBe('NOT_FOUND');
+    }
+    expect(await compterToutesLesUnites(), 'rien n’a été écrit nulle part').toBe(totalAvant);
+  });
+});
+
+describe('§25.3 — les refus de `validate` et `merge` que la matrice principale ne montre pas', () => {
+  it('`validate` d’un identifiant inconnu rend 404 ; d’une unité FUSIONNÉE rend 409 et le dit', async () => {
+    const admin = await creerCompte('admin', 'validate-refus');
+    const missionId = await semerMission('validate-refus', admin.id);
+    const cible = await semerUnite({
+      missionId,
+      nom: 'Cible factice',
+      kind: 'service',
+      position: 1,
+    });
+    const fusionnee = await semerUnite({
+      missionId,
+      nom: 'Source factice fusionnée',
+      kind: 'service',
+      status: 'proposee',
+      proposePar: admin.id,
+      position: 2,
+    });
+    const fusion = await appeler('POST', `/v1/org-units/${fusionnee}/merge`, {
+      jeton: admin.jeton,
+      charge: chargeFusion(cible, 'doublon'),
+    });
+    expect(fusion.statut, `fusion préalable refusée : ${fusion.corps}`).toBe(200);
+
+    // `charge: {}` comme partout ailleurs dans ce fichier : un POST SANS corps est
+    // refusé en 400 « objet attendu, null reçu » alors que
+    // `validateOrgUnitRequestSchema` se dit « facultatif » — écart REMONTÉ au
+    // rapport A16, non contourné ici (le test vise le 404, pas le corps vide).
+    const inconnue = await appeler('POST', `/v1/org-units/${uuidv7()}/validate`, {
+      jeton: admin.jeton,
+      charge: {},
+    });
+    expect(inconnue.statut, `validate d’un id inconnu : ${inconnue.corps}`).toBe(404);
+    expect(inconnue.code).toBe('NOT_FOUND');
+
+    const surFusionnee = await appeler('POST', `/v1/org-units/${fusionnee}/validate`, {
+      jeton: admin.jeton,
+      charge: {},
+    });
+    expect(surFusionnee.statut, `valider une trace de fusion : ${surFusionnee.corps}`).toBe(409);
+    expect(surFusionnee.code).toBe('CONFLICT');
+    expect(surFusionnee.corps, 'le message distingue « fusionnée » de « déjà active »').toContain(
+      'fusionn',
+    );
+    const apres = await lireUnite(fusionnee);
+    expect(apres?.status).toBe('fusionnee');
+    expect(apres?.merged_into_id).toBe(cible);
+  });
+
+  it('`merge` d’une source inconnue rend 404 ; vers une cible INEXISTANTE rend 400 et nomme `mergedIntoId`', async () => {
+    const admin = await creerCompte('admin', 'merge-refus');
+    const missionId = await semerMission('merge-refus', admin.id);
+    const proposee = await semerUnite({
+      missionId,
+      nom: 'Proposition factice',
+      kind: 'service',
+      status: 'proposee',
+      proposePar: admin.id,
+      position: 1,
+    });
+    const photoAvant = await photographierArbre(missionId);
+
+    const sourceInconnue = await appeler('POST', `/v1/org-units/${uuidv7()}/merge`, {
+      jeton: admin.jeton,
+      charge: chargeFusion(proposee, 'source fantôme'),
+    });
+    expect(sourceInconnue.statut).toBe(404);
+    expect(sourceInconnue.code).toBe('NOT_FOUND');
+
+    const cibleInconnue = await appeler('POST', `/v1/org-units/${proposee}/merge`, {
+      jeton: admin.jeton,
+      charge: chargeFusion(uuidv7(), 'cible fantôme'),
+    });
+    expect(cibleInconnue.statut, `cible inexistante : ${cibleInconnue.corps}`).toBe(400);
+    expect(cibleInconnue.code).toBe('VALIDATION_FAILED');
+    expect(cheminsDesDetails(cibleInconnue)).toContain('mergedIntoId');
+    await attendreArbreInchange(missionId, photoAvant, 'deux fusions refusées n’écrivent rien');
+  });
+
+  it('@critique `merge` RE-PARENTE les filles de la source sous la cible, et le dit dans sa réponse', async () => {
+    // La moitié de la fusion que le cas des entretiens ne montre pas : une unité
+    // proposée peut déjà porter des filles (proposées elles aussi, ou créées en
+    // console). Les laisser sous une unité `fusionnee` les sortirait de l'arbre
+    // actif SANS les fusionner — exactement l'oubli silencieux que l'invariant 7
+    // interdit. Elles passent donc sous la cible, et `enfantsReattaches` les compte.
+    const admin = await creerCompte('admin', 'merge-enfants');
+    const missionId = await semerMission('merge-enfants', admin.id);
+    const cible = await semerUnite({
+      missionId,
+      nom: 'Cible factice active',
+      kind: 'direction',
+      position: 1,
+    });
+    const source = await semerUnite({
+      missionId,
+      nom: 'Source factice proposée avec filles',
+      kind: 'direction',
+      status: 'proposee',
+      proposePar: admin.id,
+      position: 2,
+    });
+    const filleA = await semerUnite({
+      missionId,
+      nom: 'Fille factice A',
+      kind: 'service',
+      parentId: source,
+      position: 3,
+    });
+    const filleB = await semerUnite({
+      missionId,
+      nom: 'Fille factice B',
+      kind: 'equipe',
+      parentId: source,
+      position: 4,
+    });
+    const cousine = await semerUnite({
+      missionId,
+      nom: 'Cousine factice',
+      kind: 'service',
+      parentId: cible,
+      position: 5,
+    });
+
+    const reponse = await appeler('POST', `/v1/org-units/${source}/merge`, {
+      jeton: admin.jeton,
+      charge: chargeFusion(cible, 'doublon avec filles'),
+    });
+    expect(reponse.statut, `fusion refusée : ${reponse.corps}`).toBe(200);
+    const corps = z
+      .looseObject({ enfantsReattaches: z.number().int(), entretiensReattaches: z.number().int() })
+      .parse(analyserJson(reponse.corps));
+    expect(corps.enfantsReattaches, 'les DEUX filles sont comptées').toBe(2);
+    expect(corps.entretiensReattaches).toBe(0);
+
+    expect((await lireUnite(filleA))?.parent_id).toBe(cible);
+    expect((await lireUnite(filleB))?.parent_id).toBe(cible);
+    expect((await lireUnite(cousine))?.parent_id, 'la fille de la cible ne bouge pas').toBe(cible);
+    expect((await lireUnite(source))?.status).toBe('fusionnee');
+    const orphelines = (await lireUnites(missionId)).filter((ligne) => ligne.parent_id === source);
+    expect(orphelines, 'plus AUCUNE unité sous la trace de fusion').toHaveLength(0);
+  });
+});
+
+describe('GET /v1/missions/:id/org-units — le curseur posé SUR une unité sans rang', () => {
+  it('@critique une frontière de page tombant sur une unité de `position` NULLE reprend au bon endroit', async () => {
+    // Le curseur encode le RANG DE TRI (`coalesce(position, fin de liste)`), pas la
+    // colonne nue : une composante nulle rendrait la comparaison de n-uplets
+    // indécidable, et la page suivante repartirait du début ou sauterait la fin.
+    // La section 6 éprouve une unité nulle QUELQUE PART ; ce cas-ci la place
+    // EXACTEMENT en fin de page, là où le curseur doit être construit sur elle.
+    const admin = await creerCompte('admin', 'curseur-rang-nul');
+    const missionId = await semerMission('curseur-rang-nul', admin.id);
+    const rangee = await semerUnite({
+      missionId,
+      nom: 'Unité factice rangée',
+      kind: 'service',
+      position: 1,
+    });
+    const sansRangA = await semerUnite({
+      missionId,
+      nom: 'Unité factice sans rang A',
+      kind: 'service',
+      position: null,
+    });
+    const sansRangB = await semerUnite({
+      missionId,
+      nom: 'Unité factice sans rang B',
+      kind: 'service',
+      position: null,
+    });
+
+    const premierePage = await appeler('GET', `${urlListe(missionId)}?limit=2`, {
+      jeton: admin.jeton,
+    });
+    expect(premierePage.statut, premierePage.corps).toBe(200);
+    const lue = page(premierePage);
+    expect(lue.items.map((item) => item.id)[0], 'l’unité rangée passe avant les sans-rang').toBe(
+      rangee,
+    );
+    expect(
+      lue.items,
+      'la page est pleine : la frontière tombe sur une unité sans rang',
+    ).toHaveLength(2);
+    expect(lue.nextCursor, 'un curseur est rendu SUR l’unité sans rang').not.toBeNull();
+
+    const identifiants = await tousLesIdentifiants(missionId, admin.jeton, 2);
+    expect(identifiants, 'aucune unité sautée ni servie deux fois').toHaveLength(3);
+    expect(new Set(identifiants)).toStrictEqual(new Set([rangee, sansRangA, sansRangB]));
+  });
+});
+
+describe('POST /v1/missions/:id/org-units/import — l’état nominal, les défauts sans colonne, l’écrêtage', () => {
+  it('@critique l’import atterrit sur une mission qui a DÉJÀ sa racine d’office, et la laisse en place', async () => {
+    // L'état nominal du produit (§16.2) : une mission créée par la route porte sa
+    // racine d'office. « Arbre habité » ne peut donc pas signifier « une unité ou
+    // plus », sinon aucun import ne serait jamais possible — et il ne peut pas non
+    // plus signifier « rien » : la racine d'office est la SEULE unité tolérée.
+    const admin = await creerCompte('admin', 'import-racine-office');
+    const { missionId, uniteRacineId } = await creerMissionParLaRoute(
+      admin.jeton,
+      'import-racine-office',
+    );
+    const lignes: readonly LigneCsv[] = [
+      { ref: 'ra', name: 'Racine factice du fichier', kind: 'groupe' },
+      { ref: 'rb', name: 'Service factice du fichier', kind: 'service', parent_ref: 'ra' },
+    ];
+
+    const aBlanc = await importer(missionId, fichierCsv(lignes), {
+      jeton: admin.jeton,
+      aBlanc: true,
+    });
+    expect(aBlanc.statut, `passage à blanc : ${aBlanc.corps}`).toBe(200);
+    const rapport = z
+      .looseObject({ importReelRefuse: z.unknown().nullable() })
+      .parse(analyserJson(aBlanc.corps));
+    expect(
+      rapport.importReelRefuse,
+      'la racine d’office seule ne s’oppose pas à l’import',
+    ).toBeNull();
+
+    const reel = await importer(missionId, fichierCsv(lignes), { jeton: admin.jeton });
+    expect(reel.statut, `import réel : ${reel.corps}`).toBe(200);
+    expect(await compterUnitesDeLaMission(missionId)).toBe(1 + lignes.length);
+    const racineOffice = await lireUnite(uniteRacineId);
+    expect(racineOffice?.parent_id, 'la racine d’office reste une racine').toBeNull();
+    expect(racineOffice?.status).toBe('active');
+  });
+
+  it('@critique un défaut qui concerne la LIGNE ENTIÈRE (en-tête inconnu, fichier sans données) est rapporté sans colonne', async () => {
+    // Arbitrage `[transverse]` du 2026-09-01 : `path` porte « ligne » ou
+    // « ligne.colonne ». Un défaut d'en-tête n'a pas de colonne — le rapport le dit
+    // en n'en inventant pas une. Deux fichiers : une colonne inconnue dans
+    // l'en-tête, et un en-tête sans la moindre ligne d'unité.
+    const admin = await creerCompte('admin', 'import-sans-colonne');
+    const missionId = await semerMission('import-sans-colonne', admin.id);
+
+    const enTeteInconnu = `${COLONNES_35_2.join(';')};budget\r\nxa;Racine factice;groupe;;;;;;;\r\n`;
+    const refusEnTete = await importer(missionId, enTeteInconnu, { jeton: admin.jeton });
+    expect(refusEnTete.statut, `en-tête inconnu : ${refusEnTete.corps}`).toBe(422);
+    expect(refusEnTete.code).toBe('IMPORT_REJECTED');
+    const detailsEnTete = erreurSchema.parse(analyserJson(refusEnTete.corps)).error.details ?? [];
+    expect(detailsEnTete.length).toBeGreaterThanOrEqual(1);
+    expect(
+      detailsEnTete.map((detail) => detail.path),
+      'l’en-tête est la ligne 1, et le défaut n’a PAS de colonne : `path` = « 1 »',
+    ).toContain('1');
+    expect(detailsEnTete.some((detail) => detail.code === 'ENTETE_INCONNU')).toBe(true);
+    expect(refusEnTete.corps).toContain('budget');
+
+    const refusVide = await importer(missionId, fichierCsv([]), { jeton: admin.jeton });
+    expect(refusVide.statut, `fichier sans données : ${refusVide.corps}`).toBe(422);
+    const detailsVide = erreurSchema.parse(analyserJson(refusVide.corps)).error.details ?? [];
+    expect(detailsVide.map((detail) => detail.path)).toContain('1');
+    expect(detailsVide.map((detail) => detail.code)).toContain('FICHIER_VIDE');
+
+    expect(await compterUnitesDeLaMission(missionId), 'deux refus, zéro unité').toBe(0);
+  });
+
+  it('@critique un fichier à PLUS DE 500 défauts est ÉCRÊTÉ dans le rapport, et le total réel reste annoncé', async () => {
+    // Un rapport de 12 000 lignes ne sert à personne ; mais un rapport écrêté qui
+    // TAIRAIT l'écrêtage ferait croire à 500 défauts quand il y en a 520 — et
+    // l'utilisateur corrigerait 500 lignes pour se faire refuser à nouveau. Les deux
+    // modes (réel et à blanc) doivent dire le total VRAI.
+    const PLAFOND_RAPPORT = 500;
+    const NB_DEFAUTS = 520;
+    const admin = await creerCompte('admin', 'import-ecretage');
+    const missionId = await semerMission('import-ecretage', admin.id);
+    const lignes: LigneCsv[] = [{ ref: 'ea', name: 'Racine factice', kind: 'groupe' }];
+    for (let index = 0; index < NB_DEFAUTS; index += 1) {
+      lignes.push({
+        ref: `e${String(index)}`,
+        name: `Unité factice ${String(index)}`,
+        kind: 'departement',
+        parent_ref: 'ea',
+      });
+    }
+    const contenu = fichierCsv(lignes);
+
+    const reel = await importer(missionId, contenu, { jeton: admin.jeton });
+    expect(reel.statut, `import de 520 défauts : ${reel.corps.slice(0, 300)}`).toBe(422);
+    expect(reel.code).toBe('IMPORT_REJECTED');
+    const enveloppe = erreurSchema.parse(analyserJson(reel.corps)).error;
+    expect(enveloppe.details, 'le rapport est écrêté au plafond').toHaveLength(PLAFOND_RAPPORT);
+    expect(mentionneNombre(enveloppe.message, NB_DEFAUTS), 'le message annonce le total RÉEL').toBe(
+      true,
+    );
+    expect(await compterUnitesDeLaMission(missionId), 'rien n’est écrit').toBe(0);
+
+    const aBlanc = await importer(missionId, contenu, { jeton: admin.jeton, aBlanc: true });
+    expect(aBlanc.statut, `passage à blanc : ${aBlanc.corps.slice(0, 300)}`).toBe(200);
+    const rapport = z
+      .looseObject({
+        erreurs: z.array(z.unknown()),
+        totalErreurs: z.number().int(),
+        erreursTronquees: z.boolean(),
+        applique: z.boolean(),
+      })
+      .parse(analyserJson(aBlanc.corps));
+    expect(rapport.erreurs).toHaveLength(PLAFOND_RAPPORT);
+    expect(rapport.totalErreurs).toBe(NB_DEFAUTS);
+    expect(rapport.erreursTronquees).toBe(true);
+    expect(rapport.applique).toBe(false);
+  });
+});
+
+describe('PATCH /v1/org-units/:id — un rang que le modèle de données ne peut pas stocker', () => {
+  it('un `position` au-delà de l’entier PostgreSQL est refusé en 400, jamais remonté en 500', async () => {
+    // 04 : `position INTEGER` (32 bits signés). 11 §3 : « chaque route déclare son
+    // schéma Zod » et « statut HTTP cohérent ». Une valeur que le CONTRAT accepte
+    // (`z.number().int().min(1)`, sans plafond) mais que le MODÈLE refuse
+    // (`numeric_value_out_of_range`) est une entrée invalide — un 500 du pilote
+    // serait un défaut de contrat, pas une panne. Ce cas exerce aussi le chemin
+    // « erreur de base SANS contrainte nommée » du traducteur d'échecs du dépôt.
+    const admin = await creerCompte('admin', 'patch-rang-hors-entier');
+    const missionId = await semerMission('patch-rang-hors-entier', admin.id);
+    const id = await semerUnite({
+      missionId,
+      nom: 'Unité factice rangée',
+      kind: 'service',
+      position: 1,
+    });
+    const photoAvant = await photographierArbre(missionId);
+
+    const reponse = await appeler('PATCH', `/v1/org-units/${id}`, {
+      jeton: admin.jeton,
+      charge: { position: 2_147_483_648 },
+    });
+    expect(
+      reponse.statut,
+      'Un rang hors de l’entier 32 bits du 04 est une entrée INVALIDE (400), pas une\n' +
+        `panne du serveur (500). Réponse : ${reponse.corps}`,
+    ).toBe(400);
+    expect(reponse.code).toBe('VALIDATION_FAILED');
+    await attendreArbreInchange(missionId, photoAvant, 'un rang refusé ne réécrit rien');
   });
 });

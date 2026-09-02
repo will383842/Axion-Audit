@@ -875,6 +875,49 @@ afterAll(async () => {
 });
 
 // =============================================================================
+// 0. LA BANQUE VIDE — AVANT TOUT SEMIS, ET C'EST POURQUOI CE BLOC EST PREMIER
+// =============================================================================
+// `questions` est une table GLOBALE : dès qu'un cas ci-dessous y sème une ligne,
+// plus aucun test de ce fichier ne peut observer une banque vide (aucun cas ne
+// supprime — le produit ne supprime jamais, et un test qui vide une table
+// partagée invaliderait tous ses voisins). Le seed exécuté en `beforeAll` pose les
+// paliers et les fonctions, jamais une question. Ce bloc est donc PREMIER, et il
+// commence par PROUVER la précondition : déplacé plus bas, il rougit sur elle
+// avant de rougir sur le sujet — un ordre, ici, est une hypothèse écrite.
+describe('POST generate-questionnaire — sur une banque VIDE', () => {
+  it('@critique aucune question exploitable : 409, la cause `banque_sans_question`, aucun filtre accusé', async () => {
+    // Le refus « sélection vide » nomme d'ordinaire LE FILTRE qui a vidé
+    // l'ensemble (c'est l'information actionnable). Quand la banque est vide, AUCUN
+    // filtre n'est responsable : accuser « bloc actif » enverrait l'administrateur
+    // corriger un cadrage qui n'a rien à se reprocher. Le message doit dire que la
+    // banque ne contient rien, et le `code` machine doit permettre au front de
+    // proposer l'IMPORT de la banque (L4) plutôt qu'un changement de cadrage.
+    expect(
+      await compterBanque(),
+      'PRÉCONDITION : ce bloc doit s’exécuter AVANT tout semis de question. S’il\n' +
+        'rougit ici, il a été déplacé — remettez-le en tête du fichier.',
+    ).toBe(0);
+
+    const admin = await creerCompte('admin', 'banque-vide');
+    const bloc = await semerBloc(1);
+    const mission = await semerMission({ createur: admin.id, blocsActifs: [bloc.code] });
+
+    const refus = await figer(mission.id, admin.jeton);
+    expect(refus.statut, `Attendu 409. Reçu : ${refus.corps.slice(0, 400)}`).toBe(409);
+    expect(refus.code).toBe(ERROR_CODES.CONFLICT);
+    const details = erreurSchema.parse(JSON.parse(refus.corps)).error.details ?? [];
+    expect(
+      details.map((detail) => detail.code),
+      'la cause machine est « banque_sans_question », pas le nom d’un filtre',
+    ).toContain('banque_sans_question');
+    expect(refus.message, 'le message nomme la banque, pas un réglage de cadrage').toMatch(
+      /banque/i,
+    );
+    expect(await compterFigees(mission.id), 'un refus n’écrit rien').toBe(0);
+  });
+});
+
+// =============================================================================
 // 1. L'ASSEMBLEUR M2 — UN CAS PAR FILTRE, REFUS COMPRIS
 // =============================================================================
 // 03 M2-1 : « Sélection = questions ACTIVES dont les étiquettes matchent (palier
@@ -2776,5 +2819,98 @@ describe('conventions d’API sur les deux routes du questionnaire', () => {
         'mission ne s’applique QU’À L’AFFICHAGE (11 §3, invariant 5) : une date décalée\n' +
         'côté API se propage silencieusement dans tout ce qui la compare.',
     ).toStrictEqual([]);
+  });
+});
+
+// =============================================================================
+// 9. LES BRANCHES QUE LA MESURE A DÉNONCÉES — palier NUL, figeage SANS trace
+// =============================================================================
+// `.github/coverage-critical-paths.json` (2026-09-02) place ce module sous le
+// seuil de 90 % sur les quatre métriques ; mesuré avant cette section : 96,8
+// lignes / 96,8 instructions / 100 fonctions / 86,7 branches. Les deux cas
+// ci-dessous exercent les deux branches du DÉPÔT et du SERVICE qu'aucun test
+// n'atteignait — et chacun assère un comportement.
+
+/** Sème une ligne figée PAR SQL, sans aucune trace au journal — l'état « figé, mais sans date ». */
+async function semerFigeeSansTrace(missionId: string, questionId: string): Promise<void> {
+  await bd().query(
+    `INSERT INTO mission_questions (id, mission_id, question_id, question_version,
+                                    text_snapshot, position, added_ad_hoc)
+     VALUES ($1, $2, $3, 1, $4, 1, false)`,
+    [uuidv7(), missionId, questionId, 'Question factice figée sans trace — libellé neutre.'],
+  );
+}
+
+describe('mission SANS palier d’effectif — le dépôt ne résout rien, l’assembleur avertit', () => {
+  it('@critique `size_tier_id` NUL : le filtre de palier n’est pas appliqué, PALIER_ABSENT est rendu, et le figeage aboutit', async () => {
+    // 04 : `missions.size_tier_id` est NULLABLE — une mission en avant-vente n'a
+    // pas toujours son palier. Arbitrage `[L3d]` du 2026-09-02 : palier absent ⇒
+    // filtre NON appliqué (jamais « rien ne passe »), avec un avertissement.
+    // La preuve est prise sur une question réservée aux GRANDS effectifs : avec le
+    // palier PME elle serait exclue ; sans palier, elle entre.
+    const admin = await creerCompte('admin', 'palier-nul');
+    const bloc = await semerBloc(910);
+    const mission = await semerMission({
+      createur: admin.id,
+      blocsActifs: [bloc.code],
+      palier: null,
+    });
+    await semerQuestion({ blocId: bloc.id, code: 'L3D-PN-UNIVERSELLE' });
+    await semerQuestion({
+      blocId: bloc.id,
+      code: 'L3D-PN-GRANDS-EFFECTIFS',
+      effectifMin: 5001,
+      effectifMax: null,
+    });
+
+    const reponse = await appeler('GET', urlPrevisualisation(mission.id), { jeton: admin.jeton });
+    const apercu = previsualisation(reponse);
+    expect(apercu.total, 'sans palier, la question des grands effectifs entre aussi').toBe(2);
+    const avertissements = tableauDe(reponse.corps, 'avertissements') ?? [];
+    const codes = avertissements.map(
+      (a) => z.looseObject({ code: z.string() }).safeParse(a).data?.code ?? '',
+    );
+    expect(codes, 'l’absence de palier est DITE, jamais tue').toContain('PALIER_ABSENT');
+
+    const total = await figerEtExiger201(mission.id, admin.jeton);
+    expect(total).toBe(2);
+    expect((await lireFigees(mission.id)).map((l) => l.code).sort()).toEqual([
+      'L3D-PN-GRANDS-EFFECTIFS',
+      'L3D-PN-UNIVERSELLE',
+    ]);
+  });
+});
+
+describe('POST generate-questionnaire — déjà figé, mais SANS trace de figeage au journal', () => {
+  it('@critique le refus porte le compte et DIT que la date est inconnue du journal, au lieu d’en inventer une', async () => {
+    // `DECISIONS.md` 2026-09-01 : la date du figeage se lit dans `activity_log`,
+    // faute de colonne au 04. Une mission figée AVANT que cette trace n'existe
+    // (reprise de données, seed de démonstration, restauration partielle) a des
+    // lignes et pas de date. Le refus doit rester un 409 `QUESTIONNAIRE_ALREADY_FROZEN`
+    // avec le COMPTE — et dire que la date manque plutôt que d'afficher `now()`,
+    // l'epoch, ou une date d'une autre entité. Une date fausse est pire qu'absente.
+    const admin = await creerCompte('admin', 'fige-sans-trace');
+    const bloc = await semerBloc(920);
+    const mission = await semerMission({ createur: admin.id, blocsActifs: [bloc.code] });
+    const questionId = await semerQuestion({ blocId: bloc.id, code: 'L3D-ST-01' });
+    await semerFigeeSansTrace(mission.id, questionId);
+    expect(
+      await dernierJournal(mission.id),
+      'précondition : aucune trace pour cette mission',
+    ).toBeNull();
+
+    const refus = await figer(mission.id, admin.jeton);
+    expect(refus.statut, `Attendu 409. Reçu : ${refus.corps.slice(0, 400)}`).toBe(409);
+    expect(refus.code).toBe(CODE_DEJA_FIGE);
+    expect(/(^|\D)1(\D|$)/.test(refus.message ?? ''), 'le COMPTE (une question) est porté').toBe(
+      true,
+    );
+    expect(
+      refus.message,
+      'la date n’est pas connue : le message le DIT, et ne porte aucune date fabriquée',
+    ).toMatch(/journal/i);
+    expect(refus.message?.match(/\d{4}-\d{2}-\d{2}/g) ?? [], 'aucune date inventée').toEqual([]);
+    expect(await compterFigees(mission.id), 'le refus n’écrit rien').toBe(1);
+    expect(await dernierJournal(mission.id), 'et ne trace rien non plus').toBeNull();
   });
 });

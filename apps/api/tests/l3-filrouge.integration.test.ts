@@ -1,4 +1,7 @@
 // =============================================================================
+// Écrit par A16 (testeur d intégration), qui n a écrit aucune des routes qu il traverse —
+// 09 §5.6. Un fil rouge transverse n est le test d aucun producteur en particulier ;
+// la convention du dépôt vaut quand même partout.
 // FIL ROUGE CUMULATIF — LOT L3 (09 §4bis, 07 §12 et §13)
 //
 // « Un test @filrouge rejoue à CHAQUE merge le parcours de bout en bout

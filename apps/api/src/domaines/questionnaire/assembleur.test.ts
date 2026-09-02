@@ -803,3 +803,127 @@ describe('assembleur M2 — capture vs routage, sans confusion', () => {
     expect(sortie.questions[0]?.capture.textSnapshot).toBe('Texte v3');
   });
 });
+
+// -----------------------------------------------------------------------------
+// LES BRANCHES QUE LA MESURE A DÉNONCÉES (2026-09-02) — étiquettes de MISSION
+// illisibles, palier ouvert à GAUCHE, blocs SANS position, question SANS code
+// -----------------------------------------------------------------------------
+// `.github/coverage-critical-paths.json` place ce module sous le seuil de 90 % sur
+// les quatre métriques ; mesuré avant cette section : 86,7 % de branches. Chaque
+// cas exerce une branche que le rapport v8 donnait à zéro, et assère un
+// comportement — jamais un simple passage.
+
+describe('assembleur M2 — les étiquettes de la MISSION elle-même, quand elles sont illisibles', () => {
+  it('`activeBlocks` qui n’est pas une liste ⇒ aucune restriction, et un avertissement qui NOMME « active_blocks »', () => {
+    // Un JSONB corrompu (`"socle"` au lieu de `["socle"]`) ne doit ni restreindre en
+    // silence (la mission perdrait ses blocs sans le voir), ni passer en silence
+    // (l'administrateur croirait sa restriction appliquée). Il est ignoré ET signalé.
+    const sortie = assembler(entree({ mission: mission({ activeBlocks: 'socle' }) }));
+    expect(etape(sortie, 'bloc_actif').avant).toBe(etape(sortie, 'bloc_actif').apres);
+    const avertissements = sortie.avertissements.filter(
+      (a) => a.code === AVERTISSEMENTS_ASSEMBLAGE.ETIQUETTE_ILLISIBLE,
+    );
+    expect(avertissements).toHaveLength(1);
+    expect(avertissements[0]?.message).toContain('active_blocks');
+  });
+
+  it('`activeSectors` qui n’est pas une liste ⇒ aucune restriction de secteur, avertissement nommant « active_sectors »', () => {
+    const sortie = assembler(
+      entree({ mission: mission({ activeSectors: { code: 'hotellerie' } }) }),
+    );
+    expect(etape(sortie, 'secteur').avant).toBe(etape(sortie, 'secteur').apres);
+    const messages = sortie.avertissements
+      .filter((a) => a.code === AVERTISSEMENTS_ASSEMBLAGE.ETIQUETTE_ILLISIBLE)
+      .map((a) => a.message);
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toContain('active_sectors');
+  });
+
+  it('`activeBlocks` ABSENT (`undefined`) vaut « aucune restriction », sans avertissement', () => {
+    // `null`, absent ou `[]` : les trois sont la convention du pack (`[]` =
+    // universelle) — et aucun des trois n'est une corruption.
+    const sortie = assembler(entree({ mission: mission({ activeBlocks: undefined }) }));
+    expect(etape(sortie, 'bloc_actif').avant).toBe(etape(sortie, 'bloc_actif').apres);
+    expect(codesAvertissements(sortie)).not.toContain(
+      AVERTISSEMENTS_ASSEMBLAGE.ETIQUETTE_ILLISIBLE,
+    );
+  });
+
+  it('une liste MÊLÉE (nombre, code vide, code valide) : seul le code valide restreint, et l’avertissement est posé', () => {
+    // `[42, '  ', 'socle']` : le nombre et la chaîne vide sont ILLISIBLES et ignorés ;
+    // `socle` est un code lisible, donc la restriction s'applique à lui SEUL. Une
+    // implémentation qui abandonnerait toute la liste au premier élément illisible
+    // laisserait passer les cinq blocs — le compte du bloc actif la trahit.
+    const sortie = assembler(entree({ mission: mission({ activeBlocks: [42, '  ', 'socle'] }) }));
+    expect(codesAvertissements(sortie)).toContain(AVERTISSEMENTS_ASSEMBLAGE.ETIQUETTE_ILLISIBLE);
+    expect(sortie.parBloc.map((b) => b.blocCode)).toEqual(['socle']);
+    expect(etape(sortie, 'bloc_actif').apres).toBeLessThan(etape(sortie, 'bloc_actif').avant);
+  });
+
+  it('une question SANS code dont une étiquette est illisible est nommée par son IDENTIFIANT', () => {
+    // `code` est NULL au 04 pour une question non versée : le message doit quand
+    // même désigner la ligne fautive, et l'identifiant est le seul nom qui reste.
+    const q = dansBloc(B_SOCLE, { ...question(71, null, { levels: 'operationnel' }), id: id(971) });
+    const sortie = assembler(entree({ questions: [q] }));
+    expect(sortie.total, 'une étiquette illisible ne restreint pas').toBe(1);
+    const message = sortie.avertissements.find(
+      (a) => a.code === AVERTISSEMENTS_ASSEMBLAGE.ETIQUETTE_ILLISIBLE,
+    )?.message;
+    expect(message).toContain(id(971));
+  });
+});
+
+describe('assembleur M2 — palier ouvert à GAUCHE et blocs sans position', () => {
+  it('un palier sans borne basse ([null, 5]) retient une question qui commence sous 5, et exclut celle qui commence à 6', () => {
+    // La borne NULL est OUVERTE des deux côtés du recouvrement — pas seulement à
+    // droite (grand compte). Un palier « jusqu'à 5 personnes » sans plancher
+    // recouvre [3, 100] (3 ≤ 5) et ne recouvre pas [6, ∞[ (6 > 5).
+    const PALIER_SANS_PLANCHER: LignePalierAssemblage = {
+      code: 'micro',
+      headcountMin: null,
+      headcountMax: 5,
+    };
+    const retenue = dansBloc(
+      B_SOCLE,
+      question(72, 'Q_DES_TROIS', { headcountMin: 3, headcountMax: 100 }),
+    );
+    const exclue = dansBloc(
+      B_SOCLE,
+      question(73, 'Q_DES_SIX', { headcountMin: 6, headcountMax: null }),
+    );
+    const sortie = assembler(
+      entree({ palier: PALIER_SANS_PLANCHER, questions: [retenue, exclue] }),
+    );
+    expect(codesRetenus(sortie)).toEqual(['Q_DES_TROIS']);
+    expect(etape(sortie, 'palier')).toEqual({ filtre: 'palier', avant: 2, apres: 1 });
+  });
+
+  it('deux blocs SANS position sont départagés par leur code, et passent tous deux après un bloc positionné', () => {
+    // Attrape : un tri qui traiterait `null` comme 0 (les deux blocs sans position
+    // passeraient EN TÊTE), ou qui laisserait deux `null` à égalité (l'ordre
+    // dépendrait alors de l'ordre d'arrivée, ce que le déterminisme interdit).
+    const B_SANS_A: LigneBlocBanque = { id: id(81), code: 'zeta', position: null };
+    const B_SANS_B: LigneBlocBanque = { id: id(82), code: 'alpha', position: null };
+    const questions: readonly QuestionDeBanque[] = [
+      dansBloc(B_SANS_A, question(81, 'Z01')),
+      dansBloc(B_SANS_B, question(82, 'A01')),
+      dansBloc(B_SOCLE, question(83, 'S01')),
+      dansBloc(B_SANS_A, question(84, 'Z00')),
+    ];
+    const sortie = assembler(
+      entree({ mission: mission({ activeBlocks: [] }), palier: null, questions }),
+    );
+    expect(sortie.parBloc.map((b) => b.blocCode)).toEqual(['socle', 'alpha', 'zeta']);
+    expect(codesRetenus(sortie)).toEqual(['S01', 'A01', 'Z00', 'Z01']);
+
+    // Et dans l'ordre INVERSE d'arrivée : le résultat ne change pas.
+    const renversee = assembler(
+      entree({
+        mission: mission({ activeBlocks: [] }),
+        palier: null,
+        questions: [...questions].reverse(),
+      }),
+    );
+    expect(codesRetenus(renversee)).toEqual(['S01', 'A01', 'Z00', 'Z01']);
+  });
+});

@@ -34,6 +34,7 @@
 import { and, eq, isNull, ne, sql, type SQL } from 'drizzle-orm';
 import {
   AppError,
+  ENTIER_POSTGRES_MAX,
   type PaginationQuery,
   type StatutUniteOrg,
   type TypeUniteOrg,
@@ -122,11 +123,16 @@ const COLONNES_UNITE = {
  * sans position se range en queue d'arbre, et elle y apparaît **exactement une
  * fois** — ni zéro (elle sortirait de l'arbre sans un mot), ni deux.
  *
- * ⚠ Une unité qui porterait RÉELLEMENT `2147483647` partagerait ce rang avec les
- * unités sans position. Ce n'est pas un défaut : l'`id`, seconde composante du
+ * ⚠ Une unité qui porterait RÉELLEMENT cette valeur partagerait ce rang avec les
+ * unités sans position — c'est la borne HAUTE que `positionSchema` autorise, donc
+ * le cas est atteignable. Ce n'est pas un défaut : l'`id`, seconde composante du
  * curseur, départage, et l'ordre reste total. Aucune ligne n'est perdue ni répétée.
+ *
+ * La valeur vient d'`ENTIER_POSTGRES_MAX` (`packages/shared`) et n'est PAS recopiée :
+ * c'est la même borne qui plafonne `position` à l'entrée et qui range les nuls en
+ * fin de liste, et deux écritures de ce nombre finiraient par diverger.
  */
-const RANG_FIN_DE_LISTE = 2_147_483_647;
+const RANG_FIN_DE_LISTE = ENTIER_POSTGRES_MAX;
 
 /**
  * Le rang réellement trié et comparé — voir `RANG_FIN_DE_LISTE`.
@@ -478,140 +484,22 @@ export async function lireReferentiels(executeur: ExecuteurSql): Promise<{
 // ÉCRITURES — et la traduction des erreurs du pilote PostgreSQL
 // -----------------------------------------------------------------------------
 
-/** Code SQLSTATE d'une violation de clé primaire ou d'index unique (PostgreSQL). */
-const VIOLATION_UNICITE = '23505';
-
-/** Code SQLSTATE d'une violation de clé étrangère (PostgreSQL). */
-const VIOLATION_CLE_ETRANGERE = '23503';
-
-/** Code SQLSTATE d'une violation de contrainte CHECK (PostgreSQL). */
-const VIOLATION_CHECK = '23514';
-
 /**
- * Les clés étrangères de `org_units` (migration `0002`), et le champ d'API qu'il
- * faut nommer quand chacune casse. Le nom de la contrainte est LU, jamais deviné :
- * traiter tout `23503` comme « parent inconnu » enverrait chercher au mauvais
- * endroit le jour où c'est le secteur qui manque — et un message d'erreur faux
- * coûte plus cher qu'un message absent.
- */
-const CONTRAINTES_ETRANGERES: readonly {
-  readonly contrainte: string;
-  readonly champ: string;
-  readonly message: string;
-}[] = [
-  {
-    contrainte: 'org_units_mission_id_fkey',
-    champ: 'missionId',
-    message: "Cette mission n'existe pas.",
-  },
-  {
-    contrainte: 'org_units_parent_id_fkey',
-    champ: 'parentId',
-    message: "L'unité parente indiquée n'existe pas.",
-  },
-  {
-    contrainte: 'org_units_service_ref_id_fkey',
-    champ: 'serviceRefId',
-    message: "Cette fonction n'existe pas dans le référentiel.",
-  },
-  {
-    contrainte: 'org_units_sector_id_fkey',
-    champ: 'sectorId',
-    message: "Ce secteur n'existe pas dans le référentiel.",
-  },
-  {
-    contrainte: 'org_units_proposed_by_fkey',
-    champ: 'proposedBy',
-    message: "L'auteur de la proposition n'existe plus.",
-  },
-  {
-    contrainte: 'org_units_merged_into_id_fkey',
-    champ: 'mergedIntoId',
-    message: "L'unité cible de la fusion n'existe pas.",
-  },
-];
-
-/**
- * Profondeur de remontée de la chaîne `cause`. Deux suffisent aujourd'hui
- * (`DrizzleQueryError` → `DatabaseError`) ; trois laissent la marge d'un
- * enveloppement supplémentaire sans jamais risquer une boucle.
- */
-const PROFONDEUR_MAX_CAUSE = 3;
-
-/**
- * Lit `code` et `constraint` en REMONTANT la chaîne `cause`, sans `instanceof`.
+ * Traduction des erreurs du pilote PostgreSQL — **déplacée dans
+ * `erreurs-postgres.ts`, et RÉEXPORTÉE ici** pour qu'aucun appelant ne change.
  *
- * MESURÉ au CRUD des comptes et redit dans chaque dépôt parce que l'oublier coûte
- * un 500 au lieu d'un 400 : une requête qui échoue ne propage PAS l'erreur du
- * pilote. Drizzle lève une `DrizzleQueryError` et RANGE la `DatabaseError` de `pg`
- * dans sa propriété `cause` ; ni `code` ni `constraint` ne sont recopiés sur
- * l'enveloppe.
+ * Le motif du déplacement est écrit dans l'en-tête de ce module, et il tient en une
+ * phrase : ces fonctions sont pures, mais `depot.ts` ne l'est pas — l'importer
+ * exige une configuration complète, ce qui rendait intestable sans base une logique
+ * qui n'a jamais eu besoin d'une base.
  */
-function lireEchecDeContrainte(erreur: unknown): { code: string; contrainte: string } | null {
-  let courante: unknown = erreur;
-  for (let profondeur = 0; profondeur <= PROFONDEUR_MAX_CAUSE; profondeur += 1) {
-    if (typeof courante !== 'object' || courante === null) return null;
+export {
+  lireEchecDeContrainte,
+  traduireEchecDeContrainte,
+  type EchecPostgres,
+} from './erreurs-postgres.js';
 
-    const code = 'code' in courante ? courante.code : undefined;
-    const contrainte = 'constraint' in courante ? courante.constraint : undefined;
-    if (typeof code === 'string' && typeof contrainte === 'string') {
-      return { code, contrainte };
-    }
-
-    courante = 'cause' in courante ? courante.cause : undefined;
-  }
-  return null;
-}
-
-/**
- * Traduit les échecs de contrainte que ces routes peuvent provoquer, et relance
- * tout le reste.
- *
- * ── LA CLÉ PRIMAIRE EST UN 409, ET C'EST LE CŒUR DE LA RÈGLE P1-4 ──────────
- * Un `id` d'unité peut venir du CLIENT (04, règle P1-4 : « TOUTE entité créable
- * hors ligne […] porte un UUID v7 généré côté client »). Deux appareils, deux
- * propositions, un même identifiant : c'est un CONFLIT, pas une requête malformée,
- * et surtout **jamais un écrasement**. L'upsert idempotent que P1-4 décrit
- * appartient au chemin de sync (05 §9.2), qui porte sa propre déduplication par
- * `op_id` ; une route de console qui écraserait sur collision d'`id` donnerait à un
- * `POST` le pouvoir de réécrire une unité par surprise.
- *
- * ── POURQUOI ON NE LIT PAS AVANT D'ÉCRIRE ───────────────────────────────────
- * Un `SELECT … WHERE id = $1` préalable ne supprime pas le besoin de ce traitement :
- * entre la lecture et l'insertion, une autre requête peut prendre l'identifiant.
- * **C'est la contrainte qui arbitre, pas nous.**
- */
-function traduireEchecDeContrainte(erreur: unknown): never {
-  const echec = lireEchecDeContrainte(erreur);
-  if (echec === null) throw erreur;
-
-  if (echec.code === VIOLATION_UNICITE && echec.contrainte === 'org_units_pkey') {
-    throw new AppError(
-      'CONFLICT',
-      "Une unité portant cet identifiant existe déjà. Rien n'a été modifié.",
-      [{ path: 'id', message: 'Cet identifiant est déjà utilisé par une autre unité.' }],
-    );
-  }
-
-  if (echec.code === VIOLATION_CLE_ETRANGERE) {
-    const connue = CONTRAINTES_ETRANGERES.find((c) => c.contrainte === echec.contrainte);
-    if (connue !== undefined) {
-      throw new AppError('VALIDATION_FAILED', connue.message, [
-        { path: connue.champ, message: connue.message },
-      ]);
-    }
-  }
-
-  if (echec.code === VIOLATION_CHECK && echec.contrainte.startsWith('org_units_')) {
-    throw new AppError(
-      'VALIDATION_FAILED',
-      "Une valeur de l'unité n'est pas admise par le modèle de données.",
-      [{ path: 'orgUnit', message: `Contrainte violée : ${echec.contrainte}` }],
-    );
-  }
-
-  throw erreur;
-}
+import { traduireEchecDeContrainte } from './erreurs-postgres.js';
 
 /**
  * Ce qu'une création d'unité fournit.
