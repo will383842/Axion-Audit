@@ -24,14 +24,27 @@ et **un garde qui bloque à tort finit désactivé** — ce qui est pire que pas
 
 ## Format — quatre colonnes, une ligne par module
 
-| module | incrément consommateur | déclaré le | justification |
-| ------ | ---------------------- | ---------- | ------------- |
+| module                                   | incrément consommateur | déclaré le | justification                                                                                                                                                       |
+| ---------------------------------------- | ---------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| apps/field/src/local/depots/sessions.ts  | L5b                    | 2026-09-02 | Interface publiée le premier jour par L5a (LOT_L5.md §2) pour que L5b n attende pas : l écran 3 zones lit les sessions du jour et la session en cours par ce dépôt. |
+| apps/field/src/local/depots/reponses.ts  | L5b                    | 2026-09-02 | Interface publiée le premier jour par L5a (LOT_L5.md §2) : l écran 3 zones lit et compte les réponses d une session par ce dépôt (avancement, à-revoir).            |
+| apps/field/src/local/depots/questions.ts | L5b                    | 2026-09-02 | Interface publiée le premier jour par L5a (LOT_L5.md §2) : le questionnaire figé et la recherche hors-parcours (03 §25.4) passent par ce dépôt.                     |
+| apps/field/src/local/depots/outbox.ts    | L5b                    | 2026-09-02 | Interface publiée le premier jour par L5a (LOT_L5.md §2) : le compteur d opérations en attente alimente l indicateur d enregistrement de L5b, puis le push de L6a.  |
+| apps/field/src/session/machine.ts        | L5b                    | 2026-09-02 | Interface publiée le premier jour par L5a (LOT_L5.md §2) : terminer et valider un entretien (03 §19.1 V2.10) sont des gestes de l écran L5b, pas du socle.          |
 
-_(Aucune entrée. `apps/api/src/http/pagination.ts` en est sortie le **2026-08-31** : son premier
-consommateur réel n'est pas celui qu'on attendait — ce n'est pas `GET /v1/companies` (L3b) mais
-`GET /v1/users` (L2/T3), désigné comme tel par la note de conception L2 §4.5. La règle 2 a fait
-exactement ce pour quoi elle existe : c'est le garde qui a réclamé le retrait de la ligne, pas la
-mémoire de l'auteur.)_
+_(**Cinq entrées, toutes L5a → L5b, déclarées le 2026-09-02.** Elles sont le cas normal que cette
+soupape décrit : `LOT_L5.md` §2 fait publier par L5a, le premier jour, les interfaces que L5b et L5c
+consommeront — sans quoi les deux incréments suivants attendraient. Les DEUX modules L5a qui
+n'étaient PAS dans ce cas (`local/jetons.ts`, `local/embarquement.ts`) ont été CÂBLÉS dans la coquille
+le même jour plutôt qu'inscrits ici : ce sont des livrables du socle, pas des interfaces en avance.
+Le plafond de 5 est donc atteint exactement, et il le restera : toute nouvelle entrée exige d'abord
+qu'une de celles-ci sorte. Historique : `apps/api/src/http/pagination.ts` en est sortie le **2026-08-31**, et les deux
+branches qui fusionnent ici en donnaient chacune une raison différente — la fusion tranche plutôt que
+de garder les deux. **`GET /v1/users` (L2/T3) est le premier consommateur réel**, désigné comme tel
+par la note de conception L2 §4.5 et livré sur `main` avant L3a ; `GET /v1/companies` (L3a, via
+`apps/api/src/domaines/companies/depot.ts`) est le **second**, et c'est lui que la note de conception
+L3 avait anticipé. La règle 2 a fait exactement ce pour quoi elle existe dans les deux cas : c'est le
+garde qui a réclamé le retrait de la ligne, pas la mémoire de l'auteur.)_
 
 ## Les cinq règles que la machine applique
 

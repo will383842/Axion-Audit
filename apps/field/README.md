@@ -9,11 +9,51 @@ Décision ferme du contrat 11 §2. Le SSR est inutile (outil interne authentifi�
 **nuisible** ici : l'app doit démarrer depuis le cache du service worker **sans serveur**. Ne jamais
 scaffolder Next dans ce dépôt, même « par habitude ».
 
-## État au lot L0
+## État au lot L5a — le SOCLE
 
-Coquille buildable. Le service worker Workbox, Dexie, la DEK/KEK, le verrouillage et
-`storage.persist()` arrivent au **lot L5a** — les ajouter ici anticiperait un lot, ce que le pipeline
-interdit (09 §5.3).
+Livré : shell PWA + service worker Workbox, base locale Dexie **versionnée**, coffre **DEK/KEK**,
+port d'écriture, horloge à décalage serveur, verrou 15/60 min + Wake Lock, `storage.persist()`.
+**Aucun écran de collecte** : l'écran d'entretien est L5b (A22), la journée et l'export de secours
+sont L5c (A23).
+
+### Carte du socle
+
+| Module                         | Ce qu'il porte                                                                                  |
+| ------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `src/local/base.ts`            | `BaseLocale` (Dexie 4), `SCHEMA_LOCAL` versionné, `VERSION_SCHEMA_LOCAL`, clés de `meta`        |
+| `src/local/formes.ts`          | l'en-tête d'index EN CLAIR (liste **fermée**) et les charges chiffrées, par table               |
+| `src/local/coffre.ts`          | Argon2id (`hash-wasm`) → KEK, DEK AES-256 non extractable, `verrouiller()`, ré-enveloppement    |
+| `src/local/coffre-appareil.ts` | sel + paramètres + DEK enveloppée dans `meta` ; changement de mot de passe et son avertissement |
+| `src/local/ecriture.ts`        | `ecrireLocal` (ligne + op d'outbox en UNE transaction) et `appliquerDescente` (jamais d'outbox) |
+| `src/local/horloge.ts`         | **le seul `new Date()` de l'application** — décalage serveur 05 §9.2                            |
+| `src/local/stockage.ts`        | `storage.persist()`, quota, seuils d'alerte                                                     |
+| `src/local/depots/*.ts`        | lectures indexées : sessions du jour, réponses, recherche hors-parcours, outbox                 |
+| `src/session/machine.ts`       | les 4 états × 2 profils, **terminer ≠ valider** (03 §19.1 V2.10)                                |
+| `src/local/port-sync.ts`       | `PortSync` **déclaré** ; implémentation **inerte** — L6a la REMPLACE, sous `src/sync/`          |
+| `src/app/**`                   | coquille, verrou, navigation sans routeur, registre `vues.ts` **append-only**                   |
+| `sw/service-worker.ts`         | précache du shell, des polices et des icônes ; **aucun cache d'exécution de `/api`**            |
+
+### Deux règles de socle que tout écran doit respecter
+
+1. **Aucune écriture Dexie hors de `src/local/ecriture.ts`** (hors `meta`). C'est ce qui rend vraie,
+   par construction, la règle « chaque écriture pousse une op dans l'outbox » (05 §9.2-2).
+2. **Aucun `new Date()` ni `Date.now()` hors de `src/local/horloge.ts`** — sinon l'appareil déréglé
+   de +3 h du scénario 05 §9.8 gagne tous les arbitrages de conflit.
+
+### Ce que le socle refuse EXPLICITEMENT, et pourquoi
+
+- `embarquerMission()` prépare le stockage puis **refuse** le premier pull : il dépend de L3d
+  (figeage du questionnaire), non livré. Un embarquement qui « réussirait » sans données produirait
+  une mission vide, découverte chez le client.
+- `portSyncInerte` rend `{ statut: 'indisponible' }`. **Jamais une pastille verte** : une pastille
+  qui verdit sans serveur annonce plus qu'elle ne fait, et le prix se paie en journée d'entretiens.
+
+### Construction
+
+`pnpm --filter @axion/field build` enchaîne `tsc` (app + service worker), `vite build`, puis
+`scripts/build-sw.mjs` — Workbox 7 en `injectManifest`, **sans `vite-plugin-pwa`** (hors liste 11 §1,
+arbitrage A01). Le manifeste de précache ne peut être calculé qu'APRÈS que `dist/` existe : l'ordre
+n'est pas négociable.
 
 ## Contraintes qui pèsent sur chaque écran
 

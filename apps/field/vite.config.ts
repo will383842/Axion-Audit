@@ -3,10 +3,14 @@
 // L'app doit démarrer depuis le cache du service worker SANS serveur : c'est
 // exactement ce que le SSR rendrait impossible.
 //
-// PÉRIMÈTRE L0 : coquille buildable. Le service worker Workbox, Dexie, la DEK/KEK
-// et `storage.persist()` arrivent au lot L5a (11 §6) — les ajouter ici serait
-// anticiper un lot, ce que le pipeline interdit.
-// Traçabilité : E17, E6 (hors ligne total).
+// PÉRIMÈTRE L5a : coquille PWA installable + service worker Workbox. Le service
+// worker lui-même n'est PAS construit ici mais par `scripts/build-sw.mjs`
+// (`injectManifest`, arbitrage A01 sur `LOT_L5.md` §5-1 : aucune dépendance
+// nouvelle, donc pas de `vite-plugin-pwa`). Le `build` de `package.json` enchaîne
+// les deux : le manifeste de précache ne peut être calculé qu'APRÈS que `dist/`
+// existe.
+// Traçabilité : E17 (stack imposée : Hetzner, Docker, PG, Fastify, Vite/React),
+// E6 (hors ligne total, PC ET tablette).
 // =============================================================================
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -29,8 +33,51 @@ function injecterCouleurTheme(): Plugin {
   };
 }
 
+/**
+ * Émet `manifest.webmanifest`.
+ *
+ * GÉNÉRÉ et non versionné, pour la même raison que la couleur de thème :
+ * `theme_color` et `background_color` SONT des couleurs de la charte, et un
+ * fichier JSON versionné en porterait une seconde copie que personne ne mettrait
+ * à jour le jour où la charte bouge (invariant 4).
+ *
+ * `display: standalone` n'est pas cosmétique : sur iPad, la persistance longue
+ * durée d'IndexedDB exige l'installation « Sur l'écran d'accueil » (03 §22.1), et
+ * c'est ce manifeste qui la rend possible. Sans lui, `storage.persist()` échoue et
+ * aucune mission n'est embarquable (05 §31-2).
+ *
+ * Invariant 2 : aucun nom de client nulle part — le nom est celui du PRODUIT.
+ */
+function manifestePwa(): Plugin {
+  const manifeste = {
+    name: 'Axion Audit — Terrain',
+    short_name: 'Axion Terrain',
+    description: 'Collecte d’audit hors ligne.',
+    start_url: '/',
+    scope: '/',
+    display: 'standalone',
+    orientation: 'any',
+    lang: 'fr',
+    dir: 'ltr',
+    theme_color: COULEURS_CHARTE.terracotta,
+    background_color: COULEURS_CHARTE.ivoire,
+    icons: [],
+  };
+
+  return {
+    name: 'axion-manifeste-pwa',
+    generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'manifest.webmanifest',
+        source: JSON.stringify(manifeste, null, 2),
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), injecterCouleurTheme()],
+  plugins: [react(), injecterCouleurTheme(), manifestePwa()],
   // Servie à la racine du domaine par Caddy (`/` → field) — 11 §2, pas de CORS.
   base: '/',
   build: {

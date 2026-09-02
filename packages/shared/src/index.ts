@@ -13,3 +13,4 @@ export * from './redaction.js';
 export * from './journal.js';
 export * from './scoping.js';
 export * from './users.js';
+export * from './sync.js';

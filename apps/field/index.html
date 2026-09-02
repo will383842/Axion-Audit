@@ -10,6 +10,10 @@
          ce n'est pas une raison pour dupliquer la charte : invariant 4, une
          couleur n'a qu'une seule source de vérité. -->
     <meta name="theme-color" content="%COULEUR_THEME%" />
+    <!-- Manifeste GÉNÉRÉ à la construction depuis les jetons de packages/ui
+         (voir vite.config.ts). Sans lui, pas d installation sur l écran d accueil,
+         donc pas de persistance durable d IndexedDB sur iPad (03 §22.1, 05 §31-2). -->
+    <link rel="manifest" href="/manifest.webmanifest" />
     <title>Axion Audit — Terrain</title>
   </head>
   <body>
