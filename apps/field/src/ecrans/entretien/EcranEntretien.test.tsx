@@ -1183,7 +1183,7 @@ describe('R1 — l’écran d’entretien ne perd pas une note volante quand l�
 //   ③ le CONTRAT JS ↔ CSS : le seuil de `REQUETE_TROIS_COLONNES` est le même que
 //     celui déclaré par `entretien.css`. C'est la dérive que personne ne verrait.
 describe('R4 — les trois zones de M3.1, au-dessus du seuil', () => {
-  it('① rend les trois zones EN MÊME TEMPS, sans qu’aucun panneau soit ouvert', async () => {
+  it('① monte les trois zones de M3.1 au premier rendu, aucune derrière un panneau', async () => {
     const { container } = await monterEntretien(interviewId);
     await waitFor(() => {
       expect(questionAffichee(TEXTE_ECHELLE)).toBeTruthy();
@@ -1193,8 +1193,22 @@ describe('R4 — les trois zones de M3.1, au-dessus du seuil', () => {
     expect(container.querySelector('.axn-entretien__zone--centre')).not.toBeNull();
     expect(container.querySelector('aside[aria-label="Notes"]')).not.toBeNull();
 
-    // La colonne de droite porte ses champs SANS geste préalable : c'est ce qui
-    // distingue une colonne d'un panneau, et c'est ce que M3.1 demande.
+    // CE QUE CE CAS PROUVE, ET CE QU'IL NE PROUVE PAS — réserve N1 du second
+    // rejeu A29. Le commentaire précédent affirmait « c'est ce qui distingue une
+    // colonne d'un panneau » : c'est FAUX, et c'est nous qui l'avions écrit.
+    // Mesuré par A29 : les deux `<aside>` ne dépendent que de `!partage`, jamais
+    // de la largeur — `troisColonnes` n'est consommé qu'à UN endroit
+    // (`EcranEntretien.tsx`, `ouvrirNote`). Ce cas passerait donc À L'IDENTIQUE
+    // à 500 px.
+    //
+    // Ce qu'il prouve réellement, et qui vaut d'être gardé : les trois zones de
+    // M3.1 sont TOUTES MONTÉES au premier rendu, et la zone de droite porte ses
+    // champs sans qu'aucun geste ait été fait — donc aucune n'est derrière un
+    // panneau à ouvrir, à aucune largeur. C'est une garde de STRUCTURE.
+    // La garde de DISPOSITION, elle, est portée par ② (le geste bascule de part
+    // et d'autre du seuil) et ③ (le seuil du JS est celui du CSS) ; la mise en
+    // colonnes PEINTE se constate sur appareil réel à P-C — voir la recette
+    // manuelle de `docs/conception/LOT_L5.md` §4.
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(zoneCaptureVolante()).toBeTruthy();
   });

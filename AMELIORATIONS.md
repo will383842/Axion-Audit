@@ -1680,3 +1680,76 @@ API : aucun. Impact crypto : aucun. Impact périmètre : aucun.**
 
 **Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-C_ · le correctif de fond
 (`e2e97b9`) n'attend PAS cet arbitrage : il arrive avec la PR #26.
+
+---
+
+## 2026-09-03 — [transverse] Étage 2, PROPOSÉE — une glose ABSENTE est refusée, une glose FAUSSE est COCHÉE
+
+**Constat, mesuré sur le seul lot L5b.** `check:tracabilite` compare la glose au LIBELLÉ de
+l'exigence citée. Il ne peut pas voir qu'un module réalise une **autre** exigence que celle qu'il
+cite. Trois occurrences dans un seul lot, **dont deux ont passé le garde** et n'ont été vues qu'en
+revue humaine :
+
+1. `session/fuseau.ts` citait **E13** (« écran 3 zones ») alors qu'il ne fait que du formatage au
+   fuseau de mission — donc **E32 n'avait aucun code rattaché depuis ce module** ;
+2. `session/enregistrement.ts` citait **E38** (« sync ≥ 1×/j + export de secours ») là où la purge
+   sur `pagehide` protège la saisie en cours et ne remonte rien au siège ;
+3. `e2e/accessibilite-l5a.e2e.ts` et deux fichiers L5b citaient **E7** (« remontée continue au
+   siège ») en croyant citer l'**invariant 7** (« rien n'est silencieusement écrasé »). Collision de
+   nommage pure — celle-là, le garde l'a attrapée.
+
+**L'ARGUMENT QUI REND LA FICHE DÉCISIVE, et il n'est pas de moi (A29) : une glose ABSENTE est
+refusée par A02 à l'étape 6 ; une glose FAUSSE est COCHÉE.** La seconde est donc strictement pire
+que rien — elle achète la conformité apparente au prix de la conformité réelle — et c'est
+exactement celle que rien n'attrape aujourd'hui.
+
+**Valeur pour l'auditeur.** Indirecte, et c'est le fond du contrôle d'acceptation : la matrice
+E1-E47 lue « dans les deux sens » (09 §3-6) est la seule preuve qu'aucune exigence n'a été oubliée.
+Une matrice alimentée par des gloses fausses est verte et ne prouve rien.
+
+**TROIS CONTRÔLES PROPOSÉS — décrits, PAS implémentés (11 §8 : `scripts/` et la CI relèvent du
+contrat d'ops ; 09 §5.9 : étage 2 jamais anticipé).**
+
+- **① L'exigence citée est-elle RÉALISÉE, ou seulement CONSOMMÉE ?** Motif approchable sans IA, et
+  c'est ce qui le rend implémentable : un module dont TOUTES les exigences citées sont également
+  citées par tous ses importateurs, et qui n'en cite aucune qui lui soit propre, dit « je cite ce
+  qui m'appelle ». Signalement, pas refus — le motif est heuristique et doit le rester.
+- **② LE SENS INVERSE, celui qui a manqué :** toute exigence du périmètre du lot doit avoir au
+  moins un module qui la réalise. `E32` sans aucun code rattaché aurait sauté aux yeux, et personne
+  n'aurait eu à lire `fuseau.ts` pour s'en apercevoir. C'est le contrôle le moins coûteux des trois
+  et le plus rentable.
+- **③ La collision `E7` / « invariant 7 ».** Purement lexicale : une glose qui cite `E7` et dont le
+  texte parle d'écrasement, de suppression ou de révision tracée cite l'invariant, pas l'exigence.
+  Un contrôle de mots suffit ; la même famille existe pour `E4`/invariant 4 (tokens) et
+  `E1`/invariant 1 (hors ligne), à vérifier avant d'écrire la liste.
+
+**Coût estimé.** ~0,5 j pour les trois, ② étant le tiers le plus simple et pouvant être livré seul.
+**Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun. Impact périmètre : aucun** — le
+contrôle ne change aucun comportement produit, il refuse des en-têtes.
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-C_
+
+---
+
+## 2026-09-03 — [transverse] Étage 2, PROPOSÉE — `vitest.config.ts` porte toujours `thresholds: {}`
+
+**Constat (A29, second rejeu, 2026-09-03).** La DoD transverse exige « couverture ≥ 90 % sur les
+modules critiques — MESURÉE ». Elle l'est : par `.github/scripts/check-coverage.mjs`, appelé par le
+job `coverage` de la CI. Mais `vitest.config.ts` déclare `thresholds: {}` — **aucun glob n'est
+opposable à Vitest lui-même**. Un développeur qui lance `pnpm test:coverage` en local voit des
+chiffres et n'obtient AUCUN échec, quel que soit leur niveau ; le commentaire du fichier annonce
+pourtant des seuils « par chemin, renseignés au fil des lots ».
+
+**Ce que ça coûte.** Rien aujourd'hui — la CI tient le seuil, et elle est la seule juge (09 §5.7).
+Le risque est de dérive : le jour où le job `coverage` serait renommé, déplacé ou conditionné, la
+DoD ne serait plus tenue par personne et la configuration continuerait d'annoncer qu'elle l'est.
+C'est la même forme que le défaut de `pnpm verify` qui n'exécutait pas le projet `interface`.
+
+**Proposé, NON appliqué — c'est le contrat d'ops (11 §8-2).** Soit renseigner `thresholds` avec les
+globs de `coverage-critical-paths.json`, soit — et c'est ma préférence — **retirer `thresholds` et
+écrire dans le fichier que le seuil vit dans `check-coverage.mjs`, à un seul endroit**. Deux seuils
+qui doivent rester égaux finissent toujours par diverger : c'est l'argument que ce dépôt applique
+déjà au numéro de version du schéma local. Coût ~0,1 j.
+**Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun. Impact périmètre : aucun.**
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-C_

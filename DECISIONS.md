@@ -5800,3 +5800,32 @@ traçabilité, pas sa syntaxe.
 
 Décideur : A20, sur réserve R5 du rejeu A29
 Impact spec : aucun.
+
+## 2026-09-03 — [L5b] Amendement à la règle R5 : elle porte sur le CRITÈRE DE CHOIX, jamais sur le NOMBRE de gloses
+
+L'entrée du même jour (« Un module d'affichage au fuseau se rattache à E32, jamais à l'écran qui le
+consomme ») pose une règle juste et incomplète. Lue vite, « une glose cite ce que le module FAIT »
+peut s'entendre « une glose = une exigence ». Ce serait un contresens coûteux, et A29 l'a signalé
+avant qu'il ne se généralise : `session/ecriture-reponses.ts` cite légitimement **E13 + E37 + E12 +
+E7**, parce qu'il réalise réellement les quatre.
+
+Options :
+
+1. **Préciser la règle** : elle départage QUELLES exigences citer, pas COMBIEN. Un module en réalise
+   souvent plusieurs ; il les cite toutes.
+2. Laisser la formulation en l'état et compter sur la lecture de bon sens.
+
+Arbitrage : **option 1**, et la règle complète s'énonce ainsi :
+**cite une exigence si le module la RÉALISE ; ne la cite pas s'il se contente de servir un module
+qui la réalise. Aucun plafond, aucun plancher au-delà de un.** Le test mental qui départage :
+« si cette exigence disparaissait du pack, ce fichier perdrait-il sa raison d'être, ou seulement un
+appelant ? » — le premier cas se cite, le second non. `fuseau.ts` perdrait sa raison d'être sans E32
+et n'en perdrait aucune sans E13 : c'est ce qui a tranché. `ecriture-reponses.ts` en perdrait une
+pour chacune des quatre qu'il cite.
+L'option 2 est écartée pour un motif mesuré cette nuit : trois gloses fausses dans un seul lot, dont
+deux passées sous le garde. Une règle qui repose sur la lecture de bon sens produit exactement ce
+que ce dépôt passe son temps à réparer. **Précédence : sans objet** — le pack exige la traçabilité
+(11 §9bis), pas sa syntaxe.
+
+Décideur : A20, sur précision A29
+Impact spec : aucun — amendement horodaté de l'entrée R5 du 2026-09-03.

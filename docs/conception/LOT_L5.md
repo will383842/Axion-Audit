@@ -154,6 +154,27 @@ locale + machine à états = « modules critiques » de la DoD). `@filrouge` res
 **mode avion réel sur tablette** se rejoue à la main aux portes P-C et P-E (A27, checklist §15).
 Ce n'est pas un trou qu'on découvre, c'est un trou qu'on nomme.
 
+### Recette manuelle P-C — à exécuter par **A27** (appareils) et **A54** (novice)
+
+**Ajoutée le 2026-09-03, sur constat du second rejeu A29.** Elle ne remplace aucun test : elle
+nomme ce qu'aucun test ne peut voir. `jsdom` **n'évalue pas les media queries d'une feuille de
+style** ; la suite d'interface éprouve donc la STRUCTURE (les trois zones sont montées, aucune
+derrière un panneau), le COMPORTEMENT au seuil (le geste « Note » bascule de part et d'autre) et le
+CONTRAT JS ↔ CSS (le seuil de `REQUETE_TROIS_COLONNES` est celui d'`entretien.css`) — **jamais la
+mise en colonnes PEINTE**. C'est le livrable-titre de L5b (03 M3.1), et 03 §33.7 en fait un critère
+de porte : il se constate à l'œil, sur du matériel.
+
+| # | Appareil | À constater |
+| - | -------- | ----------- |
+| 1 | **iPad, paysage** (≥ 1024 px) | Les **trois zones CÔTE À CÔTE** — blocs · question · notes. Ni empilées, ni derrière un bouton. La note de question est saisissable **sans ouvrir de panneau**. |
+| 2 | **PC ≥ 1280 px** | Idem, et les rappels de raccourcis §33.3 sont visibles (pointeur fin). |
+| 3 | **iPad, portrait** (< 1024 px) | Le **repli en panneaux** : « Blocs et progression » et « Notes » deviennent deux boutons ; la question occupe seule la largeur. |
+| 4 | Les trois ci-dessus | Cibles tactiles ≥ 44 px (03 §22.1), aucun défilement horizontal. |
+
+**Si l'une des trois lignes 1-3 échoue, P-C n'est pas franchie** : la disposition en trois zones est
+le cœur du lot, pas un raffinement. Le résultat se copie dans `docs/portes/PORTE_C_<date>.md` avec
+la capture, comme toute preuve de porte (11 §9bis).
+
 ---
 
 ## 5. Ce que cette note NE tranche PAS — à arbitrer avant la première ligne de code
