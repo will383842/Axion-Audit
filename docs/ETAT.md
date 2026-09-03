@@ -2285,3 +2285,26 @@ validé, liste fermée, dépendances) sont présentes, rejouer `pnpm test:unit` 
 lancer A28 (axe sur les trois écrans + mesure de dérivation < 1 s), puis A20 signe, A02 contrôle,
 PR lot/l5a → main (Williams fusionne). lot/l5b (162/162) attend cette PR pour intégrer main.
 Tests rouges connus : aucun. À Williams : icône PWA provisoire (A-009), script d'accord (L5b).
+
+## 2026-09-03 06h00 — [lot L5 / incrément L5a] — étape pipeline 5/7
+Dernier commit vert : d589b03 (test(l5a) : balayage axe-core + budget de dérivation, A28) · Branche : lot/l5a · Poussé : oui
+Tâche en cours : R-L5a-6 est FERMÉE, et par une mesure. `@axe-core/playwright`, installé par
+dérogation 11 §8-1 et appelé nulle part, est enfin utilisé : `e2e/accessibilite-l5a.e2e.ts`, cinq cas,
+0 violation sur les trois écrans du socle (déverrouillage premier usage ET coffre existant, Aujourd'hui
+en état vide, Stockage), tags wcag2a + wcag2aa + wcag21a + wcag21aa, aucun `disableRules`.
+Dérivation Argon2id mesurée dans le navigateur : création 284 ms, réouverture 199 ms, budget
+11 §4 = 1000 ms. C'est une BORNE SUPÉRIEURE de bout en bout, elle majore la dérivation seule ; le
+chiffre de l'iPad reste dû à A27 à la porte P-C. Bascule faite : une image sans `alt` injectée fait
+sortir `image-alt`, le vert n'est donc pas un balayage qui ne balaie rien.
+Deux constats A28-1 remontés à A29, non corrigés ici (un test d'accessibilité ne modifie pas
+l'interface qu'il mesure) : sur « Aujourd'hui », la coquille et l'écran affichent DEUX `<h1>` de
+libellé identique ; l'écran Stockage porte deux libellés différents (« de l'appareil » dans `VUES`,
+« de cet appareil » à l'écran).
+Prochaine action : ATTENDRE que la PR L3 entre dans `main` (ordre de fusion figé, DECISIONS.md A37 —
+`main` est à 8c5f9ff, L3 n'y est PAS), puis `git merge origin/main` dans lot/l5a, vérifier PAR GREP
+que les cinq entrées [L5a] du 2026-09-02 (Argon2id, AAD, `validé`, liste fermée, dépendances de test)
+survivent à la fusion — c'est la fermeture de R-L5a-9 — rejouer `pnpm verify`, puis PR lot/l5a → main.
+Tests rouges connus : aucun. `verify:rapide` vert au pre-push (865 tests unitaires) ; les 5 cas
+Playwright d'accessibilité verts localement.
+Réserve de méthode à connaître : `pnpm test:unit` ne lance PAS le projet `interface` — un vert local
+peut donc répondre à une autre question que la CI. Mesurer avec `pnpm test:coverage`.
