@@ -1687,14 +1687,20 @@ API : aucun. Impact crypto : aucun. Impact périmètre : aucun.**
 
 **Constat, mesuré sur le seul lot L5b.** `check:tracabilite` compare la glose au LIBELLÉ de
 l'exigence citée. Il ne peut pas voir qu'un module réalise une **autre** exigence que celle qu'il
-cite. Trois occurrences dans un seul lot, **dont deux ont passé le garde** et n'ont été vues qu'en
+cite. **Cinq** occurrences dans un seul lot, **dont quatre ont passé le garde** et n'ont été vues qu'en
 revue humaine :
 
 1. `session/fuseau.ts` citait **E13** (« écran 3 zones ») alors qu'il ne fait que du formatage au
    fuseau de mission — donc **E32 n'avait aucun code rattaché depuis ce module** ;
 2. `session/enregistrement.ts` citait **E38** (« sync ≥ 1×/j + export de secours ») là où la purge
    sur `pagehide` protège la saisie en cours et ne remonte rien au siège ;
-3. `e2e/accessibilite-l5a.e2e.ts` et deux fichiers L5b citaient **E7** (« remontée continue au
+3. `session/valeurs.ts` citait **E30** (« 3 niveaux d’audit ») pour un module qui type les
+   DOUZE formes de valeur de réponse — alors que ses deux voisins immédiats du même incrément,
+   `SaisieReponse.tsx` et `ecriture-reponses.ts`, citaient déjà **E37** pour exactement ce sujet ;
+4. `session/peripherie-entretien.test.ts` citait **E43 (DoD)** — trouvée par l’auteur lui-même en
+   appliquant sa propre règle, et **RETIRÉE plutôt que remplacée** : une glose se supprime aussi
+   bien qu’elle s’ajoute, et c’est la moitié de la règle qu’on oublie ;
+5. `e2e/accessibilite-l5a.e2e.ts` et deux fichiers L5b citaient **E7** (« remontée continue au
    siège ») en croyant citer l'**invariant 7** (« rien n'est silencieusement écrasé »). Collision de
    nommage pure — celle-là, le garde l'a attrapée.
 
@@ -1702,6 +1708,16 @@ revue humaine :
 refusée par A02 à l'étape 6 ; une glose FAUSSE est COCHÉE.** La seconde est donc strictement pire
 que rien — elle achète la conformité apparente au prix de la conformité réelle — et c'est
 exactement celle que rien n'attrape aujourd'hui.
+
+**CE N'EST PAS UN GARDE CASSÉ : C'EST UN GARDE QUI N'EXISTE PAS. Requalification du
+2026-09-03 (constat A02), et elle change le coût que Williams arbitre.** Le dispositif ne
+s'est pas trompé — **il documente lui-même son trou**. `node scripts/check-tracabilite-exigences.mjs
+--angles-morts` l'énonce en toutes lettres : n° 1, « **il ne distingue pas un rattachement JUSTE**
+d'un rattachement faux » ; n° 3, « le rapprochement est **LEXICAL, pas sémantique** » ; n° 5,
+« ce script part des citations et remonte à la table — **il ne fait pas le chemin inverse** ».
+Les cinq gloses fausses de ce lot sont donc tombées EXACTEMENT dans ce que l'outil annonce ne pas
+voir. Cette fiche ne demande pas de RÉPARER un garde défaillant : elle demande d'en **CONSTRUIRE
+un second**, qui n'a jamais existé. Le contrôle ② ci-dessous est nommément l'angle mort n° 5.
 
 **Valeur pour l'auditeur.** Indirecte, et c'est le fond du contrôle d'acceptation : la matrice
 E1-E47 lue « dans les deux sens » (09 §3-6) est la seule preuve qu'aucune exigence n'a été oubliée.

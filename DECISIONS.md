@@ -5829,3 +5829,74 @@ que ce dépôt passe son temps à réparer. **Précédence : sans objet** — le
 
 Décideur : A20, sur précision A29
 Impact spec : aucun — amendement horodaté de l'entrée R5 du 2026-09-03.
+
+## 2026-09-03 — [L5b] AMENDEMENT HORODATÉ à la décision Williams du 2026-09-02 sur le script d'accord : le texte EN SERVICE n'est pas celui qui a été arbitré
+
+Réserve R3 du contrôle A02, et elle est fondée. L'entrée du 2026-09-02 (« Le script d'accord de
+participation a un libellé par défaut, et une seule définition », décideur **Williams**) fixe un
+libellé. Le texte réellement lu aux interlocuteurs — `DemarrageEntretien.tsx:19-23`, affiché
+ligne 53, version `v1` — **est un autre texte**. La divergence était documentée en fiche
+`AMELIORATIONS.md` ; elle ne l'était PAS ici. 11 §9bis : une décision non tracée dans ce format
+n'existe pas — et une session neuve lit la décision AVANT le code. Elle lisait donc, depuis 24 h, un
+engagement RGPD qui n'est pas celui qui est en service.
+
+**TROIS ÉCARTS, pas deux.** Le troisième a été trouvé par A02, ni par moi ni par le pilote :
+
+|     | Arbitré le 2026-09-02                                                                                                                     | En service (`v1`)                                                                                                                                  |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | « Le rapport ne vous attribue **aucun propos nominativement**. »                                                                          | « elles sont **consignées sous votre nom et votre fonction** »                                                                                     |
+| 2   | « Je note vos réponses dans un outil sécurisé ; elles servent **uniquement** à établir le diagnostic et le rapport d'audit. »             | « conservées de façon sécurisée, et **ne servent à aucune évaluation individuelle** »                                                              |
+| 3   | « Vous pouvez refuser de répondre à une question, **ou demander l'arrêt de l'entretien, à tout moment et sans avoir à vous justifier**. » | « Vous pouvez ne pas répondre à une question, **ou demander qu'une information ne soit pas communiquée**. » — **le droit d'INTERROMPRE a disparu** |
+
+Options :
+
+1. **Tracer l'écart ici et laisser les deux textes intacts** ; la rédaction va au juriste.
+2. Aligner le code sur le texte arbitré.
+3. Amender la décision pour qu'elle adopte le texte en service.
+
+Arbitrage : **option 1.** Les options 2 et 3 exigent toutes deux de choisir QUEL engagement RGPD
+l'entreprise prend envers des personnes physiques — l'attribution nominative dans le livrable et le
+droit d'interrompre un entretien ne sont pas des questions de rédaction. **Ce choix n'appartient pas
+à un agent**, et le trancher vite serait pire que l'écart lui-même. L'écart est donc RENDU VISIBLE
+là où il se lit en premier ; la fiche `AMELIORATIONS.md` porte la demande de relecture juridique
+avant P-E, avec la note d'exécution qui compte : le jour où le texte change,
+`VERSION_MENTION_INFORMATION` doit être incrémentée, sans quoi des sessions déjà collectées seraient
+rattachées à une version qu'elles n'ont jamais entendue (invariant 7).
+**Précédence : invariant 7** pour le versionnement ; sans objet pour le reste — le pack ne rédige
+pas ce texte, il exige seulement qu'il soit versionné et enregistré (06 §10.4).
+
+Décideur : A20, sur réserve R3 d'A02 — **la décision de fond reste à Williams**
+Impact spec : aucun — amendement horodaté de l'entrée du 2026-09-02.
+
+## 2026-09-03 — [L5b] Doute de spec transmis à A01 : `apps/field/src/ecrans/**` doit-il entrer dans les chemins critiques ?
+
+Mesuré : `EcranEntretien.tsx` est à **11/26 fonctions** et `AccesEntretien.tsx` à **0 % de lignes**,
+alors que ce dernier est la porte d'entrée de l'incrément. Cinq des douze formes de saisie
+(`SaisieDevise`, `SaisieDate`, `ChoixUnique`, `SaisieTableau`) sont à `FNDA:0` — aucun test ne les
+rend. Le glob `apps/field/src/ecrans/**` n'est PAS dans `.github/coverage-critical-paths.json`.
+
+Options :
+
+1. **Ne pas l'ajouter maintenant, et écrire pourquoi** — motif A29 : viser 90 % sur un composant de
+   872 lignes ferait courir après des rappels JSX sans rien prouver ; le vrai constat est que
+   l'orchestration d'écriture vit DANS le composant, ce qui la rend difficile à mesurer.
+2. L'ajouter tout de suite : la CI rougirait jusqu'à ce que les écrans soient testés.
+3. Extraire l'orchestration hors du composant, PUIS mettre le module extrait sous seuil.
+
+Arbitrage : **option 1 pour L5b — et la distinction d'A02 est conservée ici MOT POUR MOT, parce
+qu'elle est la vraie décision et qu'elle appartient à A01, pas à moi** :
+
+> Le motif d'A29 est recevable comme raison de **ne pas le faire MAINTENANT** ; il n'est pas
+> recevable comme raison de **ne pas le faire**.
+
+Le dépôt a déjà corrigé **trois fois** cette asymétrie, sous une formule qui vit dans
+`coverage-critical-paths.json` : « un seuil qui mesure le dépôt mais pas la route mesure la moitié
+qui ne décide de rien » — pour `scoping`, pour `users`, puis pour `local/**` où le port d'écriture a
+été joint au coffre. Un écran de collecte est la route de la donnée d'audit. **L'option 3 est donc
+la sortie, et elle est due à L5c ou à L6** ; ce qui est tranché ici n'est que le calendrier.
+En attendant, le trou est NOMMÉ dans la recette P-C et dans `apps/field/README.md`, pas seulement
+dans ce registre. **Précédence : sans objet** — la DoD (09 §3) énumère sync, crypto locale, scoring
+et RBAC ; les écrans n'y figurent pas, il n'y a donc pas d'infraction, mais une décision à prendre.
+
+Décideur : A20 pour le calendrier de L5b — **arbitrage de fond attendu d'A01**
+Impact spec : aucun.

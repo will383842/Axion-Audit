@@ -175,6 +175,28 @@ de porte : il se constate à l'œil, sur du matériel.
 le cœur du lot, pas un raffinement. Le résultat se copie dans `docs/portes/PORTE_C_<date>.md` avec
 la capture, comme toute preuve de porte (11 §9bis).
 
+#### Second point de recette : CINQ FORMES DE SAISIE NE SONT RENDUES PAR AUCUN TEST
+
+**Mesuré par A02 le 2026-09-03 (sa réserve R4, non bloquante et délibérément laissée ouverte).**
+Ce n'est PAS une infraction à la DoD — elle énumère sync, crypto locale, scoring et RBAC, jamais les
+écrans. Mais c'est ce que P-C doit savoir **avant** de cocher « une session de chaque type » :
+
+| Composant | Mesure | Conséquence pour la recette |
+| --------- | ------ | --------------------------- |
+| `SaisieDevise` | `FNDA:0` | aucun test ne l'a jamais rendue |
+| `SaisieDate` | `FNDA:0` | idem |
+| `ChoixUnique` | `FNDA:0` | idem |
+| `SaisieTableau` | `FNDA:0` | idem |
+| `AccesEntretien.tsx` | **0 % de lignes** | c'est la PORTE D'ENTRÉE de l'écran d'entretien |
+
+**Donc la recette doit répondre EN SAISISSANT, pas en regardant** : au moins une question de chaque
+type — `money` avec sa devise, `date`, `single_choice`, `table` — puis rouvrir la session et
+vérifier que la valeur relue est bien celle saisie. Un rendu qui s'affiche mais n'enregistre pas
+serait invisible à l'œil ; c'est exactement ce qu'aucun test ne surveille aujourd'hui.
+`EcranEntretien.tsx` est par ailleurs à 11/26 fonctions couvertes : le doute de spec « faut-il
+mettre `apps/field/src/ecrans/**` sous seuil » est tracé dans `DECISIONS.md` du 2026-09-03 et
+attend **A01** — le motif « à extraire un jour » vaut pour le calendrier, pas pour le principe.
+
 ---
 
 ## 5. Ce que cette note NE tranche PAS — à arbitrer avant la première ligne de code
