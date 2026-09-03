@@ -2116,3 +2116,141 @@ La règle ne change pas : **une exigence ne passe à `couverte` que si son libel
 
 *Report effectué le 2026-09-02 par la session de vérification, sur autorisation de Williams, à partir
 de la fiche P-B signée. Aucune ligne datée n'a été modifiée.*
+
+---
+
+# K. CONTRÔLE D'ACCEPTATION DE L'INCRÉMENT L5b — A02, 2026-09-03, sur `b3d8886`
+
+Périmètre mesuré : `git diff ce4b29b..b3d8886` — 42 fichiers, 10 515 insertions.
+Dossier complet, preuves et verdict : `docs/portes/CONTROLE_A02_L5b_2026-09-03.md`.
+
+## K.1 — Sens 1, exigences → code (périmètre L5b du 11 §6)
+
+| Exigence | Réalisée par | Constat |
+|---|---|---|
+| **E13** écran 3 zones, une question à la fois, enregistrement continu (M3.1, §17.4) | `ecrans/entretien/{EcranEntretien,ZoneBlocs,ZoneQuestion,PanneauNotes}.tsx`, `entretien.css`, `session/{enregistrement,position}.ts` | COUVERTE — structure éprouvée (faisceau R4 ①②③) ; la mise en colonnes PEINTE est reportée à la recette manuelle P-C, jsdom n'évaluant pas les media queries |
+| **E12** entretiens par interlocuteur, pause/reprise, à-revoir, notes, ad hoc (M3) | `DialogueDrapeau.tsx`, `DialogueQuestionAdHoc.tsx`, `EcranNouvelEntretien.tsx`, `session/{ecriture-session,notes-volantes,questions-adhoc,missions}.ts` | COUVERTE |
+| **E37** barème par type de réponse ; fourchette et non communiqué hors calcul (§32.1, §27.4) | `session/valeurs.ts` (12 formes + `range`), `session/ecriture-reponses.ts` (`withheld`, `MOTIFS_NON_COMMUNIQUE`, `notApplicable`, `horsParcours`), `SaisieReponse.tsx` | COUVERTE côté DONNÉE (100 % lignes sur `valeurs.ts`) — **non éprouvée côté SAISIE**, voir K.3 |
+| **E23** hyper intuitif, zéro bouton sauvegarder (§17) | `session/{enregistrement,raccourcis,gestes}.ts` | COUVERTE |
+| **E44** raccourcis complets, ancres visibles, 4 états (§33) | `session/{raccourcis,gestes,media}.ts`, `shared/banque-questions.ts` (`lireAncresDeCotation` + `consigne`) | PARTIELLE — les 4 états sont présents sur les écrans et listes livrés ; **axe-core n'est exécuté nulle part** (K.4) |
+| **E6** hors ligne total, PC ET tablette | tout `session/**`, `local/base.ts` | COUVERTE |
+| **E7** remontée continue — une op d'outbox à chaque geste | `ecriture-reponses.ts`, `ecriture-session.ts`, `notes-volantes.ts`, `questions-adhoc.ts` | COUVERTE |
+| **E33** RGPD — chiffrement local, accord de participation versionné (06 §10.4) | `DemarrageEntretien.tsx`, `session/{ecriture-session,auditeur}.ts` | COUVERTE — **avec l'écart de texte K.5** |
+| **E32** fuseau de mission à l'affichage, devises (§22.2) | `session/fuseau.ts` (E32 cité — correction R5 confirmée), `valeurs.ts` (`money` + ISO 4217) | COUVERTE — `valeurs.ts` réalise la part « devises » sans la citer (sous-citation, non bloquante) |
+
+Le contrôle qui avait manqué pour E32 est refait **exigence par exigence**, pas déduit des
+citations : E32 a désormais du code qui la réalise.
+
+Hors périmètre L5b, cochées ailleurs — je refuse explicitement de les cocher ici :
+**E24** (validation d'entretien strict/expert) et **E25** (contrôles de fin d'entretien, écran de
+couverture) → **L5c** · **E38** (export de secours chiffré) → **L5c** · **E26** (centre d'alertes)
+→ L5c/L7 · **E9** (multi-consultants, propriété §9.9) → **L6a**.
+
+## K.2 — Sens 2, code → exigences : aucun orphelin, **une glose FAUSSE**
+
+29 fichiers de source livrés, **29 lignes `Traçabilité :`**. Aucune route, aucune table, aucun job :
+le diff sur `apps/api/drizzle/**` et `apps/api/schema-manifest.json` est **VIDE** (mesuré).
+**Zéro code orphelin.**
+
+Deux fichiers de `packages/shared` relus au titre du 11 §8-2 : `sync.ts` = modification de
+**commentaire seulement** (renvoi de chemin cassé, C7 d'A29), donc **pas de déclencheur** sur le
+contrat d'ops ; `banque-questions.ts` = ajout **additif** du champ `consigne` (bloquant B2 d'A29),
+typecheck vert sur les cinq paquets, amendement tracé.
+
+### ÉCART K.2-a — `apps/field/src/session/valeurs.ts:45-46` cite **E30**, qui ne le concerne pas
+
+Fichier 08 : `E30 | 3 niveaux d'audit (diagnostic cadrage / opérationnel / stratégique groupe)
+alignés sur l'offre publique 8 étapes | §20.1, §20.2`.
+
+`valeurs.ts` type les douze formes de valeur de réponse et les valide à l'écriture. Aucun rapport
+avec les niveaux d'audit. Règle opposable, arbitrée en `DECISIONS.md` du 2026-09-03 (« Amendement à
+la règle R5 ») : « cite une exigence si le module la RÉALISE ». Test qui départage : si E30
+disparaissait du pack, `valeurs.ts` ne perdrait **rien**.
+
+Ce qui rend le constat certain plutôt qu'interprétatif : dans le **même incrément**,
+`SaisieReponse.tsx:26-27` et `session/ecriture-reponses.ts:33-34` citent **E37 (« fourchettes
+§27.4 »)** pour exactement ce sujet, et 03 §32.1 traite bien la fourchette (« borne BASSE ») et le
+non communiqué (« exclue du numérateur ET du dénominateur »).
+
+**QUATRIÈME occurrence de la classe** après E7/invariant 7, `fuseau.ts` (E13→E32) et
+`enregistrement.ts` (E38→E13/E6). Celle-ci franchit `check:tracabilite` (RC=0, 535 citations,
+« aucune incohérence » — le garde ne vérifie que l'existence du numéro, il le dit lui-même à
+`--angles-morts` n° 1 et n° 3), **le rejeu A29**, et la fiche étage 2 ouverte le jour même sur ce
+défaut exact (`AMELIORATIONS.md:1686`).
+
+Sous-citations relevées, **non bloquantes** : `session/media.ts` porte le seuil des trois colonnes
+sans citer E13 · `entretien.css` nomme 03 M3.1 sans ligne `Traçabilité :` (le garde ne balaie pas
+le CSS) · `notes-adhoc-hors-parcours.test.ts:24` cite « E7 » **sans glose** — angle mort n° 2.
+
+## K.3 — Ce que le chiffre de couverture annoncé mesure, et ce qu'il ne mesure pas
+
+`apps/field/src/session/**` : lignes **98,76 %** · fonctions **98,41 %** · branches **94,03 %** —
+remesuré, exact. Ce glob (`.github/coverage-critical-paths.json`, entrée « Machine a etats de
+session terrain ») **ne contient aucun composant d'écran** ; `apps/field/src/ecrans/**` n'est sous
+aucun seuil opposable, ni dans `cheminsCritiques`, ni dans `cheminsAttendus`.
+
+Mesure par fonction (`coverage/lcov.info`, enregistrements `FNDA`) sur `SaisieReponse.tsx` — le
+fichier qui EST « TOUS les types de réponse » du brief 11 §6 :
+
+| Fonction | Ligne | Exécutions | Type de réponse |
+|---|---|---|---|
+| `SaisieDevise` | 322 | **0** | `money` |
+| `SaisieDate` | 347 | **0** | `date` |
+| `ChoixUnique` | 377 | **0** | `single_choice`, `multi_choice` |
+| `SaisieTableau` | 495 | **0** | `table` |
+| 8 des 10 `onChangement` | 111 → 259 | **0** | tous sauf `scale_1_5` |
+
+Fichier : **40,85 % lignes · 31,81 % fonctions**. Voisins : `DialogueQuestionAdHoc.tsx`
+**14,28 % fonctions** · `PaletteRecherche.tsx` (hors-parcours) **53,27 % lignes** ·
+`EcranEntretien.tsx` **42,3 % fonctions** · **`AccesEntretien.tsx` 0 % lignes**, alors que c'est la
+porte d'entrée de tout l'incrément depuis l'accueil. Aucun e2e ne couvre l'écran d'entretien
+(`e2e/` = `polices`, `pwa-404`, `socle`).
+
+**Cinq des douze types de réponse ne sont rendus par aucun test.** Ce n'est pas une infraction à la
+DoD — son énumération est « sync, crypto locale, scoring, RBAC/propriété », et je n'exige pas ce
+qui n'est écrit nulle part. C'est un fait que la porte P-C doit voir **avant** la démo « 1 session
+de chaque type créée hors ligne ».
+
+## K.4 — DoD transverse : une ligne non tenue, une non vérifiable, une non allongée
+
+- **README de l'app à jour — NON TENUE.** `apps/field/README.md:11` : « ## État au lot **L5a** — le
+  SOCLE » ; `:15-16` : « **Aucun écran de collecte** : l'écran d'entretien est L5b (A22) ». Onze
+  composants d'écran et treize modules de session livrés ; la « Carte du socle » n'inscrit ni
+  `src/session/**` ni `src/ecrans/entretien/**`. Dernière modification : commit L5a `0d4daf4`.
+- **axe-core vert — NON VÉRIFIABLE.** Aucune occurrence d'`AxeBuilder` ni de `@axe-core/*` dans le
+  code du dépôt. `e2e/accessibilite-l5a.e2e.ts`, cité par `AMELIORATIONS.md:1611`, n'existe pas
+  dans ce worktree. Onze composants livrés, zéro balayage.
+- **`@filrouge` — VERT mais NON ALLONGÉ.** Vert sur FIL-TPE et FIL-GC
+  (`apps/api/tests/l1-filrouge.integration.test.ts`, 5 cas). 09 §4bis veut que chaque lot ALLONGE
+  le scénario du segment L5 ; L5b n'y a rien ajouté.
+
+## K.5 — L'écart RGPD est documenté en AMELIORATIONS, il ne l'est pas en DECISIONS
+
+`DECISIONS.md` du 2026-09-02 (Décideur : **Williams**) fixe un « Libellé retenu » promettant « le
+rapport ne vous attribue aucun propos **nominativement** » et le droit de « demander **l'arrêt de
+l'entretien** ». `DemarrageEntretien.tsx:19-23` est en production et annonce « elles sont
+**consignées sous votre nom et votre fonction** », sans le droit d'arrêt. Trois différences, pas
+une. La fiche `AMELIORATIONS.md:1557` nomme l'écart avec exactitude et le porte à Williams — mais
+**aucun amendement horodaté n'a été ajouté sous la décision du 2026-09-02**. 11 §9bis : « une
+décision non tracée dans ce format n'existe pas » ; 09 §5.2 : « tout écart à la spec est soit
+refusé, soit documenté comme amendement horodaté — jamais silencieux ». Une session neuve applique
+le protocole de reprise (11 §9ter) et lit la décision **avant** le code.
+
+## K.6 — Synthèse chiffrée, mesurée le 2026-09-03 sur `b3d8886`
+
+`pnpm lint` **RC=0** · `pnpm typecheck` **RC=0** · `npx vitest run --coverage` (3 projets)
+**78 fichiers, 1710/1710 verts, RC=0** · `.github/scripts/check-coverage.mjs` **RC=0**, « Tous les
+modules critiques atteignent 90 % — couverture MESURÉE » · `check:tracabilite` **RC=0** (535
+citations, 323 fichiers) · `check:decisions` **RC=0** (131 entrées au format) ·
+`check:no-skipped-tests` **RC=0** (81 fichiers) · `check:test-projects` **RC=0**
+(interface 29 · unit 32 · integration 17 · playwright 3) · `check:invariants` **RC=0**.
+Mesures prises sous **Node v24.19.0**, alors que 11 §1 épingle **Node 22 LTS** et que
+`package.json` déclare `>=22.11.0 <23` (avertissement « Unsupported engine » à chaque appel).
+Non rejoué : `schema:diff` (PostgreSQL injoignable, `ECONNREFUSED 127.0.0.1:5432`) — atténué, non
+remplacé, par le delta de schéma vide de L5b.
+
+**VERDICT A02 : ACCEPTÉ SOUS RÉSERVE.** Bloquantes pour le passage en porte P-C : **R1** (glose
+E30, K.2-a), **R2** (README, K.4), **R3** (amendement horodaté, K.5). Non bloquantes, à porter au
+dossier de porte : **R4** (cinq types de réponse jamais rendus, K.3), **R5** (axe-core absent),
+**R6** (fil rouge non allongé). Détail et conditions de levée :
+`docs/portes/CONTROLE_A02_L5b_2026-09-03.md`.
