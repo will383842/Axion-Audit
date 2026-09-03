@@ -177,22 +177,35 @@ la capture, comme toute preuve de porte (11 §9bis).
 
 #### Second point de recette : CINQ FORMES DE SAISIE NE SONT RENDUES PAR AUCUN TEST
 
-**Mesuré par A02 le 2026-09-03 (sa réserve R4, non bloquante et délibérément laissée ouverte).**
-Ce n'est PAS une infraction à la DoD — elle énumère sync, crypto locale, scoring et RBAC, jamais les
-écrans. Mais c'est ce que P-C doit savoir **avant** de cocher « une session de chaque type » :
+**Mesuré par A02 le 2026-09-03 (sa réserve R4, non bloquante et délibérément laissée ouverte),
+CORRIGÉ le même jour sur sa propre rectification.** Ce n'est PAS une infraction à la DoD — elle
+énumère sync, crypto locale, scoring et RBAC, jamais les écrans. Mais c'est ce que P-C doit savoir
+**avant** de cocher « une session de chaque type » :
 
-| Composant | Mesure | Conséquence pour la recette |
-| --------- | ------ | --------------------------- |
-| `SaisieDevise` | `FNDA:0` | aucun test ne l'a jamais rendue |
-| `SaisieDate` | `FNDA:0` | idem |
-| `ChoixUnique` | `FNDA:0` | idem |
-| `SaisieTableau` | `FNDA:0` | idem |
-| `AccesEntretien.tsx` | **0 % de lignes** | c'est la PORTE D'ENTRÉE de l'écran d'entretien |
+| Type de réponse | Comment il est rendu | Mesure |
+| --------------- | -------------------- | ------ |
+| `money` | `SaisieDevise` | `FNDA:0` — jamais exécutée |
+| `date` | `SaisieDate` | `FNDA:0` |
+| `single_choice` | `ChoixUnique` | `FNDA:0` |
+| `table` | `SaisieTableau` | `FNDA:0` |
+| **`multi_choice`** | **rendu EN LIGNE, aucune fonction nommée** | **`DA:153-186` à 0** — voir ci-dessous |
+| (porte d'entrée) | `AccesEntretien.tsx` | **0 % de lignes** |
 
-**Donc la recette doit répondre EN SAISISSANT, pas en regardant** : au moins une question de chaque
-type — `money` avec sa devise, `date`, `single_choice`, `table` — puis rouvrir la session et
-vérifier que la valeur relue est bien celle saisie. Un rendu qui s'affiche mais n'enregistre pas
-serait invisible à l'œil ; c'est exactement ce qu'aucun test ne surveille aujourd'hui.
+**ET LA RAISON DE CETTE CORRECTION VAUT PLUS QUE LA CORRECTION.** La première version de ce tableau
+listait QUATRE types et attribuait `single_choice` **et** `multi_choice` à `ChoixUnique`. C'est
+faux : `ChoixUnique` n'est appelé que pour `single_choice` ; `multi_choice` est rendu **en ligne**
+dans le `switch`, donc **il n'a aucune fonction à nommer et n'apparaît dans AUCUNE liste `FNDA:0`**.
+Il est vraiment non couvert — `lcov` donne ses lignes à zéro exécution — mais la métrique qui compte
+les FONCTIONS ne pouvait pas le dire. **Corollaire à retenir pour toute recette future : l'absence
+d'une entrée dans une liste `FNDA:0` ne prouve PAS qu'un type est couvert.** Le tableau destiné à
+rendre un trou visible en avait un de sa propre forme, et pour la raison qui a traversé tout ce lot
+— la mesure disponible répond à une autre question que celle posée.
+
+**Donc la recette répond EN SAISISSANT, pas en regardant** : au moins une question de chacun des
+**CINQ** types — `money` avec sa devise, `date`, `single_choice`, **`multi_choice` (cocher au moins
+deux options)**, `table` — puis rouvrir la session et vérifier que la valeur relue est bien celle
+saisie. Un rendu qui s'affiche mais n'enregistre pas serait invisible à l'œil ; c'est exactement ce
+qu'aucun test ne surveille aujourd'hui.
 `EcranEntretien.tsx` est par ailleurs à 11/26 fonctions couvertes : le doute de spec « faut-il
 mettre `apps/field/src/ecrans/**` sous seuil » est tracé dans `DECISIONS.md` du 2026-09-03 et
 attend **A01** — le motif « à extraire un jour » vaut pour le calendrier, pas pour le principe.

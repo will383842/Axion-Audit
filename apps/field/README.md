@@ -54,11 +54,16 @@ Couverture **mesurée** sur les modules critiques de la DoD : `src/local/**` et 
 ≥ 90 % sur les quatre métriques (`pnpm test:coverage` puis
 `node .github/scripts/check-coverage.mjs`).
 
-**Les COMPOSANTS d'écran ne sont pas dans ce périmètre, et le trou est nommé** : cinq des douze
-formes de saisie ne sont rendues par aucun test (`SaisieDevise`, `SaisieDate`, `ChoixUnique`,
-`SaisieTableau`), et `AccesEntretien.tsx` est à 0 % de lignes alors qu'il est la porte d'entrée de
-l'écran. Ce n'est pas une infraction à la DoD — elle énumère sync, crypto, scoring, RBAC — mais
-c'est ce que la recette P-C doit savoir avant de cocher « une session de chaque type ».
+**Les COMPOSANTS d'écran ne sont pas dans ce périmètre, et le trou est nommé** : **cinq** types de
+réponse ne sont rendus par aucun test — `money` (`SaisieDevise`), `date` (`SaisieDate`),
+`single_choice` (`ChoixUnique`), `table` (`SaisieTableau`) et **`multi_choice`**. Ce dernier est
+rendu **en ligne** dans le `switch` : il n'a **aucune fonction nommée**, donc il n'apparaît dans
+aucune liste `FNDA:0` — ses lignes sont pourtant à zéro exécution dans `lcov`. **L'absence d'une
+entrée dans une liste `FNDA:0` ne prouve donc pas qu'un type est couvert** ; la première version de
+ce paragraphe annonçait cinq types et n'en nommait que quatre, pour cette raison exacte.
+`AccesEntretien.tsx` est à 0 % de lignes alors qu'il est la porte d'entrée de l'écran.
+Ce n'est pas une infraction à la DoD — elle énumère sync, crypto, scoring, RBAC — mais c'est ce que
+la recette P-C doit savoir avant de cocher « une session de chaque type ».
 Voir `docs/conception/LOT_L5.md` §4.
 
 ### Carte du socle
