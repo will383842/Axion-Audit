@@ -9,12 +9,57 @@ Décision ferme du contrat 11 §2. Le SSR est inutile (outil interne authentifi�
 **nuisible** ici : l'app doit démarrer depuis le cache du service worker **sans serveur**. Ne jamais
 scaffolder Next dans ce dépôt, même « par habitude ».
 
-## État au lot L5a — le SOCLE
+## État au lot L5b — le SOCLE **et** l'écran d'entretien
 
-Livré : shell PWA + service worker Workbox, base locale Dexie **versionnée**, coffre **DEK/KEK**,
-port d'écriture, horloge à décalage serveur, verrou 15/60 min + Wake Lock, `storage.persist()`.
-**Aucun écran de collecte** : l'écran d'entretien est L5b (A22), la journée et l'export de secours
-sont L5c (A23).
+**Mis à jour le 2026-09-03 (réserve R2 du contrôle A02).** Ce paragraphe annonçait encore
+« aucun écran de collecte : l'écran d'entretien est L5b (A22) » alors que L5b est livré. Un README
+qui présente comme à venir ce que le commit contient n'est pas incomplet, il est FAUX — et c'est le
+premier fichier que lit quelqu'un qui arrive.
+
+**Livré par L5a (socle)** : shell PWA + service worker Workbox, base locale Dexie **versionnée**,
+coffre **DEK/KEK**, port d'écriture, horloge à décalage serveur, verrou 15/60 min + Wake Lock,
+`storage.persist()`.
+
+**Livré par L5b (collecte)** : l'écran d'entretien **3 zones** (03 M3.1) — blocs · question · notes —
+« Nouvel entretien » en trois champs, les **onze** `TYPES_DE_REPONSE`, le mode **fourchette** et
+« non communiqué » (§27.4), à-revoir / sans objet, les **trois** natures de note (note de question,
+bloc-notes de session, **note volante** à rattachement différé), la question **ad hoc**, le
+**hors-parcours** (§25.4), les raccourcis §33.3, le **mode écran partagé**, et l'indicateur
+« Enregistré » adossé à un enregistrement continu débouncé. **11 composants** sous
+`src/ecrans/entretien/`, **13 modules** sous `src/session/`.
+
+**PAS encore livré — c'est L5c (A23)** : l'agenda et le cockpit « Aujourd'hui » (§34.2), les cinq
+types de session autres qu'`entretien`, **terminer ≠ valider** côté écran (la machine à états, elle,
+est livrée et testée), les photos, et l'**export de secours** `.axionbackup`.
+**PAS encore livré — c'est L6** : toute synchronisation. `portSyncInerte` rend
+`{ statut: 'indisponible' }`.
+
+### Ce que L5b ajoute à la carte des modules
+
+| Module                              | Ce qu'il porte                                                                            |
+| ----------------------------------- | ----------------------------------------------------------------------------------------- |
+| `src/ecrans/entretien/**`           | les 11 composants de l'écran 3 zones, `entretien.css` (le seuil des colonnes : **64rem**) |
+| `src/session/valeurs.ts`            | les **douze** formes de valeur (11 types + `range`) et la GARDE À L'ÉCRITURE              |
+| `src/session/ecriture-*.ts`         | création/démarrage d'entretien, écriture de réponse — refus si validé (§19.1 V2.10)       |
+| `src/session/notes-volantes.ts`     | capture immédiate, rattachement différé, suppression **logique** (invariant 7)            |
+| `src/session/questions-adhoc.ts`    | question ad hoc hors ligne, codes d'options garantis DISTINCTS                            |
+| `src/session/enregistrement.ts`     | l'enregistrement continu : file sérialisée, débounce, purge sur `pagehide`                |
+| `src/session/raccourcis.ts`         | la grille §33.3, INACTIVE dans un champ de saisie (règle V2.8)                            |
+| `src/session/media.ts`, `gestes.ts` | seuil des trois colonnes, pointeur fin, balayage horizontal iPad                          |
+| `src/session/fuseau.ts`             | affichage au fuseau de **mission** (03 §22.2) — jamais celui de l'appareil                |
+
+### Ce que les tests couvrent, et ce qu'ils ne couvrent PAS
+
+Couverture **mesurée** sur les modules critiques de la DoD : `src/local/**` et `src/session/**`
+≥ 90 % sur les quatre métriques (`pnpm test:coverage` puis
+`node .github/scripts/check-coverage.mjs`).
+
+**Les COMPOSANTS d'écran ne sont pas dans ce périmètre, et le trou est nommé** : cinq des douze
+formes de saisie ne sont rendues par aucun test (`SaisieDevise`, `SaisieDate`, `ChoixUnique`,
+`SaisieTableau`), et `AccesEntretien.tsx` est à 0 % de lignes alors qu'il est la porte d'entrée de
+l'écran. Ce n'est pas une infraction à la DoD — elle énumère sync, crypto, scoring, RBAC — mais
+c'est ce que la recette P-C doit savoir avant de cocher « une session de chaque type ».
+Voir `docs/conception/LOT_L5.md` §4.
 
 ### Carte du socle
 
