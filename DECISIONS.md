@@ -7233,6 +7233,55 @@ Décideur : **Williams** (préparé et mis en œuvre par A11).
 Impact spec : aucun sur `/docs` ; `infra/README.md` §5.7-4 et §6.3 amendés (datés), note datée dans
 `.github/workflows/README.md`.
 
+## 2026-09-03 — [gouvernance] Deux sessions pilotes simultanées sur les mêmes worktrees : laquelle pilote
+
+Options :
+(a) La session `…01Xk19br` (celle-ci) garde les trois chantiers — elle a nommé trois chefs et gelé
+proprement ; (b) la session `…01Ckvewm` pilote, celle-ci passe la main et verse ce que ses équipes
+ont produit ; (c) partage par chantier — écarté d'emblée : c'est la configuration qui a produit
+l'incident, pas son remède.
+
+Arbitrage : **(b)**. Trois faits mesurés, aucun récit. `f37dd3c`, que le briefing de cette session
+donnait comme l'état de SON chantier L7, porte déjà le trailer `Claude-Session: …01Ckvewm` : l'autre
+session travaillait sur ces worktrees **avant** ce lancement — celle-ci est arrivée dans un chantier
+occupé sans le savoir. Les trois sondes A51 (F-19, F-20, F-21) sont d'elle, commitées. Son A10 a
+refusé de pousser un arbre qu'il savait porteur d'une régression et refusé `--no-verify` pour
+contourner le hook. À l'inverse, cette session a posé un commit vide comme sonde d'identité
+(`e8fb708`) sans voir qu'un commit vide **porte l'arbre de son parent** : elle a fait de l'état cassé
+la tête de `lot/l3-suite`. « Aucun fichier touché » ne veut pas dire « aucun arbre porté ».
+Précédence : `ORGANISATION_AGENTS.md` §7 (« Un seul pilote ») et §9 (« la quatrième session est
+interdite : un pilote, trois chefs, une session de vérification qui ne produit rien »), qui outillent
+`CLAUDE.md` §4 et §7 ; aucune divergence de pack, donc pas de règle de précédence à invoquer.
+
+Décideur : **A01**, sur délégation de Williams du 2026-09-03 (« fais selon tes recommandations »),
+la recommandation ayant été formulée AVANT la délégation et à son propre désavantage.
+Impact spec : aucun. Ce que cette session verse et qui ne se perd pas : la note de conception L6
+(`docs/conception/LOT_L6.md`), les bascules de discriminance F-19/F-20, la localisation du rouge de
+couverture L5b (8 fichiers périphériques, +12 fonctions), et le défaut du projet `interface`.
+
+## 2026-09-03 — [gouvernance] La phrase « L6 après L5a » du §9 : citation fautive, PAS arbitrage
+
+Options :
+(a) Tracer l'ordre L5a → L5b → L5c → L6 comme une décision, puisque deux sessions l'ont proposé
+comme un amendement ; (b) corriger la phrase du §9 sans rien décider, parce que le pack le dit déjà.
+
+Arbitrage : **(b)**. Vérifié dans le pack : `09 §6` (« P-C, fin L5 … **ensuite** L6 se développe
+SEUL ; jamais L5 et L6 menés de front ») et `07:24` (L5 = les trois incréments L5a/L5b/L5c). La
+formulation « L6 après L5a » est **introuvable** dans 07, 09, 11 et 00_INDEX. Le §9 ne se contredit
+pas : il **cite mal** le calendrier du 09. Une décision qui ratifie ce que la spec dit déjà fabrique
+un flottement là où il n'y en a pas et **affaiblit toutes les autres**, en laissant croire que le
+point était ouvert. On applique, on ne décide pas. Précédence : `CLAUDE.md` §0 (le pack est LA source
+d'exécution) ; `ORGANISATION_AGENTS.md` ne prime sur rien et n'amende aucune spécification — il ne
+pouvait donc pas créer cet ordre, seulement le rapporter de travers.
+
+Conséquence opérationnelle : L5c n'est pas descopable (le 07 met « 1 session de chaque type créée
+hors ligne » et « export de secours restauré sur un 2e appareil » dans les critères de la porte L5) ;
+le levier de descope au 15/09 (P-DESCOPE) est **L8**, que le 07 marque déjà différable.
+
+Décideur : **A01**, sur délégation de Williams du 2026-09-03.
+Impact spec : aucun sur `/docs` (aucun fichier du pack modifié) ; `ORGANISATION_AGENTS.md` §9 corrigé
+et daté, la version fautive citée dans le texte pour que la correction reste lisible.
+
 ## 2026-09-03 — [L3] « Migrations up/down exécutées sur staging » : la porte L3 attend-elle la remise en état de staging ?
 
 La DoD transverse (`CLAUDE.md` §5, ligne 4) dit « migrations up/down **exécutées sur staging** ».
