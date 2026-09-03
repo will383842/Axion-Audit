@@ -562,6 +562,47 @@ describe('codesDOptions — deux options distinctes ne deviennent JAMAIS le mêm
     expect(new Set(codes).size).toBe(codes.length);
   });
 
+  it('un libellé qui VAUT DÉJÀ le suffixe généré ne prend pas sa place — réserve R3', () => {
+    // Mesuré par A29 sur la première correction de C4 : ['Oui', 'Oui 2', 'Oui !']
+    // rendait ['oui', 'oui_2', 'oui_2']. Le suffixe entrait en collision avec un
+    // libellé qui vaut déjà `oui_2` — la correction reproduisait le défaut
+    // qu'elle fermait. Un compteur par base ne suffit pas : il faut consulter
+    // l'ensemble des codes DÉJÀ ATTRIBUÉS.
+    expect(codesDOptions(['Oui', 'Oui 2', 'Oui !'])).toEqual(['oui', 'oui_2', 'oui_3']);
+  });
+
+  it('reste distinct quel que soit l’ORDRE des libellés', () => {
+    // L'ordre change les codes ; il ne doit jamais faire réapparaître un doublon.
+    for (const ordre of [
+      ['Oui', 'Oui !', 'Oui 2', 'Oui ?'],
+      ['Oui 2', 'Oui', 'Oui ?', 'Oui !'],
+      ['Oui !', 'Oui 2', 'Oui ?', 'Oui'],
+    ]) {
+      const codes = codesDOptions(ordre);
+      expect(new Set(codes).size, `ordre ${ordre.join('/')} → ${codes.join(',')}`).toBe(
+        codes.length,
+      );
+    }
+  });
+
+  it('garantit l’unicité sur un lot ADVERSE de libellés fabriqués pour entrer en collision', () => {
+    // La propriété est vérifiée sur la SORTIE, pas sur la recette : c'est elle
+    // qu'`answers.value` doit tenir, quelle que soit la façon de l'obtenir.
+    const codes = codesDOptions([
+      'Oui',
+      'Oui !',
+      'oui_2',
+      'OUI ?',
+      'Oui 3',
+      'oui___',
+      'Oui…',
+      '',
+      '!!!',
+    ]);
+    expect(new Set(codes).size).toBe(codes.length);
+    expect(codes.every((code) => code !== '')).toBe(true);
+  });
+
   it('reste distinct même quand tous les libellés sont vides de lettres', () => {
     // `codeDOption` replie alors sur le rang : la distinction survit d'elle-même.
     const codes = codesDOptions(['!!!', '???', '***']);

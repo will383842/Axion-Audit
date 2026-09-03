@@ -41,6 +41,7 @@
 // E27 (design/WCAG), E33 (RGPD — écran partagé), E44.
 // =============================================================================
 import 'fake-indexeddb/auto';
+import { readFileSync } from 'node:fs';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
@@ -58,6 +59,7 @@ import {
   memoriserQuestionCourante,
   memoriserSessionCourante,
 } from '../../session/position.js';
+import { REQUETE_TROIS_COLONNES } from '../../session/media.js';
 import { EcranEntretien } from './EcranEntretien.js';
 import { EcranNouvelEntretien } from './EcranNouvelEntretien.js';
 
@@ -1099,5 +1101,148 @@ describe('indicateur « Enregistré » (03 §33.3) — la confiance se voit, et 
     touche('2', questionAffichee(TEXTE_ECHELLE));
     const indicateur = await screen.findByText(/^Enregistré/);
     expect(indicateur.closest('[role="status"]')).not.toBeNull();
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// R1 — LA SECONDE FACE DE B1, ÉPROUVÉE CHEZ LE PRODUCTEUR ET PLUS SEULEMENT
+//      CHEZ LE CONSOMMATEUR (réserve R1 du rejeu A29, 2026-09-03)
+// ═════════════════════════════════════════════════════════════════════════════
+// Les deux cas de `revue-a29.test.tsx` posent `mockResolvedValue(false)` sur
+// `PanneauNotes` : ils prouvent que le PANNEAU honore un booléen. Ils ne prouvent
+// pas que `capturerNoteVolante` REND `false` quand la transaction Dexie échoue —
+// qui est précisément la face trouvée en corrigeant B1, et celle qu'un `throw` sur
+// l'identité n'aurait pas fermée. Ici la porte d'écriture rejette pour de vrai, et
+// c'est l'écran complet qui est monté.
+const NOTE_VOLANTE_R1 = 'SENTINELLE_VOLANTE_R1_KP7X2M — le circuit d’achat n’est pas écrit';
+
+/** La zone de capture d'une note volante, dans la colonne de droite. */
+function zoneCaptureVolante(): HTMLTextAreaElement {
+  const zone = screen.getByLabelText(/où la mettre/i);
+  if (!(zone instanceof HTMLTextAreaElement)) throw new Error('zone de capture introuvable');
+  return zone;
+}
+
+describe('R1 — l’écran d’entretien ne perd pas une note volante quand l’écriture échoue', () => {
+  it('CONSERVE le texte quand `ecrireLocal` rejette — la promesse ne ment plus', async () => {
+    await monterEntretien(interviewId);
+    await waitFor(() => {
+      expect(questionAffichee(TEXTE_ECHELLE)).toBeTruthy();
+    });
+
+    const zone = zoneCaptureVolante();
+    fireEvent.change(zone, { target: { value: NOTE_VOLANTE_R1 } });
+
+    // La porte se ferme APRÈS la saisie : seul l'enregistrement échoue.
+    porte.intercepter = () => Promise.reject(new Error('QuotaExceededError simulée'));
+    fireEvent.click(screen.getByRole('button', { name: 'Garder cette note volante' }));
+
+    // L'échec est ANNONCÉ (03 §17.6 : une cause et une action, jamais un silence).
+    await screen.findByRole('alert');
+    // ET LE TEXTE EST TOUJOURS LÀ. Avant B1, il avait disparu.
+    await waitFor(() => {
+      expect(zoneCaptureVolante().value).toBe(NOTE_VOLANTE_R1);
+    });
+    // Rien n'a été rangé : la liste des notes de la session ne l'a pas reçue.
+    expect(contenuDom()).not.toContain(NOTE_VOLANTE_R1.slice(0, 30) + '\u200b');
+  });
+
+  it('EFFACE le texte quand l’écriture RÉUSSIT — sinon le test précédent ne prouverait rien', async () => {
+    await monterEntretien(interviewId);
+    await waitFor(() => {
+      expect(questionAffichee(TEXTE_ECHELLE)).toBeTruthy();
+    });
+
+    const zone = zoneCaptureVolante();
+    fireEvent.change(zone, { target: { value: `${NOTE_VOLANTE_R1} (celle-ci passe)` } });
+    fireEvent.click(screen.getByRole('button', { name: 'Garder cette note volante' }));
+
+    await waitFor(() => {
+      expect(zoneCaptureVolante().value).toBe('');
+    });
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// R4 — LES TROIS ZONES SONT ÉPROUVÉES, ET PLUS SEULEMENT RENDUES
+// ═════════════════════════════════════════════════════════════════════════════
+// A29 a mesuré que basculer le shim `matchMedia` de `false` à `true` change la
+// disposition et laisse TOUT vert : aucune assertion de la suite ne dépendait des
+// trois colonnes. Le livrable-titre de L5b (03 M3.1) était rendu et jamais éprouvé.
+//
+// CE QUE JSDOM PERMET ET CE QU'IL NE PERMET PAS, dit avant d'asserter : la mise en
+// colonnes est portée par une MEDIA QUERY CSS (`entretien.css`), et jsdom
+// n'évalue pas les media queries d'une feuille de style. Prétendre vérifier ici
+// « trois colonnes peintes » serait refaire le défaut qu'on répare — un test qui
+// annonce autre chose que ce qu'il mesure. On éprouve donc les TROIS choses
+// réellement observables, et elles suffisent à attraper une régression :
+//   ① la STRUCTURE : les trois zones coexistent dans le DOM, la colonne de droite
+//     porte ses champs SANS qu'aucun panneau ait été ouvert ;
+//   ② le COMPORTEMENT piloté par le seuil : au-dessus, « Note » pose le focus dans
+//     la note de la colonne ; en dessous, il OUVRE le panneau ;
+//   ③ le CONTRAT JS ↔ CSS : le seuil de `REQUETE_TROIS_COLONNES` est le même que
+//     celui déclaré par `entretien.css`. C'est la dérive que personne ne verrait.
+describe('R4 — les trois zones de M3.1, au-dessus du seuil', () => {
+  it('① rend les trois zones EN MÊME TEMPS, sans qu’aucun panneau soit ouvert', async () => {
+    const { container } = await monterEntretien(interviewId);
+    await waitFor(() => {
+      expect(questionAffichee(TEXTE_ECHELLE)).toBeTruthy();
+    });
+
+    expect(container.querySelector('aside[aria-label="Blocs et progression"]')).not.toBeNull();
+    expect(container.querySelector('.axn-entretien__zone--centre')).not.toBeNull();
+    expect(container.querySelector('aside[aria-label="Notes"]')).not.toBeNull();
+
+    // La colonne de droite porte ses champs SANS geste préalable : c'est ce qui
+    // distingue une colonne d'un panneau, et c'est ce que M3.1 demande.
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(zoneCaptureVolante()).toBeTruthy();
+  });
+
+  it('② « Note » pose le focus dans la colonne, et n’ouvre PAS de panneau', async () => {
+    await monterEntretien(interviewId);
+    await waitFor(() => {
+      expect(questionAffichee(TEXTE_ECHELLE)).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Note' }));
+    await waitFor(() => {
+      expect(document.activeElement?.id).toBe('axn-note-de-question');
+    });
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('② en DESSOUS du seuil, le même geste ouvre le panneau — la bascule existe', async () => {
+    const largeur = window.innerWidth;
+    try {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: 500 });
+      await monterEntretien(interviewId);
+      await waitFor(() => {
+        expect(questionAffichee(TEXTE_ECHELLE)).toBeTruthy();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Note' }));
+      // Le panneau s'ouvre : c'est l'autre moitié du composant, celle que le
+      // shim menteur rendait SEULE pendant tout le lot.
+      await screen.findByRole('dialog');
+      expect(document.activeElement?.id).not.toBe('axn-note-de-question');
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: largeur });
+    }
+  });
+
+  it('③ le seuil du JS et celui du CSS sont le MÊME nombre', () => {
+    // `media.ts` affirme en commentaire « le MÊME seuil que `entretien.css` ».
+    // Une affirmation en commentaire ne tient pas : on la mesure. Si l'un des deux
+    // bouge un jour, ce test le dit — sinon la disposition et la logique de
+    // navigation divergeraient sans qu'aucun écran ne casse visiblement.
+    // Le CSS est lu SUR LE DISQUE, pas importé : sous Vitest, un import
+    // `?raw` d'une feuille de style rend une chaîne VIDE — et un `toContain`
+    // sur une chaîne vide passerait pour une vérification alors qu’il ne
+    // vérifie rien. Mesuré ici même avant de le remplacer.
+    const css = readFileSync('apps/field/src/ecrans/entretien/entretien.css', 'utf8');
+    const seuilJs = /min-width:\s*([\d.]+)rem/.exec(REQUETE_TROIS_COLONNES)?.[1];
+    expect(seuilJs).toBeDefined();
+    expect(css).toContain(`@media (min-width: ${String(seuilJs)}rem)`);
   });
 });

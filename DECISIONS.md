@@ -5741,3 +5741,62 @@ adossée au pipeline 09 §3-2 (« TDD sur les parties critiques : tests écrits 
 
 Décideur : A20
 Impact spec : aucun — amendement horodaté de l'entrée B2 du 2026-09-03.
+
+## 2026-09-03 — [L5b] Quand un libellé d'option VAUT DÉJÀ le suffixe généré : on cherche le premier code libre
+
+Réserve R3 du rejeu A29. L'arbitrage « suffixer plutôt que refuser » est endossé ; c'est son
+implémentation qui était incomplète. Mesuré : `['Oui', 'Oui 2', 'Oui !']` rendait
+`['oui', 'oui_2', 'oui_2']` — le suffixe généré entrait en collision avec un libellé qui vaut
+littéralement `oui_2`. La correction de C4 reproduisait donc exactement le défaut qu'elle fermait.
+
+Options :
+
+1. **Chercher le premier code LIBRE** : boucler tant que le candidat est pris, en consultant
+   l'ensemble de tous les codes déjà attribués.
+2. Réserver le motif `_<chiffre>` en refusant tout libellé qui s'y réduit.
+3. Préfixer les codes générés d'un marqueur (`oui__2`) pour qu'ils ne puissent jamais collisionner
+   avec un code issu d'un libellé.
+
+Arbitrage : **option 1.** L'option 2 rend imprévisible pour l'auditeur ce qu'il a le droit d'écrire,
+et pour une raison qu'aucun écran ne peut lui expliquer. L'option 3 fabrique un code illisible dans
+un export, alors que ces codes finissent dans `answers.value` et sont relus par un humain au
+dépouillement. L'option 1 ne demande rien à personne et se vérifie par une propriété simple :
+`new Set(codes).size === codes.length`, éprouvée sur trois ORDRES différents et un lot adverse —
+un compteur par base n'est qu'une approximation de la seule vérité, l'ensemble des codes attribués.
+Conséquence assumée : `['Oui', 'Oui !', 'Oui 2', 'Oui ?']` rend `['oui', 'oui_2', 'oui_2_2',
+'oui_3']`. Le code `oui_2_2` est laid ; il est UNIQUE, et l'unicité prime la beauté sur une donnée
+d'audit. **Précédence : invariant 7** — rien n'est silencieusement écrasé.
+
+Décideur : A20, sur réserve R3 du rejeu A29
+Impact spec : aucun.
+
+## 2026-09-03 — [L5b] Un module d'affichage au fuseau se rattache à E32, jamais à l'écran qui le consomme
+
+Réserve R5 du rejeu A29. `session/fuseau.ts` citait E13 (« écran d'entretien 3 zones ») au motif que
+l'indicateur « Enregistré à HH:mm » consomme son résultat. Conséquence mesurable : **E32 n'avait
+aucun code rattaché depuis ce module**, alors que le module ne fait QUE ce que E32 décrit. A02 coche
+la traçabilité dans les deux sens à l'étape 6 ; une exigence sans code rattaché s'y voit.
+
+Options :
+
+1. **Rattacher un module à l'exigence qu'il RÉALISE** — ici E32 (fuseaux, devises, interface
+   française), comme le fait déjà son jumeau `local/horloge.ts`.
+2. Le rattacher à l'écran qui le consomme, pour que la lecture « à quoi sert ce fichier » soit
+   immédiate.
+
+Arbitrage : **option 1**, et la règle vaut au-delà de ce fichier : **une glose cite ce que le module
+FAIT, pas ce qui l'appelle.** Un consommateur change ; ce que réalise un module ne change pas sans
+que le module change. La règle de l'option 2 ferait dériver toute la traçabilité vers les écrans, et
+les exigences transverses (fuseaux, sécurité, hors ligne) n'auraient plus jamais de code rattaché.
+Même correction pour `session/enregistrement.ts`, qui citait E38 (« sync ≥ 1×/jour + export de
+secours ») : la purge sur `pagehide` protège la SAISIE EN COURS sur l'appareil, elle ne remonte rien
+au siège et ne produit aucun export — E38 est servie par L5c et L6.
+**C'est la troisième occurrence de cette classe de défaut dans le lot** (E7 confondue avec
+l'invariant 7, puis ces deux-ci) : elle mérite un contrôle outillé et pas de la vigilance. Fiche
+`AMELIORATIONS.md` étage 2 à ouvrir — le garde actuel compare la glose au LIBELLÉ de l'exigence,
+il ne peut pas voir qu'un module réalise une AUTRE exigence que celle qu'il cite.
+**Précédence : sans objet** — le pack ne règle pas la forme des gloses ; 11 §9bis exige la
+traçabilité, pas sa syntaxe.
+
+Décideur : A20, sur réserve R5 du rejeu A29
+Impact spec : aucun.

@@ -225,14 +225,33 @@ function CaptureNoteVolante(proprietes: {
 
   const capturer = (): void => {
     if (brouillon.trim() === '' || enCours) return;
+    // Ce qui est ENVOYÉ est figé ici. Tout ce que l'auditeur tapera pendant
+    // l'écriture ne fait PAS partie de cette note, et ne doit donc pas partir
+    // avec elle — ni disparaître avec elle.
+    const capture = brouillon;
     setEnCours(true);
-    // Le brouillon n'est vidé QUE sur confirmation d'écriture. Un refus
-    // (identité inconnue) ou un échec de transaction locale laisse le texte
-    // à l'écran : l'auditeur peut réessayer ou le copier ailleurs. Ne rien
-    // effacer qu'on n'a pas su ranger — c'est l'invariant 7 vu du clavier.
-    void onCapturer(brouillon)
+    void onCapturer(capture)
       .then((ecrite) => {
-        if (ecrite) setBrouillon('');
+        if (!ecrite) return;
+        // ── TROISIÈME FACE DE B1 (réserve R2 du rejeu A29, 2026-09-03) ────────
+        // `setBrouillon('')` effaçait AUSSI les caractères tapés depuis le clic.
+        // La fenêtre est courte mais réelle, et la file sérialisée de
+        // `enregistrement.ts` l'élargit : une frappe débouncée en attente ajoute
+        // son délai avant que celle-ci ne s'exécute. Même geste, même invariant 7
+        // — du texte saisi disparaît sans avoir été écrit.
+        //
+        // ON RETIRE CE QU'ON A RANGÉ, PAS LE CHAMP. Et si le début du champ n'est
+        // plus la capture (l'auditeur a corrigé le milieu de sa phrase pendant
+        // l'écriture), ON NE RETIRE RIEN : garder un texte en trop se répare d'un
+        // geste, en perdre un ne se répare pas. Le repli va vers la conservation.
+        //
+        // POURQUOI PAS `disabled={desactive || enCours}` : bloquer la frappe
+        // pendant l'écriture contredit 03 §17.4 — « rien de ce qui se dit ne doit
+        // attendre qu'on trouve la bonne case ». L'auditeur est en entretien ;
+        // c'est l'interface qui s'adapte, pas lui.
+        setBrouillon((actuel) =>
+          actuel.startsWith(capture) ? actuel.slice(capture.length) : actuel,
+        );
       })
       .finally(() => {
         setEnCours(false);

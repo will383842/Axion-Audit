@@ -104,6 +104,69 @@ describe('B1 — « Garder cette note volante » n’efface rien qu’il n’a p
     });
   });
 
+  it('ne retire QUE le texte capturé — ce qui est tapé pendant l’écriture survit (R2)', async () => {
+    // TROISIÈME FACE DE B1. `setBrouillon('')` effaçait aussi les caractères tapés
+    // depuis le clic. La fenêtre est courte, et la file sérialisée de
+    // `enregistrement.ts` l'élargit : une frappe débouncée en attente ajoute son
+    // délai. Même geste, même invariant 7 — du texte saisi disparaît sans avoir
+    // été écrit. On tient la promesse ouverte pour rendre la fenêtre observable.
+    let confirmer: (ecrite: boolean) => void = () => undefined;
+    const lent = vi.fn<(texte: string) => Promise<boolean>>().mockImplementation(
+      () =>
+        new Promise<boolean>((resoudre) => {
+          confirmer = resoudre;
+        }),
+    );
+    rendrePanneau(lent);
+    const { zone, bouton } = captureNoteVolante();
+
+    fireEvent.change(zone, { target: { value: TEXTE_NOTE } });
+    fireEvent.click(bouton);
+    await waitFor(() => {
+      expect(lent).toHaveBeenCalledWith(TEXTE_NOTE);
+    });
+
+    // L'auditeur continue de parler, donc de taper, pendant que ça écrit.
+    const SUITE = ' et la relance : depuis quand ?';
+    fireEvent.change(zone, { target: { value: TEXTE_NOTE + SUITE } });
+
+    confirmer(true);
+
+    // Seule la note RANGÉE part. La suite reste, parce qu'elle n'a pas été rangée.
+    await waitFor(() => {
+      expect(zone.value).toBe(SUITE);
+    });
+  });
+
+  it('ne retire RIEN si le champ ne commence plus par la capture — le repli va vers la conservation', async () => {
+    // L'auditeur a corrigé le MILIEU de sa phrase pendant l'écriture : on ne sait
+    // plus quoi retirer. Garder un texte en trop se répare d'un geste ; en perdre
+    // un ne se répare pas.
+    let confirmer: (ecrite: boolean) => void = () => undefined;
+    const lent = vi.fn<(texte: string) => Promise<boolean>>().mockImplementation(
+      () =>
+        new Promise<boolean>((resoudre) => {
+          confirmer = resoudre;
+        }),
+    );
+    rendrePanneau(lent);
+    const { zone, bouton } = captureNoteVolante();
+
+    fireEvent.change(zone, { target: { value: TEXTE_NOTE } });
+    fireEvent.click(bouton);
+    await waitFor(() => {
+      expect(lent).toHaveBeenCalledTimes(1);
+    });
+
+    const REECRIT = 'Phrase entièrement réécrite pendant l’enregistrement.';
+    fireEvent.change(zone, { target: { value: REECRIT } });
+    confirmer(true);
+
+    await waitFor(() => {
+      expect(zone.value).toBe(REECRIT);
+    });
+  });
+
   it('ne tente rien sur un brouillon vide — une note vide n’a rien à retenir', () => {
     const capturer = vi.fn<(texte: string) => Promise<boolean>>().mockResolvedValue(true);
     rendrePanneau(capturer);

@@ -66,19 +66,26 @@ export function codeDOption(libelle: string, rang: number): string {
  * conserve les deux, reste lisible, et se relit sans documentation.
  */
 export function codesDOptions(libelles: readonly string[]): string[] {
-  const vus = new Map<string, number>();
+  const pris = new Set<string>();
   return libelles.map((libelle, rang) => {
     const base = codeDOption(libelle, rang);
-    const dejaVu = vus.get(base);
-    if (dejaVu === undefined) {
-      vus.set(base, 1);
-      return base;
+    // ── RÉSERVE R3 DU REJEU A29 (2026-09-03) : LE SUFFIXE NE SE VÉRIFIAIT PAS ──
+    // La version d'avant comptait les occurrences d'une base et suffixait par ce
+    // compteur, sans regarder si le code PRODUIT était libre. Mesuré :
+    // ['Oui', 'Oui 2', 'Oui !'] rendait ['oui', 'oui_2', 'oui_2'] — le suffixe
+    // généré entrait en collision avec un libellé qui vaut DÉJÀ `oui_2`, et la
+    // correction de C4 reproduisait exactement le défaut qu'elle fermait.
+    // On BOUCLE donc tant que le candidat est pris, en consultant l'ensemble de
+    // tous les codes déjà attribués — la seule vérité, un compteur par base n'en
+    // est qu'une approximation.
+    let candidat = base;
+    let rangDeCollision = 1;
+    while (pris.has(candidat)) {
+      rangDeCollision += 1;
+      candidat = `${base}_${String(rangDeCollision)}`;
     }
-    // Le suffixe part de 2 : la première occurrence garde le code nu, ce qui
-    // laisse intactes toutes les questions qui n'ont jamais eu de collision.
-    const suivant = dejaVu + 1;
-    vus.set(base, suivant);
-    return `${base}_${String(suivant)}`;
+    pris.add(candidat);
+    return candidat;
   });
 }
 

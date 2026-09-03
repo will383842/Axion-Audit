@@ -21,7 +21,10 @@
 //
 // L'échec ne se rattrape pas en silence : `erreur` porte un message français et
 // l'indicateur ne dit PAS « Enregistré ».
-// Traçabilité : E13 (enregistrement continu, aucun bouton sauvegarder), E38 (sauvegarde terrain).
+// Traçabilité : E13 (écran 3 zones, enregistrement continu), E6 (hors ligne total).
+// Citait E38 (« sync ≥ 1×/j + export de secours ») : la purge sur `pagehide` protège
+// la SAISIE EN COURS sur l’appareil, elle ne remonte rien au siège et ne produit
+// aucun export — E38 est servie par L5c et L6, pas ici. Corrigé sur réserve R5.
 // =============================================================================
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { EtatEnregistrement } from '@axion/ui';
