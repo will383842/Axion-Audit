@@ -2682,4 +2682,25 @@ plan supprimée = 1 rouge. `verrou.ts` restauré à l'identique (SHA-1 `b101c45`
 **Deux défauts rendus à A24/A20, NON corrigés par moi** (09 §5.6) : `verrou.ts:192`, `verrouEcran`
 n'est jamais remis à `null` après un `release` système — le Wake Lock n'est donc pas redemandé au
 retour au premier plan ; et `contexte.tsx:281`, le `useMemo` ne mémoïse rien, `useVerrou` rendant un
-objet neuf à chaque rendu. Aucun n'est bloquant. Recommandation de glob : voir le rapport.
+objet neuf à chaque rendu. Aucun n'est bloquant.
+
+## 2026-09-03 13h50 — [lot L5 / incrément L5a] — le glob de couverture est POSÉ, plus « à voir »
+
+Dernier commit vert : (celui-ci) · Branche : lot/l5a · Poussé : oui
+Tâche : aucune. Bloc écrit par la session **pilote**, à sa fermeture.
+Prochaine action : **A51 sur `lot/l5a`** (réserve **B2**, seule bloquante restante). Puis merge #30.
+Tests rouges connus : aucun.
+
+**Le second volet de B1 est fermé.** `apps/field/src/app/verrou.ts` entre dans
+`.github/coverage-critical-paths.json` — **14 chemins critiques**, seuil inchangé à 90. Le glob
+**RESSERRE** le seuil (mesuré 100 % sur les quatre métriques, dix points de marge) : même motif que
+`routes/users.ts` et la machine à états L3d. **`apps/field/src/app/**` n'est DÉLIBÉRÉMENT pas
+inscrit** (80,49 %) : il rougirait, et la seule sortie serait alors des tests ou un rétrécissement de
+périmètre — la faute que le bandeau du fichier interdit. La question de fond (la coquille est-elle
+critique ?) reste à A01, et se tranchera mieux quand L5b et L5c auront couvert le reste.
+
+**Pourquoi ce bloc existe, et c'est la leçon du jour.** Le bloc précédent disait « Recommandation de
+glob : **voir le rapport** ». Ce rapport était celui d'un agent : il ne vit que dans la session qui
+l'a lancé, et il disparaît avec elle. **Une recommandation qui n'entre pas dans un fichier est
+perdue**, même excellente, même tenant en huit lignes de JSON. Le renvoi a été remplacé par la chose
+elle-même.

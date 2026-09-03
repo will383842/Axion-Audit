@@ -257,6 +257,32 @@
         "Aucun des deux ne casse un ecran : les deux changent le dossier d audit."
       ],
       "$motif": "Ajoute le 2026-09-02 par A24, sur consigne A01. Le glob RESSERRE le seuil, il ne le relache pas."
+    },
+    {
+      "lot": "L5a",
+      "module": "Verrouillage de la PWA terrain — deux seuils 15/60 min, Wake Lock, bouton d un geste",
+      "glob": "apps/field/src/app/verrou.ts",
+      "reference": "05 §9.7 (regle V2.10) · 03 §33.7 (session active de 45 min) · 11 §6 ligne L5a · 06 §10.5",
+      "_note_glob": [
+        "POSE LE 2026-09-03, a la fermeture de la reserve BLOQUANTE B1 du controle A02.",
+        "Le trou etait celui-ci : verrou.ts est NOMME au perimetre du 11 §6, il portait 227 lignes",
+        "et 0,00 % de couverture, et LE SEUIL NE POUVAIT PAS LE VOIR — apps/field/src/app/**",
+        "n etait declare ni dans cheminsCritiques ni dans cheminsAttendus. Un module critique",
+        "peut donc etre livre sans jamais entrer sous seuil : c est exactement le defaut que la",
+        "ceinture 2 avait attrape sur apps/api/src/auth/**, et il s est reproduit cote terrain.",
+        "",
+        "CE GLOB RESSERRE LE SEUIL, IL NE LE RELACHE PAS — meme motif que routes/users.ts et que",
+        "la machine a etats L3d. Mesure sur 1b89433 : 100 % lignes / 100 % branches / 100 %",
+        "fonctions / 100 % instructions, soit dix points de marge. Il ne peut pas rougir",
+        "aujourd hui ; il interdit une regression demain.",
+        "",
+        "CE QUI N EST DELIBEREMENT PAS INSCRIT : apps/field/src/app/** (mesure 80,49 %). L y",
+        "mettre ferait rougir la CI immediatement, et la seule sortie serait alors soit des tests,",
+        "soit un retrecissement de perimetre — c est-a-dire la faute que le bandeau interdit. La",
+        "question de fond (la coquille est-elle critique ?) appartient a A01 et se tranchera mieux",
+        "quand L5b et L5c auront couvert EcranAccueil.tsx et service-worker-client.ts."
+      ],
+      "$motif": "Recommandation A26 au rapport B1 (2026-09-03), appliquee par la session pilote. Le rapport d un agent ne survit pas a sa session : une recommandation qui n entre pas dans un fichier est perdue."
     }
   ],
   "_cheminsAttendus_mode_emploi": [
