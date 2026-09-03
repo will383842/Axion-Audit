@@ -18,8 +18,16 @@
 // TanStack. C'est un N+1 borné par la page, et c'est un point à trancher
 // (`LOT_L7.md` §5 : jointure dans la liste, ou route de portefeuille).
 //
-// Traçabilité : E22 (console de pilotage 7 espaces), E25 (zéro oubli — plan,
-// couverture, contrôles).
+// Traçabilité : E22 (console de pilotage 7 espaces).
+//
+// E25 (« zéro oubli — plan, couverture, contrôles ») était cité ici jusqu'au
+// 2026-09-03 : RETIRÉ sur constat d'A02 (réserve R-L7a-4), qui a ouvert §17.3 et
+// §16.6 et constaté qu'AUCUN des quatre objets d'E25 n'est livré par cet écran —
+// ce que le commentaire ci-dessus écrit lui-même six lignes plus haut. La glose
+// est supprimée, pas remplacée : une glose s'enlève aussi bien qu'elle s'ajoute,
+// et `check:tracabilite` ne pouvait pas la voir (son contrôle compare la glose au
+// LIBELLÉ de l'exigence, jamais au code). Une glose absente est un manque ; une
+// glose fausse passe le garde et ment.
 // =============================================================================
 import type { ReactNode } from 'react';
 import { Bouton, ZoneEtat } from '@axion/ui';

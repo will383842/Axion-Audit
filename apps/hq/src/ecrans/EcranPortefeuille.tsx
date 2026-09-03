@@ -16,8 +16,13 @@
 //
 // Les quatre états (§33.2) : `etatDeRequete` + `ZoneEtat`.
 //
-// Traçabilité : E22 (console de pilotage 7 espaces), E25 (zéro oubli — plan,
-// couverture, contrôles).
+// Traçabilité : E22 (console de pilotage 7 espaces).
+//
+// E25 (« zéro oubli — plan, couverture, contrôles ») était cité ici jusqu'au
+// 2026-09-03 : RETIRÉ sur constat d'A02 (réserve R-L7a-4). Ni le plan, ni la
+// couverture, ni les contrôles ne sont livrés par cet écran — ils relèvent de
+// L7b. La glose est supprimée, pas remplacée. Voir `EcranAccueil.tsx`, qui
+// portait la même et dit pourquoi le garde ne pouvait pas l'attraper.
 // =============================================================================
 import type { ReactNode } from 'react';
 import { Badge, Bouton, ZoneEtat, type TonBadge } from '@axion/ui';

@@ -19,9 +19,16 @@ Les espaces 3 à 7 sont **visibles et fermés** dans la barre (mention « Phase 
 
 ### Arborescence
 
-- `src/api/contrats.ts` — **la seule couture** avec `packages/shared`. Section A : ré-exports de
-  `main`. Section B : **extrait transitoire** des schémas `missions`/`companies` de `lot/l3-suite`
-  (provenance citée), à remplacer par un ré-export dès la fusion de L3 — premier point de la revue A37.
+- `src/api/contrats.ts` — **la seule couture** avec `packages/shared`. Aucun écran n'importe
+  `@axion/shared` directement : tout passe ici, pour qu'un contrat qui bouge n'ait qu'**un** endroit
+  à relire. **Rien n'y est redéfini** — chaque schéma, constante et type est un ré-export pur ; le
+  fichier n'ajoute que les libellés français que le siège est le premier à afficher
+  (`LIBELLES_NIVEAU_AUDIT`, `LIBELLES_PERIMETRE_GEO`).
+  _(Amendement du 2026-09-03, réserve **R-L7a-1** d'A02 : ce paragraphe décrivait une « Section B —
+  extrait transitoire des schémas de `lot/l3-suite` ». Cette copie de 127 lignes a été retirée par la
+  revue croisée A37, et L3 est dans `main` depuis le tag `v0.l3`. Le README décrivait donc un fichier
+  qui n'existait plus — et un README faux coûte plus cher qu'un README absent : il fait perdre du
+  temps à qui le croit.)_
 - `src/api/client.ts` — `fetch` injecté, URL `/api/v1/…` même origine, cookies `same-origin`,
   en-tête custom `X-Axion-Client: console` (anti-CSRF, 11 §3), réponse validée par le schéma de la
   route ; erreurs dans l'enveloppe 11 §3 → `ErreurApi` (message français), forme inconnue →
