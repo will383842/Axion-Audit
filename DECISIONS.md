@@ -5900,3 +5900,30 @@ et RBAC ; les écrans n'y figurent pas, il n'y a donc pas d'infraction, mais une
 
 Décideur : A20 pour le calendrier de L5b — **arbitrage de fond attendu d'A01**
 Impact spec : aucun.
+
+## 2026-09-03 — [L5b] Borne de la doctrine de retrait : jusqu'à UNE glose, jamais jusqu'à ZÉRO
+
+Amendement à l'entrée du même jour « la règle porte sur le CRITÈRE DE CHOIX, jamais sur le NOMBRE ».
+Elle disait « aucun plafond, aucun plancher au-delà de un » et j'ai appliqué le retrait sur
+`peripherie-entretien.test.ts` (E43 supprimée, quatre citations restantes). A02 valide la règle et
+pose la limite qui lui manquait — sans elle, elle autorise à rendre un fichier INVISIBLE en croyant
+l'assainir.
+
+Options :
+
+1. **Retirer une glose est légitime jusqu'à UNE citation restante, jamais jusqu'à ZÉRO.**
+2. Laisser la règle sans borne : un fichier dont aucune exigence ne passe le test perd ses gloses.
+
+Arbitrage : **option 1.** Le motif est mécanique, pas esthétique : `check:tracabilite` documente
+lui-même son angle mort n° 6 — « un fichier livré SANS aucune ligne de traçabilité est INVISIBLE
+pour ce script, il n'a aucune citation à vérifier ». Un fichier vidé de ses gloses échappe donc au
+contrôle du sens 1 **et** tombe sous le refus du sens 2 (code orphelin) que le gardien A02 applique
+à l'étape 6. Le retrait, poussé jusqu'à zéro, produirait exactement l'effet que la règle veut
+empêcher : un module qui n'est rattaché à rien.
+**Conséquence pratique** : si aucune exigence citée ne passe le test « ce fichier perdrait-il sa
+raison d'être ? », ce n'est pas la glose qu'il faut supprimer — c'est le fichier qui n'a pas de
+raison d'être, et cela remonte à A01 comme du code orphelin, pas comme une correction d'en-tête.
+**Précédence : sans objet** — le pack exige la traçabilité (11 §9bis), pas sa syntaxe.
+
+Décideur : A20, sur validation et borne posées par A02
+Impact spec : aucun — amendement horodaté de l'entrée R5 du 2026-09-03.

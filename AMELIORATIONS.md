@@ -1739,7 +1739,31 @@ contrat d'ops ; 09 §5.9 : étage 2 jamais anticipé).**
   Un contrôle de mots suffit ; la même famille existe pour `E4`/invariant 4 (tokens) et
   `E1`/invariant 1 (hors ligne), à vérifier avant d'écrire la liste.
 
+**QUATRIÈME ANGLE MORT, ÉTABLI PAR A02 LE 2026-09-03 ET NON DÉCLARÉ PAR L'OUTIL —
+`check:tracabilite` COMPTE DES OCCURRENCES DE NUMÉROS DANS DU TEXTE, PAS DES RATTACHEMENTS.**
+La preuve est dans la correction elle-même : le compteur est passé de 535 à **539 citations** alors
+que le travail consistait à DÉFAIRE une attache (`valeurs.ts` : E30 → E37, +3 par les mentions de
+prose expliquant l'erreur) et à en SUPPRIMER une (`peripherie-entretien.test.ts` : E43 retirée, +1
+par la prose qui l'explique). **Le compteur est monté pendant qu'une attache était défaite.** Un
+nombre qui augmente quand la chose qu'il prétend mesurer diminue ne mesure pas cette chose ; il
+mesure la longueur de la discussion à son sujet. C'est la même famille que les trois angles morts
+déclarés, et il faut le déclarer avec eux.
+
+**DEUX GLOSES LAISSÉES DEBOUT, AVEC LEUR MOTIF — et le motif est la moitié qui manquait.** Mon
+balayage des 36 fichiers de l'incrément les avait épargnées sans dire pourquoi, ce qui revenait à
+les avoir ratées :
+
+- `packages/shared/src/banque-questions.ts` cite « **E43 (conventions)** » — même forme que celle
+  que j'ai retirée. Elle reste : `git blame` la date de **`8eead2f4`, 2026-08-29, lot L4**, hors de
+  mon autorité d'incrément ; et elle est défendable au titre du 11 §3, ce fichier portant des
+  conventions de format partagées. La toucher aurait été un ajout de périmètre déguisé en ménage.
+- `apps/field/src/ecrans/entretien/EcranEntretien.test.tsx` cite **E27**. A02 la juge mince mais
+  **recevable** : ce fichier atteste des noms accessibles et de la gestion du focus, qui sont du
+  WCAG AA au sens du 03 §19.2. Conservée telle quelle.
+
 **Coût estimé.** ~0,5 j pour les trois, ② étant le tiers le plus simple et pouvant être livré seul.
+Le quatrième angle mort ci-dessus ne demande PAS un contrôle de plus : il demande que le compteur
+cesse d'être présenté comme une mesure de rattachement. Une ligne de libellé, coût nul.
 **Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun. Impact périmètre : aucun** — le
 contrôle ne change aucun comportement produit, il refuse des en-têtes.
 
