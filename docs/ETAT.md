@@ -2501,3 +2501,27 @@ unilatéraux de HEAD sur des zones intactes côté main, vérifiés un par un co
 Le commit de merge 5b3796f a été fait avec --no-verify (commit de fusion) : déclaré, et couvert par
 le verify complet qui l'a suivi, strictement plus fort que le hook.
 Dettes non bloquantes remontées à Williams par le pilote : F-15..F-18 · A-006 · R-B8 · R-B9 · R-L3-10.
+
+## 2026-09-03 11h00 — [lot L3 / porte] — étape pipeline 7/7 — **LA PORTE EST SIGNÉE**
+
+Dernier commit vert : 0d7f4f8 (bandeau de superseding) · Branche : lot/l3-suite · Poussé : oui
+Tâche en cours : aucune. Le dossier de porte porte les deux signatures qui manquaient.
+Prochaine action : **WILLIAMS** — `gh pr merge 26 --squash --delete-branch`, puis tag `v0.l3`
+poussé. **Aucun agent ne fusionne ni ne pose de tag** (`CLAUDE.md` §7, dossier de porte §6).
+Tests rouges connus : aucun ici. `main` reste rouge sur `8 · deploy-staging`, hors périmètre L3.
+
+Williams a validé sans amendement la recommandation du §3 du dossier de vérification : signer L3
+sur la preuve CI, et porter « up/down **sur staging** » comme réserve **R-L3-2-bis** rattachée à la
+remise en état de staging (L0, PR #28). **La DoD transverse n'est PAS amendée** — `CLAUDE.md` §5
+ligne 4 est inchangé ; la clause change de propriétaire, le geste humain reste dû, par L0, à sa
+propre porte. Écrit : `DECISIONS.md` (entrée du 2026-09-03, format normé, option 2) ·
+`PORTE_L3_2026-09-02.md` §4 (A01 rendu, Williams signée), §5 (R-L3-2-bis, propriétaire, mode de
+fermeture, les deux écarts déclarés par le lot), §6 (les deux commandes réservées à Williams).
+
+Restent ouverts, aucun bloquant : R-L3-2-bis (L0) · R-L3-6 (rejeu à P-E) · R-L3-7 (2 archétypes
+sur 4) · R-L3-10 (enveloppe Playwright) · escalade E18 `external_ref` sans unicité, **non
+tranchée** · F-15..F-18, A-006, R-B8, R-B9.
+
+**Ordre de fusion imposé après le merge, à ne pas improviser** : `lot/l5a` (merge de `main`, puis
+fermeture de R-L5a-9 par le grep des cinq entrées du 2026-09-02, puis PR) → `lot/l5b` → rebase de
+`lot/l7a` et rejeu de ses 80 tests console. Trois worktrees distincts, trois sessions distinctes.

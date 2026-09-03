@@ -7232,3 +7232,46 @@ seule au premier déploiement vert si l'origine est l'URL HTTPS et l'arbre propr
 Décideur : **Williams** (préparé et mis en œuvre par A11).
 Impact spec : aucun sur `/docs` ; `infra/README.md` §5.7-4 et §6.3 amendés (datés), note datée dans
 `.github/workflows/README.md`.
+
+## 2026-09-03 — [L3] « Migrations up/down exécutées sur staging » : la porte L3 attend-elle la remise en état de staging ?
+
+La DoD transverse (`CLAUDE.md` §5, ligne 4) dit « migrations up/down **exécutées sur staging** ».
+La preuve versée par L3 est une descente jouée sur le PostgreSQL **jetable de la CI** — le `ci.yml`
+l'écrit lui-même (l. 961-964) : « ce job prouve up ET down sur le Postgres JETABLE de la CI ; il ne
+prouve rien sur staging ». La moitié technique de **R-L3-2** est LEVÉE (§C, ligne 427 du dossier :
+trois garde-fous dans le job `6 · schema-diff`, dont la descente de `0014` sur base **peuplée**, le
+seul cas qui porte de la logique). Ce qui reste ouvert est **un mot de spécification**, et il n'est
+pas imputable à L3 : `main` est rouge depuis le 2026-09-02 14h40 UTC sur `8 · deploy-staging`
+(runs `33643594297` puis `33714804567`) — le conteneur en service ne porte pas l'UUID du
+déploiement déclenché, **un ancien conteneur tourne pendant que l'API répond « réussi »**, et
+`ZAP baseline (staging)` est `skipped` en conséquence. Diagnostic mesuré sur le serveur : PR #28.
+
+Options :
+
+1. **Attendre la remise en état de staging** pour signer L3 à la lettre de la DoD. Coût : la chaîne
+   « staging périmé → up/down non prouvable → R-L3-2 ouverte → porte non signée → #26 non fusionnée
+   → L5a n'intègre pas main → L5b attend L5a → L7a non rebasée » tient **trois chantiers finis** en
+   otage d'un défaut d'infrastructure étranger au lot. À la date, cela gèle ~4,3 j-h de travail
+   écrit, vert et revu, à 12 jours de P-DESCOPE.
+2. **Signer L3 sur la preuve CI**, et porter « up/down **sur staging** » comme **réserve explicite
+   rattachée à la remise en état de staging** — la réserve suit l'objet qui la cause (L0/infra),
+   pas le lot qui l'a rencontrée.
+3. Amender la DoD transverse pour que « sur staging » lise « sur une base équivalente ». Écartée
+   sans être plaidée : la DoD ne se rabote pas pour accommoder une panne, et le geste humain
+   « migrations jouées sur staging » a une valeur propre que la CI ne remplace pas.
+
+Arbitrage : **option 2**. L3 est signée sur la preuve CI. La clause « up/down sur staging » de la
+DoD transverse devient la **réserve R-L3-2-bis**, non bloquante pour L3, **rattachée à la remise en
+état de staging (L0)** et à solder par un geste humain tracé au dossier de porte de la remise en
+état — pas au dossier L3. Aucun autre critère de la DoD n'est raboté : les 4 critères du fichier 07
+restent tenus et prouvés, les 5 réserves bloquantes restent fermées avec artefacts citables.
+Règle de précédence citée : **`CLAUDE.md` §3-4** — « un doute de spec ne se devine pas : il s'écrit
+dans `DECISIONS.md` » et son décideur est l'humain, pas un agent ; la question posée ici est bien
+celle du **mot** de la DoD, jamais celle de la conformité du lot, que `CLAUDE.md` §4 étape 6 confie
+à A02 et qui est signée depuis le 2026-09-02.
+
+Décideur : **Williams** (recommandation écrite par la session de vérification le 2026-09-03, §3 du
+dossier `docs/portes/PORTE_L3_2026-09-02.md`, et validée sans amendement).
+Impact spec : aucun sur `/docs`. La DoD transverse de `CLAUDE.md` §5 est **inchangée** — elle n'est
+pas amendée, elle est portée en réserve datée sur un autre objet. Amendement horodaté au dossier de
+porte L3 (§4 et §5, 2026-09-03).
