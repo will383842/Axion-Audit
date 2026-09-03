@@ -1633,21 +1633,33 @@ une décision d'exploitation, pas une amélioration de confort.
 
 **Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte suivante_
 
-### FICHE A-014 — Un worktree neuf n'a AUCUN hook git : le garde pre-push n'existe pas là où on ouvre les chantiers
+### FICHE A-014 — Le garde pre-push s'exécute dans certains worktrees et pas dans d'autres, et rien ne dit lequel
 
-**Constat (mesuré le 2026-09-03, sur le worktree qui porte la fiche A-013 — c'est-à-dire sur
-moi-même).** Le régime de travail impose un `pre-push` qui rejoue `pnpm verify:rapide`, et
-`ORGANISATION_AGENTS.md` §9 impose **un worktree par chantier**. Les deux ne tiennent pas ensemble :
+**Constat (mesuré le 2026-09-03, d'abord sur le worktree qui porte la fiche A-013 — c'est-à-dire sur
+moi-même — puis élargi par la session de vérification, qui a FALSIFIÉ la première rédaction de cette
+fiche).** Le régime de travail impose un `pre-push` qui rejoue `pnpm verify:rapide`, et
+`ORGANISATION_AGENTS.md` §9 impose **un worktree par chantier**. Le garde tient dans les uns et pas
+dans les autres :
 
 ```
-$ git config core.hooksPath        -> .husky/_
-$ ls -1 .husky/_/                  -> (vide)
+$ for w in _axverif-l3 _axl3 _axl5conception _axdiag; do ls -1 $w/.husky/_/ | wc -l; done
+  _axverif-l3       16 entrées   pre-push PRÉSENT
+  _axl3             16 entrées   pre-push PRÉSENT
+  _axl5conception    0 entrée    pre-push ABSENT
+  _axdiag            0 entrée    pre-push ABSENT     <- celui d'où part cette fiche
 ```
 
-`core.hooksPath` est une valeur de `.git/config`, **partagée par tous les worktrees** ; mais
-`.husky/_/` est un répertoire **généré par `husky` à l'installation**, présent seulement dans
-l'arbre où `pnpm install` a tourné. Dans un worktree fraîchement créé, le chemin existe et **son
-contenu non** : `git push` ne trouve aucun hook et **passe sans rien vérifier, en silence**.
+`core.hooksPath` vaut `.husky/_` et vit dans le `.git` **partagé par tous les worktrees** ; mais
+`.husky/_/` est un répertoire **de l'arbre de travail**, peuplé par `husky` au moment du
+`pnpm install`. La condition n'est donc **pas** « worktree neuf » — c'est **« worktree où
+`pnpm install` n'a pas tourné »**, et ces deux énoncés ne se recouvrent qu'au début. Là où l'install
+a tourné, le garde s'exécute pleinement ; ailleurs, `git push` ne trouve aucun hook et **passe sans
+rien vérifier, en silence**.
+
+**Cette précision n'affaiblit pas la fiche, elle l'aggrave.** Un garde uniformément absent finirait
+par se voir. Un garde qui tient dans `_axl3` et pas dans `_axdiag`, sans que rien ne le signale
+dans un cas ni dans l'autre, ne se voit jamais : deux sessions font le même geste, l'une est
+contrôlée, l'autre non, et **les deux sorties sont identiques**.
 
 **Preuve par l'incident, et elle est de moi.** Mes deux pushes de la nuit (`lot/l6-conception`,
 `infra/diagnostic-staging`) sont passés sans une ligne de sortie de hook. J'ai cru le garde vert ;
@@ -1658,16 +1670,19 @@ avant la CI n'a jamais tourné**.
 
 **Valeur pour l'auditeur.** Aucune directement, et forte pour le chantier : _un garde muet est pire
 qu'un garde absent — il rassure_ (§5-2). Ici c'est la version la plus traître : le garde est
-**configuré**, il est **documenté**, il est **exigé** — et il ne s'exécute pas. Chaque nouveau
-chantier ouvert conformément au §9 pousse sans contrôle, et personne ne peut le voir puisque
-l'absence de sortie ressemble à un succès silencieux.
+**configuré**, il est **documenté**, il est **exigé** — et selon le répertoire d'où l'on pousse, il
+s'exécute ou non. Un chantier ouvert conformément au §9 pousse sans contrôle tant que l'install n'y
+a pas tourné, et personne ne peut le voir puisque **l'absence de sortie ressemble à un succès
+silencieux**.
 
 **Coût estimé.** Faible, mais c'est une décision, pas un réflexe. Trois pistes, à arbitrer :
 (a) documenter `pnpm install` comme première commande obligatoire de tout worktree neuf (§2 du
-fichier d'organisation) — le moins cher, le plus oubliable ; (b) faire échouer bruyamment un `push`
-quand `.husky/_/pre-push` est absent, plutôt que de le laisser passer — transforme un silence en
-refus ; (c) versionner les hooks au lieu de les générer. **(b) est la seule qui respecte la règle
-« un contrôle qui ne trouve rien ne doit jamais sortir vert » (`CLAUDE.md` §5.7).**
+fichier d'organisation) — le moins cher, le plus oubliable, et il ne supprime pas le silence ;
+(b) faire échouer bruyamment un `push` quand `.husky/_/pre-push` est absent, plutôt que de le
+laisser passer — transforme un silence en refus ; (c) versionner les hooks au lieu de les générer.
+**(b) est la seule qui respecte la règle « un contrôle qui ne trouve rien ne doit jamais sortir
+vert » (`CLAUDE.md` §5.7)** — et c'est la seule qui traite le vrai défaut, qui n'est pas l'absence
+du hook mais **l'impossibilité de savoir s'il a tourné**.
 
 **Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun.** Outillage.
 

@@ -2313,7 +2313,9 @@ manuel Coolify et les secrets `TELEGRAM_*` (absents — déploiement aveugle).
 Tests rouges connus : `main` ROUGE sur `8 · deploy-staging` (cause ci-dessus, pas le code).
 `lot/l5b` est repassé VERT. PR #26 (L3) est `DIRTY` depuis la fusion de #27 — conflit d'append
 attendu sur `DECISIONS.md`/`ETAT.md`, se résout en gardant les deux côtés.
-BLOQUANT DE PORTE, inchangé : ligne 16 de `docs/portes/PORTE_L3_2026-09-02.md` dit encore
-« 🟡 ACCEPTÉE SOUS RÉSERVE — aucun merge » alors que son addendum lève tout 360 lignes plus bas ; le
-verdict final d'a7 (`9f4e3c0`) n'est PAS poussé, et a7 est la session de VÉRIFICATION — le §3 dit
-qu'elle ne produit rien, et le §10 réserve l'étape 6 au gardien A02. À faire re-signer par A02.
+PORTE L3 : le blocage est LEVÉ, et mon annonce contraire était une mesure trop étroite — `sed -n
+'16p'` lisait le titre « 🟡 ACCEPTÉE SOUS RÉSERVE » et pas la ligne 18, qui porte depuis 06h15 le
+bandeau « VERDICT DU 2026-09-02 — SUPERSÉDÉ », R-L3-1 à R-L3-5 fermées, verdict final sur `0d7f4f8`.
+Reste tracé : ce verdict a été rédigé par a7, session de VÉRIFICATION, que le §3 dit ne rien
+produire et dont le §10 réserve l'étape 6 au gardien A02 ; Williams a tranché « ça me va » sans
+contreseing A02 — arbitrage humain au-dessus de la règle, pas un oubli.
