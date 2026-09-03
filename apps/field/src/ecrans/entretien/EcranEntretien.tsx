@@ -403,23 +403,50 @@ export function EcranEntretien(): ReactNode {
     [differer, session],
   );
 
+  /**
+   * Capture une note volante et dit SI ELLE A ÉTÉ ÉCRITE.
+   *
+   * ── BLOQUANT B1 (revue A29, 2026-09-03) ────────────────────────────────
+   * Cette fonction rendait `Promise<void>` et sortait par un `return` nu dans
+   * deux cas : session absente, identité de l'auditeur inconnue. La promesse
+   * RÉSOLVAIT donc, l'appelant lisait un succès et vidait le champ — l'auditeur
+   * tapait sa note, appuyait sur « Garder cette note volante », et le texte
+   * disparaissait sans que rien ne soit persisté. Chemin atteignable sur un
+   * appareil neuf, où l'identité n'a jamais été rangée.
+   *
+   * ET IL Y AVAIT UNE SECONDE FACE, que le seul `throw` n'aurait pas fermée :
+   * `enregistrer()` (enregistrement continu) AVALE l'échec de son travail pour
+   * en faire un état d'erreur affichable — c'est son rôle, et il est juste. Mais
+   * il résout donc aussi quand la transaction Dexie a échoué. Le drapeau `ecrite`
+   * ci-dessous n'est levé QUE par le retour de `creerNoteVolante`, à l'intérieur
+   * du travail : il distingue « écrit » de « tenté », ce que la promesse seule ne
+   * peut pas dire.
+   */
   const capturerNoteVolante = useCallback(
-    async (texte: string): Promise<void> => {
-      if (session === null || session === undefined) return;
+    async (texte: string): Promise<boolean> => {
+      if (session === null || session === undefined) {
+        setErreurAction(
+          'Aucun entretien n’est ouvert sur cet appareil : la note n’a pas été enregistrée, votre texte est toujours à l’écran.',
+        );
+        return false;
+      }
       if (identite === null || identite === undefined) {
         setErreurAction(
-          'L’identité de l’auditeur est inconnue sur cet appareil : connectez-vous une fois au siège avant de capturer une note volante.',
+          'L’identité de l’auditeur est inconnue sur cet appareil : connectez-vous une fois au siège avant de capturer une note volante. Votre texte n’a pas été effacé.',
         );
-        return;
+        return false;
       }
-      await enregistrer(() =>
-        creerNoteVolante({
+      let ecrite = false;
+      await enregistrer(async () => {
+        await creerNoteVolante({
           missionId: session.missionId,
           interviewId: session.id,
           createdBy: identite.id,
           content: texte,
-        }),
-      );
+        });
+        ecrite = true;
+      });
+      return ecrite;
     },
     [enregistrer, identite, session],
   );

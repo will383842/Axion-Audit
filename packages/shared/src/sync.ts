@@ -11,7 +11,13 @@
 // ── CE QUE CE FICHIER NE FAIT PAS ────────────────────────────────────────────
 // Aucune logique : ni push, ni pull, ni backoff, ni file. Il ne déclare QUE la
 // forme des messages. Le moteur est L6 (05 §9.3) et le port terrain est déclaré
-// dans `apps/field/src/sync/port.ts`.
+// dans `apps/field/src/local/port-sync.ts`.
+//
+// ── C7 (revue A29, 2026-09-03) : CE RENVOI ÉTAIT CASSÉ ──────────────────────
+// Il désignait `apps/field/src/sync/port.ts`, un chemin qui n'existe pas. Il
+// avait été introduit par le commit qui prétendait « remettre les gloses en face
+// de leur exigence » — le meilleur rappel possible qu'une relecture de citations
+// doit vérifier les CHEMINS aussi sérieusement que les numéros d'exigence.
 //
 // ── NOMMAGE : snake_case dans le pack, camelCase ici ─────────────────────────
 // 11 §4 écrit l'op `{op_id, entity, entity_id, action, payload, client_updated_at}`

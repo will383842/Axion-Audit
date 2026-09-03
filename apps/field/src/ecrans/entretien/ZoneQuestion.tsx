@@ -13,8 +13,10 @@
 //
 // En écran partagé (§33.3), cette zone ne montre QUE la question, la consigne,
 // la saisie et Précédent/Suivant : ni drapeaux, ni motifs, ni badges internes.
+// Traçabilité : E13 (écran 3 zones — question au centre), E23 (hyper intuitif, consigne consultant).
 // =============================================================================
 import type { ReactNode } from 'react';
+import { lireAncresDeCotation } from '@axion/shared';
 import { Badge, Bascule, Bouton, Message } from '@axion/ui';
 import type { QuestionLocale } from '../../local/depots/questions.js';
 import type { ReponseLocale } from '../../local/depots/reponses.js';
@@ -78,6 +80,17 @@ export function ZoneQuestion(proprietes: ProprietesZoneQuestion): ReactNode {
   const nonCommunique = reponse?.withheld === 1;
   const admetFourchette = fourchetteAdmise(question.answerType, question.allowRangeSnapshot);
 
+  // La consigne à AFFICHER ici. Sur une échelle, les ancres sont déjà rendues
+  // sous l'échelle par `EchelleAncree` : on ne montre que la PROSE, sinon
+  // l'auditeur lit deux fois « 1 = … 5 = … » et cesse de lire. Sur les dix
+  // autres types, la guidance n'a pas d'ancres à extraire, on la rend entière.
+  // Le retrait est fait par le parseur du pack (`lireAncresDeCotation`), jamais
+  // par un découpage local : un second découpage du même texte dériverait.
+  const consigneAffichee =
+    question.answerType === 'scale_1_5'
+      ? lireAncresDeCotation(question.guidanceSnapshot).consigne
+      : question.guidanceSnapshot;
+
   return (
     <article className="axn-question" aria-labelledby="axn-question-texte">
       <div className="axn-question__repere">
@@ -99,9 +112,23 @@ export function ZoneQuestion(proprietes: ProprietesZoneQuestion): ReactNode {
         {question.texteSnapshot}
       </h2>
 
-      {question.guidanceSnapshot !== null && question.answerType !== 'scale_1_5' && (
-        <p className="axn-question__consigne">{question.guidanceSnapshot}</p>
-      )}
+      {/*
+        LA CONSIGNE CONSULTANT — 03 M3.1 (« au centre »), 03 §17.5 (« la consigne
+        porte le savoir-faire ; la banque de questions EST le manuel de formation »).
+
+        Bloquant B2 de la revue A29 (2026-09-03). Cette ligne excluait `scale_1_5`
+        pour ne pas afficher deux fois les ancres — que `EchelleAncree` rend déjà
+        sous l'échelle. L'intention était juste ; l'effet ne l'était pas : sur le
+        type de question LE PLUS FRÉQUENT d'un audit, la consigne n'apparaissait
+        alors NULLE PART, et avec elle les relances et les pièges. C'est un coup
+        direct au critère « novice autonome en moins de 30 minutes ».
+
+        La composition retenue (DECISIONS.md du 2026-09-03) : les ancres restent
+        SOUS l'échelle, où l'auditeur les lit en cotant ; la consigne reste ICI,
+        à la même place pour les onze types — c'est cette constance de place qui
+        sert le novice, plus qu'un placement optimal par type.
+      */}
+      {consigneAffichee !== null && <p className="axn-question__consigne">{consigneAffichee}</p>}
 
       {!partage && reponse !== null && (aRevoir || sansObjet || nonCommunique) && (
         <div className="axn-question__etats" aria-label="États de la réponse">

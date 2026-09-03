@@ -54,7 +54,7 @@ import {
   memoriserQuestionCourante,
   memoriserSessionCourante,
 } from './position.js';
-import { codeDOption } from './questions-adhoc.js';
+import { codeDOption, codesDOptions } from './questions-adhoc.js';
 import {
   colonnesDeTableau,
   COLONNE_PAR_DEFAUT,
@@ -336,8 +336,37 @@ describe('les onze TYPES_DE_REPONSE, un par un', () => {
     );
   });
 
-  it.each(TYPES_DE_REPONSE)('« %s » : sa valeur se résume en une ligne non vide', (type) => {
-    expect(resumerValeur(VALEUR_VALIDE[type], OPTIONS)).not.toBe('');
+  /**
+   * Le résumé ATTENDU, mot pour mot, pour chacun des onze types.
+   *
+   * ── NON BLOQUANTE C3 (revue A29, 2026-09-03) ──────────────────────────────
+   * Ce bloc n'assérait que `not.toBe('')` — une propriété COMMUNE aux onze, donc
+   * une assertion qu'aucun d'eux ne peut échouer seul. Muter le `case` de six
+   * types sur onze en `return 'x'` laissait toute la suite verte : le `it.each`
+   * prouvait que la fonction rend quelque chose, jamais qu'elle rend LA BONNE
+   * CHOSE. C'est le contraire de ce que le parcours exhaustif était censé
+   * garantir — un barème dont personne n'a jamais vu le refus.
+   *
+   * La table ci-dessous est donc la SPÉCIFICATION du rendu, et le `it.each` la
+   * vérifie type par type. Un douzième type ajouté à `TYPES_DE_REPONSE` fera
+   * échouer la compilation de cette table avant même d'atteindre un test.
+   */
+  const RESUME_ATTENDU: Readonly<Record<TypeDeReponse, string>> = {
+    yes_no: 'Oui',
+    scale_1_5: '4 / 5',
+    single_choice: 'Option A',
+    multi_choice: 'Option A, Option B',
+    free_text: 'Une réponse libre.',
+    number: '12',
+    percent: '40 %',
+    duration: '90',
+    money: '1200 EUR',
+    date: '2026-09-02',
+    table: '1 ligne(s)',
+  };
+
+  it.each(TYPES_DE_REPONSE)('« %s » : sa valeur se résume EXACTEMENT comme prévu', (type) => {
+    expect(resumerValeur(VALEUR_VALIDE[type], OPTIONS)).toBe(RESUME_ATTENDU[type]);
   });
 });
 
@@ -511,6 +540,32 @@ describe('codeDOption — un code stable à partir d’un libellé', () => {
   it('replie sur un code de rang quand le libellé ne laisse rien', () => {
     expect(codeDOption('!!!', 0)).toBe('option_1');
     expect(codeDOption('   ', 4)).toBe('option_5');
+  });
+});
+
+describe('codesDOptions — deux options distinctes ne deviennent JAMAIS le même code', () => {
+  it('suffixe une collision de ponctuation — non bloquante C4 de la revue A29', () => {
+    // `codeDOption` écrase la ponctuation : « Oui ! » et « Oui ? » rendaient tous
+    // deux `oui`. Deux choix distincts à l'écran devenaient indiscernables une
+    // fois écrits dans `answers.value`, et la confusion ne se voyait qu'au
+    // dépouillement — quand plus personne ne peut dire lequel a été coché.
+    expect(codesDOptions(['Oui !', 'Oui ?'])).toEqual(['oui', 'oui_2']);
+  });
+
+  it('la PREMIÈRE occurrence garde le code nu — rien de ce qui marchait ne bouge', () => {
+    expect(codesDOptions(['Oui', 'Non'])).toEqual(['oui', 'non']);
+  });
+
+  it('compte au-delà de deux, et n’en perd aucune', () => {
+    const codes = codesDOptions(['Oui !', 'Oui ?', 'Oui…', 'Non']);
+    expect(codes).toEqual(['oui', 'oui_2', 'oui_3', 'non']);
+    expect(new Set(codes).size).toBe(codes.length);
+  });
+
+  it('reste distinct même quand tous les libellés sont vides de lettres', () => {
+    // `codeDOption` replie alors sur le rang : la distinction survit d'elle-même.
+    const codes = codesDOptions(['!!!', '???', '***']);
+    expect(new Set(codes).size).toBe(3);
   });
 });
 

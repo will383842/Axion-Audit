@@ -5,6 +5,7 @@
 // Le cockpit « Aujourd'hui » (03 §34.2, L5c) remplacera ce bloc par l'agenda et
 // le démarrage pré-rempli en un tap. D'ici là : ouvrir un nouvel entretien, ou
 // reprendre celui qui est mémorisé (03 §17.4, reprise instantanée).
+// Traçabilité : E12 (entretiens par interlocuteur), E23 (hyper intuitif, novice < 30 min).
 // =============================================================================
 import type { ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';

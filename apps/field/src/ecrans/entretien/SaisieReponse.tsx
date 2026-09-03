@@ -454,14 +454,22 @@ function SaisieEnFourchette(proprietes: {
     (bas.trim() !== '' && nombreDepuisSaisie(bas) === null) ||
     (haut.trim() !== '' && nombreDepuisSaisie(haut) === null);
 
+  // UNE SEULE source pour `unite` — non bloquante C9 (revue A29, 2026-09-03).
+  // Deux spreads posaient la même propriété sur `SaisieFourchette` : le second
+  // gagnait en silence. Sans effet aujourd'hui (aucune unité n'est déclarée pour
+  // un type monétaire, donc la devise passait), mais le jour où une unité le
+  // serait, la DEVISE DE LA RÉPONSE serait écrasée par une unité d'affichage —
+  // et rien dans le code ne l'aurait annoncé. La précédence est désormais
+  // ÉCRITE : la devise portée par la valeur d'abord, l'unité du type en repli.
+  const uniteAffichee = devise ?? UNITES[type];
+
   return (
     <div className="axn-question__saisie">
       <SaisieFourchette
         libelle="Fourchette (borne basse et borne haute)"
         bas={bas}
         haut={haut}
-        {...(devise === undefined ? {} : { unite: devise })}
-        {...(UNITES[type] === undefined ? {} : { unite: UNITES[type] })}
+        {...(uniteAffichee === undefined ? {} : { unite: uniteAffichee })}
         aide="Quand le chiffre exact est refusé, une fourchette ou un ordre de grandeur est souvent accepté (§27.4)."
         {...(illisible ? { erreur: MESSAGE_NOMBRE_ILLISIBLE } : {})}
         desactive={desactive}

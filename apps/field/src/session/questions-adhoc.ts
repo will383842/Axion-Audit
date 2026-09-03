@@ -46,6 +46,42 @@ export function codeDOption(libelle: string, rang: number): string {
   return base === '' ? `option_${String(rang + 1)}` : base;
 }
 
+/**
+ * Les codes de TOUTES les options d'une question, garantis DISTINCTS.
+ *
+ * ── NON BLOQUANTE C4 (revue A29, 2026-09-03) ────────────────────────────────
+ * `codeDOption` seule est une fonction du libellé : elle ne peut pas savoir ce
+ * qu'ont produit les autres. Or elle écrase la ponctuation, donc « Oui ! » et
+ * « Oui ? » rendaient tous deux `oui`. Deux options DISTINCTES à l'écran
+ * devenaient indiscernables une fois écrites dans `answers.value` — et comme
+ * `value` est la donnée d'audit, la confusion ne se voyait qu'au dépouillement,
+ * quand plus personne ne peut dire laquelle l'interlocuteur avait choisie.
+ * C'est l'invariant 7 : rien ne doit être silencieusement écrasé.
+ *
+ * ARBITRAGE (DECISIONS.md 2026-09-03) : on SUFFIXE, on ne refuse pas.
+ * Refuser la saisie obligerait l'auditeur à reformuler une option en pleine
+ * question, pour une raison technique qu'il ne peut pas comprendre — 03 §17.4
+ * interdit ce genre d'obstacle. Dédupliquer en fusionnant les deux options
+ * perdrait un choix que l'auditeur a délibérément écrit. Le suffixe `_2`, `_3`…
+ * conserve les deux, reste lisible, et se relit sans documentation.
+ */
+export function codesDOptions(libelles: readonly string[]): string[] {
+  const vus = new Map<string, number>();
+  return libelles.map((libelle, rang) => {
+    const base = codeDOption(libelle, rang);
+    const dejaVu = vus.get(base);
+    if (dejaVu === undefined) {
+      vus.set(base, 1);
+      return base;
+    }
+    // Le suffixe part de 2 : la première occurrence garde le code nu, ce qui
+    // laisse intactes toutes les questions qui n'ont jamais eu de collision.
+    const suivant = dejaVu + 1;
+    vus.set(base, suivant);
+    return `${base}_${String(suivant)}`;
+  });
+}
+
 /** Crée la question ad hoc et rend l'identifiant de la ligne de questionnaire. */
 export async function creerQuestionAdHoc(demande: DemandeQuestionAdHoc): Promise<string> {
   const texte = demande.texte.trim();
@@ -59,7 +95,11 @@ export async function creerQuestionAdHoc(demande: DemandeQuestionAdHoc): Promise
     throw new Error('Une question à choix a besoin d’au moins deux options.');
   }
   const optionsSnapshot = aDesOptions
-    ? libelles.map((label, rang) => ({ code: codeDOption(label, rang), label, score: null }))
+    ? codesDOptions(libelles).map((code, rang) => ({
+        code,
+        label: libelles[rang] ?? code,
+        score: null,
+      }))
     : null;
 
   const id = uuidv7();

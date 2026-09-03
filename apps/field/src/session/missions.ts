@@ -6,6 +6,8 @@
 // du NOM des unités — tous deux dans la charge chiffrée — pour que l'auditeur
 // choisisse sans lire un identifiant. Lecture seule, même forme que les dépôts
 // du socle : index en clair + charge déchiffrée, à plat.
+// Traçabilité : E12 (entretiens par interlocuteur — l’unité où se tient la
+// session se choisit sur son NOM, jamais sur un identifiant), E33 (sécurité / RGPD).
 // =============================================================================
 import { contexteLocal } from '../local/contexte.js';
 import {

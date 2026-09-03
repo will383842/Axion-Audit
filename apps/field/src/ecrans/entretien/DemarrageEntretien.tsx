@@ -9,6 +9,7 @@
 // ci-dessous est une rédaction NEUTRE, sans nom de client, versionnée `v1`
 // (`VERSION_MENTION_INFORMATION`) — à faire valider par Williams, signalé au
 // rapport A22. La version est enregistrée sur la session (06 §10.4).
+// Traçabilité : E33 (sécurité / RGPD — accord de participation horodaté), E12 (entretiens par interlocuteur).
 // =============================================================================
 import { useState, type ReactNode } from 'react';
 import { Bouton, CaseACocher, Message } from '@axion/ui';

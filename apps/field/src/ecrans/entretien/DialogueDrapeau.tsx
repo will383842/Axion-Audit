@@ -6,6 +6,7 @@
 // Une seule fenêtre, trois natures. Ce sont des ÉTATS explicites (invariant 7 :
 // « l'à-revoir et le NA sont des états explicites, pas des absences »), et
 // chacun se retire d'un geste — on ne « supprime » pas un drapeau, on le lève.
+// Traçabilité : E12 (entretiens par interlocuteur, à-revoir).
 // =============================================================================
 import { useId, useState, type ReactNode } from 'react';
 import { Bouton, Dialogue, IconeCoche, ZoneNotes } from '@axion/ui';

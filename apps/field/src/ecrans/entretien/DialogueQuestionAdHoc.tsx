@@ -5,6 +5,7 @@
 // facultative — et les options quand le type en veut. La création est UNE op
 // (`session/questions-adhoc.ts`) ; l'écran enchaîne directement sur la question
 // créée, pour y répondre pendant que l'interlocuteur parle.
+// Traçabilité : E13 (écran 3 zones — question ad hoc), E23 (hyper intuitif).
 // =============================================================================
 import { useState, type ReactNode } from 'react';
 import { Bouton, ChampTexte, Dialogue, Message, Selection, ZoneNotes } from '@axion/ui';

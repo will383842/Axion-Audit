@@ -10,6 +10,7 @@
 // (03 §17.4).
 //
 // Cette zone est INTERNE : en écran partagé, l'écran ne la rend pas.
+// Traçabilité : E13 (écran 3 zones — progression par bloc), E23 (hyper intuitif).
 // =============================================================================
 import type { ReactNode } from 'react';
 import { AnneauProgression, Badge } from '@axion/ui';

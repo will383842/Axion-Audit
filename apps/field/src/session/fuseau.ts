@@ -4,6 +4,8 @@
 // UTC en base et en API ; le fuseau de la mission (`missions.timezone`)
 // n'intervient qu'ICI, à l'affichage. Aucun `new Date()` : on formate un nombre
 // d'époque, ce qui laisse `horloge.ts` seul maître du « maintenant ».
+// Traçabilité : E13 (écran 3 zones, enregistrement continu — l’indicateur
+// « Enregistré à HH:mm » se lit au fuseau de la mission, 03 §22.2).
 // =============================================================================
 
 /** Rend `'HH:mm'` dans le fuseau donné (celui de l'appareil si `undefined`). */

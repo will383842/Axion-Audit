@@ -27,6 +27,7 @@
 // frappe — et c'est alors le texte complet du champ, note existante comprise.
 //
 // Tout ce panneau est INTERNE : jamais rendu en écran partagé.
+// Traçabilité : E13 (écran 3 zones, notes volantes).
 // =============================================================================
 import { useState, type ReactNode } from 'react';
 import { Badge, Bouton, ZoneNotes } from '@axion/ui';
@@ -45,7 +46,14 @@ export interface ProprietesPanneauNotes {
   readonly notesGenerales: string;
   readonly onNotesGenerales: (texte: string) => void;
   readonly notesVolantes: readonly NoteVolanteLocale[];
-  readonly onCapturerNoteVolante: (texte: string) => Promise<void>;
+  /**
+   * Capture une note volante. **Rend `true` SI ET SEULEMENT SI la note est
+   * persistée**, jamais `Promise<void>` — bloquant B1 de la revue A29 : une
+   * promesse qui résout sans avoir écrit est lue comme un succès par
+   * l'appelant, qui vide alors le champ. Le texte de l'auditeur disparaît
+   * sans avoir été enregistré (invariant 7, 03 §17.4).
+   */
+  readonly onCapturerNoteVolante: (texte: string) => Promise<boolean>;
   /** `null` = la question courante n'a pas encore de réponse : rien à rattacher. */
   readonly reponseCouranteId: string | null;
   readonly onRattacher: (note: NoteVolanteLocale) => void;
@@ -209,7 +217,7 @@ function Brouillon(proprietes: {
 
 function CaptureNoteVolante(proprietes: {
   readonly desactive: boolean;
-  readonly onCapturer: (texte: string) => Promise<void>;
+  readonly onCapturer: (texte: string) => Promise<boolean>;
 }): ReactNode {
   const { desactive, onCapturer } = proprietes;
   const [brouillon, setBrouillon] = useState('');
@@ -218,9 +226,13 @@ function CaptureNoteVolante(proprietes: {
   const capturer = (): void => {
     if (brouillon.trim() === '' || enCours) return;
     setEnCours(true);
+    // Le brouillon n'est vidé QUE sur confirmation d'écriture. Un refus
+    // (identité inconnue) ou un échec de transaction locale laisse le texte
+    // à l'écran : l'auditeur peut réessayer ou le copier ailleurs. Ne rien
+    // effacer qu'on n'a pas su ranger — c'est l'invariant 7 vu du clavier.
     void onCapturer(brouillon)
-      .then(() => {
-        setBrouillon('');
+      .then((ecrite) => {
+        if (ecrite) setBrouillon('');
       })
       .finally(() => {
         setEnCours(false);

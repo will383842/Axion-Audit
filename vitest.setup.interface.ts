@@ -36,17 +36,55 @@ afterEach(() => {
 // -----------------------------------------------------------------------------
 // `window.matchMedia` — jsdom ne l'implémente pas, et un composant qui lit
 // `prefers-reduced-motion` ou la largeur d'écran (les trois zones de la session,
-// 03 §33.3, se réordonnent sous 900 px) lèverait `TypeError` au premier rendu.
-// Le shim répond « aucune requête ne correspond » : le rendu par défaut est
-// celui d'un écran large sans préférence — l'iPad en paysage, la cible du 03 §22.1.
-// Un test qui veut l'autre branche remplace `window.matchMedia` lui-même.
+// 03 §33.3) lèverait `TypeError` au premier rendu.
+//
+// ── POURQUOI CE SHIM A ÉTÉ RÉÉCRIT (bloquant C5 de la revue A29, 2026-09-03) ──
+// La version précédente répondait `matches: false` À TOUTE REQUÊTE, en affirmant
+// dans son propre commentaire que « le rendu par défaut est celui d'un écran
+// large — l'iPad en paysage ». C'était l'inverse : `(min-width: 64rem)` rendait
+// FAUX, donc les 29 cas d'`EcranEntretien.test.tsx` rendaient la disposition en
+// PANNEAUX et jamais les TROIS COLONNES, qui sont le livrable-titre de L5b.
+// Un outil de test qui mesure autre chose que ce qu'il annonce est le pire des
+// deux mondes : il est vert, et il documente son propre mensonge.
+//
+// LE SHIM NE DÉCIDE PLUS À LA PLACE DE PERSONNE : il RÉPOND À PARTIR DE JSDOM.
+// `window.innerWidth` vaut 1024 px par défaut dans jsdom, soit exactement les
+// 64rem du seuil des trois colonnes — c'est donc la largeur qu'il faut consulter,
+// pas une constante recopiée ici. Un test qui veut l'autre branche pose
+// `window.innerWidth` et rejoue, ou remplace `window.matchMedia` lui-même.
 // -----------------------------------------------------------------------------
+/** Largeur de référence en pixels d'une requête `min-width` / `max-width`. */
+function largeurDemandee(requete: string): { borne: 'min' | 'max'; pixels: number } | null {
+  const m = /\((min|max)-width:\s*([\d.]+)(px|rem|em)\)/.exec(requete);
+  if (m === null) return null;
+  const valeur = Number(m[2]);
+  const unite = m[3];
+  // 1rem = 1em = 16px, la taille racine par défaut — celle de jsdom comme celle
+  // du navigateur tant que rien ne la change (et rien ne la change ici).
+  return { borne: m[1] === 'min' ? 'min' : 'max', pixels: unite === 'px' ? valeur : valeur * 16 };
+}
+
 if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
     configurable: true,
     value: (query: string): MediaQueryList => ({
-      matches: false,
+      get matches(): boolean {
+        const largeur = largeurDemandee(query);
+        if (largeur !== null) {
+          return largeur.borne === 'min'
+            ? window.innerWidth >= largeur.pixels
+            : window.innerWidth <= largeur.pixels;
+        }
+        // Un pointeur FIN : l'environnement de test est un poste, pas un doigt.
+        // C'est ce qui rend visibles les rappels de raccourcis du 03 §33.3, donc
+        // ce qui les met sous test au lieu de les masquer.
+        if (/\(pointer:\s*fine\)/.test(query)) return true;
+        if (/\(pointer:\s*coarse\)/.test(query)) return false;
+        // Aucune préférence d'accessibilité déclarée : le cas nominal.
+        if (query.includes('prefers-')) return false;
+        return false;
+      },
       media: query,
       onchange: null,
       addListener: () => undefined,

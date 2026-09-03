@@ -16,6 +16,8 @@
 // court APRÈS ceux de ses enfants, donc après un `autoFocus`. La palette
 // reprend donc le focus pour son champ juste après le montage, en différé :
 // « / » doit mettre l'auditeur en train de taper, pas sur « Fermer ».
+// Traçabilité : E13 (écran 3 zones, enregistrement continu — la recherche
+// hors-parcours §25.4 s’ouvre depuis la question courante), E6 (hors ligne total).
 // =============================================================================
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChampTexte, Panneau, ZoneEtat, type EtatZone } from '@axion/ui';

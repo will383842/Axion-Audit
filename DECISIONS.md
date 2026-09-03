@@ -5648,3 +5648,59 @@ désormais les deux composantes.
 
 Décideur : Williams (délégation du 2026-09-02 à la session pilote)
 Impact spec : aucun.
+
+## 2026-09-03 — [L5b] Ancres visibles ET consigne consultant : où chacune se pose sur une échelle
+
+Bloquant B2 de la revue A29. Le pack exige les DEUX et ne dit pas comment les composer : 03 §33.3
+veut les ancres de cotation visibles sous l'échelle, 03 M3.1 veut la consigne consultant au centre
+de l'écran, et 03 §17.5 rappelle que « la consigne porte le savoir-faire ». L'écran tranchait la
+contradiction en supprimant la consigne sur `scale_1_5` — le type le plus fréquent d'un audit.
+
+Options :
+
+1. **Les ancres restent sous l'échelle ; la consigne reste à SA place, au-dessus de la saisie, pour
+   les onze types.** La guidance d'une échelle est découpée par le parseur du pack : les fragments
+   `N = libellé` alimentent `EchelleAncree`, la prose alimente la consigne.
+2. Passer la consigne à `EchelleAncree` pour qu'elle la rende au-dessus de ses ancres — la consigne
+   change alors de place selon le type de question.
+3. Afficher la guidance brute au-dessus de l'échelle — l'auditeur lit deux fois « 1 = … 5 = … ».
+
+Arbitrage : **option 1.** Le critère qui départage est E23, « novice autonome en moins de
+30 minutes » : ce qui aide un novice n'est pas le placement optimal de chaque élément, c'est la
+CONSTANCE de placement d'un écran à l'autre. Une consigne qui se déplace selon le type de réponse
+oblige à la chercher onze fois. L'option 3 est écartée pour la raison inverse : une information
+affichée deux fois cesse d'être lue, et ce sont les ancres qu'on cesserait de lire — celles-là mêmes
+que §33.3 exige visibles. L'extraction se fait dans `lireAncresDeCotation` (packages/shared), par le
+MÊME découpage que les ancres et non par un second parseur : deux découpages du même texte finissent
+par ne plus être d'accord, et c'est la consigne qui disparaîtrait à nouveau.
+**Précédence : §32-36 (03 §33.3, ancres visibles) et §16-22 (03 §17.5, la consigne porte le
+savoir-faire) sont tous deux honorés — il n'y avait pas conflit de précédence, mais absence de
+règle de composition.** Elle est posée ici.
+
+Décideur : A20, sur bloquant A29
+Impact spec : aucun.
+
+## 2026-09-03 — [L5b] Deux options ad hoc au même code : on SUFFIXE, on ne refuse pas
+
+Non bloquante C4 de la revue A29. `codeDOption` normalise le libellé en écrasant la ponctuation :
+« Oui ! » et « Oui ? » rendaient tous deux `oui`. Deux options DISTINCTES proposées par l'auditeur
+devenaient indiscernables une fois écrites dans `answers.value` — et comme `value` EST la donnée
+d'audit, la confusion ne se voyait qu'au dépouillement, quand plus personne ne peut dire laquelle
+l'interlocuteur avait choisie.
+
+Options :
+
+1. **Suffixer** les collisions : `oui`, `oui_2`, `oui_3`… La première occurrence garde le code nu.
+2. **Refuser** la saisie et demander à l'auditeur de reformuler l'option.
+3. **Dédupliquer** en fusionnant les deux options en une seule.
+
+Arbitrage : **option 1.** L'option 2 arrête l'auditeur EN PLEINE QUESTION, devant un interlocuteur,
+pour une raison technique qu'il ne peut pas comprendre — 03 §17.4 (« rien de ce qui se dit ne doit
+attendre qu'on trouve la bonne case ») interdit ce genre d'obstacle. L'option 3 perd un choix que
+l'auditeur a délibérément écrit : c'est une suppression silencieuse de contenu. Le suffixe conserve
+les deux options, reste lisible dans un export, et ne change rien aux questionnaires qui n'ont
+jamais eu de collision. **Précédence : invariant 7** — « rien n'est jamais silencieusement écrasé
+ou supprimé » ; les options 2 et 3 y contreviennent chacune à leur façon.
+
+Décideur : A20, sur revue A29
+Impact spec : aucun.

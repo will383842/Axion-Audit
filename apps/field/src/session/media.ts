@@ -7,6 +7,7 @@
 // (le même seuil que `entretien.css`). `useEnLigne` nourrit la pastille de
 // l'état hors ligne (03 §33.2) — une INFORMATION, jamais une condition : tout
 // fonctionne pareil dans les deux cas (invariant 1).
+// Traçabilité : E44 (rappels de raccourcis §33.3), E6 (hors ligne total : l’état réseau informe, ne commande pas).
 // =============================================================================
 import { useEffect, useState } from 'react';
 

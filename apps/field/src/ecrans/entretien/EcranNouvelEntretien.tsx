@@ -14,6 +14,7 @@
 // Les quatre états (03 §33.2) : chargement · vide (aucune mission, ou aucune
 // unité dans la mission) · erreur (identité de l'auditeur inconnue — on ne
 // fabrique pas un propriétaire de session) · nominal.
+// Traçabilité : E12 (entretiens par interlocuteur), E23 (hyper intuitif, novice < 30 min).
 // =============================================================================
 import { useCallback, useState, type FormEvent, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';

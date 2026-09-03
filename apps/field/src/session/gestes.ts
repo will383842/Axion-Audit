@@ -7,6 +7,7 @@
 // vertical — sinon c'est un défilement). Un balayage qui COMMENCE dans un champ
 // de saisie est ignoré : on y sélectionne du texte, on n'y change pas de
 // question.
+// Traçabilité : E44 (grille des gestes et raccourcis §33.3), E23 (hyper intuitif).
 // =============================================================================
 import { useMemo, useRef, type TouchEvent } from 'react';
 import { estChampDeSaisie } from './raccourcis.js';

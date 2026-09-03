@@ -21,6 +21,7 @@
 //
 // L'échec ne se rattrape pas en silence : `erreur` porte un message français et
 // l'indicateur ne dit PAS « Enregistré ».
+// Traçabilité : E13 (enregistrement continu, aucun bouton sauvegarder), E38 (sauvegarde terrain).
 // =============================================================================
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { EtatEnregistrement } from '@axion/ui';
