@@ -2463,3 +2463,28 @@ geste, mais le motif ne relève pas de cette classe de défaut.
 (A29) : l'orchestration d'écriture vit DANS le composant — à extraire un jour, pas ici.
 Prochaine action : A02 (contrôle d'acceptation). Aucune PR : L3 n'est pas dans `main`.
 Tests rouges connus : aucun.
+## 2026-09-03 10h40 — [lot L5 / incrément L5b] — étape pipeline 6/7 (réserves A02 fermées)
+Dernier commit vert : (celui-ci) · Branche : lot/l5b · Poussé : oui
+Contrôle A02 « ACCEPTÉ SOUS RÉSERVE » (`fedfcc3`), 3 réserves bloquantes — **les 3 sont fermées**,
+aucune ligne de code fonctionnel touchée. R1 : `valeurs.ts` citait E30 (« 3 niveaux d'audit ») pour
+un module qui type les douze formes de valeur ; corrigé vers E37, que ses deux voisins du même
+incrément citaient déjà. **Une CINQUIÈME trouvée en cherchant** : `peripherie-entretien.test.ts`
+citait « E43 (DoD) » — RETIRÉE, pas remplacée ; une glose se supprime aussi bien qu'elle s'ajoute.
+R2 : `apps/field/README.md` annonçait comme à venir l'écran que le commit livre ; réécrit en trois
+temps (L5a · L5b · ce qui reste dû) avec une section neuve sur ce que les tests NE couvrent PAS.
+R3 : amendement horodaté sous la décision Williams du 2026-09-02, avec **TROIS** écarts et non deux
+— A02 a vu que le droit d'ARRÊTER l'entretien a disparu du texte en service. Les deux textes restent
+intacts : la rédaction juridique n'appartient pas à un agent.
+Fiche traçabilité REQUALIFIÉE : le garde n'est pas cassé, il documente lui-même son trou
+(`--angles-morts` 1, 3 et 5, le 5 étant le contrôle ② proposé) — elle demande de CONSTRUIRE un garde
+qui n'existe pas, coût différent, à arbitrer sur ce libellé. Doute de spec transmis à A01, mot pour
+mot d'A02 : « à extraire un jour » vaut pour ne pas mettre `ecrans/**` sous seuil MAINTENANT, pas
+pour ne jamais le faire. Recette P-C complétée : cinq formes de saisie à `FNDA:0` — répondre EN
+SAISISSANT, rouvrir, vérifier la valeur relue.
+RÉSERVE DE MÉTHODE, qui n'est pas de mon fait et que je ne corrige pas : les hooks locaux émettent
+« Unsupported engine — wanted >=22.11.0 <23, current v24.19.0 » à CHAQUE appel : **la barrière
+locale tourne hors de la version épinglée au 11 §1**, seule la CI mesure sur le Node du contrat. Un
+vert local obtenu sur une autre version répond à côté — tout ce que j'ai mesuré est à relire ainsi.
+Mesures : traçabilité 539 citations sans incohérence ; `peripherie-entretien` 103/103 ; prettier conforme ; DECISIONS 133 entrées ; suite complète inchangée depuis 1710/1710.
+Prochaine action : A01 (passage en porte). Aucune PR : L3 n'est pas dans `main`.
+Tests rouges connus : aucun.
