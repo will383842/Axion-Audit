@@ -7450,10 +7450,20 @@ Impact spec : aucun.
 ## 2026-09-02 — [L7b] Sur quel vocabulaire se compte la « couverture par type de source » (§27.1) ?
 
 > **Texte FIGÉ le 2026-09-02 au §9.4 de `docs/conception/LOT_L7.md`, déposé ici le 2026-09-03**,
-> après l'entrée de L3 dans `main` — c'est la condition que la note posait. Reproduit **mot pour
-> mot**, sans reformulation : une entrée qui cite le §27.1 se défend seule, une qui dit « on a
-> choisi `kind` » demande qu'on la croie. Sa date est celle de l'arbitrage, pas celle du dépôt ;
-> `check:decisions` signale donc une date qui recule, et c'est **assumé**.
+> après l'entrée de L3 dans `main` — c'est la condition que la note posait. Sa date est celle de
+> l'arbitrage, pas celle du dépôt ; `check:decisions` signale donc une date qui recule, et c'est
+> **assumé**.
+>
+> **RECTIFICATION DU 2026-09-03, relevée par A02 (réserve R-L7a-2).** Ce bandeau disait « reproduit
+> **mot pour mot**, sans reformulation ». **C'était faux, et la faute est de la classe exacte que ce
+> dépôt pourchasse** : le texte figé écrivait « la couverture est un écart **prévu/planifié/réalisé** »
+> et le dépôt avait écrit « prévu/réalisé ». **Un mot perdu, et pas n'importe lequel** — c'est
+> précisément celui que le §6.2 de la note distingue du « prévu », et sans lui la colonne du milieu
+> de l'écran de couverture n'a plus de nom. La casse et deux tournures avaient également glissé.
+> Le texte est **rétabli** ci-dessous ; le mot « planifié » est revenu à sa place. Aucune autre
+> divergence sur le fond après recomptage mot à mot. **Une affirmation d'exactitude qui n'est pas
+> vérifiée vaut moins qu'une citation modeste** : c'est elle qui empêche le lecteur suivant de
+> vérifier, puisqu'elle lui dit que c'est déjà fait.
 
 Options :
 a) `answers.source` — 5 valeurs (entretien, observation, demonstration, document, releve).
@@ -7466,8 +7476,9 @@ type de session) ; l. 549 « cinq types de sessions », table à 5 lignes, `atel
 au §28.1 ; §32.6 l. 673 le range dans les 6 `interviews.kind`) ; l. 559 « le plan de mission
 planifie les CINQ types … l'écran de couverture contrôle la couverture PAR TYPE DE SOURCE » — même
 sujet des deux côtés, et la même ligne réserve le mot PROVENANCE à `answers.source`.
-Raison de fond : **on ne planifie pas une provenance.** La couverture est un écart prévu/réalisé et
-le critère L7-min du 07 exige qu'elle « reflète le plan d'entretiens » ; le plan publie
+Raison de fond : **ON NE PLANIFIE PAS UNE PROVENANCE.** La couverture est un écart
+**prévu/planifié/réalisé** et le critère L7-min du 07 exige qu'elle « reflète le plan
+d'entretiens » ; le plan publie
 `{orgUnitId, kind}`. Comptée sur `answers.source`, elle n'aurait aucune colonne « prévu » et le
 critère du 07 deviendrait inexprimable.
 Précédence (`CLAUDE.md`) : **§24-31 > §16-22** — le §27.1 prime sur la lecture courte du §16.6
@@ -7478,4 +7489,46 @@ toujours affichée, y compris à zéro) — une session invisible est une sessio
 
 Décideur : **Williams** (délégation du 2026-09-02 à la session pilote).
 Impact spec : aucun — lecture du §27.1 confirmée, aucun amendement du pack ; note de conception
-`docs/conception/LOT_L7.md` §9 mise à jour (elle rectifie ses propres §6.1, §6.3 et §8.3).
+`docs/conception/LOT_L7.md` §9 mise à jour (rectifie ses §6.1, §6.3 et §8.3).
+
+## 2026-09-03 — [L7b] « Prévu » recouvre trois notions : une colonne, deux, ou trois ?
+
+Arbitrage rendu par **A30** au §6.2 de `docs/conception/LOT_L7.md` et **jamais déposé** — relevé par
+A02 le 2026-09-03 (réserve **R-L7a-2**). Il est déposé ici **avant l'ouverture de L7b**, et l'ordre
+compte : sans lui, A32 coderait trois colonnes que rien n'atteste, et le premier relecteur qui
+demanderait « pourquoi trois ? » n'aurait qu'une note de conception pour toute réponse.
+
+Trois notions coexistent dans le dépôt, et les fondre perdrait de l'information :
+
+1. **PRÉVU (cible)** — le plan §32.4, `GET …/interview-plan`. Cible **calculée qui n'écrit rien**
+   (`sessionProposeeSchema` ; `POST …/apply` REPORTÉE), publiée par unité **et par `kind`** : elle
+   EST l'axe B du prévu, et c'est elle que vise le critère du 07 « la couverture reflète le plan ».
+2. **PLANIFIÉ (agenda)** — lignes `interviews` à `schedule_status` planifié. **Peut être vide alors
+   que le plan existe**, `apply` étant reportée : afficher 0/0 serait faux.
+3. **RÉALISÉ** — lignes `interviews` à `status` terminé.
+
+Options :
+
+1. Une colonne « prévu » unique, les trois notions fondues. Simple à l'écran, **faux** : un plan
+   existant sans agenda s'afficherait 0/0.
+2. Deux colonnes (prévu / réalisé). Perd la distinction entre un défaut d'agenda et un défaut de
+   terrain — c'est l'option que le dépôt appliquait de fait, faute d'arbitrage déposé.
+3. **Trois colonnes distinctes** (prévu / planifié / réalisé), **jamais un ratio unique**.
+
+Arbitrage : **option 3**. L'écart prévu → planifié est un **défaut d'agenda** ; l'écart planifié →
+réalisé est un **défaut de terrain**. Ce ne sont pas les mêmes alertes et elles ne s'adressent pas
+aux mêmes personnes : une moyenne les confondrait et n'appellerait personne.
+**Consigne structurante pour A32, et elle borne l'implémentation** : la colonne « prévu » **appelle
+le service de plan de L3** (`apps/api/src/domaines/plan-entretiens/`) et n'en réimplémente **aucune**
+règle §32.4. Une seconde implémentation des tranches d'effectif divergerait de la première au premier
+amendement, et la couverture affirmerait alors un prévu que le plan ne reconnaît pas. Si le service
+de L3 n'expose pas la forme utile, **on l'étend — on ne le recopie pas**.
+Règle de précédence : **§24-31 > §16-22** — le §27.1 (couverture par unité ET par type de source)
+prime sur la lecture courte du §16.6 « entretiens menés / prévus », qui ne connaît que deux termes.
+Précédence interne au pack **sans objet** : le pack ne nomme pas les trois notions, il ne se
+contredit pas — il est silencieux, et c'est le §6.2 qui les distingue.
+
+Décideur : **A30**, chef d'équipe console (note de conception §6.2, 2026-09-02) ; déposé le
+2026-09-03 sur constat d'A02.
+Impact spec : aucun sur `/docs`. Engage `packages/shared/src/pilotage.ts` et l'écran de couverture
+de **L7b**, qui ne sont pas encore écrits.
