@@ -2254,3 +2254,61 @@ E30, K.2-a), **R2** (README, K.4), **R3** (amendement horodaté, K.5). Non bloqu
 dossier de porte : **R4** (cinq types de réponse jamais rendus, K.3), **R5** (axe-core absent),
 **R6** (fil rouge non allongé). Détail et conditions de levée :
 `docs/portes/CONTROLE_A02_L5b_2026-09-03.md`.
+
+---
+
+# K.7 — REJEU DU CONTRÔLE A02 SUR `fcedce8` (2026-09-03) — condition de veto LEVÉE
+
+Quatre commits depuis `fedfcc3`, **aucune ligne exécutable modifiée** (diff filtré des commentaires
+et des lignes vides : sortie vide). Deux en-têtes, cinq documents.
+
+**R1 fermée.** `session/valeurs.ts` cite **E37** au lieu d'E30 — rattachement juste (03 §32.1 traite
+la fourchette et le non communiqué ; ses deux voisins du lot citaient déjà E37). **Cinquième glose
+fausse trouvée par l'auteur et RETIRÉE** : `session/peripherie-entretien.test.ts` citait « E43 (DoD) »,
+qui est l'exécutabilité autopilote — un fichier qui exerce les barèmes des onze types ne la réalise
+pas. Retrait correct. **Doctrine validée avec sa borne** : l'amendement R5 dit « aucun plancher
+au-delà de un » ; retirer est légitime **jusqu'à une** glose, jamais jusqu'à zéro — un fichier sans
+aucune citation devient invisible au garde (son angle mort n° 6) et tombe sous le refus du sens 2.
+Le fichier en garde quatre.
+
+**Pas de sixième.** Diff de toutes les lignes de traçabilité `fedfcc3..fcedce8` = **exactement deux
+changements** ; aucune glose juste retirée. Les 39 fichiers glosés repassés contre le fichier 08.
+Deux observations sans réserve : `packages/shared/src/banque-questions.ts` cite « E43 (conventions) »
+— même forme, mais **antérieure à L5b** (`git blame` : `8eead2f4`, 2026-08-29, lot L4) et défendable
+au titre de 11 §3 · `EcranEntretien.test.tsx` cite « E27 (design/WCAG) » — mince, mais le fichier
+atteste des noms accessibles et de la gestion du focus (WCAG AA, §19.2).
+
+**R2 fermée.** README réécrit ; chiffres **vérifiés** : 11 composants (mesuré 11), 13 modules de
+session pour L5b (mesuré 14 dont `machine.ts` correctement rangé au socle L5a), seuil 64rem,
+`AccesEntretien.tsx` 0 %, `EcranEntretien.tsx` 11/26 = 42,3 %. Section d'honnêteté exacte.
+
+**R3 fermée.** Amendement horodaté sous la décision Williams du 2026-09-02, **au format 11 §9bis**
+(`check:decisions` RC=0, 133 entrées) ; trois écarts tabulés dont le droit d'interrompre ; les deux
+textes intacts ; décision de fond réservée à Williams ; note d'exécution sur
+`VERSION_MENTION_INFORMATION` (invariant 7).
+
+**Le garde déclare ses propres trous — confirmé verbatim.** `--angles-morts` n° 1 (« ne distingue
+pas un rattachement JUSTE d'un rattachement FAUX »), n° 3 (« rapprochement LEXICAL, pas
+sémantique »), n° 5 (« il ne fait JAMAIS le chemin inverse »). Ce n'est pas un garde cassé, c'est un
+garde qui n'existe pas : Williams arbitre une construction, pas une réparation.
+
+**Le compteur de citations mesure autre chose que ce qu'on lui demande.** 535 → **539** pendant
+qu'une glose est retirée : `valeurs.ts` +3, `peripherie` +1, `README` 0 — total exact, parce que les
+notes de correction **re-citent les numéros en prose**. Ce compteur compte des occurrences de
+numéros dans du texte, **pas des rattachements**. Quatrième angle mort, à verser à la fiche.
+
+**Correction d'une affirmation de A02 (§K.3).** `ChoixUnique` ne sert **que** `single_choice`
+(l. 142) ; `multi_choice` est rendu **en ligne** (l. 152-186) et n'a **aucune fonction nommée**. Les
+cinq types non rendus sont confirmés (`lcov` : l. 141-149 et 153-185 toutes à 0 exécution), mais
+`multi_choice` **n'apparaît dans aucune liste `FNDA:0`** et manque donc à la consigne de recette de
+`LOT_L5.md` §4, qui nomme « money, date, single_choice, table ». **À ajouter avant P-C.**
+
+**Remesure sur `fcedce8`** : `npx vitest run --coverage` → **78 fichiers, 1710/1710, RC=0** ·
+`check-coverage.mjs` **RC=0** · `check:pack`, `check:prose`, `check:decisions` (133),
+`check:tracabilite` (539 citations, 323 fichiers), `check:no-skipped-tests` (81),
+`check:test-projects`, `check:invariants` → **tous RC=0**.
+
+**VERDICT DU REJEU : ACCEPTÉ.** R1, R2, R3 fermées, **condition de veto levée**. A01 peut signer le
+passage en porte. Restent ouvertes et non bloquantes pour P-C : **R4** (avec la correction
+`multi_choice`), **R5** (axe-core), **R6** (fil rouge non allongé) ; restent dues à la porte les
+migrations up/down sur staging et la rejouée du diff schéma-vs-04.
