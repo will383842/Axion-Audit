@@ -2594,3 +2594,33 @@ Contrôle porteur : sans la ligne du manifeste, `schema:diff` sort en 1 (« inde
 
 Réserve : mesures locales sur **Node v24.19.0**, hors du `>=22.11.0 <23` du 11 §1 — seule la CI
 mesure sur le Node du contrat.
+
+## 2026-09-03 17h05 — [lot L1 / incrément E18 `external_ref`] — étape pipeline 5/7
+
+Dernier commit vert : 8fb9cbb (feat(l1) : `companies.external_ref` reçoit son unicité) · Branche :
+lot/l1-e18-external-ref · Poussé : oui
+Tâche en cours : aucune — le test d'intégration de l'unicité partielle est écrit ET exécuté.
+Prochaine action : revue croisée A17 du diff de test, puis contrôle A02 ; **trancher dans
+`DECISIONS.md` le code d'erreur attendu quand l'API reçoit un `external_ref` déjà pris.**
+Tests rouges connus : aucun.
+
+Livré (A16 — aucune ligne de code de production touchée, 09 §5.6) : 4 tests dans
+`apps/api/tests/l1-contraintes.integration.test.ts`, à la suite du bloc `siren` dont cet index est le
+symétrique · 2 aides dans `tests/aide/base-l1.ts` (`tenterMigrations`, `versionAvantLaMigrationQui`).
+Prouvé : doublon REFUSÉ en 23505 · deux `external_ref` NULL ACCEPTÉS · l'index est PARTIEL dans le
+catalogue · la montée refuse une base à doublons préexistants sans laisser index ni ligne de journal.
+
+Preuve par BASCULE — quatre mutations temporaires du `0015`, toutes restaurées : index rendu TOTAL →
+seul le test de catalogue mord, les deux tests de comportement restent VERTS (PG16 tient deux NULL
+pour distincts même sans clause `WHERE` — c'est ce qui justifie ce troisième test) · `NULLS NOT
+DISTINCT` → le cas NULL et le catalogue mordent · index retiré → 3 mordent · garde `DO $$` retiré →
+le refus devient l'erreur brute PostgreSQL et le test mord.
+
+DÉFAUT RENDU À A13/A15, NON CORRIGÉ ICI : `POST /v1/companies` avec un `externalRef` déjà pris rend
+**500 INTERNAL_ERROR** (mesuré), là où un SIREN en double rend 409 `COMPANY_DUPLICATE` —
+`companies/depot.ts` ne nomme que `uq_companies_siren`. Et `externalRef` EST exposé par les schémas
+d'entrée (`packages/shared/src/companies.ts:492` et `:519`), contrairement à ce qu'affirmait
+l'option 2 de l'entrée `DECISIONS.md` du 2026-09-03.
+
+Réserve : mesures locales sur **Node v24.19.0**, hors du `>=22.11.0 <23` du 11 §1 — seule la CI
+mesure sur le Node du contrat.
