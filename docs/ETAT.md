@@ -2286,3 +2286,28 @@ Tests rouges connus : aucun sur les trois fichiers L5b (unitaire complet non rej
 branche : à rejouer en premier — la vérité, ce sont les tests). Cales jsdom (matchMedia,
 scrollIntoView) dans vitest.setup.interface.ts.
 Doute serveur transmis à L6 : deux mission_questions à la même position (ad hoc « juste après »).
+
+## 2026-09-03 05h55 — [lot L5 / incrément L5b] — étape pipeline 5/7
+Dernier commit vert : 736f62e (test(l5b) : périphérie de l'entretien, 128 cas, bascule prouvée) · Branche : lot/l5b · Poussé : NON — push refusé par la politique de permission de la session, à relancer
+Tâche en cours : le rouge de CI de l5b est FERMÉ. Il n'était pas « aucun test rouge » comme
+l'affirmait le bloc précédent : c'était le job « couverture ≥ 90 % (modules critiques) », module
+« Machine à états de session terrain », mesuré à fonctions 70,49 % · lignes 83,74 % · branches
+83,81 % sur 14 fichiers. Cause : `pnpm test:unit` (= `--project unit`) ne lance JAMAIS le projet
+`interface`, donc les `.test.tsx` n'étaient vus que par `test:coverage` — un vert local qui répondait
+à une autre question que celle de la CI.
+Mesure APRÈS (`pnpm test:coverage` puis `node .github/scripts/check-coverage.mjs`, 2026-09-03) :
+lignes 99,13 % · instructions 99,13 % · fonctions 98,39 % · branches 93,96 %. Suite complète
+1681/1681 verte, 77 fichiers. Seuil INCHANGÉ à 90 %, 9 chemins critiques INCHANGÉS (diff vide sur
+.github/coverage-critical-paths.json, ci.yml, vitest.config.ts, package.json).
+Deux fichiers de tests écrits par A26, jamais par A22 qui a écrit le code (09 §5.6) :
+`session/peripherie-entretien.test.ts` (96 cas) et `session/capteurs-gestes-enregistrement.test.tsx`
+(32 cas). Les ONZE TYPES_DE_REPONSE et les SIX TYPES_DE_SESSION sont parcourus par une boucle sur la
+liste elle-même : un type ajouté fera rougir le fichier au lieu de passer inaperçu.
+Prochaine action : POUSSER lot/l5b (736f62e) et lot/l5a (92944eb), puis revue croisée A29 sur l5b,
+puis — dans l'ordre de fusion figé — PR L5a avant PR L5b.
+Tests rouges connus : aucun (mesuré, pas supposé : 1681/1681 le 2026-09-03 à 05h50).
+Escalades ouvertes : PHRASE_SCRIPT_ACCORD est TRANCHÉE (DECISIONS.md 2026-09-02, libellé par défaut
+V1, relecture juridique en fiche AMELIORATIONS étage 1) mais NON IMPLÉMENTÉE — la constante unique et
+son affichage à l'écran de démarrage reviennent à A22, pas à A20 ni au testeur. Constat A28-1 remonté
+à A29 : deux `<h1>` de même libellé sur « Aujourd'hui » (coquille + écran), et deux libellés
+différents pour l'écran Stockage (« de l'appareil » dans VUES, « de cet appareil » à l'écran).
