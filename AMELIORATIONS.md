@@ -1550,3 +1550,84 @@ Impact crypto : aucun** (le jeton est le même, seul le transport change).
 clause du contrat 11 §3 non encore tenue. À planifier par A30 au brief de L7.
 
 **Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-C_
+
+### FICHE A-013 — `staging` sert le même conteneur depuis 21 h : Coolify échoue à lire le compose, en 9 secondes, et le déploiement n'a jamais lieu
+
+**Constat (mesuré le 2026-09-03 par accès direct au serveur, après relance délibérée du job en
+échec).** `main` est rouge depuis le 2026-09-02 14h40 UTC sur `8 · deploy-staging`. J'ai relancé le
+job sans changer une ligne : **il a échoué de la même façon**, ce qui établit un défaut
+**systématique** et non une panne passagère — le précédent Docker Hub, où un rejeu suffisait, ne
+s'applique pas.
+
+Le fait qui tranche, deux déploiements distincts à treize heures d'écart :
+
+| Déclenchement | `deployment_uuid` | Conteneur réellement en service |
+| --- | --- | --- |
+| 2026-09-02 14h48 | `ji178zfg0eeuywnsmqm0u543` | `/artifacts/tvgaihhwrs0g8kg9mwcmnnwv` |
+| 2026-09-03 03h46 | `7vafdkixhk0hit2wgig8w1es` | `/artifacts/tvgaihhwrs0g8kg9mwcmnnwv` |
+
+`docker inspect` sur le serveur : `api-wrunr6mwq2oxqq392i4myzjn-073253734194`, **Up 21 hours**, créé
+le 2026-09-02 07h34 UTC. **Le conteneur en service est celui du dernier déploiement réussi et n'a
+jamais été remplacé.**
+
+**La cause, lue dans la base Coolify** (`application_deployment_queues`) — le déploiement dure
+**9 secondes** (03:46:40 → 03:46:49) et se termine en `failed` :
+
+```
+Deployment failed: Failed to read Git source. Please verify repository access and try again.
+Error type: RuntimeException — /var/www/html/app/Models/Application.php:2119
+#0 ApplicationDeploymentJob.php(681): App\Models\Application->loadComposeFile()
+#1 ApplicationDeploymentJob.php(507): ->deploy_docker_compose_buildpack()
+```
+
+Le clone, lui, **réussit** : le journal montre `git ls-remote` rendant `8c5f9ff…`, puis
+`Cloning into '/artifacts/7vafdkixhk0hit2wgig8w1es'`. C'est la **lecture du fichier compose** qui
+échoue ensuite, pas l'accès au dépôt.
+
+**Ce que ce n'est PAS — écarté par mesure, pour que personne ne le recherche :**
+
+- **Pas l'espace disque** : `df -h /` → 29 % utilisés, 103 G libres ; inodes à 5 %.
+- **Pas un fichier absent** : Coolify attend `/infra/docker-compose.coolify.yml`
+  (`base_directory` = `/`, `build_pack` = `dockercompose`) ; `git ls-tree 8c5f9ff infra/` le trouve.
+- **Pas l'accès au dépôt** : le `git ls-remote` anonyme aboutit dans le journal même.
+- **Pas le commit `8c5f9ff` lui-même** : il ne touche **aucun** fichier compose
+  (`git show 8c5f9ff -- infra/docker-compose.coolify.yml` est vide) — il ne modifie que des
+  workflows et des scripts d'infra. La corrélation avec ce sha est celle de la tête de `main`, pas
+  celle d'une cause.
+
+**Dernier succès / premier échec**, sur la même application `wrunr6mwq2oxqq392i4myzjn` :
+
+```
+7vafdkixhk0hit2wgig8w1es | failed   | 2026-09-03 03:46 | 8c5f9ffa
+ji178zfg0eeuywnsmqm0u543 | failed   | 2026-09-02 14:48 | 8c5f9ffa
+tvgaihhwrs0g8kg9mwcmnnwv | finished | 2026-09-02 07:32 | f7a11b6a   <- le conteneur en service
+```
+
+**Valeur pour l'auditeur.** Aucune directement, et **bloquante pour tout le reste** : la DoD
+transverse exige « migrations up/down exécutées **sur staging** » et l'étape 7 du pipeline est une
+**démo sur staging**. Tant que staging sert du code périmé, **aucune porte ne peut être franchie** —
+ni P-C, ni P-D — et trois chantiers (L3, L5, L7) attendent derrière une cause qui ne leur appartient
+pas. *Un job d'infra tient trois chantiers.*
+
+**Coût estimé.** Diagnostic : fait. Correction : inconnue tant que `loadComposeFile()` n'a pas été
+instrumenté — l'hypothèse la moins coûteuse à éprouver est un **redéploiement manuel depuis
+l'interface Coolify**, qui dira si le défaut est dans l'appel d'API ou dans la configuration de
+l'application. Ne PAS modifier `deploy-staging.sh` avant : le script n'est pas en cause, il **refuse
+de sortir vert**, et c'est exactement ce pour quoi il a été écrit.
+
+**Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun.** C'est de l'exploitation.
+
+**Deux constats annexes, à ne pas perdre.**
+1. `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` sont **absents** : « un déploiement sans canal d'alerte
+   est un déploiement aveugle » (02 §11.3). Même réparé, le déploiement repartirait aveugle.
+2. Coolify tourne sur `ghcr.io/coollabsio/coolify:latest` — **une étiquette non épinglée**, alors
+   que le contrat 11 §1 épingle tout le reste au patch près et que Renovate est désactivé en
+   Phase 1. Le conteneur est en service depuis 5 jours, donc il n'est pas la cause de CET incident ;
+   mais une infrastructure qui peut changer sous nos pieds sans qu'aucun commit ne l'enregistre est
+   la prochaine panne qu'on ne saura pas dater.
+
+**Recommandation.** **Étage 2 — PROPOSÉE**, arbitrage Williams. Le point 1 (secrets Telegram) est
+d'étage 1 et peut être fait d'office par qui détient les secrets. Le point 2 (épingler Coolify) est
+une décision d'exploitation, pas une amélioration de confort.
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte suivante_
