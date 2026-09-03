@@ -2294,3 +2294,29 @@ permis au « 162/162 » de coexister avec une CI rouge. Réparation en cours cô
 exécute « commit wip: puis push » à moitié) — fiche à ouvrir, `settings.json` NON touché.
 Écart assumé : la note L6 fait 126 lignes là où 09 §3-1bis dit « ≤ 1 page » — densité préférée au
 format, sept points durs sourcés dans le code plutôt que supposés.
+
+## 2026-09-03 04h45 — [chantier C4 / staging] — étape pipeline 1/7 (diagnostic, AUCUNE correction)
+Dernier commit vert : 44e348b (docs(l6) — note de conception du moteur de sync) · Branche : fix/staging-deploiement · Poussé : oui
+Tâche en cours : diagnostic du job `8 · deploy-staging`, rouge depuis le 2026-09-02 14h40. AUCUNE
+action serveur, aucune correction : phase 1-2 seulement, en attente du feu vert de Williams.
+CAUSE MESURÉE : les deux enveloppeurs du serveur (`/opt/axion-audit/deploy-staging.sh` et le clone
+`/opt/axion-audit/repo`) sont restés au commit **e234756**, l'état d'AVANT la PR #25. Empreinte
+serveur 68fbc455… = empreinte du fichier à e234756 (identité exacte) ; dépôt à 8c5f9ff/44e348b =
+74926ac…. Le nocturne le dit dans les mêmes termes : « Le serveur a exécuté e234756 ». `infra/README`
+§6.3 prescrivait « copier PUIS fusionner » et se déclarait « NON JOUÉ sur le serveur » : la PR #25 a
+été fusionnée sans son préalable manuel. Un seul geste humain, deux workflows rouges.
+CE QUE LA MESURE CONTREDIT : (a) le déploiement N'EST PAS systématiquement inopérant — celui de
+04h30 (44e348b, uuid nkspyepfuygvyv2iffvh5v35) a pris effet en 190 s, conteneur neuf ; (b) le
+staging N'EST PAS hors service — /, /hq et /api rendent 200 (le 503 de 04h32 était la recréation
+en cours) ; (c) TELEGRAM_BOT_TOKEN et TELEGRAM_CHAT_ID EXISTENT (posés le 2026-08-28) et l'étape
+« Notifier Telegram » est verte sur les deux runs rouges — le texte « Alerte impossible » lu dans le
+journal est le CORPS du script échoué, pas son exécution.
+RESTE INEXPLIQUÉ, et c'est le défaut de fond : les tentatives de 14h48 (ji178zfg…) et 03h46
+(7vafdkix…, même commit 8c5f9ff, rejeu) n'ont créé aucun conteneur en 20 min. La cause est dans le
+journal de déploiement Coolify, que NI le script NI le workflow ne lisent : `/api/v1/deployments/
+<uuid>` n'est interrogé que pour son `status`, lequel décrit l'application (`running:healthy`) et
+non le déploiement. Le seul artefact qui nomme la panne est jeté.
+Prochaine action : présenter le diagnostic à Williams et attendre son feu vert avant toute action
+serveur (pose des deux enveloppeurs) ou toute correction de dépôt (lecture du journal Coolify).
+Tests rouges connus : `8 · deploy-staging` sur main (empreinte) · `Test de restauration nocturne`
+depuis le 2026-08-31 (même cause) · les rouges de lot/l5b, hors périmètre de ce chantier.
