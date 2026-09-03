@@ -2597,3 +2597,35 @@ sans PR). **B1 fermée** (`1b89433`) : `verrou.ts` de 0,00 % à **100 %**, 42 te
 
 **Trois gestes restent à Williams** : le root sur staging (`infra/README.md` §6.3), l'arbitrage
 **P-DESCOPE** du 15/09, et les portes **P-C / P-D / P-E** — hors délégation du 2026-09-03.
+
+## 2026-09-03 14h30 — [session pilote] — CLÔTURE DÉFINITIVE, ce bloc fait foi
+
+Dernier commit vert : la tête de `main` qui porte ce bloc · Branche : `main` · Poussé : oui
+Tâche en cours : aucune. Session close (`CLAUDE.md` §8). **Rien de non commité, rien de non poussé,
+vérifié worktree par worktree.**
+Tests rouges connus : `main` rouge sur `8 · deploy-staging` **seulement** — empreinte du script
+serveur, couvert par R-L3-2-bis rattaché à L0. **Aucun rouge fonctionnel nulle part.**
+
+**Ce bloc remplace celui de 13h35**, qui citait `main = 508ae15` et une branche supprimée depuis :
+deux cibles mouvantes qu'une session neuve aurait suivies dans le vide. Il n'en cite plus aucune.
+
+**LIRE D'ABORD `docs/journal/2026-09-03.md`** — section « APRÈS-MIDI » pour le récit et les défauts
+ouverts, puis **« CARTE DES ARTEFACTS »** en fin de fichier : elle dit, branche par branche et
+chemin par chemin, où lire ce qui n'est pas sur `main` (les trois contrôles A02, la matrice E1-E47,
+E18). On les lit par `git show <branche>:<chemin>`, sans checkout.
+
+**Cinq PR ouvertes** : **#30** L5a (**ne pas fusionner** — réserve B2) · **#31** L5b · **#32** L7a ·
+**#34** E18 · **#28** staging. Tags `v0.l0` `v0.l2` `v0.l3`.
+Burn-down : **56 % écrit · 37 % sur `main` · 33 % porte signée** (référence 26 j-h, fichier 07).
+
+**PROCHAINE ACTION, dans cet ordre strict :**
+
+1. **A51 sur `lot/l5a`** — réserve **B2**, seule bloquante restante. C'est elle qui tient #30.
+2. B2 fermée → merge **#30** (il apporte **axe-core**, que la DoD attend et que `main` n'a pas).
+3. `lot/l5b` **refusionne `main`** — bifurqué AVANT les 5 bloquants PWA de L5a — rejoue sa suite sur
+   le vrai socle, puis **#31**, puis **#32**, puis **#34**.
+4. **Absorber A-006** (cookies httpOnly console) en incrément nommé, après #32.
+5. **L5c** — conditionne P-C. Périmètre : `docs/conception/LOT_L5.md` §1.
+
+**À Williams, hors délégation** : le geste root sur staging (`infra/README.md` §6.3), l'arbitrage
+**P-DESCOPE** du 15/09, et les portes **P-C / P-D / P-E**.
