@@ -2308,3 +2308,27 @@ Tests rouges connus : aucun. `verify:rapide` vert au pre-push (865 tests unitair
 Playwright d'accessibilité verts localement.
 Réserve de méthode à connaître : `pnpm test:unit` ne lance PAS le projet `interface` — un vert local
 peut donc répondre à une autre question que la CI. Mesurer avec `pnpm test:coverage`.
+
+## 2026-09-03 06h35 — [lot L5 / incrément L5a] — étape pipeline 5/7 (fin d'incrément, session close)
+Dernier commit vert : (celui-ci) · Branche : lot/l5a · Poussé : oui
+Tâche en cours : rien. Incrément L5a terminé côté A20, en attente de L3.
+`pnpm verify` COMPLET exécuté sur cette branche le 2026-09-03 — **RC=0**, chiffres bruts :
+build OK · lint (`--max-warnings=0`) OK · format:check OK · typecheck strict OK · pack 12/12 ·
+DECISIONS 125 entrées au format · prose OK · invariants 16 règles vertes · jonctions 50 scripts /
+105 variables / 10 fichiers de CI · graphe 104 modules, 0 import pendu · activity_log 234 fichiers ·
+traçabilité 468 citations / 297 fichiers · anti-skip 79 fichiers, aucun test désactivé ·
+projets de test 79 (interface:29 · unit:29 · integration:17 · playwright:4) · isolation réseau OK ·
+Coolify OK · exécutabilité OK · **test:unit 29 fichiers / 647 verts · test:integration 17 / 308 verts
+· test:e2e 45 verts** (dont les 5 d'accessibilité A28). Total exécuté : 1000 tests.
+DÉFAUT STRUCTUREL MIS EN ÉVIDENCE PAR CE VERIFY, fiche étage 2 posée sur lot/l5b : `pnpm verify`
+n'exécute JAMAIS le projet `interface`. Ses trois suites finales sont `--project unit`,
+`--project integration` et Playwright ; les 29 fichiers `.test.tsx` ne tournent que sous
+`pnpm test:coverage`, donc dans le seul job CI `coverage`. Un `.test.tsx` rouge sort donc VERT de
+`verify`, du pre-push et des jobs `unit`/`integration`/`e2e`. Ne pas lire ce RC=0 comme « toute
+l'interface est verte » : il ne le dit pas.
+Prochaine action : ATTENDRE que L3 entre dans `main` (`main` = 8c5f9ff, L3 n'y est pas ; le dossier
+de porte se contredit et `deploy-staging` est rouge — chez Williams). Ensuite seulement :
+`git merge origin/main` dans lot/l5a, puis GREP des cinq entrées [L5a] du 2026-09-02 (Argon2id, AAD,
+`validé`, liste fermée, dépendances de test) — c'est la fermeture de R-L5a-9 — puis PR lot/l5a → main.
+Aucun merge et aucune PR n'ont été faits ici.
+Tests rouges connus : aucun.
