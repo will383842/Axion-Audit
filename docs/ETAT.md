@@ -2654,3 +2654,32 @@ Résolution refaite **par blocs depuis la base commune** (`4b3f7ee`) : base 119 
 
 **R-L5a-9 fermée par la mesure.** Les cinq entrées `[L5a]` du 2026-09-02, écrites à l'origine sur
 `lot/l3-suite`, survivent : Argon2id, AAD, état `validé`, liste fermée, dépendances de test.
+
+## 2026-09-03 13h00 — [lot L5 / incrément L5a] — étape 5/7 → réserve **B1 FERMÉE** (verrou testé)
+
+Dernier commit vert : (celui-ci) · Branche : lot/l5a · Poussé : oui
+Tâche en cours : aucune. B1 du contrôle A02 est traitée par A26, sans toucher au code de production.
+Prochaine action : A20 affecte le second volet de B1 (le glob de couverture) et A01 tranche B2
+(verdict A51 sur L5a) ; la PR #30 reste ouverte, aucun merge n'a été fait ici.
+Tests rouges connus : aucun.
+
+`apps/field/src/app/verrou.ts` passe de **0,00 %** à **100 %** (lignes, branches, fonctions, v8),
+`contexte.tsx` de 0,00 % à **80,00 %**, et `apps/field/src/app/**` de 40,11 % à **80,49 %**.
+Deux fichiers écrits, aucun autre touché : `app/verrou.test.tsx` (33 tests) et `app/contexte.test.tsx`
+(9 tests), tous deux au projet `interface` (jsdom + minuteurs simulés — une échéance de 15/60 min ne
+s'observe pas autrement). `test:interface` : 31 fichiers, **508 tests verts**. `test:unit` inchangé
+(39 fichiers, 923 tests). Ni `.skip`, ni `.only` ; `check:test-projects` et `check:no-skipped-tests`
+verts sur 97 fichiers.
+
+**Le scénario qui n'avait jamais été joué l'est** : une session active de 45 min ne se verrouille
+JAMAIS (03 §33.7, recette P-C), au niveau du hook ET dans la coquille complète. Doublé de son
+contrôle d'anti-vacuité : les mêmes 45 min HORS session verrouillent bien.
+
+**Preuve par bascule, trois mutations posées puis retirées** : seuil de session 60 → 30 min = 8 tests
+rouges ; `scroll` retiré des interactions = 1 rouge ; recomparaison à l'horloge au retour au premier
+plan supprimée = 1 rouge. `verrou.ts` restauré à l'identique (SHA-1 `b101c45`, `git diff` vide).
+
+**Deux défauts rendus à A24/A20, NON corrigés par moi** (09 §5.6) : `verrou.ts:192`, `verrouEcran`
+n'est jamais remis à `null` après un `release` système — le Wake Lock n'est donc pas redemandé au
+retour au premier plan ; et `contexte.tsx:281`, le `useMemo` ne mémoïse rien, `useVerrou` rendant un
+objet neuf à chaque rendu. Aucun n'est bloquant. Recommandation de glob : voir le rapport.
