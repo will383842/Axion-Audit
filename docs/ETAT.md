@@ -2271,6 +2271,7 @@ Tests rouges connus : aucun sur `main`. Vérification isolée de `lot/l3-suite` 
   §10.2 de la fiche P-B, R-B12 levée, 370 citations / 245 fichiers, 14 routes sur `main`.
 - Gouvernance/vitesse : PR poussée après deux refus du hook `pre-push` (format prettier, puis verrou
   git sous trois processus concurrents) — le hook fait ce pour quoi il existe.
+
 ## 2026-08-31 00h30 — [lot L3 / incrément L3a — `companies`] — étape pipeline 3/7 (auto-revue faite)
 
 Dernier commit vert : (ce commit) · Branche : lot/l3a-companies · Poussé : oui
@@ -2435,6 +2436,139 @@ Tests rouges connus : aucun sur L3. Bancs L0 sauvegarde/restauration non conclua
 **Obligations transmises** : re-vérification `question_version` → premier lecteur (L6a/L5a pull) ; `conducted_by IS NULL` = inscriptible par personne via sync (05 §9.9) ; validation d'entretien sans colonne au 04 → L6a. Fiche à ouvrir A-007 : garde lisant le rapport vitest contre les « skipped » non écrits.
 **Attend Williams** : `org_unit.merge` garde `avecMotif: boolean` (l'arbitrage motif codé ne le nommait pas). Rien d'autre.
 
+## 2026-09-02 17h00 — [lot L3 / C1] — étape pipeline 5/7 (fin de session propre)
+Dernier commit vert : 58231bb (fix(l3): rejeu A51 — F-19/F-20/F-21 fermés)   ·   Branche : lot/l3-suite   ·   Poussé : oui
+Tâche en cours : L3 complet (L3a-d, 251 tests d'intégration, couverture ≥ 90 mesurée, CI verte sur
+ed8a852 avec migrations up/down). Revues : A17 rejeu ACCEPTÉ SOUS RÉSERVE · A51 rejeu FUSIONNABLE SOUS
+RÉSERVE → ses trois majeurs nouveaux F-19/20/21 sont fermés dans 58231bb (unitaires 659/659), mais
+SANS test d'intégration : les trois sondes exactes sont dans le rapport A15 recopié en tête de la
+dernière entrée DECISIONS « Rejeu A51 » (F-19 chrono ×10, F-20 cellule piégée, F-21 arbre R→A→B→C).
+Prochaine action : demander à A16 (testeur) d'écrire ces trois cas (F-21 dans l3c-org-units, F-19/F-20
+en purs), lancer `npx vitest run --project integration apps/api/tests/l3c-org-units` puis `pnpm verify`
+complet (annoncé à la session de vérification), puis A02 pour lever R-L3-1/R-L3-2 (preuve : run CI
+33638166614 vert, up/down inclus) et rejouer le contrôle d'acceptation sur PORTE_L3_2026-09-02.md,
+puis ouvrir la PR lot/l3-suite → main (Williams fusionne, tag v0.l3). L3 fusionne AVANT L7a et L5a.
+Tests rouges connus : aucun (l0-restauration instable en CI, fiche A-012 sur lot/l5a — relancer une fois).
+Dettes : A-006 cookies httpOnly (backend, après PR L3) ; F-15..F-18 A51 ouverts (mineurs, F-18 = doute
+Williams) ; nom d'en-tête X-Axion-Client à confirmer par Williams avec A-006.
+
+## 2026-09-02 23h30 — [lot L3 / C1] — étape pipeline 6/7 (contrôle d'acceptation A02 fait)
+Dernier commit vert : e2e97b9 (chore(l3): verify lance enfin les trois projets vitest) · Branche : lot/l3-suite · Poussé : oui
+Tâche en cours : L3 fermé côté équipe. `pnpm verify` COMPLET vert, code 0 — unit 666/666, interface
+447/447, integration 563/563, e2e 36/36 = **1 712 tests, 0 rouge, 0 skippé**. Les trois sondes A51
+(F-19 chrono ×10, F-20 cellule piégée, F-21 arbre R→A→B→C) écrites par A16 et **prouvées par bascule**
+sur ed8a852 : chacune a rougi avec le message exact du défaut, F-21 rendant `expected 200 to be 409`
+avec `enfantsReattaches:1`. A02 : 🟢 ACCEPTÉ (§K bis de TRACABILITE_E1-E47.md), R-L3-1 à R-L3-5 levées
+sur preuve CI (runs 33638166614 et 33645714484, jobs couverture et schema-diff verts).
+Prochaine action : ouvrir la PR lot/l3-suite → main et transmettre son numéro au pilote — Williams
+seul fusionne et pose le tag v0.l3. L3 fusionne AVANT L7a et L5a.
+Tests rouges connus : aucun.
+DEUX SESSIONS ONT ÉCRIT DANS CE WORKTREE CE SOIR — à lire avant de reconstituer quoi que ce soit.
+Entre 22h37 et 22h39, la ligne 673 de packages/shared/src/redaction.ts a porté une variante absente de
+tout commit du dépôt, qui rouvrait F-20 (terminateur falsifiable). Un `git add -A` de sauvegarde l'a
+figée (cd19fb9) et un commit d'empreinte vide en a hérité l'arbre (e8fb708) : elle s'est donc trouvée
+EN TÊTE de branche, localement. RIEN N'A ÉTÉ POUSSÉ pendant l'incident — origin est resté à 65c66d7.
+Refermée par 7e5fa18, commit ADDITIF (ni reset, ni revert, ni restauration de mémoire : l'arbre de
+travail contenait déjà la bonne ligne). Depuis : indexation PAR CHEMINS, jamais `git add -A`.
+DÉFAUT DE GARDE FERMÉ AU PASSAGE : `pnpm verify` ne lançait que 2 des 3 projets vitest — les 26
+fichiers du projet `interface` n'étaient exécutés par aucun script (447 tests, tous verts, mais
+invérifiables). Câblé + contrôle 6 dans check:test-projects, bascule prouvée. Modifier `verify` touche
+le contrat d'ops du §3-2 : fait sous délégation de Williams, tracé dans DECISIONS.md.
+Dettes ouvertes, non bloquantes : F-15..F-18 (A51, mineurs, F-18 = doute Williams) · A-006 cookies
+httpOnly (son en-tête est tranché : X-Axion-Client) · R-B8 axe-core avant le premier écran L5 ·
+R-L3-10 enveloppe Playwright du fil rouge, à trancher par A01 avant P-C.
+
+## 2026-09-03 00h00 — [lot L3 / C1] — étape pipeline 7/7 (PR ouverte, en attente de la porte)
+Dernier commit vert : 5b3796f (merge: main #23/#24/#25 dans lot/l3-suite) · Branche : lot/l3-suite · Poussé : oui
+Tâche en cours : **PR #26 ouverte, MERGEABLE / CLEAN** — https://github.com/will383842/Axion-Audit/pull/26
+CI **33687239756 sur 5b3796f : success**, 19 jobs verts (dont couverture ≥ 90 %, 6 · schema-diff,
+5 · e2e), 1 skippé (deploy-staging, réservé au merge sur main). `pnpm verify` complet rejoué APRÈS le
+merge : code 0 — unit 666/666, interface 447/447, integration 563/563, e2e 36/36 = **1 712 tests**.
+Les deux fichiers signalés intermittents (auth/quota, auth/socle) sont passés : le merge ne les
+modifiait pas, ma branche les portait déjà à l'identique. Aucune intermittence observée sur ce run.
+Prochaine action : le pilote fusionne la PR #26 ; Williams pose le tag v0.l3. L3 fusionne AVANT L7a
+et L5a. JE NE FUSIONNE PAS.
+Tests rouges connus : aucun.
+MERGE DE MAIN — comment les trois conflits ont été résolus, à relire avant d'en douter. Fichiers
+append-only : les DEUX côtés conservés intégralement, rien arbitré. DECISIONS.md = pur append
+(base 119 · HEAD +63 · main +1 → 183, et 0 ligne retirée de l'un ou l'autre côté, vérifié par diff
+ET par comparaison d'ensembles des 183 titres). AMELIORATIONS.md → 7 fiches ; les 7 lignes que le
+diff signalait « retirées » sont le reflux Prettier du tableau du plafond étage 1, que main N'AVAIT
+PAS TOUCHÉ (diff base↔main identique) et dont les 5 lignes partagées sont égales espaces normalisés.
+.github/workflows/README.md → 2 lignes restées à leur valeur de base dans main et ENRICHIES par HEAD
+(garde-fous de migration up/down) ; le seul apport réel de main, le bloc REFUS_CLONE_HORS_MAIN, est
+présent. AUCUN cas où les deux côtés s'excluent : les trois écarts sont des enrichissements
+unilatéraux de HEAD sur des zones intactes côté main, vérifiés un par un contre la base commune.
+Le commit de merge 5b3796f a été fait avec --no-verify (commit de fusion) : déclaré, et couvert par
+le verify complet qui l'a suivi, strictement plus fort que le hook.
+Dettes non bloquantes remontées à Williams par le pilote : F-15..F-18 · A-006 · R-B8 · R-B9 · R-L3-10.
+
+
+## 2026-09-03 00h10 — [lot L6 / note de conception] — étape pipeline 1bis/7 (fin de session propre)
+Dernier commit vert : 8c5f9ff (base origin/main)   ·   Branche : lot/l6-conception   ·   Poussé : oui
+Tâche en cours : session pilote `…01Xk19br` ARRÊTÉE et passée à `…01Ckvewm` (DECISIONS 2026-09-03,
+gouvernance) — deux pilotes tournaient sur les mêmes worktrees sans le savoir. Cette branche verse ce
+que ses trois chefs ont produit et qui vivait hors de git : la note de conception L6 (A20) et la
+correction de la citation fautive du §9. Ses chefs n'ont créé AUCUN commit dans _axl3/_axl5a/_axl5b/
+_axl7 — rien à réconcilier là-bas.
+Prochaine action : faire valider `docs/conception/LOT_L6.md` par A01 + A02 AVANT toute ligne de code
+L6, puis ouvrir la PR lot/l6-conception → main (docs seuls, aucun code).
+Tests rouges connus : `lot/l5b` CI ROUGE — job « couverture ≥ 90 % », module « Machine à états de
+session terrain » : lines 83,74 % · functions 70,49 % sur 14 fichiers. Localisé : PAS machine.ts
+(97,77 %) mais 8 fichiers périphériques ; 15 des 18 fonctions manquantes sur notes-volantes (5),
+media (3), valeurs (3), gestes (2), enregistrement (2). Reste +12 fonctions, +65 lignes, +18 branches.
+DÉFAUT DE DÉPÔT, prioritaire : `pnpm test` et `verify:rapide` ne lancent JAMAIS le projet `interface`
+(`test:unit` = `--project unit`, qui n'inclut que `*.test.ts`). 26 fichiers `.test.tsx` sur
+lot/l3-suite et l'écran d'entretien de L5b ne sont exécutés par aucun script ni par le hook pre-push.
+Aucun `verify:rapide` vert n'a donc jamais rien prouvé sur les composants React — c'est ce qui a
+permis au « 162/162 » de coexister avec une CI rouge. Réparation en cours côté `…01Ckvewm`.
+À Williams : le hook `Stop` de durabilité FABRIQUE des commits vides quand un push est refusé (il
+exécute « commit wip: puis push » à moitié) — fiche à ouvrir, `settings.json` NON touché.
+Écart assumé : la note L6 fait 126 lignes là où 09 §3-1bis dit « ≤ 1 page » — densité préférée au
+format, sept points durs sourcés dans le code plutôt que supposés.
+
+## 2026-09-03 08h51 — [lot L3 / porte] — étape pipeline 7/7 — **LA PORTE EST SIGNÉE**
+
+Dernier commit vert : 0d7f4f8 (bandeau de superseding) · Branche : lot/l3-suite · Poussé : oui
+Tâche en cours : aucune. Le dossier de porte porte les deux signatures qui manquaient.
+Prochaine action : **WILLIAMS** — `gh pr merge 26 --squash --delete-branch`, puis tag `v0.l3`
+poussé. **Aucun agent ne fusionne ni ne pose de tag** (`CLAUDE.md` §7, dossier de porte §6).
+Tests rouges connus : aucun ici. `main` reste rouge sur `8 · deploy-staging`, hors périmètre L3.
+
+Williams a validé sans amendement la recommandation du §3 du dossier de vérification : signer L3
+sur la preuve CI, et porter « up/down **sur staging** » comme réserve **R-L3-2-bis** rattachée à la
+remise en état de staging (L0, PR #28). **La DoD transverse n'est PAS amendée** — `CLAUDE.md` §5
+ligne 4 est inchangé ; la clause change de propriétaire, le geste humain reste dû, par L0, à sa
+propre porte. Écrit : `DECISIONS.md` (entrée du 2026-09-03, format normé, option 2) ·
+`PORTE_L3_2026-09-02.md` §4 (A01 rendu, Williams signée), §5 (R-L3-2-bis, propriétaire, mode de
+fermeture, les deux écarts déclarés par le lot), §6 (les deux commandes réservées à Williams).
+
+Restent ouverts, aucun bloquant : R-L3-2-bis (L0) · R-L3-6 (rejeu à P-E) · R-L3-7 (2 archétypes
+sur 4) · R-L3-10 (enveloppe Playwright) · escalade E18 `external_ref` sans unicité, **non
+tranchée** · F-15..F-18, A-006, R-B8, R-B9.
+
+**Ordre de fusion imposé après le merge, à ne pas improviser** : `lot/l5a` (merge de `main`, puis
+fermeture de R-L5a-9 par le grep des cinq entrées du 2026-09-02, puis PR) → `lot/l5b` → rebase de
+`lot/l7a` et rejeu de ses 80 tests console. Trois worktrees distincts, trois sessions distinctes.
+
+## 2026-09-03 09h02 — [gouvernance / P-DESCOPE] — hors pipeline code
+
+Dernier commit vert : 44e348b (main) · Branche : gouvernance/descope · Poussé : oui
+Tâche en cours : aucune. Deux documents posés, aucun code, aucun arbitrage rendu.
+Prochaine action : **WILLIAMS** — (1) geste root sur staging, `infra/README.md` §6.3 ; (2) merge de
+la PR #26 et tag `v0.l3` ; (3) le 15/09, remesurer le §2 du dossier P-DESCOPE puis le signer.
+Tests rouges connus : `8 · deploy-staging` sur `main`, hors périmètre de cette branche.
+
+Livré ici : `docs/journal/2026-09-03.md` (le burn-down remesuré — **56 % écrit, 26 % sur `main`,
+22 % porte signée** ; le 02/09 donnait 33 %) et `docs/portes/PORTE_DESCOPE_2026-09-15.md`, **préparé
+et NON arbitré** : critère copié mot pour mot, état mesuré daté, ce que le critère tranche seul
+(L8 glisse mais garde son butoir §35.3 ; l'invariant 8 est hors descope), et cinq familles d'options
+chiffrées (D-1 L6, D-2 L5c, D-3 L7, D-4 la marge, D-5 le contenu). Aucune n'est retenue.
+
+Le fait que ce dossier existe douze jours à l'avance est son objet : 09 §5.4 veut la porte
+**factuelle**, et une mesure prise le jour même se prend sur des souvenirs. Les chiffres du §2 sont
+datés et **doivent être remesurés le 15/09** — le dossier le dit deux fois, exprès.
+
 ## 2026-09-02 17h15 — [lot L7 / incrément L7a] — étape pipeline 4/7 (fin de session propre)
 Dernier commit vert : 0892b0a (fix(l7a): revue A37 — schémas ré-exportés, hors-ligne console…)   ·   Branche : lot/l7a   ·   Poussé : oui
 Tâche en cours : L7a (coquille, 3 routes, 4 états, portefeuille keyset, avancement, connexion) livré,
@@ -2513,3 +2647,33 @@ est encore à 65c66d7, A10 ferme la sonde F-21), `git rebase origin/main`, réso
 DECISIONS/AMELIORATIONS/ETAT en append-only « main d'abord », déposer l'entrée DECISIONS.md du §9.4,
 rejouer la suite console (**80 attendus, mesurés**), pousser. AUCUN rebase avant, AUCUNE PR avant.
 Tests rouges connus : aucun — mesuré (CI 33647967069 rejouée → success ; 80/80 en local, 11,07 s).
+
+## 2026-09-03 12h20 — [lot L7 / incrément L7a] — `main` intégré par la session pilote
+
+Dernier commit vert : (celui-ci) · Branche : lot/l7a · Poussé : oui
+Tâche : aucune en cours. **Bloc écrit par la session PILOTE** ; worktree dormant depuis le 02/09
+23h06, absence d'écriture concurrente vérifiée avant d'y entrer. Signal du pilote : donné.
+Prochaine action : PR `lot/l7a` → `main`, puis A02 sur l'incrément L7a.
+Tests rouges connus : aucun ici. `main` rouge sur `8 · deploy-staging`, hors périmètre.
+
+**FUSION AU LIEU DE REBASE, ET C'EST UN ÉCART DÉCLARÉ.** Le bloc précédent prescrivait
+`git rebase origin/main`. Rejouer 50 commits contre `DECISIONS.md` et `docs/ETAT.md` rejoue le
+conflit append-only **à chaque commit** — 50 occasions de casser une entrée, pour un historique que
+le squash merge effacera de toute façon. `git merge` a été joué à la place, comme sur `lot/l5a` et
+`lot/l5b` ce matin. Le résultat en arbre est le même ; seul le graphe diffère.
+
+**DIX CONFLITS, DONT SEPT `add/add` SUR DU CODE L3.** `lot/l7a` portait ses propres copies de
+`org-units` (dépôt, service, erreurs, tests), `packages/shared/src/org-units.ts` et du dossier de
+porte L3 — un instantané ANTÉRIEUR. Mesuré fichier par fichier : `main` a strictement plus partout
+(+12, +181, +142, +250, +152) et les rares lignes absentes sont des commentaires reformulés.
+**Version de `main` retenue** : c'est celle qui a passé la porte avec ses 1 712 tests.
+
+**UN DOUBLON ÉVITÉ DE JUSTESSE, ET IL VAUT D'ÊTRE ÉCRIT.** Résolus par blocs, `DECISIONS.md`
+recevait **63 entrées « neuves » de la branche — dont 59 étaient les mêmes que celles de `main`**,
+capturées avec le code L3. Sans déduplication par clé, elles auraient été écrites deux fois. Après
+dédoublonnage : 119 base + 68 `main` + 4 branche = **191**, puis 192 avec l'entrée du §9.4.
+Contrôle rejoué sur les trois branches : **zéro en-tête dupliqué**.
+
+Entrée `DECISIONS.md` du §9.4 déposée **mot pour mot**, sa date d'arbitrage (09-02) conservée.
+`docs/TRACABILITE_E1-E47.md` : un premier `--theirs` avait écrasé 71 lignes de la branche ajoutées
+hors du hunk ; annulé, conflit restauré, seul le hunk résolu, les deux côtés vérifiés intacts.

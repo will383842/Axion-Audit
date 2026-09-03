@@ -399,6 +399,43 @@ export async function modifierUneUnite(
 
     const parent = comparer(corps.parentId, avant.parentId);
     if (parent.change) {
+      // ═══════════════════════════════════════════════════════════════════════════
+      // LE VERROU DE MISSION — SANS LUI, DEUX `PATCH` CROISÉS COMMETTENT UN CYCLE.
+      // ═══════════════════════════════════════════════════════════════════════════
+      // A51, F-13. `lireUnitePourEcriture` ne verrouille QUE la ligne modifiée, or un
+      // reparentage ne décide pas sur cette ligne : il décide sur TOUT L'ARBRE. Deux
+      // requêtes concurrentes — « A devient enfant de B » et « B devient enfant de
+      // A » — verrouillent donc deux lignes DISTINCTES, lisent chacune un squelette
+      // qui ignore l'écriture non committée de l'autre, passent toutes deux le
+      // contrôle, et committent un cycle. Aucune contrainte du fichier 04 ne s'y
+      // oppose, et aucun `CHECK` ne pourrait l'exprimer — une propriété de graphe ne
+      // se dit pas ligne à ligne.
+      //
+      // C'est exactement la règle que `importerLArbre` applique déjà (décision B-2 de
+      // la revue croisée A17) : **toute route qui décide sur l'arbre lit la mission
+      // `FOR UPDATE`**. Le `PATCH` la contredisait ; il s'y range.
+      //
+      // ── COÛT, ET ORDRE DES VERROUS — CE QUI EST VRAI, ET CE QUI NE L'EST PAS ──
+      // Coût NUL hors reparentage : le verrou n'est pris que dans cette branche — un
+      // simple changement de nom ne fait attendre personne.
+      //
+      // L'ordre est ici « ligne PUIS mission ». Deux `PATCH` concurrents convergent
+      // sur LA MÊME mission et se sérialisent — c'est l'effet recherché : le second
+      // relit un squelette à jour.
+      //
+      // ⚠ **UN INTERBLOCAGE RESTE POSSIBLE, ET LE PRÉTENDRE IMPOSSIBLE SERAIT FAUX**
+      // (A51) : deux `PATCH` de reparentage croisés prennent chacun le `FOR UPDATE`
+      // de LEUR ligne, puis le verrou de mission — mais l'écriture de `parent_id`
+      // demande en plus, par la clé étrangère, un `FOR KEY SHARE` sur la ligne du
+      // NOUVEAU PARENT, c'est-à-dire sur la ligne que l'autre transaction tient
+      // déjà. Les deux peuvent donc s'attendre. **Ce qui est vrai, et qui suffit** :
+      // l'issue n'est ni un cycle commité ni un 500 — PostgreSQL tranche par un
+      // `40P01` que `erreurs-postgres.ts` traduit en **409 lisible** (F-14), et
+      // l'invariant de graphe, lui, n'est jamais violé. Une transaction annulée est
+      // un refus ; un arbre faux est une donnée que l'invariant 7 interdit de
+      // nettoyer par suppression.
+      await exigerMission(tx, avant.missionId, true);
+
       if (parent.valeur !== null) {
         await exigerParentDeLaMission(tx, avant.missionId, parent.valeur);
         await exigerAbsenceDeCycle(tx, avant.missionId, uniteId, parent.valeur);
@@ -537,6 +574,60 @@ export async function validerUneUnite(
   return ligne;
 }
 
+/**
+ * La CIBLE d'une fusion descend-elle de la SOURCE ? Si oui, on refuse (A51, F-21).
+ *
+ * On remonte les ancêtres de la cible : si l'on rencontre la source, la cible est
+ * dans sa descendance, et la fusion produirait un arbre cassé — voir le point
+ * d'appel, qui écrit ce qui se passerait exactement.
+ *
+ * ── POURQUOI 409 ET NON 400 ────────────────────────────────────────────────
+ * La requête est bien formée et les deux unités existent : ce qui s'y oppose est la
+ * FORME DE L'ARBRE au moment de la demande, c'est-à-dire l'état de la ressource —
+ * la définition de 409, et le même raisonnement que les deux refus de statut qui
+ * précèdent. Le même corps de requête redeviendra valide dès que l'administrateur
+ * aura reparenté la cible : c'est bien l'état qui change, pas la requête.
+ *
+ * La remontée est BORNÉE (`PROFONDEUR_ARBRE_MAX`) pour la raison qui vaut partout
+ * ailleurs dans ce fichier : un arbre déjà corrompu ne doit jamais faire boucler une
+ * requête — une donnée fausse rend l'API bruyante, pas muette.
+ */
+async function exigerCibleNonDescendante(
+  executeur: ExecuteurSql,
+  missionId: string,
+  sourceId: string,
+  cibleId: string,
+): Promise<void> {
+  const squelette = await lireSquelette(executeur, missionId);
+  const parents = new Map(squelette.map((noeud) => [noeud.id, noeud.parentId]));
+
+  let courant: string | null = parents.get(cibleId) ?? null;
+  for (let profondeur = 0; profondeur <= PROFONDEUR_ARBRE_MAX; profondeur += 1) {
+    if (courant === null) return;
+    if (courant === sourceId) {
+      const message =
+        "L'unité cible descend de l'unité à fusionner : la fusion casserait l'arbre. " +
+        "Reparentez d'abord la cible en dehors de cette branche, puis refaites la fusion.";
+      throw new AppError('CONFLICT', message, [
+        { path: 'mergedIntoId', code: 'cible_descendante', message },
+      ]);
+    }
+    courant = parents.get(courant) ?? null;
+  }
+
+  throw new AppError(
+    'CONFLICT',
+    `La chaîne de rattachement de l'unité cible dépasse ${String(PROFONDEUR_ARBRE_MAX)} niveaux : la fusion est refusée tant que l'arbre n'est pas corrigé.`,
+    [
+      {
+        path: 'mergedIntoId',
+        code: 'cible_descendante',
+        message: 'Chaîne de rattachement anormale.',
+      },
+    ],
+  );
+}
+
 /** Ce qu'une fusion rend : les deux unités, et ce qui a été déplacé. */
 export interface ResultatFusion {
   readonly unite: LigneUniteOrg;
@@ -559,7 +650,7 @@ export interface ResultatFusion {
  * `activity_log` (qui dit combien ont bougé, et vers où) et la ligne `org_units`
  * elle-même (qui dit d'où l'on vient).
  *
- * ── LES QUATRE GARDE-FOUS, ET CE QUE CHACUN EMPÊCHE ────────────────────────
+ * ── LES CINQ GARDE-FOUS, ET CE QUE CHACUN EMPÊCHE ──────────────────────────
  *  1. **seule une `proposee` se fusionne** — §25.3 décrit la qualification d'une
  *     PROPOSITION. Fusionner deux unités actives serait une réorganisation
  *     d'arbre, que le pack ne décrit nulle part et qui poserait des questions
@@ -570,7 +661,16 @@ export interface ResultatFusion {
  *  3. **même mission** — sinon un entretien changerait de mission par ricochet,
  *     et la couverture de deux missions deviendrait fausse d'un coup ;
  *  4. **la cible n'est pas la source** — une unité fusionnée dans elle-même serait
- *     une ligne qui dit avoir disparu vers elle-même.
+ *     une ligne qui dit avoir disparu vers elle-même ;
+ *  5. **la cible ne DESCEND PAS de la source** (A51, F-21) — sinon le re-parentage
+ *     des enfants donnerait à la cible son propre identifiant comme parent, et la
+ *     branche entière sortirait de l'arbre sans qu'aucune contrainte du fichier 04
+ *     ne s'y oppose. Refus, jamais réécriture silencieuse (invariant 7).
+ *
+ * ── L'ORDRE DES DEUX VERROUS EST CANONIQUE, PAS CELUI DE LA REQUÊTE ────────
+ * A51, F-14 : les deux unités sont verrouillées **par identifiant croissant**, et
+ * non « celle de l'URL puis celle du corps ». Deux fusions symétriques concurrentes
+ * ne peuvent donc plus s'interbloquer — voir le commentaire au point du verrou.
  *
  * ── L'ORDRE DES ÉCRITURES, DANS UNE SEULE TRANSACTION ──────────────────────
  * Les enfants sont re-parentés AVANT que la source ne passe `fusionnee` ; les
@@ -590,12 +690,9 @@ export async function fusionnerUneUnite(
   contexte: ContexteJournal,
 ): Promise<ResultatFusion> {
   const resultat = await db.transaction(async (tx) => {
-    const source = await lireUnitePourEcriture(tx, uniteId);
-    if (source === null) throw new AppError('NOT_FOUND', MESSAGE_UNITE_INTROUVABLE);
-
-    // ④ — vérifié en premier parce que c'est le seul cas où « source » et « cible »
-    // désignent la même ligne, donc le seul où un second `FOR UPDATE` serait un
-    // verrou sur soi-même.
+    // ④ — VÉRIFIÉ AVANT TOUT VERROU. C'est le seul cas où « source » et « cible »
+    // désignent la même ligne : le contrôler ici évite d'avoir à décider ce que
+    // signifierait un ordre canonique sur deux identifiants égaux.
     if (corps.mergedIntoId === uniteId) {
       throw new AppError(
         'VALIDATION_FAILED',
@@ -603,6 +700,55 @@ export async function fusionnerUneUnite(
         [{ path: 'mergedIntoId', message: 'Choisissez une unité cible différente.' }],
       );
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // LES DEUX VERROUS SONT PRIS DANS L'ORDRE DES IDENTIFIANTS, PAS DANS CELUI DE
+    // LA REQUÊTE.
+    // ═══════════════════════════════════════════════════════════════════════════
+    // A51, F-14. Verrouiller « d'abord l'unité de l'URL, puis celle du corps »
+    // laissait l'APPELANT choisir l'ordre d'acquisition : deux fusions symétriques
+    // concurrentes — `A→B` et `B→A` — prenaient donc les deux mêmes verrous dans des
+    // ordres opposés et s'interbloquaient (ABBA). PostgreSQL tranchait par un
+    // `40P01`, et la victime recevait une erreur là où elle n'avait rien fait de mal.
+    //
+    // **L'ordre canonique supprime la classe des interblocages ENTRE FUSIONS** — et
+    // rien de plus, ce qu'il faut dire précisément : deux transactions qui
+    // verrouillent les MÊMES lignes dans le MÊME ordre ne peuvent pas s'attendre
+    // mutuellement. La seconde attend la première, puis relit un état à jour et sort
+    // en 409 — le refus lisible qu'on voulait. C'est la même doctrine que le verrou
+    // de mission du `PATCH` (F-13) : ce qu'on sérialise, c'est la décision, pas la
+    // ligne.
+    //
+    // L'ordre retenu est celui des identifiants, croissant, **comparés en minuscules**.
+    // Il est ARBITRAIRE mais TOTAL et STABLE — les deux seules propriétés qui
+    // comptent : tout appelant, sur n'importe quelle paire, en déduit la même
+    // séquence sans se concerter.
+    //
+    // ⚠ LA NORMALISATION DE CASSE N'EST PAS COSMÉTIQUE, ET SANS ELLE LA PHRASE
+    // CI-DESSUS SERAIT FAUSSE (A51) : `z.uuid()` accepte les majuscules, et la
+    // comparaison de chaînes de JavaScript est sensible à la casse. Deux appelants
+    // qui écriraient le MÊME couple d'identifiants dans deux casses différentes en
+    // déduiraient donc deux ordres OPPOSÉS, et l'ABBA reviendrait par la porte que
+    // l'ordre canonique était censé fermer. Deux lignes, et la propriété redevient
+    // vraie pour toutes les graphies d'un même identifiant.
+    //
+    // ⚠ La traduction du `40P01` reste en place (`erreurs-postgres.ts`) et n'est pas
+    // devenue inutile : cet ordre ne couvre que les fusions ENTRE ELLES. Un
+    // interblocage reste possible avec un autre chemin d'écriture — un `PATCH` de
+    // reparentage, un import qui tient la mission, une sync à venir — et une erreur
+    // non traduite rallumerait F-12 en journalisant la requête et ses paramètres.
+    const cleSource = uniteId.toLowerCase();
+    const cleCible = corps.mergedIntoId.toLowerCase();
+    const [premierId, secondId] =
+      cleSource < cleCible ? [uniteId, corps.mergedIntoId] : [corps.mergedIntoId, uniteId];
+
+    const premier = await lireUnitePourEcriture(tx, premierId);
+    const second = await lireUnitePourEcriture(tx, secondId);
+
+    const source = premierId === uniteId ? premier : second;
+    const cible = premierId === uniteId ? second : premier;
+
+    if (source === null) throw new AppError('NOT_FOUND', MESSAGE_UNITE_INTROUVABLE);
 
     // ① — seule une proposition se fusionne.
     if (source.status !== 'proposee') {
@@ -615,7 +761,6 @@ export async function fusionnerUneUnite(
       );
     }
 
-    const cible = await lireUnitePourEcriture(tx, corps.mergedIntoId);
     if (cible === null) {
       throw new AppError('VALIDATION_FAILED', "L'unité cible de la fusion n'existe pas.", [
         { path: 'mergedIntoId', message: "L'unité cible de la fusion n'existe pas." },
@@ -639,6 +784,33 @@ export async function fusionnerUneUnite(
         },
       ]);
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ⑤ — LA CIBLE NE DOIT PAS DESCENDRE DE LA SOURCE.
+    // ═══════════════════════════════════════════════════════════════════════════
+    // A51, F-21. Fusionner `A` dans `C` alors que `C` descend de `A` produisait un
+    // arbre CASSÉ, en silence : `reparenterEnfants` donne à tous les enfants de `A`
+    // le parent `C`, donc `C` — qui est l'un de ses descendants — reçoit
+    // `parent_id = C`. Une unité devient son propre parent, et **aucune contrainte
+    // du fichier 04 ne s'y oppose** : il n'y a ni `CHECK (parent_id <> id)` ni
+    // contrainte de graphe, et une propriété de graphe ne s'exprime pas ligne à
+    // ligne. La branche entière sortait alors de l'arbre — invisible à la lecture,
+    // puisque `listerUnitesDeMission` rend une liste à plat.
+    //
+    // ── REFUSER, ET DIRE QUOI FAIRE ────────────────────────────────────────────
+    // `DECISIONS.md` du 2026-09-02 écarte le reparentage implicite (« la cible prend
+    // la place de la source ») : ce serait inventer une sémantique que personne n'a
+    // demandée et réécrire un arbre en silence — invariant 7. On refuse, et le
+    // message dit le geste qui débloque : reparenter la cible d'abord.
+    //
+    // ── LE SQUELETTE EST LU SOUS LES VERROUS DÉJÀ PRIS ────────────────────────
+    // Même doctrine que le reparentage du `PATCH` (F-13) : la mission est verrouillée
+    // avant la lecture, de sorte que deux fusions concurrentes ne jugent pas chacune
+    // sur un arbre que l'autre est en train de changer. Le verrou vient APRÈS les
+    // deux verrous d'unités, comme dans le `PATCH` — même ordre relatif, donc pas
+    // d'inversion entre ces deux chemins.
+    await exigerMission(tx, source.missionId, true);
+    await exigerCibleNonDescendante(tx, source.missionId, uniteId, cible.id);
 
     const maintenant = new Date();
     const enfantsReattaches = await reparenterEnfants(tx, uniteId, cible.id, maintenant);

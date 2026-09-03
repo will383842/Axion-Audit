@@ -4552,3 +4552,155 @@ describe('PATCH /v1/org-units/:id — un rang que le modèle de données ne peut
     await attendreArbreInchange(missionId, photoAvant, 'un rang refusé ne réécrit rien');
   });
 });
+
+// =============================================================================
+// F-21 — FUSIONNER VERS UN DESCENDANT CASSAIT L'ARBRE, EN SILENCE.
+// =============================================================================
+// ÉCRIT PAR A16 (testeur), PAS PAR L'AUTEUR DU CORRECTIF (09 §5.6). Le garde-fou
+// ⑤ de `fusionnerUneUnite` a été posé par A15 dans `58231bb` ; la sonde reproduite
+// ici est celle d'A51, recopiée dans `DECISIONS.md` du 2026-09-02 (« Rejeu A51 »,
+// constat F-21) : un arbre `R → A → B → C`, puis une fusion de `A` VERS `C`.
+//
+// LE DÉFAUT, en une phrase : `reparenterEnfants` donne à tous les enfants de `A`
+// le parent `C` — or `B` est un enfant de `A` et `C` descend de `B`, de sorte que
+// `C` finissait par recevoir `parent_id = C`. Une unité devenait SON PROPRE
+// PARENT, la branche entière sortait de l'arbre, et RIEN ne s'y opposait : le
+// fichier 04 ne porte ni `CHECK (parent_id <> id)` ni contrainte de graphe (une
+// propriété de graphe ne s'exprime pas ligne à ligne). Invisible à la lecture,
+// puisque la route rend une liste à plat.
+//
+// TROIS ASSERTIONS, ET AUCUNE N'EST REDONDANTE :
+//   ① le refus est un 409 LISIBLE — pas un 500, pas un succès silencieux ;
+//   ② l'arbre n'a pas bougé D'UN OCTET, et AUCUNE unité de la base n'est son
+//      propre parent — c'est la seule qui décrit le défaut lui-même ;
+//   ③ CONTRE-ÉPREUVE (piège ③ de ce fichier) : une fusion vers une cible qui NE
+//      descend PAS de la source réussit toujours. Sans elle, « refuser tout »
+//      passerait ce cas au vert.
+describe('POST /v1/org-units/:id/merge — la cible ne peut pas descendre de la source', () => {
+  it('@critique fusionner `A` vers `C` alors que `C` descend de `A` est REFUSÉ, et rien ne bouge', async () => {
+    const admin = await creerCompte('admin', 'merge-descendante');
+    const missionId = await semerMission('merge-descendante', admin.id);
+
+    // L'arbre exact de la sonde : R → A → B → C. `A` est la PROPOSITION (sinon le
+    // garde-fou ① refuserait avant d'arriver au nôtre) ; `C`, sa petite-fille, est
+    // ACTIVE (sinon ce serait ② qui refuserait). Les deux autres garde-fous — même
+    // mission, cible ≠ source — sont satisfaits par construction. Ce cas ne peut
+    // donc être refusé QUE par le garde-fou de graphe.
+    const racine = await semerUnite({
+      missionId,
+      nom: 'Unité factice racine',
+      kind: 'groupe',
+      position: 1,
+    });
+    const a = await semerUnite({
+      missionId,
+      nom: 'Unité factice A proposée',
+      kind: 'direction',
+      parentId: racine,
+      status: 'proposee',
+      proposePar: admin.id,
+      position: 2,
+    });
+    const b = await semerUnite({
+      missionId,
+      nom: 'Unité factice B intermédiaire',
+      kind: 'service',
+      parentId: a,
+      position: 3,
+    });
+    const c = await semerUnite({
+      missionId,
+      nom: 'Unité factice C descendante',
+      kind: 'service',
+      parentId: b,
+      position: 4,
+    });
+
+    const photoAvant = await photographierArbre(missionId);
+
+    const reponse = await appeler('POST', `/v1/org-units/${a}/merge`, {
+      jeton: admin.jeton,
+      charge: chargeFusion(c, 'fusion vers une unité de sa propre descendance'),
+    });
+
+    // ① — un refus LISIBLE. 409 parce que ce qui s'oppose à la requête est l'état de
+    // la ressource (la forme de l'arbre), pas la requête elle-même : le même corps
+    // redeviendra valide dès que la cible aura été reparentée ailleurs.
+    expect(
+      reponse.statut,
+      `Une fusion vers un DESCENDANT casse l'arbre : elle doit être refusée, jamais\n` +
+        `appliquée en silence (A51, F-21). Réponse : ${reponse.corps}`,
+    ).toBe(409);
+    expect(reponse.code).toBe('CONFLICT');
+    const enveloppe = erreurSchema.parse(analyserJson(reponse.corps)).error;
+    expect(
+      enveloppe.details?.map((detail) => detail.code),
+      'le motif du refus est NOMMÉ — un 409 sans code laisse la console deviner',
+    ).toContain('cible_descendante');
+
+    // ② — le défaut lui-même. `photographierArbre` prouve qu'aucune ligne n'a bougé ;
+    // la requête qui suit prouve la propriété de graphe que le 04 ne sait pas porter.
+    await attendreArbreInchange(missionId, photoAvant, 'une fusion refusée ne réécrit rien');
+    expect((await lireUnite(c))?.parent_id, 'C reste rattachée à B').toBe(b);
+    expect((await lireUnite(a))?.status, 'A reste une proposition').toBe('proposee');
+    expect((await lireUnite(a))?.merged_into_id).toBeNull();
+    const autoParents = await bd().query<{ id: string }>(
+      'SELECT id FROM org_units WHERE parent_id = id',
+    );
+    expect(
+      autoParents.rows,
+      'AUCUNE unité ne doit être son propre parent — c’est exactement ce que la fusion\n' +
+        'vers un descendant produisait, et aucune contrainte du 04 ne l’empêche.',
+    ).toHaveLength(0);
+  });
+
+  it('@critique la contre-épreuve : une cible qui NE descend PAS de la source se fusionne toujours', async () => {
+    // Sans ce cas, une implémentation qui refuserait TOUTE fusion passerait le cas
+    // ci-dessus. On refait le même arbre, mais la cible est une SŒUR de `A` : la
+    // remontée des ancêtres de la cible ne rencontre jamais la source, et la fusion
+    // doit se dérouler entièrement — enfants re-rattachés compris.
+    const admin = await creerCompte('admin', 'merge-non-descendante');
+    const missionId = await semerMission('merge-non-descendante', admin.id);
+
+    const racine = await semerUnite({
+      missionId,
+      nom: 'Unité factice racine contre-épreuve',
+      kind: 'groupe',
+      position: 1,
+    });
+    const a = await semerUnite({
+      missionId,
+      nom: 'Unité factice A proposée sœur',
+      kind: 'direction',
+      parentId: racine,
+      status: 'proposee',
+      proposePar: admin.id,
+      position: 2,
+    });
+    const b = await semerUnite({
+      missionId,
+      nom: 'Unité factice B fille de A',
+      kind: 'service',
+      parentId: a,
+      position: 3,
+    });
+    const soeur = await semerUnite({
+      missionId,
+      nom: 'Unité factice sœur active',
+      kind: 'direction',
+      parentId: racine,
+      position: 4,
+    });
+
+    const reponse = await appeler('POST', `/v1/org-units/${a}/merge`, {
+      jeton: admin.jeton,
+      charge: chargeFusion(soeur, 'fusion vers une sœur, hors de la descendance'),
+    });
+    expect(reponse.statut, `la fusion légitime doit passer : ${reponse.corps}`).toBe(200);
+
+    expect((await lireUnite(a))?.status, '§25.3 : la source devient `fusionnee`').toBe('fusionnee');
+    expect((await lireUnite(a))?.merged_into_id, '… et pointe la cible').toBe(soeur);
+    expect((await lireUnite(b))?.parent_id, 'l’enfant de A suit vers la cible').toBe(soeur);
+    expect((await lireUnite(soeur))?.parent_id, 'la cible, elle, n’a pas bougé').toBe(racine);
+  });
+});

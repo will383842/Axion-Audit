@@ -257,6 +257,13 @@ que si l'arborescence du serveur diffère.
 > `ops` porte donc une clé au périmètre réduit, **sans** approbation. **Choix non tranché par le
 > pack** → à arbitrer dans `DECISIONS.md`.
 
+> **Amendement 2026-09-02 (décision de Williams).** Le nocturne **vérifie avant d'éprouver** que le
+> clone `/opt/axion-audit/repo` est au sha de `main` (sha lu par `git ls-remote`, envoyé sur
+> l'entrée standard de `restore-test-ci.sh`) ; un clone hors de `main` est un **refus nommé, sans
+> restauration** (`REFUS_CLONE_HORS_MAIN`). Ce clone est remis au sha livré par le job
+> `8 · deploy-staging` à chaque fusion, par la clé de déploiement — sans qu'elle gagne aucun droit.
+> Mécanisme, garde-fous, test à blanc et geste manuel initial : `infra/README.md` §6.3.
+
 ### Ce qui n'est **pas** un secret GitHub
 
 `GHCR_TOKEN` : inutile. Le `GITHUB_TOKEN` du run, à durée de vie limitée et avec `packages: write`

@@ -55,6 +55,37 @@ const VIOLATION_CHECK = '23514';
 const VALEUR_HORS_BORNES = '22003';
 
 /**
+ * Code SQLSTATE d'un INTERBLOCAGE tranché par PostgreSQL — `40P01`,
+ * `deadlock_detected`.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * CE N'EST PAS UNE PANNE : C'EST UN ARBITRAGE, ET IL A UNE VICTIME DÉSIGNÉE.
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * Quand deux transactions s'attendent mutuellement, PostgreSQL en choisit une et
+ * l'annule. La transaction survivante aboutit normalement ; la victime reçoit ce
+ * code. **Rien n'est cassé, rien n'est corrompu — la demande a simplement perdu une
+ * course**, et la rejouer réussit presque toujours.
+ *
+ * ── POURQUOI LE TRADUIRE EST UNE MESURE DE SÉCURITÉ, PAS DE CONFORT ────────
+ * Revue A51, F-14. Non traduit, un `40P01` remontait brut jusqu'au gestionnaire
+ * global et sortait en **500 `INTERNAL_ERROR`** — deux conséquences, et la seconde
+ * est la vraie :
+ *   1. l'appelant lit « erreur interne » là où il devait lire « réessayez », donc il
+ *      ne réessaie pas ;
+ *   2. **une erreur non traduite est journalisée avec son objet d'erreur complet**,
+ *      c'est-à-dire avec le gabarit `Failed query: … / params: …` de Drizzle — la
+ *      fuite F-12. La traduire ici, c'est fermer la porte par laquelle F-12
+ *      rentrait ; les deux constats sont liés et se corrigent ensemble.
+ *
+ * ── 409, ET NON 503 NI 500 ──────────────────────────────────────────────────
+ * La requête est bien formée (400 serait faux), l'appelant a les droits (403 serait
+ * faux), et le service n'est pas indisponible (503 serait faux) : c'est **l'état de
+ * la ressource au moment de la demande** qui s'y oppose — la définition de 409, et
+ * le même raisonnement que celui d'`ILLEGAL_STATE_TRANSITION` (`errors.ts`).
+ */
+const INTERBLOCAGE = '40P01';
+
+/**
  * Les colonnes `INTEGER` de `org_units` qu'une écriture peut faire déborder, et le
  * champ d'API à nommer. La correspondance est explicite plutôt que dérivée d'un
  * `snake_case → camelCase` automatique : PostgreSQL ne garantit pas de renseigner
@@ -208,6 +239,26 @@ export function traduireEchecDeContrainte(erreur: unknown): never {
       "Une valeur de l'unité n'est pas admise par le modèle de données.",
       [{ path: 'orgUnit', message: `Contrainte violée : ${echec.contrainte}` }],
     );
+  }
+
+  // ── L'INTERBLOCAGE — 409, ET SURTOUT JAMAIS 500 ────────────────────────────
+  //
+  // A51, F-14. Placé AVANT le débordement d'entier parce qu'il est le seul code de
+  // cette liste qui ne dit rien de la DONNÉE : il dit que la demande a perdu une
+  // course. Le message le dit à l'utilisateur en toutes lettres — « réessayez » est
+  // une instruction exécutable, « erreur interne » ne l'est pas.
+  //
+  // ⚠ AUCUN DÉTAIL SUR L'AUTRE TRANSACTION : ni ce qu'elle faisait, ni sur quelle
+  // ressource. Le renseigner apprendrait à un appelant ce qu'un autre est en train
+  // de modifier — et le traducteur ne le sait pas davantage : PostgreSQL range ce
+  // diagnostic dans `detail`, que la redaction masque précisément parce qu'il
+  // recopie des valeurs de ligne.
+  if (echec.code === INTERBLOCAGE) {
+    const message =
+      'Une autre opération modifiait les mêmes unités au même moment : votre demande a été annulée pour préserver la cohérence de l’arbre. Réessayez.';
+    throw new AppError('CONFLICT', message, [
+      { path: 'orgUnit', code: 'conflit_concurrent', message },
+    ]);
   }
 
   // ── LE DÉBORDEMENT D'ENTIER — SECONDE CEINTURE ─────────────────────────────

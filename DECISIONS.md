@@ -5500,7 +5500,6 @@ du §10.2 de la fiche P-B, réserve R-B12 levée). Précédence : 09 §5.2 (amen
 règle du pack sans objet — aucune section en conflit, deux sections complétées.
 Décideur : Williams.
 Impact spec : amendements horodatés de 02 §30.6 et 03 §32.4 ; sceau régénéré.
----
 
 ## 2026-08-31 — [L3a] Quel rôle accède au référentiel client ? Le pack ne le dit nulle part
 
@@ -7071,6 +7070,298 @@ seront seuillés à L6 quand `assignments` deviendra le siège de la propriété
 Décideur : A01, sur mesure de la vérification isolée et réserve R-L3-4 d'A17
 Impact spec : aucun. `.github/coverage-critical-paths.json` : quatre entrées, chiffres à l'ajout.
 
+## 2026-09-02 — [L3] Revue sécurité A51 sur L3 : 0 critique, 3 majeurs, 5 mineurs — verdict accepté, F-11 à F-14 fermés dans l'incrément
+
+A51 a relu `lot/l3-suite` (ASVS L2, 19 points conformes) : `docs/portes/VERDICT_A51_L3_2026-09-02.md`.
+Trois majeurs : F-11 la borne de 5 000 lignes de l'import borne le résultat, pas le travail (999 878
+lignes vides = 1 s de CPU et 319 Mo de tas, importé sans erreur) · F-12 une erreur Drizzle non
+traduite republie au journal la requête ET ses paramètres (`Failed query: … / params: …`) · F-13 le
+garde-fou anti-cycle du `PATCH` décide sur une lecture non verrouillée. Un mineur retenu de suite :
+F-14 la fusion prend deux verrous dans l'ordre dicté par l'appelant (ABBA → `40P01` → 500, qui
+rallume F-12).
+
+Options :
+
+1. **Accepter le verdict**, fermer les trois majeurs et F-14 dans l'incrément, laisser F-15 à F-18
+   à la porte suivante (F-18 est un doute de spec, pas un défaut), rejouer A51 sur le correctif.
+2. Ne fermer que les majeurs et reporter F-14 comme les autres mineurs.
+
+Arbitrage : **option 1.** F-14 n'est pas un mineur isolé : son chemin d'échec passe par F-12, et un
+majeur qu'un mineur peut rallumer n'est pas fermé. Correctifs : F-11 `LIGNES_BRUTES_MAX` borne le
+contenu AVANT le découpage (le travail, pas le résultat) · F-12 `redaction.ts` connaît le contenant
+`DrizzleQueryError` (`query` gardée, `params` masqué — 12 tests purs) · F-13 `lireSquelette` sous
+`FOR UPDATE` de la mission · F-14 `40P01` traduit en 409 `CONFLICT` / `conflit_concurrent`, et la
+fusion verrouille **par identifiant croissant** — l'ABBA disparaît par construction. Le cas de test
+`40P01` est écrit par A01, pas par l'implémenteur (09 §5.6). **Précédence : invariant 7** (rien n'est
+écrasé — F-13) et **11 §3** (statut cohérent — F-14).
+
+Décideur : A01, sur revue A51
+Impact spec : aucun.
+
+## 2026-09-02 — [L3] Rejeu A51 : FUSIONNABLE SOUS RÉSERVE — F-11..F-14 fermés, trois majeurs nouveaux (F-19, F-20, F-21), deux doutes tranchés
+
+A51 a rejoué son verdict sur `ed8a852` par sondes pures (aucune base). Fermés : F-11 (bornes et mémoire,
+1 Mo de `\n` → 35 ms au lieu de 693), F-12 (cas nominal, `cause` ×2, `AggregateError`, `req.params`
+reste lisible), F-13 (même transaction, aucune sérialisation inter-missions), F-14. Nouveaux, **non
+introduits par le correctif** : **F-19** `fuseauIanaSchema` construit un `Intl.DateTimeFormat` PAR
+LIGNE — 5 000 fuseaux légitimes = 1,4 s sous le verrou de mission ; **F-20** `RX_DRIZZLE_PARAMS`
+s'arrête sur `\n    at ` — un terminateur qu'une cellule CSV entre guillemets peut contenir (retour à
+la ligne admis, RFC 4180), et tout ce qui suit repart en clair au journal ; **F-21** `merge` vers une
+unité DESCENDANTE de la source écrit `C.parent_id = C` (aucun garde-fou de graphe, aucun `CHECK` en base).
+
+Options :
+
+1. **Fermer les trois dans l'incrément.** F-19 : mémoïser le formateur par fuseau (un `Map` au
+   module). F-20 : ne jamais chercher un terminateur dans du texte que l'appelant contrôle — masquer
+   jusqu'à la fin de chaîne. F-21 : **refuser** (409, `cible_descendante`) une fusion dont la cible
+   descend de la source ; l'administrateur reparente d'abord.
+2. F-21 par reparentage implicite (la cible prend la place de la source).
+3. Interdire le saut de ligne dans une cellule CSV (fermer le vecteur de F-20 plutôt que la fuite).
+
+Arbitrage : **option 1.** L'option 2 invente une sémantique que personne n'a demandée ; refuser et le
+dire vaut mieux qu'un arbre réécrit en silence (invariant 7). L'option 3 traite le symptôme : la
+redaction doit tenir face à N'IMPORTE QUEL contenu, pas seulement face aux CSV bien élevés — et un
+`CHECK (parent_id <> id)` en base serait un amendement du 04, escaladé à part si Williams le veut.
+Trois affirmations trop larges dans les commentaires (F-13 « pas un ABBA », F-14 « la classe entière »,
+F-11 « quelques millisecondes ») sont remises à l'état vrai. **Précédence : 11 §2** (aucune donnée
+personnelle dans les logs — F-20) et **invariant 7** (F-21).
+
+Décideur : A01, sur revue A51
+Impact spec : aucun. Doute F-18 inchangé, à Williams.
+
+## 2026-09-02 — [L2/L3] L'en-tête anti-CSRF de la console s'appelle `X-Axion-Client`
+
+Le 11 §3 impose « cookies httpOnly SameSite=Lax **+ en-tête anti-CSRF custom** » pour `apps/hq`, sans
+jamais NOMMER cet en-tête. Le nom traînait donc comme un doute ouvert (`X-Axion-Client` employé de
+fait, « à confirmer » dans le dernier bloc `ETAT.md`), et la fiche A-006 (cookies httpOnly) attendait
+la même réponse. Deux équipes — A10 sur l'API, A30 sur la console — allaient devoir l'écrire.
+
+Options :
+
+1. **`X-Axion-Client`**, ratifié tel quel. Un en-tête custom ne vaut pas par son nom mais par le fait
+   qu'un formulaire HTML ne peut pas l'émettre ; celui-là est déjà employé, il ne coûte aucune
+   réécriture.
+2. `X-CSRF-Token` avec une valeur à vérifier — le patron « double submit cookie ».
+3. Laisser le doute ouvert jusqu'à L7.
+
+Arbitrage : **option 1.** L'option 2 change de MÉCANISME, pas de nom : elle ajouterait un jeton à
+émettre, à stocker et à faire tourner là où le 11 §3 ne demande qu'un en-tête que le navigateur
+refuse d'envoyer en requête simple — ce serait « toucher à la sécurité autrement que spécifié »
+(CLAUDE.md §3-4), donc hors décision d'agent. L'option 3 laisse deux équipes écrire le même nom
+chacune de son côté, c'est-à-dire la divergence garantie. **Précédence : 11 §3** (conventions d'API),
+qui exige l'en-tête sans le nommer — le nom est donc bien une décision, pas une interprétation.
+
+Portée : le nom vaut pour l'API (garde anti-CSRF des routes console) ET pour la fiche **A-006**
+(bascule de `apps/hq` vers les cookies httpOnly), qui n'a plus d'inconnue de ce côté. A30 s'y conforme
+sans dupliquer cette entrée. Aucun code de L3 ne change : L3 ne livre aucune route console à cookie —
+la réserve « `X-Axion-Client` à confirmer » du dernier bloc `ETAT.md` est simplement LEVÉE.
+
+Décideur : Williams (délégation du 2026-09-02 à la session pilote)
+Impact spec : aucun
+
+## 2026-09-02 — [L3] `pnpm verify` ne lançait que deux des trois projets vitest : 26 fichiers invérifiables
+
+Mesuré sur `lot/l3-suite`, avant tout correctif :
+
+    $ grep -n "name: '" vitest.config.ts   → 3 projets : interface, unit, integration
+    $ node -e "…package.json"              → test    = test:unit && test:integration
+                                             verify  = … && test:unit && test:integration && test:e2e
+    $ find apps packages -name "*.test.tsx" | wc -l      → 26
+    $ npx vitest run --project interface   → 26 fichiers, 447 tests, 447 VERTS, 0 rouge, 17,9 s
+
+Le projet `interface` n'était démarré par AUCUN script : ni `pnpm test`, ni `verify`, ni le hook
+pre-push. Seul `test:coverage` (sans filtre de projet) les voyait — d'où une CI de lot rouge pendant
+qu'un décompte local paraissait vert. `check:test-projects` était vert et avait raison de l'être :
+ses cinq contrôles partent du FICHIER (« est-il capté par un projet ? »), aucun ne partait du PROJET
+(« ce projet est-il seulement lancé ? »).
+
+**Les 447 verts sont le fait le plus instructif** : le trou n'avait rien cassé, il avait rendu 26
+fichiers INVÉRIFIABLES. Un garde ne protège pas du rouge, il protège de l'ignorance.
+
+Options :
+
+1. Câbler `test:interface` dans `test`, `verify`, `verify:rapide`, et **durcir le garde** d'un
+   contrôle 6 qui refuse tout projet déclaré que `verify` ne lance pas.
+2. Câbler seulement, sans toucher au garde.
+3. Laisser en fiche `AMELIORATIONS.md` pour after-L3.
+
+Arbitrage : **option 1.** L'option 2 referme ce trou-ci et laisse ouverte la classe entière : un
+quatrième projet demain repasserait inaperçu. L'option 3 est exclue par la mesure — le geste est
+gratuit puisque tout est vert. Ce n'est PAS « désactiver un test » (§3-5) : c'est l'inverse exact,
+faire tourner des tests qui existent et que personne n'exécutait. **Précédence : 09 §5.7** (« une CI
+qui ment est pire que pas de CI ») et la DoD §5 (« tous les tests verts, AUCUN test skippé » — un
+test jamais lancé n'est ni vert ni skippé, il est absent).
+
+**NATURE DU GESTE, écrite sans la maquiller** : `verify` est le garde obligatoire avant toute PR, donc
+le modifier touche le **contrat d'ops que le §3-2 réserve à l'humain**. La direction est bonne et la
+mesure la défend, mais c'est la NATURE de l'acte qui doit rester visible pour Williams, pas seulement
+son sens. Bascule du garde prouvée : `test:interface` retiré de `verify` → contrôle 6 en sortie 1,
+nommant « interface — 26 fichier(s) ».
+
+Décideur : Williams (délégation du 2026-09-02 à la session pilote)
+Impact spec : aucun — `vitest.config.ts` et les 26 fichiers sont inchangés
+
+## 2026-09-02 — [L0 / infra] Le clone `/opt/axion-audit/repo` suit la livraison ; le nocturne vérifie avant d'éprouver
+
+Options : celles de l'entrée du 2026-08-31 « Rien ne met à niveau le clone » — (1) l'enveloppeur du
+nocturne se réaligne lui-même ; (2) la livraison réaligne le clone sur le sha qu'elle déploie ;
+(3) une unité `systemd` ; (4) ne plus comparer — refusée d'avance.
+
+Arbitrage : **Williams, le 2026-09-02, sur cette entrée : « fais tout selon tes recommandations »**,
+relayé par la session de vérification (13h35) sous la forme : la mise à niveau appartient à la
+**livraison** (option 2), et le nocturne **vérifie que le clone est au sha de `main` avant
+d'éprouver**, sinon refus nommé, avant toute restauration. Mis en œuvre tel que relayé :
+`deploy-staging.sh` fait, en dernière étape, `fetch origin main` + `checkout --detach <sha livré>`
+(le sha, jamais une branche) et publie `CLONE_SERVEUR=` que le job compare à `github.sha` ;
+`restore-test-ci.sh` reçoit le sha de `main` sur stdin et refuse (`REFUS_CLONE_HORS_MAIN`, code 3)
+avant de restaurer ; `test-garde-clone.sh` prouve les deux sens sur un dépôt jetable (31 cas verts).
+Les trois garde-fous de l'entrée du 31/08 sont posés et joués : origine vérifiée, branche en dur,
+refus de réécriture d'historique — plus le refus d'écraser des modifications locales (invariant 7).
+**Écart nommé, non arbitré par un agent** : la recommandation écrite de C3 portait sur l'option 1,
+l'option 2 « en complément » ; ce qui est livré est l'option 2 seule. Le défaut propre à l'option 2
+(« ne couvre pas les nuits sans déploiement ») devient un rouge pour la bonne raison — livraison
+manquée — au lieu d'un rouge inexpliqué. **La clé restreinte ne gagne aucun droit** : c'est le
+script, contrôlé par empreinte, qui écrit dans le clone. Le second point de l'entrée du 31/08
+(secrets nominatifs, coffre `.env`) reste à Williams lui-même — non touché. Règle de précédence du
+pack **sans objet** (aucune divergence interne ; `CLAUDE.md` §3-4 satisfait : l'humain a tranché).
+**Non joué sur le serveur** : les deux enveloppeurs doivent être recopiés à la main dans
+`/opt/axion-audit/` AVANT la fusion (README infra §6.3), sinon le contrôle d'empreinte rougit et
+n'aligne rien ; le clone étant à `e234756`, ancêtre de `main`, la première mise à niveau se fera
+seule au premier déploiement vert si l'origine est l'URL HTTPS et l'arbre propre.
+Décideur : **Williams** (préparé et mis en œuvre par A11).
+Impact spec : aucun sur `/docs` ; `infra/README.md` §5.7-4 et §6.3 amendés (datés), note datée dans
+`.github/workflows/README.md`.
+
+## 2026-09-03 — [gouvernance] Deux sessions pilotes simultanées sur les mêmes worktrees : laquelle pilote
+
+Options :
+(a) La session `…01Xk19br` (celle-ci) garde les trois chantiers — elle a nommé trois chefs et gelé
+proprement ; (b) la session `…01Ckvewm` pilote, celle-ci passe la main et verse ce que ses équipes
+ont produit ; (c) partage par chantier — écarté d'emblée : c'est la configuration qui a produit
+l'incident, pas son remède.
+
+Arbitrage : **(b)**. Trois faits mesurés, aucun récit. `f37dd3c`, que le briefing de cette session
+donnait comme l'état de SON chantier L7, porte déjà le trailer `Claude-Session: …01Ckvewm` : l'autre
+session travaillait sur ces worktrees **avant** ce lancement — celle-ci est arrivée dans un chantier
+occupé sans le savoir. Les trois sondes A51 (F-19, F-20, F-21) sont d'elle, commitées. Son A10 a
+refusé de pousser un arbre qu'il savait porteur d'une régression et refusé `--no-verify` pour
+contourner le hook. À l'inverse, cette session a posé un commit vide comme sonde d'identité
+(`e8fb708`) sans voir qu'un commit vide **porte l'arbre de son parent** : elle a fait de l'état cassé
+la tête de `lot/l3-suite`. « Aucun fichier touché » ne veut pas dire « aucun arbre porté ».
+Précédence : `ORGANISATION_AGENTS.md` §7 (« Un seul pilote ») et §9 (« la quatrième session est
+interdite : un pilote, trois chefs, une session de vérification qui ne produit rien »), qui outillent
+`CLAUDE.md` §4 et §7 ; aucune divergence de pack, donc pas de règle de précédence à invoquer.
+
+Décideur : **A01**, sur délégation de Williams du 2026-09-03 (« fais selon tes recommandations »),
+la recommandation ayant été formulée AVANT la délégation et à son propre désavantage.
+Impact spec : aucun. Ce que cette session verse et qui ne se perd pas : la note de conception L6
+(`docs/conception/LOT_L6.md`), les bascules de discriminance F-19/F-20, la localisation du rouge de
+couverture L5b (8 fichiers périphériques, +12 fonctions), et le défaut du projet `interface`.
+
+## 2026-09-03 — [gouvernance] La phrase « L6 après L5a » du §9 : citation fautive, PAS arbitrage
+
+Options :
+(a) Tracer l'ordre L5a → L5b → L5c → L6 comme une décision, puisque deux sessions l'ont proposé
+comme un amendement ; (b) corriger la phrase du §9 sans rien décider, parce que le pack le dit déjà.
+
+Arbitrage : **(b)**. Vérifié dans le pack : `09 §6` (« P-C, fin L5 … **ensuite** L6 se développe
+SEUL ; jamais L5 et L6 menés de front ») et `07:24` (L5 = les trois incréments L5a/L5b/L5c). La
+formulation « L6 après L5a » est **introuvable** dans 07, 09, 11 et 00_INDEX. Le §9 ne se contredit
+pas : il **cite mal** le calendrier du 09. Une décision qui ratifie ce que la spec dit déjà fabrique
+un flottement là où il n'y en a pas et **affaiblit toutes les autres**, en laissant croire que le
+point était ouvert. On applique, on ne décide pas. Précédence : `CLAUDE.md` §0 (le pack est LA source
+d'exécution) ; `ORGANISATION_AGENTS.md` ne prime sur rien et n'amende aucune spécification — il ne
+pouvait donc pas créer cet ordre, seulement le rapporter de travers.
+
+Conséquence opérationnelle : L5c n'est pas descopable (le 07 met « 1 session de chaque type créée
+hors ligne » et « export de secours restauré sur un 2e appareil » dans les critères de la porte L5) ;
+le levier de descope au 15/09 (P-DESCOPE) est **L8**, que le 07 marque déjà différable.
+
+Décideur : **A01**, sur délégation de Williams du 2026-09-03.
+Impact spec : aucun sur `/docs` (aucun fichier du pack modifié) ; `ORGANISATION_AGENTS.md` §9 corrigé
+et daté, la version fautive citée dans le texte pour que la correction reste lisible.
+
+## 2026-09-03 — [L3] « Migrations up/down exécutées sur staging » : la porte L3 attend-elle la remise en état de staging ?
+
+La DoD transverse (`CLAUDE.md` §5, ligne 4) dit « migrations up/down **exécutées sur staging** ».
+La preuve versée par L3 est une descente jouée sur le PostgreSQL **jetable de la CI** — le `ci.yml`
+l'écrit lui-même (l. 961-964) : « ce job prouve up ET down sur le Postgres JETABLE de la CI ; il ne
+prouve rien sur staging ». La moitié technique de **R-L3-2** est LEVÉE (§C, ligne 427 du dossier :
+trois garde-fous dans le job `6 · schema-diff`, dont la descente de `0014` sur base **peuplée**, le
+seul cas qui porte de la logique). Ce qui reste ouvert est **un mot de spécification**, et il n'est
+pas imputable à L3 : `main` est rouge depuis le 2026-09-02 14h40 UTC sur `8 · deploy-staging`
+(runs `33643594297` puis `33714804567`) — le conteneur en service ne porte pas l'UUID du
+déploiement déclenché, **un ancien conteneur tourne pendant que l'API répond « réussi »**, et
+`ZAP baseline (staging)` est `skipped` en conséquence. Diagnostic mesuré sur le serveur : PR #28.
+
+Options :
+
+1. **Attendre la remise en état de staging** pour signer L3 à la lettre de la DoD. Coût : la chaîne
+   « staging périmé → up/down non prouvable → R-L3-2 ouverte → porte non signée → #26 non fusionnée
+   → L5a n'intègre pas main → L5b attend L5a → L7a non rebasée » tient **trois chantiers finis** en
+   otage d'un défaut d'infrastructure étranger au lot. À la date, cela gèle ~4,3 j-h de travail
+   écrit, vert et revu, à 12 jours de P-DESCOPE.
+2. **Signer L3 sur la preuve CI**, et porter « up/down **sur staging** » comme **réserve explicite
+   rattachée à la remise en état de staging** — la réserve suit l'objet qui la cause (L0/infra),
+   pas le lot qui l'a rencontrée.
+3. Amender la DoD transverse pour que « sur staging » lise « sur une base équivalente ». Écartée
+   sans être plaidée : la DoD ne se rabote pas pour accommoder une panne, et le geste humain
+   « migrations jouées sur staging » a une valeur propre que la CI ne remplace pas.
+
+Arbitrage : **option 2**. L3 est signée sur la preuve CI. La clause « up/down sur staging » de la
+DoD transverse devient la **réserve R-L3-2-bis**, non bloquante pour L3, **rattachée à la remise en
+état de staging (L0)** et à solder par un geste humain tracé au dossier de porte de la remise en
+état — pas au dossier L3. Aucun autre critère de la DoD n'est raboté : les 4 critères du fichier 07
+restent tenus et prouvés, les 5 réserves bloquantes restent fermées avec artefacts citables.
+Règle de précédence citée : **`CLAUDE.md` §3-4** — « un doute de spec ne se devine pas : il s'écrit
+dans `DECISIONS.md` » et son décideur est l'humain, pas un agent ; la question posée ici est bien
+celle du **mot** de la DoD, jamais celle de la conformité du lot, que `CLAUDE.md` §4 étape 6 confie
+à A02 et qui est signée depuis le 2026-09-02.
+
+Décideur : **Williams** (recommandation écrite par la session de vérification le 2026-09-03, §3 du
+dossier `docs/portes/PORTE_L3_2026-09-02.md`, et validée sans amendement).
+Impact spec : aucun sur `/docs`. La DoD transverse de `CLAUDE.md` §5 est **inchangée** — elle n'est
+pas amendée, elle est portée en réserve datée sur un autre objet. Amendement horodaté au dossier de
+porte L3 (§4 et §5, 2026-09-03).
+
+## 2026-09-03 — [gouvernance] Le merge de la porte L3 et le tag `v0.l3` : Williams délègue les deux gestes à la session pilote
+
+`CLAUDE.md` §7 réserve à Williams le merge de la porte et le tag qui la scelle, et le §6 du dossier
+`docs/portes/PORTE_L3_2026-09-02.md` le réécrit nommément : « **Aucun agent ne fusionne ni ne pose de
+tag** ». Le 2026-09-03, Williams demande à la session pilote de « faire tout directement », après
+avoir signé la porte le matin même. La règle et l'instruction se contredisent en apparence : la règle
+protège Williams d'un agent qui fusionnerait **de sa propre initiative**, elle ne lui interdit pas de
+déléguer son propre geste. C'est le motif de la délégation du 2026-09-02 sur le script `verify`
+(contrat d'ops réservé à l'humain, délégué explicitement, tracé) — et c'est **la nature du geste qui
+doit rester visible, pas sa direction**.
+
+Options :
+
+1. Refuser et rendre les commandes à Williams. Tient la lettre du §7 ; ignore que son auteur vient de
+   se prononcer, et laisse trois chantiers gelés au nom d'une règle dont il est le bénéficiaire.
+2. **Exécuter sous délégation explicite, tracée AVANT le geste**, les conditions de la porte étant
+   par ailleurs inchangées : porte signée, CI verte sur la tête réelle, PR `MERGEABLE` / `CLEAN`.
+3. Amender `CLAUDE.md` §7. Écartée : une délégation ponctuelle ne se paie pas d'une modification du
+   contrat permanent, que le §3-2 réserve d'ailleurs à l'humain.
+
+Arbitrage : **option 2**. La session pilote fusionne la PR #26 en squash, pose et pousse `v0.l3`,
+puis fusionne la PR #29. **`CLAUDE.md` §7 n'est pas modifié** : il continue d'interdire à un agent de
+fusionner une porte de sa propre initiative. Ce qui est autorisé ici est nommé, daté, borné à ces
+trois gestes, et il n'en découle aucun précédent — la prochaine porte revient à Williams par défaut.
+Conditions vérifiées et citables avant exécution : porte signée le 2026-09-03 (§4 du dossier) ·
+`gh pr view 26` rend `mergeable=MERGEABLE` et `mergeStateStatus=CLEAN` · CI verte sur `5960ccf`, le
+job `8 · deploy-staging` étant en `skipping` puisqu'il est réservé à `main`.
+Règle de précédence citée : `CLAUDE.md` §3 — ce que l'autopilote ne décide jamais seul. La décision
+est prise par Williams et non par l'agent, et c'est précisément ce que la présente entrée établit.
+
+**Ce que la délégation ne couvre pas, et qui reste à Williams :** le geste root sur `axionia-web` —
+la barrière de permissions de cette machine refuse les **écritures** SSH distantes, mesuré et non
+contourné (les lectures passent, et ont servi à confirmer le diagnostic sur le serveur) — et
+**l'arbitrage de P-DESCOPE**, qui décide de ce qui se construit et que le §3-7 interdit d'anticiper.
+
+Décideur : **Williams** (instruction du 2026-09-03 : « je voudrais que tu fasses tout directement »).
+Impact spec : aucun. `CLAUDE.md` §7 et le §6 du dossier de porte restent en vigueur, mot pour mot.
+
 ## 2026-09-02 — [L7a] Le client sur les cartes du portefeuille : un N+1 BORNÉ, accepté en V1
 
 Chaque carte de mission appelle `GET /v1/companies/:id` (dédupliqué par TanStack Query) : sur une page
@@ -7155,3 +7446,36 @@ lever pour tout. **Précédence : 11 §3** (B2) et **CLAUDE.md §7** (B1).
 
 Décideur : A01, sur revue A37
 Impact spec : aucun.
+
+## 2026-09-02 — [L7b] Sur quel vocabulaire se compte la « couverture par type de source » (§27.1) ?
+
+> **Texte FIGÉ le 2026-09-02 au §9.4 de `docs/conception/LOT_L7.md`, déposé ici le 2026-09-03**,
+> après l'entrée de L3 dans `main` — c'est la condition que la note posait. Reproduit **mot pour
+> mot**, sans reformulation : une entrée qui cite le §27.1 se défend seule, une qui dit « on a
+> choisi `kind` » demande qu'on la croie. Sa date est celle de l'arbitrage, pas celle du dépôt ;
+> `check:decisions` signale donc une date qui recule, et c'est **assumé**.
+
+Options :
+a) `answers.source` — 5 valeurs (entretien, observation, demonstration, document, releve).
+b) `interviews.kind` — les 5 sources de collecte du §27.1 (atelier, 6e kind, traité à part).
+
+Arbitrage : **b)**, et **a) est RETENUE POUR L'AUTRE ÉCRAN** (agrégation L7c, provenance par
+question). Preuve dans le 03, vérifiée ligne à ligne : l. 548 « Les 5 sources de collecte —
+GÉNÉRALISE la table `interviews` en SESSIONS DE COLLECTE » (le pack pose l'équivalence source =
+type de session) ; l. 549 « cinq types de sessions », table à 5 lignes, `atelier` absent (il arrive
+au §28.1 ; §32.6 l. 673 le range dans les 6 `interviews.kind`) ; l. 559 « le plan de mission
+planifie les CINQ types … l'écran de couverture contrôle la couverture PAR TYPE DE SOURCE » — même
+sujet des deux côtés, et la même ligne réserve le mot PROVENANCE à `answers.source`.
+Raison de fond : **on ne planifie pas une provenance.** La couverture est un écart prévu/réalisé et
+le critère L7-min du 07 exige qu'elle « reflète le plan d'entretiens » ; le plan publie
+`{orgUnitId, kind}`. Comptée sur `answers.source`, elle n'aurait aucune colonne « prévu » et le
+critère du 07 deviendrait inexprimable.
+Précédence (`CLAUDE.md`) : **§24-31 > §16-22** — le §27.1 prime sur la lecture courte du §16.6
+(« entretiens menés / prévus ») ; et §32-36 confirme sans contredire — le §36.3 impose dans
+`reponses.csv` « session + type + provenance », TROIS colonnes, donc deux vocabulaires assumés.
+`atelier` : rendu hors de la grille des cinq, réalisé seulement, jamais silencieux (marge de mission
+toujours affichée, y compris à zéro) — une session invisible est une session perdue.
+
+Décideur : **Williams** (délégation du 2026-09-02 à la session pilote).
+Impact spec : aucun — lecture du §27.1 confirmée, aucun amendement du pack ; note de conception
+`docs/conception/LOT_L7.md` §9 mise à jour (elle rectifie ses propres §6.1, §6.3 et §8.3).
