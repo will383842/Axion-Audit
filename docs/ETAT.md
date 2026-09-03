@@ -2567,3 +2567,30 @@ chiffrées (D-1 L6, D-2 L5c, D-3 L7, D-4 la marge, D-5 le contenu). Aucune n'est
 Le fait que ce dossier existe douze jours à l'avance est son objet : 09 §5.4 veut la porte
 **factuelle**, et une mesure prise le jour même se prend sur des souvenirs. Les chiffres du §2 sont
 datés et **doivent être remesurés le 15/09** — le dossier le dit deux fois, exprès.
+
+## 2026-09-03 13h20 — [session pilote] — FIN DE SESSION PROPRE, reprise préparée
+
+Dernier commit vert : `508ae15` (`main`) · Branche : gouvernance/reprise-2026-09-03 · Poussé : oui
+Tâche en cours : aucune. Session close volontairement (`CLAUDE.md` §8), pas par limite de contexte.
+Tests rouges connus : `main` rouge sur `8 · deploy-staging` **seulement** (empreinte du script
+serveur) — couvert par R-L3-2-bis, rattaché à L0. Aucun rouge fonctionnel nulle part.
+
+**LIRE D'ABORD** : `docs/journal/2026-09-03.md`, section « APRÈS-MIDI » — état complet, les quatre
+défauts de méthode payés aujourd'hui, et ce qui reste ouvert. Ce bloc n'en est que l'index.
+
+`main` = `508ae15` · tags `v0.l0` `v0.l2` **`v0.l3`** · **56 % écrit · 37 % sur `main` · 33 % porte
+signée**. PR ouvertes : **#30** L5a (**2 bloquantes A02, ne pas fusionner**) · **#31** L5b · **#32**
+L7a (0 bloquante incrément) · **#28** staging · branche `lot/l1-e18-external-ref` (E18 livré,
+sans PR, test A16 en cours).
+
+**PROCHAINE ACTION, dans cet ordre strict** — chaque étape a sa raison, ne pas réordonner :
+
+1. **Vérifier l'état des deux agents laissés en vol** : `git -C ../_axl5a status` (A26, tests du
+   verrou — avait commité `1b89433`, non poussé) et `git -C ../_axe18 status` (A16, test E18 —
+   3 fichiers non commités). Terminer ou reprendre leur travail avant tout le reste.
+2. **Lancer A51 sur `lot/l5a`** — réserve **B2**, jamais lancée faute de worktree libre.
+3. B1 + B2 fermées → merge **#30** (il apporte **axe-core**, que la DoD attend et que `main` n'a pas).
+4. `lot/l5b` **refusionne `main`** — il a bifurqué AVANT les 5 bloquants PWA de L5a — rejoue sa
+   suite sur le vrai socle, puis merge **#31**. Puis **#32**.
+5. **Absorber A-006** (cookies httpOnly console) en incrément nommé, après le merge de #32.
+6. **L5c** — le chantier qui conditionne P-C. Périmètre : `docs/conception/LOT_L5.md` §1.
