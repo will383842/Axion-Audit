@@ -2387,3 +2387,28 @@ Deux entrées DECISIONS.md pour les deux vrais choix : composition ancres/consig
 codes d'options en collision.
 Prochaine action : rejeu A29 sur `c043c3d`. Puis, dans cet ordre seul : L3 dans `main` → PR L5a → PR L5b.
 Tests rouges connus : aucun.
+
+## 2026-09-03 08h10 — [lot L5 / incrément L5b] — étape pipeline 5/7 (rectification documentaire)
+Dernier commit vert : (celui-ci) · Branche : lot/l5b · Poussé : oui
+Tâche en cours : rien sur le code. AUCUN fichier de code n'a été touché : la plage relue par A29 en
+rejeu (`ef5e727..2f581f2`) est intacte, ce bloc et son commit se posent APRÈS elle.
+RECTIFICATION QUI COMPTE, et elle corrige une affirmation FAUSSE de mes blocs précédents :
+`PHRASE_SCRIPT_ACCORD` n'est PAS « tranchée mais non implémentée ». Elle est **EN PRODUCTION** —
+`ecrans/entretien/DemarrageEntretien.tsx:19-23` la définit, la **ligne 53 l'AFFICHE** dans l'écran
+« Avant la première question », version `v1` (`VERSION_MENTION_INFORMATION`), enregistrée sur chaque
+session dans `informationNoticeVersion` (06 §10.4). Ce texte RGPD est lu à voix haute à chaque
+interlocuteur avant chaque entretien, il a été rédigé par un agent, et aucun juriste ne l'a relu.
+ÉCART TROUVÉ EN RÉÉCRIVANT LA FICHE, et il aggrave l'urgence : le texte en production n'est PAS
+celui arbitré dans `DECISIONS.md` du 2026-09-02. L'arbitré promet « le rapport ne vous attribue
+aucun propos nominativement » ; celui en production annonce « elles sont consignées sous votre nom
+et votre fonction ». Ce ne sont pas deux formulations d'une même promesse, ce sont deux engagements
+différents. Les deux textes sont laissés TELS QUELS : le rapprochement appartient au juriste.
+La fiche `AMELIORATIONS.md` est réécrite en « EN PRODUCTION — validation juridique URGENTE », avec
+chemin, version, et ce qui reste dû à la relecture (a/b/c). Toute formulation « à poser par A22 » a
+disparu, sauf dans le bandeau qui dit que la fiche a été fausse 24 h.
+Amendement horodaté ajouté à `DECISIONS.md` : pourquoi le test B2 devait être écrit AVANT — la
+première correction rendait `null` et serait partie verte et fausse, parce que `SEPARATEURS_ANCRES`
+ne coupe ni sur l'espace ni sur le point et que la prose vit DEVANT l'ancre, dans le même fragment.
+Prochaine action : attendre le verdict du rejeu A29 sur `ef5e727..2f581f2`. Si ACCEPTÉ, A20 signe la
+fin d'incrément L5b et s'arrête. Pas de PR : L3 n'est pas dans `main`.
+Tests rouges connus : aucun (1699/1699 mesuré le 2026-09-03 à 07h30 ; rien n'a bougé depuis).

@@ -5704,3 +5704,40 @@ ou supprimé » ; les options 2 et 3 y contreviennent chacune à leur façon.
 
 Décideur : A20, sur revue A29
 Impact spec : aucun.
+
+## 2026-09-03 — [L5b] Amendement horodaté à la décision B2 : pourquoi le test devait être écrit AVANT
+
+L'entrée du même jour « Ancres visibles ET consigne consultant : où chacune se pose sur une échelle »
+dit CE QUI a été décidé. Elle ne dit pas ce que la mise en œuvre a appris, et c'est la partie qui
+sert au lot suivant. Elle est ajoutée ici plutôt qu'insérée là-bas : `DECISIONS.md` est append-only
+(11 §9bis), une entrée ne se réécrit pas après coup.
+
+Options :
+
+1. **Consigner l'enseignement** comme amendement horodaté de l'entrée B2.
+2. Le laisser vivre dans le message de commit `c043c3d` et dans `ETAT.md` seuls.
+
+Arbitrage : **option 1.** Un message de commit se retrouve si on sait qu'il existe ; `DECISIONS.md`
+se lit au démarrage de chaque session. Ce qui doit survivre :
+
+**La première correction de B2 rendait `null`, et elle serait partie VERTE ET FAUSSE.** Elle
+collectait les fragments qui ne matchent PAS le motif d'ancre. Or `SEPARATEURS_ANCRES` vaut
+`/[·•;\r\n|]+/` : il ne coupe **ni sur l'espace ni sur le point**. « Faire préciser QUI valide. 1 =
+aucun » est donc **un seul fragment**, qui matche comme ancre — la consigne se faisait avaler par
+l'ancre qui la suit, et la fonction rendait « pas de consigne » avec l'air d'avoir travaillé. La
+prose vit DEVANT l'ancre, dans le même fragment ; on la récupère par
+`fragment.slice(0, trouve.index)`.
+
+Le test avait été écrit d'abord. Il a rougi sur `expected null to be 'Faire préciser QUI valide…'`,
+et c'est la seule raison pour laquelle le défaut a été vu : le correctif compilait, ne cassait aucun
+test existant, et fermait le bloquant **en apparence**. Sans TDD, le rejeu A29 aurait relu un
+diff plausible et la consigne serait restée absente de l'écran le plus fréquent de l'outil.
+
+**Corollaire opérationnel pour L5c et L6** : quand un correctif porte sur un PARSEUR, le test doit
+porter sur une entrée RÉELLE du domaine, jamais sur une entrée fabriquée à l'image de la
+compréhension qu'on a du parseur — c'est cette compréhension qui est fausse.
+**Précédence : sans objet** — aucune règle du pack n'est en cause, c'est une leçon de méthode
+adossée au pipeline 09 §3-2 (« TDD sur les parties critiques : tests écrits AVANT »).
+
+Décideur : A20
+Impact spec : aucun — amendement horodaté de l'entrée B2 du 2026-09-03.

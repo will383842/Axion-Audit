@@ -1554,30 +1554,55 @@ clause du contrat 11 §3 non encore tenue. À planifier par A30 au brief de L7.
 
 ---
 
-## 2026-09-02 — [L5b] Étage 1 — le script d'accord de participation est un libellé PAR DÉFAUT, pas un texte de juriste
+## 2026-09-02 (RÉÉCRITE LE 2026-09-03) — [L5b] **EN PRODUCTION — validation juridique URGENTE** : le script d'accord de participation
 
-**Constat.** `DECISIONS.md` du 2026-09-02 (« Le script d'accord de participation a un libellé par
-défaut, et une seule définition ») pose `PHRASE_SCRIPT_ACCORD` comme constante unique du code. Ce
-texte est lu à voix haute à une personne physique avant que ses propos ne soient enregistrés dans un
-outil : c'est le support d'une information RGPD, et **il n'a été relu par aucun juriste**. Le refus de
-démarrer sans accord est testé ; le CONTENU de l'information ne peut pas l'être par un test.
+> **CETTE FICHE A ÉTÉ FAUSSE PENDANT 24 H, ET SUR UN TEXTE JURIDIQUE.** Elle décrivait
+> `PHRASE_SCRIPT_ACCORD` comme un travail « à poser par A22 ». **Le texte est écrit, affiché et
+> lu.** Rien ici ne reste à écrire. Une fiche qui présente comme à faire ce qui est déjà en service
+> retarde la seule chose qui compte : la relecture.
 
-**Valeur pour l'auditeur.** Un script juridiquement faible ne se voit pas en recette et ne casse
-aucun test : il se voit lors d'une contestation, quand il est trop tard. L'écrire ici, c'est
-garantir que la réserve survivra au départ de la session qui l'a posée.
+**FAIT MESURÉ (2026-09-03).** `apps/field/src/ecrans/entretien/DemarrageEntretien.tsx:19-23` définit
+la constante `PHRASE_SCRIPT_ACCORD` ; **la ligne 53 l'AFFICHE** dans un `<blockquote>` de l'écran
+« Avant la première question », précédé de « À lire à {nom} (mention d'information v1) ».
+Version : **`v1`** (`VERSION_MENTION_INFORMATION`, `session/ecriture-session.ts:32`), enregistrée sur
+chaque session dans `informationNoticeVersion` comme l'exige 06 §10.4.
 
-**Ce qui est demandé.** Relecture juridique du libellé **avant la porte P-E**, et confirmation de
-deux points en particulier : (a) la mention « le rapport ne vous attribue aucun propos
-nominativement » engage le traitement, il faut qu'elle soit vraie de bout en bout (03 §26.2,
-pseudonymisation) ; (b) le droit de retrait en cours d'entretien doit dire ce qu'il advient des
-réponses déjà saisies.
+**CE QUI EST RÉELLEMENT EN JEU.** Ce texte est le support d'une information RGPD. Il est **lu à voix
+haute à chaque interlocuteur, avant chaque entretien**, avant que ses propos ne soient enregistrés.
+**Il a été rédigé par un agent. Aucun juriste ne l'a relu.** Et aucun test ne peut le relire : la
+suite vérifie qu'on ne démarre pas sans accord — elle ne peut pas vérifier que ce à quoi la personne
+consent est juste, complet et opposable.
 
-**Coût estimé.** ~0,05 j côté équipe (remplacer la valeur d'une constante et rejouer les tests de
-libellé). Le coût réel est celui de la relecture, hors équipe.
+**ÉCART SUPPLÉMENTAIRE, TROUVÉ EN RÉÉCRIVANT CETTE FICHE — IL AGGRAVE L'URGENCE.** Le texte
+EN PRODUCTION n'est **pas** celui arbitré dans `DECISIONS.md` du 2026-09-02, et les deux ne disent
+pas la même chose sur le point le plus sensible :
+
+- **arbitré** : « Le rapport ne vous attribue aucun propos nominativement. »
+- **en production** : « elles sont consignées sous votre nom et votre fonction […] et ne servent à
+  aucune évaluation individuelle. »
+
+L'un promet la non-attribution dans le livrable, l'autre annonce une consignation nominative. Ce ne
+sont pas deux formulations d'une même promesse : ce sont **deux engagements différents**. La
+décision tracée ne décrit donc pas ce qui est lu aux personnes — et c'est la décision, pas le code,
+qu'une session neuve lit en premier. **Le rapprochement des deux appartient au juriste, pas à un
+agent : aucun des deux textes n'est réécrit ici.**
+
+**CE QUI EST DEMANDÉ, ET À QUI.** Relecture juridique **avant la porte P-E**, par un juriste, portant
+sur : (a) laquelle des deux formulations engage correctement le traitement, et sa cohérence de bout
+en bout avec la pseudonymisation du 03 §26.2 ; (b) ce qu'il advient des réponses déjà saisies quand
+une personne demande l'arrêt en cours d'entretien — le texte en production ne le dit pas ; (c) la
+base légale et le sort des mentions nominatives dans le rapport final.
+
+**Coût.** ~0,05 j côté équipe une fois le texte validé : remplacer la valeur de la constante,
+**incrémenter `VERSION_MENTION_INFORMATION`** (les sessions déjà collectées doivent rester
+rattachées à la version qu'elles ont réellement entendue — invariant 7), rejouer les tests de
+libellé. Le coût réel est celui de la relecture, hors équipe.
 
 **Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun. Impact périmètre fonctionnel :
-aucun. Étage 1** — et le compteur du plafond n'est pas mouvementé : cette entrée est documentaire,
-elle n'ajoute aucune ligne de comportement.
+aucun.** Le compteur du plafond étage 1 n'est pas mouvementé : cette fiche est documentaire.
+
+**Arbitrage Williams :** ☐ TEXTE VALIDÉ ☐ TEXTE À REMPLACER ☐ RELECTURE JURIDIQUE COMMANDÉE
+— _porté à Williams le 2026-09-03 ; le texte est en service pendant ce temps._
 
 ---
 
