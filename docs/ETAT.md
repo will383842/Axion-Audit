@@ -2294,3 +2294,21 @@ permis au « 162/162 » de coexister avec une CI rouge. Réparation en cours cô
 exécute « commit wip: puis push » à moitié) — fiche à ouvrir, `settings.json` NON touché.
 Écart assumé : la note L6 fait 126 lignes là où 09 §3-1bis dit « ≤ 1 page » — densité préférée au
 format, sept points durs sourcés dans le code plutôt que supposés.
+
+## 2026-09-03 11h30 — [gouvernance / P-DESCOPE] — hors pipeline code
+
+Dernier commit vert : 44e348b (main) · Branche : gouvernance/descope · Poussé : oui
+Tâche en cours : aucune. Deux documents posés, aucun code, aucun arbitrage rendu.
+Prochaine action : **WILLIAMS** — (1) geste root sur staging, `infra/README.md` §6.3 ; (2) merge de
+la PR #26 et tag `v0.l3` ; (3) le 15/09, remesurer le §2 du dossier P-DESCOPE puis le signer.
+Tests rouges connus : `8 · deploy-staging` sur `main`, hors périmètre de cette branche.
+
+Livré ici : `docs/journal/2026-09-03.md` (le burn-down remesuré — **56 % écrit, 26 % sur `main`,
+22 % porte signée** ; le 02/09 donnait 33 %) et `docs/portes/PORTE_DESCOPE_2026-09-15.md`, **préparé
+et NON arbitré** : critère copié mot pour mot, état mesuré daté, ce que le critère tranche seul
+(L8 glisse mais garde son butoir §35.3 ; l'invariant 8 est hors descope), et cinq familles d'options
+chiffrées (D-1 L6, D-2 L5c, D-3 L7, D-4 la marge, D-5 le contenu). Aucune n'est retenue.
+
+Le fait que ce dossier existe douze jours à l'avance est son objet : 09 §5.4 veut la porte
+**factuelle**, et une mesure prise le jour même se prend sur des souvenirs. Les chiffres du §2 sont
+datés et **doivent être remesurés le 15/09** — le dossier le dit deux fois, exprès.
