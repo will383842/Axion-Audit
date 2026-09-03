@@ -2382,7 +2382,7 @@ stade (ni sécurité serveur ni crypto touchées ; A54 se prononce en recette de
 | --- | --- | --- |
 | Tests exécutés, tous projets, sur le **Node du contrat** | **1 756 / 1 756** (+ **36** e2e) | CI `33739760104`, `headSha ce1a80f`, `conclusion: success`, Node **v22.23.2** |
 | Dont projet `interface` | **527** (était 447) — **+80, exactement L7a** | log du job « couverture ≥ 90 % », qui lance les **trois** projets |
-| Fichiers de test | **80** (était 77) | même log |
+| Fichiers de test | **83** — interface **32** (était 26 : **+6**, les six suites L7a) · unit 25 · integration 23 · playwright 3 (était **77**). Le « 80 » du log de CI ne compte que **vitest** (32+25+23) : les deux bases diffèrent, et il faut le dire plutôt que de les soustraire | `pnpm check:test-projects` (par moi) + log du job « couverture ≥ 90 % » |
 | Tests désactivés ou annulés | **0** | `check:no-skipped-tests`, local **et** CI |
 | Entrées `DECISIONS.md` | **192**, zéro doublon d'en-tête | `grep -c` et `uniq -d`, exécutés par moi |
 | Checks CI sur `ce1a80f` | **19 SUCCESS**, 1 SKIPPED (`deploy-staging`, `main` seul) | `gh pr view 32` |
