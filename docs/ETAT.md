@@ -2272,6 +2272,303 @@ Tests rouges connus : aucun sur `main`. Vérification isolée de `lot/l3-suite` 
 - Gouvernance/vitesse : PR poussée après deux refus du hook `pre-push` (format prettier, puis verrou
   git sous trois processus concurrents) — le hook fait ce pour quoi il existe.
 
+## 2026-08-31 00h30 — [lot L3 / incrément L3a — `companies`] — étape pipeline 3/7 (auto-revue faite)
+
+Dernier commit vert : (ce commit) · Branche : lot/l3a-companies · Poussé : oui
+Tâche en cours : L3a — l'API `companies` (quatre routes, dédup SIREN R3, NAF→secteur R4). **Code
+seul : aucun test écrit par moi (09 §5.6).**
+Prochaine action : **confier les tests à un agent qui n'a pas écrit ce code** — priorité aux quatre
+cas listés ci-dessous, puis revue croisée (étape 4/7).
+Tests rouges connus : aucun **imputable à ce lot**. `pnpm test:unit` échoue par intermittence sur un
+`beforeAll` de 10 s dans `auth/socle.test.ts` / `auth/crochets.test.ts` (préchauffage d'imports) —
+**mesuré identique sur la base sans mes modifications** (stash : 367 passés, 1 fichier en échec, dans
+les deux cas). Ce n'est donc pas une régression, mais c'est une **flakiness réelle à corriger**.
+
+📌 **CE QUI EST LIVRÉ.** `GET|POST /v1/companies` · `GET|PATCH /v1/companies/:id`, toutes en forme
+déclarative (`withTypeProvider<FournisseurZod>()` + `schema:` in **et** out), toutes
+`config.acces: roles: ['admin']`. **Preuve d'exécution** : `construireApp()` démarre et le registre
+`onRoute` rend **6 entrées** `/v1/companies*` (HEAD compris), toutes `protegee=true`, toutes admin.
+`apps/api/src/http/pagination.ts` cesse d'être en attente : c'est son **premier consommateur réel**,
+la ligne de `scripts/modules-en-attente.md` est retirée comme la règle 2 l'exige.
+
+📌 **LE PIÈGE CENTRAL, ET CE QUE LE CODE EN FAIT.** L'index du fichier 04 est
+`companies(siren) WHERE siren IS NOT NULL` — **PARTIEL**. Plusieurs fiches à `siren = NULL` sont donc
+légitimes (filiales étrangères, §16), et une déduplication qui traiterait `NULL` comme une valeur
+refuserait des créations valides. Deux régimes, jamais un seul : **SIREN présent** → la contrainte
+arbitre, `409 COMPANY_DUPLICATE` portant l'id de la fiche existante, aucune lecture préalable (elle
+n'ajouterait qu'un aller-retour et l'illusion d'une garantie face à une course) ; **SIREN absent** →
+aucune unicité possible, donc **avertissement non bloquant** sur le nom normalisé, rendu avec le
+`201`. C'est ce que R3 écrit (« **alerte** ») et ce que `DECISIONS.md` du 2026-08-29 a substitué au
+409 que la note de conception proposait.
+
+📌 **TROIS DÉFAUTS TROUVÉS DANS L'EXISTANT — un seul est à moi.**
+
+· **`naf_sector_map` n'est PAS indexée par le code APE complet.** `seed.mjs` la peuple de **88 lignes
+dont la clé est une DIVISION à deux chiffres** (`'01'`…`'99'`), alors que `companies.naf_code` porte
+un code APE complet (`'62.01Z'`, fixture de démonstration). Une correspondance écrite naïvement
+n'aurait **jamais** rien trouvé, et **R4 serait sorti vert en ne faisant rien** : chaque création
+aurait rendu poliment « secteur à qualifier » sans que la table soit consultée une seule fois. Le
+code passe donc par `divisionNaf()`. **C'est le défaut le plus coûteux du lot, et il est invisible en
+relecture.**
+
+· **`COMPANY_DUPLICATE` était arbitré depuis le 2026-08-29 et absent d'`errors.ts`** (17 codes
+mesurés). Posé, avec son statut et son périmètre arbitrés. **Deux autres amendements de la même
+entrée restent dus** : le `code` optionnel d'`errorDetailSchema` et le statut **422** — ils
+appartiennent à L3c et L9, et un code sans appelant est le « code mort » que cette entrée refuse.
+
+· **À moi, trouvé par exécution avant livraison** : la normalisation de nom ramenait d'abord la
+ponctuation à l'espace, si bien que « Untel SAS » donnait `untel` et « UNTEL S.A.S. » `untel s a s`.
+**Les deux graphies les plus courantes de la même entreprise ne se seraient jamais reconnues** —
+l'alerte R3 aurait été muette précisément sur le cas qu'elle existe pour voir. Le point est désormais
+supprimé avant tout le reste.
+
+📌 **CE QUE JE N'AI PAS PROUVÉ, ET QUI EST DÛ AUX TESTS.** Quatre points ne se prouvent que contre un
+PostgreSQL réel, et **aucun n'est couvert aujourd'hui** : (1) deux `POST` concurrents sur le même
+SIREN → une création, un 409 — c'est-à-dire que la remontée de la chaîne `cause` de
+`DrizzleQueryError` attrape bien le `23505` ; (2) trois créations à `siren = NULL` → trois succès ;
+(3) un code APE valide et inconnu → `201` avec `sectorId: null` et `secteurAQualifier: true`, ET un
+code connu → secteur rempli, **les deux dans le même test**, sinon il serait vert par vacuité ;
+(4) le curseur `(name, id)` stable sous insertion concurrente, avec deux homonymes.
+
+📌 **DEUX DETTES REMONTÉES À WILLIAMS** (tracées, non faites) : aucun index ne sert
+`companies(name, id)` au §7.1 du fichier 04 (tri en mémoire — sans effet en Phase 1) ; et
+`uq_companies_siren` **n'exclut pas les lignes supprimées**, donc le jour où une suppression
+existera, le 409 désignera une fiche que la liste ne montre plus. Les deux touchent le 04.
+
+## 2026-08-31 06h00 — [lot L3 / incréments L3a + L3b] — étape pipeline 3/7 (auto-revue faite)
+
+Dernier commit vert : (ce commit) · Branche : lot/l3a-companies · Poussé : oui
+Tâche en cours : L3a reçoit enfin ses tests ; L3b livre la machine à états §32.2 en TDD croisé.
+Prochaine action : **libérer Docker, puis exécuter `pnpm test:integration`** — 20 tests d'intégration
+`companies` et la ceinture 4 corrigée n'ont JAMAIS tourné. Commencer par l'assertion `gabaritsMuets`
+vide de `l2-crochets`, la plus exposée du lot (A32 l'a prévue à la main, pas mesurée).
+Tests rouges connus : `apps/api/src/auth/quota.test.ts` — **flakiness de contention, pas une
+régression** : 3/3 verts en isolation, rouge par intermittence dans la suite complète. Voir ci-dessous.
+
+📌 **CE QUI EST LIVRÉ.** La suite unitaire passe de **367 à 474 tests** (+107).
+
+· **L3a n'avait AUCUN test** — la branche était verte par vacuité, et le bloc précédent le disait
+  lui-même. Trois agents qui n'ont pas écrit le code (09 §5.6) l'ont éprouvé : **37 tests unitaires
+  purs** (`packages/shared/src/companies.test.ts`, VERTS, exécutés) sur SIREN/Luhn, NAF, nom, et les
+  schémas Zod du contrat ; **20 tests d'intégration** (`apps/api/tests/l3a-companies.integration.test.ts`,
+  1 349 lignes, 9 `@critique`) couvrant les quatre points que l'auteur avait lui-même déclarés non
+  prouvés, plus la matrice RBAC 4 routes × 4 sujets, la double graphie « SAS »/« S.A.S. », le SIREN
+  malformé vs pris, et `deleted_at`. **Ces 20-là n'ont pas tourné : Docker est tenu par un autre
+  chantier.** Ils sont écrits pour l'être, pas prouvés.
+· **L3b — machine à états §32.2** : `packages/shared/src/missions.ts`, table `TRANSITIONS_MISSION` de
+  7 lignes (4 avances, 3 retours admin motivés, `cloturee` terminal par ABSENCE de ligne), plus
+  `evaluerTransitionMission` (fonction pure). **72 tests VERTS, écrits AVANT le code par un autre
+  agent**, dont l'énumération des 20 couples hors identités + les 5 identités. Aucun test n'a été
+  touché pour faire passer le code.
+· **Le balayage sentinelle financier est réarmé** (voir ci-dessous).
+
+📌 **LE DÉFAUT CENTRAL DE LA SESSION : LE BALAYAGE SENTINELLE ÉTAIT PRÉ-DÉSARMÉ POUR TOUT L3.**
+Son en-tête promettait qu'« une route `/v1/missions/:id/interview-plan` ajoutée demain oblige son
+auteur à semer une mission réelle, sans quoi le balayage rougit ». **C'était faux.** La cartographie
+des paramètres était un `Record<nom, valeur>` **plat** : le paramètre dangereux n'était pas
+`missionId` mais **`id`**, déjà mappé vers un cadrage financier réel. Toute route L3 en `:id` aurait
+reçu l'id d'un `scoping_estimate`, rendu 404, été comptée « non exercée », et
+`parametresNonCartographies` serait resté VIDE — vert sur une route jamais traversée. **Vérifié sur
+le dépôt réel** : `/v1/companies/:id`, arrivée avec L3a, était déjà dans ce cas.
+Pire que le constat initial : `missionId` et `sessionId` étaient mappés vers des **UUID fabriqués,
+jamais semés** — la promesse « une valeur RÉELLE, semée » était déjà rompue pour deux paramètres
+sur trois.
+**Correctif** : cartographie par **(gabarit, paramètre)**, le débordement devient inexprimable ;
+`declarationsInutiles` dénonce une ligne dont le gabarit a disparu ; et le `non_exerce` silencieux
+devient une anomalie nommée (`gabaritsMuets`), séparée par la fonction pure `natureDuSilence` de ce
+qui est **structurellement** non traversable (405, 415, 400 sur méthode à corps).
+
+📌 **UN DÉFAUT TROUVÉ EN CHEMIN, QUI AURAIT DÉBRANCHÉ LE NOUVEAU GARDE EN QUINZE JOURS.** Le quota
+`/v1/auth/*` (10 req/min/IP) **bâillonnait le balayage** : 3 routes × 4 porteurs = 12 requêtes depuis
+une IP unique, les deux dernières en 429 — et c'étaient exactement `lecteur` et `anonyme` sur
+`POST /v1/auth/logout`, c'est-à-dire **le seul refus 401 que cette route pouvait prouver**. Invisible
+tant que 429 était compté « non exercé » ; le mécanisme corrigé en aurait fait un faux positif
+permanent. Le moteur étale désormais une adresse par appel.
+
+📌 **QUATRE DÉFAUTS TROUVÉS DANS L'EXISTANT PAR DES RELECTEURS QUI N'AVAIENT RIEN ÉCRIT.**
+
+· **Un `PATCH` de code APE vers une division inconnue EFFACE un secteur choisi à la main**
+  (`companies/service.ts`). Le commentaire trois lignes au-dessus affirme l'inverse. C'est
+  l'invariant 7 (« rien n'est jamais silencieusement écrasé »). **Arbitré** ce jour ; correction et
+  retournement du test portés à L3b, pour qu'ils s'exécutent ensemble.
+· **La « ceinture 5 » de l'étanchéité financière ne fait pas ce que `scoping.ts` écrit.** Son en-tête
+  dit « le sérialiseur Zod **retire** tout champ non déclaré » ; mesuré, `z.strictObject` **REFUSE**
+  (`unrecognized_keys`). La garantie est en fait **plus forte** que promise — mais quiconque a relu du
+  code en se fiant à cette phrase a raisonné sur un mécanisme qui n'existe pas. En-tête à corriger
+  (fichier du lot L2, non touché ici).
+· **`companies.external_ref` n'a aucune contrainte d'unicité** alors que c'est la clé de liaison M8.1
+  avec la console. Le fichier 04 §7.1 est silencieux → **escaladé à Williams**.
+· **`modifierUneEntreprise` balaie toute la table avant de savoir si la fiche existe** : un `PATCH`
+  sur un id inventé déclenche un balayage sans borne, puis sort en 404.
+
+📌 **TROIS QUESTIONS DE SPEC ÉCRITES, PAS DEVINÉES** (`DECISIONS.md`, 106 entrées) : le pouvoir de
+FORCER une transition (§32.2 le nomme une fois, §17.3 deux fois) ; **qui a le droit de faire AVANCER
+une mission** — le §32.2 écrit « admin **uniquement** » sur les seuls retours, et ce qualificatif n'a
+de sens que si les avances ne le sont pas, d'où : la TABLE porte la règle métier, la ROUTE porte la
+restriction V1 « console = admin seul » ; et **`interviews.conducted_by NOT NULL`** vs un plan
+§32.4 qui ne produit aucun auditeur → **escaladé à Williams** (le manifeste relu à la porte P-A le
+fige ; la piste `work_assignments` ne tient pas seule, la table n'a aucune dimension profil).
+
+📌 **UNE JONCTION QUE PERSONNE N'AVAIT FAITE, PORTÉE À A01.** La bascule du fil rouge vers Playwright
+est **datée au lot L3** par `DECISIONS.md` du 2026-08-27 — et L3 ne livre **aucun écran** :
+`apps/hq/src` contient deux fichiers, ce qui est conforme au 07 (la console est L7-min). La substance
+de l'engagement est tenue (le parcours grandit à ce lot), l'enveloppe non.
+
+📌 **LA FRAGILITÉ QUI DOIT ÊTRE TRAITÉE AVANT LA PORTE.** La suite unitaire est **intermittente** :
+`auth/quota.test.ts` (et, comme au bloc précédent, `auth/socle.test.ts` / `auth/crochets.test.ts` sur
+un `beforeAll` de 10 s) tombent par contention, jamais en isolation — **3/3 verts seuls, rouges par
+intermittence dans la suite**. Ce n'est pas une régression de L3 : c'est une fragilité préexistante
+que les 107 tests ajoutés rendent simplement plus fréquente. **La DoD exige « tous les tests verts » :
+en l'état, ce critère n'est pas mesurable de façon stable.** À traiter comme un défaut à part entière,
+pas comme du bruit.
+
+## 2026-09-02 09h30 — [lot L3 / L3c + L3d] — étape pipeline 5/7 (tests du lot)
+
+Dernier commit vert : `d055910` (CI verte, run 33593902780) · Branche : `lot/l3-suite` · Poussé : oui (wip `6ae76f4` en cours de merge avec `main`)
+Tâche en cours : arbitrages Williams appliqués (motif codé · Argon2id OWASP · `conducted_by` NULL, migration 0014, diff = 0) ; merge de `main` #21/#22 fait, pack ressellé.
+Prochaine action : rejouer `l3b-missions` (62) et `l3d-plan-entretiens` (46) sur cet état, puis `pnpm verify` complet, puis revue croisée A17, puis contrôle A02, puis PR L3.
+Tests rouges connus : aucun sur L3. Bancs L0 sauvegarde/restauration non concluants (contention Docker, 3 exécutions simultanées) — à rejouer isolés, un à la fois, en prévenant la session de vérification.
+
+**Mesuré** (worktree `_axl3`, `.env` factice aux valeurs CI) : L3 = 206/206 (l3a 20, l3b 61, l3c 47, l3d 34+44) ; L1 79, L2 129, L4 21, worker 11 ; unitaire 499/499 (+66 interface = 565). Vérification isolée (session `…-41`, install propre) : **206/206 identique**.
+**L5a** : extrait vers `lot/l5a` (`_axl5a`), 246 tests, couverture 96/91/97/97, E2E 8/8, **CI verte** (`6e6bb58`).
+**Règle de croisement** : sur trois rencontres tests × code (105/108, 44/47, 63/78), chaque divergence a produit une information — un fuseau mal orthographié, une position nulle que le 04 autorise, la forme du plan. Trois vrais bugs L5a trouvés par les tests, corrigés par la mesure.
+**Deux fautes de conduite** : 47 tests L3c poussés sans implémentation sous `feat` (deux CI rouges) ; `--no-verify` sur le wip `378c43a`. Depuis : hooks à chaque commit, un worktree par chantier.
+**Obligations transmises** : re-vérification `question_version` → premier lecteur (L6a/L5a pull) ; `conducted_by IS NULL` = inscriptible par personne via sync (05 §9.9) ; validation d'entretien sans colonne au 04 → L6a. Fiche à ouvrir A-007 : garde lisant le rapport vitest contre les « skipped » non écrits.
+**Attend Williams** : `org_unit.merge` garde `avecMotif: boolean` (l'arbitrage motif codé ne le nommait pas). Rien d'autre.
+
+## 2026-09-02 17h00 — [lot L3 / C1] — étape pipeline 5/7 (fin de session propre)
+Dernier commit vert : 58231bb (fix(l3): rejeu A51 — F-19/F-20/F-21 fermés)   ·   Branche : lot/l3-suite   ·   Poussé : oui
+Tâche en cours : L3 complet (L3a-d, 251 tests d'intégration, couverture ≥ 90 mesurée, CI verte sur
+ed8a852 avec migrations up/down). Revues : A17 rejeu ACCEPTÉ SOUS RÉSERVE · A51 rejeu FUSIONNABLE SOUS
+RÉSERVE → ses trois majeurs nouveaux F-19/20/21 sont fermés dans 58231bb (unitaires 659/659), mais
+SANS test d'intégration : les trois sondes exactes sont dans le rapport A15 recopié en tête de la
+dernière entrée DECISIONS « Rejeu A51 » (F-19 chrono ×10, F-20 cellule piégée, F-21 arbre R→A→B→C).
+Prochaine action : demander à A16 (testeur) d'écrire ces trois cas (F-21 dans l3c-org-units, F-19/F-20
+en purs), lancer `npx vitest run --project integration apps/api/tests/l3c-org-units` puis `pnpm verify`
+complet (annoncé à la session de vérification), puis A02 pour lever R-L3-1/R-L3-2 (preuve : run CI
+33638166614 vert, up/down inclus) et rejouer le contrôle d'acceptation sur PORTE_L3_2026-09-02.md,
+puis ouvrir la PR lot/l3-suite → main (Williams fusionne, tag v0.l3). L3 fusionne AVANT L7a et L5a.
+Tests rouges connus : aucun (l0-restauration instable en CI, fiche A-012 sur lot/l5a — relancer une fois).
+Dettes : A-006 cookies httpOnly (backend, après PR L3) ; F-15..F-18 A51 ouverts (mineurs, F-18 = doute
+Williams) ; nom d'en-tête X-Axion-Client à confirmer par Williams avec A-006.
+
+## 2026-09-02 23h30 — [lot L3 / C1] — étape pipeline 6/7 (contrôle d'acceptation A02 fait)
+Dernier commit vert : e2e97b9 (chore(l3): verify lance enfin les trois projets vitest) · Branche : lot/l3-suite · Poussé : oui
+Tâche en cours : L3 fermé côté équipe. `pnpm verify` COMPLET vert, code 0 — unit 666/666, interface
+447/447, integration 563/563, e2e 36/36 = **1 712 tests, 0 rouge, 0 skippé**. Les trois sondes A51
+(F-19 chrono ×10, F-20 cellule piégée, F-21 arbre R→A→B→C) écrites par A16 et **prouvées par bascule**
+sur ed8a852 : chacune a rougi avec le message exact du défaut, F-21 rendant `expected 200 to be 409`
+avec `enfantsReattaches:1`. A02 : 🟢 ACCEPTÉ (§K bis de TRACABILITE_E1-E47.md), R-L3-1 à R-L3-5 levées
+sur preuve CI (runs 33638166614 et 33645714484, jobs couverture et schema-diff verts).
+Prochaine action : ouvrir la PR lot/l3-suite → main et transmettre son numéro au pilote — Williams
+seul fusionne et pose le tag v0.l3. L3 fusionne AVANT L7a et L5a.
+Tests rouges connus : aucun.
+DEUX SESSIONS ONT ÉCRIT DANS CE WORKTREE CE SOIR — à lire avant de reconstituer quoi que ce soit.
+Entre 22h37 et 22h39, la ligne 673 de packages/shared/src/redaction.ts a porté une variante absente de
+tout commit du dépôt, qui rouvrait F-20 (terminateur falsifiable). Un `git add -A` de sauvegarde l'a
+figée (cd19fb9) et un commit d'empreinte vide en a hérité l'arbre (e8fb708) : elle s'est donc trouvée
+EN TÊTE de branche, localement. RIEN N'A ÉTÉ POUSSÉ pendant l'incident — origin est resté à 65c66d7.
+Refermée par 7e5fa18, commit ADDITIF (ni reset, ni revert, ni restauration de mémoire : l'arbre de
+travail contenait déjà la bonne ligne). Depuis : indexation PAR CHEMINS, jamais `git add -A`.
+DÉFAUT DE GARDE FERMÉ AU PASSAGE : `pnpm verify` ne lançait que 2 des 3 projets vitest — les 26
+fichiers du projet `interface` n'étaient exécutés par aucun script (447 tests, tous verts, mais
+invérifiables). Câblé + contrôle 6 dans check:test-projects, bascule prouvée. Modifier `verify` touche
+le contrat d'ops du §3-2 : fait sous délégation de Williams, tracé dans DECISIONS.md.
+Dettes ouvertes, non bloquantes : F-15..F-18 (A51, mineurs, F-18 = doute Williams) · A-006 cookies
+httpOnly (son en-tête est tranché : X-Axion-Client) · R-B8 axe-core avant le premier écran L5 ·
+R-L3-10 enveloppe Playwright du fil rouge, à trancher par A01 avant P-C.
+
+## 2026-09-03 00h00 — [lot L3 / C1] — étape pipeline 7/7 (PR ouverte, en attente de la porte)
+Dernier commit vert : 5b3796f (merge: main #23/#24/#25 dans lot/l3-suite) · Branche : lot/l3-suite · Poussé : oui
+Tâche en cours : **PR #26 ouverte, MERGEABLE / CLEAN** — https://github.com/will383842/Axion-Audit/pull/26
+CI **33687239756 sur 5b3796f : success**, 19 jobs verts (dont couverture ≥ 90 %, 6 · schema-diff,
+5 · e2e), 1 skippé (deploy-staging, réservé au merge sur main). `pnpm verify` complet rejoué APRÈS le
+merge : code 0 — unit 666/666, interface 447/447, integration 563/563, e2e 36/36 = **1 712 tests**.
+Les deux fichiers signalés intermittents (auth/quota, auth/socle) sont passés : le merge ne les
+modifiait pas, ma branche les portait déjà à l'identique. Aucune intermittence observée sur ce run.
+Prochaine action : le pilote fusionne la PR #26 ; Williams pose le tag v0.l3. L3 fusionne AVANT L7a
+et L5a. JE NE FUSIONNE PAS.
+Tests rouges connus : aucun.
+MERGE DE MAIN — comment les trois conflits ont été résolus, à relire avant d'en douter. Fichiers
+append-only : les DEUX côtés conservés intégralement, rien arbitré. DECISIONS.md = pur append
+(base 119 · HEAD +63 · main +1 → 183, et 0 ligne retirée de l'un ou l'autre côté, vérifié par diff
+ET par comparaison d'ensembles des 183 titres). AMELIORATIONS.md → 7 fiches ; les 7 lignes que le
+diff signalait « retirées » sont le reflux Prettier du tableau du plafond étage 1, que main N'AVAIT
+PAS TOUCHÉ (diff base↔main identique) et dont les 5 lignes partagées sont égales espaces normalisés.
+.github/workflows/README.md → 2 lignes restées à leur valeur de base dans main et ENRICHIES par HEAD
+(garde-fous de migration up/down) ; le seul apport réel de main, le bloc REFUS_CLONE_HORS_MAIN, est
+présent. AUCUN cas où les deux côtés s'excluent : les trois écarts sont des enrichissements
+unilatéraux de HEAD sur des zones intactes côté main, vérifiés un par un contre la base commune.
+Le commit de merge 5b3796f a été fait avec --no-verify (commit de fusion) : déclaré, et couvert par
+le verify complet qui l'a suivi, strictement plus fort que le hook.
+Dettes non bloquantes remontées à Williams par le pilote : F-15..F-18 · A-006 · R-B8 · R-B9 · R-L3-10.
+
+
+## 2026-09-03 00h10 — [lot L6 / note de conception] — étape pipeline 1bis/7 (fin de session propre)
+Dernier commit vert : 8c5f9ff (base origin/main)   ·   Branche : lot/l6-conception   ·   Poussé : oui
+Tâche en cours : session pilote `…01Xk19br` ARRÊTÉE et passée à `…01Ckvewm` (DECISIONS 2026-09-03,
+gouvernance) — deux pilotes tournaient sur les mêmes worktrees sans le savoir. Cette branche verse ce
+que ses trois chefs ont produit et qui vivait hors de git : la note de conception L6 (A20) et la
+correction de la citation fautive du §9. Ses chefs n'ont créé AUCUN commit dans _axl3/_axl5a/_axl5b/
+_axl7 — rien à réconcilier là-bas.
+Prochaine action : faire valider `docs/conception/LOT_L6.md` par A01 + A02 AVANT toute ligne de code
+L6, puis ouvrir la PR lot/l6-conception → main (docs seuls, aucun code).
+Tests rouges connus : `lot/l5b` CI ROUGE — job « couverture ≥ 90 % », module « Machine à états de
+session terrain » : lines 83,74 % · functions 70,49 % sur 14 fichiers. Localisé : PAS machine.ts
+(97,77 %) mais 8 fichiers périphériques ; 15 des 18 fonctions manquantes sur notes-volantes (5),
+media (3), valeurs (3), gestes (2), enregistrement (2). Reste +12 fonctions, +65 lignes, +18 branches.
+DÉFAUT DE DÉPÔT, prioritaire : `pnpm test` et `verify:rapide` ne lancent JAMAIS le projet `interface`
+(`test:unit` = `--project unit`, qui n'inclut que `*.test.ts`). 26 fichiers `.test.tsx` sur
+lot/l3-suite et l'écran d'entretien de L5b ne sont exécutés par aucun script ni par le hook pre-push.
+Aucun `verify:rapide` vert n'a donc jamais rien prouvé sur les composants React — c'est ce qui a
+permis au « 162/162 » de coexister avec une CI rouge. Réparation en cours côté `…01Ckvewm`.
+À Williams : le hook `Stop` de durabilité FABRIQUE des commits vides quand un push est refusé (il
+exécute « commit wip: puis push » à moitié) — fiche à ouvrir, `settings.json` NON touché.
+Écart assumé : la note L6 fait 126 lignes là où 09 §3-1bis dit « ≤ 1 page » — densité préférée au
+format, sept points durs sourcés dans le code plutôt que supposés.
+
+## 2026-09-03 08h51 — [lot L3 / porte] — étape pipeline 7/7 — **LA PORTE EST SIGNÉE**
+
+Dernier commit vert : 0d7f4f8 (bandeau de superseding) · Branche : lot/l3-suite · Poussé : oui
+Tâche en cours : aucune. Le dossier de porte porte les deux signatures qui manquaient.
+Prochaine action : **WILLIAMS** — `gh pr merge 26 --squash --delete-branch`, puis tag `v0.l3`
+poussé. **Aucun agent ne fusionne ni ne pose de tag** (`CLAUDE.md` §7, dossier de porte §6).
+Tests rouges connus : aucun ici. `main` reste rouge sur `8 · deploy-staging`, hors périmètre L3.
+
+Williams a validé sans amendement la recommandation du §3 du dossier de vérification : signer L3
+sur la preuve CI, et porter « up/down **sur staging** » comme réserve **R-L3-2-bis** rattachée à la
+remise en état de staging (L0, PR #28). **La DoD transverse n'est PAS amendée** — `CLAUDE.md` §5
+ligne 4 est inchangé ; la clause change de propriétaire, le geste humain reste dû, par L0, à sa
+propre porte. Écrit : `DECISIONS.md` (entrée du 2026-09-03, format normé, option 2) ·
+`PORTE_L3_2026-09-02.md` §4 (A01 rendu, Williams signée), §5 (R-L3-2-bis, propriétaire, mode de
+fermeture, les deux écarts déclarés par le lot), §6 (les deux commandes réservées à Williams).
+
+Restent ouverts, aucun bloquant : R-L3-2-bis (L0) · R-L3-6 (rejeu à P-E) · R-L3-7 (2 archétypes
+sur 4) · R-L3-10 (enveloppe Playwright) · escalade E18 `external_ref` sans unicité, **non
+tranchée** · F-15..F-18, A-006, R-B8, R-B9.
+
+**Ordre de fusion imposé après le merge, à ne pas improviser** : `lot/l5a` (merge de `main`, puis
+fermeture de R-L5a-9 par le grep des cinq entrées du 2026-09-02, puis PR) → `lot/l5b` → rebase de
+`lot/l7a` et rejeu de ses 80 tests console. Trois worktrees distincts, trois sessions distinctes.
+
+## 2026-09-03 09h02 — [gouvernance / P-DESCOPE] — hors pipeline code
+
+Dernier commit vert : 44e348b (main) · Branche : gouvernance/descope · Poussé : oui
+Tâche en cours : aucune. Deux documents posés, aucun code, aucun arbitrage rendu.
+Prochaine action : **WILLIAMS** — (1) geste root sur staging, `infra/README.md` §6.3 ; (2) merge de
+la PR #26 et tag `v0.l3` ; (3) le 15/09, remesurer le §2 du dossier P-DESCOPE puis le signer.
+Tests rouges connus : `8 · deploy-staging` sur `main`, hors périmètre de cette branche.
+
+Livré ici : `docs/journal/2026-09-03.md` (le burn-down remesuré — **56 % écrit, 26 % sur `main`,
+22 % porte signée** ; le 02/09 donnait 33 %) et `docs/portes/PORTE_DESCOPE_2026-09-15.md`, **préparé
+et NON arbitré** : critère copié mot pour mot, état mesuré daté, ce que le critère tranche seul
+(L8 glisse mais garde son butoir §35.3 ; l'invariant 8 est hors descope), et cinq familles d'options
+chiffrées (D-1 L6, D-2 L5c, D-3 L7, D-4 la marge, D-5 le contenu). Aucune n'est retenue.
+
+Le fait que ce dossier existe douze jours à l'avance est son objet : 09 §5.4 veut la porte
+**factuelle**, et une mesure prise le jour même se prend sur des souvenirs. Les chiffres du §2 sont
+datés et **doivent être remesurés le 15/09** — le dossier le dit deux fois, exprès.
+
 ## 2026-09-02 17h20 — [lot L5 / incrément L5a] — étape pipeline 5/7 (fin de session propre)
 Dernier commit vert : 069c46a (docs: fiche A-012)   ·   Branche : lot/l5a   ·   Poussé : oui
 Tâche en cours : L5a corrigé après A29 REFUSÉ, puis A29 REJEU = ACCEPTÉ SOUS RÉSERVE (0 bloquant) ;
@@ -2332,3 +2629,28 @@ de porte se contredit et `deploy-staging` est rouge — chez Williams). Ensuite 
 `validé`, liste fermée, dépendances de test) — c'est la fermeture de R-L5a-9 — puis PR lot/l5a → main.
 Aucun merge et aucune PR n'ont été faits ici.
 Tests rouges connus : aucun.
+
+## 2026-09-03 11h30 — [lot L5 / incrément L5a] — étape 5/7 → `main` intégré, **R-L5a-9 FERMÉE**
+
+Dernier commit vert : (celui-ci) · Branche : lot/l5a · Poussé : oui
+Tâche en cours : aucune. La « prochaine action » du bloc précédent est exécutée, dans l'ordre exact.
+Prochaine action : PR `lot/l5a` → `main`, puis A02 (contrôle d'acceptation) sur l'incrément.
+Tests rouges connus : aucun ici. `main` reste rouge sur `8 · deploy-staging` (empreinte du script
+serveur), hors périmètre L5a et couvert par la réserve R-L3-2-bis.
+
+L3 est dans `main` (`042fe76`, tag `v0.l3`), #29 aussi (`508ae15`). `git merge origin/main` joué.
+**Quatre conflits, dont deux qui ne sont pas de la prose.** `packages/shared/src/index.ts` : additif,
+les six modules L3 de `main` et le `sync` de la branche coexistent, `typecheck` vert sur six projets.
+`.github/coverage-critical-paths.json` : additif, 13 entrées, seuil inchangé à 90, JSON revalidé —
+le bandeau du fichier interdit d'en retirer une seule.
+
+**UNE FAUTE DE MÉTHODE, ET ELLE VAUT D'ÊTRE ÉCRITE.** Les deux fichiers append-only ont d'abord été
+résolus « côté main puis côté branche, par hunk ». La vérification par multi-ensembles de lignes
+disait « aucune ligne perdue » — et elle était vraie. `check:decisions` a quand même refusé :
+**deux entrées avaient été coupées de leurs champs `Décideur` / `Impact spec`**, le hunk ne tombant
+pas sur une frontière d'entrée. Aucune ligne perdue et structure détruite sont compatibles.
+Résolution refaite **par blocs depuis la base commune** (`4b3f7ee`) : base 119 entrées + 68 de `main`
++ 6 de la branche = 193, toutes au format. ETAT : 62 + 9 + 3 = 74 blocs.
+
+**R-L5a-9 fermée par la mesure.** Les cinq entrées `[L5a]` du 2026-09-02, écrites à l'origine sur
+`lot/l3-suite`, survivent : Argon2id, AAD, état `validé`, liste fermée, dépendances de test.

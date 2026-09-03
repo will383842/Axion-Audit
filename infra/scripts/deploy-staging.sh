@@ -43,15 +43,106 @@ set -uo pipefail
 
 echec() { echo "::error::$*" >&2; exit 1; }
 
+# =============================================================================
+# LA COPIE DU DEPOT SUR LE SERVEUR SUIT LA LIVRAISON — decide le 2026-09-02.
+# =============================================================================
+# `/opt/axion-audit/repo` porte `restore-test.sh`, que le test nocturne execute.
+# Jusqu au 2026-09-02, RIEN ne mettait ce clone a niveau : c etait un geste
+# humain, jamais planifie, et le garde nocturne rougissait apres chaque fusion
+# pour une raison qui n etait pas celle qu il surveille (DECISIONS.md,
+# 2026-08-31 « Rien ne met a niveau le clone »). Williams a tranche le
+# 2026-09-02 : la fraicheur de cette copie est une propriete de la LIVRAISON.
+# Ce script, que la cle de deploiement est seule a pouvoir lancer, realigne
+# donc le clone sur LE SHA QU IL VIENT DE DEPLOYER — pas sur une branche : le
+# clone doit etre exactement ce que la CI a livre.
+#
+# CE QUE LA CLE N A PAS GAGNE : rien. Elle ne peut toujours executer que ce
+# fichier, dont l empreinte est comparee au depot avant toute conclusion. Ce
+# qui a gagne du pouvoir, c est CE SCRIPT — et c est pourquoi les garde-fous
+# ci-dessous ne sont pas negociables (memes trois que l entree du 31/08) :
+#   · l origine du clone est VERIFIEE : on ne tire que du depot public attendu ;
+#   · la reference de branche est EN DUR : la cle ne choisit jamais ce qui
+#     s execute, seulement le declenchement ;
+#   · aucune reecriture d historique n est suivie : le sha vise doit DESCENDRE
+#     du commit courant du clone, et etre atteignable depuis `origin/main`.
+#   · un clone porteur de modifications locales n est JAMAIS ecrase en silence
+#     (invariant 7) : on refuse, on nomme, un humain tranche.
+# Un `git checkout` ne lance aucun code ; c est le nocturne, a 03h00, qui
+# executera ce que le clone contient — comme avant, mais sans attendre l oubli
+# d un humain.
+# =============================================================================
+CLONE="/opt/axion-audit/repo"
+ORIGINE_ATTENDUE="https://github.com/will383842/Axion-Audit.git"
+BRANCHE="main"
+
+# Publie la ligne `CLONE_SERVEUR=<sha40>` que la CI compare au sha deploye.
+aligner_clone() {
+  local clone="$1" sha="$2" origine="$3" tete_avant origine_reelle tete_apres
+  [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || echec "Alignement du clone : il faut un sha COMPLET (40 hexa), recu « ${sha} ». Un sha abrege ne garantit pas l exactitude."
+  [ -d "${clone}/.git" ] || echec "Alignement du clone : ${clone} n est pas un depot git. Le cloner a la main (README infra §6.3) avant de redeployer."
+
+  origine_reelle="$(git -C "$clone" remote get-url origin 2>/dev/null)" \
+    || echec "Alignement du clone : ${clone} n a pas de remote « origin » lisible (droits ? propriete du .git ?)."
+  case "$origine_reelle" in
+    "$origine"|"${origine%.git}") : ;;
+    *) echec "Alignement du clone REFUSE : origin=« ${origine_reelle} », attendu « ${origine} ». On ne tire jamais d un autre depot que celui qui a ete relu." ;;
+  esac
+
+  if [ -n "$(git -C "$clone" status --porcelain --untracked-files=no 2>/dev/null)" ]; then
+    echec "Alignement du clone REFUSE : ${clone} porte des modifications locales non versionnees. Elles ne seront pas ecrasees en silence (invariant 7) — les examiner sur le serveur (git status), puis les jeter ou les porter dans le depot."
+  fi
+
+  tete_avant="$(git -C "$clone" rev-parse HEAD 2>/dev/null)" || echec "Alignement du clone : HEAD illisible dans ${clone}."
+
+  # Reference EN DUR, jamais prise de l entree : la cle ne choisit pas la branche.
+  git -C "$clone" fetch --quiet --no-tags origin "+refs/heads/${BRANCHE}:refs/remotes/origin/${BRANCHE}" \
+    || echec "Alignement du clone : « git fetch origin ${BRANCHE} » a echoue. Reseau sortant vers github.com ? Le depot est public : aucun identifiant n est requis."
+
+  git -C "$clone" cat-file -e "${sha}^{commit}" 2>/dev/null \
+    || echec "Alignement du clone REFUSE : le sha ${sha} est inconnu apres fetch de ${BRANCHE}. Il n est donc pas sur la branche livree."
+  git -C "$clone" merge-base --is-ancestor "$sha" "refs/remotes/origin/${BRANCHE}" \
+    || echec "Alignement du clone REFUSE : ${sha} n est pas atteignable depuis origin/${BRANCHE}. Ce script ne suit que du code fusionne."
+  git -C "$clone" merge-base --is-ancestor "$tete_avant" "$sha" \
+    || echec "Alignement du clone REFUSE : ${sha} ne DESCEND PAS du commit courant du clone (${tete_avant}). Cela ressemble a une reecriture d historique de ${BRANCHE} — interdite par la protection de branche. Un humain doit regarder AVANT que la machine ne suive."
+
+  git -C "$clone" checkout --quiet --detach "$sha" \
+    || echec "Alignement du clone : « git checkout --detach ${sha} » a echoue dans ${clone}."
+
+  tete_apres="$(git -C "$clone" rev-parse HEAD 2>/dev/null)"
+  [ "$tete_apres" = "$sha" ] || echec "Alignement du clone : HEAD vaut ${tete_apres} apres checkout, attendu ${sha}. Le clone n est PAS dans l etat annonce."
+  [ -z "$(git -C "$clone" status --porcelain --untracked-files=no 2>/dev/null)" ] \
+    || echec "Alignement du clone : l arbre de travail n est pas propre apres checkout de ${sha}."
+
+  if [ "$tete_avant" = "$tete_apres" ]; then
+    echo "Clone ${clone} deja au sha livre (${sha}) — rien a faire."
+  else
+    echo "Clone ${clone} remis a niveau : ${tete_avant} -> ${tete_apres}."
+  fi
+  echo "CLONE_SERVEUR=${tete_apres}"
+}
+
+# MODE LOCAL, pour le test a blanc (`infra/scripts/test-garde-clone.sh`) et
+# pour un exploitant sur le serveur. Il ne peut PAS etre atteint par la cle de
+# CI : `command=` de authorized_keys fixe la ligne de commande et n y transmet
+# AUCUN argument du client. Seule une invocation locale porte des arguments.
+if [ "${1:-}" = "--aligner-clone" ]; then
+  [ $# -ge 3 ] || echec "Usage : $0 --aligner-clone <chemin du clone> <sha40> [<url origin attendue>]"
+  aligner_clone "$2" "$3" "${4:-$ORIGINE_ATTENDUE}"
+  exit 0
+fi
+
 read -r JETON  || echec "stdin: jeton absent."
 read -r UUID   || echec "stdin: uuid absent."
 read -r COMMIT || echec "stdin: commit absent."
 
 # Validation stricte AVANT tout appel. Un uuid ou un sha qui ne ressemble pas a
 # ce qu il pretend etre est refuse ici, pas transmis a Coolify.
+# Le sha est exige COMPLET depuis le 2026-09-02 : il sert a realigner le clone,
+# et un prefixe ne designe pas un commit de facon certaine. La CI envoie
+# toujours `github.sha` (40 hexa) — rien ne change pour elle.
 [[ "$JETON"  =~ ^[A-Za-z0-9|._-]{20,200}$ ]] || echec "Jeton de forme inattendue — refuse sans etre transmis."
 [[ "$UUID"   =~ ^[a-z0-9]{20,32}$ ]]         || echec "UUID d application de forme inattendue : refuse."
-[[ "$COMMIT" =~ ^[0-9a-f]{7,40}$ ]]          || echec "SHA de commit de forme inattendue : refuse."
+[[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]            || echec "SHA de commit de forme inattendue (40 hexa attendus) : refuse."
 
 API="http://127.0.0.1:8000/api/v1"
 
@@ -210,5 +301,13 @@ if [ -f "$FICHIER_ENV" ]; then
 else
   echo "::warning::Fichier de secrets introuvable en ${FICHIER_ENV} : ses droits n ont PAS pu etre verifies. Si l orchestrateur a change d arborescence, ce controle est devenu muet — et un controle muet ne protege rien."
 fi
+
+# --- 5. REMETTRE LE CLONE DU SERVEUR AU SHA QUI VIENT D ETRE LIVRE -----------
+# EN DERNIER, et c est voulu : la livraison a pris effet (etape 3) avant que la
+# copie qui porte `restore-test.sh` ne la suive. Si l alignement echoue, ce
+# script rend un code non nul et la CI rougit EN NOMMANT LE CLONE — le staging,
+# lui, est deja en service. Un deploiement qui echoue plus haut ne realigne
+# rien : le nocturne rougira alors pour la bonne raison, une livraison manquee.
+aligner_clone "$CLONE" "$COMMIT" "$ORIGINE_ATTENDUE"
 
 echo "Deploiement du staging termine et verifie."
