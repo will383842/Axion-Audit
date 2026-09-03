@@ -2271,3 +2271,26 @@ Tests rouges connus : aucun sur `main`. Vérification isolée de `lot/l3-suite` 
   §10.2 de la fiche P-B, R-B12 levée, 370 citations / 245 fichiers, 14 routes sur `main`.
 - Gouvernance/vitesse : PR poussée après deux refus du hook `pre-push` (format prettier, puis verrou
   git sous trois processus concurrents) — le hook fait ce pour quoi il existe.
+
+## 2026-09-03 00h10 — [lot L6 / note de conception] — étape pipeline 1bis/7 (fin de session propre)
+Dernier commit vert : 8c5f9ff (base origin/main)   ·   Branche : lot/l6-conception   ·   Poussé : oui
+Tâche en cours : session pilote `…01Xk19br` ARRÊTÉE et passée à `…01Ckvewm` (DECISIONS 2026-09-03,
+gouvernance) — deux pilotes tournaient sur les mêmes worktrees sans le savoir. Cette branche verse ce
+que ses trois chefs ont produit et qui vivait hors de git : la note de conception L6 (A20) et la
+correction de la citation fautive du §9. Ses chefs n'ont créé AUCUN commit dans _axl3/_axl5a/_axl5b/
+_axl7 — rien à réconcilier là-bas.
+Prochaine action : faire valider `docs/conception/LOT_L6.md` par A01 + A02 AVANT toute ligne de code
+L6, puis ouvrir la PR lot/l6-conception → main (docs seuls, aucun code).
+Tests rouges connus : `lot/l5b` CI ROUGE — job « couverture ≥ 90 % », module « Machine à états de
+session terrain » : lines 83,74 % · functions 70,49 % sur 14 fichiers. Localisé : PAS machine.ts
+(97,77 %) mais 8 fichiers périphériques ; 15 des 18 fonctions manquantes sur notes-volantes (5),
+media (3), valeurs (3), gestes (2), enregistrement (2). Reste +12 fonctions, +65 lignes, +18 branches.
+DÉFAUT DE DÉPÔT, prioritaire : `pnpm test` et `verify:rapide` ne lancent JAMAIS le projet `interface`
+(`test:unit` = `--project unit`, qui n'inclut que `*.test.ts`). 26 fichiers `.test.tsx` sur
+lot/l3-suite et l'écran d'entretien de L5b ne sont exécutés par aucun script ni par le hook pre-push.
+Aucun `verify:rapide` vert n'a donc jamais rien prouvé sur les composants React — c'est ce qui a
+permis au « 162/162 » de coexister avec une CI rouge. Réparation en cours côté `…01Ckvewm`.
+À Williams : le hook `Stop` de durabilité FABRIQUE des commits vides quand un push est refusé (il
+exécute « commit wip: puis push » à moitié) — fiche à ouvrir, `settings.json` NON touché.
+Écart assumé : la note L6 fait 126 lignes là où 09 §3-1bis dit « ≤ 1 page » — densité préférée au
+format, sept points durs sourcés dans le code plutôt que supposés.
