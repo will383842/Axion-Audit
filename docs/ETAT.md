@@ -2502,7 +2502,7 @@ Le commit de merge 5b3796f a été fait avec --no-verify (commit de fusion) : d�
 le verify complet qui l'a suivi, strictement plus fort que le hook.
 Dettes non bloquantes remontées à Williams par le pilote : F-15..F-18 · A-006 · R-B8 · R-B9 · R-L3-10.
 
-## 2026-09-03 11h00 — [lot L3 / porte] — étape pipeline 7/7 — **LA PORTE EST SIGNÉE**
+## 2026-09-03 08h51 — [lot L3 / porte] — étape pipeline 7/7 — **LA PORTE EST SIGNÉE**
 
 Dernier commit vert : 0d7f4f8 (bandeau de superseding) · Branche : lot/l3-suite · Poussé : oui
 Tâche en cours : aucune. Le dossier de porte porte les deux signatures qui manquaient.
