@@ -2294,3 +2294,26 @@ permis au « 162/162 » de coexister avec une CI rouge. Réparation en cours cô
 exécute « commit wip: puis push » à moitié) — fiche à ouvrir, `settings.json` NON touché.
 Écart assumé : la note L6 fait 126 lignes là où 09 §3-1bis dit « ≤ 1 page » — densité préférée au
 format, sept points durs sourcés dans le code plutôt que supposés.
+
+## 2026-09-03 06h45 — [infra / diagnostic staging] — hors pipeline (fin de session propre)
+Dernier commit vert : 44e348b (main, PR #27 fusionnée)   ·   Branche : infra/diagnostic-staging   ·   Poussé : oui
+Tâche en cours : session `…01Xk19br` — pilotage passé à `…01Ckvewm` (DECISIONS 2026-09-03). PR #27
+fusionnée sur ordre de Williams : la note de conception L6 et la correction du §9 sont sur `main`.
+PR #28 ouverte : fiches A-013 (staging) et A-014 (hooks absents en worktree neuf).
+STAGING EST LE BLOCAGE DE TOUT, diagnostiqué par accès serveur direct : Coolify échoue en 9 s sur
+`loadComposeFile()` — « Failed to read Git source » — alors que le clone RÉUSSIT. Le conteneur en
+service (`Up 21 h`, créé 2026-09-02 07h34) est celui du dernier déploiement réussi `f7a11b6` ; les
+deux tentatives suivantes ont échoué. Écarté par mesure : disque (29 %, inodes 5 %), fichier compose
+absent (il existe au commit déployé), accès au dépôt (`ls-remote` aboutit), et le commit `8c5f9ff`
+(il ne touche aucun compose). NE PAS modifier `deploy-staging.sh` : il refuse de sortir vert, c'est
+sa fonction. Prochaine mesure, hors de portée d'une session : redéploiement manuel depuis
+l'interface Coolify, pour dire si le défaut est dans l'appel d'API ou la configuration.
+Prochaine action : faire relire et fusionner la PR #28, puis obtenir de Williams le redéploiement
+manuel Coolify et les secrets `TELEGRAM_*` (absents — déploiement aveugle).
+Tests rouges connus : `main` ROUGE sur `8 · deploy-staging` (cause ci-dessus, pas le code).
+`lot/l5b` est repassé VERT. PR #26 (L3) est `DIRTY` depuis la fusion de #27 — conflit d'append
+attendu sur `DECISIONS.md`/`ETAT.md`, se résout en gardant les deux côtés.
+BLOQUANT DE PORTE, inchangé : ligne 16 de `docs/portes/PORTE_L3_2026-09-02.md` dit encore
+« 🟡 ACCEPTÉE SOUS RÉSERVE — aucun merge » alors que son addendum lève tout 360 lignes plus bas ; le
+verdict final d'a7 (`9f4e3c0`) n'est PAS poussé, et a7 est la session de VÉRIFICATION — le §3 dit
+qu'elle ne produit rien, et le §10 réserve l'étape 6 au gardien A02. À faire re-signer par A02.

@@ -1561,8 +1561,8 @@ s'applique pas.
 
 Le fait qui tranche, deux déploiements distincts à treize heures d'écart :
 
-| Déclenchement | `deployment_uuid` | Conteneur réellement en service |
-| --- | --- | --- |
+| Déclenchement    | `deployment_uuid`          | Conteneur réellement en service       |
+| ---------------- | -------------------------- | ------------------------------------- |
 | 2026-09-02 14h48 | `ji178zfg0eeuywnsmqm0u543` | `/artifacts/tvgaihhwrs0g8kg9mwcmnnwv` |
 | 2026-09-03 03h46 | `7vafdkixhk0hit2wgig8w1es` | `/artifacts/tvgaihhwrs0g8kg9mwcmnnwv` |
 
@@ -1607,7 +1607,7 @@ tvgaihhwrs0g8kg9mwcmnnwv | finished | 2026-09-02 07:32 | f7a11b6a   <- le conten
 transverse exige « migrations up/down exécutées **sur staging** » et l'étape 7 du pipeline est une
 **démo sur staging**. Tant que staging sert du code périmé, **aucune porte ne peut être franchie** —
 ni P-C, ni P-D — et trois chantiers (L3, L5, L7) attendent derrière une cause qui ne leur appartient
-pas. *Un job d'infra tient trois chantiers.*
+pas. _Un job d'infra tient trois chantiers._
 
 **Coût estimé.** Diagnostic : fait. Correction : inconnue tant que `loadComposeFile()` n'a pas été
 instrumenté — l'hypothèse la moins coûteuse à éprouver est un **redéploiement manuel depuis
@@ -1618,6 +1618,7 @@ de sortir vert**, et c'est exactement ce pour quoi il a été écrit.
 **Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun.** C'est de l'exploitation.
 
 **Deux constats annexes, à ne pas perdre.**
+
 1. `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` sont **absents** : « un déploiement sans canal d'alerte
    est un déploiement aveugle » (02 §11.3). Même réparé, le déploiement repartirait aveugle.
 2. Coolify tourne sur `ghcr.io/coollabsio/coolify:latest` — **une étiquette non épinglée**, alors
@@ -1629,5 +1630,50 @@ de sortir vert**, et c'est exactement ce pour quoi il a été écrit.
 **Recommandation.** **Étage 2 — PROPOSÉE**, arbitrage Williams. Le point 1 (secrets Telegram) est
 d'étage 1 et peut être fait d'office par qui détient les secrets. Le point 2 (épingler Coolify) est
 une décision d'exploitation, pas une amélioration de confort.
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte suivante_
+
+### FICHE A-014 — Un worktree neuf n'a AUCUN hook git : le garde pre-push n'existe pas là où on ouvre les chantiers
+
+**Constat (mesuré le 2026-09-03, sur le worktree qui porte la fiche A-013 — c'est-à-dire sur
+moi-même).** Le régime de travail impose un `pre-push` qui rejoue `pnpm verify:rapide`, et
+`ORGANISATION_AGENTS.md` §9 impose **un worktree par chantier**. Les deux ne tiennent pas ensemble :
+
+```
+$ git config core.hooksPath        -> .husky/_
+$ ls -1 .husky/_/                  -> (vide)
+```
+
+`core.hooksPath` est une valeur de `.git/config`, **partagée par tous les worktrees** ; mais
+`.husky/_/` est un répertoire **généré par `husky` à l'installation**, présent seulement dans
+l'arbre où `pnpm install` a tourné. Dans un worktree fraîchement créé, le chemin existe et **son
+contenu non** : `git push` ne trouve aucun hook et **passe sans rien vérifier, en silence**.
+
+**Preuve par l'incident, et elle est de moi.** Mes deux pushes de la nuit (`lot/l6-conception`,
+`infra/diagnostic-staging`) sont passés sans une ligne de sortie de hook. J'ai cru le garde vert ;
+il était **absent**. La CI l'a rattrapé au coup suivant — `1 · lint` en `FAILURE` sur la PR #28,
+pour un `.md` qui ne passait pas `prettier --check`. C'est exactement le piège déjà consigné
+(`ORGANISATION_AGENTS.md` §2, incident du 2026-08-29), sauf qu'ici **le garde censé l'attraper
+avant la CI n'a jamais tourné**.
+
+**Valeur pour l'auditeur.** Aucune directement, et forte pour le chantier : _un garde muet est pire
+qu'un garde absent — il rassure_ (§5-2). Ici c'est la version la plus traître : le garde est
+**configuré**, il est **documenté**, il est **exigé** — et il ne s'exécute pas. Chaque nouveau
+chantier ouvert conformément au §9 pousse sans contrôle, et personne ne peut le voir puisque
+l'absence de sortie ressemble à un succès silencieux.
+
+**Coût estimé.** Faible, mais c'est une décision, pas un réflexe. Trois pistes, à arbitrer :
+(a) documenter `pnpm install` comme première commande obligatoire de tout worktree neuf (§2 du
+fichier d'organisation) — le moins cher, le plus oubliable ; (b) faire échouer bruyamment un `push`
+quand `.husky/_/pre-push` est absent, plutôt que de le laisser passer — transforme un silence en
+refus ; (c) versionner les hooks au lieu de les générer. **(b) est la seule qui respecte la règle
+« un contrôle qui ne trouve rien ne doit jamais sortir vert » (`CLAUDE.md` §5.7).**
+
+**Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun.** Outillage.
+
+**Recommandation.** **Étage 2 — PROPOSÉE.** Ce n'est pas du confort : c'est le garde obligatoire
+avant toute PR qui n'existe pas dans les répertoires où le projet travaille. À rapprocher de la
+réparation en cours du garde `verify`, aveugle au projet `interface` — **deux gardes obligatoires,
+deux angles morts, découverts le même jour.**
 
 **Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte suivante_
