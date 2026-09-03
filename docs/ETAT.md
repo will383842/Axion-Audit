@@ -2361,3 +2361,29 @@ indépendants (revue d'outillage · rouge de couverture de L5b puis `verify` sur
 Prochaine action : inchangée — A29, revue croisée de lot/l5b (diff lot/l5a..lot/l5b, lecture seule).
 Puis, dans cet ordre seulement : L3 dans `main` → PR L5a → PR L5b.
 Tests rouges connus : aucun (1681/1681 le 2026-09-03 à 05h50, `pnpm test:coverage`).
+
+## 2026-09-03 07h40 — [lot L5 / incrément L5b] — étape pipeline 5/7 (correctifs A29)
+Dernier commit vert : c043c3d (fix(l5b) : les deux bloquants A29 fermés) · Branche : lot/l5b · Poussé : oui
+Tâche en cours : revue croisée A29 « ACCEPTÉ SOUS RÉSERVE » — les 2 bloquants et 7 des 9 non
+bloquantes sont FERMÉS. Périmètre réel du lot rectifié par A29 : les branches sont DIVERGENTES,
+`merge-base` = ce4b29b, donc le delta L5b est `ce4b29b..HEAD` (38 fichiers, 9 292 insertions, 1
+suppression) et non `lot/l5a..lot/l5b`.
+B1 : une note volante saisie était effacée sans avoir été enregistrée (promesse résolvant sur un
+refus). Corrigé sur ses DEUX faces — le refus d'identité ET l'échec d'écriture, que
+`enregistrer()` avale par conception. Contrat désormais `Promise<boolean>`.
+B2 : la consigne consultant disparaissait sur toute question `scale_1_5`. Le parseur du pack rend
+`consigne` ; piège trouvé en chemin : la prose est DEVANT l'ancre dans le même fragment, car
+`SEPARATEURS_ANCRES` ne coupe ni sur l'espace ni sur le point.
+C5 : le shim `matchMedia` rendait `matches: false` à TOUTE requête en affirmant l'inverse — les 29
+cas de l'écran rendaient les panneaux, jamais les trois colonnes. Il répond maintenant depuis
+`window.innerWidth`. Fait EN PREMIER, comme demandé, parce qu'il faussait toute mesure ultérieure.
+C3, C4, C6, C7, C9 fermées. C1/C2 : rien à faire ici, les gardes ESLint vivent sur L5a — à rejouer
+après la fusion, comme A29 le demande.
+Mesures : suite complète 1699/1699 verte (78 fichiers). Module critique « Machine à états » —
+fonctions 98,41 % (62/63) · lignes 98,76 % · branches 94,03 %. Seuil 90 et périmètre INCHANGÉS
+(diff vide sur `coverage-critical-paths.json` et `ci.yml`). Bascule faite sur les quatre correctifs :
+chacun retiré fait rougir SES cas et eux seuls ; code de production restauré à l'identique.
+Deux entrées DECISIONS.md pour les deux vrais choix : composition ancres/consigne, et suffixe des
+codes d'options en collision.
+Prochaine action : rejeu A29 sur `c043c3d`. Puis, dans cet ordre seul : L3 dans `main` → PR L5a → PR L5b.
+Tests rouges connus : aucun.
