@@ -2295,7 +2295,7 @@ exécute « commit wip: puis push » à moitié) — fiche à ouvrir, `settings.
 Écart assumé : la note L6 fait 126 lignes là où 09 §3-1bis dit « ≤ 1 page » — densité préférée au
 format, sept points durs sourcés dans le code plutôt que supposés.
 
-## 2026-09-03 11h30 — [gouvernance / P-DESCOPE] — hors pipeline code
+## 2026-09-03 09h02 — [gouvernance / P-DESCOPE] — hors pipeline code
 
 Dernier commit vert : 44e348b (main) · Branche : gouvernance/descope · Poussé : oui
 Tâche en cours : aucune. Deux documents posés, aucun code, aucun arbitrage rendu.
