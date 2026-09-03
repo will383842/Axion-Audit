@@ -2336,3 +2336,28 @@ ici. La vérité de la couverture est `pnpm test:coverage`, jamais `test:unit`.
 Réserve de gouvernance remontée à Williams : cette session n'avait aucun outil de sous-agent. A20 a
 tenu les rôles A28 et A26 lui-même. Le croisement 09 §5.6 qui compte est préservé (A24 a écrit L5a,
 A22 a écrit L5b, A20 n'a écrit ni l'un ni l'autre), mais ce n'est pas la chaîne nominale.
+
+## 2026-09-03 06h50 — [lot L5 / incrément L5b] — étape pipeline 5/7 (rectification de fiche, session close)
+Dernier commit vert : (celui-ci) · Branche : lot/l5b · Poussé : oui
+Tâche en cours : rien. Ce bloc RECTIFIE un seul point du précédent, et ne rouvre aucun travail.
+Rectification : la fiche étage 2 « `pnpm verify` n'exécute jamais le projet `interface` » proposait
+0,2 j de correctif — **ce correctif est DÉJÀ ÉCRIT**. A10 l'a fermé le 2026-09-03 dans `e2e97b9`
+(« verify lance enfin les trois projets vitest ») sur `lot/l3-suite` : `test:interface` ajouté et
+enchaîné dans `test`, `verify` et `verify:rapide`, plus un SIXIÈME contrôle dans
+`check:test-projects` qui part du PROJET (« ce projet est-il lancé ? ») là où les cinq existants
+partaient du FICHIER (« ce fichier est-il capté ? ») — l'angle mort exact qui faisait lire
+`interface:29` dans une sortie verte. Le défaut se referme donc **par la fusion de L3 (PR #26), sans
+travail supplémentaire**. La fiche a été réécrite en ce sens ; laisser un devis pour un travail fait
+aurait coûté une journée à quelqu'un dans trois semaines.
+Ce qui RESTE proposé dans la fiche, et rien d'autre : un job CI **nommé** pour le projet `interface`,
+afin qu'un `.test.tsx` cassé rougisse sous l'étiquette « interface » et non « couverture
+insuffisante » (~0,05 j, arbitrage à P-C). Le correctif de fond n'attend PAS cet arbitrage.
+Le diagnostic, lui, est conservé mot pour mot dans la fiche : un `.test.tsx` rouge sort VERT de
+`verify`, VERT du pre-push, VERT des jobs `unit`, `integration` et `e2e`, et ne rougit que dans
+`coverage` sous une étiquette qui parle de couverture et jamais de test cassé. C'est pourquoi le
+bloc ETAT.md de cette branche a pu écrire « Tests rouges connus : aucun » de BONNE FOI.
+Confirmation croisée à noter : A10 et A20 ont trouvé ce défaut le même jour par deux chemins
+indépendants (revue d'outillage · rouge de couverture de L5b puis `verify` sur L5a).
+Prochaine action : inchangée — A29, revue croisée de lot/l5b (diff lot/l5a..lot/l5b, lecture seule).
+Puis, dans cet ordre seulement : L3 dans `main` → PR L5a → PR L5b.
+Tests rouges connus : aucun (1681/1681 le 2026-09-03 à 05h50, `pnpm test:coverage`).

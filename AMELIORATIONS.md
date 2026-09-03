@@ -1609,16 +1609,22 @@ aucun. Impact périmètre fonctionnel : aucun. Étage 1**, autorisé d'office.
 
 ---
 
-## 2026-09-03 — [transverse] Étage 2, PROPOSÉE — `pnpm verify` n'exécute JAMAIS le projet `interface` (29 fichiers)
+## 2026-09-03 — [transverse] Étage 2 — `pnpm verify` n'exécutait JAMAIS le projet `interface` : DÉFAUT RÉEL, **DÉJÀ CORRIGÉ** sur `lot/l3-suite`
+
+> **NE PAS RE-CHIFFRER CE CORRECTIF : IL EST ÉCRIT.** A10 l'a fermé le 2026-09-03 dans
+> **`e2e97b9`** (« verify lance enfin les trois projets vitest ») sur `lot/l3-suite`, et il entre
+> dans `main` avec la **PR #26**. Ce défaut se referme donc **par la fusion de L3, sans travail
+> supplémentaire**. La présente fiche est conservée pour le DIAGNOSTIC, qui reste la meilleure
+> explication écrite de la famille de défaut — pas pour proposer un travail déjà fait.
 
 **Constat, mesuré le 2026-09-03 sur `lot/l5a` (`pnpm verify`, RC=0) et sur `lot/l5b`.**
-`verify` se termine par `test:unit && test:integration && test:e2e`, c'est-à-dire
+`verify` se terminait par `test:unit && test:integration && test:e2e`, c'est-à-dire
 `vitest run --project unit`, `--project integration`, puis Playwright. **Aucune de ces trois
-commandes ne lance le projet `interface`.** `check:test-projects` compte pourtant
-`interface:29 · unit:29 · integration:17 · playwright:4` : **29 fichiers de test sont analysés par
-les garde-fous et exécutés par personne** dans `verify`. Ils ne tournent que sous
+commandes ne lançait le projet `interface`.** `check:test-projects` comptait pourtant
+`interface:29 · unit:29 · integration:17 · playwright:4` : **29 fichiers de test étaient analysés
+par les garde-fous et exécutés par personne** dans `verify`. Ils ne tournaient que sous
 `pnpm test:coverage` (`vitest run --coverage`, qui lance TOUS les projets), donc uniquement dans le
-job CI `coverage`. `test:critique` a le même trou : `--project unit --project integration`.
+job CI `coverage`. `test:critique` avait le même trou : `--project unit --project integration`.
 
 **Ce que ça coûte, et ce n'est pas théorique — c'est arrivé cette semaine.** Un `.test.tsx` rouge
 sort VERT de `pnpm verify`, VERT du hook pre-push, VERT des jobs CI `unit`, `integration` et `e2e`.
@@ -1627,13 +1633,25 @@ non « test cassé ». C'est exactement le rouge de `lot/l5b` du 2026-09-02, et 
 `ETAT.md` a pu écrire « Tests rouges connus : aucun » de bonne foi : les 162/162 d'A22 étaient vrais
 et répondaient à une autre question. Un garde-fou qui mesure vraiment, mais pas ce qu'on croit.
 
-**Valeur pour l'auditeur.** Indirecte et large : tout le design system et tous les écrans terrain
-vivent dans ce projet. Une régression d'interface peut traverser une porte.
+**CONFIRMATION CROISÉE, et c'est ce qui donne son poids au diagnostic.** Deux équipes y sont
+arrivées par deux chemins indépendants et le même jour : A10 par la revue de l'outillage, A20 par le
+rouge de couverture de `lot/l5b` puis par un `pnpm verify` sur `lot/l5a`. Aucune des deux n'a lu la
+trouvaille de l'autre avant de la faire. Un défaut qu'on trouve deux fois n'est pas une hypothèse.
 
-**Correctif proposé (NON appliqué — 11 §8-2 : `package.json` et `ci.yml` relèvent du contrat d'ops).**
-Ajouter `"test:interface": "vitest run --project interface"`, l'insérer dans `verify`, `verify:rapide`
-et `test:critique`, et lui donner son job CI — nommé, pour que son rouge dise « interface », pas
-« couverture ». **Coût ~0,2 j. Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun.**
-Impact périmètre : aucun ; le seul effet est que des tests déjà écrits sont enfin exécutés.
+**Ce que le correctif d'A10 apporte EN PLUS, et qui est le vrai fond.** `test:interface` ajouté et
+enchaîné dans `test`, `verify` ET `verify:rapide` — mais surtout un **sixième contrôle** dans
+`check:test-projects`, qui part du **PROJET** (« ce projet est-il lancé ? ») là où les cinq
+existants partaient du **FICHIER** (« ce fichier est-il capté ? »). C'est exactement l'angle mort
+qui faisait lire `interface:29` dans une sortie VERTE : les 29 fichiers étaient bien captés, et
+exécutés par personne. Prouvé par bascule deux fois (`test:interface` retiré de `verify` → sortie 1,
+« interface — 26 fichier(s) de test concerné(s) »). Une réparation qui se garde elle-même.
 
-**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-C_
+**CE QUI RESTE PROPOSÉ, et rien d'autre : un job CI NOMMÉ.** Le correctif d'A10 fait exécuter les
+tests d'interface ; il ne change pas l'ÉTIQUETTE sous laquelle leur rouge s'affiche en CI. Donner au
+projet `interface` son propre job — plutôt que de le laisser rougir à l'intérieur du job `coverage`
+— pour qu'un `.test.tsx` cassé dise « interface » et non « couverture insuffisante ». Un rouge mal
+étiqueté se diagnostique deux fois. **Coût ~0,05 j (un bloc de job). Impact schéma : aucun. Impact
+API : aucun. Impact crypto : aucun. Impact périmètre : aucun.**
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-C_ · le correctif de fond
+(`e2e97b9`) n'attend PAS cet arbitrage : il arrive avec la PR #26.
