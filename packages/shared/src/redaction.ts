@@ -261,6 +261,23 @@ const SOEURS_CLE_CONFIG = ['key', 'cle'];
 // fréquents. Le prompt LLM contient ces réponses : il ne doit pas plus apparaître.
 // ═══════════════════════════════════════════════════════════════════════════════
 const CHAMPS_CONTENU = [
+  // ── Le tableau POSITIONNEL d'une requête préparée (A51, F-12) ──────────────
+  // `params` est la propriété propre que `DrizzleQueryError` expose en plus de son
+  // message. Il n'a AUCUNE clé : rien, dans son contenu, ne peut être reconnu par la
+  // politique par nom — c'est précisément ce qui la contournait intégralement.
+  //
+  // Masqué EN BLOC, et c'est le seul traitement honnête : un tableau de valeurs de
+  // colonnes porte aujourd'hui des identifiants et des codes, et portera
+  // `person_name` et `participants` dès que L5/L6 écriront ces tables. Le nettoyage
+  // de chaînes (§6) traite le MESSAGE ; ce masquage-ci traite le CHAMP. Il faut les
+  // deux : pino sérialise les deux, et l'un ne voit pas ce que l'autre voit.
+  //
+  // ⚠ EFFET DE BORD ASSUMÉ ET VÉRIFIÉ : `req.params` (les paramètres d'URL de
+  // Fastify) porte le même nom et sera masqué aussi. On y perd des identifiants de
+  // ressource dans le journal d'exploitation — l'`url` complète, elle, reste
+  // journalisée et nettoyée, donc le diagnostic ne disparaît pas. Un champ de trop
+  // masqué coûte une gêne ; un champ de moins coûte une divulgation.
+  'params',
   // answers / answer_revisions
   'value', // exempté sur la forme `(key, value NUMERIC)` — voir SOEURS_CLE_CONFIG
   'previous_value',
@@ -429,6 +446,12 @@ export const CHAMPS_NETTOYES_JOURNAL: readonly string[] = [
   // — donc `Key (…)=(…)` et `Failing row contains (…)`. Mesuré : c'est LÀ que vivait
   // la fuite de `person_name`, et non dans `err.message` comme on pouvait le croire.
   'detail',
+  // `query` : le SQL que `DrizzleQueryError` expose comme propriété propre. NETTOYÉ
+  // et non masqué — il ne porte que des identifiants SQL et des emplacements
+  // numérotés, et c'est le diagnostic entier d'un import qui échoue. Son jumeau
+  // `params`, lui, est MASQUÉ (voir §2, CHAMPS_CONTENU) : c'est un tableau
+  // POSITIONNEL, donc rien dans son contenu ne peut être reconnu.
+  'query',
 ];
 
 /** Tous les noms de champs masqués, forme canonique du fichier 04 (snake_case). */
@@ -603,6 +626,75 @@ const RX_PG_SYNTAXE_TYPE =
 const RX_JSON_INVALIDE = /"[^\n]*"(\.\.\.)? is not valid JSON/g;
 
 /**
+ * DRIZZLE — le message d'une requête échouée recopie **la requête ET TOUS SES
+ * PARAMÈTRES**. Vérifié dans `drizzle-orm`, `errors.js` : le constructeur concatène
+ * la requête et le tableau des paramètres dans le message, puis les expose en plus
+ * comme propriétés propres (`query`, `params`) — que le sérialiseur d'erreur de pino
+ * recopie telles quelles.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * CE CONTENANT-CI CONTOURNE INTÉGRALEMENT LE MASQUAGE PAR NOM DE CHAMP.
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * Relevé par la revue de sécurité A51 (F-12), MESURÉ sur une `DrizzleQueryError`
+ * reconstruite et passée à pino avec la politique de ce fichier : une cellule de
+ * fichier client ressortait **en clair**, deux fois — dans le message et dans
+ * `params`.
+ *
+ * Ce qui rend ce gabarit différent des trois précédents : `params` est un tableau
+ * **POSITIONNEL**. Il n'a pas de clés, donc il n'y a aucun nom de champ à
+ * reconnaître — toute la politique par nom (§1 à §4) est aveugle devant lui, quelle
+ * que soit la colonne concernée. Aujourd'hui il transporte des identifiants et des
+ * codes ; dès qu'un `INSERT` d'import échoue sur une erreur NON TRADUITE
+ * (interblocage `40P01`, rupture de connexion, `22001`, une contrainte future), il
+ * transporte **tout le lot de lignes du fichier client**. Et dès L5/L6, ces lignes
+ * porteront `person_name` et `participants`.
+ *
+ * ── CE QUI SURVIT, ET POURQUOI ──────────────────────────────────────────────
+ * **La REQUÊTE est conservée** : c'est le diagnostic entier — quelle table, quelles
+ * colonnes, quelle forme. Elle ne contient que des identifiants SQL et des
+ * emplacements numérotés, jamais une valeur. **Le segment des paramètres
+ * disparaît**, remplacé par un DÉCOMPTE : « combien de valeurs » reste utile pour
+ * comprendre un lot qui échoue, « lesquelles » ne l'est jamais assez pour valoir une
+ * fuite.
+ *
+ * ── LE BORNAGE : JUSQU'À LA FIN DE LA CHAÎNE, ET C'EST UN CORRECTIF ────────
+ * La première version s'arrêtait sur la forme d'une trame de pile (`\n    at `).
+ * A51 (F-20) a montré que ce terminateur est DANS LE TEXTE QUE L'APPELANT CONTRÔLE :
+ * une cellule de CSV entre guillemets peut porter un saut de ligne (RFC 4180, admis
+ * par `analyserCsvArbre`), donc une valeur peut contenir une FAUSSE trame — et tout
+ * ce qui la suivait repartait en clair. **On ne borne jamais un masquage par un
+ * motif que la donnée peut contenir** : le segment est donc masqué jusqu'à la fin de
+ * la chaîne, sans exception et sans condition.
+ *
+ * Les trames de pile ne sont pas perdues pour autant : elles sont récupérées par une
+ * borne que l'appelant ne contrôle pas — la LONGUEUR du message, propriété distincte
+ * de l'erreur. Voir `nettoyerPileJournal`, et le pourquoi complet qui y est écrit.
+ */
+const RX_DRIZZLE_PARAMS = /\nparams:[\s\S]*$/;
+
+/**
+ * Emplacements de paramètres d'une requête préparée (`$1`, `$42`).
+ * Sert UNIQUEMENT à compter : le décompte est lu sur la REQUÊTE, jamais sur les
+ * valeurs — un comptage par virgules serait faux dès qu'une valeur en contient une
+ * (« Direction, Sud »), et un décompte faux dans un journal est pire qu'aucun.
+ */
+const RX_EMPLACEMENT_PARAM = /\$(\d+)/g;
+
+/**
+ * Combien de paramètres la requête qui précède déclare-t-elle ?
+ * Le MAXIMUM des emplacements, et non leur nombre d'occurrences : un même
+ * emplacement peut être cité deux fois dans une requête.
+ */
+function compterParametres(requete: string): number {
+  let maximum = 0;
+  for (const trouve of requete.matchAll(RX_EMPLACEMENT_PARAM)) {
+    const rang = Number(trouve[1]);
+    if (Number.isFinite(rang) && rang > maximum) maximum = rang;
+  }
+  return maximum;
+}
+
+/**
  * PRÉFILTRE — un seul balayage pour écarter le cas courant.
  *
  * Mesuré, et c'est la raison d'être de cette ligne : garder chaque motif par son propre
@@ -616,7 +708,7 @@ const RX_JSON_INVALIDE = /"[^\n]*"(\.\.\.)? is not valid JSON/g;
  * suffit. Toute nouvelle alternative ajoutée ici doit rester un LITTÉRAL — une
  * alternative à quantificateur ferait perdre l'automate, donc tout le bénéfice.
  */
-const RX_INDICE_MOTIF = /\)=\(|row contains \(|invalid input |valid JSON|eyJ/;
+const RX_INDICE_MOTIF = /\)=\(|row contains \(|invalid input |valid JSON|eyJ|\nparams:/;
 
 /**
  * Retire les identités d'une chaîne QUE L'ON CONSERVE.
@@ -659,6 +751,25 @@ export function nettoyerTexteJournal(texte: string): string {
         `"${CENSEUR_TEXTE_JOURNAL}"$1 is not valid JSON`,
       );
     }
+    // Drizzle : la requête survit, les paramètres deviennent un décompte. Placé
+    // APRÈS les gabarits PostgreSQL et AVANT le jeton nu : une erreur de requête peut
+    // porter les deux — le SQL de Drizzle et le DETAIL de PostgreSQL — et vider le
+    // segment des paramètres d'abord épargne aux motifs suivants de le retravailler.
+    if (resultat.includes('\nparams:')) {
+      resultat = resultat.replace(
+        RX_DRIZZLE_PARAMS,
+        (_coincidence: string, decalage: number, entier: string) => {
+          const nombre = compterParametres(entier.slice(0, decalage));
+          // L'accord suit le décompte : « 1 paramètre masqué », « 4 paramètres
+          // masqués ». Invariant 5 — une ligne de journal est lue par un humain,
+          // et un pluriel fautif dans un fichier d'exploitation se recopie ensuite
+          // dans une interface.
+          if (nombre === 0) return '\nparams: [paramètres masqués]';
+          const marque = nombre > 1 ? 's' : '';
+          return `\nparams: [${String(nombre)} paramètre${marque} masqué${marque}]`;
+        },
+      );
+    }
     // Le jeton nu partage le préfiltre. Le masquer AVANT `RX_PORTEUR` ne change rien
     // aux cas déjà couverts — `Bearer eyJ…` devient `Bearer [masqué]` par l'un ou par
     // l'autre — et c'est vérifié : zéro écart sur les entrées que la version
@@ -673,6 +784,60 @@ export function nettoyerTexteJournal(texte: string): string {
   }
   if (resultat.length >= 10) resultat = resultat.replace(RX_TELEPHONE, CENSEUR_TEXTE_JOURNAL);
   return resultat;
+}
+
+/**
+ * Marge de recherche de l'en-tête d'une pile V8 : « RangeError: » et ses voisins
+ * tiennent très en deçà. Elle borne un balayage dont la longueur serait sinon
+ * choisie par l'appelant.
+ */
+const MARGE_ENTETE_PILE = 256;
+
+/**
+ * NETTOIE UNE PILE D'APPELS EN PRÉSERVANT SES TRAMES — sans jamais chercher un
+ * terminateur DANS la donnée.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * LE DÉFAUT QUE CETTE FONCTION FERME (A51, F-20) : UN TERMINATEUR FALSIFIABLE.
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * La première version de `RX_DRIZZLE_PARAMS` s'arrêtait sur `\n    at ` — la forme
+ * d'une trame de pile. Or ce terminateur EST DANS LE TEXTE QUE L'APPELANT CONTRÔLE :
+ * une cellule de CSV entre guillemets peut légitimement contenir un saut de ligne
+ * (RFC 4180, admis par `analyserCsvArbre`), donc une valeur peut porter
+ * `"Direction\n    at feint (/app/x.js:1:1)\nla suite"` — et tout ce qui suit la
+ * fausse trame repartait EN CLAIR, dans `message` comme dans `stack`. Un garde-fou
+ * dont la borne est choisie par l'attaquant n'est pas un garde-fou.
+ *
+ * ── LA RÈGLE, ET ELLE VAUT AU-DELÀ DE CE CAS ────────────────────────────────
+ * **On ne borne jamais un masquage par un motif que la donnée peut contenir.** Le
+ * motif masque donc désormais jusqu'à la FIN DE LA CHAÎNE. Les trames, elles, ne
+ * sont pas perdues pour autant : elles sont récupérées par une borne que l'appelant
+ * ne contrôle PAS — la LONGUEUR du message, qui est une propriété distincte de
+ * l'erreur. V8 construit `stack` comme « Nom: message » suivi des trames ; couper à
+ * la fin du message sépare donc exactement ce que l'appelant a écrit de ce que le
+ * moteur a produit.
+ *
+ * Les deux moitiés sont ensuite nettoyées SÉPARÉMENT : si une fausse trame a été
+ * glissée dans le message, elle est dans la première moitié, donc masquée ; les
+ * vraies trames sont dans la seconde, donc préservées.
+ *
+ * ⚠ REPLI SÛR : si le message est introuvable dans la pile (forme inattendue, pile
+ * réécrite, moteur non-V8), on masque la pile ENTIÈRE par le nettoyage ordinaire. On
+ * ne préserve rien qu'on ne sait pas délimiter.
+ */
+export function nettoyerPileJournal(message: string, pile: string): string {
+  if (message.length === 0) return nettoyerTexteJournal(pile);
+
+  // Recherche BORNÉE : le message d'une erreur V8 commence dans les tout premiers
+  // caractères de la pile (« RangeError: » et consorts). Chercher dans la pile
+  // entière ferait payer un balayage proportionnel au produit des deux longueurs sur
+  // une charge utile que l'appelant choisit.
+  const zone = pile.slice(0, message.length + MARGE_ENTETE_PILE);
+  const debut = zone.indexOf(message);
+  if (debut < 0) return nettoyerTexteJournal(pile);
+
+  const coupure = debut + message.length;
+  return nettoyerTexteJournal(pile.slice(0, coupure)) + nettoyerTexteJournal(pile.slice(coupure));
 }
 
 /** Vrai si la clé désigne une valeur à masquer intégralement, dans ce contexte. */
@@ -903,12 +1068,22 @@ function parcourir(
       return {
         type: valeur.name,
         message: nettoyerTexteJournal(valeur.message),
-        stack: typeof valeur.stack === 'string' ? nettoyerTexteJournal(valeur.stack) : undefined,
+        stack:
+          typeof valeur.stack === 'string'
+            ? nettoyerPileJournal(valeur.message, valeur.stack)
+            : undefined,
       };
     }
 
     const ligneDePersonne = estLigneDePersonne(valeur);
     const valeurDeConfig = estValeurDeConfig(valeur);
+    // ── UNE ERREUR DÉJÀ SÉRIALISÉE PORTE SA PILE COMME UNE CLÉ ORDINAIRE ───────
+    // pino appelle son sérialiseur d'erreur AVANT la redaction : ce qui arrive ici
+    // n'est donc pas une `Error` mais un objet `{ type, message, stack, … }`, et la
+    // branche `instanceof Error` ci-dessus ne le voit jamais. Sans ce cas-ci, `stack`
+    // serait nettoyée comme une chaîne quelconque — donc masquée jusqu'à sa fin,
+    // trames comprises. On récupère le message VOISIN pour délimiter (A51, F-20).
+    const messageVoisin = typeof valeur.message === 'string' ? valeur.message : null;
     let modifie = false;
     const copie: Record<string, unknown> = {};
     for (const [cle, sousValeur] of Object.entries(valeur)) {
@@ -916,6 +1091,12 @@ function parcourir(
       if (estMasque(cleNormalisee, parentNormalise, ligneDePersonne, valeurDeConfig)) {
         copie[cle] = CENSEUR_JOURNAL;
         modifie = true;
+        continue;
+      }
+      if (cleNormalisee === 'stack' && messageVoisin !== null && typeof sousValeur === 'string') {
+        const pile = nettoyerPileJournal(messageVoisin, sousValeur);
+        if (pile !== sousValeur) modifie = true;
+        copie[cle] = pile;
         continue;
       }
       const assaini = parcourir(sousValeur, cleNormalisee, profondeur + 1, vus);
