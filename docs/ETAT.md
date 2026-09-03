@@ -2437,3 +2437,29 @@ le verdict était « sous réserve », la signature attend un ACCEPTÉ franc.
 Tests rouges connus : aucun.
 Dû, non fait ici : fiche AMELIORATIONS étage 2 pour outiller le contrôle « le module réalise-t-il
 l’exigence qu’il cite ? » — troisième occurrence de cette classe de défaut dans le lot.
+
+## 2026-09-03 09h55 — [lot L5 / incrément L5b] — étape pipeline 5/7 → FIN D'INCRÉMENT SIGNÉE
+Dernier commit vert : (celui-ci) · Branche : lot/l5b · Poussé : oui
+**SIGNATURE FIN D'INCRÉMENT L5b — A20, 2026-09-03, sur commit f85cfb8** (11 §6, chaîne 09 §1).
+Rejeu A29 : **ACCEPTÉ**, franc, aucune réserve résiduelle. Les 2 bloquants et 9 non bloquantes du
+premier tour, les 5 réserves du rejeu, puis N1, sont fermés. Suite **1710/1710** verte (78 fichiers),
+unitaire seul 872/872. Machine à états — fonctions 98,41 % · lignes 98,76 % · branches 94,03 %.
+Traçabilité 535 citations, aucune incohérence. Seuil 90 et périmètre INCHANGÉS.
+Suite de la chaîne, non faite ici : conformité + traçabilité E1-E47 dans les deux sens → **A02** ;
+passage en porte → **A01** ; porte → **Williams**. A20 ne signe que la fin d'incrément.
+N1 fermé : le commentaire du cas ① affirmait distinguer une colonne d'un panneau — faux, il passe à
+l'identique à 500 px. Il garde la STRUCTURE ; ② et ③ gardent la DISPOSITION.
+Recette manuelle P-C écrite dans `docs/conception/LOT_L5.md` §4, à l'ancre d'A27 : trois zones côte
+à côte sur iPad paysage et PC ≥ 1280, repli en panneaux sous le seuil. jsdom n'évalue pas les media
+queries — cette observation ne se remplace pas (03 §33.7).
+Deux fiches AMELIORATIONS étage 2, PROPOSÉES et non implémentées : ① contrôle de traçabilité (une
+glose absente est refusée, une glose FAUSSE est cochée — trois occurrences dans ce seul lot, dont
+deux passées sous le garde) ; ② `vitest.config.ts` porte toujours `thresholds: {}`, la DoD tient par
+`check-coverage.mjs` en CI et pas par Vitest. Signalé, PAS corrigé : contrat d'ops.
+Correction de mon bloc de 09h20 : l'import `?raw` rendant du vide n'était PAS un « test qui ment » —
+`expect('').toContain(...)` ÉCHOUE, ce garde serait parti ROUGE. Lire le CSS sur disque reste le bon
+geste, mais le motif ne relève pas de cette classe de défaut.
+`EcranEntretien.tsx` reste à 11/26 fonctions et ne doit PAS entrer dans un glob critique en l'état
+(A29) : l'orchestration d'écriture vit DANS le composant — à extraire un jour, pas ici.
+Prochaine action : A02 (contrôle d'acceptation). Aucune PR : L3 n'est pas dans `main`.
+Tests rouges connus : aucun.
