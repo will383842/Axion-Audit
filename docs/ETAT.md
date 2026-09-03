@@ -2567,3 +2567,30 @@ chiffrées (D-1 L6, D-2 L5c, D-3 L7, D-4 la marge, D-5 le contenu). Aucune n'est
 Le fait que ce dossier existe douze jours à l'avance est son objet : 09 §5.4 veut la porte
 **factuelle**, et une mesure prise le jour même se prend sur des souvenirs. Les chiffres du §2 sont
 datés et **doivent être remesurés le 15/09** — le dossier le dit deux fois, exprès.
+
+## 2026-09-03 15h10 — [lot L1 / incrément E18 `external_ref`] — étape pipeline 3/7
+
+Dernier commit vert : 40b6654 (docs(gouvernance) : Williams tranche E18 (option a)) · Branche :
+lot/l1-e18-external-ref · Poussé : oui
+Tâche en cours : aucune — l'arbitrage E18 option 1 est appliqué de bout en bout.
+Prochaine action : **A16** écrit le test d'intégration de l'unicité partielle (un second
+`external_ref` identique REFUSÉ, un `NULL` répété ACCEPTÉ) — 09 §5.6 : l'auteur du code ne le teste
+pas. Puis revue croisée A17.
+Tests rouges connus : aucun.
+
+Livré : amendement du 04 §7.1 — une ligne d'index datée « (amendement du 2026-09-03) », dans la
+forme des amendements du 2026-08-31 · `docs/.pack-integrity.json` resceau par
+`check-pack-integrity.mjs --sceller` (seul le sceau du 04 bouge) ·
+`apps/api/drizzle/0015_unicite_companies_external_ref.sql` · `apps/api/schema-manifest.json` (+1
+entrée `indexCritiques`). `src/db/schema.ts` **inchangé** : son en-tête interdit d'y redéclarer les
+index — `uq_companies_siren` n'y figure pas davantage. Aucun test écrit ici, délibérément.
+
+Mesuré sur PostgreSQL 16.15 jetable (conteneur, 127.0.0.1:55444) : montée 15/15, `--down-to 0`
+15/15, remontée 15/15 · `schema:diff` ZÉRO ÉCART (44 tables, 487 colonnes, 202 contraintes, **38**
+index du §7.1) · `check:schema-inventaire` vert · `check:pack` cohérent · `format:check` vert. Garde
+de doublons PROUVÉ : deux fiches au même `external_ref` font échouer la montée en 23505 avec le
+message métier, exit 1, `0015` absent du journal ; deux `external_ref NULL` cohabitent sous l'index.
+Contrôle porteur : sans la ligne du manifeste, `schema:diff` sort en 1 (« index UNIQUE non déclaré »).
+
+Réserve : mesures locales sur **Node v24.19.0**, hors du `>=22.11.0 <23` du 11 §1 — seule la CI
+mesure sur le Node du contrat.
