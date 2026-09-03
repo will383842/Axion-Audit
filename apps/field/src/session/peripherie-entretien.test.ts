@@ -24,7 +24,15 @@
 // barème dont personne n'a jamais vu le refus. »
 //
 // Traçabilité : E12 (entretiens, à-revoir), E13 (écran 3 zones, notes volantes),
-// E6 (hors ligne total), E33 (RGPD — le contenu reste chiffré), E43 (DoD).
+// E6 (hors ligne total), E33 (RGPD — le contenu reste chiffré).
+//
+// CINQUIÈME GLOSE CORRIGÉE, et celle-ci est de moi (2026-09-03, sur R1 d’A02 qui
+// invitait à chercher). Ce fichier citait « E43 (DoD) ». Mon propre test le
+// refuse : E43 est l’exécutabilité autopilote — versions épinglées, conventions
+// d’API, contrat d’ops, format d’export de secours, seeds codables. Si elle
+// disparaissait du pack, ce fichier ne perdrait rien. La citation ne se REMPLACE
+// pas par une autre : elle se RETIRE. Une glose se supprime aussi bien qu’elle
+// s’ajoute, et c’est la moitié de la règle qu’on oublie en la relisant.
 // =============================================================================
 import 'fake-indexeddb/auto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';

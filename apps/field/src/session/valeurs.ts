@@ -42,8 +42,14 @@
 // au moment de la saisie : valider au push, c'est découvrir hors ligne, des
 // heures plus tard, qu'une cotation n'existait pas.
 //
-// Traçabilité : E13 (écran 3 zones), E30 (informations non communiquées et
-// fourchettes, §27.4).
+// Traçabilité : E13 (écran 3 zones, enregistrement continu), E37 (scoring
+// intégralement spécifié — barème par type de réponse, fourchettes §27.4).
+// CORRIGÉ le 2026-09-03 (réserve R1 du contrôle A02) : ce fichier citait E30,
+// que le 08 définit comme « 3 niveaux d’audit (diagnostic / opérationnel /
+// stratégique groupe) ». Ce module type les DOUZE formes de valeur de réponse ;
+// si E30 disparaissait du pack, il ne perdrait rien. Ses deux voisins immédiats
+// du même incrément — `SaisieReponse.tsx` et `ecriture-reponses.ts` — citaient
+// déjà E37 pour exactement ce sujet : la preuve était dans le lot.
 // =============================================================================
 import { z } from 'zod';
 import {
