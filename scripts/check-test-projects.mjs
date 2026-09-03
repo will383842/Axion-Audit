@@ -386,6 +386,79 @@ if (surDisque.length > 0) {
   process.exit(1);
 }
 
+// --- Contrôle 6 : un projet vitest DÉCLARÉ mais lancé par AUCUN script -------
+//
+// LE TROU QUE CE CONTRÔLE FERME, et il était béant. Les contrôles 1 à 5 partent
+// tous du FICHIER : « ce test est-il capté par un projet ? ». Aucun ne partait du
+// PROJET : « ce projet est-il seulement lancé ? ». Les deux questions paraissent
+// jumelles ; elles ne le sont pas, et l'écart entre elles a coûté 26 fichiers.
+//
+// MESURÉ le 2026-09-02 sur ce dépôt, AVANT correctif :
+//     vitest.config.ts déclare TROIS projets .... interface, unit, integration
+//     `pnpm verify` en lançait ................... DEUX (unit, integration)
+//     fichiers du projet `interface` ............. 26, exécutés par AUCUN script
+//                                                  de `pnpm test`, ni par
+//                                                  `verify`, ni par le pre-push
+//     ce qu'ils donnent quand on les lance ....... 447 tests, 447 VERTS
+//
+// Les 447 verts sont la partie la plus instructive : le trou n'avait rien cassé,
+// il avait seulement rendu 26 fichiers INVÉRIFIABLES. Un garde-fou ne protège pas
+// contre le rouge, il protège contre l'ignorance — et pendant tout ce temps
+// personne ne pouvait dire, preuve en main, si ces 447 cas passaient encore.
+//
+// Le contrôle 1 était VERT tout du long, et il avait raison de l'être : les 26
+// fichiers SONT captés par un projet. Simplement, ce projet n'était démarré nulle
+// part. C'est la forme la plus discrète du défaut que ce script traque depuis sa
+// première ligne — « un fichier hors des `include` est vert en permanence sans
+// jamais s'exécuter » — déplacée d'un cran, du fichier vers le projet. Le garde
+// décrivait exactement sa propre panne dans son en-tête sans la voir.
+//
+// CE QU'IL EXIGE : chaque projet déclaré dans `vitest.config.ts` doit être lancé
+// par `pnpm verify`, le garde obligatoire avant toute PR. On suit le GRAPHE des
+// scripts (`verify` appelle `pnpm test:unit`, qui appelle `vitest run --project
+// unit`) plutôt que de chercher un nom dans une chaîne : c'est l'indirection qui
+// avait rendu le trou invisible à la lecture.
+//
+// `verify:rapide` n'est délibérément PAS soumis à la même exigence : le hook
+// pre-push doit rester léger, et l'intégration y est légitimement absente. Ce qui
+// n'est pas négociable, c'est `verify`.
+const scripts = JSON.parse(readFileSync(resolve(RACINE, 'package.json'), 'utf8')).scripts ?? {};
+
+/** Texte de toutes les commandes atteignables depuis un script, indirections suivies. */
+function commandesAtteignables(nom, vus = new Set()) {
+  if (vus.has(nom) || !(nom in scripts)) return '';
+  vus.add(nom);
+  const brut = scripts[nom];
+  const references = [...brut.matchAll(/pnpm(?:\s+run)?\s+([\w:-]+)/g)].map((m) => m[1] ?? '');
+  return [brut, ...references.map((r) => commandesAtteignables(r, vus))].join('\n');
+}
+
+const commandesVerify = commandesAtteignables('verify');
+const projetsVitest = projets.filter((p) => p.nom !== 'playwright');
+const jamaisLances = projetsVitest.filter(
+  (p) => !new RegExp('--project[= ]' + p.nom + '(?![A-Za-z0-9_-])').test(commandesVerify),
+);
+
+if (jamaisLances.length > 0) {
+  console.error(
+    `${ROUGE}✗ PROJET(S) VITEST DÉCLARÉ(S) MAIS LANCÉ(S) PAR AUCUN SCRIPT DE « verify »${RAZ}\n`,
+  );
+  for (const projet of jamaisLances) {
+    const captes = tests.filter((f) => couvertPar(f)?.nom === projet.nom).length;
+    console.error(`  ${projet.nom} — ${String(captes)} fichier(s) de test concerné(s)`);
+  }
+  console.error(
+    '\n  Ces projets existent dans `vitest.config.ts`, leurs fichiers sont bien captés\n' +
+      '  (le contrôle 1 est vert), mais RIEN ne les démarre : `pnpm verify` — le garde\n' +
+      "  obligatoire avant toute PR — n'en lance pas un seul. Les tests concernés sont\n" +
+      '  donc verts en permanence sans jamais tourner, et le vert de `verify` recouvre\n' +
+      "  leur absence. Un garde muet est pire qu'un garde absent : il rassure.\n" +
+      '  → Ajoute un script `test:<projet>` = `vitest run --project <projet>` et\n' +
+      '    enchaîne-le dans `verify` à côté de `pnpm test:unit`.\n',
+  );
+  process.exit(1);
+}
+
 const detail = projets
   .map((p) => `${p.nom}:${String(tests.filter((f) => couvertPar(f)?.nom === p.nom).length)}`)
   .join(' · ');

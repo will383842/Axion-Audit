@@ -20,6 +20,12 @@ import { routesAuth } from './domaines/auth/routes.js';
 import { routesSante } from './routes/sante.js';
 import { routesScoping } from './routes/scoping.js';
 import { routesUsers } from './routes/users.js';
+import { routesCompanies } from './routes/companies.js';
+import { routesMissions } from './routes/missions.js';
+import { routesOrgUnits } from './routes/org-units.js';
+import { routesQuestionnaire } from './routes/questionnaire.js';
+import { routesAssignments } from './routes/assignments.js';
+import { routesInterviews } from './routes/interviews.js';
 
 // =============================================================================
 // PÉRIMÈTRE DE CONFIANCE DES EN-TÊTES DE PROXY — correctif de sécurité.
@@ -201,6 +207,66 @@ export async function construireApp(): Promise<FastifyInstance> {
   // comptes » pour le lead). `GET /v1/users` est le PREMIER appelant réel de la
   // pagination keyset de `http/pagination.ts` — curseur `(created_at, id)`.
   await app.register(routesUsers, { prefix: '/v1' });
+  // Référentiel client (07, table des lots : « API missions/companies — dédup SIREN
+  // R3, NAF→secteur R4 ») — lot L3/L3a. Les quatre routes sont `admin` seul ; le
+  // crochet `onRoute` refuse le démarrage si l'une d'elles perdait `config.acces`.
+  await app.register(routesCompanies, { prefix: '/v1' });
+  // Missions (07, table des lots : « API missions/companies » et « machine à états
+  // mission §32.2 ») — lot L3/L3b. CINQ routes déclarées, SEPT enregistrées :
+  // Fastify ajoute d'office les `HEAD` compagnes des deux `GET`, qui héritent de
+  // `config.acces` (le même écart « écrit vs enregistré » que pour les comptes,
+  // relevé plus haut).
+  //
+  // ⚠ ORDRE D'ENREGISTREMENT SANS IMPORTANCE ICI, et il vaut mieux l'écrire :
+  // `/v1/missions/:id/status` et `/v1/missions/:id` ne se recouvrent pas — le
+  // routeur de Fastify est un arbre de segments, pas une liste de motifs essayés
+  // dans l'ordre. Aucune des deux ne peut donc masquer l'autre.
+  //
+  // Toutes sont `admin` seul (03 §34.1, « la console est ADMIN SEUL » en V1) —
+  // moitié « route » de la décision en deux couches du 2026-08-31 sur les rôles de
+  // la machine à états ; l'autre moitié vit dans `TRANSITIONS_MISSION`.
+  await app.register(routesMissions, { prefix: '/v1' });
+  // Arbre organisationnel (07, table des lots : « arbre `org_units` — import CSV,
+  // kind jusqu'à `poste`, statuts proposée/fusionnée ») — lot L3/L3c. SIX routes
+  // déclarées, SEPT enregistrées : Fastify ajoute d'office le `HEAD` compagnon du
+  // seul `GET` (même écart « écrit vs enregistré » que ci-dessus).
+  //
+  // ⚠ ORDRE D'ENREGISTREMENT SANS IMPORTANCE, et il vaut mieux l'écrire :
+  // `/v1/missions/:id/org-units` et `/v1/missions/:id/org-units/import` cohabitent
+  // avec `/v1/missions/:id/status` sans se recouvrir — le routeur de Fastify est un
+  // arbre de segments, pas une liste de motifs essayés dans l'ordre. Ce greffon peut
+  // donc être enregistré avant ou après `routesMissions` sans rien changer.
+  //
+  // Toutes sont `admin` seul, **lecture comprise** (03 §34.1 « la console est ADMIN
+  // SEUL » en V1 ; `DECISIONS.md` du 2026-09-01 pour l'articulation avec le pouvoir
+  // de qualification que §34.3 donne au lead, qui s'exercera en Phase 2). Le
+  // consultant membre lit l'arbre de sa mission par le pull de sync (05 §9.5).
+  await app.register(routesOrgUnits, { prefix: '/v1' });
+  // Questionnaire et plan d'entretiens (07, table des lots : « moteur questionnaire
+  // M2 », « plan d'entretiens §32.4 », « prévisualisation §33.4 ») — lot L3/L3d.
+  // TROIS routes déclarées, CINQ enregistrées : Fastify ajoute d'office les `HEAD`
+  // compagnons des deux `GET` (même écart « écrit vs enregistré » que ci-dessus).
+  //
+  // ⚠ DEUX POLITIQUES DIFFÉRENTES DANS LE MÊME GREFFON, et c'est voulu :
+  // `questionnaire-preview` et `generate-questionnaire` sont `admin` seul (§34.1 —
+  // figer un questionnaire est un acte de console), tandis que `interview-plan` est
+  // `type:'mission'` : le plan est l'outil de l'auditeur SUR LE TERRAIN, et le
+  // réserver aux administrateurs le rendrait invisible à ceux qui l'exécutent
+  // (§18.3). Le cadrage par `mission_users` vit alors dans le DÉPÔT — un non-membre
+  // reçoit 404, jamais 403 (`DECISIONS.md` 2026-09-02).
+  await app.register(routesQuestionnaire, { prefix: '/v1' });
+  // Affectations de travail (05 §24.2, `work_assignments` §18.2) — lot L3/L3d.
+  // DEUX routes déclarées, TROIS enregistrées (le `HEAD` compagnon du `GET`).
+  // `admin` seul en V1 : §34.3 donne ce pouvoir au lead, §34.1 borne la console à
+  // l'admin, et l'arbitrage du 2026-09-02 tranche pour la V1 — ouvrir un droit sans
+  // l'écran qui le porte ouvre une surface pour une fonctionnalité qui n'existe pas.
+  await app.register(routesAssignments, { prefix: '/v1' });
+  // Réaffectation d'une session (05 §24.2, 03 §34.4) — lot L3/L3d. UNE route.
+  // `roles: ['admin','consultant']` dit QUI ENTRE ; « lead de CETTE mission » se
+  // vérifie dans le SERVICE, parce que « lead » n'est pas un rôle global mais une
+  // ligne de `mission_users` — et que `PolitiqueAcces` est une union exclusive
+  // qu'A01 a refusé d'élargir (`DECISIONS.md` 2026-08-29).
+  await app.register(routesInterviews, { prefix: '/v1' });
 
   return app;
 }

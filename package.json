@@ -18,8 +18,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "pnpm build:packages && pnpm --recursive --stream typecheck",
-    "test": "pnpm test:unit && pnpm test:integration",
+    "test": "pnpm test:unit && pnpm test:interface && pnpm test:integration",
     "test:unit": "vitest run --project unit",
+    "test:interface": "vitest run --project interface",
     "test:integration": "vitest run --project integration",
     "test:e2e": "pnpm build && playwright test",
     "test:filrouge": "vitest run --project integration -t @filrouge",
@@ -54,8 +55,8 @@
     "prepare": "node scripts/prepare-husky.mjs",
     "check:test-projects": "node scripts/check-test-projects.mjs",
     "check:prose": "node scripts/check-prose.mjs",
-    "verify:rapide": "pnpm check:pack && pnpm check:decisions && pnpm check:prose && pnpm check:invariants && pnpm check:jonction && pnpm check:graphe-modules && pnpm check:porte-journal && pnpm check:tracabilite && pnpm check:no-skipped-tests && pnpm check:test-projects && pnpm check:isolation-reseau && pnpm check:compose-coolify && pnpm check:executabilite && pnpm lint && pnpm format:check && pnpm typecheck && pnpm test:unit",
-    "verify": "pnpm build && pnpm lint && pnpm format:check && pnpm typecheck && pnpm check:pack && pnpm check:decisions && pnpm check:prose && pnpm check:invariants && pnpm check:jonction && pnpm check:graphe-modules && pnpm check:porte-journal && pnpm check:tracabilite && pnpm check:no-skipped-tests && pnpm check:test-projects && pnpm check:isolation-reseau && pnpm check:compose-coolify && pnpm check:executabilite && pnpm test:unit && pnpm test:integration && pnpm test:e2e",
+    "verify:rapide": "pnpm check:pack && pnpm check:decisions && pnpm check:prose && pnpm check:invariants && pnpm check:jonction && pnpm check:graphe-modules && pnpm check:porte-journal && pnpm check:tracabilite && pnpm check:no-skipped-tests && pnpm check:test-projects && pnpm check:isolation-reseau && pnpm check:compose-coolify && pnpm check:executabilite && pnpm lint && pnpm format:check && pnpm typecheck && pnpm test:unit && pnpm test:interface",
+    "verify": "pnpm build && pnpm lint && pnpm format:check && pnpm typecheck && pnpm check:pack && pnpm check:decisions && pnpm check:prose && pnpm check:invariants && pnpm check:jonction && pnpm check:graphe-modules && pnpm check:porte-journal && pnpm check:tracabilite && pnpm check:no-skipped-tests && pnpm check:test-projects && pnpm check:isolation-reseau && pnpm check:compose-coolify && pnpm check:executabilite && pnpm test:unit && pnpm test:interface && pnpm test:integration && pnpm test:e2e",
     "build:packages": "pnpm --recursive --filter \"./packages/**\" build"
   },
   "devDependencies": {

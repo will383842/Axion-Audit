@@ -171,6 +171,45 @@
         "sur 0e3aeae). Signale a Williams, applique immediatement."
       ],
       "$motif": "Ajoute le 2026-08-31 (DECISIONS.md, « L agent croise reprend l auteur du code sur six points », constat 4)."
+    },
+    {
+      "lot": "L3 (L3b)",
+      "module": "Missions — application de la machine a etats §32.2 (transitions, conditions, motifs codes)",
+      "glob": "apps/api/src/domaines/missions/**",
+      "reference": "docs/conception/LOT_L3.md §4 (« couverture ≥ 90 % mesurée sur services/questionnaire, services/org-units et la machine à états ») · 09 §3 · CLAUDE.md §4 (TDD : machine à états) et §5",
+      "_note_glob": [
+        "AJOUTE LE 2026-09-02 SUR MESURE, PAS AU JUGE. La revue croisee A17 (R-L3-4) a",
+        "releve que la note L3 §4 exigeait ce seuil et que rien ne le portait ; A01 a",
+        "refuse de seuiller a l aveugle. La verification isolee (16102dd) a mesure les",
+        "quatre metriques par module ; les entrees sont posees sur ces chiffres.",
+        "Deux modules sont SOUS le seuil au moment de l ajout (org-units : lignes 87,3,",
+        "branches 76,1 · missions : lignes 84,2, fonctions 84,6, branches 75,4) et",
+        "c est voulu : la regle de ce fichier dit qu un module sous le seuil se corrige",
+        "par des tests, jamais par un retrecissement de perimetre. La CI de la branche",
+        "est rouge tant que les tests manquent — c est le signal, pas un accident."
+      ],
+      "$mesure_16102dd": "84,2 / 84,2 / 84,6 / 75,4 — SOUS LE SEUIL a l ajout"
+    },
+    {
+      "lot": "L3 (L3c)",
+      "module": "Arbre org_units — import CSV §35.2 atomique, qualification §25.3, verrou d import",
+      "glob": "apps/api/src/domaines/org-units/**",
+      "reference": "docs/conception/LOT_L3.md §4 (« couverture ≥ 90 % mesurée sur services/questionnaire, services/org-units et la machine à états ») · 09 §3 · CLAUDE.md §4 (TDD : machine à états) et §5",
+      "$mesure_16102dd": "87,3 / 87,3 / 91,9 / 76,1 — SOUS LE SEUIL a l ajout"
+    },
+    {
+      "lot": "L3 (L3d)",
+      "module": "Questionnaire — assembleur M2, previsualisation §33.4, figeage (CAPTURE des 8 colonnes)",
+      "glob": "apps/api/src/domaines/questionnaire/**",
+      "reference": "docs/conception/LOT_L3.md §4 (« couverture ≥ 90 % mesurée sur services/questionnaire, services/org-units et la machine à états ») · 09 §3 · CLAUDE.md §4 (TDD : machine à états) et §5",
+      "$mesure_16102dd": "96,8 / 96,8 / 100 / 86,8 — branches sous le seuil a l ajout"
+    },
+    {
+      "lot": "L3 (L3d)",
+      "module": "Plan d entretiens §32.4 — generateur pur et lecture",
+      "glob": "apps/api/src/domaines/plan-entretiens/**",
+      "reference": "docs/conception/LOT_L3.md §4 (« couverture ≥ 90 % mesurée sur services/questionnaire, services/org-units et la machine à états ») · 09 §3 · CLAUDE.md §4 (TDD : machine à états) et §5",
+      "$mesure_16102dd": "99,4 / 99,4 / 100 / 94,7"
     }
   ],
   "_cheminsAttendus_mode_emploi": [
