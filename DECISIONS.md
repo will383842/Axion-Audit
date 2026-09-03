@@ -5571,3 +5571,80 @@ premier rendu) ne sont pas des doutes : ce sont des défauts, corrigés par A22.
 
 Décideur : A01
 Impact spec : aucun.
+
+## 2026-09-02 — [L5b] Le script d'accord de participation a un libellé par défaut, et une seule définition
+
+03 §19.1 et le 06 exigent qu'un entretien ne démarre pas sans accord de participation. Le refus sans
+accord EST testé (`ecriture-session.ts`, `motifRefusEcriture`) ; la PHRASE que l'auditeur lit à la
+personne, elle, n'existait nulle part — ni dans le pack, ni dans le code. Un écran qui exige un
+accord sans dire ce à quoi la personne consent transforme une garantie RGPD en case à cocher.
+
+Options :
+
+1. **Poser un libellé par défaut V1**, en CONSTANTE UNIQUE (`PHRASE_SCRIPT_ACCORD`), jamais recopiée,
+   avec réserve explicite de relecture juridique avant la porte P-E.
+2. Laisser l'auditeur improviser — le refus reste testé, le propos ne l'est pas.
+3. Attendre un texte de juriste avant de livrer L5b.
+
+Arbitrage : **option 1.** Libellé retenu : « Cet entretien s'inscrit dans un audit d'organisation
+commandé par votre direction. Je note vos réponses dans un outil sécurisé ; elles servent uniquement
+à établir le diagnostic et le rapport d'audit. Le rapport ne vous attribue aucun propos
+nominativement. Vous pouvez refuser de répondre à une question, ou demander l'arrêt de l'entretien,
+à tout moment et sans avoir à vous justifier. Êtes-vous d'accord pour que nous commencions ? »
+Aucun nom de client, aucun libellé variable : **invariant 2** tenu par construction — le commanditaire
+est désigné par « votre direction », qui est vrai de toute mission. Une constante unique parce qu'un
+texte juridique recopié à deux endroits finit par exister en deux versions, dont une seule est relue.
+**Précédence : invariant 2** (aucune référence client) et **invariant 5** (interface en français) ;
+la règle §32-36 > §24-31 est sans objet, le pack est muet sur ce libellé.
+Réserve tracée en fiche `AMELIORATIONS.md` étage 1 : « relecture juridique du script d'accord avant
+la porte P-E » — c'est un libellé par défaut, pas un texte validé par un juriste.
+
+Décideur : Williams (délégation du 2026-09-02 à la session pilote)
+Impact spec : aucun.
+
+## 2026-09-03 — [L6a] Le serveur BORNE `client_updated_at` à 5 minutes symétriques, il ne le croit pas
+
+05 §9.4 règle les conflits au dernier écrivain (LWW) sur `client_updated_at`, une valeur produite par
+l'horloge de l'appareil. Le scénario §9.8 « horloge locale +3 h » n'est donc pas un cas de bord : une
+tablette en avance fait gagner sa saisie contre TOUTES les suivantes, définitivement, et rien ne le
+signale. Le pack décrit le décalage d'horloge (§9.2) mais ne dit pas ce que le serveur en fait.
+
+Options :
+
+1. **Borner** : au-delà de 5 minutes dans le futur (tolérance symétrique, donc ±5 min), le serveur
+   écrête `client_updated_at` à son propre `now()` et le journalise. Ni rejet, ni confiance aveugle.
+2. Rejeter l'opération — l'auditeur perd sa saisie pour un défaut d'horloge qu'il ne contrôle pas.
+3. Faire confiance à l'appareil — c'est l'état actuel, et c'est le défaut décrit ci-dessus.
+
+Arbitrage : **option 1.** Écrêter préserve la donnée (elle est acceptée) tout en retirant l'avantage
+indu au LWW ; journaliser rend le décalage VISIBLE plutôt que silencieux. La symétrie évite l'écueil
+inverse : une tablette en retard ne doit pas non plus perdre systématiquement.
+**Précédence : invariant 7** — « rien n'est jamais silencieusement écrasé » : une horloge fausse
+écrase silencieusement, c'est précisément ce que l'invariant interdit. Précision d'exécution du
+§9.4, pas un amendement.
+
+Décideur : Williams (délégation du 2026-09-02 à la session pilote)
+Impact spec : aucun.
+
+## 2026-09-03 — [L6b] Le curseur de pull est COMPOSITE `(updated_at, id)`, pas un timestamptz seul
+
+Le 11 §4 décrit le curseur de pull comme un `timestamptz` (`nextSince`). Un curseur mono-colonne a
+deux défauts mesurables, pas théoriques : il SAUTE les lignes qui partagent le même `updated_at` de
+part et d'autre d'une frontière de page, et il BOUCLE sans avancer si plus de `limit` lignes
+partagent la même seconde. Les deux sont silencieux : le terrain croit avoir tout reçu.
+
+Options :
+
+1. **Curseur composite `(updated_at, id)`**, ordre `ORDER BY updated_at, id` et prédicat
+   `(updated_at, id) > (:since, :sinceId)` — le keyset que le 11 §3 impose déjà partout ailleurs.
+2. Garder le timestamptz seul et compenser par un recouvrement d'une seconde — masque le saut, ne
+   supprime ni le doublon ni la boucle.
+
+Arbitrage : **option 1.** Le 11 §3 dit « Pagination : keyset partout (`?limit=50&after=<curseur>`),
+jamais d'offset » : un curseur non unique n'est pas un keyset, c'est un offset déguisé en date.
+**Précédence : 11 §3 (conventions d'API) sur la formulation illustrative du 11 §4** — précision
+d'exécution du §9.5, pas un amendement du pack. `nextSince` reste le nom du champ ; il porte
+désormais les deux composantes.
+
+Décideur : Williams (délégation du 2026-09-02 à la session pilote)
+Impact spec : aucun.

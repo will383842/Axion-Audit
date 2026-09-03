@@ -1550,3 +1550,30 @@ Impact crypto : aucun** (le jeton est le même, seul le transport change).
 clause du contrat 11 §3 non encore tenue. À planifier par A30 au brief de L7.
 
 **Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-C_
+
+---
+
+## 2026-09-02 — [L5b] Étage 1 — le script d'accord de participation est un libellé PAR DÉFAUT, pas un texte de juriste
+
+**Constat.** `DECISIONS.md` du 2026-09-02 (« Le script d'accord de participation a un libellé par
+défaut, et une seule définition ») pose `PHRASE_SCRIPT_ACCORD` comme constante unique du code. Ce
+texte est lu à voix haute à une personne physique avant que ses propos ne soient enregistrés dans un
+outil : c'est le support d'une information RGPD, et **il n'a été relu par aucun juriste**. Le refus de
+démarrer sans accord est testé ; le CONTENU de l'information ne peut pas l'être par un test.
+
+**Valeur pour l'auditeur.** Un script juridiquement faible ne se voit pas en recette et ne casse
+aucun test : il se voit lors d'une contestation, quand il est trop tard. L'écrire ici, c'est
+garantir que la réserve survivra au départ de la session qui l'a posée.
+
+**Ce qui est demandé.** Relecture juridique du libellé **avant la porte P-E**, et confirmation de
+deux points en particulier : (a) la mention « le rapport ne vous attribue aucun propos
+nominativement » engage le traitement, il faut qu'elle soit vraie de bout en bout (03 §26.2,
+pseudonymisation) ; (b) le droit de retrait en cours d'entretien doit dire ce qu'il advient des
+réponses déjà saisies.
+
+**Coût estimé.** ~0,05 j côté équipe (remplacer la valeur d'une constante et rejouer les tests de
+libellé). Le coût réel est celui de la relecture, hors équipe.
+
+**Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun. Impact périmètre fonctionnel :
+aucun. Étage 1** — et le compteur du plafond n'est pas mouvementé : cette entrée est documentaire,
+elle n'ajoute aucune ligne de comportement.
