@@ -2488,3 +2488,28 @@ vert local obtenu sur une autre version répond à côté — tout ce que j'ai m
 Mesures : traçabilité 539 citations sans incohérence ; `peripherie-entretien` 103/103 ; prettier conforme ; DECISIONS 133 entrées ; suite complète inchangée depuis 1710/1710.
 Prochaine action : A01 (passage en porte). Aucune PR : L3 n'est pas dans `main`.
 Tests rouges connus : aucun.
+## 2026-09-03 11h20 — [lot L5 / incrément L5b] — étape 6/7 FRANCHIE — session close
+Dernier commit vert : (celui-ci) · Branche : lot/l5b · Poussé : oui
+Contrôle A02 : **ACCEPTÉ**, condition de veto levée. L5b est complet jusqu'à l'étape 6 incluse.
+Dernière correction, et elle vient d'une rectification qu'A02 a faite sur SA PROPRE mesure :
+`multi_choice` est rendu EN LIGNE dans le `switch` de `SaisieReponse.tsx` (l.152-186) et **n'a
+aucune fonction nommée**. Vérifié par moi avant de corriger : `lcov` donne `DA:153,0`…`DA:186,0`.
+Il est donc réellement non couvert, mais **il n'apparaît dans AUCUNE liste `FNDA:0`** — il manquait
+au tableau que j'avais écrit pour rendre le trou visible, et ma consigne nommait quatre types au
+lieu de cinq. **Corollaire porté aux deux endroits : l'absence d'une entrée dans une liste `FNDA:0`
+ne prouve pas qu'un type est couvert.** Recette P-C : cinq types à SAISIR — `money`, `date`,
+`single_choice`, `multi_choice`, `table` — puis rouvrir et vérifier la valeur relue.
+Trois intégrations. ① Borne de ma doctrine de retrait, posée par A02 : retirer une glose est
+légitime jusqu'à UNE, jamais jusqu'à ZÉRO — l'angle mort n° 6 rend invisible un fichier sans
+citation, donc ma règle sans borne autorisait à rendre un fichier invisible en croyant l'assainir.
+② Quatrième angle mort versé à la fiche : `check:tracabilite` compte des OCCURRENCES DE NUMÉROS
+DANS DU TEXTE, pas des rattachements — le compteur est passé de 535 à 539 pendant que je DÉFAISAIS
+une attache. ③ Deux gloses laissées debout AVEC leur motif : `banque-questions.ts` (E43, blâme =
+`8eead2f4`, lot L4, hors autorité) et `EcranEntretien.test.tsx` (E27, WCAG AA du 03 §19.2).
+Mesures : traçabilité 539 citations sans incohérence ; prose et prettier conformes ; DECISIONS 134
+entrées au format. Aucune ligne de code fonctionnel touchée dans ce dernier tour.
+Réserve de méthode toujours valable : les hooks locaux tournent sur Node v24.19.0 alors que le 11 §1
+épingle >=22.11.0 <23 — seule la CI mesure sur le Node du contrat.
+Prochaine action : **A01** (passage en porte), puis Williams. Aucune PR : L3 n'est pas dans `main`
+et staging attend un geste humain.
+Tests rouges connus : aucun.
