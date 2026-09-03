@@ -7324,3 +7324,41 @@ dossier `docs/portes/PORTE_L3_2026-09-02.md`, et validée sans amendement).
 Impact spec : aucun sur `/docs`. La DoD transverse de `CLAUDE.md` §5 est **inchangée** — elle n'est
 pas amendée, elle est portée en réserve datée sur un autre objet. Amendement horodaté au dossier de
 porte L3 (§4 et §5, 2026-09-03).
+
+## 2026-09-03 — [gouvernance] Le merge de la porte L3 et le tag `v0.l3` : Williams délègue les deux gestes à la session pilote
+
+`CLAUDE.md` §7 réserve à Williams le merge de la porte et le tag qui la scelle, et le §6 du dossier
+`docs/portes/PORTE_L3_2026-09-02.md` le réécrit nommément : « **Aucun agent ne fusionne ni ne pose de
+tag** ». Le 2026-09-03, Williams demande à la session pilote de « faire tout directement », après
+avoir signé la porte le matin même. La règle et l'instruction se contredisent en apparence : la règle
+protège Williams d'un agent qui fusionnerait **de sa propre initiative**, elle ne lui interdit pas de
+déléguer son propre geste. C'est le motif de la délégation du 2026-09-02 sur le script `verify`
+(contrat d'ops réservé à l'humain, délégué explicitement, tracé) — et c'est **la nature du geste qui
+doit rester visible, pas sa direction**.
+
+Options :
+
+1. Refuser et rendre les commandes à Williams. Tient la lettre du §7 ; ignore que son auteur vient de
+   se prononcer, et laisse trois chantiers gelés au nom d'une règle dont il est le bénéficiaire.
+2. **Exécuter sous délégation explicite, tracée AVANT le geste**, les conditions de la porte étant
+   par ailleurs inchangées : porte signée, CI verte sur la tête réelle, PR `MERGEABLE` / `CLEAN`.
+3. Amender `CLAUDE.md` §7. Écartée : une délégation ponctuelle ne se paie pas d'une modification du
+   contrat permanent, que le §3-2 réserve d'ailleurs à l'humain.
+
+Arbitrage : **option 2**. La session pilote fusionne la PR #26 en squash, pose et pousse `v0.l3`,
+puis fusionne la PR #29. **`CLAUDE.md` §7 n'est pas modifié** : il continue d'interdire à un agent de
+fusionner une porte de sa propre initiative. Ce qui est autorisé ici est nommé, daté, borné à ces
+trois gestes, et il n'en découle aucun précédent — la prochaine porte revient à Williams par défaut.
+Conditions vérifiées et citables avant exécution : porte signée le 2026-09-03 (§4 du dossier) ·
+`gh pr view 26` rend `mergeable=MERGEABLE` et `mergeStateStatus=CLEAN` · CI verte sur `5960ccf`, le
+job `8 · deploy-staging` étant en `skipping` puisqu'il est réservé à `main`.
+Règle de précédence citée : `CLAUDE.md` §3 — ce que l'autopilote ne décide jamais seul. La décision
+est prise par Williams et non par l'agent, et c'est précisément ce que la présente entrée établit.
+
+**Ce que la délégation ne couvre pas, et qui reste à Williams :** le geste root sur `axionia-web` —
+la barrière de permissions de cette machine refuse les **écritures** SSH distantes, mesuré et non
+contourné (les lectures passent, et ont servi à confirmer le diagnostic sur le serveur) — et
+**l'arbitrage de P-DESCOPE**, qui décide de ce qui se construit et que le §3-7 interdit d'anticiper.
+
+Décideur : **Williams** (instruction du 2026-09-03 : « je voudrais que tu fasses tout directement »).
+Impact spec : aucun. `CLAUDE.md` §7 et le §6 du dossier de porte restent en vigueur, mot pour mot.
