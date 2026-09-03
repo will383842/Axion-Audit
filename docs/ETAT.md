@@ -2412,3 +2412,28 @@ ne coupe ni sur l'espace ni sur le point et que la prose vit DEVANT l'ancre, dan
 Prochaine action : attendre le verdict du rejeu A29 sur `ef5e727..2f581f2`. Si ACCEPTÉ, A20 signe la
 fin d'incrément L5b et s'arrête. Pas de PR : L3 n'est pas dans `main`.
 Tests rouges connus : aucun (1699/1699 mesuré le 2026-09-03 à 07h30 ; rien n'a bougé depuis).
+
+## 2026-09-03 09h20 — [lot L5 / incrément L5b] — étape pipeline 5/7 (réserves du rejeu A29)
+Dernier commit vert : 6640191 (fix(l5b) : les cinq réserves du rejeu A29 fermées) · Branche : lot/l5b · Poussé : oui
+Tâche en cours : rejeu A29 « ACCEPTÉ SOUS RÉSERVE », 5 réserves dont 2 bloquant P-C — **les 5 sont
+fermées**. R2 : troisième face de B1, perte de saisie réelle — le champ entier était vidé au succès,
+donc les caractères tapés DEPUIS le clic partaient avec la note ; on retire ce qu’on a rangé, et si
+le début du champ n’est plus la capture on ne retire RIEN. R3 : le suffixe de C4 ne se vérifiait pas
+lui-même (`[Oui, Oui 2, Oui !]` → `oui, oui_2, oui_2`) ; on boucle sur l’ensemble des codes
+attribués. R1 : deux cas montent l’ÉCRAN COMPLET avec la porte d’écriture qui rejette — la face
+« échec Dexie » est éprouvée chez le PRODUCTEUR. R4 : jsdom n’évalue pas les media queries, donc on
+éprouve les trois choses observables — coexistence des trois zones sans panneau, bascule du geste
+« Note » de part et d’autre du seuil, et le seuil du JS égal à celui d’`entretien.css`. R5 :
+`fuseau.ts` citait E13 — E32 n’avait aucun code rattaché depuis ce module.
+Mesures : suite complète **1710/1710** verte (78 fichiers). Machine à états — fonctions 98,41 %,
+lignes 98,76 %, branches 94,03 %. Traçabilité 535 citations, aucune incohérence. Seuil 90 et
+périmètre INCHANGÉS. `EcranEntretien.tsx` reste à **11/26 fonctions**, chiffre inchangé, dit tel
+quel : ce fichier n’est pas sous seuil. Bascule faite sur les quatre correctifs de code, injectés
+séparément — chacun fait rougir SES cas ; aucun reste d’instrumentation.
+Trois entrées DECISIONS.md : collision de suffixe (R3), rattachement d’un module d’affichage (R5 —
+« une glose cite ce que le module FAIT, pas ce qui l’appelle »), amendement B2.
+Prochaine action : second rejeu A29 sur `9c8ff15..6640191`. A20 n’a PAS signé la fin d’incrément :
+le verdict était « sous réserve », la signature attend un ACCEPTÉ franc.
+Tests rouges connus : aucun.
+Dû, non fait ici : fiche AMELIORATIONS étage 2 pour outiller le contrôle « le module réalise-t-il
+l’exigence qu’il cite ? » — troisième occurrence de cette classe de défaut dans le lot.
