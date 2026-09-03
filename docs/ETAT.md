@@ -2320,3 +2320,29 @@ Prochaine action : présenter le diagnostic à Williams et attendre son feu vert
 serveur (pose des deux enveloppeurs) ou toute correction de dépôt (lecture du journal Coolify).
 Tests rouges connus : `8 · deploy-staging` sur main (empreinte) · `Test de restauration nocturne`
 depuis le 2026-08-31 (même cause) · les rouges de lot/l5b, hors périmètre de ce chantier.
+
+## 2026-09-03 05h05 — [chantier C4 / staging] — étape 1/7 — A AUTORISÉ, BLOQUÉ PAR LES PERMISSIONS
+Dernier commit vert : 80ec6b3 (diagnostic staging) · Branche : fix/staging-deploiement · Poussé : oui
+Tâche : le correctif A (poser les deux enveloppeurs sur `/opt/axion-audit/`) a le feu vert du
+coordinateur, mais SSH sortant vers le serveur est REFUSÉ par le système de permissions de cette
+machine. Un feu vert d'agent n'est pas une permission : aucun contournement tenté. B (lire le journal
+Coolify) est conditionné à « A vert » — ni commencé ni anticipé. C et D : arbitrage Williams.
+Prochaine action : un humain root pose les deux enveloppeurs (pré-contrôles du clone, puis
+`install -m 755` de `infra/scripts/deploy-staging.sh` et `restore-test-ci.sh` vers `/opt/axion-audit/`,
+procédure `infra/README.md` §6.3), puis rejoue `deploy-staging` sur main.
+Preuve exigée, trois lignes et jamais un « réussi » d'API : « Script distant vérifié » · `CLONE_SERVEUR=`
+égal à `github.sha` · santé publique verte. Rejeu encore rouge ⇒ NE PAS chasser : c'est B qui doit voir.
+CAUSE (mesurée) : le serveur exécute les enveloppeurs du commit e234756, l'état d'avant la PR #25 ;
+empreinte serveur 68fbc455… = celle du fichier à e234756, dépôt 74926ac…. `infra/README.md` §6.3 avait
+PRÉDIT la panne, écrit « copier PUIS fusionner », noté « non joué » : #25 fusionnée dans l'ordre
+inverse de sa propre consigne. Le dépôt savait — à remonter à Williams plus que l'incident.
+TROIS FAITS DU BRIEF DÉMENTIS (qu'une session neuve trouve la version juste) :
+(1) pas systématique — les deux tentatives portaient sur le même commit 8c5f9ff dont un rejeu, et le
+déploiement de 04h30 sur 44e348b a créé un conteneur neuf en 190 s ;
+(2) aucun conteneur anormal — `tvgaih…` est celui du dernier déploiement VERT (02/09 07h32) et staging
+rend 200 sur /, /hq, /api ; le 503 de 04h32 était une recréation en cours ;
+(3) secrets Telegram PRÉSENTS depuis le 28/08, étape de notification VERTE sur les deux runs rouges.
+« Alerte impossible… déploiement aveugle » était le CORPS du script recopié par le bloc `##[group]Run`,
+pas sa sortie. Lire une source affichée dans un journal comme une exécution : le défaut même que ce
+dépôt pourchasse, commis sur l'outillage qui le pourchasse. À retenir plus que la panne.
+Tests rouges connus : `8 · deploy-staging` sur main (empreinte) · nocturne depuis le 31/08, même cause.
