@@ -2567,3 +2567,33 @@ chiffrées (D-1 L6, D-2 L5c, D-3 L7, D-4 la marge, D-5 le contenu). Aucune n'est
 Le fait que ce dossier existe douze jours à l'avance est son objet : 09 §5.4 veut la porte
 **factuelle**, et une mesure prise le jour même se prend sur des souvenirs. Les chiffres du §2 sont
 datés et **doivent être remesurés le 15/09** — le dossier le dit deux fois, exprès.
+
+## 2026-09-03 13h35 — [session pilote] — FIN DE SESSION PROPRE, reprise préparée
+
+Dernier commit vert : `508ae15` (`main`) · Branche : gouvernance/reprise-2026-09-03 · Poussé : oui
+Tâche en cours : aucune. Session close volontairement (`CLAUDE.md` §8), pas par limite de contexte.
+Tests rouges connus : `main` rouge sur `8 · deploy-staging` **seulement** (empreinte du script
+serveur), couvert par R-L3-2-bis rattaché à L0. **Aucun rouge fonctionnel nulle part.**
+
+**LIRE D'ABORD `docs/journal/2026-09-03.md`, section « APRÈS-MIDI »** — état complet, les quatre
+défauts de méthode payés aujourd'hui, les trois défauts rendus aux producteurs et non corrigés, et
+une prémisse fausse à rectifier. **Ce bloc n'en est que l'index.**
+
+`main` = `508ae15` · tags `v0.l0` `v0.l2` **`v0.l3`** · **56 % écrit · 37 % sur `main` · 33 % porte
+signée**. PR ouvertes : **#30** L5a (**ne pas fusionner**, réserve B2 ouverte) · **#31** L5b ·
+**#32** L7a (0 bloquante) · **#28** staging · branche `lot/l1-e18-external-ref` (E18 + son test,
+sans PR). **B1 fermée** (`1b89433`) : `verrou.ts` de 0,00 % à **100 %**, 42 tests, preuve par bascule.
+
+**PROCHAINE ACTION, dans cet ordre strict** — ne pas réordonner :
+
+1. **A51 sur `lot/l5a`** — réserve **B2**, seule bloquante restante. C'est elle qui tient #30.
+2. **Coller le glob `verrou.ts`** dans `.github/coverage-critical-paths.json` (bloc JSON prêt au §5
+   du rapport A26). **Ne PAS inscrire `apps/field/src/app/**`** — mesuré 80,49 %, rougirait.
+3. B2 fermée → merge **#30** (il apporte **axe-core**, que la DoD attend et que `main` n'a pas).
+4. `lot/l5b` **refusionne `main`** — bifurqué AVANT les 5 bloquants PWA de L5a — rejoue sa suite sur
+   le vrai socle, puis **#31**, puis **#32**.
+5. **Absorber A-006** (cookies httpOnly console) en incrément nommé, après #32.
+6. **L5c** — conditionne P-C. Périmètre : `docs/conception/LOT_L5.md` §1.
+
+**Trois gestes restent à Williams** : le root sur staging (`infra/README.md` §6.3), l'arbitrage
+**P-DESCOPE** du 15/09, et les portes **P-C / P-D / P-E** — hors délégation du 2026-09-03.

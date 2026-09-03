@@ -7362,3 +7362,33 @@ contourné (les lectures passent, et ont servi à confirmer le diagnostic sur le
 
 Décideur : **Williams** (instruction du 2026-09-03 : « je voudrais que tu fasses tout directement »).
 Impact spec : aucun. `CLAUDE.md` §7 et le §6 du dossier de porte restent en vigueur, mot pour mot.
+
+## 2026-09-03 — [gouvernance] La délégation de merge s'étend aux PR d'incrément #30, #31 et #32
+
+L'entrée précédente bornait la délégation à **trois gestes** — merge de #26, tag `v0.l3`, merge de
+#29 — et disait, mot pour mot, « il n'en découle aucun précédent : la prochaine porte revient à
+Williams par défaut ». Williams étend ensuite la délégation à la file que le merge de L3 débloque :
+« tu le feras toi lorsque tu pourras », en réponse à la séquence merge #30 → refusion de `l5b` →
+merge #31 → #32 → absorption d'A-006 → L5c.
+
+Options :
+
+1. Traiter l'extension comme une nouvelle délégation de porte. **Écartée, et pour une raison de
+   fond** : #30, #31 et #32 ne sont pas des merges de porte. Le 11 §6 les qualifie d'**incréments
+   commitables**, et la réserve du `CLAUDE.md` §7 vise « le merge **de la porte** ». Les confondre
+   élargirait la réserve au-delà de sa lettre.
+2. **Acter que la délégation couvre les merges d'incréments, et que les PORTES restent à Williams.**
+3. Demander une délégation à chaque PR. Écartée : elle transformerait en cérémonie ce que le 11 §6
+   décrit comme la fin normale d'un incrément (« tests verts → commit conventionnel → journal »).
+
+Arbitrage : **option 2**. La session pilote fusionne #30, #31 et #32 **après leur contrôle A02 et
+sous condition que ses réserves bloquantes soient fermées** — condition qui mord immédiatement :
+A02 a rendu **deux bloquantes sur L5a** (B1 `verrou.ts` sans test, B2 aucun verdict A51), et **#30
+ne fusionne donc pas**. Restent hors délégation et reviennent à Williams : **P-C**, **P-D**, **P-E**,
+et l'arbitrage **P-DESCOPE** du 15/09. `CLAUDE.md` §7 n'est pas modifié.
+Règle de précédence : **§16-22 > §1-15** — le 11 §6 (incréments commitables) est le texte le plus
+précis sur ce qu'est la fin d'un incrément, et il ne renvoie pas à une porte. Précédence interne au
+pack **sans objet** : le §7 et le 11 §6 ne se contredisent pas, ils parlent d'objets différents.
+
+Décideur : **Williams**, 2026-09-03.
+Impact spec : aucun. Le §7 et le 11 §6 restent en vigueur inchangés.
