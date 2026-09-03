@@ -28,6 +28,7 @@
 | L0-b | ~0,25 j  | 0,5 j   | ~0,25 j                   |
 | L2   | ~0,3 j   | 0,5 j   | ~0,2 j                    |
 | L3a  | ~0,1 j   | 0,5 j   | ~0,4 j                    |
+| L5b  | ~0,1 j   | 0,5 j   | ~0,4 j                    |
 
 ---
 
@@ -1577,3 +1578,62 @@ libellé). Le coût réel est celui de la relecture, hors équipe.
 **Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun. Impact périmètre fonctionnel :
 aucun. Étage 1** — et le compteur du plafond n'est pas mouvementé : cette entrée est documentaire,
 elle n'ajoute aucune ligne de comportement.
+
+---
+
+## 2026-09-03 — [L5a/L5b] Étage 1 — deux libellés d'écran, relevés par le balayage axe et NON corrigés par lui
+
+**Constat (A28, balayage axe-core du 2026-09-03, `e2e/accessibilite-l5a.e2e.ts`).** Le scope des
+localisateurs sur le landmark `main` a fait apparaître deux défauts de libellé que le balayage
+lui-même ne signale pas — axe ne les compte pas comme des violations WCAG, et c'est précisément
+pourquoi ils vivaient là sans que rien ne les voie :
+
+1. **Deux `<h1>` de libellé IDENTIQUE sur « Aujourd'hui ».** `App.tsx` affiche `VUES[vue].titre`
+   dans un `<h1>` d'en-tête, et `EcranAccueil.tsx` affiche son propre `<h1>` dans `<main>`. Un
+   lecteur d'écran annonce donc deux titres de niveau 1 portant le même texte sur une page qui n'a
+   qu'un seul sujet.
+2. **Deux libellés DIFFÉRENTS pour le même écran.** Le registre `app/vues.ts` dit « Stockage de
+   l'appareil » ; `EcranStockage.tsx` dit « Stockage de cet appareil ». L'en-tête et le corps de
+   l'écran ne s'appellent pas pareil.
+
+**Valeur pour l'auditeur.** Le premier coûte à qui navigue au lecteur d'écran ou au clavier
+(03 §22.1, « navigation clavier intégrale ») ; le second est un flottement de vocabulaire dans une
+interface dont 03 §17.4 exige qu'elle soit sans jargon et sans surprise.
+
+**Ce qui est demandé, et à qui.** Correction par **A22** avec le reste de L5b, relue par le
+réviseur croisé comme n'importe quel code. **Pas par A28 ni par A20** : un test d'accessibilité qui
+corrige l'interface qu'il mesure ne mesure plus que son propre correctif.
+
+**Coût estimé.** ~0,05 j les deux. **Impact schéma : aucun. Impact API : aucun. Impact crypto :
+aucun. Impact périmètre fonctionnel : aucun. Étage 1**, autorisé d'office.
+
+---
+
+## 2026-09-03 — [transverse] Étage 2, PROPOSÉE — `pnpm verify` n'exécute JAMAIS le projet `interface` (29 fichiers)
+
+**Constat, mesuré le 2026-09-03 sur `lot/l5a` (`pnpm verify`, RC=0) et sur `lot/l5b`.**
+`verify` se termine par `test:unit && test:integration && test:e2e`, c'est-à-dire
+`vitest run --project unit`, `--project integration`, puis Playwright. **Aucune de ces trois
+commandes ne lance le projet `interface`.** `check:test-projects` compte pourtant
+`interface:29 · unit:29 · integration:17 · playwright:4` : **29 fichiers de test sont analysés par
+les garde-fous et exécutés par personne** dans `verify`. Ils ne tournent que sous
+`pnpm test:coverage` (`vitest run --coverage`, qui lance TOUS les projets), donc uniquement dans le
+job CI `coverage`. `test:critique` a le même trou : `--project unit --project integration`.
+
+**Ce que ça coûte, et ce n'est pas théorique — c'est arrivé cette semaine.** Un `.test.tsx` rouge
+sort VERT de `pnpm verify`, VERT du hook pre-push, VERT des jobs CI `unit`, `integration` et `e2e`.
+Il ne rougit que dans le job `coverage` — où le message affiché est « couverture insuffisante » et
+non « test cassé ». C'est exactement le rouge de `lot/l5b` du 2026-09-02, et c'est pourquoi son bloc
+`ETAT.md` a pu écrire « Tests rouges connus : aucun » de bonne foi : les 162/162 d'A22 étaient vrais
+et répondaient à une autre question. Un garde-fou qui mesure vraiment, mais pas ce qu'on croit.
+
+**Valeur pour l'auditeur.** Indirecte et large : tout le design system et tous les écrans terrain
+vivent dans ce projet. Une régression d'interface peut traverser une porte.
+
+**Correctif proposé (NON appliqué — 11 §8-2 : `package.json` et `ci.yml` relèvent du contrat d'ops).**
+Ajouter `"test:interface": "vitest run --project interface"`, l'insérer dans `verify`, `verify:rapide`
+et `test:critique`, et lui donner son job CI — nommé, pour que son rouge dise « interface », pas
+« couverture ». **Coût ~0,2 j. Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun.**
+Impact périmètre : aucun ; le seul effet est que des tests déjà écrits sont enfin exécutés.
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-C_

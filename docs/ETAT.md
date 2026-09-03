@@ -2311,3 +2311,28 @@ V1, relecture juridique en fiche AMELIORATIONS étage 1) mais NON IMPLÉMENTÉE 
 son affichage à l'écran de démarrage reviennent à A22, pas à A20 ni au testeur. Constat A28-1 remonté
 à A29 : deux `<h1>` de même libellé sur « Aujourd'hui » (coquille + écran), et deux libellés
 différents pour l'écran Stockage (« de l'appareil » dans VUES, « de cet appareil » à l'écran).
+
+## 2026-09-03 06h20 — [lot L5 / incrément L5b] — étape pipeline 5/7 (fin d'incrément, session close)
+Dernier commit vert : (celui-ci) · Branche : lot/l5b · Poussé : oui
+Tâche en cours : incrément L5b TERMINÉ côté A20. Rien n'est en vol.
+Ce que ce bloc ajoute au précédent, et rien d'autre : la fiche étage 1 du constat A28-1 est posée
+(deux `<h1>` de libellé identique sur « Aujourd'hui » ; « Stockage de l'appareil » dans `app/vues.ts`
+contre « Stockage de cet appareil » dans `EcranStockage.tsx`). Autorisée d'office par le coordinateur,
+elle revient à **A22** avec le reste de L5b — jamais à A28 ni à A20 : un test d'accessibilité qui
+corrige l'interface qu'il mesure ne mesure plus que son propre correctif. Compteur étage 1 : ligne
+L5b ouverte à ~0,1 j sur 0,5 j.
+Prochaine action : A29 — revue croisée de lot/l5b (diff lot/l5a..lot/l5b, lecture seule). Puis, et
+SEULEMENT dans cet ordre : L3 dans `main` → PR L5a → PR L5b. Aucun merge de `main` ici avant la PR L5a.
+Tests rouges connus : aucun — mesuré le 2026-09-03 à 05h50 par `pnpm test:coverage` : 77 fichiers,
+1681/1681 verts, et `node .github/scripts/check-coverage.mjs` sort en 0 (« Tous les modules critiques
+atteignent 90 % — couverture MESURÉE »). Module « Machine à états de session terrain » : fonctions
+98,39 % (61/62) · lignes 99,13 % · instructions 99,13 % · branches 93,96 %, sur les 14 fichiers.
+Dû par A22 au prochain incrément, tranché mais NON implémenté : `PHRASE_SCRIPT_ACCORD` (DECISIONS.md
+2026-09-02) — poser la constante unique ET l'afficher à l'écran de démarrage. Une constante non
+affichée serait du code orphelin, qu'A02 refuserait ; c'est pourquoi A20 ne l'a pas posée seul.
+Réserve de méthode, à ne pas réapprendre : `pnpm test:unit` ne lance PAS le projet `interface`. Un
+`.test.tsx` vert en local peut donc coexister avec une CI rouge — c'est exactement ce qui s'est passé
+ici. La vérité de la couverture est `pnpm test:coverage`, jamais `test:unit`.
+Réserve de gouvernance remontée à Williams : cette session n'avait aucun outil de sous-agent. A20 a
+tenu les rôles A28 et A26 lui-même. Le croisement 09 §5.6 qui compte est préservé (A24 a écrit L5a,
+A22 a écrit L5b, A20 n'a écrit ni l'un ni l'autre), mais ce n'est pas la chaîne nominale.
