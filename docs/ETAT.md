@@ -2298,24 +2298,25 @@ format, sept points durs sourcés dans le code plutôt que supposés.
 ## 2026-09-03 06h45 — [infra / diagnostic staging] — hors pipeline (fin de session propre)
 Dernier commit vert : 44e348b (main, PR #27 fusionnée)   ·   Branche : infra/diagnostic-staging   ·   Poussé : oui
 Tâche en cours : session `…01Xk19br` — pilotage passé à `…01Ckvewm` (DECISIONS 2026-09-03). PR #27
-fusionnée sur ordre de Williams : la note de conception L6 et la correction du §9 sont sur `main`.
-PR #28 ouverte : fiches A-013 (staging) et A-014 (hooks absents en worktree neuf).
-STAGING EST LE BLOCAGE DE TOUT, diagnostiqué par accès serveur direct : Coolify échoue en 9 s sur
-`loadComposeFile()` — « Failed to read Git source » — alors que le clone RÉUSSIT. Le conteneur en
-service (`Up 21 h`, créé 2026-09-02 07h34) est celui du dernier déploiement réussi `f7a11b6` ; les
-deux tentatives suivantes ont échoué. Écarté par mesure : disque (29 %, inodes 5 %), fichier compose
-absent (il existe au commit déployé), accès au dépôt (`ls-remote` aboutit), et le commit `8c5f9ff`
-(il ne touche aucun compose). NE PAS modifier `deploy-staging.sh` : il refuse de sortir vert, c'est
-sa fonction. Prochaine mesure, hors de portée d'une session : redéploiement manuel depuis
-l'interface Coolify, pour dire si le défaut est dans l'appel d'API ou la configuration.
-Prochaine action : faire relire et fusionner la PR #28, puis obtenir de Williams le redéploiement
-manuel Coolify et les secrets `TELEGRAM_*` (absents — déploiement aveugle).
-Tests rouges connus : `main` ROUGE sur `8 · deploy-staging` (cause ci-dessus, pas le code).
-`lot/l5b` est repassé VERT. PR #26 (L3) est `DIRTY` depuis la fusion de #27 — conflit d'append
-attendu sur `DECISIONS.md`/`ETAT.md`, se résout en gardant les deux côtés.
-PORTE L3 : le blocage est LEVÉ, et mon annonce contraire était une mesure trop étroite — `sed -n
-'16p'` lisait le titre « 🟡 ACCEPTÉE SOUS RÉSERVE » et pas la ligne 18, qui porte depuis 06h15 le
-bandeau « VERDICT DU 2026-09-02 — SUPERSÉDÉ », R-L3-1 à R-L3-5 fermées, verdict final sur `0d7f4f8`.
-Reste tracé : ce verdict a été rédigé par a7, session de VÉRIFICATION, que le §3 dit ne rien
-produire et dont le §10 réserve l'étape 6 au gardien A02 ; Williams a tranché « ça me va » sans
-contreseing A02 — arbitrage humain au-dessus de la règle, pas un oubli.
+fusionnée : note de conception L6 et correction du §9 sur `main`. PR #28 ouverte : fiches A-013
+(staging) et A-014 (le hook pre-push ne tourne pas là où `pnpm install` n'a pas tourné).
+STAGING, point de rupture localisé à la ligne : `loadComposeFile()` appelle `getGitRemoteStatus()`,
+qui lance `git ls-remote` SUR L'HÔTE (`exec_in_docker: false`) ; le `ls-remote` visible dans le
+journal tourne DANS le conteneur d'aide — deux commandes homonymes, seule la première décide.
+Rejouée le 2026-09-03 par le canal exact de Coolify, elle RÉUSSIT, et la config de l'app a été
+modifiée à 04h30, après le second échec : le défaut n'est peut-être plus présent. Déploiement
+relancé, verdict à lire. Détail complet et contre-mesures dans la fiche A-013.
+NE PAS modifier `deploy-staging.sh` : il refuse de sortir vert, c'est sa fonction.
+Prochaine action : lire le verdict du déploiement relancé ; si vert, `main` redevient verte et la
+chaîne des portes se rouvre. Puis faire fusionner la PR #28.
+Tests rouges connus : `main` ROUGE sur le seul job `8 · deploy-staging` (20 jobs sur 22 verts).
+Les quatre branches de lot sont VERTES. PR #26 est `CONFLICTING` depuis la fusion de #27 — conflit
+d'append sur `DECISIONS.md`/`ETAT.md`, se résout en gardant les deux côtés.
+PORTE L3 : blocage LEVÉ (bandeau « SUPERSÉDÉ » l. 18, R-L3-1 à R-L3-5 fermées, verdict sur
+`0d7f4f8`). Tracé sans être contesté : ce verdict a été rédigé par a7, session de VÉRIFICATION, que
+le §3 dit ne rien produire et dont le §10 réserve l'étape 6 au gardien A02 ; Williams a tranché
+« ça me va » — arbitrage humain assumé, pas un oubli.
+QUATRE ERREURS DE CETTE SESSION, toutes de la même forme — une commande juste, une question mal
+posée : §9 lu dans le dépôt bare (périmé d'un jour) · `grep` sur VERDICT/REJEU au lieu de FERMETURE ·
+`sed -n '16p'` sans la ligne 18 · lignes `^[[36;1m` du journal CI (le SOURCE du workflow) lues comme
+des erreurs émises, d'où un « secrets TELEGRAM absents » faux — ils existent depuis le 2026-08-28.

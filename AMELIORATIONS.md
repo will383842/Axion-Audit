@@ -1619,17 +1619,36 @@ de sortir vert**, et c'est exactement ce pour quoi il a été écrit.
 
 **Deux constats annexes, à ne pas perdre.**
 
-1. `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` sont **absents** : « un déploiement sans canal d'alerte
-   est un déploiement aveugle » (02 §11.3). Même réparé, le déploiement repartirait aveugle.
+1. **RETIRÉ — l'affirmation était fausse, et sa fausseté est instructive.** Cette fiche a d'abord
+   annoncé que `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` étaient **absents**. Ils ne le sont pas :
+   `gh secret list` les donne tous les deux, posés le 2026-08-28. L'erreur vient de la lecture du
+   journal : dans une sortie GitHub Actions, les lignes préfixées `^[[36;1m` sont **le source du
+   workflow que le runner affiche**, pas ce qu'il a émis. Le `echo "::error title=Alerte
+impossible::…"` que j'ai cité est une **branche conditionnelle non prise**, imprimée parce que
+   le runner affiche la commande. Les erreurs réellement émises se reconnaissent au préfixe
+   `##[error]` **sans** code couleur : il y en a **trois** dans ce run, et aucune ne concerne
+   Telegram. _Un journal de CI contient le code qui aurait pu s'exécuter à côté de ce qui s'est
+   exécuté — les confondre fait lire des pannes qui n'ont pas eu lieu._
 2. Coolify tourne sur `ghcr.io/coollabsio/coolify:latest` — **une étiquette non épinglée**, alors
    que le contrat 11 §1 épingle tout le reste au patch près et que Renovate est désactivé en
    Phase 1. Le conteneur est en service depuis 5 jours, donc il n'est pas la cause de CET incident ;
    mais une infrastructure qui peut changer sous nos pieds sans qu'aucun commit ne l'enregistre est
    la prochaine panne qu'on ne saura pas dater.
 
-**Recommandation.** **Étage 2 — PROPOSÉE**, arbitrage Williams. Le point 1 (secrets Telegram) est
-d'étage 1 et peut être fait d'office par qui détient les secrets. Le point 2 (épingler Coolify) est
-une décision d'exploitation, pas une amélioration de confort.
+**Recommandation.** **Étage 2 — PROPOSÉE**, arbitrage Williams, sur le seul point 2 : épingler
+Coolify est une décision d'exploitation, pas une amélioration de confort. Le point 1 n'existe pas.
+
+**Post-scriptum du 2026-09-03, à lire avant d'agir sur cette fiche.** Après sa rédaction, la
+commande que Coolify exécute pour vérifier l'accès au dépôt a été rejouée **par le canal exact de
+Coolify** (`instant_remote_process` vers l'hôte, depuis le conteneur `coolify`) : elle **réussit**,
+et rend le HEAD de `main`. Le point de rupture est donc localisé à la ligne près —
+`Application::loadComposeFile()` appelle `getGitRemoteStatus()`, qui lance `git ls-remote` **sur
+l'hôte** (`exec_in_docker: false`), et c'est son échec qui lève « Failed to read Git source » ;
+le `ls-remote` visible dans le journal de déploiement, lui, tourne **dans le conteneur d'aide** —
+deux commandes homonymes, deux endroits différents, et seule la première décide. La configuration
+de l'application porte par ailleurs `updated_at = 2026-09-03 04h30`, soit **après** le second échec.
+**Conséquence : le défaut n'est peut-être plus présent.** Un déploiement relancé le dira, et c'est
+la mesure qui manque à cette fiche.
 
 **Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte suivante_
 
