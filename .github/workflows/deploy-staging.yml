@@ -15,7 +15,10 @@
 #   1. il REFUSE DE PARTIR si un réglage manque, en nommant lequel ;
 #   2. il DÉCLENCHE le déploiement de l'application par son uuid ;
 #   3. il ATTEND la fin et ÉCHOUE si le déploiement échoue ;
-#   4. il VÉRIFIE ENSUITE que le service répond, depuis l'extérieur.
+#   4. il VÉRIFIE ENSUITE que le service répond, depuis l'extérieur ;
+#   5. (2026-09-02, décision de Williams) le script distant REMET LE CLONE
+#      `/opt/axion-audit/repo` AU SHA LIVRÉ — celui que le nocturne éprouvera —
+#      et ce workflow vérifie que le sha atteint est bien `github.sha`.
 #
 # L'étape 3 est la raison d'être du fichier. Un workflow qui poste un
 # déclenchement puis rend la main annonce un succès qu'il n'a pas constaté :
@@ -329,6 +332,13 @@ jobs:
           printf '%s\n' "${SORTIE}"
 
           if [ "${CODE}" -ne 0 ]; then
+            # Deux échecs qui ne se corrigent pas au même endroit, nommés
+            # séparément : la livraison elle-même, ou — depuis le 2026-09-02 —
+            # la remise à niveau du clone, qui vient APRÈS une livraison réussie.
+            if printf '%s' "${SORTIE}" | grep -q '::error::Alignement du clone'; then
+              echo "::error title=Staging déployé, mais le clone du serveur n'a PAS été remis à niveau::Le script distant a rendu ${CODE} à l'étape 5 (alignement de /opt/axion-audit/repo sur ${COMMIT}). La livraison a pris effet ; c'est la copie qui porte restore-test.sh qui est restée en arrière. La cause est nommée ci-dessus (origine du clone, modifications locales, historique réécrit, fetch impossible). Sans correction, le test de restauration nocturne rougira « clone hors de main » — pour la bonne raison."
+              exit 1
+            fi
             echo "::error title=Déploiement échoué::Le script distant a rendu ${CODE}. Sa sortie est ci-dessus — elle nomme la cause."
             exit 1
           fi
@@ -379,6 +389,31 @@ jobs:
             exit 1
           fi
           echo "Script distant vérifié : identique au fichier versionné (${empreinte_depot:0:16}…)."
+
+          # ---------------------------------------------------------------------
+          # LE CLONE DU SERVEUR EST-IL AU SHA QUI VIENT D'ÊTRE LIVRÉ ?
+          # ---------------------------------------------------------------------
+          # Décidé par Williams le 2026-09-02 (DECISIONS.md) : la fraîcheur de
+          # `/opt/axion-audit/repo` — la copie qui porte `restore-test.sh`, que
+          # le test nocturne exécute — est une propriété de la LIVRAISON. Le
+          # script distant vient de le remettre au sha déployé (fetch + checkout
+          # du SHA, jamais d'une branche) et publie `CLONE_SERVEUR=<sha40>`. On
+          # ne le croit pas sur parole : la ligne est comparée ici à `github.sha`.
+          # Un écart rougit ce job EN NOMMANT LE CLONE — le staging, lui, est
+          # déjà en service (l'alignement est la dernière étape du script).
+          # Sans cette ligne, le nocturne rougirait à 03h00 « clone hors de
+          # main » et l'on chercherait la cause au mauvais endroit.
+          # ---------------------------------------------------------------------
+          clone_serveur="$(printf '%s' "${SORTIE}" | grep -oE '^CLONE_SERVEUR=[0-9a-f]{40}$' | head -1 | cut -d= -f2)"
+          if [ -z "${clone_serveur}" ]; then
+            echo "::error title=Le clone du serveur n'a pas été remis à niveau::Le script distant n'a pas publié CLONE_SERVEUR=<sha>. Sa sortie ci-dessus nomme la cause (origine du clone, modifications locales, historique réécrit, fetch impossible). Tant que /opt/axion-audit/repo n'est pas au sha livré, le test de restauration nocturne éprouvera un autre code que celui-ci — et rougira en le disant."
+            exit 1
+          fi
+          if [ "${clone_serveur}" != "${COMMIT}" ]; then
+            echo "::error title=Le clone du serveur n'est PAS au sha livré::clone=${clone_serveur} · livré=${COMMIT}. Le script distant a annoncé un alignement sur un autre commit que celui de ce déploiement. Ne pas laisser passer : le nocturne comparerait ce clone à main et rougirait."
+            exit 1
+          fi
+          echo "Clone du serveur vérifié : /opt/axion-audit/repo est au sha livré (${clone_serveur:0:12}…)."
 
       # L'attente et la vérification du commit RÉELLEMENT en service vivent
       # désormais dans le script distant, où elles ont accès au conteneur.

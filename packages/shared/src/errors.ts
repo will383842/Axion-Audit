@@ -17,6 +17,11 @@ import { z } from 'zod';
 // « Invalid ISO datetime ». Un message d'erreur d'API affiché tel quel EST de
 // l'interface : l'invariant 5 s'y applique sans exception.
 //
+// « Sans exception » est à prendre au mot, et c'est pour le tenir qu'`errorDetailSchema`
+// porte un champ `code` SÉPARÉ (amendement du 2026-08-29, posé au lot L3b) : ce qui
+// est destiné à une machine — un état exact, un code de défaut d'import — y va, et
+// `message` reste une phrase française. Voir le schéma pour le détail du partage.
+//
 // Zod 4 EMBARQUE la locale française (`z.locales.fr`, présent dans le paquet épinglé
 // 4.4.3 — vérifié avant d'écrire une ligne). AUCUNE dépendance ajoutée : l'escalade
 // 11 §8-1 ne s'applique pas.
@@ -95,6 +100,83 @@ export const ERROR_CODES = {
    * le code nomme la cause ; c'est déjà la répartition de `ILLEGAL_STATE_TRANSITION`.
    */
   UNSYNCED_DATA_AT_RISK: 'UNSYNCED_DATA_AT_RISK',
+  /**
+   * `POST|PATCH /v1/companies` — le SIREN présenté est DÉJÀ porté par une autre
+   * fiche. Arbitré par `DECISIONS.md` du 2026-08-29 (« Les quatre codes d'erreur du
+   * lot »), option 3 : **retenu, périmètre RÉDUIT au SIREN**.
+   *
+   * Le générique `CONFLICT` suffirait AUJOURD'HUI — cette route n'a qu'un seul 409
+   * possible. Le code dédié est une assurance, et A01 en écrit le prix : 05 §8.3 et
+   * M8.1 annoncent un référentiel partagé avec `external_ref` ; le jour où un second
+   * conflit arrivera sur ces routes, un branchement front bâti sur un conflit nu
+   * deviendrait faux **en silence**.
+   *
+   * ⚠ IL NE COUVRE PAS LA COLLISION DE NOM. Le nom n'a aucune unicité en base (04 :
+   * l'index unique est PARTIEL, sur `siren` seul) ; une collision de nom rend donc
+   * un **201 avec avertissement**, jamais ce code. Voir `companies.ts`.
+   */
+  COMPANY_DUPLICATE: 'COMPANY_DUPLICATE',
+  /**
+   * `POST /v1/missions/:id/generate-questionnaire` — le questionnaire de cette
+   * mission est **DÉJÀ FIGÉ**. Arbitré par `DECISIONS.md` du 2026-08-29, précisé le
+   * 2026-09-02 : le message porte le COMPTE de questions figées **et la DATE**, lue
+   * dans `activity_log` faute de colonne au fichier 04.
+   *
+   * ── POURQUOI UN CODE À LUI, ET NON `CONFLICT` ────────────────────────────────
+   * Le figeage a **trois** refus, tous en 409, et le front doit proposer trois
+   * choses différentes : « déjà figé » → montrer le questionnaire existant (rien à
+   * corriger, l'acte a eu lieu) ; `ILLEGAL_STATE_TRANSITION` → la mission n'est plus
+   * en préparation ; `CONFLICT` → la sélection est vide, il faut reprendre le
+   * cadrage. Sous un `CONFLICT` unique, distinguer les trois demanderait d'analyser
+   * une phrase française — exactement ce que le 11 §3 refuse.
+   *
+   * ── POURQUOI 409 ────────────────────────────────────────────────────────────
+   * La requête est bien formée (400 serait faux), l'appelant a les droits (403 serait
+   * faux) : c'est l'ÉTAT de la ressource qui s'y oppose, définition de 409. Le statut
+   * classe la famille, le code nomme la cause — même répartition que
+   * `ILLEGAL_STATE_TRANSITION`.
+   *
+   * ⚠ **UN REFUS QUI N'ÉCRIT RIEN.** Il est prononcé sous le `FOR UPDATE` de la
+   * mission et AVANT tout `INSERT` : deux appels concurrents produisent une création
+   * et ce code, jamais deux jeux de lignes figées (note de conception L3 §3.a).
+   */
+  QUESTIONNAIRE_ALREADY_FROZEN: 'QUESTIONNAIRE_ALREADY_FROZEN',
+
+  // --- 422 : le document a été LU, et rejeté ---------------------------------
+  /**
+   * UN IMPORT DE FICHIER A ÉTÉ REJETÉ. Premier appelant : l'import CSV de l'arbre
+   * organisationnel (03 §35.2, lot L3c). Arbitré par `DECISIONS.md` du 2026-08-29
+   * (« Les quatre codes d'erreur du lot »), option 3.
+   *
+   * ── POURQUOI `IMPORT_REJECTED` ET NON `CSV_IMPORT_REJECTED` ─────────────────
+   * La décision renomme le code proposé par la note de conception, et le motif est
+   * écrit : « `banque-questions.ts` annonce déjà un `BANK_IMPORT_REJECTED` pour le
+   * lot L9. Deux codes, une seule action front, une seule forme de rapport, et deux
+   * imports qui sont tous deux du CSV : “CSV” nomme le MÉDIUM, pas le sujet. »
+   * Un seul code, donc, la route disant ce qui a été importé — un code aujourd'hui,
+   * un code évité au lot L9.
+   *
+   * ── POURQUOI 422, ET POURQUOI C'EST LE PREMIER DE LA TABLE ─────────────────
+   * Sur une route d'import, **400 est déjà consommé par le compilateur Zod** : le
+   * corps `{ csv: "…" }` est validé comme n'importe quel autre. Faire cohabiter
+   * « votre appel HTTP est malformé » et « votre document a été lu et rejeté sur
+   * 12 lignes » sous un statut unique rendrait la distinction dépendante du seul
+   * code, alors que la route peut lever les deux. 422 dit exactement ce qui s'est
+   * passé : la requête était bien formée, son CONTENU ne l'était pas.
+   *
+   * ── CE QUI VOYAGE DANS `details[]`, ET CE QUI N'Y VOYAGE PAS ───────────────
+   * Le rapport ligne à ligne du §35.2 (`{ligne, colonne, code, message}`) : `path`
+   * porte « ligne[.colonne] », `code` la cause machine, `message` la phrase
+   * française. **Ce rapport n'est JAMAIS journalisé** — même décision du
+   * 2026-08-29 : il recopie des cellules du fichier client (noms d'unités,
+   * effectifs), et le §2 du contrat interdit tout déversement de données client
+   * dans les journaux.
+   *
+   * ⚠ **LA VALIDATION À BLANC NE LÈVE JAMAIS CE CODE** : `?verification=true` rend
+   * `200` avec le même rapport, parce qu'une validation à blanc qui trouve des
+   * erreurs a RÉUSSI son travail.
+   */
+  IMPORT_REJECTED: 'IMPORT_REJECTED',
 
   // --- 413 / 415 / 429 -------------------------------------------------------
   PAYLOAD_TOO_LARGE: 'PAYLOAD_TOO_LARGE',
@@ -146,10 +228,58 @@ export function messageValidationFrancais(message: string): string {
     : message;
 }
 
-/** Détail d'erreur : sert à pointer le champ fautif d'une validation Zod. */
+/**
+ * Détail d'erreur : pointe le champ fautif d'une validation Zod, et — depuis
+ * l'amendement du 2026-08-29 — peut porter un CODE de défaut lisible par une machine.
+ *
+ * ══════════════════════════════════════════════════════════════════════════════
+ * `message` ET `code` NE S'ADRESSENT PAS AU MÊME LECTEUR, ET C'EST TOUT LEUR SENS.
+ * ══════════════════════════════════════════════════════════════════════════════
+ *   · **`message` est de l'INTERFACE.** Il est affiché TEL QUEL (voir l'en-tête de
+ *     ce fichier), donc **l'invariant 5 s'y applique sans exception** : une phrase
+ *     française, lisible par un auditeur en clientèle. C'est la raison d'être de
+ *     la locale `z.locales.fr` posée plus haut ;
+ *   · **`code` est pour une MACHINE, et n'est JAMAIS rendu à un humain.** Il porte
+ *     un identifiant technique stable — un code de défaut métier, une valeur
+ *     d'énumération — sur lequel un front branche sans avoir à analyser une phrase.
+ *     Il est **optionnel** : la grande majorité des détails, ceux qui viennent du
+ *     compilateur Zod, n'en ont pas.
+ *
+ * Écrire un identifiant technique dans `message` « parce que le support en a
+ * besoin » revient à afficher `en_analyse` à un utilisateur ; l'écrire dans `code`
+ * sert le support **sans** toucher à ce que l'utilisateur lit. Les deux besoins
+ * cohabitent sur la même ligne de `details`, chacun dans son champ.
+ *
+ * ── D'OÙ VIENT CE CHAMP, ET POURQUOI IL ARRIVE MAINTENANT ───────────────────
+ * `DECISIONS.md` du **2026-08-29** (« Les quatre codes d'erreur du lot ») le retient
+ * comme amendement de convention 11 §3, au motif que le rapport ligne à ligne du
+ * 03 §35.2 (`{ligne, colonne, code, message}`) est autrement **inexprimable**, et
+ * que `banque-questions.ts` promet déjà que « les codes voyageront dans `details[]`,
+ * inchangés ». `DECISIONS.md` du **2026-08-31** constate qu'il était resté sur le
+ * papier et le déclare **« dû aux lots L3c et L9, qui le poseront avec leur premier
+ * usage »** — un code sans appelant étant précisément le « code mort » que la
+ * première entrée refuse. **Ce premier usage est arrivé** : le refus de transition
+ * du 03 §32.2 (`domaines/missions/service.ts`) a besoin de rendre les états EXACTS
+ * au support sans dégrader le message français. Poser ce champ ici n'est donc pas
+ * une décision, c'est l'exécution d'un arbitrage daté — même geste, et même
+ * raison, que `COMPANY_DUPLICATE` au lot L3a.
+ *
+ * ⚠ CE QUE `code` N'EST PAS : un code d'erreur HTTP ni une valeur d'`ERROR_CODES`.
+ * Celui-là vit dans `error.code`, une seule fois par réponse. Confondre les deux
+ * ferait croire à un front qu'une ligne de détail peut changer le sens de la
+ * réponse entière.
+ *
+ * ⚠ CE QUI N'ÉTAIT PAS POSÉ ICI À L'ORIGINE, ET QUI L'EST DEPUIS : le statut **422**
+ * et `IMPORT_REJECTED`, seconds amendements de la même entrée du 2026-08-29. Ils
+ * appartenaient à l'import CSV (L3c) et à l'import de banque (L9), « qui les
+ * poseront avec LEUR premier appelant ». **Ce premier appelant est arrivé** :
+ * l'import CSV de l'arbre organisationnel du lot L3c. Voir `ERROR_CODES` ci-dessus.
+ */
 export const errorDetailSchema = z.object({
   path: z.string(),
   message: z.string(),
+  /** Identifiant technique, pour une machine. JAMAIS affiché. Voir ci-dessus. */
+  code: z.string().optional(),
 });
 
 /** L'enveloppe d'erreur, identique sur TOUTES les routes. */
@@ -179,6 +309,9 @@ export const HTTP_STATUS_BY_ERROR_CODE: Record<ErrorCode, number> = {
   CONFLICT: 409,
   ILLEGAL_STATE_TRANSITION: 409,
   UNSYNCED_DATA_AT_RISK: 409,
+  COMPANY_DUPLICATE: 409,
+  QUESTIONNAIRE_ALREADY_FROZEN: 409,
+  IMPORT_REJECTED: 422,
   PAYLOAD_TOO_LARGE: 413,
   UNSUPPORTED_MEDIA_TYPE: 415,
   RATE_LIMITED: 429,

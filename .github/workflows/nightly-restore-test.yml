@@ -142,11 +142,36 @@ jobs:
       # `DEPLOY_USER` et `DEPLOY_HOST` restent utiles : ils designent la machine.
       # Le code de retour du script EST le verdict — aucun masquage, aucun `|| true`.
       # -----------------------------------------------------------------------
+      # -----------------------------------------------------------------------
+      # LE GARDE EN TETE — decide par Williams le 2026-09-02 (DECISIONS.md).
+      # -----------------------------------------------------------------------
+      # Le clone /opt/axion-audit/repo doit etre AU SHA DE `main` avant que quoi
+      # que ce soit ne soit eprouve. Depuis le 2026-09-02, c est le job
+      # « 8 · deploy-staging » qui l y remet a chaque fusion. Le nocturne, lui,
+      # ne fait que VERIFIER : il envoie le sha de `main` au script distant sur
+      # l entree standard, et le script refuse de restaurer si son clone n y est
+      # pas — en le disant, AVANT toute restauration. Le sha est lu sur le
+      # depot distant, pas pris de GITHUB_SHA : un dispatch depuis une branche
+      # doit comparer le clone a `main`, pas a la branche.
+      # -----------------------------------------------------------------------
+      - name: Lire le sha de main (référence du garde)
+        id: sha_main
+        run: |
+          set -euo pipefail
+          sha_main="$(git ls-remote --exit-code origin refs/heads/main | cut -f1)"
+          if ! printf '%s' "${sha_main}" | grep -qE '^[0-9a-f]{40}$'; then
+            echo "::error title=Sha de main illisible::git ls-remote origin refs/heads/main n a pas rendu un sha de 40 hexa (« ${sha_main} »). Sans reference, le garde ne peut pas conclure — et un garde qui ne conclut pas ne laisse pas restaurer."
+            exit 1
+          fi
+          echo "sha_main=${sha_main}" >> "$GITHUB_OUTPUT"
+          echo "Reference du garde : main est a ${sha_main}."
+
       - name: Restaurer Postgres + MinIO dans un conteneur jetable
         id: restore
         env:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          SHA_MAIN: ${{ steps.sha_main.outputs.sha_main }}
         run: |
           set -euo pipefail
 
@@ -154,7 +179,9 @@ jobs:
           # ecrite en clair pour qu un journal de CI montre l intention, et pour
           # qu une cle NON restreinte — donc mal posee — execute quelque chose
           # d inoffensif et de bruyant au lieu du script attendu.
-          SORTIE="$(ssh -i ~/.ssh/restore_key \
+          # Le sha de main part sur l ENTREE STANDARD (ligne 1) : c est le seul
+          # canal qui traverse `command=` sans etre remplace ni interprete.
+          SORTIE="$(printf '%s\n' "${SHA_MAIN}" | ssh -i ~/.ssh/restore_key \
               -o StrictHostKeyChecking=yes \
               -o UserKnownHostsFile=~/.ssh/known_hosts \
               -o IdentitiesOnly=yes \
@@ -198,76 +225,69 @@ jobs:
           echo "Script distant verifie : identique au fichier versionne (${empreinte_depot:0:16}…)."
 
           # ---------------------------------------------------------------------
-          # QUEL COMMIT LE SERVEUR EXECUTE-T-IL REELLEMENT ?
+          # QUEL COMMIT LE SERVEUR EXECUTE-T-IL REELLEMENT ? — ET EST-CE `main` ?
           # ---------------------------------------------------------------------
           # L empreinte ci-dessus couvre l ENVELOPPEUR. Elle ne dit RIEN de
           # `restore-test.sh`, qui vit dans le clone /opt/axion-audit/repo et fait
-          # tout le travail. Or ce clone suit `main` — volontairement, pour que la
-          # machine n execute que du code fusionne.
+          # tout le travail. Ce clone est remis au sha livre par le job
+          # « 8 · deploy-staging » a chaque fusion sur `main` (2026-09-02). Le
+          # script distant a recu le sha de `main` et a DEJA tranche, avant toute
+          # restauration : soit il a verifie que son clone y est, soit il a
+          # refuse en le disant (code 3, ligne REFUS_CLONE_HORS_MAIN). Ici on
+          # relit ce verdict pour l annoter, et l on re-verifie le sha nous-memes :
+          # un garde qui croit sur parole n est pas un garde.
           #
-          # LA CONSEQUENCE, RELEVEE LE 2026-08-30 ET QUI N ETAIT DITE NULLE PART :
-          # lancer ce workflow depuis une BRANCHE ne teste PAS cette branche. Le
-          # `ref` ne choisit que le fichier de workflow ; le script execute reste
-          # celui de `main`. Un dispatch qui ment sur ce qu il teste est pire
-          # qu un dispatch impossible — on croit avoir verifie, et l on fusionne.
+          # HISTORIQUE DE CE BLOC, pour qui lira ceci sans le connaitre. Jusqu au
+          # 2026-09-02, le clone n etait mis a niveau par PERSONNE : ce garde
+          # rougissait apres chaque fusion (trois nuits de suite), pour une raison
+          # qui n etait pas celle qu il surveille, et le 2026-08-31 les deux
+          # verdicts avaient ete separes pour qu un clone en retard ne MASQUE plus
+          # l echec d une restauration. Williams a tranche le 2026-09-02 : la
+          # fraicheur du clone est une propriete de la LIVRAISON, et le nocturne
+          # verifie AVANT d eprouver. Un clone hors de `main` est desormais une
+          # livraison manquee ou une alteration — les deux meritent le rouge.
           #
-          # DEUX REGIMES, ET LA DISTINCTION N EST PAS COSMETIQUE :
-          #   · sur `main`, un ecart est une DERIVE (le clone est en retard) et
-          #     doit faire ECHOUER : le garde testerait autre chose que ce qui est
-          #     livre ;
-          #   · sur une branche, l ecart est NORMAL et attendu — on l annonce
-          #     bruyamment, sans rougir, pour que personne ne prenne ce vert pour
-          #     une preuve concernant sa branche.
+          # DISPATCH DEPUIS UNE BRANCHE : le clone est compare a `main`, pas a la
+          # branche. Un vert obtenu ici ne dit donc RIEN de la branche — c est
+          # dit en avertissement, sans rougir, pour que personne ne prenne ce
+          # vert pour une preuve concernant son travail non fusionne.
           # ---------------------------------------------------------------------
-          # ---------------------------------------------------------------------
-          # DEUX QUESTIONS, DEUX VERDICTS — SEPARES LE 2026-08-31.
-          # ---------------------------------------------------------------------
-          # Cette etape repond a DEUX questions independantes : « la restauration
-          # a-t-elle abouti ? » et « la machine executait-elle le code livre ? ».
-          # Chacune des deux, jusqu ici, faisait `exit 1` sur place — et comme la
-          # seconde etait evaluee AVANT la premiere, un clone en retard MASQUAIT
-          # completement le verdict de la restauration. C est exactement ce qui
-          # s est produit au run 33378083192 : l annotation ne nommait que le
-          # retard du clone, et l echec REEL de la restauration (« le conteneur
-          # de sauvegarde ne monte aucun volume sur /sauvegarde ») ne vivait plus
-          # que dans le corps du journal, ou personne n allait le chercher.
-          #
-          # ON N ASSOUPLIT RIEN : les deux gardes echouent toujours, et pour les
-          # memes raisons. On les EVALUE TOUS LES DEUX avant de conclure, pour
-          # que le journal nomme toutes les causes d un coup. Un garde qui
-          # s arrete a la premiere cause fait rejouer la nuit suivante pour
-          # decouvrir la seconde.
-          # ---------------------------------------------------------------------
+          if printf '%s' "${SORTIE}" | grep -q '^REFUS_SHA_ATTENDU_ABSENT$'; then
+            echo "::error title=Le script distant n a pas recu le sha de main::Il l attend sur l entree standard (ligne 1) et a refuse de restaurer sans lui. Le workflow l envoie pourtant : verifier que l enveloppeur en service est bien celui du depot (l empreinte ci-dessus dit oui) et que rien ne consomme stdin avant lui."
+            exit 1
+          fi
+
+          if printf '%s' "${SORTIE}" | grep -q '^REFUS_CLONE_HORS_MAIN '; then
+            detail="$(printf '%s' "${SORTIE}" | grep -m1 '^REFUS_CLONE_HORS_MAIN ' | cut -d' ' -f2-)"
+            echo "::error title=Le clone du serveur N EST PAS au sha de main — restauration NON tentee::${detail}. Depuis le 2026-09-02 c est le job « 8 · deploy-staging » qui remet /opt/axion-audit/repo au sha livre : verifier que le run CI de ${SHA_MAIN} a atteint ce job et qu il est VERT (une CI rouge sur main = livraison manquee = clone en retard). Si le job est vert et que le clone diverge quand meme, quelqu un a touche au clone : a examiner sur le serveur AVANT de le realigner (git -C /opt/axion-audit/repo status ; puis fetch origin main && checkout --detach ${SHA_MAIN}). Aucun verdict de restauration n existe pour cette nuit."
+            exit 1
+          fi
+
           defauts=0
 
-          commit_serveur="$(printf '%s' "${SORTIE}" | grep -oE 'depot /opt/axion-audit/repo \(commit [0-9a-f]+\)' | head -1 | grep -oE '[0-9a-f]+\)$' | tr -d ')')"
+          commit_serveur="$(printf '%s' "${SORTIE}" | grep -oE '^COMMIT_SERVEUR=[0-9a-f]{40}$' | head -1 | cut -d= -f2)"
 
           if [ -z "${commit_serveur}" ]; then
-            echo "::error title=Commit du serveur inconnu::Le script distant n'a pas annoncé le commit de son clone. On ne peut donc pas dire QUEL code a été exécuté — et un test de restauration dont on ignore la version ne prouve rien de datable."
+            echo "::error title=Commit du serveur inconnu::Le script distant n a pas annonce le commit de son clone (ligne COMMIT_SERVEUR=). On ne peut donc pas dire QUEL code a ete execute — et un test de restauration dont on ignore la version ne prouve rien de datable."
+            defauts=$((defauts + 1))
+          elif [ "${commit_serveur}" != "${SHA_MAIN}" ]; then
+            # Le script distant aurait du refuser. S il a restaure quand meme, il
+            # ne compare pas ce qu il pretend comparer — c est un defaut a part
+            # entiere, evalue ici sans confiance dans son propre verdict.
+            echo "::error title=Le clone n est pas au sha de main, et le script distant a restaure quand meme::serveur=${commit_serveur} · main=${SHA_MAIN}. Le garde distant devait refuser AVANT de restaurer et ne l a pas fait : verifier l enveloppeur en service."
             defauts=$((defauts + 1))
           else
-            echo "Le serveur a exécuté le commit ${commit_serveur} (clone de main)."
-
-            case "${GITHUB_SHA}" in
-              "${commit_serveur}"*)
-                echo "Le commit exécuté est bien celui de cette exécution."
-                ;;
-              *)
-                if [ "${GITHUB_REF_NAME}" = "main" ]; then
-                  echo "::error title=Le clone du serveur est en retard sur main::Le serveur a exécuté ${commit_serveur}, cette exécution porte sur ${GITHUB_SHA}. Le garde éprouverait donc un code différent de celui qui est livré. RIEN NE MET CE CLONE A NIVEAU AUTOMATIQUEMENT — c'est le défaut de fond, escaladé dans DECISIONS.md (2026-08-31) ; en attendant l'arbitrage, la mise à niveau est un geste humain sur le serveur."
-                  defauts=$((defauts + 1))
-                else
-                  echo "::warning title=Ce test ne porte PAS sur cette branche::Le serveur exécute ${commit_serveur} (le clone suit main), pas ${GITHUB_SHA}. C'est le comportement voulu — la machine n'exécute que du code fusionné — mais un vert obtenu ici ne dit RIEN de la branche ${GITHUB_REF_NAME}. Pour éprouver une modification de restore-test.sh, il faut la fusionner d'abord."
-                fi
-                ;;
-            esac
+            echo "Le serveur a execute ${commit_serveur} — le sha de main. Le clone etait a niveau AVANT la restauration."
+            if [ "${GITHUB_REF_NAME}" != "main" ]; then
+              echo "::warning title=Ce test ne porte PAS sur cette branche::Le serveur execute le sha de main (${commit_serveur}), pas ${GITHUB_SHA}. C est le comportement voulu — la machine n execute que du code fusionne — mais un vert obtenu ici ne dit RIEN de la branche ${GITHUB_REF_NAME}. Pour eprouver une modification de restore-test.sh, il faut la fusionner d abord."
+            fi
           fi
 
           if [ "${CODE}" -ne 0 ]; then
             echo "::error title=Restauration echouee::Le script distant a rendu ${CODE}. Sa sortie est ci-dessus — elle nomme la cause. Un retour non nul est un echec de plan de reprise."
             defauts=$((defauts + 1))
           else
-            echo "La restauration elle-même s'est terminée sans erreur (code 0)."
+            echo "La restauration elle-meme s est terminee sans erreur (code 0)."
           fi
 
           if [ "${defauts}" -ne 0 ]; then
