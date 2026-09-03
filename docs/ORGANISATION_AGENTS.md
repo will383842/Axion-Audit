@@ -279,7 +279,14 @@ avant de pousser, jamais deux PR ouvertes sur le même de ces fichiers sans reba
 `packages/ui` est **figé** pendant les trois chantiers ; un composant manquant = une fiche étage 1,
 livrée par A21 dans une PR à part.
 
-**Ce qui ne change pas** : L6 (sync) se développe **seul** quand C2 a livré L5a. Deux exécutions
+**Ce qui ne change pas** : L6 (sync) se développe **seul**, et **après la porte P-C, qui est la fin
+de L5 ENTIER** — L5a *et* L5b *et* L5c. `09 §6` : « P-C (fin L5) au plus tard le mardi de la semaine
+3 ; **ensuite** L6 se développe SEUL (§5.3) ; **jamais L5 et L6 menés de front** » ; `07:24` définit
+L5 comme « PWA terrain COMPLÈTE … en 3 incréments L5a/L5b/L5c ». **Ce paragraphe a porté « quand C2
+a livré L5a » du 2026-09-02 au 2026-09-03** : c'était une citation fautive, pas un arbitrage — la
+formulation « L6 après L5a » ne figure ni dans 07, ni dans 09, ni dans 11, ni dans 00_INDEX. Elle
+aurait fait démarrer L6 dans `apps/field/**` pendant que C2 y travaillait encore. *Un renvoi qui
+reformule sa source au lieu de la citer finit par dire autre chose qu'elle.* Deux exécutions
 lourdes au maximum sur la machine, une seule par chantier. La quatrième session est **interdite** :
 les trois chantiers sont trois chefs lancés depuis la session pilote ; la session de vérification
 mesure et ne produit rien.
