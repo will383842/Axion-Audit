@@ -37,7 +37,8 @@
 // (11 §7, limite déjà assumée pour le service worker iOS).
 //
 // Traçabilité : E23 (hyper intuitif), E33 (sécurité / RGPD), E36 (CI exécutable),
-// E43 (DoD transverse : « axe-core vert », budgets mesurés).
+// E43 (exécutabilité autopilote : versions épinglées — la dérogation `@axe-core/playwright`
+// du 11 §8-1 et les budgets d'acceptation du 11 §4).
 // =============================================================================
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
