@@ -3086,3 +3086,21 @@ sur un `Map` de l5b). Placés : la règle chez A24, `AccesEntretien` chez A22 à
 **Mesure de la file** : les 4 branches en attente ne conflictent avec `main` que sur `DECISIONS.md` et
 `docs/ETAT.md`. **Zéro conflit de code.** Fiche **A-015** ouverte (pilote de fusion `union`, `ETAT.md`
 exclu à dessein — « le dernier bloc fait foi » ne se délègue pas à un automatisme).
+
+## 2026-09-05 00h35 — [lot L5 / incrément L5b] — étape pipeline 3/7 (refusion + auto-revue)
+
+Dernier commit vert : 6031d6b (fix(l5b) : une lecture locale qui échoue produit un ÉTAT) · Branche : lot/l5b · Poussé : oui
+Tâche en cours : refusion `origin/main` puis `origin/lot/l5a` dans `lot/l5b` (PR #31), et
+fermeture du défaut d'intégration `<AccesEntretien />` que seule la refusion pouvait révéler.
+Faits : `lot/l5a` est désormais ANCÊTRE de `lot/l5b` (14 commits intégrés : cinq bloquants PWA
+A29, icône iOS à la racine, balayage axe-core, 42 tests du verrou / réserve B1, verdict A51,
+F-22 / F-23 / F-25, règle ESLint « écriture Dexie » corrigée par A24) ; `main` aussi (#33, #35,
+#36, #37, #38, #39). Neuf conflits en tout, TOUS sur des registres ou des ajouts parallèles,
+résolus par blocs depuis la base commune en `diff3`, contrôlés en multi-ensembles sur les
+versions COMPLÈTES des deux branches — zéro ligne perdue, zéro ligne inventée.
+Mesuré ici (Node v24, hors contrat — la CI reste le juge) : build RC=0 · lint RC=0 ·
+typecheck RC=0 · test:unit 1159/1159 · test:interface 591/591 · les huit gardes `check:*` RC=0.
+Prochaine action : lire le run CI de la PR #31 et, s'il est vert, demander la revue croisée A29
+sur le diff de refusion (le correctif `AccesEntretien` n'a été relu par personne d'autre).
+Tests rouges connus : aucun. Avertissement `check:decisions` sur une date qui recule
+(« Quel rôle accède au référentiel client ? ») : PRÉEXISTANT, non bloquant, non corrigé ici.
