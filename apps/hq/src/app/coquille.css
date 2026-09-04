@@ -480,3 +480,183 @@
     border-bottom: var(--taille-bordure-epaisseur) solid var(--couleur-bordure-discrete);
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PILOTAGE — COUVERTURE ET AGRÉGATION (lot L7b)
+   ═══════════════════════════════════════════════════════════════════════════
+   Aucune couleur, aucune taille en dur : TOUT vient des jetons de
+   `@axion/ui/tokens.css` (invariant 4). Deux points de vigilance, écrits ici
+   parce qu'ils se relisent :
+
+   ① L'ALERTE EST UN ROUGE DISTINCT. `--couleur-alerte-*` n'est pas le
+      terracotta d'action (`--couleur-action-*`) : une unité du périmètre sans
+      aucune session (§16.6) doit se distinguer d'un bouton, et l'échelle de
+      complétude ne doit jamais emprunter ce rouge-là.
+
+   ② IL N'Y A PAS D'ÉCHELLE DE COULEUR ICI, et c'est délibéré. La couverture se
+      lit en TROIS états seulement — attendue et couverte, attendue et
+      manquante, non attendue — donc trois jetons existants suffisent. La
+      HEATMAP (§16.4) et son échelle de complétude appartiennent au lot L8 ;
+      poser ici une échelle qu'aucun écran de L7b n'utilise créerait un jeton
+      orphelin, puis deux échelles concurrentes. */
+
+/* --- Vues de pilotage : le drill-down depuis la fiche mission -------------- */
+
+.axn-vues-pilotage {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(var(--taille-largeur-contenu-etroit), 1fr));
+  gap: var(--espacement-4);
+}
+
+.axn-vues-pilotage a {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacement-1);
+  padding: var(--espacement-4);
+  background: var(--couleur-surface-carte);
+  border: var(--taille-bordure-epaisseur) solid var(--couleur-bordure-discrete);
+  border-radius: var(--taille-rayon-moyen);
+  color: inherit;
+  text-decoration: none;
+}
+
+.axn-vues-pilotage a:hover {
+  border-color: var(--couleur-action-bordure);
+}
+
+.axn-vues-pilotage span {
+  font-size: var(--typo-taille-sm);
+  color: var(--couleur-texte-secondaire);
+}
+
+/* --- Tableau de couverture ------------------------------------------------- */
+
+.axn-couverture__unite {
+  display: inline-block;
+}
+
+.axn-couverture__note {
+  display: block;
+  font-size: var(--typo-taille-xs);
+  font-weight: var(--typo-graisse-normale);
+  color: var(--couleur-texte-tertiaire);
+}
+
+.axn-couverture__cellule {
+  text-align: center;
+}
+
+.axn-couverture__realise {
+  font-weight: var(--typo-graisse-semi);
+}
+
+.axn-couverture__separateur {
+  color: var(--couleur-texte-tertiaire);
+  padding: 0 var(--espacement-1);
+}
+
+.axn-couverture__prevu {
+  color: var(--couleur-texte-secondaire);
+}
+
+.axn-couverture__planifie {
+  display: block;
+  font-size: var(--typo-taille-xs);
+  color: var(--couleur-texte-tertiaire);
+}
+
+/* Source EXIGÉE par le plan et NON couverte : l'écart qui appelle une action. */
+.axn-couverture__cellule[data-manquante='true'] {
+  background: var(--couleur-avertissement-fond);
+  color: var(--couleur-avertissement-texte);
+}
+
+/* Source que le plan n'exige pas : rien ne manque, donc rien ne s'allume. */
+.axn-couverture__cellule[data-attendue='false'] {
+  color: var(--couleur-texte-tertiaire);
+}
+
+/* ① L'ALERTE §16.6 — un rouge DISTINCT de l'action et de l'avertissement. */
+.axn-couverture tbody tr[data-alerte='true'] > th {
+  box-shadow: inset var(--taille-bordure-epaisseur-forte) 0 0 var(--couleur-alerte-bordure);
+}
+
+/* La colonne hors grille (§27.1) est visuellement DÉTACHÉE : un atelier n'est
+   pas une source de collecte, et la grille ne doit pas le laisser croire. */
+.axn-couverture .axn-couverture__hors-grille {
+  border-left: var(--taille-bordure-epaisseur-forte) solid var(--couleur-bordure-nette);
+  text-align: center;
+  color: var(--couleur-texte-secondaire);
+}
+
+.axn-couverture__marges > th,
+.axn-couverture__marges > td {
+  background: var(--couleur-surface-enfoncee);
+  font-weight: var(--typo-graisse-moyenne);
+  border-top: var(--taille-bordure-epaisseur-forte) solid var(--couleur-bordure-nette);
+}
+
+.axn-couverture__avertissements {
+  margin: 0;
+  padding-inline-start: var(--espacement-6);
+  color: var(--couleur-texte-secondaire);
+  font-size: var(--typo-taille-sm);
+}
+
+.axn-couverture__horodatage {
+  color: var(--couleur-texte-tertiaire);
+  font-size: var(--typo-taille-sm);
+}
+
+/* --- Agrégation par question ---------------------------------------------- */
+
+.axn-agregation__filtres {
+  display: flex;
+  gap: var(--espacement-4);
+  align-items: flex-end;
+}
+
+.axn-agregation__question {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacement-3);
+  padding: var(--espacement-4);
+  background: var(--couleur-surface-carte);
+  border: var(--taille-bordure-epaisseur) solid var(--couleur-bordure-discrete);
+  border-radius: var(--taille-rayon-moyen);
+}
+
+.axn-agregation__question h2 {
+  margin: 0;
+  font-size: var(--typo-taille-lg);
+  font-weight: var(--typo-graisse-semi);
+  line-height: var(--typo-interligne-serre);
+}
+
+.axn-agregation__meta,
+.axn-agregation__comptes {
+  margin: 0;
+  font-size: var(--typo-taille-sm);
+  color: var(--couleur-texte-secondaire);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Le QUATRIÈME cas du §27.4 — « personne ne l'a posée ». Il a sa phrase et son
+   fond : le rendre comme une liste vide le confondrait avec un chargement. */
+.axn-agregation__jamais-posee {
+  margin: 0;
+  padding: var(--espacement-3);
+  background: var(--couleur-surface-enfoncee);
+  border-radius: var(--taille-rayon-petit);
+  color: var(--couleur-texte-secondaire);
+  font-size: var(--typo-taille-sm);
+}
+
+.axn-agregation__valeur {
+  white-space: normal;
+  min-width: calc(var(--taille-largeur-contenu-etroit) / 2);
+}
+
+.axn-agregation__sans-valeur {
+  color: var(--couleur-texte-tertiaire);
+}
