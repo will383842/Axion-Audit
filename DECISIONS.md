@@ -7627,3 +7627,30 @@ le fichier outil, et c'est son auteur qui l'amende.
 
 Décideur : **Williams**, 2026-09-04.
 Impact spec : `docs/ORGANISATION_AGENTS.md` §2 amendé et daté ; `CLAUDE.md` §4 inchangé.
+
+## 2026-09-04 — [L1 / E18] Le 409 de SIREN sur une fiche ARCHIVÉE, et le contrat de `details`
+
+A16 a mesuré par sonde, en testant le correctif du défaut ① : un conflit de **SIREN** contre une
+fiche `deleted_at IS NOT NULL` rend `COMPANY_DUPLICATE` avec « Rapprochez les deux fiches » — vers une
+fiche que `GET /:id` rend en 404. La décision B du jour n'avait tranché que `external_ref` : **deux
+colonnes uniques de la même table, deux comportements.** Et `details[0].code` (`fiche_active |
+fiche_archivee`) n'existe que sur l'un des deux 409 — un front qui branche dessus reçoit `undefined`
+une fois sur deux. Troisième question jointe : le chemin dégradé (fiche disparue entre la violation et
+la relecture → 409 **sans `details`**) est-il un contrat ou un accident ?
+
+Options :
+
+1. **Symétrie complète** : le 409 de SIREN nomme l'archive et oriente vers la restauration ;
+   `details[0].code` devient **systématique** sur les 409 d'unicité de `companies` ; le chemin dégradé
+   est un **contrat** — statut et `code` garantis, `details` au mieux.
+2. Laisser le SIREN tel quel et ne traiter que `external_ref`. **Écartée** : c'est la même table, le
+   même invariant 7 et le même piège (un 409 muet sur une fiche invisible fait créer un doublon).
+3. Rendre `details` garanti en re-lisant sous verrou. **Écartée** : la lecture APRÈS coup est le
+   choix explicite de `depot.ts` (« une lecture qui échouerait dégrade le message, jamais la
+   décision ») ; un verrou pour un message coûterait plus que le message.
+
+Arbitrage : **option 1**. Règle de précédence : **§16-22 > §1-15** — le 11 §3 impose la cohérence de
+l'enveloppe d'erreur, et une clé présente une fois sur deux n'est pas cohérente.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun. Le 04 est inchangé ; le contrat de `details` est **écrit** dans
+`packages/shared` là où le code d'erreur est documenté.
