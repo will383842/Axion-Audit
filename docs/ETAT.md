@@ -2990,3 +2990,30 @@ l'erreur de lecture pendant le rendu et emporte l'écran d'accueil (L5a). ② La
 (L5b), qui est un `Map` : 2 erreurs, toutes deux fausses. Non corrigés — hors périmètre L5c.
 
 Socle mesuré : build OK · typecheck RC=0 · lint 2 erreurs · unit 1159 · interface 590/591.
+
+---
+
+## 2026-09-05 — [lot L5 / incrément L5c] — étape pipeline 2/7 → 3/7 (auto-revue)
+
+Dernier commit vert : `a417dec` · Branche : lot/l5c · Poussé : oui
+Tâche en cours : aucune. Incrément L5c implémenté, auto-revue rendue au pilote.
+Prochaine action : **revue croisée A29**, puis tests croisés A26 (E2E offline) et A27 (interface
+et appareils) — aucun test d'écran n'est écrit par moi (09 §5.6).
+Tests rouges connus : 1, HÉRITÉ et hors périmètre — `app/EcranAccueil.test.tsx`, défaut
+d'intégration L5a/L5b remonté le 2026-09-04 (A22/A24). Lint : 2 erreurs, mêmes origines.
+
+Livré : cockpit « Aujourd'hui » (§34.2) · agenda §25.2 et démarrage pré-rempli · les 6 `kind`
+dont l'atelier · proposition d'unité §25.3 · entretien complémentaire §25.6 · terminer ≠ valider
+et validation groupée §19.1 · **parcours express R1** (§29, arbitré dans L5c le 2026-09-04) ·
+fin de journée en un geste · compression R2 · export `.axionbackup` (11 §4) · bandeau §31-1.
+
+TDD tenu sur les deux parties que `CLAUDE.md` §4 nomme : la machine de validation (21 tests) et
+l'export chiffré (14 tests) ont tourné ROUGES avant que le code existe. Ils sont écrits par
+l'auteur du code — limite déclarée, A26/A27 passent derrière.
+
+Mesuré : unit **1258/1258** (trois passes) · interface 590/591 · typecheck 0 · format propre ·
+couverture export 98,91/94,87/100 et 100/100/100 · `check:decisions` 212 au format ·
+`check:tracabilite` 820 citations sans incohérence.
+
+Quatre doutes de spec tracés dans `DECISIONS.md`, aucun deviné. Deux fichiers partagés au lieu
+d'un : `app/vues.ts` (prévu) et `App.tsx` (rendu partagé par L5b avant moi) — remonté.
