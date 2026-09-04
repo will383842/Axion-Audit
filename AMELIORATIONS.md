@@ -1608,3 +1608,51 @@ Impact crypto : aucun** (le jeton est le même, seul le transport change).
 clause du contrat 11 §3 non encore tenue. À planifier par A30 au brief de L7.
 
 **Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-C_
+
+---
+
+### FICHE A-015 — Les quatre fusions en attente ne butent QUE sur deux fichiers append-only
+
+> Étage 2 — **proposée, non implémentée** (09 §5.9). Ouverte le 2026-09-04 par la session pilote.
+> Numérotation : A-014 était le dernier pris (`infra/diagnostic-staging`).
+
+**Constat, mesuré et non déduit.** `git merge-tree --write-tree origin/main <branche>` sur les
+quatre branches en attente de fusion — `lot/l5a`, `lot/l5b`, `lot/l7a`, `lot/l1-e18-external-ref` —
+rend exactement le même verdict pour les quatre : **conflit sur `DECISIONS.md` et `docs/ETAT.md`,
+et sur rien d'autre. Zéro conflit de code, sur aucun fichier.** Le découpage en chantiers disjoints
+tient donc parfaitement ; ce qui coûte, c'est la tenue des registres partagés.
+
+**Ce que ça a déjà coûté.** Deux défauts de fusion en deux jours, tous deux sur ces mêmes fichiers,
+tous deux avec perte silencieuse : le 2026-09-02, une résolution par hunk a coupé deux entrées de
+leurs champs `Décideur` et `Impact spec` **en passant** un contrôle « aucune ligne perdue » ; le
+2026-09-03, un `git checkout --theirs` a écrasé 71 lignes ajoutées **hors du hunk**, que le diff du
+conflit ne montrait pas. Le second est le plus instructif : la faute était invisible dans l'outil
+même qui servait à la commettre.
+
+**Valeur.** Ce n'est pas du confort : c'est la suppression d'une classe entière de défauts sur les
+deux fichiers dont le pack dit qu'une entrée non tracée « n'existe pas ». Chaque incrément la paie.
+
+**Ce qui est proposé, et ce qui ne l'est PAS.** Un pilote de fusion `union` déclaré en
+`.gitattributes` pour `DECISIONS.md` et `AMELIORATIONS.md` : sur deux ajouts en fin de fichier, il
+garde les deux blocs sans marqueur, et `check:decisions` reste le juge du format — un champ coupé
+serait donc _bloqué_, pas seulement regretté.
+**`docs/ETAT.md` en est EXCLU, délibérément**, et c'est le cœur de la fiche : sa sémantique est
+« **le dernier bloc fait foi** ». Un pilote qui décide seul de l'ordre des blocs peut faire du bloc
+le plus ancien le dernier, et une session neuve suivrait alors une consigne périmée en croyant lire
+la plus récente. **Un automatisme qui se trompe sur ce fichier-là est pire que le travail manuel
+qu'il remplace** — c'est exactement le « garde qui ne garde rien » que ce dépôt pourchasse.
+
+**Coût estimé.** 0,25 j : deux lignes de `.gitattributes`, un test de fusion à blanc dans les deux
+sens sur un dépôt jetable (le gabarit existe : `infra/scripts/test-garde-clone.sh`), et une entrée
+au contrat 11 §3 disant que le pilote existe et pourquoi `ETAT.md` en est exclu.
+
+**Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun.** Impact convention : oui —
+c'est une convention 11 §3, donc une escalade 11 §8-2, d'où cette fiche plutôt qu'un commit.
+
+**Recommandation.** **PHASE 2**, sauf si un troisième défaut de fusion survient d'ici P-C — auquel
+cas ABSORBÉE. La procédure manuelle (résolution par blocs depuis la base commune, contrôle en
+multi-ensembles sur les versions **complètes**) est écrite, transmise à chaque agent qui fusionne, et
+elle a tenu à la fusion `lot/l5a` → `lot/l5c` du 2026-09-04. Tant qu'elle tient, l'automatisme est un
+confort ; le jour où elle cède, il devient une nécessité.
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-C_
