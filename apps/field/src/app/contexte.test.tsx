@@ -42,6 +42,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
 import { FournisseurTerrain, useTerrain, type ValeurTerrain } from './contexte.js';
 import { deverrouiller, initialiserCoffre } from '../local/coffre-appareil.js';
+import { CoffreIllisibleError, ParametresKdfHorsBornesError } from '../local/coffre.js';
 import { installerContexteLocal, retirerContexteLocal } from '../local/contexte.js';
 import type * as ModuleBase from '../local/base.js';
 
@@ -62,6 +63,13 @@ const baseFactice = { nom: 'base-factice' };
 const coffreFactice = { dek: 'clef-factice' };
 
 let coffreAuRepos: unknown = { sel: 'sel-factice' };
+/**
+ * L’anomalie que `lireCoffreAuRepos` doit LEVER, ou `null` pour une lecture qui
+ * réussit. Le double d’origine ne savait que RÉSOUDRE : il ne pouvait donc pas
+ * jouer le cas F-22, où la lecture lève et où la coquille doit router vers une
+ * page d’anomalie plutôt que vers l’écran de création (verdict A51, 2026-09-04).
+ */
+let erreurLectureCoffre: Error | null = null;
 let sessionSimulee = false;
 let dernierInterrogateur: (() => unknown) | null = null;
 
@@ -83,7 +91,11 @@ vi.mock('../local/base.js', async (importerReel) => {
 });
 
 vi.mock('../local/coffre-appareil.js', () => ({
-  lireCoffreAuRepos: vi.fn(() => Promise.resolve(coffreAuRepos)),
+  lireCoffreAuRepos: vi.fn(() =>
+    erreurLectureCoffre === null
+      ? Promise.resolve(coffreAuRepos)
+      : Promise.reject(erreurLectureCoffre),
+  ),
   deverrouiller: vi.fn(() => Promise.resolve(coffreFactice)),
   initialiserCoffre: vi.fn(() => Promise.resolve(coffreFactice)),
 }));
@@ -168,6 +180,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(T0);
   coffreAuRepos = { sel: 'sel-factice' };
+  erreurLectureCoffre = null;
   sessionSimulee = false;
   dernierInterrogateur = null;
   vi.mocked(deverrouiller).mockClear();
@@ -309,5 +322,71 @@ describe('coquille terrain — la session en cours porte le délai à 60 min', (
     });
 
     expect(sessionEnCoursFactice).toHaveBeenCalledWith(baseFactice);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UNE ANOMALIE DE COFFRE VA VERS L'ERREUR, JAMAIS VERS « PREMIER USAGE »
+//
+// Ajouté le 2026-09-05 par A26, depuis le verdict A51 du 2026-09-04 (F-22,
+// CRITIQUE). C'est le test qui manquait à ce fichier : `setPremierUsage(coffre
+// === null)` était vrai aussi bien pour un appareil neuf que pour un coffre
+// devenu illisible, et l'écran proposait alors de « préparer cet appareil ».
+// Le mot de passe de l'auditeur écrasait sa propre DEK.
+//
+// Ce qui est éprouvé ici est le CÂBLAGE, pas la crypto : quand la lecture du
+// coffre LÈVE, la coquille doit router vers `phase: 'erreur'` avec une cause et
+// une action, et `premierUsage` doit rester FAUX — aucun chemin ne doit mener à
+// l'écran de création quand une ligne de coffre existe.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('coquille terrain — une anomalie de coffre ne devient jamais « premier usage » (A51, F-22)', () => {
+  const ANOMALIES = [
+    {
+      nom: 'CoffreIllisibleError',
+      erreur: (): Error =>
+        new CoffreIllisibleError('sa forme n’est pas celle attendue sur : parametres.memoireKio'),
+    },
+    {
+      nom: 'ParametresKdfHorsBornesError',
+      erreur: (): Error =>
+        new ParametresKdfHorsBornesError('mémoire de 4000000 pour un maximum de 188416'),
+    },
+  ];
+
+  for (const { nom, erreur } of ANOMALIES) {
+    it(`@critique ${nom} à l’amorçage : phase « erreur », cause et action non vides, premierUsage FAUX`, async () => {
+      erreurLectureCoffre = erreur();
+      await monterCoquille();
+
+      expect(phase()).toBe('erreur');
+      expect(terrain.premierUsage).toBe(false);
+      expect(terrain.panne).not.toBeNull();
+      expect((terrain.panne?.cause ?? '').length).toBeGreaterThan(0);
+      expect((terrain.panne?.action ?? '').length).toBeGreaterThan(0);
+      // L'action doit dire ce qu'il ne faut SURTOUT pas faire : c'est elle qui
+      // sépare « on vous explique » de « on vous invite à détruire votre journée ».
+      expect(terrain.panne?.action).toMatch(/ne créez pas/i);
+      // Et aucun chemin n'a pu créer ni ouvrir quoi que ce soit.
+      expect(initialiserCoffre).not.toHaveBeenCalled();
+      expect(deverrouiller).not.toHaveBeenCalled();
+    });
+  }
+
+  it('contrôle d’anti-vacuité : le MÊME montage avec un coffre réellement ABSENT mène bien à `premierUsage === true`', async () => {
+    // Sans ce contrôle, les deux tests ci-dessus resteraient verts sur une
+    // coquille qui ne saurait jamais dire « premier usage » — et le faux vert
+    // porterait précisément sur le drapeau qu'ils sont censés surveiller.
+    coffreAuRepos = null;
+    await monterCoquille();
+
+    expect(phase()).toBe('verrouille');
+    expect(terrain.premierUsage).toBe(true);
+    expect(terrain.panne).toBeNull();
+  });
+
+  it('un coffre présent et LISIBLE ne déclenche pas non plus « premier usage »', async () => {
+    await monterCoquille();
+    expect(phase()).toBe('verrouille');
+    expect(terrain.premierUsage).toBe(false);
   });
 });
