@@ -7663,3 +7663,172 @@ périmètre que le bandeau du fichier interdit. Le seuil reste à 90 % : on remo
 rétrécit jamais le périmètre. Règle de précédence **sans objet** (aucune divergence interne au pack).
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun.
+
+## 2026-09-04 — [L5a] Le mot de passe du coffre local est-il celui du compte ?
+
+A24 a appliqué `MOT_DE_PASSE_LONGUEUR_MIN` (06 §10.1) au coffre local pour fermer F-23, comme A51 le
+demandait — **mais le pack ne dit nulle part que les deux mots de passe sont le même**, et la
+conséquence n'est pas cosmétique : si le coffre est indépendant, il lui faut sa propre politique
+écrite ; s'il est le même, il faut dire ce qui arrive quand un admin réinitialise côté serveur alors
+que l'appareil garde l'ancienne KEK.
+
+Options :
+
+1. **Le mot de passe du coffre EST celui du compte.**
+2. Un secret local indépendant. **Écartée** : elle rendrait le garde-fou 05 §9.7 sans objet — refuser
+   un reset serveur quand l'outbox n'est pas vide ne protège rien si le coffre ne dépend pas de ce
+   mot de passe.
+3. Laisser indéterminé. **Écartée** : la politique est **déjà** appliquée dans le code ; ne pas
+   trancher, c'est laisser une règle de sécurité sans fondement écrit.
+
+Arbitrage : **option 1**, et la preuve est déjà dans le pack plutôt que dans une préférence : le
+fichier 07 §14 traite le risque « reset de mot de passe pendant une mission hors ligne » par « garde-
+fou serveur §9.7 **+ ré-enveloppement de la DEK en ligne** ». Ré-envelopper la DEK après un reset n'a
+de sens que si la **KEK dérive du mot de passe du compte**. `MOT_DE_PASSE_LONGUEUR_MIN` est donc la
+bonne source, et son import est justifié.
+Conséquence à tenir, et elle appartient à L6/L2, pas à L5a : après un reset accepté (outbox vide), un
+appareil hors ligne garde une KEK périmée — le ré-enveloppement en ligne est **dû**, et son absence
+serait un défaut, pas un oubli.
+Règle de précédence : **§16-22 > §1-15** — le 07 §14 et le 05 §9.7 sont les textes précis ; le 06
+§10.1 fournit la valeur.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun amendement. Le pack est **interprété**, pas modifié.
+
+## 2026-09-04 — [L5a] Quel plafond pour les paramètres KDF relus du stockage (F-25) ?
+
+Les paramètres Argon2id voyagent avec le coffre — c'est le bon choix, il ne ferme aucune porte — mais
+rien ne bornait ce qui revient : `m = 4 000 000`, `t = 1 000 000` étaient acceptés, soit un déni de
+service au déverrouillage écrit par une seule ligne dans IndexedDB. A24 a posé un plafond et le
+remonte comme décision humaine (11 §8-4, sécurité).
+
+Options :
+
+1. Un plafond en valeur absolue par paramètre. **Écartée** : il dérive du profil qu'il est censé
+   protéger, et devient faux le jour où le profil est durci.
+2. **Un plafond sur le TRAVAIL total, amarré au profil : `travailKdf(défaut) × 4`.**
+3. Aucun plafond, on s'en remet au budget A28. **Écartée** : un budget est une cible de performance,
+   pas un refus ; il ne s'oppose à rien.
+
+Arbitrage : **option 2**, multiplicateur **4** confirmé. Deux raisons, dans cet ordre : il laisse
+passer un durcissement humain raisonnable (un profil `t = 4` à mémoire égale est accepté — testé), et
+il **suit le profil** au lieu de le doubler en constante, de sorte qu'un durcissement futur relève le
+plafond du même geste. La borne mesurée : dérivation médiane 61 ms (A51, machine de développement)
+contre un budget A28 d'1 s — quatre fois le travail reste sous le budget avec plus d'un ordre de
+grandeur de marge, **et il reste à mesurer sur iPad**, ce qui n'a pas été fait et est déclaré tel.
+Écart assumé avec la lettre d'A51, et il est juste : les bornes ne vivent **pas** dans un `.max()`
+Zod. Un dépassement s'y lirait « coffre illisible » — exactement la confusion que F-22 punit.
+Règle de précédence **sans objet** (le pack ne borne pas ces paramètres).
+Décideur : **A01**, sur délégation du 2026-09-04 ; profil Argon2id lui-même **inchangé** (confirmé par
+Williams le 2026-09-02), seules des bornes de **refus** sont ajoutées.
+Impact spec : aucun.
+
+## 2026-09-04 — [gouvernance] Le plafond de TROIS chantiers suivis tient-il en autopilote ?
+
+Williams, 2026-09-04 : « attention à toujours être au maximum des capacités de codage et
+d'implémentation pour ne pas perdre de temps ». `ORGANISATION_AGENTS.md` §2 plafonne à **trois
+chantiers suivis**, et l'amendement du 2026-08-31 dit d'où vient ce chiffre : il mesure **ce qu'un
+pilote arrive à tenir en tête**, et il est passé de deux à trois le jour où l'on a branché un chef
+d'équipe par chantier — « ce n'est pas le plafond qu'on relâche, c'est l'intermédiaire qu'on branche ».
+
+Options :
+
+1. Tenir trois. **Écartée** : les chantiers restants sont disjoints par construction (`apps/field`,
+   `apps/hq`, `apps/api`, `.github/`) et trois d'entre eux attendraient sans raison technique.
+2. **Porter le plafond à SIX chantiers suivis, les deux autres contraintes du §2 INCHANGÉES.**
+3. Supprimer le plafond. **Écartée** : le motif du §2 reste vrai, et le 2026-08-30 a montré qu'un
+   pilote débordé produit des rapports faux — deux blocages sur trois l'étaient.
+
+Arbitrage : **option 2**, et **ce qui bouge est nommé, comme ce qui ne bouge pas** :
+
+- **La contrainte 1 (COLLISION) est inchangée et reste un INTERDIT, pas un plafond** : jamais deux
+  lots sur les mêmes fichiers. C'est elle qui rend l'élargissement possible — les six chantiers ne
+  partagent aucun fichier, mesuré à l'instant par `git merge-tree` sur les quatre branches en attente :
+  conflit sur `DECISIONS.md` et `docs/ETAT.md` **et sur rien d'autre**.
+- **La contrainte 2 (MÉMOIRE) est inchangée** : au plus **deux exécutions lourdes** simultanées, tous
+  chantiers confondus. Un seul des six chantiers monte des conteneurs (l'API) ; les autres tournent en
+  `jsdom`. Le plafond de six porte sur les chantiers, jamais sur les exécutions.
+- **L6 se développe toujours SEUL** (`CLAUDE.md` §4). Le plafond ne l'entame pas.
+- Chaque chantier garde **un agent responsable identifié** ; le pilote suit des rapports, pas des
+  fichiers.
+
+Règle de précédence : **`CLAUDE.md` gagne**, et `ORGANISATION_AGENTS.md` le dit de lui-même (« ce
+fichier ne prime sur rien ; il outille `CLAUDE.md` §4 et §7 »). Le §4 pose l'interdit de collision et
+le développement solitaire de L6 : les deux sont tenus. Le plafond d'attention n'est écrit que dans
+le fichier outil, et c'est son auteur qui l'amende.
+
+Décideur : **Williams**, 2026-09-04.
+Impact spec : `docs/ORGANISATION_AGENTS.md` §2 amendé et daté ; `CLAUDE.md` §4 inchangé.
+
+## 2026-09-04 — [L1 / E18] Le 409 de SIREN sur une fiche ARCHIVÉE, et le contrat de `details`
+
+A16 a mesuré par sonde, en testant le correctif du défaut ① : un conflit de **SIREN** contre une
+fiche `deleted_at IS NOT NULL` rend `COMPANY_DUPLICATE` avec « Rapprochez les deux fiches » — vers une
+fiche que `GET /:id` rend en 404. La décision B du jour n'avait tranché que `external_ref` : **deux
+colonnes uniques de la même table, deux comportements.** Et `details[0].code` (`fiche_active |
+fiche_archivee`) n'existe que sur l'un des deux 409 — un front qui branche dessus reçoit `undefined`
+une fois sur deux. Troisième question jointe : le chemin dégradé (fiche disparue entre la violation et
+la relecture → 409 **sans `details`**) est-il un contrat ou un accident ?
+
+Options :
+
+1. **Symétrie complète** : le 409 de SIREN nomme l'archive et oriente vers la restauration ;
+   `details[0].code` devient **systématique** sur les 409 d'unicité de `companies` ; le chemin dégradé
+   est un **contrat** — statut et `code` garantis, `details` au mieux.
+2. Laisser le SIREN tel quel et ne traiter que `external_ref`. **Écartée** : c'est la même table, le
+   même invariant 7 et le même piège (un 409 muet sur une fiche invisible fait créer un doublon).
+3. Rendre `details` garanti en re-lisant sous verrou. **Écartée** : la lecture APRÈS coup est le
+   choix explicite de `depot.ts` (« une lecture qui échouerait dégrade le message, jamais la
+   décision ») ; un verrou pour un message coûterait plus que le message.
+
+Arbitrage : **option 1**. Règle de précédence : **§16-22 > §1-15** — le 11 §3 impose la cohérence de
+l'enveloppe d'erreur, et une clé présente une fois sur deux n'est pas cohérente.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun. Le 04 est inchangé ; le contrat de `details` est **écrit** dans
+`packages/shared` là où le code d'erreur est documenté.
+
+## 2026-09-05 — [securite] ZAP remis en service : bloquant maintenant, ou après traitement des 12 alertes ?
+
+Constat **F-31** : aucune ligne ZAP entre le 2026-09-02 07h35 UTC (dernier scan réel, run
+`33603477826`) et le 2026-09-05. Deux causes mesurées, et **aucune n'est celle que le mot « skippé »
+suggérait**. (1) Le job `securite` de `deploy-staging.yml` déclarait `needs: [deployer]` sans `if:` ;
+or un contrôle de GOUVERNANCE **postérieur à une livraison réussie** (empreinte du script distant)
+rougit depuis le 2026-09-02 14h40 UTC, et le scan a été skippé par ricochet sur **neuf runs**
+(`33643594297` → `33920693605`). Un job `skipped` ne rougit pas : d'où deux jours de silence.
+(2) Plus grave : le drapeau `-I` de `zap-baseline.py` transforme un code 2 en code 0, et aucune règle
+n'est au niveau FAIL — **le seul code atteignable était 0**, donc la bascule `ZAP_BLOQUANT: 'true'`
+promise à la porte L2 (entrée du 2026-08-27) était un **geste vide**. Mesure A/B du 2026-09-05, même
+cible, image `sha256:781a2bda…` : `-a` → code **2** (7 WARN-NEW) · `-a -I` → code **0** (les mêmes 7).
+
+Corrigé **sans arbitrage**, ce sont des défauts : `-I` retiré · verdict extrait dans
+`.github/scripts/zap-verdict.sh`, table de vérité de 13 cas **rejouée avant chaque scan** · codes 1
+et 3 bloquants en toutes circonstances · `ZAP_BLOQUANT` mal orthographié = erreur dure · rapport JSON
+obligatoire · **scan nocturne** (`cron: '17 3 * * *'`) pour rendre l'absence bruyante · `securite`
+conditionné à un **fait mesuré** (la sonde HTTP publique a répondu). Aucun garde retiré ni adouci :
+`deployer` échoue comme avant. **Preuve par les deux sens**, staging réel, même digest :
+`'true'` → run `33925309775` **ÉCHEC** · `'false'` → run `33925246206` **SUCCÈS**.
+
+**Reste à trancher : `ZAP_BLOQUANT` passe-t-il à `'true'` ?** Le scan rend 2 sur **12 alertes
+réelles**, aucune High, aucune FAIL-NEW : **1 Medium** (`10055` CSP `style-src unsafe-inline`,
+3 occ.) · **3 Low** (`90004` COEP / COOP / CORP absents, 10 occ.) · **8 Informational** (`90005`
+Sec-Fetch ×4, `10049`, `10094`, `10109`, `10015` — 26 occ.).
+
+Options :
+
+1. `'true'` maintenant : `main` rougit à **chaque** merge tant que les 12 restent ouvertes.
+2. `'false'` maintenu, **borné et daté**, le temps qu'A51 les traite ; codes 1 et 3 restent bloquants.
+3. Rendre bloquant en excluant les règles gênantes (`-c … IGNORE`) ou en ne bloquant qu'au-dessus de
+   Medium. **Écartée sans être plaidée** : « un module sous le seuil se corrige par des tests, jamais
+   par un rétrécissement de périmètre ». Un scan vert par exclusion est le contrôle-qui-ment de F-31.
+
+Recommandation **A52 : option 2, échéance porte P-C**. Motif : le scan ne voit que **6 URL** — la
+coquille statique de `apps/field`, ni `/hq`, ni `/api`, ni aucune route d'authentification. Or c'est
+l'authentification (07 §12, L2) qui motivait la bascule : bloquer aujourd'hui ferait rougir `main` sur
+les en-têtes d'une page statique **sans garder la surface qu'il fallait garder**.
+Arbitrage : **EN ATTENTE — Williams**. Règle de précédence **sans objet** (aucune divergence
+interne au pack : le 07 §13 et le 09 §1 demandent le scan, ils ne disent pas quand il bloque).
+`ZAP_BLOQUANT` reste à `'false'` d'ici là, statut écrit dans
+le bandeau du workflow et dans le `::warning` de chaque run. Échéance **P-C**, pas « au lot
+suivant » — c'est cette formule qui avait perdu la bascule de la porte L2.
+Décideur : **Williams** (question posée par **A52** le 2026-09-05).
+Impact spec : aucun sur `/docs`. L'entrée du 2026-08-27 n'est pas amendée : elle est **constatée
+inexécutable en l'état** (cause 2), et la présente entrée porte désormais la question et sa date.

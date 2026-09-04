@@ -2527,6 +2527,32 @@ exécute « commit wip: puis push » à moitié) — fiche à ouvrir, `settings.
 Écart assumé : la note L6 fait 126 lignes là où 09 §3-1bis dit « ≤ 1 page » — densité préférée au
 format, sept points durs sourcés dans le code plutôt que supposés.
 
+## 2026-09-03 06h45 — [infra / diagnostic staging] — hors pipeline (fin de session propre)
+Dernier commit vert : 44e348b (main, PR #27 fusionnée)   ·   Branche : infra/diagnostic-staging   ·   Poussé : oui
+Tâche en cours : session `…01Xk19br` — pilotage passé à `…01Ckvewm` (DECISIONS 2026-09-03). PR #27
+fusionnée : note de conception L6 et correction du §9 sur `main`. PR #28 ouverte : fiches A-013
+(staging) et A-014 (le hook pre-push ne tourne pas là où `pnpm install` n'a pas tourné).
+STAGING, point de rupture localisé à la ligne : `loadComposeFile()` appelle `getGitRemoteStatus()`,
+qui lance `git ls-remote` SUR L'HÔTE (`exec_in_docker: false`) ; le `ls-remote` visible dans le
+journal tourne DANS le conteneur d'aide — deux commandes homonymes, seule la première décide.
+Rejouée le 2026-09-03 par le canal exact de Coolify, elle RÉUSSIT, et la config de l'app a été
+modifiée à 04h30, après le second échec : le défaut n'est peut-être plus présent. Déploiement
+relancé, verdict à lire. Détail complet et contre-mesures dans la fiche A-013.
+NE PAS modifier `deploy-staging.sh` : il refuse de sortir vert, c'est sa fonction.
+Prochaine action : lire le verdict du déploiement relancé ; si vert, `main` redevient verte et la
+chaîne des portes se rouvre. Puis faire fusionner la PR #28.
+Tests rouges connus : `main` ROUGE sur le seul job `8 · deploy-staging` (20 jobs sur 22 verts).
+Les quatre branches de lot sont VERTES. PR #26 est `CONFLICTING` depuis la fusion de #27 — conflit
+d'append sur `DECISIONS.md`/`ETAT.md`, se résout en gardant les deux côtés.
+PORTE L3 : blocage LEVÉ (bandeau « SUPERSÉDÉ » l. 18, R-L3-1 à R-L3-5 fermées, verdict sur
+`0d7f4f8`). Tracé sans être contesté : ce verdict a été rédigé par a7, session de VÉRIFICATION, que
+le §3 dit ne rien produire et dont le §10 réserve l'étape 6 au gardien A02 ; Williams a tranché
+« ça me va » — arbitrage humain assumé, pas un oubli.
+QUATRE ERREURS DE CETTE SESSION, toutes de la même forme — une commande juste, une question mal
+posée : §9 lu dans le dépôt bare (périmé d'un jour) · `grep` sur VERDICT/REJEU au lieu de FERMETURE ·
+`sed -n '16p'` sans la ligne 18 · lignes `^[[36;1m` du journal CI (le SOURCE du workflow) lues comme
+des erreurs émises, d'où un « secrets TELEGRAM absents » faux — ils existent depuis le 2026-08-28.
+
 ## 2026-09-03 08h51 — [lot L3 / porte] — étape pipeline 7/7 — **LA PORTE EST SIGNÉE**
 
 Dernier commit vert : 0d7f4f8 (bandeau de superseding) · Branche : lot/l3-suite · Poussé : oui
@@ -2791,3 +2817,33 @@ Tests rouges connus : `main` rouge sur `8 · deploy-staging` seulement (R-L3-2-b
 - **7 commits de la banque de questions n'existaient que sur cette machine** : la branche
   `contenu/banque-questions-vague-1` n'avait aucune contrepartie sur `origin`, alors que son bloc
   ETAT du 2026-09-02 déclarait « Poussé : oui ». **Poussée ce jour** (1 846 lignes mises à l'abri).
+
+## 2026-09-04 21h35 — [autopilote / 3 chantiers] — étape pipeline 2/7 (implémentation)
+
+Dernier commit vert : `172b663` (`main`, #38) · Branche : `gouvernance/etat-autopilote` · Poussé : oui
+Tâche en cours : trois chantiers en parallèle, un chef chacun (`ORGANISATION_AGENTS.md` §2).
+Prochaine action : à la remise d'A24, **refusionner `main` dans `lot/l5a` puis fusionner #30** — c'est
+lui qui apporte axe-core et débloque `lot/l5b`.
+Tests rouges connus : `main` rouge sur `8 · deploy-staging` seulement. Sur `lot/l5c` : 2 erreurs
+`lint` et 1 rouge `@critique` **hérités et placés** (voir ci-dessous), aucun ajouté.
+
+**Chantiers** : C1 `lot/l5a` / A24 (F-22, F-23, F-25 + règle ESLint) · C2 `lot/l1-e18-external-ref` /
+A16 (les 16 cas du 409) · C3 `lot/l5c` / A23 (L5c, R1 inclus).
+
+**Le verdict A51 sur L5a est rendu** (`docs/securite/VERDICT_A51_L5A.md`, 746 l.) : **FUSIONNABLE SOUS
+RÉSERVE — 1 critique, 3 majeurs, 4 mineurs, 4 observations**, zéro fuite de confidentialité. **B2 est
+fermée.** F-22 (critique) : un coffre *illisible* se lit *absent*, l'app propose « Préparer cet
+appareil » et le mot de passe **détruit la DEK** — mesuré de bout en bout, et **sans attaquant** : tout
+`safeParse` en échec suffit, y compris un futur champ requis ajouté au schéma. F-24 (AES-GCM sans AAD)
+n'est pas un veto : **ré-arbitrage à P-C sur une prémisse corrigée** (celle de 2026-09-02 est fausse).
+**F-31 à ne pas perdre** : `ZAP_BLOQUANT` est resté à `'false'` et le job est **skippé depuis le
+2026-09-02** — aucune ligne ZAP n'existe depuis. À traiter dès qu'un chantier se libère.
+
+**Deux défauts d'intégration invisibles en CI**, trouvés en fusionnant `lot/l5a` dans `lot/l5c` : la
+garde vit sur une branche et le code gardé sur l'autre (un test `@critique` de l5a protège un état
+d'erreur qu'`AccesEntretien` de l5b fait disparaître ; la règle ESLint « écriture Dexie » de l5a mord
+sur un `Map` de l5b). Placés : la règle chez A24, `AccesEntretien` chez A22 à la refusion de `lot/l5b`.
+
+**Mesure de la file** : les 4 branches en attente ne conflictent avec `main` que sur `DECISIONS.md` et
+`docs/ETAT.md`. **Zéro conflit de code.** Fiche **A-015** ouverte (pilote de fusion `union`, `ETAT.md`
+exclu à dessein — « le dernier bloc fait foi » ne se délègue pas à un automatisme).
