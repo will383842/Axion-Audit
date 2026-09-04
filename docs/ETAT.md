@@ -2684,6 +2684,36 @@ n'est jamais remis à `null` après un `release` système — le Wake Lock n'est
 retour au premier plan ; et `contexte.tsx:281`, le `useMemo` ne mémoïse rien, `useVerrou` rendant un
 objet neuf à chaque rendu. Aucun n'est bloquant.
 
+## 2026-09-03 13h35 — [session pilote] — FIN DE SESSION PROPRE, reprise préparée
+
+Dernier commit vert : `508ae15` (`main`) · Branche : gouvernance/reprise-2026-09-03 · Poussé : oui
+Tâche en cours : aucune. Session close volontairement (`CLAUDE.md` §8), pas par limite de contexte.
+Tests rouges connus : `main` rouge sur `8 · deploy-staging` **seulement** (empreinte du script
+serveur), couvert par R-L3-2-bis rattaché à L0. **Aucun rouge fonctionnel nulle part.**
+
+**LIRE D'ABORD `docs/journal/2026-09-03.md`, section « APRÈS-MIDI »** — état complet, les quatre
+défauts de méthode payés aujourd'hui, les trois défauts rendus aux producteurs et non corrigés, et
+une prémisse fausse à rectifier. **Ce bloc n'en est que l'index.**
+
+`main` = `508ae15` · tags `v0.l0` `v0.l2` **`v0.l3`** · **56 % écrit · 37 % sur `main` · 33 % porte
+signée**. PR ouvertes : **#30** L5a (**ne pas fusionner**, réserve B2 ouverte) · **#31** L5b ·
+**#32** L7a (0 bloquante) · **#28** staging · branche `lot/l1-e18-external-ref` (E18 + son test,
+sans PR). **B1 fermée** (`1b89433`) : `verrou.ts` de 0,00 % à **100 %**, 42 tests, preuve par bascule.
+
+**PROCHAINE ACTION, dans cet ordre strict** — ne pas réordonner :
+
+1. **A51 sur `lot/l5a`** — réserve **B2**, seule bloquante restante. C'est elle qui tient #30.
+2. **Coller le glob `verrou.ts`** dans `.github/coverage-critical-paths.json` (bloc JSON prêt au §5
+   du rapport A26). **Ne PAS inscrire `apps/field/src/app/**`** — mesuré 80,49 %, rougirait.
+3. B2 fermée → merge **#30** (il apporte **axe-core**, que la DoD attend et que `main` n'a pas).
+4. `lot/l5b` **refusionne `main`** — bifurqué AVANT les 5 bloquants PWA de L5a — rejoue sa suite sur
+   le vrai socle, puis **#31**, puis **#32**.
+5. **Absorber A-006** (cookies httpOnly console) en incrément nommé, après #32.
+6. **L5c** — conditionne P-C. Périmètre : `docs/conception/LOT_L5.md` §1.
+
+**Trois gestes restent à Williams** : le root sur staging (`infra/README.md` §6.3), l'arbitrage
+**P-DESCOPE** du 15/09, et les portes **P-C / P-D / P-E** — hors délégation du 2026-09-03.
+
 ## 2026-09-03 13h50 — [lot L5 / incrément L5a] — le glob de couverture est POSÉ, plus « à voir »
 
 Dernier commit vert : (celui-ci) · Branche : lot/l5a · Poussé : oui
@@ -2704,3 +2734,60 @@ glob : **voir le rapport** ». Ce rapport était celui d'un agent : il ne vit qu
 l'a lancé, et il disparaît avec elle. **Une recommandation qui n'entre pas dans un fichier est
 perdue**, même excellente, même tenant en huit lignes de JSON. Le renvoi a été remplacé par la chose
 elle-même.
+
+## 2026-09-03 14h30 — [session pilote] — CLÔTURE DÉFINITIVE, ce bloc fait foi
+
+Dernier commit vert : la tête de `main` qui porte ce bloc · Branche : `main` · Poussé : oui
+Tâche en cours : aucune. Session close (`CLAUDE.md` §8). **Rien de non commité, rien de non poussé,
+vérifié worktree par worktree.**
+Tests rouges connus : `main` rouge sur `8 · deploy-staging` **seulement** — empreinte du script
+serveur, couvert par R-L3-2-bis rattaché à L0. **Aucun rouge fonctionnel nulle part.**
+
+**Ce bloc remplace celui de 13h35**, qui citait `main = 508ae15` et une branche supprimée depuis :
+deux cibles mouvantes qu'une session neuve aurait suivies dans le vide. Il n'en cite plus aucune.
+
+**LIRE D'ABORD `docs/journal/2026-09-03.md`** — section « APRÈS-MIDI » pour le récit et les défauts
+ouverts, puis **« CARTE DES ARTEFACTS »** en fin de fichier : elle dit, branche par branche et
+chemin par chemin, où lire ce qui n'est pas sur `main` (les trois contrôles A02, la matrice E1-E47,
+E18). On les lit par `git show <branche>:<chemin>`, sans checkout.
+
+**Cinq PR ouvertes** : **#30** L5a (**ne pas fusionner** — réserve B2) · **#31** L5b · **#32** L7a ·
+**#34** E18 · **#28** staging. Tags `v0.l0` `v0.l2` `v0.l3`.
+Burn-down : **56 % écrit · 37 % sur `main` · 33 % porte signée** (référence 26 j-h, fichier 07).
+
+**PROCHAINE ACTION, dans cet ordre strict :**
+
+1. **A51 sur `lot/l5a`** — réserve **B2**, seule bloquante restante. C'est elle qui tient #30.
+2. B2 fermée → merge **#30** (il apporte **axe-core**, que la DoD attend et que `main` n'a pas).
+3. `lot/l5b` **refusionne `main`** — bifurqué AVANT les 5 bloquants PWA de L5a — rejoue sa suite sur
+   le vrai socle, puis **#31**, puis **#32**, puis **#34**.
+4. **Absorber A-006** (cookies httpOnly console) en incrément nommé, après #32.
+5. **L5c** — conditionne P-C. Périmètre : `docs/conception/LOT_L5.md` §1.
+
+**À Williams, hors délégation** : le geste root sur staging (`infra/README.md` §6.3), l'arbitrage
+**P-DESCOPE** du 15/09, et les portes **P-C / P-D / P-E**.
+
+## 2026-09-04 20h40 — [autopilote de bout en bout] — ouverture, hors pipeline code
+
+Dernier commit vert : `3c60af7` (`main`) · Branche : `gouvernance/autopilote-2026-09-04` · Poussé : oui
+Tâche en cours : ouvrir l'autopilote — délégation tracée, file de reprise inchangée.
+Prochaine action : fermer **B2** (A51 sur `lot/l5a`), puis dérouler la file du bloc du 2026-09-03
+14h30 sans la réordonner.
+Tests rouges connus : `main` rouge sur `8 · deploy-staging` seulement (R-L3-2-bis, L0).
+
+**Ce que ce bloc ajoute, et rien d'autre :**
+
+- **La délégation s'étend aux PORTES** (Williams, 2026-09-04, `DECISIONS.md`) sous quatre bornes :
+  dossier intégral, DoD non amendée, une porte échouée reste échouée, tout est re-signable. La ligne
+  « Williams » de chaque porte se signera **par délégation nommée**, jamais comme signature rendue.
+- **Défaut ① du 2026-09-03 tranché** : `409 COMPANY_EXTERNAL_REF_DUPLICATE`, et une fiche archivée
+  **conserve** sa référence console — le 409 doit le dire et orienter vers la restauration.
+- **CONTRAINTE D'ENVIRONNEMENT NOUVELLE, elle change l'organisation** : cette session refuse toute
+  écriture **hors du répertoire principal**. Les worktrees `_ax*` sont lisibles, pas inscriptibles.
+  `ORGANISATION_AGENTS.md` §2 (un worktree par chantier) reste la doctrine ; il n'est simplement pas
+  applicable ici, et les chantiers se **sérialisent** dans le répertoire principal.
+- **`core.bare=true` dans `.git/config` du répertoire principal** : `git status` y est cassé.
+  Contournement sans écriture : `git --work-tree=. -c core.bare=false <cmd>`.
+- **7 commits de la banque de questions n'existaient que sur cette machine** : la branche
+  `contenu/banque-questions-vague-1` n'avait aucune contrepartie sur `origin`, alors que son bloc
+  ETAT du 2026-09-02 déclarait « Poussé : oui ». **Poussée ce jour** (1 846 lignes mises à l'abri).
