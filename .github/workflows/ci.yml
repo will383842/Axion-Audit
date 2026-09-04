@@ -168,13 +168,21 @@ jobs:
   # GARDE-FOU 2 — SCRIPTS SHELL D'INFRA (11 §7, scripts livrés par A11)
   # ---------------------------------------------------------------------------
   shellcheck:
-    name: shellcheck (infra/scripts/*.sh + .github/scripts/*.sh)
+    # ⚠️ NE PAS RENOMMER CE JOB SANS TOUCHER À LA PROTECTION DE BRANCHE.
+    # Ce libellé EXACT figure dans les `required_status_checks.contexts` de
+    # `main`. Mesuré le 2026-09-05 : renommé en « … + .github/scripts/*.sh »,
+    # le contrôle requis n'est plus jamais rendu et la PR reste `BLOCKED` pour
+    # toujours (échec fermé, donc sans danger — mais indéboulonnable sans un
+    # geste d'administration du dépôt, qui n'appartient pas à un agent).
+    # Le périmètre réel est décrit à l'étape ci-dessous ; c'est le NOM qui est
+    # un contrat avec GitHub, pas la vérité du scope.
+    name: shellcheck (infra/scripts/*.sh)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: ./.github/actions/setup-node-pnpm
 
-      - name: Analyser les scripts d'exploitation
+      - name: Analyser les scripts d'exploitation (infra/scripts + .github/scripts)
         run: |
           set -euo pipefail
           # shellcheck est préinstallé sur les runners ubuntu-latest.
