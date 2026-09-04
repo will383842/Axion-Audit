@@ -5,11 +5,12 @@
   "type": "module",
   "description": "PWA terrain offline-first (invariant 1) — React 18 + Vite. JAMAIS Next.js (11 §2).",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit && tsc --noEmit --project sw/tsconfig.json && vite build && node scripts/build-sw.mjs",
+    "dev": "node scripts/build-icones.mjs && vite",
+    "build": "tsc --noEmit && tsc --noEmit --project sw/tsconfig.json && node scripts/build-icones.mjs && vite build && node scripts/build-sw.mjs",
     "build:sw": "node scripts/build-sw.mjs",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit && tsc --noEmit --project sw/tsconfig.json"
+    "typecheck": "tsc --noEmit && tsc --noEmit --project sw/tsconfig.json",
+    "build:icones": "node scripts/build-icones.mjs"
   },
   "dependencies": {
     "@axion/shared": "workspace:*",

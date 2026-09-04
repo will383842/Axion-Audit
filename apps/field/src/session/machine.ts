@@ -126,6 +126,19 @@ const LIBELLE_ETAT: Record<EtatSession, string> = {
   valide: 'validée',
 };
 
+/**
+ * Le profil, en français.
+ *
+ * Le message citait « guidé strict » EN DUR alors que `profil` est un paramètre :
+ * un `expert` refusé aurait lu un motif qui parle de quelqu'un d'autre (remarque
+ * de la revue A29). Un motif de refus qui se trompe d'interlocuteur est pire
+ * qu'un refus muet — il envoie chercher la mauvaise autorisation.
+ */
+const LIBELLE_PROFIL: Record<ProfilAuditeur, string> = {
+  guide_strict: 'guidé strict',
+  expert: 'expert',
+};
+
 const LIBELLE_ACTION: Record<ActionSession, string> = {
   demarrer: 'démarrer',
   terminer: 'terminer',
@@ -164,7 +177,7 @@ export function peutTransiter(
   if (!depuisCetEtat.profils.includes(profil)) {
     return {
       autorise: false,
-      motif: `Votre profil (guidé strict) ne permet pas de ${LIBELLE_ACTION[action]} une session ${LIBELLE_ETAT[etat]}. Demandez à un administrateur de la débloquer, avec motif.`,
+      motif: `Votre profil (${LIBELLE_PROFIL[profil]}) ne permet pas de ${LIBELLE_ACTION[action]} une session ${LIBELLE_ETAT[etat]}. Demandez à un administrateur de la débloquer, avec motif.`,
     };
   }
 

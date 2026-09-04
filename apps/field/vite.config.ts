@@ -61,7 +61,24 @@ function manifestePwa(): Plugin {
     dir: 'ltr',
     theme_color: COULEURS_CHARTE.terracotta,
     background_color: COULEURS_CHARTE.ivoire,
-    icons: [],
+    // Sans icône, le manifeste n'est PAS installable — donc pas de persistance
+    // durable d'IndexedDB sur iPad (03 §22.1), donc aucune mission embarquable
+    // (05 §31-2). C'était le bloquant B2 de la revue A29. Les fichiers sont
+    // GÉNÉRÉS depuis les jetons par `scripts/build-icones.mjs`.
+    icons: [
+      { src: '/icones/icone-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: '/icones/icone-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+      {
+        src: '/icones/icone-maskable-512.png',
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'maskable',
+      },
+    ],
+    // Le DESSIN reste celui de Williams : ces icônes sont un aplat de charte, et
+    // le manifeste le déclare plutôt que de le laisser deviner (DECISIONS.md
+    // 2026-09-02, « icône PROVISOIRE, tracée — ESCALADE SOUS DÉFAUT »).
+    _provisoire: true,
   };
 
   return {
