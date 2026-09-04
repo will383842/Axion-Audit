@@ -7683,8 +7683,7 @@ Sec-Fetch ×4, `10049`, `10094`, `10109`, `10015` — 26 occ.).
 
 Options :
 
-1. `'true'` maintenant : `main` rougit à **chaque** merge tant que les 12 alertes ne sont pas
-   traitées — dont la seule Medium, qui touche du code de production hors périmètre d'A52.
+1. `'true'` maintenant : `main` rougit à **chaque** merge tant que les 12 restent ouvertes.
 2. `'false'` maintenu, **borné et daté**, le temps qu'A51 les traite ; codes 1 et 3 restent bloquants.
 3. Rendre bloquant en excluant les règles gênantes (`-c … IGNORE`) ou en ne bloquant qu'au-dessus de
    Medium. **Écartée sans être plaidée** : « un module sous le seuil se corrige par des tests, jamais
@@ -7692,9 +7691,11 @@ Options :
 
 Recommandation **A52 : option 2, échéance porte P-C**. Motif : le scan ne voit que **6 URL** — la
 coquille statique de `apps/field`, ni `/hq`, ni `/api`, ni aucune route d'authentification. Or c'est
-l'authentification (07 §12, L2) qui motivait la bascule : bloquer aujourd'hui ferait rougir `main`
-sur les en-têtes d'une page statique **sans garder la surface qu'il fallait garder**.
-Arbitrage : **EN ATTENTE — Williams**. `ZAP_BLOQUANT` reste à `'false'` d'ici là, statut écrit dans
+l'authentification (07 §12, L2) qui motivait la bascule : bloquer aujourd'hui ferait rougir `main` sur
+les en-têtes d'une page statique **sans garder la surface qu'il fallait garder**.
+Arbitrage : **EN ATTENTE — Williams**. Règle de précédence **sans objet** (aucune divergence
+interne au pack : le 07 §13 et le 09 §1 demandent le scan, ils ne disent pas quand il bloque).
+`ZAP_BLOQUANT` reste à `'false'` d'ici là, statut écrit dans
 le bandeau du workflow et dans le `::warning` de chaque run. Échéance **P-C**, pas « au lot
 suivant » — c'est cette formule qui avait perdu la bascule de la porte L2.
 Décideur : **Williams** (question posée par **A52** le 2026-09-05).
