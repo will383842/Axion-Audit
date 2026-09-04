@@ -91,6 +91,26 @@ produit un rapport de trois blocages dont **deux étaient faux**, faute de mesur
 > à ce qu'il compte finit par être appliqué au jugé, puis contesté, puis ignoré. **Trois règles nettes
 > valent mieux qu'un chiffre qui a l'air simple.**
 
+> **AMENDEMENT DU 2026-09-04 — Williams. Le plafond passe à SIX chantiers suivis.**
+> Motif : « toujours être au maximum des capacités de codage et d'implémentation pour ne pas perdre
+> de temps », dans le cadre de l'autopilote de bout en bout du même jour (`DECISIONS.md`).
+>
+> **Ce qui NE bouge PAS, et c'est ce qui rend l'amendement tenable** : la **contrainte 1**
+> (collision) reste un **interdit** — jamais deux lots sur les mêmes fichiers ; la **contrainte 2**
+> (mémoire) reste à **deux exécutions lourdes** simultanées, tous chantiers confondus ; **L6 se
+> développe toujours SEUL** (`CLAUDE.md` §4). Le plafond compte des **chantiers**, jamais des
+> exécutions, et jamais des agents.
+>
+> **Pourquoi ça tient ici, alors que le motif du plafond n'a pas changé.** Le §2 mesure ce qu'un
+> pilote tient en tête. Ce qui a changé n'est pas sa capacité, c'est la **preuve de disjonction** :
+> `git merge-tree` sur les quatre branches en attente rend le même verdict pour les quatre — conflit
+> sur `DECISIONS.md` et `docs/ETAT.md`, **et sur rien d'autre. Zéro conflit de code.** Six chantiers
+> qui ne partagent aucun fichier ne demandent pas six fois l'attention d'un : ils demandent six
+> rapports. **Le plafond d'attention se mesure aux fichiers partagés, pas au nombre de répertoires.**
+>
+> **La borne, et elle est réelle** : le jour où deux chantiers se disputent un fichier, ce n'est plus
+> l'amendement qui s'applique, c'est la contrainte 1 — et elle, elle ne se négocie pas.
+
 **Le nombre d'AGENTS par chantier, lui, n'a pas ce plafond.** Élargir en amont, sérialiser à
 l'exécution : dix agents peuvent écrire dix fichiers de tests en parallèle, ils ne peuvent pas les
 *lancer* en parallèle. Lecture, rédaction, revue et traçabilité coûtent de l'API, presque pas de RAM ;
