@@ -7590,3 +7590,40 @@ Règle de précédence **sans objet** (le pack ne borne pas ces paramètres).
 Décideur : **A01**, sur délégation du 2026-09-04 ; profil Argon2id lui-même **inchangé** (confirmé par
 Williams le 2026-09-02), seules des bornes de **refus** sont ajoutées.
 Impact spec : aucun.
+
+## 2026-09-04 — [gouvernance] Le plafond de TROIS chantiers suivis tient-il en autopilote ?
+
+Williams, 2026-09-04 : « attention à toujours être au maximum des capacités de codage et
+d'implémentation pour ne pas perdre de temps ». `ORGANISATION_AGENTS.md` §2 plafonne à **trois
+chantiers suivis**, et l'amendement du 2026-08-31 dit d'où vient ce chiffre : il mesure **ce qu'un
+pilote arrive à tenir en tête**, et il est passé de deux à trois le jour où l'on a branché un chef
+d'équipe par chantier — « ce n'est pas le plafond qu'on relâche, c'est l'intermédiaire qu'on branche ».
+
+Options :
+
+1. Tenir trois. **Écartée** : les chantiers restants sont disjoints par construction (`apps/field`,
+   `apps/hq`, `apps/api`, `.github/`) et trois d'entre eux attendraient sans raison technique.
+2. **Porter le plafond à SIX chantiers suivis, les deux autres contraintes du §2 INCHANGÉES.**
+3. Supprimer le plafond. **Écartée** : le motif du §2 reste vrai, et le 2026-08-30 a montré qu'un
+   pilote débordé produit des rapports faux — deux blocages sur trois l'étaient.
+
+Arbitrage : **option 2**, et **ce qui bouge est nommé, comme ce qui ne bouge pas** :
+
+- **La contrainte 1 (COLLISION) est inchangée et reste un INTERDIT, pas un plafond** : jamais deux
+  lots sur les mêmes fichiers. C'est elle qui rend l'élargissement possible — les six chantiers ne
+  partagent aucun fichier, mesuré à l'instant par `git merge-tree` sur les quatre branches en attente :
+  conflit sur `DECISIONS.md` et `docs/ETAT.md` **et sur rien d'autre**.
+- **La contrainte 2 (MÉMOIRE) est inchangée** : au plus **deux exécutions lourdes** simultanées, tous
+  chantiers confondus. Un seul des six chantiers monte des conteneurs (l'API) ; les autres tournent en
+  `jsdom`. Le plafond de six porte sur les chantiers, jamais sur les exécutions.
+- **L6 se développe toujours SEUL** (`CLAUDE.md` §4). Le plafond ne l'entame pas.
+- Chaque chantier garde **un agent responsable identifié** ; le pilote suit des rapports, pas des
+  fichiers.
+
+Règle de précédence : **`CLAUDE.md` gagne**, et `ORGANISATION_AGENTS.md` le dit de lui-même (« ce
+fichier ne prime sur rien ; il outille `CLAUDE.md` §4 et §7 »). Le §4 pose l'interdit de collision et
+le développement solitaire de L6 : les deux sont tenus. Le plafond d'attention n'est écrit que dans
+le fichier outil, et c'est son auteur qui l'amende.
+
+Décideur : **Williams**, 2026-09-04.
+Impact spec : `docs/ORGANISATION_AGENTS.md` §2 amendé et daté ; `CLAUDE.md` §4 inchangé.
