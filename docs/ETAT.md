@@ -2969,3 +2969,46 @@ glob : **voir le rapport** ». Ce rapport était celui d'un agent : il ne vit qu
 l'a lancé, et il disparaît avec elle. **Une recommandation qui n'entre pas dans un fichier est
 perdue**, même excellente, même tenant en huit lignes de JSON. Le renvoi a été remplacé par la chose
 elle-même.
+
+---
+
+## 2026-09-04 — [lot L5 / incrément L5c] — étape pipeline 1/7 (brief) — ARRÊT AVANT CODE
+
+Dernier commit : `5ef8ef2` (merge lot/l5a dans lot/l5c) · Branche : lot/l5c · Poussé : oui
+Tâche en cours : aucune. Session **arrêtée avant la première ligne de code L5c**, sur la règle
+« le socle doit être vert AVANT que tu écrives ta première ligne ».
+Prochaine action : **faire corriger les DEUX défauts d'intégration ci-dessous par leurs
+propriétaires** (A22 pour `ecrans/entretien/`, A24 pour `app/` et `eslint.config.js`), puis rouvrir
+L5c au brief.
+Tests rouges connus : **1** — `apps/field/src/app/EcranAccueil.test.tsx`, « @critique si la lecture
+locale REJETTE, l'écran affiche une erreur en français (cause + action), sans tomber ».
+
+**LE SOCLE ÉTAIT AMPUTÉ, ET LA FUSION L'A DIT.** `lot/l5b` ne contenait pas `lot/l5a`
+(`git merge-base --is-ancestor` = faux, 14 commits manquants dont les cinq bloquants PWA d'A29, les
+42 tests du verrou et le glob de couverture). La fusion a été faite, ses six conflits résolus par
+blocs depuis la base commune — jamais par hunk, jamais par fichier entier — et un contrôle en
+multiset a établi qu'**aucune ligne non vide des versions complètes des deux branches n'est perdue**.
+
+**DEUX DÉFAUTS D'INTÉGRATION, INVISIBLES SUR CHAQUE BRANCHE PRISE SEULE.** C'est le point qui vaut
+d'être retenu : ni l'un ni l'autre n'est un défaut de fusion, et aucune CI de branche ne pouvait les
+voir, parce que dans les deux cas **la garde vit sur une branche et le code gardé sur l'autre**.
+
+1. **`<AccesEntretien />` (L5b) emporte l'écran d'accueil (L5a) quand la lecture locale échoue.**
+   Son `useLiveQuery` relance l'erreur pendant le rendu ; le corps rendu devient `<div />` — donc
+   l'état d'erreur que le test `@critique` garde, celui-là même qu'A29 avait nommé, **disparaît au
+   moment précis où il devrait servir**. Mesuré : le test n'existe que sur `l5a`, le composant que
+   sur `l5b`.
+2. **La règle ESLint « écriture Dexie » (L5a) crie sur un `Map` (L5b).** Son sélecteur vise
+   `X.Y.delete(…)` / `X.Y.clear()` dès que l'objet appelé est un `MemberExpression` : il attrape
+   `enAttente.current.clear()` de `session/enregistrement.ts`, qui est une file en `useRef`, pas une
+   table. `pnpm lint` = 2 erreurs, toutes deux fausses. La glose de la règle annonce elle-même
+   qu'« un objet identifiant simple passe » — un objet à DEUX niveaux ne passe pas, et c'est le trou.
+
+**NON CORRIGÉS ICI, ET C'EST DÉLIBÉRÉ** : les trois fichiers en cause (`app/EcranAccueil.tsx`,
+`ecrans/entretien/AccesEntretien.tsx`, `eslint.config.js`) sont hors du périmètre L5c, qui est
+`ecrans/journee/**`, `agenda/**`, `sauvegarde/**` et l'ajout append-only à `app/vues.ts`. Un agent
+qui répare le fichier d'un autre pour se déboucher lui-même fabrique exactement la collision que le
+découpage en trois incréments existe pour empêcher.
+
+État mesuré du socle fusionné : `pnpm build` OK · `pnpm typecheck` RC=0 · `pnpm lint` **2 erreurs**
+· `pnpm test:unit` **1159/1159** · `pnpm test:interface` **590/591**.
