@@ -2654,3 +2654,33 @@ Tests rouges connus : `main` rouge sur `8 · deploy-staging` seulement (R-L3-2-b
 - **7 commits de la banque de questions n'existaient que sur cette machine** : la branche
   `contenu/banque-questions-vague-1` n'avait aucune contrepartie sur `origin`, alors que son bloc
   ETAT du 2026-09-02 déclarait « Poussé : oui ». **Poussée ce jour** (1 846 lignes mises à l'abri).
+
+## 2026-09-04 21h35 — [autopilote / 3 chantiers] — étape pipeline 2/7 (implémentation)
+
+Dernier commit vert : `172b663` (`main`, #38) · Branche : `gouvernance/etat-autopilote` · Poussé : oui
+Tâche en cours : trois chantiers en parallèle, un chef chacun (`ORGANISATION_AGENTS.md` §2).
+Prochaine action : à la remise d'A24, **refusionner `main` dans `lot/l5a` puis fusionner #30** — c'est
+lui qui apporte axe-core et débloque `lot/l5b`.
+Tests rouges connus : `main` rouge sur `8 · deploy-staging` seulement. Sur `lot/l5c` : 2 erreurs
+`lint` et 1 rouge `@critique` **hérités et placés** (voir ci-dessous), aucun ajouté.
+
+**Chantiers** : C1 `lot/l5a` / A24 (F-22, F-23, F-25 + règle ESLint) · C2 `lot/l1-e18-external-ref` /
+A16 (les 16 cas du 409) · C3 `lot/l5c` / A23 (L5c, R1 inclus).
+
+**Le verdict A51 sur L5a est rendu** (`docs/securite/VERDICT_A51_L5A.md`, 746 l.) : **FUSIONNABLE SOUS
+RÉSERVE — 1 critique, 3 majeurs, 4 mineurs, 4 observations**, zéro fuite de confidentialité. **B2 est
+fermée.** F-22 (critique) : un coffre *illisible* se lit *absent*, l'app propose « Préparer cet
+appareil » et le mot de passe **détruit la DEK** — mesuré de bout en bout, et **sans attaquant** : tout
+`safeParse` en échec suffit, y compris un futur champ requis ajouté au schéma. F-24 (AES-GCM sans AAD)
+n'est pas un veto : **ré-arbitrage à P-C sur une prémisse corrigée** (celle de 2026-09-02 est fausse).
+**F-31 à ne pas perdre** : `ZAP_BLOQUANT` est resté à `'false'` et le job est **skippé depuis le
+2026-09-02** — aucune ligne ZAP n'existe depuis. À traiter dès qu'un chantier se libère.
+
+**Deux défauts d'intégration invisibles en CI**, trouvés en fusionnant `lot/l5a` dans `lot/l5c` : la
+garde vit sur une branche et le code gardé sur l'autre (un test `@critique` de l5a protège un état
+d'erreur qu'`AccesEntretien` de l5b fait disparaître ; la règle ESLint « écriture Dexie » de l5a mord
+sur un `Map` de l5b). Placés : la règle chez A24, `AccesEntretien` chez A22 à la refusion de `lot/l5b`.
+
+**Mesure de la file** : les 4 branches en attente ne conflictent avec `main` que sur `DECISIONS.md` et
+`docs/ETAT.md`. **Zéro conflit de code.** Fiche **A-015** ouverte (pilote de fusion `union`, `ETAT.md`
+exclu à dessein — « le dernier bloc fait foi » ne se délègue pas à un automatisme).
