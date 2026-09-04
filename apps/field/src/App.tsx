@@ -23,6 +23,10 @@ import { useTerrain } from './app/contexte.js';
 import { VUES } from './app/vues.js';
 import { EcranEntretien } from './ecrans/entretien/EcranEntretien.js';
 import { EcranNouvelEntretien } from './ecrans/entretien/EcranNouvelEntretien.js';
+import { EcranAgenda } from './ecrans/journee/EcranAgenda.js';
+import { EcranAujourdhui } from './ecrans/journee/EcranAujourdhui.js';
+import { EcranFinDeJournee } from './ecrans/journee/EcranFinDeJournee.js';
+import { EcranPilote } from './ecrans/journee/EcranPilote.js';
 
 function ContenuCourant(): ReactNode {
   const { vue } = useTerrain();
@@ -38,6 +42,15 @@ function ContenuCourant(): ReactNode {
       return <EcranNouvelEntretien />;
     case 'entretien':
       return <EcranEntretien />;
+    // ── L5c (A23) ──
+    case 'aujourdhui':
+      return <EcranAujourdhui />;
+    case 'agenda':
+      return <EcranAgenda />;
+    case 'pilote':
+      return <EcranPilote />;
+    case 'finDeJournee':
+      return <EcranFinDeJournee />;
   }
 }
 

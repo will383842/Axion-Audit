@@ -25,7 +25,7 @@
 //      outbox ») — c'est-à-dire précisément le travail que le serveur n'a pas
 //      encore reçu, donc le seul qui puisse disparaître avec l'appareil.
 //
-// Traçabilité : E34 (sauvegarde et restauration éprouvées), E6 (hors ligne
+// Traçabilité : E38 (sauvegarde terrain : sync ≥ 1×/j + export de secours), E6 (hors ligne
 // total), E33 (sécurité / RGPD).
 // =============================================================================
 import 'fake-indexeddb/auto';

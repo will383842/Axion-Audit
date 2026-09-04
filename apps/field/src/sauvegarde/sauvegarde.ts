@@ -47,7 +47,7 @@
 // `LOT_L5.md` §3.6 : « elle rend `{statut: 'indisponible'}` et l'écran l'affiche
 // tel quel — jamais une pastille verte ». Le point est remonté pour L6a.
 //
-// Traçabilité : E34 (sauvegarde et restauration éprouvées), E6 (hors ligne
+// Traçabilité : E38 (sauvegarde terrain : sync ≥ 1×/j + export de secours), E6 (hors ligne
 // total), E33 (sécurité / RGPD).
 // =============================================================================
 import { z } from 'zod';

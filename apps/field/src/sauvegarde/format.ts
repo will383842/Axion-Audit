@@ -37,7 +37,7 @@
 // Aucun des deux n'est une donnée personnelle ; tous deux sont en clair, comme le
 // reste de l'en-tête, qui DOIT l'être puisqu'il porte le sel de dérivation.
 //
-// Traçabilité : E34 (sauvegarde et restauration éprouvées), E33 (sécurité/RGPD).
+// Traçabilité : E38 (sauvegarde terrain : sync ≥ 1×/j + export de secours), E33 (sécurité/RGPD).
 // =============================================================================
 import { z } from 'zod';
 import { enveloppeSchema } from '../local/enveloppe.js';

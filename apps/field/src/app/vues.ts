@@ -46,7 +46,16 @@ export const VUES = {
   // ── L5b (écran d'entretien) — A22 ─────────────────────────────────────────
   nouvelEntretien: { titre: 'Nouvel entretien', exigeCoffreOuvert: true },
   entretien: { titre: 'Entretien', exigeCoffreOuvert: true },
-  // ── L5c (journée, agenda, sauvegarde) — à compléter par A23 ───────────────
+  // ── L5c (journée, agenda, sauvegarde) — A23 ──────────────────────────────
+  // `aujourdhui` est le COCKPIT du 03 §34.2. Il ne remplace pas `accueil`, qui
+  // est l'écran d'embarquement du socle L5a : les deux coexistent, et le choix
+  // de celui qui porte `VUE_INITIALE` appartient à A20 à l'intégration — le
+  // trancher ici reviendrait à retirer de la route l'écran d'un autre incrément
+  // depuis un fichier déclaré append-only. Point remonté au rapport d'A23.
+  aujourdhui: { titre: 'Aujourd’hui', exigeCoffreOuvert: true },
+  agenda: { titre: 'Agenda', exigeCoffreOuvert: true },
+  pilote: { titre: 'Où en est la mission', exigeCoffreOuvert: true },
+  finDeJournee: { titre: 'Fin de journée', exigeCoffreOuvert: true },
 } as const satisfies Record<string, DefinitionVue>;
 
 export type CodeVue = keyof typeof VUES;
