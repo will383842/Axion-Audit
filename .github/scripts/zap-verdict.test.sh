@@ -26,7 +26,11 @@ eprouver() {
   local obtenu
   total=$((total + 1))
   set +e
-  "${verdict}" "${code}" "${bloquant}" "epreuve" >/dev/null 2>&1
+  # `bash <script>` et non `<script>` : le bit exécutable ne survit pas au dépôt
+  # (git a enregistré 100644 depuis Windows), et un 126 « permission denied »
+  # ferait dire au test que la garde ne mord plus alors qu'elle n'a pas tourné.
+  # Mesuré : run 33925076306, 13/13 cas faux pour cette seule raison.
+  bash "${verdict}" "${code}" "${bloquant}" "epreuve" >/dev/null 2>&1
   obtenu=$?
   set -e
   if [ "${obtenu}" -eq "${attendu}" ]; then
