@@ -2767,3 +2767,20 @@ sur un `Map` de l5b). Placés : la règle chez A24, `AccesEntretien` chez A22 à
 **Mesure de la file** : les 4 branches en attente ne conflictent avec `main` que sur `DECISIONS.md` et
 `docs/ETAT.md`. **Zéro conflit de code.** Fiche **A-015** ouverte (pilote de fusion `union`, `ETAT.md`
 exclu à dessein — « le dernier bloc fait foi » ne se délègue pas à un automatisme).
+
+## 2026-09-05 02h00 — [lot L1 / incrément E18 `external_ref`] — étape pipeline 4/7 (revue croisée A17, correctifs livrés)
+
+Dernier commit vert : `c77a021` (CI 33927012410) · Branche : `lot/l1-e18-external-ref` (PR #34) · Poussé : oui
+Tâche en cours : fermer les bloquants de `docs/portes/REVUE_A17_E18_2026-09-05.md`. **B-2** fermé par
+`63c68bc` (la relecture d'après coup avale son échec : 409 garanti, `details` au mieux — cause : seconde
+connexion du pool prise sous transaction, `max: 10`, timeout 5 s). **B-1** fermé par `d1f7b7d` (le bloc
+`06h45` rejoint la branche par fusion d'`origin/main` `1b54554`, contrôle par blocs 78 / 203). **B-3** est
+à A16 : les 5 cas du SIREN archivé et du `code` systématique sont sur la branche (`6a9db3c`, 38 tests
+verts localement). m-1 (citation drizzle 0.45.2) fermé dans `63c68bc`.
+Ce que cet incrément a livré depuis le bloc du 03 17h05 : le défaut ① (`b89dfdf`, 409 et plus 500 sur
+`external_ref` en double), les 16 cas d'A16 (`b713f84`), la symétrie du SIREN archivé et
+`details[0].code ∈ { fiche_active, fiche_archivee }` sur les deux 409 (`308ed1a`).
+Prochaine action : **A17 rejoue sa revue sur la tête de la branche** ; M-1 (rectification de la prémisse
+« `external_ref` n'est écrit par aucune route ») et M-2 (référence console non confrontée) sont des
+entrées `DECISIONS.md` de A01, pas de A13.
+Tests rouges connus : aucun sur la branche (Node v24 local, hors contrat — la CI fait foi).
