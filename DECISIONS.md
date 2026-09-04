@@ -8090,3 +8090,36 @@ périmètre que le bandeau du fichier interdit. Le seuil reste à 90 % : on remo
 rétrécit jamais le périmètre. Règle de précédence **sans objet** (aucune divergence interne au pack).
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun.
+
+## 2026-09-05 — [L5b] Un bloc imbriqué dans un écran doit-il lever son PROPRE `role="alert"` ?
+
+À la refusion `lot/l5a` → `lot/l5b`, le test `@critique` d'`EcranAccueil` (écrit par A26 sur L5a)
+tombe sur `<AccesEntretien />` (écrit par A22 sur L5b) : `useLiveQuery` **relance** le rejet de la
+lecture locale pendant le rendu, aucune frontière d'erreur ne le capte, l'arbre entier tombe — et
+l'état d'erreur que l'écran venait d'établir disparaît **au moment précis où il devait servir**.
+Le correctif est sans discussion (capter le rejet DANS la requête, comme le fait déjà `EcranAccueil`
+depuis R-L5a-7). La question qui reste : le bloc doit-il, en plus, afficher son propre état d'erreur
+en `ZoneEtat nature="erreur"` — donc un second `role="alert"` — pour tenir les 4 états du 03 §33.2 ?
+
+Options :
+
+1. **`ZoneEtat nature="erreur"`** dans le bloc : quatre états portés par le même composant partout,
+   mais **deux `role="alert"` pour une seule cause** sur un écran qui en lève déjà un.
+2. **`Message ton="avertissement"`** (`role="status"`) dans le bloc, l'alerte interruptive restant
+   celle de l'écran : une cause, une interruption ; le bloc dit la conséquence locale
+   (« impossible de vérifier si un entretien était en cours ») et garde « Nouvel entretien » actif.
+3. Ne rien afficher dans le bloc. **Écartée** : l'auditeur qui avait un entretien ouvert ne verrait
+   que « Nouvel entretien » et croirait qu'aucun n'était en cours — un silence qui ment (invariant 7).
+
+Arbitrage : **option 2, appliquée**. Les quatre états sont bien tous rendus (chargement · vide ·
+erreur · nominal), tous par des composants d'A21 ; seul le **rôle ARIA** de l'erreur change. Deux
+raisons, aucune n'est un artefact de test : `Message` lui-même documente que `alert` **interrompt**
+le lecteur d'écran et que le mettre partout revient à couper la parole à un auditeur malvoyant,
+quand 03 §17.3 interdit déjà toute notification intrusive en entretien ; et c'est la doctrine
+« une seule source pour une alerte » de R-L5a-8 — deux endroits qui annoncent le même fait finissent
+par l'annoncer différemment. **Précédence : sans objet** — 03 §33.2 exige les quatre états, il
+n'assigne aucun rôle ARIA ; aucune section du pack n'est en conflit avec une autre ici.
+
+Décideur : A22 pour le rendu de son composant — **le principe « un écran, une alerte » est soumis à
+A01**, qui peut le poser en convention 11 §3 s'il le juge général.
+Impact spec : aucun. Aucun test modifié : le test d'A26 avait raison, et il reste tel quel.
