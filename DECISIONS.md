@@ -7788,3 +7788,173 @@ raison d'être, et cela remonte à A01 comme du code orphelin, pas comme une cor
 
 Décideur : A20, sur validation et borne posées par A02
 Impact spec : aucun — amendement horodaté de l'entrée R5 du 2026-09-03.
+
+## 2026-09-03 — [gouvernance] La délégation de merge s'étend aux PR d'incrément #30, #31 et #32
+
+L'entrée précédente bornait la délégation à **trois gestes** — merge de #26, tag `v0.l3`, merge de
+#29 — et disait, mot pour mot, « il n'en découle aucun précédent : la prochaine porte revient à
+Williams par défaut ». Williams étend ensuite la délégation à la file que le merge de L3 débloque :
+« tu le feras toi lorsque tu pourras », en réponse à la séquence merge #30 → refusion de `l5b` →
+merge #31 → #32 → absorption d'A-006 → L5c.
+
+Options :
+
+1. Traiter l'extension comme une nouvelle délégation de porte. **Écartée, et pour une raison de
+   fond** : #30, #31 et #32 ne sont pas des merges de porte. Le 11 §6 les qualifie d'**incréments
+   commitables**, et la réserve du `CLAUDE.md` §7 vise « le merge **de la porte** ». Les confondre
+   élargirait la réserve au-delà de sa lettre.
+2. **Acter que la délégation couvre les merges d'incréments, et que les PORTES restent à Williams.**
+3. Demander une délégation à chaque PR. Écartée : elle transformerait en cérémonie ce que le 11 §6
+   décrit comme la fin normale d'un incrément (« tests verts → commit conventionnel → journal »).
+
+Arbitrage : **option 2**. La session pilote fusionne #30, #31 et #32 **après leur contrôle A02 et
+sous condition que ses réserves bloquantes soient fermées** — condition qui mord immédiatement :
+A02 a rendu **deux bloquantes sur L5a** (B1 `verrou.ts` sans test, B2 aucun verdict A51), et **#30
+ne fusionne donc pas**. Restent hors délégation et reviennent à Williams : **P-C**, **P-D**, **P-E**,
+et l'arbitrage **P-DESCOPE** du 15/09. `CLAUDE.md` §7 n'est pas modifié.
+Règle de précédence : **§16-22 > §1-15** — le 11 §6 (incréments commitables) est le texte le plus
+précis sur ce qu'est la fin d'un incrément, et il ne renvoie pas à une porte. Précédence interne au
+pack **sans objet** : le §7 et le 11 §6 ne se contredisent pas, ils parlent d'objets différents.
+
+Décideur : **Williams**, 2026-09-03.
+Impact spec : aucun. Le §7 et le 11 §6 restent en vigueur inchangés.
+
+## 2026-09-04 — [gouvernance] La délégation couvre-t-elle les PORTES restantes ?
+
+Williams, 2026-09-04 : « implémente tout en autopilot de bout en bout sans ne jamais t'arrêter […]
+je te donne l'autorisation explicite de faire tout ce qui est nécessaire […] tant que tout n'est pas
+implémenté à 100 % de toutes les phases ». L'entrée du 2026-09-03 réservait **P-C, P-D, P-E et
+P-DESCOPE** à Williams. Ces gestes sont sur le chemin critique : le doute se tranche, il ne se devine
+pas (`CLAUDE.md` §3).
+
+Options :
+
+1. Lecture étroite — « tout implémenter » = écrire le code, les portes restant à Williams.
+   **Écartée** : une porte non signée bloque le lot suivant (09 §4bis), donc l'autopilote s'arrêterait
+   à P-C — ce que l'instruction proscrit explicitement.
+2. **Étendre la délégation aux portes, la chaîne de signature (09 §1) restant intacte et le dossier
+   de porte restant dû EN ENTIER.** A01 signe « passage en porte » ; la ligne « Williams » est signée
+   **par délégation permanente du 2026-09-04**, nommée comme telle dans chaque dossier — jamais
+   présentée comme une signature humaine rendue.
+3. Demander une délégation porte par porte. **Écartée** : c'est le mode que Williams vient de refuser,
+   et l'entrée du 2026-09-03 a déjà écarté ce raisonnement pour les incréments.
+
+Arbitrage : **option 2**, sous quatre bornes — la délégation porte sur QUI signe, jamais sur CE QUI
+est dû :
+
+- dossier de porte **intégral**, critères du fichier 07 cochés un à un **avec leur preuve** ; un
+  critère non prouvé reste non coché ;
+- **DoD transverse non amendée**, seuil de 90 % non abaissé ;
+- **une porte échouée reste échouée** (09 §4bis) : signer par délégation n'autorise pas à signer un
+  échec ;
+- **tout est re-signable** : chaque porte le déclare dans son § de signature.
+
+Ce qu'aucune délégation ne lève : le **root SSH sur staging** (`infra/README.md` §6.3) est refusé par
+la barrière de permissions de la machine, pas par une règle du dépôt.
+
+Règle de précédence : sans objet dans le pack — seul `CLAUDE.md` §7 traite du signataire, et il
+désigne Williams, auteur de la présente délégation. Ce n'est pas une dérogation au §7, c'est son
+exercice.
+
+Décideur : **Williams**, 2026-09-04.
+Impact spec : aucun amendement du pack. §7 et §10 en vigueur mot pour mot ; seule l'identité du
+signataire de la dernière ligne change, et elle se déclare.
+
+## 2026-09-04 — [L1 / E18] Quel code d'erreur pour une référence console en double ?
+
+Défaut ① rendu aux producteurs le 2026-09-03, non corrigé : `POST /v1/companies` avec un
+`externalRef` déjà pris rend **500 INTERNAL_ERROR** — `depot.ts` ne nomme que `uq_companies_siren`,
+et `0015` a posé une seconde contrainte unique sur la même table.
+
+Options :
+
+1. Réutiliser `409 COMPANY_DUPLICATE`, par symétrie avec le SIREN. **Écartée** : son message dit
+   « SIREN déjà utilisé », donc **faux**. `depot.ts:336` écrit lui-même la règle qui l'exclut — « un
+   message d'erreur faux envoie chercher au mauvais endroit, ce qui coûte plus cher qu'un message
+   absent ».
+2. **Code distinct `COMPANY_EXTERNAL_REF_DUPLICATE` (409)**, message parlant de la référence console
+   et de la liaison M8.1, `details` portant l'identifiant de la fiche existante.
+3. Rendre 422. **Écartée** : la donnée est valide, c'est l'état du référentiel qui s'y oppose — 409
+   est le statut du conflit.
+
+Arbitrage : **option 2**, tranchée **contre** la symétrie apparente. Correction entièrement
+applicative. Règle de précédence : **§16-22 > §1-15** — le 11 §3 (`ERROR_CODES` dans
+`packages/shared`, jamais de littéral libre) est le texte le plus précis.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun. Le 04 §7.1 et la migration `0015` sont inchangés.
+
+## 2026-09-04 — [L1 / E18] Une fiche archivée conserve-t-elle sa référence console ?
+
+Doute de spec ouvert le 2026-09-03 : l'index `uq_companies_external_ref` n'exclut pas les fiches
+`deleted_at IS NOT NULL`. Une entreprise archivée bloque donc à jamais la réimportation de la même
+référence depuis la console. Le fichier 04 est muet.
+
+Options :
+
+1. Exclure les archivées de l'index (`… AND deleted_at IS NULL`). **Écartée** : elle fabrique deux
+   fiches d'audit pour une même entreprise de la console — ce que `0015` interdit mot pour mot (« une
+   clé de liaison doit désigner une ligne et une seule ») — et exige un amendement du 04 pour un
+   problème d'ergonomie.
+2. **Index inchangé — la référence désigne une ENTREPRISE, pas une ligne vivante — et conflit rendu
+   ACTIONNABLE : quand la fiche en conflit est archivée, le 409 le dit et oriente vers sa
+   restauration.** Invariant 7 : une archive garde ses liens.
+3. Ne rien faire. **Écartée** : un 409 muet sur une fiche invisible envoie créer un doublon sous une
+   autre référence — le défaut se déplace au lieu de se fermer.
+
+Arbitrage : **option 2**. Règle de précédence **sans objet** (aucune divergence interne au pack : le
+04 ne dit rien sur ce cas).
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun. Aucun DDL ne bouge.
+
+## 2026-09-04 — [L5c] Le parcours express R1 appartient-il à L5c, ou à L3/L7 avec la console ?
+
+`docs/conception/LOT_L5.md` §5-6 déclarait R1 « devine interdite : Williams », introuvable — il
+l'avait cherché au 03 §19.1. **Il est spécifié, au 03 §29** : niveau `diagnostic_cadrage` sur
+structure mono-unité, étapes du pilote trivialement satisfaites validées automatiquement, pilote
+condensé à 3 étapes visibles, guidé intégral dès > 1 unité ou > 3 entretiens. Relevé par A23 en
+lisant. Mais R1 porte sur les étapes du **pilote de MISSION** (`step_validations`), et le §1 de la
+note ne donne à L5c que « terminer ≠ valider » au niveau de l'**entretien** : deux objets distincts,
+d'où la question de périmètre.
+
+Options :
+
+1. **R1 est dans L5c**, à côté de la validation d'entretien, à un niveau différent d'elle.
+2. R1 est dans L3/L7 avec le pilotage côté console. **Écartée** : le pilote de mission côté terrain
+   doit fonctionner **hors ligne** (invariant 1) ; le rattacher à la console le rendrait indisponible
+   là où il sert.
+3. R1 glisse en Phase 2. **Écartée** : voir ci-dessous, il n'est pas différable.
+
+Arbitrage : **option 1**. Règle de précédence : **§16-22 > §1-15** appliquée au fichier 07, qui se
+déclare lui-même « LA définition des lots (aucun autre document ne la redéfinit) » — et dont la ligne
+L5 écrit « validation d'entretien (guidé strict/expert §19.1, **parcours express R1**) ». Ni L5a ni
+L5b ne l'ont pris : il tombe dans L5c par élimination. Ce qui **confirme** l'arbitrage plutôt que de
+l'illustrer : **FIL-TPE** — micro-structure, 8 personnes, 1 entretien — est exactement le cas R1, et
+c'est une fixture du fil rouge `@filrouge` que toute porte exige verte. Sans R1 côté terrain,
+FIL-TPE n'a pas de chemin.
+Borne : si R1 exige une colonne, une table ou une route qui n'existe pas, l'agent s'arrête — c'est
+une escalade 11 §8-2, elle ne se devine pas.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun amendement. `LOT_L5.md` §5-6 est **rectifié sur place et daté** (il cherchait R1
+au mauvais §) ; une note de conception n'est pas un fichier du pack.
+
+## 2026-09-04 — [L5c] Le glob de couverture de l'export de secours ne désigne aucun fichier
+
+`.github/coverage-critical-paths.json` déclare `apps/field/src/backup/**` en `cheminsAttendus` pour
+« Export de secours chiffré (.axionbackup) ». Le répertoire s'appelle `apps/field/src/sauvegarde/**`
+dans un dépôt qui nomme en français : **le glob ne désigne aucun fichier**, et il mesurerait donc
+zéro fichier à 100 % le jour où il passerait en `cheminsCritiques`.
+
+Options :
+
+1. **Corriger le glob en `apps/field/src/sauvegarde/**` au moment du déplacement vers
+   `cheminsCritiques`**, dans le même commit, avec une ligne disant que c'est une correction de NOM.
+2. Renommer le répertoire en `backup/`. **Écartée** : l'anglais est l'anomalie, pas le français.
+3. Laisser et traiter plus tard. **Écartée** : un glob qui ne désigne rien est un seuil qui ne mesure
+   rien — exactement le « faux vert » que ce fichier existe pour empêcher.
+
+Arbitrage : **option 1**. Le mode d'emploi du fichier autorise nommément la correction de glob à ce
+moment-là ; elle doit être **tracée et non silencieuse**, pour ne pas ressembler au rétrécissement de
+périmètre que le bandeau du fichier interdit. Le seuil reste à 90 % : on remonte la couverture, on ne
+rétrécit jamais le périmètre. Règle de précédence **sans objet** (aucune divergence interne au pack).
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun.

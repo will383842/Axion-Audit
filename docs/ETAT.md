@@ -2833,3 +2833,120 @@ sections ne peuvent pas porter la même lettre. **L'antérieure garde K, celle d
 ses 15 renvois internes. **Seules les lettres changent** — aucune mesure, aucun verdict, aucune date
 — et la renumérotation est **déclarée en tête de section**, pas faite en silence.
 Gardes rejoués : `check:decisions` ✓ · `check:tracabilite` ✓ 751 citations, 369 fichiers, 0 incohérence.
+
+## 2026-09-03 13h35 — [session pilote] — FIN DE SESSION PROPRE, reprise préparée
+
+Dernier commit vert : `508ae15` (`main`) · Branche : gouvernance/reprise-2026-09-03 · Poussé : oui
+Tâche en cours : aucune. Session close volontairement (`CLAUDE.md` §8), pas par limite de contexte.
+Tests rouges connus : `main` rouge sur `8 · deploy-staging` **seulement** (empreinte du script
+serveur), couvert par R-L3-2-bis rattaché à L0. **Aucun rouge fonctionnel nulle part.**
+
+**LIRE D'ABORD `docs/journal/2026-09-03.md`, section « APRÈS-MIDI »** — état complet, les quatre
+défauts de méthode payés aujourd'hui, les trois défauts rendus aux producteurs et non corrigés, et
+une prémisse fausse à rectifier. **Ce bloc n'en est que l'index.**
+
+`main` = `508ae15` · tags `v0.l0` `v0.l2` **`v0.l3`** · **56 % écrit · 37 % sur `main` · 33 % porte
+signée**. PR ouvertes : **#30** L5a (**ne pas fusionner**, réserve B2 ouverte) · **#31** L5b ·
+**#32** L7a (0 bloquante) · **#28** staging · branche `lot/l1-e18-external-ref` (E18 + son test,
+sans PR). **B1 fermée** (`1b89433`) : `verrou.ts` de 0,00 % à **100 %**, 42 tests, preuve par bascule.
+
+**PROCHAINE ACTION, dans cet ordre strict** — ne pas réordonner :
+
+1. **A51 sur `lot/l5a`** — réserve **B2**, seule bloquante restante. C'est elle qui tient #30.
+2. **Coller le glob `verrou.ts`** dans `.github/coverage-critical-paths.json` (bloc JSON prêt au §5
+   du rapport A26). **Ne PAS inscrire `apps/field/src/app/**`** — mesuré 80,49 %, rougirait.
+3. B2 fermée → merge **#30** (il apporte **axe-core**, que la DoD attend et que `main` n'a pas).
+4. `lot/l5b` **refusionne `main`** — bifurqué AVANT les 5 bloquants PWA de L5a — rejoue sa suite sur
+   le vrai socle, puis **#31**, puis **#32**.
+5. **Absorber A-006** (cookies httpOnly console) en incrément nommé, après #32.
+6. **L5c** — conditionne P-C. Périmètre : `docs/conception/LOT_L5.md` §1.
+
+**Trois gestes restent à Williams** : le root sur staging (`infra/README.md` §6.3), l'arbitrage
+**P-DESCOPE** du 15/09, et les portes **P-C / P-D / P-E** — hors délégation du 2026-09-03.
+
+## 2026-09-03 14h30 — [session pilote] — CLÔTURE DÉFINITIVE, ce bloc fait foi
+
+Dernier commit vert : la tête de `main` qui porte ce bloc · Branche : `main` · Poussé : oui
+Tâche en cours : aucune. Session close (`CLAUDE.md` §8). **Rien de non commité, rien de non poussé,
+vérifié worktree par worktree.**
+Tests rouges connus : `main` rouge sur `8 · deploy-staging` **seulement** — empreinte du script
+serveur, couvert par R-L3-2-bis rattaché à L0. **Aucun rouge fonctionnel nulle part.**
+
+**Ce bloc remplace celui de 13h35**, qui citait `main = 508ae15` et une branche supprimée depuis :
+deux cibles mouvantes qu'une session neuve aurait suivies dans le vide. Il n'en cite plus aucune.
+
+**LIRE D'ABORD `docs/journal/2026-09-03.md`** — section « APRÈS-MIDI » pour le récit et les défauts
+ouverts, puis **« CARTE DES ARTEFACTS »** en fin de fichier : elle dit, branche par branche et
+chemin par chemin, où lire ce qui n'est pas sur `main` (les trois contrôles A02, la matrice E1-E47,
+E18). On les lit par `git show <branche>:<chemin>`, sans checkout.
+
+**Cinq PR ouvertes** : **#30** L5a (**ne pas fusionner** — réserve B2) · **#31** L5b · **#32** L7a ·
+**#34** E18 · **#28** staging. Tags `v0.l0` `v0.l2` `v0.l3`.
+Burn-down : **56 % écrit · 37 % sur `main` · 33 % porte signée** (référence 26 j-h, fichier 07).
+
+**PROCHAINE ACTION, dans cet ordre strict :**
+
+1. **A51 sur `lot/l5a`** — réserve **B2**, seule bloquante restante. C'est elle qui tient #30.
+2. B2 fermée → merge **#30** (il apporte **axe-core**, que la DoD attend et que `main` n'a pas).
+3. `lot/l5b` **refusionne `main`** — bifurqué AVANT les 5 bloquants PWA de L5a — rejoue sa suite sur
+   le vrai socle, puis **#31**, puis **#32**, puis **#34**.
+4. **Absorber A-006** (cookies httpOnly console) en incrément nommé, après #32.
+5. **L5c** — conditionne P-C. Périmètre : `docs/conception/LOT_L5.md` §1.
+
+**À Williams, hors délégation** : le geste root sur staging (`infra/README.md` §6.3), l'arbitrage
+**P-DESCOPE** du 15/09, et les portes **P-C / P-D / P-E**.
+
+## 2026-09-04 20h40 — [autopilote de bout en bout] — ouverture, hors pipeline code
+
+Dernier commit vert : `3c60af7` (`main`) · Branche : `gouvernance/autopilote-2026-09-04` · Poussé : oui
+Tâche en cours : ouvrir l'autopilote — délégation tracée, file de reprise inchangée.
+Prochaine action : fermer **B2** (A51 sur `lot/l5a`), puis dérouler la file du bloc du 2026-09-03
+14h30 sans la réordonner.
+Tests rouges connus : `main` rouge sur `8 · deploy-staging` seulement (R-L3-2-bis, L0).
+
+**Ce que ce bloc ajoute, et rien d'autre :**
+
+- **La délégation s'étend aux PORTES** (Williams, 2026-09-04, `DECISIONS.md`) sous quatre bornes :
+  dossier intégral, DoD non amendée, une porte échouée reste échouée, tout est re-signable. La ligne
+  « Williams » de chaque porte se signera **par délégation nommée**, jamais comme signature rendue.
+- **Défaut ① du 2026-09-03 tranché** : `409 COMPANY_EXTERNAL_REF_DUPLICATE`, et une fiche archivée
+  **conserve** sa référence console — le 409 doit le dire et orienter vers la restauration.
+- **CONTRAINTE D'ENVIRONNEMENT NOUVELLE, elle change l'organisation** : cette session refuse toute
+  écriture **hors du répertoire principal**. Les worktrees `_ax*` sont lisibles, pas inscriptibles.
+  `ORGANISATION_AGENTS.md` §2 (un worktree par chantier) reste la doctrine ; il n'est simplement pas
+  applicable ici, et les chantiers se **sérialisent** dans le répertoire principal.
+- **`core.bare=true` dans `.git/config` du répertoire principal** : `git status` y est cassé.
+  Contournement sans écriture : `git --work-tree=. -c core.bare=false <cmd>`.
+- **7 commits de la banque de questions n'existaient que sur cette machine** : la branche
+  `contenu/banque-questions-vague-1` n'avait aucune contrepartie sur `origin`, alors que son bloc
+  ETAT du 2026-09-02 déclarait « Poussé : oui ». **Poussée ce jour** (1 846 lignes mises à l'abri).
+
+## 2026-09-04 21h35 — [autopilote / 3 chantiers] — étape pipeline 2/7 (implémentation)
+
+Dernier commit vert : `172b663` (`main`, #38) · Branche : `gouvernance/etat-autopilote` · Poussé : oui
+Tâche en cours : trois chantiers en parallèle, un chef chacun (`ORGANISATION_AGENTS.md` §2).
+Prochaine action : à la remise d'A24, **refusionner `main` dans `lot/l5a` puis fusionner #30** — c'est
+lui qui apporte axe-core et débloque `lot/l5b`.
+Tests rouges connus : `main` rouge sur `8 · deploy-staging` seulement. Sur `lot/l5c` : 2 erreurs
+`lint` et 1 rouge `@critique` **hérités et placés** (voir ci-dessous), aucun ajouté.
+
+**Chantiers** : C1 `lot/l5a` / A24 (F-22, F-23, F-25 + règle ESLint) · C2 `lot/l1-e18-external-ref` /
+A16 (les 16 cas du 409) · C3 `lot/l5c` / A23 (L5c, R1 inclus).
+
+**Le verdict A51 sur L5a est rendu** (`docs/securite/VERDICT_A51_L5A.md`, 746 l.) : **FUSIONNABLE SOUS
+RÉSERVE — 1 critique, 3 majeurs, 4 mineurs, 4 observations**, zéro fuite de confidentialité. **B2 est
+fermée.** F-22 (critique) : un coffre *illisible* se lit *absent*, l'app propose « Préparer cet
+appareil » et le mot de passe **détruit la DEK** — mesuré de bout en bout, et **sans attaquant** : tout
+`safeParse` en échec suffit, y compris un futur champ requis ajouté au schéma. F-24 (AES-GCM sans AAD)
+n'est pas un veto : **ré-arbitrage à P-C sur une prémisse corrigée** (celle de 2026-09-02 est fausse).
+**F-31 à ne pas perdre** : `ZAP_BLOQUANT` est resté à `'false'` et le job est **skippé depuis le
+2026-09-02** — aucune ligne ZAP n'existe depuis. À traiter dès qu'un chantier se libère.
+
+**Deux défauts d'intégration invisibles en CI**, trouvés en fusionnant `lot/l5a` dans `lot/l5c` : la
+garde vit sur une branche et le code gardé sur l'autre (un test `@critique` de l5a protège un état
+d'erreur qu'`AccesEntretien` de l5b fait disparaître ; la règle ESLint « écriture Dexie » de l5a mord
+sur un `Map` de l5b). Placés : la règle chez A24, `AccesEntretien` chez A22 à la refusion de `lot/l5b`.
+
+**Mesure de la file** : les 4 branches en attente ne conflictent avec `main` que sur `DECISIONS.md` et
+`docs/ETAT.md`. **Zéro conflit de code.** Fiche **A-015** ouverte (pilote de fusion `union`, `ETAT.md`
+exclu à dessein — « le dernier bloc fait foi » ne se délègue pas à un automatisme).
