@@ -157,6 +157,22 @@ jobs:
       # lisibles que par un job qui déclare cet environment — le job ZAP, lui,
       # n'en déclare aucun. On la fait donc transiter explicitement.
       url_base: ${{ steps.bilan.outputs.url_base }}
+      # -----------------------------------------------------------------------
+      # LE FAIT, PAS LE VERDICT — sortie ajoutée le 2026-09-05 (constat F-31).
+      # -----------------------------------------------------------------------
+      # Le job `securite` (ZAP) dépendait de la RÉUSSITE de ce job. Or ce job
+      # porte deux choses de nature différente : la LIVRAISON (staging est-il en
+      # service ?) et des contrôles de GOUVERNANCE qui viennent APRÈS elle
+      # (l'empreinte du script distant est-elle celle du dépôt ? le clone du
+      # serveur est-il au sha livré ?). Depuis le 2026-09-02, un contrôle de la
+      # seconde famille rougit — le staging, lui, tourne. Résultat : le scan de
+      # sécurité était skippé par ricochet, DEUX JOURS, sans que rien ne le dise.
+      # Un défaut d'hygiène de dépôt ne doit pas éteindre un contrôle de sécurité.
+      # Cette sortie ne vaut PAS « déploiement réussi » : elle vaut « il y a bien
+      # un environnement vivant à scanner », et c'est mesuré par une sonde HTTP
+      # publique, hors du serveur. Ce job continue d'échouer exactement comme
+      # avant : aucun garde n'est retiré, aucun n'est adouci.
+      staging_en_service: ${{ steps.sante.outputs.en_service }}
     steps:
       # -----------------------------------------------------------------------
       # 1/4 — REFUSER DE PARTIR PLUTÔT QUE D'ÉCHOUER OBSCURÉMENT PLUS LOIN
@@ -351,6 +367,25 @@ jobs:
           echo "uuid_deploiement=${uuid_deploiement}" >> "$GITHUB_OUTPUT"
 
           # ---------------------------------------------------------------------
+          # LA LIVRAISON A-T-ELLE PRIS EFFET ? (constaté ICI, avant la suite)
+          # ---------------------------------------------------------------------
+          # Le script distant lit le conteneur RÉELLEMENT en service et annonce
+          # « Prise d effet observee … provient du deploiement <uuid> ». On note
+          # ce fait MAINTENANT, avant les contrôles de gouvernance qui suivent :
+          # ils portent sur l'hygiène du dépôt et du serveur, pas sur l'existence
+          # d'un environnement. `set -e` interrompra peut-être cette étape trois
+          # lignes plus bas ; la sortie déjà écrite dans $GITHUB_OUTPUT, elle,
+          # reste lisible par les jobs suivants. C'est ce qui permet au scan ZAP
+          # de tourner sur un staging vivant même quand ce job rougit ailleurs.
+          # ---------------------------------------------------------------------
+          if printf '%s' "${SORTIE}" | grep -q "provient du deploiement ${uuid_deploiement}"; then
+            echo "prise_effet=oui" >> "$GITHUB_OUTPUT"
+            echo "Prise d'effet confirmée pour ${uuid_deploiement} : il y a un environnement vivant."
+          else
+            echo "::warning title=Prise d'effet non confirmée::Le script distant n'a pas annoncé que le conteneur en service provient de ${uuid_deploiement}. Les contrôles ci-dessous vont trancher ; le scan de sécurité, lui, ne tournera pas — on ne scanne pas un environnement dont on ne sait pas ce qu'il sert."
+          fi
+
+          # ---------------------------------------------------------------------
           # LE SCRIPT DISTANT EST-IL BIEN CELUI QUI A ÉTÉ RELU ?
           # ---------------------------------------------------------------------
           # `command=` ne peut pointer que vers un chemin local : le script vit donc
@@ -422,6 +457,13 @@ jobs:
       # (DECISIONS.md). Le script lit l'étiquette de révision du conteneur en
       # service et échoue si ce n'est pas le commit demandé.
       - name: Contrôle de santé public (hors serveur)
+        id: sante
+        # `always()` + prise d'effet : cette sonde doit s'exécuter même si
+        # l'étape précédente a échoué SUR UN CONTRÔLE DE GOUVERNANCE (empreinte,
+        # clone), car dans ce cas le staging est déjà en service et le scan de
+        # sécurité a un objet. Elle ne s'exécute PAS si la livraison n'a pas pris
+        # effet : on ne sonde pas un environnement dont on ignore ce qu'il sert.
+        if: always() && steps.declenchement.outputs.prise_effet == 'oui'
         timeout-minutes: 10
         env:
           URL_BASE: ${{ vars.STAGING_BASE_URL }}
@@ -435,6 +477,9 @@ jobs:
           for i in $(seq 1 "${essais}"); do
             if curl -fsS --max-time 10 -o /dev/null "${sonde}"; then
               echo "Santé API OK sur ${sonde} (essai ${i}/${essais})."
+              # Fait mesuré hors du serveur : il y a un environnement vivant à
+              # scanner. Consommé par le job `securite` (voir sorties du job).
+              echo "en_service=oui" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             echo "[$(date -u +%H:%M:%S)] ${sonde} ne répond pas encore (essai ${i}/${essais})."
@@ -494,6 +539,23 @@ jobs:
   securite:
     name: ZAP baseline (staging)
     needs: [deployer]
+    # -------------------------------------------------------------------------
+    # POURQUOI CE `if:` EXISTE — constat F-31 du 2026-09-04.
+    # -------------------------------------------------------------------------
+    # Il n'y avait ici AUCUN `if:`, donc un `success()` implicite sur
+    # `deployer`. Le 2026-09-02 à 14h40 UTC, `deployer` s'est mis à rougir sur
+    # un contrôle de gouvernance POSTÉRIEUR à une livraison réussie ; le scan de
+    # sécurité a été skippé à chaque merge pendant deux jours (runs 33643594297,
+    # 33714804567, 33733141719, 33735371068, 33750466751, 33753848462,
+    # 33755148476, 33918656915, 33920693605) et personne ne l'a vu, parce qu'un
+    # job `skipped` ne rougit pas. Dernier scan réel : run 33603477826.
+    # La condition ne relâche RIEN : elle remplace un « aucun défaut nulle part »
+    # par un FAIT MESURÉ — la sonde publique a répondu, il y a un environnement
+    # à scanner. `deployer` échoue toujours, le workflow reste rouge, et si le
+    # staging n'est pas en service ce job est skippé À BON DROIT (et le scan
+    # nocturne de `zap-baseline.yml` rougira, lui, de ne pas joindre la cible).
+    # -------------------------------------------------------------------------
+    if: always() && needs.deployer.outputs.staging_en_service == 'oui'
     uses: ./.github/workflows/zap-baseline.yml
     with:
       cible: ${{ needs.deployer.outputs.url_base }}

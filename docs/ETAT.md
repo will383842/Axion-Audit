@@ -2526,6 +2526,32 @@ exécute « commit wip: puis push » à moitié) — fiche à ouvrir, `settings.
 Écart assumé : la note L6 fait 126 lignes là où 09 §3-1bis dit « ≤ 1 page » — densité préférée au
 format, sept points durs sourcés dans le code plutôt que supposés.
 
+## 2026-09-03 06h45 — [infra / diagnostic staging] — hors pipeline (fin de session propre)
+Dernier commit vert : 44e348b (main, PR #27 fusionnée)   ·   Branche : infra/diagnostic-staging   ·   Poussé : oui
+Tâche en cours : session `…01Xk19br` — pilotage passé à `…01Ckvewm` (DECISIONS 2026-09-03). PR #27
+fusionnée : note de conception L6 et correction du §9 sur `main`. PR #28 ouverte : fiches A-013
+(staging) et A-014 (le hook pre-push ne tourne pas là où `pnpm install` n'a pas tourné).
+STAGING, point de rupture localisé à la ligne : `loadComposeFile()` appelle `getGitRemoteStatus()`,
+qui lance `git ls-remote` SUR L'HÔTE (`exec_in_docker: false`) ; le `ls-remote` visible dans le
+journal tourne DANS le conteneur d'aide — deux commandes homonymes, seule la première décide.
+Rejouée le 2026-09-03 par le canal exact de Coolify, elle RÉUSSIT, et la config de l'app a été
+modifiée à 04h30, après le second échec : le défaut n'est peut-être plus présent. Déploiement
+relancé, verdict à lire. Détail complet et contre-mesures dans la fiche A-013.
+NE PAS modifier `deploy-staging.sh` : il refuse de sortir vert, c'est sa fonction.
+Prochaine action : lire le verdict du déploiement relancé ; si vert, `main` redevient verte et la
+chaîne des portes se rouvre. Puis faire fusionner la PR #28.
+Tests rouges connus : `main` ROUGE sur le seul job `8 · deploy-staging` (20 jobs sur 22 verts).
+Les quatre branches de lot sont VERTES. PR #26 est `CONFLICTING` depuis la fusion de #27 — conflit
+d'append sur `DECISIONS.md`/`ETAT.md`, se résout en gardant les deux côtés.
+PORTE L3 : blocage LEVÉ (bandeau « SUPERSÉDÉ » l. 18, R-L3-1 à R-L3-5 fermées, verdict sur
+`0d7f4f8`). Tracé sans être contesté : ce verdict a été rédigé par a7, session de VÉRIFICATION, que
+le §3 dit ne rien produire et dont le §10 réserve l'étape 6 au gardien A02 ; Williams a tranché
+« ça me va » — arbitrage humain assumé, pas un oubli.
+QUATRE ERREURS DE CETTE SESSION, toutes de la même forme — une commande juste, une question mal
+posée : §9 lu dans le dépôt bare (périmé d'un jour) · `grep` sur VERDICT/REJEU au lieu de FERMETURE ·
+`sed -n '16p'` sans la ligne 18 · lignes `^[[36;1m` du journal CI (le SOURCE du workflow) lues comme
+des erreurs émises, d'où un « secrets TELEGRAM absents » faux — ils existent depuis le 2026-08-28.
+
 ## 2026-09-03 08h51 — [lot L3 / porte] — étape pipeline 7/7 — **LA PORTE EST SIGNÉE**
 
 Dernier commit vert : 0d7f4f8 (bandeau de superseding) · Branche : lot/l3-suite · Poussé : oui
