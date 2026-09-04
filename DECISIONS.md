@@ -7920,3 +7920,103 @@ recopier. **Précédence : invariant 7** (N1) ; sans objet pour le reste.
 
 Décideur : A01, sur revue A29
 Impact spec : aucun.
+
+## 2026-09-05 — [L5c] Quelles TROIS étapes le pilote condensé de R1 affiche-t-il ?
+
+03 §29 R1 donne un NOMBRE — « pilote condensé (3 étapes visibles) » — et ne dit jamais
+LESQUELLES. Le pilote en compte six (§17.2). Deux d'entre elles s'auto-valident en express
+(cadrage, préparation) : il en resterait donc QUATRE, pas trois.
+
+Options :
+(a) Désigner trois étapes à la main dans le code. Refusé : c'est la devinette que `CLAUDE.md`
+§3 interdit, et elle serait invisible à la relecture.
+(b) CALCULER les étapes visibles — celles qui ne sont pas auto-validées — en repliant `rapport`
+sur `analyse`, parce que **03 §32.2 les projette lui-même sur un seul statut de mission**
+(« `en_analyse` ⇔ Analyse + Rapport »). Le calcul rend alors exactement trois : Collecte,
+Analyse, Livraison.
+(c) Ne pas livrer R1 et attendre. Refusé : R1 est arbitré dans L5c, et FIL-TPE (mono-unité,
+1 entretien) est exactement le cas R1 — sans lui, le fil rouge n'a pas de chemin terrain.
+
+Arbitrage : **(b)**, appliqué, et le « 3 » du pack devient une VÉRIFICATION du calcul plutôt
+qu'un nombre recopié : `pilote.test.ts` exige `etapesVisibles.length === 3` ET fixe la liste
+`['collecte','analyse','livraison']`. Si la lecture du repli est fausse, c'est le test qui
+tombe, pas la recette. Règle de précédence citée : §32-36 > §24-31 > §16-22 > §1-15 — le §32.2
+(repli Analyse+Rapport) prévaut sur le §17.2 (six étapes), qui est plus ancien.
+Décideur : A01 pour l'appartenance de R1 à L5c ; **le choix des trois étapes reste ouvert et
+attend Williams** — s'il tranche autrement, un seul test change, et il se voit.
+Impact spec : aucun. Aucune étape, aucun code d'étape et aucun seuil n'a été inventé.
+
+## 2026-09-05 — [L5c] Le motif d'un déverrouillage d'entretien n'a nulle part où se poser
+
+03 §19.1 exige que le contournement d'un verrou en profil `expert` porte un « motif
+obligatoire, journalisé ». `session/machine.ts` (L5a) déclare la transition
+`valide --deverrouiller--> en_cours` réservée à `expert` avec `motifRequis: true`. Mais aucun
+champ des formes locales (`local/formes.ts`, transcrit du 04) ne porte ce motif, et le terrain
+n'a pas de table de journal : `activity_log` est SERVEUR (06 §10.4).
+
+Options :
+(a) Glisser le motif dans `generalNotes`. Refusé : c'est une donnée d'audit qui part au siège
+et se retrouverait dans le rapport.
+(b) Ajouter un champ à `chargeInterviewSchema`. Refusé : modifier le 04 ou les formes d'un
+autre incrément est une escalade (`CLAUDE.md` §3-2), pas un geste de L5c.
+(c) Exiger le motif, l'utiliser pour REFUSER quand il manque, et ne pas le persister — en le
+disant dans le code et ici.
+
+Arbitrage : **(c)**, appliqué dans `agenda/validation.ts`. Le motif est vérifié (un motif vide
+est refusé, et testé), il n'est pas stocké. L'invariant 7 reste tenu par ailleurs : toute
+correction de RÉPONSE qui suit le déverrouillage incrémente `answers.revision`, ce qui est la
+trace que l'invariant demande. Ce qui manque est la trace du GESTE, pas celle de la donnée.
+Règle de précédence sans objet (aucune divergence interne) : §19.1 exige un motif journalisé,
+et le 04 ne le nie pas — il ne prévoit simplement aucune colonne où le poser. C’est un MANQUE
+de support, pas un conflit entre deux sections.
+Décideur : **Williams** — la question est de savoir si le motif doit remonter (op de sync
+dédiée ? colonne au 04 ?) ou si le déverrouillage terrain doit disparaître au profit du seul
+déverrouillage admin en console, que §19.1 prévoit aussi.
+Impact spec : aucun tant que la question n'est pas tranchée.
+
+## 2026-09-05 — [L5c] La « note » d'une unité proposée depuis le terrain n'existe dans aucun schéma
+
+03 §25.3 énumère cinq champs pour une unité proposée : « nom, type, rattachement supposé,
+effectif estimé, **note** ». Les quatre premiers existent dans `chargeOrgUnitSchema` (L5a,
+transcrit du 04). Le cinquième n'existe ni au 04, ni dans la charge locale.
+
+Options :
+(a) Concaténer la note au `name`. Refusé : elle polluerait l'arbre organisationnel du siège,
+sur une entité que le terrain n'a pas le droit de modifier (§9.5 amendé).
+(b) Accepter le champ à l'écran puis le jeter à l'écriture. Refusé, et c'est le pire des trois :
+une perte silencieuse de saisie, que l'auditeur ne verrait pas — invariant 7.
+(c) NE PAS offrir le champ, et remonter le manque.
+
+Arbitrage : **(c)**, appliqué dans `agenda/unites.ts`. Un formulaire qui ne demande pas est
+honnête ; un formulaire qui demande et oublie ne l'est pas. Règle de précédence : le DDL vit
+exclusivement au 04 (`CLAUDE.md` en-tête), que L5c ne modifie pas.
+Décideur : **Williams** — soit `org_units` gagne une colonne `proposal_note`, soit le §25.3
+perd son cinquième champ. Les deux se défendent ; aucune ne se devine.
+Impact spec : aucun aujourd'hui. Amendement horodaté du 04 si l'option colonne est retenue.
+
+## 2026-09-05 — [L5c] L'import d'une sauvegarde ne peut pas réinjecter la file d'attente
+
+11 §4 : le payload d'un `.axionbackup` contient « données de mission locales **+ outbox** ».
+L'export les emporte. L'import ne peut PAS les remettre dans la file : `ecrireLocal` fabrique
+de NOUVEAUX `opId` — que `processed_ops` ne saurait plus dédupliquer — et réécrit
+`clientUpdatedAt` à l'instant de l'import, ce qui ferait gagner une vieille sauvegarde contre
+une donnée serveur plus fraîche (05 §9.4). `appliquerDescente`, lui, n'écrit JAMAIS dans
+l'outbox, par construction (c'est sa garantie, pas son manque).
+
+Options :
+(a) Écrire dans `outbox` depuis `sauvegarde/`. Refusé : la règle ESLint l'interdit, et la
+doctrine « une seule porte d'écriture » (05 §9.2-2) vaut plus que ce besoin.
+(b) Ajouter une primitive de restauration à `local/ecriture.ts`. C'est le fichier de L5a.
+(c) Restaurer les LIGNES (ce que le critère du 07 demande : « restauré sur un 2ᵉ appareil »)
+et ANNONCER le nombre d'opérations non réinjectées.
+
+Arbitrage : **(c)** pour cet incrément, appliqué et testé. Même parti que le port de sync
+inerte (`LOT_L5.md` §3.6) : l'écran affiche l'état réel, jamais une pastille verte. Le critère
+07 « export créé puis restauré sur un 2ᵉ appareil » porte sur les DONNÉES, et elles le sont —
+éprouvé sur une base neuve avec une DEK différente.
+Règle de précédence sans objet (aucune divergence interne) : 11 §4 décrit ce que le FICHIER
+contient, 05 §9.2-2 décrit qui a le droit d’écrire dans la file. Les deux sont vrais ensemble ;
+c’est l’outillage de relecture qui manque, pas une règle qui en contredit une autre.
+Décideur : **A01/A20 à l'ouverture de L6a** — c'est là que la primitive (b) a son sens, parce
+que c'est là que la file cesse d'être inerte.
+Impact spec : aucun. Le format de fichier est complet ; seule sa relecture est partielle.

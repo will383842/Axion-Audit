@@ -235,9 +235,29 @@ attend **A01** — le motif « à extraire un jour » vaut pour le calendrier, p
    `kind='entretien'`, NULL sinon »). Ce défaut applicatif vit-il côté terrain (L5c) ou côté serveur
    (L6a) ? S'il vit des deux côtés, les deux dériveront. Je propose **terrain uniquement** — c'est là
    que la session naît. À confirmer.
-6. **Le « parcours express R1 » de la validation d'entretien** (07, ligne L5) n'est décrit nulle part
+6. ~~**Le « parcours express R1 » de la validation d'entretien** (07, ligne L5) n'est décrit nulle part
    dans 03 §19.1, qui ne connaît que guidé strict / expert et la validation groupée V2.10. Je ne sais
-   pas ce que R1 désigne. **Devine interdite : Williams.**
+   pas ce que R1 désigne. **Devine interdite : Williams.**~~
+
+   **═══ RECTIFICATION DU 2026-09-05 (A23, sur arbitrage A01 du 2026-09-04) ═══**
+   **Ce point est CLOS, et il l'était déjà quand il a été écrit : R1 EST spécifié.** Le texte
+   barré ci-dessus reste lisible parce qu'une note de conception ne se réécrit pas en silence —
+   mais il est faux sur son point principal.
+   R1 est au **03 §29** (corrections de la certification finale), verbatim : « **R1 — Parcours
+   EXPRESS micro** : en niveau `diagnostic_cadrage` sur structure mono-unité, les étapes du
+   pilote trivialement satisfaites se valident automatiquement ; pilote condensé (3 étapes
+   visibles). Guidé intégral dès > 1 unité ou > 3 entretiens. »
+   **Pourquoi la note ne l'a pas trouvé, et c'est la leçon utile** : elle l'a cherché au §19.1,
+   parce que le fichier 07 écrit « validation d'entretien (guidé strict/expert §19.1, parcours
+   express R1) » — la parenthèse pose R1 à côté d'un renvoi qui ne le porte pas. R1 ne concerne
+   d'ailleurs PAS la validation d'entretien : il porte sur les étapes du **pilote de mission**
+   (`step_validations`), à un autre niveau. Les deux vivent dans L5c sans se confondre.
+   **Arbitrage A01 (2026-09-04)** : R1 est dans L5 — le fichier 07 est la définition des lots ;
+   ni L5a ni L5b ne l'ont pris ; il revient à L5c, dont le mandat 09 §1 le nomme.
+   **Implémenté** : `apps/field/src/agenda/pilote.ts`, gardé par `pilote.test.ts`, qui relit les
+   deux seuils DANS le pack plutôt que de les recopier. Reste soumis à Williams : **quelles**
+   trois étapes sont visibles — le pack donne le nombre, jamais la liste (`DECISIONS.md`,
+   2026-09-05).
 7. **Chef d'équipe** : 09 §1 nomme A20 « chef d'équipe front » — L5 est bien le lot d'A20, contrairement
    au doute laissé au §6.7 de la note L2. Aucune correction attendue ici.
 

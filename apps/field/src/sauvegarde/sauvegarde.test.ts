@@ -34,6 +34,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { BaseLocale, CLES_META, ecrireMeta } from '../local/base.js';
 import { creerDekEnveloppee, deriverKek, ouvrirCoffre, type Coffre } from '../local/coffre.js';
 import { installerContexteLocal, retirerContexteLocal } from '../local/contexte.js';
+import { depuisBase64, versBase64 } from '../local/enveloppe.js';
+import { EXTENSION_SAUVEGARDE, nomFichierSauvegarde } from './format.js';
 import { depotSessions } from '../local/depots/sessions.js';
 import { appliquerDescente, ecrireLocal } from '../local/ecriture.js';
 import { decalageActuelMs, reglerDecalage, reinitialiserHorloge } from '../local/horloge.js';
@@ -445,4 +447,104 @@ describe('la sauvegarde emporte la file d’attente (11 §4)', () => {
     expect(rapport.operationsNonReinjectees).toBe(fichier.enTete.operationsIncluses);
     expect(rapport.avertissement).toMatch(/[a-zéèêàç]/);
   }, 30_000);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// G. LES CHEMINS QUE LA PREMIÈRE PASSE N'AVAIT PAS ÉPROUVÉS
+//
+// Ajoutés après MESURE de couverture, et non pour faire monter un chiffre :
+// chacun porte une décision de conception qui, si elle se retournait, ne
+// casserait aucun écran mais changerait ce qui sort de l'appareil.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('les bords du format, éprouvés parce que mesurés à découvert', () => {
+  it('@critique un appareil SANS libellé ne bloque pas l’export — il le dit', async () => {
+    // Le libellé est une commodité humaine, pas une clé. Un export refusé faute
+    // de nom d'appareil rendrait la sauvegarde indisponible le jour où elle
+    // compte, pour une raison cosmétique.
+    await baseSource.meta.delete(CLES_META.libelleAppareil);
+
+    const fichier = await exporterSauvegarde({
+      missionId: MISSION_ID,
+      motDePasse: MOT_DE_PASSE,
+      parametresKdf: KDF_TEST,
+    });
+    expect(fichier.enTete.libelleAppareil).toBe('Appareil non nommé');
+  }, 30_000);
+
+  it('@critique une sauvegarde SANS opération en file ne fabrique aucun avertissement', async () => {
+    await baseSource.outbox.clear();
+
+    const fichier = await exporterSauvegarde({
+      missionId: MISSION_ID,
+      motDePasse: MOT_DE_PASSE,
+      parametresKdf: KDF_TEST,
+    });
+    expect(fichier.enTete.operationsIncluses).toBe(0);
+
+    const rapport = await importerSauvegarde(fichier, MOT_DE_PASSE);
+    // `null` et non une phrase rassurante : un écran qui affiche « 0 élément non
+    // synchronisé » à chaque import apprend à être ignoré.
+    expect(rapport.avertissement).toBeNull();
+    expect(rapport.operationsNonReinjectees).toBe(0);
+  }, 30_000);
+
+  it('@critique une ligne SANS horodatage de modification est refusée, pas fusionnée au hasard', async () => {
+    // C'est le défaut qui ne se verrait pas : `appliquerDescente` arbitre sur
+    // `clientUpdatedAt` (05 §9.4) et un `undefined` DÉSARME l'arbitrage — la
+    // ligne importée écraserait alors une ligne locale plus récente, c'est-à-dire
+    // exactement ce que 11 §4 interdit. Le refus est préférable au silence.
+    const fichier = await exporterSauvegarde({
+      missionId: MISSION_ID,
+      motDePasse: MOT_DE_PASSE,
+      parametresKdf: KDF_TEST,
+    });
+
+    // On reconstruit un fichier dont UNE ligne a perdu son horodatage.
+    const cle = await deriverKek(
+      MOT_DE_PASSE,
+      depuisBase64(fichier.enTete.kdf.sel),
+      fichier.enTete.kdf.parametres,
+    );
+    const clair = new TextDecoder().decode(
+      await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: depuisBase64(fichier.charge.n) },
+        cle,
+        depuisBase64(fichier.charge.c),
+      ),
+    );
+    const contenu = JSON.parse(clair) as {
+      lignes: Record<string, { clientUpdatedAt?: string }[]>;
+    };
+    const premiere = contenu.lignes.interviews?.[0];
+    if (premiere === undefined) throw new Error('fixture : aucune session dans la sauvegarde');
+    delete premiere.clientUpdatedAt;
+
+    const nonce = crypto.getRandomValues(new Uint8Array(12));
+    const rechiffre = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv: nonce },
+      cle,
+      new TextEncoder().encode(JSON.stringify(contenu)),
+    );
+    const altere = {
+      ...fichier,
+      charge: { v: 1, n: versBase64(nonce), c: versBase64(new Uint8Array(rechiffre)) },
+    };
+
+    await expect(importerSauvegarde(altere, MOT_DE_PASSE)).rejects.toBeInstanceOf(
+      SauvegardeIllisibleError,
+    );
+  }, 30_000);
+});
+
+describe('le nom du fichier proposé à l’auditeur', () => {
+  it('@critique il ne porte NI nom de client NI donnée personnelle (invariant 2)', () => {
+    const nom = nomFichierSauvegarde(MISSION_ID, '2026-09-04T07:00:00.000Z');
+
+    expect(nom).toContain(MISSION_ID);
+    expect(nom.endsWith(EXTENSION_SAUVEGARDE)).toBe(true);
+    // Aucun deux-points : un nom de fichier doit survivre à tous les systèmes de
+    // fichiers, y compris ceux qui les refusent.
+    expect(nom).not.toContain(':');
+    expect(nom).toBe('axion-0191e2a0-0000-7000-8000-00000000f3de-20260904T070000Z.axionbackup');
+  });
 });

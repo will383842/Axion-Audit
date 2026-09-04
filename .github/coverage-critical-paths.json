@@ -283,6 +283,56 @@
         "quand L5b et L5c auront couvert EcranAccueil.tsx et service-worker-client.ts."
       ],
       "$motif": "Recommandation A26 au rapport B1 (2026-09-03), appliquee par la session pilote. Le rapport d un agent ne survit pas a sa session : une recommandation qui n entre pas dans un fichier est perdue."
+    },
+    {
+      "lot": "L5c",
+      "module": "Export de secours chiffre (.axionbackup) — derivation, chiffrement, fusion a l import",
+      "glob": "apps/field/src/sauvegarde/sauvegarde.ts",
+      "reference": "11 §4 (format de fichier) · 05 §9.7 · 07 §12 lot L5 · invariant 8 · E38 · 09 §3 (« crypto locale »)",
+      "_note_glob": [
+        "LE GLOB A CHANGE DE NOM, ET C EST UNE CORRECTION DE NOM, PAS DE PERIMETRE.",
+        "L entree d attente visait `apps/field/src/backup/**` : ce repertoire N EXISTE PAS et",
+        "n a jamais ete construit. `backup` etait un nom ANGLAIS ecrit avant livraison, dans un",
+        "depot qui nomme en francais ; `sauvegarde/` est l arborescence REELLE. Le mode d emploi",
+        "de `cheminsAttendus` autorise nommement cette correction au moment du deplacement.",
+        "",
+        "IL VISE DEUX FICHIERS ET NON LE REPERTOIRE, ET LE MOTIF EST ECRIT PLUTOT QUE SUPPOSE.",
+        "L entree nomme UN module : « Export de secours chiffre (.axionbackup) ». Ce module,",
+        "ce sont `sauvegarde.ts` (derivation, chiffrement, fusion a l import) et `format.ts`",
+        "(les schemas Zod de la frontiere). Meme parti que `routes/scoping.ts` et",
+        "`routes/users.ts`, qui visent un fichier chacun pour la meme raison.",
+        "Mesure a la pose : sauvegarde.ts 98,90 lignes / 94,87 branches / 100 fonctions ·",
+        "format.ts 100 / 100 / 100. Les deux passent, avec de la marge.",
+        "",
+        "CE QUI N EST DELIBEREMENT PAS INSCRIT, AVEC SON CHIFFRE : `sauvegarde/photos.ts`",
+        "(compression R2), mesure a 26,76 % de lignes et 33,33 % de fonctions. DEUX raisons,",
+        "et aucune n est « pour faire passer le seuil » :",
+        "  · ce n est pas un module critique au sens de la DoD, qui en nomme quatre — moteur de",
+        "    sync, crypto locale, scoring, RBAC/propriete. La compression d une photo n en est",
+        "    aucun : elle reduit un volume, elle ne garde rien ;",
+        "  · ses chemins de rendu (`createImageBitmap`, `OffscreenCanvas.convertToBlob`, le repli",
+        "    `<canvas>`) N EXISTENT NI DANS NODE NI DANS JSDOM. Les y soumettre rendrait la CI",
+        "rouge pour une raison d OUTILLAGE et non de test — exactement le TROU DE MESURE que le",
+        "bandeau de ce fichier decrit pour `packages/shared`. Sa regle pure (`dimensionsCibles`)",
+        "EST couverte ; le reste se verifie en E2E et a la recette d appareils (A27).",
+        "Ce n est donc pas une dispense : c est un trou NOMME, et il est remonte a A01/A20."
+      ],
+      "$motif": "Deplace de cheminsAttendus le 2026-09-05 par A23, sur arbitrage A01 du 2026-09-04 (« tu le corriges en apps/field/src/sauvegarde/** »). Le glob final vise les deux fichiers qui SONT l export, le repertoire portant aussi photos.ts — ecart et chiffre publies ci-dessus."
+    },
+    {
+      "lot": "L5c",
+      "module": "Export de secours — schemas Zod de la frontiere du fichier .axionbackup",
+      "glob": "apps/field/src/sauvegarde/format.ts",
+      "reference": "11 §4 (format de fichier) · 05 §9.7 · E38",
+      "_note_glob": [
+        "SECOND GLOB DU MEME MODULE, et il est SEPARE parce que le controle",
+        "(.github/scripts/check-coverage.mjs) convertit UN glob par entree en expression",
+        "reguliere : deux chemins dans une meme chaine ne correspondraient a AUCUN fichier,",
+        "et le script sortirait « aucun fichier couvert ne correspond ». La forme suit donc",
+        "le meme partage que scoping (depot + route) et users (depot + route).",
+        "Mesure a la pose : 100 / 100 / 100."
+      ],
+      "$motif": "Pose le 2026-09-05 par A23, en meme temps que sauvegarde.ts."
     }
   ],
   "_cheminsAttendus_mode_emploi": [
@@ -294,13 +344,6 @@
     "Les globs sont au format `git ls-files` (pathspec)."
   ],
   "cheminsAttendus": [
-    {
-      "lot": "L5c",
-      "module": "Export de secours chiffre (.axionbackup)",
-      "glob": "apps/field/src/backup/**",
-      "reference": "11 §4 (format de fichier) · 07 §12 lot L5 · invariant 8",
-      "statut": "non livre"
-    },
     {
       "lot": "L6a",
       "module": "Moteur de sync — outbox et push idempotent (cote terrain)",
