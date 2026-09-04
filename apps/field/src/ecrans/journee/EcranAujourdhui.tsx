@@ -368,6 +368,17 @@ export function EcranAujourdhui(): ReactNode {
         >
           Fin de journée
         </Bouton>
+        {/* L'écran d'EMBARQUEMENT (L5a) reste joignable : la règle de vue initiale
+            (arbitrage A01, 2026-09-05) fait atterrir ici quand une mission est
+            présente, elle ne retire pas l'autre écran de la route. */}
+        <Bouton
+          variante="discret"
+          onClick={() => {
+            naviguer({ type: 'aller', vue: 'accueil' });
+          }}
+        >
+          Missions et stockage de l’appareil
+        </Bouton>
       </div>
 
       {!enLigne && (

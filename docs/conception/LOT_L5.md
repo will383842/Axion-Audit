@@ -26,6 +26,14 @@ construction : `src/ecrans/entretien/**` (A22) contre `src/ecrans/journee/**` (A
 append-only, une ligne par écran**. Créé par L5a avec les vues du socle ; L5b puis L5c y ajoutent
 leurs lignes dans cet ordre de fusion. Aucun autre fichier n'est écrit par deux incréments : si un
 troisième candidat apparaît, il remonte à A20 avant d'être touché, il ne se partage pas.
+**═══ AMENDEMENT DU 2026-09-05 (A01, sur délégation de Williams du 2026-09-04) ═══ Le
+« troisième candidat » est apparu, et il est ENREGISTRÉ : `apps/field/src/App.tsx` rejoint
+`vues.ts` dans la liste des fichiers partagés, sous le même régime — strictement append-only, un
+`case` par écran dans `ContenuCourant`, dans l'ordre de fusion des incréments.** Chronologie, pour
+que personne ne la devine : c'est **L5b** qui l'a rendu partagé (`case 'nouvelEntretien'`,
+`case 'entretien'`) sans le déclarer ; c'est **L5c** qui a suivi le même modèle ET l'a remonté au
+lieu de le taire — la conduite que ce paragraphe demandait. Une vue ajoutée à `vues.ts` sans son
+`case` est un écran injoignable : les deux fichiers s'amendent ensemble, ou pas du tout.
 Tests : **A26** (E2E offline) et **A27** (multi-appareils) — ni l'un ni l'autre n'écrit de code de
 production (09 §5.6). Revue croisée intégrale : **A29**. Accessibilité et budgets : **A28**.
 

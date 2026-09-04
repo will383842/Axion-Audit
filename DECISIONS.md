@@ -8020,3 +8020,25 @@ c’est l’outillage de relecture qui manque, pas une règle qui en contredit u
 Décideur : **A01/A20 à l'ouverture de L6a** — c'est là que la primitive (b) a son sens, parce
 que c'est là que la file cesse d'être inerte.
 Impact spec : aucun. Le format de fichier est complet ; seule sa relecture est partielle.
+
+## 2026-09-05 — [L5c] Les quatre entrées L5c du 2026-09-05 sont des ARBITRAGES RENDUS, pas des propositions
+
+Les quatre entrées précédentes de ce jour — R1 (trois étapes calculées, le « 3 » du pack en
+vérification) · motif de déverrouillage vérifié non persisté · note d'unité non offerte plutôt que
+jetée · outbox non réinjectée et annoncée — portaient un `Décideur` ouvert (« Williams »,
+« A01/A20 à l'ouverture de L6a »). A01 les a lues et les tient pour tranchées.
+
+Options :
+(a) Réécrire la ligne `Décideur` des quatre entrées. Refusé : elles sont commitées (`a417dec`),
+et ce fichier est append-only — `check:decisions` le dit mot pour mot : « ne réécris pas une
+entrée passée […] réémets son contenu manquant dans une entrée nouvelle et datée ».
+(b) Une entrée de RATIFICATION, celle-ci, qui fixe le décideur pour les quatre.
+
+Arbitrage : **(b)**. Les quatre arbitrages sont ceux appliqués dans le code, tels quels. Ce qui
+reste ouvert n'est PAS remis en cause par cette entrée : R1 garde sa question secondaire
+(Williams peut encore changer LESQUELLES des trois étapes sont visibles — un seul test bouge),
+et la réinjection de l'outbox se rejoue à l'ouverture de L6a, là où la file cesse d'être inerte.
+Règle de précédence sans objet (aucune divergence interne) : cette entrée ne tranche aucun
+texte du pack, elle nomme qui a tranché.
+Décideur : **A01, sur délégation de Williams du 2026-09-04**.
+Impact spec : aucun — les quatre entrées précédentes gardent le leur, entrée par entrée.

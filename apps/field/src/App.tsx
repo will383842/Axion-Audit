@@ -14,12 +14,13 @@
 //
 // Traçabilité : E33 (sécurité / RGPD), E6 (hors ligne total, PC ET tablette).
 // =============================================================================
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { Bouton, EtatErreur, Squelette } from '@axion/ui';
 import { EcranAccueil } from './app/EcranAccueil.js';
 import { EcranDeverrouillage } from './app/EcranDeverrouillage.js';
 import { EcranStockage } from './app/EcranStockage.js';
 import { useTerrain } from './app/contexte.js';
+import { vueCourante } from './app/navigation.js';
 import { VUES } from './app/vues.js';
 import { EcranEntretien } from './ecrans/entretien/EcranEntretien.js';
 import { EcranNouvelEntretien } from './ecrans/entretien/EcranNouvelEntretien.js';
@@ -27,6 +28,7 @@ import { EcranAgenda } from './ecrans/journee/EcranAgenda.js';
 import { EcranAujourdhui } from './ecrans/journee/EcranAujourdhui.js';
 import { EcranFinDeJournee } from './ecrans/journee/EcranFinDeJournee.js';
 import { EcranPilote } from './ecrans/journee/EcranPilote.js';
+import { aUneMissionEmbarquee, vueInitiale } from './ecrans/journee/vue-initiale.js';
 
 function ContenuCourant(): ReactNode {
   const { vue } = useTerrain();
@@ -54,8 +56,36 @@ function ContenuCourant(): ReactNode {
   }
 }
 
+/**
+ * La vue initiale est une RÈGLE, pas une constante (arbitrage A01, 2026-09-05) :
+ * cockpit « Aujourd'hui » quand une mission est embarquée, `accueil` sinon.
+ *
+ * Appliquée UNE fois par chargement de page, à l'ouverture du coffre, et
+ * seulement si l'application a atterri sur la vue par défaut avec une pile
+ * vierge — la reprise instantanée (03 §17.4) n'est jamais détournée. La règle
+ * elle-même vit dans `ecrans/journee/vue-initiale.ts` (L5c), testée sur ses deux
+ * cas ; ce crochet ne fait que la lire et naviguer.
+ */
+function useVueInitiale(): void {
+  const { base, phase, navigation, naviguer } = useTerrain();
+  const appliquee = useRef(false);
+  useEffect(() => {
+    if (appliquee.current || base === null || phase !== 'ouvert') return;
+    appliquee.current = true;
+    void aUneMissionEmbarquee(base).then((missionEmbarquee) => {
+      const cible = vueInitiale({
+        missionEmbarquee,
+        vueAtterrissage: vueCourante(navigation),
+        profondeurPile: navigation.pile.length,
+      });
+      if (cible !== vueCourante(navigation)) naviguer({ type: 'racine', vue: cible });
+    });
+  }, [base, phase, navigation, naviguer]);
+}
+
 export function App(): ReactNode {
   const { phase, panne, vue, verrou, fermer } = useTerrain();
+  useVueInitiale();
 
   if (phase === 'chargement') {
     return (
