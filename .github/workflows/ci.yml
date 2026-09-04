@@ -168,7 +168,7 @@ jobs:
   # GARDE-FOU 2 — SCRIPTS SHELL D'INFRA (11 §7, scripts livrés par A11)
   # ---------------------------------------------------------------------------
   shellcheck:
-    name: shellcheck (infra/scripts/*.sh)
+    name: shellcheck (infra/scripts/*.sh + .github/scripts/*.sh)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -187,7 +187,12 @@ jobs:
           # lot, pas une situation normale : on échoue avec un message lisible.
           # Un seul pathspec suffit : en pathspec git, `*` traverse `/` — il
           # couvre donc aussi `infra/scripts/lib/common.sh`.
-          mapfile -t scripts < <(git ls-files 'infra/scripts/*.sh')
+          # `.github/scripts/*.sh` ajouté le 2026-09-05 : depuis le constat
+          # F-31, la GARDE du scan ZAP (verdict + sa table de vérité) vit dans un
+          # script versionné plutôt qu'en ligne dans le workflow. Un script qui
+          # décide si une PR est rouge ou verte est du code d'exploitation : il
+          # s'analyse comme le reste, sinon on a seulement déplacé l'angle mort.
+          mapfile -t scripts < <(git ls-files 'infra/scripts/*.sh' '.github/scripts/*.sh')
           if [ "${#scripts[@]}" -eq 0 ]; then
             echo "::error::Aucun script dans infra/scripts/ — livrable du lot L0 (agent A11 : deploy.sh, restore-test.sh). La CI n'a rien à vérifier : échec explicite plutôt que faux vert."
             exit 1
