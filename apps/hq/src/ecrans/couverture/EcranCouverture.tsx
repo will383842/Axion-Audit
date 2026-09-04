@@ -67,6 +67,13 @@ const PROFONDEUR_MAX_INDENTEE = 6;
  * Trois nombres, pas un ratio : l'écart prévu → planifié est un défaut d'AGENDA,
  * l'écart planifié → réalisé un défaut de TERRAIN. Ce ne sont ni les mêmes
  * alertes ni les mêmes destinataires.
+ *
+ * ── L'ŒIL ET LA MACHINE LISENT LA MÊME CHOSE, PAS LA MÊME FORME ────────────
+ * L'affichage compact (« 2 / 3 ») est ABRÉGÉ, donc `aria-hidden` : lu à voix
+ * haute, il donnerait « deux barre oblique trois », qui ne veut rien dire. La
+ * phrase complète est la SEULE contenu accessible de la cellule, et elle dit les
+ * trois nombres et l'état. §33.6 : jamais la couleur seule — le fond ambré d'une
+ * source manquante est doublé du mot « non couverte » dans cette phrase.
  */
 function Cellule({ cellule }: { cellule: CelluleCouverture }): ReactNode {
   const attendue = cellule.prevu.min > 0;
@@ -82,17 +89,17 @@ function Cellule({ cellule }: { cellule: CelluleCouverture }): ReactNode {
       data-manquante={manquante ? 'true' : 'false'}
       data-attendue={attendue ? 'true' : 'false'}
     >
-      <span className="axn-couverture__realise">{cellule.realise}</span>
-      <span className="axn-couverture__separateur" aria-hidden="true">
-        /
+      <span aria-hidden="true">
+        <span className="axn-couverture__realise">{cellule.realise}</span>
+        <span className="axn-couverture__separateur">/</span>
+        <span className="axn-couverture__prevu">{prevu}</span>
+        <span className="axn-couverture__planifie">
+          {cellule.planifie} planifié{cellule.planifie > 1 ? 's' : ''}
+        </span>
       </span>
-      <span className="axn-couverture__prevu">{prevu}</span>
       <span className="axn-visuellement-masque">
-        {` réalisé sur ${prevu} prévu, ${String(cellule.planifie)} planifié`}
-        {manquante ? ' — source non couverte' : ''}
-      </span>
-      <span className="axn-couverture__planifie" aria-hidden="true">
-        {cellule.planifie} planifié{cellule.planifie > 1 ? 's' : ''}
+        {`${String(cellule.realise)} réalisé sur ${prevu} prévu, ${String(cellule.planifie)} planifié`}
+        {attendue ? (manquante ? ' — source non couverte' : ' — source couverte') : ''}
       </span>
     </td>
   );
