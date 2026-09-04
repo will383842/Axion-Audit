@@ -34,6 +34,7 @@
 // =============================================================================
 import { argon2id } from 'hash-wasm';
 import type { ZodType } from 'zod';
+import { MOT_DE_PASSE_LONGUEUR_MIN } from '@axion/shared';
 import {
   depuisBase64,
   ErreurEnveloppe,
@@ -87,6 +88,124 @@ export const LONGUEUR_SEL_OCTETS = 16;
 /** Longueur de la DEK, en bits. 05 §9.7 : « une DEK AES-256 ». */
 const LONGUEUR_DEK_BITS = 256;
 
+/**
+ * Le TRAVAIL demandé à Argon2id, en kibioctets-passes (`m × t`).
+ *
+ * C'est la grandeur qui commande le temps de dérivation : la doubler double le
+ * coût, qu'on double la mémoire ou le nombre de passes.
+ */
+export function travailKdf(parametres: ParametresKdf): number {
+  return parametres.memoireKio * parametres.iterations;
+}
+
+/**
+ * BORNES HAUTES des paramètres de dérivation — verdict A51 du 2026-09-04, F-25.
+ *
+ * ── POURQUOI BORNER DES PARAMÈTRES QUI SONT LES NÔTRES ──────────────────────
+ * Ils ne le sont pas toujours : ils sont **stockés avec le coffre** (et c'est la
+ * bonne décision — un coffre créé hier doit s'ouvrir demain), donc **relus d'une
+ * entrée non fiable**. A51 l'a mesuré : `{memoireKio: 4 000 000, iterations:
+ * 1 000 000}` écrit dans `meta` était accepté, et chaque déverrouillage aurait
+ * alors demandé 4 Gio et un million de passes — l'onglet meurt, les données sont
+ * intactes et l'auditeur n'y accède plus. Une écriture, sans mot de passe.
+ *
+ * ── D'OÙ VIENNENT CES NOMBRES : DU BUDGET, PAS DE L'INSPIRATION ─────────────
+ * 11 §4 impose « dérivation de clé < 1 s sur iPad ». Le profil confirmé
+ * (`PARAMETRES_KDF_DEFAUT`, 47 104 Kio-passes) a été mesuré par A51 à 139 ms sur
+ * une machine de développement, sur une courbe linéaire (250 000 Kio → 498 ms ;
+ * 500 000 Kio → 861 ms, déjà au budget). Le plafond de TRAVAIL est donc fixé à
+ * **4 × le profil confirmé** : assez haut pour qu'un durcissement raisonnable du
+ * profil (décision humaine, 11 §8-4) n'oblige pas à revenir ici, assez bas pour
+ * qu'aucune valeur écrite par un tiers ne coûte plus de quelques centaines de
+ * millisecondes. Les trois autres bornes ne bornent pas le temps mais une
+ * RESSOURCE : allocation, voies, taille de sortie.
+ *
+ * Aucune borne BASSE : refuser un profil plus faible que le nôtre ne protège
+ * rien (un attaquant hors ligne choisit ses propres paramètres) et rendrait
+ * illisible un coffre légitime créé sous un autre profil — invariant 7.
+ */
+export const BORNES_KDF = {
+  /** Allocation mémoire maximale acceptée, en kibioctets. */
+  memoireKioMax: 4 * PARAMETRES_KDF_DEFAUT.memoireKio,
+  /** Nombre de passes maximal accepté. */
+  iterationsMax: 8,
+  /** Voies parallèles maximales. `hash-wasm` est mono-thread ; au-delà, c'est du coût pur. */
+  parallelismeMax: 4,
+  /** Longueur de clé dérivée maximale, en octets (AES-256 en demande 32). */
+  longueurOctetsMax: 64,
+  /** Travail total maximal (`m × t`), en kibioctets-passes. */
+  travailMax: 4 * travailKdf(PARAMETRES_KDF_DEFAUT),
+} as const;
+
+/**
+ * Refuse d'exécuter des paramètres hors bornes — par une erreur EXPLICITE.
+ *
+ * Le refus ne passe volontairement pas par un `.max()` du schéma Zod du coffre au
+ * repos : Zod dirait « ce coffre est illisible » là où la vérité est « ce coffre
+ * est parfaitement lisible et ses paramètres sont hors bornes ». Confondre deux
+ * états distincts est exactement ce que F-22 a coûté ; on ne le réintroduit pas
+ * ici pour gagner trois lignes.
+ */
+export function verifierParametresKdf(parametres: ParametresKdf): void {
+  const depassements: string[] = [];
+  const dire = (valeur: number, maximum: number, unite: string): string =>
+    `${unite} ${String(valeur)} pour un maximum de ${String(maximum)}`;
+
+  if (parametres.memoireKio > BORNES_KDF.memoireKioMax) {
+    depassements.push(dire(parametres.memoireKio, BORNES_KDF.memoireKioMax, 'mémoire de'));
+  }
+  if (parametres.iterations > BORNES_KDF.iterationsMax) {
+    depassements.push(dire(parametres.iterations, BORNES_KDF.iterationsMax, 'passes :'));
+  }
+  if (parametres.parallelisme > BORNES_KDF.parallelismeMax) {
+    depassements.push(
+      dire(parametres.parallelisme, BORNES_KDF.parallelismeMax, 'voies parallèles :'),
+    );
+  }
+  if (parametres.longueurOctets > BORNES_KDF.longueurOctetsMax) {
+    depassements.push(
+      dire(parametres.longueurOctets, BORNES_KDF.longueurOctetsMax, 'longueur de clé :'),
+    );
+  }
+  if (travailKdf(parametres) > BORNES_KDF.travailMax) {
+    depassements.push(dire(travailKdf(parametres), BORNES_KDF.travailMax, 'travail total de'));
+  }
+  if (depassements.length > 0) {
+    throw new ParametresKdfHorsBornesError(depassements.join(' ; '));
+  }
+}
+
+/**
+ * La politique de mot de passe du coffre local — verdict A51, F-23.
+ *
+ * ── CE QUE CE MOT DE PASSE PROTÈGE, ET QUI JUSTIFIE LA CONTRAINTE ───────────
+ * Sur cet appareil, il est la racine de TOUT : les réponses, les notes, les noms
+ * et courriels d'interviewés, et le jeton de rafraîchissement de 30 jours — donc
+ * un accès au serveur. Un iPad volé livre `sel`, `parametres` et `dekEnveloppee`
+ * à qui sait ouvrir IndexedDB : l'attaque se poursuit HORS LIGNE, au rythme de
+ * l'attaquant, et aucun compteur d'essais côté écran n'y changerait quoi que ce
+ * soit. Le seul rempart est le coût par essai (61 ms mesurés) MULTIPLIÉ par
+ * l'entropie du mot de passe. `deriverKek` ne refusait que la chaîne vide : un
+ * mot de passe d'UN caractère créait un coffre (mesuré par A51).
+ *
+ * ── LÀ OÙ ELLE S'APPLIQUE, ET LÀ OÙ ELLE NE S'APPLIQUE JAMAIS ───────────────
+ * À la CRÉATION du coffre et au CHANGEMENT de mot de passe — c'est-à-dire au
+ * moment où l'auditeur choisit. **Jamais au déverrouillage** : une politique
+ * appliquée à l'ouverture d'un coffre existant ne renforce rien et interdirait
+ * l'accès à des données déjà chiffrées. Un durcissement futur de la politique ne
+ * doit jamais rendre une base illisible (invariant 7).
+ *
+ * Le seuil n'est pas inventé ici : `MOT_DE_PASSE_LONGUEUR_MIN` de
+ * `@axion/shared` transcrit 06 §10.1 (« 12+ caractères »), et l'API l'applique
+ * déjà. Le terrain applique le même — voir la réserve de spec au rapport A24 :
+ * le pack ne dit nulle part si le mot de passe du coffre EST celui du compte.
+ */
+export function verifierPolitiqueMotDePasse(motDePasse: string): void {
+  if (motDePasse.length < MOT_DE_PASSE_LONGUEUR_MIN) {
+    throw new MotDePasseTropCourtError();
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ERREURS — chacune dit une CAUSE et une ACTION (03 §17.6, §33.2)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -105,6 +224,81 @@ export class MotDePasseInvalideError extends Error {
   override readonly name = 'MotDePasseInvalideError';
   constructor() {
     super('Mot de passe incorrect. Aucune donnée locale n’a été modifiée.');
+  }
+}
+
+/**
+ * Anomalie du coffre AU REPOS — la famille d'erreurs qui doit conduire à une page
+ * d'anomalie, JAMAIS à une ré-initialisation.
+ *
+ * Verdict A51, F-22 : `lireCoffreAuRepos` rendait `null` aussi bien pour un coffre
+ * ABSENT que pour un coffre ILLISIBLE ; la coquille affichait alors « Préparer cet
+ * appareil » et le mot de passe de l'auditeur détruisait sa propre DEK. Ces deux
+ * états sont distincts et le restent désormais sur TOUT le chemin — lecture,
+ * initialisation, phase de la coquille, écran. Une anomalie porte donc une CAUSE
+ * (le message) ET une ACTION (03 §17.6, §33.2), et l'action ne propose jamais de
+ * repartir de zéro : ce serait proposer d'effacer la journée de collecte.
+ */
+export abstract class AnomalieCoffreError extends Error {
+  /** Ce que l'auditeur doit faire — et ce qu'il ne doit surtout pas faire. */
+  abstract readonly action: string;
+}
+
+/**
+ * L'action commune à toutes les anomalies de coffre : ne rien recréer, signaler.
+ *
+ * Le premier réflexe devant un appareil qui ne s'ouvre pas est de « repartir
+ * propre ». C'est précisément le geste qui rend les données définitivement
+ * illisibles, et l'écran doit le dire avant que l'auditeur ne le pense.
+ */
+const ACTION_ANOMALIE_COFFRE =
+  'Ne créez PAS de nouvelle protection sur cet appareil : les données qui s’y trouvent deviendraient définitivement illisibles. ' +
+  'Signalez cette anomalie au siège sans recharger ni réinstaller, et poursuivez la collecte sur un autre appareil si vous devez collecter maintenant.';
+
+/**
+ * Une ligne de coffre EXISTE mais cette version de l'application ne sait pas la
+ * lire. Ce n'est ni un coffre absent, ni un mauvais mot de passe.
+ *
+ * Le déclencheur le plus probable n'est pas un attaquant : c'est une écriture
+ * partielle sur une tablette qui s'éteint, un quota atteint en pleine écriture de
+ * `meta`, ou une version future qui ajoute un champ requis au schéma du coffre.
+ * D'où le ton : la donnée est là, elle n'a pas été touchée, et personne ne doit
+ * la « réparer » en la remplaçant.
+ */
+export class CoffreIllisibleError extends AnomalieCoffreError {
+  override readonly name = 'CoffreIllisibleError';
+  override readonly action = ACTION_ANOMALIE_COFFRE;
+  constructor(detail: string) {
+    super(
+      `Cet appareil porte bien un coffre, mais l’application ne sait pas le lire : ${detail}. Aucune donnée locale n’a été supprimée ni modifiée.`,
+    );
+  }
+}
+
+/**
+ * Les paramètres de dérivation enregistrés sortent des bornes admises (F-25).
+ *
+ * Le coffre est lisible ; ce sont ses paramètres qui demandent plus que ce que
+ * l'application accepte d'exécuter. Le dire ainsi, et non « illisible », est ce
+ * qui permettra à quelqu'un de comprendre en une lecture ce qui s'est passé.
+ */
+export class ParametresKdfHorsBornesError extends AnomalieCoffreError {
+  override readonly name = 'ParametresKdfHorsBornesError';
+  override readonly action = ACTION_ANOMALIE_COFFRE;
+  constructor(detail: string) {
+    super(
+      `Les paramètres de chiffrement enregistrés sur cet appareil dépassent ce que l’application accepte (${detail}). Aucune donnée locale n’a été supprimée ni modifiée.`,
+    );
+  }
+}
+
+/** Le mot de passe choisi est trop court pour protéger quoi que ce soit (F-23). */
+export class MotDePasseTropCourtError extends Error {
+  override readonly name = 'MotDePasseTropCourtError';
+  constructor() {
+    super(
+      `Choisissez un mot de passe d’au moins ${String(MOT_DE_PASSE_LONGUEUR_MIN)} caractères : sur cet appareil, il protège à lui seul les données d’audit et l’accès au siège. Aucune donnée locale n’a été modifiée.`,
+    );
   }
 }
 
@@ -144,6 +338,13 @@ export async function deriverKek(
   if (motDePasse === '') {
     throw new MotDePasseInvalideError();
   }
+  // Seconde ceinture de F-25 : quel que soit l'appelant — coffre au repos,
+  // changement de mot de passe, futur `.axionbackup` —, aucun paramètre hors
+  // bornes n'atteint `argon2id`. Le premier contrôle a lieu à la RELECTURE
+  // (`coffre-appareil.ts`) ; celui-ci ferme les chemins qu'on n'a pas encore
+  // écrits. La politique de longueur, elle, N'EST PAS ici : `deriverKek` sert
+  // aussi à OUVRIR un coffre existant (voir `verifierPolitiqueMotDePasse`).
+  verifierParametresKdf(parametres);
   const brut = await argon2id({
     password: motDePasse,
     salt: sel,

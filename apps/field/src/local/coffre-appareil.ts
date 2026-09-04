@@ -14,6 +14,28 @@
 // Les paramètres sont stockés AVEC la DEK et non lus d'une constante : le jour où
 // `PARAMETRES_KDF_DEFAUT` change, un coffre créé hier doit continuer à s'ouvrir.
 //
+// ── « ABSENT » ET « ILLISIBLE » SONT DEUX ÉTATS, ET LE RESTENT ──────────────
+// Verdict A51 du 2026-09-04, constat F-22 (CRITIQUE) : `lireCoffreAuRepos`
+// rendait `null` pour un coffre absent COMME pour un coffre illisible. La coquille
+// en déduisait « premier usage », affichait « Préparer cet appareil », et le mot de
+// passe de l'auditeur écrasait l'enveloppe de son ANCIENNE DEK. Mesuré de bout en
+// bout : toutes les lignes restaient là — l'invariant 7 tenu à la lettre — et plus
+// rien n'était lisible, définitivement, même avec le bon mot de passe.
+//
+// Le déclencheur n'a pas besoin d'un attaquant : n'importe quel échec de
+// `safeParse` suffit — une écriture partielle sur une tablette qui s'éteint, un
+// quota atteint, ou une version future qui ajoute un champ requis au schéma. Ce
+// jour-là, TOUS les appareils en mission liraient leur coffre comme « absent ».
+//
+// Trois règles en découlent, et elles ne se négocient pas :
+//   1. `lireCoffreAuRepos` rend `null` pour ABSENT et **lève** pour illisible —
+//      exactement la doctrine que `jetons.ts` avait déjà écrite pour lui-même ;
+//   2. `initialiserCoffre` refuse dès qu'une ligne `meta.coffre` EXISTE, quelle
+//      que soit sa lisibilité — et refuse aussi de « préparer » un appareil qui
+//      porte déjà des données (seconde ceinture) ;
+//   3. l'appelant route l'anomalie vers un écran d'erreur, jamais vers un écran
+//      de création (`app/contexte.tsx`).
+//
 // ── LE GARDE-FOU DU 05 §9.7, CÔTÉ TERRAIN ────────────────────────────────────
 // Un changement de mot de passe est un ré-enveloppement, jamais un re-chiffrement.
 // Mais le SERVEUR refuse une réinitialisation tant que le dernier
@@ -27,12 +49,16 @@ import { z } from 'zod';
 import { uuidv7 } from 'uuidv7';
 import { CLES_META, ecrireMeta, lireMeta, type BaseLocale } from './base.js';
 import {
+  CoffreIllisibleError,
   creerCoffreNeuf,
   deriverKek,
   genererSel,
   ouvrirCoffre,
   PARAMETRES_KDF_DEFAUT,
   reenvelopperDek,
+  verifierParametresKdf,
+  verifierPolitiqueMotDePasse,
+  AnomalieCoffreError,
   type Coffre,
   type ParametresKdf,
 } from './coffre.js';
@@ -55,32 +81,105 @@ const coffreAuReposSchema = z.object({
 
 export type CoffreAuRepos = z.infer<typeof coffreAuReposSchema>;
 
-/** Le coffre existe-t-il déjà sur cet appareil ? */
+/**
+ * Le coffre de cet appareil, ou `null`.
+ *
+ * **`null` veut dire ABSENT, et rien d'autre.** Une ligne `meta.coffre` présente
+ * mais que le schéma refuse LÈVE une `CoffreIllisibleError` ; des paramètres de
+ * dérivation hors bornes lèvent une `ParametresKdfHorsBornesError` (F-25). Rendre
+ * `null` dans l'un de ces cas ferait dire « appareil neuf » à un appareil qui
+ * porte une journée de collecte — et la suite est écrite en tête de fichier.
+ *
+ * La règle est celle que `jetons.ts` s'était déjà appliquée à lui-même : la
+ * doctrine existait, elle n'avait simplement pas été appliquée au coffre.
+ */
 export async function lireCoffreAuRepos(base: BaseLocale): Promise<CoffreAuRepos | null> {
   const brut = await lireMeta(base, CLES_META.coffre);
   if (brut === undefined || brut === null) return null;
+
   const verdict = coffreAuReposSchema.safeParse(brut);
-  return verdict.success ? verdict.data : null;
+  if (!verdict.success) {
+    // Les CHEMINS, jamais les VALEURS (11 §2) : un message d'erreur ne republie
+    // pas le contenu de `meta`, fût-il chiffré.
+    const chemins = verdict.error.issues
+      .map((probleme) => probleme.path.join('.'))
+      .filter((chemin) => chemin.length > 0);
+    throw new CoffreIllisibleError(
+      chemins.length > 0
+        ? `sa forme n’est pas celle attendue sur : ${[...new Set(chemins)].join(', ')}`
+        : 'sa forme n’est pas celle attendue',
+    );
+  }
+
+  verifierParametresKdf(verdict.data.parametres);
+  return verdict.data;
+}
+
+/**
+ * Y a-t-il déjà de la collecte sur cet appareil ? — seconde ceinture de F-22.
+ *
+ * On ne « prépare » pas un appareil qui porte déjà des données : si les tables
+ * miroirs ou l'outbox ne sont pas vides alors qu'aucun coffre n'est enregistré,
+ * quelque chose s'est passé qu'aucun mot de passe ne réparera, et créer une DEK
+ * neuve rendrait ces lignes illisibles pour toujours. Compter coûte deux
+ * millisecondes sur un appareil neuf, où tout est à zéro.
+ */
+async function compterDonneesLocales(base: BaseLocale): Promise<number> {
+  const comptes = await Promise.all([
+    base.missions.count(),
+    base.missionQuestions.count(),
+    base.orgUnits.count(),
+    base.interviews.count(),
+    base.answers.count(),
+    base.attachments.count(),
+    base.workAssignments.count(),
+    base.outbox.count(),
+  ]);
+  return comptes.reduce((total, compte) => total + compte, 0);
+}
+
+/** Des données locales, mais aucun coffre pour les ouvrir : on ne recrée rien. */
+export class DonneesSansCoffreError extends AnomalieCoffreError {
+  override readonly name = 'DonneesSansCoffreError';
+  override readonly action =
+    'Ne créez PAS de protection sur cet appareil : ces enregistrements deviendraient définitivement illisibles. ' +
+    'Signalez-le au siège avant toute autre manœuvre, et poursuivez la collecte sur un autre appareil.';
+  constructor(lignes: number) {
+    super(
+      `Cet appareil porte déjà ${String(lignes)} enregistrement(s) locaux alors qu’aucun coffre n’y est enregistré. Rien n’a été supprimé ni modifié.`,
+    );
+  }
 }
 
 /**
  * Premier déverrouillage d'un appareil : crée le sel, dérive la KEK, tire une DEK
  * neuve et range son enveloppe. Rend le coffre OUVERT.
  *
- * Ne fait rien si un coffre existe déjà : écraser un coffre, ce serait rendre
- * illisibles toutes les données locales — la forme la plus brutale de l'écrasement
- * silencieux que l'invariant 7 interdit.
+ * N'écrase JAMAIS un coffre : écraser, ce serait rendre illisibles toutes les
+ * données locales — la forme la plus brutale de l'écrasement silencieux que
+ * l'invariant 7 interdit. La garde porte sur la PRÉSENCE de la ligne `meta.coffre`
+ * et non sur sa lisibilité (F-22) : une ligne illisible fait lever, jamais tirer un
+ * sel neuf. Quand la ligne est présente et lisible, l'appel est un déverrouillage
+ * ordinaire — un mot de passe faux y est refusé comme partout ailleurs.
  */
 export async function initialiserCoffre(
   base: BaseLocale,
   motDePasse: string,
   parametres: ParametresKdf = PARAMETRES_KDF_DEFAUT,
 ): Promise<Coffre> {
-  const existant = await lireCoffreAuRepos(base);
-  if (existant !== null) {
+  const ligneExistante = await lireMeta(base, CLES_META.coffre);
+  if (ligneExistante !== undefined && ligneExistante !== null) {
+    // `deverrouiller` relit par `lireCoffreAuRepos`, qui lèvera si la ligne est
+    // illisible : c'est le seul chemin, et il ne crée rien.
     return deverrouiller(base, motDePasse);
   }
 
+  const lignesLocales = await compterDonneesLocales(base);
+  if (lignesLocales > 0) {
+    throw new DonneesSansCoffreError(lignesLocales);
+  }
+
+  verifierPolitiqueMotDePasse(motDePasse);
   const sel = genererSel();
   const kek = await deriverKek(motDePasse, sel, parametres);
   const { coffre, dekEnveloppee } = await creerCoffreNeuf(kek);
@@ -161,6 +260,10 @@ export async function changerMotDePasse(
 ): Promise<Coffre> {
   const auRepos = await lireCoffreAuRepos(base);
   if (auRepos === null) throw new CoffreAbsentError();
+
+  // La politique porte sur le mot de passe CHOISI, jamais sur l'ancien : refuser
+  // l'ancien reviendrait à interdire de corriger un mot de passe trop court.
+  verifierPolitiqueMotDePasse(nouveauMotDePasse);
 
   const kekActuelle = await deriverKek(
     ancienMotDePasse,
