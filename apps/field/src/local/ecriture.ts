@@ -108,6 +108,20 @@ export type ChargeUtile<E extends EntiteSync> = ChargeDeTable<TablePourEntite<E>
 // chercher ailleurs. Le corollaire est assumé et voulu : après `verrouiller()`, le
 // contexte est retiré et toute écriture LÈVE (05 §9.7).
 
+/**
+ * L'instant porté par un `clientUpdatedAt`, ou `null` s'il est illisible.
+ *
+ * `Date.parse` et non une comparaison de chaînes : 05 §9.4 arbitre les conflits
+ * sur un INSTANT. Deux écritures du même instant sous deux formes ISO valides
+ * (`…T10:00:00Z` et `…T10:00:00.000+00:00`) s'ordonnent au hasard en lexical, et
+ * le perdant est une réponse d'audit.
+ */
+function instantDe(valeur: unknown): number | null {
+  if (typeof valeur !== 'string') return null;
+  const ms = Date.parse(valeur);
+  return Number.isNaN(ms) ? null : ms;
+}
+
 /** Ce que Dexie stocke réellement : l'en-tête d'index en clair + la charge chiffrée. */
 type LigneEcrite = { readonly id: string; readonly charge: Enveloppe } & Record<string, unknown>;
 
@@ -211,12 +225,24 @@ export interface LotDescendant {
  * Applique une descente.
  *
  * Deux garde-fous, tous deux au service de l'invariant 7 :
- *   1. **une ligne qui a une op EN ATTENTE dans l'outbox n'est jamais écrasée** —
- *      le travail non synchronisé de l'auditeur passe avant tout ;
+ *   1. **une ligne qui porte une op NON APPLIQUÉE n'est jamais écrasée.** Toute
+ *      op encore dans l'outbox est non appliquée, quel que soit son statut :
+ *      `en_attente`, mais aussi `rejetee` (05 §9.9) et `a_examiner` (05 §9.3).
+ *      La première version ne protégeait que les `en_attente` — réserve
+ *      R-L5a-2 de la revue A29, tranchée dans `DECISIONS.md` du 2026-09-02 :
+ *      « une op en échec est une saisie de l'auditeur que le serveur n'a pas
+ *      encore acceptée ; l'écraser par une version serveur, c'est perdre la
+ *      saisie sans que personne ne l'ait décidé ». Rien ne sort de la file sans
+ *      une réponse serveur — c'est précisément ce que ces statuts signifient ;
  *   2. à défaut, `clientUpdatedAt` arbitre (05 §9.4, dernier écrit gagne par
  *      LIGNE) — une descente plus ANCIENNE que la ligne locale ne l'écrase pas.
+ *      La comparaison porte sur des INSTANTS, jamais sur des chaînes : deux
+ *      formes ISO du même instant (millisecondes, `+00:00` contre `Z`) se
+ *      comparent alors correctement, là où l'ordre lexical trancherait au
+ *      hasard (réserve R-L5a-4).
  * Ce qui est conservé n'est pas passé sous silence : le compte est écrit dans
- * `meta`, pour que L6b puisse le montrer (« n élément(s) conservé(s) »).
+ * `meta` à CHAQUE lot, **y compris quand il vaut zéro** (réserve R-L5a-3), sans
+ * quoi un « 3 éléments conservés » d'hier resterait affiché après un pull propre.
  *
  * Rend `void` (signature publiée `LOT_L5.md` §2).
  */
@@ -228,10 +254,9 @@ export async function appliquerDescente(lot: LotDescendant): Promise<void> {
   reglerDecalage(lot.serverTime);
 
   // Lecture PRÉALABLE de la file — hors de la transaction d'écriture, qui
-  // n'inclura pas `outbox`.
-  const enAttente = new Set(
-    (await base.outbox.where('statut').equals('en_attente').toArray()).map((op) => op.entiteId),
-  );
+  // n'inclura pas `outbox`. Toutes les ops, pas seulement les `en_attente` :
+  // une op PRÉSENTE dans la file est une op que le serveur n'a pas acceptée.
+  const nonAppliquees = new Set((await base.outbox.toArray()).map((op) => op.entiteId));
 
   // Chiffrement de toutes les charges avant d'ouvrir la transaction.
   const prets: { nom: TableMiroir; enTete: LigneEcrite }[] = [];
@@ -252,16 +277,14 @@ export async function appliquerDescente(lot: LotDescendant): Promise<void> {
     for (const pret of prets) {
       const table = tableDe(base, pret.nom);
       const identifiant = pret.enTete.id;
-      if (enAttente.has(identifiant)) {
+      if (nonAppliquees.has(identifiant)) {
         conservees += 1;
         continue;
       }
       const existante = await table.get(identifiant);
-      const localeIso =
-        typeof existante?.clientUpdatedAt === 'string' ? existante.clientUpdatedAt : null;
-      const entranteIso =
-        typeof pret.enTete.clientUpdatedAt === 'string' ? pret.enTete.clientUpdatedAt : null;
-      if (localeIso !== null && entranteIso !== null && localeIso > entranteIso) {
+      const locale = instantDe(existante?.clientUpdatedAt);
+      const entrante = instantDe(pret.enTete.clientUpdatedAt);
+      if (locale !== null && entrante !== null && locale > entrante) {
         conservees += 1;
         continue;
       }
@@ -273,11 +296,12 @@ export async function appliquerDescente(lot: LotDescendant): Promise<void> {
       valeur: lot.prochainSince,
     });
     await base.meta.put({ cle: CLES_META.decalageHorloge, valeur: decalageActuelMs() });
-    if (conservees > 0) {
-      await base.meta.put({
-        cle: `${CLES_META.prefixeDescenteConservee}${lot.missionId}`,
-        valeur: conservees,
-      });
-    }
+    // Écrit à CHAQUE lot, zéro compris : la valeur décrit CE pull, pas l'histoire
+    // de l'appareil. N'écrire que les valeurs non nulles laissait un compte
+    // d'hier survivre à un pull propre — réserve R-L5a-3.
+    await base.meta.put({
+      cle: `${CLES_META.prefixeDescenteConservee}${lot.missionId}`,
+      valeur: conservees,
+    });
   });
 }

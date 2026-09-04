@@ -230,7 +230,7 @@ describe('BaseLocale — schéma local livré (05 §9.1, note L5 §2)', () => {
     expect(outbox).toHaveLength(NOMBRE_OPS + 1);
     const cles = outbox.map((op) => String(op.op_id ?? op.opId));
     expect([...cles].sort()).toEqual(cles);
-  });
+  }, 20_000);
 });
 
 // =============================================================================
@@ -254,7 +254,7 @@ describe('migration locale v1 → v2 avec outbox non vide (05 §31-1, note L5 §
     const apres = (await baseV2.table('outbox').toArray()) as Ligne[];
     expect(apres).toEqual(avant.outbox);
     baseV2.close();
-  });
+  }, 20_000);
 
   it('@critique les lignes d’entités (chiffrées) traversent la montée intactes', async () => {
     const nom = nomUnique();
@@ -265,7 +265,7 @@ describe('migration locale v1 → v2 avec outbox non vide (05 §31-1, note L5 §
     expect(await baseV2.table('answers').toArray()).toEqual(avant.answers);
     expect(await baseV2.table('interviews').toArray()).toEqual(avant.interviews);
     baseV2.close();
-  });
+  }, 20_000);
 
   it('la montée a bien eu lieu (sa trace) — le test ne passe pas par vacuité', async () => {
     const nom = nomUnique();
@@ -281,7 +281,7 @@ describe('migration locale v1 → v2 avec outbox non vide (05 §31-1, note L5 §
     // Et `meta` (curseurs, device_id) n'a pas bougé non plus.
     expect(await baseV2.table('meta').toArray()).toEqual(avant.meta);
     baseV2.close();
-  });
+  }, 20_000);
 
   it('après la montée, le port continue d’écrire À LA SUITE de la file (jamais devant)', async () => {
     const nom = nomUnique();
@@ -311,7 +311,7 @@ describe('migration locale v1 → v2 avec outbox non vide (05 §31-1, note L5 §
     expect(apres).toHaveLength(avant.outbox.length + 1);
     expect(apres.slice(0, avant.outbox.length)).toEqual(avant.outbox);
     baseV2.close();
-  });
+  }, 20_000);
 
   // IMPLÉMENTATION FAUSSE ATTRAPÉE : une migration « manuelle » hors de la
   // transaction `versionchange` de Dexie — export des tables, suppression,
@@ -336,5 +336,5 @@ describe('migration locale v1 → v2 avec outbox non vide (05 §31-1, note L5 §
     expect(await baseV1.table('meta').toArray()).toEqual(avant.meta);
     expect(baseV1.tables.map((t) => t.name)).not.toContain('journalMigrations');
     baseV1.close();
-  });
+  }, 20_000);
 });

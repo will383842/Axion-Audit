@@ -14,7 +14,7 @@
 // Traçabilité : E6 (hors ligne total, PC ET tablette), E38 (sauvegarde terrain).
 // =============================================================================
 import { useCallback, useState, type ReactNode } from 'react';
-import { Bouton, EtatErreur, Message } from '@axion/ui';
+import { Bouton, EtatErreur, Message, ZoneEtat } from '@axion/ui';
 import { alerteEspace, exigerPersistance } from '../local/stockage.js';
 import { useTerrain } from './contexte.js';
 
@@ -56,7 +56,23 @@ export function EcranStockage(): ReactNode {
     <section className="axn-pile axn-pile--large">
       <h1>Stockage de cet appareil</h1>
 
-      {persistant === true ? (
+      {/*
+        R-L5a-7 : `persistant === null` veut dire « on ne sait pas encore » — le
+        chargement, ou un navigateur sans l'API. L'afficher en ERREUR faisait
+        crier l'écran pendant la seconde qui précède la réponse, et 03 §33.2
+        distingue nommément les deux états. Trois branches, donc, pas deux.
+      */}
+      {persistant === null ? (
+        <ZoneEtat
+          etat={{
+            nature: 'chargement',
+            libelle: 'Vérification du stockage de cet appareil',
+            lignes: 2,
+          }}
+        >
+          <span />
+        </ZoneEtat>
+      ) : persistant ? (
         <Message ton="succes" titre="Conservation garantie">
           Le navigateur garantit de ne pas effacer les données de collecte de cet appareil.
         </Message>

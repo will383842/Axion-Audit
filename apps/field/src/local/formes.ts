@@ -3,10 +3,13 @@
 //
 // ── LA LISTE FERMÉE, ET POURQUOI ELLE EST FERMÉE ─────────────────────────────
 // `LOT_L5.md` §3.2 : le chiffrement se fait par ENREGISTREMENT ; restent en clair,
-// et **la liste est fermée** : `id`, `missionId`, `interviewId`,
-// `missionQuestionId`, `orgUnitId`, `kind`, `status`, `scheduleStatus`,
-// `scheduledAt`, `flagReview`, `notApplicable`, `withheld`, `horsParcours`,
-// `clientUpdatedAt`, `position`. Tout le reste — `personName`, `personEmail`,
+// et **la liste est fermée** — elle vit DANS LA NOTE, pas ici : la recopier l'a
+// déjà fait mentir deux fois (amendements du 2026-09-02 : `supprimeLe`, `answerId`,
+// puis `answerType`, `criticality`, `parentId` ; et le texte figé `*_snapshot`,
+// `texteSnapshot`/`motsCles`, indexé en clair pour la recherche §25.4). Ce que ce
+// fichier garantit, c'est le TYPAGE : chaque en-tête ci-dessous n'a que des
+// colonnes de la liste, et le balayage `etancheite.test.ts` la vérifie sur les
+// sept tables. Tout le reste — `personName`, `personEmail`,
 // `value`, `note`, `generalNotes`, le `content` d'une note volante,
 // `participants` — vit dans une `Enveloppe`.
 //

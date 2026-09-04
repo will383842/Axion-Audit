@@ -65,6 +65,10 @@ const SENTINELLES = {
   noteVolante: 'SENTINELLE_NOTE_VOLANTE_GY4W7Q',
   nomDescendu: 'SENTINELLE_NOM_DESCENDU_KD8J2E',
   valeurDescendue: 'SENTINELLE_VALEUR_DESCENDUE_MN6T3R',
+  titreMission: 'SENTINELLE_TITRE_MISSION_PW5R8C',
+  consigneQuestion: 'SENTINELLE_CONSIGNE_QUESTION_JF2H6L',
+  nomUniteDescendue: 'SENTINELLE_UNITE_DESCENDUE_CV9M3X',
+  nomUniteProposee: 'SENTINELLE_UNITE_PROPOSEE_RB7Q1D',
 } as const;
 
 /**
@@ -93,6 +97,18 @@ const COLONNES_EN_CLAIR = new Set([
   'position',
   'supprimeLe', // DECISIONS.md 2026-09-02
   'answerId', // DECISIONS.md 2026-09-02
+  // Revue A29 du 2026-09-02, amendement LOT_L5.md §3.2 : métadonnées de question
+  // et structure de l'arbre — aucune personnelle.
+  'answerType',
+  'criticality',
+  'parentId',
+  // LOT_L5.md §3.2, phrase suivante : « Le texte figé des questions (*_snapshot)
+  // n'est pas une donnée personnelle : il est indexé en clair » — `texteSnapshot`
+  // et ses jetons `motsCles` (03 §25.4) en sont l'application. Confirmé par A01
+  // le 2026-09-02 (DECISIONS.md, « `texteSnapshot` et `motsCles` sont du
+  // `*_snapshot` ») : dans l'exception, pas dans l'énumération.
+  'texteSnapshot',
+  'motsCles',
   'charge',
 ]);
 
@@ -105,6 +121,7 @@ const REPONSE_1_ID = uuidv7();
 const REPONSE_2_ID = uuidv7();
 const REPONSE_DESCENDUE_ID = '0191e2a0-0000-7000-8000-00000000d0d1';
 const NOTE_VOLANTE_ID = uuidv7();
+const UNITE_PROPOSEE_ID = uuidv7();
 const QUESTION_1_ID = '0191e2a0-0000-7000-8000-00000000b001';
 const QUESTION_2_ID = '0191e2a0-0000-7000-8000-00000000b002';
 
@@ -300,7 +317,119 @@ beforeAll(async () => {
           value: { type: 'free_text', v: SENTINELLES.valeurDescendue },
         },
       },
+      // 5. Les quatre tables SIÈGE (revue A29, R-L5a-1) : mission, question de
+      //    mission, unité, affectation — chacune avec une sentinelle dans sa charge
+      //    quand la forme le permet.
+      {
+        table: 'missions',
+        index: {
+          id: MISSION_ID,
+          status: 'en_cours',
+          clientUpdatedAt: HORODATAGE,
+          supprimeLe: null,
+        },
+        charge: {
+          titre: SENTINELLES.titreMission,
+          companyId: '0191e2a0-0000-7000-8000-00000000cc01',
+          timezone: 'Europe/Paris',
+          auditLevel: 'standard',
+          geoScope: 'france',
+          countryCode: 'FR',
+          startPlanned: null,
+          endPlanned: null,
+          roleSurMission: 'auditeur',
+        },
+      },
+      {
+        table: 'missionQuestions',
+        index: {
+          id: QUESTION_1_ID,
+          missionId: MISSION_ID,
+          position: 1,
+          texteSnapshot: 'Quel est le niveau de maturité des données ?',
+          motsCles: ['quel', 'niveau', 'maturite', 'donnees'],
+          answerType: 'free_text',
+          criticality: 'important',
+          clientUpdatedAt: HORODATAGE,
+          supprimeLe: null,
+        },
+        charge: {
+          questionId: '0191e2a0-0000-7000-8000-000000000001',
+          questionVersion: 1,
+          guidanceSnapshot: SENTINELLES.consigneQuestion,
+          optionsSnapshot: null,
+          scoringSnapshot: null,
+          weightSnapshot: null,
+          allowRangeSnapshot: false,
+          addedAdHoc: false,
+          blockCode: null,
+        },
+      },
+      {
+        table: 'orgUnits',
+        index: {
+          id: ORG_UNIT_ID,
+          missionId: MISSION_ID,
+          parentId: null,
+          kind: 'service',
+          status: 'active',
+          position: 1,
+          clientUpdatedAt: HORODATAGE,
+          supprimeLe: null,
+        },
+        charge: {
+          name: SENTINELLES.nomUniteDescendue,
+          countryCode: 'FR',
+          timezone: null,
+          headcount: 12,
+          serviceRefId: null,
+          sectorId: null,
+          inScope: true,
+          proposedBy: null,
+          mergedIntoId: null,
+          clientCreatedAt: HORODATAGE,
+        },
+      },
+      {
+        table: 'workAssignments',
+        index: {
+          id: '0191e2a0-0000-7000-8000-00000000aa01',
+          missionId: MISSION_ID,
+          orgUnitId: ORG_UNIT_ID,
+          clientUpdatedAt: HORODATAGE,
+          supprimeLe: null,
+        },
+        charge: {
+          userId: '0191e2a0-0000-7000-8000-00000000e001',
+          plannedInterviews: 4,
+          plannedDays: 1.5,
+          dateFrom: null,
+          dateTo: null,
+        },
+      },
     ],
+  });
+
+  // 6. Une unité PROPOSÉE sur le terrain (03 §25.3) — la cinquième entité du
+  //    contrat d'ops, écrite par le port comme les autres.
+  await ecrireLocal({
+    entite: 'org_unit_proposal',
+    id: UNITE_PROPOSEE_ID,
+    missionId: MISSION_ID,
+    action: 'upsert',
+    index: { parentId: ORG_UNIT_ID, kind: 'equipe', status: 'proposee', position: 2 },
+    charge: {
+      name: SENTINELLES.nomUniteProposee,
+      countryCode: null,
+      timezone: null,
+      headcount: null,
+      serviceRefId: null,
+      sectorId: null,
+      inScope: true,
+      proposedBy: '0191e2a0-0000-7000-8000-00000000e001',
+      mergedIntoId: null,
+      clientCreatedAt: HORODATAGE,
+    },
   });
 
   // ── Le vidage : TOUTES les tables, sans liste ──────────────────────────────
@@ -324,7 +453,11 @@ describe('étanchéité — aucune donnée personnelle hors du chiffré (note L5
     expect(vidage.interviews).toHaveLength(2);
     expect(vidage.answers).toHaveLength(3);
     expect(vidage.attachments).toHaveLength(1);
-    expect(vidage.outbox).toHaveLength(4);
+    expect(vidage.missions).toHaveLength(1);
+    expect(vidage.missionQuestions).toHaveLength(1);
+    expect(vidage.orgUnits).toHaveLength(2);
+    expect(vidage.workAssignments).toHaveLength(1);
+    expect(vidage.outbox).toHaveLength(5);
     expect(Object.keys(vidage).length).toBeGreaterThanOrEqual(9);
   });
 
@@ -371,8 +504,16 @@ describe('étanchéité — les colonnes en clair sont celles de la liste fermé
   // `updatedAt` ou `syncStatus` ajouté « pour l'écran » n'est pas personnel,
   // mais il n'est pas dans la liste : le rouge ici signifie « amendez la note ou
   // le code », jamais « élargissez le test ».
-  it.each(['interviews', 'answers', 'attachments'])(
-    'dans « %s », toute colonne hors `charge` appartient à la liste fermée',
+  it.each([
+    'missions',
+    'missionQuestions',
+    'orgUnits',
+    'interviews',
+    'answers',
+    'attachments',
+    'workAssignments',
+  ])(
+    '@critique dans « %s », toute colonne hors `charge` appartient à la liste fermée',
     (nomTable) => {
       const lignes = vidage[nomTable] ?? [];
       expect(lignes.length).toBeGreaterThan(0);
@@ -437,6 +578,34 @@ describe('étanchéité — contrôle positif : la charge chiffrée contient bie
     expect(clair.content).toBe(SENTINELLES.noteVolante);
   });
 
+  it('@critique les quatre tables siège et l’unité proposée se déchiffrent avec leurs sentinelles', async () => {
+    const mission = await coffre.dechiffrer(
+      chargeDe('missions', MISSION_ID),
+      z.looseObject({ titre: z.string() }),
+    );
+    const question = await coffre.dechiffrer(
+      chargeDe('missionQuestions', QUESTION_1_ID),
+      z.looseObject({ guidanceSnapshot: z.string() }),
+    );
+    const unite = await coffre.dechiffrer(
+      chargeDe('orgUnits', ORG_UNIT_ID),
+      z.looseObject({ name: z.string() }),
+    );
+    const proposee = await coffre.dechiffrer(
+      chargeDe('orgUnits', UNITE_PROPOSEE_ID),
+      z.looseObject({ name: z.string() }),
+    );
+    const affectation = await coffre.dechiffrer(
+      chargeDe('workAssignments', '0191e2a0-0000-7000-8000-00000000aa01'),
+      z.looseObject({ plannedInterviews: z.number() }),
+    );
+    expect(mission.titre).toBe(SENTINELLES.titreMission);
+    expect(question.guidanceSnapshot).toBe(SENTINELLES.consigneQuestion);
+    expect(unite.name).toBe(SENTINELLES.nomUniteDescendue);
+    expect(proposee.name).toBe(SENTINELLES.nomUniteProposee);
+    expect(affectation.plannedInterviews).toBe(4);
+  });
+
   it('@critique les lignes DESCENDUES du siège sont chiffrées au repos comme les lignes saisies', async () => {
     const entretien = await coffre.dechiffrer(
       chargeDe('interviews', INTERVIEW_DESCENDU_ID),
@@ -452,7 +621,7 @@ describe('étanchéité — contrôle positif : la charge chiffrée contient bie
 
   it('la charge de chaque op (`payload` 11 §4) est elle aussi une enveloppe que le coffre relit', async () => {
     const ops = vidage.outbox ?? [];
-    expect(ops).toHaveLength(4);
+    expect(ops).toHaveLength(5);
     const contenus: string[] = [];
     for (const op of ops) {
       const clair = await coffre.dechiffrer(
