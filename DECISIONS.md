@@ -7532,3 +7532,61 @@ périmètre que le bandeau du fichier interdit. Le seuil reste à 90 % : on remo
 rétrécit jamais le périmètre. Règle de précédence **sans objet** (aucune divergence interne au pack).
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun.
+
+## 2026-09-04 — [L5a] Le mot de passe du coffre local est-il celui du compte ?
+
+A24 a appliqué `MOT_DE_PASSE_LONGUEUR_MIN` (06 §10.1) au coffre local pour fermer F-23, comme A51 le
+demandait — **mais le pack ne dit nulle part que les deux mots de passe sont le même**, et la
+conséquence n'est pas cosmétique : si le coffre est indépendant, il lui faut sa propre politique
+écrite ; s'il est le même, il faut dire ce qui arrive quand un admin réinitialise côté serveur alors
+que l'appareil garde l'ancienne KEK.
+
+Options :
+
+1. **Le mot de passe du coffre EST celui du compte.**
+2. Un secret local indépendant. **Écartée** : elle rendrait le garde-fou 05 §9.7 sans objet — refuser
+   un reset serveur quand l'outbox n'est pas vide ne protège rien si le coffre ne dépend pas de ce
+   mot de passe.
+3. Laisser indéterminé. **Écartée** : la politique est **déjà** appliquée dans le code ; ne pas
+   trancher, c'est laisser une règle de sécurité sans fondement écrit.
+
+Arbitrage : **option 1**, et la preuve est déjà dans le pack plutôt que dans une préférence : le
+fichier 07 §14 traite le risque « reset de mot de passe pendant une mission hors ligne » par « garde-
+fou serveur §9.7 **+ ré-enveloppement de la DEK en ligne** ». Ré-envelopper la DEK après un reset n'a
+de sens que si la **KEK dérive du mot de passe du compte**. `MOT_DE_PASSE_LONGUEUR_MIN` est donc la
+bonne source, et son import est justifié.
+Conséquence à tenir, et elle appartient à L6/L2, pas à L5a : après un reset accepté (outbox vide), un
+appareil hors ligne garde une KEK périmée — le ré-enveloppement en ligne est **dû**, et son absence
+serait un défaut, pas un oubli.
+Règle de précédence : **§16-22 > §1-15** — le 07 §14 et le 05 §9.7 sont les textes précis ; le 06
+§10.1 fournit la valeur.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun amendement. Le pack est **interprété**, pas modifié.
+
+## 2026-09-04 — [L5a] Quel plafond pour les paramètres KDF relus du stockage (F-25) ?
+
+Les paramètres Argon2id voyagent avec le coffre — c'est le bon choix, il ne ferme aucune porte — mais
+rien ne bornait ce qui revient : `m = 4 000 000`, `t = 1 000 000` étaient acceptés, soit un déni de
+service au déverrouillage écrit par une seule ligne dans IndexedDB. A24 a posé un plafond et le
+remonte comme décision humaine (11 §8-4, sécurité).
+
+Options :
+
+1. Un plafond en valeur absolue par paramètre. **Écartée** : il dérive du profil qu'il est censé
+   protéger, et devient faux le jour où le profil est durci.
+2. **Un plafond sur le TRAVAIL total, amarré au profil : `travailKdf(défaut) × 4`.**
+3. Aucun plafond, on s'en remet au budget A28. **Écartée** : un budget est une cible de performance,
+   pas un refus ; il ne s'oppose à rien.
+
+Arbitrage : **option 2**, multiplicateur **4** confirmé. Deux raisons, dans cet ordre : il laisse
+passer un durcissement humain raisonnable (un profil `t = 4` à mémoire égale est accepté — testé), et
+il **suit le profil** au lieu de le doubler en constante, de sorte qu'un durcissement futur relève le
+plafond du même geste. La borne mesurée : dérivation médiane 61 ms (A51, machine de développement)
+contre un budget A28 d'1 s — quatre fois le travail reste sous le budget avec plus d'un ordre de
+grandeur de marge, **et il reste à mesurer sur iPad**, ce qui n'a pas été fait et est déclaré tel.
+Écart assumé avec la lettre d'A51, et il est juste : les bornes ne vivent **pas** dans un `.max()`
+Zod. Un dépassement s'y lirait « coffre illisible » — exactement la confusion que F-22 punit.
+Règle de précédence **sans objet** (le pack ne borne pas ces paramètres).
+Décideur : **A01**, sur délégation du 2026-09-04 ; profil Argon2id lui-même **inchangé** (confirmé par
+Williams le 2026-09-02), seules des bornes de **refus** sont ajoutées.
+Impact spec : aucun.
