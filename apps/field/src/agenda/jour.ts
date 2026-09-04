@@ -50,6 +50,13 @@ import {
 
 export type MissionDuJour = IndexMission & ChargeMission;
 
+/**
+ * Clé `meta` du dernier rituel de fin de journée accompli (03 §34.2-2).
+ * Écrite par l'écran de fin de journée, lue par le cockpit pour son rappel —
+ * UNE définition, ici, pour que les deux ne divergent jamais.
+ */
+export const CLE_DERNIER_RITUEL = 'journee:dernier-rituel';
+
 /** Les trois natures d'alerte que le §34.2 nomme, et RIEN d'autre. */
 export type NatureAlerte = 'a_revoir_en_attente' | 'sync_muette' | 'entretien_non_termine';
 

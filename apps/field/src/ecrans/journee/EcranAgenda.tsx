@@ -26,7 +26,15 @@
 // =============================================================================
 import { useCallback, useId, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Bouton, ChampTexte, Message, Selection, ZoneEtat, type EtatZone } from '@axion/ui';
+import {
+  Bouton,
+  ChampTexte,
+  Message,
+  Selection,
+  ZoneEtat,
+  ZoneNotes,
+  type EtatZone,
+} from '@axion/ui';
 import {
   AIDE_TYPE_SESSION,
   chevauchements,
@@ -44,7 +52,7 @@ import { depotSessions } from '../../local/depots/sessions.js';
 import { MODES_ENTRETIEN, TYPES_DE_SESSION, TYPES_UNITE } from '../../local/formes.js';
 import { lireIdentiteAuditeur } from '../../session/auditeur.js';
 import { formaterHeure } from '../../session/fuseau.js';
-import { lireMissionsLocales, lireUnites } from '../../session/missions.js';
+import { lireMissionsLocales, lireUnites, type MissionLocale } from '../../session/missions.js';
 import './journee.css';
 
 /**
@@ -83,15 +91,28 @@ export function EcranAgenda(): ReactNode {
   const [typeUnite, setTypeUnite] = useState<TypeUnite>('service');
   const [effectif, setEffectif] = useState('');
 
+  // `undefined` = pas encore lu (chargement) · `null` = la lecture a ÉCHOUÉ
+  // (état d'erreur) · tableau = nominal. Sans le `try/catch`, `useLiveQuery`
+  // relance le rejet pendant le rendu et emporte l'écran entier — l'écart
+  // R-L5a-7, rejoué ici par A27.
   const missions = useLiveQuery(
-    async () => (base === null ? undefined : lireMissionsLocales()),
+    async (): Promise<readonly MissionLocale[] | null | undefined> => {
+      if (base === null) return undefined;
+      try {
+        return await lireMissionsLocales();
+      } catch {
+        return null;
+      }
+    },
     [base],
     undefined,
   );
   const missionCourante =
-    missionId === ''
-      ? (missions?.[0] ?? null)
-      : (missions?.find((m) => m.id === missionId) ?? null);
+    missions == null
+      ? null
+      : missionId === ''
+        ? (missions[0] ?? null)
+        : (missions.find((m) => m.id === missionId) ?? null);
 
   const unites = useLiveQuery(
     async () => (missionCourante === null ? [] : lireUnites(missionCourante.id)),
@@ -248,23 +269,30 @@ export function EcranAgenda(): ReactNode {
   const etat: EtatZone =
     missions === undefined
       ? { nature: 'chargement', libelle: 'Lecture des missions embarquées', lignes: 3 }
-      : missions.length === 0
+      : missions === null
         ? {
-            nature: 'vide',
-            titre: 'Aucune mission sur cet appareil',
-            description:
-              'Embarquez une mission depuis l’accueil avant de planifier des sessions de collecte.',
-            actions: (
-              <Bouton
-                onClick={() => {
-                  naviguer({ type: 'aller', vue: 'accueil' });
-                }}
-              >
-                Revenir à l’accueil
-              </Bouton>
-            ),
+            nature: 'erreur',
+            titre: 'L’agenda n’a pas pu être lu',
+            cause: 'Les données locales de cet appareil n’ont pas pu être ouvertes.',
+            action: 'Rechargez la page, puis rouvrez l’agenda. Aucune donnée n’a été modifiée.',
           }
-        : { nature: 'nominal' };
+        : missions.length === 0
+          ? {
+              nature: 'vide',
+              titre: 'Aucune mission sur cet appareil',
+              description:
+                'Embarquez une mission depuis l’accueil avant de planifier des sessions de collecte.',
+              actions: (
+                <Bouton
+                  onClick={() => {
+                    naviguer({ type: 'aller', vue: 'accueil' });
+                  }}
+                >
+                  Revenir à l’accueil
+                </Bouton>
+              ),
+            }
+          : { nature: 'nominal' };
 
   return (
     <section className="axn-pile">
@@ -407,7 +435,10 @@ export function EcranAgenda(): ReactNode {
             )}
 
             {kind === 'atelier' ? (
-              <ChampTexte
+              /* `ZoneNotes` (textarea) et NON `ChampTexte` (input) : la spec HTML
+                 retire les sauts de ligne de la valeur d'un <input>, donc « un
+                 par ligne » ne pouvait produire qu'UN participant. A27 l'a mesuré. */
+              <ZoneNotes
                 libelle="Participants"
                 aide="Un par ligne, au format « Nom — fonction »."
                 value={participants}

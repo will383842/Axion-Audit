@@ -43,12 +43,16 @@ import {
   type EtatZone,
 } from '@axion/ui';
 import {
+  CLE_DERNIER_RITUEL,
   construireJournee,
+  rappelFinDeJournee,
   type EtatMissionDuJour,
   type JourneeTerrain,
 } from '../../agenda/jour.js';
 import { LIBELLE_TYPE_SESSION } from '../../agenda/sessions.js';
 import { useTerrain } from '../../app/contexte.js';
+import { lireMeta } from '../../local/base.js';
+import { maintenant } from '../../local/horloge.js';
 import type { SessionLocale } from '../../local/depots/sessions.js';
 import { portSyncInerte, type StatutSync } from '../../local/port-sync.js';
 import { memoriserSessionCourante } from '../../session/position.js';
@@ -101,6 +105,14 @@ function nombreTerminees(journee: JourneeTerrain | null | undefined): number {
 function partTerminees(journee: JourneeTerrain | null | undefined): number {
   const total = journee?.sessionsDuJour.length ?? 0;
   return total === 0 ? 0 : Math.round((nombreTerminees(journee) / total) * 100);
+}
+
+/** Le fuseau de la mission d'une session — « heure locale du site » (§34.2). */
+function fuseauDe(
+  journee: JourneeTerrain | null | undefined,
+  missionId: string,
+): string | undefined {
+  return journee?.missions.find((m) => m.mission.id === missionId)?.mission.timezone;
 }
 
 /** Une ligne d'agenda : heure locale du site, personne, unité, type (§34.2). */
@@ -183,6 +195,24 @@ export function EcranAujourdhui(): ReactNode {
     },
     [base, naviguer],
   );
+
+  // 03 §34.2-2 : « rappel discret sur le cockpit tant que le rituel du jour n'est
+  // pas fait ». Le domaine le calcule (`rappelFinDeJournee`) ; il n'était rendu
+  // nulle part — une fonction orpheline, attrapée par A27. `CLE_DERNIER_RITUEL`
+  // est la clé qu'écrit `EcranFinDeJournee` ; la lire ici est le seul couplage.
+  const dernierRituel = useLiveQuery(
+    async () => (base === null ? null : ((await lireMeta(base, CLE_DERNIER_RITUEL)) ?? null)),
+    [base],
+    null,
+  );
+  const rappel =
+    journee == null
+      ? null
+      : rappelFinDeJournee(
+          typeof dernierRituel === 'string' ? dernierRituel : null,
+          journee,
+          maintenant(),
+        );
 
   const etat: EtatZone =
     journee === undefined
@@ -295,16 +325,18 @@ export function EcranAujourdhui(): ReactNode {
             />
           </div>
           <ul className="axn-journee__liste">
-            {(journee?.missions ?? []).flatMap((etatMission) =>
-              etatMission.sessions.map((session) => (
-                <LigneSession
-                  key={session.id}
-                  session={session}
-                  fuseau={etatMission.mission.timezone}
-                  onOuvrir={ouvrir}
-                />
-              )),
-            )}
+            {/* `sessionsDuJour` et non `missions.flatMap` : c'est la liste triée
+                APRÈS le mélange des missions. La première version itérait mission
+                par mission — le tri du domaine était juste et jamais utilisé, et
+                l'auditeur lisait sa matinée deux fois. A27 l'a mesuré. */}
+            {(journee?.sessionsDuJour ?? []).map((session) => (
+              <LigneSession
+                key={session.id}
+                session={session}
+                fuseau={fuseauDe(journee, session.missionId)}
+                onOuvrir={ouvrir}
+              />
+            ))}
           </ul>
           <div className="axn-journee__actions">
             <Bouton
@@ -359,6 +391,11 @@ export function EcranAujourdhui(): ReactNode {
       ))}
 
       {/* ── ⑤ Le rituel de fin de journée ──────────────────────────────────── */}
+      {rappel !== null && (
+        <Message ton="info" titre="Rituel du soir">
+          {rappel}
+        </Message>
+      )}
       <div className="axn-journee__actions">
         <Bouton
           taille="large"

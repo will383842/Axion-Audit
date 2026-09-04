@@ -42,6 +42,7 @@ import { useCallback, useId, useState, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Bouton, CaseACocher, Message, ZoneEtat, type EtatZone } from '@axion/ui';
 import {
+  CLE_DERNIER_RITUEL,
   construireJournee,
   type EtatMissionDuJour,
   type JourneeTerrain,
@@ -62,16 +63,20 @@ import { exporterSauvegarde } from '../../sauvegarde/sauvegarde.js';
 import { PROFIL_PAR_DEFAUT } from '../../session/auditeur.js';
 import './journee.css';
 
-/** Clé `meta` du dernier rituel accompli — le rappel discret du §34.2 s'y règle. */
-const CLE_DERNIER_RITUEL = 'journee:dernier-rituel';
-
-interface ResultatRituel {
+/** Ce que le rituel a fait pour UNE mission — 11 §4 : un fichier `.axionbackup` PAR mission. */
+interface ResultatMission {
+  readonly missionId: string;
+  readonly titre: string;
   readonly sync: string;
   readonly sauvegarde: string;
+  /** `true` si un fichier a été déposé pour cette mission. */
+  readonly fichierProduit: boolean;
+}
+
+interface ResultatRituel {
+  readonly missions: readonly ResultatMission[];
   readonly validation: string;
   readonly refus: readonly RefusValidation[];
-  /** Le fichier produit, à télécharger. `null` si l'export a échoué. */
-  readonly fichier: { readonly nom: string; readonly contenu: string } | null;
 }
 
 /**
@@ -150,21 +155,31 @@ export function EcranFinDeJournee(): ReactNode {
     setErreur(null);
 
     void (async (): Promise<void> => {
-      const missionId = journee.missions[0]?.mission.id ?? null;
+      // ── ①+② PAR MISSION — 11 §4 : `header.mission_id` est au singulier, le
+      //    payload est « données de mission locales + outbox ». Un fichier par
+      //    mission, donc, et une synchronisation par mission. Ne traiter que la
+      //    première laisserait la seconde sans filet en disant « sauvegarde
+      //    produite » — c'est le test d'A27 qui l'a attrapé.
+      const missions: ResultatMission[] = [];
+      for (const etatMission of journee.missions) {
+        const missionId = etatMission.mission.id;
+        const titre = etatMission.mission.titre;
 
-      // ① Synchronisation. Le port est inerte tant que L6a n'a pas livré : il
-      //    dit « indisponible », et c'est ce que l'écran affichera.
-      let sync = 'Aucune mission embarquée : rien à synchroniser.';
-      if (missionId !== null) {
-        const r = await portSyncInerte.synchroniserMaintenant(missionId);
-        sync = r.message;
-      }
+        // ① Synchronisation — GARDÉE. Le port inerte dit « indisponible » ; un
+        //    port qui LÈVE (réseau coupé en plein appel, L6a demain) ne doit pas
+        //    annuler l'export : c'est exactement quand la sync tombe que la
+        //    sauvegarde compte. Ce garde manquait, et A27 l'a mesuré.
+        let sync: string;
+        try {
+          sync = (await portSyncInerte.synchroniserMaintenant(missionId)).message;
+        } catch {
+          sync =
+            'La synchronisation a échoué sur cet appareil. Vos données restent intactes ; la sauvegarde de secours ci-dessous est votre filet.';
+        }
 
-      // ② Sauvegarde de secours. Elle fonctionne SANS réseau (11 §4) — c'est
-      //    précisément pour cet instant qu'elle existe.
-      let sauvegarde = 'Aucune mission embarquée : aucune sauvegarde à produire.';
-      let fichier: ResultatRituel['fichier'] = null;
-      if (missionId !== null) {
+        // ② Sauvegarde de secours — sans réseau (11 §4).
+        let sauvegarde: string;
+        let fichierProduit = false;
         if (motDePasse.trim() === '') {
           sauvegarde =
             'Sauvegarde NON produite : votre mot de passe est nécessaire pour la chiffrer (c’est lui, et lui seul, qui permettra de la rouvrir sur un autre appareil).';
@@ -172,17 +187,18 @@ export function EcranFinDeJournee(): ReactNode {
           try {
             const produit = await exporterSauvegarde({ missionId, motDePasse });
             const nom = nomFichierSauvegarde(missionId, produit.enTete.creeLe);
-            fichier = { nom, contenu: JSON.stringify(produit) };
-            deposerFichier(nom, fichier.contenu);
+            deposerFichier(nom, JSON.stringify(produit));
+            fichierProduit = true;
             sauvegarde = `Sauvegarde chiffrée produite : ${nom} (${String(produit.enTete.operationsIncluses)} élément(s) non encore synchronisé(s) inclus).`;
           } catch {
             sauvegarde =
               'La sauvegarde n’a pas pu être produite sur cet appareil. Vos données restent intactes ; réessayez, et prévenez le siège si l’échec persiste.';
           }
         }
+        missions.push({ missionId, titre, sync, sauvegarde, fichierProduit });
       }
 
-      // ③ Validation groupée. Une seule confirmation, un seul récapitulatif.
+      // ③ Validation groupée — en DERNIER : elle modifie, on a protégé avant.
       let validation = 'Aucun entretien terminé à valider.';
       let refus: readonly RefusValidation[] = [];
       if (aValider.length > 0) {
@@ -192,7 +208,7 @@ export function EcranFinDeJournee(): ReactNode {
       }
 
       await ecrireMeta(base, CLE_DERNIER_RITUEL, maintenant());
-      setResultat({ sync, sauvegarde, validation, refus, fichier });
+      setResultat({ missions, validation, refus });
       setMotDePasse('');
       setCochees(null);
     })()
@@ -370,15 +386,30 @@ export function EcranFinDeJournee(): ReactNode {
               <div className="axn-journee__entete-carte">
                 <h2 className="axn-journee__titre-carte">Ce qui a été fait</h2>
               </div>
-              <Message ton="info" titre="Synchronisation">
-                {resultat.sync}
-              </Message>
-              <Message
-                ton={resultat.fichier === null ? 'avertissement' : 'succes'}
-                titre="Sauvegarde de secours"
-              >
-                {resultat.sauvegarde}
-              </Message>
+              {resultat.missions.map((m) => (
+                <div key={m.missionId} className="axn-pile">
+                  <Message
+                    ton="info"
+                    titre={
+                      resultat.missions.length > 1
+                        ? `Synchronisation · ${m.titre}`
+                        : 'Synchronisation'
+                    }
+                  >
+                    {m.sync}
+                  </Message>
+                  <Message
+                    ton={m.fichierProduit ? 'succes' : 'avertissement'}
+                    titre={
+                      resultat.missions.length > 1
+                        ? `Sauvegarde de secours · ${m.titre}`
+                        : 'Sauvegarde de secours'
+                    }
+                  >
+                    {m.sauvegarde}
+                  </Message>
+                </div>
+              ))}
               <Message ton="succes" titre="Validation des entretiens">
                 {resultat.validation}
               </Message>
