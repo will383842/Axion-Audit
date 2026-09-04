@@ -248,6 +248,38 @@ export async function lireIdEntrepriseParSiren(siren: string): Promise<string | 
   return lignes[0]?.id ?? null;
 }
 
+/**
+ * La fiche qui porte DÉJÀ cette référence console, et SON ÉTAT.
+ *
+ * `archivee` n'est pas un ornement : il change ce que le 409 conseille. Une fiche
+ * VIVANTE en conflit se rapproche ; une fiche ARCHIVÉE se RESTAURE — et sans le dire,
+ * le refus enverrait l'utilisateur créer un doublon sous une autre référence, ce qui
+ * est exactement le désordre que `uq_companies_external_ref` existe pour empêcher.
+ * (Tranché le 2026-09-04 ; voir `traduireEchecDeContrainte`.)
+ *
+ * ⚠ NE FILTRE PAS `deleted_at`, pour la même raison que la lecture par SIREN :
+ * l'index unique partiel ne l'exclut pas non plus. Filtrer ici rendrait `null` sur le
+ * conflit le PLUS déroutant des deux — celui dont la fiche coupable n'apparaît dans
+ * aucune liste.
+ */
+export interface FicheParRefExterne {
+  readonly id: string;
+  readonly archivee: boolean;
+}
+
+export async function lireFicheParRefExterne(
+  externalRef: string,
+): Promise<FicheParRefExterne | null> {
+  const lignes = await db
+    .select({ id: companies.id, deletedAt: companies.deletedAt })
+    .from(companies)
+    .where(eq(companies.externalRef, externalRef))
+    .limit(1);
+
+  const ligne = lignes[0];
+  return ligne === undefined ? null : { id: ligne.id, archivee: ligne.deletedAt !== null };
+}
+
 /** Un nom de fiche, réduit à ce que la comparaison de doublons a besoin de voir. */
 export interface NomEntreprise {
   readonly id: string;
@@ -336,8 +368,38 @@ export async function lireSecteurParCodeNaf(codeNafCanonique: string): Promise<s
  * référentiel partagé avec `external_ref`), un message parlant de SIREN serait
  * FAUX — et un message d'erreur faux envoie chercher au mauvais endroit, ce qui
  * coûte plus cher qu'un message absent.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * CE JOUR EST ARRIVÉ — 2026-09-03. Le paragraphe ci-dessus reste écrit AU FUTUR
+ * parce qu'il est la trace de ce qui a rendu le défaut lisible ; voici la suite.
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * La migration `0015` a posé `uq_companies_external_ref` (amendement du 04 §7.1),
+ * et ce fichier ne nommait toujours qu'`uq_companies_siren` : une référence console
+ * en double ne tombait dans AUCUNE branche de `traduireEchecDeContrainte` et
+ * ressortait en **500 INTERNAL_ERROR** — mesuré par A16, rendu aux producteurs comme
+ * « défaut ① » le 2026-09-03. Le pari tenu ici a donc payé DEUX fois : le message du
+ * SIREN n'est jamais devenu faux (aucun conflit d'`external_ref` n'a été rapporté
+ * comme un doublon de SIREN), et le seul prix payé a été un 500 — bruyant, donc
+ * trouvable. **Il est traité depuis le 2026-09-04 par `CONTRAINTE_REF_EXTERNE_UNIQUE`
+ * ci-dessous et sa branche dans `traduireEchecDeContrainte`.**
+ *
+ * ⚠ LA LEÇON, POUR LA PROCHAINE CONTRAINTE : nommer les contraintes protège du
+ * message FAUX, pas du message ABSENT. Une migration qui ajoute une contrainte
+ * unique sur une table déjà servie par des routes doit, dans le même incrément,
+ * ajouter sa branche de traduction — sinon elle transforme un 409 en 500.
  */
 const CONTRAINTE_SIREN_UNIQUE = 'uq_companies_siren';
+
+/**
+ * Nom de l'index unique PARTIEL de la RÉFÉRENCE CONSOLE, tel que le pose la migration
+ * `0015_unicite_companies_external_ref.sql` :
+ * `CREATE UNIQUE INDEX uq_companies_external_ref ON companies (external_ref) WHERE external_ref IS NOT NULL`.
+ *
+ * Même forme que celui du SIREN, même motif (une clé de liaison doit désigner une
+ * ligne et une seule), et **un code d'erreur DIFFÉRENT** : voir la branche
+ * correspondante de `traduireEchecDeContrainte`.
+ */
+const CONTRAINTE_REF_EXTERNE_UNIQUE = 'uq_companies_external_ref';
 
 /** Nom de la clé étrangère du secteur, posée par la même migration. */
 const CONTRAINTE_SECTEUR = 'companies_sector_id_fkey';
@@ -388,8 +450,27 @@ function violeLaContrainte(erreur: unknown, sqlstate: string, contrainte: string
 }
 
 /**
- * Traduit les deux échecs de contrainte que ces routes peuvent provoquer, et
- * relance tout le reste.
+ * Les valeurs UNIQUES que le geste en cours a réellement écrites.
+ *
+ * ── POURQUOI UN OBJET PLUTÔT QUE DEUX PARAMÈTRES ────────────────────────────
+ * Deux `string | null` côte à côte dans une signature s'inversent en silence : rien,
+ * dans `traduire(erreur, ref, siren)`, ne dit au compilateur que l'ordre est faux.
+ * Nommer les champs supprime la classe entière de ce défaut — et la liste est
+ * destinée à grandir avec les contraintes de `companies`, pas à rester à deux.
+ *
+ * `null` ne veut pas dire « inconnu » mais **« ce geste n'a pas écrit cette
+ * colonne »** : sur un `PATCH` qui ne touche pas au SIREN, l'index du SIREN ne PEUT
+ * pas être violé par cette requête, et il n'y a donc rien à rapprocher.
+ */
+interface ValeursUniquesEcrites {
+  readonly siren: string | null;
+  readonly externalRef: string | null;
+}
+
+/**
+ * Traduit les échecs de contrainte que ces routes peuvent provoquer, et relance tout
+ * le reste. TROIS aujourd'hui : les deux unicités partielles de `companies`
+ * (`siren`, `external_ref`) et la clé étrangère du secteur.
  *
  * ── POURQUOI ON N'A PAS LU AVANT D'ÉCRIRE ───────────────────────────────────
  * Un `SELECT … WHERE siren = $1` préalable ne supprime PAS le besoin de ce
@@ -397,13 +478,25 @@ function violeLaContrainte(erreur: unknown, sqlstate: string, contrainte: string
  * SIREN. **C'est l'index unique partiel qui arbitre la course, pas nous** — deux
  * `POST` concurrents sur le même SIREN donnent une création et un 409, et c'est la
  * base qui le décide. Un contrôle préalable n'ajouterait qu'un aller-retour et
- * l'illusion d'une garantie.
+ * l'illusion d'une garantie. Le raisonnement vaut mot pour mot pour `external_ref`.
  *
  * L'identifiant de la fiche existante est lu APRÈS coup, uniquement pour le message :
  * une lecture qui échouerait (course, fiche supprimée entre-temps) dégrade le
  * message, jamais la décision.
+ *
+ * ⚠ **UNE SEULE CONTRAINTE MORD À LA FOIS.** PostgreSQL abandonne l'instruction à la
+ * PREMIÈRE violation : un `POST` qui présente à la fois un SIREN pris et une référence
+ * console prise ne rend qu'UN des deux 409, celui que la base a rencontré en premier
+ * (l'ordre des index n'est pas garanti). Corriger le champ nommé et rejouer fait alors
+ * apparaître l'autre. Rapporter les deux exigerait de lire avant d'écrire — ce que le
+ * paragraphe précédent refuse, et pour une raison plus forte que la commodité.
  */
-async function traduireEchecDeContrainte(erreur: unknown, siren: string | null): Promise<never> {
+async function traduireEchecDeContrainte(
+  erreur: unknown,
+  valeurs: ValeursUniquesEcrites,
+): Promise<never> {
+  const { siren, externalRef } = valeurs;
+
   if (violeLaContrainte(erreur, VIOLATION_UNICITE, CONTRAINTE_SIREN_UNIQUE)) {
     // L'identifiant de la fiche fautive rend le conflit ACTIONNABLE : sans lui, la
     // console ne peut qu'annoncer un doublon, jamais y conduire. Il est lu APRÈS
@@ -417,6 +510,45 @@ async function traduireEchecDeContrainte(erreur: unknown, siren: string | null):
       existante === null
         ? undefined
         : [{ path: 'siren', message: `Fiche existante : ${existante}` }],
+    );
+  }
+  if (violeLaContrainte(erreur, VIOLATION_UNICITE, CONTRAINTE_REF_EXTERNE_UNIQUE)) {
+    // Même geste que pour le SIREN — la fiche fautive est lue APRÈS que la contrainte
+    // a décidé —, mais on lit AUSSI son état : une fiche archivée retient sa référence
+    // console (l'index n'exclut pas `deleted_at`, et c'est voulu, invariant 7), et
+    // c'est le seul cas où la bonne suite n'est pas « rapprocher » mais « restaurer ».
+    // Un 409 muet là-dessus enverrait créer un doublon sous une autre référence.
+    const existante = externalRef === null ? null : await lireFicheParRefExterne(externalRef);
+
+    // `existante?.archivee` vaut `undefined` quand la fiche n'a pas pu être relue
+    // (course : elle a disparu entre la violation et cette lecture). Le message
+    // générique s'applique alors — on ne présume pas d'un état qu'on n'a pas vu.
+    const message =
+      existante?.archivee === true
+        ? 'Cette référence console est retenue par une fiche ARCHIVÉE : une fiche ' +
+          'archivée conserve sa référence, qui désigne une entreprise et non une ligne ' +
+          "vivante. Restaurez cette fiche plutôt que d'en créer une autre."
+        : 'Une autre fiche porte déjà cette référence console. Elle identifie une ' +
+          "entreprise de la console axion-ia.com et ne peut désigner qu'une seule fiche " +
+          "d'audit : rapprochez les deux fiches plutôt que d'en créer une seconde.";
+
+    throw new AppError(
+      'COMPANY_EXTERNAL_REF_DUPLICATE',
+      message,
+      existante === null
+        ? undefined
+        : [
+            {
+              path: 'externalRef',
+              // `code` est pour une MACHINE (voir `errorDetailSchema`) : il porte
+              // l'état de la fiche fautive pour que la console propose « restaurer »
+              // ou « rapprocher » sans analyser la phrase française.
+              code: existante.archivee ? 'fiche_archivee' : 'fiche_active',
+              message: existante.archivee
+                ? `Fiche archivée existante : ${existante.id}`
+                : `Fiche existante : ${existante.id}`,
+            },
+          ],
     );
   }
   if (violeLaContrainte(erreur, VIOLATION_CLE_ETRANGERE, CONTRAINTE_SECTEUR)) {
@@ -442,7 +574,8 @@ export interface NouvelleEntreprise {
 }
 
 /**
- * Insère une fiche. Lève `COMPANY_DUPLICATE` (409) si le SIREN est déjà pris.
+ * Insère une fiche. Lève `COMPANY_DUPLICATE` (409) si le SIREN est déjà pris, et
+ * `COMPANY_EXTERNAL_REF_DUPLICATE` (409) si la référence console l'est.
  *
  * `created_at` et `updated_at` sont posés PAR L'APPLICATION malgré leur défaut SQL,
  * pour la raison qu'énonce le dépôt du journal : un horodatage qui vient tantôt de
@@ -479,7 +612,10 @@ export async function insererEntreprise(
       })
       .returning(COLONNES_ENTREPRISE);
   } catch (erreur: unknown) {
-    return traduireEchecDeContrainte(erreur, nouvelle.siren);
+    return traduireEchecDeContrainte(erreur, {
+      siren: nouvelle.siren,
+      externalRef: nouvelle.externalRef,
+    });
   }
 
   const ligne = lignes[0];
@@ -523,10 +659,19 @@ export async function mettreAJourEntreprise(
       .where(and(eq(companies.id, id), isNull(companies.deletedAt)))
       .returning(COLONNES_ENTREPRISE);
   } catch (erreur: unknown) {
-    // `champs.siren` est `undefined` quand la modification ne touche pas au SIREN —
-    // et dans ce cas l'index unique ne PEUT pas être violé par cette requête. Le
-    // `?? null` n'est donc pas un repli : il dit qu'il n'y a rien à rapprocher.
-    return traduireEchecDeContrainte(erreur, champs.siren ?? null);
+    // `champs.siren` / `champs.externalRef` sont `undefined` quand la modification ne
+    // touche pas la colonne — et dans ce cas l'index correspondant ne PEUT pas être
+    // violé par cette requête. Le `?? null` n'est donc pas un repli : il dit qu'il n'y
+    // a rien à rapprocher.
+    //
+    // ⚠ LE `PATCH` PASSE PAR LA MÊME TRADUCTION QUE LE `POST`, ET C'EST DÉLIBÉRÉ : il
+    // écrit les deux mêmes colonnes uniques, donc il peut lever les deux mêmes 409.
+    // C'est aussi pourquoi le défaut ① du 2026-09-03 les touchait TOUS LES DEUX d'un
+    // seul manque — une branche absente ici est une branche absente partout.
+    return traduireEchecDeContrainte(erreur, {
+      siren: champs.siren ?? null,
+      externalRef: champs.externalRef ?? null,
+    });
   }
 
   const ligne = lignes[0];

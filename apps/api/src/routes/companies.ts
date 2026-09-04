@@ -159,12 +159,18 @@ export const routesCompanies: FastifyPluginAsync = async (app) => {
    * `secteurAQualifier` (R4 : le code APE est valide mais sa division n'est pas au
    * référentiel) et `doublonsNomPossibles` (R3, moitié « nom en second » : des
    * fiches homonymes existent). **Ni l'un ni l'autre n'est un échec** — un doublon
-   * de NOM est un avertissement, jamais un refus, parce que l'unicité en base est
-   * PARTIELLE (`siren` seul, `WHERE siren IS NOT NULL`) et que deux entités
-   * homonymes dans deux pays sont légitimes (§16).
+   * de NOM est un avertissement, jamais un refus, parce que **le nom ne porte aucune
+   * unicité en base** — les deux index uniques de `companies` sont PARTIELS et portent
+   * sur `siren` et `external_ref` — et que deux entités homonymes dans deux pays sont
+   * légitimes (§16).
    *
-   * Le seul refus de cette route est **`409 COMPANY_DUPLICATE`**, sur un SIREN déjà
-   * pris — décidé par l'index unique partiel, pas par une lecture préalable.
+   * Les refus de cette route sont **DEUX 409**, tous deux décidés par un index unique
+   * partiel et non par une lecture préalable : **`COMPANY_DUPLICATE`** sur un SIREN
+   * déjà pris, et **`COMPANY_EXTERNAL_REF_DUPLICATE`** sur une référence console déjà
+   * prise (`uq_companies_external_ref`, migration `0015` — amendement du 04 §7.1 du
+   * 2026-09-03). Deux codes et non un : les deux conflits ne se réparent pas au même
+   * endroit, et le second nomme le cas de la fiche ARCHIVÉE, qui conserve sa référence
+   * console et se RESTAURE au lieu de se rapprocher. Voir `companies/depot.ts`.
    */
   instance.post(
     '/companies',
@@ -205,6 +211,12 @@ export const routesCompanies: FastifyPluginAsync = async (app) => {
    *
    * Même forme de réponse que la création — la modification peut, elle aussi,
    * changer le code APE (donc rejouer R4) ou le nom (donc lever l'alerte R3).
+   *
+   * **Et les MÊMES deux 409**, `COMPANY_DUPLICATE` et
+   * `COMPANY_EXTERNAL_REF_DUPLICATE` : un `PATCH` écrit les deux mêmes colonnes
+   * uniques qu'un `POST`, donc il court exactement les mêmes conflits. Ils passent par
+   * la même traduction de contrainte, dans le dépôt — un seul endroit, pour qu'il n'y
+   * ait jamais deux vérités sur ce que la base refuse.
    */
   instance.patch(
     '/companies/:id',

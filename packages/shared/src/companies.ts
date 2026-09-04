@@ -39,6 +39,18 @@
 // puis elle implémente un blocage ». Le pack a une maison de style pour ce cas
 // (§25.2 chevauchement d'agenda, §34.6 anti-collision : avertissement NON bloquant).
 //
+// ── ET DEPUIS LE 2026-09-03, UNE SECONDE UNICITÉ : `external_ref` ────────────
+// L'amendement du 04 §7.1 (migration `0015`) pose `uq_companies_external_ref`, de
+// forme IDENTIQUE à celui du SIREN : UNIQUE PARTIEL, `WHERE external_ref IS NOT
+// NULL` — plusieurs fiches créées localement n'ont légitimement aucun pendant dans
+// la console. Le régime est donc celui de la première ligne du tableau, avec un code
+// À PART : **`409 COMPANY_EXTERNAL_REF_DUPLICATE`**. Deux codes et non un, parce que
+// les deux conflits ne se réparent pas au même endroit (rapprocher deux fiches
+// d'audit vs corriger la liaison M8.1) — voir `errors.ts`.
+// ⚠ Cet index **n'exclut pas les fiches supprimées** : une fiche archivée conserve
+// sa référence console (invariant 7, tranché le 2026-09-04). Le 409 le dit alors
+// explicitement et oriente vers la RESTAURATION.
+//
 // AUCUNE LOGIQUE D'ACCÈS NI D'ÉCRITURE ICI : ce paquet est importé par la console
 // (`apps/hq`) et par la PWA terrain. Ce qui y entre part dans un navigateur — d'où
 // des fonctions PURES (normalisation SIREN, clé de Luhn, normalisation de nom) que
@@ -335,6 +347,18 @@ const nomEntrepriseSchema = z
   .trim()
   .pipe(z.string().min(1).max(NOM_ENTREPRISE_LONGUEUR_MAX));
 
+/**
+ * La RÉFÉRENCE CONSOLE : l'id client d'axion-ia.com (04 §7.1), clé de la liaison
+ * M8.1. **UNIQUE quand elle est renseignée** depuis l'amendement du 04 du
+ * 2026-09-03 (index partiel `uq_companies_external_ref`, migration `0015`) : une
+ * référence déjà prise rend **`409 COMPANY_EXTERNAL_REF_DUPLICATE`**, jamais
+ * `COMPANY_DUPLICATE` qui, lui, ne parle que du SIREN.
+ *
+ * L'unicité n'est PAS exprimable ici — ce schéma valide une chaîne, il ne connaît
+ * pas les autres fiches. C'est l'index qui arbitre, côté serveur, et c'est bien :
+ * un front ne peut pas garantir qu'une référence libre à l'instant de la saisie le
+ * sera encore à l'instant de l'écriture.
+ */
 const refExterneSchema = z.string().trim().pipe(z.string().min(1).max(REF_EXTERNE_LONGUEUR_MAX));
 
 const notesSchema = z.string().max(NOTES_ENTREPRISE_LONGUEUR_MAX);
