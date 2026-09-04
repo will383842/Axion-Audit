@@ -7479,3 +7479,56 @@ Arbitrage : **option 2**. Règle de précédence **sans objet** (aucune divergen
 04 ne dit rien sur ce cas).
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun. Aucun DDL ne bouge.
+
+## 2026-09-04 — [L5c] Le parcours express R1 appartient-il à L5c, ou à L3/L7 avec la console ?
+
+`docs/conception/LOT_L5.md` §5-6 déclarait R1 « devine interdite : Williams », introuvable — il
+l'avait cherché au 03 §19.1. **Il est spécifié, au 03 §29** : niveau `diagnostic_cadrage` sur
+structure mono-unité, étapes du pilote trivialement satisfaites validées automatiquement, pilote
+condensé à 3 étapes visibles, guidé intégral dès > 1 unité ou > 3 entretiens. Relevé par A23 en
+lisant. Mais R1 porte sur les étapes du **pilote de MISSION** (`step_validations`), et le §1 de la
+note ne donne à L5c que « terminer ≠ valider » au niveau de l'**entretien** : deux objets distincts,
+d'où la question de périmètre.
+
+Options :
+
+1. **R1 est dans L5c**, à côté de la validation d'entretien, à un niveau différent d'elle.
+2. R1 est dans L3/L7 avec le pilotage côté console. **Écartée** : le pilote de mission côté terrain
+   doit fonctionner **hors ligne** (invariant 1) ; le rattacher à la console le rendrait indisponible
+   là où il sert.
+3. R1 glisse en Phase 2. **Écartée** : voir ci-dessous, il n'est pas différable.
+
+Arbitrage : **option 1**. Règle de précédence : **§16-22 > §1-15** appliquée au fichier 07, qui se
+déclare lui-même « LA définition des lots (aucun autre document ne la redéfinit) » — et dont la ligne
+L5 écrit « validation d'entretien (guidé strict/expert §19.1, **parcours express R1**) ». Ni L5a ni
+L5b ne l'ont pris : il tombe dans L5c par élimination. Ce qui **confirme** l'arbitrage plutôt que de
+l'illustrer : **FIL-TPE** — micro-structure, 8 personnes, 1 entretien — est exactement le cas R1, et
+c'est une fixture du fil rouge `@filrouge` que toute porte exige verte. Sans R1 côté terrain,
+FIL-TPE n'a pas de chemin.
+Borne : si R1 exige une colonne, une table ou une route qui n'existe pas, l'agent s'arrête — c'est
+une escalade 11 §8-2, elle ne se devine pas.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun amendement. `LOT_L5.md` §5-6 est **rectifié sur place et daté** (il cherchait R1
+au mauvais §) ; une note de conception n'est pas un fichier du pack.
+
+## 2026-09-04 — [L5c] Le glob de couverture de l'export de secours ne désigne aucun fichier
+
+`.github/coverage-critical-paths.json` déclare `apps/field/src/backup/**` en `cheminsAttendus` pour
+« Export de secours chiffré (.axionbackup) ». Le répertoire s'appelle `apps/field/src/sauvegarde/**`
+dans un dépôt qui nomme en français : **le glob ne désigne aucun fichier**, et il mesurerait donc
+zéro fichier à 100 % le jour où il passerait en `cheminsCritiques`.
+
+Options :
+
+1. **Corriger le glob en `apps/field/src/sauvegarde/**` au moment du déplacement vers
+   `cheminsCritiques`**, dans le même commit, avec une ligne disant que c'est une correction de NOM.
+2. Renommer le répertoire en `backup/`. **Écartée** : l'anglais est l'anomalie, pas le français.
+3. Laisser et traiter plus tard. **Écartée** : un glob qui ne désigne rien est un seuil qui ne mesure
+   rien — exactement le « faux vert » que ce fichier existe pour empêcher.
+
+Arbitrage : **option 1**. Le mode d'emploi du fichier autorise nommément la correction de glob à ce
+moment-là ; elle doit être **tracée et non silencieuse**, pour ne pas ressembler au rétrécissement de
+périmètre que le bandeau du fichier interdit. Le seuil reste à 90 % : on remonte la couverture, on ne
+rétrécit jamais le périmètre. Règle de précédence **sans objet** (aucune divergence interne au pack).
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun.
