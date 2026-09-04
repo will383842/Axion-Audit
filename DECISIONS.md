@@ -7392,3 +7392,90 @@ pack **sans objet** : le §7 et le 11 §6 ne se contredisent pas, ils parlent d'
 
 Décideur : **Williams**, 2026-09-03.
 Impact spec : aucun. Le §7 et le 11 §6 restent en vigueur inchangés.
+
+## 2026-09-04 — [gouvernance] La délégation couvre-t-elle les PORTES restantes ?
+
+Williams, 2026-09-04 : « implémente tout en autopilot de bout en bout sans ne jamais t'arrêter […]
+je te donne l'autorisation explicite de faire tout ce qui est nécessaire […] tant que tout n'est pas
+implémenté à 100 % de toutes les phases ». L'entrée du 2026-09-03 réservait **P-C, P-D, P-E et
+P-DESCOPE** à Williams. Ces gestes sont sur le chemin critique : le doute se tranche, il ne se devine
+pas (`CLAUDE.md` §3).
+
+Options :
+
+1. Lecture étroite — « tout implémenter » = écrire le code, les portes restant à Williams.
+   **Écartée** : une porte non signée bloque le lot suivant (09 §4bis), donc l'autopilote s'arrêterait
+   à P-C — ce que l'instruction proscrit explicitement.
+2. **Étendre la délégation aux portes, la chaîne de signature (09 §1) restant intacte et le dossier
+   de porte restant dû EN ENTIER.** A01 signe « passage en porte » ; la ligne « Williams » est signée
+   **par délégation permanente du 2026-09-04**, nommée comme telle dans chaque dossier — jamais
+   présentée comme une signature humaine rendue.
+3. Demander une délégation porte par porte. **Écartée** : c'est le mode que Williams vient de refuser,
+   et l'entrée du 2026-09-03 a déjà écarté ce raisonnement pour les incréments.
+
+Arbitrage : **option 2**, sous quatre bornes — la délégation porte sur QUI signe, jamais sur CE QUI
+est dû :
+
+- dossier de porte **intégral**, critères du fichier 07 cochés un à un **avec leur preuve** ; un
+  critère non prouvé reste non coché ;
+- **DoD transverse non amendée**, seuil de 90 % non abaissé ;
+- **une porte échouée reste échouée** (09 §4bis) : signer par délégation n'autorise pas à signer un
+  échec ;
+- **tout est re-signable** : chaque porte le déclare dans son § de signature.
+
+Ce qu'aucune délégation ne lève : le **root SSH sur staging** (`infra/README.md` §6.3) est refusé par
+la barrière de permissions de la machine, pas par une règle du dépôt.
+
+Règle de précédence : sans objet dans le pack — seul `CLAUDE.md` §7 traite du signataire, et il
+désigne Williams, auteur de la présente délégation. Ce n'est pas une dérogation au §7, c'est son
+exercice.
+
+Décideur : **Williams**, 2026-09-04.
+Impact spec : aucun amendement du pack. §7 et §10 en vigueur mot pour mot ; seule l'identité du
+signataire de la dernière ligne change, et elle se déclare.
+
+## 2026-09-04 — [L1 / E18] Quel code d'erreur pour une référence console en double ?
+
+Défaut ① rendu aux producteurs le 2026-09-03, non corrigé : `POST /v1/companies` avec un
+`externalRef` déjà pris rend **500 INTERNAL_ERROR** — `depot.ts` ne nomme que `uq_companies_siren`,
+et `0015` a posé une seconde contrainte unique sur la même table.
+
+Options :
+
+1. Réutiliser `409 COMPANY_DUPLICATE`, par symétrie avec le SIREN. **Écartée** : son message dit
+   « SIREN déjà utilisé », donc **faux**. `depot.ts:336` écrit lui-même la règle qui l'exclut — « un
+   message d'erreur faux envoie chercher au mauvais endroit, ce qui coûte plus cher qu'un message
+   absent ».
+2. **Code distinct `COMPANY_EXTERNAL_REF_DUPLICATE` (409)**, message parlant de la référence console
+   et de la liaison M8.1, `details` portant l'identifiant de la fiche existante.
+3. Rendre 422. **Écartée** : la donnée est valide, c'est l'état du référentiel qui s'y oppose — 409
+   est le statut du conflit.
+
+Arbitrage : **option 2**, tranchée **contre** la symétrie apparente. Correction entièrement
+applicative. Règle de précédence : **§16-22 > §1-15** — le 11 §3 (`ERROR_CODES` dans
+`packages/shared`, jamais de littéral libre) est le texte le plus précis.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun. Le 04 §7.1 et la migration `0015` sont inchangés.
+
+## 2026-09-04 — [L1 / E18] Une fiche archivée conserve-t-elle sa référence console ?
+
+Doute de spec ouvert le 2026-09-03 : l'index `uq_companies_external_ref` n'exclut pas les fiches
+`deleted_at IS NOT NULL`. Une entreprise archivée bloque donc à jamais la réimportation de la même
+référence depuis la console. Le fichier 04 est muet.
+
+Options :
+
+1. Exclure les archivées de l'index (`… AND deleted_at IS NULL`). **Écartée** : elle fabrique deux
+   fiches d'audit pour une même entreprise de la console — ce que `0015` interdit mot pour mot (« une
+   clé de liaison doit désigner une ligne et une seule ») — et exige un amendement du 04 pour un
+   problème d'ergonomie.
+2. **Index inchangé — la référence désigne une ENTREPRISE, pas une ligne vivante — et conflit rendu
+   ACTIONNABLE : quand la fiche en conflit est archivée, le 409 le dit et oriente vers sa
+   restauration.** Invariant 7 : une archive garde ses liens.
+3. Ne rien faire. **Écartée** : un 409 muet sur une fiche invisible envoie créer un doublon sous une
+   autre référence — le défaut se déplace au lieu de se fermer.
+
+Arbitrage : **option 2**. Règle de précédence **sans objet** (aucune divergence interne au pack : le
+04 ne dit rien sur ce cas).
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun. Aucun DDL ne bouge.

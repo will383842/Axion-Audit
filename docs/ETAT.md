@@ -2629,3 +2629,28 @@ Burn-down : **56 % écrit · 37 % sur `main` · 33 % porte signée** (référenc
 
 **À Williams, hors délégation** : le geste root sur staging (`infra/README.md` §6.3), l'arbitrage
 **P-DESCOPE** du 15/09, et les portes **P-C / P-D / P-E**.
+
+## 2026-09-04 20h40 — [autopilote de bout en bout] — ouverture, hors pipeline code
+
+Dernier commit vert : `3c60af7` (`main`) · Branche : `gouvernance/autopilote-2026-09-04` · Poussé : oui
+Tâche en cours : ouvrir l'autopilote — délégation tracée, file de reprise inchangée.
+Prochaine action : fermer **B2** (A51 sur `lot/l5a`), puis dérouler la file du bloc du 2026-09-03
+14h30 sans la réordonner.
+Tests rouges connus : `main` rouge sur `8 · deploy-staging` seulement (R-L3-2-bis, L0).
+
+**Ce que ce bloc ajoute, et rien d'autre :**
+
+- **La délégation s'étend aux PORTES** (Williams, 2026-09-04, `DECISIONS.md`) sous quatre bornes :
+  dossier intégral, DoD non amendée, une porte échouée reste échouée, tout est re-signable. La ligne
+  « Williams » de chaque porte se signera **par délégation nommée**, jamais comme signature rendue.
+- **Défaut ① du 2026-09-03 tranché** : `409 COMPANY_EXTERNAL_REF_DUPLICATE`, et une fiche archivée
+  **conserve** sa référence console — le 409 doit le dire et orienter vers la restauration.
+- **CONTRAINTE D'ENVIRONNEMENT NOUVELLE, elle change l'organisation** : cette session refuse toute
+  écriture **hors du répertoire principal**. Les worktrees `_ax*` sont lisibles, pas inscriptibles.
+  `ORGANISATION_AGENTS.md` §2 (un worktree par chantier) reste la doctrine ; il n'est simplement pas
+  applicable ici, et les chantiers se **sérialisent** dans le répertoire principal.
+- **`core.bare=true` dans `.git/config` du répertoire principal** : `git status` y est cassé.
+  Contournement sans écriture : `git --work-tree=. -c core.bare=false <cmd>`.
+- **7 commits de la banque de questions n'existaient que sur cette machine** : la branche
+  `contenu/banque-questions-vague-1` n'avait aucune contrepartie sur `origin`, alors que son bloc
+  ETAT du 2026-09-02 déclarait « Poussé : oui ». **Poussée ce jour** (1 846 lignes mises à l'abri).
