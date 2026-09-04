@@ -41,8 +41,7 @@ import { lireSessionCourante } from '../../session/position.js';
 
 /** Le résultat d'une lecture locale qui a le DROIT d'échouer, et qui le dit. */
 type LectureReprise =
-  | { readonly ok: true; readonly session: SessionLocale | null }
-  | { readonly ok: false };
+  { readonly ok: true; readonly session: SessionLocale | null } | { readonly ok: false };
 
 /**
  * Ce que l'auditeur doit pouvoir faire quand même : rien dans ce message ne
