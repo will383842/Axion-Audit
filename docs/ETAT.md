@@ -2677,3 +2677,31 @@ Contrôle rejoué sur les trois branches : **zéro en-tête dupliqué**.
 Entrée `DECISIONS.md` du §9.4 déposée **mot pour mot**, sa date d'arbitrage (09-02) conservée.
 `docs/TRACABILITE_E1-E47.md` : un premier `--theirs` avait écrasé 71 lignes de la branche ajoutées
 hors du hunk ; annulé, conflit restauré, seul le hunk résolu, les deux côtés vérifiés intacts.
+
+## 2026-09-05 01h00 — [lot L7 / incrément L7b] — étape pipeline 3/7 (auto-revue)
+
+Dernier commit vert : `58dbf14` (feat(l7b) : les deux écrans de pilotage) · Branche : `lot/l7b`
+(née de `lot/l7a`, worktree `_axl7`) · Poussé : oui
+Tâche en cours : auto-revue A32 de L7b — couverture par unité ET par source (§27.1), agrégation par
+question avec provenance et « non communiqué » visibles (M5.1, §27.4).
+Prochaine action : transmettre l'auto-revue à **A37** (revue croisée) et demander à **A36** les
+tests d'acceptation — étanchéité par rôle, quatre états, keyset de bout en bout, axe-core, p95 HTTP
+sur FIL-GC ; aucun n'est écrit par A32 (09 §5.6).
+Tests rouges connus : aucun.
+
+Livré : deux contrats (`packages/shared/src/{pilotage,agregation}.ts`), un domaine API en lecture
+seule (deux fonctions pures, un dépôt qui agrège en SQL, un service), deux routes
+`GET /v1/missions/:id/{coverage,aggregation}`, deux écrans console avec leurs quatre états et leur
+drill-down. **66 tests unitaires écrits AVANT le code**, dont les deux fixtures symétriques du
+`LOT_L7.md` §6.5 : un build qui n'aurait qu'un seul axe échoue sur l'une des deux.
+
+Mesures : `test:unit` **732** verts (666 avant) · `test:interface` **527** verts, aucune régression
+sur L7a · lint, typecheck, `format:check`, `build`, `verify:rapide` : 0 erreur, aucun test skippé.
+Assemblage de la couverture à l'échelle **FIL-GC** (150 unités, 4 niveaux, page de 50) :
+**1,465 ms**, garde-fou à 25 ms. Le **p95 HTTP** de bout en bout appartient à **A28** (k6, base
+réelle) et n'est pas mesuré ici.
+
+Cinq entrées `DECISIONS.md` (2026-09-05) : les deux routes (11 §8-6) · le **nom du répondant**
+(M5.1) non publié, escalade Williams · les **« profils rencontrés »** (§16.6) non livrés, le 04 ne
+portant pas le lien session ↔ profil, escalade Williams · ce que « planifié » compte · un bloc
+« abordé » par une réponse non communiquée.
