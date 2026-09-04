@@ -253,15 +253,55 @@ export interface FicheEnConflit {
 /** Les colonnes uniques de `companies` — celles que `traduireEchecDeContrainte` traduit. */
 type ColonneUnique = 'siren' | 'externalRef';
 
+/**
+ * ⚠ CE `catch` AVALE, ET C'EST LE SEUL DU DÉPÔT QUI EN A LE DROIT — voici pourquoi.
+ *
+ * Cette lecture s'exécute DANS le `catch` d'une violation de contrainte, APRÈS que
+ * la base a décidé du 409. Elle ne sert qu'à nommer la fiche fautive ; le contrat
+ * (voir `traduireEchecDeContrainte`) promet le statut et `error.code` « sans aucune
+ * lecture », et `details` « au mieux ». Une lecture qui ÉCHOUE — et non qui ne
+ * trouve rien — doit donc rendre `null`, pour que le 409 sorte sans `details` : si
+ * son échec remontait, il sortirait de `traduireEchecDeContrainte` et le gestionnaire
+ * d'erreurs rendrait **500 INTERNAL_ERROR** à la place d'un conflit d'état — le
+ * défaut ① sous une autre forme, sur le chemin même que le contrat jure tenu
+ * (bloquant B-2 de la revue A17 du 2026-09-05).
+ *
+ * ── POURQUOI CET ÉCHEC N'EST PAS EXOTIQUE : LA CONNEXION DU POOL SOUS TRANSACTION ─
+ * Le `PATCH` (`service.ts`, `modifierUneEntreprise`) exécute l'`UPDATE` DANS
+ * `db.transaction`. Quand la contrainte mord, la connexion de la transaction est en
+ * état AVORTÉ (`25P02` : PostgreSQL refuse toute requête jusqu'au `ROLLBACK`) — c'est
+ * pour cela que la relecture passe par le `db` global, donc par une SECONDE connexion
+ * du pool, prise en tenant encore la première. Le pool est à `max: 10`,
+ * `connectionTimeoutMillis: 5_000` (`db.ts`) : dix `PATCH` conflictuels simultanés
+ * tiennent les dix connexions, les dix relectures attendent une onzième et expirent.
+ * Sans ce `catch`, dix 409 deviendraient dix 500 après cinq secondes chacun.
+ *
+ * ── POURQUOI PAS LA CONNEXION DE LA TRANSACTION ─────────────────────────────
+ * Relire sur `tx` exigerait que l'`UPDATE` ait été posé dans un SAVEPOINT
+ * (`tx.transaction(...)` imbriqué) pour pouvoir y revenir après la violation. C'est
+ * une restructuration de la transaction du service, pas un correctif de dépôt, et
+ * elle n'est pas dans l'arbitrage du 2026-09-05. Le `try/catch` tient le contrat
+ * tel qu'il est écrit ; le savepoint reste une amélioration possible, à proposer
+ * avec son coût, pas à glisser ici.
+ *
+ * Rien n'est journalisé ici : le dépôt n'a pas de logger, et un pool saturé se voit
+ * déjà par la latence de 5 s qu'il impose à chaque relecture expirée.
+ */
 async function lireFicheEnConflit(
   colonne: ColonneUnique,
   valeur: string,
 ): Promise<FicheEnConflit | null> {
-  const lignes = await db
-    .select({ id: companies.id, deletedAt: companies.deletedAt })
-    .from(companies)
-    .where(eq(companies[colonne], valeur))
-    .limit(1);
+  let lignes: { id: string; deletedAt: Date | null }[];
+  try {
+    lignes = await db
+      .select({ id: companies.id, deletedAt: companies.deletedAt })
+      .from(companies)
+      .where(eq(companies[colonne], valeur))
+      .limit(1);
+  } catch {
+    // Lecture d'agrément qui a échoué : le 409 sort sans `details`. Voir ci-dessus.
+    return null;
+  }
 
   const ligne = lignes[0];
   return ligne === undefined ? null : { id: ligne.id, archivee: ligne.deletedAt !== null };
@@ -420,13 +460,16 @@ const PROFONDEUR_MAX_CAUSE = 3;
  * ═══════════════════════════════════════════════════════════════════════════════
  * ON REMONTE LA CHAÎNE `cause`, ET C'EST LA SEULE FAÇON QUE ÇA MARCHE.
  * ═══════════════════════════════════════════════════════════════════════════════
- * MESURÉ sur `drizzle-orm@0.44.7` lors du CRUD des comptes : une requête qui échoue
- * ne propage PAS l'erreur du pilote — elle lève une `DrizzleQueryError` qui porte la
- * requête et ses paramètres, et RANGE la `DatabaseError` de `pg` dans sa propriété
- * `cause`. **Ni `code` ni `constraint` ne sont recopiés sur l'enveloppe.** Un
- * `catch` qui lirait `erreur.code` rendrait donc TOUJOURS `false`, et un SIREN en
- * double sortirait en **500 INTERNAL_ERROR** au lieu de **409 COMPANY_DUPLICATE** —
- * un défaut qui ne se voit pas en lisant le code, seulement en l'exécutant contre un
+ * MESURÉ sur `drizzle-orm@0.44.7` lors du CRUD des comptes, et **RE-MESURÉ sur
+ * `0.45.2`** (la version épinglée depuis la montée du 2026-08-31) le 2026-09-05 : les
+ * 580 tests d'intégration du run CI 33927012410 n'obtiennent leurs 409 que si cette
+ * remontée mord — elle mord toujours. Une requête qui échoue ne propage PAS l'erreur
+ * du pilote — elle lève une `DrizzleQueryError` qui porte la requête et ses
+ * paramètres, et RANGE la `DatabaseError` de `pg` dans sa propriété `cause`.
+ * **Ni `code` ni `constraint` ne sont recopiés sur l'enveloppe.** Un `catch` qui
+ * lirait `erreur.code` rendrait donc TOUJOURS `false`, et un SIREN en double
+ * sortirait en **500 INTERNAL_ERROR** au lieu de **409 COMPANY_DUPLICATE** — un
+ * défaut qui ne se voit pas en lisant le code, seulement en l'exécutant contre un
  * PostgreSQL réel.
  *
  * Le type de l'erreur du pilote `pg` n'est pas exporté d'une façon sur laquelle il
