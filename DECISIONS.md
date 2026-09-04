@@ -7533,6 +7533,64 @@ rétrécit jamais le périmètre. Règle de précédence **sans objet** (aucune 
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun.
 
+## 2026-09-04 — [L5a] Le mot de passe du coffre local est-il celui du compte ?
+
+A24 a appliqué `MOT_DE_PASSE_LONGUEUR_MIN` (06 §10.1) au coffre local pour fermer F-23, comme A51 le
+demandait — **mais le pack ne dit nulle part que les deux mots de passe sont le même**, et la
+conséquence n'est pas cosmétique : si le coffre est indépendant, il lui faut sa propre politique
+écrite ; s'il est le même, il faut dire ce qui arrive quand un admin réinitialise côté serveur alors
+que l'appareil garde l'ancienne KEK.
+
+Options :
+
+1. **Le mot de passe du coffre EST celui du compte.**
+2. Un secret local indépendant. **Écartée** : elle rendrait le garde-fou 05 §9.7 sans objet — refuser
+   un reset serveur quand l'outbox n'est pas vide ne protège rien si le coffre ne dépend pas de ce
+   mot de passe.
+3. Laisser indéterminé. **Écartée** : la politique est **déjà** appliquée dans le code ; ne pas
+   trancher, c'est laisser une règle de sécurité sans fondement écrit.
+
+Arbitrage : **option 1**, et la preuve est déjà dans le pack plutôt que dans une préférence : le
+fichier 07 §14 traite le risque « reset de mot de passe pendant une mission hors ligne » par « garde-
+fou serveur §9.7 **+ ré-enveloppement de la DEK en ligne** ». Ré-envelopper la DEK après un reset n'a
+de sens que si la **KEK dérive du mot de passe du compte**. `MOT_DE_PASSE_LONGUEUR_MIN` est donc la
+bonne source, et son import est justifié.
+Conséquence à tenir, et elle appartient à L6/L2, pas à L5a : après un reset accepté (outbox vide), un
+appareil hors ligne garde une KEK périmée — le ré-enveloppement en ligne est **dû**, et son absence
+serait un défaut, pas un oubli.
+Règle de précédence : **§16-22 > §1-15** — le 07 §14 et le 05 §9.7 sont les textes précis ; le 06
+§10.1 fournit la valeur.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun amendement. Le pack est **interprété**, pas modifié.
+
+## 2026-09-04 — [L5a] Quel plafond pour les paramètres KDF relus du stockage (F-25) ?
+
+Les paramètres Argon2id voyagent avec le coffre — c'est le bon choix, il ne ferme aucune porte — mais
+rien ne bornait ce qui revient : `m = 4 000 000`, `t = 1 000 000` étaient acceptés, soit un déni de
+service au déverrouillage écrit par une seule ligne dans IndexedDB. A24 a posé un plafond et le
+remonte comme décision humaine (11 §8-4, sécurité).
+
+Options :
+
+1. Un plafond en valeur absolue par paramètre. **Écartée** : il dérive du profil qu'il est censé
+   protéger, et devient faux le jour où le profil est durci.
+2. **Un plafond sur le TRAVAIL total, amarré au profil : `travailKdf(défaut) × 4`.**
+3. Aucun plafond, on s'en remet au budget A28. **Écartée** : un budget est une cible de performance,
+   pas un refus ; il ne s'oppose à rien.
+
+Arbitrage : **option 2**, multiplicateur **4** confirmé. Deux raisons, dans cet ordre : il laisse
+passer un durcissement humain raisonnable (un profil `t = 4` à mémoire égale est accepté — testé), et
+il **suit le profil** au lieu de le doubler en constante, de sorte qu'un durcissement futur relève le
+plafond du même geste. La borne mesurée : dérivation médiane 61 ms (A51, machine de développement)
+contre un budget A28 d'1 s — quatre fois le travail reste sous le budget avec plus d'un ordre de
+grandeur de marge, **et il reste à mesurer sur iPad**, ce qui n'a pas été fait et est déclaré tel.
+Écart assumé avec la lettre d'A51, et il est juste : les bornes ne vivent **pas** dans un `.max()`
+Zod. Un dépassement s'y lirait « coffre illisible » — exactement la confusion que F-22 punit.
+Règle de précédence **sans objet** (le pack ne borne pas ces paramètres).
+Décideur : **A01**, sur délégation du 2026-09-04 ; profil Argon2id lui-même **inchangé** (confirmé par
+Williams le 2026-09-02), seules des bornes de **refus** sont ajoutées.
+Impact spec : aucun.
+
 ## 2026-09-04 — [gouvernance] Le plafond de TROIS chantiers suivis tient-il en autopilote ?
 
 Williams, 2026-09-04 : « attention à toujours être au maximum des capacités de codage et
@@ -7569,3 +7627,30 @@ le fichier outil, et c'est son auteur qui l'amende.
 
 Décideur : **Williams**, 2026-09-04.
 Impact spec : `docs/ORGANISATION_AGENTS.md` §2 amendé et daté ; `CLAUDE.md` §4 inchangé.
+
+## 2026-09-04 — [L1 / E18] Le 409 de SIREN sur une fiche ARCHIVÉE, et le contrat de `details`
+
+A16 a mesuré par sonde, en testant le correctif du défaut ① : un conflit de **SIREN** contre une
+fiche `deleted_at IS NOT NULL` rend `COMPANY_DUPLICATE` avec « Rapprochez les deux fiches » — vers une
+fiche que `GET /:id` rend en 404. La décision B du jour n'avait tranché que `external_ref` : **deux
+colonnes uniques de la même table, deux comportements.** Et `details[0].code` (`fiche_active |
+fiche_archivee`) n'existe que sur l'un des deux 409 — un front qui branche dessus reçoit `undefined`
+une fois sur deux. Troisième question jointe : le chemin dégradé (fiche disparue entre la violation et
+la relecture → 409 **sans `details`**) est-il un contrat ou un accident ?
+
+Options :
+
+1. **Symétrie complète** : le 409 de SIREN nomme l'archive et oriente vers la restauration ;
+   `details[0].code` devient **systématique** sur les 409 d'unicité de `companies` ; le chemin dégradé
+   est un **contrat** — statut et `code` garantis, `details` au mieux.
+2. Laisser le SIREN tel quel et ne traiter que `external_ref`. **Écartée** : c'est la même table, le
+   même invariant 7 et le même piège (un 409 muet sur une fiche invisible fait créer un doublon).
+3. Rendre `details` garanti en re-lisant sous verrou. **Écartée** : la lecture APRÈS coup est le
+   choix explicite de `depot.ts` (« une lecture qui échouerait dégrade le message, jamais la
+   décision ») ; un verrou pour un message coûterait plus que le message.
+
+Arbitrage : **option 1**. Règle de précédence : **§16-22 > §1-15** — le 11 §3 impose la cohérence de
+l'enveloppe d'erreur, et une clé présente une fois sur deux n'est pas cohérente.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun. Le 04 est inchangé ; le contrat de `details` est **écrit** dans
+`packages/shared` là où le code d'erreur est documenté.
