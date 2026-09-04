@@ -23,3 +23,7 @@ export * from './org-units.js';
 export * from './questionnaire.js';
 export * from './plan-entretiens.js';
 export * from './assignments.js';
+// Le pilotage (couverture) et l'agrégation viennent APRÈS le plan : la couverture
+// se confronte au plan §32.4, elle ne le recalcule jamais (lot L7, incrément L7b).
+export * from './pilotage.js';
+export * from './agregation.js';
