@@ -7532,3 +7532,88 @@ périmètre que le bandeau du fichier interdit. Le seuil reste à 90 % : on remo
 rétrécit jamais le périmètre. Règle de précédence **sans objet** (aucune divergence interne au pack).
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun.
+
+## 2026-09-05 — [securite] ZAP remis en service : bloquant tout de suite, ou après traitement des 12 alertes ?
+
+**Le fait, mesuré avant toute conclusion (constat F-31, A51, 2026-09-04).** Le scan ZAP n'a produit
+aucune ligne entre le **2026-09-02 07h35 UTC** (dernier scan réel, run `33603477826`) et le
+2026-09-05. Deux causes distinctes, dont **aucune n'est celle que le mot « skippé » suggérait** :
+
+1. **Le couplage.** Dans `deploy-staging.yml`, le job `securite` déclarait `needs: [deployer]` sans
+   `if:` — donc un `success()` implicite. Le job `deployer` porte, dans une seule étape sous `set -e`,
+   la LIVRAISON et des contrôles de GOUVERNANCE qui viennent **après** elle (empreinte du script
+   distant, fraîcheur du clone du serveur). Depuis le **2026-09-02 14h40 UTC** (run `33643594297`),
+   un contrôle de la seconde famille rougit — et le staging, lui, **est en service** : les journaux
+   du run `33920693605` disent « Prise d effet observee … Deploiement du staging termine et verifie »
+   avant l'échec sur l'empreinte. Le scan a donc été skippé sur **neuf runs consécutifs**
+   (`33643594297`, `33714804567`, `33733141719`, `33735371068`, `33750466751`, `33753848462`,
+   `33755148476`, `33918656915`, `33920693605`) — et **un job `skipped` ne rougit pas**, d'où le
+   silence de deux jours.
+2. **La bascule était un geste vide, et c'est le point le plus grave.** Le scan passait `-I` à
+   `zap-baseline.py` (« do not return failure on warning »), qui **transforme un code 2 en code 0** ;
+   aucune règle n'étant configurée au niveau FAIL, le code 1 ne pouvait pas survenir non plus. Le
+   seul code atteignable était **0** : la branche `ZAP_BLOQUANT=true` du verdict était **morte**.
+   Autrement dit, le point de contrôle « passer `ZAP_BLOQUANT` à `'true'` à la porte L2 » (entrée du
+   2026-08-27) était **inexécutable** : quiconque l'aurait honoré aurait coché un critère sans rien
+   armer. Le commentaire du fichier aggravait le piège en énonçant une table de codes fausse
+   (« 2 = avertissements (avec `-I`) » : c'est l'inverse). **Mesure A/B**, 2026-09-05, même cible,
+   même heure, image `ghcr.io/zaproxy/zaproxy@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef` :
+   `-a` donne **code 2** (7 WARN-NEW) · `-a -I` donne **code 0** (les **mêmes** 7 WARN-NEW).
+
+**Ce qui est corrigé sans arbitrage, parce que ce sont des défauts et non des choix** : `-I` retiré ·
+verdict extrait dans `.github/scripts/zap-verdict.sh` avec une table de vérité de 13 cas rejouée
+**avant chaque scan** · codes **1 et 3 bloquants en toutes circonstances** (un scanner qui ne tourne
+pas n'est pas un « scan non bloquant ») · `ZAP_BLOQUANT` mal orthographié = erreur dure, jamais
+« donc non bloquant » · rapport JSON obligatoire · **scan nocturne** (`cron: '17 3 * * *'`) pour que
+l'absence de scan devienne bruyante · `securite` conditionné à un **fait mesuré** (la sonde HTTP
+publique a répondu) et non à l'absence de tout défaut ailleurs — `deployer` échoue exactement comme
+avant, aucun garde n'est retiré ni adouci.
+
+**Ce qui reste à arbitrer, et qui est l'objet de cette entrée : `ZAP_BLOQUANT` passe-t-il à `'true'`
+maintenant ?** Le scan rend **code 2** contre le staging du 2026-09-05. Les **12 alertes réelles**,
+classées (aucune High, aucune FAIL-NEW) :
+
+| Sévérité | Règle | Occurrences |
+| --- | --- | --- |
+| **Medium** (confiance High) | `10055` CSP : `style-src unsafe-inline` | 3 |
+| **Low** (Medium) | `90004` Cross-Origin-Embedder-Policy absent ou invalide | 3 |
+| **Low** (Medium) | `90004` Cross-Origin-Opener-Policy absent ou invalide | 3 |
+| **Low** (Medium) | `90004` Cross-Origin-Resource-Policy absent ou invalide | 4 |
+| Informational (High) | `90005` Sec-Fetch-Dest / Mode / Site / User absents (4 règles) | 16 |
+| Informational (Medium) | `10049` Storable and Cacheable Content | 5 |
+| Informational (Medium) | `10094` Base64 Disclosure | 1 |
+| Informational (Medium) | `10109` Modern Web Application | 3 |
+| Informational (Low) | `10015` Re-examine Cache-control Directives | 1 |
+
+Options :
+
+1. **`'true'` immédiatement**, conformément au point de contrôle du 2026-08-27. Effet mesuré : `main`
+   rougit à **chaque** merge tant que les 12 alertes ne sont pas traitées — dont une seule Medium,
+   qui touche la CSP de l'app terrain (donc du code de production, hors du périmètre d'A52).
+2. **`'false'` maintenu, borné et daté**, le temps qu'A51 traite les alertes ; les codes 1 et 3
+   restent bloquants. **Échéance proposée : la porte P-C.**
+3. Rendre bloquant en excluant les règles qui gênent (`-c` avec des lignes `IGNORE`), ou en ne
+   bloquant qu'au-dessus de Medium. **Écartée sans être plaidée, et c'est le point de doctrine :**
+   « on n'écarte aucun fichier d'un glob critique pour faire passer le seuil ; un module sous le
+   seuil se corrige par des tests, jamais par un rétrécissement de périmètre ». La même règle vaut
+   ici. Un scan rendu vert par exclusion est exactement le contrôle-qui-ment que F-31 dénonce.
+
+**Recommandation d'A52 : option 2, avec une réserve qui vaut d'être lue.** Le scan ne voit que
+**6 URL** — `/`, deux `assets/index-*`, `/robots.txt`, `/sitemap.xml` : la coquille statique de
+`apps/field`. Le spider passif ne traverse pas une SPA, **ni `/hq`, ni `/api`, ni la moindre route
+d'authentification**. Or c'est précisément l'arrivée de l'authentification (07 §12, lot L2) qui
+motivait la bascule bloquante. Rendre le scan bloquant aujourd'hui ferait donc rougir `main` sur les
+en-têtes d'une page statique, **sans rien garder de la surface qu'il était censé garder**. Le geste
+qui a de la valeur n'est pas la bascule seule : c'est la bascule **plus** un scan qui atteint la
+surface authentifiée (contexte authentifié ZAP, ou scan `full`), et cela dépasse la remise en service
+demandée.
+
+Arbitrage : **EN ATTENTE — Williams.** Tant qu'il n'est pas rendu, `ZAP_BLOQUANT` reste à `'false'`,
+le statut est écrit dans le bandeau du workflow et dans le `::warning` de chaque run, et **l'échéance
+proposée est la porte P-C** — pas « au lot suivant », qui est la formule par laquelle la bascule de
+la porte L2 s'est perdue.
+Décideur : **Williams** (question posée par **A52** le 2026-09-05 ; l'instruction reçue est
+explicitement « je tranche »).
+Impact spec : aucun sur `/docs`. L'entrée du 2026-08-27 « [L0] ZAP baseline non bloquant jusqu'au lot
+L2 » n'est pas amendée : elle est **constatée inexécutable en l'état** (cause 2 ci-dessus), et c'est
+la présente entrée qui porte désormais la question et sa date.
