@@ -7902,3 +7902,50 @@ suivant » — c'est cette formule qui avait perdu la bascule de la porte L2.
 Décideur : **Williams** (question posée par **A52** le 2026-09-05).
 Impact spec : aucun sur `/docs`. L'entrée du 2026-08-27 n'est pas amendée : elle est **constatée
 inexécutable en l'état** (cause 2), et la présente entrée porte désormais la question et sa date.
+
+## 2026-09-05 — [securite] ZAP : l'arbitrage « EN ATTENTE » de l'entrée précédente est rendu
+
+L'entrée précédente laissait la bascule `ZAP_BLOQUANT` **EN ATTENTE — Williams**. Elle est rendue ici,
+sur délégation, pour que la garde ait une date plutôt qu'un espoir — c'est par « au lot suivant »
+que la bascule L2 s'était perdue.
+
+Options : celles de l'entrée précédente, inchangées (1. `'true'` maintenant · 2. `'false'` borné et
+daté · 3. exclure les règles gênantes).
+
+Arbitrage : **option 2, échéance porte P-C**, avec une condition qui manquait à la recommandation
+d'A52 : **avant P-C, le scan doit couvrir `/hq` et `/api`** (authentification comprise), sinon la
+bascule à P-C protégerait encore une page statique. Le dossier de porte P-C coche donc deux choses :
+la couverture étendue **puis** `ZAP_BLOQUANT='true'`. Les codes 1 et 3 restent bloquants dès
+maintenant. L'option 3 est écartée pour la raison qu'A52 donne : un scan vert par exclusion est le
+contrôle-qui-ment de F-31.
+Vérifié au merge de #42 (run `33928717453`) : le job `ZAP baseline (staging) / Scan passif` **tourne**
+sur `main` — `success` — alors que le déploiement échoue toujours sur l'empreinte. Le découplage a
+pris ; l'un des cinq points « non mesurés » d'A52 est mesuré.
+Règle de précédence : **§16-22 > §1-15** — 07 §13 (ZAP baseline en CI) et 06 §10.2.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun.
+
+## 2026-09-05 — [L1 / E18] Qui a le droit d'ÉCRIRE `companies.external_ref` ?
+
+Doute remonté par A17 en revue croisée, **mesuré d'abord** : les quatre routes `companies` sont
+`roles: ['admin']` (tracé 2026-08-31, éprouvé) — aucun consultant ne peut écrire `externalRef`, la
+liaison M8.1 n'est pas falsifiable par un compte de terrain, l'invariant 3 tient. Reste qu'un
+**administrateur** peut poser une référence console **arbitraire** que rien ne confronte à la
+console ; `0015` garantit l'unicité, pas l'existence. 03 M8.1 décrit le mouvement inverse (import
+depuis la console, « pas de doublon de vérité »).
+
+Options :
+
+1. **`externalRef` reste écrit par l'API, admin seul ; l'unicité suffit ; L13 réconcilie.**
+2. Retirer `externalRef` des schémas d'entrée L3a — ne s'écrit que par la liaison console. **Écartée**
+   : L13 n'est pas dans la table des lots de la Phase 1 (07 §12) ; aucune fiche ne porterait de
+   référence avant la Phase 2, et la liaison manuelle dont le client pilote a besoin disparaîtrait.
+3. Accepter et marquer « non confirmée » jusqu'à confrontation. **Écartée** : colonne au 04, donc
+   escalade 11 §8-2, interdite hors de la révision de spec de P-D (09 §5.9).
+
+Arbitrage : **option 1**, avec deux bornes : la route reste admin seul (déjà le cas), et **L13 devra
+confronter** à la console toute référence posée à la main — ce qui s'écrit dans le brief de L13, pas
+ici. Règle de précédence : **§32-36 > §24-31** — 09 §5.9 (le 04 inviolable hors P-D) écarte
+l'option 3 ; et 07 §12 (la table des lots) borne ce qui est livrable en Phase 1.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun. **Amendement candidat à P-D** si l'option 3 est jugée nécessaire.
