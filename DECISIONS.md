@@ -7786,6 +7786,76 @@ Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun. Le 04 est inchangé ; le contrat de `details` est **écrit** dans
 `packages/shared` là où le code d'erreur est documenté.
 
+## 2026-09-05 — [L7b] Le nom du répondant : sous quelle condition s'affiche-t-il au siège ?
+
+M5.1 annonce « nom / fonction / service » dans l'agrégation par question. A32 n'a **pas** publié le
+nom, à titre conservatoire : le §26 dit que l'attribution est conditionnelle sans dire sous quelle
+condition elle vaut _au siège_ ; `consent_given` est nullable au 04 ; le 11 §2 interdit les noms dans
+les **logs**, pas dans les réponses. Ajouter un champ est un incrément ; retirer un nom déjà parti au
+navigateur ne se rattrape pas.
+
+Options :
+
+1. Publier le nom dès que la réponse existe. **Écartée** : un `consent_given` nul serait lu comme un
+   oui, et c'est le sens inverse du RGPD (06 §10).
+2. **Publier le nom uniquement si `consent_given = true` strict, ET derrière une action explicite
+   (« afficher les répondants »), jamais par défaut dans la vue agrégée.** Le nul et le faux sont
+   traités de la même façon : masqué.
+3. Ne jamais publier au siège. **Écartée** : M5.1 le demande, et le rapport §20.3 a besoin de la
+   fonction et du service pour contextualiser une citation.
+
+Arbitrage : **option 2**, à livrer en **L7c** (pas L7b : la décision d'A32 de ne rien publier était la
+bonne au moment où la condition n'était pas écrite). Fonction et service suivent la même condition —
+à trois, ils identifient une personne dans une petite structure. Règle de précédence : **§24-31 >
+§16-22** — le §26 (attribution conditionnelle) prime sur M5.1 (le champ annoncé).
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun amendement ; le pack est interprété dans le sens le plus protecteur.
+
+## 2026-09-05 — [L7b] « Profils rencontrés » (§16.6) : inexprimable sans amender le 04
+
+Le §16.6 veut confronter, par unité, les profils d'interlocuteurs **prévus** et **rencontrés**. Or
+`interviews` n'a aucun lien vers `interlocutor_profiles` au 04 (déjà constaté le 2026-09-01, [L3d]) ;
+`services` (11 fonctions) n'est pas `interlocutor_profiles` (9 profils). L'axe est **inexprimable**
+sur le schéma actuel. A32 n'a pas livré la colonne et l'a remonté.
+
+Options :
+
+1. Amender le 04 maintenant (une colonne `interviews.interlocutor_profile_id`). **Écartée** : 09 §5.9
+   est formel — « le fichier 04 reste inviolable hors de la révision de spec de P-D ». La délégation
+   du 2026-09-04 étend les signatures, pas les révisions de spec.
+2. **Colonne non livrée en L7b ; le point entre à l'ordre du jour de la REVUE DE SPEC de P-D**, avec la
+   proposition d'amendement prête (colonne nullable, FK, remplie par le terrain à la création de
+   session).
+3. Approximer par `services`. **Écartée** : ce serait afficher une confrontation qui n'en est pas une,
+   et un chiffre faux au siège coûte plus qu'une colonne absente.
+
+Arbitrage : **option 2**. Règle de précédence : **§32-36 > §24-31** — 09 §5.9 (le 04 inviolable hors
+P-D) prime sur le §16.6 (la colonne souhaitée). La proposition d'amendement se rédige dans le dossier
+P-D, pas ici.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun aujourd'hui ; **amendement candidat du 04 à P-D**, tracé ici pour ne pas être
+perdu.
+
+## 2026-09-05 — [L7] L'agrégation par question est en L7b, pas en L7c : la note de conception est amendée
+
+`docs/conception/LOT_L7.md` §1 confiait l'agrégation par question à **L7c** (A31/A35). Le brief du
+pilote l'a confiée à **L7b** (A32) et a réduit L7c à l'export §36.3. A32 a suivi le brief et a déclaré
+l'écart. Sans arbitrage, A31 ouvrirait L7c sur des fichiers qu'A32 a déjà écrits.
+
+Options :
+
+1. **Ratifier le brief** : agrégation en L7b (livrée, testée), L7c = export CSV/JSON §36.3 **+** le nom
+   du répondant sous condition (décision ci-dessus). `packages/shared/src/agregation.ts` et l'écran
+   d'agrégation appartiennent à L7b ; L7c y **branche** son export sans les réécrire.
+2. Revenir à la note : déplacer l'agrégation vers L7c. **Écartée** : c'est déplacer du code livré
+   pour honorer un plan, et l'incrément L7c n'a rien à y ajouter.
+
+Arbitrage : **option 1**. `LOT_L7.md` §1 est amendé et daté par le prochain agent qui l'ouvre (A31 au
+brief de L7c), avec la mention de cet arbitrage. Règle de précédence **sans objet** (découpage
+interne, hors pack).
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun ; note de conception amendée.
+
 ## 2026-09-05 — [securite] ZAP remis en service : bloquant maintenant, ou après traitement des 12 alertes ?
 
 Constat **F-31** : aucune ligne ZAP entre le 2026-09-02 07h35 UTC (dernier scan réel, run
