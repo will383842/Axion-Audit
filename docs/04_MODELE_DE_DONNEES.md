@@ -112,8 +112,16 @@ mission_questions(id, mission_id FK, question_id FK, question_version INT,
 -- Décision V2.2 (§32.6) : résolution de la collision §25.6/§27.1 — le TYPE de session (kind)
 -- est distinct du MODE d'entretien (mode). 'complementaire' est un mode d'entretien, pas un type.
 interviews(id,                                   -- UUID v7 CÔTÉ CLIENT
-           mission_id FK, conducted_by FK users, -- PROPRIÉTAIRE : seul habilité à écrire via sync (§9.9) ;
+           mission_id FK, conducted_by FK users NULL,   -- PROPRIÉTAIRE : seul habilité à écrire via sync (§9.9) ;
                                                  -- réaffectable par admin/lead UNIQUEMENT si status ≠ en_cours/termine (§34.4) ; immuable après réalisation
+           -- ═══ AMENDEMENT (2026-09-02, DECISIONS.md — tranché par Williams) — `conducted_by` DEVIENT NULLABLE ═══
+           -- Le plan d'entretiens §32.4 (fichier 03) produit des sessions PLANIFIÉES pour lesquelles
+           -- AUCUN auditeur n'est encore affecté : au cadrage, l'équipe n'est pas constituée. La colonne
+           -- était NOT NULL (choix du lot L1 dans le silence de ce fichier) et interdisait de les persister.
+           -- Elle accepte désormais NULL. RÈGLE MÉTIER portée par le SERVICE, pas par une contrainte CHECK :
+           -- une session PLANIFIÉE (status 'non_demarre') peut n'avoir aucun auditeur ; une session CONDUITE
+           -- (status en_cours/termine) doit en avoir un. Pour la propriété d'écriture §9.9, « propriétaire
+           -- inconnu » ne se lit JAMAIS « tout le monde ».
            kind CHECK IN ('entretien','observation','demonstration','analyse_documentaire',
                           'releve_donnees','atelier') DEFAULT 'entretien',
            mode CHECK IN ('sur_site','distanciel','complementaire') NULL,   -- défaut APPLICATIF (V2.8) : 'sur_site' si kind='entretien', NULL sinon (un DEFAULT SQL conditionnel n'existe pas)

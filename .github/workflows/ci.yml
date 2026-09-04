@@ -912,13 +912,116 @@ jobs:
       # Le lot L1 a livré les migrations : plus de garde conditionnelle ici. Si
       # `apps/api/drizzle/` venait à disparaître, `pnpm db:migrate` échoue — et
       # c'est le comportement voulu, pas un cas à contourner.
-      - name: Appliquer les migrations
+      - name: Appliquer les migrations (montée complète)
         env:
           DATABASE_URL: postgresql://axion:ci_factice_postgres@127.0.0.1:5432/axion_audit_test
           APP_ENV: dev
           TZ: UTC
         run: pnpm db:migrate
 
+      # -----------------------------------------------------------------------
+      # MIGRATION GARDE-FOU — UP **ET** DOWN (DoD transverse 09 §3 ; R-B7 de la
+      # porte P-B, redevenu bloquant au contrôle A02 du L3 sous le code R-L3-2).
+      # -----------------------------------------------------------------------
+      # MESURÉ PAR A02 LE 2026-09-02 : ce fichier ne contenait AUCUNE occurrence
+      # de `--down`. La CI jouait la montée sur un Postgres jetable et déclarait
+      # « migrations up/down » sur la foi des sentinelles `-- @DOWN`, que
+      # `migrations.mjs` exige mais n'exécute jamais en CI. Une descente que
+      # personne n'a jouée est une descente qu'on découvre pendant un incident.
+      #
+      # LA SEULE DESCENTE À LOGIQUE DU DÉPÔT est celle de
+      # `0014_interviews_conducted_by_nullable.sql` : un bloc `DO $$` qui compte
+      # les sessions à `conducted_by NULL` et lève `not_null_violation` (23502)
+      # plutôt que d'inventer un auditeur ou d'effacer des lignes (invariant 7).
+      # Elle n'avait été exécutée QUE par son auteur, sur son poste. Les étapes
+      # ci-dessous la jouent dans ses DEUX verdicts, chacun dans un `step` nommé,
+      # sans `|| true` : (1) sur base vide elle RÉUSSIT ; (2) sur base peuplée
+      # elle ÉCHOUE proprement — 23502, transaction annulée, journal toujours à
+      # 0014, ligne intacte.
+      #
+      # POURQUOI DANS CE JOB ET NON DANS UN JOB `6bis` : la protection de `main`
+      # exige des contrôles NOMMÉS (voir le job `1 · lint`, encadré
+      # `check:decisions`). Un job nouveau serait NON REQUIS jusqu'à ce qu'un
+      # humain édite la protection de branche — un garde qui ne bloque rien.
+      # Ici, un rouge sur la descente rougit `6 · schema-diff`, déjà requis.
+      #
+      # SYNTAXE DE L'EXÉCUTEUR, TRANSCRITE de `apps/api/scripts/migrations.mjs` :
+      #   `--down`         → redescend LA dernière appliquée (une seule) ;
+      #   `--down-to NNNN` → redescend TOUT ce qui est au-dessus de NNNN, de la
+      #                      plus récente vers la plus ancienne.
+      # Le script racine `db:migrate` délègue vers `node scripts/migrations.mjs`
+      # et pnpm lui transmet les drapeaux qui suivent — vérifié le 2026-09-02 :
+      # `pnpm db:migrate --down-to 0013` arrive en `["--down-to","0013"]`.
+      #
+      # `psql` est celui DU CONTENEUR de service (`docker exec`), jamais celui du
+      # runner : l'image `postgres:16-alpine` l'embarque, et il parle à la base
+      # par le socket local que l'image autorise en `trust`. Aucun mot de passe
+      # ne circule, et l'étape ne dépend d'aucun outil préinstallé sur l'hôte.
+      #
+      # « SUR STAGING » — la DoD transverse dit « migrations up/down exécutées sur
+      # staging ». Ce job prouve up ET down sur le Postgres JETABLE de la CI ; il
+      # ne prouve rien sur staging. L'exécution sur staging reste un geste
+      # HUMAIN, à tracer par Williams dans le fichier de porte (A02, 2026-09-02).
+      # -----------------------------------------------------------------------
+      - name: Garde-fou migrations 1/3 — descente de la dernière migration sur base VIDE (--down) — doit RÉUSSIR
+        env:
+          DATABASE_URL: postgresql://axion:ci_factice_postgres@127.0.0.1:5432/axion_audit_test
+          APP_ENV: dev
+          TZ: UTC
+          PG_CID: ${{ job.services.postgres.id }}
+        run: |
+          set -euo pipefail
+          psql_ci() { docker exec -i "$PG_CID" psql -v ON_ERROR_STOP=1 -qtAX -U "$POSTGRES_USER" -d "$POSTGRES_DB" "$@"; }
+
+          # Même lecture que `readdirSync(...).sort()` dans l'exécuteur.
+          FICHIERS=(apps/api/drizzle/[0-9][0-9][0-9][0-9]_*.sql)
+          NB_FICHIERS="${#FICHIERS[@]}"
+          DERNIERE="$(basename "${FICHIERS[-1]}" | cut -c1-4)"
+          echo "  ${NB_FICHIERS} fichier(s) de migration ; dernière : ${DERNIERE}"
+
+          AVANT="$(psql_ci -c 'SELECT count(*) FROM schema_migrations')"
+          if [ "$AVANT" != "$NB_FICHIERS" ]; then
+            echo "::error::Journal schema_migrations : ${AVANT} ligne(s) après la montée, ${NB_FICHIERS} attendue(s). La montée n'a pas tout appliqué — la descente ne peut rien prouver."
+            exit 1
+          fi
+
+          pnpm db:migrate --down
+
+          APRES="$(psql_ci -c 'SELECT count(*) FROM schema_migrations')"
+          SOMMET="$(psql_ci -c "SELECT coalesce(max(version), '0000') FROM schema_migrations")"
+          if [ "$APRES" != "$((NB_FICHIERS - 1))" ] || [ "$SOMMET" = "$DERNIERE" ]; then
+            echo "::error::Après --down : ${APRES} ligne(s) au journal (attendu $((NB_FICHIERS - 1))), sommet ${SOMMET} (attendu < ${DERNIERE}). La descente de ${DERNIERE} n'a pas été enregistrée."
+            exit 1
+          fi
+          echo "  descente de ${DERNIERE} sur base vide : OK (journal à ${SOMMET})"
+
+      - name: Garde-fou migrations 2/3 — remontée (re-up) — le journal revient à la dernière version
+        env:
+          DATABASE_URL: postgresql://axion:ci_factice_postgres@127.0.0.1:5432/axion_audit_test
+          APP_ENV: dev
+          TZ: UTC
+          PG_CID: ${{ job.services.postgres.id }}
+        run: |
+          set -euo pipefail
+          psql_ci() { docker exec -i "$PG_CID" psql -v ON_ERROR_STOP=1 -qtAX -U "$POSTGRES_USER" -d "$POSTGRES_DB" "$@"; }
+          FICHIERS=(apps/api/drizzle/[0-9][0-9][0-9][0-9]_*.sql)
+          NB_FICHIERS="${#FICHIERS[@]}"
+          DERNIERE="$(basename "${FICHIERS[-1]}" | cut -c1-4)"
+
+          pnpm db:migrate
+
+          APRES="$(psql_ci -c 'SELECT count(*) FROM schema_migrations')"
+          SOMMET="$(psql_ci -c "SELECT coalesce(max(version), '0000') FROM schema_migrations")"
+          if [ "$APRES" != "$NB_FICHIERS" ] || [ "$SOMMET" != "$DERNIERE" ]; then
+            echo "::error::Après re-up : ${APRES} ligne(s) au journal (attendu ${NB_FICHIERS}), sommet ${SOMMET} (attendu ${DERNIERE})."
+            exit 1
+          fi
+          echo "  remontée : OK (journal à ${DERNIERE}) — le diff schéma-vs-04 ci-dessous juge le schéma obtenu"
+
+      # Les deux contrôles de schéma qui suivent jugent le schéma OBTENU PAR
+      # up → down → re-up, et non par la seule montée : c'est ce qui prouve que la
+      # descente puis la remontée de la dernière migration rendent EXACTEMENT le
+      # fichier 04 — « zéro écart » — et non un schéma « presque » identique.
       - name: pnpm schema:diff (tout écart = build rouge)
         env:
           DATABASE_URL: postgresql://axion:ci_factice_postgres@127.0.0.1:5432/axion_audit_test
@@ -941,6 +1044,144 @@ jobs:
           APP_ENV: dev
           TZ: UTC
         run: pnpm check:schema-inventaire
+
+      # -----------------------------------------------------------------------
+      # LE CAS QUI COMPTE : la descente de 0014 sur une base PEUPLÉE.
+      # -----------------------------------------------------------------------
+      # La fixture est la chaîne de clés étrangères MINIMALE jusqu'à `interviews`
+      # (companies → missions → org_units → interviews), sans aucune ligne
+      # `users` : c'est précisément une session PLANIFIÉE sans auditeur (03
+      # §32.4), le cas que 0014 rend possible et que sa descente doit REFUSER.
+      # Libellés neutres (invariant 2), identifiants littéraux d'un jeu de test —
+      # la règle « UUID v7 côté applicatif » vise les entités créées par l'app,
+      # pas quatre lignes qu'une étape de CI pose puis retire.
+      #
+      # DEUX PREUVES INDÉPENDANTES, parce que l'exécuteur n'imprime que
+      # `err.message` et jamais le SQLSTATE :
+      #   (a) la section `@DOWN` du fichier, jouée TELLE QUELLE par psql en mode
+      #       verbeux dans une transaction → `ERROR:  23502:` attendu, ce qui
+      #       prouve l'ERRCODE et que le bloc s'arrête AVANT le `SET NOT NULL` ;
+      #   (b) l'exécuteur `pnpm db:migrate --down-to 0013` → exit ≠ 0 ET le
+      #       message « descente de 0014 refusée », ce qui prouve que c'est bien
+      #       0014 qui refuse (et non une migration ultérieure qui aurait échoué
+      #       pour une autre raison).
+      # Puis l'ÉTAT : 0014 toujours au journal, colonne toujours NULLABLE, ligne
+      # toujours là — c'est-à-dire « transaction annulée en bloc ».
+      #
+      # `--down-to 0013` et non `--down` : le jour où une 0015 existera, `--down`
+      # ne toucherait plus 0014 et cette étape testerait autre chose sans le
+      # dire. Avec `--down-to 0013`, l'exécuteur redescend d'abord ce qui est
+      # au-dessus, puis bute sur 0014 ; l'étape suivante remonte ce qui a pu
+      # être redescendu. Une future migration dont la descente refuserait AUSSI
+      # sur données doit ajouter SON cas ici — celui-ci ne le verra pas.
+      - name: Peupler la base — une session d'entretien sans auditeur (fixture factice)
+        env:
+          PG_CID: ${{ job.services.postgres.id }}
+        run: |
+          set -euo pipefail
+          docker exec -i "$PG_CID" psql -v ON_ERROR_STOP=1 -qX -U "$POSTGRES_USER" -d "$POSTGRES_DB" <<'SQL'
+          BEGIN;
+          INSERT INTO companies (id, name)
+              VALUES ('00000000-0000-7000-8000-00000000c1a1', 'Entreprise factice de CI');
+          INSERT INTO missions (id, company_id, title, geo_scope, audit_level, status)
+              VALUES ('00000000-0000-7000-8000-00000000c1a2', '00000000-0000-7000-8000-00000000c1a1',
+                      'Mission factice de CI', 'france', 'diagnostic_cadrage', 'preparation');
+          INSERT INTO org_units (id, mission_id, kind, name)
+              VALUES ('00000000-0000-7000-8000-00000000c1a3', '00000000-0000-7000-8000-00000000c1a2',
+                      'direction', 'Direction factice de CI');
+          INSERT INTO interviews (id, mission_id, conducted_by, org_unit_id)
+              VALUES ('00000000-0000-7000-8000-00000000c1a4', '00000000-0000-7000-8000-00000000c1a2',
+                      NULL, '00000000-0000-7000-8000-00000000c1a3');
+          COMMIT;
+          SQL
+          NB="$(docker exec -i "$PG_CID" psql -v ON_ERROR_STOP=1 -qtAX -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+                -c "SELECT count(*) FROM interviews WHERE conducted_by IS NULL")"
+          if [ "$NB" != "1" ]; then
+            echo "::error::Fixture non posée : ${NB} session(s) à conducted_by NULL, 1 attendue."
+            exit 1
+          fi
+          echo "  fixture posée : 1 session d'entretien sans auditeur"
+
+      - name: Garde-fou migrations 3/3 — descente de 0014 sur base PEUPLÉE — doit ÉCHOUER en 23502, transaction annulée, ligne intacte
+        env:
+          DATABASE_URL: postgresql://axion:ci_factice_postgres@127.0.0.1:5432/axion_audit_test
+          APP_ENV: dev
+          TZ: UTC
+          PG_CID: ${{ job.services.postgres.id }}
+        run: |
+          set -euo pipefail
+          psql_ci() { docker exec -i "$PG_CID" psql -v ON_ERROR_STOP=1 -qtAX -U "$POSTGRES_USER" -d "$POSTGRES_DB" "$@"; }
+          FICHIER=apps/api/drizzle/0014_interviews_conducted_by_nullable.sql
+          if [ ! -f "$FICHIER" ]; then
+            echo "::error::${FICHIER} introuvable — cette étape teste SA descente ; si la migration a été renommée, l'étape doit suivre."
+            exit 1
+          fi
+
+          # (a) SQLSTATE — la section @DOWN du fichier, telle quelle, sous psql.
+          # Sous `set -o pipefail`, un `grep` sans correspondance tuerait le
+          # pipeline : on capture donc d'abord, puis on juge (idiome du fichier).
+          DOWN="$(sed -n '/^--[[:space:]]*@DOWN[[:space:]]*$/,$p' "$FICHIER" | sed '1d')"
+          if [ -z "$DOWN" ]; then
+            echo "::error::Section @DOWN vide ou introuvable dans ${FICHIER}."
+            exit 1
+          fi
+          RC=0; SORTIE_SQL="$(printf '\\set VERBOSITY verbose\nBEGIN;\n%s\nCOMMIT;\n' "$DOWN" | psql_ci 2>&1)" || RC=$?
+          if [ "$RC" -eq 0 ]; then
+            echo "::error::La section @DOWN de 0014 a RÉUSSI sur une base contenant une session sans auditeur : le garde du bloc DO ne fonctionne pas (ou n'a pas été joué)."
+            exit 1
+          fi
+          if ! printf '%s\n' "$SORTIE_SQL" | grep -q 'ERROR:  23502:'; then
+            echo "::error::La descente de 0014 a échoué, mais PAS en 23502 (not_null_violation). Sortie psql ci-dessous."
+            printf '%s\n' "$SORTIE_SQL"
+            exit 1
+          fi
+          echo "  (a) section @DOWN sous psql : refus en SQLSTATE 23502 — OK"
+
+          # (b) L'EXÉCUTEUR — même refus, par le chemin que l'exploitation utilise.
+          RC=0; SORTIE="$(pnpm db:migrate --down-to 0013 2>&1)" || RC=$?
+          if [ "$RC" -eq 0 ]; then
+            echo "::error::pnpm db:migrate --down-to 0013 a RENDU 0 avec une session sans auditeur en base."
+            printf '%s\n' "$SORTIE"
+            exit 1
+          fi
+          if ! printf '%s\n' "$SORTIE" | grep -q 'descente de 0014 refusée'; then
+            echo "::error::L'exécuteur a échoué (exit ${RC}) mais sans le message de refus de 0014 — une autre migration a échoué, ou le message a changé. Sortie ci-dessous."
+            printf '%s\n' "$SORTIE"
+            exit 1
+          fi
+          echo "  (b) exécuteur : exit ${RC}, « descente de 0014 refusée » — OK"
+
+          # L'ÉTAT — ce que « transaction annulée en bloc » veut dire, mesuré.
+          AU_JOURNAL="$(psql_ci -c "SELECT count(*) FROM schema_migrations WHERE version = '0014'")"
+          NULLABLE="$(psql_ci -c "SELECT is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'interviews' AND column_name = 'conducted_by'")"
+          LIGNE="$(psql_ci -c "SELECT count(*) FROM interviews WHERE id = '00000000-0000-7000-8000-00000000c1a4' AND conducted_by IS NULL")"
+          if [ "$AU_JOURNAL" != "1" ] || [ "$NULLABLE" != "YES" ] || [ "$LIGNE" != "1" ]; then
+            echo "::error::État après refus : 0014 au journal = ${AU_JOURNAL} (attendu 1) · conducted_by nullable = ${NULLABLE} (attendu YES) · ligne intacte = ${LIGNE} (attendu 1). Le refus n'a pas laissé la base telle qu'il l'a trouvée."
+            exit 1
+          fi
+          echo "  état : 0014 au journal, colonne toujours NULLABLE, ligne toujours là — OK"
+
+      - name: Retirer la fixture, remonter ce qui a pu être redescendu au-dessus de 0014, re-diff
+        env:
+          DATABASE_URL: postgresql://axion:ci_factice_postgres@127.0.0.1:5432/axion_audit_test
+          APP_ENV: dev
+          TZ: UTC
+          PG_CID: ${{ job.services.postgres.id }}
+        run: |
+          set -euo pipefail
+          docker exec -i "$PG_CID" psql -v ON_ERROR_STOP=1 -qX -U "$POSTGRES_USER" -d "$POSTGRES_DB" <<'SQL'
+          BEGIN;
+          DELETE FROM interviews WHERE id = '00000000-0000-7000-8000-00000000c1a4';
+          DELETE FROM org_units  WHERE id = '00000000-0000-7000-8000-00000000c1a3';
+          DELETE FROM missions   WHERE id = '00000000-0000-7000-8000-00000000c1a2';
+          DELETE FROM companies  WHERE id = '00000000-0000-7000-8000-00000000c1a1';
+          COMMIT;
+          SQL
+          # Aujourd'hui « schéma à jour, 0 en attente » ; le jour où une 0015
+          # existe, c'est ici qu'elle remonte après avoir été redescendue en (b).
+          pnpm db:migrate
+          # Le refus n'a rien laissé derrière lui : le schéma est toujours le 04.
+          pnpm schema:diff
 
   # ---------------------------------------------------------------------------
   # COUVERTURE — DoD transverse 09 §3 : « ≥ 90 % sur les modules critiques
