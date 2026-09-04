@@ -3130,3 +3130,23 @@ Prochaine action : lire le run CI de la PR #31 et, s'il est vert, demander la re
 sur le diff de refusion (le correctif `AccesEntretien` n'a été relu par personne d'autre).
 Tests rouges connus : aucun. Avertissement `check:decisions` sur une date qui recule
 (« Quel rôle accède au référentiel client ? ») : PRÉEXISTANT, non bloquant, non corrigé ici.
+
+## 2026-09-05 01h10 — [lot L5 / incrément L5b] — étape pipeline 3/7 (refusion TERMINÉE, CI verte)
+
+Dernier commit vert : b89e358 (merge lot/l5a ba38847) · Branche : lot/l5b · Poussé : oui
+Tâche en cours : terminée. Le bloc de 00h35 est SUPERSÉDÉ sur deux points, et c'est le motif de
+ce bloc-ci : `main` et `lot/l5a` ont chacun avancé PENDANT la CI, et la refusion a dû être
+rejouée deux fois. État final mesuré : `lot/l5a` ET `origin/main` sont ANCÊTRES de `lot/l5b`,
+plus rien à intégrer dans aucun des deux sens. PR #31 : **MERGEABLE / CLEAN**.
+Preuve : run CI **33927473653** (pull_request, sha b89e358) — **20 jobs verts**, dont lint,
+typecheck, unit, integration, e2e chromium, couverture ≥ 90 %, schema-diff et les 4 images ;
+seul `8 · deploy-staging` est sauté, par conception (merge sur `main` uniquement).
+Localement (Node v24, hors contrat — la CI reste le juge) : build · lint · typecheck ·
+format:check RC=0 · test:unit 1201/1201 · test:interface 599/599 · les huit gardes `check:*` RC=0.
+Défaut d'intégration fermé : `<AccesEntretien />` ne relance plus le rejet de lecture au rendu ;
+les 4 états du 03 §33.2 y sont, et le test `@critique` d'A26 retrouve son état d'erreur. Aucun
+test modifié.
+Prochaine action : demander à A29 la revue croisée du diff de refusion — le correctif
+`AccesEntretien` et les neuf résolutions de conflit n'ont été relus par personne d'autre que moi.
+Tests rouges connus : aucun. Avertissement `check:decisions` sur une date qui recule
+(« Quel rôle accède au référentiel client ? ») : PRÉEXISTANT, non bloquant, non corrigé ici.
