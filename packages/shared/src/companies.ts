@@ -47,9 +47,11 @@
 // À PART : **`409 COMPANY_EXTERNAL_REF_DUPLICATE`**. Deux codes et non un, parce que
 // les deux conflits ne se réparent pas au même endroit (rapprocher deux fiches
 // d'audit vs corriger la liaison M8.1) — voir `errors.ts`.
-// ⚠ Cet index **n'exclut pas les fiches supprimées** : une fiche archivée conserve
-// sa référence console (invariant 7, tranché le 2026-09-04). Le 409 le dit alors
-// explicitement et oriente vers la RESTAURATION.
+// ⚠ AUCUN des deux index **n'exclut les fiches supprimées** : une fiche archivée
+// conserve sa référence console (invariant 7, tranché le 2026-09-04) ET son SIREN
+// (symétrie arbitrée le 2026-09-05). Les deux 409 le disent alors explicitement,
+// orientent vers la RESTAURATION, et portent `details[0].code ∈ { fiche_active,
+// fiche_archivee }` — voir `ERROR_CODES.COMPANY_DUPLICATE` pour le contrat complet.
 //
 // AUCUNE LOGIQUE D'ACCÈS NI D'ÉCRITURE ICI : ce paquet est importé par la console
 // (`apps/hq`) et par la PWA terrain. Ce qui y entre part dans un navigateur — d'où

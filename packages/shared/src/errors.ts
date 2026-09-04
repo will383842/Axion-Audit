@@ -114,6 +114,31 @@ export const ERROR_CODES = {
    * ⚠ IL NE COUVRE PAS LA COLLISION DE NOM. Le nom n'a aucune unicité en base (04 :
    * l'index unique est PARTIEL, sur `siren` seul) ; une collision de nom rend donc
    * un **201 avec avertissement**, jamais ce code. Voir `companies.ts`.
+   *
+   * ── CE QUE LE MESSAGE DIT DE PLUS QUE LE CONFLIT (depuis le 2026-09-05) ──────
+   * `uq_companies_siren` **n'exclut PAS les fiches supprimées** : une fiche archivée
+   * (`deleted_at IS NOT NULL`) CONSERVE son SIREN (invariant 7 : une archive garde
+   * ses liens). Un 409 muet là-dessus envoyait « rapprocher » une fiche que `GET /:id`
+   * rend en 404 et qu'aucune liste ne montre — mesuré par A16 sur la livraison du
+   * 2026-09-04, qui avait réglé ce cas pour `external_ref` et l'avait laissé ouvert
+   * pour le SIREN. Arbitré par A01 le 2026-09-05 : **symétrie complète**. Quand la
+   * fiche en conflit est archivée, le message LE NOMME et oriente vers sa
+   * RESTAURATION, pas vers le rapprochement.
+   *
+   * ── LE CONTRAT DE `details` SUR LES 409 D'UNICITÉ DE `companies` ────────────
+   * Vaut pour ce code ET pour `COMPANY_EXTERNAL_REF_DUPLICATE`, à l'identique :
+   *   · **garantis** : le statut 409 et `error.code`, décidés par la contrainte ;
+   *   · **au mieux** : `details[0]`, relu APRÈS coup. Quand il est présent, il porte
+   *     TOUJOURS `path` (`siren` | `externalRef`), **`code ∈ { fiche_active,
+   *     fiche_archivee }`** — vocabulaire FERMÉ, l'état de la fiche fautive pour une
+   *     machine — et `message` (son identifiant, pour un humain). Quand la fiche a
+   *     disparu entre la violation et la relecture (course), le 409 sort **sans
+   *     `details`** : jamais un `details` partiel, jamais un état présumé.
+   * Un front branche sur `error.code`, puis sur `details[0]?.code` s'il existe, et
+   * traite son absence comme « conflit constaté, fiche non nommée » — pas comme une
+   * anomalie. Le chemin dégradé est un contrat tenu, pas un accident toléré ; c'est
+   * le principe déjà écrit dans `companies/depot.ts` (« dégrade le message, jamais la
+   * décision »), formulé ici en contrat parce qu'un front l'importe d'ici.
    */
   COMPANY_DUPLICATE: 'COMPANY_DUPLICATE',
   /**
@@ -153,7 +178,10 @@ export const ERROR_CODES = {
    *
    * `details[0].code` porte l'état de la fiche fautive — `fiche_active` |
    * `fiche_archivee` — pour que le front branche sans lire le français, selon le
-   * partage message/code documenté sur `errorDetailSchema`.
+   * partage message/code documenté sur `errorDetailSchema`. **Le même contrat vaut
+   * pour `COMPANY_DUPLICATE` depuis le 2026-09-05** — même vocabulaire, même chemin
+   * dégradé (un 409 sans `details` si la fiche a disparu entre la violation et la
+   * relecture) : il est écrit UNE fois, sur ce code-là, et s'applique aux deux.
    *
    * ── POURQUOI 409 ────────────────────────────────────────────────────────────
    * Requête bien formée (400 serait faux), appelant habilité (403 serait faux) : c'est

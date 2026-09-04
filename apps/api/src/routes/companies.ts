@@ -169,8 +169,13 @@ export const routesCompanies: FastifyPluginAsync = async (app) => {
    * déjà pris, et **`COMPANY_EXTERNAL_REF_DUPLICATE`** sur une référence console déjà
    * prise (`uq_companies_external_ref`, migration `0015` — amendement du 04 §7.1 du
    * 2026-09-03). Deux codes et non un : les deux conflits ne se réparent pas au même
-   * endroit, et le second nomme le cas de la fiche ARCHIVÉE, qui conserve sa référence
-   * console et se RESTAURE au lieu de se rapprocher. Voir `companies/depot.ts`.
+   * endroit. **Les deux se comportent de la même façon** (symétrie arbitrée le
+   * 2026-09-05) : quand la fiche en conflit est ARCHIVÉE — elle conserve son SIREN
+   * comme sa référence console, invariant 7 —, le message le dit et oriente vers sa
+   * RESTAURATION au lieu du rapprochement ; et `details[0].code ∈ { fiche_active,
+   * fiche_archivee }` le porte pour la machine. Statut et `error.code` sont garantis ;
+   * `details` est au mieux (absent si la fiche a disparu entre la violation et la
+   * relecture). Voir `companies/depot.ts` et `ERROR_CODES.COMPANY_DUPLICATE`.
    */
   instance.post(
     '/companies',

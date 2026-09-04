@@ -227,57 +227,54 @@ export async function lireEntreprisePourEcriture(
 }
 
 /**
- * L'identifiant de la fiche qui porte DÉJÀ ce SIREN. Sert UNIQUEMENT à enrichir le
- * message d'un `COMPANY_DUPLICATE` déjà décidé par la contrainte — jamais à décider
- * du conflit lui-même (voir `insererEntreprise`).
- *
- * ⚠ NE FILTRE PAS `deleted_at` : l'index unique partiel du fichier 04 ne l'exclut
- * pas non plus. Une fiche supprimée continue donc de retenir son SIREN, et cette
- * lecture doit pouvoir la nommer — sinon le conflit serait rapporté sans coupable.
- * Conséquence à connaître, remontée au rapport du lot : tant qu'aucune route
- * n'écrit `deleted_at`, le cas est inatteignable ; le jour où une suppression
- * existera, ce 409 désignera une fiche que la liste ne montre plus.
- */
-export async function lireIdEntrepriseParSiren(siren: string): Promise<string | null> {
-  const lignes = await db
-    .select({ id: companies.id })
-    .from(companies)
-    .where(eq(companies.siren, siren))
-    .limit(1);
-
-  return lignes[0]?.id ?? null;
-}
-
-/**
- * La fiche qui porte DÉJÀ cette référence console, et SON ÉTAT.
+ * La fiche qui porte DÉJÀ une valeur unique (SIREN ou référence console), et SON
+ * ÉTAT. Sert UNIQUEMENT à enrichir le message d'un 409 déjà décidé par la contrainte
+ * — jamais à décider du conflit lui-même (voir `insererEntreprise`).
  *
  * `archivee` n'est pas un ornement : il change ce que le 409 conseille. Une fiche
  * VIVANTE en conflit se rapproche ; une fiche ARCHIVÉE se RESTAURE — et sans le dire,
- * le refus enverrait l'utilisateur créer un doublon sous une autre référence, ce qui
- * est exactement le désordre que `uq_companies_external_ref` existe pour empêcher.
- * (Tranché le 2026-09-04 ; voir `traduireEchecDeContrainte`.)
+ * le refus enverrait l'utilisateur créer un doublon sous une autre valeur, ce qui
+ * est exactement le désordre que les deux index uniques existent pour empêcher.
+ * (Tranché le 2026-09-04 pour `external_ref` ; étendu au SIREN le 2026-09-05, quand
+ * A16 a mesuré que le 409 du SIREN envoyait « rapprocher » une fiche que `GET /:id`
+ * rend en 404. Deux colonnes uniques de la même table, UN SEUL comportement.)
  *
- * ⚠ NE FILTRE PAS `deleted_at`, pour la même raison que la lecture par SIREN :
- * l'index unique partiel ne l'exclut pas non plus. Filtrer ici rendrait `null` sur le
- * conflit le PLUS déroutant des deux — celui dont la fiche coupable n'apparaît dans
- * aucune liste.
+ * ⚠ NE FILTRE PAS `deleted_at` : les deux index uniques partiels du fichier 04 ne
+ * l'excluent pas non plus. Une fiche archivée continue donc de retenir son SIREN et
+ * sa référence console (invariant 7 : une archive garde ses liens), et cette lecture
+ * doit pouvoir la nommer — sinon le conflit serait rapporté sans coupable, et sur le
+ * cas le PLUS déroutant des deux, celui dont la fiche n'apparaît dans aucune liste.
  */
-export interface FicheParRefExterne {
+export interface FicheEnConflit {
   readonly id: string;
   readonly archivee: boolean;
 }
 
-export async function lireFicheParRefExterne(
-  externalRef: string,
-): Promise<FicheParRefExterne | null> {
+/** Les colonnes uniques de `companies` — celles que `traduireEchecDeContrainte` traduit. */
+type ColonneUnique = 'siren' | 'externalRef';
+
+async function lireFicheEnConflit(
+  colonne: ColonneUnique,
+  valeur: string,
+): Promise<FicheEnConflit | null> {
   const lignes = await db
     .select({ id: companies.id, deletedAt: companies.deletedAt })
     .from(companies)
-    .where(eq(companies.externalRef, externalRef))
+    .where(eq(companies[colonne], valeur))
     .limit(1);
 
   const ligne = lignes[0];
   return ligne === undefined ? null : { id: ligne.id, archivee: ligne.deletedAt !== null };
+}
+
+/** La fiche qui porte DÉJÀ ce SIREN, et son état. Voir `lireFicheEnConflit`. */
+export function lireFicheParSiren(siren: string): Promise<FicheEnConflit | null> {
+  return lireFicheEnConflit('siren', siren);
+}
+
+/** La fiche qui porte DÉJÀ cette référence console, et son état. Voir `lireFicheEnConflit`. */
+export function lireFicheParRefExterne(externalRef: string): Promise<FicheEnConflit | null> {
+  return lireFicheEnConflit('externalRef', externalRef);
 }
 
 /** Un nom de fiche, réduit à ce que la comparaison de doublons a besoin de voir. */
@@ -484,6 +481,21 @@ interface ValeursUniquesEcrites {
  * une lecture qui échouerait (course, fiche supprimée entre-temps) dégrade le
  * message, jamais la décision.
  *
+ * ── LE CONTRAT DU 409 D'UNICITÉ, ET SON CHEMIN DÉGRADÉ ──────────────────────
+ * Sur les deux 409 d'unicité de `companies` (`COMPANY_DUPLICATE`,
+ * `COMPANY_EXTERNAL_REF_DUPLICATE`), ce qui est GARANTI et ce qui est AU MIEUX :
+ *   · **garantis** : le statut 409 et `error.code` — décidés par la contrainte, sans
+ *     aucune lecture ;
+ *   · **au mieux** : `details[0]`, lu après coup. Quand il est présent, il porte
+ *     TOUJOURS `path` (la colonne fautive), `code ∈ { fiche_active, fiche_archivee }`
+ *     (l'état de la fiche en conflit, pour une machine) et `message` (son
+ *     identifiant, pour un humain). Quand la fiche a disparu entre la violation et
+ *     la relecture, le 409 sort **sans `details`** — jamais avec un `details` partiel,
+ *     jamais avec un état présumé.
+ * Un front branche donc sur `error.code`, puis sur `details[0]?.code` s'il existe —
+ * et traite son absence comme « conflit constaté, fiche non nommée », pas comme une
+ * anomalie. Le chemin dégradé est un contrat tenu, pas un accident toléré.
+ *
  * ⚠ **UNE SEULE CONTRAINTE MORD À LA FOIS.** PostgreSQL abandonne l'instruction à la
  * PREMIÈRE violation : un `POST` qui présente à la fois un SIREN pris et une référence
  * console prise ne rend qu'UN des deux 409, celui que la base a rencontré en premier
@@ -491,6 +503,34 @@ interface ValeursUniquesEcrites {
  * apparaître l'autre. Rapporter les deux exigerait de lire avant d'écrire — ce que le
  * paragraphe précédent refuse, et pour une raison plus forte que la commodité.
  */
+/**
+ * Le `details` d'un 409 d'unicité — UNE SEULE fabrique pour les deux codes, pour que
+ * le vocabulaire de `code` (`fiche_active` | `fiche_archivee`) et la forme du
+ * `message` ne puissent pas diverger d'une colonne à l'autre. C'est la divergence
+ * que A16 a mesurée le 2026-09-05 : un `code` présent sur un 409 et absent sur
+ * l'autre, pour la même table.
+ *
+ * `code` est pour une MACHINE (voir `errorDetailSchema`) : il porte l'état de la
+ * fiche fautive pour que la console propose « restaurer » ou « rapprocher » sans
+ * analyser la phrase française. `undefined` quand la fiche n'a pas pu être relue :
+ * pas de `details` du tout, jamais un `details` sans `code`.
+ */
+function detailDeConflit(
+  colonne: ColonneUnique,
+  existante: FicheEnConflit | null,
+): AppError['details'] {
+  if (existante === null) return undefined;
+  return [
+    {
+      path: colonne,
+      code: existante.archivee ? 'fiche_archivee' : 'fiche_active',
+      message: existante.archivee
+        ? `Fiche archivée existante : ${existante.id}`
+        : `Fiche existante : ${existante.id}`,
+    },
+  ];
+}
+
 async function traduireEchecDeContrainte(
   erreur: unknown,
   valeurs: ValeursUniquesEcrites,
@@ -498,31 +538,33 @@ async function traduireEchecDeContrainte(
   const { siren, externalRef } = valeurs;
 
   if (violeLaContrainte(erreur, VIOLATION_UNICITE, CONTRAINTE_SIREN_UNIQUE)) {
-    // L'identifiant de la fiche fautive rend le conflit ACTIONNABLE : sans lui, la
-    // console ne peut qu'annoncer un doublon, jamais y conduire. Il est lu APRÈS
-    // que la contrainte a décidé — s'il manque (course, SIREN effacé entre-temps),
-    // le message est plus pauvre, la décision reste la même.
-    const existante = siren === null ? null : await lireIdEntrepriseParSiren(siren);
-    throw new AppError(
-      'COMPANY_DUPLICATE',
-      'Une autre entreprise porte déjà ce SIREN. Rapprochez les deux fiches plutôt ' +
-        "que d'en créer une seconde.",
-      existante === null
-        ? undefined
-        : [{ path: 'siren', message: `Fiche existante : ${existante}` }],
-    );
-  }
-  if (violeLaContrainte(erreur, VIOLATION_UNICITE, CONTRAINTE_REF_EXTERNE_UNIQUE)) {
-    // Même geste que pour le SIREN — la fiche fautive est lue APRÈS que la contrainte
-    // a décidé —, mais on lit AUSSI son état : une fiche archivée retient sa référence
-    // console (l'index n'exclut pas `deleted_at`, et c'est voulu, invariant 7), et
-    // c'est le seul cas où la bonne suite n'est pas « rapprocher » mais « restaurer ».
-    // Un 409 muet là-dessus enverrait créer un doublon sous une autre référence.
-    const existante = externalRef === null ? null : await lireFicheParRefExterne(externalRef);
+    // La fiche fautive rend le conflit ACTIONNABLE : sans elle, la console ne peut
+    // qu'annoncer un doublon, jamais y conduire. Elle est lue APRÈS que la contrainte
+    // a décidé — et avec son ÉTAT : une fiche archivée retient son SIREN (l'index
+    // n'exclut pas `deleted_at`, invariant 7), et c'est le seul cas où la bonne suite
+    // n'est pas « rapprocher » mais « restaurer ». Un 409 muet là-dessus enverrait
+    // rapprocher une fiche que `GET /:id` rend en 404 — mesuré par A16 le 2026-09-05.
+    const existante = siren === null ? null : await lireFicheParSiren(siren);
 
     // `existante?.archivee` vaut `undefined` quand la fiche n'a pas pu être relue
     // (course : elle a disparu entre la violation et cette lecture). Le message
     // générique s'applique alors — on ne présume pas d'un état qu'on n'a pas vu.
+    const message =
+      existante?.archivee === true
+        ? 'Ce SIREN est retenu par une fiche ARCHIVÉE : une fiche archivée conserve ' +
+          'son SIREN, qui désigne une entreprise et non une ligne vivante. Restaurez ' +
+          "cette fiche plutôt que d'en créer une autre."
+        : 'Une autre entreprise porte déjà ce SIREN. Rapprochez les deux fiches plutôt ' +
+          "que d'en créer une seconde.";
+
+    throw new AppError('COMPANY_DUPLICATE', message, detailDeConflit('siren', existante));
+  }
+  if (violeLaContrainte(erreur, VIOLATION_UNICITE, CONTRAINTE_REF_EXTERNE_UNIQUE)) {
+    // Même geste, même contrat que pour le SIREN : la fiche fautive et son état sont
+    // lus APRÈS que la contrainte a décidé ; archivée, elle se RESTAURE, sinon le
+    // 409 enverrait créer un doublon sous une autre référence.
+    const existante = externalRef === null ? null : await lireFicheParRefExterne(externalRef);
+
     const message =
       existante?.archivee === true
         ? 'Cette référence console est retenue par une fiche ARCHIVÉE : une fiche ' +
@@ -535,20 +577,7 @@ async function traduireEchecDeContrainte(
     throw new AppError(
       'COMPANY_EXTERNAL_REF_DUPLICATE',
       message,
-      existante === null
-        ? undefined
-        : [
-            {
-              path: 'externalRef',
-              // `code` est pour une MACHINE (voir `errorDetailSchema`) : il porte
-              // l'état de la fiche fautive pour que la console propose « restaurer »
-              // ou « rapprocher » sans analyser la phrase française.
-              code: existante.archivee ? 'fiche_archivee' : 'fiche_active',
-              message: existante.archivee
-                ? `Fiche archivée existante : ${existante.id}`
-                : `Fiche existante : ${existante.id}`,
-            },
-          ],
+      detailDeConflit('externalRef', existante),
     );
   }
   if (violeLaContrainte(erreur, VIOLATION_CLE_ETRANGERE, CONTRAINTE_SECTEUR)) {
