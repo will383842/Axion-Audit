@@ -3017,3 +3017,18 @@ couverture export 98,91/94,87/100 et 100/100/100 · `check:decisions` 212 au for
 
 Quatre doutes de spec tracés dans `DECISIONS.md`, aucun deviné. Deux fichiers partagés au lieu
 d'un : `app/vues.ts` (prévu) et `App.tsx` (rendu partagé par L5b avant moi) — remonté.
+
+---
+
+## 2026-09-05 — [lot L5 / incrément L5c] — étape 3/7 close — main rendue au pilote
+
+Dernier commit vert : (celui-ci) · Branche : lot/l5c · Poussé : oui
+Tâche en cours : aucune. Les trois points de l'arbitrage A01 du 2026-09-05 sont appliqués.
+Prochaine action : **A27 entre dans ce worktree pour les tests d'écran** — A23 en est sorti.
+Tests rouges connus : 1, hérité (`app/EcranAccueil.test.tsx`, défaut L5a/L5b). Lint : 2, hérités.
+
+Appliqué : vue initiale = RÈGLE (`ecrans/journee/vue-initiale.ts`, 7 tests, deux cas + reprise
+instantanée préservée) · `App.tsx` déclaré second fichier partagé dans `LOT_L5.md` §1 ·
+les quatre arbitrages du jour ratifiés par une entrée nouvelle (append-only respecté).
+
+Mesuré : unit **1265/1265** · interface 590/591 · typecheck 0 · format propre · gardes verts.
