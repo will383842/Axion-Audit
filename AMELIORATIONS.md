@@ -1611,6 +1611,169 @@ clause du contrat 11 §3 non encore tenue. À planifier par A30 au brief de L7.
 
 ---
 
+### FICHE A-013 — `staging` sert le même conteneur depuis 21 h : Coolify échoue à lire le compose, en 9 secondes, et le déploiement n'a jamais lieu
+
+**Constat (mesuré le 2026-09-03 par accès direct au serveur, après relance délibérée du job en
+échec).** `main` est rouge depuis le 2026-09-02 14h40 UTC sur `8 · deploy-staging`. J'ai relancé le
+job sans changer une ligne : **il a échoué de la même façon**, ce qui établit un défaut
+**systématique** et non une panne passagère — le précédent Docker Hub, où un rejeu suffisait, ne
+s'applique pas.
+
+Le fait qui tranche, deux déploiements distincts à treize heures d'écart :
+
+| Déclenchement    | `deployment_uuid`          | Conteneur réellement en service       |
+| ---------------- | -------------------------- | ------------------------------------- |
+| 2026-09-02 14h48 | `ji178zfg0eeuywnsmqm0u543` | `/artifacts/tvgaihhwrs0g8kg9mwcmnnwv` |
+| 2026-09-03 03h46 | `7vafdkixhk0hit2wgig8w1es` | `/artifacts/tvgaihhwrs0g8kg9mwcmnnwv` |
+
+`docker inspect` sur le serveur : `api-wrunr6mwq2oxqq392i4myzjn-073253734194`, **Up 21 hours**, créé
+le 2026-09-02 07h34 UTC. **Le conteneur en service est celui du dernier déploiement réussi et n'a
+jamais été remplacé.**
+
+**La cause, lue dans la base Coolify** (`application_deployment_queues`) — le déploiement dure
+**9 secondes** (03:46:40 → 03:46:49) et se termine en `failed` :
+
+```
+Deployment failed: Failed to read Git source. Please verify repository access and try again.
+Error type: RuntimeException — /var/www/html/app/Models/Application.php:2119
+#0 ApplicationDeploymentJob.php(681): App\Models\Application->loadComposeFile()
+#1 ApplicationDeploymentJob.php(507): ->deploy_docker_compose_buildpack()
+```
+
+Le clone, lui, **réussit** : le journal montre `git ls-remote` rendant `8c5f9ff…`, puis
+`Cloning into '/artifacts/7vafdkixhk0hit2wgig8w1es'`. C'est la **lecture du fichier compose** qui
+échoue ensuite, pas l'accès au dépôt.
+
+**Ce que ce n'est PAS — écarté par mesure, pour que personne ne le recherche :**
+
+- **Pas l'espace disque** : `df -h /` → 29 % utilisés, 103 G libres ; inodes à 5 %.
+- **Pas un fichier absent** : Coolify attend `/infra/docker-compose.coolify.yml`
+  (`base_directory` = `/`, `build_pack` = `dockercompose`) ; `git ls-tree 8c5f9ff infra/` le trouve.
+- **Pas l'accès au dépôt** : le `git ls-remote` anonyme aboutit dans le journal même.
+- **Pas le commit `8c5f9ff` lui-même** : il ne touche **aucun** fichier compose
+  (`git show 8c5f9ff -- infra/docker-compose.coolify.yml` est vide) — il ne modifie que des
+  workflows et des scripts d'infra. La corrélation avec ce sha est celle de la tête de `main`, pas
+  celle d'une cause.
+
+**Dernier succès / premier échec**, sur la même application `wrunr6mwq2oxqq392i4myzjn` :
+
+```
+7vafdkixhk0hit2wgig8w1es | failed   | 2026-09-03 03:46 | 8c5f9ffa
+ji178zfg0eeuywnsmqm0u543 | failed   | 2026-09-02 14:48 | 8c5f9ffa
+tvgaihhwrs0g8kg9mwcmnnwv | finished | 2026-09-02 07:32 | f7a11b6a   <- le conteneur en service
+```
+
+**Valeur pour l'auditeur.** Aucune directement, et **bloquante pour tout le reste** : la DoD
+transverse exige « migrations up/down exécutées **sur staging** » et l'étape 7 du pipeline est une
+**démo sur staging**. Tant que staging sert du code périmé, **aucune porte ne peut être franchie** —
+ni P-C, ni P-D — et trois chantiers (L3, L5, L7) attendent derrière une cause qui ne leur appartient
+pas. _Un job d'infra tient trois chantiers._
+
+**Coût estimé.** Diagnostic : fait. Correction : inconnue tant que `loadComposeFile()` n'a pas été
+instrumenté — l'hypothèse la moins coûteuse à éprouver est un **redéploiement manuel depuis
+l'interface Coolify**, qui dira si le défaut est dans l'appel d'API ou dans la configuration de
+l'application. Ne PAS modifier `deploy-staging.sh` avant : le script n'est pas en cause, il **refuse
+de sortir vert**, et c'est exactement ce pour quoi il a été écrit.
+
+**Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun.** C'est de l'exploitation.
+
+**Deux constats annexes, à ne pas perdre.**
+
+1. **RETIRÉ — l'affirmation était fausse, et sa fausseté est instructive.** Cette fiche a d'abord
+   annoncé que `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` étaient **absents**. Ils ne le sont pas :
+   `gh secret list` les donne tous les deux, posés le 2026-08-28. L'erreur vient de la lecture du
+   journal : dans une sortie GitHub Actions, les lignes préfixées `^[[36;1m` sont **le source du
+   workflow que le runner affiche**, pas ce qu'il a émis. Le `echo "::error title=Alerte
+impossible::…"` que j'ai cité est une **branche conditionnelle non prise**, imprimée parce que
+   le runner affiche la commande. Les erreurs réellement émises se reconnaissent au préfixe
+   `##[error]` **sans** code couleur : il y en a **trois** dans ce run, et aucune ne concerne
+   Telegram. _Un journal de CI contient le code qui aurait pu s'exécuter à côté de ce qui s'est
+   exécuté — les confondre fait lire des pannes qui n'ont pas eu lieu._
+2. Coolify tourne sur `ghcr.io/coollabsio/coolify:latest` — **une étiquette non épinglée**, alors
+   que le contrat 11 §1 épingle tout le reste au patch près et que Renovate est désactivé en
+   Phase 1. Le conteneur est en service depuis 5 jours, donc il n'est pas la cause de CET incident ;
+   mais une infrastructure qui peut changer sous nos pieds sans qu'aucun commit ne l'enregistre est
+   la prochaine panne qu'on ne saura pas dater.
+
+**Recommandation.** **Étage 2 — PROPOSÉE**, arbitrage Williams, sur le seul point 2 : épingler
+Coolify est une décision d'exploitation, pas une amélioration de confort. Le point 1 n'existe pas.
+
+**Post-scriptum du 2026-09-03, à lire avant d'agir sur cette fiche.** Après sa rédaction, la
+commande que Coolify exécute pour vérifier l'accès au dépôt a été rejouée **par le canal exact de
+Coolify** (`instant_remote_process` vers l'hôte, depuis le conteneur `coolify`) : elle **réussit**,
+et rend le HEAD de `main`. Le point de rupture est donc localisé à la ligne près —
+`Application::loadComposeFile()` appelle `getGitRemoteStatus()`, qui lance `git ls-remote` **sur
+l'hôte** (`exec_in_docker: false`), et c'est son échec qui lève « Failed to read Git source » ;
+le `ls-remote` visible dans le journal de déploiement, lui, tourne **dans le conteneur d'aide** —
+deux commandes homonymes, deux endroits différents, et seule la première décide. La configuration
+de l'application porte par ailleurs `updated_at = 2026-09-03 04h30`, soit **après** le second échec.
+**Conséquence : le défaut n'est peut-être plus présent.** Un déploiement relancé le dira, et c'est
+la mesure qui manque à cette fiche.
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte suivante_
+
+### FICHE A-014 — Le garde pre-push s'exécute dans certains worktrees et pas dans d'autres, et rien ne dit lequel
+
+**Constat (mesuré le 2026-09-03, d'abord sur le worktree qui porte la fiche A-013 — c'est-à-dire sur
+moi-même — puis élargi par la session de vérification, qui a FALSIFIÉ la première rédaction de cette
+fiche).** Le régime de travail impose un `pre-push` qui rejoue `pnpm verify:rapide`, et
+`ORGANISATION_AGENTS.md` §9 impose **un worktree par chantier**. Le garde tient dans les uns et pas
+dans les autres :
+
+```
+$ for w in _axverif-l3 _axl3 _axl5conception _axdiag; do ls -1 $w/.husky/_/ | wc -l; done
+  _axverif-l3       16 entrées   pre-push PRÉSENT
+  _axl3             16 entrées   pre-push PRÉSENT
+  _axl5conception    0 entrée    pre-push ABSENT
+  _axdiag            0 entrée    pre-push ABSENT     <- celui d'où part cette fiche
+```
+
+`core.hooksPath` vaut `.husky/_` et vit dans le `.git` **partagé par tous les worktrees** ; mais
+`.husky/_/` est un répertoire **de l'arbre de travail**, peuplé par `husky` au moment du
+`pnpm install`. La condition n'est donc **pas** « worktree neuf » — c'est **« worktree où
+`pnpm install` n'a pas tourné »**, et ces deux énoncés ne se recouvrent qu'au début. Là où l'install
+a tourné, le garde s'exécute pleinement ; ailleurs, `git push` ne trouve aucun hook et **passe sans
+rien vérifier, en silence**.
+
+**Cette précision n'affaiblit pas la fiche, elle l'aggrave.** Un garde uniformément absent finirait
+par se voir. Un garde qui tient dans `_axl3` et pas dans `_axdiag`, sans que rien ne le signale
+dans un cas ni dans l'autre, ne se voit jamais : deux sessions font le même geste, l'une est
+contrôlée, l'autre non, et **les deux sorties sont identiques**.
+
+**Preuve par l'incident, et elle est de moi.** Mes deux pushes de la nuit (`lot/l6-conception`,
+`infra/diagnostic-staging`) sont passés sans une ligne de sortie de hook. J'ai cru le garde vert ;
+il était **absent**. La CI l'a rattrapé au coup suivant — `1 · lint` en `FAILURE` sur la PR #28,
+pour un `.md` qui ne passait pas `prettier --check`. C'est exactement le piège déjà consigné
+(`ORGANISATION_AGENTS.md` §2, incident du 2026-08-29), sauf qu'ici **le garde censé l'attraper
+avant la CI n'a jamais tourné**.
+
+**Valeur pour l'auditeur.** Aucune directement, et forte pour le chantier : _un garde muet est pire
+qu'un garde absent — il rassure_ (§5-2). Ici c'est la version la plus traître : le garde est
+**configuré**, il est **documenté**, il est **exigé** — et selon le répertoire d'où l'on pousse, il
+s'exécute ou non. Un chantier ouvert conformément au §9 pousse sans contrôle tant que l'install n'y
+a pas tourné, et personne ne peut le voir puisque **l'absence de sortie ressemble à un succès
+silencieux**.
+
+**Coût estimé.** Faible, mais c'est une décision, pas un réflexe. Trois pistes, à arbitrer :
+(a) documenter `pnpm install` comme première commande obligatoire de tout worktree neuf (§2 du
+fichier d'organisation) — le moins cher, le plus oubliable, et il ne supprime pas le silence ;
+(b) faire échouer bruyamment un `push` quand `.husky/_/pre-push` est absent, plutôt que de le
+laisser passer — transforme un silence en refus ; (c) versionner les hooks au lieu de les générer.
+**(b) est la seule qui respecte la règle « un contrôle qui ne trouve rien ne doit jamais sortir
+vert » (`CLAUDE.md` §5.7)** — et c'est la seule qui traite le vrai défaut, qui n'est pas l'absence
+du hook mais **l'impossibilité de savoir s'il a tourné**.
+
+**Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun.** Outillage.
+
+**Recommandation.** **Étage 2 — PROPOSÉE.** Ce n'est pas du confort : c'est le garde obligatoire
+avant toute PR qui n'existe pas dans les répertoires où le projet travaille. À rapprocher de la
+réparation en cours du garde `verify`, aveugle au projet `interface` — **deux gardes obligatoires,
+deux angles morts, découverts le même jour.**
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte suivante_
+
+---
+
 ### FICHE A-015 — Les quatre fusions en attente ne butent QUE sur deux fichiers append-only
 
 > Étage 2 — **proposée, non implémentée** (09 §5.9). Ouverte le 2026-09-04 par la session pilote.
