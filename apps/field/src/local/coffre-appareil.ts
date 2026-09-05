@@ -34,7 +34,10 @@
 //      que soit sa lisibilité — et refuse aussi de « préparer » un appareil qui
 //      porte déjà des données (seconde ceinture) ;
 //   3. l'appelant route l'anomalie vers un écran d'erreur, jamais vers un écran
-//      de création (`app/contexte.tsx`).
+//      de création (`app/contexte.tsx`) ;
+//   4. AUCUNE erreur technique née d'une valeur relue du stockage n'atteint
+//      l'écran : `sousFiletDAnomalie` les enveloppe en `CoffreInexploitableError`,
+//      qui porte une cause en français ET l'action (revue A29 du 2026-09-05, R1).
 //
 // ── LE GARDE-FOU DU 05 §9.7, CÔTÉ TERRAIN ────────────────────────────────────
 // Un changement de mot de passe est un ré-enveloppement, jamais un re-chiffrement.
@@ -50,9 +53,13 @@ import { uuidv7 } from 'uuidv7';
 import { CLES_META, ecrireMeta, lireMeta, type BaseLocale } from './base.js';
 import {
   CoffreIllisibleError,
+  CoffreInexploitableError,
   creerCoffreNeuf,
   deriverKek,
+  DonneeLocaleCorrompueError,
   genererSel,
+  MotDePasseInvalideError,
+  MotDePasseTropCourtError,
   ouvrirCoffre,
   PARAMETRES_KDF_DEFAUT,
   reenvelopperDek,
@@ -205,16 +212,57 @@ export class CoffreAbsentError extends Error {
 }
 
 /**
+ * Le FILET : tout ce qui touche à des valeurs relues du stockage passe par ici.
+ *
+ * ── CE QU'IL FERME, ET POURQUOI IL NE PEUT PAS ÊTRE UNE LISTE ───────────────
+ * `verifierParametresKdf` refuse d'avance les paramètres qu'Argon2id et AES
+ * refusent — ceux que l'on connaît. Mais **tout** ce qui ouvre un coffre est relu
+ * du stockage : le sel autant que les paramètres, et l'enveloppe de la DEK avec
+ * eux. Un sel de moins de 8 octets, une base64 malformée, un refus qu'une
+ * bibliothèque ajoutera demain : chacun meurt un cran plus bas, sur un message
+ * ANGLAIS, sans action — c'est ce qu'A29 a mesuré sur `DataError: Invalid key
+ * length` (R1). Une liste de cas ne peut pas suivre ; un filet, si.
+ *
+ * ── CE QU'IL LAISSE PASSER, ET C'EST LE POINT DÉLICAT ───────────────────────
+ * Les erreurs MÉTIER, qui disent déjà la vérité en français : un mot de passe
+ * faux reste un mot de passe faux, et le déguiser en anomalie de coffre
+ * affolerait un auditeur qui s'est simplement trompé de touche. Tout le reste est
+ * enveloppé. Le filet est posé au plus près — AUTOUR DE LA SEULE CRYPTOGRAPHIE,
+ * jamais autour d'un accès Dexie : une panne de base de données n'est pas une
+ * anomalie de coffre, et le dire serait un mensonge de plus.
+ */
+async function sousFiletDAnomalie<T>(travail: () => Promise<T>): Promise<T> {
+  try {
+    return await travail();
+  } catch (erreur) {
+    if (
+      erreur instanceof AnomalieCoffreError ||
+      erreur instanceof MotDePasseInvalideError ||
+      erreur instanceof MotDePasseTropCourtError ||
+      erreur instanceof DonneeLocaleCorrompueError
+    ) {
+      throw erreur;
+    }
+    throw new CoffreInexploitableError(erreur);
+  }
+}
+
+/**
  * Déverrouillage : dérive la KEK depuis le mot de passe et ouvre le coffre.
  *
  * Aucun réseau n'est requis — c'est la condition du 05 §31-3 (« le déverrouillage
  * local continue de fonctionner » même refresh token expiré) et de l'invariant 1.
+ *
+ * Le sel, les paramètres et l'enveloppe viennent tous les trois de `meta` : le
+ * filet ci-dessus couvre les trois d'un seul geste (revue A29, R1).
  */
 export async function deverrouiller(base: BaseLocale, motDePasse: string): Promise<Coffre> {
   const auRepos = await lireCoffreAuRepos(base);
   if (auRepos === null) throw new CoffreAbsentError();
-  const kek = await deriverKek(motDePasse, depuisBase64(auRepos.sel), auRepos.parametres);
-  return ouvrirCoffre(kek, auRepos.dekEnveloppee);
+  return sousFiletDAnomalie(async () => {
+    const kek = await deriverKek(motDePasse, depuisBase64(auRepos.sel), auRepos.parametres);
+    return ouvrirCoffre(kek, auRepos.dekEnveloppee);
+  });
 }
 
 export interface EtatAvantChangement {
@@ -251,6 +299,10 @@ export async function etatAvantChangementDeMotDePasse(
  * Les données ne sont pas touchées — c'est la propriété qui rend l'opération
  * instantanée sur une mission de 5 000 réponses, et c'est aussi pourquoi elle ne
  * peut pas servir de réparation : un coffre dont la DEK est perdue reste perdu.
+ *
+ * Même filet qu'au déverrouillage, et pour la même raison : l'ANCIENNE KEK se
+ * dérive de valeurs relues de `meta`. L'écriture de `meta`, elle, reste HORS du
+ * filet — une panne de Dexie n'est pas une anomalie de coffre.
  */
 export async function changerMotDePasse(
   base: BaseLocale,
@@ -265,16 +317,21 @@ export async function changerMotDePasse(
   // l'ancien reviendrait à interdire de corriger un mot de passe trop court.
   verifierPolitiqueMotDePasse(nouveauMotDePasse);
 
-  const kekActuelle = await deriverKek(
-    ancienMotDePasse,
-    depuisBase64(auRepos.sel),
-    auRepos.parametres,
-  );
   // Sel NEUF : réutiliser l'ancien laisserait un attaquant qui aurait capté
   // l'ancienne enveloppe attaquer les deux mots de passe avec le même précalcul.
   const selNouveau = genererSel();
-  const kekNouvelle = await deriverKek(nouveauMotDePasse, selNouveau, parametres);
-  const dekEnveloppee = await reenvelopperDek(auRepos.dekEnveloppee, kekActuelle, kekNouvelle);
+  const { kekNouvelle, dekEnveloppee } = await sousFiletDAnomalie(async () => {
+    const kekActuelle = await deriverKek(
+      ancienMotDePasse,
+      depuisBase64(auRepos.sel),
+      auRepos.parametres,
+    );
+    const kekNouvelle = await deriverKek(nouveauMotDePasse, selNouveau, parametres);
+    return {
+      kekNouvelle,
+      dekEnveloppee: await reenvelopperDek(auRepos.dekEnveloppee, kekActuelle, kekNouvelle),
+    };
+  });
 
   await ecrireMeta(base, CLES_META.coffre, {
     sel: versBase64(selNouveau),

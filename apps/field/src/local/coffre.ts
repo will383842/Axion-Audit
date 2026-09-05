@@ -89,6 +89,17 @@ export const LONGUEUR_SEL_OCTETS = 16;
 const LONGUEUR_DEK_BITS = 256;
 
 /**
+ * Longueur de la KEK dérivée, en octets — et la SEULE admise (revue A29, R1).
+ *
+ * Ce n'est pas un réglage : `crypto.subtle.importKey('raw', …, 'AES-GCM')`
+ * n'accepte que 16, 24 ou 32 octets et rejette tout le reste par un `DataError:
+ * Invalid key length` ; et parmi les trois, la KEK enveloppe une DEK **AES-256**
+ * (05 §9.7), donc elle vaut 32. En admettre 16 dégraderait en silence tout le
+ * chiffrement local d'un appareil, sur la foi d'une ligne écrite dans IndexedDB.
+ */
+const LONGUEUR_KEK_OCTETS = LONGUEUR_DEK_BITS / 8;
+
+/**
  * Le TRAVAIL demandé à Argon2id, en kibioctets-passes (`m × t`).
  *
  * C'est la grandeur qui commande le temps de dérivation : la doubler double le
@@ -99,7 +110,9 @@ export function travailKdf(parametres: ParametresKdf): number {
 }
 
 /**
- * BORNES HAUTES des paramètres de dérivation — verdict A51 du 2026-09-04, F-25.
+ * BORNES des paramètres de dérivation — verdict A51 du 2026-09-04 (F-25), et
+ * revue croisée A29 du 2026-09-05 (R1), qui a mesuré ce que la première version
+ * laissait passer.
  *
  * ── POURQUOI BORNER DES PARAMÈTRES QUI SONT LES NÔTRES ──────────────────────
  * Ils ne le sont pas toujours : ils sont **stockés avec le coffre** (et c'est la
@@ -109,30 +122,66 @@ export function travailKdf(parametres: ParametresKdf): number {
  * alors demandé 4 Gio et un million de passes — l'onglet meurt, les données sont
  * intactes et l'auditeur n'y accède plus. Une écriture, sans mot de passe.
  *
- * ── D'OÙ VIENNENT CES NOMBRES : DU BUDGET, PAS DE L'INSPIRATION ─────────────
- * 11 §4 impose « dérivation de clé < 1 s sur iPad ». Le profil confirmé
- * (`PARAMETRES_KDF_DEFAUT`, 47 104 Kio-passes) a été mesuré par A51 à 139 ms sur
- * une machine de développement, sur une courbe linéaire (250 000 Kio → 498 ms ;
- * 500 000 Kio → 861 ms, déjà au budget). Le plafond de TRAVAIL est donc fixé à
- * **4 × le profil confirmé** : assez haut pour qu'un durcissement raisonnable du
- * profil (décision humaine, 11 §8-4) n'oblige pas à revenir ici, assez bas pour
- * qu'aucune valeur écrite par un tiers ne coûte plus de quelques centaines de
- * millisecondes. Les trois autres bornes ne bornent pas le temps mais une
- * RESSOURCE : allocation, voies, taille de sortie.
+ * ── CE QUE LA PREMIÈRE VERSION FERMAIT, ET CE QU'ELLE LAISSAIT OUVERT ───────
+ * Elle ne bornait que par le HAUT, et seulement le budget. A29 a mesuré QUATRE
+ * jeux de paramètres qui PASSAIENT la vérification et tuaient le déverrouillage
+ * un cran plus bas, sur un message technique anglais :
+ *   · `longueurOctets: 48` et `64` → `DataError: Invalid key length` (WebCrypto),
+ *     `64` étant la borne haute EXACTE de la version précédente ;
+ *   · `longueurOctets: 1`          → `Hash length should be at least 4 bytes.` ;
+ *   · `memoireKio: 7`              → `Memory size should be at least 8 * parallelism.`
+ * Même écriture dans IndexedDB, même conséquence, même appareil définitivement
+ * fermé : c'est F-25 dans son INTENTION — « une valeur qui vient du stockage est
+ * une entrée non fiable » —, et c'est elle qu'on ferme ici, pas sa lettre.
  *
- * Aucune borne BASSE : refuser un profil plus faible que le nôtre ne protège
- * rien (un attaquant hors ligne choisit ses propres paramètres) et rendrait
- * illisible un coffre légitime créé sous un autre profil — invariant 7.
+ * ── D'OÙ VIENNENT CES NOMBRES : DU BUDGET ET DES OUTILS, PAS DE L'INSPIRATION ─
+ * · Le PLAFOND DE TRAVAIL (`m × t`) vient du budget 11 §4 (« dérivation de clé
+ *   < 1 s sur iPad ») et de l'arbitrage `DECISIONS.md` du 2026-09-04, « [L5a]
+ *   Quel plafond pour les paramètres KDF relus du stockage (F-25) ? » :
+ *   `travailKdf(défaut) × 4`, **amarré au profil** pour qu'un durcissement humain
+ *   (11 §8-4) relève le plafond du même geste. Le profil confirmé a été mesuré à
+ *   139 ms par A51, sur une courbe linéaire (500 000 Kio-passes → 861 ms, déjà au
+ *   budget). Les trois autres plafonds ne bornent pas le temps mais une
+ *   RESSOURCE : allocation, voies, taille de sortie.
+ * · Les PLANCHERS ne sont PAS un jugement de sécurité : ce sont les refus que
+ *   `hash-wasm` et WebCrypto opposent eux-mêmes, transcrits ici pour être dits en
+ *   français AVANT d'être subis en anglais. Ils sont LUS de la bibliothèque
+ *   (`hash-wasm@4.12.0`, `lib/argon2.ts`, `validateOptions`) et non devinés :
+ *   `iterations ≥ 1`, `parallelisme ≥ 1`, `memoireKio ≥ 8 × p`, et chacun ENTIER.
+ *   Un plancher qui ne refuse que ce que la bibliothèque refuse déjà ne peut
+ *   fermer aucun coffre qui s'ouvrait la veille — invariant 7.
+ * · `longueurOctets` n'est pas une grandeur à borner : c'est une valeur UNIQUE,
+ *   `LONGUEUR_KEK_OCTETS`. Plancher et plafond sont donc ÉGAUX, et le dire par
+ *   deux bornes plutôt que par une égalité garde un message d'erreur homogène
+ *   avec les quatre autres axes (« pour un maximum de », « pour un minimum de »).
+ *
+ * Aucun autre plancher, et surtout aucun plancher de TRAVAIL : refuser un profil
+ * plus faible que le nôtre ne protège rien (un attaquant hors ligne choisit ses
+ * propres paramètres) et rendrait illisible un coffre légitime créé sous un autre
+ * profil — invariant 7, encore.
  */
 export const BORNES_KDF = {
   /** Allocation mémoire maximale acceptée, en kibioctets. */
   memoireKioMax: 4 * PARAMETRES_KDF_DEFAUT.memoireKio,
+  /**
+   * Mémoire minimale PAR VOIE, en kibioctets — `hash-wasm` : « Memory size should
+   * be at least 8 * parallelism ». Un COEFFICIENT et non une valeur : le plancher
+   * dépend de `parallelisme`, et l'écrire en dur le rendrait faux au premier `p`
+   * différent de 1.
+   */
+  memoireKioMinParVoie: 8,
   /** Nombre de passes maximal accepté. */
   iterationsMax: 8,
+  /** Passes minimales — `hash-wasm` : « Iterations should be a positive number ». */
+  iterationsMin: 1,
   /** Voies parallèles maximales. `hash-wasm` est mono-thread ; au-delà, c'est du coût pur. */
   parallelismeMax: 4,
+  /** Voies minimales — `hash-wasm` : « Parallelism should be a positive number ». */
+  parallelismeMin: 1,
   /** Longueur de clé dérivée maximale, en octets (AES-256 en demande 32). */
-  longueurOctetsMax: 64,
+  longueurOctetsMax: LONGUEUR_KEK_OCTETS,
+  /** …et minimale : la MÊME. Ce n'est pas une plage — voir `LONGUEUR_KEK_OCTETS`. */
+  longueurOctetsMin: LONGUEUR_KEK_OCTETS,
   /** Travail total maximal (`m × t`), en kibioctets-passes. */
   travailMax: 4 * travailKdf(PARAMETRES_KDF_DEFAUT),
 } as const;
@@ -140,38 +189,76 @@ export const BORNES_KDF = {
 /**
  * Refuse d'exécuter des paramètres hors bornes — par une erreur EXPLICITE.
  *
- * Le refus ne passe volontairement pas par un `.max()` du schéma Zod du coffre au
- * repos : Zod dirait « ce coffre est illisible » là où la vérité est « ce coffre
- * est parfaitement lisible et ses paramètres sont hors bornes ». Confondre deux
- * états distincts est exactement ce que F-22 a coûté ; on ne le réintroduit pas
- * ici pour gagner trois lignes.
+ * Le refus ne passe volontairement pas par un `.max()` ni par un `.min()` du
+ * schéma Zod du coffre au repos : Zod dirait « ce coffre est illisible » là où la
+ * vérité est « ce coffre est parfaitement lisible et ses paramètres sont hors
+ * bornes ». Confondre deux états distincts est exactement ce que F-22 a coûté ;
+ * on ne le réintroduit pas ici pour gagner trois lignes.
+ *
+ * Tous les écarts sont collectés avant de lever, jamais le premier venu : celui
+ * qui lira ce message une seule fois, sur le terrain, doit y trouver TOUT ce qui
+ * cloche.
  */
 export function verifierParametresKdf(parametres: ParametresKdf): void {
-  const depassements: string[] = [];
-  const dire = (valeur: number, maximum: number, unite: string): string =>
-    `${unite} ${String(valeur)} pour un maximum de ${String(maximum)}`;
+  const ecarts: string[] = [];
+  const trop = (valeur: number, maximum: number, axe: string): string =>
+    `${axe} ${String(valeur)} pour un maximum de ${String(maximum)}`;
+  const pasAssez = (valeur: number, minimum: number, axe: string): string =>
+    `${axe} ${String(valeur)} pour un minimum de ${String(minimum)}`;
+
+  // Argon2id refuse tout paramètre non entier (`Number.isInteger`, dans son
+  // propre `validateOptions`). Le dire ici évite qu'une valeur fractionnaire
+  // relue du stockage ne meure un cran plus bas, en anglais. `NaN` tombe dans le
+  // même filet : il n'est entier pour personne, et aucune comparaison de borne ne
+  // le retiendrait — toutes rendent `false`.
+  const AXES: readonly { readonly axe: string; readonly valeur: number }[] = [
+    { axe: 'mémoire de', valeur: parametres.memoireKio },
+    { axe: 'passes :', valeur: parametres.iterations },
+    { axe: 'voies parallèles :', valeur: parametres.parallelisme },
+    { axe: 'longueur de clé :', valeur: parametres.longueurOctets },
+  ];
+  for (const { axe, valeur } of AXES) {
+    if (!Number.isInteger(valeur)) {
+      ecarts.push(`${axe} ${String(valeur)} n’est pas un nombre entier`);
+    }
+  }
 
   if (parametres.memoireKio > BORNES_KDF.memoireKioMax) {
-    depassements.push(dire(parametres.memoireKio, BORNES_KDF.memoireKioMax, 'mémoire de'));
+    ecarts.push(trop(parametres.memoireKio, BORNES_KDF.memoireKioMax, 'mémoire de'));
+  }
+  // Le plancher de mémoire SUIT le parallélisme, comme la contrainte d'Argon2id
+  // elle-même (`m ≥ 8 × p`). Écrit en dur, il serait faux dès `p = 2`.
+  const memoireKioMin = BORNES_KDF.memoireKioMinParVoie * parametres.parallelisme;
+  if (parametres.memoireKio < memoireKioMin) {
+    ecarts.push(pasAssez(parametres.memoireKio, memoireKioMin, 'mémoire de'));
   }
   if (parametres.iterations > BORNES_KDF.iterationsMax) {
-    depassements.push(dire(parametres.iterations, BORNES_KDF.iterationsMax, 'passes :'));
+    ecarts.push(trop(parametres.iterations, BORNES_KDF.iterationsMax, 'passes :'));
+  }
+  if (parametres.iterations < BORNES_KDF.iterationsMin) {
+    ecarts.push(pasAssez(parametres.iterations, BORNES_KDF.iterationsMin, 'passes :'));
   }
   if (parametres.parallelisme > BORNES_KDF.parallelismeMax) {
-    depassements.push(
-      dire(parametres.parallelisme, BORNES_KDF.parallelismeMax, 'voies parallèles :'),
+    ecarts.push(trop(parametres.parallelisme, BORNES_KDF.parallelismeMax, 'voies parallèles :'));
+  }
+  if (parametres.parallelisme < BORNES_KDF.parallelismeMin) {
+    ecarts.push(
+      pasAssez(parametres.parallelisme, BORNES_KDF.parallelismeMin, 'voies parallèles :'),
     );
   }
   if (parametres.longueurOctets > BORNES_KDF.longueurOctetsMax) {
-    depassements.push(
-      dire(parametres.longueurOctets, BORNES_KDF.longueurOctetsMax, 'longueur de clé :'),
+    ecarts.push(trop(parametres.longueurOctets, BORNES_KDF.longueurOctetsMax, 'longueur de clé :'));
+  }
+  if (parametres.longueurOctets < BORNES_KDF.longueurOctetsMin) {
+    ecarts.push(
+      pasAssez(parametres.longueurOctets, BORNES_KDF.longueurOctetsMin, 'longueur de clé :'),
     );
   }
   if (travailKdf(parametres) > BORNES_KDF.travailMax) {
-    depassements.push(dire(travailKdf(parametres), BORNES_KDF.travailMax, 'travail total de'));
+    ecarts.push(trop(travailKdf(parametres), BORNES_KDF.travailMax, 'travail total de'));
   }
-  if (depassements.length > 0) {
-    throw new ParametresKdfHorsBornesError(depassements.join(' ; '));
+  if (ecarts.length > 0) {
+    throw new ParametresKdfHorsBornesError(ecarts.join(' ; '));
   }
 }
 
@@ -287,7 +374,40 @@ export class ParametresKdfHorsBornesError extends AnomalieCoffreError {
   override readonly action = ACTION_ANOMALIE_COFFRE;
   constructor(detail: string) {
     super(
-      `Les paramètres de chiffrement enregistrés sur cet appareil dépassent ce que l’application accepte (${detail}). Aucune donnée locale n’a été supprimée ni modifiée.`,
+      `Les paramètres de chiffrement enregistrés sur cet appareil sortent de ce que l’application accepte (${detail}). Aucune donnée locale n’a été supprimée ni modifiée.`,
+    );
+  }
+}
+
+/**
+ * L'ouverture du coffre a échoué sur une panne TECHNIQUE du chiffrement — le
+ * dernier filet de F-25, posé par la revue A29 (R1).
+ *
+ * ── POURQUOI UN FILET EN PLUS DES BORNES ────────────────────────────────────
+ * `verifierParametresKdf` transcrit les refus d'Argon2id et d'AES *connus au
+ * 2026-09-05*. Mais tout ce qui sert à ouvrir un coffre est relu du stockage —
+ * le sel autant que les paramètres —, et une bibliothèque a le droit d'ajouter
+ * un refus demain sans nous prévenir. Ce que ce filet garantit ne dépend donc
+ * d'aucune liste tenue à jour : **aucune erreur technique brute n'atteint
+ * l'écran** (03 §17.6), et **l'auditeur reçoit toujours l'action** « ne créez PAS
+ * de nouvelle protection » — celle qui, sur cette famille de pannes, est la seule
+ * chose qui empêche la destruction. A29 l'a mesuré sur un coffre trafiqué :
+ * `deverrouiller(base, bonMotDePasse)` rendait `DataError: Invalid key length`,
+ * en anglais, sans action, sur un appareil définitivement fermé.
+ *
+ * ── CE QUI EST DIT, ET CE QUI NE L'EST PAS ──────────────────────────────────
+ * Le message est en français et ne cite AUCUN détail technique. L'erreur
+ * d'origine n'est pas perdue pour autant : elle voyage dans `cause` (option
+ * standard d'`Error`), atteignable pour un diagnostic, jamais affichée. C'est la
+ * même doctrine que partout ici — les CHEMINS, jamais les VALEURS.
+ */
+export class CoffreInexploitableError extends AnomalieCoffreError {
+  override readonly name = 'CoffreInexploitableError';
+  override readonly action = ACTION_ANOMALIE_COFFRE;
+  constructor(cause: unknown) {
+    super(
+      'Cet appareil porte bien un coffre, mais son ouverture a échoué : le chiffrement enregistré ici ne peut pas être exécuté par cette version de l’application. Aucune donnée locale n’a été supprimée ni modifiée.',
+      { cause },
     );
   }
 }
