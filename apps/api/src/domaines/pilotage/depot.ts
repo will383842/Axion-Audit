@@ -241,12 +241,13 @@ export interface LigneQuestionAgregee {
 /**
  * UNE RÉPONSE, telle qu'elle sort de la base — révision COURANTE (invariant 7).
  *
- * ⚠ **`person_name` ET `person_email` NE SONT PAS SÉLECTIONNÉS**, et ce n'est pas
- * un oubli : ce type ne les porte pas, donc aucune projection ne peut les rendre.
- * M5.1 demande « nom/fonction/service du répondant » ; le pack ne dit nulle part
- * sous quelle condition de consentement (§26) un nom s'affiche au siège. La
- * FONCTION et le SERVICE suffisent à lire une divergence direction ↔ terrain, et
- * la question du nom est portée en `DECISIONS.md` (2026-09-05) plutôt que devinée.
+ * ⚠ **`person_email` n'est JAMAIS sélectionné**, sous aucune condition.
+ *
+ * `person_name`, lui, l'est SOUS DEUX CONDITIONS CUMULÉES (amendement du
+ * 2026-09-05, arbitrage A01) : l'appelant a passé `?repondants=true`, ET la
+ * session porte `consent_given IS TRUE`. Dans tous les autres cas — paramètre
+ * absent, consentement refusé, consentement INCONNU (`NULL`) — le SQL rend
+ * `null`, et aucune couche au-dessus ne peut ouvrir cette porte par mégarde.
  */
 export interface LigneReponseAgregee {
   readonly answerId: string;
@@ -258,6 +259,8 @@ export interface LigneReponseAgregee {
   readonly orgUnitInScope: boolean;
   readonly fonctionRepondant: string | null;
   readonly serviceRepondant: string | null;
+  /** `null` sauf si `repondants=true` ET `consent_given IS TRUE` (§26). */
+  readonly nomRepondant: string | null;
   readonly provenance: string;
   readonly valeur: unknown;
   readonly nonCommunique: boolean;
@@ -391,6 +394,7 @@ export async function listerReponsesDesQuestions(
   missionId: string,
   missionQuestionIds: readonly string[],
   filtre: FiltreAgregation,
+  avecNoms: boolean,
 ): Promise<readonly LigneReponseAgregee[]> {
   if (missionQuestionIds.length === 0) return [];
 
@@ -405,6 +409,15 @@ export async function listerReponsesDesQuestions(
       orgUnitInScope: orgUnits.inScope,
       fonctionRepondant: interviews.personRole,
       serviceRepondant: services.labelFr,
+      // LA PORTE DU NOM, EN SQL — `IS TRUE` traite `NULL` comme faux, ce qui est
+      // la demande exacte de l'arbitrage (« le nul vaut non »). `= true` rendrait
+      // `NULL` pour un consentement inconnu : le même résultat par hasard, pas
+      // par règle — et la différence compte le jour où l'on déplace ce fragment.
+      nomRepondant: avecNoms
+        ? sql<
+            string | null
+          >`case when ${interviews.consentGiven} is true then ${interviews.personName} else null end`
+        : sql<string | null>`null::text`,
       provenance: answers.source,
       valeur: answers.value,
       nonCommunique: answers.withheld,

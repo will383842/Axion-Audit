@@ -35,9 +35,14 @@ export function espaceDeRoute(route: Route): CodeEspace | null {
     // Les deux sous-écrans de L7b restent SOUS l'espace 2 : la barre latérale
     // continue d'éclairer « Pilotage mission » pendant qu'on lit la couverture
     // ou l'agrégation d'une mission — on n'a pas changé d'espace, on a creusé.
+    // L'export (L7c) est de la même famille : produire l'archive d'une mission,
+    // c'est encore piloter CETTE mission — la barre n'a aucune raison de sauter
+    // d'espace parce qu'on descend d'un cran.
     // eslint-disable-next-line no-fallthrough -- cases groupés, aucun corps intercalé
     case 'couverture':
     case 'agregation':
+    // eslint-disable-next-line no-fallthrough -- idem
+    case 'export':
       return 'pilotage_mission';
     case 'inconnue':
       return null;

@@ -103,3 +103,10 @@ export type {
   QuestionAgregee,
   AgregationMission,
 } from '@axion/shared';
+
+// ── Export de mission au format §36.3 — L7c ─────────────────────────────────
+// Ré-exports PURS, comme au-dessus. La console ne redéfinit NI les noms de
+// fichiers du ZIP, NI ce que chacun nourrit dans le rapport §20.3 : elle affiche
+// ce que le serveur produit, depuis la même source.
+export { FICHIERS_EXPORT, DESCRIPTIONS_FICHIERS_EXPORT, VERSION_EXPORT } from '@axion/shared';
+export type { CleFichierExport, MetaExport } from '@axion/shared';

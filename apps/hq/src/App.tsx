@@ -42,6 +42,7 @@ import { EcranConnexion } from './ecrans/EcranConnexion.js';
 import { EcranPortefeuille } from './ecrans/EcranPortefeuille.js';
 import { EcranCouverture } from './ecrans/couverture/EcranCouverture.js';
 import { EcranAgregation } from './ecrans/agregation/EcranAgregation.js';
+import { EcranExport } from './ecrans/export/EcranExport.js';
 
 /** Version injectée par la CI (SHA court) — `dev` en local. Voir le Dockerfile. */
 const VERSION: string =
@@ -80,7 +81,8 @@ function FilDAriane({ route }: { route: Route }): ReactNode {
         )}
         {(route.type === 'mission' ||
           route.type === 'couverture' ||
-          route.type === 'agregation') && (
+          route.type === 'agregation' ||
+          route.type === 'export') && (
           <>
             <li>
               <a
@@ -115,6 +117,11 @@ function FilDAriane({ route }: { route: Route }): ReactNode {
                 <span aria-current="page">Agrégation</span>
               </li>
             )}
+            {route.type === 'export' && (
+              <li>
+                <span aria-current="page">Export</span>
+              </li>
+            )}
           </>
         )}
         {route.type === 'inconnue' && (
@@ -139,6 +146,8 @@ function Contenu({ route }: { route: Route }): ReactNode {
       return <EcranCouverture id={route.id} />;
     case 'agregation':
       return <EcranAgregation id={route.id} />;
+    case 'export':
+      return <EcranExport id={route.id} />;
     case 'inconnue':
       return (
         <EtatVide

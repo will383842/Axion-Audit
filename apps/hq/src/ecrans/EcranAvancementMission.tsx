@@ -152,7 +152,7 @@ function Fiche({ mission }: { mission: MissionResponse }): ReactNode {
 }
 
 /**
- * LE DRILL-DOWN (§22.3) — deux VRAIS liens, jamais des onglets.
+ * LE DRILL-DOWN (§22.3) — trois VRAIS liens, jamais des onglets.
  *
  * Chaque vue a son URL : collable dans un message, ouvrable dans un nouvel
  * onglet, et le bouton « précédent » du navigateur y remonte d'un cran. Le
@@ -162,6 +162,7 @@ function Fiche({ mission }: { mission: MissionResponse }): ReactNode {
 function VuesDePilotage({ id }: { id: string }): ReactNode {
   const couverture = { type: 'couverture', id } as const;
   const agregation = { type: 'agregation', id } as const;
+  const exportMission = { type: 'export', id } as const;
   return (
     <nav className="axn-vues-pilotage" aria-label="Vues de pilotage de la mission">
       <a href={hrefDeRoute(couverture)} onClick={auClicLienInterne(couverture)}>
@@ -176,6 +177,13 @@ function VuesDePilotage({ id }: { id: string }): ReactNode {
         <span>
           Toutes les réponses côte à côte, avec leur provenance et le statut « non communiqué »
           rendu visible.
+        </span>
+      </a>
+      <a href={hrefDeRoute(exportMission)} onClick={auClicLienInterne(exportMission)}>
+        <strong>Export de mission</strong>
+        <span>
+          L’archive avec laquelle le rapport s’écrit : les réponses, les sessions, l’arbre, les
+          constats, les cas d’usage, le registre IA. Format 03 §36.3.
         </span>
       </a>
     </nav>

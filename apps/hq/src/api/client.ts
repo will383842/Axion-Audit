@@ -89,9 +89,27 @@ export interface OptionsLecture {
   signal?: AbortSignal;
 }
 
+/** Un fichier reçu de l'API : ses octets, et le nom que le serveur lui donne. */
+export interface FichierTelecharge {
+  readonly blob: Blob;
+  readonly nomFichier: string;
+  readonly typeMime: string;
+}
+
 export interface ClientApi {
   /** `GET` typé : la réponse est validée par `schema` avant d'être rendue. */
   lire<T>(chemin: string, schema: z.ZodType<T>, options?: OptionsLecture): Promise<T>;
+  /**
+   * `GET` d'un FICHIER — la seule lecture qui ne passe par aucun schéma Zod.
+   *
+   * Ajoutée en L7c pour l'export §36.3, et à n'utiliser que pour un contenu
+   * destiné à être ENREGISTRÉ : il n'y a pas de « forme » à valider dans un ZIP,
+   * et l'encoder en base64 dans une enveloppe JSON coûterait +33 % d'octets et un
+   * décodage navigateur pour un fichier que l'on va écrire sur un disque.
+   * Les erreurs, elles, restent lues dans l'enveloppe unique du 11 §3 : un
+   * téléchargement refusé rend un `ErreurApi` comme n'importe quel appel.
+   */
+  telecharger(chemin: string, options?: OptionsLecture): Promise<FichierTelecharge>;
   /** `POST` typé : le corps est validé par `entree`, la réponse par `sortie`. */
   ecrire<E, S>(
     chemin: string,
@@ -201,8 +219,54 @@ export function creerClientApi(options: OptionsClientApi): ClientApi {
     return decoder(chemin, schema, corps);
   }
 
+  /**
+   * Le nom de fichier proposé par le serveur (`Content-Disposition`).
+   *
+   * Repli sur le nom fourni par l'appelant si l'en-tête manque : un fichier
+   * téléchargé sans nom atterrit sous un identifiant opaque dans le dossier de
+   * téléchargement, et le consultant ne le retrouve pas.
+   */
+  function nomPropose(reponse: Response, defaut: string): string {
+    const entete = reponse.headers.get('Content-Disposition') ?? '';
+    const analyse = /filename="?([^";]+)"?/.exec(entete);
+    return analyse?.[1] ?? defaut;
+  }
+
+  async function telecharger(
+    chemin: string,
+    lecture: OptionsLecture = {},
+  ): Promise<FichierTelecharge> {
+    const url = construireUrl(chemin, lecture.query);
+    let reponse: Response;
+    try {
+      reponse = await appeler(url, {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: { Accept: 'application/zip', ...enTetesAuth('GET', lireJeton()) },
+        ...(lecture.signal === undefined ? {} : { signal: lecture.signal }),
+      });
+    } catch (cause) {
+      if (cause instanceof DOMException && cause.name === 'AbortError') throw cause;
+      throw new ErreurReseau(cause);
+    }
+
+    if (!reponse.ok) {
+      const erreur = await lireErreur(reponse);
+      if (erreur.nonAuthentifie) onNonAuthentifie?.();
+      throw erreur;
+    }
+
+    const blob = await reponse.blob();
+    return {
+      blob,
+      nomFichier: nomPropose(reponse, 'export.zip'),
+      typeMime: reponse.headers.get('Content-Type') ?? 'application/zip',
+    };
+  }
+
   return {
     lire: (chemin, schema, lecture) => requeter('GET', chemin, schema, lecture),
+    telecharger,
     ecrire: (chemin, entree, corps, sortie, options) => {
       // Le corps est validé AVANT de partir : un client qui envoie ce que le
       // contrat refuse ne mérite pas un aller-retour pour l'apprendre.
