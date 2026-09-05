@@ -114,8 +114,81 @@ export const ERROR_CODES = {
    * ⚠ IL NE COUVRE PAS LA COLLISION DE NOM. Le nom n'a aucune unicité en base (04 :
    * l'index unique est PARTIEL, sur `siren` seul) ; une collision de nom rend donc
    * un **201 avec avertissement**, jamais ce code. Voir `companies.ts`.
+   *
+   * ── CE QUE LE MESSAGE DIT DE PLUS QUE LE CONFLIT (depuis le 2026-09-05) ──────
+   * `uq_companies_siren` **n'exclut PAS les fiches supprimées** : une fiche archivée
+   * (`deleted_at IS NOT NULL`) CONSERVE son SIREN (invariant 7 : une archive garde
+   * ses liens). Un 409 muet là-dessus envoyait « rapprocher » une fiche que `GET /:id`
+   * rend en 404 et qu'aucune liste ne montre — mesuré par A16 sur la livraison du
+   * 2026-09-04, qui avait réglé ce cas pour `external_ref` et l'avait laissé ouvert
+   * pour le SIREN. Arbitré par A01 le 2026-09-05 : **symétrie complète**. Quand la
+   * fiche en conflit est archivée, le message LE NOMME et oriente vers sa
+   * RESTAURATION, pas vers le rapprochement.
+   *
+   * ── LE CONTRAT DE `details` SUR LES 409 D'UNICITÉ DE `companies` ────────────
+   * Vaut pour ce code ET pour `COMPANY_EXTERNAL_REF_DUPLICATE`, à l'identique :
+   *   · **garantis** : le statut 409 et `error.code`, décidés par la contrainte ;
+   *   · **au mieux** : `details[0]`, relu APRÈS coup. Quand il est présent, il porte
+   *     TOUJOURS `path` (`siren` | `externalRef`), **`code ∈ { fiche_active,
+   *     fiche_archivee }`** — vocabulaire FERMÉ, l'état de la fiche fautive pour une
+   *     machine — et `message` (son identifiant, pour un humain). Quand la fiche a
+   *     disparu entre la violation et la relecture (course), le 409 sort **sans
+   *     `details`** : jamais un `details` partiel, jamais un état présumé.
+   * Un front branche sur `error.code`, puis sur `details[0]?.code` s'il existe, et
+   * traite son absence comme « conflit constaté, fiche non nommée » — pas comme une
+   * anomalie. Le chemin dégradé est un contrat tenu, pas un accident toléré ; c'est
+   * le principe déjà écrit dans `companies/depot.ts` (« dégrade le message, jamais la
+   * décision »), formulé ici en contrat parce qu'un front l'importe d'ici.
    */
   COMPANY_DUPLICATE: 'COMPANY_DUPLICATE',
+  /**
+   * `POST|PATCH /v1/companies` — la **RÉFÉRENCE CONSOLE** (`external_ref`) présentée
+   * est DÉJÀ portée par une autre fiche. Décidée par l'index unique partiel
+   * `uq_companies_external_ref` (migration `0015`, amendement du 04 §7.1 du
+   * 2026-09-03), jamais par une lecture préalable — comme pour le SIREN.
+   *
+   * ── D'OÙ IL VIENT ───────────────────────────────────────────────────────────
+   * Fermeture du **défaut ①** rendu aux producteurs le 2026-09-03 : `0015` a posé une
+   * SECONDE contrainte unique sur des routes L3a qui ne nommaient que
+   * `uq_companies_siren`, et une référence console en double sortait en **500
+   * INTERNAL_ERROR**. C'est exactement le jour que le commentaire de
+   * `companies/depot.ts` annonçait au futur ; il est arrivé.
+   *
+   * ── POURQUOI UN CODE À LUI, ET NON `COMPANY_DUPLICATE` ÉTENDU ───────────────
+   * Décision du pilote du 2026-09-04, sur délégation de Williams. Étendre le code du
+   * SIREN aurait été la symétrie paresseuse : son message parle du SIREN, et
+   * `depot.ts` écrit lui-même qu'« un message d'erreur faux envoie chercher au
+   * mauvais endroit, ce qui coûte plus cher qu'un message absent ». Les deux conflits
+   * n'ont d'ailleurs PAS la même réparation — un SIREN en double se rapproche entre
+   * deux fiches d'audit, une référence console en double se règle du côté de la
+   * LIAISON M8.1 avec la console axion-ia.com. Distinguer les deux en analysant une
+   * phrase française est précisément ce que le 11 §3 refuse. C'est aussi, mot pour
+   * mot, le « second conflit sur ces routes » que `COMPANY_DUPLICATE` annonçait
+   * ci-dessus pour justifier son propre périmètre réduit.
+   *
+   * ── CE QUE LE MESSAGE DIT DE PLUS QUE LE CONFLIT ────────────────────────────
+   * `uq_companies_external_ref` **n'exclut PAS les fiches supprimées** : une fiche
+   * archivée (`deleted_at IS NOT NULL`) CONSERVE sa référence console. C'est voulu, et
+   * tranché le 2026-09-04 (invariant 7 : rien n'est silencieusement écrasé ; une
+   * référence console désigne une ENTREPRISE, pas une ligne vivante). Mais un 409 muet
+   * sur ce point enverrait l'utilisateur créer un doublon sous une AUTRE référence :
+   * quand la fiche en conflit est archivée, le message LE NOMME et oriente vers sa
+   * RESTAURATION plutôt que vers une création. C'est la différence entre un conflit
+   * constaté et un conflit actionnable.
+   *
+   * `details[0].code` porte l'état de la fiche fautive — `fiche_active` |
+   * `fiche_archivee` — pour que le front branche sans lire le français, selon le
+   * partage message/code documenté sur `errorDetailSchema`. **Le même contrat vaut
+   * pour `COMPANY_DUPLICATE` depuis le 2026-09-05** — même vocabulaire, même chemin
+   * dégradé (un 409 sans `details` si la fiche a disparu entre la violation et la
+   * relecture) : il est écrit UNE fois, sur ce code-là, et s'applique aux deux.
+   *
+   * ── POURQUOI 409 ────────────────────────────────────────────────────────────
+   * Requête bien formée (400 serait faux), appelant habilité (403 serait faux) : c'est
+   * l'ÉTAT de la ressource qui s'y oppose, définition de 409. Le statut classe la
+   * famille, le code nomme la cause.
+   */
+  COMPANY_EXTERNAL_REF_DUPLICATE: 'COMPANY_EXTERNAL_REF_DUPLICATE',
   /**
    * `POST /v1/missions/:id/generate-questionnaire` — le questionnaire de cette
    * mission est **DÉJÀ FIGÉ**. Arbitré par `DECISIONS.md` du 2026-08-29, précisé le
@@ -310,6 +383,7 @@ export const HTTP_STATUS_BY_ERROR_CODE: Record<ErrorCode, number> = {
   ILLEGAL_STATE_TRANSITION: 409,
   UNSYNCED_DATA_AT_RISK: 409,
   COMPANY_DUPLICATE: 409,
+  COMPANY_EXTERNAL_REF_DUPLICATE: 409,
   QUESTIONNAIRE_ALREADY_FROZEN: 409,
   IMPORT_REJECTED: 422,
   PAYLOAD_TOO_LARGE: 413,
