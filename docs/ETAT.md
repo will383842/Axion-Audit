@@ -3429,3 +3429,34 @@ escaladé à A20 par entrée `DECISIONS.md` — trois obstacles hors périmètre
 Prochaine action : faire arbitrer par A20 le lot propriétaire de la chaîne photo, et demander à A29
 la revue croisée du diff des trois refusions.
 Tests rouges connus : aucun en CI. Local : l'artefact Vitest ci-dessus, tracé et non masqué.
+
+## 2026-09-05 08h45 — [lot L7 / incrément L7b] — étape pipeline 5/7 (acceptation A36 close)
+
+Dernier commit : `a88e107` · Branche : `lot/l7b` · Poussé : oui · **PR #47**.
+Suites : unit + interface **717/717**, e2e **52/52**, integration verte en CI. **Zéro rouge.**
+
+Les cinq constats sont fermés par A32 (#49) : B1, B2 (0 octet NUL dans
+`couverture.ts`, vérifié), D1, D2, D3. Mes six tests axe ont verdi **sans qu'une
+ligne du fichier de test change** — c'est ce qu'on attend d'un test d'acceptation.
+
+Ma garde d'anti-vacuité, elle, était fausse : elle exigeait `violations > 0` sur
+la page **réelle** avant d'appliquer sa bascule, donc elle empruntait sa condition
+d'existence aux défauts qu'elle prouvait et ne pouvait pas survivre à leur
+guérison. Corrigée (`f4e865c`) : elle **fabrique** désormais les trois défauts,
+vérifie que l'instrument les voit, les retire, et compare à l'**empreinte relevée
+au départ** — jamais à « zéro ». Trois bascules sur le test lui-même le prouvent.
+
+**DEUX POINTS À REMONTER, ce sont des faits, pas des griefs :**
+
+1. **Une autre session a travaillé dans `_axl7` pendant que j'y étais** (annoncé
+   comme libre). Son `Merge … into lot/l7b` de 08h20 (`a88e107`) a **emporté mon
+   édition non commitée** de `EcranCouverture.test.tsx` : le contenu est intact et
+   vert, mais il est entré sous un message qui ne le mentionne pas. Rien n'est
+   perdu, la traçabilité l'est. Le raisonnement, lui, vit dans le commentaire du
+   test — c'est ce qui sauve la mise.
+2. **Le budget de temps de « trois pages de 50 » était à 103 %** (10 304 ms contre
+   10 000 ms). Porté à 30 s, **harnais seulement, aucune assertion touchée**. Sous
+   charge, trois autres cas d'interface ont aussi dépassé leur budget puis sont
+   repassés verts au calme : à surveiller si la contention persiste.
+
+Prochaine action : suivre la CI de la PR #47, seul verrou restant de L7b.
