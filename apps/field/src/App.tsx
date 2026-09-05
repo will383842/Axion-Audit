@@ -23,6 +23,17 @@ import { useTerrain } from './app/contexte.js';
 import { VUES } from './app/vues.js';
 import { EcranEntretien } from './ecrans/entretien/EcranEntretien.js';
 import { EcranNouvelEntretien } from './ecrans/entretien/EcranNouvelEntretien.js';
+import { EcranAgenda } from './ecrans/journee/EcranAgenda.js';
+import { EcranAujourdhui } from './ecrans/journee/EcranAujourdhui.js';
+import { EcranFinDeJournee } from './ecrans/journee/EcranFinDeJournee.js';
+import { EcranFinDeSession } from './ecrans/journee/EcranFinDeSession.js';
+import { EcranPilote } from './ecrans/journee/EcranPilote.js';
+import { EcranRestauration } from './ecrans/journee/EcranRestauration.js';
+import {
+  ComplementAccueil,
+  IndicateursCoquille,
+  useVueInitiale,
+} from './ecrans/journee/coquille-l5c.js';
 
 function ContenuCourant(): ReactNode {
   const { vue } = useTerrain();
@@ -32,17 +43,41 @@ function ContenuCourant(): ReactNode {
     case 'stockage':
       return <EcranStockage />;
     case 'accueil':
-      return <EcranAccueil />;
+      // `AccesRestauration` est COMPOSÉ ici, sous l'écran de L5a, et non ajouté
+      // dans `EcranAccueil.tsx` : ce fichier appartient à L5a et un correctif de
+      // sécurité y atterrit (A24). La coquille est le fichier partagé déclaré
+      // (LOT_L5.md §1, amendement 2026-09-05) ; c'est le seul endroit où L5c
+      // peut poser une porte d'entrée sans écrire chez un autre incrément.
+      return (
+        <>
+          <EcranAccueil />
+          <ComplementAccueil />
+        </>
+      );
     // ── L5b (A22) ──
     case 'nouvelEntretien':
       return <EcranNouvelEntretien />;
     case 'entretien':
       return <EcranEntretien />;
+    // ── L5c (A23) ──
+    case 'aujourdhui':
+      return <EcranAujourdhui />;
+    case 'agenda':
+      return <EcranAgenda />;
+    case 'pilote':
+      return <EcranPilote />;
+    case 'finDeJournee':
+      return <EcranFinDeJournee />;
+    case 'restauration':
+      return <EcranRestauration />;
+    case 'finDeSession':
+      return <EcranFinDeSession />;
   }
 }
 
 export function App(): ReactNode {
   const { phase, panne, vue, verrou, fermer } = useTerrain();
+  useVueInitiale();
 
   if (phase === 'chargement') {
     return (
@@ -84,6 +119,11 @@ export function App(): ReactNode {
     <div className="axn-coquille">
       <header className="axn-coquille__entete">
         <h1 className="axn-coquille__titre">{VUES[vue].titre}</h1>
+        {/* Décision A01 (2026-09-05) : l'état de synchronisation est visible sur
+            TOUS les écrans. « Hors ligne = nominal » veut dire pas une erreur,
+            pas invisible. Posée dans la coquille — le fichier partagé — plutôt
+            que répétée dans chaque écran. */}
+        <IndicateursCoquille />
         <Bouton variante="discret" onClick={fermer}>
           Verrouiller
         </Bouton>

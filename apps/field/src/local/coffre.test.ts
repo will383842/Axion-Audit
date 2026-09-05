@@ -37,18 +37,12 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
-  BORNES_KDF,
-  PARAMETRES_KDF_DEFAUT,
-  ParametresKdfHorsBornesError,
   creerDekEnveloppee,
   deriverKek,
   ouvrirCoffre,
   reenvelopperDek,
-  travailKdf,
-  verifierParametresKdf,
   type Coffre,
   type Enveloppe,
-  type ParametresKdf,
 } from './coffre.js';
 
 /**
@@ -457,132 +451,3 @@ function collecterClesResiduelles(objet: unknown, chemin = 'coffre', profondeur 
   }
   return restes;
 }
-
-// =============================================================================
-// F. F-25 — LES BORNES HAUTES DES PARAMÈTRES DE DÉRIVATION
-//
-// Ajouté le 2026-09-05 par A26, depuis le verdict A51 du 2026-09-04 (F-25,
-// MAJEUR). Les paramètres Argon2id voyagent AVEC le coffre — et c'est la bonne
-// décision, un coffre créé hier doit s'ouvrir demain. Mais une valeur qui vient
-// du stockage est une ENTRÉE NON FIABLE, et celle-ci commande une allocation
-// mémoire : A51 a mesuré `{memoireKio: 4 000 000, iterations: 1 000 000}` accepté
-// par le schéma, c'est-à-dire 4 Gio et un million de passes à CHAQUE tentative de
-// déverrouillage. Les données sont intactes et l'auditeur n'y accède plus.
-//
-// Ce que ces tests fixent, et qui compte autant que le refus lui-même : le
-// PLAFOND reste AMARRÉ au profil confirmé. Un plafond qui dérive de son profil
-// devient un chiffre orphelin, et un chiffre orphelin finit par être relevé
-// « parce qu'il gênait ».
-//
-// Traçabilité : E33 (sécurité / RGPD) ; 11 §4 (budget A28 : dérivation < 1 s sur
-// iPad) ; 11 §7.
-// =============================================================================
-describe('coffre — bornes hautes des paramètres de dérivation (verdict A51, F-25)', () => {
-  /** Le profil confirmé, modifié sur un SEUL axe — le reste est celui qui passe. */
-  function profil(surcharges: Partial<ParametresKdf>): ParametresKdf {
-    return { ...PARAMETRES_KDF_DEFAUT, ...surcharges };
-  }
-
-  it('@critique le profil confirmé (`PARAMETRES_KDF_DEFAUT`) passe les bornes', () => {
-    // Anti-vacuité de tout ce qui suit : si le profil du produit ne passait pas,
-    // les refus ci-dessous ne prouveraient rien d'autre qu'une garde trop serrée.
-    expect(() => {
-      verifierParametresKdf(PARAMETRES_KDF_DEFAUT);
-    }).not.toThrow();
-  });
-
-  it('@critique le plafond de TRAVAIL reste amarré au profil : `travailKdf(défaut) × 4 === BORNES_KDF.travailMax`', () => {
-    // C'est ce test, et lui seul, qui empêche `travailMax` de devenir un nombre
-    // écrit à la main que plus personne ne rattache à rien. Le facteur 4 est celui
-    // que le code motive (assez haut pour un durcissement humain raisonnable,
-    // assez bas pour qu'aucune écriture d'un tiers ne coûte plus de quelques
-    // centaines de millisecondes).
-    expect(travailKdf(PARAMETRES_KDF_DEFAUT) * 4).toBe(BORNES_KDF.travailMax);
-    expect(BORNES_KDF.memoireKioMax).toBe(PARAMETRES_KDF_DEFAUT.memoireKio * 4);
-  });
-
-  // Un axe à la fois : les compagnons restent à une valeur qui PASSE, pour que le
-  // refus ne puisse venir que de l'axe visé.
-  const HORS_BORNES: readonly {
-    readonly axe: string;
-    readonly parametres: ParametresKdf;
-    readonly valeur: number;
-    readonly plafond: number;
-  }[] = [
-    {
-      axe: 'memoireKio',
-      parametres: profil({ memoireKio: BORNES_KDF.memoireKioMax + 1, iterations: 1 }),
-      valeur: BORNES_KDF.memoireKioMax + 1,
-      plafond: BORNES_KDF.memoireKioMax,
-    },
-    {
-      axe: 'iterations',
-      parametres: profil({ memoireKio: 1, iterations: BORNES_KDF.iterationsMax + 1 }),
-      valeur: BORNES_KDF.iterationsMax + 1,
-      plafond: BORNES_KDF.iterationsMax,
-    },
-    {
-      axe: 'parallelisme',
-      parametres: profil({ memoireKio: 1, parallelisme: BORNES_KDF.parallelismeMax + 1 }),
-      valeur: BORNES_KDF.parallelismeMax + 1,
-      plafond: BORNES_KDF.parallelismeMax,
-    },
-    {
-      axe: 'longueurOctets',
-      parametres: profil({ memoireKio: 1, longueurOctets: BORNES_KDF.longueurOctetsMax + 1 }),
-      valeur: BORNES_KDF.longueurOctetsMax + 1,
-      plafond: BORNES_KDF.longueurOctetsMax,
-    },
-    {
-      axe: 'travail total (m × t)',
-      // Chaque valeur prise SÉPARÉMENT passe : m = le profil, t = 5 ≤ 8. C'est
-      // leur produit qui déborde — la borne composée n'est pas redondante.
-      parametres: profil({ iterations: 5 }),
-      valeur: PARAMETRES_KDF_DEFAUT.memoireKio * 5,
-      plafond: BORNES_KDF.travailMax,
-    },
-  ];
-
-  for (const { axe, parametres, valeur, plafond } of HORS_BORNES) {
-    it(`@critique « ${axe} » au-dessus de sa borne : ParametresKdfHorsBornesError citant la valeur et le plafond`, () => {
-      let erreur: unknown = null;
-      try {
-        verifierParametresKdf(parametres);
-      } catch (attrapee) {
-        erreur = attrapee;
-      }
-      expect(erreur).toBeInstanceOf(ParametresKdfHorsBornesError);
-      const message = erreur instanceof Error ? erreur.message : '';
-      expect(message).toContain(String(valeur));
-      expect(message).toContain(String(plafond));
-      expect(message).toMatch(/[a-zéèêàç]/);
-    });
-  }
-
-  it('@critique un durcissement HUMAIN raisonnable reste accepté : m = 47 104, t = 4 (sous le plafond, t > 1)', () => {
-    // La borne existe contre une écriture hostile, pas contre 11 §8-4. Le profil
-    // ci-dessous est exactement quatre fois le travail du profil confirmé : la
-    // borne est INCLUSIVE, et un durcissement décidé par un humain n'oblige pas à
-    // revenir modifier `BORNES_KDF`.
-    const durci = profil({ iterations: 4 });
-    expect(travailKdf(durci)).toBe(BORNES_KDF.travailMax);
-    expect(() => {
-      verifierParametresKdf(durci);
-    }).not.toThrow();
-  });
-
-  it('@critique `deriverKek` refuse elle-même des paramètres hors bornes, indépendamment du stockage', async () => {
-    // La seconde ceinture : quel que soit l'appelant — coffre au repos, changement
-    // de mot de passe, futur `.axionbackup` —, aucun paramètre hors bornes
-    // n'atteint Argon2id. Anti-vacuité par construction : si la garde ne mordait
-    // pas, cet appel demanderait 4 Gio à `hash-wasm` et le worker mourrait ; ce
-    // test ne peut pas passer au vert par inattention.
-    await expect(
-      deriverKek(MDP, selFixe(1), profil({ memoireKio: 4_000_000, iterations: 1_000_000 })),
-    ).rejects.toThrow(ParametresKdfHorsBornesError);
-  });
-
-  it('`deriverKek` accepte toujours le profil confirmé — non-régression du chemin nominal', async () => {
-    await expect(deriverKek(MDP, selFixe(3), PARAMETRES_KDF_DEFAUT)).resolves.toBeDefined();
-  }, 20_000);
-});

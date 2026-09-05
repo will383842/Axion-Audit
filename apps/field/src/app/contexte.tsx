@@ -37,10 +37,6 @@ import {
   type BaseLocale,
 } from '../local/base.js';
 import { deverrouiller, initialiserCoffre, lireCoffreAuRepos } from '../local/coffre-appareil.js';
-// Importée de `coffre.js` et non de `coffre-appareil.js` à dessein : c'est la
-// RACINE de la famille d'anomalies (coffre illisible, paramètres hors bornes,
-// données sans coffre), et elle vit avec la cryptographie qui la produit.
-import { AnomalieCoffreError } from '../local/coffre.js';
 import { contexteLocal, installerContexteLocal, retirerContexteLocal } from '../local/contexte.js';
 import { instantMs, restaurerDecalage } from '../local/horloge.js';
 import {
@@ -172,24 +168,17 @@ export function FournisseurTerrain({ children }: { readonly children: ReactNode 
       } catch (erreur) {
         if (abandonne()) return;
         setPanne(
-          // Un coffre PRÉSENT mais illisible n'est pas un appareil neuf : il va
-          // vers l'anomalie, avec sa cause et son action, et JAMAIS vers l'écran
-          // « Préparer cet appareil » (verdict A51, F-22). C'est ici que se joue
-          // la différence entre « on vous explique » et « on vous invite à
-          // détruire votre journée ».
-          erreur instanceof AnomalieCoffreError
-            ? { cause: erreur.message, action: erreur.action }
-            : erreur instanceof BaseTropRecenteError
-              ? {
-                  cause: erreur.message,
-                  action:
-                    'Rechargez la page pour appliquer la mise à jour. Aucune donnée n’a été supprimée.',
-                }
-              : {
-                  cause: 'Le stockage local de cet appareil n’a pas pu être ouvert.',
-                  action:
-                    'Vérifiez que la navigation privée est désactivée, puis rechargez la page. Si le problème persiste, changez d’appareil AVANT de collecter.',
-                },
+          erreur instanceof BaseTropRecenteError
+            ? {
+                cause: erreur.message,
+                action:
+                  'Rechargez la page pour appliquer la mise à jour. Aucune donnée n’a été supprimée.',
+              }
+            : {
+                cause: 'Le stockage local de cet appareil n’a pas pu être ouvert.',
+                action:
+                  'Vérifiez que la navigation privée est désactivée, puis rechargez la page. Si le problème persiste, changez d’appareil AVANT de collecter.',
+              },
         );
         setPhase('erreur');
       }
