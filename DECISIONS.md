@@ -8042,3 +8042,28 @@ Règle de précédence sans objet (aucune divergence interne) : cette entrée ne
 texte du pack, elle nomme qui a tranché.
 Décideur : **A01, sur délégation de Williams du 2026-09-04**.
 Impact spec : aucun — les quatre entrées précédentes gardent le leur, entrée par entrée.
+
+## 2026-09-05 — [L5c] Que peut-on ajouter à `App.tsx`, le second fichier partagé ?
+
+Majeur M7 de la revue croisée A29. `LOT_L5.md` §1 a déclaré `App.tsx` fichier partagé le matin
+même, sous le régime « un `case` par écran, append-only ». L5c y avait pourtant mis trois choses
+de plus : `useVueInitiale`, `<PastilleSyncCoquille />` dans l'en-tête, et la composition
+`<EcranAccueil /><AccesRestauration />`. Le régime déclaré ne couvrait donc pas le contenu.
+
+Options :
+(a) Élargir l'amendement pour autoriser ces trois natures d'ajout. Refusé : la liste des natures
+permises grossirait à chaque incrément, et un fichier partagé dont la règle s'élargit à la
+demande n'a plus de règle.
+(b) SORTIR ce qui dépasse dans un module d'incrément que la coquille se contente d'appeler, et
+maintenir la règle telle quelle.
+
+Arbitrage : **(b)**, appliqué. `ecrans/journee/coquille-l5c.tsx` publie les trois points de
+branchement (`useVueInitiale`, `IndicateursCoquille`, `ComplementAccueil`) ; `App.tsx` ne contient
+plus que des `case` et trois appels. Le code n'est pas modifié, il est déplacé. Règle générale
+posée au §1 : un incrément qui doit ajouter un comportement à la coquille PUBLIE une fonction et
+l'appelle — il n'écrit pas sa logique dans le fichier commun. Un fichier partagé qui ne contient
+que de l'aiguillage ne se dispute pas.
+Règle de précédence sans objet (aucune divergence interne) : `LOT_L5.md` est une note de
+conception, pas une section du pack ; elle se précise sans contredire aucun texte.
+Décideur : **A01, sur délégation de Williams du 2026-09-04**, sur constat A29.
+Impact spec : aucun. Amendement de `docs/conception/LOT_L5.md` §1, daté et horodaté sur place.

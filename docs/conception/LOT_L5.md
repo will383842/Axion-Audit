@@ -29,7 +29,13 @@ troisième candidat apparaît, il remonte à A20 avant d'être touché, il ne se
 **═══ AMENDEMENT DU 2026-09-05 (A01, sur délégation de Williams du 2026-09-04) ═══ Le
 « troisième candidat » est apparu, et il est ENREGISTRÉ : `apps/field/src/App.tsx` rejoint
 `vues.ts` dans la liste des fichiers partagés, sous le même régime — strictement append-only, un
-`case` par écran dans `ContenuCourant`, dans l'ordre de fusion des incréments.** Chronologie, pour
+`case` par écran dans `ContenuCourant`, dans l'ordre de fusion des incréments.** **Précisé le 2026-09-05 (majeur M7 de la revue A29) : le régime déclaré était plus
+ÉTROIT que ce que L5c y avait mis** — un crochet de vue initiale, une pastille de synchronisation,
+une composition sous `accueil`. Un fichier partagé dont la règle ne couvre pas le contenu est un
+fichier qui se disputera. **Ce qui dépassait est SORTI** dans `ecrans/journee/coquille-l5c.tsx`, et
+la règle est maintenue telle quelle : `App.tsx` ne contient que de l'AIGUILLAGE — des `case`, et
+des APPELS à un module d'incrément. Un incrément qui a besoin d'ajouter un comportement à la
+coquille publie une fonction et l'appelle ; il n'écrit pas sa logique dans le fichier commun. Chronologie, pour
 que personne ne la devine : c'est **L5b** qui l'a rendu partagé (`case 'nouvelEntretien'`,
 `case 'entretien'`) sans le déclarer ; c'est **L5c** qui a suivi le même modèle ET l'a remonté au
 lieu de le taire — la conduite que ce paragraphe demandait. Une vue ajoutée à `vues.ts` sans son
