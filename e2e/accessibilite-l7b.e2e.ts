@@ -45,10 +45,15 @@
 // effet en plus discret — la coquille est à l'écran, l'auditeur la voit, elle
 // se mesure.
 //
-// ── CES SIX TESTS SONT ROUGES AUJOURD'HUI, ET C'EST UN CONSTAT ─────────────
-// Trois défauts RÉELS, mesurés, rendus à leurs producteurs et NON corrigés ici
-// (09 §5.6 : A36 ne touche pas au code qu'il vérifie). Ils rougiront jusqu'à
-// leur correction, exactement comme le bloquant B1 de la revue A37.
+// ── CES SIX TESTS ONT ÉTÉ ROUGES, ET ILS SONT VERTS DEPUIS LE 2026-09-05 ───
+// Ils ont trouvé TROIS défauts réels, mesurés, rendus à leurs producteurs et
+// jamais corrigés ici (09 §5.6 : A36 ne touche pas au code qu'il vérifie). A32
+// les a fermés par la PR #49 ; les six tests ont verdi sans qu'une ligne de ce
+// fichier change. C'est ce qu'on attend d'un test d'acceptation : il décrit ce
+// qui est dû, il ne suit pas ce qui est fait.
+//
+// On garde ci-dessous le relevé d'origine — un défaut fermé qu'on efface est un
+// défaut qui revient, et ces trois-là disent où la console est fragile.
 //
 //   D1 — coquille de L7a, `app/coquille.css`. L'espace ACTIF de la barre
 //        latérale (`a[aria-current="page"]`) : le TERRACOTTA D'ACTION sur le fond
@@ -71,6 +76,12 @@
 //        défiler ce que la souris fait défiler. WCAG 2.1.1 — niveau **A**, pas
 //        AA — et 03 §22.1 « navigation clavier intégrale » mot pour mot. C'est
 //        le plus grave des trois.
+//
+// Ce qu'A32 a livré (#49) : la marge d'atelier sort de la GRILLE au lieu de
+// disparaître — une cellule de `<tfoot>` sans colonne rendrait le tableau
+// malformé, et la masquer en CSS « réparerait l'œil en cassant l'oreille » ;
+// `CadreTableau` porte `tabIndex`, `role="region"` et `aria-label`, motif ARIA
+// canonique, posés SANS CONDITION ; et les deux jetons de couleur passent.
 //
 // Traçabilité : E22 (console de pilotage 7 espaces) · E25 (zéro oubli : plan,
 // couverture, contrôles) · E23 (hyper intuitif) · E36 (CI exécutable).
@@ -548,69 +559,153 @@ test.describe('L7b — accessibilité de l’écran Agrégation (M5.1, §27.4)',
   });
 });
 
+/** L'empreinte d'un balayage : les règles violées et le nombre d'éléments, triés. */
+function empreinte(
+  violations: readonly { readonly id: string; readonly nodes: readonly unknown[] }[],
+): string[] {
+  return violations.map((v) => `${v.id}×${String(v.nodes.length)}`).sort();
+}
+
 test.describe('L7b — preuve que le balayage n’est pas vide', () => {
   /**
-   * ANTI-VACUITÉ, ET PREUVE PAR BASCULE — mais DANS LE NAVIGATEUR, jamais dans
-   * un fichier.
+   * ANTI-VACUITÉ, ET PREUVE PAR BASCULE — dans le navigateur, jamais dans un
+   * fichier (mandat A36, 09 §5.6 : je n'écris pas le code que je vérifie).
    *
-   * Six tests rouges ne prouvent pas encore qu'ils mesurent la bonne chose : ils
-   * prouveraient aussi bien un balayage cassé qui rougit sur tout. La bascule
-   * habituelle — modifier la production, mesurer, restaurer — est ici INTERDITE
-   * par le mandat A36 (09 §5.6 : je n'écris pas le code que je vérifie), et la
-   * restauration « à l'identique » d'un fichier de style est de toute façon une
-   * promesse qu'on tient mal.
+   * Six tests verts ne prouvent pas encore qu'ils mesurent quelque chose : un
+   * balayage cassé, une page blanche ou un `withTags` qui ne sélectionne aucune
+   * règle rendraient le même vert. Ce test-ci est là pour distinguer « rien à
+   * signaler » de « rien mesuré ».
    *
-   * Alors la bascule se fait sur la PAGE VIVANTE : on pousse les trois correctifs
-   * exacts que D1, D2 et D3 appellent — deux couleurs assombries, une zone de
-   * défilement rendue focusable — et on remesure. Si les violations tombent à
-   * zéro, alors le balayage mesurait BIEN ces trois propriétés-là, et rien
-   * d'autre ne le tenait en échec. Aucun fichier n'est touché : la retombée est
-   * la fermeture de l'onglet.
+   * ── UNE LEÇON, DATÉE PLUTÔT QU'EFFACÉE (2026-09-05) ────────────────────────
+   * La version précédente de ce test annonçait : « il est VERT aujourd'hui et
+   * doit le rester ; le jour où A31/A32 corrigent les trois défauts, il devient
+   * une redite, jamais un faux ». **C'était faux, et c'est le seul endroit où ce
+   * fichier s'est trompé.** A32 a corrigé D1, D2 et D3 (#49) ; les six tests
+   * ci-dessus ont verdi — et celui-ci est passé au ROUGE, sur sa PRÉCONDITION :
    *
-   * Ce test est VERT aujourd'hui et doit le rester. Le jour où A31/A32 corrigent
-   * les trois défauts, les six tests ci-dessus verdissent et celui-ci ne change
-   * pas : il devient une redite, jamais un faux.
+   *     Error: le balayage ne relève rien AVANT la bascule
+   *     Expected: > 0   Received: 0
+   *
+   * Il mesurait la page RÉELLE et exigeait `violations > 0` avant d'appliquer
+   * les correctifs. Autrement dit il EMPRUNTAIT sa condition d'existence aux
+   * défauts qu'il servait à prouver, et il ne pouvait pas survivre à leur
+   * guérison. La règle générale, qui vaut bien au-delà d'ici :
+   *
+   *   **une garde d'anti-vacuité qui s'appuie sur l'état du code de production
+   *   devient fausse le jour où ce code guérit. Une bascule doit FABRIQUER sa
+   *   propre condition, jamais l'emprunter.**
+   *
+   * ── CE QUE LA VERSION CORRIGÉE FAIT ────────────────────────────────────────
+   * Elle fabrique les trois défauts à chaud, mesure qu'ils apparaissent, les
+   * retire, et mesure que la page revient EXACTEMENT à son empreinte de départ.
+   *
+   * Et cette empreinte de départ n'est pas supposée vide : elle est RELEVÉE.
+   * C'est ce qui découple enfin ce test de la santé de la production — si une
+   * régression réapparaissait un jour, ce test resterait vert (l'instrument
+   * fonctionne toujours) et ce sont les six tests ci-dessus qui la porteraient.
+   * L'instrument et le produit ne se mesurent plus l'un l'autre.
    */
-  test('les trois défauts corrigés À CHAUD, le balayage rend zéro violation', async ({ page }) => {
+  test('la bascule fabrique ses propres défauts, les voit, les retire — et la page revient à son état', async ({
+    page,
+  }) => {
     await servirApi(page, { couverture: COUVERTURE, agregation: null });
     await page.goto(URL_COUVERTURE);
     await expect(page.locator('td[data-manquante="true"]').first()).toBeVisible();
 
-    // La mesure AVANT : elle doit être non vide, sinon la bascule ne prouve rien.
-    const avant = await new AxeBuilder({ page }).withTags([...NORMES]).analyze();
-    expect(
-      avant.violations.length,
-      'le balayage ne relève rien AVANT la bascule : il n’y aurait alors rien à prouver',
-    ).toBeGreaterThan(0);
+    // 1. L'ÉTAT DE DÉPART, RELEVÉ et non supposé. Aucune assertion sur son
+    //    contenu : ce test ne juge pas la page, il juge l'instrument.
+    const depart = empreinte(
+      (await new AxeBuilder({ page }).withTags([...NORMES]).analyze()).violations,
+    );
 
-    // D1 et D2 : les deux textes reçoivent LE JETON DE TEXTE PRINCIPAL à la place
-    // de celui qu'ils portent. Pas une valeur écrite ici : aucune notation de
-    // couleur n'a le droit d'exister dans ce dépôt hors des jetons (invariant 4),
-    // et le garde ne distingue pas l'exemple de l'infraction — c'est voulu, et
-    // c'est déjà ce qu'A36 avait constaté sur `lot/l7a` le 2026-09-02.
+    // 2. ON FABRIQUE LES TROIS DÉFAUTS.
     //
-    // Et c'est le correctif JUSTE, pas un contournement : la correction que
-    // A31/A32 appliqueront sera elle aussi un changement de jeton, jamais un
-    // hexadécimal. La bascule éprouve donc le geste réel.
-    await page.addStyleTag({
-      content: `
+    //    Contraste (D1, D2) : le texte reçoit la couleur d'une SURFACE CLAIRE,
+    //    donc quasiment celle de son propre fond — un rapport voisin de 1:1, que
+    //    `color-contrast` ne peut pas manquer. C'est un JETON, pas une valeur :
+    //    aucune notation de couleur n'a le droit d'exister dans ce dépôt hors
+    //    des jetons (invariant 4), et le garde ne distingue pas l'exemple de
+    //    l'infraction — il a déjà rougi sur ce fichier le 2026-09-05, à raison.
+    //
+    //    La feuille est posée AVEC UN IDENTIFIANT plutôt que par `addStyleTag`,
+    //    pour pouvoir la retirer par cet identifiant à l'étape 4 : une bascule
+    //    qui ne sait pas défaire ce qu'elle a fait n'est pas une bascule.
+    const ID_INJECTION = 'a36-bascule-contraste';
+    await page.evaluate((id: string) => {
+      const style = document.createElement('style');
+      style.id = id;
+      style.textContent = `
         .axn-console__espace[aria-current='page'],
         .axn-couverture__note,
-        .axn-couverture__planifie { color: var(--couleur-texte-principal); }
-      `,
-    });
-    // D3 : la zone de défilement devient atteignable au clavier.
-    await page.evaluate(() => {
+        .axn-couverture__planifie { color: var(--couleur-surface-carte) !important; }
+      `;
+      document.head.append(style);
+    }, ID_INJECTION);
+
+    //    Clavier (D3) : on RETIRE ce qu'A32 a posé (#49) — `tabindex`, `role` et
+    //    `aria-label` sur la zone défilante — après l'avoir mémorisé pour le
+    //    remettre à l'identique. Fabriquer le défaut, ici, c'est défaire le
+    //    correctif, le temps d'une mesure.
+    const ATTRIBUTS = ['tabindex', 'role', 'aria-label'];
+    const memoire = await page.evaluate((attributs: string[]) => {
       // `Array.from` et non un `for…of` direct : la `lib` du tsconfig racine ne
       // donne pas d'itérateur à `NodeListOf`, et un `for…of` y dégénère en `any`.
-      for (const cadre of Array.from(document.querySelectorAll('.axn-tableau-cadre'))) {
-        cadre.setAttribute('tabindex', '0');
-        cadre.setAttribute('role', 'region');
-        cadre.setAttribute('aria-label', 'Tableau défilant');
-      }
-    });
+      const cadres = Array.from(document.querySelectorAll('.axn-tableau-cadre'));
+      return cadres.map((cadre) => {
+        const garde = attributs.map((a) => cadre.getAttribute(a));
+        for (const a of attributs) cadre.removeAttribute(a);
+        return garde;
+      });
+    }, ATTRIBUTS);
 
-    const apres = await new AxeBuilder({ page }).withTags([...NORMES]).analyze();
-    expect(apres.violations, `après bascule, il reste :\n${resumer(apres.violations)}`).toEqual([]);
+    // Anti-vacuité de l'anti-vacuité : si la page ne portait AUCUNE zone
+    // défilante, le défaut D3 n'aurait pas été fabriqué et l'étape suivante
+    // pourrait passer pour de mauvaises raisons.
+    expect(
+      memoire.length,
+      'aucune `.axn-tableau-cadre` dans la page : le défaut D3 n’a pas pu être fabriqué',
+    ).toBeGreaterThan(0);
+
+    // 3. L'INSTRUMENT LES VOIT. C'est ici, et nulle part ailleurs, que se prouve
+    //    que le balayage mesure vraiment — et sur les bonnes règles.
+    const avec = await new AxeBuilder({ page }).withTags([...NORMES]).analyze();
+    const reglesVues = avec.violations.map((v) => v.id);
+    expect(
+      reglesVues,
+      `contraste fabriqué mais non détecté — le balayage est aveugle :\n${resumer(avec.violations)}`,
+    ).toContain('color-contrast');
+    expect(
+      reglesVues,
+      `zone défilante rendue inatteignable mais non détectée :\n${resumer(avec.violations)}`,
+    ).toContain('scrollable-region-focusable');
+
+    // 4. ON RETIRE L'INJECTION, à l'identique.
+    await page.evaluate((id: string) => {
+      document.getElementById(id)?.remove();
+    }, ID_INJECTION);
+    await page.evaluate(
+      ({ attributs, garde }: { attributs: string[]; garde: (string | null)[][] }) => {
+        const cadres = Array.from(document.querySelectorAll('.axn-tableau-cadre'));
+        cadres.forEach((cadre, i) => {
+          attributs.forEach((a, j) => {
+            const valeur = garde[i]?.[j];
+            if (valeur !== null && valeur !== undefined) cadre.setAttribute(a, valeur);
+          });
+        });
+      },
+      { attributs: ATTRIBUTS, garde: memoire },
+    );
+
+    // 5. LA PAGE EST REVENUE À SON ÉTAT DE DÉPART — le même, ni meilleur ni pire.
+    //    Comparer à l'empreinte relevée, et non à la liste vide, est TOUT le
+    //    correctif du 2026-09-05 : c'est ce qui rend ce test indépendant de la
+    //    santé du code de production.
+    const retour = empreinte(
+      (await new AxeBuilder({ page }).withTags([...NORMES]).analyze()).violations,
+    );
+    expect(
+      retour,
+      'après retrait, la page ne retrouve pas son empreinte de départ : la bascule a laissé une trace',
+    ).toEqual(depart);
   });
 });
