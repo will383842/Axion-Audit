@@ -7665,6 +7665,68 @@ recopier. **Précédence : invariant 7** (N1) ; sans objet pour le reste.
 Décideur : A01, sur revue A29
 Impact spec : aucun.
 
+## 2026-09-03 — [L1 / L3a] `companies.external_ref` reçoit son unicité : l'escalade du 2026-08-31 est tranchée
+
+Reprise et **clôture** de l'entrée du 2026-08-31 « `companies.external_ref` n'a aucune contrainte
+d'unicité » (A17 → A10 → Williams), restée en attente trois jours. Le rappel du fait, inchangé : la
+colonne est la clé de liaison avec la console commerciale (04 « id client console axion-ia.com »,
+03 M8.1 « référentiel client partagé »). Un doublon signifierait qu'une même entreprise de la console
+correspond à deux fiches d'audit, et que ni la liaison M8.1 ni le webhook `client.updated` du 05 §8.6
+n'ont de cible déterminée. **Le défaut ne se manifesterait qu'au lot L13, loin de sa cause.**
+
+Options (les trois soumises le 2026-08-31, reproduites sans reformulation) :
+
+1. Ajouter au fichier 04 §7.1 un index **UNIQUE partiel** `companies(external_ref) WHERE external_ref
+IS NOT NULL` — symétrique exact de celui qui existe déjà sur `siren`, et même motif.
+2. Ne rien changer : la liaison console est L13 (Phase 2), et d'ici là `external_ref` n'est écrit par
+   aucune route (aucun schéma d'entrée de L3a ne l'expose — vérifié).
+3. Traiter la question au lot L13, avec le reste du contrat d'intégration.
+
+Arbitrage : **option 1**, rendue par Williams le 2026-09-03. Ce qu'elle emporte, et qui n'est pas
+anodin : **le fichier 04 est amendé**. `CLAUDE.md` §3-2 réserve cette signature à Williams ; elle est
+donnée ici, explicitement et pour ce seul objet. Le §7.1 gagne une ligne d'index, le sceau du pack
+(`docs/.pack-integrity.json`) est refait, une migration `0015` transcrit l'amendement, et
+`apps/api/schema-manifest.json` suit — sans quoi le contrôle « diff schéma-vs-04 » de la CI rougirait,
+ce qui est précisément la raison pour laquelle ce point était une escalade et non une correction.
+La migration porte un `@DOWN` réversible : un index se retire sans perte de donnée, contrairement à
+une contrainte de colonne — l'invariant 7 n'est pas en jeu ici, et c'est dit pour qu'on n'aille pas
+chercher une garantie qui n'a pas d'objet.
+Règle de précédence : **`CLAUDE.md` §3-2** (le fichier 04 est la signature de Williams) · 03 M8.1.
+Règle de précédence du pack **sans objet** : le pack était silencieux, il ne se contredisait pas.
+
+Décideur : **Williams**, 2026-09-03. Instruit par A10 le 2026-08-31, sur constat d'A17.
+Impact spec : **amendement horodaté du fichier 04 §7.1** + resceau de `docs/.pack-integrity.json`.
+
+## 2026-09-03 — [L7a] La fiche A-006 (cookies httpOnly de la console) est ABSORBÉE
+
+Fiche d'étage 2 ouverte le 2026-08-31 sur constat d'A51, revérifiée sur `main` le 2026-09-03 :
+`@fastify/cookie` 11.1.2 est épinglé au 11 §1 et présent dans `apps/api/package.json:21`, mais
+`git grep fastifyCookie -- apps/api/src` ne rend **rien**, et `/v1/auth/login` renvoie
+`{ accessToken, refreshToken }` **dans le corps**. `CLAUDE.md` §9 et 06 §8.1 imposent pourtant à la
+console des **cookies httpOnly SameSite=Lax + en-tête anti-CSRF**. Le Bearer du terrain est
+aujourd'hui le seul chemin d'authentification qui existe.
+
+Options : ABSORBÉE (budget pris sur la marge, 2 j max en Phase 1) · PHASE 2 (le défaut) · REFUSÉE.
+
+Arbitrage : **ABSORBÉE, dans L7a**, rendue par Williams le 2026-09-03 — l'arbitrage était calé à
+P-C, il est rendu avant. Le motif retenu est celui de la fiche : **ce n'est pas une fonctionnalité
+neuve, c'est une clause du contrat 11 §3 non encore tenue**, et sans elle L7-min n'est pas
+démontrable à P-E. Coût 0,5 j. Impact schéma **aucun**, impact crypto **aucun** — le jeton est le
+même, seul son transport change ; impact API : un chemin d'authentification de plus sur des routes
+existantes. Le plafond d'étage 1 n'est pas concerné : une fiche d'étage 2 absorbée s'impute sur la
+marge, pas sur les 0,5 j de micro-améliorations.
+**Séquencement, et il n'est pas cosmétique** : le contrôle d'acceptation A02 de l'incrément L7a
+s'exécute au moment de cet arbitrage, sur `ce1a80f`. « Un contrôle d'acceptation ne se tient pas sur
+un arbre qui bouge » (matrice E1-E47, leçon de la 1ʳᵉ passe L0). L'absorption est donc **posée mais
+non appliquée** : elle entre après le verdict A02, en incrément nommé, jamais sous le contrôle en
+cours. La proposer est un devoir, l'anticiper est une faute — l'appliquer sous une passe ouverte en
+serait une autre.
+Règle de précédence : **`CLAUDE.md` §6** (canal d'amélioration, étage 2 arbitré par Williams) ·
+11 §3 pour la clause elle-même. Précédence du pack sans objet — aucune divergence interne.
+
+Décideur : **Williams**, 2026-09-03.
+Impact spec : aucun sur `/docs` — la clause existait déjà au 11 §3 ; c'est le code qui la rejoint.
+
 ## 2026-09-02 — [L5b] Rencontre tests A26 / code A22 : les tests adaptent leur ÉCHAFAUDAGE, jamais leurs assertions
 
 Écrits en parallèle sans se voir (règle de croisement 09 §5.6), les tests d'A26 supposaient un module
@@ -9568,3 +9630,58 @@ Règle de précédence : **§16-22 > §1-15** — 03 §22.1 est le texte précis
 axe-core vert.
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun.
+
+## 2026-09-05 — [L5] La chaîne PHOTO n'a de lot propriétaire nulle part : qui la livre ?
+
+A23 puis A22 l'ont mesuré indépendamment : **aucune photo n'entre dans l'application**. `grep` sur
+`type="file"`, `capture=`, `kind: 'photo'` dans `apps/field/src` et `packages/ui/src` → **zéro ligne**.
+`compresserPhoto` (R2, livrée par L5c) n'a donc **aucun appelant**, et 03 §17.4 n'est pas tenu. A22 a
+refusé de livrer, et ses trois obstacles sont hors de sa main : ① `compresserPhoto` vit sur `lot/l5c`,
+non fusionnée ; ② **aucun endroit local ne peut recevoir les octets** — pas de table binaire dans
+`local/base.ts`, et la charge est **sérialisée en JSON avant chiffrement**, ce qu'un `Blob` ne traverse
+pas : il faut une table **et** un `VERSION_SCHEMA_LOCAL` incrémenté, donc une migration de données
+terrain ; ③ l'attachement n'a **pas de statut d'envoi local**, que 05 §9.6 exige.
+
+Options :
+
+1. Livrer les métadonnées sans les octets. **Écartée, et c'est la pire des trois** : l'écran
+   promettrait une photo que rien ne conserve — la perte silencieuse que l'invariant 7 interdit.
+2. **Un incrément nommé `L5d`, propriétaire de la chaîne DE BOUT EN BOUT** : table binaire locale et
+   montée de `VERSION_SCHEMA_LOCAL` (A24) → capture depuis l'écran de session (A22) →
+   `compresserPhoto` (A23, **déjà écrite**) → statut d'envoi local (A22). **L'envoi lui-même reste
+   à L6c** (chunks §9.6), et la frontière est là, nette.
+3. Glisser la photo en Phase 2. **Écartée** : le fichier 07 met « compression photos R2 » dans la
+   ligne L5, et §27.1 compte les photos parmi les sources d'audit. Ce n'est pas un ajout, c'est du
+   périmètre noyau.
+
+Arbitrage : **option 2**. `L5d` s'ouvre **après P-C** (il touche le schéma local, donc L5a) et
+**avant L6c**. **Et le manque se DÉCLARE au contrôle A02 de P-C** plutôt que de disparaître : à cette
+date, 03 §17.4 n'est pas tenu et `photos.ts` est du code sans appelant — les deux doivent être écrits
+au dossier de porte, pas découverts à P-E. Règle de précédence : **§16-22 > §1-15** — le fichier 07,
+ligne L5, définit le lot ; 05 §9.6 fixe la frontière avec L6.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun amendement du pack ; **`VERSION_SCHEMA_LOCAL` montera** à L5d, ce qui est prévu
+par 05 §31-1 (migrations locales versionnées).
+
+## 2026-09-05 — [UI] Un écran, une alerte : convention ou choix local ?
+
+Sur `AccesEntretien`, A22 a routé l'échec de lecture vers `Message ton="avertissement"`
+(`role="status"`) et **non** vers `ZoneEtat nature="erreur"` (`role="alert"`), parce que l'écran porte
+déjà une alerte interruptive et que 03 §17.3 interdit la notification intrusive en entretien. Le choix
+est défendable et il demande une règle, sinon chaque écran tranchera dans son coin.
+
+Options :
+
+1. **Convention générale : au plus UN `role="alert"` par écran à la fois.** Il est réservé à ce qui
+   **bloque le geste en cours** ; toute autre erreur emprunte `role="status"` — et reste **visible**,
+   la dégradation portant sur l'annonce, jamais sur l'affichage.
+2. `role="alert"` sur toute erreur. **Écartée** : plusieurs alertes simultanées se masquent l'une
+   l'autre chez un lecteur d'écran — on croit renforcer le signal, on le détruit.
+3. Choix local, écran par écran. **Écartée** : c'est la porte ouverte à un écran où l'erreur
+   bloquante est en `status` et l'accessoire en `alert`.
+
+Arbitrage : **option 1**, avec une borne qui n'est pas négociable : **A28 vérifie qu'aucune erreur
+BLOQUANTE n'est passée en `status`** — la règle sert à hiérarchiser, jamais à taire. Règle de
+précédence : **§16-22 > §1-15** — 03 §17.3 (pas de notification intrusive en entretien) et §22.1.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun amendement ; convention portée par `packages/ui` et vérifiée par A28.
