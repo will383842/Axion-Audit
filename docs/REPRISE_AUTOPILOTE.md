@@ -76,19 +76,25 @@ paru apporter 291 lignes dont **zéro n'était absente** de l'autre.
 
 ---
 
-## 4. ÉTAT MESURÉ AU 2026-09-05 06h30 UTC — À VÉRIFIER, PAS À CROIRE
+## 4. ÉTAT MESURÉ AU 2026-09-05 06h50 UTC — À VÉRIFIER, PAS À CROIRE
 
-**`main` porte L0, L1, L2, L3, L5a, L5b, L7a et E18.** Tags `v0.l0`, `v0.l2`, `v0.l3`.
+**`main` porte L0, L1, L2, L3, L5a, L5b, L7a, L7b et E18.** Tags `v0.l0`, `v0.l2`, `v0.l3`.
 
-| Chantier | Où | Ce qu'il reste |
+> **Une limite d'API a coupé six agents à 06h40 UTC** (réinitialisation 10h20 Paris). **Rien n'a été
+> perdu** : tout a été poussé sur `origin`, vérifié deux fois, worktree par worktree. Chaque branche
+> ci-dessous porte donc du travail réel, à des degrés d'avancement différents. **Relis ce qui est là
+> avant d'écrire quoi que ce soit** — un brief précédent affirmait « rien n'a été commité » alors que
+> six correctifs l'étaient, sans être poussés.
+
+| Chantier | Branche | État à la coupure |
 | --- | --- | --- |
-| **L5c** | PR #52 | **Dernier incrément avant la porte P-C** |
-| **L7b** | PR #47 | Couverture unité × source, agrégation par question |
-| **L7c** | `lot/l7c` | Export de mission §36.3 + nom du répondant sous consentement |
-| **L5a réserves** | `lot/l5a-reserves` | Six réserves de sécurité, tests croisés en cours |
-| **Couverture `companies`** | `lot/l3-couverture-companies` | Inscrire au seuil en **remontant** la couverture |
-| **L8 scoring** | `lot/l8-scoring` | Barème §32.1, complétude, drapeaux rouges |
-| **Garde octets** | `chore/garde-octets-controle` | Aucun octet de contrôle dans une source |
+| **L5c** | PR **#52** | Complet, en attente de fusion. **Dernier incrément avant P-C** |
+| **L7c** | `lot/l7c` | Export §36.3 — l'agent en était au bloc `ETAT` et au balayage final |
+| **L5a réserves** | `lot/l5a-reserves` | Six réserves fermées ; tests croisés A26 **en cours** |
+| **Couverture `companies`** | `lot/l3-couverture-companies` | Build vert, mesure sur base post-#34 en cours |
+| **L8 scoring** | `lot/l8-scoring` | **`wip:`** — contrat partagé et jeux de référence écrits, **moteur non écrit**, rien de vert |
+| **Garde octets** | `chore/garde-octets-controle` | Script écrit ; l'étape de CI restait à brancher |
+| **Note L6 amendée** | PR **#53** | 8/8 scénarios ont un porteur |
 
 **Séquence imposée ensuite** : `L5c → porte P-C → L5d (chaîne photo) → L6a → L6b → L6c → porte P-D`.
 L5d passe **avant** L6 : il touche le schéma local, et deux chantiers dessus en même temps sont la
