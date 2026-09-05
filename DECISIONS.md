@@ -9039,6 +9039,34 @@ axe-core vert.
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun.
 
+## 2026-09-05 — [outillage] Qui écrit le test du garde des octets de contrôle ?
+
+La règle 09 §5.6 est nette : « le code de test n'est JAMAIS écrit par l'agent qui a écrit le code
+testé ». `scripts/check-octets-controle.mjs` et `scripts/garde-fous-octets-controle.test.ts` ont
+pourtant été écrits dans la même passe, par A52.
+
+Options :
+
+1. **Livrer le garde SANS test automatisé**, avec la seule preuve manuelle par les deux sens.
+   **Écartée** : ce dépôt a déjà eu une bascule ZAP qui n'armait rien pendant huit jours, un
+   `check-jonction` branché nulle part et un `check-invariants` qui laissait passer dix mutations.
+   Dans les trois cas, la preuve manuelle avait eu lieu une fois et n'avait pas survécu au commit
+   suivant. Un garde sans test de garde est un garde à durée de vie d'une session.
+2. **Attendre un second agent** avant de livrer. **Écartée** : le défaut est ACTIF — tout agent qui
+   écrit une séquence d'échappement dans ce dépôt produit un octet réel, aujourd'hui. Retarder la
+   protection pour respecter la forme de la revue coûterait plus que la revue ne rapporte.
+3. **Livrer les deux, avec la réserve ÉCRITE dans l'en-tête du fichier de test et ici**, et demander
+   la contre-lecture par un réviseur croisé à l'étape 4 du lot en cours.
+
+Arbitrage : **option 3**. Règle de précédence : **§16-22 > §1-15** — 09 §5.6 (croisement) et 09 §2
+(hooks bloquants) tirent en sens contraires ; §2 fonde l'existence même du contrôle, §5.6 en règle la
+qualité. On sert d'abord la protection, on inscrit la dette de revue plutôt que de la taire.
+Ce que le réviseur croisé doit chercher en priorité : **un cas fautif qui passerait au vert**. Les
+onze cas actuels sont tous écrits par l'auteur du garde, ils partagent donc ses angles morts —
+notamment sur les octets que le garde N'ÉNUMÈRE PAS un par un (0x01 à 0x08, 0x0E à 0x1F), couverts
+par la borne mais éprouvés par aucun cas nommé.
+Décideur : **A52**, à confirmer par **A01** à l'étape 4.
+Impact spec : aucun.
 ## 2026-09-05 — [L5] La chaîne PHOTO n'a de lot propriétaire nulle part : qui la livre ?
 
 A23 puis A22 l'ont mesuré indépendamment : **aucune photo n'entre dans l'application**. `grep` sur
