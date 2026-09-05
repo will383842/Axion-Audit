@@ -64,7 +64,11 @@ import './journee.css';
 /** Ce que l'appareil sait faire sans réseau — rappel de l'état hors ligne (§33.2). */
 const CAPACITES_HORS_LIGNE = [
   'Ouvrir, mener et terminer une session de collecte',
-  'Photographier, annoter, signaler un point à revoir',
+  // « Photographier » RETIRÉ le 2026-09-05 (majeur M6, A29) : la capture photo
+  // n'existe nulle part dans l'application — le point d'entrée est chez A22
+  // (lot/l5b). Une liste de capacités qui promet ce que le produit ne fait pas
+  // est un mensonge à l'auditeur en mode avion. À remettre quand le geste existe.
+  'Annoter, signaler un point à revoir, terminer une session',
   'Exporter une sauvegarde de secours chiffrée',
 ];
 
@@ -120,10 +124,12 @@ function LigneSession({
   session,
   fuseau,
   onOuvrir,
+  onFinir,
 }: {
   readonly session: SessionLocale;
   readonly fuseau: string | undefined;
   readonly onOuvrir: (session: SessionLocale) => void;
+  readonly onFinir: (session: SessionLocale) => void;
 }): ReactNode {
   const heure = session.scheduledAt === null ? '—:—' : formaterHeure(session.scheduledAt, fuseau);
   const personne = session.personName ?? LIBELLE_TYPE_SESSION[session.kind];
@@ -151,6 +157,21 @@ function LigneSession({
         )}
         {session.valideeLe !== null && <Badge ton="succes">Validée</Badge>}
       </button>
+      {/* Bloquant B1 de la revue A29 : le geste « Terminer » n'existait NULLE
+          PART, et la validation groupée s'appliquait donc à un ensemble
+          structurellement vide. Il est ici, sur la ligne de la session, là où
+          l'auditeur la voit. HORS du <button> de la ligne : un bouton dans un
+          bouton est un HTML invalide et un piège de navigation clavier. */}
+      {(session.status === 'en_cours' || session.status === 'termine') && (
+        <Bouton
+          variante="secondaire"
+          onClick={() => {
+            onFinir(session);
+          }}
+        >
+          {session.status === 'en_cours' ? 'Terminer la session' : 'Rouvrir ou valider'}
+        </Bouton>
+      )}
     </li>
   );
 }
@@ -213,6 +234,17 @@ export function EcranAujourdhui(): ReactNode {
           journee,
           maintenant(),
         );
+
+  /** Ouvre l'écran de fin de session sur CETTE session (bloquant B1, A29). */
+  const finir = useCallback(
+    (session: SessionLocale): void => {
+      if (base === null) return;
+      void memoriserSessionCourante(base, session.id).then(() => {
+        naviguer({ type: 'aller', vue: 'finDeSession' });
+      });
+    },
+    [base, naviguer],
+  );
 
   const etat: EtatZone =
     journee === undefined
@@ -335,6 +367,7 @@ export function EcranAujourdhui(): ReactNode {
                 session={session}
                 fuseau={fuseauDe(journee, session.missionId)}
                 onOuvrir={ouvrir}
+                onFinir={finir}
               />
             ))}
           </ul>

@@ -27,6 +27,7 @@ import { EcranNouvelEntretien } from './ecrans/entretien/EcranNouvelEntretien.js
 import { EcranAgenda } from './ecrans/journee/EcranAgenda.js';
 import { EcranAujourdhui } from './ecrans/journee/EcranAujourdhui.js';
 import { EcranFinDeJournee } from './ecrans/journee/EcranFinDeJournee.js';
+import { EcranFinDeSession } from './ecrans/journee/EcranFinDeSession.js';
 import { EcranPilote } from './ecrans/journee/EcranPilote.js';
 import { AccesRestauration, EcranRestauration } from './ecrans/journee/EcranRestauration.js';
 import { PastilleSyncCoquille } from './ecrans/journee/PastilleSyncCoquille.js';
@@ -67,6 +68,8 @@ function ContenuCourant(): ReactNode {
       return <EcranFinDeJournee />;
     case 'restauration':
       return <EcranRestauration />;
+    case 'finDeSession':
+      return <EcranFinDeSession />;
   }
 }
 
