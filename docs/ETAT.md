@@ -2610,6 +2610,85 @@ branche : à rejouer en premier — la vérité, ce sont les tests). Cales jsdom
 scrollIntoView) dans vitest.setup.interface.ts.
 Doute serveur transmis à L6 : deux mission_questions à la même position (ad hoc « juste après »).
 
+## 2026-09-02 17h15 — [lot L7 / incrément L7a] — étape pipeline 4/7 (fin de session propre)
+Dernier commit vert : 0892b0a (fix(l7a): revue A37 — schémas ré-exportés, hors-ligne console…)   ·   Branche : lot/l7a   ·   Poussé : oui
+Tâche en cours : L7a (coquille, 3 routes, 4 états, portefeuille keyset, avancement, connexion) livré,
+80/80 tests A36 par rôle, CI verte sur d76c0a1. Revue croisée A37 : ACCEPTÉ SOUS RÉSERVE — B2
+(schémas recopiés) et les cinq réserves FERMÉS dans 0892b0a ; B1 = 63646f2 est une FUSION de L3
+déguisée en feat : lot/l7a contient L3 sans ed8a852 ni les correctifs A51 → ORDRE DE FUSION FIGÉ
+(DECISIONS 2026-09-02 [L7a] A37) : L3 → main d'abord, puis lot/l7a rebasé sur main. AUCUNE PR L7a
+avant. Trois arbitrages A30 tracés (N+1, X-Axion-Client, trois routes) ; fiches A-010/A-011.
+Prochaine action : quand main contient L3 (PR L3 fusionnée par Williams), `git rebase origin/main`
+sur lot/l7a (résoudre DECISIONS/AMELIORATIONS/ETAT append-only « main d'abord »), rejouer
+`npx vitest run --project interface apps/hq` (80 attendus), pousser, faire signer la fin d'incrément
+par A30 (A37 rejeu bref sur 0892b0a si A30 l'exige), puis A02 (traçabilité E1-E47 dans les deux
+sens : `formaterPourcentage` retirée = plus d'orphelin), puis PR lot/l7a → main.
+Tests rouges connus : aucun. À Williams : confirmer le nom d'en-tête `X-Axion-Client` avec A-006.
+Point 5-1 de la note L7 (trois cales) : résolu par fusion de L3, tracé dans l'entrée A37.
+
+## 2026-09-02 20h30 — [lot L7 / incrément L7a] — étape pipeline 4/7 (correction d'un état faux)
+Dernier commit vert : bef11cc (chore(etat): bloc L7a — fin de session propre, ordre de fusion figé)   ·   Branche : lot/l7a   ·   Poussé : oui
+Tâche en cours : CORRECTION — le bloc de 17h15 affirmait « Tests rouges connus : aucun » alors que la
+CI de bef11cc était ROUGE (run 33647967069). Mesure : UN job sur dix-sept en échec, « 7 ·
+constructibilité des 4 images / worker », sur `502 Bad Gateway` de registry-1.docker.io au HEAD de
+`node:22.21.0-alpine` — panne du registre amont, pas un défaut de code. `gh run rerun --failed`,
+sans une ligne changée : run `success`, 19 verts / 1 sauté / 0 échec. Fiche AMELIORATIONS déposée
+(étage 2, PROPOSÉE : épingler les images de base par digest + re-tentative bornée sur la seule
+résolution d'image, jamais sur les tests) — non implémentée, arbitrage Williams à P-E.
+L'ordre de fusion reste FIGÉ (DECISIONS 2026-09-02 [L7a] A37) : L3 → main d'abord, puis lot/l7a
+rebasé sur main. AUCUNE PR L7a avant. Aucun rebase tant que le pilote n'a pas annoncé la fusion L3.
+Prochaine action : préparer le contenu L7b (couverture par unité ET par type de source §27.1 —
+DEUX axes distincts, agrégation, export §36.3) sans toucher aux fichiers que le rebase remuera ;
+au signal de fusion L3 : `git rebase origin/main`, résoudre DECISIONS/AMELIORATIONS/ETAT en
+append-only « main d'abord », rejouer `npx vitest run --project interface apps/hq` (80 attendus,
+mesurés), pousser, signature de fin d'incrément A30.
+Tests rouges connus : aucun — vérifié par rejeu, pas par souvenir (run 33647967069 = success).
+À Williams : confirmer le nom d'en-tête `X-Axion-Client` avec la fiche A-006.
+
+## 2026-09-02 23h00 — [lot L7 / incrément L7a] — étape pipeline 4/7 (briefs L7b et L7c posés)
+
+Dernier commit vert : 1845c07 (docs(l7a): il n y a pas deux vocabulaires de session mais TROIS) · Branche : lot/l7a · Poussé : oui
+Tâche en cours : L7a reste en attente de rebase (ordre de fusion FIGÉ, aucun rebase sans signal du
+pilote). Avancé sans toucher au code : brief **L7b** (couverture) et **L7c** (agrégation + export)
+dans `docs/conception/LOT_L7.md` §6-§8. Code A32/A31/A35, tests A36 — jamais le même agent (09 §5.6).
+Trois vocabulaires vérifiés au dépôt : TYPE de session (6, `plan-entretiens.ts` l.52-59), PROVENANCE
+(5, `schema.ts` l.124-130), MODE (3, l.64, seulement si `kind='entretien'`) → **pas de 7e colonne
+« complémentaire »** sur la couverture (03 l.673) ; `sessions.csv` porte type ET mode (§36.3).
+Mesures du soir : CI 33647967069 rejouée → **success** (19 verts / 1 sauté / 0 échec) ; le rouge était
+un 502 de Docker Hub, pas le code. Suite console mesurée : **80/80, 6 fichiers, 11,07 s**
+(`npx vitest run --project interface apps/hq`) — c'est la référence à retrouver après le rebase.
+Deux fiches AMELIORATIONS étage 2/1 déposées (flake de registre ; hook Stop qui fabrique un `wip:`
+vide quand le push est refusé — `.claude/settings.json` NON modifié, arbitrage humain, CLAUDE.md §3).
+Décision D1 : `X-Axion-Client` ratifié, tracé par A10 sur `lot/l3-suite`, **non dupliqué ici** → le
+point §5-6 de la note est clos.
+Prochaine action : sur signal explicite du pilote (L3 dans main), `git rebase origin/main`, résoudre
+DECISIONS/AMELIORATIONS/ETAT en append-only « main d'abord », rejouer la suite console (**80
+attendus, mesurés**), pousser, puis porter en DECISIONS.md les trois arbitrages en attente.
+Tests rouges connus : aucun — mesuré, pas supposé (CI success + 80/80 en local).
+EN ATTENTE D'ARBITRAGE (A01/Williams) : axe B de la couverture = `interviews.kind` (A30) ou
+`answers.source` (contrôle de lecture) ; A30 maintient `kind` — on ne planifie pas une provenance, et
+le critère du 07 exige que la couverture reflète le PLAN. Divergence remontée, non tranchée seule.
+
+## 2026-09-02 23h40 — [lot L7 / incrément L7a] — étape pipeline 4/7 (arbitrage rendu)
+
+Dernier commit vert : db8192f (docs(l7a): arbitrage rendu — la couverture compte des SESSIONS) · Branche : lot/l7a · Poussé : oui (8f2f225..db8192f)
+Tâche en cours : le bloc de 23h00 disait « EN ATTENTE D'ARBITRAGE » — **c'est faux depuis**, et un
+fichier d'état qui retarde est exactement le défaut que la fiche du hook Stop dénonce ce soir.
+ARBITRAGE RENDU (Williams, délégation du 2026-09-02 à la session pilote), il SÉPARE deux écrans :
+COUVERTURE (§27.1/§16.6, L7b) = `interviews.kind`, les 5 sources de collecte, confrontée au plan ·
+AGRÉGATION (critère L7-min, L7c) = `answers.source`, les 5 provenances. Jamais fusionnés — c'est leur
+COMPARAISON qui fait le §27.6. Preuve relevée ligne à ligne dans le 03 (l.548 titre, l.549 table à
+cinq lignes, l.559 même sujet des deux côtés) ; raison de fond : on ne planifie pas une provenance.
+`atelier` (6e kind, §32.6 l.673) : rendu HORS grille, réalisé seulement, hors complétude, jamais
+silencieux (marge de mission toujours affichée, y compris à zéro).
+Note `docs/conception/LOT_L7.md` §9 : l'amendement RECTIFIE ses propres §6.1, §6.3 et §8.3 au lieu de
+les laisser se contredire ; le texte de l'entrée DECISIONS.md est FIGÉ, prêt à coller après le rebase.
+Prochaine action : **sur signal explicite du pilote uniquement** (L3 dans main — `origin/lot/l3-suite`
+est encore à 65c66d7, A10 ferme la sonde F-21), `git rebase origin/main`, résoudre
+DECISIONS/AMELIORATIONS/ETAT en append-only « main d'abord », déposer l'entrée DECISIONS.md du §9.4,
+rejouer la suite console (**80 attendus, mesurés**), pousser. AUCUN rebase avant, AUCUNE PR avant.
+Tests rouges connus : aucun — mesuré (CI 33647967069 rejouée → success ; 80/80 en local, 11,07 s).
+
 ## 2026-09-03 05h55 — [lot L5 / incrément L5b] — étape pipeline 5/7
 Dernier commit vert : 736f62e (test(l5b) : périphérie de l'entretien, 128 cas, bascule prouvée) · Branche : lot/l5b · Poussé : NON — push refusé par la politique de permission de la session, à relancer
 Tâche en cours : le rouge de CI de l5b est FERMÉ. Il n'était pas « aucun test rouge » comme
@@ -2860,6 +2939,35 @@ ses 15 renvois internes. **Seules les lettres changent** — aucune mesure, aucu
 — et la renumérotation est **déclarée en tête de section**, pas faite en silence.
 Gardes rejoués : `check:decisions` ✓ · `check:tracabilite` ✓ 751 citations, 369 fichiers, 0 incohérence.
 
+## 2026-09-03 12h20 — [lot L7 / incrément L7a] — `main` intégré par la session pilote
+
+Dernier commit vert : (celui-ci) · Branche : lot/l7a · Poussé : oui
+Tâche : aucune en cours. **Bloc écrit par la session PILOTE** ; worktree dormant depuis le 02/09
+23h06, absence d'écriture concurrente vérifiée avant d'y entrer. Signal du pilote : donné.
+Prochaine action : PR `lot/l7a` → `main`, puis A02 sur l'incrément L7a.
+Tests rouges connus : aucun ici. `main` rouge sur `8 · deploy-staging`, hors périmètre.
+
+**FUSION AU LIEU DE REBASE, ET C'EST UN ÉCART DÉCLARÉ.** Le bloc précédent prescrivait
+`git rebase origin/main`. Rejouer 50 commits contre `DECISIONS.md` et `docs/ETAT.md` rejoue le
+conflit append-only **à chaque commit** — 50 occasions de casser une entrée, pour un historique que
+le squash merge effacera de toute façon. `git merge` a été joué à la place, comme sur `lot/l5a` et
+`lot/l5b` ce matin. Le résultat en arbre est le même ; seul le graphe diffère.
+
+**DIX CONFLITS, DONT SEPT `add/add` SUR DU CODE L3.** `lot/l7a` portait ses propres copies de
+`org-units` (dépôt, service, erreurs, tests), `packages/shared/src/org-units.ts` et du dossier de
+porte L3 — un instantané ANTÉRIEUR. Mesuré fichier par fichier : `main` a strictement plus partout
+(+12, +181, +142, +250, +152) et les rares lignes absentes sont des commentaires reformulés.
+**Version de `main` retenue** : c'est celle qui a passé la porte avec ses 1 712 tests.
+
+**UN DOUBLON ÉVITÉ DE JUSTESSE, ET IL VAUT D'ÊTRE ÉCRIT.** Résolus par blocs, `DECISIONS.md`
+recevait **63 entrées « neuves » de la branche — dont 59 étaient les mêmes que celles de `main`**,
+capturées avec le code L3. Sans déduplication par clé, elles auraient été écrites deux fois. Après
+dédoublonnage : 119 base + 68 `main` + 4 branche = **191**, puis 192 avec l'entrée du §9.4.
+Contrôle rejoué sur les trois branches : **zéro en-tête dupliqué**.
+
+Entrée `DECISIONS.md` du §9.4 déposée **mot pour mot**, sa date d'arbitrage (09-02) conservée.
+`docs/TRACABILITE_E1-E47.md` : un premier `--theirs` avait écrasé 71 lignes de la branche ajoutées
+hors du hunk ; annulé, conflit restauré, seul le hunk résolu, les deux côtés vérifiés intacts.
 ## 2026-09-02 17h20 — [lot L5 / incrément L5a] — étape pipeline 5/7 (fin de session propre)
 Dernier commit vert : 069c46a (docs: fiche A-012)   ·   Branche : lot/l5a   ·   Poussé : oui
 Tâche en cours : L5a corrigé après A29 REFUSÉ, puis A29 REJEU = ACCEPTÉ SOUS RÉSERVE (0 bloquant) ;
