@@ -55,6 +55,7 @@ import {
 import { useCouverture } from '../../api/requetes-pilotage.js';
 import { useMission } from '../../api/requetes.js';
 import { etatDeRequete } from '../../app/etats.js';
+import { CadreTableau } from '../../app/CadreTableau.js';
 import { auClicLienInterne, hrefDeRoute } from '../../app/routeur.js';
 import { formaterInstant } from '../../format/dates.js';
 
@@ -162,6 +163,41 @@ function LigneUnite({
   );
 }
 
+/**
+ * LA SYNTHÈSE DES ATELIERS — HORS DU TABLEAU, ET JAMAIS SILENCIEUSE.
+ *
+ * ── LE DÉFAUT QUE CE COMPOSANT FERME (bloquant B1 de la revue A37) ──────────
+ * Un seul booléen repliait la COLONNE **et** la MARGE. Résultat : une mission
+ * sans aucun atelier n'en disait rien du tout, alors que `LOT_L7.md` §9.3 écrit
+ * l'inverse en toutes lettres — « la marge de mission porte TOUJOURS le décompte
+ * des ateliers, **y compris à zéro** ; seule la colonne du tableau se replie ».
+ * L'API était juste (`couverture.ts` calcule `atelierRealise` sans condition) :
+ * c'est l'écran qui taisait un chiffre qu'il recevait. « Une session invisible
+ * est une session perdue » — et un zéro invisible est un doute qu'on ne peut pas
+ * lever : impossible de distinguer « aucun atelier tenu » de « l'écran ne me le
+ * dit pas ».
+ *
+ * ── POURQUOI HORS DU TABLEAU, ET NON DANS LE `<tfoot>` (arbitrage A01) ──────
+ * Parce que l'atelier n'a pas de colonne quand il vaut zéro, et qu'une cellule de
+ * pied sans colonne rendrait le tableau MALFORMÉ — les totaux ne s'aligneraient
+ * plus sur rien. La note de conception le disait déjà sans en tirer la
+ * conséquence : « atelier **hors grille** ». Sa marge suit sa nature — une ligne
+ * de synthèse, à côté de la grille, toujours lue.
+ *
+ * Quand la colonne EXISTE, son total reste aussi dans le pied : ce n'est pas une
+ * redite gratuite, c'est ce qui garde le `<tfoot>` cohérent avec ses en-têtes.
+ */
+function SyntheseAteliers({ marges }: { marges: MargesCouverture }): ReactNode {
+  return (
+    <p className="axn-couverture__hors-grille-synthese">
+      <strong>Ateliers tenus : {marges.atelierRealise}</strong> sur l’ensemble de la mission — hors
+      de la grille des cinq sources de collecte, parce qu’un atelier n’en est pas une et ne comble
+      l’absence d’aucune d’elles. Le plan d’entretiens n’en propose jamais : il n’y a donc pas de
+      «&nbsp;prévu&nbsp;» à confronter, seulement du tenu.
+    </p>
+  );
+}
+
 /** Les marges de mission — mission entière, jamais la page (§6.3 `LOT_L7.md`). */
 function Marges({ marges, ateliers }: { marges: MargesCouverture; ateliers: boolean }): ReactNode {
   return (
@@ -240,7 +276,7 @@ export function EcranCouverture({ id }: { id: string }): ReactNode {
         plan d’entretiens de la mission.
       </p>
       <ZoneEtat etat={etat}>
-        <div className="axn-tableau-cadre">
+        <CadreTableau libelle="Couverture par unité et par source, tableau défilant">
           <table className="axn-tableau axn-couverture">
             <caption className="axn-visuellement-masque">
               Couverture par unité organisationnelle et par source de collecte
@@ -290,10 +326,14 @@ export function EcranCouverture({ id }: { id: string }): ReactNode {
               </Bouton>
             </div>
           )}
-        </div>
+        </CadreTableau>
       </ZoneEtat>
       {premiere !== undefined && (
         <>
+          {/* TOUJOURS rendue, même à zéro : voir `SyntheseAteliers` (bloquant B1).
+              Elle n'est PAS conditionnée par `ateliers`, et c'est tout l'objet du
+              correctif — le booléen ne pilote plus que la colonne. */}
+          <SyntheseAteliers marges={premiere.marges} />
           {premiere.avertissements.length > 0 && (
             <ul className="axn-couverture__avertissements" aria-label="Avertissements du plan">
               {premiere.avertissements.map((avertissement) => (

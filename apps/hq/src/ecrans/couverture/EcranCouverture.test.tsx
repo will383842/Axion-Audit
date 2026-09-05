@@ -478,51 +478,75 @@ describe('@critique consultant vs administrateur — DOM et trace réseau, compa
 // 5. FIL-GC — 150 unités, keyset, arbre navigable ; français ; fuseau
 // =============================================================================
 describe('FIL-GC — 150 unités sur 4 niveaux, chargées par curseur', () => {
-  it('trois pages de 50 par « Charger la suite », curseur OPAQUE rendu tel quel, marges inchangées, aucun doublon', async () => {
-    serveur = installerServeurFactice();
-    rendreConsole(CHEMIN(ID.missionGc));
-    await screen.findByRole('heading', { level: 1, name: TITRE });
-    const principal = screen.getByRole('main');
-    await within(principal).findByText('Groupe 1');
-    const table = tableau(principal);
-    expect(table.querySelectorAll('tbody tr')).toHaveLength(50);
-    const margesAvant = texteVisibleDEmblee(table.querySelector('tfoot') ?? table);
-    expect(margesAvant).toMatch(/150 au périmètre/);
-    expect(margesAvant).toMatch(/90 sans session/);
+  /**
+   * BUDGET DE TEMPS EXPLICITE — 30 s. C'est le HARNAIS qu'on desserre, jamais une
+   * assertion.
+   *
+   * Mesuré le 2026-09-05 : ce cas prend **10 304 ms** sur la machine de
+   * développement, contre les 10 000 ms du défaut Vitest. Il ne s'était PAS mis à
+   * échouer en CI, plus rapide — mais il vivait à 103 % de son budget, donc à un
+   * cheveu du rouge intermittent. Un test qui échoue une fois sur deux est un test
+   * qui ment (`playwright.config.ts` le dit déjà pour l'E2E) : il se corrige avant
+   * de flaker, pas après.
+   *
+   * Ce que ce cas fait réellement : monter 150 unités × 9 colonnes dans jsdom, en
+   * TROIS pages, et relire tout le DOM entre chacune. Dix secondes n'est pas une
+   * exigence produit — le budget produit est le p95 < 100 ms de la ROUTE (porte
+   * P-E, mesuré avec A28), et il ne se lit pas dans jsdom.
+   *
+   * Aucune assertion n'est retirée ni assouplie : le nombre de lignes, les trois
+   * appels, le curseur opaque, l'absence d'offset, les 150 noms distincts et les
+   * marges inchangées sont exactement les mêmes qu'avant.
+   */
+  it(
+    'trois pages de 50 par « Charger la suite », curseur OPAQUE rendu tel quel, marges inchangées, aucun doublon',
+    { timeout: 30_000 },
+    async () => {
+      serveur = installerServeurFactice();
+      rendreConsole(CHEMIN(ID.missionGc));
+      await screen.findByRole('heading', { level: 1, name: TITRE });
+      const principal = screen.getByRole('main');
+      await within(principal).findByText('Groupe 1');
+      const table = tableau(principal);
+      expect(table.querySelectorAll('tbody tr')).toHaveLength(50);
+      const margesAvant = texteVisibleDEmblee(table.querySelector('tfoot') ?? table);
+      expect(margesAvant).toMatch(/150 au périmètre/);
+      expect(margesAvant).toMatch(/90 sans session/);
 
-    for (const attendu of [100, 150]) {
-      within(principal)
-        .getByRole('button', { name: /charger la suite/i })
-        .click();
-      await waitFor(() => {
-        expect(table.querySelectorAll('tbody tr')).toHaveLength(attendu);
-      });
-    }
-    expect(within(principal).queryByRole('button', { name: /charger la suite/i })).toBeNull();
-    // Trois appels, `after` = le curseur rendu par la page précédente, jamais un offset.
-    const appels = serveur.appels.filter((a) => a.url.pathname.endsWith('/coverage'));
-    expect(appels).toHaveLength(3);
-    expect(appels[0]?.url.searchParams.get('after')).toBeNull();
-    expect(appels[1]?.url.searchParams.get('after')).toBe('curseur-couverture-50');
-    expect(appels[2]?.url.searchParams.get('after')).toBe('curseur-couverture-100');
-    for (const appel of appels) {
-      expect([...appel.url.searchParams.keys()].some((k) => /offset|page|skip/i.test(k))).toBe(
-        false,
+      for (const attendu of [100, 150]) {
+        within(principal)
+          .getByRole('button', { name: /charger la suite/i })
+          .click();
+        await waitFor(() => {
+          expect(table.querySelectorAll('tbody tr')).toHaveLength(attendu);
+        });
+      }
+      expect(within(principal).queryByRole('button', { name: /charger la suite/i })).toBeNull();
+      // Trois appels, `after` = le curseur rendu par la page précédente, jamais un offset.
+      const appels = serveur.appels.filter((a) => a.url.pathname.endsWith('/coverage'));
+      expect(appels).toHaveLength(3);
+      expect(appels[0]?.url.searchParams.get('after')).toBeNull();
+      expect(appels[1]?.url.searchParams.get('after')).toBe('curseur-couverture-50');
+      expect(appels[2]?.url.searchParams.get('after')).toBe('curseur-couverture-100');
+      for (const appel of appels) {
+        expect([...appel.url.searchParams.keys()].some((k) => /offset|page|skip/i.test(k))).toBe(
+          false,
+        );
+      }
+      // Aucune ligne dupliquée : 150 unités distinctes, l'arbre entier navigable.
+      const noms = [...table.querySelectorAll('tbody th[scope="row"]')].map((th) => th.textContent);
+      expect(new Set(noms).size).toBe(150);
+      expect(noms.at(-1)).toContain('Service 120');
+      // Les marges n'ont pas bougé d'une page à l'autre (elles viennent de la première).
+      expect(texteVisibleDEmblee(table.querySelector('tfoot') ?? table)).toBe(margesAvant);
+      // L'indentation de l'arbre est un multiple d'un JETON d'espacement, jamais un px.
+      const service = within(table).getByRole('row', { name: /Service 120/ });
+      expect(service.querySelector('.axn-couverture__unite')?.getAttribute('style')).toMatch(
+        /var\(--espacement-/,
       );
-    }
-    // Aucune ligne dupliquée : 150 unités distinctes, l'arbre entier navigable.
-    const noms = [...table.querySelectorAll('tbody th[scope="row"]')].map((th) => th.textContent);
-    expect(new Set(noms).size).toBe(150);
-    expect(noms.at(-1)).toContain('Service 120');
-    // Les marges n'ont pas bougé d'une page à l'autre (elles viennent de la première).
-    expect(texteVisibleDEmblee(table.querySelector('tfoot') ?? table)).toBe(margesAvant);
-    // L'indentation de l'arbre est un multiple d'un JETON d'espacement, jamais un px.
-    const service = within(table).getByRole('row', { name: /Service 120/ });
-    expect(service.querySelector('.axn-couverture__unite')?.getAttribute('style')).toMatch(
-      /var\(--espacement-/,
-    );
-    expect(balayerStylesEnDur(table)).toEqual([]);
-  });
+      expect(balayerStylesEnDur(table)).toEqual([]);
+    },
+  );
 
   it('interface 100 % française : aucun code brut du contrat, aucun mot d’interface anglais — et l’horodatage au fuseau de MISSION', async () => {
     const principal = await rendreCouverture({});

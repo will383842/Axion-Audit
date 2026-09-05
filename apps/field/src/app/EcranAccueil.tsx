@@ -38,6 +38,7 @@ import { cleEmbarquement, clePersistance, type BaseLocale } from '../local/base.
 import { embarquerMission, type ResultatEmbarquement } from '../local/embarquement.js';
 import { portSyncInerte, type EtatSyncMission } from '../local/port-sync.js';
 import { useTerrain } from './contexte.js';
+import { AccesEntretien } from '../ecrans/entretien/AccesEntretien.js'; // raccordement L5b (A22)
 
 /** Une mission présente localement, avec les deux états que B4 sépare. */
 interface MissionLocale {
@@ -295,6 +296,8 @@ export function EcranAccueil(): ReactNode {
           {resume?.sessionsEnCours ?? 0} session(s) en cours sur cet appareil.
         </p>
       </ZoneEtat>
+
+      <AccesEntretien />
 
       <Message ton="info" titre="Ce que cet appareil sait faire sans réseau">
         <ul>

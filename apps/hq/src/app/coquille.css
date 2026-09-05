@@ -98,9 +98,19 @@
   background: var(--couleur-surface-enfoncee);
 }
 
+/* ── D1 (mesuré par A36, axe-core) — L'ESPACE ACTIF ÉCHOUAIT LE CONTRASTE AA ──
+   Le jeton de TEXTE d'action sur le fond doux d'action donnait 4,12:1, sous le
+   4,5:1 de WCAG 1.4.3 (AA). Il est sur TOUTES les pages de la console : c'était
+   donc aussi une non-régression sur les trois écrans de L7a.
+   Le correctif prend le jeton le plus SOMBRE de la même rampe d'action
+   (`--couleur-action-fond-actif`, l'état pressé d'un bouton) : ~6,7:1 sur le même
+   fond, et l'état actif garde son identité terracotta. Basculer sur le jeton de
+   texte principal aurait passé aussi, mais aurait effacé l'indice de couleur qui
+   dit « vous êtes ici » — on corrige le contraste, on ne supprime pas
+   l'information. Un jeton remplace un jeton, aucune valeur en dur (invariant 4). */
 .axn-console__espace[aria-current='page'] {
   background: var(--couleur-action-fond-doux);
-  color: var(--couleur-action-texte);
+  color: var(--couleur-action-fond-actif);
   font-weight: var(--typo-graisse-semi);
 }
 
@@ -535,11 +545,24 @@
   display: inline-block;
 }
 
+/* ── D2 (mesuré par A36) — LE JETON N'EST PAS EN CAUSE, SON EMPLOI L'ÉTAIT ────
+   Le jeton de texte TERTIAIRE donne 4,49:1 sur la surface enfoncée — l'en-tête
+   et le pied du tableau — et échoue AA de 0,01 ; sur la surface carte (le corps),
+   le même jeton passe à 5,2:1. Le défaut n'était donc ni le jeton ni le fond : on
+   avait rangé en information tertiaire deux choses qui n'en sont pas — le
+   sous-titre d'une colonne et, dans le pied, LES TOTAUX DE LA MISSION.
+   Corrigé en montant d'un cran (SECONDAIRE, ~6,5:1 sur enfoncée, ~7,5:1 sur
+   carte) : le contraste passe ET la hiérarchie visuelle devient juste. La valeur
+   du jeton tertiaire n'est pas touchée — elle sert ailleurs, et l'abaisser pour
+   un seul emploi aurait assombri toute la console pour une mauvaise raison.
+   Effet de bord réglé au passage : au SURVOL, une ligne du corps prend la surface
+   enfoncée ; le tertiaire y serait retombé à 4,49:1, dans un état qu'axe-core ne
+   balaie pas. Le secondaire tient sur les deux fonds. */
 .axn-couverture__note {
   display: block;
   font-size: var(--typo-taille-xs);
   font-weight: var(--typo-graisse-normale);
-  color: var(--couleur-texte-tertiaire);
+  color: var(--couleur-texte-secondaire);
 }
 
 .axn-couverture__cellule {
@@ -551,7 +574,7 @@
 }
 
 .axn-couverture__separateur {
-  color: var(--couleur-texte-tertiaire);
+  color: var(--couleur-texte-secondaire);
   padding: 0 var(--espacement-1);
 }
 
@@ -559,10 +582,12 @@
   color: var(--couleur-texte-secondaire);
 }
 
+/* D2 — voir `.axn-couverture__note` : le « planifié » est un COMPTE, pas une
+   décoration. Il tient désormais sur les trois fonds (carte, survol, pied). */
 .axn-couverture__planifie {
   display: block;
   font-size: var(--typo-taille-xs);
-  color: var(--couleur-texte-tertiaire);
+  color: var(--couleur-texte-secondaire);
 }
 
 /* Source EXIGÉE par le plan et NON couverte : l'écart qui appelle une action. */
@@ -594,6 +619,20 @@
   background: var(--couleur-surface-enfoncee);
   font-weight: var(--typo-graisse-moyenne);
   border-top: var(--taille-bordure-epaisseur-forte) solid var(--couleur-bordure-nette);
+}
+
+/* B1 — LA SYNTHÈSE DES ATELIERS, hors du tableau et TOUJOURS rendue.
+   Elle porte la même bordure d'appel que la colonne hors grille : l'œil relie les
+   deux sans qu'on ait à l'écrire, et il reste clair que ce chiffre ne fait pas
+   partie de la grille des cinq sources. */
+.axn-couverture__hors-grille-synthese {
+  margin: 0;
+  padding: var(--espacement-3) var(--espacement-4);
+  border-left: var(--taille-bordure-epaisseur-forte) solid var(--couleur-bordure-nette);
+  background: var(--couleur-surface-carte);
+  border-radius: var(--taille-rayon-petit);
+  color: var(--couleur-texte-secondaire);
+  font-size: var(--typo-taille-sm);
 }
 
 .axn-couverture__avertissements {

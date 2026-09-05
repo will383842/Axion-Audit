@@ -43,7 +43,7 @@
 // =============================================================================
 import { execFile } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
@@ -289,6 +289,60 @@ export async function appliquerMontee(urlBase: string): Promise<string> {
  */
 export async function appliquerDescente(urlBase: string): Promise<string> {
   return lancerMigrations(urlBase, ['--down-to', '0']);
+}
+
+/**
+ * Lance l'exécuteur de migrations SANS lever sur un code de sortie non nul, et
+ * rend ce code AVEC la sortie complète. Jumeau volontaire de `lancerSchemaDiff`,
+ * et pour la même raison : quand ce qu'on éprouve est un GARDE de migration,
+ * l'échec EST le résultat attendu, et le texte du refus fait partie de ce qui se
+ * vérifie. `lancerMigrations`, lui, lève — il reste le bon outil partout où une
+ * montée doit simplement réussir.
+ */
+export async function tenterMigrations(
+  urlBase: string,
+  arguments_: readonly string[] = [],
+): Promise<{ code: number; sortie: string }> {
+  const script = resolve(RACINE_API, 'scripts', 'migrations.mjs');
+  try {
+    const { stdout, stderr } = await executerFichier(process.execPath, [script, ...arguments_], {
+      cwd: RACINE_DEPOT,
+      env: { ...process.env, DATABASE_URL: urlBase },
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    return { code: 0, sortie: `${stdout}${stderr}` };
+  } catch (erreur) {
+    const details = erreur as { code?: unknown; stdout?: unknown; stderr?: unknown };
+    const stdout = typeof details.stdout === 'string' ? details.stdout : '';
+    const stderr = typeof details.stderr === 'string' ? details.stderr : '';
+    return {
+      code: typeof details.code === 'number' ? details.code : 1,
+      sortie: `${stdout}${stderr}`,
+    };
+  }
+}
+
+/**
+ * Version (`NNNN`) qui PRÉCÈDE, dans l'ordre d'application, la migration dont le
+ * texte correspond au motif — `'0000'` si c'est la première. Elle se passe à
+ * `--down-to` pour ramener une base JUSTE AVANT une migration donnée, et éprouver
+ * alors ce que cette migration refuse.
+ *
+ * La migration est désignée PAR CE QU'ELLE FAIT, jamais par son numéro : un
+ * `'0014'` codé en dur dans un test ne dit pas ce qu'il vise, et se relit d'autant
+ * moins bien qu'il aura l'air juste longtemps après avoir cessé de l'être.
+ */
+export function versionAvantLaMigrationQui(motif: RegExp): string {
+  const fichiers = fichiersMigration();
+  const rang = fichiers.findIndex((chemin) => motif.test(readFileSync(chemin, 'utf8')));
+  if (rang < 0) {
+    throw new Error(
+      `Aucune migration livrée ne correspond à ${motif.source}.\n` +
+        `Migrations présentes :\n  ${fichiers.map((f) => basename(f)).join('\n  ')}`,
+    );
+  }
+  const precedente = rang === 0 ? undefined : fichiers[rang - 1];
+  return precedente === undefined ? '0000' : basename(precedente).slice(0, 4);
 }
 
 // -----------------------------------------------------------------------------

@@ -82,6 +82,12 @@ fonction et le service le sont ; la question du nom est ouverte dans `DECISIONS.
 - `src/app/` — `routeur.ts` (History API, sans dépendance), `espaces.ts` (registre des 7 espaces,
   append-only), `etats.ts` (une erreur → cause + action en français), `base.ts` (`/hq`, partagé
   avec `vite.config.ts`), `coquille.css` (structure seule, jetons uniquement).
+- `src/app/CadreTableau.tsx` (**L7b**) — le cadre d'un tableau dense, **atteignable au clavier**
+  (`tabindex=0` + `role="region"` + `aria-label` obligatoire). Il existe parce que
+  `.axn-tableau-cadre` porte `overflow-x: auto` : la souris faisait défiler ce que le clavier ne
+  pouvait pas atteindre (**WCAG 2.1.1, niveau A** ; 03 §22.1, « navigation clavier intégrale »), et
+  la classe était recopiée à la main par trois écrans. Un composant rend l'oubli impossible sur le
+  quatrième. **Tout tableau dense de la console passe par lui.**
 - `src/ecrans/` — `EcranAccueil`, `EcranPortefeuille`, `EcranAvancementMission`, `EcranConnexion`,
   puis `couverture/EcranCouverture` et `agregation/EcranAgregation` (**L7b**), et
   `export/EcranExport` (**L7c**).
