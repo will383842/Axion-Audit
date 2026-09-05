@@ -7726,6 +7726,7 @@ Règle de précédence : **`CLAUDE.md` §6** (canal d'amélioration, étage 2 ar
 
 Décideur : **Williams**, 2026-09-03.
 Impact spec : aucun sur `/docs` — la clause existait déjà au 11 §3 ; c'est le code qui la rejoint.
+
 ## 2026-09-02 — [L5b] Rencontre tests A26 / code A22 : les tests adaptent leur ÉCHAFAUDAGE, jamais leurs assertions
 
 Écrits en parallèle sans se voir (règle de croisement 09 §5.6), les tests d'A26 supposaient un module
