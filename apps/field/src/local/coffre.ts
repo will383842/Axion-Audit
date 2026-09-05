@@ -284,8 +284,14 @@ export function verifierParametresKdf(parametres: ParametresKdf): void {
  *
  * Le seuil n'est pas inventé ici : `MOT_DE_PASSE_LONGUEUR_MIN` de
  * `@axion/shared` transcrit 06 §10.1 (« 12+ caractères »), et l'API l'applique
- * déjà. Le terrain applique le même — voir la réserve de spec au rapport A24 :
- * le pack ne dit nulle part si le mot de passe du coffre EST celui du compte.
+ * déjà. Le terrain applique le même, et ce n'est plus une réserve de spec : la
+ * question « le mot de passe du coffre local est-il celui du compte ? » est
+ * TRANCHÉE — `DECISIONS.md`, entrée du 2026-09-04, arbitrage A01 : **oui**. La
+ * preuve y est tirée du pack et non d'une préférence : le 07 §14 traite le risque
+ * « reset de mot de passe pendant une mission hors ligne » par « garde-fou serveur
+ * §9.7 **+ ré-enveloppement de la DEK en ligne** », et ré-envelopper la DEK après
+ * un reset n'a de sens que si la KEK dérive du mot de passe du COMPTE. L'import de
+ * `MOT_DE_PASSE_LONGUEUR_MIN` est donc fondé, pas commode.
  */
 export function verifierPolitiqueMotDePasse(motDePasse: string): void {
   if (motDePasse.length < MOT_DE_PASSE_LONGUEUR_MIN) {
