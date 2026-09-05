@@ -364,8 +364,28 @@ export async function ouvrirBaseLocale(nom: string = NOM_BASE_LOCALE): Promise<B
 // par nature : `meta` ne se synchronise pas, elle n'a donc pas d'op d'outbox.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function lireMeta(base: BaseLocale, cle: string): Promise<unknown> {
-  const ligne = await base.meta.get(cle);
+  const ligne = await lireLigneMeta(base, cle);
   return ligne?.valeur;
+}
+
+/**
+ * La LIGNE `meta`, et non sa valeur — `undefined` veut dire « aucune ligne ».
+ *
+ * ── POURQUOI DEUX LECTURES POUR UNE TABLE CLÉ-VALEUR ────────────────────────
+ * Parce que `lireMeta` confond deux faits que la revue A29 du 2026-09-05 (R4) a
+ * mesurés distincts : une ligne ABSENTE et une ligne PRÉSENTE dont la valeur est
+ * `null` rendent toutes deux `undefined`. Sur la plupart des clés, c'est sans
+ * conséquence. Sur `meta.coffre`, c'est F-22 : une garde qui croit lire la
+ * présence lit la valeur, et un appareil qui porte une journée de collecte se
+ * lit « neuf ».
+ *
+ * Qui a besoin de la DIFFÉRENCE appelle cette fonction-ci et décide lui-même de
+ * ce que vaut une valeur nulle sur SA clé ; `lireMeta` reste la porte ordinaire,
+ * et sa doctrine (« `null` veut dire ABSENT ») ne change pas d'un octet pour les
+ * clés qui s'en accommodent.
+ */
+export function lireLigneMeta(base: BaseLocale, cle: string): Promise<LigneMeta | undefined> {
+  return base.meta.get(cle);
 }
 
 export async function ecrireMeta(base: BaseLocale, cle: string, valeur: unknown): Promise<void> {

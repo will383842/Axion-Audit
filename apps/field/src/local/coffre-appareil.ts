@@ -50,7 +50,7 @@
 // =============================================================================
 import { z } from 'zod';
 import { uuidv7 } from 'uuidv7';
-import { CLES_META, ecrireMeta, lireMeta, type BaseLocale } from './base.js';
+import { CLES_META, ecrireMeta, lireLigneMeta, lireMeta, type BaseLocale } from './base.js';
 import {
   CoffreIllisibleError,
   CoffreInexploitableError,
@@ -91,18 +91,32 @@ export type CoffreAuRepos = z.infer<typeof coffreAuReposSchema>;
 /**
  * Le coffre de cet appareil, ou `null`.
  *
- * **`null` veut dire ABSENT, et rien d'autre.** Une ligne `meta.coffre` présente
- * mais que le schéma refuse LÈVE une `CoffreIllisibleError` ; des paramètres de
- * dérivation hors bornes lèvent une `ParametresKdfHorsBornesError` (F-25). Rendre
- * `null` dans l'un de ces cas ferait dire « appareil neuf » à un appareil qui
- * porte une journée de collecte — et la suite est écrite en tête de fichier.
+ * **`null` veut dire ABSENT, et rien d'autre — et « absent » veut dire qu'il n'y
+ * a AUCUNE LIGNE `meta.coffre`.** Une ligne présente mais que le schéma refuse
+ * LÈVE une `CoffreIllisibleError` ; des paramètres de dérivation hors bornes
+ * lèvent une `ParametresKdfHorsBornesError` (F-25). Rendre `null` dans l'un de ces
+ * cas ferait dire « appareil neuf » à un appareil qui porte une journée de
+ * collecte — et la suite est écrite en tête de fichier.
  *
- * La règle est celle que `jetons.ts` s'était déjà appliquée à lui-même : la
- * doctrine existait, elle n'avait simplement pas été appliquée au coffre.
+ * ── LE CAS QUI TOMBAIT ENTRE LES DEUX (revue A29 du 2026-09-05, R4) ─────────
+ * Une ligne PRÉSENTE dont la valeur est `null` ou absente traversait la garde et
+ * se lisait « absente » : `lireMeta` rend la VALEUR, jamais la ligne. **Arbitrage
+ * A01 : c'est une ANOMALIE, pas une absence.** Aucun chemin de L5a n'écrit cela —
+ * `ecrireMeta` n'est appelée avec la clé `coffre` qu'avec un objet complet — donc
+ * si cette ligne existe, elle vient d'une corruption ou d'une écriture délibérée,
+ * et dans les deux cas la seule réponse sûre est de lever. Le déclencheur n'est
+ * d'ailleurs pas naturel : IndexedDB écrit un enregistrement entier ou pas du
+ * tout. La doctrine de `jetons.ts` (« `null` veut dire ABSENT ») reste vraie là où
+ * elle a été écrite ; elle ne couvrait simplement pas ce cas-ci.
  */
 export async function lireCoffreAuRepos(base: BaseLocale): Promise<CoffreAuRepos | null> {
-  const brut = await lireMeta(base, CLES_META.coffre);
-  if (brut === undefined || brut === null) return null;
+  const ligne = await lireLigneMeta(base, CLES_META.coffre);
+  if (ligne === undefined) return null;
+
+  const brut: unknown = ligne.valeur;
+  if (brut === undefined || brut === null) {
+    throw new CoffreIllisibleError('sa ligne est présente mais ne porte aucune valeur');
+  }
 
   const verdict = coffreAuReposSchema.safeParse(brut);
   if (!verdict.success) {
@@ -177,16 +191,21 @@ export class DonneesSansCoffreError extends AnomalieCoffreError {
  * et non sur sa lisibilité (F-22) : une ligne illisible fait lever, jamais tirer un
  * sel neuf. Quand la ligne est présente et lisible, l'appel est un déverrouillage
  * ordinaire — un mot de passe faux y est refusé comme partout ailleurs.
+ *
+ * **Et « présence » se lit désormais sur la LIGNE** (`lireLigneMeta`), pas sur sa
+ * valeur : la glose promettait cela, `lireMeta` rendait la valeur, et une ligne
+ * de valeur nulle traversait la garde (revue A29, R4). Le cas part maintenant vers
+ * `deverrouiller`, donc vers `lireCoffreAuRepos`, qui lève.
  */
 export async function initialiserCoffre(
   base: BaseLocale,
   motDePasse: string,
   parametres: ParametresKdf = PARAMETRES_KDF_DEFAUT,
 ): Promise<Coffre> {
-  const ligneExistante = await lireMeta(base, CLES_META.coffre);
-  if (ligneExistante !== undefined && ligneExistante !== null) {
+  const ligneExistante = await lireLigneMeta(base, CLES_META.coffre);
+  if (ligneExistante !== undefined) {
     // `deverrouiller` relit par `lireCoffreAuRepos`, qui lèvera si la ligne est
-    // illisible : c'est le seul chemin, et il ne crée rien.
+    // illisible — vide comprise : c'est le seul chemin, et il ne crée rien.
     return deverrouiller(base, motDePasse);
   }
 
