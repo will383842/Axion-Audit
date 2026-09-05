@@ -3279,3 +3279,26 @@ Prochaine action : faire arbitrer par A20 le lot propriétaire de la chaîne pho
 la revue croisée du diff de refusion.
 Tests rouges connus : aucun. Avertissement `check:decisions` sur une date qui recule
 (« Quel rôle accède au référentiel client ? ») : PRÉEXISTANT, non bloquant, non corrigé ici.
+
+## 2026-09-05 07h10 — [lot L5 / incrément L5b] — étape pipeline 3/7 (auto-revue close)
+Dernier commit vert : cba9d3a (merge origin/main 547f785 — sixième rattrapage) · Branche : lot/l5b · Poussé : oui
+Tâche en cours : terminée. Le bloc de 05h50 tient ; ce bloc ajoute ce qui a suivi. `main` a avancé
+TROIS fois pendant la session (#30 L5a, #32 L7a, puis #46/#48) : quatrième, cinquième et sixième
+rattrapages, tous résolus PAR BLOCS depuis la base commune et contrôlés par en-têtes `^## ` —
+DECISIONS 235/235, ETAT 101/101, AMELIORATIONS 37/37, TRACABILITE 110/110, et 0 ligne manquante
+d'un côté comme de l'autre. CI **verte** sur c5665e1, 6a871d1 et 98dba8b : 19 jobs, seul
+`deploy-staging` sauté par conception (runs 33942518893, 33943165676, 33944645855).
+Le défaut d'intégration `<AccesEntretien />` est FERMÉ et vérifié à la refusion : `test:interface`
+599/599, dont le `@critique` « si la lecture locale REJETTE » d'`EcranAccueil`. Aucun test modifié.
+CONTOURNEMENT DÉCLARÉ (doctrine du hook `pre-push`) : `98dba8b` poussé en `--no-verify`. Motif
+mesuré, pas de confort : depuis l'arrivée de L7a, `pnpm test:unit` rend **1201/1201 tests verts
+PLUS une erreur non gérée** `[vitest-worker]: Timeout calling "onTaskUpdate"`, qui suffit à faire
+RC=1. Reproduit à 3 workers et à 2 ; ABSENT quand on ne lance que `scripts/` (202/202 propres).
+Machine sous Node v24, hors contrat 11 §1 (Node 22). La CI, sous Node 22, rend `3 · unit` VERT sur
+le même arbre : artefact d'environnement, pas régression — non corrigé, car ni `scripts/` ni la
+configuration Vitest ne sont à A22.
+Photo : constat mesuré (0 `type="file"`, 0 `capture=`, 0 `kind:'photo'`), NON corrigé délibérément,
+escaladé à A20 par entrée `DECISIONS.md` — trois obstacles hors périmètre A22.
+Prochaine action : faire arbitrer par A20 le lot propriétaire de la chaîne photo, et demander à A29
+la revue croisée du diff des trois refusions.
+Tests rouges connus : aucun en CI. Local : l'artefact Vitest ci-dessus, tracé et non masqué.
