@@ -161,13 +161,42 @@ function profondeurs(unites: readonly UnitePourPlan[]): ReadonlyMap<string, numb
   return resultat;
 }
 
+/**
+ * LA CLÉ D'INDEX (unité, type), et pourquoi son séparateur s'ÉCRIT.
+ *
+ * Le séparateur est le caractère nul : ni un UUID ni un `TypeSession` ne peut le
+ * contenir, donc deux couples distincts ne peuvent pas produire la même clé — ce
+ * qu'un tiret ou un espace ne garantiraient pas aussi absolument.
+ *
+ * ⚠ **Il est CONSTRUIT, jamais déposé comme octet dans ce fichier** — et c'est le
+ * seul point de ce module qui mérite d'être défendu. L'octet littéral y a vécu
+ * trois commits, et son coût était invisible : un seul `0x00` fait classer le
+ * fichier BINAIRE par ripgrep, qui l'omet alors **en silence**, et par `grep` GNU,
+ * qui ne rend que « Binary file matches ». Le fichier le plus dense de l'incrément
+ * devenait illisible aux `grep` sur lesquels reposent la revue croisée, le contrôle
+ * d'invariants et la recherche d'un correctif — et « zéro occurrence » y avait
+ * l'air d'une bonne nouvelle. Git ne le diffait encore que par chance : sa
+ * détection binaire s'arrête à 8 000 octets, le premier nul était à 8 114.
+ *
+ * `String.fromCharCode(0)` plutôt qu'un échappement littéral : **mesuré**, les
+ * outils d'édition de cette chaîne d'agents convertissent l'échappement en octet
+ * réel à l'écriture — c'est ainsi que les trois nuls sont arrivés. Un appel de
+ * fonction ne peut pas subir cette conversion. La valeur d'exécution est
+ * identique ; c'est la lisibilité du dépôt qui change.
+ */
+const SEPARATEUR_CLE = String.fromCharCode(0);
+
+function cleDeCompte(orgUnitId: string, kind: TypeSession): string {
+  return `${orgUnitId}${SEPARATEUR_CLE}${kind}`;
+}
+
 /** Index (unité, type) → décomptes, pour ne parcourir la liste plate qu'une fois. */
 function indexerComptes(
   comptes: readonly CompteSessionsUnite[],
 ): ReadonlyMap<string, CompteSessionsUnite> {
   const index = new Map<string, CompteSessionsUnite>();
   for (const compte of comptes) {
-    const cle = `${compte.orgUnitId} ${compte.kind}`;
+    const cle = cleDeCompte(compte.orgUnitId, compte.kind);
     const existant = index.get(cle);
     index.set(
       cle,
@@ -227,7 +256,7 @@ export function calculerCouverture(entree: EntreeCouverture): CouvertureMission 
   }
 
   function comptesDe(orgUnitId: string, kind: TypeSession): Decomptes {
-    return comptes.get(`${orgUnitId} ${kind}`) ?? COMPTE_NUL;
+    return comptes.get(cleDeCompte(orgUnitId, kind)) ?? COMPTE_NUL;
   }
 
   function ligne(unite: UnitePourPlan): UniteCouverte {
@@ -292,7 +321,7 @@ function marges(
   comptes: ReadonlyMap<string, CompteSessionsUnite>,
 ): MargesCouverture {
   function comptesDe(orgUnitId: string, kind: TypeSession): Decomptes {
-    return comptes.get(`${orgUnitId} ${kind}`) ?? COMPTE_NUL;
+    return comptes.get(cleDeCompte(orgUnitId, kind)) ?? COMPTE_NUL;
   }
 
   const duPerimetre = entree.toutesLesUnites.filter((u) => u.inScope);
