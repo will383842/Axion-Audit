@@ -3166,6 +3166,63 @@ Burn-down : **56 % écrit · 37 % sur `main` · 33 % porte signée** (référenc
 **À Williams, hors délégation** : le geste root sur staging (`infra/README.md` §6.3), l'arbitrage
 **P-DESCOPE** du 15/09, et les portes **P-C / P-D / P-E**.
 
+## 2026-09-03 15h10 — [lot L1 / incrément E18 `external_ref`] — étape pipeline 3/7
+
+Dernier commit vert : 40b6654 (docs(gouvernance) : Williams tranche E18 (option a)) · Branche :
+lot/l1-e18-external-ref · Poussé : oui
+Tâche en cours : aucune — l'arbitrage E18 option 1 est appliqué de bout en bout.
+Prochaine action : **A16** écrit le test d'intégration de l'unicité partielle (un second
+`external_ref` identique REFUSÉ, un `NULL` répété ACCEPTÉ) — 09 §5.6 : l'auteur du code ne le teste
+pas. Puis revue croisée A17.
+Tests rouges connus : aucun.
+
+Livré : amendement du 04 §7.1 — une ligne d'index datée « (amendement du 2026-09-03) », dans la
+forme des amendements du 2026-08-31 · `docs/.pack-integrity.json` resceau par
+`check-pack-integrity.mjs --sceller` (seul le sceau du 04 bouge) ·
+`apps/api/drizzle/0015_unicite_companies_external_ref.sql` · `apps/api/schema-manifest.json` (+1
+entrée `indexCritiques`). `src/db/schema.ts` **inchangé** : son en-tête interdit d'y redéclarer les
+index — `uq_companies_siren` n'y figure pas davantage. Aucun test écrit ici, délibérément.
+
+Mesuré sur PostgreSQL 16.15 jetable (conteneur, 127.0.0.1:55444) : montée 15/15, `--down-to 0`
+15/15, remontée 15/15 · `schema:diff` ZÉRO ÉCART (44 tables, 487 colonnes, 202 contraintes, **38**
+index du §7.1) · `check:schema-inventaire` vert · `check:pack` cohérent · `format:check` vert. Garde
+de doublons PROUVÉ : deux fiches au même `external_ref` font échouer la montée en 23505 avec le
+message métier, exit 1, `0015` absent du journal ; deux `external_ref NULL` cohabitent sous l'index.
+Contrôle porteur : sans la ligne du manifeste, `schema:diff` sort en 1 (« index UNIQUE non déclaré »).
+
+Réserve : mesures locales sur **Node v24.19.0**, hors du `>=22.11.0 <23` du 11 §1 — seule la CI
+mesure sur le Node du contrat.
+
+## 2026-09-03 17h05 — [lot L1 / incrément E18 `external_ref`] — étape pipeline 5/7
+
+Dernier commit vert : 8fb9cbb (feat(l1) : `companies.external_ref` reçoit son unicité) · Branche :
+lot/l1-e18-external-ref · Poussé : oui
+Tâche en cours : aucune — le test d'intégration de l'unicité partielle est écrit ET exécuté.
+Prochaine action : revue croisée A17 du diff de test, puis contrôle A02 ; **trancher dans
+`DECISIONS.md` le code d'erreur attendu quand l'API reçoit un `external_ref` déjà pris.**
+Tests rouges connus : aucun.
+
+Livré (A16 — aucune ligne de code de production touchée, 09 §5.6) : 4 tests dans
+`apps/api/tests/l1-contraintes.integration.test.ts`, à la suite du bloc `siren` dont cet index est le
+symétrique · 2 aides dans `tests/aide/base-l1.ts` (`tenterMigrations`, `versionAvantLaMigrationQui`).
+Prouvé : doublon REFUSÉ en 23505 · deux `external_ref` NULL ACCEPTÉS · l'index est PARTIEL dans le
+catalogue · la montée refuse une base à doublons préexistants sans laisser index ni ligne de journal.
+
+Preuve par BASCULE — quatre mutations temporaires du `0015`, toutes restaurées : index rendu TOTAL →
+seul le test de catalogue mord, les deux tests de comportement restent VERTS (PG16 tient deux NULL
+pour distincts même sans clause `WHERE` — c'est ce qui justifie ce troisième test) · `NULLS NOT
+DISTINCT` → le cas NULL et le catalogue mordent · index retiré → 3 mordent · garde `DO $$` retiré →
+le refus devient l'erreur brute PostgreSQL et le test mord.
+
+DÉFAUT RENDU À A13/A15, NON CORRIGÉ ICI : `POST /v1/companies` avec un `externalRef` déjà pris rend
+**500 INTERNAL_ERROR** (mesuré), là où un SIREN en double rend 409 `COMPANY_DUPLICATE` —
+`companies/depot.ts` ne nomme que `uq_companies_siren`. Et `externalRef` EST exposé par les schémas
+d'entrée (`packages/shared/src/companies.ts:492` et `:519`), contrairement à ce qu'affirmait
+l'option 2 de l'entrée `DECISIONS.md` du 2026-09-03.
+
+Réserve : mesures locales sur **Node v24.19.0**, hors du `>=22.11.0 <23` du 11 §1 — seule la CI
+mesure sur le Node du contrat.
+
 ## 2026-09-04 20h40 — [autopilote de bout en bout] — ouverture, hors pipeline code
 
 Dernier commit vert : `3c60af7` (`main`) · Branche : `gouvernance/autopilote-2026-09-04` · Poussé : oui
@@ -3221,6 +3278,22 @@ sur un `Map` de l5b). Placés : la règle chez A24, `AccesEntretien` chez A22 à
 `docs/ETAT.md`. **Zéro conflit de code.** Fiche **A-015** ouverte (pilote de fusion `union`, `ETAT.md`
 exclu à dessein — « le dernier bloc fait foi » ne se délègue pas à un automatisme).
 
+## 2026-09-05 02h00 — [lot L1 / incrément E18 `external_ref`] — étape pipeline 4/7 (revue croisée A17, correctifs livrés)
+
+Dernier commit vert : `c77a021` (CI 33927012410) · Branche : `lot/l1-e18-external-ref` (PR #34) · Poussé : oui
+Tâche en cours : fermer les bloquants de `docs/portes/REVUE_A17_E18_2026-09-05.md`. **B-2** fermé par
+`63c68bc` (la relecture d'après coup avale son échec : 409 garanti, `details` au mieux — cause : seconde
+connexion du pool prise sous transaction, `max: 10`, timeout 5 s). **B-1** fermé par `d1f7b7d` (le bloc
+`06h45` rejoint la branche par fusion d'`origin/main` `1b54554`, contrôle par blocs 78 / 203). **B-3** est
+à A16 : les 5 cas du SIREN archivé et du `code` systématique sont sur la branche (`6a9db3c`, 38 tests
+verts localement). m-1 (citation drizzle 0.45.2) fermé dans `63c68bc`.
+Ce que cet incrément a livré depuis le bloc du 03 17h05 : le défaut ① (`b89dfdf`, 409 et plus 500 sur
+`external_ref` en double), les 16 cas d'A16 (`b713f84`), la symétrie du SIREN archivé et
+`details[0].code ∈ { fiche_active, fiche_archivee }` sur les deux 409 (`308ed1a`).
+Prochaine action : **A17 rejoue sa revue sur la tête de la branche** ; M-1 (rectification de la prémisse
+« `external_ref` n'est écrit par aucune route ») et M-2 (référence console non confrontée) sont des
+entrées `DECISIONS.md` de A01, pas de A13.
+Tests rouges connus : aucun sur la branche (Node v24 local, hors contrat — la CI fait foi).
 ## 2026-09-05 00h35 — [lot L5 / incrément L5b] — étape pipeline 3/7 (refusion + auto-revue)
 
 Dernier commit vert : 6031d6b (fix(l5b) : une lecture locale qui échoue produit un ÉTAT) · Branche : lot/l5b · Poussé : oui
