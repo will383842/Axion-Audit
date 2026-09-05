@@ -149,8 +149,16 @@ export function FournisseurTerrain({ children }: { readonly children: ReactNode 
     let vivant = true;
     const abandonne = (): boolean => !vivant;
     const amorcer = async (): Promise<void> => {
+      // La référence est tenue HORS du `try` pour une seule raison : le chemin qui
+      // lève doit pouvoir FERMER la connexion (revue A29 du 2026-09-05, R6). Avant
+      // le correctif de F-22, `lireCoffreAuRepos` ne levait jamais et le cas
+      // n'existait pas ; depuis, une anomalie de coffre laissait une connexion
+      // Dexie vivante que plus personne ne référençait — et une connexion vivante
+      // bloque un `versionchange` (05 §31-1, compatibilité ascendante du schéma
+      // local) jusqu'au rechargement de la page.
+      let ouverte: BaseLocale | null = null;
       try {
-        const ouverte = await ouvrirBaseLocale();
+        ouverte = await ouvrirBaseLocale();
         if (abandonne()) {
           ouverte.close();
           return;
@@ -162,14 +170,22 @@ export function FournisseurTerrain({ children }: { readonly children: ReactNode 
 
         const vueMemorisee = await lireMeta(ouverte, CLES_META.vueCourante);
         const coffre = await lireCoffreAuRepos(ouverte);
-        if (abandonne()) return;
+        // Tout ce qui peut LEVER est fait avant de publier quoi que ce soit : ce
+        // qui suit ne peut plus échouer, donc le `catch` ne peut jamais fermer une
+        // base déjà remise à l'application.
+        const etatStockage = await evaluerStockage();
+        if (abandonne()) {
+          ouverte.close();
+          return;
+        }
 
         naviguer({ type: 'racine', vue: vueCourante(restaurerNavigation(vueMemorisee)) });
         setBase(ouverte);
         setPremierUsage(coffre === null);
         setPhase('verrouille');
-        setStockage(await evaluerStockage());
+        setStockage(etatStockage);
       } catch (erreur) {
+        ouverte?.close();
         if (abandonne()) return;
         setPanne(
           // Un coffre PRÉSENT mais illisible n'est pas un appareil neuf : il va

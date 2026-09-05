@@ -59,7 +59,13 @@ const MOT_DE_PASSE_FICTIF = 'phrase-de-passe-de-test-0000';
 
 // Doubles opaques : ce fichier ne teste ni Dexie ni la crypto, il teste le fil
 // qui les relie au verrou.
-const baseFactice = { nom: 'base-factice' };
+//
+// `close` a été ajouté au double le 2026-09-05 par A24, avec le correctif de la
+// réserve R6 (la coquille FERME désormais la connexion Dexie sur le chemin qui
+// lève). C'est une FIXTURE, pas une assertion : le double doit répondre à ce que
+// le module appelle. Éprouver qu'il est bien appelé — et une seule fois, et
+// jamais sur le chemin nominal — appartient à A26 (09 §5.6).
+const baseFactice = { nom: 'base-factice', close: vi.fn() };
 const coffreFactice = { dek: 'clef-factice' };
 
 let coffreAuRepos: unknown = { sel: 'sel-factice' };
