@@ -5500,7 +5500,6 @@ du §10.2 de la fiche P-B, réserve R-B12 levée). Précédence : 09 §5.2 (amen
 règle du pack sans objet — aucune section en conflit, deux sections complétées.
 Décideur : Williams.
 Impact spec : amendements horodatés de 02 §30.6 et 03 §32.4 ; sceau régénéré.
----
 
 ## 2026-08-31 — [L3a] Quel rôle accède au référentiel client ? Le pack ne le dit nulle part
 
@@ -7363,6 +7362,138 @@ contourné (les lectures passent, et ont servi à confirmer le diagnostic sur le
 Décideur : **Williams** (instruction du 2026-09-03 : « je voudrais que tu fasses tout directement »).
 Impact spec : aucun. `CLAUDE.md` §7 et le §6 du dossier de porte restent en vigueur, mot pour mot.
 
+## 2026-09-02 — [L5a] Revue croisée A29 : REFUSÉ, cinq bloquants sur l'axe PWA — verdict accepté
+
+A29 a relu les 59 fichiers de `lot/l5a` @ `ce4b29b`. Le coffre, le port d'écriture, la base
+versionnée, l'horloge et le verrou sont approuvables ; **la PWA elle-même ne fonctionne pas en
+déploiement** : B1 l'infra Caddy sert 404 sur `/sw.js` et le manifeste (bloc L0 « à supprimer le jour
+où L5 livre la PWA ») et un E2E `@critique` l'exige · B2 manifeste sans icône, non installable, donc
+`storage.persist()` refusé sur iPad et aucune mission embarquable · B3 écran d'installation
+inatteignable · B4 marque « embarquée » posée sur un embarquement refusé · B5 garde de mise à jour
+permissif par défaut et jamais branché. Dix réserves R-L5a-1 à 10.
+
+Options :
+
+1. **Accepter le verdict**, corriger les cinq bloquants dans l'incrément (B1 : L5a retire le bloc
+   Caddy et retourne l'E2E — c'est L5a qui livre la PWA, à lui d'ouvrir la porte, avec relecture A11),
+   trancher les réserves qui appellent une décision, rejouer la revue.
+2. Livrer L5a sans PWA servie et reporter à L5c.
+
+Arbitrage : **option 1.** L'option 2 ferait passer une porte à un socle « offline-first » qui ne
+démarre pas hors ligne — la contradiction est dans les termes. **Règle de précédence sans objet.**
+
+Décideur : A01, sur revue A29
+Impact spec : aucun. `infra/caddy/fronts.static.caddy` : bloc `@pwa_non_livree` retiré par L5a.
+
+## 2026-09-02 — [L5a] Le manifeste PWA sans icône de charte : une icône PROVISOIRE, tracée — ESCALADE SOUS DÉFAUT
+
+La décision du 2026-08-28 réserve le dessin de l'icône à Williams et interdit le demi-manifeste. Les
+icônes n'existent pas ; sans elles l'app n'est pas installable (B2).
+
+Options :
+
+1. **Icône provisoire générée** — un aplat aux couleurs de la charte (terracotta sur ivoire, lettre
+   du produit), 192/512/maskable + `apple-touch-icon`, marquée provisoire dans le manifeste et dans
+   `AMELIORATIONS.md`, **remplacée dès que Williams livre la sienne**.
+2. Attendre l'icône de Williams — l'app reste non installable entre-temps.
+
+Arbitrage : **option 1, sous la règle « silence vaut accord » du 2026-08-31, et signalée à
+Williams** : le dessin reste le sien, le remplacement est une substitution de fichiers sans code.
+Un manifeste complet avec une icône laide vaut mieux qu'un manifeste incomplet et vert.
+**Règle de précédence sans objet.**
+
+Décideur : **Williams — à confirmer** · défaut appliqué par A01
+Impact spec : aucun.
+
+## 2026-09-02 — [L5a] « Mission embarquée » signifie « données présentes », jamais « persistance accordée »
+
+`embarquement.ts` posait la marque `mission:embarquee` dès que `storage.persist()` était accordé, puis
+refusait le pull : `missionEmbarquee()` répondait oui sur une mission sans une ligne (B4).
+
+Options :
+
+1. **La marque n'est posée qu'après un premier pull réussi** ; la persistance accordée est un état
+   distinct (`persistance: 'accordee'`), affiché comme tel.
+2. Garder la marque comme aujourd'hui.
+
+Arbitrage : **option 1.** La question que la marque répond est « puis-je collecter hors ligne sur
+cette mission ? » ; la seule réponse honnête dépend des données, pas du quota. **Précédence :
+invariant 8** (aucune donnée ne vit sur un seul appareil — la marque en est le témoin, elle ne peut
+pas mentir).
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-02 — [L5a] Une ligne dont l'op est en ÉCHEC n'est jamais écrasée par une descente
+
+`appliquerDescente` ne protège que les ops `en_attente` ; une ligne dont l'op est `rejetee` ou
+`a_examiner` peut être écrasée par une descente plus récente (R-L5a-2). Ces statuts existent pour
+que rien ne sorte de la file sans réponse serveur.
+
+Options :
+
+1. **Toute ligne portant une op non `appliquee`** (`en_attente`, `rejetee`, `a_examiner`) est
+   conservée face à une descente, et comptée dans `conservees`.
+2. Seules les `en_attente` sont protégées.
+
+Arbitrage : **option 1.** Une op en échec est une saisie de l'auditeur que le serveur n'a pas encore
+acceptée ; l'écraser par une version serveur, c'est perdre la saisie sans que personne ne l'ait
+décidé. **Précédence : invariant 7.** Obligation transmise à L6b, qui consomme ce code.
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-02 — [L5a] Liste fermée §3.2 : `answerType`, `criticality`, `parentId` entrent ; le premier pull est descopé vers L6a
+
+R-L5a-1 : trois colonnes en clair hors liste (`missionQuestions.answerType`, `criticality`,
+`orgUnits.parentId`) — métadonnées de question et structure d'arbre, aucune personnelle, toutes
+nécessaires à l'index (type de saisie à afficher, criticité, hiérarchie). R-L5a-10 : le premier pull
+(11 §6, « pull mission ») est refusé par L5a avec un motif en commentaire, sans décision.
+
+Options :
+
+1. Les trois colonnes entrent dans la liste fermée ; le premier pull est descopé vers L6a, tracé.
+2. Les trois colonnes passent dans la charge chiffrée ; le premier pull reste dû à L5a.
+
+Arbitrage : **les trois colonnes entrent dans la liste fermée §3.2** (amendement daté de la note,
+même motif que `supprimeLe`/`answerId` : filtrer et afficher sans déchiffrer) ; **le premier pull
+est descopé de L5a vers L6a**, qui livre l'endpoint serveur qu'il consomme — L3d (figeage) est
+livré, l'obstacle restant est côté API. Le balayage d'étanchéité doit couvrir **les sept tables**
+(R-L5a-1), pas trois. **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun sur `/docs`. `docs/conception/LOT_L5.md` §3.2 amendé, daté.
+
+## 2026-09-02 — [L5a] Rejeu de la revue croisée A29 : ACCEPTÉ SOUS RÉSERVE — réserves fermées, deux libellés reconstitués
+
+Rejeu sur `1892df3` : les cinq bloquants B1-B5 et les réserves R-L5a-1/2/3/4/5/7/8/10 sont fermés
+avec preuve `fichier:ligne`. Trois réserves nouvelles (N1 aucun test ne force `rejetee`/`a_examiner`
+face à une descente · N2 `formes.ts` recopie une liste fermée périmée, et `texteSnapshot`/`motsCles`
+attendaient une confirmation · N3 l'icône iOS déplacée à la racine n'est plus précachée), deux
+remarques transmises (N4 fenêtre d'amorçage de la garde de mise à jour → L5c ; N5 lecture de l'outbox
+hors transaction → contrat L6b), et un constat de gouvernance (N6) : **R-L5a-6 et R-L5a-9 n'ont
+jamais été tracées** — la revue REFUSÉE ne détaillait que huit réserves sur dix dans le dépôt.
+
+Options :
+
+1. **Fermer N1-N3 dans l'incrément, reconstituer R-L5a-6 et R-L5a-9 depuis la transcription** de la
+   revue (pas de mémoire), et dire ce qu'elles deviennent.
+2. Déclarer les deux réserves closes sans les relire.
+
+Arbitrage : **option 1.** Reconstituées mot pour mot : **R-L5a-6** — `@axe-core/playwright` est
+installé et n'est utilisé nulle part ; la dérogation 11 §8-1 était justifiée par « la case P-C est
+incochable sans lui », elle reste incochable → **OUVERTE**, fermée par A28 (balayage axe des trois
+écrans L5a, avec la mesure de dérivation < 1 s déjà due). **R-L5a-9** — les cinq décisions L5a
+(Argon2id, AAD, `validé`, liste fermée, dépendances de test) vivent sur `lot/l3-suite`, pas sur
+`lot/l5a` → **OUVERTE, fermée par l'ordre de fusion** : L3 → `main` → `main` dans `lot/l5a` AVANT la
+PR L5a, vérifié par `grep` à ce moment-là ; la fiche AAD (A-008) existe. N1 : cas de test écrit par
+A01 (pas l'auteur d'`ecriture.ts`). N2 : `texteSnapshot` et `motsCles` sont du `*_snapshot` de la
+note §3.2 — dans l'exception, pas dans l'énumération ; `formes.ts` renvoie à la note au lieu de la
+recopier. **Précédence : invariant 7** (N1) ; sans objet pour le reste.
+
+Décideur : A01, sur revue A29
+Impact spec : aucun.
+
 ## 2026-09-03 — [L1 / L3a] `companies.external_ref` reçoit son unicité : l'escalade du 2026-08-31 est tranchée
 
 Reprise et **clôture** de l'entrée du 2026-08-31 « `companies.external_ref` n'a aucune contrainte
@@ -7833,3 +7964,50 @@ suivant » — c'est cette formule qui avait perdu la bascule de la porte L2.
 Décideur : **Williams** (question posée par **A52** le 2026-09-05).
 Impact spec : aucun sur `/docs`. L'entrée du 2026-08-27 n'est pas amendée : elle est **constatée
 inexécutable en l'état** (cause 2), et la présente entrée porte désormais la question et sa date.
+
+## 2026-09-05 — [securite] ZAP : l'arbitrage « EN ATTENTE » de l'entrée précédente est rendu
+
+L'entrée précédente laissait la bascule `ZAP_BLOQUANT` **EN ATTENTE — Williams**. Elle est rendue ici,
+sur délégation, pour que la garde ait une date plutôt qu'un espoir — c'est par « au lot suivant »
+que la bascule L2 s'était perdue.
+
+Options : celles de l'entrée précédente, inchangées (1. `'true'` maintenant · 2. `'false'` borné et
+daté · 3. exclure les règles gênantes).
+
+Arbitrage : **option 2, échéance porte P-C**, avec une condition qui manquait à la recommandation
+d'A52 : **avant P-C, le scan doit couvrir `/hq` et `/api`** (authentification comprise), sinon la
+bascule à P-C protégerait encore une page statique. Le dossier de porte P-C coche donc deux choses :
+la couverture étendue **puis** `ZAP_BLOQUANT='true'`. Les codes 1 et 3 restent bloquants dès
+maintenant. L'option 3 est écartée pour la raison qu'A52 donne : un scan vert par exclusion est le
+contrôle-qui-ment de F-31.
+Vérifié au merge de #42 (run `33928717453`) : le job `ZAP baseline (staging) / Scan passif` **tourne**
+sur `main` — `success` — alors que le déploiement échoue toujours sur l'empreinte. Le découplage a
+pris ; l'un des cinq points « non mesurés » d'A52 est mesuré.
+Règle de précédence : **§16-22 > §1-15** — 07 §13 (ZAP baseline en CI) et 06 §10.2.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun.
+
+## 2026-09-05 — [L1 / E18] Qui a le droit d'ÉCRIRE `companies.external_ref` ?
+
+Doute remonté par A17 en revue croisée, **mesuré d'abord** : les quatre routes `companies` sont
+`roles: ['admin']` (tracé 2026-08-31, éprouvé) — aucun consultant ne peut écrire `externalRef`, la
+liaison M8.1 n'est pas falsifiable par un compte de terrain, l'invariant 3 tient. Reste qu'un
+**administrateur** peut poser une référence console **arbitraire** que rien ne confronte à la
+console ; `0015` garantit l'unicité, pas l'existence. 03 M8.1 décrit le mouvement inverse (import
+depuis la console, « pas de doublon de vérité »).
+
+Options :
+
+1. **`externalRef` reste écrit par l'API, admin seul ; l'unicité suffit ; L13 réconcilie.**
+2. Retirer `externalRef` des schémas d'entrée L3a — ne s'écrit que par la liaison console. **Écartée**
+   : L13 n'est pas dans la table des lots de la Phase 1 (07 §12) ; aucune fiche ne porterait de
+   référence avant la Phase 2, et la liaison manuelle dont le client pilote a besoin disparaîtrait.
+3. Accepter et marquer « non confirmée » jusqu'à confrontation. **Écartée** : colonne au 04, donc
+   escalade 11 §8-2, interdite hors de la révision de spec de P-D (09 §5.9).
+
+Arbitrage : **option 1**, avec deux bornes : la route reste admin seul (déjà le cas), et **L13 devra
+confronter** à la console toute référence posée à la main — ce qui s'écrit dans le brief de L13, pas
+ici. Règle de précédence : **§32-36 > §24-31** — 09 §5.9 (le 04 inviolable hors P-D) écarte
+l'option 3 ; et 07 §12 (la table des lots) borne ce qui est livrable en Phase 1.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun. **Amendement candidat à P-D** si l'option 3 est jugée nécessaire.
