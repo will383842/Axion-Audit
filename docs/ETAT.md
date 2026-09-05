@@ -3009,3 +3009,32 @@ Tests rouges connus, tous VOULUS et tous rendus aux producteurs :
   niveau A). Prouvés non vacants par une bascule qui ne touche aucun fichier.
 · **B2** (A37) — trois octets NUL dans `couverture.ts` : aucun test ne l'attrape ; `ripgrep` omet
   le fichier **en silence**, `grep` GNU n'en rend que « Binary file matches », `git grep` marche.
+
+## 2026-09-05 07h30 — [lot L7 / incrément L7b] — étape pipeline 4/7 (réserves levées)
+
+Dernier commit vert : `bc229b0` (B1 + D1/D2/D3) · Branche : `lot/l7b` · Poussé : oui · PR #47
+Tâche en cours : reprise A32 des deux bloquants d'A37 et des trois défauts mesurés par A36.
+Prochaine action : demander à **A36** de corriger son test anti-vacuité
+(`e2e/accessibilite-l7b.e2e.ts:574`) — il exige `violations > 0` AVANT sa bascule, donc il rougit
+maintenant que les trois défauts sont fermés ; son propre en-tête annonçait qu'il resterait vert.
+Tests rouges connus : ce test-là, et lui seul.
+
+**LES CINQ POINTS SONT FERMÉS.** B2 (trois octets nuls qui rendaient `couverture.ts` invisible aux
+`grep`) : séparateur construit par `String.fromCharCode(0)` — **l'échappement que la revue
+proposait a été essayé et reproduit le défaut**, les outils d'édition le convertissent en octet réel
+à l'écriture. B1 (l'atelier muet à zéro) : la marge sort du `<tfoot>` et devient une ligne de
+synthèse hors tableau, rendue sans condition ; le booléen ne pilote plus que la colonne. D3 (WCAG
+2.1.1, niveau A) : composant `CadreTableau` (`tabindex=0` + `role=region` + `aria-label`) — le cadre
+n'était PAS dans `packages/ui`, c'était une classe recopiée par **trois** écrans, dont le
+portefeuille de L7a. D1 et D2 : deux emplois de jeton corrigés, aucune valeur de jeton touchée.
+
+**MESURES.** `lint`, `typecheck`, `format:check`, `build`, `check:invariants` : 0 erreur.
+`test:interface` **634 verts** (dont les 118 d'`apps/hq`, y compris le test B1 d'A36 qui était
+rouge). `test:unit` **1031 verts**. E2E : **51 passés, 1 échec** — le test anti-vacuité ci-dessus.
+Six tests axe-core rouges au départ, **six verts** : les trois défauts sont réellement fermés.
+
+**DEUX FRAGILITÉS D'ENVIRONNEMENT, mesurées et non corrigées** (aucune ne vient de L7b) :
+`scripts/garde-fous-invariants.test.ts` dépasse son budget de 5 s quand les 44 fichiers tournent en
+parallèle sur cette machine — **3 passages sur 3 verts en isolation** ; et vitest lève un
+`Timeout calling "onTaskUpdate"` (RPC de son propre rapporteur) sur la suite complète, avec
+1031/1031 tests au vert. Les deux appartiennent à des fichiers hors de mon périmètre.
