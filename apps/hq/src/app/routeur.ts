@@ -14,6 +14,14 @@
 //   `/missions`      → portefeuille (liste dense keyset, §33.4)
 //   `/missions/:id`  → avancement d'une mission, espace 2 « Pilotage mission »
 //
+// Les deux routes de L7b, en DRILL-DOWN sous une mission (§22.3 : « drill-down
+// partout, fil d'ariane constant ») :
+//   `/missions/:id/couverture`  → couverture par unité ET par source (§27.1)
+//   `/missions/:id/agregation`  → réponses par question (M5.1, §27.4)
+// Elles ne sont PAS des espaces de la barre latérale : les deux n'ont de sens
+// qu'une fois une mission choisie. Les brancher sur un espace exigerait un
+// sélecteur de mission, qui appartient à l'espace 6 et arrivera avec lui.
+//
 // La base vient de `base.ts`, partagée avec `vite.config.ts` : le routeur ne
 // connaît pas `/hq` — un seul endroit le sait.
 //
@@ -26,6 +34,8 @@ export type Route =
   | { readonly type: 'accueil' }
   | { readonly type: 'portefeuille' }
   | { readonly type: 'mission'; readonly id: string }
+  | { readonly type: 'couverture'; readonly id: string }
+  | { readonly type: 'agregation'; readonly id: string }
   | { readonly type: 'inconnue'; readonly chemin: string };
 
 export const ROUTE_ACCUEIL: Route = { type: 'accueil' };
@@ -43,6 +53,16 @@ export function analyserChemin(chemin: string): Route {
   if (mission?.[1] !== undefined && UUID.test(mission[1])) {
     return { type: 'mission', id: mission[1].toLowerCase() };
   }
+  // Les sous-écrans d'une mission. Le segment de fin est FERMÉ (une alternance,
+  // pas un joker) : un chemin inventé reste « inconnue » et rend l'écran qui le
+  // dit, plutôt qu'un écran vide sur un identifiant qui n'existe pas.
+  const sousEcran = /^\/missions\/([^/]+)\/(couverture|agregation)$/.exec(propre);
+  const id = sousEcran?.[1];
+  const vue = sousEcran?.[2];
+  if (id !== undefined && UUID.test(id)) {
+    if (vue === 'couverture') return { type: 'couverture', id: id.toLowerCase() };
+    if (vue === 'agregation') return { type: 'agregation', id: id.toLowerCase() };
+  }
   return { type: 'inconnue', chemin: propre };
 }
 
@@ -55,6 +75,10 @@ export function cheminDeRoute(route: Route): string {
       return '/missions';
     case 'mission':
       return `/missions/${route.id}`;
+    case 'couverture':
+      return `/missions/${route.id}/couverture`;
+    case 'agregation':
+      return `/missions/${route.id}/agregation`;
     case 'inconnue':
       return route.chemin;
   }

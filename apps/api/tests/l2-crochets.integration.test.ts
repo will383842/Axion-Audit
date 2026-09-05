@@ -1167,6 +1167,14 @@ describe('T5 — les ceintures 3 et 4 : sources et exécution', () => {
     '/v1/missions/:id/generate-questionnaire': { id: missionSemee },
     '/v1/missions/:id/interview-plan': { id: missionSemee },
     '/v1/missions/:id/assignments': { id: missionSemee },
+    // ── LE PILOTAGE (L7b) ─────────────────────────────────────────────────────
+    // Deux gabarits, deux lignes, et la MÊME mission réellement semée : c'est le
+    // mécanisme ① qui l'exige, et c'est l'auteur de la route qui le voit — pas le
+    // lot suivant. Ces deux routes ne touchent aucune table financière ; le
+    // balayage sentinelle les traverse quand même, parce qu'il interroge les
+    // routes QUI EXISTENT et non celles auxquelles on a pensé.
+    '/v1/missions/:id/coverage': { id: missionSemee },
+    '/v1/missions/:id/aggregation': { id: missionSemee },
     '/v1/org-units/:id': { id: uniteSemee },
     '/v1/org-units/:id/validate': { id: uniteSemee },
     '/v1/org-units/:id/merge': { id: uniteSemee },
