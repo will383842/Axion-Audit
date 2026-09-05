@@ -2847,3 +2847,26 @@ sur un `Map` de l5b). Placés : la règle chez A24, `AccesEntretien` chez A22 à
 **Mesure de la file** : les 4 branches en attente ne conflictent avec `main` que sur `DECISIONS.md` et
 `docs/ETAT.md`. **Zéro conflit de code.** Fiche **A-015** ouverte (pilote de fusion `union`, `ETAT.md`
 exclu à dessein — « le dernier bloc fait foi » ne se délègue pas à un automatisme).
+
+## 2026-09-05 02h20 — [lot L5 / incrément L5a — réserves A29] — étape pipeline 3/7 (auto-revue)
+
+Dernier commit vert : `e9d6712` (docs(l5a) : le code citait comme « réserve de spec » une question
+tranchée) · Branche : `lot/l5a-reserves` (partie de `lot/l5a` à `236450c`) · Poussé : oui
+Tâche en cours : les six réserves d'A24 dans la revue croisée A29 du 2026-09-05 sont **fermées** —
+R1 (bornes KDF + filet d'anomalie), R3 (l'écran ne propose plus ce qu'il interdit), R4 (la garde de
+présence lit la LIGNE), R2 (glose ESLint vraie dans les deux sens), R6 (la base est fermée), R5.
+Un commit par réserve, aucun test écrit (09 §5.6) : la liste des cas est remise à **A26**.
+Prochaine action : **A26 écrit les 14 tests listés au rapport A24** (dont les quatre jeux de
+paramètres d'A29 et le cas « ligne présente, valeur nulle »), puis **A29 rejoue la revue croisée**.
+Tests rouges connus : aucun. `pnpm build`, `lint --max-warnings=0`, `typecheck`, `format:check`
+verts ; `test:unit` **965/965**, `test:interface` **516/516**, 0 skippé. Machine sur Node v24, hors
+contrat (11 §1 : Node 22 LTS) — **la CI reste seule juge**.
+
+**Ce qui reste ouvert d'A29** : **R7** (aucun bloc `ETAT.md` pour l'incrément — ce bloc-ci ne couvre
+que les réserves, pas les correctifs de F-22/F-23/F-25) et **R8** (la règle ESLint hors périmètre,
+sans ligne `AMELIORATIONS.md` ni entrée `DECISIONS.md` — R2 en élargit encore la surface). Les deux
+appartiennent à la signature A20 et au contrôle A02, pas à A24.
+
+**Couverture** : `apps/field/src/local/**` **96,32 % lignes / 91,95 % branches** — au-dessus du seuil.
+Mais `coffre.ts` SEUL passe de 95,10 % à **89,51 %** : les planchers KDF et `CoffreInexploitableError`
+n'ont pas encore de test. La porte de CI agrège par glob et reste verte ; le trou est réel et nommé.
