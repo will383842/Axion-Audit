@@ -140,6 +140,25 @@ ligne utile, une clé SSH « restreinte » qui ne l'aurait pas été.
 **Le vérificateur mesure, il ne relit pas.** Un résumé n'est pas une preuve : on exécute la commande
 et on lit sa sortie.
 
+> **AMENDEMENT DU 2026-09-05 — deux règles, chacune payée par un incident du jour.**
+>
+> **a. Un réviseur qui commite est un écrivain.** Le §1 disait « lecture en parallèle : sans
+> risque » — et c'est vrai de la lecture. Mais A17 (revue) et A16 (tests), placés dans le même
+> worktree, se sont télescopés : A17 a commité son verdict, **amendé par erreur le commit d'A16**, et
+> laissé un merge en cours ; A37 et A36 ont rejoué la même scène sur L7b. Aucune perte, deux fois la
+> même cause. **Règle** : un réviseur **dépose** son verdict dans `docs/portes/` et **ne touche jamais
+> à l'index** — ni `add`, ni `commit`, ni `push`. Le pilote le commite lui-même
+> (`git -C <worktree> add <fichier> && git commit`) une fois le testeur sorti. Tout `git add`,
+> `commit` ou `push` est une écriture, y compris pour un fichier Markdown.
+>
+> **b. Deux couches de tests, deux auteurs.** `CLAUDE.md` §4 impose le TDD (tests écrits AVANT, donc
+> par l'auteur) **et** le croisement (jamais par l'auteur). Les deux se lisent ensemble : les **tests
+> de conception** (TDD) sont écrits par l'auteur, déclarés dans leur en-tête, et **ne portent jamais
+> `@critique`** ; les **tests d'acceptation** (`@critique`, par rôle, 4 états, E2E, preuve par
+> bascule) sont écrits par un testeur croisé — A16, A26, A27, A36 — qui peut **contester** un test de
+> conception, jamais le **remplacer**. Une porte ne s'appuie que sur la seconde couche.
+> (`DECISIONS.md`, 2026-09-05, les deux entrées « [méthode] » et « [organisation] ».)
+
 ---
 
 ## 4. LES INTERDITS GIT

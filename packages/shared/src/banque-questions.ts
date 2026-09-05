@@ -340,19 +340,54 @@ export function lireAncresDeCotation(guidance: string | null | undefined): {
   ancres: AncreDeCotation[];
   niveauxHorsEchelle: number[];
   niveauxSansLibelle: number[];
+  /**
+   * CE QUI RESTE QUAND ON A RETIRÉ LES ANCRES : la CONSIGNE CONSULTANT.
+   *
+   * Bloquant B2 de la revue A29 (2026-09-03). Cette fonction ne rendait que les
+   * fragments `N = libellé` et JETAIT tout le reste. Sur une question
+   * `scale_1_5` — le type le plus fréquent d'un audit — l'écran d'entretien
+   * masquait par ailleurs `guidanceSnapshot` pour ne pas doubler les ancres :
+   * la consigne (relances, pièges, ce qu'il faut faire préciser) n'était donc
+   * rendue NULLE PART. 03 M3.1 l'impose au centre de l'écran et 03 §17.5 dit
+   * qu'elle « porte le savoir-faire » — c'est aussi le critère « novice < 30 min ».
+   *
+   * Elle est extraite ICI, par le MÊME découpage que les ancres, et non par un
+   * second parseur : deux découpages du même texte finissent par ne plus être
+   * d'accord, et c'est la consigne qui disparaîtrait à nouveau.
+   *
+   * `null` quand il ne reste rien — jamais une chaîne vide, qu'un rendu
+   * conditionnel afficherait comme un paragraphe fantôme.
+   */
+  consigne: string | null;
 } {
   const ancres: AncreDeCotation[] = [];
   const niveauxHorsEchelle: number[] = [];
   const niveauxSansLibelle: number[] = [];
+  const prose: string[] = [];
   if (guidance === null || guidance === undefined) {
-    return { ancres, niveauxHorsEchelle, niveauxSansLibelle };
+    return { ancres, niveauxHorsEchelle, niveauxSansLibelle, consigne: null };
   }
 
   for (const fragment of guidance.split(SEPARATEURS_ANCRES)) {
     // Le chiffre doit ouvrir le fragment ou suivre un séparateur de phrase : sans
     // cette borne, « article 50 = … » se ferait passer pour l'ancre 0.
     const trouve = /(?:^|[\s([«"'—–-])(\d)\s*[=:]\s*(.*)$/.exec(fragment);
-    if (trouve === null) continue;
+    if (trouve === null) {
+      // Ni ancre ni promesse d'ancre : c'est de la CONSIGNE. On la garde, au
+      // lieu de la jeter comme le faisait la version d'avant B2.
+      const texte = fragment.trim();
+      if (texte !== '') prose.push(texte);
+      continue;
+    }
+    // LA PROSE EST DEVANT L'ANCRE, DANS LE MÊME FRAGMENT — et c'est le point que
+    // la première tentative de correction avait manqué. `SEPARATEURS_ANCRES` ne
+    // découpe ni sur l'espace ni sur le point : « Faire préciser QUI valide. 1 =
+    // aucun » est UN SEUL fragment, qui MATCHE comme ancre. Ne collecter que les
+    // fragments non-ancres laissait donc la consigne se faire avaler par l'ancre
+    // qui la suit. On garde ce qui précède le début du match.
+    const avant = fragment.slice(0, trouve.index).trim();
+    if (avant !== '') prose.push(avant);
+
     const niveau = Number(trouve[1]);
     const libelle = (trouve[2] ?? '').trim();
     if (niveau < 1 || niveau > 5) {
@@ -366,7 +401,17 @@ export function lireAncresDeCotation(guidance: string | null | undefined): {
     ancres.push({ niveau, libelle });
   }
 
-  return { ancres, niveauxHorsEchelle, niveauxSansLibelle };
+  // Les fragments d'ancre MALFORMÉS (niveau hors échelle, libellé manquant) ne
+  // rejoignent pas la consigne : ce sont des défauts de rédaction signalés par
+  // les deux listes ci-dessus, pas de la prose. Les recracher à l'écran ferait
+  // lire « 0 = » à l'auditeur en pleine question.
+  const consigne = prose.join(' ').trim();
+  return {
+    ancres,
+    niveauxHorsEchelle,
+    niveauxSansLibelle,
+    consigne: consigne === '' ? null : consigne,
+  };
 }
 
 // ---------------------------------------------------------------------------
