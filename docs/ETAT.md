@@ -3460,3 +3460,25 @@ dépassait sort d'`App.tsx` vers `coquille-l5c.tsx`. M8 : perte déclarée, corr
 M4 REFUSÉ par un test croisé d'A27 — motif écrit dans le code.
 
 Mesuré : unit **1276/1276** · interface **679/680** · build OK · typecheck 0 · format propre.
+
+---
+
+## 2026-09-05 — [lot L5 / incrément L5c] — étape 4/7 — `main` fusionné, main rendue
+
+Dernier commit vert : `f2f17a8` (merge origin/main) · Branche : lot/l5c · Poussé : oui
+Tâche en cours : aucune. **Aucune PR ouverte** — `lot/l5c` part de `lot/l5b`, #31 fusionne d'abord.
+Prochaine action : **rejeu A29**, puis A02.
+Tests rouges connus : **1**, hérité — `app/EcranAccueil.test.tsx` (L5a), chez A22. Lint : **0**.
+
+`main` portait L5a en SQUASH : seize fichiers en `add/add`, sans base commune. Fusion à trois
+branches PAR FICHIER avec `lot/l5a` nommé comme base — les quinze fichiers de code passent sans
+un conflit, et le correctif A51 de `coffre.ts` est vérifié présent. Les quatre fichiers
+append-only : bords de conflit inspectés AVANT résolution (l'incident de `lot/l7a`), les quatre
+coupures tombent entre deux entrées ; les deux côtés conservés, main d'abord pour que le dernier
+bloc d'ETAT reste celui de cette branche. Multiset : aucune ligne non vide perdue.
+
+`eslint.config.js` pris sur `main` après avoir vérifié qu'aucun sélecteur de L5b n'y manquait :
+**les 2 erreurs de lint héritées sont fermées**.
+
+Mesuré : build OK · typecheck 0 · lint 0 · format propre · unit **1287/1287** · interface
+**759/760**.
