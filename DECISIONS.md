@@ -8990,6 +8990,7 @@ dont l'absence était le trou du premier contrôle. La question générale — a
 précédence : **09 §3-1bis** pour la forme, **07** pour le contenu exigible, qui prime.
 Décideur : **A01**, sur délégation de Williams du 2026-09-04.
 Impact spec : aucun amendement du pack ; écart de forme tracé.
+
 ## 2026-09-05 — [L5] La chaîne PHOTO n'a de lot propriétaire nulle part : qui la livre ?
 
 A23 puis A22 l'ont mesuré indépendamment : **aucune photo n'entre dans l'application**. `grep` sur
