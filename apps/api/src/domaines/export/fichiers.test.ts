@@ -20,6 +20,7 @@
 import { describe, expect, it } from 'vitest';
 import { SEPARATEUR_LISTE_CELLULE } from '@axion/shared';
 import {
+  assemblerLignesArbre,
   ecrireArbre,
   ecrireCasUsage,
   ecrireConstats,
@@ -355,5 +356,76 @@ describe('les fichiers d’annexe — présents même vides, jamais absents', ()
     const corps = lignes(ecrireUnitesHorsPerimetre(ARBRE)).slice(1);
     expect(corps).toHaveLength(1);
     expect(corps[0]).toContain('Atelier Nord');
+  });
+});
+
+// -----------------------------------------------------------------------------
+
+describe('assemblerLignesArbre — le chemin, et les comptes de sessions', () => {
+  const BRUTES = [
+    {
+      id: U1,
+      nom: 'Groupe',
+      kind: 'entreprise',
+      parentId: null,
+      effectif: 500,
+      inScope: true,
+      statut: 'valide',
+    },
+    {
+      id: U2,
+      nom: 'Usine Nord',
+      kind: 'etablissement',
+      parentId: U1,
+      effectif: 80,
+      inScope: true,
+      statut: 'valide',
+    },
+  ];
+
+  it('construit le chemin complet, du sommet à la feuille', () => {
+    const lignesArbre = assemblerLignesArbre(BRUTES, []);
+    expect(lignesArbre[0]?.chemin).toBe('Groupe');
+    expect(lignesArbre[1]?.chemin).toBe('Groupe > Usine Nord');
+  });
+
+  it('compte 0 et 0 pour une unité sans session — jamais une cellule vide', () => {
+    const lignesArbre = assemblerLignesArbre(BRUTES, []);
+    expect(lignesArbre[0]?.sessionsPrevues).toBe(0);
+    expect(lignesArbre[0]?.sessionsRealisees).toBe(0);
+  });
+
+  it('reporte les comptes de la couverture sur la bonne unité', () => {
+    const lignesArbre = assemblerLignesArbre(BRUTES, [
+      { orgUnitId: U2, planifiees: 4, realisees: 3 },
+    ]);
+    expect(lignesArbre[1]?.sessionsPrevues).toBe(4);
+    expect(lignesArbre[1]?.sessionsRealisees).toBe(3);
+  });
+
+  it('ne boucle pas sur un arbre CYCLIQUE — un export ne fige jamais le serveur', () => {
+    const cycle = [
+      {
+        id: U1,
+        nom: 'A',
+        kind: 'service',
+        parentId: U2,
+        effectif: null,
+        inScope: true,
+        statut: 'valide',
+      },
+      {
+        id: U2,
+        nom: 'B',
+        kind: 'service',
+        parentId: U1,
+        effectif: null,
+        inScope: true,
+        statut: 'valide',
+      },
+    ];
+    const lignesArbre = assemblerLignesArbre(cycle, []);
+    expect(lignesArbre).toHaveLength(2);
+    expect(lignesArbre[0]?.chemin.length).toBeGreaterThan(0);
   });
 });

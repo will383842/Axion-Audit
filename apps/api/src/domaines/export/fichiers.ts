@@ -786,3 +786,90 @@ export function ecrireManifestePiecesJointes(
     ]),
   ]);
 }
+
+// -----------------------------------------------------------------------------
+// L'ASSEMBLAGE DE L'ARBRE — pur, et séparé de sa lecture
+// -----------------------------------------------------------------------------
+
+/** Une unité telle que la base la rend, avant chemin et avant comptes. */
+export interface UniteBruteExport {
+  readonly id: string;
+  readonly nom: string;
+  readonly kind: string;
+  readonly parentId: string | null;
+  readonly effectif: number | null;
+  readonly inScope: boolean;
+  readonly statut: string;
+}
+
+/** Ce que la couverture rend par unité — deux nombres, pas un ratio. */
+export interface ComptesUniteExport {
+  readonly orgUnitId: string;
+  readonly planifiees: number;
+  readonly realisees: number;
+}
+
+/** Le séparateur du chemin d'arbre : lisible dans une cellule, et sans ambiguïté. */
+const SEPARATEUR_CHEMIN = ' > ';
+
+/**
+ * Construit le CHEMIN de chaque unité — « Groupe > Usine Nord > Atelier ».
+ *
+ * ── POURQUOI UNE BOUCLE AVEC MÉMO PLUTÔT QU'UNE RÉCURSION NUE ──────────────
+ * Un arbre lu en base peut contenir un CYCLE (un parent qui redescend), et une
+ * récursion nue tournerait indéfiniment sur un export de 150 unités sans que rien
+ * ne le dise. La remontée est donc BORNÉE par le nombre d'unités : au-delà, on
+ * s'arrête et le chemin reste partiel — un fichier imparfait vaut mieux qu'un
+ * serveur qui ne répond plus.
+ */
+function cheminsDesUnites(unites: readonly UniteBruteExport[]): Map<string, string> {
+  const parNom = new Map(unites.map((u) => [u.id, u]));
+  const chemins = new Map<string, string>();
+
+  for (const unite of unites) {
+    const segments: string[] = [];
+    let courante: UniteBruteExport | undefined = unite;
+    let garde = 0;
+    while (courante !== undefined && garde <= unites.length) {
+      segments.unshift(courante.nom);
+      courante = courante.parentId === null ? undefined : parNom.get(courante.parentId);
+      garde += 1;
+    }
+    chemins.set(unite.id, segments.join(SEPARATEUR_CHEMIN));
+  }
+  return chemins;
+}
+
+/**
+ * Assemble les lignes d'`arbre.csv` : unités + chemins + comptes de sessions.
+ *
+ * Une unité SANS session compte 0 et 0 — jamais une cellule vide. « Aucune
+ * session » est une information de couverture (§16.6) ; une cellule vide se lirait
+ * « on ne sait pas », et c'est précisément la confusion qu'un écran de couverture
+ * existe pour lever.
+ */
+export function assemblerLignesArbre(
+  unites: readonly UniteBruteExport[],
+  comptes: readonly ComptesUniteExport[],
+): readonly LigneArbreExport[] {
+  const parId = new Map(unites.map((u) => [u.id, u]));
+  const chemins = cheminsDesUnites(unites);
+  const parUnite = new Map(comptes.map((c) => [c.orgUnitId, c]));
+
+  return unites.map((unite) => {
+    const compte = parUnite.get(unite.id);
+    return {
+      id: unite.id,
+      nom: unite.nom,
+      kind: unite.kind,
+      parentId: unite.parentId,
+      parentNom: unite.parentId === null ? null : (parId.get(unite.parentId)?.nom ?? null),
+      chemin: chemins.get(unite.id) ?? unite.nom,
+      effectif: unite.effectif,
+      inScope: unite.inScope,
+      statut: unite.statut,
+      sessionsPrevues: compte?.planifiees ?? 0,
+      sessionsRealisees: compte?.realisees ?? 0,
+    };
+  });
+}
