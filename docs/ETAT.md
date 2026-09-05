@@ -3375,3 +3375,33 @@ escaladé à A20 par entrée `DECISIONS.md` — trois obstacles hors périmètre
 Prochaine action : faire arbitrer par A20 le lot propriétaire de la chaîne photo, et demander à A29
 la revue croisée du diff des trois refusions.
 Tests rouges connus : aucun en CI. Local : l'artefact Vitest ci-dessus, tracé et non masqué.
+
+## 2026-09-05 06h25 — [autopilote] — QUATRE LOTS DANS `main`, L5c en porte
+
+Dernier commit vert : `26b4702` (`main`) · Branche : `gouvernance/etat-06` · Poussé : oui
+Tâche en cours : six chantiers, un agent chacun.
+Prochaine action : fusionner **#52 (L5c)** dès sa CI verte, puis **monter le dossier de la porte
+P-C** — c'est elle qui ouvre L5d puis L6.
+Tests rouges connus : `main` rouge sur `8 · deploy-staging` seulement (geste root, hors délégation).
+
+**`main` porte L0, L1, L2, L3, L5a, L5b, L7a et E18.** Fusionnées depuis le dernier bloc : #31, #32,
+#34, #45, #46, #48, #49, #50.
+
+**Chantiers** : `lot/l5c` PR #52 (dernier incrément avant P-C) · `lot/l7b` PR #47 · `lot/l7c` A30
+(export §36.3) · `lot/l5a-reserves` A26 · `lot/l3-couverture-companies` A16 · **`lot/l8-scoring` A15,
+ouvert ce jour** · `chore/garde-octets-controle` A52.
+
+**Ce que la validation de la note L6 a évité** (A02, PR #51) : la note ne portait que **5 des 8
+scénarios `@critique`**. Les 6 et 7 dépendent de la chaîne photo — qui n'existait nulle part — et le
+8 d'un **transport authentifié au périmètre d'aucun incrément** : `grep "fetch("` dans `apps/field`
+rend **zéro**, L5a range le jeton et rien ne s'en sert. Amendée (#53) : **8/8 ont un porteur**.
+
+**Trois défauts de méthode payés et fermés cette nuit** : un correctif juste qu'**aucun test
+n'exécutait** (`lcov` de la CI, pas relecture) · un conflit append-only qui coupait **au milieu**
+d'une entrée, produisant des entrées sans `Décideur` alors que le comptage de lignes disait « zéro
+perdue » · une garde d'anti-vacuité **couplée à la présence du défaut qu'elle prouvait**, donc
+impossible à satisfaire une fois le défaut corrigé.
+
+**Déclaré non tenu, et il ira au dossier P-C** : 03 §17.4 — **aucune photo n'entre dans
+l'application**, `compresserPhoto` est du code sans appelant. Lot **L5d** créé pour la chaîne
+complète, séquencé **avant L6** (collision sur le schéma local).
