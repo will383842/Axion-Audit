@@ -42,6 +42,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { Bouton, CarteSyntheseEntretien, Message, ZoneEtat, type EtatZone } from '@axion/ui';
 import { LIBELLE_TYPE_SESSION } from '../../agenda/sessions.js';
 import {
+  AVERTISSEMENT_PERTE_VALIDATION,
   deverrouillerSession,
   rouvrirSession,
   terminerSession,
@@ -258,6 +259,12 @@ export function EcranFinDeSession(): ReactNode {
                   <Message ton="avertissement" titre="Session validée et verrouillée">
                     Toute correction passera par une révision tracée. Un déverrouillage exige un
                     motif, et il est réservé au profil expert.
+                  </Message>
+                  {/* M8 (A29) : la perte de `valideeLe` ne peut pas être évitée
+                      sans un champ que L5c n'a pas le droit d'ajouter. Elle
+                      cesse au moins d'être SILENCIEUSE — invariant 7. */}
+                  <Message ton="alerte" titre="Ce que ce geste efface">
+                    {AVERTISSEMENT_PERTE_VALIDATION}
                   </Message>
                   <textarea
                     className="axn-champ__saisie"

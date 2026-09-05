@@ -152,6 +152,31 @@ export async function deverrouillerSession(
 }
 
 /**
+ * Ce qu'un déverrouillage DÉTRUIT, dit avant de le faire — majeur **M8** (A29).
+ *
+ * ── LE CONSTAT, ET POURQUOI IL N'EST PAS FERMÉ ICI ─────────────────────────
+ * `deverrouillerSession` remet `valideeLe` à `null`. C'est une donnée d'audit,
+ * et elle remonte au siège : le push effacera aussi la trace côté serveur. Rien
+ * ne conserve qu'un entretien A ÉTÉ validé, ni quand. Invariant 7.
+ *
+ * **La conservation a été essayée et MESURÉE : elle fabrique un défaut pire.**
+ * `etatSession` (L5a) lit `status === 'termine' && valideeLe !== null`. Garder
+ * l'horodatage donne bien `en_cours` juste après le déverrouillage — mais le
+ * jour où l'auditeur RE-TERMINE la session, `etatSession` rend de nouveau
+ * `valide` : un entretien se retrouverait verrouillé sans que personne ne l'ait
+ * validé. Échanger une trace perdue contre un verrou fantôme n'est pas un gain.
+ *
+ * La correction juste demande un champ distinct dans `chargeInterviewSchema`
+ * (`local/formes.ts`, L5a, transcrit du 04) — hors du périmètre L5c, et le DDL
+ * vit exclusivement au 04. Escaladé dans `DECISIONS.md`.
+ * Ce qui EST fait ici, et qui est la part de l'invariant 7 que je peux tenir :
+ * l'écart cesse d'être SILENCIEUX. L'écran l'annonce avant le geste, et cette
+ * constante est le texte qu'il affiche — une seule source.
+ */
+export const AVERTISSEMENT_PERTE_VALIDATION =
+  'Le déverrouillage effacera la date de validation de cet entretien, sur cet appareil comme au siège : rien ne conservera qu’il a été validé, ni quand. Cette limite est connue et tracée ; elle attend un champ dédié au schéma.';
+
+/**
  * Les sessions d'un lot que ce profil peut valider MAINTENANT.
  *
  * Sert à armer la case à cocher de l'écran de fin de journée : proposer une

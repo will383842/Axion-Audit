@@ -88,7 +88,19 @@ export const LIBELLE_ETAPE: Record<EtapePilote, string> = {
 // ─────────────────────────────────────────────────────────────────────────────
 // R1 — LE PARCOURS EXPRESS MICRO
 // ─────────────────────────────────────────────────────────────────────────────
-/** 03 §29 R1 — « structure mono-unité ». Au-delà : guidé intégral. */
+/**
+ * 03 §29 R1 — « structure **mono**-unité ». Exactement UNE, ni plus ni moins.
+ *
+ * Le nom garde son `MAX` : il est importé par les tests croisés d'A27, et une
+ * constante publique ne se renomme pas pour un confort de lecture. La BORNE, elle,
+ * est désormais une ÉGALITÉ.
+ *
+ * Le `<=` d'origine acceptait ZÉRO unité (majeur M2, A29) : une mission sans
+ * arbre n'est pas « mono-unité », c'est une mission qu'on n'a pas encore cadrée.
+ * L'express s'y appliquait, `cadrage` redevenait visible faute d'être
+ * trivialement satisfaite, et le pilote affichait QUATRE étapes en annonçant
+ * « structure mono-unité » — faux sur les deux points.
+ */
 export const UNITES_MAX_EXPRESS = 1;
 
 /** 03 §29 R1 — « guidé intégral dès […] > 3 entretiens ». */
@@ -122,7 +134,7 @@ export interface MesureMission {
 export function estParcoursExpress(mesure: MesureMission): boolean {
   return (
     mesure.auditLevel === NIVEAU_AUDIT_EXPRESS &&
-    mesure.unites <= UNITES_MAX_EXPRESS &&
+    mesure.unites === UNITES_MAX_EXPRESS &&
     mesure.entretiens <= ENTRETIENS_MAX_EXPRESS
   );
 }
@@ -139,8 +151,10 @@ export function motifGuideIntegral(mesure: MesureMission): string | null {
   if (mesure.auditLevel !== NIVEAU_AUDIT_EXPRESS) {
     return 'Le parcours condensé est réservé au niveau « diagnostic de cadrage ». Cette mission suit le parcours guidé complet.';
   }
-  if (mesure.unites > UNITES_MAX_EXPRESS) {
-    return `Cette mission couvre ${String(mesure.unites)} unités : le parcours guidé complet s’applique dès la deuxième.`;
+  if (mesure.unites !== UNITES_MAX_EXPRESS) {
+    return mesure.unites === 0
+      ? 'Cette mission n’a encore aucune unité : le parcours guidé complet s’applique tant que l’arbre organisationnel n’est pas posé.'
+      : `Cette mission couvre ${String(mesure.unites)} unités : le parcours guidé complet s’applique dès la deuxième.`;
   }
   return `Cette mission compte ${String(mesure.entretiens)} sessions de collecte : le parcours guidé complet s’applique au-delà de ${String(ENTRETIENS_MAX_EXPRESS)}.`;
 }

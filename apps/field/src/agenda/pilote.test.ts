@@ -201,3 +201,63 @@ describe('l’automatisme ne valide jamais l’absence de travail, ni n’efface
     }
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// F. LE NOMBRE D'ÉTAPES VISIBLES AUX BORNES (majeur M2, revue A29 du 2026-09-05)
+//
+// Les cas dégradés étaient éprouvés sur `.etapes` et JAMAIS sur
+// `.etapesVisibles.length` : la borne que le « 3 » du pack protège n'était donc
+// pas protégée là où elle casse. Ces tests la protègent là.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('R1 aux bornes — le « 3 » tient, ou l’express ne s’applique pas', () => {
+  it('@critique ZÉRO unité n’est PAS « mono-unité » : le parcours guidé complet s’applique', () => {
+    // Le `<=` d'origine acceptait 0 : l'express s'appliquait, `cadrage` redevenait
+    // visible faute d'être trivialement satisfaite, et l'écran annonçait
+    // « 4 étapes : structure mono-unité » — faux sur les deux points.
+    const pilote = construirePilote({ ...EXPRESS, unites: 0 });
+    expect(pilote.express).toBe(false);
+    expect(pilote.etapesVisibles).toHaveLength(6);
+    expect(pilote.motifGuideIntegral).toMatch(/aucune unité/i);
+  });
+
+  it('@critique UNE unité exactement : express, et exactement 3 étapes visibles', () => {
+    const pilote = construirePilote({ ...EXPRESS, unites: 1 });
+    expect(pilote.express).toBe(true);
+    expect(pilote.etapesVisibles).toHaveLength(ETAPES_VISIBLES_EXPRESS);
+  });
+
+  it('@critique sans questionnaire descendu, l’express reste mais « Préparation » redevient VISIBLE', () => {
+    // Ce n'est pas un défaut : la préparation n'est pas satisfaite, donc elle se
+    // montre. Ce qui serait un défaut, c'est que l'écran continue d'annoncer
+    // « 3 » — il affiche le nombre CALCULÉ, et ce test fixe ce nombre.
+    const pilote = construirePilote({ ...EXPRESS, questions: 0 });
+    expect(pilote.express).toBe(true);
+    expect(pilote.etapesVisibles).toHaveLength(4);
+    expect(pilote.etapesVisibles.map((e) => e.code)).toEqual([
+      'preparation',
+      'collecte',
+      'analyse',
+      'livraison',
+    ]);
+  });
+
+  it('@critique quatre entretiens : au-delà de la borne, six étapes et un motif', () => {
+    const pilote = construirePilote({ ...EXPRESS, entretiens: 4 });
+    expect(pilote.express).toBe(false);
+    expect(pilote.etapesVisibles).toHaveLength(6);
+  });
+
+  it('le nombre annoncé est TOUJOURS celui de la liste — jamais la constante recopiée', () => {
+    for (const mesure of [
+      EXPRESS,
+      { ...EXPRESS, questions: 0 },
+      { ...EXPRESS, unites: 0 },
+      { ...EXPRESS, entretiens: 9 },
+    ]) {
+      const pilote = construirePilote(mesure);
+      expect(pilote.etapesVisibles).toHaveLength(
+        pilote.etapes.filter((etape) => etape.visible).length,
+      );
+    }
+  });
+});

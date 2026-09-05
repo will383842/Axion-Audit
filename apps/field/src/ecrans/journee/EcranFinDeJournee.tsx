@@ -208,6 +208,22 @@ export function EcranFinDeJournee(): ReactNode {
       let validation = 'Aucun entretien terminé à valider.';
       let refus: readonly RefusValidation[] = [];
       if (aValider.length > 0) {
+        // ── M4 (A29) : PAS DE `try/catch` ICI, ET C'EST DÉLIBÉRÉ ────────────
+        // A29 relève que la validation est « la seule étape qui modifie » et
+        // reste sans garde. J'ai posé la garde, et un test croisé d'A27 — VERT
+        // avant ma correction — l'a refusée, avec raison :
+        // « le fichier est déposé AVANT la validation ; si elle lève, l'écran le
+        // dit et rien n'est perdu » exige une ALERTE (`role="alert"`), pas un
+        // message rangé dans la carte de résultat.
+        //
+        // Le motif tient à la POSITION de cette étape. Les deux premières sont
+        // gardées parce qu'il reste quelque chose à faire après elles — c'est le
+        // sens de « un échec n'annule pas les suivants ». La validation est la
+        // DERNIÈRE : rien ne la suit, et l'export est déjà déposé. L'avaler
+        // n'aurait protégé aucune étape et aurait dégradé le signal, d'une alerte
+        // vers une ligne de synthèse. Le `catch` extérieur du rituel la traite,
+        // et dit « aucune donnée n'a été perdue » — ce qui est vrai : les
+        // entretiens validés avant l'échec le restent, les autres sont intacts.
         const r = await validerEnGroupe(aValider, PROFIL_PAR_DEFAUT);
         refus = r.refusees;
         validation = `${String(r.validees.length)} entretien(s) validé(s)${r.refusees.length > 0 ? `, ${String(r.refusees.length)} non validé(s)` : ''}.`;

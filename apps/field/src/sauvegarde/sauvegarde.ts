@@ -412,6 +412,23 @@ export async function importerSauvegarde(
     );
   }
 
+  // ── M1 (A29) : LA GARDE QUE LE CHAMP PROMETTAIT ─────────────────────────
+  // `versionSchemaLocal` était écrit dans l'en-tête et JAMAIS relu. Le champ est
+  // un ajout au format que 11 §4 ne nomme pas, assumé au nom d'une garde qui
+  // n'existait pas : le format portait une promesse que le code ne tenait pas.
+  // Deux issues cohérentes — écrire la garde, ou retirer le champ. La garde vaut
+  // mieux : 05 §31-1 exige qu'une mise à jour « n'invalide JAMAIS des données non
+  // synchronisées », et une sauvegarde d'une version PLUS RÉCENTE contient des
+  // formes que ce code ne sait pas lire.
+  // Le sens est asymétrique, et c'est voulu : une sauvegarde PLUS ANCIENNE est
+  // acceptée (les migrations locales montent, `base.ts`), une PLUS RÉCENTE est
+  // refusée. Refuser l'ancienne rendrait inutilisable la sauvegarde d'hier.
+  if (valide.enTete.versionSchemaLocal > VERSION_SCHEMA_LOCAL) {
+    throw new SauvegardeIllisibleError(
+      `elle a été produite par une version plus récente de l’application (schéma local ${String(valide.enTete.versionSchemaLocal)}, cet appareil lit jusqu’à ${String(VERSION_SCHEMA_LOCAL)}) — mettez cet appareil à jour avant de restaurer`,
+    );
+  }
+
   let clair: string;
   try {
     const cle = await cleDuFichier(

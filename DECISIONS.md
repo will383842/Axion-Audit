@@ -8067,3 +8067,31 @@ Règle de précédence sans objet (aucune divergence interne) : `LOT_L5.md` est 
 conception, pas une section du pack ; elle se précise sans contredire aucun texte.
 Décideur : **A01, sur délégation de Williams du 2026-09-04**, sur constat A29.
 Impact spec : aucun. Amendement de `docs/conception/LOT_L5.md` §1, daté et horodaté sur place.
+
+## 2026-09-05 — [L5c] Un déverrouillage efface `valideeLe`, et rien ne conserve qu'il y a eu validation
+
+Majeur M8 de la revue A29. `deverrouillerSession` remet `valideeLe` à `null`. C'est une donnée
+d'audit qui remonte au siège par `ecrireLocal` : le push effacera aussi la trace côté serveur.
+L'entrée du même jour sur le MOTIF ne couvre pas ce champ — elle argue que l'invariant 7 tient par
+`answers.revision`, ce qui est exact pour `answers` et muet sur `interviews`.
+
+Options :
+(a) CONSERVER `valideeLe` en passant `status` à `en_cours`. **Essayé et mesuré : produit un défaut
+pire.** `etatSession` (L5a) lit `status === 'termine' && valideeLe !== null`. Juste après le
+déverrouillage l'état est bien `en_cours` — mais le jour où l'auditeur RE-TERMINE la session,
+`etatSession` rend de nouveau `valide` : un entretien verrouillé sans que personne ne l'ait
+validé. Échanger une trace perdue contre un verrou fantôme n'est pas un gain.
+(b) Ajouter un champ distinct (`premiereValidationLe`, ou un compteur) à `chargeInterviewSchema`.
+C'est la correction juste. Elle touche `local/formes.ts` (L5a) et, en amont, le fichier 04 —
+hors périmètre L5c, et le DDL vit exclusivement au 04 (`CLAUDE.md` en-tête).
+(c) Rendre la perte NON SILENCIEUSE, et escalader.
+
+Arbitrage : **(c) pour cet incrément, (b) à faire faire.** L'invariant 7 interdit qu'une donnée soit
+« SILENCIEUSEMENT écrasée » : l'écran de fin de session annonce désormais, avant le geste et en
+toutes lettres, ce que le déverrouillage efface (`AVERTISSEMENT_PERTE_VALIDATION`, une seule
+source, dans le domaine). L'écart demeure ; il n'est plus caché.
+Règle de précédence sans objet (aucune divergence interne) : l'invariant 7 et la machine à états de
+L5a ne se contredisent pas — il manque un champ pour honorer les deux.
+Décideur : **A01, sur délégation de Williams du 2026-09-04** pour (c). **(b) appartient à Williams**
+(amendement du 04) et se pose au brief de L5a/L6.
+Impact spec : aucun aujourd'hui. Amendement horodaté du 04 si (b) est retenu.
