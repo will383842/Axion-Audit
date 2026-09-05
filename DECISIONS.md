@@ -8172,3 +8172,30 @@ une par une** dans le fichier, comme L3 l'a fait — jamais écartée en silence
 **sans objet** (aucune divergence interne : le bandeau du fichier et la DoD disent la même chose).
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun. Dette de L3 nommée et datée, pas découverte à P-E.
+
+## 2026-09-05 — [méthode] La fiche A-015 est ABSORBÉE : sa condition de déclenchement est remplie
+
+La fiche A-015 (2026-09-04) proposait un pilote de fusion `union` pour les registres append-only, et
+se recommandait elle-même en **PHASE 2** — « sauf si un troisième défaut de fusion survient d'ici
+P-C, auquel cas ABSORBÉE ». Il est survenu le 2026-09-05, sur `lot/l7a`, **et c'est la session pilote
+qui l'a commis** : une résolution mécanique des marqueurs a coupé deux entrées de leurs champs
+`Décideur` et `Impact spec`. Trois défauts en quatre jours, tous sur les deux mêmes fichiers.
+
+Options :
+
+1. **Absorber maintenant** : `DECISIONS.md` et `AMELIORATIONS.md` en `merge=union`, `docs/ETAT.md`
+   exclu, et les gardes de format rendus **obligatoires après chaque fusion**.
+2. Tenir la Phase 2 comme la fiche le recommandait. **Écartée** : la fiche prévoyait elle-même son
+   propre renversement, et la condition est remplie — la tenir serait suivre la lettre contre le fait.
+3. Étendre `union` à `docs/ETAT.md` aussi. **Écartée** pour la raison écrite dans la fiche : « le
+   dernier bloc fait foi » ne se délègue pas à un automatisme qui décide seul de l'ordre.
+
+Arbitrage : **option 1**, avec une borne qui vaut plus que le pilote lui-même : **`union` ne sait pas
+reconnaître une entrée**. Quand un conflit tombe **au milieu** d'une entrée — c'est le défaut du jour —
+il produit la même entrée chimérique qu'une résolution manuelle. Il supprime le **travail**, jamais le
+**contrôle** : `check:decisions` et `check:prose` sont **dus après chaque fusion, avant le commit**,
+et ils sont les seuls à attraper ce défaut — le comptage de lignes répond « zéro perdue » dans les
+deux sens.
+Règle de précédence **sans objet** (convention d'outillage, hors pack).
+Décideur : **A01**, sur délégation du 2026-09-04, sur la clause de la fiche elle-même.
+Impact spec : `.gitattributes` amendé et commenté ; aucun fichier du pack modifié.
