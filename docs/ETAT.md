@@ -2898,3 +2898,31 @@ reste seule juge** (09 §5.7).
 Restent ouverts d'A29 : **R7** et **R8** — signature A20 et contrôle A02, pas A24.
 **Couverture** : `local/**` 96,32 % ; mais `coffre.ts` seul **89,51 %**, sous le seuil : les planchers
 KDF et `CoffreInexploitableError` n'ont pas encore de test, et A24 n'en écrit pas (09 §5.6).
+
+## 2026-09-05 06h20 — [lot L5 / incrément L5a — réserves A29] — étape pipeline 3/7 (auto-revue)
+
+Dernier commit vert : `ad58f61` · Branche : `lot/l5a-reserves` · Poussé : **oui, vérifié**
+(`* [new branch] lot/l5a-reserves`, hook `pre-push` **intégralement vert**, `test:unit` compris).
+Tâche en cours : deux chiffres du bloc de 06h00 sont corrigés ci-dessous, mesurés et non repris.
+Prochaine action : **A26 écrit les tests listés au rapport A24**, en priorité ceux qui couvrent les
+planchers KDF, `CoffreInexploitableError` et le filet `sousFiletDAnomalie`.
+Tests rouges connus : **aucun** — `test:unit` 965/965, `test:interface` 516/516, 0 skippé.
+
+**Correction 1 — le code de sortie de `test:unit`.** Le bloc de 06h00 le donnait pour sortant en
+code 1 ; c'est **intermittent**, pas systématique. Mesuré 4 fois : 2 échecs en `--pool=threads`
+(965 verts + `[vitest-worker]: Timeout calling "onTaskUpdate"`, le RPC du *reporter*), **2 succès**
+dont celui du hook `pre-push` qui a laissé passer ce push. Le symptôme est une contention sous
+**Node v24.19.0**, hors contrat (11 §1). Rien n'a été reconfiguré ; la CI sous Node 22 reste juge.
+Une session qui verrait ce code 1 ne doit **pas** chercher un test rouge : il n'y en a pas.
+
+**Correction 2 — la couverture, mesurée sur l'arbre fusionné** (`--coverage`, unit + interface) :
+`apps/field/src/local/**` **95,55 % lignes / 92,27 % branches** (et non 96,32 / 91,95) — au-dessus du
+seuil. Mais **deux modules de crypto ont BAISSÉ** en gagnant leurs garde-fous, faute de tests :
+`coffre.ts` **89,51 % / 87,69 %** (était 95,10) — **sous les 90 % de la DoD** — et
+`coffre-appareil.ts` **95,54 % / 87,80 %** (était 99,23). Les lignes non couvertes sont exactement
+les correctifs d'A29 : planchers KDF, `CoffreInexploitableError`, `sousFiletDAnomalie`.
+**La porte de CI agrège par glob et reste verte : le trou est réel, nommé, et non contourné.**
+Il se ferme quand A26 livre — A24 n'écrit pas ses propres tests (09 §5.6).
+
+**Le hook `pre-push` a mordu à raison** : le bloc de 06h00 faisait 38 lignes pour un maximum de 25
+(`check:prose`). Réécrit, pas tronqué.
