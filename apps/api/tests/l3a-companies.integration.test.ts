@@ -43,6 +43,17 @@
 //   7. SIREN malformé = 400, SIREN valide écrit autrement = même fiche ;
 //   8. `deleted_at` non nul → 404 et absence de la liste.
 //
+// ── AJOUT DU 2026-09-04 — LA SECONDE UNICITÉ, ET CE QU'ELLE A COÛTÉ ─────────
+//   9. `companies.external_ref` a reçu son index unique partiel le 2026-09-03
+//      (migration `0015`, amendement du 04 §7.1) SANS que les routes apprennent à
+//      le nommer : une référence console en double sortait en 500 INTERNAL_ERROR
+//      — « défaut ① », mesuré puis rendu aux producteurs. Les sections 10 à 13
+//      ferment ce défaut et, surtout, le rendent irréversible : les deux 409 de
+//      `companies` (SIREN et référence console) y sont éprouvés sur LES DEUX
+//      chemins d'écriture, le cas de la fiche ARCHIVÉE qui retient sa référence y
+//      est tenu, et le conflit DOUBLE y est exigé sans présumer lequel des deux
+//      index mord le premier.
+//
 // ── CE QUE CE FICHIER NE PROUVE PAS, dit plutôt que sous-entendu ─────────────
 //   · il ne prouve rien sur les journaux `activity_log` : la porte d'écriture du
 //     journal appartient au lot L2 et a sa propre suite (`l2-journal`). Ce qui
@@ -138,6 +149,28 @@ function sirenFactice(huitChiffres: string): string {
 }
 
 // -----------------------------------------------------------------------------
+// RÉFÉRENCES CONSOLE FACTICES — invariant 2, jusque dans les fixtures
+// -----------------------------------------------------------------------------
+
+/**
+ * Une référence console UNIQUE À L'EXÉCUTION.
+ *
+ * ── DEUX RAISONS DE NE PAS ÉCRIRE LA CHAÎNE À LA MAIN ───────────────────────
+ *  1. `uq_companies_external_ref` est posé sur TOUTE la table, et les fichiers de
+ *     ce projet partagent un conteneur : deux tests qui choisiraient la même
+ *     constante se refuseraient l'un l'autre, et le second rougirait pour une
+ *     raison qui n'est pas la sienne. Le compteur rend l'ordre des `it` sans effet.
+ *  2. invariant 2 — aucune référence client réelle, même en fixture. `REF-FICTIVE`
+ *     ne désigne rien ni personne, et se reconnaît d'un coup d'œil dans un dump.
+ * La longueur reste très en deçà des 128 caractères du contrat.
+ */
+let compteurRef = 0;
+function refFactice(marqueur: string): string {
+  compteurRef += 1;
+  return `REF-FICTIVE-${marqueur.toUpperCase()}-${String(compteurRef).padStart(3, '0')}`;
+}
+
+// -----------------------------------------------------------------------------
 // CODES APE — une division RÉELLEMENT semée, et une qui ne l'est PAS
 // -----------------------------------------------------------------------------
 
@@ -180,10 +213,27 @@ function api(): FastifyInstance {
 // APPELS HTTP
 // -----------------------------------------------------------------------------
 
+/**
+ * Une ligne de `details[]`, TELLE QUE LA DÉCRIT 11 §3 — et non telle que la code le
+ * dépôt. `code` y est OPTIONNEL et destiné à une MACHINE : c'est l'amendement de
+ * convention du 2026-08-29 (`errorDetailSchema`), et c'est par lui que la console
+ * distingue une fiche en conflit VIVANTE d'une fiche ARCHIVÉE sans avoir à lire le
+ * français. Le champ était absent de cette enveloppe de test jusqu'au 2026-09-04 :
+ * il n'était donc ni lu ni exigé, et un `code` absent serait passé inaperçu.
+ */
+const detailErreurSchema = z.object({
+  path: z.string(),
+  code: z.string().optional(),
+  message: z.string(),
+});
+type DetailErreur = z.infer<typeof detailErreurSchema>;
+
 interface Reponse {
   readonly statut: number;
   readonly code: string | null;
-  readonly details: readonly { readonly path: string; readonly message: string }[];
+  /** Le message FRANÇAIS de l'enveloppe, ou `null` si la réponse n'est pas une erreur. */
+  readonly message: string | null;
+  readonly details: readonly DetailErreur[];
   readonly corps: string;
 }
 
@@ -191,7 +241,28 @@ const erreurSchema = z.object({
   error: z.object({
     code: z.string(),
     message: z.string(),
-    details: z.array(z.object({ path: z.string(), message: z.string() })).optional(),
+    details: z.array(detailErreurSchema).optional(),
+  }),
+});
+
+/**
+ * L'ENVELOPPE D'ERREUR, EXIGÉE AU MOT — clés comprises.
+ *
+ * Réécrite depuis 11 §3 (`{ error: { code, message, details? } }`) plutôt
+ * qu'importée d'`@axion/shared` : importer `apiErrorSchema` reviendrait à demander
+ * au sujet de valider sa propre réponse, exactement comme pour
+ * `companyResponseSchema` plus haut. La différence avec `erreurSchema` ci-dessus est
+ * la STRICTESSE : ici aucune clé supplémentaire n'est tolérée, à aucun niveau. Une
+ * réponse d'erreur qui laisserait fuir un `stack`, un `statusCode` ou un fragment de
+ * requête SQL passerait sans bruit à travers un schéma permissif.
+ */
+const enveloppeErreurStricteSchema = z.strictObject({
+  error: z.strictObject({
+    code: z.string(),
+    message: z.string(),
+    details: z
+      .array(z.strictObject({ path: z.string(), code: z.string().optional(), message: z.string() }))
+      .optional(),
   }),
 });
 
@@ -225,15 +296,17 @@ async function appeler(
   });
 
   let code: string | null = null;
-  let details: readonly { path: string; message: string }[] = [];
+  let message: string | null = null;
+  let details: readonly DetailErreur[] = [];
   if (reponse.body !== '') {
     const analyse = erreurSchema.safeParse(JSON.parse(reponse.body));
     if (analyse.success) {
       code = analyse.data.error.code;
+      message = analyse.data.error.message;
       details = analyse.data.error.details ?? [];
     }
   }
-  return { statut: reponse.statusCode, code, details, corps: reponse.body };
+  return { statut: reponse.statusCode, code, message, details, corps: reponse.body };
 }
 
 // -----------------------------------------------------------------------------
@@ -383,6 +456,56 @@ async function compterParSiren(siren: string): Promise<number> {
     [siren],
   );
   return Number(resultat.rows[0]?.total ?? '0');
+}
+
+/**
+ * Combien de LIGNES portent cette référence console — toutes lignes confondues,
+ * archivées comprises.
+ *
+ * Le `WHERE` ne filtre PAS `deleted_at`, et c'est le cœur du sujet : l'index
+ * `uq_companies_external_ref` ne l'exclut pas non plus (04 §7.1, migration `0015`).
+ * Compter les seules fiches vivantes rendrait `0` sur le conflit le plus déroutant
+ * des deux — celui dont la fiche coupable n'apparaît dans aucune liste — et le test
+ * de la fiche archivée serait vert en ne mesurant rien.
+ */
+async function compterParRefExterne(externalRef: string): Promise<number> {
+  const resultat = await bd().query<{ total: string }>(
+    'SELECT count(*) AS total FROM companies WHERE external_ref = $1',
+    [externalRef],
+  );
+  return Number(resultat.rows[0]?.total ?? '0');
+}
+
+/** La référence console RÉELLEMENT écrite en base — la réponse ne fait pas foi. */
+async function refExterneEnBase(id: string): Promise<string | null> {
+  const resultat = await bd().query<{ external_ref: string | null }>(
+    'SELECT external_ref FROM companies WHERE id = $1',
+    [id],
+  );
+  if (resultat.rowCount !== 1) throw new Error(`fiche ${id} absente`);
+  return resultat.rows[0]?.external_ref ?? null;
+}
+
+/**
+ * `true` si la fiche porte un `deleted_at` NON NUL.
+ *
+ * ── POURQUOI CE CONTRÔLE EXISTE ─────────────────────────────────────────────
+ * Le cas « fiche archivée » se fabrique par un `UPDATE` direct (aucune route
+ * n'écrit `deleted_at`). Si cette écriture ratait — mauvais identifiant, colonne
+ * renommée, ligne déjà remplacée —, le test se poursuivrait contre une fiche
+ * VIVANTE et attendrait `fiche_archivee` d'un code qui a raison de rendre
+ * `fiche_active`. Il rougirait alors en accusant le mauvais coupable ; pire, s'il
+ * n'exigeait que le statut 409, il serait VERT sans jamais avoir atteint sa
+ * condition. On vérifie donc l'état AVANT d'en tirer une attente.
+ */
+async function estArchiveeEnBase(id: string): Promise<boolean> {
+  const resultat = await bd().query<{ deleted_at: Date | null }>(
+    'SELECT deleted_at FROM companies WHERE id = $1',
+    [id],
+  );
+  const ligne = resultat.rows[0];
+  if (ligne === undefined) throw new Error(`fiche ${id} absente`);
+  return ligne.deleted_at !== null;
 }
 
 async function secteurDeLaDivision(division: string): Promise<string | null> {
@@ -1394,5 +1517,1248 @@ describe('PATCH /v1/companies/:id', () => {
         'une ressource absente : le distinguer évite d’aller chercher en base une clé\n' +
         'qui ne peut correspondre à rien.',
     ).toBe(400);
+  });
+});
+
+// =============================================================================
+// 10. LA RÉFÉRENCE CONSOLE EN DOUBLE — FERMETURE DU DÉFAUT ① DU 2026-09-03
+// =============================================================================
+// AJOUTÉ LE 2026-09-04 par A16, qui n'a écrit AUCUNE ligne du correctif (09 §5.6).
+//
+// CE QUI S'EST PASSÉ, en une phrase : la migration `0015` a posé un SECOND index
+// unique sur `companies` (`uq_companies_external_ref`, amendement du 04 §7.1) sans
+// que les routes L3a apprennent à le nommer — une référence console en double ne
+// tombait donc dans aucune branche de traduction et ressortait en **500
+// INTERNAL_ERROR**. Ce n'est pas une inattention isolée : c'est la forme exacte que
+// le commentaire de `depot.ts` annonçait au futur depuis le premier jour du lot.
+//
+// CE QUE CES TESTS TIENNENT, ET QU'AUCUNE RELECTURE NE TIENDRAIT :
+//   · la traduction du SQLSTATE 23505 dépend de la remontée de la chaîne `cause` de
+//     Drizzle, qui ne se voit qu'À L'EXÉCUTION contre un PostgreSQL réel. Le seul
+//     verdict qui compte est donc « 409, jamais 500 » mesuré contre un conteneur ;
+//   · le `PATCH` refait le chemin EN ENTIER, et ce n'est pas du zèle : il écrit sous
+//     une transaction ouverte par un `SELECT … FOR UPDATE`, tandis que la lecture qui
+//     enrichit le message part sur une connexion DISTINCTE de cette transaction. Deux
+//     chemins, deux verdicts — un `POST` vert ne dit rien du `PATCH` ;
+//   · la fiche ARCHIVÉE conserve sa référence console (l'index n'exclut pas
+//     `deleted_at`, et c'est voulu, invariant 7). Le 409 doit alors NOMMER cette
+//     fiche et orienter vers sa RESTAURATION — sans quoi le refus enverrait créer un
+//     doublon sous une autre référence, exactement le désordre que la contrainte
+//     existe pour empêcher.
+//
+// LES DEUX RÉÉCRITURES ASSUMÉES, par rapport à la liste des cas reçue :
+//   1. « `apiErrorSchema` valide la réponse » devient « une enveloppe STRICTE
+//      réécrite depuis 11 §3 valide la réponse ». Importer le schéma du sujet pour
+//      juger le sujet est précisément ce que l'en-tête de ce fichier refuse : une
+//      clé retirée du contrat disparaîtrait des deux côtés le même jour, et le test
+//      resterait vert en n'exigeant plus rien. La version stricte exige PLUS que
+//      l'originale — aucune clé surnuméraire, à aucun niveau ;
+//   2. le cas « PATCH d'un SIREN déjà pris » n'appartient PAS au correctif de la
+//      référence console. Il est écrit quand même, et à cet endroit, parce qu'il est
+//      le trou de couverture que le correctif a rendu visible : le `PATCH` passe par
+//      la même traduction que le `POST`, et personne ne l'avait jamais éprouvé sur
+//      le SIREN. Un chemin non testé qui marche est un chemin qui marche par chance.
+//
+// Traçabilité : E18 (liaison clients axion-ia.com) · E43 (conventions d'API).
+// =============================================================================
+describe('POST /v1/companies — conflit de RÉFÉRENCE CONSOLE (E18, migration 0015)', () => {
+  it('@critique une référence console déjà prise rend 409 COMPANY_EXTERNAL_REF_DUPLICATE — et plus jamais 500', async () => {
+    // LA NON-RÉGRESSION LITTÉRALE DU DÉFAUT ①. Le statut est la première assertion du
+    // test, et la seule dont l'échec se lit sans contexte : un 500 ici signifierait
+    // que la contrainte a mordu et que personne ne l'a traduite — l'utilisateur
+    // verrait « une erreur interne est survenue » là où il doit voir quoi corriger.
+    const admin = await creerCompte('admin', 'ref-doublon');
+    const ref = refFactice('doublon');
+
+    const premiere = await creer(admin.jeton, {
+      name: 'Entreprise factice Sigma A',
+      externalRef: ref,
+    });
+    const idPremiere = premiere.ecriture.company.id;
+    expect(
+      await refExterneEnBase(idPremiere),
+      'ANTI-VACUITÉ : la référence est RÉELLEMENT écrite en base. Si la création\n' +
+        'l’avait silencieusement ignorée, le refus attendu ci-dessous n’aurait aucune\n' +
+        'raison de se produire, et un 201 passerait pour un comportement correct.',
+    ).toBe(ref);
+
+    const seconde = await appeler('POST', '/v1/companies', {
+      jeton: admin.jeton,
+      charge: { name: 'Entreprise factice Sigma B', externalRef: ref },
+    });
+
+    expect(
+      seconde.statut,
+      'DÉFAUT ① — mesuré le 2026-09-03 : une référence console en double sortait en\n' +
+        '500 INTERNAL_ERROR faute d’une branche de traduction pour\n' +
+        '`uq_companies_external_ref`. Le statut d’un conflit d’ÉTAT est 409.',
+    ).toBe(409);
+    expect(
+      seconde.code,
+      'Un code À LUI, et non `COMPANY_DUPLICATE` étendu : les deux conflits ne se\n' +
+        'réparent pas au même endroit, et un front qui devrait les distinguer en\n' +
+        'analysant une phrase française est exactement ce que 11 §3 refuse.',
+    ).toBe('COMPANY_EXTERNAL_REF_DUPLICATE');
+
+    const enveloppe = enveloppeErreurStricteSchema.parse(JSON.parse(seconde.corps));
+    expect(
+      enveloppe.error.details?.length,
+      'Le refus est ACTIONNABLE : une ligne de détail, et une seule. L’enveloppe est\n' +
+        'validée STRICTEMENT — aucune clé surnuméraire, donc aucune fuite de trace\n' +
+        'technique dans une réponse d’erreur.',
+    ).toBe(1);
+    expect(seconde.details.map((detail) => detail.path)).toStrictEqual(['externalRef']);
+    expect(
+      seconde.details[0]?.code,
+      '`details[0].code` est pour une MACHINE : il dit que la fiche en conflit est\n' +
+        'VIVANTE, donc que la suite est « rapprocher » et non « restaurer ».',
+    ).toBe('fiche_active');
+    expect(seconde.details[0]?.message).toContain(idPremiere);
+
+    expect(
+      await compterParRefExterne(ref),
+      'Une seule ligne porte cette référence : la seconde création n’a rien laissé.',
+    ).toBe(1);
+  });
+
+  it('@critique le message du conflit de référence console ne parle JAMAIS du SIREN', async () => {
+    // CE N'EST PAS UN DÉTAIL DE RÉDACTION, C'EST LA DÉCISION ELLE-MÊME.
+    // La solution paresseuse consistait à réutiliser `COMPANY_DUPLICATE` pour la
+    // seconde contrainte. Elle a été écartée parce que son message parle du SIREN :
+    // il aurait envoyé l'utilisateur vérifier un numéro correct pendant que la vraie
+    // cause — la liaison M8.1 avec la console axion-ia.com — restait intacte. Le
+    // dépôt écrit lui-même qu'« un message d'erreur faux envoie chercher au mauvais
+    // endroit, ce qui coûte plus cher qu'un message absent ». Sans cette assertion
+    // NÉGATIVE, rien n'empêche quiconque de refondre les deux 409 en un seul message
+    // « générique » — et la décision serait perdue sans qu'un seul test rougisse.
+    const admin = await creerCompte('admin', 'ref-message');
+    const ref = refFactice('message');
+
+    await creer(admin.jeton, { name: 'Entreprise factice Sigma Gamma', externalRef: ref });
+    const refus = await appeler('POST', '/v1/companies', {
+      jeton: admin.jeton,
+      charge: { name: 'Entreprise factice Sigma Delta', externalRef: ref },
+    });
+
+    expect(refus.statut).toBe(409);
+    expect(
+      refus.message,
+      'Le message nomme la RÉFÉRENCE CONSOLE — c’est le champ à corriger, et le seul.',
+    ).toMatch(/référence console/i);
+    expect(
+      refus.message,
+      'Et il ne prononce JAMAIS le mot SIREN : ce numéro n’est pour rien dans ce\n' +
+        'conflit. Un message qui le nommerait ferait vérifier une donnée correcte.',
+    ).not.toMatch(/siren/i);
+    expect(
+      refus.details.map((detail) => detail.path),
+      'Le champ désigné est `externalRef`, pas `siren` : c’est ce chemin que la\n' +
+        'console met en surbrillance dans le formulaire.',
+    ).toStrictEqual(['externalRef']);
+  });
+
+  it('@critique deux créations CONCURRENTES sur la même référence console : exactement [201, 409]', async () => {
+    // SYMÉTRIQUE EXACT DE LA COURSE DU SIREN, ET POUR LA MÊME RAISON.
+    // Le refus n'est décidé ni par un `if` ni par une lecture préalable : il vient de
+    // l'index unique partiel, sous la forme d'un SQLSTATE 23505 que Drizzle enveloppe
+    // sans recopier `code` ni `constraint`. Deux requêtes simultanées sont la seule
+    // disposition où une implémentation « je lis, puis j'écris » se trahit : elle
+    // rendrait DEUX 201, et l'unicité de la liaison M8.1 n'existerait plus.
+    //
+    // CE QUE CE TEST NE PEUT PAS PROUVER, dit plutôt que sous-entendu : que les deux
+    // requêtes se sont RÉELLEMENT chevauchées dans le temps. Rien, vu de l'extérieur,
+    // ne l'observe. Ce qui est prouvé à la place, et qui suffit à écarter la vacuité :
+    // le perdant NOMME le gagnant — donc les deux ont bien visé LA MÊME référence —
+    // et la base n'en garde qu'une seule ligne.
+    const admin = await creerCompte('admin', 'ref-course');
+    const ref = refFactice('course');
+
+    const [premiere, seconde] = await Promise.all([
+      appeler('POST', '/v1/companies', {
+        jeton: admin.jeton,
+        charge: { name: 'Entreprise factice de course REF A', externalRef: ref },
+      }),
+      appeler('POST', '/v1/companies', {
+        jeton: admin.jeton,
+        charge: { name: 'Entreprise factice de course REF B', externalRef: ref },
+      }),
+    ]);
+
+    const statuts = [premiere.statut, seconde.statut].sort((x, y) => x - y);
+    expect(
+      statuts,
+      'Deux requêtes simultanées, une seule référence console : exactement une\n' +
+        'création et un conflit. Ni deux 201 (l’unicité aurait cédé), ni un 500 (la\n' +
+        'traduction aurait cédé). L’ordre n’est PAS présumé — la course est arbitrée\n' +
+        'par la base, et laquelle des deux gagne n’a aucune importance.',
+    ).toStrictEqual([201, 409]);
+
+    const gagnante = premiere.statut === 201 ? premiere : seconde;
+    const perdante = premiere.statut === 409 ? premiere : seconde;
+
+    expect(perdante.code).toBe('COMPANY_EXTERNAL_REF_DUPLICATE');
+    expect(perdante.details[0]?.code).toBe('fiche_active');
+    expect(
+      perdante.details[0]?.message,
+      'ANTI-VACUITÉ : le perdant nomme le GAGNANT. Sans cette assertion, un conflit\n' +
+        'survenu avec une TROISIÈME fiche — parce que la référence aurait fuité d’un\n' +
+        'autre test — passerait pour le bon conflit.',
+    ).toContain(ecriture(gagnante).company.id);
+
+    expect(
+      await compterParRefExterne(ref),
+      'Une seule ligne porte cette référence console. Deux signifieraient que l’index\n' +
+        'unique partiel de la migration `0015` n’arbitre plus rien.',
+    ).toBe(1);
+  });
+
+  it('deux créations à `externalRef` NULL réussissent — l’index est PARTIEL, et c’est une règle métier', async () => {
+    // LA NON-RÉGRESSION DE LA MOITIÉ QU'ON OUBLIE.
+    // `uq_companies_external_ref` porte `WHERE external_ref IS NOT NULL` : le 04 §7
+    // décrit la colonne comme « id client console axion-ia.com (NULL si local) », et
+    // une fiche créée sur le terrain n'a légitimement aucun pendant dans la console.
+    // Un correctif qui, en apprenant à refuser les doublons, se mettrait à traiter
+    // `NULL` comme une valeur refuserait la MAJORITÉ des créations réelles — et il le
+    // ferait le jour de la mise en production, pas ici.
+    const admin = await creerCompte('admin', 'ref-nulle');
+
+    const omise = await creer(admin.jeton, { name: 'Filiale factice sans liaison A' });
+    const explicite = await creer(admin.jeton, {
+      name: 'Filiale factice sans liaison B',
+      externalRef: null,
+    });
+
+    expect(
+      [omise.ecriture.company.externalRef, explicite.ecriture.company.externalRef],
+      'Les DEUX formes de « pas de référence » sont éprouvées — champ absent et\n' +
+        '`null` explicite —, parce qu’un contrat qui n’en accepterait qu’une\n' +
+        'obligerait le front à deviner laquelle.',
+    ).toStrictEqual([null, null]);
+    expect(await refExterneEnBase(omise.ecriture.company.id)).toBeNull();
+    expect(await refExterneEnBase(explicite.ecriture.company.id)).toBeNull();
+    expect(
+      omise.ecriture.company.id === explicite.ecriture.company.id,
+      'deux fiches DISTINCTES, pas une fusion silencieuse',
+    ).toBe(false);
+  });
+
+  it('une référence console LIBRE est acceptée et relue telle quelle', async () => {
+    // Le chemin nominal, écrit APRÈS les refus et non avant : sans lui, tout ce qui
+    // précède resterait vert avec une route qui refuserait TOUTES les références.
+    const admin = await creerCompte('admin', 'ref-libre');
+    const ref = refFactice('libre');
+
+    const creee = await creer(admin.jeton, {
+      name: 'Entreprise factice Sigma Libre',
+      externalRef: ref,
+    });
+    expect(creee.reponse.statut).toBe(201);
+    expect(creee.ecriture.company.externalRef).toBe(ref);
+
+    const relue = await appeler('GET', `/v1/companies/${creee.ecriture.company.id}`, {
+      jeton: admin.jeton,
+    });
+    expect(relue.statut).toBe(200);
+    expect(
+      fiche(relue).externalRef,
+      'La référence traverse l’écriture ET la lecture sans être altérée : c’est une\n' +
+        'clé de liaison, pas un libellé — un espace ajouté la casserait en silence.',
+    ).toBe(ref);
+  });
+});
+
+// =============================================================================
+// 11. LE MÊME CONFLIT PAR `PATCH` — AUTRE CHEMIN, DONC AUTRE VERDICT
+// =============================================================================
+describe('PATCH /v1/companies/:id — les deux 409 d’unicité', () => {
+  it('@critique poser une référence console DÉJÀ PRISE rend 409, et n’écrit rien', async () => {
+    // POURQUOI REJOUER CE QUE LE `POST` A DÉJÀ PROUVÉ.
+    // Le `PATCH` n'emprunte pas le même chemin : il travaille DANS une transaction
+    // ouverte, après un `SELECT … FOR UPDATE` sur la fiche visée, et la lecture qui
+    // enrichit le message part sur une connexion DISTINCTE de cette transaction. Un
+    // `POST` vert ne dit donc rien de lui — et le défaut ① les touchait tous les deux
+    // d'un seul manque, ce qui prouve surtout qu'aucun des deux n'était éprouvé.
+    const admin = await creerCompte('admin', 'patch-ref-prise');
+    const ref = refFactice('patch-prise');
+
+    const detentrice = await creer(admin.jeton, {
+      name: 'Entreprise factice Phi détentrice',
+      externalRef: ref,
+    });
+    const candidate = await creer(admin.jeton, { name: 'Entreprise factice Phi candidate' });
+    const idCandidate = candidate.ecriture.company.id;
+
+    const refus = await appeler('PATCH', `/v1/companies/${idCandidate}`, {
+      jeton: admin.jeton,
+      charge: { externalRef: ref },
+    });
+
+    expect(refus.statut, 'Un 500 ici serait le défaut ① survivant dans le `PATCH`.').toBe(409);
+    expect(refus.code).toBe('COMPANY_EXTERNAL_REF_DUPLICATE');
+    expect(refus.details.map((detail) => detail.path)).toStrictEqual(['externalRef']);
+    expect(refus.details[0]?.code).toBe('fiche_active');
+    expect(refus.details[0]?.message).toContain(detentrice.ecriture.company.id);
+    enveloppeErreurStricteSchema.parse(JSON.parse(refus.corps));
+
+    expect(
+      await refExterneEnBase(idCandidate),
+      'LA TRANSACTION A ÉTÉ ANNULÉE EN ENTIER. Une fiche qui garderait une référence\n' +
+        'à demi écrite après un 409 serait pire que le 500 d’origine : le refus\n' +
+        'annoncerait un état que la base ne tiendrait pas.',
+    ).toBeNull();
+
+    const relue = await appeler('GET', `/v1/companies/${idCandidate}`, { jeton: admin.jeton });
+    expect(relue.statut).toBe(200);
+    expect(
+      fiche(relue).updatedAt,
+      'et `updated_at` n’a pas bougé : un refus n’est pas une modification, et une\n' +
+        'ligne d’audit décrivant un non-événement rendrait le journal faux.',
+    ).toBe(candidate.ecriture.company.updatedAt);
+    expect(await compterParRefExterne(ref)).toBe(1);
+  });
+
+  it('un `PATCH` qui ne touche PAS à la référence console ne lève aucun conflit', async () => {
+    // LE FAUX POSITIF QUE PERSONNE NE VERRAIT VENIR.
+    // Une implémentation qui réécrirait systématiquement toutes les colonnes, ou qui
+    // vérifierait l'unicité par une lecture préalable sans s'exclure elle-même,
+    // rendrait 409 sur une fiche EN CONFLIT AVEC ELLE-MÊME. Le symptôme serait absurde
+    // et rare : « impossible de corriger les notes d'une fiche liée à la console ».
+    // Les deux formes sont éprouvées — champ absent, et champ répété à l'identique —,
+    // parce qu'elles n'empruntent pas le même chemin dans le service.
+    const admin = await creerCompte('admin', 'patch-ref-intacte');
+    const ref = refFactice('intacte');
+
+    const cible = await creer(admin.jeton, {
+      name: 'Entreprise factice Chi',
+      externalRef: ref,
+      notes: 'note initiale',
+    });
+    const id = cible.ecriture.company.id;
+    expect(
+      await refExterneEnBase(id),
+      'ANTI-VACUITÉ : la fiche porte VRAIMENT une référence console. Sur une fiche\n' +
+        'sans référence, ce test serait vert sans avoir approché son sujet.',
+    ).toBe(ref);
+
+    const autreChamp = await appeler('PATCH', `/v1/companies/${id}`, {
+      jeton: admin.jeton,
+      charge: { notes: 'note corrigée' },
+    });
+    expect(autreChamp.statut).toBe(200);
+    expect(ecriture(autreChamp).company.externalRef).toBe(ref);
+    expect(ecriture(autreChamp).company.notes).toBe('note corrigée');
+
+    const memeReference = await appeler('PATCH', `/v1/companies/${id}`, {
+      jeton: admin.jeton,
+      charge: { externalRef: ref, notes: 'note corrigée deux fois' },
+    });
+    expect(
+      memeReference.statut,
+      'Répéter SA PROPRE référence n’est pas un conflit : une fiche ne se dédouble pas.',
+    ).toBe(200);
+    expect(await refExterneEnBase(id)).toBe(ref);
+    expect(await compterParRefExterne(ref)).toBe(1);
+  });
+
+  it('mettre la référence console à `null` la LIBÈRE pour une autre fiche', async () => {
+    // LA CONTRE-ÉPREUVE DE L'UNICITÉ : sans elle, « unique » pourrait aussi bien
+    // vouloir dire « prise à jamais ». Or une liaison M8.1 se corrige — c'est
+    // exactement le cas d'usage d'une `external_ref` mal saisie — et l'invariant 7
+    // suppose que la correction passe PAR L'API, jamais par un `UPDATE` à la main.
+    const admin = await creerCompte('admin', 'patch-ref-liberee');
+    const ref = refFactice('liberee');
+
+    const detentrice = await creer(admin.jeton, {
+      name: 'Entreprise factice Psi détentrice',
+      externalRef: ref,
+    });
+    const suivante = await creer(admin.jeton, { name: 'Entreprise factice Psi suivante' });
+
+    const refusAvant = await appeler('PATCH', `/v1/companies/${suivante.ecriture.company.id}`, {
+      jeton: admin.jeton,
+      charge: { externalRef: ref },
+    });
+    expect(
+      refusAvant.statut,
+      'ANTI-VACUITÉ : la référence est bien PRISE avant d’être libérée. Sans ce refus\n' +
+        'initial, le 200 final ne prouverait rien — il pourrait décrire une référence\n' +
+        'qui n’a jamais été contestée.',
+    ).toBe(409);
+
+    const liberation = await appeler('PATCH', `/v1/companies/${detentrice.ecriture.company.id}`, {
+      jeton: admin.jeton,
+      charge: { externalRef: null },
+    });
+    expect(liberation.statut).toBe(200);
+    expect(ecriture(liberation).company.externalRef).toBeNull();
+    expect(await compterParRefExterne(ref), 'plus AUCUNE ligne ne retient la référence').toBe(0);
+
+    const reprise = await appeler('PATCH', `/v1/companies/${suivante.ecriture.company.id}`, {
+      jeton: admin.jeton,
+      charge: { externalRef: ref },
+    });
+    expect(reprise.statut, 'la référence libérée est reprenable — sinon elle serait perdue').toBe(
+      200,
+    );
+    expect(ecriture(reprise).company.externalRef).toBe(ref);
+    expect(await compterParRefExterne(ref)).toBe(1);
+  });
+
+  it('@critique poser un SIREN DÉJÀ PRIS par `PATCH` rend 409 COMPANY_DUPLICATE', async () => {
+    // LE TROU DE COUVERTURE, COMBLÉ ICI BIEN QU'IL N'APPARTIENNE PAS AU CORRECTIF.
+    // Le conflit de SIREN n'était éprouvé qu'à la CRÉATION. Le `PATCH` écrit pourtant
+    // la même colonne, sous la même contrainte, et passe par la même traduction —
+    // mais dans une transaction, ce qui n'est pas le même chemin. Il marchait donc
+    // sans que rien ne le tienne, et le défaut ① a montré ce que vaut une branche de
+    // traduction que personne n'exécute : elle disparaît sans bruit.
+    const admin = await creerCompte('admin', 'patch-siren-pris');
+    const siren = sirenFactice('60000000');
+
+    const detentrice = await creer(admin.jeton, {
+      name: 'Entreprise factice Oméga détentrice',
+      siren,
+    });
+    const candidate = await creer(admin.jeton, { name: 'Entreprise factice Oméga candidate' });
+    const idCandidate = candidate.ecriture.company.id;
+
+    const refus = await appeler('PATCH', `/v1/companies/${idCandidate}`, {
+      jeton: admin.jeton,
+      charge: { siren },
+    });
+
+    expect(refus.statut, 'Un doublon de SIREN est un conflit d’ÉTAT, par `PATCH` aussi.').toBe(409);
+    expect(
+      refus.code,
+      'Et c’est bien le code du SIREN, pas celui de la référence console : les deux\n' +
+        'contraintes vivent sur la même table et se confondraient sans peine.',
+    ).toBe('COMPANY_DUPLICATE');
+    expect(refus.details.map((detail) => detail.path)).toStrictEqual(['siren']);
+    expect(refus.details[0]?.message).toContain(detentrice.ecriture.company.id);
+    expect(
+      await compterParSiren(siren),
+      'Une seule ligne porte ce SIREN : la transaction refusée n’a rien écrit.',
+    ).toBe(1);
+  });
+});
+
+// =============================================================================
+// 12. LA FICHE ARCHIVÉE — ELLE RETIENT SA RÉFÉRENCE, ET LE 409 LE DIT
+// =============================================================================
+// TRANCHÉ LE 2026-09-04. `uq_companies_external_ref` n'exclut pas `deleted_at` :
+// une fiche archivée CONSERVE sa référence console, parce qu'une référence console
+// désigne une ENTREPRISE et non une ligne vivante (invariant 7). La conséquence est
+// inconfortable et assumée : le 409 nomme une fiche que toutes les lectures masquent.
+// C'est le cas le plus déroutant des deux, donc le seul qui exige que le message
+// dise ce qu'il faut FAIRE — restaurer, et non créer un doublon sous une autre
+// référence, ce qui est précisément le désordre que la contrainte existe à empêcher.
+//
+// ⚠ AUCUNE ROUTE N'ÉCRIT `deleted_at` : l'archivage se fabrique par un `UPDATE`
+// direct (`marquerSupprimee`). C'est une fabrication d'ÉTAT, jamais une fabrication
+// de RÉSULTAT — et `estArchiveeEnBase` vérifie qu'elle a réellement eu lieu avant
+// que le test n'en tire la moindre attente.
+// =============================================================================
+describe('conflit de référence console avec une fiche ARCHIVÉE (deleted_at IS NOT NULL)', () => {
+  it('@critique un POST sur la référence d’une fiche archivée rend 409 `fiche_archivee` et oriente vers la RESTAURATION', async () => {
+    const admin = await creerCompte('admin', 'ref-archivee-post');
+    const ref = refFactice('archivee-post');
+
+    const archivee = await creer(admin.jeton, {
+      name: 'Entreprise factice Zêta archivée',
+      externalRef: ref,
+    });
+    const idArchivee = archivee.ecriture.company.id;
+    await marquerSupprimee(idArchivee);
+
+    expect(
+      await estArchiveeEnBase(idArchivee),
+      'ANTI-VACUITÉ, et c’est le point le plus fragile de ce fichier : si l’archivage\n' +
+        'n’avait pas eu lieu, le test attendrait `fiche_archivee` d’un code qui a\n' +
+        'RAISON de rendre `fiche_active`. Il accuserait alors le mauvais coupable.',
+    ).toBe(true);
+    expect(
+      await compterParRefExterne(ref),
+      'Et la fiche archivée RETIENT sa référence — c’est la décision elle-même. Si\n' +
+        'l’index excluait `deleted_at`, il n’y aurait aucun conflit à traduire, et\n' +
+        'tout ce qui suit serait vert sans avoir rien éprouvé.',
+    ).toBe(1);
+
+    const refus = await appeler('POST', '/v1/companies', {
+      jeton: admin.jeton,
+      charge: { name: 'Entreprise factice Zêta nouvelle', externalRef: ref },
+    });
+
+    expect(refus.statut).toBe(409);
+    expect(refus.code).toBe('COMPANY_EXTERNAL_REF_DUPLICATE');
+    expect(
+      refus.details[0]?.code,
+      '`fiche_archivee`, et non `fiche_active` : la console doit pouvoir proposer\n' +
+        '« restaurer » plutôt que « rapprocher » SANS analyser le français.',
+    ).toBe('fiche_archivee');
+    expect(
+      refus.details[0]?.message,
+      'La fiche coupable est NOMMÉE. C’est ce qui distingue un conflit constaté d’un\n' +
+        'conflit actionnable — d’autant qu’aucune liste ne la montrera jamais.',
+    ).toContain(idArchivee);
+    expect(
+      refus.message,
+      'Le message DIT que la fiche est archivée. Un refus muet enverrait créer un\n' +
+        'doublon sous une autre référence : exactement le désordre que la contrainte\n' +
+        'existe pour empêcher.',
+    ).toContain('ARCHIVÉE');
+    expect(
+      refus.message,
+      'et il oriente vers la RESTAURATION, la seule suite juste dans ce cas',
+    ).toMatch(/restaur/i);
+
+    expect(
+      await compterParRefExterne(ref),
+      'Rien n’a été créé : la référence reste portée par la seule fiche archivée.',
+    ).toBe(1);
+  });
+
+  it('@critique un PATCH vers la référence d’une fiche archivée rend le même 409 `fiche_archivee`', async () => {
+    // Le `PATCH` refait le chemin par la transaction : la lecture d'état de la fiche
+    // archivée s'y fait sur une connexion distincte du `tx`, et c'est la seule chose
+    // qui distingue vraiment ce test du précédent. Elle suffit à l'exiger.
+    const admin = await creerCompte('admin', 'ref-archivee-patch');
+    const ref = refFactice('archivee-patch');
+
+    const archivee = await creer(admin.jeton, {
+      name: 'Entreprise factice Êta archivée',
+      externalRef: ref,
+    });
+    const idArchivee = archivee.ecriture.company.id;
+    await marquerSupprimee(idArchivee);
+    expect(await estArchiveeEnBase(idArchivee), 'ANTI-VACUITÉ : l’archivage a eu lieu').toBe(true);
+    expect(await compterParRefExterne(ref), 'et la référence est bien retenue').toBe(1);
+
+    const vivante = await creer(admin.jeton, { name: 'Entreprise factice Êta vivante' });
+    const idVivante = vivante.ecriture.company.id;
+
+    const refus = await appeler('PATCH', `/v1/companies/${idVivante}`, {
+      jeton: admin.jeton,
+      charge: { externalRef: ref },
+    });
+
+    expect(refus.statut).toBe(409);
+    expect(refus.code).toBe('COMPANY_EXTERNAL_REF_DUPLICATE');
+    expect(refus.details[0]?.code).toBe('fiche_archivee');
+    expect(refus.details[0]?.message).toContain(idArchivee);
+    expect(refus.message).toContain('ARCHIVÉE');
+    expect(refus.message).toMatch(/restaur/i);
+    expect(
+      await refExterneEnBase(idVivante),
+      'La fiche vivante n’a rien reçu : le refus a annulé la transaction en entier.',
+    ).toBeNull();
+  });
+
+  it('@critique le 409 NOMME une fiche que les lectures MASQUENT — et c’est voulu', async () => {
+    // LA GARDE QUI EXISTE CONTRE UNE FUTURE « RÉPARATION ».
+    // Un lecteur pressé constatera un jour l'incohérence apparente : l'API refuse une
+    // référence au nom d'une fiche que `GET /v1/companies` ne montre pas et que
+    // `GET /v1/companies/:id` déclare introuvable. La tentation sera de « corriger »
+    // l'un des deux côtés — soit en excluant `deleted_at` de l'index (et une fiche
+    // restaurée entrerait alors en conflit avec son propre doublon), soit en
+    // remontrant les archives dans les listes. Les deux comportements sont ici
+    // ENSEMBLE, dans un même test, pour qu'on ne puisse pas en changer un sans voir
+    // l'autre. La cohérence n'est pas dans les lectures : elle est dans l'invariant 7.
+    const admin = await creerCompte('admin', 'ref-archivee-masquee');
+    const ref = refFactice('masquee');
+
+    const archivee = await creer(admin.jeton, {
+      name: 'Entreprise factice Thêta masquée',
+      externalRef: ref,
+    });
+    const idArchivee = archivee.ecriture.company.id;
+    await marquerSupprimee(idArchivee);
+    expect(await estArchiveeEnBase(idArchivee), 'ANTI-VACUITÉ : l’archivage a eu lieu').toBe(true);
+
+    const refus = await appeler('POST', '/v1/companies', {
+      jeton: admin.jeton,
+      charge: { name: 'Entreprise factice Thêta nouvelle', externalRef: ref },
+    });
+    expect(refus.statut).toBe(409);
+    expect(refus.details[0]?.message, 'le 409 NOMME la fiche archivée').toContain(idArchivee);
+
+    const lecture = await appeler('GET', `/v1/companies/${idArchivee}`, { jeton: admin.jeton });
+    expect(
+      lecture.statut,
+      'La MÊME fiche, lue par son identifiant, reste introuvable. Le 409 ne rouvre\n' +
+        'aucune porte de lecture : il rend un conflit actionnable, rien de plus.',
+    ).toBe(404);
+    expect(lecture.code).toBe('NOT_FOUND');
+
+    const identifiants = await tousLesIdentifiants(admin.jeton, 50);
+    expect(
+      identifiants.includes(idArchivee),
+      'Et elle n’apparaît sur AUCUNE page de la liste. Toutes les pages sont\n' +
+        'parcourues : un filtre appliqué à la requête mais pas à la clause du curseur\n' +
+        'passerait autrement inaperçu.',
+    ).toBe(false);
+  });
+});
+
+// =============================================================================
+// 13. LE CONFLIT DOUBLE — UNE SEULE CONTRAINTE MORD À LA FOIS
+// =============================================================================
+describe('POST /v1/companies — SIREN pris ET référence console prise', () => {
+  it('@critique un conflit double rend UN des deux 409 — sans présumer lequel — puis l’autre au rejeu', async () => {
+    // POURQUOI CE TEST NE PRÉSUME RIEN.
+    // PostgreSQL abandonne l'instruction à la PREMIÈRE violation rencontrée, et
+    // l'ordre dans lequel il évalue les index N'EST PAS GARANTI : il dépend du plan,
+    // de l'ordre de création des index, et peut changer d'une version à l'autre ou
+    // après un `REINDEX`. Exiger `COMPANY_DUPLICATE` ici produirait un test qui passe
+    // aujourd'hui et rougit demain — c'est-à-dire un test qui ment sur ce qu'il garde.
+    //
+    // CE QUI EST RÉELLEMENT EXIGÉ, et qui ne dépend d'aucun ordre :
+    //   · le statut est 409 — jamais 500, la non-régression du défaut ① ;
+    //   · le code est l'UN des deux, et le détail nomme le champ correspondant ;
+    //   · après correction DU CHAMP NOMMÉ, le rejeu fait apparaître l'AUTRE 409.
+    //     C'est cette troisième exigence qui a du prix : elle prouve que le second
+    //     conflit n'a pas été perdu en route, et elle décrit le parcours réel de
+    //     l'utilisateur — deux allers-retours, pas un.
+    const admin = await creerCompte('admin', 'conflit-double');
+    const siren = sirenFactice('61000000');
+    const ref = refFactice('conflit-double');
+
+    await creer(admin.jeton, { name: 'Entreprise factice Iota porteuse du SIREN', siren });
+    await creer(admin.jeton, {
+      name: 'Entreprise factice Iota porteuse de la référence',
+      externalRef: ref,
+    });
+    expect(
+      [await compterParSiren(siren), await compterParRefExterne(ref)],
+      'ANTI-VACUITÉ : les DEUX conflits existent réellement avant la tentative. Si\n' +
+        'l’un des deux manquait, ce test dégénérerait en simple conflit unique sans\n' +
+        'que rien ne le signale.',
+    ).toStrictEqual([1, 1]);
+
+    const nomTente = 'Entreprise factice Iota doublement en conflit';
+    const premierRefus = await appeler('POST', '/v1/companies', {
+      jeton: admin.jeton,
+      charge: { name: nomTente, siren, externalRef: ref },
+    });
+
+    expect(
+      premierRefus.statut,
+      'Le point qui compte : un conflit DOUBLE reste un 409. Un 500 signifierait que\n' +
+        'la seconde violation a échappé à la traduction — la forme exacte du défaut ①.',
+    ).toBe(409);
+    const codesPossibles = ['COMPANY_DUPLICATE', 'COMPANY_EXTERNAL_REF_DUPLICATE'];
+    expect(codesPossibles, 'l’un OU l’autre, jamais un troisième').toContain(premierRefus.code);
+    const champNomme = premierRefus.code === 'COMPANY_DUPLICATE' ? 'siren' : 'externalRef';
+    expect(
+      premierRefus.details.map((detail) => detail.path),
+      'Le détail nomme le champ COHÉRENT avec le code rendu : un code qui pointerait\n' +
+        'l’autre colonne enverrait corriger une donnée correcte.',
+    ).toStrictEqual([champNomme]);
+
+    const sirenLibre = sirenFactice('61000001');
+    const refLibre = refFactice('conflit-double-libre');
+    const chargeCorrigee =
+      premierRefus.code === 'COMPANY_DUPLICATE'
+        ? { name: nomTente, siren: sirenLibre, externalRef: ref }
+        : { name: nomTente, siren, externalRef: refLibre };
+
+    const secondRefus = await appeler('POST', '/v1/companies', {
+      jeton: admin.jeton,
+      charge: chargeCorrigee,
+    });
+    expect(secondRefus.statut).toBe(409);
+    expect(
+      secondRefus.code,
+      'L’AUTRE conflit apparaît maintenant. S’il était resté silencieux, l’utilisateur\n' +
+        'aurait corrigé un champ pour se voir refuser sans explication nouvelle — ou\n' +
+        'pire, aurait cru le second conflit résolu.',
+    ).not.toBe(premierRefus.code);
+    expect(codesPossibles).toContain(secondRefus.code);
+
+    expect(
+      [await compterParSiren(siren), await compterParRefExterne(ref)],
+      'Aucune ligne fantôme : les deux refus n’ont rien écrit.',
+    ).toStrictEqual([1, 1]);
+
+    const acceptee = await creer(admin.jeton, {
+      name: nomTente,
+      siren: sirenLibre,
+      externalRef: refLibre,
+    });
+    expect(
+      acceptee.reponse.statut,
+      'Les DEUX champs corrigés, la création passe. Sans cette contre-épreuve, une\n' +
+        'route qui refuserait tout ferait passer ce test en entier.',
+    ).toBe(201);
+    expect(acceptee.ecriture.company.externalRef).toBe(refLibre);
+    expect(acceptee.ecriture.company.siren).toBe(sirenLibre);
+  });
+});
+
+// =============================================================================
+// 14. LA FICHE ARCHIVÉE, PAR SON SIREN — LA SYMÉTRIE, ET LE `code` SUR LES DEUX 409
+// =============================================================================
+// TRANCHÉ LE 2026-09-04 (« Le 409 de SIREN sur une fiche ARCHIVÉE, et le contrat de
+// `details` »). La section 12 avait éprouvé la fiche archivée pour la RÉFÉRENCE
+// CONSOLE seulement ; sur la même table, le SIREN — lui aussi retenu par
+// `uq_companies_siren`, qui n'exclut pas `deleted_at` — rendait un 409 qui envoyait
+// « Rapprochez les deux fiches » vers une fiche que `GET /:id` rend en 404, et sans
+// `details[0].code`. Deux colonnes uniques, deux comportements : c'est ce défaut que
+// cette section ferme, dans les deux sens —
+//   · le SIREN d'une fiche ARCHIVÉE rend `fiche_archivee` et oriente vers la
+//     RESTAURATION, par `POST` comme par `PATCH` (cas 1 et 2) ;
+//   · le SIREN d'une fiche VIVANTE rend `fiche_active` (cas 3) — la moitié qui
+//     manquait : aucune assertion des sections 1 et 11 ne LIT `code` sur ce 409, et
+//     un `code` absent y passait donc inaperçu.
+// Même fabrication d'état que la section 12 : `marquerSupprimee`, puis
+// `estArchiveeEnBase` AVANT toute attente.
+// =============================================================================
+describe('conflit de SIREN avec une fiche ARCHIVÉE (deleted_at IS NOT NULL) — symétrie avec la référence console', () => {
+  it('@critique un POST sur le SIREN d’une fiche archivée rend 409 `fiche_archivee` et oriente vers la RESTAURATION, jamais vers le rapprochement', async () => {
+    const admin = await creerCompte('admin', 'siren-archivee-post');
+    const siren = sirenFactice('62000000');
+
+    const archivee = await creer(admin.jeton, {
+      name: 'Entreprise factice Kappa archivée',
+      siren,
+    });
+    const idArchivee = archivee.ecriture.company.id;
+    await marquerSupprimee(idArchivee);
+
+    expect(
+      await estArchiveeEnBase(idArchivee),
+      'ANTI-VACUITÉ : si l’archivage n’avait pas eu lieu, le test attendrait\n' +
+        '`fiche_archivee` d’un code qui a RAISON de rendre `fiche_active`.',
+    ).toBe(true);
+    expect(
+      await compterParSiren(siren),
+      'La fiche archivée RETIENT son SIREN : `uq_companies_siren` n’exclut pas\n' +
+        '`deleted_at`. Sans cette ligne, il n’y aurait aucun conflit à traduire.',
+    ).toBe(1);
+
+    const refus = await appeler('POST', '/v1/companies', {
+      jeton: admin.jeton,
+      charge: { name: 'Entreprise factice Kappa nouvelle', siren },
+    });
+
+    expect(refus.statut).toBe(409);
+    expect(
+      refus.code,
+      'Le code du SIREN — pas celui de la référence console. La symétrie porte sur\n' +
+        'le CONTENU du 409, jamais sur son code : les deux conflits ne se réparent\n' +
+        'pas au même endroit.',
+    ).toBe('COMPANY_DUPLICATE');
+    expect(
+      refus.details.map((detail) => detail.path),
+      'Le détail nomme la colonne fautive, et elle seule.',
+    ).toStrictEqual(['siren']);
+    expect(
+      refus.details[0]?.code,
+      '`fiche_archivee` sur le 409 de SIREN, comme sur celui de la référence console :\n' +
+        'un front qui branche sur `details[0].code` recevait `undefined` une fois sur\n' +
+        'deux, pour la même table. C’est le défaut mesuré le 2026-09-04.',
+    ).toBe('fiche_archivee');
+    expect(
+      refus.details[0]?.message,
+      'La fiche coupable est NOMMÉE — d’autant plus nécessaire qu’aucune liste ne la\n' +
+        'montrera jamais.',
+    ).toContain(idArchivee);
+    expect(
+      refus.message,
+      'Le message DIT que la fiche est archivée, sinon il envoie créer un doublon\n' +
+        'sous un autre SIREN — le désordre exact que l’index existe pour empêcher.',
+    ).toContain('ARCHIVÉE');
+    expect(refus.message, 'et il oriente vers la RESTAURATION').toMatch(/restaur/i);
+    expect(
+      refus.message,
+      'Et il ne dit PLUS « Rapprochez » : c’était le mot du défaut — rapprocher une\n' +
+        'fiche que `GET /:id` rend en 404 n’est pas une suite possible.',
+    ).not.toMatch(/rapproch/i);
+
+    expect(
+      await compterParSiren(siren),
+      'Rien n’a été créé : le SIREN reste porté par la seule fiche archivée.',
+    ).toBe(1);
+  });
+
+  it('@critique un PATCH vers le SIREN d’une fiche archivée rend le même 409 `fiche_archivee`', async () => {
+    // Le `PATCH` refait le chemin par la transaction : la relecture de la fiche
+    // archivée s'y fait HORS du `tx`, sur le pool — la seule différence avec le
+    // `POST`, et elle suffit à l'exiger séparément (section 12, même raison).
+    const admin = await creerCompte('admin', 'siren-archivee-patch');
+    const siren = sirenFactice('63000000');
+
+    const archivee = await creer(admin.jeton, {
+      name: 'Entreprise factice Lambda archivée',
+      siren,
+    });
+    const idArchivee = archivee.ecriture.company.id;
+    await marquerSupprimee(idArchivee);
+    expect(await estArchiveeEnBase(idArchivee), 'ANTI-VACUITÉ : l’archivage a eu lieu').toBe(true);
+    expect(await compterParSiren(siren), 'et le SIREN est bien retenu').toBe(1);
+
+    const vivante = await creer(admin.jeton, { name: 'Entreprise factice Lambda vivante' });
+    const idVivante = vivante.ecriture.company.id;
+
+    const refus = await appeler('PATCH', `/v1/companies/${idVivante}`, {
+      jeton: admin.jeton,
+      charge: { siren },
+    });
+
+    expect(refus.statut).toBe(409);
+    expect(refus.code).toBe('COMPANY_DUPLICATE');
+    expect(refus.details.map((detail) => detail.path)).toStrictEqual(['siren']);
+    expect(refus.details[0]?.code).toBe('fiche_archivee');
+    expect(refus.details[0]?.message).toContain(idArchivee);
+    expect(refus.message).toContain('ARCHIVÉE');
+    expect(refus.message).toMatch(/restaur/i);
+    expect(refus.message).not.toMatch(/rapproch/i);
+
+    const relue = await appeler('GET', `/v1/companies/${idVivante}`, { jeton: admin.jeton });
+    expect(relue.statut).toBe(200);
+    expect(
+      fiche(relue).siren,
+      'La fiche vivante n’a rien reçu : le refus a annulé la transaction en entier.',
+    ).toBeNull();
+    expect(await compterParSiren(siren), 'une seule ligne porte ce SIREN').toBe(1);
+  });
+
+  it('@critique le SIREN d’une fiche VIVANTE rend `fiche_active`, par POST comme par PATCH — le `code` est SYSTÉMATIQUE', async () => {
+    // LA MOITIÉ QUI MANQUAIT. Les sections 1 et 11 exigent `path` et l'identifiant
+    // dans `message` sur le 409 de SIREN — jamais `code`. Un `details` sans `code`
+    // les traversait donc en vert, et c'est exactement ce que le dépôt rendait
+    // jusqu'au 2026-09-04. Ce test lit `code`, et exige le mot du vocabulaire fermé
+    // (`fiche_active`), pas seulement sa présence.
+    const admin = await creerCompte('admin', 'siren-vivante-code');
+    const siren = sirenFactice('64000000');
+
+    const detentrice = await creer(admin.jeton, {
+      name: 'Entreprise factice Mu détentrice',
+      siren,
+    });
+    const idDetentrice = detentrice.ecriture.company.id;
+    expect(
+      await estArchiveeEnBase(idDetentrice),
+      'ANTI-VACUITÉ, dans l’autre sens : la détentrice est VIVANTE. Une fiche\n' +
+        'archivée par accident rendrait `fiche_archivee`, et ce test accuserait le\n' +
+        'code d’un défaut qui n’existe pas.',
+    ).toBe(false);
+
+    const refusPost = await appeler('POST', '/v1/companies', {
+      jeton: admin.jeton,
+      charge: { name: 'Entreprise factice Mu nouvelle', siren },
+    });
+    expect(refusPost.statut).toBe(409);
+    expect(refusPost.code).toBe('COMPANY_DUPLICATE');
+    expect(refusPost.details.map((detail) => detail.path)).toStrictEqual(['siren']);
+    expect(
+      refusPost.details[0]?.code,
+      '`fiche_active` — un mot du vocabulaire fermé, pour que la console propose\n' +
+        '« rapprocher » sans lire le français. Ni `undefined`, ni un mot libre.',
+    ).toBe('fiche_active');
+    expect(refusPost.details[0]?.message).toContain(idDetentrice);
+    expect(
+      refusPost.message,
+      'Sur une fiche vivante, la suite juste est le RAPPROCHEMENT — et surtout pas\n' +
+        'la restauration d’une fiche qui n’a jamais été archivée.',
+    ).toMatch(/rapproch/i);
+    expect(refusPost.message).not.toContain('ARCHIVÉE');
+
+    const candidate = await creer(admin.jeton, { name: 'Entreprise factice Mu candidate' });
+    const refusPatch = await appeler('PATCH', `/v1/companies/${candidate.ecriture.company.id}`, {
+      jeton: admin.jeton,
+      charge: { siren },
+    });
+    expect(refusPatch.statut).toBe(409);
+    expect(refusPatch.code).toBe('COMPANY_DUPLICATE');
+    expect(refusPatch.details[0]?.code, 'même vocabulaire par `PATCH`').toBe('fiche_active');
+    expect(refusPatch.details[0]?.message).toContain(idDetentrice);
+    expect(refusPatch.message).toMatch(/rapproch/i);
+    expect(refusPatch.message).not.toContain('ARCHIVÉE');
+
+    expect(await compterParSiren(siren), 'aucun des deux refus n’a écrit').toBe(1);
+  });
+});
+
+// =============================================================================
+// 15. LE CHEMIN DÉGRADÉ — UN 409 SANS `details`, JAMAIS UN `details` PARTIEL
+// =============================================================================
+// LE CONTRAT (DECISIONS.md 2026-09-04, `ERROR_CODES.COMPANY_DUPLICATE`) : statut et
+// `error.code` sont GARANTIS par la contrainte ; `details[0]` est relu APRÈS coup, et
+// quand la fiche a disparu entre la violation et la relecture, le 409 sort SANS
+// `details` — jamais avec un `details` sans `code`, jamais avec un état présumé.
+//
+// ── POURQUOI CE TEST EST DÉTERMINISTE, ET CE QU'IL NE FAIT PAS ──────────────
+// Une course réelle ne se provoque pas de façon fiable : la relecture est un
+// `SELECT`, et aucun verrou PostgreSQL ne bloque un `SELECT` sans bloquer aussi
+// l'`INSERT` qui doit d'abord violer l'index (seul ACCESS EXCLUSIVE arrête une
+// lecture, et il arrête tout). On ne peut donc pas, par la base seule, faire
+// disparaître la fiche ENTRE la violation et la relecture — ni prouver que l'on y
+// est arrivé. Un test qui lancerait un `DELETE` « au bon moment » serait vert par
+// hasard, et rougirait par hasard.
+//
+// Ce test tient l'instant par une SONDE sur `pool.query` — la porte par laquelle
+// Drizzle envoie TOUTE requête hors transaction, y compris la relecture. La sonde
+// n'invente aucun résultat : quand elle reconnaît la relecture (le premier `SELECT`
+// sur `companies` qui porte le SIREN en paramètre), elle SUPPRIME RÉELLEMENT la
+// fiche, par la connexion du test, et attend que la suppression soit COMMISE ;
+// puis elle laisse passer la requête d'origine, inchangée, vers le vrai PostgreSQL.
+// La relecture s'exécute donc telle que le dépôt l'écrit, contre une base où la
+// fiche n'existe plus. Ce n'est pas un double complaisant : c'est un double de
+// CHRONOLOGIE, qui fixe l'ordre de deux événements réels.
+//
+// La chaîne de preuve, qui ne dépend d'aucun ordre non maîtrisé :
+//   · le 409 prouve que l'`INSERT` a violé l'index AVANT la suppression (sinon il
+//     aurait rendu 201) ;
+//   · la sonde déclenchée UNE fois, et la ligne absente ensuite, prouvent que la
+//     suppression a précédé la relecture ;
+//   · `details` absent prouve le contrat — et sa forme est lue sur le CORPS BRUT,
+//     par un schéma strict : ni `[]`, ni un objet sans `code`.
+// =============================================================================
+describe('409 d’unicité — chemin dégradé (la fiche en conflit disparaît entre la violation et la relecture)', () => {
+  /**
+   * Une requête telle que Drizzle la remet au pool : `{ text, ... }` puis les
+   * paramètres. Réduite à ce que la sonde a besoin de voir ; le reste passe intact.
+   */
+  type RequeteDuPool = (
+    config: { readonly text: string },
+    valeurs?: readonly unknown[],
+  ) => Promise<unknown>;
+
+  /**
+   * Installe la sonde : à la PREMIÈRE requête `SELECT` sur `companies` qui porte
+   * `valeurRelue` en paramètre, supprime réellement `idASupprimer`, puis laisse la
+   * requête passer. Rend le compteur de déclenchements et la fonction de retrait.
+   */
+  async function poserLaSonde(
+    valeurRelue: string,
+    idASupprimer: string,
+  ): Promise<{ readonly declenchements: () => number; readonly retirer: () => void }> {
+    const { pool } = await import('../src/db.js');
+    const originale = pool.query.bind(pool) as RequeteDuPool;
+    let compteur = 0;
+
+    const remplacante: RequeteDuPool = async (config, valeurs) => {
+      const estLaRelecture =
+        compteur === 0 &&
+        /^select\b/i.test(config.text) &&
+        config.text.includes('"companies"') &&
+        (valeurs ?? []).includes(valeurRelue);
+      if (estLaRelecture) {
+        compteur += 1;
+        const suppression = await bd().query('DELETE FROM companies WHERE id = $1', [idASupprimer]);
+        expect(suppression.rowCount, 'la fiche en conflit a RÉELLEMENT disparu').toBe(1);
+      }
+      return originale(config, valeurs);
+    };
+
+    // La sonde est posée comme propriété PROPRE de l'instance : `pool.query` est une
+    // méthode du prototype, et Drizzle la résout à chaque appel. La retirer, c'est
+    // effacer la propriété propre — le prototype reprend, sans rien recopier.
+    expect(Object.hasOwn(pool, 'query'), 'aucune sonde antérieure ne traîne').toBe(false);
+    pool.query = remplacante as typeof pool.query;
+    return {
+      declenchements: () => compteur,
+      retirer: () => {
+        Reflect.deleteProperty(pool, 'query');
+        expect(Object.hasOwn(pool, 'query'), 'la sonde est retirée').toBe(false);
+      },
+    };
+  }
+
+  /** Le corps brut du 409, exigé au mot — c'est la FORME de `details` qui est jugée. */
+  function enveloppeBrute(reponse: Reponse): z.infer<typeof enveloppeErreurStricteSchema> {
+    return enveloppeErreurStricteSchema.parse(JSON.parse(reponse.corps));
+  }
+
+  it('@critique un POST dont la fiche en conflit disparaît avant la relecture rend 409 COMPANY_DUPLICATE SANS `details` — jamais un `details` sans `code`', async () => {
+    const admin = await creerCompte('admin', 'siren-degrade-post');
+    const siren = sirenFactice('65000000');
+
+    const enConflit = await creer(admin.jeton, {
+      name: 'Entreprise factice Nu qui va disparaître',
+      siren,
+    });
+    const idEnConflit = enConflit.ecriture.company.id;
+    expect(await compterParSiren(siren), 'ANTI-VACUITÉ : le conflit existe avant l’appel').toBe(1);
+
+    const sonde = await poserLaSonde(siren, idEnConflit);
+    let refus: Reponse;
+    try {
+      refus = await appeler('POST', '/v1/companies', {
+        jeton: admin.jeton,
+        charge: { name: 'Entreprise factice Nu nouvelle', siren },
+      });
+    } finally {
+      sonde.retirer();
+    }
+
+    expect(
+      sonde.declenchements(),
+      'ANTI-VACUITÉ : la sonde a reconnu la relecture, une fois. Zéro signifierait\n' +
+        'que le dépôt ne relit plus par ce chemin, et le test jugerait un autre\n' +
+        'scénario que le sien.',
+    ).toBe(1);
+    expect(
+      await compterParSiren(siren),
+      'La fiche en conflit n’existe plus : la suppression a été commise AVANT la\n' +
+        'relecture, c’est la sonde qui l’a attendue.',
+    ).toBe(0);
+
+    expect(
+      refus.statut,
+      'Le 409 est GARANTI par la contrainte, et il prouve l’ordre : l’INSERT a violé\n' +
+        'l’index AVANT la suppression — sinon il aurait rendu 201.',
+    ).toBe(409);
+    expect(refus.code, '`error.code` est garanti aussi').toBe('COMPANY_DUPLICATE');
+    expect(
+      refus.message,
+      'Aucun état présumé : sans fiche relue, le message est le GÉNÉRIQUE, pas\n' +
+        'celui de l’archive.',
+    ).not.toContain('ARCHIVÉE');
+
+    const corps = enveloppeBrute(refus);
+    expect(
+      'details' in corps.error,
+      'ABSENT — pas `[]`, pas `[{ path }]` sans `code`, pas `null`. Le contrat dit\n' +
+        '« jamais partiel », et la clé elle-même ne doit pas figurer dans l’enveloppe.',
+    ).toBe(false);
+    expect(corps.error.details).toBeUndefined();
+  });
+
+  it('@critique un PATCH dont la fiche en conflit disparaît avant la relecture rend le même 409 sans `details`, et n’écrit rien', async () => {
+    // Le `PATCH` échoue DANS une transaction encore ouverte quand la relecture part
+    // sur le pool : la suppression par la connexion du test ne doit pas s'y heurter
+    // (la transaction abandonnée ne verrouille pas la fiche en conflit — seulement
+    // sa propre ligne), et le refus doit annuler la transaction en entier.
+    const admin = await creerCompte('admin', 'siren-degrade-patch');
+    const siren = sirenFactice('66000000');
+
+    const enConflit = await creer(admin.jeton, {
+      name: 'Entreprise factice Xi qui va disparaître',
+      siren,
+    });
+    const idEnConflit = enConflit.ecriture.company.id;
+    const candidate = await creer(admin.jeton, { name: 'Entreprise factice Xi candidate' });
+    const idCandidate = candidate.ecriture.company.id;
+    expect(await compterParSiren(siren), 'ANTI-VACUITÉ : le conflit existe avant l’appel').toBe(1);
+
+    const sonde = await poserLaSonde(siren, idEnConflit);
+    let refus: Reponse;
+    try {
+      refus = await appeler('PATCH', `/v1/companies/${idCandidate}`, {
+        jeton: admin.jeton,
+        charge: { siren },
+      });
+    } finally {
+      sonde.retirer();
+    }
+
+    expect(sonde.declenchements(), 'ANTI-VACUITÉ : la relecture a été reconnue').toBe(1);
+    expect(await compterParSiren(siren), 'la fiche en conflit n’existe plus').toBe(0);
+
+    expect(refus.statut).toBe(409);
+    expect(refus.code).toBe('COMPANY_DUPLICATE');
+    expect(refus.message).not.toContain('ARCHIVÉE');
+    const corps = enveloppeBrute(refus);
+    expect('details' in corps.error, 'absent, jamais partiel').toBe(false);
+
+    const relue = await appeler('GET', `/v1/companies/${idCandidate}`, { jeton: admin.jeton });
+    expect(relue.statut).toBe(200);
+    expect(
+      fiche(relue).siren,
+      'La candidate n’a PAS reçu le SIREN : le refus a annulé la transaction, même\n' +
+        'si le SIREN est devenu libre entre-temps. Le 409 ne se rejoue pas tout seul.',
+    ).toBeNull();
+  });
+});
+
+// =============================================================================
+// 16. LE CHEMIN DÉGRADÉ, L'AUTRE ÉTAT : LA RELECTURE **ÉCHOUE** (E18 · E43)
+// =============================================================================
+// LA DISTINCTION QUI FAIT TOUT LE TEST, et qui a manqué à la section 15.
+//
+// Il y a DEUX états dégradés, pas un, et ils ne passent pas par le même code :
+//   · la relecture RÉUSSIT et ne trouve RIEN — la fiche a disparu (section 15).
+//     `lignes[0] === undefined` → `return null` : chemin géré AVANT le correctif
+//     B-2, et c'est celui que les deux tests de la section 15 construisent ;
+//   · la relecture ÉCHOUE — elle ne rend aucun résultat, elle LÈVE. C'est le cas
+//     que le correctif B-2 (`63c68bc`) traite par son `catch` (`depot.ts:303`), et
+//     sa cause nommée est la SECONDE connexion du pool prise sous transaction
+//     avortée : `max: 10`, `connectionTimeoutMillis: 5_000` (`db.ts`). Dix `PATCH`
+//     conflictuels simultanés tiennent les dix connexions, la onzième expire.
+//
+// La revue A17 du 2026-09-05 (rejeu, B-2r) a MESURÉ que `depot.ts:303` n'était
+// exécutée par AUCUN des 585 tests — `lcov.info` de la CI, run 33932745763, tête
+// `e6af20a` — et en a tiré la conséquence exacte : « on peut supprimer le correctif
+// B-2 et les 585 tests restent verts ». Un correctif de comportement que personne
+// n'exécute disparaît sans bruit, et le contrat publié dans `packages/shared`
+// redeviendrait faux en silence. Ces deux tests-ci sont ce qui l'en empêche.
+//
+// ── L'ASSERTION QUI DISTINGUE, ET SANS LAQUELLE CE SERAIT UN DOUBLON ─────────
+// `compterParSiren === 1` APRÈS le refus : la fiche en conflit EST TOUJOURS LÀ.
+// C'est la seule assertion qui sépare « la relecture a échoué » de « la relecture
+// n'a rien trouvé » — les deux rendent le même 409 sans `details`, et sans ce
+// compte, le test serait vert pour la mauvaise raison, exactement comme l'étaient
+// les deux tests de la section 15 vis-à-vis de la ligne 303.
+//
+// ── PREUVE PAR BASCULE, rejouée le 2026-09-05 ───────────────────────────────
+// `try/catch` de `lireFicheEnConflit` ôté (le `SELECT` rendu à `await` nu) : ces
+// deux tests-ci, et EUX SEULS, rougissent en « expected 500 to be 409 » ; les 585
+// autres restent verts. Le code de production a été restauré à l'identique
+// (`git diff` vide sur `apps/api/src`). C'est la démonstration que la ligne 303
+// est désormais COUVERTE, et non plus seulement présente.
+// =============================================================================
+describe('409 d’unicité — chemin dégradé (la relecture d’après coup ÉCHOUE : pool saturé)', () => {
+  /** Une requête telle que Drizzle la remet au pool. Voir section 15. */
+  type RequeteDuPool = (
+    config: { readonly text: string },
+    valeurs?: readonly unknown[],
+  ) => Promise<unknown>;
+
+  /**
+   * La même sonde de chronologie qu'en section 15, à UN geste près : au lieu de
+   * SUPPRIMER la fiche et de laisser passer la requête, elle REJETTE la promesse —
+   * ce que fait le pool quand il ne peut plus servir de connexion. Le message imite
+   * `node-postgres` au mot (`timeout exceeded when trying to connect`) pour que le
+   * test échoue de la cause qu'il prétend reproduire, et non d'une erreur de
+   * fantaisie qu'aucun pool ne produirait jamais.
+   *
+   * La reconnaissance est la même, donc discriminante de la même façon : premier
+   * `SELECT` sur `"companies"` portant le SIREN du test en paramètre — un SIREN
+   * factice unique par test, aucune reconnaissance croisée possible.
+   */
+  async function poserLaSondeQuiEchoue(
+    valeurRelue: string,
+  ): Promise<{ readonly declenchements: () => number; readonly retirer: () => void }> {
+    const { pool } = await import('../src/db.js');
+    const originale = pool.query.bind(pool) as RequeteDuPool;
+    let compteur = 0;
+
+    const remplacante: RequeteDuPool = (config, valeurs) => {
+      const estLaRelecture =
+        compteur === 0 &&
+        /^select\b/i.test(config.text) &&
+        config.text.includes('"companies"') &&
+        (valeurs ?? []).includes(valeurRelue);
+      if (estLaRelecture) {
+        compteur += 1;
+        return Promise.reject(new Error('timeout exceeded when trying to connect'));
+      }
+      return originale(config, valeurs);
+    };
+
+    // Garde décisif sous `singleFork` (`vitest.config.ts:93`) : `src/db.js` — et son
+    // `pool` — est partagé par les 23 fichiers d'intégration du run. Une sonde qui
+    // fuirait contaminerait tous les suivants ; celle-ci refuse de se poser sur une
+    // autre, et se retire dans un `finally` avec assertion d'absence après.
+    expect(Object.hasOwn(pool, 'query'), 'aucune sonde antérieure ne traîne').toBe(false);
+    pool.query = remplacante as typeof pool.query;
+    return {
+      declenchements: () => compteur,
+      retirer: () => {
+        Reflect.deleteProperty(pool, 'query');
+        expect(Object.hasOwn(pool, 'query'), 'la sonde est retirée').toBe(false);
+      },
+    };
+  }
+
+  /** Le corps brut du 409 : c'est la FORME de `details` qui est jugée, pas son contenu. */
+  function corpsBrut(reponse: Reponse): z.infer<typeof enveloppeErreurStricteSchema> {
+    return enveloppeErreurStricteSchema.parse(JSON.parse(reponse.corps));
+  }
+
+  it('@critique un POST dont la relecture ÉCHOUE rend 409 COMPANY_DUPLICATE sans `details` — et la fiche en conflit EXISTE TOUJOURS', async () => {
+    const admin = await creerCompte('admin', 'siren-relecture-ko-post');
+    const siren = sirenFactice('67000000');
+
+    await creer(admin.jeton, { name: 'Entreprise factice Pi détentrice du SIREN', siren });
+    expect(await compterParSiren(siren), 'ANTI-VACUITÉ : le conflit existe avant l’appel').toBe(1);
+
+    const sonde = await poserLaSondeQuiEchoue(siren);
+    let refus: Reponse;
+    try {
+      refus = await appeler('POST', '/v1/companies', {
+        jeton: admin.jeton,
+        charge: { name: 'Entreprise factice Pi seconde', siren },
+      });
+    } finally {
+      sonde.retirer();
+    }
+
+    expect(
+      sonde.declenchements(),
+      'ANTI-VACUITÉ : la relecture a été reconnue, une fois. Zéro signifierait que le\n' +
+        'dépôt ne relit plus par le pool, et le test jugerait un autre scénario.',
+    ).toBe(1);
+
+    expect(
+      refus.statut,
+      'SANS le `catch` de `lireFicheEnConflit` (`depot.ts:303`), l’échec de lecture\n' +
+        'sortirait de `traduireEchecDeContrainte` et le gestionnaire rendrait 500 :\n' +
+        'un conflit d’état déguisé en panne. C’est la bascule qui prouve ce test.',
+    ).toBe(409);
+    expect(refus.code, '`error.code` est GARANTI sans aucune lecture').toBe('COMPANY_DUPLICATE');
+    expect(
+      refus.message,
+      'Aucun état présumé : sans fiche relue, le message est le GÉNÉRIQUE.',
+    ).not.toContain('ARCHIVÉE');
+
+    const corps = corpsBrut(refus);
+    expect(
+      'details' in corps.error,
+      'ABSENT — pas `[]`, pas `[{ path }]` sans `code`, pas `null`. La clé elle-même\n' +
+        'ne doit pas figurer dans l’enveloppe : le contrat dit « jamais partiel ».',
+    ).toBe(false);
+    expect(corps.error.details).toBeUndefined();
+
+    expect(
+      await compterParSiren(siren),
+      'LE DISCRIMINANT (A17, B-2r) : la fiche en conflit est TOUJOURS LÀ. La relecture\n' +
+        'a ÉCHOUÉ — elle n’a pas « rien trouvé ». Sans ce compte, ce test ne se\n' +
+        'distinguerait pas de ceux de la section 15, et n’exécuterait pas la ligne 303.',
+    ).toBe(1);
+  });
+
+  it('@critique un PATCH dont la relecture ÉCHOUE rend le même 409 sans `details`, n’écrit rien, et laisse la fiche en conflit en place', async () => {
+    // Le cas NOMMÉ par le correctif : l'`UPDATE` est dans `db.transaction`, la
+    // connexion de la transaction est avortée (`25P02`), la relecture part donc sur
+    // une SECONDE connexion du pool — celle qui, pool saturé, n'arrive jamais.
+    const admin = await creerCompte('admin', 'siren-relecture-ko-patch');
+    const siren = sirenFactice('68000000');
+
+    await creer(admin.jeton, { name: 'Entreprise factice Rhô détentrice du SIREN', siren });
+    const candidate = await creer(admin.jeton, { name: 'Entreprise factice Rhô candidate' });
+    const idCandidate = candidate.ecriture.company.id;
+    expect(await compterParSiren(siren), 'ANTI-VACUITÉ : le conflit existe avant l’appel').toBe(1);
+
+    const sonde = await poserLaSondeQuiEchoue(siren);
+    let refus: Reponse;
+    try {
+      refus = await appeler('PATCH', `/v1/companies/${idCandidate}`, {
+        jeton: admin.jeton,
+        charge: { siren },
+      });
+    } finally {
+      sonde.retirer();
+    }
+
+    expect(sonde.declenchements(), 'ANTI-VACUITÉ : la relecture a été reconnue').toBe(1);
+    expect(refus.statut, 'sans le `catch`, ce serait 500').toBe(409);
+    expect(refus.code).toBe('COMPANY_DUPLICATE');
+    expect(refus.message).not.toContain('ARCHIVÉE');
+
+    const corps = corpsBrut(refus);
+    expect('details' in corps.error, 'absent, jamais partiel').toBe(false);
+    expect(corps.error.details).toBeUndefined();
+
+    expect(
+      await compterParSiren(siren),
+      'LE DISCRIMINANT : UNE seule fiche porte ce SIREN — la détentrice, toujours\n' +
+        'vivante (la relecture a échoué, pas trouvé le vide) ET la candidate n’a rien\n' +
+        'reçu (le refus a annulé la transaction en entier).',
+    ).toBe(1);
+
+    const relue = await appeler('GET', `/v1/companies/${idCandidate}`, { jeton: admin.jeton });
+    expect(relue.statut).toBe(200);
+    expect(fiche(relue).siren, 'la candidate n’a PAS reçu le SIREN').toBeNull();
   });
 });
