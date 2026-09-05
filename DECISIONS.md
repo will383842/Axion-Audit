@@ -8409,3 +8409,50 @@ n'assigne aucun rôle ARIA ; aucune section du pack n'est en conflit avec une au
 Décideur : A22 pour le rendu de son composant — **le principe « un écran, une alerte » est soumis à
 A01**, qui peut le poser en convention 11 §3 s'il le juge général.
 Impact spec : aucun. Aucun test modifié : le test d'A26 avait raison, et il reste tel quel.
+
+## 2026-09-05 — [l5b] Aucune photo n'entre dans l'application : qui livre la capture, et où vivent les octets ?
+
+Constat mesuré sur `c5665e1` : `grep -rn "type=\"file\"|capture=|kind: 'photo'" apps/field/src
+packages/ui/src` ne rend **aucune ligne**. `compresserPhoto` (03 §29 R2, livré par L5c dans
+`sauvegarde/photos.ts`) n'a donc **aucun appelant possible** — la capture n'existe nulle part. Le
+pack la demande deux fois : 03 §17.4 (barre fixe « … Note · **Photo** · Recherche · Suivant ») et
+03 M3.1 (« ajout de pièce jointe (photo — tableau blanc, process affiché en atelier) »).
+Ce n'est pas une fonctionnalité manquante au sens de 09 §5.9 : elle est **spécifiée**. C'est une
+**attribution de lot restée vide** — `docs/conception/LOT_L5.md` met « photos » hors périmètre L5b
+et donne « compression R2 » à L5c : L5c a livré la compression, personne n'a livré la capture, et
+chaque branche est verte séparément. Même angle mort structurel que l'écart R-L5a-7 fermé ce jour.
+
+Trois obstacles, tous hors de la main d'A22 :
+
+1. `compresserPhoto` vit sur `lot/l5c`, non fusionnée et sous réserve A29 — l'appeler exige de
+   fusionner la branche d'un autre agent ou de dupliquer le module (on compose, on ne recrée pas).
+2. **Aucun endroit local ne peut recevoir les octets** : pas de table binaire dans `local/base.ts`,
+   et `chargeAttachmentSchema` n'a que des scalaires. La charge est **sérialisée en JSON avant
+   chiffrement** — un `Blob` ne peut pas transiter. Il faut une table **et** un
+   `VERSION_SCHEMA_LOCAL` incrémenté, donc une migration de données terrain : couche d'A24.
+3. L'attachement n'a **pas de statut d'envoi** local, alors que 05 §9.6 l'exige (« une réponse peut
+   être synchronisée avant sa photo ») ; le protocole de chunks est L6/A25.
+
+Options :
+
+1. A22 fusionne `lot/l5c` et étend le schéma local. **Écartée** : deux interdits d'un coup, et une
+   migration de données terrain décidée par l'agent qui en a le moins la vue.
+2. A22 n'écrit que les métadonnées, les octets sont abandonnés. **Écartée, et c'est la pire** :
+   l'écran promettrait une photo que rien ne conserve — la perte silencieuse que l'**invariant 7**
+   interdit.
+3. A22 s'arrête, mesure, trace, et rend le point. Le bouton `disabled` de `ZoneQuestion.tsx` reste :
+   il est **honnête** — il tient sa place du §17.4 et dit qu'il ne fait rien encore.
+
+Arbitrage : **option 3**, que le mandat de reprise d'A22 prévoit mot pour mot (« si le format
+d'attachement ou le protocole de chunks t'oblige à toucher un fichier qui n'est pas à toi,
+arrête-toi et remonte-le »). **Précédence : sans objet** — aucune divergence interne du pack :
+03 §17.4, 03 §29 R2 et 05 §9.6 concordent ; ce qui manque est une **attribution**, pas une règle.
+Ce que la décision demande : **un lot propriétaire de la chaîne photo de bout en bout** — schéma
+local binaire (A24) → capture dans l'écran de session (A22) → `compresserPhoto` (A23, déjà écrit) →
+statut d'envoi et chunks §9.6 (A25). Tant qu'elle n'est pas attribuée, `photos.ts` est du code sans
+appelant et 03 §17.4 n'est pas tenu.
+
+Décideur : **A20** (découpage L5b / L5c / couche locale), **A01** si l'attribution déborde sur L6.
+A22 ne tranche pas et n'anticipe pas.
+Impact spec : aucun amendement. Écart de conformité **ouvert et nommé** sur 03 §17.4 et 03 §29 R2 —
+à porter au contrôle A02 de la porte P-C.

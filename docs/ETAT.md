@@ -3150,3 +3150,24 @@ Prochaine action : demander à A29 la revue croisée du diff de refusion — le 
 `AccesEntretien` et les neuf résolutions de conflit n'ont été relus par personne d'autre que moi.
 Tests rouges connus : aucun. Avertissement `check:decisions` sur une date qui recule
 (« Quel rôle accède au référentiel client ? ») : PRÉEXISTANT, non bloquant, non corrigé ici.
+
+## 2026-09-05 05h50 — [lot L5 / incrément L5b] — étape pipeline 3/7 (auto-revue)
+Dernier commit vert : c5665e1 (merge origin/main ab6dcf5 — quatrième rattrapage) · Branche : lot/l5b · Poussé : oui
+Tâche en cours : terminée. Quatrième refusion `origin/main` → `lot/l5b` après la fusion de la
+PR #30 (L5a + axe-core sur `main`). Le merge était DÉJÀ résolu et laissé non commité par la
+session coupée : résolution contrôlée avant de conclure, par **en-têtes `^## `** et non par
+lignes — 0 bloc de `main` absent, 0 ligne ajoutée par `main` manquante, 0 fichier de `main`
+manquant. Le correctif `<AccesEntretien />` était lui aussi déjà commité (6031d6b) et il TIENT :
+`pnpm test:interface` = 599/599, et le `@critique` « si la lecture locale REJETTE » d'`EcranAccueil`
+est vert sans qu'aucun test n'ait été touché. `pnpm verify:rapide` (14 gardes + lint + typecheck +
+unit) RC=0.
+Constat neuf, NON corrigé délibérément : **aucune photo n'entre dans l'application** — 0 `type="file"`,
+0 `capture=`, 0 `kind:'photo'` dans `apps/field/src` ni `packages/ui/src`, donc `compresserPhoto`
+(L5c) est du code sans appelant et 03 §17.4 n'est pas tenu. Trois obstacles hors de la main d'A22
+(module sur une branche d'un autre agent · aucune table binaire locale, charge sérialisée en JSON
+avant chiffrement · aucun statut d'envoi d'attachement, 05 §9.6 = L6). Escaladé, non deviné :
+entrée `DECISIONS.md` du 2026-09-05, décideur A20 (A01 si ça déborde sur L6).
+Prochaine action : faire arbitrer par A20 le lot propriétaire de la chaîne photo, et demander à A29
+la revue croisée du diff de refusion.
+Tests rouges connus : aucun. Avertissement `check:decisions` sur une date qui recule
+(« Quel rôle accède au référentiel client ? ») : PRÉEXISTANT, non bloquant, non corrigé ici.
