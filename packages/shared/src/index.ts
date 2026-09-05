@@ -24,3 +24,8 @@ export * from './questionnaire.js';
 export * from './plan-entretiens.js';
 export * from './assignments.js';
 export * from './sync.js';
+// Le scoring vient EN DERNIER : il consomme les vocabulaires de la banque
+// (criticités, bornes 0-5) et ceux du plan d'entretiens (groupes d'interlocuteur).
+// ⚠ NE PAS CONFONDRE avec './scoping.js' — une lettre d'écart, deux sujets sans
+// aucun rapport : l'un cote un audit, l'autre garde des montants (invariant 3).
+export * from './scoring.js';
