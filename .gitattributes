@@ -26,6 +26,12 @@
 #   FUSION, avant le commit. Le garde de format est le seul qui attrape ce défaut :
 #   le comptage de lignes répond « zéro perdue » dans les deux sens.
 #
+# ⇒ ET `pnpm format:check` AUSSI — ajouté le 2026-09-05, quelques heures après ce
+#   bloc, parce que le cas s'est présenté : `union` recolle deux entrées **sans la
+#   ligne vide qui les sépare**. `check:decisions` était vert, le comptage d'en-têtes
+#   était vert ; seul Prettier l'a vu, et c'est la CI qui l'a rendu, pas l'agent.
+#   Trois gardes, donc, et aucun des trois ne remplace les deux autres.
+#
 # `docs/ETAT.md` EN EST EXCLU, DÉLIBÉRÉMENT. Sa sémantique est « le dernier bloc
 # fait foi » (11 §9ter) : un pilote de fusion qui décide seul de l'ordre peut faire
 # du bloc le plus ancien le dernier, et une session neuve suivrait une consigne

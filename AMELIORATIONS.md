@@ -29,6 +29,7 @@
 | L2    | ~0,3 j   | 0,5 j   | ~0,2 j                                                                                                                                                    |
 | L3a   | ~0,1 j   | 0,5 j   | ~0,4 j                                                                                                                                                    |
 | L3b-d | ~0,15 j  | 0,5 j   | ~0,35 j — plafonds explicites (120 s) sur deux crochets de tests L2, port de sync L5a déplacé hors du glob réservé à L6a ; le reste est d'étage 2 (A-007) |
+| L5b   | ~0,1 j   | 0,5 j   | ~0,4 j                                                                                                                                                    |
 
 ---
 
@@ -1609,6 +1610,36 @@ clause du contrat 11 §3 non encore tenue. À planifier par A30 au brief de L7.
 
 **Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-C_
 
+### FICHE A-008 — Le coffre terrain chiffre sans AAD : une enveloppe n'est pas liée à sa ligne
+
+**Constat terrain (A24, 2026-09-02, relevé par A29) :** AES-256-GCM sans données authentifiées
+additionnelles. Une enveloppe déchiffrable l'est **quelle que soit la ligne où on la colle** : un
+attaquant qui écrit déjà dans IndexedDB peut déplacer une réponse d'une question à une autre sans que
+le déchiffrement le voie. Lier l'enveloppe à sa ligne exigeait un troisième paramètre et cassait la
+signature publiée `dechiffrer(e, s)` en pleine rencontre tests × code.
+
+**Valeur pour l'auditeur :** un durcissement, pas une faille du modèle de menace 06 §10 — la menace
+suppose un attaquant qui a déjà passé le verrou et le coffre. Mais une réponse déplacée d'une question
+à une autre est une donnée fausse qui ne se signale pas.
+
+**Proposition (étage 2) :** AAD = `table:id:colonne`, posée par le port d'écriture, vérifiée par
+`dechiffrer`. Migration locale des enveloppes existantes au ré-enveloppement. À arbitrer à **P-C**.
+**Coût estimé :** ≈ 0,3 j. **Impact schéma / API : aucun.** Impact `apps/field/src/local/**` : coffre,
+port, tests. Trace : `DECISIONS.md` 2026-09-02 « Aucun AAD sur AES-GCM ».
+
+### FICHE A-009 — L'icône de la PWA terrain est PROVISOIRE : le dessin reste à Williams
+
+**Constat (A29, 2026-09-02, B2) :** le manifeste livré par L5a n'avait aucune icône — non installable,
+donc `storage.persist()` refusé sur iPad, donc aucune mission embarquable. La décision du 2026-08-28
+réserve le dessin de l'icône à Williams et interdit le demi-manifeste. **Défaut appliqué sous la règle
+« silence vaut accord »** (`DECISIONS.md` 2026-09-02) : un aplat aux couleurs des tokens (terracotta
+sur ivoire), généré par `apps/field/scripts/build-icones.mjs` à partir de `COULEURS_CHARTE`, 192 /
+512 / maskable / `apple-touch-icon`, marqué `"_provisoire": true` dans le manifeste.
+
+**Ce qui reste dû, à Williams :** l'icône de charte. Le remplacement est une substitution de
+fichiers PNG, sans code. À cocher à la porte **P-C**.
+**Coût estimé :** 0 j côté code. **Impact schéma / API : aucun.**
+
 ## 2026-09-02 — [L7a, étage 2, PROPOSÉES] Deux composants de `packages/ui` parlent terrain à une console
 
 `packages/ui` est **figé** pendant les trois chantiers (gouvernance du 2026-09-02) ; ces deux constats
@@ -1719,36 +1750,6 @@ Le correctif vise le seul script, et hors des trois branches de lot (chantier ou
 
 **Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-E_
 
-### FICHE A-008 — Le coffre terrain chiffre sans AAD : une enveloppe n'est pas liée à sa ligne
-
-**Constat terrain (A24, 2026-09-02, relevé par A29) :** AES-256-GCM sans données authentifiées
-additionnelles. Une enveloppe déchiffrable l'est **quelle que soit la ligne où on la colle** : un
-attaquant qui écrit déjà dans IndexedDB peut déplacer une réponse d'une question à une autre sans que
-le déchiffrement le voie. Lier l'enveloppe à sa ligne exigeait un troisième paramètre et cassait la
-signature publiée `dechiffrer(e, s)` en pleine rencontre tests × code.
-
-**Valeur pour l'auditeur :** un durcissement, pas une faille du modèle de menace 06 §10 — la menace
-suppose un attaquant qui a déjà passé le verrou et le coffre. Mais une réponse déplacée d'une question
-à une autre est une donnée fausse qui ne se signale pas.
-
-**Proposition (étage 2) :** AAD = `table:id:colonne`, posée par le port d'écriture, vérifiée par
-`dechiffrer`. Migration locale des enveloppes existantes au ré-enveloppement. À arbitrer à **P-C**.
-**Coût estimé :** ≈ 0,3 j. **Impact schéma / API : aucun.** Impact `apps/field/src/local/**` : coffre,
-port, tests. Trace : `DECISIONS.md` 2026-09-02 « Aucun AAD sur AES-GCM ».
-
-### FICHE A-009 — L'icône de la PWA terrain est PROVISOIRE : le dessin reste à Williams
-
-**Constat (A29, 2026-09-02, B2) :** le manifeste livré par L5a n'avait aucune icône — non installable,
-donc `storage.persist()` refusé sur iPad, donc aucune mission embarquable. La décision du 2026-08-28
-réserve le dessin de l'icône à Williams et interdit le demi-manifeste. **Défaut appliqué sous la règle
-« silence vaut accord »** (`DECISIONS.md` 2026-09-02) : un aplat aux couleurs des tokens (terracotta
-sur ivoire), généré par `apps/field/scripts/build-icones.mjs` à partir de `COULEURS_CHARTE`, 192 /
-512 / maskable / `apple-touch-icon`, marqué `"_provisoire": true` dans le manifeste.
-
-**Ce qui reste dû, à Williams :** l'icône de charte. Le remplacement est une substitution de
-fichiers PNG, sans code. À cocher à la porte **P-C**.
-**Coût estimé :** 0 j côté code. **Impact schéma / API : aucun.**
-
 ## 2026-09-02 — [L0/CI, étage 2, PROPOSÉE] `l0-restauration` rougit une fois sur deux en CI, et verdit à la relance
 
 ### FICHE A-012 — Le test de restauration pgBackRest est instable en CI
@@ -1766,6 +1767,248 @@ fichiers PNG, sans code. À cocher à la porte **P-C**.
 - **Coût estimé** : 0,25 j — attendre `archive.info` (ou `pgbackrest info` = stanza `ok`) avec délai
   borné avant `backup`, et un cas de test qui reproduit la course.
 - **Impact schéma/API** : aucun. Lot L0 (A11 infra, A53 observabilité).
+
+---
+
+## 2026-09-02 (RÉÉCRITE LE 2026-09-03) — [L5b] **EN PRODUCTION — validation juridique URGENTE** : le script d'accord de participation
+
+> **CETTE FICHE A ÉTÉ FAUSSE PENDANT 24 H, ET SUR UN TEXTE JURIDIQUE.** Elle décrivait
+> `PHRASE_SCRIPT_ACCORD` comme un travail « à poser par A22 ». **Le texte est écrit, affiché et
+> lu.** Rien ici ne reste à écrire. Une fiche qui présente comme à faire ce qui est déjà en service
+> retarde la seule chose qui compte : la relecture.
+
+**FAIT MESURÉ (2026-09-03).** `apps/field/src/ecrans/entretien/DemarrageEntretien.tsx:19-23` définit
+la constante `PHRASE_SCRIPT_ACCORD` ; **la ligne 53 l'AFFICHE** dans un `<blockquote>` de l'écran
+« Avant la première question », précédé de « À lire à {nom} (mention d'information v1) ».
+Version : **`v1`** (`VERSION_MENTION_INFORMATION`, `session/ecriture-session.ts:32`), enregistrée sur
+chaque session dans `informationNoticeVersion` comme l'exige 06 §10.4.
+
+**CE QUI EST RÉELLEMENT EN JEU.** Ce texte est le support d'une information RGPD. Il est **lu à voix
+haute à chaque interlocuteur, avant chaque entretien**, avant que ses propos ne soient enregistrés.
+**Il a été rédigé par un agent. Aucun juriste ne l'a relu.** Et aucun test ne peut le relire : la
+suite vérifie qu'on ne démarre pas sans accord — elle ne peut pas vérifier que ce à quoi la personne
+consent est juste, complet et opposable.
+
+**ÉCART SUPPLÉMENTAIRE, TROUVÉ EN RÉÉCRIVANT CETTE FICHE — IL AGGRAVE L'URGENCE.** Le texte
+EN PRODUCTION n'est **pas** celui arbitré dans `DECISIONS.md` du 2026-09-02, et les deux ne disent
+pas la même chose sur le point le plus sensible :
+
+- **arbitré** : « Le rapport ne vous attribue aucun propos nominativement. »
+- **en production** : « elles sont consignées sous votre nom et votre fonction […] et ne servent à
+  aucune évaluation individuelle. »
+
+L'un promet la non-attribution dans le livrable, l'autre annonce une consignation nominative. Ce ne
+sont pas deux formulations d'une même promesse : ce sont **deux engagements différents**. La
+décision tracée ne décrit donc pas ce qui est lu aux personnes — et c'est la décision, pas le code,
+qu'une session neuve lit en premier. **Le rapprochement des deux appartient au juriste, pas à un
+agent : aucun des deux textes n'est réécrit ici.**
+
+**CE QUI EST DEMANDÉ, ET À QUI.** Relecture juridique **avant la porte P-E**, par un juriste, portant
+sur : (a) laquelle des deux formulations engage correctement le traitement, et sa cohérence de bout
+en bout avec la pseudonymisation du 03 §26.2 ; (b) ce qu'il advient des réponses déjà saisies quand
+une personne demande l'arrêt en cours d'entretien — le texte en production ne le dit pas ; (c) la
+base légale et le sort des mentions nominatives dans le rapport final.
+
+**Coût.** ~0,05 j côté équipe une fois le texte validé : remplacer la valeur de la constante,
+**incrémenter `VERSION_MENTION_INFORMATION`** (les sessions déjà collectées doivent rester
+rattachées à la version qu'elles ont réellement entendue — invariant 7), rejouer les tests de
+libellé. Le coût réel est celui de la relecture, hors équipe.
+
+**Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun. Impact périmètre fonctionnel :
+aucun.** Le compteur du plafond étage 1 n'est pas mouvementé : cette fiche est documentaire.
+
+**Arbitrage Williams :** ☐ TEXTE VALIDÉ ☐ TEXTE À REMPLACER ☐ RELECTURE JURIDIQUE COMMANDÉE
+— _porté à Williams le 2026-09-03 ; le texte est en service pendant ce temps._
+
+---
+
+## 2026-09-03 — [L5a/L5b] Étage 1 — deux libellés d'écran, relevés par le balayage axe et NON corrigés par lui
+
+**Constat (A28, balayage axe-core du 2026-09-03, `e2e/accessibilite-l5a.e2e.ts`).** Le scope des
+localisateurs sur le landmark `main` a fait apparaître deux défauts de libellé que le balayage
+lui-même ne signale pas — axe ne les compte pas comme des violations WCAG, et c'est précisément
+pourquoi ils vivaient là sans que rien ne les voie :
+
+1. **Deux `<h1>` de libellé IDENTIQUE sur « Aujourd'hui ».** `App.tsx` affiche `VUES[vue].titre`
+   dans un `<h1>` d'en-tête, et `EcranAccueil.tsx` affiche son propre `<h1>` dans `<main>`. Un
+   lecteur d'écran annonce donc deux titres de niveau 1 portant le même texte sur une page qui n'a
+   qu'un seul sujet.
+2. **Deux libellés DIFFÉRENTS pour le même écran.** Le registre `app/vues.ts` dit « Stockage de
+   l'appareil » ; `EcranStockage.tsx` dit « Stockage de cet appareil ». L'en-tête et le corps de
+   l'écran ne s'appellent pas pareil.
+
+**Valeur pour l'auditeur.** Le premier coûte à qui navigue au lecteur d'écran ou au clavier
+(03 §22.1, « navigation clavier intégrale ») ; le second est un flottement de vocabulaire dans une
+interface dont 03 §17.4 exige qu'elle soit sans jargon et sans surprise.
+
+**Ce qui est demandé, et à qui.** Correction par **A22** avec le reste de L5b, relue par le
+réviseur croisé comme n'importe quel code. **Pas par A28 ni par A20** : un test d'accessibilité qui
+corrige l'interface qu'il mesure ne mesure plus que son propre correctif.
+
+**Coût estimé.** ~0,05 j les deux. **Impact schéma : aucun. Impact API : aucun. Impact crypto :
+aucun. Impact périmètre fonctionnel : aucun. Étage 1**, autorisé d'office.
+
+---
+
+## 2026-09-03 — [transverse] Étage 2 — `pnpm verify` n'exécutait JAMAIS le projet `interface` : DÉFAUT RÉEL, **DÉJÀ CORRIGÉ** sur `lot/l3-suite`
+
+> **NE PAS RE-CHIFFRER CE CORRECTIF : IL EST ÉCRIT.** A10 l'a fermé le 2026-09-03 dans
+> **`e2e97b9`** (« verify lance enfin les trois projets vitest ») sur `lot/l3-suite`, et il entre
+> dans `main` avec la **PR #26**. Ce défaut se referme donc **par la fusion de L3, sans travail
+> supplémentaire**. La présente fiche est conservée pour le DIAGNOSTIC, qui reste la meilleure
+> explication écrite de la famille de défaut — pas pour proposer un travail déjà fait.
+
+**Constat, mesuré le 2026-09-03 sur `lot/l5a` (`pnpm verify`, RC=0) et sur `lot/l5b`.**
+`verify` se terminait par `test:unit && test:integration && test:e2e`, c'est-à-dire
+`vitest run --project unit`, `--project integration`, puis Playwright. **Aucune de ces trois
+commandes ne lançait le projet `interface`.** `check:test-projects` comptait pourtant
+`interface:29 · unit:29 · integration:17 · playwright:4` : **29 fichiers de test étaient analysés
+par les garde-fous et exécutés par personne** dans `verify`. Ils ne tournaient que sous
+`pnpm test:coverage` (`vitest run --coverage`, qui lance TOUS les projets), donc uniquement dans le
+job CI `coverage`. `test:critique` avait le même trou : `--project unit --project integration`.
+
+**Ce que ça coûte, et ce n'est pas théorique — c'est arrivé cette semaine.** Un `.test.tsx` rouge
+sort VERT de `pnpm verify`, VERT du hook pre-push, VERT des jobs CI `unit`, `integration` et `e2e`.
+Il ne rougit que dans le job `coverage` — où le message affiché est « couverture insuffisante » et
+non « test cassé ». C'est exactement le rouge de `lot/l5b` du 2026-09-02, et c'est pourquoi son bloc
+`ETAT.md` a pu écrire « Tests rouges connus : aucun » de bonne foi : les 162/162 d'A22 étaient vrais
+et répondaient à une autre question. Un garde-fou qui mesure vraiment, mais pas ce qu'on croit.
+
+**CONFIRMATION CROISÉE, et c'est ce qui donne son poids au diagnostic.** Deux équipes y sont
+arrivées par deux chemins indépendants et le même jour : A10 par la revue de l'outillage, A20 par le
+rouge de couverture de `lot/l5b` puis par un `pnpm verify` sur `lot/l5a`. Aucune des deux n'a lu la
+trouvaille de l'autre avant de la faire. Un défaut qu'on trouve deux fois n'est pas une hypothèse.
+
+**Ce que le correctif d'A10 apporte EN PLUS, et qui est le vrai fond.** `test:interface` ajouté et
+enchaîné dans `test`, `verify` ET `verify:rapide` — mais surtout un **sixième contrôle** dans
+`check:test-projects`, qui part du **PROJET** (« ce projet est-il lancé ? ») là où les cinq
+existants partaient du **FICHIER** (« ce fichier est-il capté ? »). C'est exactement l'angle mort
+qui faisait lire `interface:29` dans une sortie VERTE : les 29 fichiers étaient bien captés, et
+exécutés par personne. Prouvé par bascule deux fois (`test:interface` retiré de `verify` → sortie 1,
+« interface — 26 fichier(s) de test concerné(s) »). Une réparation qui se garde elle-même.
+
+**CE QUI RESTE PROPOSÉ, et rien d'autre : un job CI NOMMÉ.** Le correctif d'A10 fait exécuter les
+tests d'interface ; il ne change pas l'ÉTIQUETTE sous laquelle leur rouge s'affiche en CI. Donner au
+projet `interface` son propre job — plutôt que de le laisser rougir à l'intérieur du job `coverage`
+— pour qu'un `.test.tsx` cassé dise « interface » et non « couverture insuffisante ». Un rouge mal
+étiqueté se diagnostique deux fois. **Coût ~0,05 j (un bloc de job). Impact schéma : aucun. Impact
+API : aucun. Impact crypto : aucun. Impact périmètre : aucun.**
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-C_ · le correctif de fond
+(`e2e97b9`) n'attend PAS cet arbitrage : il arrive avec la PR #26.
+
+---
+
+## 2026-09-03 — [transverse] Étage 2, PROPOSÉE — une glose ABSENTE est refusée, une glose FAUSSE est COCHÉE
+
+**Constat, mesuré sur le seul lot L5b.** `check:tracabilite` compare la glose au LIBELLÉ de
+l'exigence citée. Il ne peut pas voir qu'un module réalise une **autre** exigence que celle qu'il
+cite. **Cinq** occurrences dans un seul lot, **dont quatre ont passé le garde** et n'ont été vues qu'en
+revue humaine :
+
+1. `session/fuseau.ts` citait **E13** (« écran 3 zones ») alors qu'il ne fait que du formatage au
+   fuseau de mission — donc **E32 n'avait aucun code rattaché depuis ce module** ;
+2. `session/enregistrement.ts` citait **E38** (« sync ≥ 1×/j + export de secours ») là où la purge
+   sur `pagehide` protège la saisie en cours et ne remonte rien au siège ;
+3. `session/valeurs.ts` citait **E30** (« 3 niveaux d’audit ») pour un module qui type les
+   DOUZE formes de valeur de réponse — alors que ses deux voisins immédiats du même incrément,
+   `SaisieReponse.tsx` et `ecriture-reponses.ts`, citaient déjà **E37** pour exactement ce sujet ;
+4. `session/peripherie-entretien.test.ts` citait **E43 (DoD)** — trouvée par l’auteur lui-même en
+   appliquant sa propre règle, et **RETIRÉE plutôt que remplacée** : une glose se supprime aussi
+   bien qu’elle s’ajoute, et c’est la moitié de la règle qu’on oublie ;
+5. `e2e/accessibilite-l5a.e2e.ts` et deux fichiers L5b citaient **E7** (« remontée continue au
+   siège ») en croyant citer l'**invariant 7** (« rien n'est silencieusement écrasé »). Collision de
+   nommage pure — celle-là, le garde l'a attrapée.
+
+**L'ARGUMENT QUI REND LA FICHE DÉCISIVE, et il n'est pas de moi (A29) : une glose ABSENTE est
+refusée par A02 à l'étape 6 ; une glose FAUSSE est COCHÉE.** La seconde est donc strictement pire
+que rien — elle achète la conformité apparente au prix de la conformité réelle — et c'est
+exactement celle que rien n'attrape aujourd'hui.
+
+**CE N'EST PAS UN GARDE CASSÉ : C'EST UN GARDE QUI N'EXISTE PAS. Requalification du
+2026-09-03 (constat A02), et elle change le coût que Williams arbitre.** Le dispositif ne
+s'est pas trompé — **il documente lui-même son trou**. `node scripts/check-tracabilite-exigences.mjs
+--angles-morts` l'énonce en toutes lettres : n° 1, « **il ne distingue pas un rattachement JUSTE**
+d'un rattachement faux » ; n° 3, « le rapprochement est **LEXICAL, pas sémantique** » ; n° 5,
+« ce script part des citations et remonte à la table — **il ne fait pas le chemin inverse** ».
+Les cinq gloses fausses de ce lot sont donc tombées EXACTEMENT dans ce que l'outil annonce ne pas
+voir. Cette fiche ne demande pas de RÉPARER un garde défaillant : elle demande d'en **CONSTRUIRE
+un second**, qui n'a jamais existé. Le contrôle ② ci-dessous est nommément l'angle mort n° 5.
+
+**Valeur pour l'auditeur.** Indirecte, et c'est le fond du contrôle d'acceptation : la matrice
+E1-E47 lue « dans les deux sens » (09 §3-6) est la seule preuve qu'aucune exigence n'a été oubliée.
+Une matrice alimentée par des gloses fausses est verte et ne prouve rien.
+
+**TROIS CONTRÔLES PROPOSÉS — décrits, PAS implémentés (11 §8 : `scripts/` et la CI relèvent du
+contrat d'ops ; 09 §5.9 : étage 2 jamais anticipé).**
+
+- **① L'exigence citée est-elle RÉALISÉE, ou seulement CONSOMMÉE ?** Motif approchable sans IA, et
+  c'est ce qui le rend implémentable : un module dont TOUTES les exigences citées sont également
+  citées par tous ses importateurs, et qui n'en cite aucune qui lui soit propre, dit « je cite ce
+  qui m'appelle ». Signalement, pas refus — le motif est heuristique et doit le rester.
+- **② LE SENS INVERSE, celui qui a manqué :** toute exigence du périmètre du lot doit avoir au
+  moins un module qui la réalise. `E32` sans aucun code rattaché aurait sauté aux yeux, et personne
+  n'aurait eu à lire `fuseau.ts` pour s'en apercevoir. C'est le contrôle le moins coûteux des trois
+  et le plus rentable.
+- **③ La collision `E7` / « invariant 7 ».** Purement lexicale : une glose qui cite `E7` et dont le
+  texte parle d'écrasement, de suppression ou de révision tracée cite l'invariant, pas l'exigence.
+  Un contrôle de mots suffit ; la même famille existe pour `E4`/invariant 4 (tokens) et
+  `E1`/invariant 1 (hors ligne), à vérifier avant d'écrire la liste.
+
+**QUATRIÈME ANGLE MORT, ÉTABLI PAR A02 LE 2026-09-03 ET NON DÉCLARÉ PAR L'OUTIL —
+`check:tracabilite` COMPTE DES OCCURRENCES DE NUMÉROS DANS DU TEXTE, PAS DES RATTACHEMENTS.**
+La preuve est dans la correction elle-même : le compteur est passé de 535 à **539 citations** alors
+que le travail consistait à DÉFAIRE une attache (`valeurs.ts` : E30 → E37, +3 par les mentions de
+prose expliquant l'erreur) et à en SUPPRIMER une (`peripherie-entretien.test.ts` : E43 retirée, +1
+par la prose qui l'explique). **Le compteur est monté pendant qu'une attache était défaite.** Un
+nombre qui augmente quand la chose qu'il prétend mesurer diminue ne mesure pas cette chose ; il
+mesure la longueur de la discussion à son sujet. C'est la même famille que les trois angles morts
+déclarés, et il faut le déclarer avec eux.
+
+**DEUX GLOSES LAISSÉES DEBOUT, AVEC LEUR MOTIF — et le motif est la moitié qui manquait.** Mon
+balayage des 36 fichiers de l'incrément les avait épargnées sans dire pourquoi, ce qui revenait à
+les avoir ratées :
+
+- `packages/shared/src/banque-questions.ts` cite « **E43 (conventions)** » — même forme que celle
+  que j'ai retirée. Elle reste : `git blame` la date de **`8eead2f4`, 2026-08-29, lot L4**, hors de
+  mon autorité d'incrément ; et elle est défendable au titre du 11 §3, ce fichier portant des
+  conventions de format partagées. La toucher aurait été un ajout de périmètre déguisé en ménage.
+- `apps/field/src/ecrans/entretien/EcranEntretien.test.tsx` cite **E27**. A02 la juge mince mais
+  **recevable** : ce fichier atteste des noms accessibles et de la gestion du focus, qui sont du
+  WCAG AA au sens du 03 §19.2. Conservée telle quelle.
+
+**Coût estimé.** ~0,5 j pour les trois, ② étant le tiers le plus simple et pouvant être livré seul.
+Le quatrième angle mort ci-dessus ne demande PAS un contrôle de plus : il demande que le compteur
+cesse d'être présenté comme une mesure de rattachement. Une ligne de libellé, coût nul.
+**Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun. Impact périmètre : aucun** — le
+contrôle ne change aucun comportement produit, il refuse des en-têtes.
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-C_
+
+---
+
+## 2026-09-03 — [transverse] Étage 2, PROPOSÉE — `vitest.config.ts` porte toujours `thresholds: {}`
+
+**Constat (A29, second rejeu, 2026-09-03).** La DoD transverse exige « couverture ≥ 90 % sur les
+modules critiques — MESURÉE ». Elle l'est : par `.github/scripts/check-coverage.mjs`, appelé par le
+job `coverage` de la CI. Mais `vitest.config.ts` déclare `thresholds: {}` — **aucun glob n'est
+opposable à Vitest lui-même**. Un développeur qui lance `pnpm test:coverage` en local voit des
+chiffres et n'obtient AUCUN échec, quel que soit leur niveau ; le commentaire du fichier annonce
+pourtant des seuils « par chemin, renseignés au fil des lots ».
+
+**Ce que ça coûte.** Rien aujourd'hui — la CI tient le seuil, et elle est la seule juge (09 §5.7).
+Le risque est de dérive : le jour où le job `coverage` serait renommé, déplacé ou conditionné, la
+DoD ne serait plus tenue par personne et la configuration continuerait d'annoncer qu'elle l'est.
+C'est la même forme que le défaut de `pnpm verify` qui n'exécutait pas le projet `interface`.
+
+**Proposé, NON appliqué — c'est le contrat d'ops (11 §8-2).** Soit renseigner `thresholds` avec les
+globs de `coverage-critical-paths.json`, soit — et c'est ma préférence — **retirer `thresholds` et
+écrire dans le fichier que le seuil vit dans `check-coverage.mjs`, à un seul endroit**. Deux seuils
+qui doivent rester égaux finissent toujours par diverger : c'est l'argument que ce dépôt applique
+déjà au numéro de version du schéma local. Coût ~0,1 j.
+**Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun. Impact périmètre : aucun.**
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-C_
 
 ---
 
