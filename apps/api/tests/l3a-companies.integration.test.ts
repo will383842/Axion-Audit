@@ -2570,3 +2570,195 @@ describe('409 d’unicité — chemin dégradé (la fiche en conflit disparaît 
     ).toBeNull();
   });
 });
+
+// =============================================================================
+// 16. LE CHEMIN DÉGRADÉ, L'AUTRE ÉTAT : LA RELECTURE **ÉCHOUE** (E18 · E43)
+// =============================================================================
+// LA DISTINCTION QUI FAIT TOUT LE TEST, et qui a manqué à la section 15.
+//
+// Il y a DEUX états dégradés, pas un, et ils ne passent pas par le même code :
+//   · la relecture RÉUSSIT et ne trouve RIEN — la fiche a disparu (section 15).
+//     `lignes[0] === undefined` → `return null` : chemin géré AVANT le correctif
+//     B-2, et c'est celui que les deux tests de la section 15 construisent ;
+//   · la relecture ÉCHOUE — elle ne rend aucun résultat, elle LÈVE. C'est le cas
+//     que le correctif B-2 (`63c68bc`) traite par son `catch` (`depot.ts:303`), et
+//     sa cause nommée est la SECONDE connexion du pool prise sous transaction
+//     avortée : `max: 10`, `connectionTimeoutMillis: 5_000` (`db.ts`). Dix `PATCH`
+//     conflictuels simultanés tiennent les dix connexions, la onzième expire.
+//
+// La revue A17 du 2026-09-05 (rejeu, B-2r) a MESURÉ que `depot.ts:303` n'était
+// exécutée par AUCUN des 585 tests — `lcov.info` de la CI, run 33932745763, tête
+// `e6af20a` — et en a tiré la conséquence exacte : « on peut supprimer le correctif
+// B-2 et les 585 tests restent verts ». Un correctif de comportement que personne
+// n'exécute disparaît sans bruit, et le contrat publié dans `packages/shared`
+// redeviendrait faux en silence. Ces deux tests-ci sont ce qui l'en empêche.
+//
+// ── L'ASSERTION QUI DISTINGUE, ET SANS LAQUELLE CE SERAIT UN DOUBLON ─────────
+// `compterParSiren === 1` APRÈS le refus : la fiche en conflit EST TOUJOURS LÀ.
+// C'est la seule assertion qui sépare « la relecture a échoué » de « la relecture
+// n'a rien trouvé » — les deux rendent le même 409 sans `details`, et sans ce
+// compte, le test serait vert pour la mauvaise raison, exactement comme l'étaient
+// les deux tests de la section 15 vis-à-vis de la ligne 303.
+//
+// ── PREUVE PAR BASCULE, rejouée le 2026-09-05 ───────────────────────────────
+// `try/catch` de `lireFicheEnConflit` ôté (le `SELECT` rendu à `await` nu) : ces
+// deux tests-ci, et EUX SEULS, rougissent en « expected 500 to be 409 » ; les 585
+// autres restent verts. Le code de production a été restauré à l'identique
+// (`git diff` vide sur `apps/api/src`). C'est la démonstration que la ligne 303
+// est désormais COUVERTE, et non plus seulement présente.
+// =============================================================================
+describe('409 d’unicité — chemin dégradé (la relecture d’après coup ÉCHOUE : pool saturé)', () => {
+  /** Une requête telle que Drizzle la remet au pool. Voir section 15. */
+  type RequeteDuPool = (
+    config: { readonly text: string },
+    valeurs?: readonly unknown[],
+  ) => Promise<unknown>;
+
+  /**
+   * La même sonde de chronologie qu'en section 15, à UN geste près : au lieu de
+   * SUPPRIMER la fiche et de laisser passer la requête, elle REJETTE la promesse —
+   * ce que fait le pool quand il ne peut plus servir de connexion. Le message imite
+   * `node-postgres` au mot (`timeout exceeded when trying to connect`) pour que le
+   * test échoue de la cause qu'il prétend reproduire, et non d'une erreur de
+   * fantaisie qu'aucun pool ne produirait jamais.
+   *
+   * La reconnaissance est la même, donc discriminante de la même façon : premier
+   * `SELECT` sur `"companies"` portant le SIREN du test en paramètre — un SIREN
+   * factice unique par test, aucune reconnaissance croisée possible.
+   */
+  async function poserLaSondeQuiEchoue(
+    valeurRelue: string,
+  ): Promise<{ readonly declenchements: () => number; readonly retirer: () => void }> {
+    const { pool } = await import('../src/db.js');
+    const originale = pool.query.bind(pool) as RequeteDuPool;
+    let compteur = 0;
+
+    const remplacante: RequeteDuPool = (config, valeurs) => {
+      const estLaRelecture =
+        compteur === 0 &&
+        /^select\b/i.test(config.text) &&
+        config.text.includes('"companies"') &&
+        (valeurs ?? []).includes(valeurRelue);
+      if (estLaRelecture) {
+        compteur += 1;
+        return Promise.reject(new Error('timeout exceeded when trying to connect'));
+      }
+      return originale(config, valeurs);
+    };
+
+    // Garde décisif sous `singleFork` (`vitest.config.ts:93`) : `src/db.js` — et son
+    // `pool` — est partagé par les 23 fichiers d'intégration du run. Une sonde qui
+    // fuirait contaminerait tous les suivants ; celle-ci refuse de se poser sur une
+    // autre, et se retire dans un `finally` avec assertion d'absence après.
+    expect(Object.hasOwn(pool, 'query'), 'aucune sonde antérieure ne traîne').toBe(false);
+    pool.query = remplacante as typeof pool.query;
+    return {
+      declenchements: () => compteur,
+      retirer: () => {
+        Reflect.deleteProperty(pool, 'query');
+        expect(Object.hasOwn(pool, 'query'), 'la sonde est retirée').toBe(false);
+      },
+    };
+  }
+
+  /** Le corps brut du 409 : c'est la FORME de `details` qui est jugée, pas son contenu. */
+  function corpsBrut(reponse: Reponse): z.infer<typeof enveloppeErreurStricteSchema> {
+    return enveloppeErreurStricteSchema.parse(JSON.parse(reponse.corps));
+  }
+
+  it('@critique un POST dont la relecture ÉCHOUE rend 409 COMPANY_DUPLICATE sans `details` — et la fiche en conflit EXISTE TOUJOURS', async () => {
+    const admin = await creerCompte('admin', 'siren-relecture-ko-post');
+    const siren = sirenFactice('67000000');
+
+    await creer(admin.jeton, { name: 'Entreprise factice Pi détentrice du SIREN', siren });
+    expect(await compterParSiren(siren), 'ANTI-VACUITÉ : le conflit existe avant l’appel').toBe(1);
+
+    const sonde = await poserLaSondeQuiEchoue(siren);
+    let refus: Reponse;
+    try {
+      refus = await appeler('POST', '/v1/companies', {
+        jeton: admin.jeton,
+        charge: { name: 'Entreprise factice Pi seconde', siren },
+      });
+    } finally {
+      sonde.retirer();
+    }
+
+    expect(
+      sonde.declenchements(),
+      'ANTI-VACUITÉ : la relecture a été reconnue, une fois. Zéro signifierait que le\n' +
+        'dépôt ne relit plus par le pool, et le test jugerait un autre scénario.',
+    ).toBe(1);
+
+    expect(
+      refus.statut,
+      'SANS le `catch` de `lireFicheEnConflit` (`depot.ts:303`), l’échec de lecture\n' +
+        'sortirait de `traduireEchecDeContrainte` et le gestionnaire rendrait 500 :\n' +
+        'un conflit d’état déguisé en panne. C’est la bascule qui prouve ce test.',
+    ).toBe(409);
+    expect(refus.code, '`error.code` est GARANTI sans aucune lecture').toBe('COMPANY_DUPLICATE');
+    expect(
+      refus.message,
+      'Aucun état présumé : sans fiche relue, le message est le GÉNÉRIQUE.',
+    ).not.toContain('ARCHIVÉE');
+
+    const corps = corpsBrut(refus);
+    expect(
+      'details' in corps.error,
+      'ABSENT — pas `[]`, pas `[{ path }]` sans `code`, pas `null`. La clé elle-même\n' +
+        'ne doit pas figurer dans l’enveloppe : le contrat dit « jamais partiel ».',
+    ).toBe(false);
+    expect(corps.error.details).toBeUndefined();
+
+    expect(
+      await compterParSiren(siren),
+      'LE DISCRIMINANT (A17, B-2r) : la fiche en conflit est TOUJOURS LÀ. La relecture\n' +
+        'a ÉCHOUÉ — elle n’a pas « rien trouvé ». Sans ce compte, ce test ne se\n' +
+        'distinguerait pas de ceux de la section 15, et n’exécuterait pas la ligne 303.',
+    ).toBe(1);
+  });
+
+  it('@critique un PATCH dont la relecture ÉCHOUE rend le même 409 sans `details`, n’écrit rien, et laisse la fiche en conflit en place', async () => {
+    // Le cas NOMMÉ par le correctif : l'`UPDATE` est dans `db.transaction`, la
+    // connexion de la transaction est avortée (`25P02`), la relecture part donc sur
+    // une SECONDE connexion du pool — celle qui, pool saturé, n'arrive jamais.
+    const admin = await creerCompte('admin', 'siren-relecture-ko-patch');
+    const siren = sirenFactice('68000000');
+
+    await creer(admin.jeton, { name: 'Entreprise factice Rhô détentrice du SIREN', siren });
+    const candidate = await creer(admin.jeton, { name: 'Entreprise factice Rhô candidate' });
+    const idCandidate = candidate.ecriture.company.id;
+    expect(await compterParSiren(siren), 'ANTI-VACUITÉ : le conflit existe avant l’appel').toBe(1);
+
+    const sonde = await poserLaSondeQuiEchoue(siren);
+    let refus: Reponse;
+    try {
+      refus = await appeler('PATCH', `/v1/companies/${idCandidate}`, {
+        jeton: admin.jeton,
+        charge: { siren },
+      });
+    } finally {
+      sonde.retirer();
+    }
+
+    expect(sonde.declenchements(), 'ANTI-VACUITÉ : la relecture a été reconnue').toBe(1);
+    expect(refus.statut, 'sans le `catch`, ce serait 500').toBe(409);
+    expect(refus.code).toBe('COMPANY_DUPLICATE');
+    expect(refus.message).not.toContain('ARCHIVÉE');
+
+    const corps = corpsBrut(refus);
+    expect('details' in corps.error, 'absent, jamais partiel').toBe(false);
+    expect(corps.error.details).toBeUndefined();
+
+    expect(
+      await compterParSiren(siren),
+      'LE DISCRIMINANT : UNE seule fiche porte ce SIREN — la détentrice, toujours\n' +
+        'vivante (la relecture a échoué, pas trouvé le vide) ET la candidate n’a rien\n' +
+        'reçu (le refus a annulé la transaction en entier).',
+    ).toBe(1);
+
+    const relue = await appeler('GET', `/v1/companies/${idCandidate}`, { jeton: admin.jeton });
+    expect(relue.statut).toBe(200);
+    expect(fiche(relue).siren, 'la candidate n’a PAS reçu le SIREN').toBeNull();
+  });
+});
