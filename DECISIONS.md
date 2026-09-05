@@ -7818,3 +7818,56 @@ ici. Règle de précédence : **§32-36 > §24-31** — 09 §5.9 (le 04 inviolab
 l'option 3 ; et 07 §12 (la table des lots) borne ce qui est livrable en Phase 1.
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun. **Amendement candidat à P-D** si l'option 3 est jugée nécessaire.
+
+## 2026-09-05 — [méthode] TDD par l'auteur et règle de croisement : les deux se contredisent-elles ?
+
+`CLAUDE.md` §4 exige **le TDD** sur les parties critiques (« tests écrits AVANT ») et, deux lignes plus
+bas, que « le code de test n'est JAMAIS écrit par l'agent qui a écrit le code testé » (09 §5.6). Lus
+à la lettre, les deux sont incompatibles : celui qui écrit le test avant le code est l'auteur du
+code. A23 (L5c, 136 tests) et A32 (L7b, 990 lignes) ont écrit leurs tests de conception en le
+déclarant ; A37 le relève (M5) : déclaré, mais **non tracé**, donc inexistant au sens du §7.
+
+Options :
+
+1. Interdire à l'auteur tout test. **Écartée** : elle interdit le TDD que le §4 impose, et un test
+   écrit après coup par un tiers sur une machine à états n'est pas un test écrit _avant_.
+2. **Distinguer deux couches** : les **tests de conception** (TDD, écrits par l'auteur, déclarés
+   dans leur en-tête) et les **tests d'acceptation** (`@critique`, par rôle, 4 états, E2E, preuve par
+   bascule), **toujours écrits par un testeur croisé** (A16/A26/A27/A36). Le croisement est
+   satisfait par la **suite du testeur**, jamais par la réécriture de celle de l'auteur ; le testeur
+   peut contester un test de conception, pas le remplacer.
+3. Laisser au cas par cas. **Écartée** : c'est ce qui a produit M5 — une dérogation déclarée à
+   chaque incrément sans règle qui la fonde.
+
+Arbitrage : **option 2**, et elle décrit ce que le chantier fait déjà depuis L3 (A15 puis A16, A23
+puis A27, A32 puis A36). Deux bornes : un test de conception ne porte **jamais** `@critique` — la
+marque est réservée aux tests croisés, pour qu'une porte ne s'appuie que sur eux ; et l'en-tête de
+tout fichier de tests dit qui l'a écrit. Règle de précédence : **§16-22 > §1-15** — 09 §3-2 (TDD)
+et 09 §5.6 (croisement) sont lus ensemble, à deux couches, plutôt que l'un contre l'autre.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : `CLAUDE.md` §4 non modifié ; l'interprétation vit ici et dans `ORGANISATION_AGENTS.md`
+§3, amendé et daté.
+
+## 2026-09-05 — [organisation] Un réviseur qui commite son verdict est-il un « lecteur » ?
+
+Le pilote a placé A17 (revue) et A16 (tests) dans le même worktree, sur la foi du §1 d'`ORGANISATION_
+AGENTS.md` : « lecture en parallèle : sans risque ». A17 a commité son verdict, **amendé par erreur
+le commit d'A16**, et laissé un merge en cours. Idem A37 et A36 sur L7b (trois fichiers de test non
+suivis, `--no-verify` assumé pour ne pas les indexer). Aucune perte — mais deux incidents en une
+soirée sur la même cause.
+
+Options :
+
+1. Un worktree par réviseur. **Écartée** : une branche ne peut être extraite que dans un worktree ;
+   il faudrait un HEAD détaché et un report manuel du verdict.
+2. **Le réviseur DÉPOSE son verdict dans `docs/portes/` sans commiter ni indexer ; le pilote le
+   commite lui-même par `git -C <worktree> add <fichier> && git commit`**, une fois le testeur sorti.
+3. Sérialiser réviseur et testeur. **Écartée** : c'est une heure perdue par incrément pour un
+   fichier Markdown.
+
+Arbitrage : **option 2**. Un réviseur ne touche **jamais** à l'index : il écrit un fichier, il le
+nomme dans son rapport, et c'est tout. Le §1 du fichier est amendé : « lecture en parallèle : sans
+risque » devient « lecture : sans risque ; **tout `git add`, `commit` ou `push` est une écriture**,
+y compris pour un verdict ». Règle de précédence **sans objet** (organisation, hors pack).
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun ; `ORGANISATION_AGENTS.md` §1 et §3 amendés et datés.
