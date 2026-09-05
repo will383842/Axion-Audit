@@ -3032,3 +3032,24 @@ instantanée préservée) · `App.tsx` déclaré second fichier partagé dans `L
 les quatre arbitrages du jour ratifiés par une entrée nouvelle (append-only respecté).
 
 Mesuré : unit **1265/1265** · interface 590/591 · typecheck 0 · format propre · gardes verts.
+
+---
+
+## 2026-09-05 — [lot L5 / incrément L5c] — étape 4/7 en cours (revue A29) — retours A27 fermés
+
+Dernier commit vert : `43a5522` · Branche : lot/l5c · Poussé : oui
+Tâche en cours : aucune — A29 lit en parallèle, main rendue au pilote.
+Prochaine action : **recevoir les constats d'A29 par le pilote**, les fermer, puis A02.
+Tests rouges connus : 1, hérité (`app/EcranAccueil.test.tsx`). Lint : 2, héritées.
+
+Les six rouges d'A27 (`66fb28c`, 89 tests) sont fermés — chacun était un défaut réel : tri du
+cockpit jamais utilisé côté écran · sync non gardée · une seule mission sauvegardée (11 §4 :
+le fichier est PAR MISSION, N fichiers) · agenda sans état d'erreur · participants dans un
+`<input>` · rappel du rituel orphelin. Ses tests ne sont pas touchés.
+
+Trois manques livrés : écran de restauration (vue `restauration`, 4 états, persistance exigée,
+mission marquée embarquée après import) · pastille de sync dans la coquille pour tous les
+écrans · R2 non branché : **aucune photo n'entre nulle part**, le point d'entrée est
+`ecrans/entretien/**` (A22), remonté.
+
+Mesuré : unit **1267/1267** · interface **679/680** · build OK · typecheck 0 · format propre.
