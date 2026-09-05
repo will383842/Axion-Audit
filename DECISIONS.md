@@ -8314,3 +8314,52 @@ deux sens.
 Règle de précédence **sans objet** (convention d'outillage, hors pack).
 Décideur : **A01**, sur délégation du 2026-09-04, sur la clause de la fiche elle-même.
 Impact spec : `.gitattributes` amendé et commenté ; aucun fichier du pack modifié.
+
+## 2026-09-05 — [L7b] Où s'affiche la marge de l'atelier quand sa colonne se replie ?
+
+`LOT_L7.md` §9.3 veut que « **seule la colonne** du tableau se replie » quand l'atelier est à zéro ;
+l'écran replie **la colonne et la marge**, contre deux fichiers de son propre commit (bloquant B1
+d'A37). A32 objecte, à raison : une cellule de `<tfoot>` sans colonne rendrait le tableau **malformé**.
+La spec dit « la marge reste affichée » sans dire **sous quelle forme**.
+
+Options :
+
+1. Garder la cellule de `<tfoot>` et laisser la colonne. **Écartée** : c'est afficher une colonne
+   vide sur toutes les missions sans atelier, ce que le §9.3 refuse précisément.
+2. **Sortir la marge de l'atelier de la grille** : ligne de synthèse (libellé + valeur) à côté ou
+   sous le tableau, **toujours visible, même à zéro**.
+3. Cellule de `<tfoot>` sur une colonne masquée en CSS. **Écartée** : un tableau dont le pied a plus
+   de cellules que l'en-tête est malformé pour un lecteur d'écran — on répare l'œil en cassant l'oreille.
+
+Arbitrage : **option 2**, et la note de conception l'avait déjà écrit sans en tirer la conséquence :
+elle dit « **atelier hors grille** ». Ce n'est donc pas la visibilité qui devait céder, c'est la
+**position**. Règle de précédence **sans objet** (mise en œuvre d'une note de conception).
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun ; `LOT_L7.md` §9.3 est **appliqué**, pas amendé.
+
+## 2026-09-05 — [L7b] Une zone de défilement inatteignable au clavier (WCAG 2.1.1, niveau A)
+
+A36 a mesuré, dans un **vrai navigateur** : la zone de défilement du tableau dense
+(`.axn-tableau-cadre`) n'est pas atteignable au clavier. C'est **WCAG 2.1.1, niveau A** — pas AA — et
+`03 §22.1` exige « navigation clavier intégrale ». Deux gestes possibles, la spec ne dit pas lequel.
+
+Options :
+
+1. **`tabindex="0"` + `role="region"` + `aria-label` sur le conteneur défilant.**
+2. Colonnes figées. **Écartée** : chantier bien plus lourd, **et elle ne résout pas le défilement au
+   clavier** — elle réduit le besoin de défiler, elle ne rend pas la zone atteignable.
+3. Ne rien faire avant P-E. **Écartée** : la DoD exige axe-core vert, et un niveau A ne se reporte pas.
+
+Arbitrage : **option 1**, motif ARIA canonique pour une région défilante. **À poser sur le composant
+partagé** s'il en existe un, pour que tout tableau dense en hérite — une correction posée écran par
+écran se perd au troisième écran.
+Deux défauts de contraste sont traités dans le même mouvement : **D1** (4,12:1 sur l'espace actif de
+la barre latérale, sur **toutes** les pages, donc non-régression de L7a) se corrige par un **jeton**.
+**D2** (4,49:1 dans le `<tfoot>`, échec de 0,01) ne se corrige **pas** par le contraste : le même jeton
+**passe dans le corps et tombe dans le pied**, donc le défaut est l'**emploi**, pas la valeur — **les
+marges ne sont pas une information tertiaire, ce sont les totaux**. Jeton de texte principal dans le
+pied : le contraste est réglé et la hiérarchie devient juste.
+Règle de précédence : **§16-22 > §1-15** — 03 §22.1 est le texte précis ; la DoD `CLAUDE.md` §5 exige
+axe-core vert.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun.
