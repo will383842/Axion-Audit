@@ -8120,3 +8120,55 @@ ici. Règle de précédence : **§32-36 > §24-31** — 09 §5.9 (le 04 inviolab
 l'option 3 ; et 07 §12 (la table des lots) borne ce qui est livrable en Phase 1.
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun. **Amendement candidat à P-D** si l'option 3 est jugée nécessaire.
+
+## 2026-09-05 — [L1 / E18] L'identifiant de la fiche en conflit n'est lisible qu'en prose (M-2)
+
+Constat d'A17, non arbitré — le pilote l'avait à tort présenté comme tranché en le confondant avec un
+autre doute du même verdict. Il est repris ici sur son mérite. `detailDeConflit` met l'**état** dans
+`details[0].code` et l'**identifiant** dans `details[0].message` (« Fiche archivée existante : <uuid> »).
+Or la doctrine d'`errorDetailSchema`, **dans le même fichier**, pose l'inverse : `message` « est de
+l'INTERFACE », « affiché TEL QUEL », et « distinguer en analysant une phrase française est
+précisément ce que le 11 §3 refuse ». Conséquence : la console à qui l'on promet un 409
+« ACTIONNABLE » doit extraire un UUID **par expression régulière**, dans une phrase qui a **quatre
+variantes** dans ce seul diff. Le comportement préexiste ; ce qui est nouveau, c'est qu'il est promu
+au rang de **contrat publié**, donc opposable.
+
+Options :
+
+1. **Ajouter un champ `entityId` OPTIONNEL à `errorDetailSchema`** ; le `message` garde sa rédaction
+   humaine, la machine lit `entityId` et **ne parse jamais le message**.
+2. Mettre l'identifiant dans `code`. **Écartée** : `code` est un vocabulaire **fermé**
+   (`fiche_active | fiche_archivee`) ; y verser un UUID le rend infini et inexploitable.
+3. Ne rien faire. **Écartée** : elle laisse un contrat publié en contradiction avec la doctrine du
+   fichier qui le publie — et c'est le genre d'écart qui se découvre au branchement de la console, à L13.
+
+Arbitrage : **option 1**, et **additive** : aucun message n'est modifié, aucun test existant ne rougit,
+la console gagne un champ et perd une expression régulière. Règle de précédence : **§16-22 > §1-15** —
+11 §3 (enveloppe d'erreur, jamais de littéral libre, jamais de distinction par le texte) est le texte
+le plus précis, et c'est lui que la doctrine d'`errors.ts` transcrit.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : **convention 11 §3 étendue** (escalade 11 §8-2, rendue ici) — un champ optionnel de plus
+dans `errorDetailSchema`. Aucun champ retiré, aucun renommé : les consommateurs existants ne bougent pas.
+
+## 2026-09-05 — [L1 / L3] `domaines/companies/**` est le seul domaine L3 hors du seuil de couverture
+
+Mesuré par A17 sur `e6af20a` : `.github/coverage-critical-paths.json` seuille tous les domaines L3
+**sauf** `companies`. Et s'il y était inscrit, **la CI serait rouge** — `depot.ts` 89,04 % de branches,
+`service.ts` 77,77 % de fonctions, 88,33 % de branches. Un job « couverture ≥ 90 % » vert ne dit donc
+rien de ce module, alors que c'est lui qui porte le RBAC admin des routes `companies` et les deux 409
+d'unicité.
+
+Options :
+
+1. Inscrire maintenant, dans #34. **Écartée** : la CI rougirait, et #34 est le dernier verrou d'une
+   file de quatre PR. Bloquer la file pour une dette héritée de L3 est disproportionné.
+2. **Inscrire dans un incrément nommé, immédiatement après la fusion de #34, en REMONTANT la
+   couverture — jamais en rétrécissant le glob.** Échéance : **avant P-E**.
+3. Ne pas inscrire. **Écartée** : c'est le rétrécissement de périmètre que le bandeau du fichier
+   interdit nommément, et le « faux vert » que F-31 vient de nous coûter ailleurs.
+
+Arbitrage : **option 2**. Si une branche s'avère structurellement inatteignable, elle est **documentée
+une par une** dans le fichier, comme L3 l'a fait — jamais écartée en silence. Règle de précédence
+**sans objet** (aucune divergence interne : le bandeau du fichier et la DoD disent la même chose).
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun. Dette de L3 nommée et datée, pas découverte à P-E.
