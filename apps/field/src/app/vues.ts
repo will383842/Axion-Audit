@@ -56,6 +56,7 @@ export const VUES = {
   agenda: { titre: 'Agenda', exigeCoffreOuvert: true },
   pilote: { titre: 'Où en est la mission', exigeCoffreOuvert: true },
   finDeJournee: { titre: 'Fin de journée', exigeCoffreOuvert: true },
+  restauration: { titre: 'Restaurer une sauvegarde', exigeCoffreOuvert: true },
 } as const satisfies Record<string, DefinitionVue>;
 
 export type CodeVue = keyof typeof VUES;

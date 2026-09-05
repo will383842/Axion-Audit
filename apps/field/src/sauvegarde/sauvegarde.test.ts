@@ -31,7 +31,7 @@
 import 'fake-indexeddb/auto';
 import Dexie from 'dexie';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { BaseLocale, CLES_META, ecrireMeta } from '../local/base.js';
+import { BaseLocale, CLES_META, cleEmbarquement, ecrireMeta, lireMeta } from '../local/base.js';
 import { creerDekEnveloppee, deriverKek, ouvrirCoffre, type Coffre } from '../local/coffre.js';
 import { installerContexteLocal, retirerContexteLocal } from '../local/contexte.js';
 import { depuisBase64, versBase64 } from '../local/enveloppe.js';
@@ -533,6 +533,34 @@ describe('les bords du format, éprouvés parce que mesurés à découvert', () 
     await expect(importerSauvegarde(altere, MOT_DE_PASSE)).rejects.toBeInstanceOf(
       SauvegardeIllisibleError,
     );
+  }, 30_000);
+});
+
+describe('une mission restaurée est EMBARQUÉE (DECISIONS.md 2026-09-02 : données présentes)', () => {
+  it('@critique après l’import, la marque d’embarquement de la mission est posée', async () => {
+    const fichier = await exporterSauvegarde({
+      missionId: MISSION_ID,
+      motDePasse: MOT_DE_PASSE,
+      parametresKdf: KDF_TEST,
+    });
+    await baseSource.meta.delete(cleEmbarquement(MISSION_ID));
+    expect(await lireMeta(baseSource, cleEmbarquement(MISSION_ID))).toBeUndefined();
+
+    await importerSauvegarde(fichier, MOT_DE_PASSE);
+    expect(typeof (await lireMeta(baseSource, cleEmbarquement(MISSION_ID)))).toBe('string');
+  }, 30_000);
+
+  it('@critique un import REFUSÉ (mauvais mot de passe) ne pose PAS la marque', async () => {
+    const fichier = await exporterSauvegarde({
+      missionId: MISSION_ID,
+      motDePasse: MOT_DE_PASSE,
+      parametresKdf: KDF_TEST,
+    });
+    await baseSource.meta.delete(cleEmbarquement(MISSION_ID));
+    await expect(importerSauvegarde(fichier, 'faux')).rejects.toBeInstanceOf(
+      MotDePasseSauvegardeInvalideError,
+    );
+    expect(await lireMeta(baseSource, cleEmbarquement(MISSION_ID))).toBeUndefined();
   }, 30_000);
 });
 

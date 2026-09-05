@@ -28,6 +28,8 @@ import { EcranAgenda } from './ecrans/journee/EcranAgenda.js';
 import { EcranAujourdhui } from './ecrans/journee/EcranAujourdhui.js';
 import { EcranFinDeJournee } from './ecrans/journee/EcranFinDeJournee.js';
 import { EcranPilote } from './ecrans/journee/EcranPilote.js';
+import { AccesRestauration, EcranRestauration } from './ecrans/journee/EcranRestauration.js';
+import { PastilleSyncCoquille } from './ecrans/journee/PastilleSyncCoquille.js';
 import { aUneMissionEmbarquee, vueInitiale } from './ecrans/journee/vue-initiale.js';
 
 function ContenuCourant(): ReactNode {
@@ -38,7 +40,17 @@ function ContenuCourant(): ReactNode {
     case 'stockage':
       return <EcranStockage />;
     case 'accueil':
-      return <EcranAccueil />;
+      // `AccesRestauration` est COMPOSÉ ici, sous l'écran de L5a, et non ajouté
+      // dans `EcranAccueil.tsx` : ce fichier appartient à L5a et un correctif de
+      // sécurité y atterrit (A24). La coquille est le fichier partagé déclaré
+      // (LOT_L5.md §1, amendement 2026-09-05) ; c'est le seul endroit où L5c
+      // peut poser une porte d'entrée sans écrire chez un autre incrément.
+      return (
+        <>
+          <EcranAccueil />
+          <AccesRestauration />
+        </>
+      );
     // ── L5b (A22) ──
     case 'nouvelEntretien':
       return <EcranNouvelEntretien />;
@@ -53,6 +65,8 @@ function ContenuCourant(): ReactNode {
       return <EcranPilote />;
     case 'finDeJournee':
       return <EcranFinDeJournee />;
+    case 'restauration':
+      return <EcranRestauration />;
   }
 }
 
@@ -127,6 +141,11 @@ export function App(): ReactNode {
     <div className="axn-coquille">
       <header className="axn-coquille__entete">
         <h1 className="axn-coquille__titre">{VUES[vue].titre}</h1>
+        {/* Décision A01 (2026-09-05) : l'état de synchronisation est visible sur
+            TOUS les écrans. « Hors ligne = nominal » veut dire pas une erreur,
+            pas invisible. Posée dans la coquille — le fichier partagé — plutôt
+            que répétée dans chaque écran. */}
+        <PastilleSyncCoquille />
         <Bouton variante="discret" onClick={fermer}>
           Verrouiller
         </Bouton>

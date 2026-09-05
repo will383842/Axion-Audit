@@ -51,7 +51,13 @@
 // total), E33 (sécurité / RGPD).
 // =============================================================================
 import { z } from 'zod';
-import { VERSION_SCHEMA_LOCAL, CLES_META, lireMeta } from '../local/base.js';
+import {
+  VERSION_SCHEMA_LOCAL,
+  CLES_META,
+  cleEmbarquement,
+  ecrireMeta,
+  lireMeta,
+} from '../local/base.js';
 import { deriverKek, PARAMETRES_KDF_DEFAUT, genererSel } from '../local/coffre.js';
 import { contexteLocal } from '../local/contexte.js';
 import {
@@ -337,6 +343,7 @@ export async function importerSauvegarde(
   fichier: unknown,
   motDePasse: string,
 ): Promise<RapportImport> {
+  const { base } = contexteLocal();
   const analyse = fichierSauvegardeSchema.safeParse(fichier);
   if (!analyse.success) {
     throw new SauvegardeIllisibleError('sa structure ne correspond pas au format attendu');
@@ -402,6 +409,15 @@ export async function importerSauvegarde(
     enregistrements,
   };
   await appliquerDescente(lot);
+
+  // ── La mission restaurée est EMBARQUÉE ────────────────────────────────────
+  // DECISIONS.md 2026-09-02 : « mission embarquée signifie DONNÉES PRÉSENTES,
+  // jamais persistance accordée ». Après l'import, les données SONT présentes.
+  // Sans cette marque, le cockpit et la règle de vue initiale diraient
+  // « aucune mission » à un appareil qui vient d'en restaurer une — et l'écran
+  // d'embarquement proposerait de la télécharger. La même clé que `embarquement.ts`
+  // (L5a), écrite par la même porte `ecrireMeta`.
+  await ecrireMeta(base, cleEmbarquement(contenu.data.missionId), maintenant());
 
   const operations = contenu.data.operations.length;
   return {
