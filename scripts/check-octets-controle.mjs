@@ -42,7 +42,8 @@
 //     const ESC = String.fromCharCode(27);  // survit à l'outillage
 //
 // ── PÉRIMÈTRE ───────────────────────────────────────────────────────────────
-// Tous les fichiers de `git ls-files`, MOINS ceux que git lui-même déclare
+// Tous les fichiers SUIVIS et les nouveaux non ignorés (`git ls-files --cached
+// --others --exclude-standard`), MOINS ceux que git lui-même déclare
 // binaires (attribut `binary` du `.gitattributes` : *.png, *.jpg, *.woff2,
 // *.docx, *.axionbackup). On INTERROGE `git check-attr` plutôt que de recopier
 // cette liste : une liste recopiée dérive, et le jour où `.gitattributes`
@@ -137,7 +138,28 @@ function pourquoiRefuse(octet) {
 
 /** Fichiers versionnés, moins ceux que GIT LUI-MÊME déclare binaires. */
 function fichiersATraiter() {
-  const versionnes = execFileSync('git', ['ls-files', '-z'], { maxBuffer: 1 << 28 })
+  // Hors dépôt git, `git ls-files` SORT EN ERREUR au lieu de rendre une liste vide.
+  // Sans ce filet, le garde mourrait sur une trace de pile Node au lieu de dire ce
+  // qui lui manque — et un contrôle illisible est un contrôle qu'on désarme.
+  try {
+    execFileSync('git', ['rev-parse', '--is-inside-work-tree'], { stdio: 'ignore' });
+  } catch {
+    return { versionnes: [], aScanner: [] };
+  }
+
+  // `--cached --others --exclude-standard` : les fichiers SUIVIS **et** les
+  // nouveaux fichiers pas encore ajoutés à l'index, en respectant le .gitignore.
+  // Sans `--others`, un agent qui vient d'écrire un fichier portant un NUL
+  // obtiendrait un `verify:rapide` VERT, ne verrait le refus qu'en CI après le
+  // push, et paierait un aller-retour pour un défaut que la machine locale avait
+  // sous les yeux. Le garde doit mordre le plus tôt possible.
+  const versionnes = execFileSync(
+    'git',
+    ['ls-files', '-z', '--cached', '--others', '--exclude-standard'],
+    {
+      maxBuffer: 1 << 28,
+    },
+  )
     .toString('utf8')
     .split(NUL)
     .filter((c) => c !== '');
