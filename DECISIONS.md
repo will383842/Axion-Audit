@@ -8627,6 +8627,7 @@ Décideur : **A20** (découpage L5b / L5c / couche locale), **A01** si l'attribu
 A22 ne tranche pas et n'anticipe pas.
 Impact spec : aucun amendement. Écart de conformité **ouvert et nommé** sur 03 §17.4 et 03 §29 R2 —
 à porter au contrôle A02 de la porte P-C.
+
 ## 2026-09-05 — [méthode] TDD par l'auteur et règle de croisement : les deux se contredisent-elles ?
 
 `CLAUDE.md` §4 exige **le TDD** sur les parties critiques (« tests écrits AVANT ») et, deux lignes plus
