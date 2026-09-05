@@ -163,6 +163,21 @@ et on lit sa sortie.
 
 ## 4. LES INTERDITS GIT
 
+> **AJOUT DU 2026-09-05 — refusionner `main` après un SQUASH MERGE.** Le dépôt fusionne en **squash**
+> (`CLAUDE.md` §7). Conséquence que personne n'avait écrite : quand `lot/l5a` entre dans `main`, son
+> historique disparaît. Une branche partie de `lot/l5a` **avant** ce squash — `lot/l5b`, `lot/l5c` —
+> ne partage donc **aucune base commune** avec les fichiers de `main` : git les voit en `add/add`, et
+> propose de choisir un côté. **Choisir perd tout un incrément**, dans un sens ou dans l'autre.
+>
+> **La parade, mesurée le 2026-09-05 sur `lot/l5c`** : fusion à trois branches **par fichier**, en
+> nommant la branche d'origine comme base — `git merge-file <à-nous> <base=lot/l5a> <de-main>`.
+> Quinze fichiers de code sont alors passés **sans un seul conflit**, là où la fusion ordinaire les
+> présentait tous comme irréconciliables.
+>
+> **Et on vérifie après, plutôt que de supposer** : que le correctif venu de `main` est présent, et
+> que les ajouts de la branche le sont aussi. Un `add/add` résolu sans contrôle est le plus silencieux
+> des écrasements — il ne laisse aucun marqueur.
+
 **a. `git commit` sans chemins emporte l'index ENTIER**, donc le travail qu'un voisin vient
 d'indexer. *Arrivé quatre fois le 2026-08-29, dont une où 2 700 lignes du travail de trois agents
 sont parties sous un message annonçant « docs ».*
