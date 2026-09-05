@@ -2955,3 +2955,34 @@ sur un `Map` de l5b). Placés : la règle chez A24, `AccesEntretien` chez A22 à
 **Mesure de la file** : les 4 branches en attente ne conflictent avec `main` que sur `DECISIONS.md` et
 `docs/ETAT.md`. **Zéro conflit de code.** Fiche **A-015** ouverte (pilote de fusion `union`, `ETAT.md`
 exclu à dessein — « le dernier bloc fait foi » ne se délègue pas à un automatisme).
+
+## 2026-09-05 04h00 — [autopilote] — L5a ET L7a sont dans `main`
+
+Dernier commit vert : `main` après #32 · Branche : `gouvernance/etat-05` · Poussé : oui
+Tâche en cours : cinq chantiers, un agent chacun.
+Prochaine action : fermer **B-2r** (A16) → fusionner **#34** ; puis **#31** dès qu'A22 a rendu.
+Tests rouges connus : `main` rouge sur `8 · deploy-staging` seulement. Hérités et placés : 1 rouge
+`@critique` (`EcranAccueil`, chez A22), 2 lint (`session/enregistrement.ts`, chez A22).
+
+**Fusionnées cette nuit** : **#30 L5a** (socle terrain, coffre, **axe-core**) · **#32 L7a** (coquille
+console) · #28, #41 à #44. `main` porte donc L0, L1, L2, L3, **L5a**, **L7a**.
+
+**Chantiers** : `lot/l5a-reserves` A24 (R1-R6 d'A29) · `lot/l5b` A22 (`AccesEntretien` + **la capture
+photo, qui n'était au périmètre de personne**) · `lot/l5c` A23 (B1 d'A29) · `lot/l7b` A36 (acceptation)
+· `lot/l1-e18-external-ref` A16 (B-2r).
+
+**Trois enseignements de la nuit, mesurés :**
+
+1. **Un correctif juste peut n'être exécuté par aucun test.** Le `catch` de B-2 protégeait réellement ;
+   le `lcov` de la CI montre sa ligne jamais atteinte — on pouvait le supprimer sans un rouge. Les
+   tests construisaient « la fiche a disparu » (la relecture réussit), pas « la relecture échoue ».
+2. **Un conflit append-only n'est pas toujours une frontière entre deux entrées.** Sur `lot/l7a`, il
+   coupait **à l'intérieur** de deux entrées : garder mécaniquement les deux côtés a fabriqué des
+   entrées ayant perdu `Décideur` et `Impact spec`, **et le comptage de lignes répondait « 0 perdue »
+   dans les deux sens**. Seul `check:decisions` l'a vu → il tourne désormais **après chaque
+   résolution**, pas seulement avant le push.
+3. **Le scan ZAP ne tournait plus depuis neuf runs**, et sa bascule « bloquante » promise à L2 était un
+   geste vide (`-I` transformait le code 2 en 0). Remis en service, vérifié `success` sur `main`.
+
+**Coupure d'API à 03h10** : quatre agents interrompus, **aucun travail perdu** — mais six commits
+n'existaient que sur cette machine, poussés avant tout le reste.
