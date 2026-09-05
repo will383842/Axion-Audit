@@ -8534,3 +8534,33 @@ Règle de précédence : **§32-36 > §24-31** — le §36.3 demande la colonne,
 donnée ; le plus récent ne peut pas créer une colonne, il révèle qu'elle manque.
 Décideur : **A30**, sous revue croisée A37.
 Impact spec : aucun aujourd'hui ; candidat `org_units.out_of_scope_reason` à P-D.
+
+## 2026-09-05 — [L7c] Les rubriques 9 et 10 du §20.3 n'ont AUCUN fichier dans la liste du §36.3
+
+Vérification du critère d'acceptation, rubrique par rubrique : le §20.3-9 (plan d'action 12 mois,
+mois par mois, en paliers) et le §20.3-10 (trajectoire à 3 ans) sont des **données structurées** —
+le §20.3 l'écrit lui-même : « `roadmap_items(…palier, month_start, month_end, description,
+expected_gain, kpi, assimilation_weeks)` — le plan 12 mois et la trajectoire 3 ans sont des DONNÉES
+structurées, pas du texte libre ». Or la liste de fichiers du §36.3 **ne comporte aucun fichier de
+feuille de route**. Sur ces deux rubriques, le ZIP ne suffit pas.
+
+Options :
+
+1. Ajouter `feuille_de_route.csv` de ma propre initiative, au motif que le critère prime sur la
+   liste. **Écartée** : le §36.3 énumère ses fichiers ; en ajouter un est une décision de format, et
+   le format d'export ne s'improvise pas (brief de l'incrément, 11 §8-6).
+2. **Constater l'écart, ne rien ajouter, et le porter** — en mesurant d'abord son coût RÉEL.
+
+Arbitrage : **option 2**, et la mesure change tout : **aucun lot livré n'écrit `roadmap_items`** —
+ni `use_cases`, ni `findings`, ni `tools_inventory`, ni `ai_systems` (vérifié : l'export est le
+PREMIER lecteur de ces cinq tables du dépôt). Ces rubriques n'ont donc pas de données à exporter
+aujourd'hui, quel que soit le fichier qu'on ajouterait. L'écart est **réel mais inerte** : il se
+tranche au brief de **L10** (rapports), quand la feuille de route aura un écran qui la remplit, et
+il coûtera alors une fonction de vingt lignes dans `fichiers.ts` — le contrat partagé
+(`FICHIERS_EXPORT`) est déjà l'endroit unique où l'ajouter.
+Recommandation portée à Williams : ajouter `feuille_de_route.csv` à la liste du §36.3 au moment de
+L10, et non maintenant — un fichier vide de plus n'aide personne à rédiger.
+Règle de précédence : **sans objet entre le §20.3 et le §36.3** — ils ne se contredisent pas, le
+second est incomplet au regard du premier, et c'est un constat, pas un arbitrage.
+Décideur : **A30** pour le constat ; **Williams** pour l'ajout au format, au brief de L10.
+Impact spec : aucun aujourd'hui ; amendement candidat du §36.3, à porter au brief de L10.

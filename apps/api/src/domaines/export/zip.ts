@@ -29,7 +29,8 @@
 // contrôlés : ni `..`, ni `/` de tête, ni antislash. Une archive n'est pas un
 // endroit où faire confiance à un nom qui vient d'ailleurs.
 //
-// Traçabilité : E14 (consolidation) · E36 · E43 (aucune dépendance hors §1).
+// Traçabilité : E14 (consolidation) · E36 (exécutable par lots avec critères) ·
+// E43 (exécutabilité autopilote — la liste de dépendances épinglée du 11 §1).
 // =============================================================================
 import { deflateRawSync } from 'node:zlib';
 

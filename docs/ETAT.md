@@ -2984,3 +2984,30 @@ Cinq entrées `DECISIONS.md` (2026-09-05) : les deux routes (11 §8-6) · le **n
 (M5.1) non publié, escalade Williams · les **« profils rencontrés »** (§16.6) non livrés, le 04 ne
 portant pas le lien session ↔ profil, escalade Williams · ce que « planifié » compte · un bloc
 « abordé » par une réponse non communiquée.
+
+## 2026-09-05 08h30 — [lot L7 / incrément L7c] — étape pipeline 3/7 (auto-revue)
+
+Dernier commit vert : `116a039` (test(l7c) — tests de conception de l'écran d'export) · Branche :
+`lot/l7c` · Poussé : oui
+
+Tâche en cours : auto-revue de L7c — export §36.3 (route, dix fichiers, conteneur ZIP écrit avec
+`node:zlib`, aucune dépendance ajoutée) + nom du répondant sous condition serveur.
+
+Prochaine action : passer la revue croisée à A37, puis faire écrire par A36 les tests d'acceptation
+du §36.3 sur base réelle — en passant par `apps/api/tests/aide/archive-export.ts`, sans quoi un
+balayage sur un corps compressé serait un vert aveugle.
+
+Tests rouges connus : deux, aucun de L7c. ① `EcranCouverture.test.tsx:205` (« atelier » invisible à
+zéro) — désaccord L7b entre l'écran d'A32 et le test d'A36, présent au commit de base `6dbf43d`,
+appartient à `_axl7`. ② quatre fichiers unitaires tombent par intermittence sur « Test timed out in
+5000ms » (`jetons`, `erreurs`, `assignments`, `garde-fous-invariants`) : **69/69 verts avec
+`--testTimeout=30000`** — plafond de 5 s trop court sur une machine où six agents travaillent, pas
+une régression.
+
+Mesures : `test:unit` **1101** (1031 avant, +70 de L7c) · `test:interface` **643** (634 + 9) ·
+lint, typecheck, `format:check` : 0 erreur · aucun test skippé (116 fichiers) · `check:invariants`,
+`check:decisions`, `check:jonction`, `check:test-projects` verts.
+
+Six entrées `DECISIONS.md` de plus (11 au total pour L7c) : les ambiguïtés du §36.3 tracées avant
+la première ligne de code, dont trois amendements candidats pour P-D/L10 (`missions.reference`,
+`org_units.out_of_scope_reason`, un fichier de feuille de route au §36.3).
