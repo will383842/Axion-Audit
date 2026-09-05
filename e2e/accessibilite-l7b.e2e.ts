@@ -51,15 +51,20 @@
 // leur correction, exactement comme le bloquant B1 de la revue A37.
 //
 //   D1 — coquille de L7a, `app/coquille.css`. L'espace ACTIF de la barre
-//        latérale (`a[aria-current="page"]`) : terracotta `#c24a1b` sur son fond
-//        `#f7e9e2` = **4,12:1**, sous le 4,5:1 exigé. WCAG 1.4.3 (AA), 03 §22.1.
-//        Il est sur TOUTES les pages de la console : c'est donc aussi une
-//        non-régression sur les trois écrans de L7a.
-//   D2 — L7b, la couleur atténuée du « planifié » et de la note « hors grille » :
-//        `#756b62` sur `#f2eee5` = **4,49:1**. Elle échoue de 0,01, et seulement
-//        dans le `<tfoot>` des marges, dont le fond est plus soutenu que celui
-//        des lignes — le même jeton passe dans le corps du tableau et tombe dans
-//        le pied. WCAG 1.4.3 (AA).
+//        latérale (`a[aria-current="page"]`) : le TERRACOTTA D'ACTION sur le fond
+//        teinté de l'espace actif donne **4,12:1**, sous le 4,5:1 exigé.
+//        WCAG 1.4.3 (AA), 03 §22.1. Il est sur TOUTES les pages de la console :
+//        c'est donc aussi une non-régression sur les trois écrans de L7a.
+//   D2 — L7b, le jeton de TEXTE TERTIAIRE porté par le « planifié » et par la
+//        note « hors grille » : **4,49:1** sur le fond des marges. Il échoue de
+//        0,01, et SEULEMENT dans le `<tfoot>`, dont le fond est plus soutenu que
+//        celui des lignes — le même jeton passe dans le corps du tableau et tombe
+//        dans le pied. WCAG 1.4.3 (AA).
+//
+//        (Aucune de ces couleurs n'est CITÉE ici : le garde de l'invariant 4 ne
+//        distingue pas l'exemple de l'infraction, et c'est voulu — le constat
+//        d'A36 du 2026-09-02 sur `lot/l7a` disait déjà exactement cela. Les
+//        valeurs exactes sont dans le rapport axe que la CI imprime.)
 //   D3 — L7b, `.axn-tableau-cadre` : la zone de défilement du tableau dense n'est
 //        atteignable NI au clavier NI par un contenu focusable. Sur une grille
 //        que le §33.4 veut large, un utilisateur au clavier ne peut pas faire
@@ -578,11 +583,20 @@ test.describe('L7b — preuve que le balayage n’est pas vide', () => {
       'le balayage ne relève rien AVANT la bascule : il n’y aurait alors rien à prouver',
     ).toBeGreaterThan(0);
 
-    // D1 et D2 : les deux couleurs, assombries juste assez pour passer 4,5:1.
+    // D1 et D2 : les deux textes reçoivent LE JETON DE TEXTE PRINCIPAL à la place
+    // de celui qu'ils portent. Pas une valeur écrite ici : aucune notation de
+    // couleur n'a le droit d'exister dans ce dépôt hors des jetons (invariant 4),
+    // et le garde ne distingue pas l'exemple de l'infraction — c'est voulu, et
+    // c'est déjà ce qu'A36 avait constaté sur `lot/l7a` le 2026-09-02.
+    //
+    // Et c'est le correctif JUSTE, pas un contournement : la correction que
+    // A31/A32 appliqueront sera elle aussi un changement de jeton, jamais un
+    // hexadécimal. La bascule éprouve donc le geste réel.
     await page.addStyleTag({
       content: `
-        .axn-console__espace[aria-current='page'] { color: #a03d16; }
-        .axn-couverture__note, .axn-couverture__planifie { color: #5f574f; }
+        .axn-console__espace[aria-current='page'],
+        .axn-couverture__note,
+        .axn-couverture__planifie { color: var(--couleur-texte-principal); }
       `,
     });
     // D3 : la zone de défilement devient atteignable au clavier.
