@@ -7362,6 +7362,24 @@ contourné (les lectures passent, et ont servi à confirmer le diagnostic sur le
 Décideur : **Williams** (instruction du 2026-09-03 : « je voudrais que tu fasses tout directement »).
 Impact spec : aucun. `CLAUDE.md` §7 et le §6 du dossier de porte restent en vigueur, mot pour mot.
 
+## 2026-09-02 — [L7a] Le client sur les cartes du portefeuille : un N+1 BORNÉ, accepté en V1
+
+Chaque carte de mission appelle `GET /v1/companies/:id` (dédupliqué par TanStack Query) : sur une page
+keyset de 50 missions, au plus 50 appels, en pratique bien moins (un client, plusieurs missions).
+
+Options :
+
+1. **Accepter en V1**, borné par la page keyset et la déduplication.
+2. Joindre `companyName` à la liste des missions — modifie `missionResponseSchema` (11 §8-2).
+3. Route de portefeuille dédiée, en L7b.
+
+Arbitrage : **option 1**, et l'option 3 est notée pour L7b (le tableau de bord 05 §8.3 aura de toute
+façon sa route). Modifier un schéma partagé pour un confort d'affichage inverse la précédence :
+l'API n'épouse pas l'écran. **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
 ## 2026-09-02 — [L5a] Revue croisée A29 : REFUSÉ, cinq bloquants sur l'axe PWA — verdict accepté
 
 A29 a relu les 59 fichiers de `lot/l5a` @ `ce4b29b`. Le coffre, le port d'écriture, la base
@@ -7424,6 +7442,44 @@ pas mentir).
 Décideur : A01
 Impact spec : aucun.
 
+## 2026-09-02 — [L7a → A-006] Le nom de l'en-tête anti-CSRF de la console : `X-Axion-Client`, ratifié
+
+Le contrat 11 §3 impose « cookies httpOnly + en-tête anti-CSRF custom » sans nommer l'en-tête. A30
+propose `X-Axion-Client: console` sur toute requête, et `X-Axion-Csrf: <jeton>` en double-soumission
+sur les écritures quand le serveur déposera un cookie lisible `axion_csrf`.
+
+Options :
+
+1. **Ratifier les deux noms** ; les constantes vivent dans `apps/hq/src/api/auth.ts` jusqu'à A-006,
+   qui les déplace dans `packages/shared` au moment où le serveur les lit (un seul nom, deux côtés).
+2. Attendre A-006 pour nommer — la console ne peut pas parler une langue qui n'existe pas encore.
+3. Réutiliser `X-Requested-With`.
+
+Arbitrage : **option 1.** L'option 3 est le nom que tout l'écosystème connaît, donc celui qu'un
+formulaire piégé n'a pas besoin de deviner ; un nom propre au produit dit aussi QUI parle, ce dont
+A-006 a besoin pour n'émettre le cookie qu'à la console. Rien ici n'est un contrôle : la sécurité
+reste serveur (invariant 3), la console se contente de poser l'en-tête. **Précédence : 11 §3.**
+
+Décideur : A01 — à confirmer par Williams à la porte, avec A-006
+Impact spec : aucun (le contrat 11 §3 est précisé, pas modifié).
+
+## 2026-09-02 — [L7a] Trois routes plutôt que deux : le portefeuille est un écran, pas un onglet de l'accueil
+
+Le découpage L7-min prévoyait accueil + avancement ; A36 attendait `/hq/missions` = « Portefeuille »
+distinct de l'accueil (H1). L7a livre les trois.
+
+Options :
+
+1. **Trois routes** — accueil (tour de contrôle 03 §18), portefeuille (liste keyset), avancement.
+2. Deux routes, le portefeuille dans l'accueil.
+
+Arbitrage : **option 1.** La tour de contrôle est une page d'alertes et de chiffres ; une liste
+paginée au même endroit en fait un écran à deux états de chargement et deux vides (§33.2). L'espace 2
+s'intitule « Pilotage mission — portefeuille ». **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
 ## 2026-09-02 — [L5a] Une ligne dont l'op est en ÉCHEC n'est jamais écrasée par une descente
 
 `appliquerDescente` ne protège que les ops `en_attente` ; une ligne dont l'op est `rejetee` ou
@@ -7442,6 +7498,121 @@ décidé. **Précédence : invariant 7.** Obligation transmise à L6b, qui conso
 
 Décideur : A01
 Impact spec : aucun.
+
+## 2026-09-02 — [L7a] Revue croisée A37 : ACCEPTÉ SOUS RÉSERVE — un commit de fusion déguisé, des schémas recopiés, et l'ordre de fusion figé
+
+A37 a relu 36 fichiers (`a9dba96..d76c0a1`). **B1** : `63646f2`, étiqueté `feat(l7a)`, est un commit de
+FUSION (parents `main` et `lot/l3-suite`) — `lot/l7a` embarque L3 sans `ed8a852` (correctifs A51) ;
+un squash de L7a avant L3 livrerait L3 sous une autre étiquette, sans sa porte, dans sa version
+d'avant A51. **B2** : `apps/hq/src/api/contrats.ts:65-181` redéfinit 90 lignes de schémas que
+`@axion/shared` exporte sur cette même branche (11 §3 : « le front importe LES MÊMES schémas »), avec
+une justification devenue fausse. Cinq réserves (~0,3 j) : contradiction « tout est enregistré sur cet
+appareil » / « rien n'est saisi dans la console » (A-010), `formaterPourcentage` orpheline, accord
+« 1 mission affichées », état vide muet de l'avancement, `data-saisie-libre` sur un mot de passe.
+Doute : la résolution du point 5-1 de la note L7 s'est faite par fusion, non par rebase, sans trace.
+
+Options :
+
+1. **Ordre de fusion figé : L3 → `main`, puis `lot/l7a` rebasé sur `main`** avant toute PR L7a ;
+   B2 par ré-export depuis `@axion/shared` ; la contradiction hors-ligne retirée CÔTÉ CONSOLE (la
+   console n'affiche pas la phrase terrain), A-010 restant une fiche ; les quatre autres réserves
+   fermées dans l'incrément.
+2. Dégeler `packages/ui` pour A-010 maintenant.
+
+Arbitrage : **option 1.** La fusion de L3 dans L7a était le moyen le plus court de lever trois cales
+(point 5-1) ; l'étiqueter `feat` était une faute de trace, déclarée ici — la substance (une seule
+source de vérité pour les schémas) reste due, et B2 la rend concrète. Le gel de `packages/ui` a été
+posé pour que trois chantiers n'y écrivent pas en même temps ; le lever pour une phrase, c'est le
+lever pour tout. **Précédence : 11 §3** (B2) et **CLAUDE.md §7** (B1).
+
+Décideur : A01, sur revue A37
+Impact spec : aucun.
+
+## 2026-09-02 — [L7b] Sur quel vocabulaire se compte la « couverture par type de source » (§27.1) ?
+
+> **Texte FIGÉ le 2026-09-02 au §9.4 de `docs/conception/LOT_L7.md`, déposé ici le 2026-09-03**,
+> après l'entrée de L3 dans `main` — c'est la condition que la note posait. Sa date est celle de
+> l'arbitrage, pas celle du dépôt ; `check:decisions` signale donc une date qui recule, et c'est
+> **assumé**.
+>
+> **RECTIFICATION DU 2026-09-03, relevée par A02 (réserve R-L7a-2).** Ce bandeau disait « reproduit
+> **mot pour mot**, sans reformulation ». **C'était faux, et la faute est de la classe exacte que ce
+> dépôt pourchasse** : le texte figé écrivait « la couverture est un écart **prévu/planifié/réalisé** »
+> et le dépôt avait écrit « prévu/réalisé ». **Un mot perdu, et pas n'importe lequel** — c'est
+> précisément celui que le §6.2 de la note distingue du « prévu », et sans lui la colonne du milieu
+> de l'écran de couverture n'a plus de nom. La casse et deux tournures avaient également glissé.
+> Le texte est **rétabli** ci-dessous ; le mot « planifié » est revenu à sa place. Aucune autre
+> divergence sur le fond après recomptage mot à mot. **Une affirmation d'exactitude qui n'est pas
+> vérifiée vaut moins qu'une citation modeste** : c'est elle qui empêche le lecteur suivant de
+> vérifier, puisqu'elle lui dit que c'est déjà fait.
+
+Options :
+a) `answers.source` — 5 valeurs (entretien, observation, demonstration, document, releve).
+b) `interviews.kind` — les 5 sources de collecte du §27.1 (atelier, 6e kind, traité à part).
+
+Arbitrage : **b)**, et **a) est RETENUE POUR L'AUTRE ÉCRAN** (agrégation L7c, provenance par
+question). Preuve dans le 03, vérifiée ligne à ligne : l. 548 « Les 5 sources de collecte —
+GÉNÉRALISE la table `interviews` en SESSIONS DE COLLECTE » (le pack pose l'équivalence source =
+type de session) ; l. 549 « cinq types de sessions », table à 5 lignes, `atelier` absent (il arrive
+au §28.1 ; §32.6 l. 673 le range dans les 6 `interviews.kind`) ; l. 559 « le plan de mission
+planifie les CINQ types … l'écran de couverture contrôle la couverture PAR TYPE DE SOURCE » — même
+sujet des deux côtés, et la même ligne réserve le mot PROVENANCE à `answers.source`.
+Raison de fond : **ON NE PLANIFIE PAS UNE PROVENANCE.** La couverture est un écart
+**prévu/planifié/réalisé** et le critère L7-min du 07 exige qu'elle « reflète le plan
+d'entretiens » ; le plan publie
+`{orgUnitId, kind}`. Comptée sur `answers.source`, elle n'aurait aucune colonne « prévu » et le
+critère du 07 deviendrait inexprimable.
+Précédence (`CLAUDE.md`) : **§24-31 > §16-22** — le §27.1 prime sur la lecture courte du §16.6
+(« entretiens menés / prévus ») ; et §32-36 confirme sans contredire — le §36.3 impose dans
+`reponses.csv` « session + type + provenance », TROIS colonnes, donc deux vocabulaires assumés.
+`atelier` : rendu hors de la grille des cinq, réalisé seulement, jamais silencieux (marge de mission
+toujours affichée, y compris à zéro) — une session invisible est une session perdue.
+
+Décideur : **Williams** (délégation du 2026-09-02 à la session pilote).
+Impact spec : aucun — lecture du §27.1 confirmée, aucun amendement du pack ; note de conception
+`docs/conception/LOT_L7.md` §9 mise à jour (rectifie ses §6.1, §6.3 et §8.3).
+
+## 2026-09-03 — [L7b] « Prévu » recouvre trois notions : une colonne, deux, ou trois ?
+
+Arbitrage rendu par **A30** au §6.2 de `docs/conception/LOT_L7.md` et **jamais déposé** — relevé par
+A02 le 2026-09-03 (réserve **R-L7a-2**). Il est déposé ici **avant l'ouverture de L7b**, et l'ordre
+compte : sans lui, A32 coderait trois colonnes que rien n'atteste, et le premier relecteur qui
+demanderait « pourquoi trois ? » n'aurait qu'une note de conception pour toute réponse.
+
+Trois notions coexistent dans le dépôt, et les fondre perdrait de l'information :
+
+1. **PRÉVU (cible)** — le plan §32.4, `GET …/interview-plan`. Cible **calculée qui n'écrit rien**
+   (`sessionProposeeSchema` ; `POST …/apply` REPORTÉE), publiée par unité **et par `kind`** : elle
+   EST l'axe B du prévu, et c'est elle que vise le critère du 07 « la couverture reflète le plan ».
+2. **PLANIFIÉ (agenda)** — lignes `interviews` à `schedule_status` planifié. **Peut être vide alors
+   que le plan existe**, `apply` étant reportée : afficher 0/0 serait faux.
+3. **RÉALISÉ** — lignes `interviews` à `status` terminé.
+
+Options :
+
+1. Une colonne « prévu » unique, les trois notions fondues. Simple à l'écran, **faux** : un plan
+   existant sans agenda s'afficherait 0/0.
+2. Deux colonnes (prévu / réalisé). Perd la distinction entre un défaut d'agenda et un défaut de
+   terrain — c'est l'option que le dépôt appliquait de fait, faute d'arbitrage déposé.
+3. **Trois colonnes distinctes** (prévu / planifié / réalisé), **jamais un ratio unique**.
+
+Arbitrage : **option 3**. L'écart prévu → planifié est un **défaut d'agenda** ; l'écart planifié →
+réalisé est un **défaut de terrain**. Ce ne sont pas les mêmes alertes et elles ne s'adressent pas
+aux mêmes personnes : une moyenne les confondrait et n'appellerait personne.
+**Consigne structurante pour A32, et elle borne l'implémentation** : la colonne « prévu » **appelle
+le service de plan de L3** (`apps/api/src/domaines/plan-entretiens/`) et n'en réimplémente **aucune**
+règle §32.4. Une seconde implémentation des tranches d'effectif divergerait de la première au premier
+amendement, et la couverture affirmerait alors un prévu que le plan ne reconnaît pas. Si le service
+de L3 n'expose pas la forme utile, **on l'étend — on ne le recopie pas**.
+Règle de précédence : **§24-31 > §16-22** — le §27.1 (couverture par unité ET par type de source)
+prime sur la lecture courte du §16.6 « entretiens menés / prévus », qui ne connaît que deux termes.
+Précédence interne au pack **sans objet** : le pack ne nomme pas les trois notions, il ne se
+contredit pas — il est silencieux, et c'est le §6.2 qui les distingue.
+
+Décideur : **A30**, chef d'équipe console (note de conception §6.2, 2026-09-02) ; déposé le
+2026-09-03 sur constat d'A02.
+Impact spec : aucun sur `/docs`. Engage `packages/shared/src/pilotage.ts` et l'écran de couverture
+de **L7b**, qui ne sont pas encore écrits.
 
 ## 2026-09-02 — [L5a] Liste fermée §3.2 : `answerType`, `criticality`, `parentId` entrent ; le premier pull est descopé vers L6a
 

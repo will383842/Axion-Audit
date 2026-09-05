@@ -10,6 +10,7 @@
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { COULEURS_CHARTE } from '@axion/ui';
+import { BASE_CONSOLE } from './src/app/base.js';
 
 /**
 /**
@@ -33,7 +34,7 @@ export default defineConfig({
   plugins: [react(), injecterCouleurTheme()],
   // Servie sous `/hq` par Caddy — le chemin de base DOIT le refléter, sinon les
   // assets sont demandés à la racine et c'est la PWA terrain qui répond.
-  base: '/hq/',
+  base: `${BASE_CONSOLE}/`,
   build: { outDir: 'dist', sourcemap: false, target: 'es2022' },
   server: { port: 5174, host: true },
 });

@@ -1609,6 +1609,116 @@ clause du contrat 11 §3 non encore tenue. À planifier par A30 au brief de L7.
 
 **Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-C_
 
+## 2026-09-02 — [L7a, étage 2, PROPOSÉES] Deux composants de `packages/ui` parlent terrain à une console
+
+`packages/ui` est **figé** pendant les trois chantiers (gouvernance du 2026-09-02) ; ces deux constats
+sont donc des fiches, et leur correctif une PR à part, hors des trois branches.
+
+### FICHE A-010 — `EtatHorsLigne` porte un texte terrain que la console ne peut pas paramétrer
+
+- **Constat** : le composant affiche « tout est enregistré sur cet appareil » — vrai pour la PWA
+  (invariant 1), faux pour la console, qui n'enregistre rien localement. L7a l'utilise tel quel pour
+  l'état hors-ligne (§33.2), et le texte ment.
+- **Valeur pour l'utilisateur** : un état hors-ligne qui ne promet pas une sauvegarde qui n'existe pas.
+- **Coût estimé** : 0,1 j — une prop `message` avec le texte terrain par défaut ; un test par front.
+- **Impact schéma/API** : aucun. `packages/ui` figé → PR dédiée après le dégel.
+
+### FICHE A-011 — `ChampTexte` n'a pas de nature « secret »
+
+- **Constat** : le mot de passe de la console (et du terrain) est composé à la main autour d'un
+  `ChampTexte` sans `type="password"`, `autocomplete` ni bascule d'affichage — deux copies du même
+  montage, qui divergeront.
+- **Valeur pour l'utilisateur** : un champ secret uniforme, lisible par les gestionnaires de mots de
+  passe (`autocomplete="current-password"`), avec l'affichage temporaire attendu sur tablette.
+- **Coût estimé** : 0,2 j — une nature `secret` sur `ChampTexte`, remplacement des deux montages.
+- **Impact schéma/API** : aucun. `packages/ui` figé → PR dédiée après le dégel.
+
+## 2026-09-02 — [L7a / CI, étage 2, PROPOSÉE] Une panne de Docker Hub peint la porte en rouge, et rien ne le dit
+
+**Constat, mesuré et non supposé.** Sur `lot/l7a` à `bef11cc`, le run CI 33647967069 est ressorti
+`failure` avec **un seul job en échec sur dix-sept** : « 7 · constructibilité des 4 images / worker »,
+sur `ERROR: failed to solve: node:22.21.0-alpine: unexpected status from HEAD request to
+registry-1.docker.io: 502 Bad Gateway`. Les seize autres (lint, typecheck, unit, integration,
+couverture ≥ 90 %, e2e chromium, schema-diff, gitleaks, invariants, images api/hq/field) étaient
+verts. `gh run rerun 33647967069 --failed`, **sans une ligne de code changée**, a rendu le run
+`success` : 19 jobs verts, 1 sauté (deploy-staging, main uniquement), 0 échec — job worker
+`success` en 27 s (https://github.com/will383842/Axion-Audit/actions/runs/33647967069/job/100411638777).
+Diagnostic : indisponibilité du registre amont, pas un défaut du dépôt.
+
+**Pourquoi c'est un vrai problème de gouvernance, pas un incident.** Le §9bis conditionne le merge
+d'une porte à une CI verte, et le §9ter fait des tests « la vérité terrain ». Une panne d'un tiers
+produit exactement la même couleur qu'un vrai défaut : rouge. Le coût n'est pas la minute de
+rejeu, c'est le doute — et le réflexe qu'il installe, « relance, ça repassera », qui est le début
+d'une CI qu'on ne croit plus. C'est aussi ce qui vient de rendre FAUX le bloc `ETAT.md` du jour
+(« Tests rouges connus : aucun ») : le fichier disait le code, la CI disait le registre.
+
+**Valeur.** Un rouge de CI redevient un signal sur NOTRE code. Et l'étape 7 cesse de dépendre de la
+santé d'un registre public au moment précis où on la regarde.
+
+**Coût estimé.** 0,3 j : (1) épingler les images de base par **digest** (`node:22.21.0-alpine@sha256:…`)
+dans les quatre Dockerfiles — reproductibilité en prime, dans l'esprit du §1 `save-exact` ; (2) une
+politique de re-tentative bornée sur la seule étape de résolution d'image (jamais sur les tests —
+un test flaky se corrige, il ne se rejoue pas) ; (3) une ligne de journal distinguant « échec amont »
+d'« échec de dépôt », pour que la prochaine session n'ait pas à refaire ce diagnostic.
+
+**Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun.** Périmètre : `.github/workflows`
+et les quatre `Dockerfile` — chantier infra, **hors des trois branches de lot** (gouvernance du
+2026-09-02), donc PR dédiée.
+
+**Recommandation A30.** **PHASE 2** si la porte P-E est proche ; ABSORBÉE seulement si un chantier
+infra s'ouvre avant. Rien n'est implémenté ici : la fiche est proposée, pas anticipée (CLAUDE.md §3.7).
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-E_
+
+## 2026-09-02 — [L7a / outillage, étage 1, PROPOSÉE] Le garde-fou de durabilité fabrique des commits VIDES quand le push est impossible
+
+**Origine du diagnostic** : session tierce, pendant l'incident de partage de worktrees du 2026-09-02 ;
+**reproduit et mesuré par A30 dans `_axl7` le même soir**. La fiche est écrite ici parce que le défaut
+a été observé ici ; le correctif, lui, est un chantier outillage.
+
+**Le mécanisme.** `.claude/settings.json` déclare un hook `Stop` qui lance
+`scripts/hook-stop-durabilite.mjs`. Le script compte `modifs` (fichiers non commités) et `nonPousses`
+(commits sans amont), et s'il en trouve, **il refuse la fin de tour** en dictant la marche à suivre
+(l. 71-73) : « 1) `git add` + commit (préfixe `wip:` …) ; 2) `git push` ; 3) un bloc dans ETAT.md ».
+
+**Le défaut : le script ne connaît qu'un seul monde, celui où le push réussit.** Il mesure « des
+commits ne sont pas poussés » et en déduit « la session n'a pas poussé ». Ce sont deux choses
+différentes. Quand le push est **refusé** — branche verrouillée, course entre deux sessions sur le
+même worktree, crochet `pre-push` en échec, réseau —, la session ne peut satisfaire que la **première
+moitié** de la consigne. Et comme la première moitié exige un commit alors que l'arbre est propre,
+elle produit **un commit `wip:` vide**. Le garde-fou censé prouver la durabilité fabrique alors du
+bruit dans l'historique **à la place** du signal « je n'ai pas pu pousser ».
+
+**L'exemple, mesuré, et il est de la maison.** Le 2026-09-02 dans `_axl7`, `git push` a été rejeté par
+le crochet `pre-push` (`husky - pre-push script failed (code 1)`). L'arbre était propre : le commit
+d'empreinte demandé n'a pu exister qu'en `--allow-empty` — c'est `8fba2b2`,
+`wip(l7a): sauvegarde de session — empreinte pilote`, **zéro fichier, zéro ligne**. Il est aujourd'hui
+sur `origin`, et le squash de la PR l'effacera : le dépôt n'en souffre pas. Ce qui compte est
+ailleurs — **pendant plusieurs minutes, l'historique affirmait « sauvegardé » alors que rien n'était
+parti sur `origin`.** C'est exactement l'inverse de ce que le §8 de `CLAUDE.md` cherche à garantir
+(« un commit non poussé n'existe pas »).
+
+**Valeur.** Le garde-fou dirait la vérité au moment où elle compte : un push impossible est un
+incident à REMONTER (verrou, course, `pre-push` rouge), pas une négligence à corriger par un commit
+de plus. Aujourd'hui les deux situations produisent la même injonction, donc la même réaction — et la
+seule qui soit fausse.
+
+**Correctif proposé.** Distinguer les trois états au lieu de deux : (1) _rien à sauvegarder_ → laisser
+passer ; (2) _non poussé, push possible_ → la consigne actuelle ; (3) **push tenté et REFUSÉ** →
+laisser passer **en affichant l'incident** (« push refusé : `<motif>` — remonter au pilote, ne pas
+empiler de commit »). Deux garde-fous secondaires : **ne jamais suggérer un commit quand l'arbre est
+propre** (un `wip:` vide n'est une sauvegarde de rien), et **borner** à un seul refus consécutif.
+
+**Coût estimé.** 0,2 j dans `scripts/hook-stop-durabilite.mjs` seul : une condition de plus et deux
+messages. **Impact schéma : aucun. API : aucun. Crypto : aucun. Périmètre fonctionnel : aucun.**
+D'où l'**étage 1** — c'est de la robustesse d'outillage, pas une fonctionnalité.
+
+**Ce qui N'A PAS été touché, et pourquoi.** `.claude/settings.json` **n'est pas modifié** : une
+configuration de session est un arbitrage humain (CLAUDE.md §3). La fiche décrit, elle ne répare pas.
+Le correctif vise le seul script, et hors des trois branches de lot (chantier outillage, PR dédiée).
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-E_
+
 ### FICHE A-008 — Le coffre terrain chiffre sans AAD : une enveloppe n'est pas liée à sa ligne
 
 **Constat terrain (A24, 2026-09-02, relevé par A29) :** AES-256-GCM sans données authentifiées
