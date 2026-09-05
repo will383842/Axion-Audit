@@ -8301,3 +8301,58 @@ Règle de précédence : **§16-22 > §1-15** — 03 §22.1 est le texte précis
 axe-core vert.
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun.
+
+## 2026-09-05 — [L5] La chaîne PHOTO n'a de lot propriétaire nulle part : qui la livre ?
+
+A23 puis A22 l'ont mesuré indépendamment : **aucune photo n'entre dans l'application**. `grep` sur
+`type="file"`, `capture=`, `kind: 'photo'` dans `apps/field/src` et `packages/ui/src` → **zéro ligne**.
+`compresserPhoto` (R2, livrée par L5c) n'a donc **aucun appelant**, et 03 §17.4 n'est pas tenu. A22 a
+refusé de livrer, et ses trois obstacles sont hors de sa main : ① `compresserPhoto` vit sur `lot/l5c`,
+non fusionnée ; ② **aucun endroit local ne peut recevoir les octets** — pas de table binaire dans
+`local/base.ts`, et la charge est **sérialisée en JSON avant chiffrement**, ce qu'un `Blob` ne traverse
+pas : il faut une table **et** un `VERSION_SCHEMA_LOCAL` incrémenté, donc une migration de données
+terrain ; ③ l'attachement n'a **pas de statut d'envoi local**, que 05 §9.6 exige.
+
+Options :
+
+1. Livrer les métadonnées sans les octets. **Écartée, et c'est la pire des trois** : l'écran
+   promettrait une photo que rien ne conserve — la perte silencieuse que l'invariant 7 interdit.
+2. **Un incrément nommé `L5d`, propriétaire de la chaîne DE BOUT EN BOUT** : table binaire locale et
+   montée de `VERSION_SCHEMA_LOCAL` (A24) → capture depuis l'écran de session (A22) →
+   `compresserPhoto` (A23, **déjà écrite**) → statut d'envoi local (A22). **L'envoi lui-même reste
+   à L6c** (chunks §9.6), et la frontière est là, nette.
+3. Glisser la photo en Phase 2. **Écartée** : le fichier 07 met « compression photos R2 » dans la
+   ligne L5, et §27.1 compte les photos parmi les sources d'audit. Ce n'est pas un ajout, c'est du
+   périmètre noyau.
+
+Arbitrage : **option 2**. `L5d` s'ouvre **après P-C** (il touche le schéma local, donc L5a) et
+**avant L6c**. **Et le manque se DÉCLARE au contrôle A02 de P-C** plutôt que de disparaître : à cette
+date, 03 §17.4 n'est pas tenu et `photos.ts` est du code sans appelant — les deux doivent être écrits
+au dossier de porte, pas découverts à P-E. Règle de précédence : **§16-22 > §1-15** — le fichier 07,
+ligne L5, définit le lot ; 05 §9.6 fixe la frontière avec L6.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun amendement du pack ; **`VERSION_SCHEMA_LOCAL` montera** à L5d, ce qui est prévu
+par 05 §31-1 (migrations locales versionnées).
+
+## 2026-09-05 — [UI] Un écran, une alerte : convention ou choix local ?
+
+Sur `AccesEntretien`, A22 a routé l'échec de lecture vers `Message ton="avertissement"`
+(`role="status"`) et **non** vers `ZoneEtat nature="erreur"` (`role="alert"`), parce que l'écran porte
+déjà une alerte interruptive et que 03 §17.3 interdit la notification intrusive en entretien. Le choix
+est défendable et il demande une règle, sinon chaque écran tranchera dans son coin.
+
+Options :
+
+1. **Convention générale : au plus UN `role="alert"` par écran à la fois.** Il est réservé à ce qui
+   **bloque le geste en cours** ; toute autre erreur emprunte `role="status"` — et reste **visible**,
+   la dégradation portant sur l'annonce, jamais sur l'affichage.
+2. `role="alert"` sur toute erreur. **Écartée** : plusieurs alertes simultanées se masquent l'une
+   l'autre chez un lecteur d'écran — on croit renforcer le signal, on le détruit.
+3. Choix local, écran par écran. **Écartée** : c'est la porte ouverte à un écran où l'erreur
+   bloquante est en `status` et l'accessoire en `alert`.
+
+Arbitrage : **option 1**, avec une borne qui n'est pas négociable : **A28 vérifie qu'aucune erreur
+BLOQUANTE n'est passée en `status`** — la règle sert à hiérarchiser, jamais à taire. Règle de
+précédence : **§16-22 > §1-15** — 03 §17.3 (pas de notification intrusive en entretien) et §22.1.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun amendement ; convention portée par `packages/ui` et vérifiée par A28.
