@@ -35,6 +35,7 @@ import {
   type StatutMission,
 } from '../api/contrats.js';
 import { etatDeRequete } from '../app/etats.js';
+import { CadreTableau } from '../app/CadreTableau.js';
 import { auClicLienInterne, hrefDeRoute } from '../app/routeur.js';
 import { formaterDateCivile, formaterInstant } from '../format/dates.js';
 
@@ -108,7 +109,7 @@ export function EcranPortefeuille(): ReactNode {
         )}
       </div>
       <ZoneEtat etat={etat}>
-        <div className="axn-tableau-cadre">
+        <CadreTableau libelle="Missions du portefeuille, tableau défilant">
           <table className="axn-tableau">
             <caption className="axn-visuellement-masque">Missions du portefeuille</caption>
             <thead>
@@ -139,7 +140,7 @@ export function EcranPortefeuille(): ReactNode {
               </Bouton>
             </div>
           )}
-        </div>
+        </CadreTableau>
       </ZoneEtat>
     </section>
   );
