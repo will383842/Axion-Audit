@@ -9093,3 +9093,35 @@ BLOQUANTE n'est passée en `status`** — la règle sert à hiérarchiser, jamai
 précédence : **§16-22 > §1-15** — 03 §17.3 (pas de notification intrusive en entretien) et §22.1.
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun amendement ; convention portée par `packages/ui` et vérifiée par A28.
+
+## 2026-09-05 — [L6] La propriété §9.9 ne couvre que 3 des 5 entités synchronisées
+
+A20 l'a mesuré en amendant sa propre note : `ENTITES_SYNC` (`packages/shared/src/sync.ts`) compte
+**cinq** entités ; le 05 §9.9 n'en nomme que trois — `interviews`, `answers`, `attachments`.
+**`org_unit_proposal` et `question_adhoc` n'ont aucune règle de propriété écrite**, alors que la note
+posait « propriété §9.9 » comme si elle couvrait le lot entier. Un push croisé sur ces deux-là
+n'aurait donc **rien à refuser**.
+
+Options :
+
+1. **Étendre la règle aux deux entités manquantes, par le critère de l'amendement 04 S-3 :
+   propriétaire = le rattachement quand il existe, SINON l'auteur.** Une proposition d'unité et une
+   question ad hoc sont des créations d'auditeur sans rattachement à la session d'un autre : leur
+   propriétaire est leur auteur, et personne d'autre ne les modifie.
+2. Les laisser hors propriété. **Écartée** : une entité synchronisable sans règle de propriété est
+   une porte ouverte dans le contrat de sync — et elle ne se verrait qu'en production, sur la
+   mission d'un autre auditeur.
+3. Amender le 05 §9.9 maintenant. **Écartée** : fichier du pack, donc **revue de spec de P-D**
+   (09 §5.9). L'interprétation suffit à écrire L6a ; l'amendement se propose à P-D.
+
+Arbitrage : **option 1**, avec la ceinture qu'A20 a trouvée manquante dans sa propre note et qui
+compte autant que la règle : **le serveur ne croit jamais le `createdBy` ni le `conductedBy` du
+payload client**. §9.9 est une règle **serveur** — à la création, le propriétaire est **l'émetteur
+authentifié du push** ; un payload qui désigne quelqu'un d'autre rend `forbidden`. Sans cette phrase,
+un implémenteur pouvait lire S-3 et faire confiance au client, ce qui rendait la propriété de session
+**décorative**.
+Règle de précédence : **§16-22 > §1-15** — 05 §9.9 porte la propriété, 04 S-3 le critère ;
+l'invariant 3 (« écritures de sync réservées au propriétaire ») les commande tous deux.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun aujourd'hui. **Amendement candidat du 05 §9.9 à P-D**, pour que les cinq entités
+y soient nommées plutôt qu'interprétées.
