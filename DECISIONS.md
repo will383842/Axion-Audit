@@ -8476,3 +8476,33 @@ trois, ils identifient une personne dans une petite structure.
 Règle de précédence : **§24-31 > §16-22** — le §26 (attribution conditionnelle) prime sur M5.1.
 Décideur : **A30**, en application de l'arbitrage A01 du 2026-09-05.
 Impact spec : aucun ; `reponseAgregeeSchema` gagne `nomRepondant` nullable.
+
+## 2026-09-05 — [L7c] `mission.json` : les deux mots que le §36.3 ne définit pas — « complétude globale » et « paramètres »
+
+Le §36.3 veut dans `mission.json` « client, niveau, périmètre, dates, auditeurs, **complétude
+globale**, **paramètres**, présence ou non des scores, version d'export ». Les deux mots gras n'ont
+pas de définition dans le pack, et chacun désigne deux choses possibles.
+
+Options :
+
+1. **Complétude** = celle du §32.1-3 (part des questions SCORABLES répondues, hors non communiquées).
+   **Écartée** : c'est la complétude du SCORING, elle appartient à L8, et L7b a déjà refusé de
+   l'approcher (2026-09-05). L'écrire ici la ferait exister deux fois, avec deux formules.
+2. **Complétude = part des questions du questionnaire figé ayant reçu au moins une réponse**, écrite
+   AVEC sa définition en toutes lettres dans le fichier, et accompagnée des comptes bruts (questions,
+   réponses, jamais posées, non communiquées, sans objet, à revoir) qui permettent d'en recalculer
+   n'importe quelle autre.
+3. **Paramètres** = `estimation_params` (durées-types, **taux horaires chargés**, seuils, 11 §5).
+   **Écartée sans hésitation** : ce sont les abaques de chiffrage d'Axion, pas la donnée du client.
+4. **Paramètres = les paramètres de la MISSION** : fuseau, niveau d'audit, périmètre géographique,
+   blocs actifs, secteurs actifs, palier.
+
+Arbitrage : **options 2 et 4**. Une mesure porte sa définition à côté d'elle, sinon elle finit citée
+dans un rapport avec un sens qu'elle n'a pas. Et « paramètres » dans un fichier destiné à écrire le
+rapport d'un client ne peut pas désigner les taux horaires du cabinet : ce serait, sans être
+littéralement `scoping_financials`, la même fuite (invariant 3, §18.3 — « l'auditeur ne voit jamais
+le TJM »), en pire, puisque le fichier CIRCULE.
+Règle de précédence : **§24-31 > §16-22** — le §27.4 sépare « y est-on allé » de « qu'en a-t-on
+tiré » ; c'est cette séparation qui interdit d'appeler « complétude » deux choses différentes.
+Décideur : **A30**, sous revue croisée A37.
+Impact spec : aucun ; la définition est écrite DANS `mission.json` (champ `definition`).
