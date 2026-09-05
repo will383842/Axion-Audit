@@ -2271,6 +2271,7 @@ Tests rouges connus : aucun sur `main`. Vérification isolée de `lot/l3-suite` 
   §10.2 de la fiche P-B, R-B12 levée, 370 citations / 245 fichiers, 14 routes sur `main`.
 - Gouvernance/vitesse : PR poussée après deux refus du hook `pre-push` (format prettier, puis verrou
   git sous trois processus concurrents) — le hook fait ce pour quoi il existe.
+
 ## 2026-08-31 00h30 — [lot L3 / incrément L3a — `companies`] — étape pipeline 3/7 (auto-revue faite)
 
 Dernier commit vert : (ce commit) · Branche : lot/l3a-companies · Poussé : oui
@@ -2594,6 +2595,229 @@ Le fait que ce dossier existe douze jours à l'avance est son objet : 09 §5.4 v
 **factuelle**, et une mesure prise le jour même se prend sur des souvenirs. Les chiffres du §2 sont
 datés et **doivent être remesurés le 15/09** — le dossier le dit deux fois, exprès.
 
+## 2026-09-02 17h15 — [lot L7 / incrément L7a] — étape pipeline 4/7 (fin de session propre)
+Dernier commit vert : 0892b0a (fix(l7a): revue A37 — schémas ré-exportés, hors-ligne console…)   ·   Branche : lot/l7a   ·   Poussé : oui
+Tâche en cours : L7a (coquille, 3 routes, 4 états, portefeuille keyset, avancement, connexion) livré,
+80/80 tests A36 par rôle, CI verte sur d76c0a1. Revue croisée A37 : ACCEPTÉ SOUS RÉSERVE — B2
+(schémas recopiés) et les cinq réserves FERMÉS dans 0892b0a ; B1 = 63646f2 est une FUSION de L3
+déguisée en feat : lot/l7a contient L3 sans ed8a852 ni les correctifs A51 → ORDRE DE FUSION FIGÉ
+(DECISIONS 2026-09-02 [L7a] A37) : L3 → main d'abord, puis lot/l7a rebasé sur main. AUCUNE PR L7a
+avant. Trois arbitrages A30 tracés (N+1, X-Axion-Client, trois routes) ; fiches A-010/A-011.
+Prochaine action : quand main contient L3 (PR L3 fusionnée par Williams), `git rebase origin/main`
+sur lot/l7a (résoudre DECISIONS/AMELIORATIONS/ETAT append-only « main d'abord »), rejouer
+`npx vitest run --project interface apps/hq` (80 attendus), pousser, faire signer la fin d'incrément
+par A30 (A37 rejeu bref sur 0892b0a si A30 l'exige), puis A02 (traçabilité E1-E47 dans les deux
+sens : `formaterPourcentage` retirée = plus d'orphelin), puis PR lot/l7a → main.
+Tests rouges connus : aucun. À Williams : confirmer le nom d'en-tête `X-Axion-Client` avec A-006.
+Point 5-1 de la note L7 (trois cales) : résolu par fusion de L3, tracé dans l'entrée A37.
+
+## 2026-09-02 20h30 — [lot L7 / incrément L7a] — étape pipeline 4/7 (correction d'un état faux)
+Dernier commit vert : bef11cc (chore(etat): bloc L7a — fin de session propre, ordre de fusion figé)   ·   Branche : lot/l7a   ·   Poussé : oui
+Tâche en cours : CORRECTION — le bloc de 17h15 affirmait « Tests rouges connus : aucun » alors que la
+CI de bef11cc était ROUGE (run 33647967069). Mesure : UN job sur dix-sept en échec, « 7 ·
+constructibilité des 4 images / worker », sur `502 Bad Gateway` de registry-1.docker.io au HEAD de
+`node:22.21.0-alpine` — panne du registre amont, pas un défaut de code. `gh run rerun --failed`,
+sans une ligne changée : run `success`, 19 verts / 1 sauté / 0 échec. Fiche AMELIORATIONS déposée
+(étage 2, PROPOSÉE : épingler les images de base par digest + re-tentative bornée sur la seule
+résolution d'image, jamais sur les tests) — non implémentée, arbitrage Williams à P-E.
+L'ordre de fusion reste FIGÉ (DECISIONS 2026-09-02 [L7a] A37) : L3 → main d'abord, puis lot/l7a
+rebasé sur main. AUCUNE PR L7a avant. Aucun rebase tant que le pilote n'a pas annoncé la fusion L3.
+Prochaine action : préparer le contenu L7b (couverture par unité ET par type de source §27.1 —
+DEUX axes distincts, agrégation, export §36.3) sans toucher aux fichiers que le rebase remuera ;
+au signal de fusion L3 : `git rebase origin/main`, résoudre DECISIONS/AMELIORATIONS/ETAT en
+append-only « main d'abord », rejouer `npx vitest run --project interface apps/hq` (80 attendus,
+mesurés), pousser, signature de fin d'incrément A30.
+Tests rouges connus : aucun — vérifié par rejeu, pas par souvenir (run 33647967069 = success).
+À Williams : confirmer le nom d'en-tête `X-Axion-Client` avec la fiche A-006.
+
+## 2026-09-02 23h00 — [lot L7 / incrément L7a] — étape pipeline 4/7 (briefs L7b et L7c posés)
+
+Dernier commit vert : 1845c07 (docs(l7a): il n y a pas deux vocabulaires de session mais TROIS) · Branche : lot/l7a · Poussé : oui
+Tâche en cours : L7a reste en attente de rebase (ordre de fusion FIGÉ, aucun rebase sans signal du
+pilote). Avancé sans toucher au code : brief **L7b** (couverture) et **L7c** (agrégation + export)
+dans `docs/conception/LOT_L7.md` §6-§8. Code A32/A31/A35, tests A36 — jamais le même agent (09 §5.6).
+Trois vocabulaires vérifiés au dépôt : TYPE de session (6, `plan-entretiens.ts` l.52-59), PROVENANCE
+(5, `schema.ts` l.124-130), MODE (3, l.64, seulement si `kind='entretien'`) → **pas de 7e colonne
+« complémentaire »** sur la couverture (03 l.673) ; `sessions.csv` porte type ET mode (§36.3).
+Mesures du soir : CI 33647967069 rejouée → **success** (19 verts / 1 sauté / 0 échec) ; le rouge était
+un 502 de Docker Hub, pas le code. Suite console mesurée : **80/80, 6 fichiers, 11,07 s**
+(`npx vitest run --project interface apps/hq`) — c'est la référence à retrouver après le rebase.
+Deux fiches AMELIORATIONS étage 2/1 déposées (flake de registre ; hook Stop qui fabrique un `wip:`
+vide quand le push est refusé — `.claude/settings.json` NON modifié, arbitrage humain, CLAUDE.md §3).
+Décision D1 : `X-Axion-Client` ratifié, tracé par A10 sur `lot/l3-suite`, **non dupliqué ici** → le
+point §5-6 de la note est clos.
+Prochaine action : sur signal explicite du pilote (L3 dans main), `git rebase origin/main`, résoudre
+DECISIONS/AMELIORATIONS/ETAT en append-only « main d'abord », rejouer la suite console (**80
+attendus, mesurés**), pousser, puis porter en DECISIONS.md les trois arbitrages en attente.
+Tests rouges connus : aucun — mesuré, pas supposé (CI success + 80/80 en local).
+EN ATTENTE D'ARBITRAGE (A01/Williams) : axe B de la couverture = `interviews.kind` (A30) ou
+`answers.source` (contrôle de lecture) ; A30 maintient `kind` — on ne planifie pas une provenance, et
+le critère du 07 exige que la couverture reflète le PLAN. Divergence remontée, non tranchée seule.
+
+## 2026-09-02 23h40 — [lot L7 / incrément L7a] — étape pipeline 4/7 (arbitrage rendu)
+
+Dernier commit vert : db8192f (docs(l7a): arbitrage rendu — la couverture compte des SESSIONS) · Branche : lot/l7a · Poussé : oui (8f2f225..db8192f)
+Tâche en cours : le bloc de 23h00 disait « EN ATTENTE D'ARBITRAGE » — **c'est faux depuis**, et un
+fichier d'état qui retarde est exactement le défaut que la fiche du hook Stop dénonce ce soir.
+ARBITRAGE RENDU (Williams, délégation du 2026-09-02 à la session pilote), il SÉPARE deux écrans :
+COUVERTURE (§27.1/§16.6, L7b) = `interviews.kind`, les 5 sources de collecte, confrontée au plan ·
+AGRÉGATION (critère L7-min, L7c) = `answers.source`, les 5 provenances. Jamais fusionnés — c'est leur
+COMPARAISON qui fait le §27.6. Preuve relevée ligne à ligne dans le 03 (l.548 titre, l.549 table à
+cinq lignes, l.559 même sujet des deux côtés) ; raison de fond : on ne planifie pas une provenance.
+`atelier` (6e kind, §32.6 l.673) : rendu HORS grille, réalisé seulement, hors complétude, jamais
+silencieux (marge de mission toujours affichée, y compris à zéro).
+Note `docs/conception/LOT_L7.md` §9 : l'amendement RECTIFIE ses propres §6.1, §6.3 et §8.3 au lieu de
+les laisser se contredire ; le texte de l'entrée DECISIONS.md est FIGÉ, prêt à coller après le rebase.
+Prochaine action : **sur signal explicite du pilote uniquement** (L3 dans main — `origin/lot/l3-suite`
+est encore à 65c66d7, A10 ferme la sonde F-21), `git rebase origin/main`, résoudre
+DECISIONS/AMELIORATIONS/ETAT en append-only « main d'abord », déposer l'entrée DECISIONS.md du §9.4,
+rejouer la suite console (**80 attendus, mesurés**), pousser. AUCUN rebase avant, AUCUNE PR avant.
+Tests rouges connus : aucun — mesuré (CI 33647967069 rejouée → success ; 80/80 en local, 11,07 s).
+
+## 2026-09-03 12h20 — [lot L7 / incrément L7a] — `main` intégré par la session pilote
+
+Dernier commit vert : (celui-ci) · Branche : lot/l7a · Poussé : oui
+Tâche : aucune en cours. **Bloc écrit par la session PILOTE** ; worktree dormant depuis le 02/09
+23h06, absence d'écriture concurrente vérifiée avant d'y entrer. Signal du pilote : donné.
+Prochaine action : PR `lot/l7a` → `main`, puis A02 sur l'incrément L7a.
+Tests rouges connus : aucun ici. `main` rouge sur `8 · deploy-staging`, hors périmètre.
+
+**FUSION AU LIEU DE REBASE, ET C'EST UN ÉCART DÉCLARÉ.** Le bloc précédent prescrivait
+`git rebase origin/main`. Rejouer 50 commits contre `DECISIONS.md` et `docs/ETAT.md` rejoue le
+conflit append-only **à chaque commit** — 50 occasions de casser une entrée, pour un historique que
+le squash merge effacera de toute façon. `git merge` a été joué à la place, comme sur `lot/l5a` et
+`lot/l5b` ce matin. Le résultat en arbre est le même ; seul le graphe diffère.
+
+**DIX CONFLITS, DONT SEPT `add/add` SUR DU CODE L3.** `lot/l7a` portait ses propres copies de
+`org-units` (dépôt, service, erreurs, tests), `packages/shared/src/org-units.ts` et du dossier de
+porte L3 — un instantané ANTÉRIEUR. Mesuré fichier par fichier : `main` a strictement plus partout
+(+12, +181, +142, +250, +152) et les rares lignes absentes sont des commentaires reformulés.
+**Version de `main` retenue** : c'est celle qui a passé la porte avec ses 1 712 tests.
+
+**UN DOUBLON ÉVITÉ DE JUSTESSE, ET IL VAUT D'ÊTRE ÉCRIT.** Résolus par blocs, `DECISIONS.md`
+recevait **63 entrées « neuves » de la branche — dont 59 étaient les mêmes que celles de `main`**,
+capturées avec le code L3. Sans déduplication par clé, elles auraient été écrites deux fois. Après
+dédoublonnage : 119 base + 68 `main` + 4 branche = **191**, puis 192 avec l'entrée du §9.4.
+Contrôle rejoué sur les trois branches : **zéro en-tête dupliqué**.
+
+Entrée `DECISIONS.md` du §9.4 déposée **mot pour mot**, sa date d'arbitrage (09-02) conservée.
+`docs/TRACABILITE_E1-E47.md` : un premier `--theirs` avait écrasé 71 lignes de la branche ajoutées
+hors du hunk ; annulé, conflit restauré, seul le hunk résolu, les deux côtés vérifiés intacts.
+## 2026-09-02 17h20 — [lot L5 / incrément L5a] — étape pipeline 5/7 (fin de session propre)
+Dernier commit vert : 069c46a (docs: fiche A-012)   ·   Branche : lot/l5a   ·   Poussé : oui
+Tâche en cours : L5a corrigé après A29 REFUSÉ, puis A29 REJEU = ACCEPTÉ SOUS RÉSERVE (0 bloquant) ;
+ses réserves N1-N3 fermées dans 2c754b2 (275+ tests verts, CI verte après relance — l0-restauration
+instable, fiche A-012, pas L5a). R-L5a-6 (axe-core inutilisé) et R-L5a-9 (décisions L5a sur
+lot/l3-suite) reconstituées et tracées : la première se ferme par A28, la seconde par l'ordre de
+fusion (L3 → main → main dans lot/l5a AVANT la PR L5a).
+Prochaine action : après la PR L3 fusionnée, `git merge origin/main` dans lot/l5a (append-only
+« main d'abord »), vérifier par grep que les cinq entrées [L5a] du 2026-09-02 (Argon2id, AAD,
+validé, liste fermée, dépendances) sont présentes, rejouer `pnpm test:unit` + interface, pousser,
+lancer A28 (axe sur les trois écrans + mesure de dérivation < 1 s), puis A20 signe, A02 contrôle,
+PR lot/l5a → main (Williams fusionne). lot/l5b (162/162) attend cette PR pour intégrer main.
+Tests rouges connus : aucun. À Williams : icône PWA provisoire (A-009), script d'accord (L5b).
+
+## 2026-09-03 06h00 — [lot L5 / incrément L5a] — étape pipeline 5/7
+Dernier commit vert : d589b03 (test(l5a) : balayage axe-core + budget de dérivation, A28) · Branche : lot/l5a · Poussé : oui
+Tâche en cours : R-L5a-6 est FERMÉE, et par une mesure. `@axe-core/playwright`, installé par
+dérogation 11 §8-1 et appelé nulle part, est enfin utilisé : `e2e/accessibilite-l5a.e2e.ts`, cinq cas,
+0 violation sur les trois écrans du socle (déverrouillage premier usage ET coffre existant, Aujourd'hui
+en état vide, Stockage), tags wcag2a + wcag2aa + wcag21a + wcag21aa, aucun `disableRules`.
+Dérivation Argon2id mesurée dans le navigateur : création 284 ms, réouverture 199 ms, budget
+11 §4 = 1000 ms. C'est une BORNE SUPÉRIEURE de bout en bout, elle majore la dérivation seule ; le
+chiffre de l'iPad reste dû à A27 à la porte P-C. Bascule faite : une image sans `alt` injectée fait
+sortir `image-alt`, le vert n'est donc pas un balayage qui ne balaie rien.
+Deux constats A28-1 remontés à A29, non corrigés ici (un test d'accessibilité ne modifie pas
+l'interface qu'il mesure) : sur « Aujourd'hui », la coquille et l'écran affichent DEUX `<h1>` de
+libellé identique ; l'écran Stockage porte deux libellés différents (« de l'appareil » dans `VUES`,
+« de cet appareil » à l'écran).
+Prochaine action : ATTENDRE que la PR L3 entre dans `main` (ordre de fusion figé, DECISIONS.md A37 —
+`main` est à 8c5f9ff, L3 n'y est PAS), puis `git merge origin/main` dans lot/l5a, vérifier PAR GREP
+que les cinq entrées [L5a] du 2026-09-02 (Argon2id, AAD, `validé`, liste fermée, dépendances de test)
+survivent à la fusion — c'est la fermeture de R-L5a-9 — rejouer `pnpm verify`, puis PR lot/l5a → main.
+Tests rouges connus : aucun. `verify:rapide` vert au pre-push (865 tests unitaires) ; les 5 cas
+Playwright d'accessibilité verts localement.
+Réserve de méthode à connaître : `pnpm test:unit` ne lance PAS le projet `interface` — un vert local
+peut donc répondre à une autre question que la CI. Mesurer avec `pnpm test:coverage`.
+
+## 2026-09-03 06h35 — [lot L5 / incrément L5a] — étape pipeline 5/7 (fin d'incrément, session close)
+Dernier commit vert : (celui-ci) · Branche : lot/l5a · Poussé : oui
+Tâche en cours : rien. Incrément L5a terminé côté A20, en attente de L3.
+`pnpm verify` COMPLET exécuté sur cette branche le 2026-09-03 — **RC=0**, chiffres bruts :
+build OK · lint (`--max-warnings=0`) OK · format:check OK · typecheck strict OK · pack 12/12 ·
+DECISIONS 125 entrées au format · prose OK · invariants 16 règles vertes · jonctions 50 scripts /
+105 variables / 10 fichiers de CI · graphe 104 modules, 0 import pendu · activity_log 234 fichiers ·
+traçabilité 468 citations / 297 fichiers · anti-skip 79 fichiers, aucun test désactivé ·
+projets de test 79 (interface:29 · unit:29 · integration:17 · playwright:4) · isolation réseau OK ·
+Coolify OK · exécutabilité OK · **test:unit 29 fichiers / 647 verts · test:integration 17 / 308 verts
+· test:e2e 45 verts** (dont les 5 d'accessibilité A28). Total exécuté : 1000 tests.
+DÉFAUT STRUCTUREL MIS EN ÉVIDENCE PAR CE VERIFY, fiche étage 2 posée sur lot/l5b : `pnpm verify`
+n'exécute JAMAIS le projet `interface`. Ses trois suites finales sont `--project unit`,
+`--project integration` et Playwright ; les 29 fichiers `.test.tsx` ne tournent que sous
+`pnpm test:coverage`, donc dans le seul job CI `coverage`. Un `.test.tsx` rouge sort donc VERT de
+`verify`, du pre-push et des jobs `unit`/`integration`/`e2e`. Ne pas lire ce RC=0 comme « toute
+l'interface est verte » : il ne le dit pas.
+Prochaine action : ATTENDRE que L3 entre dans `main` (`main` = 8c5f9ff, L3 n'y est pas ; le dossier
+de porte se contredit et `deploy-staging` est rouge — chez Williams). Ensuite seulement :
+`git merge origin/main` dans lot/l5a, puis GREP des cinq entrées [L5a] du 2026-09-02 (Argon2id, AAD,
+`validé`, liste fermée, dépendances de test) — c'est la fermeture de R-L5a-9 — puis PR lot/l5a → main.
+Aucun merge et aucune PR n'ont été faits ici.
+Tests rouges connus : aucun.
+
+## 2026-09-03 11h30 — [lot L5 / incrément L5a] — étape 5/7 → `main` intégré, **R-L5a-9 FERMÉE**
+
+Dernier commit vert : (celui-ci) · Branche : lot/l5a · Poussé : oui
+Tâche en cours : aucune. La « prochaine action » du bloc précédent est exécutée, dans l'ordre exact.
+Prochaine action : PR `lot/l5a` → `main`, puis A02 (contrôle d'acceptation) sur l'incrément.
+Tests rouges connus : aucun ici. `main` reste rouge sur `8 · deploy-staging` (empreinte du script
+serveur), hors périmètre L5a et couvert par la réserve R-L3-2-bis.
+
+L3 est dans `main` (`042fe76`, tag `v0.l3`), #29 aussi (`508ae15`). `git merge origin/main` joué.
+**Quatre conflits, dont deux qui ne sont pas de la prose.** `packages/shared/src/index.ts` : additif,
+les six modules L3 de `main` et le `sync` de la branche coexistent, `typecheck` vert sur six projets.
+`.github/coverage-critical-paths.json` : additif, 13 entrées, seuil inchangé à 90, JSON revalidé —
+le bandeau du fichier interdit d'en retirer une seule.
+
+**UNE FAUTE DE MÉTHODE, ET ELLE VAUT D'ÊTRE ÉCRITE.** Les deux fichiers append-only ont d'abord été
+résolus « côté main puis côté branche, par hunk ». La vérification par multi-ensembles de lignes
+disait « aucune ligne perdue » — et elle était vraie. `check:decisions` a quand même refusé :
+**deux entrées avaient été coupées de leurs champs `Décideur` / `Impact spec`**, le hunk ne tombant
+pas sur une frontière d'entrée. Aucune ligne perdue et structure détruite sont compatibles.
+Résolution refaite **par blocs depuis la base commune** (`4b3f7ee`) : base 119 entrées + 68 de `main`
++ 6 de la branche = 193, toutes au format. ETAT : 62 + 9 + 3 = 74 blocs.
+
+**R-L5a-9 fermée par la mesure.** Les cinq entrées `[L5a]` du 2026-09-02, écrites à l'origine sur
+`lot/l3-suite`, survivent : Argon2id, AAD, état `validé`, liste fermée, dépendances de test.
+
+## 2026-09-03 13h00 — [lot L5 / incrément L5a] — étape 5/7 → réserve **B1 FERMÉE** (verrou testé)
+
+Dernier commit vert : (celui-ci) · Branche : lot/l5a · Poussé : oui
+Tâche en cours : aucune. B1 du contrôle A02 est traitée par A26, sans toucher au code de production.
+Prochaine action : A20 affecte le second volet de B1 (le glob de couverture) et A01 tranche B2
+(verdict A51 sur L5a) ; la PR #30 reste ouverte, aucun merge n'a été fait ici.
+Tests rouges connus : aucun.
+
+`apps/field/src/app/verrou.ts` passe de **0,00 %** à **100 %** (lignes, branches, fonctions, v8),
+`contexte.tsx` de 0,00 % à **80,00 %**, et `apps/field/src/app/**` de 40,11 % à **80,49 %**.
+Deux fichiers écrits, aucun autre touché : `app/verrou.test.tsx` (33 tests) et `app/contexte.test.tsx`
+(9 tests), tous deux au projet `interface` (jsdom + minuteurs simulés — une échéance de 15/60 min ne
+s'observe pas autrement). `test:interface` : 31 fichiers, **508 tests verts**. `test:unit` inchangé
+(39 fichiers, 923 tests). Ni `.skip`, ni `.only` ; `check:test-projects` et `check:no-skipped-tests`
+verts sur 97 fichiers.
+
+**Le scénario qui n'avait jamais été joué l'est** : une session active de 45 min ne se verrouille
+JAMAIS (03 §33.7, recette P-C), au niveau du hook ET dans la coquille complète. Doublé de son
+contrôle d'anti-vacuité : les mêmes 45 min HORS session verrouillent bien.
+
+**Preuve par bascule, trois mutations posées puis retirées** : seuil de session 60 → 30 min = 8 tests
+rouges ; `scroll` retiré des interactions = 1 rouge ; recomparaison à l'horloge au retour au premier
+plan supprimée = 1 rouge. `verrou.ts` restauré à l'identique (SHA-1 `b101c45`, `git diff` vide).
+
+**Deux défauts rendus à A24/A20, NON corrigés par moi** (09 §5.6) : `verrou.ts:192`, `verrouEcran`
+n'est jamais remis à `null` après un `release` système — le Wake Lock n'est donc pas redemandé au
+retour au premier plan ; et `contexte.tsx:281`, le `useMemo` ne mémoïse rien, `useVerrou` rendant un
+objet neuf à chaque rendu. Aucun n'est bloquant.
+
 ## 2026-09-03 13h35 — [session pilote] — FIN DE SESSION PROPRE, reprise préparée
 
 Dernier commit vert : `508ae15` (`main`) · Branche : gouvernance/reprise-2026-09-03 · Poussé : oui
@@ -2623,6 +2847,27 @@ sans PR). **B1 fermée** (`1b89433`) : `verrou.ts` de 0,00 % à **100 %**, 42 te
 
 **Trois gestes restent à Williams** : le root sur staging (`infra/README.md` §6.3), l'arbitrage
 **P-DESCOPE** du 15/09, et les portes **P-C / P-D / P-E** — hors délégation du 2026-09-03.
+
+## 2026-09-03 13h50 — [lot L5 / incrément L5a] — le glob de couverture est POSÉ, plus « à voir »
+
+Dernier commit vert : (celui-ci) · Branche : lot/l5a · Poussé : oui
+Tâche : aucune. Bloc écrit par la session **pilote**, à sa fermeture.
+Prochaine action : **A51 sur `lot/l5a`** (réserve **B2**, seule bloquante restante). Puis merge #30.
+Tests rouges connus : aucun.
+
+**Le second volet de B1 est fermé.** `apps/field/src/app/verrou.ts` entre dans
+`.github/coverage-critical-paths.json` — **14 chemins critiques**, seuil inchangé à 90. Le glob
+**RESSERRE** le seuil (mesuré 100 % sur les quatre métriques, dix points de marge) : même motif que
+`routes/users.ts` et la machine à états L3d. **`apps/field/src/app/**` n'est DÉLIBÉRÉMENT pas
+inscrit** (80,49 %) : il rougirait, et la seule sortie serait alors des tests ou un rétrécissement de
+périmètre — la faute que le bandeau du fichier interdit. La question de fond (la coquille est-elle
+critique ?) reste à A01, et se tranchera mieux quand L5b et L5c auront couvert le reste.
+
+**Pourquoi ce bloc existe, et c'est la leçon du jour.** Le bloc précédent disait « Recommandation de
+glob : **voir le rapport** ». Ce rapport était celui d'un agent : il ne vit que dans la session qui
+l'a lancé, et il disparaît avec elle. **Une recommandation qui n'entre pas dans un fichier est
+perdue**, même excellente, même tenant en huit lignes de JSON. Le renvoi a été remplacé par la chose
+elle-même.
 
 ## 2026-09-03 14h30 — [session pilote] — CLÔTURE DÉFINITIVE, ce bloc fait foi
 

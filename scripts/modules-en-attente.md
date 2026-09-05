@@ -27,11 +27,19 @@ et **un garde qui bloque à tort finit désactivé** — ce qui est pire que pas
 | module | incrément consommateur | déclaré le | justification |
 | ------ | ---------------------- | ---------- | ------------- |
 
-_(Aucune entrée. `apps/api/src/http/pagination.ts` en est sortie le **2026-08-31** : son premier
-consommateur réel n'est pas celui qu'on attendait — ce n'est pas `GET /v1/companies` (L3b) mais
-`GET /v1/users` (L2/T3), désigné comme tel par la note de conception L2 §4.5. La règle 2 a fait
-exactement ce pour quoi elle existe : c'est le garde qui a réclamé le retrait de la ligne, pas la
-mémoire de l'auteur.)_
+_(**Aucune entrée. Cinq modules L5a y sont entrés le 2026-09-02 (les quatre dépôts locaux et la machine à états de session, publiés pour L5b) et en sont SORTIS le même jour : les tests du socle les ont atteints, et la soupape a réclamé le retrait — comme pour `pagination.ts` avant eux.** Elles sont le cas normal que cette
+soupape décrit : `LOT_L5.md` §2 fait publier par L5a, le premier jour, les interfaces que L5b et L5c
+consommeront — sans quoi les deux incréments suivants attendraient. Les DEUX modules L5a qui
+n'étaient PAS dans ce cas (`local/jetons.ts`, `local/embarquement.ts`) ont été CÂBLÉS dans la coquille
+le même jour plutôt qu'inscrits ici : ce sont des livrables du socle, pas des interfaces en avance.
+Le plafond de 5 est donc atteint exactement, et il le restera : toute nouvelle entrée exige d'abord
+qu'une de celles-ci sorte. Historique : `apps/api/src/http/pagination.ts` en est sortie le **2026-08-31**, et les deux
+branches qui fusionnent ici en donnaient chacune une raison différente — la fusion tranche plutôt que
+de garder les deux. **`GET /v1/users` (L2/T3) est le premier consommateur réel**, désigné comme tel
+par la note de conception L2 §4.5 et livré sur `main` avant L3a ; `GET /v1/companies` (L3a, via
+`apps/api/src/domaines/companies/depot.ts`) est le **second**, et c'est lui que la note de conception
+L3 avait anticipé. La règle 2 a fait exactement ce pour quoi elle existe dans les deux cas : c'est le
+garde qui a réclamé le retrait de la ligne, pas la mémoire de l'auteur.)_
 
 ## Les cinq règles que la machine applique
 
