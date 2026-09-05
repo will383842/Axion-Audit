@@ -1609,6 +1609,54 @@ clause du contrat 11 §3 non encore tenue. À planifier par A30 au brief de L7.
 
 **Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-C_
 
+### FICHE A-008 — Le coffre terrain chiffre sans AAD : une enveloppe n'est pas liée à sa ligne
+
+**Constat terrain (A24, 2026-09-02, relevé par A29) :** AES-256-GCM sans données authentifiées
+additionnelles. Une enveloppe déchiffrable l'est **quelle que soit la ligne où on la colle** : un
+attaquant qui écrit déjà dans IndexedDB peut déplacer une réponse d'une question à une autre sans que
+le déchiffrement le voie. Lier l'enveloppe à sa ligne exigeait un troisième paramètre et cassait la
+signature publiée `dechiffrer(e, s)` en pleine rencontre tests × code.
+
+**Valeur pour l'auditeur :** un durcissement, pas une faille du modèle de menace 06 §10 — la menace
+suppose un attaquant qui a déjà passé le verrou et le coffre. Mais une réponse déplacée d'une question
+à une autre est une donnée fausse qui ne se signale pas.
+
+**Proposition (étage 2) :** AAD = `table:id:colonne`, posée par le port d'écriture, vérifiée par
+`dechiffrer`. Migration locale des enveloppes existantes au ré-enveloppement. À arbitrer à **P-C**.
+**Coût estimé :** ≈ 0,3 j. **Impact schéma / API : aucun.** Impact `apps/field/src/local/**` : coffre,
+port, tests. Trace : `DECISIONS.md` 2026-09-02 « Aucun AAD sur AES-GCM ».
+
+### FICHE A-009 — L'icône de la PWA terrain est PROVISOIRE : le dessin reste à Williams
+
+**Constat (A29, 2026-09-02, B2) :** le manifeste livré par L5a n'avait aucune icône — non installable,
+donc `storage.persist()` refusé sur iPad, donc aucune mission embarquable. La décision du 2026-08-28
+réserve le dessin de l'icône à Williams et interdit le demi-manifeste. **Défaut appliqué sous la règle
+« silence vaut accord »** (`DECISIONS.md` 2026-09-02) : un aplat aux couleurs des tokens (terracotta
+sur ivoire), généré par `apps/field/scripts/build-icones.mjs` à partir de `COULEURS_CHARTE`, 192 /
+512 / maskable / `apple-touch-icon`, marqué `"_provisoire": true` dans le manifeste.
+
+**Ce qui reste dû, à Williams :** l'icône de charte. Le remplacement est une substitution de
+fichiers PNG, sans code. À cocher à la porte **P-C**.
+**Coût estimé :** 0 j côté code. **Impact schéma / API : aucun.**
+
+## 2026-09-02 — [L0/CI, étage 2, PROPOSÉE] `l0-restauration` rougit une fois sur deux en CI, et verdit à la relance
+
+### FICHE A-012 — Le test de restauration pgBackRest est instable en CI
+
+- **Constat** : run 33642357475 (`lot/l5a` @ `2c754b2`) — job « 4 · integration » rouge sur
+  `apps/api/tests/l0-restauration.integration.test.ts` : `FileMissingError: unable to open missing file
+'/var/lib/pgbackrest/archive/axion/archive.info'`. Relancé tel quel sans aucun changement : vert. Le même
+  test était vert sur `1892df3` vingt-cinq minutes plus tôt et sur `lot/l3-suite` toute la journée.
+  L'incrément L5a ne touche ni `infra/`, ni `apps/api`.
+- **Cause probable** : course entre `axion-stanza-create` (`--no-online`) et le premier `archive-push`
+  du serveur redémarré — `archive.info` n'existe pas encore quand la sauvegarde démarre. À MESURER par
+  A11/A53 avant de corriger : une relance qui verdit n'est pas un diagnostic.
+- **Valeur** : une CI qu'on relance « pour voir » est une CI qu'on finit par ne plus croire (09 §5.7 :
+  la CI reste seule juge — elle doit donc être juste).
+- **Coût estimé** : 0,25 j — attendre `archive.info` (ou `pgbackrest info` = stanza `ok`) avec délai
+  borné avant `backup`, et un cas de test qui reproduit la course.
+- **Impact schéma/API** : aucun. Lot L0 (A11 infra, A53 observabilité).
+
 ---
 
 ### FICHE A-013 — `staging` sert le même conteneur depuis 21 h : Coolify échoue à lire le compose, en 9 secondes, et le déploiement n'a jamais lieu

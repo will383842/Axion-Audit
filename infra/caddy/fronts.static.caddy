@@ -49,53 +49,68 @@
 	redir /hq /hq/ 308
 
 	# ┌───────────────────────────────────────────────────────────────────────────┐
-	# │ AUCUNE PWA N'EST LIVRÉE AVANT LE LOT L5c : /sw.js ET /manifest.webmanifest │
-	# │ RENDENT 404. Arbitrage A21 tracé dans DECISIONS.md (2026-08-28).          │
+	# │ LA PWA TERRAIN EST SERVIE DEPUIS LE LOT L5a (2026-09-02).                 │
+	# │ Revue croisée A29 (B1) sur L5a, arbitrage A01 tracé dans DECISIONS.md :   │
+	# │ « c'est L5a qui livre la PWA, à lui d'ouvrir la porte ». Le 404 posé au   │
+	# │ lot L0 sur /sw.js et le manifeste (arbitrage A21 du 2026-08-28) est       │
+	# │ SUPPRIMÉ ici, comme sa propre consigne l'exigeait le jour de la livraison.│
 	# └───────────────────────────────────────────────────────────────────────────┘
 	#
-	# CE QUE CETTE RÈGLE GARDE, ET CONTRE QUOI.
+	# CE QUE L5a LIVRE, ET QUE CADDY SERT DEPUIS LA RACINE DU FRONT TERRAIN :
+	#   · /sw.js                 — Workbox 7 `injectManifest` (apps/field/scripts/build-sw.mjs)
+	#   · /manifest.webmanifest  — émis par le build Vite (apps/field/vite.config.ts)
+	#   · /icones/*.png, /apple-touch-icon.png — icônes 192/512 + `maskable` (A29 B2)
 	#
-	#  · UN SERVICE WORKER. Enregistré depuis `/`, il prend la portée de TOUT le
-	#    domaine et SURVIT au déploiement suivant : le révoquer demanderait
-	#    d'atteindre des iPads réels, en clientèle, hors ligne. Un `sw.js` servi
-	#    « pour voir » n'est pas un essai, c'est une décision irréversible prise
-	#    sur les tablettes de quelqu'un d'autre.
+	# LES EN-TÊTES QU'UN SERVICE WORKER EXIGE, ET OÙ ILS SONT POSÉS :
+	#   · `Cache-Control: no-cache, no-store, must-revalidate` sur /sw.js et le
+	#     manifeste → matcher `@sw` du snippet `(securite)` du Caddyfile, appliqué
+	#     AVANT cet import. Un service worker mis en cache longtemps ne se met
+	#     jamais à jour (§31) : c'est l'en-tête que ce dépôt refuse de déléguer.
+	#   · `Content-Type: application/manifest+json` sur le manifeste → posé
+	#     CI-DESSOUS, explicitement. L'image `caddy:2-alpine` le déduit déjà de
+	#     /etc/mime.types (paquet `mailcap`, vérifié le 2026-09-02), mais une
+	#     garantie qui dépend d'un paquet tiers de l'image de base n'en est pas
+	#     une : le jour où le paquet saute, le navigateur recevrait
+	#     `application/octet-stream` et refuserait l'installation, en silence.
+	#     `file_server` respecte un Content-Type déjà posé.
+	#   · `Service-Worker-Allowed` : SANS OBJET. Le service worker est à la racine
+	#     (`/sw.js`, `scope: "/"`) — sa portée par défaut couvre déjà tout le
+	#     domaine. Ne l'ajouter QUE si le SW déménage sous un sous-chemin.
 	#
-	#  · UN DEMI-MANIFESTE, ET C'EST LE CAS LE PLUS TRAÎTRE. Sans icônes 192/512,
-	#    sans `maskable`, sans `apple-touch-icon` PNG, sans l'écran d'installation
-	#    guidé qu'exige 03 §29 et sans le garde-fou `storage.persist()`, un
-	#    manifeste rendrait quand même 200 `application/manifest+json` : tout le
-	#    monde cocherait la case « PWA installable », et l'ajout à l'écran d'accueil
-	#    sur iPad continuerait de produire une CAPTURE D'ÉCRAN en guise d'icône.
-	#    Un demi-manifeste est pire qu'un 404 PARCE QU'IL EST VERT.
+	# POURQUOI UN `handle` DÉDIÉ SANS `try_files` — la moitié de la garantie du
+	# lot L0 survit : un fichier de PWA ABSENT doit rendre 404, JAMAIS `index.html`
+	# en 200 text/html par le repli SPA. Un `sw.js` qui serait en réalité une page
+	# HTML ferait échouer `register()` ; un manifeste HTML ferait croire au
+	# navigateur qu'il tient un manifeste ; une icône HTML ferait de l'ajout à
+	# l'écran d'accueil une CAPTURE D'ÉCRAN. Ici, `file_server` seul : le fichier
+	# existe et il est servi tel quel, ou il n'existe pas et c'est un 404 muet
+	# (`handle_errors` du snippet `(securite)`, texte brut, jamais text/html).
 	#
-	# POURQUOI LA RÈGLE EST ICI, ET SURTOUT PAS DANS LES BLOCS `handle` CI-DESSOUS
-	# — mesuré sur `caddy:2-alpine` le 2026-08-28, pas supposé :
-	#
-	#  1. `handle` n'accepte QU'UN SEUL jeton de matcher. `handle /sw.js /sw2.js {…}`
-	#     ne s'analyse même pas (« wrong argument count »). D'où le matcher NOMMÉ.
-	#
-	#  2. L'ordre des directives de Caddy place `try_files` AVANT `handle`. Écrite
-	#     à côté du repli SPA — l'endroit où l'on pense spontanément la mettre —
-	#     la règle est évaluée APRÈS que `try_files` a déjà réécrit `/sw.js` en
-	#     `/index.html` : le matcher ne correspond plus à rien, et le front répond
-	#     **200 text/html**. Constaté par exécution, les deux placements côte à côte :
-	#         imbriquée près de `try_files` → /sw.js  200  text/html  (939 octets)
-	#         ici, avant les `handle`       → /sw.js  404  aucun Content-Type
-	#     Une règle qui s'analyse, se relit bien et ne garde rien est exactement le
-	#     défaut que ce dépôt traque partout ailleurs.
-	#
-	#  3. LE `Content-Type` FAIT PARTIE DE LA GARANTIE. `respond` n'est pas une
-	#     erreur : le `handle_errors` du snippet `(securite)` ne l'intercepte pas,
-	#     le corps est vide et AUCUN `Content-Type` n'est émis. C'est le point : un
-	#     repli SPA qui rendrait `index.html` ferait croire au navigateur qu'il
-	#     tient un manifeste — le 404 doit rester muet.
-	#
-	# Le matcher `@sw` du Caddyfile (`Cache-Control: no-cache…`) RESTE en place : il
-	# redeviendra utile au lot L5c. Nom distinct obligatoire — `(securite)` est
-	# importé dans le MÊME bloc de site, deux matchers homonymes se télescoperaient.
-	# LE JOUR OÙ L5c LIVRE LA PWA : SUPPRIMER CE BLOC, jamais l'affaiblir.
-	@pwa_non_livree path /sw.js /service-worker.js /manifest.webmanifest /hq/sw.js /hq/service-worker.js /hq/manifest.webmanifest
+	# Noms de matchers DISTINCTS de ceux du snippet `(securite)` (`@sw`,
+	# `@fingerprinted`) : importés dans le MÊME bloc de site, deux homonymes se
+	# télescoperaient.
+	@manifeste_terrain path /manifest.webmanifest
+	header @manifeste_terrain Content-Type "application/manifest+json"
+
+	@fichiers_pwa path /sw.js /manifest.webmanifest /apple-touch-icon.png /icones/*
+	handle @fichiers_pwa {
+		root * /srv/principal/field
+		file_server
+	}
+
+	# CE QUI N'EST TOUJOURS PAS LIVRÉ RESTE FERMÉ — et pour la raison du lot L0 :
+	#   · la CONSOLE SIÈGE n'est pas une PWA (aucun `register()` dans apps/hq) ;
+	#     un `/hq/sw.js` retombant sur `index.html` en 200 text/html serait un
+	#     service worker imaginaire de portée /hq/ ;
+	#   · `/service-worker.js` est l'autre nom que Workbox produit par défaut ;
+	#     L5a livre `/sw.js` (apps/field/scripts/build-sw.mjs) et rien d'autre.
+	# `handle` n'accepte QU'UN SEUL jeton de matcher, d'où le matcher nommé ; placé
+	# AVANT les `handle` de fronts parce que `try_files` s'évalue avant `handle`
+	# (mesuré le 2026-08-28 sur `caddy:2-alpine` : imbriquée près de `try_files`,
+	# la règle rendait 200 text/html). `respond` n'émet aucun Content-Type : le
+	# 404 reste muet. LE JOUR OÙ LA CONSOLE DEVIENT UNE PWA : retirer ses chemins
+	# de cette liste et lui donner son propre `handle`, jamais affaiblir la règle.
+	@pwa_non_livree path /service-worker.js /hq/sw.js /hq/service-worker.js /hq/manifest.webmanifest
 	handle @pwa_non_livree {
 		respond 404
 	}
@@ -122,14 +137,23 @@
 (fronts_staging) {
 	redir /hq /hq/ 308
 
-	# MÊME règle que la pile principale, et pour la MÊME raison — voir l'encadré
-	# du snippet ci-dessus. Elle est RECOPIÉE et non factorisée parce qu'un snippet
-	# ne peut pas en importer un autre à cet endroit sans imposer son ordre aux
-	# `handle` du site : la duplication est ici le moindre mal, et le test
-	# `l0-pwa-404` interroge les DEUX piles pour qu'aucune ne dérive de l'autre.
-	# Staging plus permissif que la prod = staging qui ne valide plus rien : c'est
-	# exactement l'argument du snippet `(securite)`, appliqué aux fronts.
-	@pwa_non_livree path /sw.js /service-worker.js /manifest.webmanifest /hq/sw.js /hq/service-worker.js /hq/manifest.webmanifest
+	# MÊMES règles que la pile principale, et pour les MÊMES raisons — voir
+	# l'encadré du snippet ci-dessus. Elles sont RECOPIÉES et non factorisées
+	# parce qu'un snippet ne peut pas en importer un autre à cet endroit sans
+	# imposer son ordre aux `handle` du site : la duplication est ici le moindre
+	# mal, et le test `e2e/pwa-servie.e2e.ts` interroge les DEUX piles pour
+	# qu'aucune ne dérive de l'autre. Staging plus permissif — ou plus fermé —
+	# que la prod = staging qui ne valide plus rien.
+	@manifeste_terrain path /manifest.webmanifest
+	header @manifeste_terrain Content-Type "application/manifest+json"
+
+	@fichiers_pwa path /sw.js /manifest.webmanifest /apple-touch-icon.png /icones/*
+	handle @fichiers_pwa {
+		root * /srv/staging/field
+		file_server
+	}
+
+	@pwa_non_livree path /service-worker.js /hq/sw.js /hq/service-worker.js /hq/manifest.webmanifest
 	handle @pwa_non_livree {
 		respond 404
 	}

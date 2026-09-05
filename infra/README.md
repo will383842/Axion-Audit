@@ -212,6 +212,23 @@ PWA : Caddy doit maîtriser lui-même le `Cache-Control` du service worker
 (`no-cache, no-store, must-revalidate`) et le repli SPA (`try_files … /index.html`). La mise à jour
 applicative et le démarrage hors ligne (invariant 1) dépendent exactement de ces en-têtes.
 
+**La PWA terrain est servie depuis le lot L5a (2026-09-02).** Jusque-là, le lot L0 fermait `/sw.js`
+et `/manifest.webmanifest` par un 404 délibéré (arbitrage A21 du 2026-08-28 : pas de service worker
+« pour voir » sur des iPads réels, pas de demi-manifeste vert). L5a livre le service worker
+(`apps/field/scripts/build-sw.mjs`), le manifeste (`apps/field/vite.config.ts`) et les icônes ;
+la revue croisée A29 (B1) a mesuré que `register('/sw.js')` échouait derrière ce 404 et que
+l'application ne démarrait plus hors réseau. Arbitrage A01 (`DECISIONS.md`, « Revue croisée A29 ») :
+c'est L5a qui ouvre la porte. Depuis, `caddy/fronts.static.caddy` sert `/sw.js`,
+`/manifest.webmanifest`, `/apple-touch-icon.png` et `/icones/*` par un `handle` dédié **sans
+`try_files`** (un fichier de PWA absent rend 404, jamais `index.html`), pose explicitement
+`Content-Type: application/manifest+json` sur le manifeste, et laisse le matcher `@sw` du Caddyfile
+interdire toute mise en cache du service worker. `Service-Worker-Allowed` est sans objet : le SW est
+à la racine, portée `/`. La console siège n'est **pas** une PWA : `/hq/sw.js`,
+`/hq/manifest.webmanifest` et l'alias `/service-worker.js` restent en 404 muet. Le test
+`e2e/pwa-servie.e2e.ts` (`@critique`, ex-`pwa-404.e2e.ts`) lance le vrai Caddy sur le vrai build et
+exige 200 + en-têtes + au moins une icône ≥ 192 px déclarée **et** réellement servie, sur les deux
+piles.
+
 **Pourquoi aucune sonde sur les jobs.** Un conteneur sorti n'a pas de vivacité à mesurer. Une sonde
 qui ne peut pas réussir est pire qu'une sonde absente : elle bloque indéfiniment tout ce qui en
 dépend. Ce qui prouve le succès d'un job, c'est son **code de sortie** — ce que

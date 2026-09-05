@@ -60,6 +60,7 @@
     "build:packages": "pnpm --recursive --filter \"./packages/**\" build"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@axion/ui": "workspace:*",
     "@eslint/js": "9.39.5",
     "@playwright/test": "1.62.1",
