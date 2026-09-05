@@ -8095,3 +8095,29 @@ L5a ne se contredisent pas — il manque un champ pour honorer les deux.
 Décideur : **A01, sur délégation de Williams du 2026-09-04** pour (c). **(b) appartient à Williams**
 (amendement du 04) et se pose au brief de L5a/L6.
 Impact spec : aucun aujourd'hui. Amendement horodaté du 04 si (b) est retenu.
+
+## 2026-09-05 — [L5c] Rectification : le champ manquant de M8 relève de P-D, pas d'une décision de Williams à la demande
+
+L'entrée de ce jour sur M8 (`valideeLe` effacé au déverrouillage) écrit « **(b) appartient à
+Williams** (amendement du 04) et se pose au brief de L5a/L6 ». C'est imprécis sur le POINT QUI
+COMPTE — non pas qui décide, mais QUAND et sous quel régime.
+
+Options :
+(a) Laisser tel quel. Refusé : « appartient à Williams » laisse croire qu'un amendement du 04 peut
+être demandé et obtenu à tout moment, ce qui est faux et userait la règle.
+(b) Nommer le régime réel.
+
+Arbitrage : **(b)**. Le fichier 04 est INVIOLABLE hors P-D. Le champ manquant
+(`premiereValidationLe`, ou un compteur de validations sur `interviews`) est donc un **amendement
+CANDIDAT à la revue de spec de P-D**, à une date connue — pas une demande ouverte. La délégation
+d'A01 du 2026-09-04 étend les SIGNATURES, jamais les révisions de spec : elle ne peut pas ouvrir
+le 04. D'ici P-D, la correction (c) tient : la perte cesse d'être silencieuse, l'écran l'annonce
+avant le geste.
+Ce que P-D aura à trancher, en une phrase : faut-il conserver la trace qu'un entretien A ÉTÉ
+validé après un déverrouillage expert, sachant que `interviews` remonte au siège et que l'effacement
+y est propagé ?
+Règle de précédence sans objet (aucune divergence interne) : cette entrée corrige la formulation
+d'une entrée du même jour, elle ne tranche aucun texte du pack.
+Décideur : **A01, sur délégation de Williams du 2026-09-04**, pour la formulation ; **P-D** pour
+l'amendement lui-même.
+Impact spec : aucun. Amendement du 04 à instruire en revue de spec P-D.
