@@ -145,12 +145,21 @@ async function compterDonneesLocales(base: BaseLocale): Promise<number> {
   return comptes.reduce((total, compte) => total + compte, 0);
 }
 
-/** Des données locales, mais aucun coffre pour les ouvrir : on ne recrée rien. */
+/**
+ * Des données locales, mais aucun coffre pour les ouvrir : on ne recrée rien.
+ *
+ * L'action porte « **sans recharger ni réinstaller** », comme toute la famille
+ * `AnomalieCoffreError` (revue A29, R3). Elle était la seule à ne pas le dire —
+ * et c'est la seule des trois qui atteigne l'écran par le chemin du PREMIER
+ * usage, c'est-à-dire devant un auditeur à qui l'on vient de refuser un bouton.
+ * Un auditeur qu'on refuse sans lui dire quoi ne pas faire réinstalle : c'est le
+ * geste qui détruit, et le message doit le devancer.
+ */
 export class DonneesSansCoffreError extends AnomalieCoffreError {
   override readonly name = 'DonneesSansCoffreError';
   override readonly action =
     'Ne créez PAS de protection sur cet appareil : ces enregistrements deviendraient définitivement illisibles. ' +
-    'Signalez-le au siège avant toute autre manœuvre, et poursuivez la collecte sur un autre appareil.';
+    'Signalez-le au siège sans recharger ni réinstaller, et poursuivez la collecte sur un autre appareil si vous devez collecter maintenant.';
   constructor(lignes: number) {
     super(
       `Cet appareil porte déjà ${String(lignes)} enregistrement(s) locaux alors qu’aucun coffre n’y est enregistré. Rien n’a été supprimé ni modifié.`,

@@ -233,9 +233,21 @@ export function FournisseurTerrain({ children }: { readonly children: ReactNode 
   const ouvrir = useCallback(
     async (motDePasse: string): Promise<void> => {
       if (base === null) return;
-      const coffre = premierUsage
-        ? await initialiserCoffre(base, motDePasse)
-        : await deverrouiller(base, motDePasse);
+      const coffre = await (
+        premierUsage ? initialiserCoffre(base, motDePasse) : deverrouiller(base, motDePasse)
+      ).catch((erreur: unknown) => {
+        // ── R3 (revue A29 du 2026-09-05) ──────────────────────────────────
+        // Une anomalie de coffre découverte À LA SOUMISSION laissait
+        // `premierUsage` à `true` : l'écran continuait d'afficher « Préparer cet
+        // appareil » et un bouton ACTIF « Créer la protection de cet appareil »
+        // au-dessus d'une alerte qui dit « Ne créez PAS de protection ». Deux
+        // messages contraires ensemble — la doctrine posée au bloquant B4 du
+        // 2026-09-02 (`DECISIONS.md`) l'interdit, et ici le message le plus
+        // visible est celui qui détruit. Une anomalie n'est JAMAIS un premier
+        // usage : elle prouve au contraire qu'une ligne de coffre existe.
+        if (erreur instanceof AnomalieCoffreError) setPremierUsage(false);
+        throw erreur;
+      });
       installerContexteLocal({ base, coffre });
       setPremierUsage(false);
       setPhase('ouvert');
