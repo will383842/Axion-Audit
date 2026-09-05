@@ -9582,6 +9582,174 @@ Règle de précédence **sans objet** (convention d'outillage, hors pack).
 Décideur : **A01**, sur délégation du 2026-09-04, sur la clause de la fiche elle-même.
 Impact spec : `.gitattributes` amendé et commenté ; aucun fichier du pack modifié.
 
+## 2026-09-05 — [L7b] Deux routes de pilotage : `/coverage` créée, `/aggregation` avec `orgUnit` au lieu de `service`
+
+Le 11 §8-6 interdit de « créer une route non listée aux §8/§24.2 **sans la documenter** ». L7b en
+crée une, et renomme un paramètre d'une autre. Les deux sont ici.
+
+**① `GET /v1/missions/:id/coverage?limit=&after=` — ROUTE NOUVELLE.**
+Options :
+
+1. La greffer sur `GET /v1/missions/:id/dashboard` (05 §8.3, « complétude, à-revoir, dernière
+   sync »). Refusée : le tableau de bord est un RÉSUMÉ non paginé ; la couverture est une LISTE de
+   150 unités qui exige un curseur. Les fondre obligerait à paginer un résumé, ou à ne pas paginer
+   une liste — les deux sont faux.
+2. La greffer sur `GET /v1/missions/:id/org-units` en ajoutant des colonnes de couverture. Refusée :
+   l'arbre est une ressource d'ÉCRITURE (CRUD, validation, fusion) et son contrat sert déjà trois
+   écrans ; y coller des agrégats de collecte ferait payer à chaque appelant un calcul que deux
+   d'entre eux n'utilisent pas.
+3. **Une route de lecture dédiée**, `type: 'mission'`, keyset `(position, id)` — le MÊME curseur que
+   l'arbre, pour que les deux listes se lisent côte à côte dans le même ordre.
+
+Arbitrage : **option 3**. Le §16.6 nomme un « écran couverture » distinct, et le §27.1 lui donne son
+second axe ; une ressource nommée dans le pack mérite sa route. Les MARGES de mission voyagent **hors
+de l'enveloppe paginée** : une marge calculée sur la page serait un chiffre faux qui a l'air juste.
+Aucune marque `financier` : la réponse porte des comptes de sessions et des effectifs, jamais un
+montant (invariant 3, §18.3).
+
+**② `GET /v1/missions/:id/aggregation` — le paramètre `service` du 05 §8.5 devient `orgUnit`.**
+Options :
+
+1. Garder `?service=` et l'interpréter comme un identifiant de `services` (les 11 fonctions du
+   11 §5). Refusée : `services` qualifie la PERSONNE interrogée (`interviews.person_service_id`),
+   pas l'unité auditée — filtrer dessus répondrait à « qu'ont dit les gens des RH ? », pas à
+   « qu'a-t-on trouvé dans cette unité ? ».
+2. Garder `?service=` et l'interpréter comme une unité de `kind = 'service'`. Refusée : la couverture
+   d'un audit se lit sur TOUTE unité — filiale, établissement, équipe — et pas seulement sur celles
+   dont le `kind` est `service`. Le filtre serait muet sur un arbre qui n'en contient pas.
+3. **Renommer le paramètre `orgUnit`**, qui prend un identifiant d'unité.
+
+Arbitrage : **option 3**. Le fichier 04 le tranche déjà, note P2-1 : « `person_service_id` —
+fonction de la PERSONNE ; **l'unité d'audit est TOUJOURS `orgUnitId`** ». Le mot « service » du
+05 §8.5 désigne donc l'unité, et le nommer `orgUnit` supprime l'ambiguïté au lieu de la transmettre.
+Les deux autres filtres de M5.1 — « site/pays » et « interlocuteur » — **ne sont pas livrés** :
+les inventer sans écran qui les porte serait du produit deviné.
+Règle de précédence (`CLAUDE.md`) : **le fichier 04 fait foi sur le modèle** ; le 05 §8.5 esquisse
+une signature, il ne définit pas une colonne.
+
+Décideur : **A32** (agent de lot), sous revue croisée A37.
+Impact spec : aucun amendement de `/docs`. Le 05 §8.5 garde son texte ; l'écart de nommage est tracé
+ici et redit dans l'en-tête de `apps/api/src/routes/pilotage.ts`.
+
+## 2026-09-05 — [L7b] Le nom du répondant dans l'agrégation par question (M5.1) : NON PUBLIÉ, et la question remonte
+
+Le 03 M5.1 écrit : « Par question : toutes les réponses côte à côte avec **nom**/fonction/service du
+répondant. » Le contrat livré par L7b publie la **fonction** et le **service**, et **pas le nom**.
+
+Options :
+
+1. Publier `interviews.person_name` tel quel, comme M5.1 le dit littéralement.
+2. Le publier sous condition de `interviews.consent_given`.
+3. **Ne pas le publier en L7b**, et poser la question.
+
+Arbitrage : **option 3**, à titre CONSERVATOIRE et jusqu'à arbitrage humain. Trois éléments, et
+aucun ne tranche seul :
+— le §26 dit « verbatims **anonymisés ou attribués selon consentement** », donc le pack SAIT que
+l'attribution est conditionnelle, mais il ne dit **nulle part** sous quelle condition un nom
+s'affiche **au siège** (le §26 parle du RAPPORT) ;
+— `interviews.consent_given` est **nullable** au fichier 04 : « consentement inconnu » est un état
+atteignable, et il n'a pas de règle écrite ;
+— le 11 §2 interdit les noms dans les LOGS, pas dans les réponses — l'interdiction ne couvre donc
+pas ce cas, et l'invoquer serait un abus de citation.
+Ce qui fait pencher : l'asymétrie du coût. Ajouter un champ à un contrat de lecture est un
+incrément ; retirer un nom déjà parti au navigateur ne se rattrape pas. Et la valeur d'usage de M5.1
+— lire une divergence **direction ↔ terrain** — est portée par la FONCTION et l'UNITÉ, pas par le
+nom : l'écran reste utile sans lui.
+Règle de précédence (`CLAUDE.md`) : **§24-31 > §16-22** — le §26 (attribution conditionnelle) prime
+sur la formulation inconditionnelle de M5.1, mais il ne fournit pas la règle : d'où l'escalade.
+
+Décideur : **à trancher par Williams** (touche une donnée personnelle : `CLAUDE.md` §3-4). A32
+propose l'option 2 avec `consent_given = true` STRICT (le `null` ne vaut pas consentement) et le nom
+masqué par défaut derrière une action explicite de l'utilisateur.
+Impact spec : aucun aujourd'hui. Si l'option 2 est retenue, `reponseAgregeeSchema`
+(`packages/shared/src/agregation.ts`) gagne un champ nullable et le dépôt une colonne de plus.
+
+## 2026-09-05 — [L7b] « Profils rencontrés » (§16.6) : la colonne n'est PAS livrée, parce que la donnée n'existe pas
+
+Le §16.6 énumère ce que porte l'écran de couverture : « nombre d'entretiens menés / prévus,
+**profils rencontrés**, complétude des paquets, blocs non couverts ». Les trois autres sont livrés ;
+« profils rencontrés » ne l'est pas.
+
+Options :
+
+1. Le déduire de `interviews.person_service_id` → `services`. Refusée : `services` porte les **11
+   fonctions** (RH, finance, logistique…), `interlocutor_profiles` porte les **9 profils**
+   (dirigeant, DSI, salarié…). Ce sont deux référentiels distincts, seedés séparément (11 §5) ;
+   présenter l'un sous le nom de l'autre serait un mensonge d'étiquette.
+2. Le déduire de `interviews.person_role`, qui est du **texte libre**. Refusée : on afficherait une
+   liste de chaînes saisies à la main sous un intitulé qui promet un référentiel.
+3. Ajouter `interviews.interlocutor_profile_id` au fichier 04. **Hors du pouvoir d'un agent de lot**
+   (`CLAUDE.md` §3-2), et déjà écarté une fois : `DECISIONS.md` du 2026-09-01 [L3d] constate que
+   cette colonne **n'existe pas au 04**, et le plan §32.4 en a tiré la conséquence — il LISTE les
+   profils à couvrir, sans aucun chiffre.
+4. **Ne pas livrer la colonne**, et le dire.
+
+Arbitrage : **option 4**. Le plan publie les profils **à couvrir** ; rien en base ne dit lesquels ont
+été **rencontrés**. La confrontation prévu ↔ réalisé, qui est tout le sujet de la couverture, est
+donc **inexprimable sur cet axe** tant que le 04 ne porte pas le lien session ↔ profil. Afficher une
+colonne approchée serait pire que son absence : on croirait la lire.
+Règle de précédence (`CLAUDE.md`) : **le DDL vit exclusivement dans `/docs/04`** ; un écran ne
+fabrique pas une donnée que le modèle ne porte pas.
+
+Décideur : **à trancher par Williams** — c'est un amendement du fichier 04 (une colonne
+`interviews.interlocutor_profile_id`, nullable), donc une escalade §3-2, à peser contre son coût sur
+la sync (§9) et sur la saisie terrain (L5).
+Impact spec : aucun aujourd'hui. `uniteCouverteSchema` n'a **pas** de champ `profilsRencontres` — il
+n'est pas prévu vide, il est absent, pour qu'aucun appelant ne construise sur une promesse.
+
+## 2026-09-05 — [L7b] Ce que « planifié » compte exactement, et pourquoi `realise` y est inclus
+
+`schedule_status` a six valeurs (`a_planifier`, `planifie`, `confirme`, `realise`, `reporte`,
+`annule`). La note de conception §6.2 dit « lignes `interviews` à `schedule_status` planifié », sans
+énumérer. Le choix se lit, il ne se devine pas :
+
+Options :
+
+1. `schedule_status = 'planifie'` seul, à la lettre. **Refusée** : confirmer une session la ferait
+   sortir du compte, et la tenir aussi. Le nombre de sessions « planifiées » **baisserait quand
+   l'agenda avance** — un compteur qui recule pendant qu'on travaille est faux au sens le plus
+   littéral, et personne ne s'en apercevrait.
+2. Tout sauf `a_planifier`. Refusée : `annule` et `reporte` compteraient, alors qu'une session
+   annulée n'occupe aucune place dans l'agenda.
+3. **`planifie` ∪ `confirme` ∪ `realise`** — « la session a une place dans l'agenda ».
+
+Arbitrage : **option 3**, et la raison est la MONOTONIE : le passage d'un statut au suivant ne doit
+jamais faire décroître un compteur d'avancement. Deux définitions voisines sont figées avec elle :
+— `realise` = `interviews.status = 'termine'`, et rien d'autre — une session **commencée** n'est pas
+une session tenue ;
+— `aucuneSession` (l'alerte §16.6) se juge sur les sessions **ni annulées ni reportées**, quel que
+soit leur `kind` : une unité dont la session reste à planifier n'est pas une unité oubliée, et un
+**atelier** tenu suffit à retirer l'alerte (c'est un travail fait) sans pour autant couvrir une
+source du §27.1 (un atelier ne remplace pas une observation).
+Règle de précédence : **sans objet** — le pack ne définit pas ces ensembles, il est silencieux ;
+c'est une lecture, tracée pour qu'elle soit contestable.
+
+Décideur : **A32** (agent de lot), sous revue croisée A37.
+Impact spec : aucun. Les trois définitions vivent dans `packages/shared/src/pilotage.ts`
+(`celluleCouvertureSchema`) et dans le `filter (where …)` de `domaines/pilotage/depot.ts`, et les
+deux disent la même chose.
+
+## 2026-09-05 — [L7b] « Blocs non couverts » (§16.6) : une réponse « non communiquée » COMPTE comme bloc abordé
+
+Options :
+
+1. Un bloc est couvert s'il porte au moins une réponse **exploitable** (ni `withheld`, ni
+   `not_applicable`). Aligné sur la complétude du §32.1-3.
+2. **Un bloc est couvert s'il porte au moins une réponse, quelle qu'elle soit.**
+
+Arbitrage : **option 2**, et les deux notions restent SÉPARÉES. « Bloc non couvert » répond à « y
+est-on allé ? » ; la **complétude** (§27.4, §32.1-3) répond à « qu'en a-t-on tiré ? ». Un bloc où le
+client a refusé de répondre a bel et bien été ABORDÉ — le travail a été fait, et c'est la rubrique
+« Limites et réserves » du rapport qui portera le refus, pas la colonne de couverture. Les confondre
+ferait disparaître de l'écran un travail réellement accompli, et l'auditeur relancerait une unité
+déjà visitée.
+Règle de précédence : **§24-31 > §16-22** — le §27.4 (« le non-communiqué est un traitement NORMAL,
+pas une anomalie ») éclaire la lecture du §16.6.
+
+Décideur : **A32** (agent de lot), sous revue croisée A37.
+Impact spec : aucun. La complétude n'est pas livrée par L7b : elle appartient au scoring (**L8**), et
+l'écran de couverture ne l'approche pas.
+
 ## 2026-09-05 — [L7b] Où s'affiche la marge de l'atelier quand sa colonne se replie ?
 
 `LOT_L7.md` §9.3 veut que « **seule la colonne** du tableau se replie » quand l'atelier est à zéro ;
@@ -9685,3 +9853,35 @@ BLOQUANTE n'est passée en `status`** — la règle sert à hiérarchiser, jamai
 précédence : **§16-22 > §1-15** — 03 §17.3 (pas de notification intrusive en entretien) et §22.1.
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun amendement ; convention portée par `packages/ui` et vérifiée par A28.
+
+## 2026-09-05 — [L6] La propriété §9.9 ne couvre que 3 des 5 entités synchronisées
+
+A20 l'a mesuré en amendant sa propre note : `ENTITES_SYNC` (`packages/shared/src/sync.ts`) compte
+**cinq** entités ; le 05 §9.9 n'en nomme que trois — `interviews`, `answers`, `attachments`.
+**`org_unit_proposal` et `question_adhoc` n'ont aucune règle de propriété écrite**, alors que la note
+posait « propriété §9.9 » comme si elle couvrait le lot entier. Un push croisé sur ces deux-là
+n'aurait donc **rien à refuser**.
+
+Options :
+
+1. **Étendre la règle aux deux entités manquantes, par le critère de l'amendement 04 S-3 :
+   propriétaire = le rattachement quand il existe, SINON l'auteur.** Une proposition d'unité et une
+   question ad hoc sont des créations d'auditeur sans rattachement à la session d'un autre : leur
+   propriétaire est leur auteur, et personne d'autre ne les modifie.
+2. Les laisser hors propriété. **Écartée** : une entité synchronisable sans règle de propriété est
+   une porte ouverte dans le contrat de sync — et elle ne se verrait qu'en production, sur la
+   mission d'un autre auditeur.
+3. Amender le 05 §9.9 maintenant. **Écartée** : fichier du pack, donc **revue de spec de P-D**
+   (09 §5.9). L'interprétation suffit à écrire L6a ; l'amendement se propose à P-D.
+
+Arbitrage : **option 1**, avec la ceinture qu'A20 a trouvée manquante dans sa propre note et qui
+compte autant que la règle : **le serveur ne croit jamais le `createdBy` ni le `conductedBy` du
+payload client**. §9.9 est une règle **serveur** — à la création, le propriétaire est **l'émetteur
+authentifié du push** ; un payload qui désigne quelqu'un d'autre rend `forbidden`. Sans cette phrase,
+un implémenteur pouvait lire S-3 et faire confiance au client, ce qui rendait la propriété de session
+**décorative**.
+Règle de précédence : **§16-22 > §1-15** — 05 §9.9 porte la propriété, 04 S-3 le critère ;
+l'invariant 3 (« écritures de sync réservées au propriétaire ») les commande tous deux.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun aujourd'hui. **Amendement candidat du 05 §9.9 à P-D**, pour que les cinq entités
+y soient nommées plutôt qu'interprétées.

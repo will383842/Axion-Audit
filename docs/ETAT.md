@@ -2595,21 +2595,6 @@ Le fait que ce dossier existe douze jours à l'avance est son objet : 09 §5.4 v
 **factuelle**, et une mesure prise le jour même se prend sur des souvenirs. Les chiffres du §2 sont
 datés et **doivent être remesurés le 15/09** — le dossier le dit deux fois, exprès.
 
-## 2026-09-02 17h05 — [lot L5 / incrément L5b] — étape pipeline 3/7 (fin de session propre)
-Dernier commit vert : (celui-ci) feat(l5b): rencontre A26/A22 — 162/162   ·   Branche : lot/l5b   ·   Poussé : oui
-Tâche en cours : L5b écrit des deux côtés (A22 code, A26 tests) et rencontré : 162/162 verts après
-six correctifs A22 (garde à l'écriture, fourchette, oui/non en 'oui'|'non', note à la reprise, état
-transitoire, focus palette). Décisions tracées (rencontre, oui/non, trois doutes). Base : ce4b29b =
-L5a AVANT ses correctifs A29 — lot/l5b devra intégrer main (après PR L5a) avant sa propre PR.
-Prochaine action : lancer la revue croisée A29 sur lot/l5b (diff lot/l5a..lot/l5b, lecture seule),
-puis A20 signe la fin d'incrément ; escalader à Williams la phrase PHRASE_SCRIPT_ACCORD (script
-d'accord de participation, session/ecriture-session.ts) — le refus sans accord est testé, le libellé
-non ; A28 : balayage axe des écrans L5a+L5b et mesure de dérivation < 1 s (R-L5a-6 ouverte).
-Tests rouges connus : aucun sur les trois fichiers L5b (unitaire complet non rejoué ce jour sur cette
-branche : à rejouer en premier — la vérité, ce sont les tests). Cales jsdom (matchMedia,
-scrollIntoView) dans vitest.setup.interface.ts.
-Doute serveur transmis à L6 : deux mission_questions à la même position (ad hoc « juste après »).
-
 ## 2026-09-02 17h15 — [lot L7 / incrément L7a] — étape pipeline 4/7 (fin de session propre)
 Dernier commit vert : 0892b0a (fix(l7a): revue A37 — schémas ré-exportés, hors-ligne console…)   ·   Branche : lot/l7a   ·   Poussé : oui
 Tâche en cours : L7a (coquille, 3 routes, 4 états, portefeuille keyset, avancement, connexion) livré,
@@ -2689,256 +2674,6 @@ DECISIONS/AMELIORATIONS/ETAT en append-only « main d'abord », déposer l'entr�
 rejouer la suite console (**80 attendus, mesurés**), pousser. AUCUN rebase avant, AUCUNE PR avant.
 Tests rouges connus : aucun — mesuré (CI 33647967069 rejouée → success ; 80/80 en local, 11,07 s).
 
-## 2026-09-03 05h55 — [lot L5 / incrément L5b] — étape pipeline 5/7
-Dernier commit vert : 736f62e (test(l5b) : périphérie de l'entretien, 128 cas, bascule prouvée) · Branche : lot/l5b · Poussé : NON — push refusé par la politique de permission de la session, à relancer
-Tâche en cours : le rouge de CI de l5b est FERMÉ. Il n'était pas « aucun test rouge » comme
-l'affirmait le bloc précédent : c'était le job « couverture ≥ 90 % (modules critiques) », module
-« Machine à états de session terrain », mesuré à fonctions 70,49 % · lignes 83,74 % · branches
-83,81 % sur 14 fichiers. Cause : `pnpm test:unit` (= `--project unit`) ne lance JAMAIS le projet
-`interface`, donc les `.test.tsx` n'étaient vus que par `test:coverage` — un vert local qui répondait
-à une autre question que celle de la CI.
-Mesure APRÈS (`pnpm test:coverage` puis `node .github/scripts/check-coverage.mjs`, 2026-09-03) :
-lignes 99,13 % · instructions 99,13 % · fonctions 98,39 % · branches 93,96 %. Suite complète
-1681/1681 verte, 77 fichiers. Seuil INCHANGÉ à 90 %, 9 chemins critiques INCHANGÉS (diff vide sur
-.github/coverage-critical-paths.json, ci.yml, vitest.config.ts, package.json).
-Deux fichiers de tests écrits par A26, jamais par A22 qui a écrit le code (09 §5.6) :
-`session/peripherie-entretien.test.ts` (96 cas) et `session/capteurs-gestes-enregistrement.test.tsx`
-(32 cas). Les ONZE TYPES_DE_REPONSE et les SIX TYPES_DE_SESSION sont parcourus par une boucle sur la
-liste elle-même : un type ajouté fera rougir le fichier au lieu de passer inaperçu.
-Prochaine action : POUSSER lot/l5b (736f62e) et lot/l5a (92944eb), puis revue croisée A29 sur l5b,
-puis — dans l'ordre de fusion figé — PR L5a avant PR L5b.
-Tests rouges connus : aucun (mesuré, pas supposé : 1681/1681 le 2026-09-03 à 05h50).
-Escalades ouvertes : PHRASE_SCRIPT_ACCORD est TRANCHÉE (DECISIONS.md 2026-09-02, libellé par défaut
-V1, relecture juridique en fiche AMELIORATIONS étage 1) mais NON IMPLÉMENTÉE — la constante unique et
-son affichage à l'écran de démarrage reviennent à A22, pas à A20 ni au testeur. Constat A28-1 remonté
-à A29 : deux `<h1>` de même libellé sur « Aujourd'hui » (coquille + écran), et deux libellés
-différents pour l'écran Stockage (« de l'appareil » dans VUES, « de cet appareil » à l'écran).
-
-## 2026-09-03 06h20 — [lot L5 / incrément L5b] — étape pipeline 5/7 (fin d'incrément, session close)
-Dernier commit vert : (celui-ci) · Branche : lot/l5b · Poussé : oui
-Tâche en cours : incrément L5b TERMINÉ côté A20. Rien n'est en vol.
-Ce que ce bloc ajoute au précédent, et rien d'autre : la fiche étage 1 du constat A28-1 est posée
-(deux `<h1>` de libellé identique sur « Aujourd'hui » ; « Stockage de l'appareil » dans `app/vues.ts`
-contre « Stockage de cet appareil » dans `EcranStockage.tsx`). Autorisée d'office par le coordinateur,
-elle revient à **A22** avec le reste de L5b — jamais à A28 ni à A20 : un test d'accessibilité qui
-corrige l'interface qu'il mesure ne mesure plus que son propre correctif. Compteur étage 1 : ligne
-L5b ouverte à ~0,1 j sur 0,5 j.
-Prochaine action : A29 — revue croisée de lot/l5b (diff lot/l5a..lot/l5b, lecture seule). Puis, et
-SEULEMENT dans cet ordre : L3 dans `main` → PR L5a → PR L5b. Aucun merge de `main` ici avant la PR L5a.
-Tests rouges connus : aucun — mesuré le 2026-09-03 à 05h50 par `pnpm test:coverage` : 77 fichiers,
-1681/1681 verts, et `node .github/scripts/check-coverage.mjs` sort en 0 (« Tous les modules critiques
-atteignent 90 % — couverture MESURÉE »). Module « Machine à états de session terrain » : fonctions
-98,39 % (61/62) · lignes 99,13 % · instructions 99,13 % · branches 93,96 %, sur les 14 fichiers.
-Dû par A22 au prochain incrément, tranché mais NON implémenté : `PHRASE_SCRIPT_ACCORD` (DECISIONS.md
-2026-09-02) — poser la constante unique ET l'afficher à l'écran de démarrage. Une constante non
-affichée serait du code orphelin, qu'A02 refuserait ; c'est pourquoi A20 ne l'a pas posée seul.
-Réserve de méthode, à ne pas réapprendre : `pnpm test:unit` ne lance PAS le projet `interface`. Un
-`.test.tsx` vert en local peut donc coexister avec une CI rouge — c'est exactement ce qui s'est passé
-ici. La vérité de la couverture est `pnpm test:coverage`, jamais `test:unit`.
-Réserve de gouvernance remontée à Williams : cette session n'avait aucun outil de sous-agent. A20 a
-tenu les rôles A28 et A26 lui-même. Le croisement 09 §5.6 qui compte est préservé (A24 a écrit L5a,
-A22 a écrit L5b, A20 n'a écrit ni l'un ni l'autre), mais ce n'est pas la chaîne nominale.
-
-## 2026-09-03 06h50 — [lot L5 / incrément L5b] — étape pipeline 5/7 (rectification de fiche, session close)
-Dernier commit vert : (celui-ci) · Branche : lot/l5b · Poussé : oui
-Tâche en cours : rien. Ce bloc RECTIFIE un seul point du précédent, et ne rouvre aucun travail.
-Rectification : la fiche étage 2 « `pnpm verify` n'exécute jamais le projet `interface` » proposait
-0,2 j de correctif — **ce correctif est DÉJÀ ÉCRIT**. A10 l'a fermé le 2026-09-03 dans `e2e97b9`
-(« verify lance enfin les trois projets vitest ») sur `lot/l3-suite` : `test:interface` ajouté et
-enchaîné dans `test`, `verify` et `verify:rapide`, plus un SIXIÈME contrôle dans
-`check:test-projects` qui part du PROJET (« ce projet est-il lancé ? ») là où les cinq existants
-partaient du FICHIER (« ce fichier est-il capté ? ») — l'angle mort exact qui faisait lire
-`interface:29` dans une sortie verte. Le défaut se referme donc **par la fusion de L3 (PR #26), sans
-travail supplémentaire**. La fiche a été réécrite en ce sens ; laisser un devis pour un travail fait
-aurait coûté une journée à quelqu'un dans trois semaines.
-Ce qui RESTE proposé dans la fiche, et rien d'autre : un job CI **nommé** pour le projet `interface`,
-afin qu'un `.test.tsx` cassé rougisse sous l'étiquette « interface » et non « couverture
-insuffisante » (~0,05 j, arbitrage à P-C). Le correctif de fond n'attend PAS cet arbitrage.
-Le diagnostic, lui, est conservé mot pour mot dans la fiche : un `.test.tsx` rouge sort VERT de
-`verify`, VERT du pre-push, VERT des jobs `unit`, `integration` et `e2e`, et ne rougit que dans
-`coverage` sous une étiquette qui parle de couverture et jamais de test cassé. C'est pourquoi le
-bloc ETAT.md de cette branche a pu écrire « Tests rouges connus : aucun » de BONNE FOI.
-Confirmation croisée à noter : A10 et A20 ont trouvé ce défaut le même jour par deux chemins
-indépendants (revue d'outillage · rouge de couverture de L5b puis `verify` sur L5a).
-Prochaine action : inchangée — A29, revue croisée de lot/l5b (diff lot/l5a..lot/l5b, lecture seule).
-Puis, dans cet ordre seulement : L3 dans `main` → PR L5a → PR L5b.
-Tests rouges connus : aucun (1681/1681 le 2026-09-03 à 05h50, `pnpm test:coverage`).
-
-## 2026-09-03 07h40 — [lot L5 / incrément L5b] — étape pipeline 5/7 (correctifs A29)
-Dernier commit vert : c043c3d (fix(l5b) : les deux bloquants A29 fermés) · Branche : lot/l5b · Poussé : oui
-Tâche en cours : revue croisée A29 « ACCEPTÉ SOUS RÉSERVE » — les 2 bloquants et 7 des 9 non
-bloquantes sont FERMÉS. Périmètre réel du lot rectifié par A29 : les branches sont DIVERGENTES,
-`merge-base` = ce4b29b, donc le delta L5b est `ce4b29b..HEAD` (38 fichiers, 9 292 insertions, 1
-suppression) et non `lot/l5a..lot/l5b`.
-B1 : une note volante saisie était effacée sans avoir été enregistrée (promesse résolvant sur un
-refus). Corrigé sur ses DEUX faces — le refus d'identité ET l'échec d'écriture, que
-`enregistrer()` avale par conception. Contrat désormais `Promise<boolean>`.
-B2 : la consigne consultant disparaissait sur toute question `scale_1_5`. Le parseur du pack rend
-`consigne` ; piège trouvé en chemin : la prose est DEVANT l'ancre dans le même fragment, car
-`SEPARATEURS_ANCRES` ne coupe ni sur l'espace ni sur le point.
-C5 : le shim `matchMedia` rendait `matches: false` à TOUTE requête en affirmant l'inverse — les 29
-cas de l'écran rendaient les panneaux, jamais les trois colonnes. Il répond maintenant depuis
-`window.innerWidth`. Fait EN PREMIER, comme demandé, parce qu'il faussait toute mesure ultérieure.
-C3, C4, C6, C7, C9 fermées. C1/C2 : rien à faire ici, les gardes ESLint vivent sur L5a — à rejouer
-après la fusion, comme A29 le demande.
-Mesures : suite complète 1699/1699 verte (78 fichiers). Module critique « Machine à états » —
-fonctions 98,41 % (62/63) · lignes 98,76 % · branches 94,03 %. Seuil 90 et périmètre INCHANGÉS
-(diff vide sur `coverage-critical-paths.json` et `ci.yml`). Bascule faite sur les quatre correctifs :
-chacun retiré fait rougir SES cas et eux seuls ; code de production restauré à l'identique.
-Deux entrées DECISIONS.md pour les deux vrais choix : composition ancres/consigne, et suffixe des
-codes d'options en collision.
-Prochaine action : rejeu A29 sur `c043c3d`. Puis, dans cet ordre seul : L3 dans `main` → PR L5a → PR L5b.
-Tests rouges connus : aucun.
-
-## 2026-09-03 08h10 — [lot L5 / incrément L5b] — étape pipeline 5/7 (rectification documentaire)
-Dernier commit vert : (celui-ci) · Branche : lot/l5b · Poussé : oui
-Tâche en cours : rien sur le code. AUCUN fichier de code n'a été touché : la plage relue par A29 en
-rejeu (`ef5e727..2f581f2`) est intacte, ce bloc et son commit se posent APRÈS elle.
-RECTIFICATION QUI COMPTE, et elle corrige une affirmation FAUSSE de mes blocs précédents :
-`PHRASE_SCRIPT_ACCORD` n'est PAS « tranchée mais non implémentée ». Elle est **EN PRODUCTION** —
-`ecrans/entretien/DemarrageEntretien.tsx:19-23` la définit, la **ligne 53 l'AFFICHE** dans l'écran
-« Avant la première question », version `v1` (`VERSION_MENTION_INFORMATION`), enregistrée sur chaque
-session dans `informationNoticeVersion` (06 §10.4). Ce texte RGPD est lu à voix haute à chaque
-interlocuteur avant chaque entretien, il a été rédigé par un agent, et aucun juriste ne l'a relu.
-ÉCART TROUVÉ EN RÉÉCRIVANT LA FICHE, et il aggrave l'urgence : le texte en production n'est PAS
-celui arbitré dans `DECISIONS.md` du 2026-09-02. L'arbitré promet « le rapport ne vous attribue
-aucun propos nominativement » ; celui en production annonce « elles sont consignées sous votre nom
-et votre fonction ». Ce ne sont pas deux formulations d'une même promesse, ce sont deux engagements
-différents. Les deux textes sont laissés TELS QUELS : le rapprochement appartient au juriste.
-La fiche `AMELIORATIONS.md` est réécrite en « EN PRODUCTION — validation juridique URGENTE », avec
-chemin, version, et ce qui reste dû à la relecture (a/b/c). Toute formulation « à poser par A22 » a
-disparu, sauf dans le bandeau qui dit que la fiche a été fausse 24 h.
-Amendement horodaté ajouté à `DECISIONS.md` : pourquoi le test B2 devait être écrit AVANT — la
-première correction rendait `null` et serait partie verte et fausse, parce que `SEPARATEURS_ANCRES`
-ne coupe ni sur l'espace ni sur le point et que la prose vit DEVANT l'ancre, dans le même fragment.
-Prochaine action : attendre le verdict du rejeu A29 sur `ef5e727..2f581f2`. Si ACCEPTÉ, A20 signe la
-fin d'incrément L5b et s'arrête. Pas de PR : L3 n'est pas dans `main`.
-Tests rouges connus : aucun (1699/1699 mesuré le 2026-09-03 à 07h30 ; rien n'a bougé depuis).
-
-## 2026-09-03 09h20 — [lot L5 / incrément L5b] — étape pipeline 5/7 (réserves du rejeu A29)
-Dernier commit vert : 6640191 (fix(l5b) : les cinq réserves du rejeu A29 fermées) · Branche : lot/l5b · Poussé : oui
-Tâche en cours : rejeu A29 « ACCEPTÉ SOUS RÉSERVE », 5 réserves dont 2 bloquant P-C — **les 5 sont
-fermées**. R2 : troisième face de B1, perte de saisie réelle — le champ entier était vidé au succès,
-donc les caractères tapés DEPUIS le clic partaient avec la note ; on retire ce qu’on a rangé, et si
-le début du champ n’est plus la capture on ne retire RIEN. R3 : le suffixe de C4 ne se vérifiait pas
-lui-même (`[Oui, Oui 2, Oui !]` → `oui, oui_2, oui_2`) ; on boucle sur l’ensemble des codes
-attribués. R1 : deux cas montent l’ÉCRAN COMPLET avec la porte d’écriture qui rejette — la face
-« échec Dexie » est éprouvée chez le PRODUCTEUR. R4 : jsdom n’évalue pas les media queries, donc on
-éprouve les trois choses observables — coexistence des trois zones sans panneau, bascule du geste
-« Note » de part et d’autre du seuil, et le seuil du JS égal à celui d’`entretien.css`. R5 :
-`fuseau.ts` citait E13 — E32 n’avait aucun code rattaché depuis ce module.
-Mesures : suite complète **1710/1710** verte (78 fichiers). Machine à états — fonctions 98,41 %,
-lignes 98,76 %, branches 94,03 %. Traçabilité 535 citations, aucune incohérence. Seuil 90 et
-périmètre INCHANGÉS. `EcranEntretien.tsx` reste à **11/26 fonctions**, chiffre inchangé, dit tel
-quel : ce fichier n’est pas sous seuil. Bascule faite sur les quatre correctifs de code, injectés
-séparément — chacun fait rougir SES cas ; aucun reste d’instrumentation.
-Trois entrées DECISIONS.md : collision de suffixe (R3), rattachement d’un module d’affichage (R5 —
-« une glose cite ce que le module FAIT, pas ce qui l’appelle »), amendement B2.
-Prochaine action : second rejeu A29 sur `9c8ff15..6640191`. A20 n’a PAS signé la fin d’incrément :
-le verdict était « sous réserve », la signature attend un ACCEPTÉ franc.
-Tests rouges connus : aucun.
-Dû, non fait ici : fiche AMELIORATIONS étage 2 pour outiller le contrôle « le module réalise-t-il
-l’exigence qu’il cite ? » — troisième occurrence de cette classe de défaut dans le lot.
-
-## 2026-09-03 09h55 — [lot L5 / incrément L5b] — étape pipeline 5/7 → FIN D'INCRÉMENT SIGNÉE
-Dernier commit vert : (celui-ci) · Branche : lot/l5b · Poussé : oui
-**SIGNATURE FIN D'INCRÉMENT L5b — A20, 2026-09-03, sur commit f85cfb8** (11 §6, chaîne 09 §1).
-Rejeu A29 : **ACCEPTÉ**, franc, aucune réserve résiduelle. Les 2 bloquants et 9 non bloquantes du
-premier tour, les 5 réserves du rejeu, puis N1, sont fermés. Suite **1710/1710** verte (78 fichiers),
-unitaire seul 872/872. Machine à états — fonctions 98,41 % · lignes 98,76 % · branches 94,03 %.
-Traçabilité 535 citations, aucune incohérence. Seuil 90 et périmètre INCHANGÉS.
-Suite de la chaîne, non faite ici : conformité + traçabilité E1-E47 dans les deux sens → **A02** ;
-passage en porte → **A01** ; porte → **Williams**. A20 ne signe que la fin d'incrément.
-N1 fermé : le commentaire du cas ① affirmait distinguer une colonne d'un panneau — faux, il passe à
-l'identique à 500 px. Il garde la STRUCTURE ; ② et ③ gardent la DISPOSITION.
-Recette manuelle P-C écrite dans `docs/conception/LOT_L5.md` §4, à l'ancre d'A27 : trois zones côte
-à côte sur iPad paysage et PC ≥ 1280, repli en panneaux sous le seuil. jsdom n'évalue pas les media
-queries — cette observation ne se remplace pas (03 §33.7).
-Deux fiches AMELIORATIONS étage 2, PROPOSÉES et non implémentées : ① contrôle de traçabilité (une
-glose absente est refusée, une glose FAUSSE est cochée — trois occurrences dans ce seul lot, dont
-deux passées sous le garde) ; ② `vitest.config.ts` porte toujours `thresholds: {}`, la DoD tient par
-`check-coverage.mjs` en CI et pas par Vitest. Signalé, PAS corrigé : contrat d'ops.
-Correction de mon bloc de 09h20 : l'import `?raw` rendant du vide n'était PAS un « test qui ment » —
-`expect('').toContain(...)` ÉCHOUE, ce garde serait parti ROUGE. Lire le CSS sur disque reste le bon
-geste, mais le motif ne relève pas de cette classe de défaut.
-`EcranEntretien.tsx` reste à 11/26 fonctions et ne doit PAS entrer dans un glob critique en l'état
-(A29) : l'orchestration d'écriture vit DANS le composant — à extraire un jour, pas ici.
-Prochaine action : A02 (contrôle d'acceptation). Aucune PR : L3 n'est pas dans `main`.
-Tests rouges connus : aucun.
-## 2026-09-03 10h40 — [lot L5 / incrément L5b] — étape pipeline 6/7 (réserves A02 fermées)
-Dernier commit vert : (celui-ci) · Branche : lot/l5b · Poussé : oui
-Contrôle A02 « ACCEPTÉ SOUS RÉSERVE » (`fedfcc3`), 3 réserves bloquantes — **les 3 sont fermées**,
-aucune ligne de code fonctionnel touchée. R1 : `valeurs.ts` citait E30 (« 3 niveaux d'audit ») pour
-un module qui type les douze formes de valeur ; corrigé vers E37, que ses deux voisins du même
-incrément citaient déjà. **Une CINQUIÈME trouvée en cherchant** : `peripherie-entretien.test.ts`
-citait « E43 (DoD) » — RETIRÉE, pas remplacée ; une glose se supprime aussi bien qu'elle s'ajoute.
-R2 : `apps/field/README.md` annonçait comme à venir l'écran que le commit livre ; réécrit en trois
-temps (L5a · L5b · ce qui reste dû) avec une section neuve sur ce que les tests NE couvrent PAS.
-R3 : amendement horodaté sous la décision Williams du 2026-09-02, avec **TROIS** écarts et non deux
-— A02 a vu que le droit d'ARRÊTER l'entretien a disparu du texte en service. Les deux textes restent
-intacts : la rédaction juridique n'appartient pas à un agent.
-Fiche traçabilité REQUALIFIÉE : le garde n'est pas cassé, il documente lui-même son trou
-(`--angles-morts` 1, 3 et 5, le 5 étant le contrôle ② proposé) — elle demande de CONSTRUIRE un garde
-qui n'existe pas, coût différent, à arbitrer sur ce libellé. Doute de spec transmis à A01, mot pour
-mot d'A02 : « à extraire un jour » vaut pour ne pas mettre `ecrans/**` sous seuil MAINTENANT, pas
-pour ne jamais le faire. Recette P-C complétée : cinq formes de saisie à `FNDA:0` — répondre EN
-SAISISSANT, rouvrir, vérifier la valeur relue.
-RÉSERVE DE MÉTHODE, qui n'est pas de mon fait et que je ne corrige pas : les hooks locaux émettent
-« Unsupported engine — wanted >=22.11.0 <23, current v24.19.0 » à CHAQUE appel : **la barrière
-locale tourne hors de la version épinglée au 11 §1**, seule la CI mesure sur le Node du contrat. Un
-vert local obtenu sur une autre version répond à côté — tout ce que j'ai mesuré est à relire ainsi.
-Mesures : traçabilité 539 citations sans incohérence ; `peripherie-entretien` 103/103 ; prettier conforme ; DECISIONS 133 entrées ; suite complète inchangée depuis 1710/1710.
-Prochaine action : A01 (passage en porte). Aucune PR : L3 n'est pas dans `main`.
-Tests rouges connus : aucun.
-## 2026-09-03 11h20 — [lot L5 / incrément L5b] — étape 6/7 FRANCHIE — session close
-Dernier commit vert : (celui-ci) · Branche : lot/l5b · Poussé : oui
-Contrôle A02 : **ACCEPTÉ**, condition de veto levée. L5b est complet jusqu'à l'étape 6 incluse.
-Dernière correction, et elle vient d'une rectification qu'A02 a faite sur SA PROPRE mesure :
-`multi_choice` est rendu EN LIGNE dans le `switch` de `SaisieReponse.tsx` (l.152-186) et **n'a
-aucune fonction nommée**. Vérifié par moi avant de corriger : `lcov` donne `DA:153,0`…`DA:186,0`.
-Il est donc réellement non couvert, mais **il n'apparaît dans AUCUNE liste `FNDA:0`** — il manquait
-au tableau que j'avais écrit pour rendre le trou visible, et ma consigne nommait quatre types au
-lieu de cinq. **Corollaire porté aux deux endroits : l'absence d'une entrée dans une liste `FNDA:0`
-ne prouve pas qu'un type est couvert.** Recette P-C : cinq types à SAISIR — `money`, `date`,
-`single_choice`, `multi_choice`, `table` — puis rouvrir et vérifier la valeur relue.
-Trois intégrations. ① Borne de ma doctrine de retrait, posée par A02 : retirer une glose est
-légitime jusqu'à UNE, jamais jusqu'à ZÉRO — l'angle mort n° 6 rend invisible un fichier sans
-citation, donc ma règle sans borne autorisait à rendre un fichier invisible en croyant l'assainir.
-② Quatrième angle mort versé à la fiche : `check:tracabilite` compte des OCCURRENCES DE NUMÉROS
-DANS DU TEXTE, pas des rattachements — le compteur est passé de 535 à 539 pendant que je DÉFAISAIS
-une attache. ③ Deux gloses laissées debout AVEC leur motif : `banque-questions.ts` (E43, blâme =
-`8eead2f4`, lot L4, hors autorité) et `EcranEntretien.test.tsx` (E27, WCAG AA du 03 §19.2).
-Mesures : traçabilité 539 citations sans incohérence ; prose et prettier conformes ; DECISIONS 134
-entrées au format. Aucune ligne de code fonctionnel touchée dans ce dernier tour.
-Réserve de méthode toujours valable : les hooks locaux tournent sur Node v24.19.0 alors que le 11 §1
-épingle >=22.11.0 <23 — seule la CI mesure sur le Node du contrat.
-Prochaine action : **A01** (passage en porte), puis Williams. Aucune PR : L3 n'est pas dans `main`
-et staging attend un geste humain.
-Tests rouges connus : aucun.
-
-## 2026-09-03 11h55 — [lot L5 / incrément L5b] — `main` intégré par la session pilote
-
-Dernier commit vert : (celui-ci) · Branche : lot/l5b · Poussé : oui
-Tâche : aucune en cours. **Bloc écrit par la session PILOTE, pas par le chantier L5b**, qui s'était
-clos proprement à 09h39 — worktree dormant, aucune écriture concurrente, vérifié avant d'entrer.
-Prochaine action : **A01** (passage en porte), inchangée. La PR est désormais possible.
-Tests rouges connus : aucun ici. `main` rouge sur `8 · deploy-staging`, hors périmètre.
-
-L3 est dans `main` (`042fe76`, tag `v0.l3`), #29 aussi (`508ae15`). `git merge origin/main` joué.
-**Six conflits.** `packages/shared/src/index.ts` et `.github/coverage-critical-paths.json` : additifs,
-résolus comme sur `lot/l5a` — 13 chemins critiques, seuil 90 inchangé, JSON revalidé par parse.
-`DECISIONS.md` (202 entrées) et `docs/ETAT.md` (81 blocs) : reconstruits **par blocs depuis la base
-commune** `4b3f7ee`, jamais par hunk — la résolution par hunk coupe les entrées à cheval, constaté et
-corrigé sur `lot/l5a` ce matin. `AMELIORATIONS.md` : même table de plafond des deux côtés, celle de
-`main` retenue, la ligne **L5b** de la branche réinsérée.
-
-**`docs/TRACABILITE_E1-E47.md` — la seule résolution qui demandait un arbitrage.** Les deux côtés
-avaient créé une section **K** : L3 le 2026-09-02 (`main`), L5b le 2026-09-03 (branche). Deux
-sections ne peuvent pas porter la même lettre. **L'antérieure garde K, celle de L5b devient L**, avec
-ses 15 renvois internes. **Seules les lettres changent** — aucune mesure, aucun verdict, aucune date
-— et la renumérotation est **déclarée en tête de section**, pas faite en silence.
-Gardes rejoués : `check:decisions` ✓ · `check:tracabilite` ✓ 751 citations, 369 fichiers, 0 incohérence.
-
 ## 2026-09-03 12h20 — [lot L7 / incrément L7a] — `main` intégré par la session pilote
 
 Dernier commit vert : (celui-ci) · Branche : lot/l7a · Poussé : oui
@@ -2968,6 +2703,7 @@ Contrôle rejoué sur les trois branches : **zéro en-tête dupliqué**.
 Entrée `DECISIONS.md` du §9.4 déposée **mot pour mot**, sa date d'arbitrage (09-02) conservée.
 `docs/TRACABILITE_E1-E47.md` : un premier `--theirs` avait écrasé 71 lignes de la branche ajoutées
 hors du hunk ; annulé, conflit restauré, seul le hunk résolu, les deux côtés vérifiés intacts.
+
 ## 2026-09-02 17h20 — [lot L5 / incrément L5a] — étape pipeline 5/7 (fin de session propre)
 Dernier commit vert : 069c46a (docs: fiche A-012)   ·   Branche : lot/l5a   ·   Poussé : oui
 Tâche en cours : L5a corrigé après A29 REFUSÉ, puis A29 REJEU = ACCEPTÉ SOUS RÉSERVE (0 bloquant) ;
@@ -3838,6 +3574,34 @@ sur le diff de refusion (le correctif `AccesEntretien` n'a été relu par person
 Tests rouges connus : aucun. Avertissement `check:decisions` sur une date qui recule
 (« Quel rôle accède au référentiel client ? ») : PRÉEXISTANT, non bloquant, non corrigé ici.
 
+## 2026-09-05 01h00 — [lot L7 / incrément L7b] — étape pipeline 3/7 (auto-revue)
+
+Dernier commit vert : `58dbf14` (feat(l7b) : les deux écrans de pilotage) · Branche : `lot/l7b`
+(née de `lot/l7a`, worktree `_axl7`) · Poussé : oui
+Tâche en cours : auto-revue A32 de L7b — couverture par unité ET par source (§27.1), agrégation par
+question avec provenance et « non communiqué » visibles (M5.1, §27.4).
+Prochaine action : transmettre l'auto-revue à **A37** (revue croisée) et demander à **A36** les
+tests d'acceptation — étanchéité par rôle, quatre états, keyset de bout en bout, axe-core, p95 HTTP
+sur FIL-GC ; aucun n'est écrit par A32 (09 §5.6).
+Tests rouges connus : aucun.
+
+Livré : deux contrats (`packages/shared/src/{pilotage,agregation}.ts`), un domaine API en lecture
+seule (deux fonctions pures, un dépôt qui agrège en SQL, un service), deux routes
+`GET /v1/missions/:id/{coverage,aggregation}`, deux écrans console avec leurs quatre états et leur
+drill-down. **66 tests unitaires écrits AVANT le code**, dont les deux fixtures symétriques du
+`LOT_L7.md` §6.5 : un build qui n'aurait qu'un seul axe échoue sur l'une des deux.
+
+Mesures : `test:unit` **732** verts (666 avant) · `test:interface` **527** verts, aucune régression
+sur L7a · lint, typecheck, `format:check`, `build`, `verify:rapide` : 0 erreur, aucun test skippé.
+Assemblage de la couverture à l'échelle **FIL-GC** (150 unités, 4 niveaux, page de 50) :
+**1,465 ms**, garde-fou à 25 ms. Le **p95 HTTP** de bout en bout appartient à **A28** (k6, base
+réelle) et n'est pas mesuré ici.
+
+Cinq entrées `DECISIONS.md` (2026-09-05) : les deux routes (11 §8-6) · le **nom du répondant**
+(M5.1) non publié, escalade Williams · les **« profils rencontrés »** (§16.6) non livrés, le 04 ne
+portant pas le lien session ↔ profil, escalade Williams · ce que « planifié » compte · un bloc
+« abordé » par une réponse non communiquée.
+
 ## 2026-09-05 01h10 — [lot L5 / incrément L5b] — étape pipeline 3/7 (refusion TERMINÉE, CI verte)
 
 Dernier commit vert : b89e358 (merge lot/l5a ba38847) · Branche : lot/l5b · Poussé : oui
@@ -3879,6 +3643,31 @@ la revue croisée du diff de refusion.
 Tests rouges connus : aucun. Avertissement `check:decisions` sur une date qui recule
 (« Quel rôle accède au référentiel client ? ») : PRÉEXISTANT, non bloquant, non corrigé ici.
 
+## 2026-09-05 06h20 — [lot L7 / incrément L7b] — étape pipeline 5/7 (tests d'acceptation A36)
+
+Dernier commit vert : `6dbf43d` (fix(l7b) : mon propre test citait des couleurs en dur) ·
+Branche : `lot/l7b` · Poussé : oui · **PR #47 ouverte** vers `main`.
+
+Tâche en cours : tests d'acceptation A36 de L7b — terminés. `origin/main` intégrée **deux fois** :
+d'abord `ab6dcf5` (L5a #30, qui apporte axe-core), puis `c748966` après que **L7a a été fusionnée
+sur `main` par la PR #32** pendant la session. Cette seconde fusion a produit huit conflits
+`add/add` sur les fichiers de L7a : ils sont **byte-identiques** entre `main` et `a6fd7d4`
+(l'ancêtre de `lot/l7b`), donc « ours » ne rétrograde rien — mesuré fichier par fichier, pas supposé.
+
+Prochaine action : **A32 corrige B1** (`EcranCouverture.tsx` replie la marge d'atelier avec la
+colonne) — c'est ce qui débloque la mesure de couverture, aujourd'hui empêchée, pas insuffisante.
+
+Tests rouges connus, tous VOULUS et tous rendus aux producteurs :
+· **B1** (A37) — 1 test d'interface : la marge d'atelier se tait à zéro. Il bloque aussi le job
+  « couverture ≥ 90 % », qui échoue AVANT d'écrire son rapport — la couverture n'est donc pas
+  sous le seuil, elle n'est **pas mesurée**.
+· **D1/D2/D3** (axe-core, 6 tests e2e) — contraste de l'espace actif de la barre latérale
+  (coquille L7a, donc aussi une non-régression), contraste du texte tertiaire dans le `<tfoot>`
+  des marges, et zone de défilement du tableau dense inatteignable au clavier (WCAG 2.1.1,
+  niveau A). Prouvés non vacants par une bascule qui ne touche aucun fichier.
+· **B2** (A37) — trois octets NUL dans `couverture.ts` : aucun test ne l'attrape ; `ripgrep` omet
+  le fichier **en silence**, `grep` GNU n'en rend que « Binary file matches », `git grep` marche.
+
 ## 2026-09-05 07h10 — [lot L5 / incrément L5b] — étape pipeline 3/7 (auto-revue close)
 Dernier commit vert : cba9d3a (merge origin/main 547f785 — sixième rattrapage) · Branche : lot/l5b · Poussé : oui
 Tâche en cours : terminée. Le bloc de 05h50 tient ; ce bloc ajoute ce qui a suivi. `main` a avancé
@@ -3901,3 +3690,34 @@ escaladé à A20 par entrée `DECISIONS.md` — trois obstacles hors périmètre
 Prochaine action : faire arbitrer par A20 le lot propriétaire de la chaîne photo, et demander à A29
 la revue croisée du diff des trois refusions.
 Tests rouges connus : aucun en CI. Local : l'artefact Vitest ci-dessus, tracé et non masqué.
+
+## 2026-09-05 08h45 — [lot L7 / incrément L7b] — étape pipeline 5/7 (acceptation A36 close)
+
+Dernier commit : `a88e107` · Branche : `lot/l7b` · Poussé : oui · **PR #47**.
+Suites : unit + interface **717/717**, e2e **52/52**, integration verte en CI. **Zéro rouge.**
+
+Les cinq constats sont fermés par A32 (#49) : B1, B2 (0 octet NUL dans
+`couverture.ts`, vérifié), D1, D2, D3. Mes six tests axe ont verdi **sans qu'une
+ligne du fichier de test change** — c'est ce qu'on attend d'un test d'acceptation.
+
+Ma garde d'anti-vacuité, elle, était fausse : elle exigeait `violations > 0` sur
+la page **réelle** avant d'appliquer sa bascule, donc elle empruntait sa condition
+d'existence aux défauts qu'elle prouvait et ne pouvait pas survivre à leur
+guérison. Corrigée (`f4e865c`) : elle **fabrique** désormais les trois défauts,
+vérifie que l'instrument les voit, les retire, et compare à l'**empreinte relevée
+au départ** — jamais à « zéro ». Trois bascules sur le test lui-même le prouvent.
+
+**DEUX POINTS À REMONTER, ce sont des faits, pas des griefs :**
+
+1. **Une autre session a travaillé dans `_axl7` pendant que j'y étais** (annoncé
+   comme libre). Son `Merge … into lot/l7b` de 08h20 (`a88e107`) a **emporté mon
+   édition non commitée** de `EcranCouverture.test.tsx` : le contenu est intact et
+   vert, mais il est entré sous un message qui ne le mentionne pas. Rien n'est
+   perdu, la traçabilité l'est. Le raisonnement, lui, vit dans le commentaire du
+   test — c'est ce qui sauve la mise.
+2. **Le budget de temps de « trois pages de 50 » était à 103 %** (10 304 ms contre
+   10 000 ms). Porté à 30 s, **harnais seulement, aucune assertion touchée**. Sous
+   charge, trois autres cas d'interface ont aussi dépassé leur budget puis sont
+   repassés verts au calme : à surveiller si la contention persiste.
+
+Prochaine action : suivre la CI de la PR #47, seul verrou restant de L7b.

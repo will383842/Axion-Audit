@@ -2471,135 +2471,6 @@ migrations up/down sur staging et la rejouée du diff schéma-vs-04.
 
 ---
 
-# N. INCRÉMENT L7a — PASSE DU GARDIEN A02, 2026-09-03, SUR `lot/l7a` @ `ce1a80f`
-
-> **Lettre N**, à la suite de K/K bis. **L** est réservée à la passe L5b et **M** à la passe L5a, qui
-> tournent sur d'autres branches au même moment : cette section ne les touche pas, et **aucune ligne
-> datée antérieure n'a été modifiée**.
-> **Dossier complet, preuves comprises : `docs/portes/CONTROLE_A02_L7a_2026-09-03.md`.**
-> Arbre **propre** (`git status --short` vide), worktree `_axl7` **dormant**, revue croisée A37
-> **rendue** (`DECISIONS.md` 2026-09-02) : l'étape 6 se tient dans l'ordre du pipeline.
-> **Verdict : 🟡 ACCEPTÉ SOUS RÉSERVE** — 6 réserves, **0 bloquante pour l'incrément**, **1 bloquante
-> pour la porte P-E** (R-L7a-3, axe-core).
-
-## N.0 — Le périmètre, mesuré avant tout jugement
-
-`git diff --numstat origin/main HEAD` : **35 fichiers, 5 269 insertions, 50 suppressions** —
-**17** fichiers de code de production (**2 315** l.), **10** de tests et harnais A36 (**2 069** l.,
-ratio 0,89), **5** de documentation (**859** l.), **3** de configuration (**26** l.).
-
-**Le contrôle de fusion, qui était le point dur.** La branche portait des copies **antérieures** du
-code L3. Après résolution, `git rev-parse` rend les **mêmes hachages** de part et d'autre :
-`apps/api/src/domaines/org-units` → `68e690ef…` (deux fois) · `docs/portes` → `20254a26…` (deux fois)
-· `packages/shared/src/org-units.ts` → `5bfc3814…` · `apps/api/tests/l3c-org-units.integration.test.ts`
-→ `2941c021…`. Et par la négative, plus fort encore :
-`git diff --numstat origin/main HEAD -- apps/api packages infra .github` rend une **sortie vide**.
-**Zéro divergence, zéro rétrogradation, zéro dossier de porte écrasé** — et ce fichier-ci est
-lui-même identique à celui de `main`, donc les passes A02 antérieures sont intactes.
-`DECISIONS.md` : **192 en-têtes, `uniq -d` VIDE**, 187 (main) + **5** entrées nettes.
-
-## N.1 — Sens 1 (exigences → code) : ce que L7a déplace, et ce qu'il ne déplace pas
-
-| Exigence | État avant | État après L7a | Preuve **exécutée** |
-| --- | --- | --- | --- |
-| **E22** — console 7 espaces | non commencée | **partiellement amorcée** | Les 7 espaces existent dans le registre `src/app/espaces.ts` (ordre §22.3) ; **2 ouverts** (tour de contrôle, pilotage/portefeuille), **5 visibles et fermés** avec leur mention. `App.navigation.test.tsx`, 20 tests verts. Reste : espaces 3-7, et L7b/L7c |
-| **E43** — exécutabilité autopilote (conventions d'API) | partiellement | **renforcée côté console** | **Keyset `@critique`** : 7 paramètres de décalage interdits, curseur **rendu par le serveur** (`curseur-factice-3`/`-6`), contrôle inverse « seules clés émises : `after`, `limit` ». Schémas Zod **ré-exportés** de `packages/shared`, **aucune redéfinition locale**, **zéro `any`**, format d'erreur unique |
-| **E21** — auditeurs jamais d'accès aux montants | `couverte` (serveur, §B.11.3) | **`couverte`, et désormais éprouvée côté écran** | `App.etancheite-roles.test.tsx` : **17 tests, 8 `@critique`**, DOM **et** trace réseau, **3 rôles**, sentinelles et noms de champs **importés** de `@axion/shared` (jamais recopiés), **3 contre-épreuves** qui prouvent que le balayage mord |
-| **E44** — UX/UI 2026-2027, règle des 4 états | partiellement | **partiellement, +3 écrans** | `App.quatre-etats.test.tsx`, 17 tests : `role="status"`+`aria-busy` sans spinner · vide qui dit quoi faire · `role="alert"` français, détail technique **dans un `<details>` fermé** · hors ligne. **3 écrans sur 4** → R-L7a-5 |
-| **E27** — design, charte, WCAG AA | partiellement | **partiellement, console amorcée** | **Invariant 4 mesuré deux fois** : DOM (`balayerStylesEnDur` = `[]`, `jetonsInconnus` = `[]` contre `tokens.css` lu sur disque) **et** feuille de style — `coquille.css`, 482 l. : **0 hexadécimal, 0 longueur absolue, 0 `rgb()`, 138 `var(--…)`, 41 jetons distincts, 0 inconnu**. Vrais liens, `aria-current` unique, lien d'évitement. **Pas `couverte` : axe-core absent (R-L7a-3)** |
-| **E32** — fuseaux, interface française | partiellement | **partiellement, +affichage console** | `@critique` fuseau de MISSION (`America/Los_Angeles` : `2026-09-02T03:30Z` → 1er sept. 20 h 30) · `@critique` DATE civile jamais convertie (NDA du 3 août reste le 3 août) · fuseau **lisible** à l'écran · `codesBrutsVisibles()` interdit tout code du contrat **et** `null`/`undefined`/`NaN`/`Invalid Date` |
-| **E33** — sécurité / RGPD | partiellement | **partiellement, côté client console** | `credentials: 'same-origin'`, en-tête custom sur **toute** requête, **aucun `Authorization: Bearer`**, **`localStorage.length === 0`** après connexion — tous mesurés. Le dépôt du cookie **serveur** reste **A-006 / R-B1**, hors L7a |
-| **E39** — machine à états mission | `couverte` côté serveur (L3) | **inchangée, +restitution** | Les 5 jalons sont dérivés de `STATUTS_MISSION` : la console **ne connaît pas** un sixième statut. Choix conforme à la précédence — §32.2 (§32-36) prime sur la « timeline 8 étapes » de §22.3 (§16-22) |
-| **E17** — stack imposée (Vite/React) | partiellement | **inchangée, +console amorcée** | `main.tsx` (React 18 + Vite, `tokens.css` = police auto-hébergée) · `base.ts` source unique de `/hq` lue par `vite.config.ts` **et** le routeur · job CI « image hq » SUCCESS |
-| **E25** — zéro oubli (plan, couverture, contrôles) | partiellement amorcée | **INCHANGÉE** | **Deux annotations la citent à tort** (`EcranAccueil.tsx` l. 21-22, `EcranPortefeuille.tsx` l. 19-20). §17.3 et §16.6 **ouvertes et lues** : aucun des quatre objets n'est livré, et les fichiers l'écrivent eux-mêmes. **E25 ne bouge pas** → **R-L7a-4** |
-
-**Aucune exigence ne passe à `couverte` par L7a**, et c'est normal : L7a est la **coquille**. Les deux
-critères d'acceptation de la ligne **L7-min** du fichier 07 (export §36.3 ; couverture reflétant le
-plan) relèvent de **L7c** et **L7b** et restent **entièrement ouverts** — **la porte P-E ne se demande
-pas sur L7a seule**.
-
-## N.2 — Sens 2 (code → exigences) : **aucun orphelin**, et deux gloses à corriger
-
-Les **35** fichiers ont été rattachés un par un (détail au §3 du dossier de porte). **Chaque glose a
-été vérifiée en ouvrant la section citée** — E22 (08 l. 34), E43 (l. 56), E21 (l. 33), E44 (l. 57),
-E27 (l. 39), E32 (l. 44), E33 (l. 45), E39 (l. 52), E17 (l. 29) : **toutes exactes**.
-
-**Deux exceptions, et c'est la trouvaille de cette passe.** `EcranAccueil.tsx` l. 21-22 et
-`EcranPortefeuille.tsx` l. 19-20 citent **E25**. Le libellé officiel est « Zéro oubli : plan
-d'entretiens, contrôles de fin d'entretien/visite, **écran de couverture**, transitions gardées ».
-Aucun des quatre n'est livré par ces écrans — les fichiers le disent eux-mêmes six lignes plus haut
-(« la jauge … arrivent avec la route de couverture (L7b) »), et la ligne 107 du présent fichier range
-E25 sous « écrans de couverture … → **L7-min** », c'est-à-dire **L7b**.
-**`pnpm check:tracabilite` est vert et ne pouvait pas le voir** : son contrôle C2 confronte la glose
-au **libellé**, jamais au **code**. C'est exactement la limite qu'il imprime en tête, et c'est
-pourquoi cette vérification reste manuelle. **Rattachement E22 valide dans les deux cas : aucun
-orphelin, une annotation à retirer.**
-
-**Non-préemption de l'arbitrage §9 de la note, mesurée** : un balayage de `apps/hq/src` sur
-`atelier|answers.source|interviews.kind|coverage|couverture|agregation|parSource|SOURCES_|TYPES_SESSION|reponses.csv`
-rend **7 occurrences, toutes en commentaire d'en-tête**, et **zéro occurrence du mot « atelier »**.
-L7a ne rend aucune grille de couverture : `atelier` ne peut donc pas y être silencieux. L'espace 6 est
-marqué `livraison: 'L7c'` — **nommé, pas ouvert**.
-
-## N.3 — DoD transverse, cochée par exécution
-
-| Critère | Verdict | Mesure |
-| --- | --- | --- |
-| lint + typecheck stricts = 0 erreur | ✅ | `eslint . --max-warnings=0` → code **0** (par moi) · `pnpm typecheck` → 6/6 `Done` · CI « 1 · lint », « 2 · typecheck » SUCCESS · `format:check` vert |
-| tous les tests verts, **aucun skippé** | ✅ | **1 756 + 36 e2e** verts en CI sur `ce1a80f`, **Node v22.23.2** (contrat) : unit **666** · integration **563** · interface **527** · e2e **36**. **527 − 447 = 80** — les 80 tests de L7a, **et aucune régression**. `check:no-skipped-tests` vert |
-| couverture ≥ 90 % modules critiques, **mesurée** | ✅ **sans objet à L7a** | Job « couverture ≥ 90 % » SUCCESS. Les **11** globs critiques sont **tous** dans `apps/api` ; L7a n'en touche aucun. **Chiffre publié quand même, mesuré par moi sur `apps/hq/src` : 93,16 % lignes · 78,66 % branches · 94,11 % fonctions** |
-| migrations up/down sur staging | ⬛ **non recomptée** | Portée par **R-L3-2-bis**, rattachée à **L0**. Sans objet ici : **L7a ne livre aucune migration** (diff `apps/api packages infra` **vide**) |
-| 4 états par écran (§33.2) | 🟡 **3 / 4** | `App.quatre-etats.test.tsx` l. 37-41 — `EcranConnexion` absent de la table `ECRANS` → **R-L7a-5** |
-| axe-core vert | ❌ **incochable** | Aucun paquet `axe*` dans les `package.json` ni le lock de cette branche. **R-B8 héritée, désormais exigible** (4 écrans livrés) → **R-L7a-3** |
-| `@filrouge` vert sur FIL-TPE **ET** FIL-GC | ✅ | Job « 4 · integration » : `l3-filrouge` **11 verts**, `l1-filrouge` **5 verts**. Les deux missions sont **aussi** les fixtures canoniques de la console |
-| README de l'app à jour | ❌ | `apps/hq/README.md` l. 22-24 décrit une « Section B » de `contrats.ts` **qui n'existe plus** (le fichier est 100 % ré-exports depuis la fermeture de la réserve B2) → **R-L7a-1** |
-| aucun TODO/FIXME sans entrée | ✅ | `grep` sur `apps/hq` → **0**. Les 3 marqueurs du dépôt sont antérieurs et adossés (**R-B9** inchangée) |
-| diff schéma-vs-04 = zéro écart | ✅ | Job « 6 · schema-diff » SUCCESS · **preuve indépendante** : aucun fichier de schéma, de migration ou de manifeste touché. Non rejoué en local (PostgreSQL injoignable) |
-
-**Critères propres au gardien** : matrice à jour dans les deux sens (cette section) · **plafond
-étage 1 : 0 j consommé** — les 4 fiches d'`AMELIORATIONS.md` sont **PROPOSÉES**, aucune implémentée,
-et `scripts/`, `.claude/`, `packages/ui/`, `.github/` sont **byte-identiques** à `main` · **aucune
-fiche étage 2 anticipée** (cases d'arbitrage vides ; `packages/ui` non modifié, la console
-**contourne** au lieu d'anticiper) · **13/13 garde-fous `check:*` verts** · A51/A54 **non requis** à ce
-stade (ni sécurité serveur ni crypto touchées ; A54 se prononce en recette de porte).
-
-## N.4 — Réserves ouvertes par cette passe
-
-| Réf. | Objet | Bloquante ? |
-| --- | --- | --- |
-| **R-L7a-1** | `apps/hq/README.md` l. 22-24 décrit une section de `contrats.ts` qui n'existe plus | non · **oui avant P-E** (DoD 8) |
-| **R-L7a-2** | L'entrée `DECISIONS.md` du §9.4 se dit « mot pour mot » et ne l'est pas (« prévu/**planifié**/réalisé » → « prévu/réalisé ») ; **l'arbitrage §6.2 n'a pas été déposé** alors que le §6.6 s'y engageait | non — mais **à fermer avant l'ouverture de L7b** |
-| **R-L7a-3** | **axe-core installé nulle part** ; 4 écrans livrés ; R-B8 héritée cesse d'être « sans objet » | non pour l'incrément · **OUI pour la porte P-E** |
-| **R-L7a-4** | Sur-revendication d'E25 sur deux écrans (annotation prématurée, pas orpheline) | non |
-| **R-L7a-5** | 4 états mesurés sur 3 des 4 écrans (`EcranConnexion` hors table) | non |
-| **R-L7a-6** | Observation : « chiffrage » est affiché et hors de la liste de vocabulaire mesurée — choix écrit, **plus prudent que §22.3** | non |
-
-**Aucun VETO** : les sept motifs du 11 §8 ont été contrôlés un par un et sont tous négatifs (détail au
-§8 du dossier de porte).
-
-## N.5 — Synthèse chiffrée au 2026-09-03, après L7a
-
-| Mesure | Valeur | Source |
-| --- | --- | --- |
-| Tests exécutés, tous projets, sur le **Node du contrat** | **1 756 / 1 756** (+ **36** e2e) | CI `33739760104`, `headSha ce1a80f`, `conclusion: success`, Node **v22.23.2** |
-| Dont projet `interface` | **527** (était 447) — **+80, exactement L7a** | log du job « couverture ≥ 90 % », qui lance les **trois** projets |
-| Fichiers de test | **83** — interface **32** (était 26 : **+6**, les six suites L7a) · unit 25 · integration 23 · playwright 3 (était **77**). Le « 80 » du log de CI ne compte que **vitest** (32+25+23) : les deux bases diffèrent, et il faut le dire plutôt que de les soustraire | `pnpm check:test-projects` (par moi) + log du job « couverture ≥ 90 % » |
-| Tests désactivés ou annulés | **0** | `check:no-skipped-tests`, local **et** CI |
-| Entrées `DECISIONS.md` | **192**, zéro doublon d'en-tête | `grep -c` et `uniq -d`, exécutés par moi |
-| Checks CI sur `ce1a80f` | **19 SUCCESS**, 1 SKIPPED (`deploy-staging`, `main` seul) | `gh pr view 32` |
-| Couverture `apps/hq/src` (hors seuil, publiée) | **93,16 % l. · 78,66 % br. · 94,11 % f.** | `vitest --coverage`, exécuté par moi |
-| Code orphelin | **aucun** | §N.2 |
-
-**Verdict A02 : 🟡 ACCEPTÉ SOUS RÉSERVE.** Les deux sens sont tenus, aucun code n'est orphelin, la
-DoD est cochée **par exécution** et non par lecture, et les deux points que le mandat désignait comme
-les plus risqués — la propreté de la fusion L3 et la déduplication de `DECISIONS.md` — sont **vérifiés
-par hachage et par comptage**, pas par déclaration. Restent 6 réserves, dont **une seule bloque la
-porte P-E** : `axe-core`, qui n'est toujours installé nulle part alors que quatre écrans sont
-désormais livrés.
-
-_Passe effectuée le 2026-09-03 par A02, gardien de la spécification, sur mandat **SANS Docker** (les
-lignes qui l'exigeaient sont marquées « non exécuté par moi » et adossées à la CI du commit exact).
-Aucune ligne datée antérieure n'a été modifiée._
 # M. INCRÉMENT L5a — CONTRÔLE D'ACCEPTATION A02, 2026-09-03, SUR `aaafcc5`
 
 > **Ajout en APPEND. Aucune ligne datée antérieure de ce fichier n'a été modifiée.**
@@ -3318,3 +3189,132 @@ impact spec du descope, statut du glob `app/**`) ; ③ **A01** signe le passage 
 _Passe effectuée le 2026-09-03 par A02, gardien de la spécification, sur `lot/l5a` @ `aaafcc5`,
 en lecture seule sur le code. Aucune ligne datée antérieure de ce fichier n'a été modifiée.
 Dossier complet : `docs/portes/CONTROLE_A02_L5a_2026-09-03.md`._
+# N. INCRÉMENT L7a — PASSE DU GARDIEN A02, 2026-09-03, SUR `lot/l7a` @ `ce1a80f`
+
+> **Lettre N**, à la suite de K/K bis. **L** est réservée à la passe L5b et **M** à la passe L5a, qui
+> tournent sur d'autres branches au même moment : cette section ne les touche pas, et **aucune ligne
+> datée antérieure n'a été modifiée**.
+> **Dossier complet, preuves comprises : `docs/portes/CONTROLE_A02_L7a_2026-09-03.md`.**
+> Arbre **propre** (`git status --short` vide), worktree `_axl7` **dormant**, revue croisée A37
+> **rendue** (`DECISIONS.md` 2026-09-02) : l'étape 6 se tient dans l'ordre du pipeline.
+> **Verdict : 🟡 ACCEPTÉ SOUS RÉSERVE** — 6 réserves, **0 bloquante pour l'incrément**, **1 bloquante
+> pour la porte P-E** (R-L7a-3, axe-core).
+
+## N.0 — Le périmètre, mesuré avant tout jugement
+
+`git diff --numstat origin/main HEAD` : **35 fichiers, 5 269 insertions, 50 suppressions** —
+**17** fichiers de code de production (**2 315** l.), **10** de tests et harnais A36 (**2 069** l.,
+ratio 0,89), **5** de documentation (**859** l.), **3** de configuration (**26** l.).
+
+**Le contrôle de fusion, qui était le point dur.** La branche portait des copies **antérieures** du
+code L3. Après résolution, `git rev-parse` rend les **mêmes hachages** de part et d'autre :
+`apps/api/src/domaines/org-units` → `68e690ef…` (deux fois) · `docs/portes` → `20254a26…` (deux fois)
+· `packages/shared/src/org-units.ts` → `5bfc3814…` · `apps/api/tests/l3c-org-units.integration.test.ts`
+→ `2941c021…`. Et par la négative, plus fort encore :
+`git diff --numstat origin/main HEAD -- apps/api packages infra .github` rend une **sortie vide**.
+**Zéro divergence, zéro rétrogradation, zéro dossier de porte écrasé** — et ce fichier-ci est
+lui-même identique à celui de `main`, donc les passes A02 antérieures sont intactes.
+`DECISIONS.md` : **192 en-têtes, `uniq -d` VIDE**, 187 (main) + **5** entrées nettes.
+
+## N.1 — Sens 1 (exigences → code) : ce que L7a déplace, et ce qu'il ne déplace pas
+
+| Exigence | État avant | État après L7a | Preuve **exécutée** |
+| --- | --- | --- | --- |
+| **E22** — console 7 espaces | non commencée | **partiellement amorcée** | Les 7 espaces existent dans le registre `src/app/espaces.ts` (ordre §22.3) ; **2 ouverts** (tour de contrôle, pilotage/portefeuille), **5 visibles et fermés** avec leur mention. `App.navigation.test.tsx`, 20 tests verts. Reste : espaces 3-7, et L7b/L7c |
+| **E43** — exécutabilité autopilote (conventions d'API) | partiellement | **renforcée côté console** | **Keyset `@critique`** : 7 paramètres de décalage interdits, curseur **rendu par le serveur** (`curseur-factice-3`/`-6`), contrôle inverse « seules clés émises : `after`, `limit` ». Schémas Zod **ré-exportés** de `packages/shared`, **aucune redéfinition locale**, **zéro `any`**, format d'erreur unique |
+| **E21** — auditeurs jamais d'accès aux montants | `couverte` (serveur, §B.11.3) | **`couverte`, et désormais éprouvée côté écran** | `App.etancheite-roles.test.tsx` : **17 tests, 8 `@critique`**, DOM **et** trace réseau, **3 rôles**, sentinelles et noms de champs **importés** de `@axion/shared` (jamais recopiés), **3 contre-épreuves** qui prouvent que le balayage mord |
+| **E44** — UX/UI 2026-2027, règle des 4 états | partiellement | **partiellement, +3 écrans** | `App.quatre-etats.test.tsx`, 17 tests : `role="status"`+`aria-busy` sans spinner · vide qui dit quoi faire · `role="alert"` français, détail technique **dans un `<details>` fermé** · hors ligne. **3 écrans sur 4** → R-L7a-5 |
+| **E27** — design, charte, WCAG AA | partiellement | **partiellement, console amorcée** | **Invariant 4 mesuré deux fois** : DOM (`balayerStylesEnDur` = `[]`, `jetonsInconnus` = `[]` contre `tokens.css` lu sur disque) **et** feuille de style — `coquille.css`, 482 l. : **0 hexadécimal, 0 longueur absolue, 0 `rgb()`, 138 `var(--…)`, 41 jetons distincts, 0 inconnu**. Vrais liens, `aria-current` unique, lien d'évitement. **Pas `couverte` : axe-core absent (R-L7a-3)** |
+| **E32** — fuseaux, interface française | partiellement | **partiellement, +affichage console** | `@critique` fuseau de MISSION (`America/Los_Angeles` : `2026-09-02T03:30Z` → 1er sept. 20 h 30) · `@critique` DATE civile jamais convertie (NDA du 3 août reste le 3 août) · fuseau **lisible** à l'écran · `codesBrutsVisibles()` interdit tout code du contrat **et** `null`/`undefined`/`NaN`/`Invalid Date` |
+| **E33** — sécurité / RGPD | partiellement | **partiellement, côté client console** | `credentials: 'same-origin'`, en-tête custom sur **toute** requête, **aucun `Authorization: Bearer`**, **`localStorage.length === 0`** après connexion — tous mesurés. Le dépôt du cookie **serveur** reste **A-006 / R-B1**, hors L7a |
+| **E39** — machine à états mission | `couverte` côté serveur (L3) | **inchangée, +restitution** | Les 5 jalons sont dérivés de `STATUTS_MISSION` : la console **ne connaît pas** un sixième statut. Choix conforme à la précédence — §32.2 (§32-36) prime sur la « timeline 8 étapes » de §22.3 (§16-22) |
+| **E17** — stack imposée (Vite/React) | partiellement | **inchangée, +console amorcée** | `main.tsx` (React 18 + Vite, `tokens.css` = police auto-hébergée) · `base.ts` source unique de `/hq` lue par `vite.config.ts` **et** le routeur · job CI « image hq » SUCCESS |
+| **E25** — zéro oubli (plan, couverture, contrôles) | partiellement amorcée | **INCHANGÉE** | **Deux annotations la citent à tort** (`EcranAccueil.tsx` l. 21-22, `EcranPortefeuille.tsx` l. 19-20). §17.3 et §16.6 **ouvertes et lues** : aucun des quatre objets n'est livré, et les fichiers l'écrivent eux-mêmes. **E25 ne bouge pas** → **R-L7a-4** |
+
+**Aucune exigence ne passe à `couverte` par L7a**, et c'est normal : L7a est la **coquille**. Les deux
+critères d'acceptation de la ligne **L7-min** du fichier 07 (export §36.3 ; couverture reflétant le
+plan) relèvent de **L7c** et **L7b** et restent **entièrement ouverts** — **la porte P-E ne se demande
+pas sur L7a seule**.
+
+## N.2 — Sens 2 (code → exigences) : **aucun orphelin**, et deux gloses à corriger
+
+Les **35** fichiers ont été rattachés un par un (détail au §3 du dossier de porte). **Chaque glose a
+été vérifiée en ouvrant la section citée** — E22 (08 l. 34), E43 (l. 56), E21 (l. 33), E44 (l. 57),
+E27 (l. 39), E32 (l. 44), E33 (l. 45), E39 (l. 52), E17 (l. 29) : **toutes exactes**.
+
+**Deux exceptions, et c'est la trouvaille de cette passe.** `EcranAccueil.tsx` l. 21-22 et
+`EcranPortefeuille.tsx` l. 19-20 citent **E25**. Le libellé officiel est « Zéro oubli : plan
+d'entretiens, contrôles de fin d'entretien/visite, **écran de couverture**, transitions gardées ».
+Aucun des quatre n'est livré par ces écrans — les fichiers le disent eux-mêmes six lignes plus haut
+(« la jauge … arrivent avec la route de couverture (L7b) »), et la ligne 107 du présent fichier range
+E25 sous « écrans de couverture … → **L7-min** », c'est-à-dire **L7b**.
+**`pnpm check:tracabilite` est vert et ne pouvait pas le voir** : son contrôle C2 confronte la glose
+au **libellé**, jamais au **code**. C'est exactement la limite qu'il imprime en tête, et c'est
+pourquoi cette vérification reste manuelle. **Rattachement E22 valide dans les deux cas : aucun
+orphelin, une annotation à retirer.**
+
+**Non-préemption de l'arbitrage §9 de la note, mesurée** : un balayage de `apps/hq/src` sur
+`atelier|answers.source|interviews.kind|coverage|couverture|agregation|parSource|SOURCES_|TYPES_SESSION|reponses.csv`
+rend **7 occurrences, toutes en commentaire d'en-tête**, et **zéro occurrence du mot « atelier »**.
+L7a ne rend aucune grille de couverture : `atelier` ne peut donc pas y être silencieux. L'espace 6 est
+marqué `livraison: 'L7c'` — **nommé, pas ouvert**.
+
+## N.3 — DoD transverse, cochée par exécution
+
+| Critère | Verdict | Mesure |
+| --- | --- | --- |
+| lint + typecheck stricts = 0 erreur | ✅ | `eslint . --max-warnings=0` → code **0** (par moi) · `pnpm typecheck` → 6/6 `Done` · CI « 1 · lint », « 2 · typecheck » SUCCESS · `format:check` vert |
+| tous les tests verts, **aucun skippé** | ✅ | **1 756 + 36 e2e** verts en CI sur `ce1a80f`, **Node v22.23.2** (contrat) : unit **666** · integration **563** · interface **527** · e2e **36**. **527 − 447 = 80** — les 80 tests de L7a, **et aucune régression**. `check:no-skipped-tests` vert |
+| couverture ≥ 90 % modules critiques, **mesurée** | ✅ **sans objet à L7a** | Job « couverture ≥ 90 % » SUCCESS. Les **11** globs critiques sont **tous** dans `apps/api` ; L7a n'en touche aucun. **Chiffre publié quand même, mesuré par moi sur `apps/hq/src` : 93,16 % lignes · 78,66 % branches · 94,11 % fonctions** |
+| migrations up/down sur staging | ⬛ **non recomptée** | Portée par **R-L3-2-bis**, rattachée à **L0**. Sans objet ici : **L7a ne livre aucune migration** (diff `apps/api packages infra` **vide**) |
+| 4 états par écran (§33.2) | 🟡 **3 / 4** | `App.quatre-etats.test.tsx` l. 37-41 — `EcranConnexion` absent de la table `ECRANS` → **R-L7a-5** |
+| axe-core vert | ❌ **incochable** | Aucun paquet `axe*` dans les `package.json` ni le lock de cette branche. **R-B8 héritée, désormais exigible** (4 écrans livrés) → **R-L7a-3** |
+| `@filrouge` vert sur FIL-TPE **ET** FIL-GC | ✅ | Job « 4 · integration » : `l3-filrouge` **11 verts**, `l1-filrouge` **5 verts**. Les deux missions sont **aussi** les fixtures canoniques de la console |
+| README de l'app à jour | ❌ | `apps/hq/README.md` l. 22-24 décrit une « Section B » de `contrats.ts` **qui n'existe plus** (le fichier est 100 % ré-exports depuis la fermeture de la réserve B2) → **R-L7a-1** |
+| aucun TODO/FIXME sans entrée | ✅ | `grep` sur `apps/hq` → **0**. Les 3 marqueurs du dépôt sont antérieurs et adossés (**R-B9** inchangée) |
+| diff schéma-vs-04 = zéro écart | ✅ | Job « 6 · schema-diff » SUCCESS · **preuve indépendante** : aucun fichier de schéma, de migration ou de manifeste touché. Non rejoué en local (PostgreSQL injoignable) |
+
+**Critères propres au gardien** : matrice à jour dans les deux sens (cette section) · **plafond
+étage 1 : 0 j consommé** — les 4 fiches d'`AMELIORATIONS.md` sont **PROPOSÉES**, aucune implémentée,
+et `scripts/`, `.claude/`, `packages/ui/`, `.github/` sont **byte-identiques** à `main` · **aucune
+fiche étage 2 anticipée** (cases d'arbitrage vides ; `packages/ui` non modifié, la console
+**contourne** au lieu d'anticiper) · **13/13 garde-fous `check:*` verts** · A51/A54 **non requis** à ce
+stade (ni sécurité serveur ni crypto touchées ; A54 se prononce en recette de porte).
+
+## N.4 — Réserves ouvertes par cette passe
+
+| Réf. | Objet | Bloquante ? |
+| --- | --- | --- |
+| **R-L7a-1** | `apps/hq/README.md` l. 22-24 décrit une section de `contrats.ts` qui n'existe plus | non · **oui avant P-E** (DoD 8) |
+| **R-L7a-2** | L'entrée `DECISIONS.md` du §9.4 se dit « mot pour mot » et ne l'est pas (« prévu/**planifié**/réalisé » → « prévu/réalisé ») ; **l'arbitrage §6.2 n'a pas été déposé** alors que le §6.6 s'y engageait | non — mais **à fermer avant l'ouverture de L7b** |
+| **R-L7a-3** | **axe-core installé nulle part** ; 4 écrans livrés ; R-B8 héritée cesse d'être « sans objet » | non pour l'incrément · **OUI pour la porte P-E** |
+| **R-L7a-4** | Sur-revendication d'E25 sur deux écrans (annotation prématurée, pas orpheline) | non |
+| **R-L7a-5** | 4 états mesurés sur 3 des 4 écrans (`EcranConnexion` hors table) | non |
+| **R-L7a-6** | Observation : « chiffrage » est affiché et hors de la liste de vocabulaire mesurée — choix écrit, **plus prudent que §22.3** | non |
+
+**Aucun VETO** : les sept motifs du 11 §8 ont été contrôlés un par un et sont tous négatifs (détail au
+§8 du dossier de porte).
+
+## N.5 — Synthèse chiffrée au 2026-09-03, après L7a
+
+| Mesure | Valeur | Source |
+| --- | --- | --- |
+| Tests exécutés, tous projets, sur le **Node du contrat** | **1 756 / 1 756** (+ **36** e2e) | CI `33739760104`, `headSha ce1a80f`, `conclusion: success`, Node **v22.23.2** |
+| Dont projet `interface` | **527** (était 447) — **+80, exactement L7a** | log du job « couverture ≥ 90 % », qui lance les **trois** projets |
+| Fichiers de test | **83** — interface **32** (était 26 : **+6**, les six suites L7a) · unit 25 · integration 23 · playwright 3 (était **77**). Le « 80 » du log de CI ne compte que **vitest** (32+25+23) : les deux bases diffèrent, et il faut le dire plutôt que de les soustraire | `pnpm check:test-projects` (par moi) + log du job « couverture ≥ 90 % » |
+| Tests désactivés ou annulés | **0** | `check:no-skipped-tests`, local **et** CI |
+| Entrées `DECISIONS.md` | **192**, zéro doublon d'en-tête | `grep -c` et `uniq -d`, exécutés par moi |
+| Checks CI sur `ce1a80f` | **19 SUCCESS**, 1 SKIPPED (`deploy-staging`, `main` seul) | `gh pr view 32` |
+| Couverture `apps/hq/src` (hors seuil, publiée) | **93,16 % l. · 78,66 % br. · 94,11 % f.** | `vitest --coverage`, exécuté par moi |
+| Code orphelin | **aucun** | §N.2 |
+
+**Verdict A02 : 🟡 ACCEPTÉ SOUS RÉSERVE.** Les deux sens sont tenus, aucun code n'est orphelin, la
+DoD est cochée **par exécution** et non par lecture, et les deux points que le mandat désignait comme
+les plus risqués — la propreté de la fusion L3 et la déduplication de `DECISIONS.md` — sont **vérifiés
+par hachage et par comptage**, pas par déclaration. Restent 6 réserves, dont **une seule bloque la
+porte P-E** : `axe-core`, qui n'est toujours installé nulle part alors que quatre écrans sont
+désormais livrés.
+
+_Passe effectuée le 2026-09-03 par A02, gardien de la spécification, sur mandat **SANS Docker** (les
+lignes qui l'exigeaient sont marquées « non exécuté par moi » et adossées à la CI du commit exact).
+Aucune ligne datée antérieure n'a été modifiée._
