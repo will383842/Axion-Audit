@@ -168,13 +168,21 @@ jobs:
   # GARDE-FOU 2 — SCRIPTS SHELL D'INFRA (11 §7, scripts livrés par A11)
   # ---------------------------------------------------------------------------
   shellcheck:
+    # ⚠️ NE PAS RENOMMER CE JOB SANS TOUCHER À LA PROTECTION DE BRANCHE.
+    # Ce libellé EXACT figure dans les `required_status_checks.contexts` de
+    # `main`. Mesuré le 2026-09-05 : renommé en « … + .github/scripts/*.sh »,
+    # le contrôle requis n'est plus jamais rendu et la PR reste `BLOCKED` pour
+    # toujours (échec fermé, donc sans danger — mais indéboulonnable sans un
+    # geste d'administration du dépôt, qui n'appartient pas à un agent).
+    # Le périmètre réel est décrit à l'étape ci-dessous ; c'est le NOM qui est
+    # un contrat avec GitHub, pas la vérité du scope.
     name: shellcheck (infra/scripts/*.sh)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: ./.github/actions/setup-node-pnpm
 
-      - name: Analyser les scripts d'exploitation
+      - name: Analyser les scripts d'exploitation (infra/scripts + .github/scripts)
         run: |
           set -euo pipefail
           # shellcheck est préinstallé sur les runners ubuntu-latest.
@@ -187,7 +195,12 @@ jobs:
           # lot, pas une situation normale : on échoue avec un message lisible.
           # Un seul pathspec suffit : en pathspec git, `*` traverse `/` — il
           # couvre donc aussi `infra/scripts/lib/common.sh`.
-          mapfile -t scripts < <(git ls-files 'infra/scripts/*.sh')
+          # `.github/scripts/*.sh` ajouté le 2026-09-05 : depuis le constat
+          # F-31, la GARDE du scan ZAP (verdict + sa table de vérité) vit dans un
+          # script versionné plutôt qu'en ligne dans le workflow. Un script qui
+          # décide si une PR est rouge ou verte est du code d'exploitation : il
+          # s'analyse comme le reste, sinon on a seulement déplacé l'angle mort.
+          mapfile -t scripts < <(git ls-files 'infra/scripts/*.sh' '.github/scripts/*.sh')
           if [ "${#scripts[@]}" -eq 0 ]; then
             echo "::error::Aucun script dans infra/scripts/ — livrable du lot L0 (agent A11 : deploy.sh, restore-test.sh). La CI n'a rien à vérifier : échec explicite plutôt que faux vert."
             exit 1
