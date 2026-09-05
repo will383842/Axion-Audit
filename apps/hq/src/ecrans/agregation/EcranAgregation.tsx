@@ -56,6 +56,7 @@ import {
 } from '../../api/requetes-pilotage.js';
 import { useMission } from '../../api/requetes.js';
 import { etatDeRequete } from '../../app/etats.js';
+import { CadreTableau } from '../../app/CadreTableau.js';
 import { auClicLienInterne, hrefDeRoute } from '../../app/routeur.js';
 import { formaterInstant } from '../../format/dates.js';
 
@@ -155,7 +156,7 @@ function BlocQuestion({
           Ce n’est ni un refus, ni un «&nbsp;sans objet&nbsp;».
         </p>
       ) : (
-        <div className="axn-tableau-cadre">
+        <CadreTableau libelle={`Réponses à la question : ${question.texte}`}>
           <table className="axn-tableau">
             <caption className="axn-visuellement-masque">
               Réponses à la question «&nbsp;{question.texte}&nbsp;»
@@ -178,7 +179,7 @@ function BlocQuestion({
               ))}
             </tbody>
           </table>
-        </div>
+        </CadreTableau>
       )}
     </article>
   );
