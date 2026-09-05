@@ -8288,3 +8288,191 @@ pas une anomalie ») éclaire la lecture du §16.6.
 Décideur : **A32** (agent de lot), sous revue croisée A37.
 Impact spec : aucun. La complétude n'est pas livrée par L7b : elle appartient au scoring (**L8**), et
 l'écran de couverture ne l'approche pas.
+
+## 2026-09-05 — [L7c] Le `<ref>` du nom de fichier de l'export §36.3 : le pack nomme une référence qui n'existe pas
+
+Le §36.3 impose `export_mission_<ref>_<AAAAMMJJ>.zip`. Or **aucune colonne du fichier 04 ne porte une
+référence de mission** : `missions` a `title` (texte libre, non unique), `companies` a `external_ref`
+(la référence du CRM, pas de la mission, et nullable — arbitrage du 2026-09-05 [L1 / E18]).
+
+Options :
+
+1. `missions.title` assaini. **Écartée** : deux missions du même client portent le même titre, et un
+   nom de fichier qui collisionne fait écraser un export par un autre sur le poste du consultant.
+2. `companies.external_ref`. **Écartée** deux fois : elle est nullable, et elle nommerait le CLIENT
+   dans un nom de fichier produit par le code — la lisière de l'invariant 2.
+3. **L'identifiant de la mission (UUID)**, seul identifiant stable et unique qui existe.
+
+Arbitrage : **option 3** pour la V1, et la question d'une référence de mission LISIBLE
+(`missions.reference`, du type `M-2026-014`) est **remontée à Williams** : c'est un amendement du 04,
+hors du pouvoir d'un agent de lot (`CLAUDE.md` §3-2), et c'est le genre de champ qu'on regrette de ne
+pas avoir posé avant la première mission réelle. Le nom rendu est
+`export_mission_<uuid>_<AAAAMMJJ>.zip`, et `mission.json` porte le titre en clair — le consultant qui
+range ses fichiers a besoin du titre, mais un nom de fichier a besoin d'être unique.
+Règle de précédence : **sans objet** — le pack n'est pas en contradiction avec lui-même, il est
+SILENCIEUX sur la donnée qu'il nomme.
+Décideur : **A30** (chef d'équipe console) pour la V1 ; **amendement candidat du 04 pour Williams**.
+Impact spec : aucun aujourd'hui ; candidat `missions.reference` à porter à la revue de spec de P-D.
+
+## 2026-09-05 — [L7c] Dans quel fuseau les horodatages de l'export sont-ils écrits ?
+
+Un rapport d'audit se rédige AVEC ces heures-là (« l'entretien de 9 h 30 »). Le §36.3 dit
+« horodatage » sans dire lequel ; l'invariant 5 dit « UTC en base et en API, fuseau de mission à
+l'affichage » ; et le §36.3 ajoute « UTF-8 avec BOM (Excel FR) », donc un lecteur humain.
+
+Options :
+
+1. UTC nu (`2026-10-14T07:30:00Z`), comme l'API. **Écartée** : le rédacteur écrirait « 7 h 30 » pour
+   un entretien tenu à 9 h 30 ; c'est une erreur de fait dans un livrable opposable.
+2. Heure locale de mission SANS décalage (`14/10/2026 09:30`). Excel FR la lit nativement, mais
+   **rien dans le fichier ne dit de quel fuseau il s'agit** — et une mission multi-pays (§2.4) en
+   porte plusieurs.
+3. **ISO 8601 avec le décalage du fuseau de MISSION** : `2026-10-14T09:30:00+02:00`.
+
+Arbitrage : **option 3**, une seule colonne, jamais deux. Elle porte l'heure telle qu'elle a été
+vécue par les gens interrogés ET l'information de fuseau, elle se trie lexicographiquement, et elle
+reste convertible. `mission.json` porte `fuseau` et `formatHorodatage` pour que la règle soit lue
+avant les données. Le confort Excel sur UNE colonne ne vaut pas une ambiguïté d'heure dans un rapport.
+Les **dates civiles** (`start_planned`, `nda_signed_at`, colonnes `DATE`) restent en `AAAA-MM-JJ`
+sans fuseau : leur en donner un décalerait le jour.
+Règle de précédence : **§32-36 > §24-31** — le §36.3 (le fichier avec lequel le rapport s'écrit) est
+plus récent que le §22.2, et il désigne un usage d'AFFICHAGE, pas un contrat d'API.
+Décideur : **A30**, sous revue croisée A37.
+Impact spec : aucun.
+
+## 2026-09-05 — [L7c] Les colonnes que le §36.3 n'énumère pas, et la jointure qui rend `constats.csv` vérifiable
+
+Le §36.3 énumère les colonnes de `arbre.csv`, `sessions.csv`, `reponses.csv` et
+`pieces_jointes/manifest.csv`, mais **nomme seulement** `constats.csv (findings + sources)`,
+`cas_usage.csv`, `inventaire_outils.csv`, `registre_ia.csv`, `unites_hors_perimetre.csv`.
+
+Options :
+
+1. Choisir un sous-ensemble « utile ». **Écartée** : c'est deviner à la place du rédacteur, et une
+   colonne manquante le renvoie dans l'outil — exactement ce que le critère d'acceptation interdit.
+2. **Exporter TOUTES les colonnes de la table du 04 pour ces cinq fichiers**, en `snake_case` (le
+   nom de la colonne, celui qu'un lecteur retrouve au fichier 04).
+
+Arbitrage : **option 2**. Un export est un dernier recours : le sur-ensemble coûte des colonnes, le
+sous-ensemble coûte une session de travail perdue. Conséquence rendue OPÉRATOIRE pour le §36.6-2
+(« chaque constat cite une source remontant à `reponses.csv` ») : `findings.sources` (JSONB
+`{answer_ids, session_ids, attachment_ids}`) est éclaté en **trois colonnes** de listes séparées par
+`|`, et `reponses.csv` porte `answer_id` et `session_id` en tête. La citation d'un constat est donc
+un `RECHERCHEV` dans le ZIP, pas une promesse.
+Règle de précédence : **§32-36 > §24-31** — le §36.6-2 impose la traçabilité, le §36.3 doit la rendre
+exécutable ; c'est lui qui fixe la forme.
+Décideur : **A30**, sous revue croisée A37.
+Impact spec : aucun.
+
+## 2026-09-05 — [L7c] `scores.csv` et « score unitaire (si L8) » : absents, et signalés dans `mission.json`
+
+Le §36.3 conditionne `scores.csv` à L8 (« sinon absent et signalé ») et met « score unitaire (si
+L8) » dans `reponses.csv`. L8 n'est pas livré. Deux points restaient à trancher : **où** le signaler,
+et si la colonne de `reponses.csv` doit être présente mais vide.
+
+Options :
+
+1. Colonne présente et vide, fichier `scores.csv` vide avec ses en-têtes. **Écartée** : une colonne
+   vide se lit comme « aucun score n'a été calculé pour cette réponse », pas comme « le scoring n'est
+   pas encore livré » — et un tableau de zéros est le plus sûr moyen de faire écrire un faux chiffre.
+2. **Fichier ABSENT, colonne ABSENTE, et un signalement explicite dans `mission.json`**.
+
+Arbitrage : **option 2**, à la lettre du §36.3 (« absent et signalé »), et `mission.json` est
+l'endroit que le §36.3 désigne lui-même : « présence ou non des scores (L8) » figure dans sa liste de
+méta. Note pour L8 : « score unitaire » par RÉPONSE n'a pas de support au 04 — `unit_scores` est un
+agrégat (mission × unité × bloc) et `answers` ne porte aucune colonne de score ; ce que L8 devra
+mettre dans cette colonne se tranche au brief de L8, pas ici.
+Règle de précédence : **sans objet** — lecture littérale du §36.3, sans divergence interne.
+Décideur : **A30**, sous revue croisée A37.
+Impact spec : aucun ; point d'entrée au brief de L8.
+
+## 2026-09-05 — [L7c] Les FICHIERS des pièces jointes : l'option du §36.3 n'est pas livrable en L7c
+
+Le §36.3 : « les FICHIERS eux-mêmes sont une option cochée à l'export (sinon manifest seul) ». Or
+`apps/api` n'a **aucun client d'objet** : `configMinio` ne sert qu'à la sonde de préparation
+(`dependances.ts`), aucune route ne descend un binaire, et le protocole de morceaux (§9.6) appartient
+à **L6c**, non livré. `attachments.storage_key` existe, l'octet derrière n'est joignable par rien.
+
+Options :
+
+1. Câbler un client MinIO dans L7c. **Écartée** : dépendance hors de la liste 11 §1 (escalade §8-1)
+   ET périmètre de L6c — deux motifs, chacun suffisant.
+2. Livrer une case à cocher qui ne fait rien. **Écartée** : une option inerte est un mensonge d'écran.
+3. **`pieces_jointes/manifest.csv` seul**, aucune case à cocher, et l'absence DITE : `mission.json`
+   porte `piecesJointes.fichiersInclus = false` avec son motif, et la console l'affiche en clair.
+
+Arbitrage : **option 3**. Le §36.3 pose lui-même le manifeste seul comme le cas par défaut
+(« sinon manifest seul ») : la V1 livre le défaut, pas une option vide. L'option redevient livrable
+dès que L6c pose le téléchargement ; elle est à rouvrir au brief de L6c.
+Règle de précédence : **sans objet** — le §36.3 prévoit les deux cas, on livre celui que
+l'infrastructure permet.
+Décideur : **A30**, sous revue croisée A37.
+Impact spec : aucun ; à rouvrir au brief de L6c.
+
+## 2026-09-05 — [L7c] Le conteneur ZIP s'écrit avec `node:zlib` — aucune bibliothèque n'est ajoutée
+
+Le §36.3 impose un ZIP. La liste épinglée du 11 §1 ne contient **aucune** bibliothèque d'archive
+(`jszip`, `archiver`, `adm-zip`…), et en ajouter une est une escalade (11 §8-1).
+
+Options :
+
+1. Escalader l'ajout d'une dépendance. Coût : une escalade humaine sur le chemin critique de P-E,
+   pour un format dont on n'utilise qu'une fraction (pas de chiffrement, pas de Zip64, pas de flux).
+2. **Écrire le conteneur** : en-têtes locaux + répertoire central + CRC-32, compression `deflateRaw`
+   de `node:zlib` (bibliothèque standard de Node 22, aucune installation).
+
+Arbitrage : **option 2**. Une dizaine de fichiers texte connus à l'avance, aucun besoin de flux :
+c'est ~150 lignes testables, contre une dépendance permanente et une escalade. **Garde-fou posé avec
+le code** : un test relit l'archive produite avec un outil TIERS (`Expand-Archive` / `unzip`) — un
+ZIP « valide selon son propre écrivain » ne prouverait rien.
+Le **BOM UTF-8** (§36.3) est posé sur les `.csv` et **jamais** sur `mission.json` : un BOM devant un
+JSON fait échouer `JSON.parse` en mode strict, et le §36.3 parle de lisibilité Excel — donc des CSV.
+Règle de précédence : **sans objet** — le 11 §1 borne les dépendances, le §36.3 impose un format ;
+les deux se tiennent sans arbitrage.
+Décideur : **A30**, sous revue croisée A37.
+Impact spec : aucun ; aucune dépendance ajoutée.
+
+## 2026-09-05 — [L7c] `GET /v1/missions/:id/export` : une route nouvelle, et une réponse qui n'est pas du JSON
+
+Deux écarts aux conventions, déclarés ici (11 §8-6 : une route hors §8/§24.2 se documente).
+
+Options :
+
+1. Rendre le ZIP en base64 dans une enveloppe JSON validée par Zod, pour tenir le §3 à la lettre.
+   **Écartée** : +33 % d'octets et un décodage navigateur, pour un fichier destiné à être ENREGISTRÉ.
+2. **Une route de lecture dédiée qui rend `application/zip` + `Content-Disposition`**, dont l'ENTRÉE
+   (params, querystring) est validée par Zod comme partout, et dont le contenu JSON (`mission.json`)
+   est validé par un schéma Zod partagé avant d'entrer dans l'archive.
+
+Arbitrage : **option 2**. Le §3 exige un schéma « in/out » pour des routes qui parlent JSON ; un
+téléchargement n'a pas de « out » JSON à valider, et ce qui, DANS le ZIP, est du JSON est validé.
+Politique `type: 'mission'` : l'appartenance se prouve dans le dépôt, un non-membre reçoit **404** —
+la convention de L7b, tenue. Aucune marque `financier` : l'export ne lit ni `scoping_financials` ni
+`scoping_estimates`, et un test de balayage l'établit table par table.
+Règle de précédence : **sans objet** — le 11 §3 ne prévoit pas le cas du binaire ; il est comblé, non
+contredit.
+Décideur : **A30**, sous revue croisée A37.
+Impact spec : aucun ; route documentée ici et en en-tête de `apps/api/src/routes/export.ts`.
+
+## 2026-09-05 — [L7c] Le nom du répondant : l'« action explicite » est un paramètre de requête
+
+L'arbitrage du 2026-09-05 impose `consent_given = true` strict ET « derrière une action explicite,
+jamais par défaut ». Restait à décider OÙ vit cette action.
+
+Options :
+
+1. Le serveur envoie toujours le nom quand le consentement est acquis, l'écran le masque tant qu'on
+   ne clique pas. **Écartée** : le nom serait DÉJÀ dans le navigateur, dans le cache TanStack et dans
+   la console réseau — « masqué » n'est pas « non transmis », et l'invariant 3 refuse un contrôle qui
+   ne vit que côté client.
+2. **Un paramètre `repondants=true` sur l'agrégation ET sur l'export** : sans lui, `nomRepondant` est
+   `null` partout ; avec lui, il vaut `person_name` **uniquement** si `consent_given IS TRUE` — le
+   `NULL` et le `false` restent masqués, comme décidé.
+
+Arbitrage : **option 2**, et la porte est SERVEUR. Fonction et service restent publiés sans le
+paramètre (L7b les livre ainsi et l'écran en dépend) ; dans l'export, qui est un fichier qui CIRCULE,
+les trois champs passent ensemble par la même porte — c'est le motif exact de l'arbitrage d'A01 : à
+trois, ils identifient une personne dans une petite structure.
+Règle de précédence : **§24-31 > §16-22** — le §26 (attribution conditionnelle) prime sur M5.1.
+Décideur : **A30**, en application de l'arbitrage A01 du 2026-09-05.
+Impact spec : aucun ; `reponseAgregeeSchema` gagne `nomRepondant` nullable.
