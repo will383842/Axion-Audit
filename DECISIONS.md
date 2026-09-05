@@ -8808,3 +8808,123 @@ Règle de précédence : **§16-22 > §1-15** — 03 §22.1 est le texte précis
 axe-core vert.
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun.
+
+## 2026-09-05 — [L6] Le transport authentifié du terrain n'est au périmètre d'aucun incrément
+
+Contrôle A02 de la note L6, réserve **B2** : `grep -rn "fetch(" apps/field/src` rend **0 occurrence**
+sur `main`, sur `lot/l5b` et sur `lot/l5c`. L'app terrain n'a jamais fait un appel HTTP. L5a a livré
+le _rangement_ du jeton (`local/jetons.ts`, chiffré sous la DEK) et **rien ne s'en sert**. Le
+scénario 8 du §9.8 — `@critique`, jamais skippable — n'a donc aucun porteur.
+
+Options :
+
+1. **Le transport entre à L6a.** Le push idempotent ne peut pas exister sans lui, et L6a est déjà
+   l'incrément qui ouvre la conversation avec le serveur.
+2. Un incrément dédié avant L6a. **Écartée** : il ne pourrait pas être testé — un client HTTP sans
+   route de sync en face n'a rien à prouver.
+3. Le laisser à L6c avec les scénarios. **Écartée** : L6a et L6b en dépendent tous les deux.
+
+Arbitrage : **option 1**. Le transport (Bearer depuis `jetons.ts`, refresh rotatif via
+`POST /v1/auth/refresh` livré par L2, détection de réutilisation serveur, distinction entre _pas de
+réseau_ et _jeton mort_, message 05 §31-3) est au périmètre de **L6a** ; le **test** du scénario 8
+reste à **L6c** avec les sept autres. Règle de précédence : **§24-31 > §16-22** — 05 §31-3 décrit le
+comportement hors ligne, 11 §3 fixe le mode d'authentification du terrain.
+Décideur : **A01**, sur délégation de Williams du 2026-09-04.
+Impact spec : aucun amendement ; `docs/conception/LOT_L6.md` amendée (A-2).
+
+## 2026-09-05 — [L6] `sync_log` n'a aucun écrivain applicatif : qui l'écrit ?
+
+Contrôle A02, réserve **B3** : la table existe (`drizzle/0007_transverse.sql`), le lecteur existe
+(`domaines/users/depot.ts`), et la **seule écriture du dépôt est une fixture de test**
+(`l2-users.integration.test.ts`). Conséquence : le garde-fou de réinitialisation de mot de passe
+(05 §9.7) reste à jamais en « aucune sync connue » — **test vert compris**, puisque le test ensemence
+la table à la main — et l'alerte « sync muette > 24 h » (invariant 8) n'a jamais de matière.
+
+Options :
+
+1. **L6a écrit la ligne `push`, L6b la ligne `pull`.** Deux garde-fous en dépendent.
+2. Laisser à un lot d'exploitation ultérieur. **Écartée** : le garde-fou de §9.7 est un critère du
+   07 ligne L2, déjà coché sur une table que personne n'alimente.
+3. Journaliser côté client. **Écartée** : `sync_log` est une table serveur, et un client hors ligne
+   ne peut rien y écrire.
+
+Arbitrage : **option 1**. À chaque synchronisation aboutie, le serveur écrit `user_id`, `device_id`,
+`direction`, `items_count`, `conflicts_count`, `outbox_remaining`, `started_at`/`ended_at`, `status`.
+Côté terrain, L6a ajoute la clé `sync:derniere-reussie:<missionId>` à `CLES_META` — ajout
+append-only, **sans montée de `VERSION_SCHEMA_LOCAL`** — sans laquelle `derniereSyncReussieLe` reste
+`null` et l'alerte de l'invariant 8 se déclenche pour toujours. Règle de précédence : **§24-31 >
+§1-15** — 05 §9.7 V2.9 définit nommément la donnée du garde-fou.
+Décideur : **A01**, sur délégation de Williams du 2026-09-04.
+Impact spec : aucun amendement ; `docs/conception/LOT_L6.md` amendée (A-3).
+
+## 2026-09-05 — [L6] Où vivent les routes de sync, et le seuil de couverture les atteint-il ?
+
+Contrôle A02, réserve **B5** : les globs `apps/field/src/sync/**` et `apps/api/src/sync/**` sont bien
+déclarés dans `.github/coverage-critical-paths.json`, mais l'arborescence réelle de l'API place les
+routes dans `apps/api/src/routes/*.ts` — **hors du glob**. Or c'est la route qui porte le contrôle
+§9.9 et le contrat §9.3. Le fichier de seuils a déjà refusé ce cas deux fois (`scoping`, puis
+`users`) : « un seuil qui mesure le dépôt mais pas la route mesure la moitié qui ne décide de rien ».
+
+Options :
+
+1. Ajouter un troisième glob `apps/api/src/routes/sync.ts`. **Écartée** : elle répare le seuil sans
+   réparer la cause, et laisse deux fichiers de sync dans deux arborescences.
+2. **Les routes de sync vivent DANS `apps/api/src/sync/`, avec leur domaine.** Un seul glob couvre
+   les deux moitiés.
+3. Ne rien décider et voir à la revue. **Écartée** : c'est une décision d'arborescence, elle se
+   prend avant la première ligne, jamais après.
+
+Arbitrage : **option 2**. `apps/api/src/sync/` porte `routes.ts`, `service.ts`, `depot.ts`,
+`proprietaire.ts`, `chunks.ts`, enregistrées dans `app.ts` avec le préfixe `/v1`. Écart assumé à la
+convention `routes/<x>.ts`, avec un précédent au dépôt : `apps/api/src/domaines/auth/routes.ts`
+colocalise déjà route et domaine. Règle de précédence : **le fichier 11 pour ce que le pack ne
+tranche pas** — le pack ne fixe aucune arborescence, la DoD 09 §3 fixe le seuil mesuré.
+Décideur : **A01**, sur délégation de Williams du 2026-09-04.
+Impact spec : aucun amendement ; `docs/conception/LOT_L6.md` amendée (A-5).
+
+## 2026-09-05 — [L6] Séquencement : L5d s'intercale-t-il avant L6, ou en parallèle ?
+
+Contrôle A02, réserve **B4** : la note L6 défendait « L5a → L5b → L5c → (P-C) → L6 seul → (P-D) ».
+La chaîne photo a reçu son lot propriétaire **L5d** le 2026-09-05 (PR #50), qui touche
+`local/base.ts` et **monte `VERSION_SCHEMA_LOCAL`**. Les scénarios 6 et 7 du §9.8 — dont le 7 est un
+critère d'acceptation nommé — ne sont pas atteignables sans lui.
+
+Options :
+
+1. **L5d en série, juste après P-C et avant L6a.** Le schéma local est stabilisé avant que le moteur
+   de sync s'écrive dessus.
+2. L5d en parallèle de L6a. **Écartée** : deux chantiers simultanés sur `local/base.ts` sont
+   exactement la collision de fichiers que `CLAUDE.md` §4 interdit.
+3. L5d en série entre L6b et L6c. **Écartée** : L6a et L6b auraient été écrits sur un schéma local
+   destiné à changer, et une migration locale se réécrirait au milieu du lot.
+
+Arbitrage : **option 1**. Séquence stricte **L5c → (P-C) → L5d → L6a → L6b → L6c → (P-D)**. Le coût
+est assumé et il se dit : **L5d retarde L6 d'environ une demi-journée**, moins cher qu'une migration
+locale réécrite au milieu de L6b. « L6 se développe SEUL » (09 §5.3) n'est pas affaibli, il est
+décalé : une fois L5d fusionné, plus rien ne tourne sur `apps/field/**` ni `apps/api/**`. Règle de
+précédence : **09 §5.3 et `CLAUDE.md` §4**, qui interdisent le parallélisme sur les mêmes fichiers.
+Décideur : **A01**, sur délégation de Williams du 2026-09-04.
+Impact spec : aucun amendement ; `docs/conception/LOT_L6.md` amendée (A-4).
+
+## 2026-09-05 — [gouvernance] La note L6 dépasse « ≤ 1 page » : écart accepté ou refusé ?
+
+Le gardien A02 mesure les cinq notes de conception du dépôt : **LOT_L7 476 · LOT_L2 247 · LOT_L5 191
+· LOT_L3 139 · LOT_L6 126**. La règle 09 §3-1bis dit « ≤ 1 page ». Aucune note ne la tient, aucune
+n'a été recalée. L'amendement du 2026-09-05 porte LOT_L6 au-delà de 126 lignes.
+
+Options :
+
+1. **Accepter l'écart pour LOT_L6 et le déclarer ici**, la règle générale restant à arbitrer.
+2. Recaler la note. **Écartée** : LOT_L6 est la plus COURTE des cinq, sur le lot le plus critique ;
+   un veto de forme sur le chemin critique est exactement ce que le veto ne doit pas être.
+3. Laisser l'écart implicite. **Écartée** : une règle que personne ne tient et que personne n'amende
+   s'éteint en silence, et la sixième note fera 500 lignes sans que personne sache pourquoi c'est
+   trop.
+
+Arbitrage : **option 1**. L'écart de format de `LOT_L6.md` est **accepté et déclaré** ; l'amendement
+du 2026-09-05 l'aggrave délibérément, puisqu'il ajoute la table « critère 07 → incrément porteur »
+dont l'absence était le trou du premier contrôle. La question générale — amender ou rétablir
+« ≤ 1 page » — reste ouverte (doute **D-A** de la note) et appartient à Williams. Règle de
+précédence : **09 §3-1bis** pour la forme, **07** pour le contenu exigible, qui prime.
+Décideur : **A01**, sur délégation de Williams du 2026-09-04.
+Impact spec : aucun amendement du pack ; écart de forme tracé.

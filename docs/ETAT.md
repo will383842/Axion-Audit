@@ -3302,3 +3302,18 @@ escaladé à A20 par entrée `DECISIONS.md` — trois obstacles hors périmètre
 Prochaine action : faire arbitrer par A20 le lot propriétaire de la chaîne photo, et demander à A29
 la revue croisée du diff des trois refusions.
 Tests rouges connus : aucun en CI. Local : l'artefact Vitest ci-dessus, tracé et non masqué.
+
+## 2026-09-05 08h30 — [lot L6 / conception] — étape pipeline 1bis/7
+
+Dernier commit vert : `da7e8c9` (L5b — l'écran de session à 3 zones) · Branche :
+`lot/l6-conception-amendee` · Poussé : oui
+Tâche en cours : `docs/conception/LOT_L6.md` amendée pour lever les cinq bloquants du contrôle A02
+(`CONTROLE_A02_NOTE_L6_2026-09-05.md`, PR #51). Cinq arbitrages A01 tracés dans `DECISIONS.md` :
+transport authentifié → L6a · `sync_log` écrit par L6a/L6b · routes de sync sous
+`apps/api/src/sync/` · séquence L5c → P-C → L5d → L6a → L6b → L6c · écart de format accepté.
+Ajouts propres à l'amendement : PD4 réécrit sur **04 S-3** (note volante = `created_by`), PD6
+déclaré périmé (R-L5a-3), table « critère 07 → incrément porteur » où **les 8 scénarios §9.8 ont
+chacun leur porteur**, doute **D5** (§9.9 ne couvre que 3 des 5 `ENTITES_SYNC`).
+Prochaine action : faire contresigner l'amendement par A01 + A02, puis ouvrir **L5d** — L6a ne
+s'ouvre qu'après lui.
+Tests rouges connus : aucun. Aucun code touché : ce commit ne modifie que deux fichiers de prose.
