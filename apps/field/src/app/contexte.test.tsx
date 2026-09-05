@@ -41,10 +41,15 @@ import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
 import { FournisseurTerrain, useTerrain, type ValeurTerrain } from './contexte.js';
-import { deverrouiller, initialiserCoffre } from '../local/coffre-appareil.js';
+import {
+  DonneesSansCoffreError,
+  deverrouiller,
+  initialiserCoffre,
+} from '../local/coffre-appareil.js';
 import { CoffreIllisibleError, ParametresKdfHorsBornesError } from '../local/coffre.js';
 import { installerContexteLocal, retirerContexteLocal } from '../local/contexte.js';
 import type * as ModuleBase from '../local/base.js';
+import type * as ModuleCoffreAppareil from '../local/coffre-appareil.js';
 
 // `vi.hoisted` : la fabrique d'un `vi.mock` s'exécute AVANT le corps du fichier.
 // Sans lui, ce double serait dans sa zone morte temporelle au premier import — et
@@ -96,15 +101,24 @@ vi.mock('../local/base.js', async (importerReel) => {
   };
 });
 
-vi.mock('../local/coffre-appareil.js', () => ({
-  lireCoffreAuRepos: vi.fn(() =>
-    erreurLectureCoffre === null
-      ? Promise.resolve(coffreAuRepos)
-      : Promise.reject(erreurLectureCoffre),
-  ),
-  deverrouiller: vi.fn(() => Promise.resolve(coffreFactice)),
-  initialiserCoffre: vi.fn(() => Promise.resolve(coffreFactice)),
-}));
+// Les TROIS fonctions sont doublées ; le reste du module — dont la classe
+// `DonneesSansCoffreError`, qui est le cas R3 du premier usage — vient du module
+// RÉEL. Doubler une classe d'erreur reviendrait à éprouver le câblage contre une
+// erreur qui n'existe pas : `instanceof AnomalieCoffreError` serait faux, et
+// c'est précisément le test qui compte ici.
+vi.mock('../local/coffre-appareil.js', async (importerReel) => {
+  const reel = await importerReel<typeof ModuleCoffreAppareil>();
+  return {
+    ...reel,
+    lireCoffreAuRepos: vi.fn(() =>
+      erreurLectureCoffre === null
+        ? Promise.resolve(coffreAuRepos)
+        : Promise.reject(erreurLectureCoffre),
+    ),
+    deverrouiller: vi.fn(() => Promise.resolve(coffreFactice)),
+    initialiserCoffre: vi.fn(() => Promise.resolve(coffreFactice)),
+  };
+});
 
 vi.mock('../local/contexte.js', () => ({
   contexteLocal: vi.fn(() => ({ base: baseFactice, coffre: coffreFactice })),
@@ -194,6 +208,7 @@ beforeEach(() => {
   vi.mocked(installerContexteLocal).mockClear();
   vi.mocked(retirerContexteLocal).mockClear();
   sessionEnCoursFactice.mockClear();
+  baseFactice.close.mockClear();
 });
 
 afterEach(() => {
@@ -394,5 +409,160 @@ describe('coquille terrain — une anomalie de coffre ne devient jamais « premi
     await monterCoquille();
     expect(phase()).toBe('verrouille');
     expect(terrain.premierUsage).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// R3 — UNE ANOMALIE DÉCOUVERTE À LA SOUMISSION N'EST PLUS UN « PREMIER USAGE »
+//
+// Ajouté le 2026-09-05 par A26, depuis la revue croisée A29 du même jour (R3) et
+// le correctif d'A24 qui la ferme. Je n'ai écrit aucune ligne du module éprouvé.
+//
+// Le cas de F-22 découvert à l'AMORÇAGE était déjà couvert (bloc ci-dessus).
+// Celui-ci est l'autre porte, et A29 l'a décrite : `DonneesSansCoffreError` n'est
+// levée que par `initialiserCoffre`, donc seulement quand `premierUsage === true`.
+// L'échec était rattrapé DANS l'écran, `premierUsage` restait `true`, et
+// l'auditeur gardait sous les yeux un bouton actif « Créer la protection de cet
+// appareil » au-dessus d'une alerte qui dit « Ne créez PAS de protection ».
+//
+// Ce qui est éprouvé ici est le CÂBLAGE : la coquille doit retirer elle-même le
+// drapeau, indépendamment de ce que l'écran affiche. Les deux gardes sont
+// volontairement redondantes — celle qui manque est celle qui détruit une
+// journée de collecte.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('coquille terrain — R3 : une anomalie À LA SOUMISSION retire « premier usage »', () => {
+  /** Monte la coquille sur un appareil SANS coffre : `premierUsage` est vrai. */
+  async function monterEnPremierUsage(): Promise<void> {
+    coffreAuRepos = null;
+    await monterCoquille();
+    // Anti-vacuité : sans ce contrôle, un `premierUsage` déjà faux rendrait le
+    // test ci-dessous vert sans que rien ne l'ait fait basculer.
+    expect(terrain.premierUsage).toBe(true);
+  }
+
+  /** Le geste de l'auditeur, dont on attend qu'il ÉCHOUE. */
+  async function tenterDOuvrir(): Promise<unknown> {
+    let erreur: unknown = null;
+    await act(async () => {
+      erreur = await terrain.ouvrir(MOT_DE_PASSE_FICTIF).then(
+        () => null,
+        (cause: unknown) => cause,
+      );
+    });
+    await laisserRepondre();
+    return erreur;
+  }
+
+  it('@critique `DonneesSansCoffreError` au premier usage : `premierUsage` passe à FAUX, et l’erreur est propagée', async () => {
+    await monterEnPremierUsage();
+    const anomalie = new DonneesSansCoffreError(37);
+    vi.mocked(initialiserCoffre).mockRejectedValueOnce(anomalie);
+
+    const erreur = await tenterDOuvrir();
+
+    expect(erreur).toBe(anomalie);
+    // Le drapeau tombe : plus aucun chemin ne mène à l'écran de création.
+    expect(terrain.premierUsage).toBe(false);
+    // Et rien n'a été ouvert : la phase reste « verrouille », le contexte local
+    // n'a pas été installé.
+    expect(phase()).toBe('verrouille');
+    expect(installerContexteLocal).not.toHaveBeenCalled();
+    // L'action que l'auditeur doit lire avant de faire le geste destructeur.
+    expect(anomalie.action).toContain('sans recharger ni réinstaller');
+  });
+
+  it('@critique anti-vacuité de R3 : une erreur ORDINAIRE laisse `premierUsage` intact', async () => {
+    // Le bord opposé. Une coquille qui retirerait le drapeau sur TOUTE erreur
+    // renverrait un auditeur ayant tapé douze caractères de travers vers
+    // « Déverrouiller la collecte » — sur un appareil qui n'a pas de coffre.
+    await monterEnPremierUsage();
+    vi.mocked(initialiserCoffre).mockRejectedValueOnce(new Error('Mot de passe incorrect.'));
+
+    const erreur = await tenterDOuvrir();
+
+    expect(erreur).toBeInstanceOf(Error);
+    expect(terrain.premierUsage).toBe(true);
+    expect(phase()).toBe('verrouille');
+  });
+
+  it('@critique le chemin nominal du premier usage n’est pas touché : ouvrir CRÉE et publie le coffre', async () => {
+    // Non-régression : la garde ajoutée ne doit pas s'appliquer au succès.
+    await monterEnPremierUsage();
+    await deverrouillerLApplication();
+
+    expect(initialiserCoffre).toHaveBeenCalledTimes(1);
+    expect(deverrouiller).not.toHaveBeenCalled();
+    expect(terrain.premierUsage).toBe(false);
+    expect(phase()).toBe('ouvert');
+    expect(installerContexteLocal).toHaveBeenCalledWith({
+      base: baseFactice,
+      coffre: coffreFactice,
+    });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// R6 — LA CONNEXION DEXIE EST FERMÉE SUR LE CHEMIN QUI LÈVE, ET SUR LUI SEUL
+//
+// Ajouté le 2026-09-05 par A26, depuis la revue croisée A29 du même jour (R6) et
+// le correctif d'A24 qui la ferme.
+//
+// Le chemin est NOUVEAU : avant le correctif de F-22, `lireCoffreAuRepos` ne
+// levait jamais. Depuis, une anomalie de coffre laissait une connexion Dexie
+// vivante que plus personne ne référençait (`setBase` n'avait pas eu lieu) — et
+// une connexion vivante bloque un `versionchange` jusqu'au rechargement de la
+// page, c'est-à-dire la compatibilité ascendante du schéma local (05 §31-1). Sur
+// un appareil dont le coffre est déjà en anomalie, refuser en plus la mise à jour
+// du schéma est la seconde panne de trop.
+//
+// Trois faits, et il faut les trois : elle est fermée, elle l'est UNE seule fois,
+// et elle ne l'est JAMAIS quand tout va bien. Le troisième est le plus important
+// des trois : une base fermée sur le chemin nominal ferait tomber toute la
+// collecte, et « close a bien été appelé » serait quand même vert.
+// ═══════════════════════════════════════════════════════════════════════════
+describe('coquille terrain — R6 : la base Dexie est fermée quand `lireCoffreAuRepos` lève', () => {
+  it('@critique anomalie de coffre à l’amorçage ⇒ `close()` appelé EXACTEMENT une fois, et la base n’est pas publiée', async () => {
+    erreurLectureCoffre = new CoffreIllisibleError('sa forme n’est pas celle attendue sur : sel');
+    await monterCoquille();
+
+    // Anti-vacuité : on est bien sur le chemin qui lève, pas sur un montage muet.
+    expect(phase()).toBe('erreur');
+    expect(terrain.panne).not.toBeNull();
+
+    expect(baseFactice.close).toHaveBeenCalledTimes(1);
+    // La référence n'a jamais été remise à l'application : c'est ce qui rendait
+    // la connexion irrattrapable, et c'est pourquoi il fallait fermer ici.
+    expect(terrain.base).toBeNull();
+  });
+
+  it('@critique chemin NOMINAL : la base n’est JAMAIS fermée, et elle est publiée', async () => {
+    // Le contrôle qui empêche la correction d'aller trop loin. Une coquille qui
+    // fermerait la base à chaque amorçage rendrait l'application inutilisable, et
+    // le test précédent resterait vert.
+    await monterCoquille();
+
+    expect(phase()).toBe('verrouille');
+    expect(baseFactice.close).not.toHaveBeenCalled();
+    expect(terrain.base).toBe(baseFactice);
+  });
+
+  it('@critique chemin nominal PUIS déverrouillage complet : toujours aucune fermeture', async () => {
+    // Le cas d'usage réel de bout en bout — amorçage, saisie du mot de passe,
+    // coffre ouvert. `close()` n'a rien à y faire.
+    await monterCoquille();
+    await deverrouillerLApplication();
+
+    expect(phase()).toBe('ouvert');
+    expect(baseFactice.close).not.toHaveBeenCalled();
+  });
+
+  it('@critique une anomalie de PARAMÈTRES ferme aussi : c’est la famille qui commande, pas la classe', async () => {
+    erreurLectureCoffre = new ParametresKdfHorsBornesError(
+      'longueur de clé : 48 pour un maximum de 32',
+    );
+    await monterCoquille();
+
+    expect(phase()).toBe('erreur');
+    expect(baseFactice.close).toHaveBeenCalledTimes(1);
   });
 });

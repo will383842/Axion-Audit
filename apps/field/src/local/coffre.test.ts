@@ -38,6 +38,8 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
   BORNES_KDF,
+  DonneeLocaleCorrompueError,
+  MotDePasseInvalideError,
   PARAMETRES_KDF_DEFAUT,
   ParametresKdfHorsBornesError,
   creerDekEnveloppee,
@@ -50,6 +52,13 @@ import {
   type Enveloppe,
   type ParametresKdf,
 } from './coffre.js';
+import {
+  ErreurEnveloppe,
+  LONGUEUR_NONCE_OCTETS,
+  VERSION_ENVELOPPE,
+  depuisBase64,
+  versBase64,
+} from './enveloppe.js';
 
 /**
  * Un coffre NEUF : DEK fraîche enveloppée sous `kek`, coffre ouvert dessus.
@@ -585,4 +594,386 @@ describe('coffre — bornes hautes des paramètres de dérivation (verdict A51, 
   it('`deriverKek` accepte toujours le profil confirmé — non-régression du chemin nominal', async () => {
     await expect(deriverKek(MDP, selFixe(3), PARAMETRES_KDF_DEFAUT)).resolves.toBeDefined();
   }, 20_000);
+});
+
+// =============================================================================
+// G. R1 — LA CLASSE ENTIÈRE DE F-25 : CE QUE LES BORNES DOIVENT ENCORE REFUSER
+//
+// Ajouté le 2026-09-05 par A26, depuis la revue croisée A29 du même jour (R1,
+// MAJEUR) et le correctif d'A24 qui la ferme. Je n'ai écrit aucune ligne du code
+// éprouvé ici (09 §5.6).
+//
+// ── CE QU'A29 A MESURÉ, ET POURQUOI C'EST LA MÊME PANNE QUE F-25 ─────────────
+// La première version des bornes ne bornait que par le HAUT, et seulement le
+// budget. QUATRE jeux de paramètres passaient la vérification et tuaient le
+// déverrouillage un cran plus bas, sur un message technique ANGLAIS, sans action
+// et sur un appareil définitivement fermé :
+//   longueurOctets 48 · longueurOctets 64 (la borne haute EXACTE de l'époque) ·
+//   longueurOctets 1 · memoireKio 7.
+// Une écriture dans IndexedDB, sans mot de passe, sans franchir le verrou : c'est
+// le modèle de menace de F-25 mot pour mot. Ces quatre-là sont ici EN
+// NON-RÉGRESSION — ils ne doivent plus jamais repasser.
+//
+// ── ET CE QUE LA MESURE SEULE NE DONNAIT PAS ────────────────────────────────
+// A29 a mesuré ce qu'elle a essayé. `longueurOctets` 16 et 24 sont acceptés par
+// AES (ce sont AES-128 et AES-192) et n'auraient donc produit AUCUNE erreur
+// technique : ils auraient dégradé EN SILENCE le chiffrement local d'un appareil,
+// sur la foi d'une ligne écrite dans `meta`. Ils sont éprouvés ici parce qu'une
+// borne qui refuse ce qui plante et laisse passer ce qui affaiblit protège
+// l'écran, pas les données.
+//
+// Traçabilité : E33 (sécurité / RGPD) ; 11 §4 ; 03 §17.6 ; invariants 5 et 7.
+// =============================================================================
+
+/** Le profil confirmé, modifié sur les seuls axes cités. */
+function profilKdf(surcharges: Partial<ParametresKdf>): ParametresKdf {
+  return { ...PARAMETRES_KDF_DEFAUT, ...surcharges };
+}
+
+/**
+ * Les fragments ANGLAIS qu'A29 a vus atteindre l'écran. Aucun message de refus ne
+ * doit les contenir : le refus doit arriver AVANT eux, et en français.
+ */
+const FRAGMENTS_TECHNIQUES_ANGLAIS = [
+  'DataError',
+  'Invalid key length',
+  'Hash length',
+  'Memory size',
+  'should be',
+  'at least',
+];
+
+/** Ce que `verifierParametresKdf` a refusé — ou `null` si elle a laissé passer. */
+function refusDe(parametres: ParametresKdf): Error | null {
+  try {
+    verifierParametresKdf(parametres);
+    return null;
+  } catch (erreur) {
+    return erreur instanceof Error ? erreur : new Error(String(erreur));
+  }
+}
+
+describe('coffre — R1 : les quatre jeux mesurés par A29 sont refusés EN FRANÇAIS (non-régression)', () => {
+  const JEUX_A29: readonly { readonly nom: string; readonly parametres: ParametresKdf }[] = [
+    {
+      nom: 'longueurOctets = 48 — « DataError: Invalid key length »',
+      parametres: profilKdf({ longueurOctets: 48 }),
+    },
+    {
+      nom: 'longueurOctets = 64 — l’ancienne borne haute EXACTE',
+      parametres: profilKdf({ longueurOctets: 64 }),
+    },
+    {
+      nom: 'longueurOctets = 1 — « Hash length should be at least 4 bytes »',
+      parametres: profilKdf({ longueurOctets: 1 }),
+    },
+    {
+      nom: 'memoireKio = 7 — « Memory size should be at least 8 * parallelism »',
+      parametres: profilKdf({ memoireKio: 7 }),
+    },
+  ];
+
+  for (const { nom, parametres } of JEUX_A29) {
+    it(`@critique ${nom} : refusé par les bornes, en français, sans aucune chaîne technique anglaise`, () => {
+      const erreur = refusDe(parametres);
+      expect(erreur).toBeInstanceOf(ParametresKdfHorsBornesError);
+      const message = erreur?.message ?? '';
+      expect(message).toMatch(/[éèêàçù]/);
+      for (const fragment of FRAGMENTS_TECHNIQUES_ANGLAIS) {
+        expect(message).not.toContain(fragment);
+      }
+    });
+  }
+
+  it('@critique les quatre jeux sont refusés par `deriverKek` AUSSI — la seconde ceinture ne dépend pas du stockage', async () => {
+    // Anti-vacuité : le profil confirmé, lui, dérive bel et bien. Sans ce
+    // contrôle, une `deriverKek` cassée rendrait les quatre refus ci-dessous
+    // triviaux — elle refuserait tout, y compris ce qui doit passer.
+    await expect(deriverKek(MDP, selFixe(1), PARAMETRES_KDF_DEFAUT)).resolves.toBeDefined();
+    for (const { parametres } of JEUX_A29) {
+      await expect(deriverKek(MDP, selFixe(1), parametres)).rejects.toThrow(
+        ParametresKdfHorsBornesError,
+      );
+    }
+  }, 20_000);
+});
+
+describe('coffre — R1 : `longueurOctets` est un point, pas une plage (la DEK est AES-256)', () => {
+  // 16 et 24 sont des longueurs de clé AES PARFAITEMENT VALIDES : rien ne
+  // planterait, et c'est exactement le danger. Une ligne écrite dans `meta`
+  // ferait dériver une KEK AES-128 pour envelopper une DEK AES-256, en silence,
+  // et aucune sonde qui cherche un message d'erreur ne l'aurait vu.
+  for (const longueur of [16, 24]) {
+    it(`@critique longueurOctets = ${String(longueur)}, accepté par AES, est refusé quand même`, () => {
+      const erreur = refusDe(profilKdf({ longueurOctets: longueur }));
+      expect(erreur).toBeInstanceOf(ParametresKdfHorsBornesError);
+      expect(erreur?.message).toContain(String(longueur));
+      expect(erreur?.message).toContain(String(BORNES_KDF.longueurOctetsMin));
+    });
+  }
+
+  it('@critique 32 — et 32 seulement — est accepté : plancher et plafond sont ÉGAUX', () => {
+    // Anti-vacuité de la paire ci-dessus, et fixation de la doctrine : si un jour
+    // quelqu'un rouvre la plage « pour être tolérant », ce test rougit.
+    expect(BORNES_KDF.longueurOctetsMin).toBe(32);
+    expect(BORNES_KDF.longueurOctetsMax).toBe(32);
+    expect(refusDe(profilKdf({ longueurOctets: 32 }))).toBeNull();
+    expect(refusDe(profilKdf({ longueurOctets: 33 }))).toBeInstanceOf(ParametresKdfHorsBornesError);
+    expect(refusDe(profilKdf({ longueurOctets: 31 }))).toBeInstanceOf(ParametresKdfHorsBornesError);
+  });
+});
+
+describe('coffre — R1 : le plancher de mémoire est un COEFFICIENT (`m ≥ 8 × p`), pas un nombre', () => {
+  // La contrainte est celle d'Argon2id lui-même. Écrite en dur à 8, elle serait
+  // fausse dès `p = 2` — et l'erreur anglaise « Memory size should be at least
+  // 8 * parallelism » repasserait, sur le seul axe qu'A29 avait mesuré.
+  const CAS: readonly { readonly m: number; readonly p: number; readonly accepte: boolean }[] = [
+    { m: 7, p: 1, accepte: false },
+    { m: 8, p: 1, accepte: true },
+    { m: 15, p: 2, accepte: false },
+    { m: 16, p: 2, accepte: true },
+    { m: 31, p: 4, accepte: false },
+    { m: 32, p: 4, accepte: true },
+  ];
+
+  for (const { m, p, accepte } of CAS) {
+    it(`@critique m = ${String(m)}, p = ${String(p)} ⇒ ${accepte ? 'accepté' : 'refusé'}`, () => {
+      const erreur = refusDe(profilKdf({ memoireKio: m, parallelisme: p }));
+      if (accepte) {
+        expect(erreur).toBeNull();
+        return;
+      }
+      expect(erreur).toBeInstanceOf(ParametresKdfHorsBornesError);
+      // Le minimum ANNONCÉ doit être celui qui a été CALCULÉ, pas la constante :
+      // un message qui dirait « minimum de 8 » devant `p = 2` enverrait celui qui
+      // le lit corriger la mauvaise valeur.
+      expect(erreur?.message).toContain(`pour un minimum de ${String(8 * p)}`);
+    });
+  }
+
+  it('@critique le plancher est publié comme un coefficient PAR VOIE, jamais comme une mémoire', () => {
+    expect(BORNES_KDF.memoireKioMinParVoie).toBe(8);
+    expect(BORNES_KDF).not.toHaveProperty('memoireKioMin');
+  });
+});
+
+describe('coffre — R1 : les planchers de passes et de voies sont ceux de la bibliothèque', () => {
+  // `hash-wasm` refuse « Iterations should be a positive number » et « Parallelism
+  // should be a positive number ». Les transcrire ici n'ajoute aucune sévérité —
+  // un plancher qui ne refuse que ce que la bibliothèque refuse déjà ne peut
+  // fermer aucun coffre qui s'ouvrait la veille (invariant 7) — mais il fait dire
+  // le refus EN FRANÇAIS, avant qu'il ne soit subi en anglais.
+  const PLANCHERS: readonly {
+    readonly nom: string;
+    readonly parametres: ParametresKdf;
+    readonly minimum: number;
+    readonly etiquette: string;
+  }[] = [
+    {
+      nom: 'zéro passe',
+      parametres: profilKdf({ iterations: 0 }),
+      minimum: BORNES_KDF.iterationsMin,
+      etiquette: 'passes :',
+    },
+    {
+      nom: 'un nombre de passes NÉGATIF',
+      parametres: profilKdf({ iterations: -3 }),
+      minimum: BORNES_KDF.iterationsMin,
+      etiquette: 'passes :',
+    },
+    {
+      nom: 'zéro voie parallèle',
+      parametres: profilKdf({ parallelisme: 0 }),
+      minimum: BORNES_KDF.parallelismeMin,
+      etiquette: 'voies parallèles :',
+    },
+    {
+      nom: 'un nombre de voies NÉGATIF',
+      parametres: profilKdf({ parallelisme: -1 }),
+      minimum: BORNES_KDF.parallelismeMin,
+      etiquette: 'voies parallèles :',
+    },
+  ];
+
+  for (const { nom, parametres, minimum, etiquette } of PLANCHERS) {
+    it(`@critique ${nom} : refusé, avec l’axe et le minimum cités`, () => {
+      const erreur = refusDe(parametres);
+      expect(erreur).toBeInstanceOf(ParametresKdfHorsBornesError);
+      expect(erreur?.message).toContain(etiquette);
+      expect(erreur?.message).toContain(`pour un minimum de ${String(minimum)}`);
+      for (const fragment of FRAGMENTS_TECHNIQUES_ANGLAIS) {
+        expect(erreur?.message).not.toContain(fragment);
+      }
+    });
+  }
+
+  it('@critique anti-vacuité : `t = 1` et `p = 1` — les valeurs du profil confirmé — passent', () => {
+    expect(BORNES_KDF.iterationsMin).toBe(1);
+    expect(BORNES_KDF.parallelismeMin).toBe(1);
+    expect(refusDe(profilKdf({ iterations: 1, parallelisme: 1 }))).toBeNull();
+  });
+});
+
+describe('coffre — R1 : un paramètre non entier est refusé sur les QUATRE axes, `NaN` compris', () => {
+  const AXES = ['memoireKio', 'iterations', 'parallelisme', 'longueurOctets'] as const;
+  const VALEURS = [
+    { nom: 'fractionnaire (1,5)', valeur: 1.5 },
+    { nom: 'NaN', valeur: Number.NaN },
+  ] as const;
+
+  for (const axe of AXES) {
+    for (const { nom, valeur } of VALEURS) {
+      it(`@critique ${axe} = ${nom} : refusé, et le message dit que ce n’est pas un entier`, () => {
+        const erreur = refusDe(profilKdf({ [axe]: valeur }));
+        expect(erreur).toBeInstanceOf(ParametresKdfHorsBornesError);
+        expect(erreur?.message).toContain('n’est pas un nombre entier');
+        for (const fragment of FRAGMENTS_TECHNIQUES_ANGLAIS) {
+          expect(erreur?.message).not.toContain(fragment);
+        }
+      });
+    }
+  }
+
+  it('@critique `NaN` ne peut être retenu par AUCUNE comparaison de borne — c’est le filet d’entiers qui l’attrape', () => {
+    // Le point qui rend ce test non redondant : `NaN > max` et `NaN < min` sont
+    // FAUX tous les deux. Sans la garde d'intégrité, un `NaN` relu du stockage
+    // traverserait les huit comparaisons sans en déclencher une seule, et
+    // Argon2id mourrait un cran plus bas, en anglais.
+    //
+    // Le `NaN` est produit ici comme il le serait sur le terrain — par une
+    // valeur de `meta` qui n'est pas un nombre —, et non écrit littéralement :
+    // c'est la même valeur, et cela évite d'apprendre au dépôt qu'on compare
+    // avec `NaN` (`use-isnan`).
+    const valeurRelue = Number.parseFloat('quarante-huit');
+    expect(Number.isNaN(valeurRelue)).toBe(true);
+    expect(valeurRelue > BORNES_KDF.memoireKioMax).toBe(false);
+    expect(valeurRelue < BORNES_KDF.memoireKioMinParVoie).toBe(false);
+    expect(refusDe(profilKdf({ memoireKio: valeurRelue }))).toBeInstanceOf(
+      ParametresKdfHorsBornesError,
+    );
+  });
+});
+
+describe('coffre — R1 : TOUS les écarts sont dits en UNE fois', () => {
+  it('@critique un jeu fautif sur cinq points rend UN message qui les cite tous les cinq', () => {
+    // Celui qui lira ce message le lira une fois, sur le terrain, sur un appareil
+    // qui ne s'ouvre plus. Le renvoyer cinq fois de suite au même écran pour
+    // découvrir un écart de plus à chaque tour n'est pas un diagnostic.
+    const erreur = refusDe(
+      profilKdf({
+        memoireKio: 4_000_000,
+        iterations: 1_000_000,
+        parallelisme: 9,
+        longueurOctets: 48,
+      }),
+    );
+    expect(erreur).toBeInstanceOf(ParametresKdfHorsBornesError);
+    const message = erreur?.message ?? '';
+    for (const axe of [
+      'mémoire de',
+      'passes :',
+      'voies parallèles :',
+      'longueur de clé :',
+      'travail total de',
+    ]) {
+      expect(message).toContain(axe);
+    }
+    // Anti-vacuité : cinq écarts, donc cinq fragments séparés — un message qui se
+    // contenterait du premier venu n'en aurait qu'un.
+    expect(message.split(' ; ')).toHaveLength(5);
+  });
+});
+
+describe('coffre — R1 : le plafond de passes reste AMARRÉ au profil, pas à `iterationsMax`', () => {
+  it('@critique `t = 4` accepté et `t = 5` refusé — et c’est le TRAVAIL qui refuse, pas le compteur de passes', () => {
+    // Le point mesuré par A29 (sonde 6bis) et qu'il faut fixer : `iterationsMax`
+    // vaut 8. Si c'était lui qui refusait `t = 5`, un durcissement humain du
+    // profil (11 §8-4) ne déplacerait pas la limite — et le plafond deviendrait
+    // un chiffre orphelin, exactement ce que l'arbitrage du 2026-09-04 a écarté.
+    expect(BORNES_KDF.iterationsMax).toBeGreaterThan(5);
+    expect(refusDe(profilKdf({ iterations: 4 }))).toBeNull();
+    const erreur = refusDe(profilKdf({ iterations: 5 }));
+    expect(erreur).toBeInstanceOf(ParametresKdfHorsBornesError);
+    expect(erreur?.message).toContain('travail total de');
+    expect(erreur?.message).not.toContain('passes :');
+    expect(erreur?.message).toContain(String(BORNES_KDF.travailMax));
+  });
+});
+
+// =============================================================================
+// H. LES REFUS DU COFFRE QUI N'AVAIENT ENCORE AUCUN TEST
+//
+// Trois chemins de `coffre.ts` restaient à zéro : le mot de passe VIDE,
+// l'enveloppe d'une AUTRE version (aux deux endroits où elle est vérifiée), et un
+// clair déchiffré qui n'est pas du JSON. Aucun n'est un correctif d'A24 — ils
+// sont antérieurs (`0d4daf43`) —, et c'est précisément pourquoi personne ne les
+// avait regardés. Ils décident tous les trois de ce qu'un auditeur voit quand une
+// donnée locale est abîmée : ce n'est pas de la couverture de confort.
+// =============================================================================
+describe('coffre — refus élémentaires (mot de passe vide, versions d’enveloppe, clair non JSON)', () => {
+  it('un mot de passe VIDE est refusé par `deriverKek`, avant Argon2id', async () => {
+    await expect(deriverKek('', selFixe(1))).rejects.toThrow(MotDePasseInvalideError);
+  });
+
+  it('une enveloppe de DEK d’une AUTRE version n’est pas « déballée au mieux » : elle lève', async () => {
+    const dekEnveloppee = await creerDekEnveloppee(kekA);
+    await expect(
+      ouvrirCoffre(kekA, { ...dekEnveloppee, v: VERSION_ENVELOPPE + 1 }),
+    ).rejects.toThrow(ErreurEnveloppe);
+    // Anti-vacuité : la MÊME enveloppe, à sa version, s'ouvre.
+    await expect(ouvrirCoffre(kekA, dekEnveloppee)).resolves.toBeDefined();
+  });
+
+  it('une enveloppe de DONNÉE d’une autre version lève aussi, et distinctement d’un mauvais chiffré', async () => {
+    const { coffre } = await creerCoffre(kekA);
+    const enveloppe = await coffre.chiffrer(CLAIR);
+    await expect(
+      coffre.dechiffrer({ ...enveloppe, v: VERSION_ENVELOPPE + 1 }, schemaReponse),
+    ).rejects.toThrow(ErreurEnveloppe);
+    await expect(coffre.dechiffrer(enveloppe, schemaReponse)).resolves.toEqual(CLAIR);
+  });
+
+  it('un clair authentifié mais NON JSON est signalé corrompu — jamais avalé en silence', async () => {
+    // Le seul cas de ce fichier qui exige de manipuler la DEK à la main : le
+    // coffre ne publie aucun moyen d'écrire autre chose que du JSON, ce qui est
+    // une bonne propriété. On reconstitue donc la même DEK avec WebCrypto brut,
+    // sans rien demander de plus au module que ce qu'il expose déjà.
+    const dekEnveloppee = await creerDekEnveloppee(kekA);
+    const coffre = await ouvrirCoffre(kekA, dekEnveloppee);
+    const dek = await crypto.subtle.unwrapKey(
+      'raw',
+      depuisBase64(dekEnveloppee.c),
+      kekA,
+      { name: 'AES-GCM', iv: depuisBase64(dekEnveloppee.n) },
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt'],
+    );
+    const envelopperOctets = async (octets: Uint8Array<ArrayBuffer>): Promise<Enveloppe> => {
+      const nonce = crypto.getRandomValues(new Uint8Array(LONGUEUR_NONCE_OCTETS));
+      const chiffre = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce }, dek, octets);
+      return {
+        v: VERSION_ENVELOPPE,
+        n: versBase64(nonce),
+        c: versBase64(new Uint8Array(chiffre)),
+      };
+    };
+
+    // Anti-vacuité : la même fabrication, avec du JSON valide, se relit. Sans
+    // elle, un `unwrapKey` mal câblé rendrait ce test vert pour la mauvaise
+    // raison — l'échec viendrait de la clé, pas du contenu.
+    const bonne = await envelopperOctets(new TextEncoder().encode(JSON.stringify(CLAIR)));
+    await expect(coffre.dechiffrer(bonne, schemaReponse)).resolves.toEqual(CLAIR);
+
+    const mauvaise = await envelopperOctets(new TextEncoder().encode('{ ceci n’est pas du JSON'));
+    await expect(coffre.dechiffrer(mauvaise, schemaReponse)).rejects.toThrow(
+      DonneeLocaleCorrompueError,
+    );
+  });
+
+  it('`chiffrer(undefined)` range un `null` explicite — jamais un trou dans le chiffré', async () => {
+    const { coffre } = await creerCoffre(kekA);
+    const enveloppe = await coffre.chiffrer(undefined);
+    await expect(coffre.dechiffrer(enveloppe, z.null())).resolves.toBeNull();
+  });
 });

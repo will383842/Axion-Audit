@@ -31,8 +31,10 @@ import {
   type CoffreAuRepos,
 } from './coffre-appareil.js';
 import {
+  AnomalieCoffreError,
   BORNES_KDF,
   CoffreIllisibleError,
+  CoffreInexploitableError,
   MotDePasseInvalideError,
   MotDePasseTropCourtError,
   PARAMETRES_KDF_DEFAUT,
@@ -643,5 +645,275 @@ describe('F-25 — paramètres KDF hors bornes AU REPOS (verdict A51, MAJEUR)', 
     await expect(rouvert.dechiffrer(enveloppeDAvant, schemaClair)).resolves.toEqual({
       valeur: SENTINELLE,
     });
+  });
+});
+
+// =============================================================================
+// R4 — UNE LIGNE `meta.coffre` PRÉSENTE MAIS SANS VALEUR EST UNE ANOMALIE
+//
+// Ajouté le 2026-09-05 par A26, depuis la revue croisée A29 du même jour (R4) et
+// le correctif d'A24 qui la ferme. Je n'ai écrit aucune ligne du code éprouvé ici
+// (09 §5.6).
+//
+// ── LE CAS QUI TOMBAIT ENTRE DEUX DOCTRINES ─────────────────────────────────
+// `lireMeta` rend la VALEUR de la ligne, jamais la ligne. Une ligne
+// PHYSIQUEMENT présente dont la valeur est `null` — ou qui n'a pas de propriété
+// `valeur` — rendait donc `undefined`, c'est-à-dire « absent », alors que la
+// glose d'`initialiserCoffre` promettait une garde de PRÉSENCE. A29 l'a mesuré
+// (sondes 3, 4, 5) : sur une base aux tables miroirs vides, un coffre NEUF était
+// créé, le sel changeait, et l'enveloppe du jeton de rafraîchissement devenait
+// définitivement indéchiffrable. La seconde ceinture couvrait la collecte ; elle
+// ne couvrait pas `meta`, que personne ne compte.
+//
+// ── CE QUI A ÉTÉ TRANCHÉ, ET QUI COMMANDE CES TESTS ─────────────────────────
+// « Une ligne présente sans valeur exploitable est une ANOMALIE, pas une
+// absence » (arbitrage A01 cité par `coffre-appareil.ts`). Ces tests fixent les
+// deux bords de cette phrase : elle LÈVE quand la ligne existe, et elle laisse
+// TOUJOURS préparer un appareil quand la ligne n'existe pas. Le second bord n'est
+// pas décoratif : une garde qui refuse tout est une garde qui empêche de
+// travailler, et c'est la seule manière de se tromper qui ne se voit pas en
+// relisant le premier.
+//
+// Traçabilité : E33, E38 ; invariant 7 ; 05 §9.7.
+// =============================================================================
+
+/** La table `meta` vue SANS l'obligation de porter une `valeur` — ce que Dexie permet. */
+function metaSansContrainte(base: BaseLocale): Table<{ cle: string; valeur?: unknown }, string> {
+  return base.table<{ cle: string; valeur?: unknown }, string>('meta');
+}
+
+describe('R4 — une ligne `meta.coffre` PRÉSENTE mais vide ne se lit jamais « absente »', () => {
+  const LIGNES_VIDES: readonly {
+    readonly nom: string;
+    readonly ecrire: (base: BaseLocale) => Promise<unknown>;
+  }[] = [
+    {
+      nom: 'valeur `null`',
+      ecrire: (base) => ecrireMeta(base, CLES_META.coffre, null),
+    },
+    {
+      nom: 'AUCUNE propriété `valeur`',
+      ecrire: (base) => metaSansContrainte(base).put({ cle: CLES_META.coffre }),
+    },
+  ];
+
+  for (const { nom, ecrire } of LIGNES_VIDES) {
+    it(`@critique ligne « ${nom} » : la lecture LÈVE, l’initialisation ne crée rien et ne réécrit pas la ligne`, async () => {
+      const base = await nouvelleBase();
+
+      // Anti-vacuité ① — l'appareil porte une vraie journée de collecte AVANT
+      // qu'on abîme sa ligne de coffre, et le coffre se lit.
+      const coffre = await initialiserCoffre(base, MDP);
+      await ecrireUneReponse(base, coffre);
+      const enveloppeDAvant = await coffre.chiffrer({ valeur: SENTINELLE });
+      const intact = await coffreAuReposBrut(base);
+      expect(await lireCoffreAuRepos(base)).not.toBeNull();
+      expect(await base.answers.count()).toBe(1);
+
+      await ecrire(base);
+
+      // Anti-vacuité ② — la ligne est TOUJOURS là (vidée, pas supprimée). Sans ce
+      // contrôle, tout ce qui suit passerait au vert sur une base simplement
+      // nettoyée, c'est-à-dire sur le cas opposé.
+      const ligne = await base.meta.get(CLES_META.coffre);
+      expect(ligne).toBeDefined();
+      expect(ligne?.valeur ?? null).toBeNull();
+      const empreinteVidee = await empreinteDuCoffreAuRepos(base);
+
+      // Le cœur de R4 : ni `null`, ni « premier usage ».
+      await expect(lireCoffreAuRepos(base)).rejects.toThrow(CoffreIllisibleError);
+      await expect(initialiserCoffre(base, MDP)).rejects.toThrow(CoffreIllisibleError);
+      await expect(initialiserCoffre(base, MDP_NOUVEAU)).rejects.toThrow(CoffreIllisibleError);
+      await expect(deverrouiller(base, MDP)).rejects.toThrow(CoffreIllisibleError);
+
+      // Aucun sel neuf, aucune DEK neuve : la ligne n'a pas bougé d'un octet.
+      expect(await empreinteDuCoffreAuRepos(base)).toEqual(empreinteVidee);
+      expect(await base.answers.count()).toBe(1);
+      expect(await base.outbox.count()).toBe(1);
+
+      // Et la démonstration que rien n'est détruit : la ligne rétablie rouvre
+      // l'enveloppe chiffrée AVANT l'incident.
+      await ecrireMeta(base, CLES_META.coffre, intact);
+      const rouvert = await deverrouiller(base, MDP);
+      await expect(rouvert.dechiffrer(enveloppeDAvant, schemaClair)).resolves.toEqual({
+        valeur: SENTINELLE,
+      });
+    });
+  }
+
+  it('@critique anti-vacuité de R4 : ligne ABSENTE ⇒ préparer un appareil NEUF reste possible', async () => {
+    // Le bord que la correction ne devait pas emporter avec elle. Une garde de
+    // présence qui refuserait aussi l'absence rendrait tout appareil neuf
+    // inutilisable — panne bien plus large que celle qu'on ferme, et invisible
+    // dans un test qui ne regarderait que le cas fautif.
+    const base = await nouvelleBase();
+    expect(await base.meta.get(CLES_META.coffre)).toBeUndefined();
+    expect(await lireCoffreAuRepos(base)).toBeNull();
+
+    const coffre = await initialiserCoffre(base, MDP);
+    const enveloppe = await coffre.chiffrer({ valeur: SENTINELLE });
+    await expect(coffre.dechiffrer(enveloppe, schemaClair)).resolves.toEqual({
+      valeur: SENTINELLE,
+    });
+    expect(await lireCoffreAuRepos(base)).not.toBeNull();
+  });
+
+  it('@critique une ligne dont la valeur n’est même pas un objet lève AUSSI, sans citer cette valeur (11 §2)', async () => {
+    // Le troisième bord : `safeParse` échoue alors à la RACINE, sans aucun chemin
+    // à citer. Un message qui se rabattrait sur la valeur relue republierait le
+    // contenu de `meta` — ce que ce module refuse partout ailleurs.
+    const base = await nouvelleBase();
+    await initialiserCoffre(base, MDP);
+    await ecrireMeta(base, CLES_META.coffre, VALEUR_SENTINELLE);
+
+    let message = '';
+    try {
+      await lireCoffreAuRepos(base);
+    } catch (erreur) {
+      message = erreur instanceof Error ? erreur.message : String(erreur);
+    }
+    expect(message.length).toBeGreaterThan(0);
+    expect(message).not.toContain(VALEUR_SENTINELLE);
+    expect(message).toMatch(/[éèêàçù]/);
+  });
+});
+
+// =============================================================================
+// R1, LE FILET — AUCUNE ERREUR TECHNIQUE NÉE DU STOCKAGE N'ATTEINT L'ÉCRAN
+//
+// `verifierParametresKdf` refuse d'avance ce qu'Argon2id et AES refusent, mais
+// TOUT ce qui ouvre un coffre est relu du stockage : le sel autant que les
+// paramètres. A29 a mesuré `DataError: Invalid key length` affiché tel quel, en
+// anglais, sans action — et surtout sans la phrase « Ne créez PAS de nouvelle
+// protection », la seule qui, sur cette famille de pannes, empêche la destruction.
+//
+// Ce que ces tests fixent, c'est le CONTRAT du filet, dans les deux sens : il
+// enveloppe tout ce qui n'est pas déjà dit en français, et il n'enveloppe RIEN
+// de ce qui l'est. Un filet trop large déguiserait un mot de passe mal tapé en
+// anomalie de coffre — et affolerait un auditeur qui s'est trompé de touche.
+// =============================================================================
+describe('R1, le filet — le sel aussi vient du stockage (revue A29)', () => {
+  const SELS_FAUTIFS: readonly { readonly nom: string; readonly sel: string }[] = [
+    { nom: 'sel de 3 octets (Argon2id en exige 8)', sel: versBase64(new Uint8Array([1, 2, 3])) },
+    { nom: 'sel qui n’est pas du base64', sel: 'ceci n’est pas du base64 !!' },
+  ];
+
+  for (const { nom, sel } of SELS_FAUTIFS) {
+    it(`@critique ${nom} ⇒ CoffreInexploitableError : message français, cause conservée, action « Ne créez PAS »`, async () => {
+      const base = await nouvelleBase();
+      await initialiserCoffre(base, MDP);
+      const intact = await coffreAuReposBrut(base);
+      // Anti-vacuité : avec le sel d'origine, le bon mot de passe ouvre.
+      await expect(deverrouiller(base, MDP)).resolves.toBeDefined();
+
+      await ecrireMeta(base, CLES_META.coffre, { ...intact, sel });
+
+      let erreur: unknown = null;
+      try {
+        await deverrouiller(base, MDP);
+      } catch (attrapee) {
+        erreur = attrapee;
+      }
+
+      expect(erreur).toBeInstanceOf(CoffreInexploitableError);
+      expect(erreur).toBeInstanceOf(AnomalieCoffreError);
+      const anomalie = erreur as CoffreInexploitableError;
+      expect(anomalie.message).toMatch(/[éèêàçù]/);
+      expect(anomalie.action).toContain('Ne créez PAS');
+      expect(anomalie.action).toContain('sans recharger ni réinstaller');
+      // La cause d'origine n'est pas perdue : elle voyage, elle ne s'affiche pas.
+      expect(anomalie.cause).toBeDefined();
+      // Et aucun fragment technique anglais n'a franchi le filet.
+      for (const fragment of ['DataError', 'Invalid key length', 'Salt should be', 'at least']) {
+        expect(anomalie.message).not.toContain(fragment);
+      }
+      // La ligne n'a pas été « réparée » d'office.
+      expect(await base.meta.get(CLES_META.coffre)).toBeDefined();
+    });
+  }
+
+  it('@critique le filet n’enveloppe PAS les erreurs métier : un mauvais mot de passe reste `MotDePasseInvalideError`', async () => {
+    // Le témoin exigé par la revue. Un filet qui déguiserait la faute de frappe
+    // la plus banale en « anomalie du coffre » enverrait l'auditeur au siège pour
+    // un mot de passe mal tapé — et lui apprendrait à ne plus croire l'écran.
+    const base = await nouvelleBase();
+    await initialiserCoffre(base, MDP);
+    let erreur: unknown = null;
+    try {
+      await deverrouiller(base, MDP_NOUVEAU);
+    } catch (attrapee) {
+      erreur = attrapee;
+    }
+    expect(erreur).toBeInstanceOf(MotDePasseInvalideError);
+    expect(erreur).not.toBeInstanceOf(CoffreInexploitableError);
+    expect(erreur).not.toBeInstanceOf(AnomalieCoffreError);
+  });
+
+  it('@critique le filet ne ré-enveloppe pas une anomalie qui dit déjà la vérité (`ParametresKdfHorsBornesError`)', async () => {
+    // Chemin réel : `changerMotDePasse` dérive la NOUVELLE KEK avec des
+    // paramètres fournis par l'appelant, non relus du coffre — ils ne sont donc
+    // pas passés par `lireCoffreAuRepos`, et c'est `deriverKek` qui les refuse,
+    // À L'INTÉRIEUR du filet. Le message doit rester celui des bornes (qui cite
+    // l'écart), pas le message générique du filet.
+    const base = await nouvelleBase();
+    await initialiserCoffre(base, MDP);
+    let erreur: unknown = null;
+    try {
+      await changerMotDePasse(base, MDP, MDP_NOUVEAU, {
+        ...PARAMETRES_KDF_DEFAUT,
+        longueurOctets: 48,
+      });
+    } catch (attrapee) {
+      erreur = attrapee;
+    }
+    expect(erreur).toBeInstanceOf(ParametresKdfHorsBornesError);
+    expect(erreur).not.toBeInstanceOf(CoffreInexploitableError);
+    expect((erreur as Error).message).toContain('48');
+    // Et le coffre n'a pas bougé : l'ancien mot de passe ouvre toujours.
+    await expect(deverrouiller(base, MDP)).resolves.toBeDefined();
+  });
+});
+
+// =============================================================================
+// R3, CÔTÉ DONNÉE — L'ACTION QUI MANQUAIT À `DonneesSansCoffreError`
+//
+// Elle était la SEULE de la famille `AnomalieCoffreError` à ne pas porter « sans
+// recharger ni réinstaller » — et la seule des trois qui atteigne l'écran par le
+// chemin du PREMIER usage, c'est-à-dire devant un auditeur à qui l'on vient de
+// refuser un bouton. Un auditeur qu'on refuse sans lui dire quoi ne pas faire
+// réinstalle : c'est le geste qui détruit.
+// =============================================================================
+describe('R3 — toute la famille `AnomalieCoffreError` dit ce qu’il ne faut PAS faire', () => {
+  const FAMILLE: readonly { readonly nom: string; readonly erreur: AnomalieCoffreError }[] = [
+    { nom: 'CoffreIllisibleError', erreur: new CoffreIllisibleError('détail fictif') },
+    { nom: 'ParametresKdfHorsBornesError', erreur: new ParametresKdfHorsBornesError('détail') },
+    { nom: 'CoffreInexploitableError', erreur: new CoffreInexploitableError(new Error('cause')) },
+    { nom: 'DonneesSansCoffreError', erreur: new DonneesSansCoffreError(12) },
+  ];
+
+  for (const { nom, erreur } of FAMILLE) {
+    it(`@critique ${nom} : « Ne créez PAS » ET « sans recharger ni réinstaller »`, () => {
+      expect(erreur.action).toContain('Ne créez PAS');
+      expect(erreur.action).toContain('sans recharger ni réinstaller');
+      expect(erreur.message.length).toBeGreaterThan(20);
+      expect(erreur.message).toMatch(/[éèêàçù]/);
+    });
+  }
+
+  it('@critique `DonneesSansCoffreError` levée sur le VRAI chemin porte bien cette action', async () => {
+    // Anti-vacuité des quatre cas ci-dessus : ils construisent les erreurs à la
+    // main. Celui-ci la fait naître du code, sur le chemin exact du premier
+    // usage — des lignes de collecte, aucun coffre.
+    const base = await nouvelleBase();
+    await tableDeCollecte(base, 'answers').put({ id: uuidv7() });
+    let erreur: unknown = null;
+    try {
+      await initialiserCoffre(base, MDP);
+    } catch (attrapee) {
+      erreur = attrapee;
+    }
+    expect(erreur).toBeInstanceOf(DonneesSansCoffreError);
+    expect((erreur as DonneesSansCoffreError).action).toContain('sans recharger ni réinstaller');
+    expect(await base.meta.get(CLES_META.coffre)).toBeUndefined();
   });
 });

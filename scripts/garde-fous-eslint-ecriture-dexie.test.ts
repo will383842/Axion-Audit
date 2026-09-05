@@ -30,6 +30,7 @@
 // Traçabilité : E6 (hors ligne total : une écriture locale hors du port de sync
 // ne remonte jamais) · E33 (sécurité / RGPD) ; 05 §9.2-2 ; 11 §8.5.
 // =============================================================================
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ESLint } from 'eslint';
 import tseslint from 'typescript-eslint';
@@ -233,5 +234,156 @@ describe('règle « écriture Dexie » — toute écriture locale hors du port e
     const verdict = await analyser(code, CHEMIN_SOUS_LA_REGLE);
     expect(verdict.fatales).toEqual([]);
     expect(verdict.ecrituresDexie).toEqual([]);
+  });
+});
+
+// =============================================================================
+// R2 — LES QUATRE FORMES QUE LA GLOSE ANNONÇAIT SANS LES VOIR, ET LE FAUX
+// POSITIF QU'ELLE NIAIT
+//
+// Ajouté le 2026-09-05 par A26, depuis la revue croisée A29 du même jour (R2,
+// MAJEUR) et le correctif d'A24 qui la ferme.
+//
+// ── CE QUI S'EST PASSÉ, ET POURQUOI CE FICHIER EN EST RESPONSABLE ───────────
+// La version d'hier de ce test éprouvait les deux sens et les deux angles morts
+// déclarés. Elle n'éprouvait PAS `.modify()` — et c'est exactement pour cela que
+// l'écart a survécu : le commentaire du sélecteur ② citait `.toCollection()
+// .modify(…)` comme un cas VU, `VERBES_ECRITURE_DEXIE` ne contenait pas
+// `modify`, et personne n'avait mesuré. `Collection.modify()` et
+// `Table.bulkUpdate()` sont des écritures Dexie 4 de plein droit
+// (`dexie@4.4.5`, `dist/dexie.d.ts:443,446,792`) ; une écriture qui échappe à la
+// règle est une écriture sans op d'outbox — « une donnée que la synchronisation
+// ne remontera jamais », dit le message de la règle elle-même (05 §9.2-2). Le
+// trou s'ouvrait à L6a, où la descente écrit par lots.
+//
+// ── LE SENS DE LECTURE, ET IL COMPTE ───────────────────────────────────────
+// La GLOSE est éprouvée CONTRE le comportement mesuré, jamais l'inverse. Une
+// glose qui ment est pire qu'une règle absente : on la lit au lieu de mesurer.
+// Le jour où le sélecteur changera, ces tests diront lequel des deux — de la
+// règle ou de sa description — a cessé d'être vrai.
+//
+// Traçabilité : E6, E33 ; 05 §9.2-2 ; `docs/conception/LOT_L5.md` §4.
+// =============================================================================
+
+/** Le texte LIVRÉ de la configuration — la glose se lit là où elle est écrite. */
+const GLOSE_LIVREE = readFileSync(resolve(RACINE_DEPOT, 'eslint.config.js'), 'utf8');
+
+describe('règle « écriture Dexie » — R2 : `modify` et `bulkUpdate` sont des écritures', () => {
+  const ECRITURES_PAR_LOT = [
+    {
+      nom: 'base.answers.modify(…) — le verbe sur la table nommée (sélecteur ①)',
+      code: [
+        'declare const base: { answers: { modify(m: unknown): Promise<number> } };',
+        'void base.answers.modify({ flagReview: 1 });',
+      ].join('\n'),
+    },
+    {
+      nom: 'base.answers.toCollection().modify(…) — la forme que la glose citait sans la voir',
+      code: [
+        'declare const base: {',
+        '  answers: { toCollection(): { modify(m: unknown): Promise<number> } };',
+        '};',
+        'void base.answers.toCollection().modify({ flagReview: 1 });',
+      ].join('\n'),
+    },
+    {
+      nom: 'base.answers.where(…).equals(…).modify(…) — l’écriture par lot de L6a',
+      code: [
+        'declare const base: {',
+        '  answers: {',
+        '    where(c: string): { equals(v: string): { modify(m: unknown): Promise<number> } };',
+        '  };',
+        '};',
+        "void base.answers.where('missionId').equals('m').modify({ flagReview: 1 });",
+      ].join('\n'),
+    },
+    {
+      nom: 'base.answers.bulkUpdate([…]) — `Table.bulkUpdate` de Dexie 4',
+      code: [
+        'declare const base: { answers: { bulkUpdate(v: unknown[]): Promise<number> } };',
+        'void base.answers.bulkUpdate([]);',
+      ].join('\n'),
+    },
+  ];
+
+  for (const { nom, code } of ECRITURES_PAR_LOT) {
+    it(`@critique ${nom} remonte une erreur`, async () => {
+      // Anti-vacuité : la règle est bien active à ce chemin AVANT qu'on mesure.
+      await verifierQueLaRegleMordIci(CHEMIN_SOUS_LA_REGLE);
+      const verdict = await analyser(code, CHEMIN_SOUS_LA_REGLE);
+      expect(verdict.fatales).toEqual([]);
+      expect(verdict.ecrituresDexie).toHaveLength(1);
+      expect(verdict.ecrituresDexie[0]).toContain('ecrireLocal');
+    });
+  }
+
+  it('@critique la GLOSE annonce `modify` et `bulkUpdate` — et la mesure le confirme', () => {
+    // Le sens de lecture de R2 : ce n'est pas la glose qui dit la vérité, c'est la
+    // mesure. Ici on vérifie seulement qu'elles disent la MÊME chose — les quatre
+    // tests ci-dessus ont déjà établi le comportement.
+    expect(GLOSE_LIVREE).toContain('bulkUpdate');
+    expect(GLOSE_LIVREE).toContain('modify');
+  });
+});
+
+describe('règle « écriture Dexie » — R2 : les deux angles morts DÉCLARÉS le restent', () => {
+  // Deux trous assumés, écrits dans la configuration. Ces tests ne demandent pas
+  // de les fermer : ils garantissent que la description reste exacte. Le jour où
+  // la règle mordra sur l'un des deux, c'est la GLOSE qu'il faudra corriger — et
+  // ce test le dira ce jour-là, pas six mois plus tard.
+  const ANGLES_MORTS = [
+    {
+      nom: 'l’ALIAS : `const t = base.answers; t.put(…)`',
+      declaration: 'PAS VU — l’écriture par alias',
+      code: [
+        'declare const base: { answers: { put(valeur: unknown): Promise<string> } };',
+        'const table = base.answers;',
+        'void table.put({});',
+      ].join('\n'),
+    },
+    {
+      nom: 'la CLÉ CALCULÉE : `base["answers"].put(…)`',
+      declaration: 'PAS VU — l’accès par clé CALCULÉE',
+      code: [
+        'declare const base: { answers: { put(valeur: unknown): Promise<string> } };',
+        'void base["answers"].put({});',
+      ].join('\n'),
+    },
+  ];
+
+  for (const { nom, declaration, code } of ANGLES_MORTS) {
+    it(`@critique ${nom} : muette, et la configuration le DÉCLARE`, async () => {
+      expect(GLOSE_LIVREE).toContain(declaration);
+      await verifierQueLaRegleMordIci(CHEMIN_SOUS_LA_REGLE);
+      const verdict = await analyser(code, CHEMIN_SOUS_LA_REGLE);
+      expect(verdict.fatales).toEqual([]);
+      expect(verdict.ecrituresDexie).toEqual([]);
+    });
+  }
+});
+
+describe('règle « écriture Dexie » — R2 : le faux positif est réel, et il est ÉCRIT', () => {
+  it('@critique `fichiers.get(id).clear()` sur une `Map` est repris — et la glose l’assume au lieu de le nier', async () => {
+    // C'est le cas exact qu'A29 a mesuré et que la glose d'hier niait (« une
+    // collection en mémoire ne s'écrit pas ainsi »). Le comportement n'a pas
+    // changé — le sélecteur ② doit garder `db.table('x').delete()`, qui est une
+    // vraie écriture Dexie —, c'est la DESCRIPTION qui a été mise en accord avec
+    // lui. On éprouve donc les deux ensemble : la mesure d'abord, la glose ensuite.
+    const code = [
+      'const fichiers = new Map<string, Set<string>>();',
+      "const id = 'a';",
+      'fichiers.get(id)?.clear();',
+      'const dejaVus = fichiers.get(id);',
+      'dejaVus?.clear();',
+    ].join('\n');
+    const verdict = await analyser(code, CHEMIN_SOUS_LA_REGLE);
+    expect(verdict.fatales).toEqual([]);
+    // UNE seule : celle au résultat de l'appel. Le contournement par variable
+    // intermédiaire (l'alias) passe — c'est ce que la glose propose.
+    expect(verdict.ecrituresDexie).toHaveLength(1);
+
+    // Et la configuration le dit, dans ces termes : « faux positif assumé ».
+    expect(GLOSE_LIVREE).toContain('FAUX POSITIF ASSUMÉ');
+    expect(GLOSE_LIVREE).toContain('fichiers.get(id).clear()');
   });
 });
