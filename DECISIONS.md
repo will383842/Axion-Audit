@@ -8173,6 +8173,7 @@ risque » devient « lecture : sans risque ; **tout `git add`, `commit` ou `push
 y compris pour un verdict ». Règle de précédence **sans objet** (organisation, hors pack).
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun ; `ORGANISATION_AGENTS.md` §1 et §3 amendés et datés.
+
 ## 2026-09-05 — [L1 / E18] L'identifiant de la fiche en conflit n'est lisible qu'en prose (M-2)
 
 Constat d'A17, non arbitré — le pilote l'avait à tort présenté comme tranché en le confondant avec un
