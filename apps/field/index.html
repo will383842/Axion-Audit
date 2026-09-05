@@ -10,6 +10,17 @@
          ce n'est pas une raison pour dupliquer la charte : invariant 4, une
          couleur n'a qu'une seule source de vérité. -->
     <meta name="theme-color" content="%COULEUR_THEME%" />
+    <!-- Manifeste GÉNÉRÉ à la construction depuis les jetons de packages/ui
+         (voir vite.config.ts). Sans lui, pas d installation sur l écran d accueil,
+         donc pas de persistance durable d IndexedDB sur iPad (03 §22.1, 05 §31-2). -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- iOS ne lit PAS les icônes du manifeste pour l'écran d'accueil : sans
+         `apple-touch-icon`, l'installation guidée du 03 §22.1 pose une capture
+         d'écran à la place de l'icône. Fichiers GÉNÉRÉS depuis les jetons
+         (scripts/build-icones.mjs) — provisoires, voir DECISIONS.md 2026-09-02. -->
+    <link rel="icon" type="image/png" sizes="192x192" href="/icones/icone-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icones/icone-512.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>Axion Audit — Terrain</title>
   </head>
   <body>

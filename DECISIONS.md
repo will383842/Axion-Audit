@@ -7362,6 +7362,138 @@ contourné (les lectures passent, et ont servi à confirmer le diagnostic sur le
 Décideur : **Williams** (instruction du 2026-09-03 : « je voudrais que tu fasses tout directement »).
 Impact spec : aucun. `CLAUDE.md` §7 et le §6 du dossier de porte restent en vigueur, mot pour mot.
 
+## 2026-09-02 — [L5a] Revue croisée A29 : REFUSÉ, cinq bloquants sur l'axe PWA — verdict accepté
+
+A29 a relu les 59 fichiers de `lot/l5a` @ `ce4b29b`. Le coffre, le port d'écriture, la base
+versionnée, l'horloge et le verrou sont approuvables ; **la PWA elle-même ne fonctionne pas en
+déploiement** : B1 l'infra Caddy sert 404 sur `/sw.js` et le manifeste (bloc L0 « à supprimer le jour
+où L5 livre la PWA ») et un E2E `@critique` l'exige · B2 manifeste sans icône, non installable, donc
+`storage.persist()` refusé sur iPad et aucune mission embarquable · B3 écran d'installation
+inatteignable · B4 marque « embarquée » posée sur un embarquement refusé · B5 garde de mise à jour
+permissif par défaut et jamais branché. Dix réserves R-L5a-1 à 10.
+
+Options :
+
+1. **Accepter le verdict**, corriger les cinq bloquants dans l'incrément (B1 : L5a retire le bloc
+   Caddy et retourne l'E2E — c'est L5a qui livre la PWA, à lui d'ouvrir la porte, avec relecture A11),
+   trancher les réserves qui appellent une décision, rejouer la revue.
+2. Livrer L5a sans PWA servie et reporter à L5c.
+
+Arbitrage : **option 1.** L'option 2 ferait passer une porte à un socle « offline-first » qui ne
+démarre pas hors ligne — la contradiction est dans les termes. **Règle de précédence sans objet.**
+
+Décideur : A01, sur revue A29
+Impact spec : aucun. `infra/caddy/fronts.static.caddy` : bloc `@pwa_non_livree` retiré par L5a.
+
+## 2026-09-02 — [L5a] Le manifeste PWA sans icône de charte : une icône PROVISOIRE, tracée — ESCALADE SOUS DÉFAUT
+
+La décision du 2026-08-28 réserve le dessin de l'icône à Williams et interdit le demi-manifeste. Les
+icônes n'existent pas ; sans elles l'app n'est pas installable (B2).
+
+Options :
+
+1. **Icône provisoire générée** — un aplat aux couleurs de la charte (terracotta sur ivoire, lettre
+   du produit), 192/512/maskable + `apple-touch-icon`, marquée provisoire dans le manifeste et dans
+   `AMELIORATIONS.md`, **remplacée dès que Williams livre la sienne**.
+2. Attendre l'icône de Williams — l'app reste non installable entre-temps.
+
+Arbitrage : **option 1, sous la règle « silence vaut accord » du 2026-08-31, et signalée à
+Williams** : le dessin reste le sien, le remplacement est une substitution de fichiers sans code.
+Un manifeste complet avec une icône laide vaut mieux qu'un manifeste incomplet et vert.
+**Règle de précédence sans objet.**
+
+Décideur : **Williams — à confirmer** · défaut appliqué par A01
+Impact spec : aucun.
+
+## 2026-09-02 — [L5a] « Mission embarquée » signifie « données présentes », jamais « persistance accordée »
+
+`embarquement.ts` posait la marque `mission:embarquee` dès que `storage.persist()` était accordé, puis
+refusait le pull : `missionEmbarquee()` répondait oui sur une mission sans une ligne (B4).
+
+Options :
+
+1. **La marque n'est posée qu'après un premier pull réussi** ; la persistance accordée est un état
+   distinct (`persistance: 'accordee'`), affiché comme tel.
+2. Garder la marque comme aujourd'hui.
+
+Arbitrage : **option 1.** La question que la marque répond est « puis-je collecter hors ligne sur
+cette mission ? » ; la seule réponse honnête dépend des données, pas du quota. **Précédence :
+invariant 8** (aucune donnée ne vit sur un seul appareil — la marque en est le témoin, elle ne peut
+pas mentir).
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-02 — [L5a] Une ligne dont l'op est en ÉCHEC n'est jamais écrasée par une descente
+
+`appliquerDescente` ne protège que les ops `en_attente` ; une ligne dont l'op est `rejetee` ou
+`a_examiner` peut être écrasée par une descente plus récente (R-L5a-2). Ces statuts existent pour
+que rien ne sorte de la file sans réponse serveur.
+
+Options :
+
+1. **Toute ligne portant une op non `appliquee`** (`en_attente`, `rejetee`, `a_examiner`) est
+   conservée face à une descente, et comptée dans `conservees`.
+2. Seules les `en_attente` sont protégées.
+
+Arbitrage : **option 1.** Une op en échec est une saisie de l'auditeur que le serveur n'a pas encore
+acceptée ; l'écraser par une version serveur, c'est perdre la saisie sans que personne ne l'ait
+décidé. **Précédence : invariant 7.** Obligation transmise à L6b, qui consomme ce code.
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-02 — [L5a] Liste fermée §3.2 : `answerType`, `criticality`, `parentId` entrent ; le premier pull est descopé vers L6a
+
+R-L5a-1 : trois colonnes en clair hors liste (`missionQuestions.answerType`, `criticality`,
+`orgUnits.parentId`) — métadonnées de question et structure d'arbre, aucune personnelle, toutes
+nécessaires à l'index (type de saisie à afficher, criticité, hiérarchie). R-L5a-10 : le premier pull
+(11 §6, « pull mission ») est refusé par L5a avec un motif en commentaire, sans décision.
+
+Options :
+
+1. Les trois colonnes entrent dans la liste fermée ; le premier pull est descopé vers L6a, tracé.
+2. Les trois colonnes passent dans la charge chiffrée ; le premier pull reste dû à L5a.
+
+Arbitrage : **les trois colonnes entrent dans la liste fermée §3.2** (amendement daté de la note,
+même motif que `supprimeLe`/`answerId` : filtrer et afficher sans déchiffrer) ; **le premier pull
+est descopé de L5a vers L6a**, qui livre l'endpoint serveur qu'il consomme — L3d (figeage) est
+livré, l'obstacle restant est côté API. Le balayage d'étanchéité doit couvrir **les sept tables**
+(R-L5a-1), pas trois. **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun sur `/docs`. `docs/conception/LOT_L5.md` §3.2 amendé, daté.
+
+## 2026-09-02 — [L5a] Rejeu de la revue croisée A29 : ACCEPTÉ SOUS RÉSERVE — réserves fermées, deux libellés reconstitués
+
+Rejeu sur `1892df3` : les cinq bloquants B1-B5 et les réserves R-L5a-1/2/3/4/5/7/8/10 sont fermés
+avec preuve `fichier:ligne`. Trois réserves nouvelles (N1 aucun test ne force `rejetee`/`a_examiner`
+face à une descente · N2 `formes.ts` recopie une liste fermée périmée, et `texteSnapshot`/`motsCles`
+attendaient une confirmation · N3 l'icône iOS déplacée à la racine n'est plus précachée), deux
+remarques transmises (N4 fenêtre d'amorçage de la garde de mise à jour → L5c ; N5 lecture de l'outbox
+hors transaction → contrat L6b), et un constat de gouvernance (N6) : **R-L5a-6 et R-L5a-9 n'ont
+jamais été tracées** — la revue REFUSÉE ne détaillait que huit réserves sur dix dans le dépôt.
+
+Options :
+
+1. **Fermer N1-N3 dans l'incrément, reconstituer R-L5a-6 et R-L5a-9 depuis la transcription** de la
+   revue (pas de mémoire), et dire ce qu'elles deviennent.
+2. Déclarer les deux réserves closes sans les relire.
+
+Arbitrage : **option 1.** Reconstituées mot pour mot : **R-L5a-6** — `@axe-core/playwright` est
+installé et n'est utilisé nulle part ; la dérogation 11 §8-1 était justifiée par « la case P-C est
+incochable sans lui », elle reste incochable → **OUVERTE**, fermée par A28 (balayage axe des trois
+écrans L5a, avec la mesure de dérivation < 1 s déjà due). **R-L5a-9** — les cinq décisions L5a
+(Argon2id, AAD, `validé`, liste fermée, dépendances de test) vivent sur `lot/l3-suite`, pas sur
+`lot/l5a` → **OUVERTE, fermée par l'ordre de fusion** : L3 → `main` → `main` dans `lot/l5a` AVANT la
+PR L5a, vérifié par `grep` à ce moment-là ; la fiche AAD (A-008) existe. N1 : cas de test écrit par
+A01 (pas l'auteur d'`ecriture.ts`). N2 : `texteSnapshot` et `motsCles` sont du `*_snapshot` de la
+note §3.2 — dans l'exception, pas dans l'énumération ; `formes.ts` renvoie à la note au lieu de la
+recopier. **Précédence : invariant 7** (N1) ; sans objet pour le reste.
+
+Décideur : A01, sur revue A29
+Impact spec : aucun.
+
 ## 2026-09-02 — [L7a] Le client sur les cartes du portefeuille : un N+1 BORNÉ, accepté en V1
 
 Chaque carte de mission appelle `GET /v1/companies/:id` (dédupliqué par TanStack Query) : sur une page
@@ -7491,6 +7623,36 @@ Décideur : **Williams** (délégation du 2026-09-02 à la session pilote).
 Impact spec : aucun — lecture du §27.1 confirmée, aucun amendement du pack ; note de conception
 `docs/conception/LOT_L7.md` §9 mise à jour (rectifie ses §6.1, §6.3 et §8.3).
 
+## 2026-09-03 — [gouvernance] La délégation de merge s'étend aux PR d'incrément #30, #31 et #32
+
+L'entrée précédente bornait la délégation à **trois gestes** — merge de #26, tag `v0.l3`, merge de
+#29 — et disait, mot pour mot, « il n'en découle aucun précédent : la prochaine porte revient à
+Williams par défaut ». Williams étend ensuite la délégation à la file que le merge de L3 débloque :
+« tu le feras toi lorsque tu pourras », en réponse à la séquence merge #30 → refusion de `l5b` →
+merge #31 → #32 → absorption d'A-006 → L5c.
+
+Options :
+
+1. Traiter l'extension comme une nouvelle délégation de porte. **Écartée, et pour une raison de
+   fond** : #30, #31 et #32 ne sont pas des merges de porte. Le 11 §6 les qualifie d'**incréments
+   commitables**, et la réserve du `CLAUDE.md` §7 vise « le merge **de la porte** ». Les confondre
+   élargirait la réserve au-delà de sa lettre.
+2. **Acter que la délégation couvre les merges d'incréments, et que les PORTES restent à Williams.**
+3. Demander une délégation à chaque PR. Écartée : elle transformerait en cérémonie ce que le 11 §6
+   décrit comme la fin normale d'un incrément (« tests verts → commit conventionnel → journal »).
+
+Arbitrage : **option 2**. La session pilote fusionne #30, #31 et #32 **après leur contrôle A02 et
+sous condition que ses réserves bloquantes soient fermées** — condition qui mord immédiatement :
+A02 a rendu **deux bloquantes sur L5a** (B1 `verrou.ts` sans test, B2 aucun verdict A51), et **#30
+ne fusionne donc pas**. Restent hors délégation et reviennent à Williams : **P-C**, **P-D**, **P-E**,
+et l'arbitrage **P-DESCOPE** du 15/09. `CLAUDE.md` §7 n'est pas modifié.
+Règle de précédence : **§16-22 > §1-15** — le 11 §6 (incréments commitables) est le texte le plus
+précis sur ce qu'est la fin d'un incrément, et il ne renvoie pas à une porte. Précédence interne au
+pack **sans objet** : le §7 et le 11 §6 ne se contredisent pas, ils parlent d'objets différents.
+
+Décideur : **Williams**, 2026-09-03.
+Impact spec : aucun. Le §7 et le 11 §6 restent en vigueur inchangés.
+
 ## 2026-09-03 — [L7b] « Prévu » recouvre trois notions : une colonne, deux, ou trois ?
 
 Arbitrage rendu par **A30** au §6.2 de `docs/conception/LOT_L7.md` et **jamais déposé** — relevé par
@@ -7532,6 +7694,432 @@ Décideur : **A30**, chef d'équipe console (note de conception §6.2, 2026-09-0
 2026-09-03 sur constat d'A02.
 Impact spec : aucun sur `/docs`. Engage `packages/shared/src/pilotage.ts` et l'écran de couverture
 de **L7b**, qui ne sont pas encore écrits.
+
+## 2026-09-04 — [gouvernance] La délégation couvre-t-elle les PORTES restantes ?
+
+Williams, 2026-09-04 : « implémente tout en autopilot de bout en bout sans ne jamais t'arrêter […]
+je te donne l'autorisation explicite de faire tout ce qui est nécessaire […] tant que tout n'est pas
+implémenté à 100 % de toutes les phases ». L'entrée du 2026-09-03 réservait **P-C, P-D, P-E et
+P-DESCOPE** à Williams. Ces gestes sont sur le chemin critique : le doute se tranche, il ne se devine
+pas (`CLAUDE.md` §3).
+
+Options :
+
+1. Lecture étroite — « tout implémenter » = écrire le code, les portes restant à Williams.
+   **Écartée** : une porte non signée bloque le lot suivant (09 §4bis), donc l'autopilote s'arrêterait
+   à P-C — ce que l'instruction proscrit explicitement.
+2. **Étendre la délégation aux portes, la chaîne de signature (09 §1) restant intacte et le dossier
+   de porte restant dû EN ENTIER.** A01 signe « passage en porte » ; la ligne « Williams » est signée
+   **par délégation permanente du 2026-09-04**, nommée comme telle dans chaque dossier — jamais
+   présentée comme une signature humaine rendue.
+3. Demander une délégation porte par porte. **Écartée** : c'est le mode que Williams vient de refuser,
+   et l'entrée du 2026-09-03 a déjà écarté ce raisonnement pour les incréments.
+
+Arbitrage : **option 2**, sous quatre bornes — la délégation porte sur QUI signe, jamais sur CE QUI
+est dû :
+
+- dossier de porte **intégral**, critères du fichier 07 cochés un à un **avec leur preuve** ; un
+  critère non prouvé reste non coché ;
+- **DoD transverse non amendée**, seuil de 90 % non abaissé ;
+- **une porte échouée reste échouée** (09 §4bis) : signer par délégation n'autorise pas à signer un
+  échec ;
+- **tout est re-signable** : chaque porte le déclare dans son § de signature.
+
+Ce qu'aucune délégation ne lève : le **root SSH sur staging** (`infra/README.md` §6.3) est refusé par
+la barrière de permissions de la machine, pas par une règle du dépôt.
+
+Règle de précédence : sans objet dans le pack — seul `CLAUDE.md` §7 traite du signataire, et il
+désigne Williams, auteur de la présente délégation. Ce n'est pas une dérogation au §7, c'est son
+exercice.
+
+Décideur : **Williams**, 2026-09-04.
+Impact spec : aucun amendement du pack. §7 et §10 en vigueur mot pour mot ; seule l'identité du
+signataire de la dernière ligne change, et elle se déclare.
+
+## 2026-09-04 — [L1 / E18] Quel code d'erreur pour une référence console en double ?
+
+Défaut ① rendu aux producteurs le 2026-09-03, non corrigé : `POST /v1/companies` avec un
+`externalRef` déjà pris rend **500 INTERNAL_ERROR** — `depot.ts` ne nomme que `uq_companies_siren`,
+et `0015` a posé une seconde contrainte unique sur la même table.
+
+Options :
+
+1. Réutiliser `409 COMPANY_DUPLICATE`, par symétrie avec le SIREN. **Écartée** : son message dit
+   « SIREN déjà utilisé », donc **faux**. `depot.ts:336` écrit lui-même la règle qui l'exclut — « un
+   message d'erreur faux envoie chercher au mauvais endroit, ce qui coûte plus cher qu'un message
+   absent ».
+2. **Code distinct `COMPANY_EXTERNAL_REF_DUPLICATE` (409)**, message parlant de la référence console
+   et de la liaison M8.1, `details` portant l'identifiant de la fiche existante.
+3. Rendre 422. **Écartée** : la donnée est valide, c'est l'état du référentiel qui s'y oppose — 409
+   est le statut du conflit.
+
+Arbitrage : **option 2**, tranchée **contre** la symétrie apparente. Correction entièrement
+applicative. Règle de précédence : **§16-22 > §1-15** — le 11 §3 (`ERROR_CODES` dans
+`packages/shared`, jamais de littéral libre) est le texte le plus précis.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun. Le 04 §7.1 et la migration `0015` sont inchangés.
+
+## 2026-09-04 — [L1 / E18] Une fiche archivée conserve-t-elle sa référence console ?
+
+Doute de spec ouvert le 2026-09-03 : l'index `uq_companies_external_ref` n'exclut pas les fiches
+`deleted_at IS NOT NULL`. Une entreprise archivée bloque donc à jamais la réimportation de la même
+référence depuis la console. Le fichier 04 est muet.
+
+Options :
+
+1. Exclure les archivées de l'index (`… AND deleted_at IS NULL`). **Écartée** : elle fabrique deux
+   fiches d'audit pour une même entreprise de la console — ce que `0015` interdit mot pour mot (« une
+   clé de liaison doit désigner une ligne et une seule ») — et exige un amendement du 04 pour un
+   problème d'ergonomie.
+2. **Index inchangé — la référence désigne une ENTREPRISE, pas une ligne vivante — et conflit rendu
+   ACTIONNABLE : quand la fiche en conflit est archivée, le 409 le dit et oriente vers sa
+   restauration.** Invariant 7 : une archive garde ses liens.
+3. Ne rien faire. **Écartée** : un 409 muet sur une fiche invisible envoie créer un doublon sous une
+   autre référence — le défaut se déplace au lieu de se fermer.
+
+Arbitrage : **option 2**. Règle de précédence **sans objet** (aucune divergence interne au pack : le
+04 ne dit rien sur ce cas).
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun. Aucun DDL ne bouge.
+
+## 2026-09-04 — [L5c] Le parcours express R1 appartient-il à L5c, ou à L3/L7 avec la console ?
+
+`docs/conception/LOT_L5.md` §5-6 déclarait R1 « devine interdite : Williams », introuvable — il
+l'avait cherché au 03 §19.1. **Il est spécifié, au 03 §29** : niveau `diagnostic_cadrage` sur
+structure mono-unité, étapes du pilote trivialement satisfaites validées automatiquement, pilote
+condensé à 3 étapes visibles, guidé intégral dès > 1 unité ou > 3 entretiens. Relevé par A23 en
+lisant. Mais R1 porte sur les étapes du **pilote de MISSION** (`step_validations`), et le §1 de la
+note ne donne à L5c que « terminer ≠ valider » au niveau de l'**entretien** : deux objets distincts,
+d'où la question de périmètre.
+
+Options :
+
+1. **R1 est dans L5c**, à côté de la validation d'entretien, à un niveau différent d'elle.
+2. R1 est dans L3/L7 avec le pilotage côté console. **Écartée** : le pilote de mission côté terrain
+   doit fonctionner **hors ligne** (invariant 1) ; le rattacher à la console le rendrait indisponible
+   là où il sert.
+3. R1 glisse en Phase 2. **Écartée** : voir ci-dessous, il n'est pas différable.
+
+Arbitrage : **option 1**. Règle de précédence : **§16-22 > §1-15** appliquée au fichier 07, qui se
+déclare lui-même « LA définition des lots (aucun autre document ne la redéfinit) » — et dont la ligne
+L5 écrit « validation d'entretien (guidé strict/expert §19.1, **parcours express R1**) ». Ni L5a ni
+L5b ne l'ont pris : il tombe dans L5c par élimination. Ce qui **confirme** l'arbitrage plutôt que de
+l'illustrer : **FIL-TPE** — micro-structure, 8 personnes, 1 entretien — est exactement le cas R1, et
+c'est une fixture du fil rouge `@filrouge` que toute porte exige verte. Sans R1 côté terrain,
+FIL-TPE n'a pas de chemin.
+Borne : si R1 exige une colonne, une table ou une route qui n'existe pas, l'agent s'arrête — c'est
+une escalade 11 §8-2, elle ne se devine pas.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun amendement. `LOT_L5.md` §5-6 est **rectifié sur place et daté** (il cherchait R1
+au mauvais §) ; une note de conception n'est pas un fichier du pack.
+
+## 2026-09-04 — [L5c] Le glob de couverture de l'export de secours ne désigne aucun fichier
+
+`.github/coverage-critical-paths.json` déclare `apps/field/src/backup/**` en `cheminsAttendus` pour
+« Export de secours chiffré (.axionbackup) ». Le répertoire s'appelle `apps/field/src/sauvegarde/**`
+dans un dépôt qui nomme en français : **le glob ne désigne aucun fichier**, et il mesurerait donc
+zéro fichier à 100 % le jour où il passerait en `cheminsCritiques`.
+
+Options :
+
+1. **Corriger le glob en `apps/field/src/sauvegarde/**` au moment du déplacement vers
+   `cheminsCritiques`**, dans le même commit, avec une ligne disant que c'est une correction de NOM.
+2. Renommer le répertoire en `backup/`. **Écartée** : l'anglais est l'anomalie, pas le français.
+3. Laisser et traiter plus tard. **Écartée** : un glob qui ne désigne rien est un seuil qui ne mesure
+   rien — exactement le « faux vert » que ce fichier existe pour empêcher.
+
+Arbitrage : **option 1**. Le mode d'emploi du fichier autorise nommément la correction de glob à ce
+moment-là ; elle doit être **tracée et non silencieuse**, pour ne pas ressembler au rétrécissement de
+périmètre que le bandeau du fichier interdit. Le seuil reste à 90 % : on remonte la couverture, on ne
+rétrécit jamais le périmètre. Règle de précédence **sans objet** (aucune divergence interne au pack).
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun.
+
+## 2026-09-04 — [L5a] Le mot de passe du coffre local est-il celui du compte ?
+
+A24 a appliqué `MOT_DE_PASSE_LONGUEUR_MIN` (06 §10.1) au coffre local pour fermer F-23, comme A51 le
+demandait — **mais le pack ne dit nulle part que les deux mots de passe sont le même**, et la
+conséquence n'est pas cosmétique : si le coffre est indépendant, il lui faut sa propre politique
+écrite ; s'il est le même, il faut dire ce qui arrive quand un admin réinitialise côté serveur alors
+que l'appareil garde l'ancienne KEK.
+
+Options :
+
+1. **Le mot de passe du coffre EST celui du compte.**
+2. Un secret local indépendant. **Écartée** : elle rendrait le garde-fou 05 §9.7 sans objet — refuser
+   un reset serveur quand l'outbox n'est pas vide ne protège rien si le coffre ne dépend pas de ce
+   mot de passe.
+3. Laisser indéterminé. **Écartée** : la politique est **déjà** appliquée dans le code ; ne pas
+   trancher, c'est laisser une règle de sécurité sans fondement écrit.
+
+Arbitrage : **option 1**, et la preuve est déjà dans le pack plutôt que dans une préférence : le
+fichier 07 §14 traite le risque « reset de mot de passe pendant une mission hors ligne » par « garde-
+fou serveur §9.7 **+ ré-enveloppement de la DEK en ligne** ». Ré-envelopper la DEK après un reset n'a
+de sens que si la **KEK dérive du mot de passe du compte**. `MOT_DE_PASSE_LONGUEUR_MIN` est donc la
+bonne source, et son import est justifié.
+Conséquence à tenir, et elle appartient à L6/L2, pas à L5a : après un reset accepté (outbox vide), un
+appareil hors ligne garde une KEK périmée — le ré-enveloppement en ligne est **dû**, et son absence
+serait un défaut, pas un oubli.
+Règle de précédence : **§16-22 > §1-15** — le 07 §14 et le 05 §9.7 sont les textes précis ; le 06
+§10.1 fournit la valeur.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun amendement. Le pack est **interprété**, pas modifié.
+
+## 2026-09-04 — [L5a] Quel plafond pour les paramètres KDF relus du stockage (F-25) ?
+
+Les paramètres Argon2id voyagent avec le coffre — c'est le bon choix, il ne ferme aucune porte — mais
+rien ne bornait ce qui revient : `m = 4 000 000`, `t = 1 000 000` étaient acceptés, soit un déni de
+service au déverrouillage écrit par une seule ligne dans IndexedDB. A24 a posé un plafond et le
+remonte comme décision humaine (11 §8-4, sécurité).
+
+Options :
+
+1. Un plafond en valeur absolue par paramètre. **Écartée** : il dérive du profil qu'il est censé
+   protéger, et devient faux le jour où le profil est durci.
+2. **Un plafond sur le TRAVAIL total, amarré au profil : `travailKdf(défaut) × 4`.**
+3. Aucun plafond, on s'en remet au budget A28. **Écartée** : un budget est une cible de performance,
+   pas un refus ; il ne s'oppose à rien.
+
+Arbitrage : **option 2**, multiplicateur **4** confirmé. Deux raisons, dans cet ordre : il laisse
+passer un durcissement humain raisonnable (un profil `t = 4` à mémoire égale est accepté — testé), et
+il **suit le profil** au lieu de le doubler en constante, de sorte qu'un durcissement futur relève le
+plafond du même geste. La borne mesurée : dérivation médiane 61 ms (A51, machine de développement)
+contre un budget A28 d'1 s — quatre fois le travail reste sous le budget avec plus d'un ordre de
+grandeur de marge, **et il reste à mesurer sur iPad**, ce qui n'a pas été fait et est déclaré tel.
+Écart assumé avec la lettre d'A51, et il est juste : les bornes ne vivent **pas** dans un `.max()`
+Zod. Un dépassement s'y lirait « coffre illisible » — exactement la confusion que F-22 punit.
+Règle de précédence **sans objet** (le pack ne borne pas ces paramètres).
+Décideur : **A01**, sur délégation du 2026-09-04 ; profil Argon2id lui-même **inchangé** (confirmé par
+Williams le 2026-09-02), seules des bornes de **refus** sont ajoutées.
+Impact spec : aucun.
+
+## 2026-09-04 — [gouvernance] Le plafond de TROIS chantiers suivis tient-il en autopilote ?
+
+Williams, 2026-09-04 : « attention à toujours être au maximum des capacités de codage et
+d'implémentation pour ne pas perdre de temps ». `ORGANISATION_AGENTS.md` §2 plafonne à **trois
+chantiers suivis**, et l'amendement du 2026-08-31 dit d'où vient ce chiffre : il mesure **ce qu'un
+pilote arrive à tenir en tête**, et il est passé de deux à trois le jour où l'on a branché un chef
+d'équipe par chantier — « ce n'est pas le plafond qu'on relâche, c'est l'intermédiaire qu'on branche ».
+
+Options :
+
+1. Tenir trois. **Écartée** : les chantiers restants sont disjoints par construction (`apps/field`,
+   `apps/hq`, `apps/api`, `.github/`) et trois d'entre eux attendraient sans raison technique.
+2. **Porter le plafond à SIX chantiers suivis, les deux autres contraintes du §2 INCHANGÉES.**
+3. Supprimer le plafond. **Écartée** : le motif du §2 reste vrai, et le 2026-08-30 a montré qu'un
+   pilote débordé produit des rapports faux — deux blocages sur trois l'étaient.
+
+Arbitrage : **option 2**, et **ce qui bouge est nommé, comme ce qui ne bouge pas** :
+
+- **La contrainte 1 (COLLISION) est inchangée et reste un INTERDIT, pas un plafond** : jamais deux
+  lots sur les mêmes fichiers. C'est elle qui rend l'élargissement possible — les six chantiers ne
+  partagent aucun fichier, mesuré à l'instant par `git merge-tree` sur les quatre branches en attente :
+  conflit sur `DECISIONS.md` et `docs/ETAT.md` **et sur rien d'autre**.
+- **La contrainte 2 (MÉMOIRE) est inchangée** : au plus **deux exécutions lourdes** simultanées, tous
+  chantiers confondus. Un seul des six chantiers monte des conteneurs (l'API) ; les autres tournent en
+  `jsdom`. Le plafond de six porte sur les chantiers, jamais sur les exécutions.
+- **L6 se développe toujours SEUL** (`CLAUDE.md` §4). Le plafond ne l'entame pas.
+- Chaque chantier garde **un agent responsable identifié** ; le pilote suit des rapports, pas des
+  fichiers.
+
+Règle de précédence : **`CLAUDE.md` gagne**, et `ORGANISATION_AGENTS.md` le dit de lui-même (« ce
+fichier ne prime sur rien ; il outille `CLAUDE.md` §4 et §7 »). Le §4 pose l'interdit de collision et
+le développement solitaire de L6 : les deux sont tenus. Le plafond d'attention n'est écrit que dans
+le fichier outil, et c'est son auteur qui l'amende.
+
+Décideur : **Williams**, 2026-09-04.
+Impact spec : `docs/ORGANISATION_AGENTS.md` §2 amendé et daté ; `CLAUDE.md` §4 inchangé.
+
+## 2026-09-04 — [L1 / E18] Le 409 de SIREN sur une fiche ARCHIVÉE, et le contrat de `details`
+
+A16 a mesuré par sonde, en testant le correctif du défaut ① : un conflit de **SIREN** contre une
+fiche `deleted_at IS NOT NULL` rend `COMPANY_DUPLICATE` avec « Rapprochez les deux fiches » — vers une
+fiche que `GET /:id` rend en 404. La décision B du jour n'avait tranché que `external_ref` : **deux
+colonnes uniques de la même table, deux comportements.** Et `details[0].code` (`fiche_active |
+fiche_archivee`) n'existe que sur l'un des deux 409 — un front qui branche dessus reçoit `undefined`
+une fois sur deux. Troisième question jointe : le chemin dégradé (fiche disparue entre la violation et
+la relecture → 409 **sans `details`**) est-il un contrat ou un accident ?
+
+Options :
+
+1. **Symétrie complète** : le 409 de SIREN nomme l'archive et oriente vers la restauration ;
+   `details[0].code` devient **systématique** sur les 409 d'unicité de `companies` ; le chemin dégradé
+   est un **contrat** — statut et `code` garantis, `details` au mieux.
+2. Laisser le SIREN tel quel et ne traiter que `external_ref`. **Écartée** : c'est la même table, le
+   même invariant 7 et le même piège (un 409 muet sur une fiche invisible fait créer un doublon).
+3. Rendre `details` garanti en re-lisant sous verrou. **Écartée** : la lecture APRÈS coup est le
+   choix explicite de `depot.ts` (« une lecture qui échouerait dégrade le message, jamais la
+   décision ») ; un verrou pour un message coûterait plus que le message.
+
+Arbitrage : **option 1**. Règle de précédence : **§16-22 > §1-15** — le 11 §3 impose la cohérence de
+l'enveloppe d'erreur, et une clé présente une fois sur deux n'est pas cohérente.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun. Le 04 est inchangé ; le contrat de `details` est **écrit** dans
+`packages/shared` là où le code d'erreur est documenté.
+
+## 2026-09-05 — [L7b] Le nom du répondant : sous quelle condition s'affiche-t-il au siège ?
+
+M5.1 annonce « nom / fonction / service » dans l'agrégation par question. A32 n'a **pas** publié le
+nom, à titre conservatoire : le §26 dit que l'attribution est conditionnelle sans dire sous quelle
+condition elle vaut _au siège_ ; `consent_given` est nullable au 04 ; le 11 §2 interdit les noms dans
+les **logs**, pas dans les réponses. Ajouter un champ est un incrément ; retirer un nom déjà parti au
+navigateur ne se rattrape pas.
+
+Options :
+
+1. Publier le nom dès que la réponse existe. **Écartée** : un `consent_given` nul serait lu comme un
+   oui, et c'est le sens inverse du RGPD (06 §10).
+2. **Publier le nom uniquement si `consent_given = true` strict, ET derrière une action explicite
+   (« afficher les répondants »), jamais par défaut dans la vue agrégée.** Le nul et le faux sont
+   traités de la même façon : masqué.
+3. Ne jamais publier au siège. **Écartée** : M5.1 le demande, et le rapport §20.3 a besoin de la
+   fonction et du service pour contextualiser une citation.
+
+Arbitrage : **option 2**, à livrer en **L7c** (pas L7b : la décision d'A32 de ne rien publier était la
+bonne au moment où la condition n'était pas écrite). Fonction et service suivent la même condition —
+à trois, ils identifient une personne dans une petite structure. Règle de précédence : **§24-31 >
+§16-22** — le §26 (attribution conditionnelle) prime sur M5.1 (le champ annoncé).
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun amendement ; le pack est interprété dans le sens le plus protecteur.
+
+## 2026-09-05 — [L7b] « Profils rencontrés » (§16.6) : inexprimable sans amender le 04
+
+Le §16.6 veut confronter, par unité, les profils d'interlocuteurs **prévus** et **rencontrés**. Or
+`interviews` n'a aucun lien vers `interlocutor_profiles` au 04 (déjà constaté le 2026-09-01, [L3d]) ;
+`services` (11 fonctions) n'est pas `interlocutor_profiles` (9 profils). L'axe est **inexprimable**
+sur le schéma actuel. A32 n'a pas livré la colonne et l'a remonté.
+
+Options :
+
+1. Amender le 04 maintenant (une colonne `interviews.interlocutor_profile_id`). **Écartée** : 09 §5.9
+   est formel — « le fichier 04 reste inviolable hors de la révision de spec de P-D ». La délégation
+   du 2026-09-04 étend les signatures, pas les révisions de spec.
+2. **Colonne non livrée en L7b ; le point entre à l'ordre du jour de la REVUE DE SPEC de P-D**, avec la
+   proposition d'amendement prête (colonne nullable, FK, remplie par le terrain à la création de
+   session).
+3. Approximer par `services`. **Écartée** : ce serait afficher une confrontation qui n'en est pas une,
+   et un chiffre faux au siège coûte plus qu'une colonne absente.
+
+Arbitrage : **option 2**. Règle de précédence : **§32-36 > §24-31** — 09 §5.9 (le 04 inviolable hors
+P-D) prime sur le §16.6 (la colonne souhaitée). La proposition d'amendement se rédige dans le dossier
+P-D, pas ici.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun aujourd'hui ; **amendement candidat du 04 à P-D**, tracé ici pour ne pas être
+perdu.
+
+## 2026-09-05 — [L7] L'agrégation par question est en L7b, pas en L7c : la note de conception est amendée
+
+`docs/conception/LOT_L7.md` §1 confiait l'agrégation par question à **L7c** (A31/A35). Le brief du
+pilote l'a confiée à **L7b** (A32) et a réduit L7c à l'export §36.3. A32 a suivi le brief et a déclaré
+l'écart. Sans arbitrage, A31 ouvrirait L7c sur des fichiers qu'A32 a déjà écrits.
+
+Options :
+
+1. **Ratifier le brief** : agrégation en L7b (livrée, testée), L7c = export CSV/JSON §36.3 **+** le nom
+   du répondant sous condition (décision ci-dessus). `packages/shared/src/agregation.ts` et l'écran
+   d'agrégation appartiennent à L7b ; L7c y **branche** son export sans les réécrire.
+2. Revenir à la note : déplacer l'agrégation vers L7c. **Écartée** : c'est déplacer du code livré
+   pour honorer un plan, et l'incrément L7c n'a rien à y ajouter.
+
+Arbitrage : **option 1**. `LOT_L7.md` §1 est amendé et daté par le prochain agent qui l'ouvre (A31 au
+brief de L7c), avec la mention de cet arbitrage. Règle de précédence **sans objet** (découpage
+interne, hors pack).
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun ; note de conception amendée.
+
+## 2026-09-05 — [securite] ZAP remis en service : bloquant maintenant, ou après traitement des 12 alertes ?
+
+Constat **F-31** : aucune ligne ZAP entre le 2026-09-02 07h35 UTC (dernier scan réel, run
+`33603477826`) et le 2026-09-05. Deux causes mesurées, et **aucune n'est celle que le mot « skippé »
+suggérait**. (1) Le job `securite` de `deploy-staging.yml` déclarait `needs: [deployer]` sans `if:` ;
+or un contrôle de GOUVERNANCE **postérieur à une livraison réussie** (empreinte du script distant)
+rougit depuis le 2026-09-02 14h40 UTC, et le scan a été skippé par ricochet sur **neuf runs**
+(`33643594297` → `33920693605`). Un job `skipped` ne rougit pas : d'où deux jours de silence.
+(2) Plus grave : le drapeau `-I` de `zap-baseline.py` transforme un code 2 en code 0, et aucune règle
+n'est au niveau FAIL — **le seul code atteignable était 0**, donc la bascule `ZAP_BLOQUANT: 'true'`
+promise à la porte L2 (entrée du 2026-08-27) était un **geste vide**. Mesure A/B du 2026-09-05, même
+cible, image `sha256:781a2bda…` : `-a` → code **2** (7 WARN-NEW) · `-a -I` → code **0** (les mêmes 7).
+
+Corrigé **sans arbitrage**, ce sont des défauts : `-I` retiré · verdict extrait dans
+`.github/scripts/zap-verdict.sh`, table de vérité de 13 cas **rejouée avant chaque scan** · codes 1
+et 3 bloquants en toutes circonstances · `ZAP_BLOQUANT` mal orthographié = erreur dure · rapport JSON
+obligatoire · **scan nocturne** (`cron: '17 3 * * *'`) pour rendre l'absence bruyante · `securite`
+conditionné à un **fait mesuré** (la sonde HTTP publique a répondu). Aucun garde retiré ni adouci :
+`deployer` échoue comme avant. **Preuve par les deux sens**, staging réel, même digest :
+`'true'` → run `33925309775` **ÉCHEC** · `'false'` → run `33925246206` **SUCCÈS**.
+
+**Reste à trancher : `ZAP_BLOQUANT` passe-t-il à `'true'` ?** Le scan rend 2 sur **12 alertes
+réelles**, aucune High, aucune FAIL-NEW : **1 Medium** (`10055` CSP `style-src unsafe-inline`,
+3 occ.) · **3 Low** (`90004` COEP / COOP / CORP absents, 10 occ.) · **8 Informational** (`90005`
+Sec-Fetch ×4, `10049`, `10094`, `10109`, `10015` — 26 occ.).
+
+Options :
+
+1. `'true'` maintenant : `main` rougit à **chaque** merge tant que les 12 restent ouvertes.
+2. `'false'` maintenu, **borné et daté**, le temps qu'A51 les traite ; codes 1 et 3 restent bloquants.
+3. Rendre bloquant en excluant les règles gênantes (`-c … IGNORE`) ou en ne bloquant qu'au-dessus de
+   Medium. **Écartée sans être plaidée** : « un module sous le seuil se corrige par des tests, jamais
+   par un rétrécissement de périmètre ». Un scan vert par exclusion est le contrôle-qui-ment de F-31.
+
+Recommandation **A52 : option 2, échéance porte P-C**. Motif : le scan ne voit que **6 URL** — la
+coquille statique de `apps/field`, ni `/hq`, ni `/api`, ni aucune route d'authentification. Or c'est
+l'authentification (07 §12, L2) qui motivait la bascule : bloquer aujourd'hui ferait rougir `main` sur
+les en-têtes d'une page statique **sans garder la surface qu'il fallait garder**.
+Arbitrage : **EN ATTENTE — Williams**. Règle de précédence **sans objet** (aucune divergence
+interne au pack : le 07 §13 et le 09 §1 demandent le scan, ils ne disent pas quand il bloque).
+`ZAP_BLOQUANT` reste à `'false'` d'ici là, statut écrit dans
+le bandeau du workflow et dans le `::warning` de chaque run. Échéance **P-C**, pas « au lot
+suivant » — c'est cette formule qui avait perdu la bascule de la porte L2.
+Décideur : **Williams** (question posée par **A52** le 2026-09-05).
+Impact spec : aucun sur `/docs`. L'entrée du 2026-08-27 n'est pas amendée : elle est **constatée
+inexécutable en l'état** (cause 2), et la présente entrée porte désormais la question et sa date.
+
+## 2026-09-05 — [securite] ZAP : l'arbitrage « EN ATTENTE » de l'entrée précédente est rendu
+
+L'entrée précédente laissait la bascule `ZAP_BLOQUANT` **EN ATTENTE — Williams**. Elle est rendue ici,
+sur délégation, pour que la garde ait une date plutôt qu'un espoir — c'est par « au lot suivant »
+que la bascule L2 s'était perdue.
+
+Options : celles de l'entrée précédente, inchangées (1. `'true'` maintenant · 2. `'false'` borné et
+daté · 3. exclure les règles gênantes).
+
+Arbitrage : **option 2, échéance porte P-C**, avec une condition qui manquait à la recommandation
+d'A52 : **avant P-C, le scan doit couvrir `/hq` et `/api`** (authentification comprise), sinon la
+bascule à P-C protégerait encore une page statique. Le dossier de porte P-C coche donc deux choses :
+la couverture étendue **puis** `ZAP_BLOQUANT='true'`. Les codes 1 et 3 restent bloquants dès
+maintenant. L'option 3 est écartée pour la raison qu'A52 donne : un scan vert par exclusion est le
+contrôle-qui-ment de F-31.
+Vérifié au merge de #42 (run `33928717453`) : le job `ZAP baseline (staging) / Scan passif` **tourne**
+sur `main` — `success` — alors que le déploiement échoue toujours sur l'empreinte. Le découplage a
+pris ; l'un des cinq points « non mesurés » d'A52 est mesuré.
+Règle de précédence : **§16-22 > §1-15** — 07 §13 (ZAP baseline en CI) et 06 §10.2.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun.
+
+## 2026-09-05 — [L1 / E18] Qui a le droit d'ÉCRIRE `companies.external_ref` ?
+
+Doute remonté par A17 en revue croisée, **mesuré d'abord** : les quatre routes `companies` sont
+`roles: ['admin']` (tracé 2026-08-31, éprouvé) — aucun consultant ne peut écrire `externalRef`, la
+liaison M8.1 n'est pas falsifiable par un compte de terrain, l'invariant 3 tient. Reste qu'un
+**administrateur** peut poser une référence console **arbitraire** que rien ne confronte à la
+console ; `0015` garantit l'unicité, pas l'existence. 03 M8.1 décrit le mouvement inverse (import
+depuis la console, « pas de doublon de vérité »).
+
+Options :
+
+1. **`externalRef` reste écrit par l'API, admin seul ; l'unicité suffit ; L13 réconcilie.**
+2. Retirer `externalRef` des schémas d'entrée L3a — ne s'écrit que par la liaison console. **Écartée**
+   : L13 n'est pas dans la table des lots de la Phase 1 (07 §12) ; aucune fiche ne porterait de
+   référence avant la Phase 2, et la liaison manuelle dont le client pilote a besoin disparaîtrait.
+3. Accepter et marquer « non confirmée » jusqu'à confrontation. **Écartée** : colonne au 04, donc
+   escalade 11 §8-2, interdite hors de la révision de spec de P-D (09 §5.9).
+
+Arbitrage : **option 1**, avec deux bornes : la route reste admin seul (déjà le cas), et **L13 devra
+confronter** à la console toute référence posée à la main — ce qui s'écrit dans le brief de L13, pas
+ici. Règle de précédence : **§32-36 > §24-31** — 09 §5.9 (le 04 inviolable hors P-D) écarte
+l'option 3 ; et 07 §12 (la table des lots) borne ce qui est livrable en Phase 1.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun. **Amendement candidat à P-D** si l'option 3 est jugée nécessaire.
 
 ## 2026-09-05 — [L7b] Deux routes de pilotage : `/coverage` créée, `/aggregation` avec `orgUnit` au lieu de `service`
 

@@ -27,3 +27,4 @@ export * from './assignments.js';
 // se confronte au plan §32.4, elle ne le recalcule jamais (lot L7, incrément L7b).
 export * from './pilotage.js';
 export * from './agregation.js';
+export * from './sync.js';
