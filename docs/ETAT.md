@@ -3053,3 +3053,23 @@ mission marquée embarquée après import) · pastille de sync dans la coquille 
 `ecrans/entretien/**` (A22), remonté.
 
 Mesuré : unit **1267/1267** · interface **679/680** · build OK · typecheck 0 · format propre.
+
+---
+
+## 2026-09-05 — [lot L5 / incrément L5c] — étape 4/7 — réserves A29 fermées
+
+Dernier commit vert : `c1f228d` · Branche : lot/l5c · Poussé : oui
+Tâche en cours : aucune — main rendue au pilote.
+Prochaine action : **rejeu A29**, puis contrôle d'acceptation A02.
+Tests rouges connus : 1, hérité (`app/EcranAccueil.test.tsx`, L5a). Lint : 2, héritées (L5b).
+
+B1 (bloquant) fermé : `EcranFinDeSession` livre « Terminer », « Rouvrir », « Valider » et le
+déverrouillage expert, atteint depuis la ligne de session du cockpit. La commande de mesure de la
+revue rend maintenant 8 lignes au lieu de zéro. `ecrans/entretien/**` non touché.
+M5 : le mot de passe d'export est vérifié contre le coffre — une faute de frappe ne produit plus
+un fichier inouvrable annoncé « produite ». M1 : la garde de version de schéma existe. M2 : la
+borne mono-unité est une égalité, 5 tests aux bornes. M6 : « Photographier » retiré. M7 : ce qui
+dépassait sort d'`App.tsx` vers `coquille-l5c.tsx`. M8 : perte déclarée, correction escaladée.
+M4 REFUSÉ par un test croisé d'A27 — motif écrit dans le code.
+
+Mesuré : unit **1276/1276** · interface **679/680** · build OK · typecheck 0 · format propre.
