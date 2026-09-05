@@ -2926,3 +2926,29 @@ Il se ferme quand A26 livre — A24 n'écrit pas ses propres tests (09 §5.6).
 
 **Le hook `pre-push` a mordu à raison** : le bloc de 06h00 faisait 38 lignes pour un maximum de 25
 (`check:prose`). Réécrit, pas tronqué.
+
+## 2026-09-05 08h05 — [lot L5 / incrément L5a — réserves A29] — étape pipeline 5/7 (tests)
+
+Dernier commit vert : `c08ecb6` · Branche : `lot/l5a-reserves` · Poussé : **non — push en attente**
+de la fin de `test:integration` (en cours, Testcontainers).
+Tâche en cours : A26 a livré les tests des six réserves A29 fermées par A24 ; aucun fichier de
+production touché (`git diff` hors `*.test.ts(x)` vide, vérifié après six bascules).
+Prochaine action : **pousser `c08ecb6`** dès `test:integration` vert, puis rendre le rapport A26 à
+A20 pour la signature de fin d'incrément (11 §6).
+Tests rouges connus : **aucun**.
+
+**Le trou du bloc de 06h20 est fermé, et il est mesuré par la porte de CI elle-même**
+(`node .github/scripts/check-coverage.mjs`, unit + interface) :
+`coffre.ts` **89,51 → 100 %** lignes / 87,69 → 100 branches ; `coffre-appareil.ts` **95,54 → 100 %** /
+87,80 → 100 ; glob `apps/field/src/local/**` **96,32 → 99,04 %** lignes / 91,95 → 95,80 branches.
++68 cas (1 481 → 1 549 en unit + interface), 35 marques `@critique`, 0 skippé.
+
+**Écart de méthode à ne pas reprendre en l'état** : le bloc de 06h20 donne le glob à 95,55 / 92,27.
+Le chiffre rendu par `check-coverage.mjs` — celui de la porte — était 96,32 / 91,95 avant, 99,04 /
+95,80 après. C'est le second qu'il faut citer : la porte ne lit pas une autre grandeur, elle lit
+celle-là.
+
+**Le flottement de `test:unit` est confirmé, et il n'a pas changé de nature** : `--pool=threads`
+sort parfois en code 1 sur `[vitest-worker]: Timeout calling "onTaskUpdate"` ; une passe a aussi vu
+deux **timeouts à 5 s** dans `apps/api/.../assignments/service.test.ts`, qui passe en 4,4 s isolé.
+`--pool=forks` : **3 passes sur 3 vertes**, 1 022/1 022. Contention sous Node v24.19.0, hors contrat.

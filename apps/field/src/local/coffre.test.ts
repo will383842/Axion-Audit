@@ -512,35 +512,71 @@ describe('coffre — bornes hautes des paramètres de dérivation (verdict A51, 
 
   // Un axe à la fois : les compagnons restent à une valeur qui PASSE, pour que le
   // refus ne puisse venir que de l'axe visé.
+  //
+  // LE COMPAGNON MÉMOIRE A CHANGÉ LE 2026-09-05, ET C'EST UNE CORRECTION DE CE
+  // FICHIER, PAS DU CODE. Il valait `memoireKio: 1` — choisi pour garder le
+  // travail sous son plafond et n'accuser que l'axe visé. Depuis que les bornes
+  // portent un PLANCHER de mémoire (revue A29, R1), `1` déclenche un second écart
+  // et la phrase ci-dessus était devenue fausse : les cas passaient encore, mais
+  // ils n'isolaient plus rien. `memoireKioMinParVoie` est le plus petit
+  // compagnon qui PASSE, et il suit la borne si elle bouge — un compagnon écrit
+  // en dur redeviendrait faux au prochain changement. C'est exactement le défaut
+  // qu'A29 a relevé trois fois dans le code : une glose qui dit un peu plus que
+  // ce qu'elle décrit.
+  const COMPAGNON_MEMOIRE = BORNES_KDF.memoireKioMinParVoie;
+
   const HORS_BORNES: readonly {
     readonly axe: string;
     readonly parametres: ParametresKdf;
     readonly valeur: number;
     readonly plafond: number;
+    /** Combien d'écarts ce jeu doit produire — l'isolation, VÉRIFIÉE et non promise. */
+    readonly ecarts: number;
   }[] = [
     {
       axe: 'memoireKio',
       parametres: profil({ memoireKio: BORNES_KDF.memoireKioMax + 1, iterations: 1 }),
       valeur: BORNES_KDF.memoireKioMax + 1,
       plafond: BORNES_KDF.memoireKioMax,
+      // DEUX, et c'est structurel, pas un défaut de jeu d'essai : `memoireKioMax`
+      // et `travailMax` valent le même nombre quand `t = 1` (les deux sont
+      // « quatre fois le profil », dont les passes valent 1). Dépasser la mémoire
+      // d'une unité dépasse donc le travail de la même unité, et `t` ne peut pas
+      // descendre plus bas — `iterationsMin` vaut 1. Le dire ici plutôt que de
+      // forcer l'isolation à coups de valeurs bricolées.
+      ecarts: 2,
     },
     {
       axe: 'iterations',
-      parametres: profil({ memoireKio: 1, iterations: BORNES_KDF.iterationsMax + 1 }),
+      parametres: profil({
+        memoireKio: COMPAGNON_MEMOIRE,
+        iterations: BORNES_KDF.iterationsMax + 1,
+      }),
       valeur: BORNES_KDF.iterationsMax + 1,
       plafond: BORNES_KDF.iterationsMax,
+      ecarts: 1,
     },
     {
       axe: 'parallelisme',
-      parametres: profil({ memoireKio: 1, parallelisme: BORNES_KDF.parallelismeMax + 1 }),
+      // Le plancher de mémoire SUIT le parallélisme (`m ≥ 8 × p`) : le compagnon
+      // doit donc suivre lui aussi, sans quoi ce cas accuserait deux axes.
+      parametres: profil({
+        memoireKio: COMPAGNON_MEMOIRE * (BORNES_KDF.parallelismeMax + 1),
+        parallelisme: BORNES_KDF.parallelismeMax + 1,
+      }),
       valeur: BORNES_KDF.parallelismeMax + 1,
       plafond: BORNES_KDF.parallelismeMax,
+      ecarts: 1,
     },
     {
       axe: 'longueurOctets',
-      parametres: profil({ memoireKio: 1, longueurOctets: BORNES_KDF.longueurOctetsMax + 1 }),
+      parametres: profil({
+        memoireKio: COMPAGNON_MEMOIRE,
+        longueurOctets: BORNES_KDF.longueurOctetsMax + 1,
+      }),
       valeur: BORNES_KDF.longueurOctetsMax + 1,
       plafond: BORNES_KDF.longueurOctetsMax,
+      ecarts: 1,
     },
     {
       axe: 'travail total (m × t)',
@@ -549,10 +585,11 @@ describe('coffre — bornes hautes des paramètres de dérivation (verdict A51, 
       parametres: profil({ iterations: 5 }),
       valeur: PARAMETRES_KDF_DEFAUT.memoireKio * 5,
       plafond: BORNES_KDF.travailMax,
+      ecarts: 1,
     },
   ];
 
-  for (const { axe, parametres, valeur, plafond } of HORS_BORNES) {
+  for (const { axe, parametres, valeur, plafond, ecarts } of HORS_BORNES) {
     it(`@critique « ${axe} » au-dessus de sa borne : ParametresKdfHorsBornesError citant la valeur et le plafond`, () => {
       let erreur: unknown = null;
       try {
@@ -565,6 +602,11 @@ describe('coffre — bornes hautes des paramètres de dérivation (verdict A51, 
       expect(message).toContain(String(valeur));
       expect(message).toContain(String(plafond));
       expect(message).toMatch(/[a-zéèêàç]/);
+      // L'ISOLATION EST VÉRIFIÉE, PAS PROMISE (ajout A26 du 2026-09-05). Un jeu
+      // d'essai censé n'accuser qu'un axe et qui en accuse deux passerait tous
+      // les contrôles ci-dessus sans rien prouver de l'axe visé — c'est ce qui
+      // était arrivé au compagnon `memoireKio: 1` quand le plancher est apparu.
+      expect(message.split(' ; ')).toHaveLength(ecarts);
     });
   }
 
