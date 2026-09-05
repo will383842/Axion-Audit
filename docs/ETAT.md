@@ -2870,3 +2870,31 @@ appartiennent à la signature A20 et au contrôle A02, pas à A24.
 **Couverture** : `apps/field/src/local/**` **96,32 % lignes / 91,95 % branches** — au-dessus du seuil.
 Mais `coffre.ts` SEUL passe de 95,10 % à **89,51 %** : les planchers KDF et `CoffreInexploitableError`
 n'ont pas encore de test. La porte de CI agrège par glob et reste verte ; le trou est réel et nommé.
+
+## 2026-09-05 06h00 — [lot L5 / incrément L5a — réserves A29] — étape pipeline 3/7 (auto-revue)
+
+Dernier commit vert : `923a5f0` (merge `origin/main`) · Branche : `lot/l5a-reserves` · Poussé : oui
+**Le bloc de 02h20 annonçait « Poussé : oui » à tort** : la branche n'existait pas sur `origin`
+(`git ls-remote` : vide). Rien n'était perdu, mais rien n'existait non plus (CLAUDE.md §8).
+Tâche en cours : **#30 fusionnée** (`ab6dcf5`), `origin/main` intégré ; les six réserves A29 (R1 à
+R6) sont fermées **et re-mesurées** par sondes hors dépôt sur les modules réels.
+Prochaine action : **A26 écrit les tests listés au rapport A24** (les quatre jeux de paramètres
+d'A29, « ligne présente valeur nulle », anomalie en premier usage, `.modify()`), puis A29 rejoue.
+Tests rouges connus : **aucun**. `build` · `lint --max-warnings=0` · `typecheck` · `format:check` ·
+**14 gardes** : tous 0. `test:unit` **965/965** · `test:interface` **516/516** · **0 skippé**.
+
+Fusion mesurée, non relue : `main` a fusionné #30 **en squash**, d'où sept conflits `add/add`. Les
+sept fichiers y sont **identiques octet à octet** à l'état d'avant correctifs (`236450c`), donc la
+version de branche en est un **sur-ensemble prouvé**. Append-only fusionnés seuls, contrôlés par
+**multiensemble** d'en-têtes (les titres de section se répètent : un contrôle par lignes uniques les
+compte mal) — `DECISIONS.md` 209 · `ETAT.md` 84 · `AMELIORATIONS.md` 29, **0 perdu, 0 inventé,
+0 ligne supprimée** contre chacun des deux parents.
+
+`pnpm test:unit` sort en **code 1 alors que les 965 tests passent** : `[vitest-worker]: Timeout
+calling "onTaskUpdate"`, le RPC du *reporter*, jamais un test. `--pool=forks` → **code 0** en 34 s.
+Machine sous **Node v24.19.0**, hors contrat (11 §1). Rien n'a été reconfiguré : **la CI sous Node 22
+reste seule juge** (09 §5.7).
+
+Restent ouverts d'A29 : **R7** et **R8** — signature A20 et contrôle A02, pas A24.
+**Couverture** : `local/**` 96,32 % ; mais `coffre.ts` seul **89,51 %**, sous le seuil : les planchers
+KDF et `CoffreInexploitableError` n'ont pas encore de test, et A24 n'en écrit pas (09 §5.6).
