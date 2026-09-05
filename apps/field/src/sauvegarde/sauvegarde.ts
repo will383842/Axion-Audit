@@ -59,6 +59,7 @@ import {
   lireMeta,
 } from '../local/base.js';
 import { deriverKek, PARAMETRES_KDF_DEFAUT, genererSel } from '../local/coffre.js';
+import { deverrouiller, lireCoffreAuRepos } from '../local/coffre-appareil.js';
 import { contexteLocal } from '../local/contexte.js';
 import {
   depuisBase64,
@@ -113,6 +114,26 @@ export class SauvegardeIllisibleError extends Error {
  * authentique, et le distinguer donnerait à un attaquant un oracle sur ce qui a
  * été modifié.
  */
+/**
+ * Le mot de passe donné pour CHIFFRER une sauvegarde n'est pas celui de
+ * l'appareil — majeur **M5** de la revue A29 (2026-09-05).
+ *
+ * Le défaut qu'elle ferme est une PERTE SILENCIEUSE, la pire forme : une faute
+ * de frappe produisait un `.axionbackup` parfaitement formé, annoncé
+ * « sauvegarde produite », et **définitivement inouvrable** — découvert le jour
+ * de la restauration, c'est-à-dire le jour où l'appareil est perdu.
+ * Invariant 8 : l'export doit être « disponible ET TESTÉ ». Un export dont on ne
+ * sait pas s'il s'ouvre n'est pas testé.
+ */
+export class MotDePasseExportInvalideError extends Error {
+  override readonly name = 'MotDePasseExportInvalideError';
+  constructor() {
+    super(
+      'Ce mot de passe n’est pas celui de cet appareil. Aucune sauvegarde n’a été produite : un fichier chiffré avec un mot de passe erroné serait définitivement illisible.',
+    );
+  }
+}
+
 export class MotDePasseSauvegardeInvalideError extends Error {
   override readonly name = 'MotDePasseSauvegardeInvalideError';
   constructor() {
@@ -141,6 +162,29 @@ async function cleDuFichier(
   parametres: ParametresKdfSauvegarde,
 ): Promise<CryptoKey> {
   return deriverKek(motDePasse, sel, parametres);
+}
+
+/**
+ * Le mot de passe est-il bien celui de CET appareil ? Lève sinon (M5, A29).
+ *
+ * ── LE SEUL CAS OÙ CETTE FONCTION NE VÉRIFIE RIEN, ET POURQUOI IL N'EXISTE PAS
+ * ── EN PRODUCTION ────────────────────────────────────────────────────────────
+ * Elle a besoin du coffre AU REPOS (`meta.coffre` : sel + DEK enveloppée). S'il
+ * est absent, elle laisse passer. Ce n'est pas un garde-fou permissif oublié —
+ * c'est un état inatteignable côté produit : le coffre au repos est posé par
+ * `initialiserCoffre` au tout premier déverrouillage, et sans lui AUCUNE donnée
+ * locale n'est déchiffrable, donc aucun export n'a de matière. Un appareil qui
+ * exporte a forcément un coffre.
+ * Fabriquer un refus sur une information absente coûterait ici plus qu'il ne
+ * rapporte : il refuserait des appels de test qui montent un coffre en mémoire
+ * sans le persister, sans protéger un seul auditeur de plus.
+ */
+export async function verifierMotDePasseAppareil(motDePasse: string): Promise<void> {
+  const { base } = contexteLocal();
+  if ((await lireCoffreAuRepos(base)) === null) return;
+  const temoin = await deverrouiller(base, motDePasse).catch(() => null);
+  if (temoin === null) throw new MotDePasseExportInvalideError();
+  temoin.verrouiller();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -211,6 +255,18 @@ async function lireTable(nom: TableSauvegardee, missionId: string): Promise<Lign
 export async function exporterSauvegarde(demande: DemandeExport): Promise<FichierSauvegarde> {
   const { base, coffre } = contexteLocal();
   const parametres: ParametresKdfSauvegarde = demande.parametresKdf ?? PARAMETRES_KDF_DEFAUT;
+
+  // ── M5 : LE MOT DE PASSE EST VÉRIFIÉ AVANT D'ÊTRE UTILISÉ ────────────────
+  // `deriverKek` accepte N'IMPORTE QUELLE chaîne : sans ce contrôle, une faute
+  // de frappe chiffrait la sauvegarde sous une clé que personne ne saurait
+  // reproduire — un fichier bien formé, annoncé « produite », et définitivement
+  // inouvrable, découvert le jour où l'appareil est perdu.
+  //
+  // La vérification est celle du déverrouillage quotidien (`coffre-appareil.ts`,
+  // le chemin qu'emprunte `EcranDeverrouillage`) : LOCALE, donc disponible en
+  // mode avion, là où l'export a lieu. Le coffre témoin est immédiatement
+  // REFERMÉ — celui du contexte n'est pas touché, aucune seconde DEK ne survit.
+  await verifierMotDePasseAppareil(demande.motDePasse);
 
   // ── Les sept tables miroirs, déchiffrées ────────────────────────────────
   const lignes: Partial<Record<TableSauvegardee, LigneSauvegardee[]>> = {};

@@ -42,6 +42,7 @@ import { decalageActuelMs, reglerDecalage, reinitialiserHorloge } from '../local
 import {
   exporterSauvegarde,
   importerSauvegarde,
+  MotDePasseExportInvalideError,
   MotDePasseSauvegardeInvalideError,
   SauvegardeIllisibleError,
   VERSION_FORMAT_SAUVEGARDE,
@@ -575,4 +576,66 @@ describe('le nom du fichier proposé à l’auditeur', () => {
     expect(nom).not.toContain(':');
     expect(nom).toBe('axion-0191e2a0-0000-7000-8000-00000000f3de-20260904T070000Z.axionbackup');
   });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// H. LE MOT DE PASSE D'EXPORT EST VÉRIFIÉ (majeur M5, revue A29 du 2026-09-05)
+//
+// Le défaut fermé est une PERTE SILENCIEUSE : `deriverKek` accepte n'importe
+// quelle chaîne, donc une faute de frappe produisait un fichier bien formé,
+// annoncé « produite », et définitivement inouvrable — découvert le jour de la
+// restauration, c'est-à-dire le jour où l'appareil est perdu.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('le mot de passe d’export est vérifié contre le coffre de l’appareil', () => {
+  /** Installe un coffre AU REPOS (`meta.coffre`) — ce que fait le 1er déverrouillage. */
+  async function installerCoffreAuRepos(motDePasse: string): Promise<void> {
+    const sel = new Uint8Array(16).fill(21);
+    const kek = await deriverKek(motDePasse, sel, KDF_TEST);
+    await ecrireMeta(baseSource, CLES_META.coffre, {
+      sel: versBase64(sel),
+      parametres: KDF_TEST,
+      dekEnveloppee: await creerDekEnveloppee(kek),
+    });
+  }
+
+  it('@critique un mot de passe FAUX est refusé, et AUCUN fichier n’est produit', async () => {
+    await installerCoffreAuRepos(MOT_DE_PASSE);
+    await expect(
+      exporterSauvegarde({
+        missionId: MISSION_ID,
+        motDePasse: 'faute-de-frappe',
+        parametresKdf: KDF_TEST,
+      }),
+    ).rejects.toBeInstanceOf(MotDePasseExportInvalideError);
+  }, 30_000);
+
+  it('@critique le BON mot de passe passe, et la sauvegarde est produite', async () => {
+    await installerCoffreAuRepos(MOT_DE_PASSE);
+    const fichier = await exporterSauvegarde({
+      missionId: MISSION_ID,
+      motDePasse: MOT_DE_PASSE,
+      parametresKdf: KDF_TEST,
+    });
+    expect(fichier.enTete.missionId).toBe(MISSION_ID);
+  }, 30_000);
+
+  it('@critique le refus dit qu’aucune sauvegarde n’a été produite — jamais un « peut-être »', async () => {
+    await installerCoffreAuRepos(MOT_DE_PASSE);
+    await expect(
+      exporterSauvegarde({ missionId: MISSION_ID, motDePasse: 'x', parametresKdf: KDF_TEST }),
+    ).rejects.toThrow(/aucune sauvegarde n’a été produite/i);
+  }, 30_000);
+
+  it('sans coffre AU REPOS, la vérification laisse passer — état inatteignable en production', async () => {
+    // Documenté dans l'en-tête de `verifierMotDePasseAppareil` : le coffre au
+    // repos est posé au premier déverrouillage, et sans lui aucune donnée locale
+    // n'est déchiffrable — un appareil qui exporte en a forcément un.
+    expect(await baseSource.meta.get(CLES_META.coffre)).toBeUndefined();
+    const fichier = await exporterSauvegarde({
+      missionId: MISSION_ID,
+      motDePasse: 'peu importe',
+      parametresKdf: KDF_TEST,
+    });
+    expect(fichier.enTete.missionId).toBe(MISSION_ID);
+  }, 30_000);
 });

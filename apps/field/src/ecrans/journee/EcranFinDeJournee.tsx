@@ -59,7 +59,7 @@ import { ecrireMeta, lireMeta } from '../../local/base.js';
 import { maintenant } from '../../local/horloge.js';
 import { portSyncInerte } from '../../local/port-sync.js';
 import { nomFichierSauvegarde } from '../../sauvegarde/format.js';
-import { exporterSauvegarde } from '../../sauvegarde/sauvegarde.js';
+import { exporterSauvegarde, MotDePasseExportInvalideError } from '../../sauvegarde/sauvegarde.js';
 import { PROFIL_PAR_DEFAUT } from '../../session/auditeur.js';
 import './journee.css';
 
@@ -190,9 +190,15 @@ export function EcranFinDeJournee(): ReactNode {
             deposerFichier(nom, JSON.stringify(produit));
             fichierProduit = true;
             sauvegarde = `Sauvegarde chiffrée produite : ${nom} (${String(produit.enTete.operationsIncluses)} élément(s) non encore synchronisé(s) inclus).`;
-          } catch {
+          } catch (cause) {
+            // M5 (A29) : un mot de passe FAUX est un refus NOMMÉ, pas un échec
+            // technique. Les deux appellent des gestes différents — retaper son
+            // mot de passe, ou prévenir le siège — et les confondre laisserait
+            // l'auditeur réessayer la même faute de frappe.
             sauvegarde =
-              'La sauvegarde n’a pas pu être produite sur cet appareil. Vos données restent intactes ; réessayez, et prévenez le siège si l’échec persiste.';
+              cause instanceof MotDePasseExportInvalideError
+                ? cause.message
+                : 'La sauvegarde n’a pas pu être produite sur cet appareil. Vos données restent intactes ; réessayez, et prévenez le siège si l’échec persiste.';
           }
         }
         missions.push({ missionId, titre, sync, sauvegarde, fichierProduit });
