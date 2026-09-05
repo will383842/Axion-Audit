@@ -1770,217 +1770,6 @@ fichiers PNG, sans code. À cocher à la porte **P-C**.
 
 ---
 
-### FICHE A-013 — `staging` sert le même conteneur depuis 21 h : Coolify échoue à lire le compose, en 9 secondes, et le déploiement n'a jamais lieu
-
-**Constat (mesuré le 2026-09-03 par accès direct au serveur, après relance délibérée du job en
-échec).** `main` est rouge depuis le 2026-09-02 14h40 UTC sur `8 · deploy-staging`. J'ai relancé le
-job sans changer une ligne : **il a échoué de la même façon**, ce qui établit un défaut
-**systématique** et non une panne passagère — le précédent Docker Hub, où un rejeu suffisait, ne
-s'applique pas.
-
-Le fait qui tranche, deux déploiements distincts à treize heures d'écart :
-
-| Déclenchement    | `deployment_uuid`          | Conteneur réellement en service       |
-| ---------------- | -------------------------- | ------------------------------------- |
-| 2026-09-02 14h48 | `ji178zfg0eeuywnsmqm0u543` | `/artifacts/tvgaihhwrs0g8kg9mwcmnnwv` |
-| 2026-09-03 03h46 | `7vafdkixhk0hit2wgig8w1es` | `/artifacts/tvgaihhwrs0g8kg9mwcmnnwv` |
-
-`docker inspect` sur le serveur : `api-wrunr6mwq2oxqq392i4myzjn-073253734194`, **Up 21 hours**, créé
-le 2026-09-02 07h34 UTC. **Le conteneur en service est celui du dernier déploiement réussi et n'a
-jamais été remplacé.**
-
-**La cause, lue dans la base Coolify** (`application_deployment_queues`) — le déploiement dure
-**9 secondes** (03:46:40 → 03:46:49) et se termine en `failed` :
-
-```
-Deployment failed: Failed to read Git source. Please verify repository access and try again.
-Error type: RuntimeException — /var/www/html/app/Models/Application.php:2119
-#0 ApplicationDeploymentJob.php(681): App\Models\Application->loadComposeFile()
-#1 ApplicationDeploymentJob.php(507): ->deploy_docker_compose_buildpack()
-```
-
-Le clone, lui, **réussit** : le journal montre `git ls-remote` rendant `8c5f9ff…`, puis
-`Cloning into '/artifacts/7vafdkixhk0hit2wgig8w1es'`. C'est la **lecture du fichier compose** qui
-échoue ensuite, pas l'accès au dépôt.
-
-**Ce que ce n'est PAS — écarté par mesure, pour que personne ne le recherche :**
-
-- **Pas l'espace disque** : `df -h /` → 29 % utilisés, 103 G libres ; inodes à 5 %.
-- **Pas un fichier absent** : Coolify attend `/infra/docker-compose.coolify.yml`
-  (`base_directory` = `/`, `build_pack` = `dockercompose`) ; `git ls-tree 8c5f9ff infra/` le trouve.
-- **Pas l'accès au dépôt** : le `git ls-remote` anonyme aboutit dans le journal même.
-- **Pas le commit `8c5f9ff` lui-même** : il ne touche **aucun** fichier compose
-  (`git show 8c5f9ff -- infra/docker-compose.coolify.yml` est vide) — il ne modifie que des
-  workflows et des scripts d'infra. La corrélation avec ce sha est celle de la tête de `main`, pas
-  celle d'une cause.
-
-**Dernier succès / premier échec**, sur la même application `wrunr6mwq2oxqq392i4myzjn` :
-
-```
-7vafdkixhk0hit2wgig8w1es | failed   | 2026-09-03 03:46 | 8c5f9ffa
-ji178zfg0eeuywnsmqm0u543 | failed   | 2026-09-02 14:48 | 8c5f9ffa
-tvgaihhwrs0g8kg9mwcmnnwv | finished | 2026-09-02 07:32 | f7a11b6a   <- le conteneur en service
-```
-
-**Valeur pour l'auditeur.** Aucune directement, et **bloquante pour tout le reste** : la DoD
-transverse exige « migrations up/down exécutées **sur staging** » et l'étape 7 du pipeline est une
-**démo sur staging**. Tant que staging sert du code périmé, **aucune porte ne peut être franchie** —
-ni P-C, ni P-D — et trois chantiers (L3, L5, L7) attendent derrière une cause qui ne leur appartient
-pas. _Un job d'infra tient trois chantiers._
-
-**Coût estimé.** Diagnostic : fait. Correction : inconnue tant que `loadComposeFile()` n'a pas été
-instrumenté — l'hypothèse la moins coûteuse à éprouver est un **redéploiement manuel depuis
-l'interface Coolify**, qui dira si le défaut est dans l'appel d'API ou dans la configuration de
-l'application. Ne PAS modifier `deploy-staging.sh` avant : le script n'est pas en cause, il **refuse
-de sortir vert**, et c'est exactement ce pour quoi il a été écrit.
-
-**Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun.** C'est de l'exploitation.
-
-**Deux constats annexes, à ne pas perdre.**
-
-1. **RETIRÉ — l'affirmation était fausse, et sa fausseté est instructive.** Cette fiche a d'abord
-   annoncé que `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` étaient **absents**. Ils ne le sont pas :
-   `gh secret list` les donne tous les deux, posés le 2026-08-28. L'erreur vient de la lecture du
-   journal : dans une sortie GitHub Actions, les lignes préfixées `^[[36;1m` sont **le source du
-   workflow que le runner affiche**, pas ce qu'il a émis. Le `echo "::error title=Alerte
-impossible::…"` que j'ai cité est une **branche conditionnelle non prise**, imprimée parce que
-   le runner affiche la commande. Les erreurs réellement émises se reconnaissent au préfixe
-   `##[error]` **sans** code couleur : il y en a **trois** dans ce run, et aucune ne concerne
-   Telegram. _Un journal de CI contient le code qui aurait pu s'exécuter à côté de ce qui s'est
-   exécuté — les confondre fait lire des pannes qui n'ont pas eu lieu._
-2. Coolify tourne sur `ghcr.io/coollabsio/coolify:latest` — **une étiquette non épinglée**, alors
-   que le contrat 11 §1 épingle tout le reste au patch près et que Renovate est désactivé en
-   Phase 1. Le conteneur est en service depuis 5 jours, donc il n'est pas la cause de CET incident ;
-   mais une infrastructure qui peut changer sous nos pieds sans qu'aucun commit ne l'enregistre est
-   la prochaine panne qu'on ne saura pas dater.
-
-**Recommandation.** **Étage 2 — PROPOSÉE**, arbitrage Williams, sur le seul point 2 : épingler
-Coolify est une décision d'exploitation, pas une amélioration de confort. Le point 1 n'existe pas.
-
-**Post-scriptum du 2026-09-03, à lire avant d'agir sur cette fiche.** Après sa rédaction, la
-commande que Coolify exécute pour vérifier l'accès au dépôt a été rejouée **par le canal exact de
-Coolify** (`instant_remote_process` vers l'hôte, depuis le conteneur `coolify`) : elle **réussit**,
-et rend le HEAD de `main`. Le point de rupture est donc localisé à la ligne près —
-`Application::loadComposeFile()` appelle `getGitRemoteStatus()`, qui lance `git ls-remote` **sur
-l'hôte** (`exec_in_docker: false`), et c'est son échec qui lève « Failed to read Git source » ;
-le `ls-remote` visible dans le journal de déploiement, lui, tourne **dans le conteneur d'aide** —
-deux commandes homonymes, deux endroits différents, et seule la première décide. La configuration
-de l'application porte par ailleurs `updated_at = 2026-09-03 04h30`, soit **après** le second échec.
-**Conséquence : le défaut n'est peut-être plus présent.** Un déploiement relancé le dira, et c'est
-la mesure qui manque à cette fiche.
-
-**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte suivante_
-
-### FICHE A-014 — Le garde pre-push s'exécute dans certains worktrees et pas dans d'autres, et rien ne dit lequel
-
-**Constat (mesuré le 2026-09-03, d'abord sur le worktree qui porte la fiche A-013 — c'est-à-dire sur
-moi-même — puis élargi par la session de vérification, qui a FALSIFIÉ la première rédaction de cette
-fiche).** Le régime de travail impose un `pre-push` qui rejoue `pnpm verify:rapide`, et
-`ORGANISATION_AGENTS.md` §9 impose **un worktree par chantier**. Le garde tient dans les uns et pas
-dans les autres :
-
-```
-$ for w in _axverif-l3 _axl3 _axl5conception _axdiag; do ls -1 $w/.husky/_/ | wc -l; done
-  _axverif-l3       16 entrées   pre-push PRÉSENT
-  _axl3             16 entrées   pre-push PRÉSENT
-  _axl5conception    0 entrée    pre-push ABSENT
-  _axdiag            0 entrée    pre-push ABSENT     <- celui d'où part cette fiche
-```
-
-`core.hooksPath` vaut `.husky/_` et vit dans le `.git` **partagé par tous les worktrees** ; mais
-`.husky/_/` est un répertoire **de l'arbre de travail**, peuplé par `husky` au moment du
-`pnpm install`. La condition n'est donc **pas** « worktree neuf » — c'est **« worktree où
-`pnpm install` n'a pas tourné »**, et ces deux énoncés ne se recouvrent qu'au début. Là où l'install
-a tourné, le garde s'exécute pleinement ; ailleurs, `git push` ne trouve aucun hook et **passe sans
-rien vérifier, en silence**.
-
-**Cette précision n'affaiblit pas la fiche, elle l'aggrave.** Un garde uniformément absent finirait
-par se voir. Un garde qui tient dans `_axl3` et pas dans `_axdiag`, sans que rien ne le signale
-dans un cas ni dans l'autre, ne se voit jamais : deux sessions font le même geste, l'une est
-contrôlée, l'autre non, et **les deux sorties sont identiques**.
-
-**Preuve par l'incident, et elle est de moi.** Mes deux pushes de la nuit (`lot/l6-conception`,
-`infra/diagnostic-staging`) sont passés sans une ligne de sortie de hook. J'ai cru le garde vert ;
-il était **absent**. La CI l'a rattrapé au coup suivant — `1 · lint` en `FAILURE` sur la PR #28,
-pour un `.md` qui ne passait pas `prettier --check`. C'est exactement le piège déjà consigné
-(`ORGANISATION_AGENTS.md` §2, incident du 2026-08-29), sauf qu'ici **le garde censé l'attraper
-avant la CI n'a jamais tourné**.
-
-**Valeur pour l'auditeur.** Aucune directement, et forte pour le chantier : _un garde muet est pire
-qu'un garde absent — il rassure_ (§5-2). Ici c'est la version la plus traître : le garde est
-**configuré**, il est **documenté**, il est **exigé** — et selon le répertoire d'où l'on pousse, il
-s'exécute ou non. Un chantier ouvert conformément au §9 pousse sans contrôle tant que l'install n'y
-a pas tourné, et personne ne peut le voir puisque **l'absence de sortie ressemble à un succès
-silencieux**.
-
-**Coût estimé.** Faible, mais c'est une décision, pas un réflexe. Trois pistes, à arbitrer :
-(a) documenter `pnpm install` comme première commande obligatoire de tout worktree neuf (§2 du
-fichier d'organisation) — le moins cher, le plus oubliable, et il ne supprime pas le silence ;
-(b) faire échouer bruyamment un `push` quand `.husky/_/pre-push` est absent, plutôt que de le
-laisser passer — transforme un silence en refus ; (c) versionner les hooks au lieu de les générer.
-**(b) est la seule qui respecte la règle « un contrôle qui ne trouve rien ne doit jamais sortir
-vert » (`CLAUDE.md` §5.7)** — et c'est la seule qui traite le vrai défaut, qui n'est pas l'absence
-du hook mais **l'impossibilité de savoir s'il a tourné**.
-
-**Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun.** Outillage.
-
-**Recommandation.** **Étage 2 — PROPOSÉE.** Ce n'est pas du confort : c'est le garde obligatoire
-avant toute PR qui n'existe pas dans les répertoires où le projet travaille. À rapprocher de la
-réparation en cours du garde `verify`, aveugle au projet `interface` — **deux gardes obligatoires,
-deux angles morts, découverts le même jour.**
-
-**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte suivante_
-
----
-
-### FICHE A-015 — Les quatre fusions en attente ne butent QUE sur deux fichiers append-only
-
-> Étage 2 — **proposée, non implémentée** (09 §5.9). Ouverte le 2026-09-04 par la session pilote.
-> Numérotation : A-014 était le dernier pris (`infra/diagnostic-staging`).
-
-**Constat, mesuré et non déduit.** `git merge-tree --write-tree origin/main <branche>` sur les
-quatre branches en attente de fusion — `lot/l5a`, `lot/l5b`, `lot/l7a`, `lot/l1-e18-external-ref` —
-rend exactement le même verdict pour les quatre : **conflit sur `DECISIONS.md` et `docs/ETAT.md`,
-et sur rien d'autre. Zéro conflit de code, sur aucun fichier.** Le découpage en chantiers disjoints
-tient donc parfaitement ; ce qui coûte, c'est la tenue des registres partagés.
-
-**Ce que ça a déjà coûté.** Deux défauts de fusion en deux jours, tous deux sur ces mêmes fichiers,
-tous deux avec perte silencieuse : le 2026-09-02, une résolution par hunk a coupé deux entrées de
-leurs champs `Décideur` et `Impact spec` **en passant** un contrôle « aucune ligne perdue » ; le
-2026-09-03, un `git checkout --theirs` a écrasé 71 lignes ajoutées **hors du hunk**, que le diff du
-conflit ne montrait pas. Le second est le plus instructif : la faute était invisible dans l'outil
-même qui servait à la commettre.
-
-**Valeur.** Ce n'est pas du confort : c'est la suppression d'une classe entière de défauts sur les
-deux fichiers dont le pack dit qu'une entrée non tracée « n'existe pas ». Chaque incrément la paie.
-
-**Ce qui est proposé, et ce qui ne l'est PAS.** Un pilote de fusion `union` déclaré en
-`.gitattributes` pour `DECISIONS.md` et `AMELIORATIONS.md` : sur deux ajouts en fin de fichier, il
-garde les deux blocs sans marqueur, et `check:decisions` reste le juge du format — un champ coupé
-serait donc _bloqué_, pas seulement regretté.
-**`docs/ETAT.md` en est EXCLU, délibérément**, et c'est le cœur de la fiche : sa sémantique est
-« **le dernier bloc fait foi** ». Un pilote qui décide seul de l'ordre des blocs peut faire du bloc
-le plus ancien le dernier, et une session neuve suivrait alors une consigne périmée en croyant lire
-la plus récente. **Un automatisme qui se trompe sur ce fichier-là est pire que le travail manuel
-qu'il remplace** — c'est exactement le « garde qui ne garde rien » que ce dépôt pourchasse.
-
-**Coût estimé.** 0,25 j : deux lignes de `.gitattributes`, un test de fusion à blanc dans les deux
-sens sur un dépôt jetable (le gabarit existe : `infra/scripts/test-garde-clone.sh`), et une entrée
-au contrat 11 §3 disant que le pilote existe et pourquoi `ETAT.md` en est exclu.
-
-**Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun.** Impact convention : oui —
-c'est une convention 11 §3, donc une escalade 11 §8-2, d'où cette fiche plutôt qu'un commit.
-
-**Recommandation.** **PHASE 2**, sauf si un troisième défaut de fusion survient d'ici P-C — auquel
-cas ABSORBÉE. La procédure manuelle (résolution par blocs depuis la base commune, contrôle en
-multi-ensembles sur les versions **complètes**) est écrite, transmise à chaque agent qui fusionne, et
-elle a tenu à la fusion `lot/l5a` → `lot/l5c` du 2026-09-04. Tant qu'elle tient, l'automatisme est un
-confort ; le jour où elle cède, il devient une nécessité.
-
-**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-C_
-
----
-
 ## 2026-09-02 (RÉÉCRITE LE 2026-09-03) — [L5b] **EN PRODUCTION — validation juridique URGENTE** : le script d'accord de participation
 
 > **CETTE FICHE A ÉTÉ FAUSSE PENDANT 24 H, ET SUR UN TEXTE JURIDIQUE.** Elle décrivait
@@ -2221,50 +2010,223 @@ déjà au numéro de version du schéma local. Coût ~0,1 j.
 
 **Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-C_
 
-### FICHE A-008 — Le coffre terrain chiffre sans AAD : une enveloppe n'est pas liée à sa ligne
+---
 
-**Constat terrain (A24, 2026-09-02, relevé par A29) :** AES-256-GCM sans données authentifiées
-additionnelles. Une enveloppe déchiffrable l'est **quelle que soit la ligne où on la colle** : un
-attaquant qui écrit déjà dans IndexedDB peut déplacer une réponse d'une question à une autre sans que
-le déchiffrement le voie. Lier l'enveloppe à sa ligne exigeait un troisième paramètre et cassait la
-signature publiée `dechiffrer(e, s)` en pleine rencontre tests × code.
+### FICHE A-013 — `staging` sert le même conteneur depuis 21 h : Coolify échoue à lire le compose, en 9 secondes, et le déploiement n'a jamais lieu
 
-**Valeur pour l'auditeur :** un durcissement, pas une faille du modèle de menace 06 §10 — la menace
-suppose un attaquant qui a déjà passé le verrou et le coffre. Mais une réponse déplacée d'une question
-à une autre est une donnée fausse qui ne se signale pas.
+**Constat (mesuré le 2026-09-03 par accès direct au serveur, après relance délibérée du job en
+échec).** `main` est rouge depuis le 2026-09-02 14h40 UTC sur `8 · deploy-staging`. J'ai relancé le
+job sans changer une ligne : **il a échoué de la même façon**, ce qui établit un défaut
+**systématique** et non une panne passagère — le précédent Docker Hub, où un rejeu suffisait, ne
+s'applique pas.
 
-**Proposition (étage 2) :** AAD = `table:id:colonne`, posée par le port d'écriture, vérifiée par
-`dechiffrer`. Migration locale des enveloppes existantes au ré-enveloppement. À arbitrer à **P-C**.
-**Coût estimé :** ≈ 0,3 j. **Impact schéma / API : aucun.** Impact `apps/field/src/local/**` : coffre,
-port, tests. Trace : `DECISIONS.md` 2026-09-02 « Aucun AAD sur AES-GCM ».
+Le fait qui tranche, deux déploiements distincts à treize heures d'écart :
 
-### FICHE A-009 — L'icône de la PWA terrain est PROVISOIRE : le dessin reste à Williams
+| Déclenchement    | `deployment_uuid`          | Conteneur réellement en service       |
+| ---------------- | -------------------------- | ------------------------------------- |
+| 2026-09-02 14h48 | `ji178zfg0eeuywnsmqm0u543` | `/artifacts/tvgaihhwrs0g8kg9mwcmnnwv` |
+| 2026-09-03 03h46 | `7vafdkixhk0hit2wgig8w1es` | `/artifacts/tvgaihhwrs0g8kg9mwcmnnwv` |
 
-**Constat (A29, 2026-09-02, B2) :** le manifeste livré par L5a n'avait aucune icône — non installable,
-donc `storage.persist()` refusé sur iPad, donc aucune mission embarquable. La décision du 2026-08-28
-réserve le dessin de l'icône à Williams et interdit le demi-manifeste. **Défaut appliqué sous la règle
-« silence vaut accord »** (`DECISIONS.md` 2026-09-02) : un aplat aux couleurs des tokens (terracotta
-sur ivoire), généré par `apps/field/scripts/build-icones.mjs` à partir de `COULEURS_CHARTE`, 192 /
-512 / maskable / `apple-touch-icon`, marqué `"_provisoire": true` dans le manifeste.
+`docker inspect` sur le serveur : `api-wrunr6mwq2oxqq392i4myzjn-073253734194`, **Up 21 hours**, créé
+le 2026-09-02 07h34 UTC. **Le conteneur en service est celui du dernier déploiement réussi et n'a
+jamais été remplacé.**
 
-**Ce qui reste dû, à Williams :** l'icône de charte. Le remplacement est une substitution de
-fichiers PNG, sans code. À cocher à la porte **P-C**.
-**Coût estimé :** 0 j côté code. **Impact schéma / API : aucun.**
+**La cause, lue dans la base Coolify** (`application_deployment_queues`) — le déploiement dure
+**9 secondes** (03:46:40 → 03:46:49) et se termine en `failed` :
 
-## 2026-09-02 — [L0/CI, étage 2, PROPOSÉE] `l0-restauration` rougit une fois sur deux en CI, et verdit à la relance
+```
+Deployment failed: Failed to read Git source. Please verify repository access and try again.
+Error type: RuntimeException — /var/www/html/app/Models/Application.php:2119
+#0 ApplicationDeploymentJob.php(681): App\Models\Application->loadComposeFile()
+#1 ApplicationDeploymentJob.php(507): ->deploy_docker_compose_buildpack()
+```
 
-### FICHE A-012 — Le test de restauration pgBackRest est instable en CI
+Le clone, lui, **réussit** : le journal montre `git ls-remote` rendant `8c5f9ff…`, puis
+`Cloning into '/artifacts/7vafdkixhk0hit2wgig8w1es'`. C'est la **lecture du fichier compose** qui
+échoue ensuite, pas l'accès au dépôt.
 
-- **Constat** : run 33642357475 (`lot/l5a` @ `2c754b2`) — job « 4 · integration » rouge sur
-  `apps/api/tests/l0-restauration.integration.test.ts` : `FileMissingError: unable to open missing file
-'/var/lib/pgbackrest/archive/axion/archive.info'`. Relancé tel quel sans aucun changement : vert. Le même
-  test était vert sur `1892df3` vingt-cinq minutes plus tôt et sur `lot/l3-suite` toute la journée.
-  L'incrément L5a ne touche ni `infra/`, ni `apps/api`.
-- **Cause probable** : course entre `axion-stanza-create` (`--no-online`) et le premier `archive-push`
-  du serveur redémarré — `archive.info` n'existe pas encore quand la sauvegarde démarre. À MESURER par
-  A11/A53 avant de corriger : une relance qui verdit n'est pas un diagnostic.
-- **Valeur** : une CI qu'on relance « pour voir » est une CI qu'on finit par ne plus croire (09 §5.7 :
-  la CI reste seule juge — elle doit donc être juste).
-- **Coût estimé** : 0,25 j — attendre `archive.info` (ou `pgbackrest info` = stanza `ok`) avec délai
-  borné avant `backup`, et un cas de test qui reproduit la course.
-- **Impact schéma/API** : aucun. Lot L0 (A11 infra, A53 observabilité).
+**Ce que ce n'est PAS — écarté par mesure, pour que personne ne le recherche :**
+
+- **Pas l'espace disque** : `df -h /` → 29 % utilisés, 103 G libres ; inodes à 5 %.
+- **Pas un fichier absent** : Coolify attend `/infra/docker-compose.coolify.yml`
+  (`base_directory` = `/`, `build_pack` = `dockercompose`) ; `git ls-tree 8c5f9ff infra/` le trouve.
+- **Pas l'accès au dépôt** : le `git ls-remote` anonyme aboutit dans le journal même.
+- **Pas le commit `8c5f9ff` lui-même** : il ne touche **aucun** fichier compose
+  (`git show 8c5f9ff -- infra/docker-compose.coolify.yml` est vide) — il ne modifie que des
+  workflows et des scripts d'infra. La corrélation avec ce sha est celle de la tête de `main`, pas
+  celle d'une cause.
+
+**Dernier succès / premier échec**, sur la même application `wrunr6mwq2oxqq392i4myzjn` :
+
+```
+7vafdkixhk0hit2wgig8w1es | failed   | 2026-09-03 03:46 | 8c5f9ffa
+ji178zfg0eeuywnsmqm0u543 | failed   | 2026-09-02 14:48 | 8c5f9ffa
+tvgaihhwrs0g8kg9mwcmnnwv | finished | 2026-09-02 07:32 | f7a11b6a   <- le conteneur en service
+```
+
+**Valeur pour l'auditeur.** Aucune directement, et **bloquante pour tout le reste** : la DoD
+transverse exige « migrations up/down exécutées **sur staging** » et l'étape 7 du pipeline est une
+**démo sur staging**. Tant que staging sert du code périmé, **aucune porte ne peut être franchie** —
+ni P-C, ni P-D — et trois chantiers (L3, L5, L7) attendent derrière une cause qui ne leur appartient
+pas. _Un job d'infra tient trois chantiers._
+
+**Coût estimé.** Diagnostic : fait. Correction : inconnue tant que `loadComposeFile()` n'a pas été
+instrumenté — l'hypothèse la moins coûteuse à éprouver est un **redéploiement manuel depuis
+l'interface Coolify**, qui dira si le défaut est dans l'appel d'API ou dans la configuration de
+l'application. Ne PAS modifier `deploy-staging.sh` avant : le script n'est pas en cause, il **refuse
+de sortir vert**, et c'est exactement ce pour quoi il a été écrit.
+
+**Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun.** C'est de l'exploitation.
+
+**Deux constats annexes, à ne pas perdre.**
+
+1. **RETIRÉ — l'affirmation était fausse, et sa fausseté est instructive.** Cette fiche a d'abord
+   annoncé que `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` étaient **absents**. Ils ne le sont pas :
+   `gh secret list` les donne tous les deux, posés le 2026-08-28. L'erreur vient de la lecture du
+   journal : dans une sortie GitHub Actions, les lignes préfixées `^[[36;1m` sont **le source du
+   workflow que le runner affiche**, pas ce qu'il a émis. Le `echo "::error title=Alerte
+impossible::…"` que j'ai cité est une **branche conditionnelle non prise**, imprimée parce que
+   le runner affiche la commande. Les erreurs réellement émises se reconnaissent au préfixe
+   `##[error]` **sans** code couleur : il y en a **trois** dans ce run, et aucune ne concerne
+   Telegram. _Un journal de CI contient le code qui aurait pu s'exécuter à côté de ce qui s'est
+   exécuté — les confondre fait lire des pannes qui n'ont pas eu lieu._
+2. Coolify tourne sur `ghcr.io/coollabsio/coolify:latest` — **une étiquette non épinglée**, alors
+   que le contrat 11 §1 épingle tout le reste au patch près et que Renovate est désactivé en
+   Phase 1. Le conteneur est en service depuis 5 jours, donc il n'est pas la cause de CET incident ;
+   mais une infrastructure qui peut changer sous nos pieds sans qu'aucun commit ne l'enregistre est
+   la prochaine panne qu'on ne saura pas dater.
+
+**Recommandation.** **Étage 2 — PROPOSÉE**, arbitrage Williams, sur le seul point 2 : épingler
+Coolify est une décision d'exploitation, pas une amélioration de confort. Le point 1 n'existe pas.
+
+**Post-scriptum du 2026-09-03, à lire avant d'agir sur cette fiche.** Après sa rédaction, la
+commande que Coolify exécute pour vérifier l'accès au dépôt a été rejouée **par le canal exact de
+Coolify** (`instant_remote_process` vers l'hôte, depuis le conteneur `coolify`) : elle **réussit**,
+et rend le HEAD de `main`. Le point de rupture est donc localisé à la ligne près —
+`Application::loadComposeFile()` appelle `getGitRemoteStatus()`, qui lance `git ls-remote` **sur
+l'hôte** (`exec_in_docker: false`), et c'est son échec qui lève « Failed to read Git source » ;
+le `ls-remote` visible dans le journal de déploiement, lui, tourne **dans le conteneur d'aide** —
+deux commandes homonymes, deux endroits différents, et seule la première décide. La configuration
+de l'application porte par ailleurs `updated_at = 2026-09-03 04h30`, soit **après** le second échec.
+**Conséquence : le défaut n'est peut-être plus présent.** Un déploiement relancé le dira, et c'est
+la mesure qui manque à cette fiche.
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte suivante_
+
+### FICHE A-014 — Le garde pre-push s'exécute dans certains worktrees et pas dans d'autres, et rien ne dit lequel
+
+**Constat (mesuré le 2026-09-03, d'abord sur le worktree qui porte la fiche A-013 — c'est-à-dire sur
+moi-même — puis élargi par la session de vérification, qui a FALSIFIÉ la première rédaction de cette
+fiche).** Le régime de travail impose un `pre-push` qui rejoue `pnpm verify:rapide`, et
+`ORGANISATION_AGENTS.md` §9 impose **un worktree par chantier**. Le garde tient dans les uns et pas
+dans les autres :
+
+```
+$ for w in _axverif-l3 _axl3 _axl5conception _axdiag; do ls -1 $w/.husky/_/ | wc -l; done
+  _axverif-l3       16 entrées   pre-push PRÉSENT
+  _axl3             16 entrées   pre-push PRÉSENT
+  _axl5conception    0 entrée    pre-push ABSENT
+  _axdiag            0 entrée    pre-push ABSENT     <- celui d'où part cette fiche
+```
+
+`core.hooksPath` vaut `.husky/_` et vit dans le `.git` **partagé par tous les worktrees** ; mais
+`.husky/_/` est un répertoire **de l'arbre de travail**, peuplé par `husky` au moment du
+`pnpm install`. La condition n'est donc **pas** « worktree neuf » — c'est **« worktree où
+`pnpm install` n'a pas tourné »**, et ces deux énoncés ne se recouvrent qu'au début. Là où l'install
+a tourné, le garde s'exécute pleinement ; ailleurs, `git push` ne trouve aucun hook et **passe sans
+rien vérifier, en silence**.
+
+**Cette précision n'affaiblit pas la fiche, elle l'aggrave.** Un garde uniformément absent finirait
+par se voir. Un garde qui tient dans `_axl3` et pas dans `_axdiag`, sans que rien ne le signale
+dans un cas ni dans l'autre, ne se voit jamais : deux sessions font le même geste, l'une est
+contrôlée, l'autre non, et **les deux sorties sont identiques**.
+
+**Preuve par l'incident, et elle est de moi.** Mes deux pushes de la nuit (`lot/l6-conception`,
+`infra/diagnostic-staging`) sont passés sans une ligne de sortie de hook. J'ai cru le garde vert ;
+il était **absent**. La CI l'a rattrapé au coup suivant — `1 · lint` en `FAILURE` sur la PR #28,
+pour un `.md` qui ne passait pas `prettier --check`. C'est exactement le piège déjà consigné
+(`ORGANISATION_AGENTS.md` §2, incident du 2026-08-29), sauf qu'ici **le garde censé l'attraper
+avant la CI n'a jamais tourné**.
+
+**Valeur pour l'auditeur.** Aucune directement, et forte pour le chantier : _un garde muet est pire
+qu'un garde absent — il rassure_ (§5-2). Ici c'est la version la plus traître : le garde est
+**configuré**, il est **documenté**, il est **exigé** — et selon le répertoire d'où l'on pousse, il
+s'exécute ou non. Un chantier ouvert conformément au §9 pousse sans contrôle tant que l'install n'y
+a pas tourné, et personne ne peut le voir puisque **l'absence de sortie ressemble à un succès
+silencieux**.
+
+**Coût estimé.** Faible, mais c'est une décision, pas un réflexe. Trois pistes, à arbitrer :
+(a) documenter `pnpm install` comme première commande obligatoire de tout worktree neuf (§2 du
+fichier d'organisation) — le moins cher, le plus oubliable, et il ne supprime pas le silence ;
+(b) faire échouer bruyamment un `push` quand `.husky/_/pre-push` est absent, plutôt que de le
+laisser passer — transforme un silence en refus ; (c) versionner les hooks au lieu de les générer.
+**(b) est la seule qui respecte la règle « un contrôle qui ne trouve rien ne doit jamais sortir
+vert » (`CLAUDE.md` §5.7)** — et c'est la seule qui traite le vrai défaut, qui n'est pas l'absence
+du hook mais **l'impossibilité de savoir s'il a tourné**.
+
+**Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun.** Outillage.
+
+**Recommandation.** **Étage 2 — PROPOSÉE.** Ce n'est pas du confort : c'est le garde obligatoire
+avant toute PR qui n'existe pas dans les répertoires où le projet travaille. À rapprocher de la
+réparation en cours du garde `verify`, aveugle au projet `interface` — **deux gardes obligatoires,
+deux angles morts, découverts le même jour.**
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte suivante_
+
+---
+
+### FICHE A-015 — Les quatre fusions en attente ne butent QUE sur deux fichiers append-only
+
+> Étage 2 — **proposée, non implémentée** (09 §5.9). Ouverte le 2026-09-04 par la session pilote.
+> Numérotation : A-014 était le dernier pris (`infra/diagnostic-staging`).
+
+**Constat, mesuré et non déduit.** `git merge-tree --write-tree origin/main <branche>` sur les
+quatre branches en attente de fusion — `lot/l5a`, `lot/l5b`, `lot/l7a`, `lot/l1-e18-external-ref` —
+rend exactement le même verdict pour les quatre : **conflit sur `DECISIONS.md` et `docs/ETAT.md`,
+et sur rien d'autre. Zéro conflit de code, sur aucun fichier.** Le découpage en chantiers disjoints
+tient donc parfaitement ; ce qui coûte, c'est la tenue des registres partagés.
+
+**Ce que ça a déjà coûté.** Deux défauts de fusion en deux jours, tous deux sur ces mêmes fichiers,
+tous deux avec perte silencieuse : le 2026-09-02, une résolution par hunk a coupé deux entrées de
+leurs champs `Décideur` et `Impact spec` **en passant** un contrôle « aucune ligne perdue » ; le
+2026-09-03, un `git checkout --theirs` a écrasé 71 lignes ajoutées **hors du hunk**, que le diff du
+conflit ne montrait pas. Le second est le plus instructif : la faute était invisible dans l'outil
+même qui servait à la commettre.
+
+**Valeur.** Ce n'est pas du confort : c'est la suppression d'une classe entière de défauts sur les
+deux fichiers dont le pack dit qu'une entrée non tracée « n'existe pas ». Chaque incrément la paie.
+
+**Ce qui est proposé, et ce qui ne l'est PAS.** Un pilote de fusion `union` déclaré en
+`.gitattributes` pour `DECISIONS.md` et `AMELIORATIONS.md` : sur deux ajouts en fin de fichier, il
+garde les deux blocs sans marqueur, et `check:decisions` reste le juge du format — un champ coupé
+serait donc _bloqué_, pas seulement regretté.
+**`docs/ETAT.md` en est EXCLU, délibérément**, et c'est le cœur de la fiche : sa sémantique est
+« **le dernier bloc fait foi** ». Un pilote qui décide seul de l'ordre des blocs peut faire du bloc
+le plus ancien le dernier, et une session neuve suivrait alors une consigne périmée en croyant lire
+la plus récente. **Un automatisme qui se trompe sur ce fichier-là est pire que le travail manuel
+qu'il remplace** — c'est exactement le « garde qui ne garde rien » que ce dépôt pourchasse.
+
+**Coût estimé.** 0,25 j : deux lignes de `.gitattributes`, un test de fusion à blanc dans les deux
+sens sur un dépôt jetable (le gabarit existe : `infra/scripts/test-garde-clone.sh`), et une entrée
+au contrat 11 §3 disant que le pilote existe et pourquoi `ETAT.md` en est exclu.
+
+**Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun.** Impact convention : oui —
+c'est une convention 11 §3, donc une escalade 11 §8-2, d'où cette fiche plutôt qu'un commit.
+
+**Recommandation.** **PHASE 2**, sauf si un troisième défaut de fusion survient d'ici P-C — auquel
+cas ABSORBÉE. La procédure manuelle (résolution par blocs depuis la base commune, contrôle en
+multi-ensembles sur les versions **complètes**) est écrite, transmise à chaque agent qui fusionne, et
+elle a tenu à la fusion `lot/l5a` → `lot/l5c` du 2026-09-04. Tant qu'elle tient, l'automatisme est un
+confort ; le jour où elle cède, il devient une nécessité.
+
+> **2026-09-05 — ELLE A CÉDÉ, ET LA FICHE EST ABSORBÉE.** Le jour même, la session pilote a résolu
+> un conflit de `lot/l7a` en retirant mécaniquement les marqueurs : le conflit tombait **au milieu**
+> de deux entrées, et l'opération a fabriqué deux entrées ayant perdu leurs champs `Décideur` et
+> `Impact spec`. Troisième défaut en quatre jours, sur les deux mêmes fichiers — la condition que
+> cette fiche posait elle-même est remplie. `merge=union` posé sur `DECISIONS.md` et
+> `AMELIORATIONS.md` ; `docs/ETAT.md` reste exclu, pour la raison écrite plus haut.
+> **Et la borne apprise ce jour-là** : `union` ne reconnaît pas plus une entrée qu'un humain pressé.
+> Il supprime le travail, jamais le contrôle — `check:decisions` est **dû après chaque fusion**.
+> Arbitrage tracé : `DECISIONS.md`, 2026-09-05, « la fiche A-015 est ABSORBÉE ».
+
+**Arbitrage Williams :** ☑ **ABSORBÉE** (2026-09-05, sur la clause de la fiche) ☐ PHASE 2 ☐ REFUSÉE
