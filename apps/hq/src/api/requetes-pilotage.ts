@@ -37,8 +37,19 @@ import {
 /** Les clés de cache du pilotage — préfixées par `missions` comme celles de L7a. */
 export const CLES_PILOTAGE = {
   couverture: (missionId: string) => ['missions', missionId, 'couverture'] as const,
-  agregation: (missionId: string, filtre: FiltreAgregationUi) =>
-    ['missions', missionId, 'agregation', filtre.block ?? '', filtre.orgUnit ?? ''] as const,
+  agregation: (missionId: string, filtre: FiltreAgregationUi, repondants: boolean) =>
+    [
+      'missions',
+      missionId,
+      'agregation',
+      filtre.block ?? '',
+      filtre.orgUnit ?? '',
+      // Le paramètre des RÉPONDANTS fait partie de la clé, et ce n'est pas un
+      // détail de cache : sans lui, la page déjà chargée SANS les noms serait
+      // resservie après le clic sur « afficher les répondants », et l'écran
+      // paraîtrait dire « aucun consentement » là où il n'a rien demandé.
+      repondants ? 'avec-repondants' : 'sans-repondants',
+    ] as const,
 };
 
 /** Le filtre tel que l'écran le tient — deux champs, jamais un objet libre. */
@@ -85,10 +96,10 @@ export function useCouverture(missionId: string) {
  */
 export const QUESTIONS_PAR_PAGE = 20;
 
-export function useAgregation(missionId: string, filtre: FiltreAgregationUi) {
+export function useAgregation(missionId: string, filtre: FiltreAgregationUi, repondants = false) {
   const client = useClientApi();
   return useInfiniteQuery({
-    queryKey: CLES_PILOTAGE.agregation(missionId, filtre),
+    queryKey: CLES_PILOTAGE.agregation(missionId, filtre, repondants),
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam }) =>
       client.lire(`/missions/${missionId}/aggregation`, agregationMissionSchema, {
@@ -97,6 +108,10 @@ export function useAgregation(missionId: string, filtre: FiltreAgregationUi) {
           after: pageParam,
           block: filtre.block ?? undefined,
           orgUnit: filtre.orgUnit ?? undefined,
+          // `false` n'est PAS envoyé : l'absence du paramètre est déjà le défaut
+          // côté serveur, et une porte de donnée personnelle se demande, elle ne
+          // se refuse pas. Voir `DECISIONS.md` 2026-09-05.
+          repondants: repondants ? 'true' : undefined,
         },
       }),
     getNextPageParam: (derniere: AgregationMission) => derniere.nextCursor ?? undefined,

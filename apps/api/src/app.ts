@@ -27,6 +27,7 @@ import { routesQuestionnaire } from './routes/questionnaire.js';
 import { routesAssignments } from './routes/assignments.js';
 import { routesInterviews } from './routes/interviews.js';
 import { routesPilotage } from './routes/pilotage.js';
+import { routesExport } from './routes/export.js';
 
 // =============================================================================
 // PÉRIMÈTRE DE CONFIANCE DES EN-TÊTES DE PROXY — correctif de sécurité.
@@ -276,6 +277,15 @@ export async function construireApp(): Promise<FastifyInstance> {
   // sessions et relit des réponses d'audit, il ne touche aucun montant
   // (invariant 3, §18.3 — « l'auditeur ne voit jamais le TJM »).
   await app.register(routesPilotage, { prefix: '/v1' });
+  // Export de mission au format §36.3 (critère L7-min du fichier 07) — lot L7/L7c.
+  // UNE route de LECTURE, non listée au 05 §8 : documentée en en-tête du greffon
+  // et dans `DECISIONS.md` (2026-09-05), comme le 11 §8-6 l’exige. C’est la seule
+  // route du dépôt qui rende un BINAIRE : son entrée est validée par Zod comme
+  // partout, sa sortie est un fichier, et le `mission.json` qu’elle enferme est
+  // validé par `metaExportSchema` avant d’entrer dans l’archive. Politique
+  // « mission » : un non-membre reçoit 404, jamais 403. Aucune marque financière —
+  // l’export ne lit aucune table de chiffrage (invariant 3).
+  await app.register(routesExport, { prefix: '/v1' });
 
   return app;
 }

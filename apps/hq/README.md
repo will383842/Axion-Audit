@@ -3,7 +3,7 @@
 React 18 + Vite, **desktop-first** (§33.4). C'est l'outil de pilotage : portefeuille de missions,
 avancement, couverture, agrégation, exports.
 
-## État au lot L7b (coquille + les deux vues de pilotage)
+## État au lot L7c (coquille, les deux vues de pilotage, l'export §36.3)
 
 AppShell §33.4 (barre latérale aux 7 espaces §22.3, fil d'Ariane constant, lien d'évitement),
 cinq écrans avec leurs **quatre états** §33.2, un client HTTP typé Zod in/out, TanStack Query 5.
@@ -15,6 +15,7 @@ cinq écrans avec leurs **quatre états** §33.2, un client HTTP typé Zod in/ou
 | `/missions/:id`            | Avancement — fiche, client, jalons §32.2 | 2            | `GET /v1/missions/:id`, `GET /v1/companies/:id` |
 | `/missions/:id/couverture` | Couverture — unité × source (§27.1)      | 2            | `GET /v1/missions/:id/coverage?limit=&after=`   |
 | `/missions/:id/agregation` | Agrégation par question (M5.1, §27.4)    | 2 → 6        | `GET /v1/missions/:id/aggregation`              |
+| `/missions/:id/export`     | Export de mission — l'archive §36.3      | 2 → 6        | `GET /v1/missions/:id/export?repondants=`       |
 
 Les deux écrans de L7b sont des **drill-down d'une mission**, pas des espaces de la barre : ils n'ont
 de sens qu'une mission choisie. Les brancher sur un espace exigerait un sélecteur de mission, qui
@@ -72,6 +73,9 @@ fonction et le service le sont ; la question du nom est ouverte dans `DECISIONS.
   Aucun jeton n'est jamais stocké.
 - `src/api/requetes.ts` — hooks TanStack (`usePortefeuille` en `useInfiniteQuery` keyset, `useMission`,
   `useEntreprise`) et clés de cache.
+- `src/api/requetes-export.ts` (**L7c**) — `useTelechargementExport`. **Pas** un `useQuery` : un
+  export est une ACTION, pas une lecture d'écran ; le garder en cache n'aurait aucun usage et le
+  re-déclencher au retour de fenêtre téléchargerait un ZIP dans le dos de l'utilisateur.
 - `src/api/requetes-pilotage.ts` (**L7b**) — `useCouverture`, `useAgregation`. Séparé de
   `requetes.ts` pour une raison de collision, pas de style : L7a, L7b et L7c travaillent en
   parallèle, et le seul fichier qu'ils partagent est `app/espaces.ts` (`LOT_L7.md` §1).
@@ -85,7 +89,8 @@ fonction et le service le sont ; la question du nom est ouverte dans `DECISIONS.
   la classe était recopiée à la main par trois écrans. Un composant rend l'oubli impossible sur le
   quatrième. **Tout tableau dense de la console passe par lui.**
 - `src/ecrans/` — `EcranAccueil`, `EcranPortefeuille`, `EcranAvancementMission`, `EcranConnexion`,
-  puis `couverture/EcranCouverture` et `agregation/EcranAgregation` (**L7b**).
+  puis `couverture/EcranCouverture` et `agregation/EcranAgregation` (**L7b**), et
+  `export/EcranExport` (**L7c**).
 - `src/format/dates.ts` — instants au **fuseau de la mission**, dates civiles jamais converties.
 - `src/tests-aide/` et `src/*.test.tsx` — écrits par **A36** (09 §5.6), serveur factice qui répond à
   travers les schémas partagés, jamais un mock qui invente.
@@ -95,7 +100,31 @@ fonction et le service le sont ; la question du nom est ouverte dans `DECISIONS.
 - Pas d'appel à `GET /v1/missions/:id/dashboard` (complétude, à-revoir, dernière sync, 05 §8.3) :
   **aucun schéma partagé ne le décrit**, et un contrat que `packages/shared` ne porte pas n'existe
   pas pour le front (11 §3).
-- Pas d'**export ZIP** §36.3 : c'est **L7c**, avec l'espace 6 et son sélecteur de mission.
+
+### L'export de mission (§36.3) — L7c
+
+`GET /v1/missions/:id/export` rend un **ZIP** produit par le serveur (invariant 6). L'écran affiche,
+**avant** le téléchargement, les dix fichiers de l'archive et **ce que chacun nourrit dans le rapport
+§20.3** — depuis `DESCRIPTIONS_FICHIERS_EXPORT` (`packages/shared`), la même source que le serveur.
+Ce n'est pas de l'ornement : le critère du §36.3 est « le rapport peut être rédigé EN ENTIER depuis
+le ZIP » ; dix fichiers sans mode d'emploi renvoient dans l'outil, et le critère tombe.
+
+Il **dit aussi ce que l'archive ne contient pas** : `scores.csv` (le scoring est en L8) et les
+fichiers des pièces jointes (leur téléchargement est en L6c). Aucune case à cocher inerte.
+
+**Le nom des répondants** (arbitrage A01 du 2026-09-05) : une seule case, décochée par défaut, qui
+ajoute `?repondants=true` **à la requête**. La porte est SERVEUR — le nom n'est écrit que si
+`consent_given` vaut vrai, et sans le paramètre il n'est même pas lu en base. Masquer dans un
+composant un nom déjà arrivé au navigateur ne serait pas le masquer (invariant 3). La même case
+existe sur l'écran d'agrégation, avec la même conséquence : la requête est relancée.
+
+**Les horodatages du ZIP** sont écrits à **l'heure de la mission**, avec leur décalage
+(`2026-10-14T09:30:00+02:00`) : un rapport se rédige avec ces heures-là.
+
+### Ce que L7c ne fait PAS (et pourquoi)
+
+- Pas de **sélecteur de mission** ni d'espace 6 ouvert : l'export reste un drill-down de mission,
+  comme la couverture et l'agrégation.
 - Pas de **scoring**, de **radar**, de **heatmap**, ni d'**avance/retard** : c'est **L8**, différable
   (05 §24.5, butoir du §35.3). Aucune échelle de couleur n'est posée d'avance dans `coquille.css` —
   deux échelles concurrentes seraient pires qu'aucune.

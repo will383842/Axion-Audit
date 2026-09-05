@@ -25,10 +25,15 @@
 // côte à côte et nommés différemment : c'est leur comparaison qui a de la valeur
 // (§27.6), et les fondre la supprimerait.
 //
-// ── AUCUN NOM DE PERSONNE ───────────────────────────────────────────────────
-// Le contrat ne porte ni `personName` ni `personEmail` : l'écran affiche la
-// FONCTION et le SERVICE du répondant, et son UNITÉ. Voir `agregation.ts` du
-// contrat partagé et l'entrée `DECISIONS.md` du 2026-09-05.
+// ── LE NOM DU RÉPONDANT : DERRIÈRE UNE ACTION, JAMAIS PAR DÉFAUT ────────────
+// AMENDEMENT L7c (2026-09-05, arbitrage A01). L'écran affiche par défaut la
+// FONCTION, le SERVICE et l'UNITÉ, et AUCUN nom. La case « afficher les
+// répondants » relance la requête avec `?repondants=true` : c'est le SERVEUR qui
+// décide alors, et il n'écrit un nom que si `consent_given` vaut vrai — un
+// consentement inconnu ou refusé reste masqué.
+// Ce qui est décoché ne voyage pas : le nom n'est pas « caché » dans un composant
+// après être arrivé au navigateur, il n'y arrive pas (invariant 3 — aucun
+// contrôle uniquement côté client). `personEmail` n'existe dans aucun cas.
 //
 // ── AUCUN MONTANT HORS ADMIN ────────────────────────────────────────────────
 // Les valeurs affichées sont des RÉPONSES D'AUDIT (`answers.value`), la matière
@@ -41,7 +46,7 @@
 // devises, interface française).
 // =============================================================================
 import { useState, type ReactNode } from 'react';
-import { Badge, Bouton, Selection, ZoneEtat } from '@axion/ui';
+import { Badge, Bouton, CaseACocher, Selection, ZoneEtat } from '@axion/ui';
 import {
   LIBELLES_MOTIF_NON_COMMUNIQUE,
   LIBELLES_PROVENANCE_REPONSE,
@@ -96,13 +101,30 @@ function EtatReponse({ reponse }: { reponse: ReponseAgregee }): ReactNode {
   );
 }
 
-function LigneReponse({ reponse, timezone }: { reponse: ReponseAgregee; timezone: string }) {
+function LigneReponse({
+  reponse,
+  timezone,
+  repondantsAffiches,
+}: {
+  reponse: ReponseAgregee;
+  timezone: string;
+  repondantsAffiches: boolean;
+}) {
   return (
     <tr>
       <td className="axn-tableau__principal">
         {reponse.orgUnitNom}
         {!reponse.orgUnitInScope && <Badge ton="neutre">hors périmètre</Badge>}
       </td>
+      {repondantsAffiches && (
+        // « Consentement non recueilli » et non « — » : l'absence d'un nom a ici
+        // une CAUSE, et la taire ferait croire à une donnée manquante.
+        <td>
+          {reponse.nomRepondant ?? (
+            <span className="axn-agregation__sans-valeur">consentement non recueilli</span>
+          )}
+        </td>
+      )}
       <td>{reponse.fonctionRepondant ?? '—'}</td>
       <td>{reponse.serviceRepondant ?? '—'}</td>
       <td>{LIBELLES_TYPE_SESSION[reponse.sessionKind] ?? reponse.sessionKind}</td>
@@ -124,9 +146,11 @@ function LigneReponse({ reponse, timezone }: { reponse: ReponseAgregee; timezone
 function BlocQuestion({
   question,
   timezone,
+  repondantsAffiches,
 }: {
   question: QuestionAgregee;
   timezone: string;
+  repondantsAffiches: boolean;
 }): ReactNode {
   const { comptes } = question;
   return (
@@ -164,6 +188,7 @@ function BlocQuestion({
             <thead>
               <tr>
                 <th scope="col">Unité</th>
+                {repondantsAffiches && <th scope="col">Répondant</th>}
                 <th scope="col">Fonction</th>
                 <th scope="col">Service</th>
                 <th scope="col">Type de session</th>
@@ -175,7 +200,12 @@ function BlocQuestion({
             </thead>
             <tbody>
               {question.reponses.map((reponse) => (
-                <LigneReponse key={reponse.answerId} reponse={reponse} timezone={timezone} />
+                <LigneReponse
+                  key={reponse.answerId}
+                  reponse={reponse}
+                  timezone={timezone}
+                  repondantsAffiches={repondantsAffiches}
+                />
               ))}
             </tbody>
           </table>
@@ -228,12 +258,18 @@ function Totaux({ agregation }: { agregation: AgregationMission }): ReactNode {
 
 export function EcranAgregation({ id }: { id: string }): ReactNode {
   const [filtre, setFiltre] = useState<FiltreAgregationUi>(FILTRE_AGREGATION_VIDE);
+  // Décoché à l'ouverture, TOUJOURS : l'action est explicite, et un état qui
+  // survivrait à la navigation la rendrait implicite au deuxième écran.
+  const [repondants, setRepondants] = useState(false);
   const mission = useMission(id);
-  const requete = useAgregation(id, filtre);
+  const requete = useAgregation(id, filtre, repondants);
   const pages = requete.data?.pages ?? [];
   const premiere = pages[0];
   const questions = pages.flatMap((page) => page.questions);
   const timezone = mission.data?.timezone ?? premiere?.timezone ?? 'UTC';
+  // Ce que le SERVEUR a servi, pas ce que la case affiche : entre le clic et la
+  // réponse, la page à l'écran est encore l'ancienne.
+  const repondantsAffiches = premiere?.repondantsAffiches ?? false;
 
   const retourMission = (
     <a
@@ -310,6 +346,15 @@ export function EcranAgregation({ id }: { id: string }): ReactNode {
               setFiltre((precedent) => ({ ...precedent, block: valeur === '' ? null : valeur }));
             }}
           />
+          <div className="axn-agregation__option-repondants">
+            <CaseACocher
+              checked={repondants}
+              onChange={(evenement) => {
+                setRepondants(evenement.target.checked);
+              }}
+              libelle="Afficher les répondants (consentement recueilli)"
+            />
+          </div>
         </div>
       )}
       <ZoneEtat etat={etat}>
@@ -320,6 +365,7 @@ export function EcranAgregation({ id }: { id: string }): ReactNode {
               key={question.missionQuestionId}
               question={question}
               timezone={timezone}
+              repondantsAffiches={repondantsAffiches}
             />
           ))}
           {requete.hasNextPage && (

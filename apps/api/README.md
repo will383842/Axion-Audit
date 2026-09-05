@@ -307,6 +307,55 @@ Le lot n'introduit **aucune variable d'environnement** : aucun module de `domain
 missions,org-units,questionnaire,plan-entretiens,assignments}` ne lit `process.env` ni la
 configuration ; `.env.example` reste la référence.
 
+## Lot L7 — pilotage et export de mission (lecture seule)
+
+Trois routes de LECTURE sous une mission, toutes en politique `type: 'mission'` : le crochet vérifie
+l'identité, l'**appartenance se prouve dans le dépôt**, et un non-membre reçoit **404, jamais 403** —
+un 403 dirait « elle existe, mais pas pour vous ».
+
+| Route                              | Lot     | Rend                                             |
+| ---------------------------------- | ------- | ------------------------------------------------ |
+| `GET /v1/missions/:id/coverage`    | **L7b** | couverture unité × source (§16.6, §27.1), keyset |
+| `GET /v1/missions/:id/aggregation` | **L7b** | réponses par question (M5.1, §27.4), keyset      |
+| `GET /v1/missions/:id/export`      | **L7c** | **un ZIP** au format §36.3 — `application/zip`   |
+
+Aucune n'est listée au 05 §8 dans sa forme livrée : les trois écarts sont documentés en en-tête de
+leur greffon **et** dans `DECISIONS.md` (2026-09-05), comme le 11 §8-6 l'exige.
+
+### L'export §36.3 — ce qui le distingue de toutes les autres routes
+
+- **Il ne rend pas du JSON.** Son ENTRÉE est validée par Zod comme partout ; sa sortie est un
+  fichier. Ce qui, DANS le ZIP, est du JSON — `mission.json` — est validé par `metaExportSchema`
+  avant d'entrer dans l'archive. L'encoder en base64 dans une enveloppe coûterait +33 % d'octets et
+  un décodage navigateur pour un contenu destiné à être ENREGISTRÉ.
+- **Il ne pagine pas**, et c'est écrit : un export n'est pas une liste, un fichier partiel serait un
+  fichier faux. Le coût est borné par la mission (FIL-GC : 150 unités, ~8 000 réponses).
+- **Le conteneur ZIP est écrit avec `node:zlib`** (`domaines/export/zip.ts`) : la liste épinglée du
+  11 §1 ne contient aucune bibliothèque d'archive, et en ajouter une est une escalade. L'horodatage
+  MS-DOS est FIGÉ — deux exports du même état rendent le même fichier, donc se comparent.
+- **Les horodatages des CSV sont au fuseau de MISSION**, avec leur décalage
+  (`2026-10-14T09:30:00+02:00`). L'invariant 5 réserve l'UTC à la base et à l'API ; un export est un
+  affichage, et un rapport se rédige avec l'heure vécue par les personnes interrogées.
+- **Le nom du répondant** n'est lu que si `?repondants=true` **et** `consent_given IS TRUE` — le
+  `NULL` et le `false` sont masqués de la même façon (arbitrage A01, 2026-09-05). La porte est en
+  SQL, pas dans une couche d'affichage. `person_email` n'est jamais lu.
+- **Aucune marque `financier`** : l'export ne lit ni `scoping_financials`, ni `scoping_estimates`,
+  ni `estimation_params`, ni `mission_rebaselines` (§25.1, admin seul).
+
+⚠ **Pour qui écrit un test d'étanchéité sur cette route** : le corps est **compressé**. Un balayage
+qui cherche une sentinelle dans le texte de la réponse serait VERT sans avoir rien lu.
+`tests/aide/archive-export.ts` décompresse l'archive et rend chaque fichier en texte ; il décode le
+format depuis sa spécification, sans importer une ligne de l'écrivain.
+
+### Ce que l'export ne contient pas, et où c'est tranché
+
+| Absent                                            | Pourquoi                                                                                                        | Où                        |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| `scores.csv`                                      | le scoring est en **L8** ; §36.3 : « sinon absent et signalé » — signalé dans `mission.json`                    | `DECISIONS.md` 2026-09-05 |
+| les FICHIERS des pièces jointes                   | aucun client d'objet dans l'API ; le téléchargement appartient à **L6c**. Manifeste seul                        | `DECISIONS.md` 2026-09-05 |
+| une colonne `motif` sur les unités hors périmètre | le 04 ne porte aucun motif SUR l'unité ; `mission_rebaselines` est admin seul                                   | `DECISIONS.md` 2026-09-05 |
+| un fichier de feuille de route                    | le §36.3 n'en liste aucun, alors que le §20.3-9/10 en a besoin — et **aucun lot livré n'écrit `roadmap_items`** | `DECISIONS.md` 2026-09-05 |
+
 ## Conventions (contrat 11 §3, appliquées à toutes les routes)
 
 - **Erreurs** : `{ "error": { "code": "SNAKE_CASE", "message": "…en français", "details"?: [] } }`.
