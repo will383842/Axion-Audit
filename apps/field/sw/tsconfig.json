@@ -1,0 +1,14 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "//": [
+    "Le service worker s'exécute HORS DOM : il faut la bibliothèque WebWorker, et",
+    "surtout PAS `DOM`. Sans ce projet séparé, `self` serait typé `Window` et le",
+    "type `ServiceWorkerGlobalScope` serait inaccessible — c'est le piège classique",
+    "d'un service worker écrit dans le tsconfig d'une application React."
+  ],
+  "compilerOptions": {
+    "lib": ["ES2023", "WebWorker"],
+    "types": []
+  },
+  "include": ["./*.ts"]
+}

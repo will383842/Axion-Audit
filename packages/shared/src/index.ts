@@ -23,3 +23,4 @@ export * from './org-units.js';
 export * from './questionnaire.js';
 export * from './plan-entretiens.js';
 export * from './assignments.js';
+export * from './sync.js';

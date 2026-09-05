@@ -210,6 +210,79 @@
       "glob": "apps/api/src/domaines/plan-entretiens/**",
       "reference": "docs/conception/LOT_L3.md §4 (« couverture ≥ 90 % mesurée sur services/questionnaire, services/org-units et la machine à états ») · 09 §3 · CLAUDE.md §4 (TDD : machine à états) et §5",
       "$mesure_16102dd": "99,4 / 99,4 / 100 / 94,7"
+    },
+    {
+      "lot": "L5a",
+      "module": "Couche locale terrain — coffre DEK/KEK, port d ecriture, base Dexie versionnee",
+      "glob": "apps/field/src/local/**",
+      "reference": "11 §6 (L5a) · 11 §4 (« Crypto navigateur » : WebCrypto + Argon2id, budgets < 50 ms / < 1 s) · 05 §9.7 · 06 §10.5 · docs/conception/LOT_L5.md §4 · 09 §3 (« crypto locale »)",
+      "_note_glob": [
+        "LE GLOB A CHANGE, ET CE N EST PAS UN ELARGISSEMENT DE CONFORT. L entree",
+        "d attente visait `apps/field/src/crypto/**` : ce repertoire N EXISTE PAS et",
+        "n a jamais ete construit. `crypto/` etait un nom ATTENDU, ecrit avant",
+        "livraison ; `local/` est l arborescence REELLE.",
+        "",
+        "ET SURTOUT, ON NE SEPARE PAS LES DEUX. Le coffre (`coffre.ts`,",
+        "`coffre-appareil.ts`, `enveloppe.ts`) et le PORT D ECRITURE (`ecriture.ts`)",
+        "sont la meme garantie lue de deux cotes : le coffre chiffre, le port est le",
+        "seul endroit qui ecrit — donc le seul qui appelle le coffre, et le seul qui",
+        "pousse l op d outbox dans la MEME transaction. Un seuil qui mesurerait la",
+        "cryptographie sans le site d ecriture mesurerait la moitie qui ne decide de",
+        "rien, exactement le constat deja fait pour `scoping` puis pour `users`.",
+        "",
+        "`formes.ts` reste DANS le glob : il porte la liste FERMEE des champs laisses",
+        "en clair dans l index local (LOT_L5.md §3.2), c est-a-dire la frontiere que le",
+        "test d etancheite verifie. L en ecarter serait le retrecissement que le",
+        "bandeau de ce fichier interdit."
+      ],
+      "$motif": "Deplace de cheminsAttendus le 2026-09-02 par A24 : L5a est LIVRE (base Dexie versionnee, DEK/KEK, port d ecriture, horloge, verrou, storage.persist())."
+    },
+    {
+      "lot": "L5a",
+      "module": "Machine a etats de session terrain — terminer ≠ valider (03 §19.1 V2.10)",
+      "glob": "apps/field/src/session/**",
+      "reference": "03 §19.1 (regle V2.10) · docs/conception/LOT_L5.md §4 · 09 §3 (DoD : couverture ≥ 90 % sur modules critiques)",
+      "_note_glob": [
+        "ENTREE JUMELLE, ABSENTE DE `cheminsAttendus` — la ceinture 2 ne l aurait donc",
+        "jamais reclamee. Elle y entre parce que docs/conception/LOT_L5.md §4 nomme",
+        "NOMMEMENT `apps/field/src/local/**` ET `apps/field/src/session/**` comme les",
+        "deux perimetres de la couverture ≥ 90 % du lot (« crypto locale + machine a",
+        "etats = modules critiques de la DoD »).",
+        "",
+        "CE QU UNE REGRESSION Y COUTERAIT, et c est pourquoi elle est critique : la",
+        "regle V2.10 « terminer ≠ valider » tient a cette seule table. Si `rouvrir`",
+        "cessait d etre autorise depuis `termine`, l auditeur perdrait la note de",
+        "couloir ; si `valider` devenait atteignable depuis `en_cours`, un entretien",
+        "se verrouillerait a chaud et toute correction deviendrait une revision tracee.",
+        "Aucun des deux ne casse un ecran : les deux changent le dossier d audit."
+      ],
+      "$motif": "Ajoute le 2026-09-02 par A24, sur consigne A01. Le glob RESSERRE le seuil, il ne le relache pas."
+    },
+    {
+      "lot": "L5a",
+      "module": "Verrouillage de la PWA terrain — deux seuils 15/60 min, Wake Lock, bouton d un geste",
+      "glob": "apps/field/src/app/verrou.ts",
+      "reference": "05 §9.7 (regle V2.10) · 03 §33.7 (session active de 45 min) · 11 §6 ligne L5a · 06 §10.5",
+      "_note_glob": [
+        "POSE LE 2026-09-03, a la fermeture de la reserve BLOQUANTE B1 du controle A02.",
+        "Le trou etait celui-ci : verrou.ts est NOMME au perimetre du 11 §6, il portait 227 lignes",
+        "et 0,00 % de couverture, et LE SEUIL NE POUVAIT PAS LE VOIR — apps/field/src/app/**",
+        "n etait declare ni dans cheminsCritiques ni dans cheminsAttendus. Un module critique",
+        "peut donc etre livre sans jamais entrer sous seuil : c est exactement le defaut que la",
+        "ceinture 2 avait attrape sur apps/api/src/auth/**, et il s est reproduit cote terrain.",
+        "",
+        "CE GLOB RESSERRE LE SEUIL, IL NE LE RELACHE PAS — meme motif que routes/users.ts et que",
+        "la machine a etats L3d. Mesure sur 1b89433 : 100 % lignes / 100 % branches / 100 %",
+        "fonctions / 100 % instructions, soit dix points de marge. Il ne peut pas rougir",
+        "aujourd hui ; il interdit une regression demain.",
+        "",
+        "CE QUI N EST DELIBEREMENT PAS INSCRIT : apps/field/src/app/** (mesure 80,49 %). L y",
+        "mettre ferait rougir la CI immediatement, et la seule sortie serait alors soit des tests,",
+        "soit un retrecissement de perimetre — c est-a-dire la faute que le bandeau interdit. La",
+        "question de fond (la coquille est-elle critique ?) appartient a A01 et se tranchera mieux",
+        "quand L5b et L5c auront couvert EcranAccueil.tsx et service-worker-client.ts."
+      ],
+      "$motif": "Recommandation A26 au rapport B1 (2026-09-03), appliquee par la session pilote. Le rapport d un agent ne survit pas a sa session : une recommandation qui n entre pas dans un fichier est perdue."
     }
   ],
   "_cheminsAttendus_mode_emploi": [
@@ -221,13 +294,6 @@
     "Les globs sont au format `git ls-files` (pathspec)."
   ],
   "cheminsAttendus": [
-    {
-      "lot": "L5a",
-      "module": "Crypto locale terrain (DEK/KEK, WebCrypto, Argon2id)",
-      "glob": "apps/field/src/crypto/**",
-      "reference": "11 §6 (L5a) · 11 §4 (« Crypto navigateur ») · 09 §3 (« crypto locale »)",
-      "statut": "non livre"
-    },
     {
       "lot": "L5c",
       "module": "Export de secours chiffre (.axionbackup)",

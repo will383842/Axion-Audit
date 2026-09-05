@@ -73,7 +73,12 @@ ni la recherche hors-parcours, ni le verrou 60 min ne fonctionnent. **Arbitrage 
 ENREGISTREMENT avec un en-tête d'index en clair.** Restent en clair, et la liste est fermée :
 `id`, `missionId`, `interviewId`, `missionQuestionId`, `orgUnitId`, `kind`, `status`,
 `scheduleStatus`, `scheduledAt`, `flagReview`, `notApplicable`, `withheld`, `horsParcours`,
-`clientUpdatedAt`, `position`. Tout le reste — `personName`, `personEmail`, `value`, `note`,
+`clientUpdatedAt`, `position` — **et, depuis le 2026-09-02, `supprimeLe` et `answerId`** : le premier
+pour filtrer les lignes supprimées sans déchiffrer (budget A28), le second comme clé structurelle
+d'une pièce jointe vers sa réponse ; aucun n'est personnel, et la liste reste fermée
+(`DECISIONS.md` du même jour, sur constat du testeur A26) ; **et, le même jour sur revue A29,
+`answerType`, `criticality` (métadonnées de question, pour afficher la bonne saisie sans déchiffrer) et
+`orgUnits.parentId` (structure de l'arbre)** — aucune personnelle, la liste reste fermée. Tout le reste — `personName`, `personEmail`, `value`, `note`,
 `generalNotes`, `content` d'une note volante, `participants` — vit dans `charge: Enveloppe`.
 **Règle jumelle de la redaction pino (11 §2) : aucune donnée personnelle ni contenu de réponse dans
 un index local.** Le texte figé des questions (`*_snapshot`) n'est pas une donnée personnelle : il
