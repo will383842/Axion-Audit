@@ -8506,3 +8506,31 @@ Règle de précédence : **§24-31 > §16-22** — le §27.4 sépare « y est-on
 tiré » ; c'est cette séparation qui interdit d'appeler « complétude » deux choses différentes.
 Décideur : **A30**, sous revue croisée A37.
 Impact spec : aucun ; la définition est écrite DANS `mission.json` (champ `definition`).
+
+## 2026-09-05 — [L7c] `unites_hors_perimetre.csv` : le §36.3 promet un motif que le fichier 04 ne porte pas
+
+Le §36.3 : « `unites_hors_perimetre.csv` liste seulement les unités **et motifs** ». Or `org_units`
+n'a aucune colonne de motif ; le §25.1 place la décision dans `mission_rebaselines(decision, note,
+decided_by…)` — **une note par DÉCISION de recalage, pas par unité** — et cette table est « visible
+ADMIN SEUL » (§25.1, écart plan vendu / plan réel).
+
+Options :
+
+1. Recopier la note du dernier recalage en face de chaque unité sortie. **Écartée** : elle
+   inventerait un motif individuel là où la décision est globale, et une mission qui a été recalée
+   deux fois afficherait le mauvais motif sur la moitié de ses unités.
+2. Exporter `mission_rebaselines` dans le ZIP. **Écartée** : le §25.1 la réserve à l'admin, et le ZIP
+   part chez le consultant qui rédige — c'est le sens même de l'invariant 3 appliqué à un fichier.
+3. **Pas de colonne `motif`**, la liste des unités avec ce qui y a été collecté avant la sortie, et
+   l'écart déclaré ici et dans l'en-tête du module.
+
+Arbitrage : **option 3**. Le rapport a besoin de savoir QUELLES unités sont sorties et ce qu'on y
+avait déjà collecté — le §25.1 le dit : « données conservées, exclues du scoring, listées au rapport
+en annexe ». Le MOTIF, lui, est une donnée qui n'existe pas au niveau où le §36.3 la demande ;
+l'écrire quand même serait fabriquer une information. **Amendement candidat du 04 pour Williams** :
+`org_units.out_of_scope_reason` (nullable), à peser à la revue de spec de P-D avec les deux autres
+candidats déjà déposés.
+Règle de précédence : **§32-36 > §24-31** — le §36.3 demande la colonne, le §25.1 dit où vit la
+donnée ; le plus récent ne peut pas créer une colonne, il révèle qu'elle manque.
+Décideur : **A30**, sous revue croisée A37.
+Impact spec : aucun aujourd'hui ; candidat `org_units.out_of_scope_reason` à P-D.
