@@ -5,3 +5,31 @@
 *.woff2 binary
 *.docx binary
 *.axionbackup binary
+
+# =============================================================================
+# FUSION DES REGISTRES APPEND-ONLY — fiche A-015, absorbée le 2026-09-05
+# =============================================================================
+# Ces deux fichiers ne reçoivent que des AJOUTS EN FIN, depuis plusieurs branches
+# à la fois. Chaque incrément payait donc une résolution manuelle, et le dépôt en
+# a payé TROIS défauts : deux entrées coupées de leurs champs `Décideur` et
+# `Impact spec` le 2026-09-02, 71 lignes écrasées hors du hunk le 2026-09-03, et
+# deux entrées chimériques le 2026-09-05 — cette dernière commise par la session
+# pilote elle-même, ce qui a déclenché la clause « ABSORBÉE » de la fiche.
+#
+# `merge=union` garde les deux côtés d'un hunk en conflit, sans marqueur.
+#
+# CE QU'IL NE FAIT PAS, ET C'EST LE POINT LE PLUS IMPORTANT DE CE BLOC :
+# il ne sait pas non plus reconnaître une entrée. Quand un conflit tombe AU MILIEU
+# d'une entrée — et c'est arrivé — l'union produit la même entrée chimérique qu'une
+# résolution manuelle. Il supprime le travail, jamais le contrôle.
+# ⇒ `node scripts/check-decisions.mjs` et `check-prose.mjs` sont DUS APRÈS CHAQUE
+#   FUSION, avant le commit. Le garde de format est le seul qui attrape ce défaut :
+#   le comptage de lignes répond « zéro perdue » dans les deux sens.
+#
+# `docs/ETAT.md` EN EST EXCLU, DÉLIBÉRÉMENT. Sa sémantique est « le dernier bloc
+# fait foi » (11 §9ter) : un pilote de fusion qui décide seul de l'ordre peut faire
+# du bloc le plus ancien le dernier, et une session neuve suivrait une consigne
+# périmée en croyant lire la plus récente. Un automatisme qui se trompe sur ce
+# fichier-là est pire que le travail manuel qu'il remplace.
+DECISIONS.md merge=union
+AMELIORATIONS.md merge=union

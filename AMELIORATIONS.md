@@ -2219,4 +2219,14 @@ multi-ensembles sur les versions **complètes**) est écrite, transmise à chaqu
 elle a tenu à la fusion `lot/l5a` → `lot/l5c` du 2026-09-04. Tant qu'elle tient, l'automatisme est un
 confort ; le jour où elle cède, il devient une nécessité.
 
-**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-C_
+> **2026-09-05 — ELLE A CÉDÉ, ET LA FICHE EST ABSORBÉE.** Le jour même, la session pilote a résolu
+> un conflit de `lot/l7a` en retirant mécaniquement les marqueurs : le conflit tombait **au milieu**
+> de deux entrées, et l'opération a fabriqué deux entrées ayant perdu leurs champs `Décideur` et
+> `Impact spec`. Troisième défaut en quatre jours, sur les deux mêmes fichiers — la condition que
+> cette fiche posait elle-même est remplie. `merge=union` posé sur `DECISIONS.md` et
+> `AMELIORATIONS.md` ; `docs/ETAT.md` reste exclu, pour la raison écrite plus haut.
+> **Et la borne apprise ce jour-là** : `union` ne reconnaît pas plus une entrée qu'un humain pressé.
+> Il supprime le travail, jamais le contrôle — `check:decisions` est **dû après chaque fusion**.
+> Arbitrage tracé : `DECISIONS.md`, 2026-09-05, « la fiche A-015 est ABSORBÉE ».
+
+**Arbitrage Williams :** ☑ **ABSORBÉE** (2026-09-05, sur la clause de la fiche) ☐ PHASE 2 ☐ REFUSÉE
