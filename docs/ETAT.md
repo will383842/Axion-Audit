@@ -4277,3 +4277,22 @@ justifié ici et doit être signalé), puis revue croisée A29 sur la PR #69.
 Tests rouges connus : aucun. ⚠ `[vitest-worker]: Timeout calling "onTaskUpdate"` sous charge — tous
 les tests passent, seul le code de sortie rougit ; antérieur à ce correctif.
 
+
+## 2026-09-06 19h55 — [lot L5 / incrément L5b] — étape pipeline 3/7
+
+Dernier commit vert : a31f718 (fix(l5b) : l'indicateur « Enregistré » par écriture) ·
+Branche : fix/identite-auditeur · Poussé : oui
+Tâche en cours : deux bloquants fermés. ① `memoriserIdentiteAuditeur` avait ZÉRO appelant de
+production (A26 + A54, arrêt à t+3 min) : livré `apps/field/src/siege/` — connexion au siège
+(`POST /v1/auth/login`, 05 §8.1), `rattacherAppareil` avec refus d'un SECOND auditeur (invariant 7),
+écran 4 états, et le geste offert depuis n'importe quel écran par la coquille. ② L'indicateur
+« Enregistré à HH:mm » affichait l'heure de l'écriture PRÉCÉDENTE pendant le débounce : une ligne
+dans `session/enregistrement.ts`, test qui reproduit d'abord.
+Les deux correctifs ont été cassés volontairement pour vérifier qu'ils rougissent.
+Tracé : 4 entrées `DECISIONS.md` (chemin d'identité + les 3 conventions de test d'A26), 1 fiche
+d'étage 2 `AMELIORATIONS.md` (appareil qui n'aura jamais de réseau — NON implémentée, elle touche
+l'API ou le format 11 §4).
+Prochaine action : ouvrir la PR vers `main` et demander la revue croisée A29 ; les tests
+d'ACCEPTATION des deux correctifs restent dus par un agent qui n'a écrit aucune de ces lignes.
+Tests rouges connus : aucun (`verify:rapide` exit 0). ⚠ `[vitest-worker]: Timeout calling
+"onTaskUpdate"` sous charge — antérieur, tous les tests passent, seul le code de sortie rougit.
