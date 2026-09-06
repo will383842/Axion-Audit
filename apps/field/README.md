@@ -93,11 +93,20 @@ Voir `docs/conception/LOT_L5.md` §4.
 3. **L'état hors ligne se rend avec `RappelHorsLigne`**, alimenté par
    `src/app/capacites-hors-ligne.ts` (§33.2, seconde moitié). Les listes y sont regroupées, **une par
    vue du registre**, et le type l'exige : un écran ajouté à `vues.ts` sans ses capacités ne compile
-   pas. **La pastille, elle, est celle de l'en-tête de la coquille** (décision A01 du 2026-09-05) :
-   les écrans passent `avecPastille={PASTILLE_PORTEE_PAR_LA_COQUILLE}` et n'en rendent jamais une
-   seconde. Le compte des onze vues est tenu par `src/app/hors-ligne.test.tsx`, pas par la vigilance
-   de chacun — c'est très exactement ce qui avait manqué : 3 vues sur 11 le rendaient, de trois
-   façons différentes.
+   pas. Chaque ligne doit être une capacité que le produit tient **aujourd'hui** — trois promesses
+   fausses ont été écrites puis retirées le 2026-09-06 (revue A29), dans le fichier même qui pose
+   cette règle. **La pastille, elle, est celle de l'en-tête de la coquille** (décision A01 du
+   2026-09-05) : les écrans passent `avecPastille={PASTILLE_PORTEE_PAR_LA_COQUILLE}`.
+   Le compte des onze vues est tenu par `src/app/hors-ligne.test.tsx`, pas par la vigilance de
+   chacun — c'est ce qui avait manqué : 3 vues sur 11 le rendaient, de trois façons différentes.
+
+   **Combien de pastilles au total, écran par écran** — mesuré sur le DOM, pas affirmé (le tableau
+   vit dans `hors-ligne.test.tsx`, bloc D). Dix vues sur onze : **une seule**, celle de l'en-tête.
+   `aujourdhui` en rend **une de plus par carte de mission**, contextualisée par la mission qu'elle
+   décrit et traduite par le même `etat-sync-affiche.ts` — donc jamais en contradiction de mots.
+   Toute autre pastille est un retour de **B6** : le 2026-09-06, l'écran d'entretien en rendait une
+   pilotée par `navigator.onLine`, et l'auditeur lisait **deux états opposés avec deux comptes
+   différents** ; elle a été retirée.
 
 ### Ce que le socle refuse EXPLICITEMENT, et pourquoi
 

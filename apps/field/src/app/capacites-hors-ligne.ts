@@ -50,12 +50,20 @@ import type { CodeVue } from './vues.js';
  * synchronisation dans son en-tête, sur les onze vues (décision A01 du
  * 2026-09-05, `App.tsx`), alimentée par le PORT DE SYNC. Celle de
  * `RappelHorsLigne` serait une SECONDE pastille sur le même écran, alimentée par
- * `navigator.onLine` : deux sources, deux mots possibles — exactement le
- * bloquant B6 de la recette novice du 2026-09-06, fermé au prix du module de
- * traduction unique `app/etat-sync-affiche.ts`.
+ * `navigator.onLine` : deux sources, deux mots possibles — le bloquant B6 de la
+ * recette novice du 2026-09-06.
  *
  * §33.2 exige ses deux moitiés sur l'ÉCRAN, pas dans le même composant. L'en-tête
  * porte la pastille ; ce module porte les capacités.
+ *
+ * ── CE QUE CETTE CONSTANTE NE SUFFIT PAS À GARANTIR (revue A29, ①) ──────────
+ * Elle empêche le RAPPEL d'en rendre une ; elle n'empêche pas un écran d'en
+ * rendre une ailleurs. C'était le cas de l'écran d'entretien jusqu'au
+ * 2026-09-06 — B6 y est resté ouvert quatre jours après avoir été « fermé »,
+ * parce que le geste n'avait porté que sur l'accueil. Le compte réel est mesuré
+ * sur le DOM, écran par écran, dans `app/hors-ligne.test.tsx` (bloc D), et
+ * coquille comprise pour l'entretien (bloc E). **Une affirmation de fermeture
+ * qu'aucune mesure ne tient est ce qui a permis au défaut de durer.**
  */
 export const PASTILLE_PORTEE_PAR_LA_COQUILLE = false;
 
@@ -91,10 +99,16 @@ export const CAPACITES_HORS_LIGNE = {
   ],
 
   // ── L'entretien (L5b) ────────────────────────────────────────────────────
+  // RÉÉCRITE le 2026-09-06 (revue A29, réserve ②). La ligne disait « Démarrer
+  // aussitôt, ou le laisser planifié pour plus tard » : l'écran n'offre AUCUN
+  // choix — un seul bouton, et `creerEntretien` écrit toujours
+  // `status: 'non_demarre'`. Laisser pour plus tard se fait sur `EcranAgenda`,
+  // qui est un autre écran. Exactement la classe B3, rouverte dans le fichier
+  // écrit pour l'empêcher.
   nouvelEntretien: [
     'Créer un entretien : nom, fonction et unité s’enregistrent sur cet appareil',
-    'Démarrer aussitôt, ou le laisser planifié pour plus tard',
-    'Prendre des notes et des notes volantes',
+    'Rattacher l’entretien à une mission et une unité déjà embarquées',
+    'Enchaîner sur les questions du questionnaire figé, déjà présentes ici',
   ],
   // Liste d'origine d'`EcranEntretien`, déplacée telle quelle.
   entretien: [
@@ -110,14 +124,23 @@ export const CAPACITES_HORS_LIGNE = {
     'Annoter, signaler un point à revoir, terminer une session',
     'Exporter une sauvegarde de secours chiffrée',
   ],
+  // RÉÉCRITE le 2026-09-06 (revue A29, réserve ②). « avant de valider un
+  // créneau » était faux, et le code le dit deux fois : l'anti-collision est
+  // « calculée AVANT, affichée APRÈS, et ne conditionne RIEN » (§25.2 « non
+  // bloquant », §34.6, §19.1). Promettre un garde-fou qui n'existe pas est pire
+  // que de n'en promettre aucun : l'auditeur cesse de vérifier lui-même.
   agenda: [
     'Planifier une session : date, heure, personne, fonction et unité',
-    'Repérer un chevauchement d’horaires avant de valider un créneau',
+    'Être averti d’un créneau déjà occupé — l’avertissement n’empêche jamais',
     'Ouvrir, mener et terminer une session de collecte',
   ],
+  // RÉÉCRITE le 2026-09-06 (revue A29, réserve ②). « sauter à l'écran qui le
+  // résout » promettait ce saut pour CHAQUE étape ; `EcranPilote` n'en offre
+  // qu'un, celui de la collecte — « les autres se résolvent au siège, et l'écran
+  // le dit plutôt que d'offrir un bouton qui ne mène nulle part ».
   pilote: [
     'Consulter l’avancement de la mission, calculé sur cet appareil',
-    'Voir ce qui manque à chaque étape, et sauter à l’écran qui le résout',
+    'Voir ce qui manque à chaque étape, et rejoindre l’agenda quand c’est la collecte',
     'Ouvrir, mener et terminer une session de collecte',
   ],
   finDeJournee: [
