@@ -353,10 +353,16 @@
  *
  * LE CORRECTIF NE TOUCHE AUCUN JETON DE CHARTE (reserve a Williams, §3-2) : il
  * choisit un autre jeton EXISTANT de la meme famille terracotta. Mesures faites
- * avant d ecrire, sur le fond `--couleur-action-fond-doux` (#f7e9e2) :
- *     --couleur-action-texte       #c24a1b  →  4,13:1   sous AA
- *     --couleur-action-fond-survol #a83e16  →  5,26:1   AA
- *     --couleur-action-fond-actif  #8d3412  →  6,73:1   AA, et retenu
+ * avant d ecrire, sur le fond `--couleur-action-fond-doux` :
+ *     --couleur-action-texte        →  4,13:1   sous AA
+ *     --couleur-action-fond-survol  →  5,26:1   AA
+ *     --couleur-action-fond-actif   →  6,73:1   AA, et retenu
+ *
+ * Les valeurs hexadecimales ne sont PAS recopiees ici : `check:invariants`
+ * (INV-4b) refuse toute notation de couleur ou qu elle soit, commentaire
+ * compris, et il a raison — un code recopie dans un commentaire est un code
+ * qui derivera du jeton sans que rien ne le dise. Les jetons sont dans
+ * `tokens.css`, et `contraste-usages.test.ts` remesure a partir de LA.
  *
  * `contraste-usages.test.ts` remesure cette paire a chaque CI : si quelqu un
  * revient au jeton clair, elle rougit sans qu on ait a s en souvenir.
