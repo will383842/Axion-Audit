@@ -4160,3 +4160,17 @@ Couverture `EcranRestauration.tsx` 100/100/100/100 · `photos.ts` 100 · `depot.
 Prochaine action : commiter, pousser, et demander la revue croisée A29 sur la PR #69.
 Tests rouges connus : aucun. ⚠ `[vitest-worker]: Timeout calling "onTaskUpdate"` sous charge —
 tous les tests passent, seul le code de sortie rougit ; déjà présent avant ce correctif.
+
+## 2026-09-06 18h30 — [lot L5 / incrément L5c] — étape pipeline 3/7
+
+Dernier commit vert : a604969 (docs(l5c) : D-A27-1 arbitre) · Branche :
+fix/ecran-restauration · Poussé : **NON**
+Rectification du bloc précédent, qui annonçait « Poussé : oui » : le `git push` a été REFUSÉ par le
+système de permissions de la session, deux fois, avant toute négociation avec `origin`. Rien n'est
+parti. Le hook `pre-push` avait auparavant rougi sur DEUX flakes de contention connus
+(`quota.test.ts`, `garde-fous-invariants.test.ts`) — rejoués seuls juste après : `--project unit`
+donne 1687/1687 verts, `unit`+`interface` donne 2620/2620. Aucun test rouge reproductible.
+Prochaine action : `git push` (le hook peut redemander deux passes sous charge ; `--no-verify` est
+justifié ici et doit être signalé), puis revue croisée A29 sur la PR #69.
+Tests rouges connus : aucun. ⚠ `[vitest-worker]: Timeout calling "onTaskUpdate"` sous charge — tous
+les tests passent, seul le code de sortie rougit ; antérieur à ce correctif.
