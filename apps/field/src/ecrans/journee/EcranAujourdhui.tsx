@@ -38,14 +38,18 @@ import {
   Bouton,
   Message,
   PastilleSync,
+  RappelHorsLigne,
   ZoneEtat,
   type EtatZone,
 } from '@axion/ui';
 import {
+  CAPACITES_HORS_LIGNE,
+  PASTILLE_PORTEE_PAR_LA_COQUILLE,
+} from '../../app/capacites-hors-ligne.js';
+import {
   CLE_DERNIER_RITUEL,
   construireJournee,
   rappelFinDeJournee,
-  type EtatMissionDuJour,
   type JourneeTerrain,
 } from '../../agenda/jour.js';
 import { LIBELLE_TYPE_SESSION } from '../../agenda/sessions.js';
@@ -61,16 +65,14 @@ import { useEnLigne } from '../../session/media.js';
 import { BandeauMiseAJour } from './BandeauMiseAJour.js';
 import './journee.css';
 
-/** Ce que l'appareil sait faire sans réseau — rappel de l'état hors ligne (§33.2). */
-const CAPACITES_HORS_LIGNE = [
-  'Ouvrir, mener et terminer une session de collecte',
-  // « Photographier » RETIRÉ le 2026-09-05 (majeur M6, A29) : la capture photo
-  // n'existe nulle part dans l'application — le point d'entrée est chez A22
-  // (lot/l5b). Une liste de capacités qui promet ce que le produit ne fait pas
-  // est un mensonge à l'auditeur en mode avion. À remettre quand le geste existe.
-  'Annoter, signaler un point à revoir, terminer une session',
-  'Exporter une sauvegarde de secours chiffrée',
-];
+// La liste de capacités de ce cockpit vit désormais dans
+// `app/capacites-hors-ligne.ts` (A21, 2026-09-06), déplacée telle quelle. Elle y
+// rejoint ses dix sœurs — dont celle de l'accueil, qui promettait encore la
+// photo retirée d'ici le 2026-09-05 (majeur M6) : deux listes séparées, une
+// correction sur deux. Une seule chose change de fond ici : le rendu passe de
+// `ZoneEtat nature="hors-ligne"` à `RappelHorsLigne`, parce que `ZoneEtat` IGNORE
+// ses enfants sur cette nature — le `<span />` qu'il fallait lui passer était un
+// contournement, pas une intention.
 
 // B6 (recette novice A54, 2026-09-06) : `versEtatPastille` vivait ICI, et la
 // pastille de la coquille en avait une autre — d'où deux pastilles qui se
@@ -434,25 +436,23 @@ export function EcranAujourdhui(): ReactNode {
         </Bouton>
       </div>
 
-      {!enLigne && (
-        <ZoneEtat
-          etat={{
-            nature: 'hors-ligne',
-            capacites: CAPACITES_HORS_LIGNE,
-            ...(journee === undefined || journee === null
-              ? {}
-              : {
-                  enAttente: journee.missions.reduce(
-                    (total: number, m: EtatMissionDuJour) =>
-                      total + (m.sync.operationsEnAttente ?? 0),
-                    0,
-                  ),
-                }),
-          }}
-        >
-          <span />
-        </ZoneEtat>
-      )}
+      {/*
+        §33.2 — le rappel des capacités. La condition `!enLigne` n'est plus écrite
+        ici : elle est DANS `RappelHorsLigne`, qui ne rend rien quand le réseau
+        est là. C'est le point du composant — une condition qu'un écran sur deux
+        oubliait d'écrire n'en est pas une.
+
+        Le COMPTE en attente n'est plus passé, et c'est délibéré : la pastille de
+        l'en-tête l'affiche déjà, lu dans l'outbox. Celui d'ici l'additionnait
+        depuis `sync.operationsEnAttente` — deux comptes du même fait, sur le même
+        écran, susceptibles de diverger. B6 a coûté assez cher pour qu'on ne
+        recommence pas avec un nombre.
+      */}
+      <RappelHorsLigne
+        enLigne={enLigne}
+        capacites={CAPACITES_HORS_LIGNE.aujourdhui}
+        avecPastille={PASTILLE_PORTEE_PAR_LA_COQUILLE}
+      />
     </section>
   );
 }

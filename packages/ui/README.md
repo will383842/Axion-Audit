@@ -72,7 +72,17 @@ import { Bouton, EchelleAncree, ZoneEtat } from '@axion/ui';
 contenu (via `ZoneEtat`). Le second **s'ajoute** à un écran qui reste entièrement utilisable — c'est
 le cas normal de cette application, où hors ligne est le mode nominal (invariant 1). Avant lui, trois
 écrans écrivaient ce rappel de trois façons différentes, dont deux en passant un enfant factice à une
-`ZoneEtat` qui l'ignore.
+`ZoneEtat` qui l'ignore. Depuis le 2026-09-06 il est branché sur les **onze** vues terrain, et les
+listes de capacités vivent au même endroit — `apps/field/src/app/capacites-hors-ligne.ts`, où le type
+exige une entrée **non vide par vue du registre**.
+
+**`avecPastille` (défaut `true`) — pour l'application qui porte déjà la sienne.** §33.2 exige ses deux
+moitiés **sur l'écran**, pas dans un même composant. La PWA terrain pose une `PastilleSync` unique
+dans l'en-tête de sa coquille, pour tous ses écrans, alimentée par le **port de sync** ; en rendre une
+seconde ici, alimentée par `navigator.onLine`, ferait **deux pastilles nourries par deux sources** sur
+un même écran — le défaut que la recette du 2026-09-06 a relevé et qu'un module de traduction unique
+a fermé. Le défaut de la propriété reste `true` : c'est le **silence** qui doit être sûr ; la baisser
+est une déclaration (« ma pastille est ailleurs »), pas une commodité.
 
 **Les composants ne font rien d'autre qu'afficher.** Aucun n'appelle le réseau, ne lit Dexie, ne
 connaît une mission, ne formate une date (les horodatages arrivent **déjà formatés** au fuseau de la

@@ -18,17 +18,31 @@
 // =============================================================================
 import { useCallback, useState, type FormEvent, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Bouton, ChampTexte, Message, Selection, ZoneEtat, type EtatZone } from '@axion/ui';
+import {
+  Bouton,
+  ChampTexte,
+  Message,
+  RappelHorsLigne,
+  Selection,
+  ZoneEtat,
+  type EtatZone,
+} from '@axion/ui';
+import {
+  CAPACITES_HORS_LIGNE,
+  PASTILLE_PORTEE_PAR_LA_COQUILLE,
+} from '../../app/capacites-hors-ligne.js';
 import { useTerrain } from '../../app/contexte.js';
 import { contexteLocal } from '../../local/contexte.js';
 import { lireIdentiteAuditeur } from '../../session/auditeur.js';
 import { creerEntretien } from '../../session/ecriture-session.js';
+import { useEnLigne } from '../../session/media.js';
 import { lireMissionsLocales, lireUnites } from '../../session/missions.js';
 import { memoriserSessionCourante } from '../../session/position.js';
 import './entretien.css';
 
 export function EcranNouvelEntretien(): ReactNode {
   const { base, naviguer } = useTerrain();
+  const enLigne = useEnLigne();
 
   const missions = useLiveQuery(
     async () => (base === null ? [] : lireMissionsLocales()),
@@ -218,6 +232,16 @@ export function EcranNouvelEntretien(): ReactNode {
           </Bouton>
         </form>
       </ZoneEtat>
+
+      {/* §33.2 — le quatrième état, HORS de la `ZoneEtat` : il s'ajoute à l'écran
+          au lieu de le remplacer, et il reste vrai que l'écran soit en chargement,
+          vide ou nominal. Créer un entretien n'attend rien du réseau : c'est un
+          UUID v7 et une écriture locale (invariant 1). */}
+      <RappelHorsLigne
+        enLigne={enLigne}
+        capacites={CAPACITES_HORS_LIGNE.nouvelEntretien}
+        avecPastille={PASTILLE_PORTEE_PAR_LA_COQUILLE}
+      />
     </section>
   );
 }

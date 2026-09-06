@@ -46,6 +46,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { uuidv7 } from 'uuidv7';
+import { CAPACITES_HORS_LIGNE } from '../../app/capacites-hors-ligne.js';
 import { FournisseurTerrain, useTerrain, type ValeurTerrain } from '../../app/contexte.js';
 import { contexteLocal } from '../../local/contexte.js';
 import { depotReponses } from '../../local/depots/reponses.js';
@@ -1258,5 +1259,213 @@ describe('R4 — les trois zones de M3.1, au-dessus du seuil', () => {
     const seuilJs = /min-width:\s*([\d.]+)rem/.exec(REQUETE_TROIS_COLONNES)?.[1];
     expect(seuilJs).toBeDefined();
     expect(css).toContain(`@media (min-width: ${String(seuilJs)}rem)`);
+  });
+});
+
+// =============================================================================
+// G. L'ÉTAT HORS LIGNE — ajouté par A21 le 2026-09-06 (branchement des onze vues)
+//
+// (Croisement 09 §5.6 : ces cas sont écrits par l'agent qui a posé le
+// branchement. Non-régression, pas revue croisée — A29 reste due.)
+//
+// L'en-tête de ce fichier annonçait les quatre états et rangeait le hors ligne
+// dans « pastille dans l'en-tête, mode NOMINAL » — la moitié GAUCHE de §33.2.
+// La moitié droite, le rappel des capacités locales, existait à l'écran depuis
+// L5b mais n'était éprouvée nulle part : elle a pu changer de forme trois fois
+// sans qu'un test bouge. Ce bloc la mesure, et il mesure surtout ce que le
+// composant commun NE PEUT PAS savoir — la garde du mode écran partagé.
+// =============================================================================
+describe('état hors ligne (03 §33.2) — le rappel des capacités, et la garde du mode partagé', () => {
+  function reglerEnLigne(valeur: boolean): void {
+    Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => valeur });
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, 'onLine');
+  });
+
+  it('@critique hors réseau, en écran PRIVÉ : les capacités de CET écran sont énumérées', async () => {
+    reglerEnLigne(false);
+    await monterEntretien(interviewId);
+    await waitFor(() => {
+      expect(questionAffichee(TEXTE_ECHELLE)).toBeTruthy();
+    });
+
+    const rappel = document.querySelector<HTMLElement>('.axn-rappel-hors-ligne');
+    expect(rappel, 'aucun rappel des capacités locales en entretien (§33.2)').not.toBeNull();
+    expect([...(rappel?.querySelectorAll('li') ?? [])].map((li) => li.textContent)).toEqual([
+      ...CAPACITES_HORS_LIGNE.entretien,
+    ]);
+    // Hors ligne est le mode NOMINAL du terrain (invariant 1) : §17.3 interdit
+    // toute notification intrusive en entretien, et une alerte en serait une.
+    for (const alerte of screen.queryAllByRole('alert')) {
+      expect(alerte.textContent).not.toMatch(/hors ligne|sans réseau/i);
+    }
+    // ── B6, MESURÉ SUR LE DOCUMENT (revue A29, réserves ① et ③) ────────────
+    // Cette ligne regardait à l'INTÉRIEUR du bloc de rappel et son commentaire
+    // affirmait pourtant que l'écran n'en rendait pas une seconde. C'était faux :
+    // l'écran en rendait une, à trois centimètres de celle de la coquille,
+    // pilotée par `navigator.onLine` et comptant l'outbox de la MISSION — A29 a
+    // relevé « En attente de synchronisation · 4 en attente » au-dessus de
+    // « Hors ligne · 5 en attente », RÉSEAU PRÉSENT. Elle est retirée (un fait,
+    // une source, une pastille), et la requête compte désormais le DOCUMENT.
+    //
+    // Ici l'écran est monté SANS coquille : le compte attendu est donc ZÉRO.
+    // Coquille comprise, la mesure vaut UN et vit dans `app/hors-ligne.test.tsx`,
+    // avec sa contre-épreuve.
+    const pastilles = [...document.querySelectorAll('.axn-pastille-sync')].map((p) =>
+      p.textContent.trim(),
+    );
+    expect(
+      pastilles,
+      `l’écran d’entretien rend sa propre pastille : ${pastilles.join(' | ')}`,
+    ).toEqual([]);
+  });
+
+  it('@critique hors réseau, en écran PARTAGÉ : plus rien de tout cela n’est dans le DOM', async () => {
+    // La garde `!partage` est la seule chose que le composant commun ne peut pas
+    // porter : il ne sait pas qu'un interlocuteur regarde la tablette. Sans elle,
+    // basculer en écran partagé laisserait s'afficher un encadré qui parle de
+    // l'outil, de sa synchronisation et de ce qu'il sait faire — §33.3 : rien
+    // d'interne, pas même une bonne nouvelle.
+    reglerEnLigne(false);
+    await monterEntretien(interviewPartageId);
+    await waitFor(() => {
+      expect(questionAffichee(TEXTE_ECHELLE)).toBeTruthy();
+    });
+    // Anti-vacuité : en privé, le rappel est bien là — sans quoi l'assertion
+    // d'après serait verte pour la mauvaise raison.
+    expect(document.querySelector('.axn-rappel-hors-ligne')).not.toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /passer en écran partagé/i }));
+    await screen.findByText(/écran partagé — les éléments internes sont masqués/i);
+
+    expect(document.querySelector('.axn-rappel-hors-ligne')).toBeNull();
+    for (const capacite of CAPACITES_HORS_LIGNE.entretien) {
+      expect(document.body.textContent, `fuite en écran partagé : ${capacite}`).not.toContain(
+        capacite,
+      );
+    }
+    // La question, elle, reste : c'est ce qu'on montre à l'interviewé.
+    expect(questionAffichee(TEXTE_ECHELLE)).toBeTruthy();
+  });
+
+  it('avec réseau : le rappel se tait, et le reste de l’écran ne bouge pas', async () => {
+    reglerEnLigne(true);
+    await monterEntretien(interviewId);
+    await waitFor(() => {
+      expect(questionAffichee(TEXTE_ECHELLE)).toBeTruthy();
+    });
+    expect(document.querySelector('.axn-rappel-hors-ligne')).toBeNull();
+    expect(screen.getAllByRole('radio')).toHaveLength(5);
+  });
+});
+
+// =============================================================================
+// H. LA COLONNE DE NOTES DÉFILE — ET IL FAUT POUVOIR LA FAIRE DÉFILER AU CLAVIER
+//
+// (Croisement 09 §5.6 : écrit par A21, qui a posé le correctif. Non-régression,
+// pas revue croisée.)
+//
+// ── D'OÙ VIENT CE BLOC ──────────────────────────────────────────────────────
+// Balayage axe des douze vues dans un Chromium RÉEL, 2026-09-06 :
+//   entretien — avant la première question
+//   scrollable-region-focusable (serious, wcag2a / wcag211 / wcag213)
+//   « Scrollable region must have keyboard access » → aside[aria-label="Notes"]
+//
+// ── CE QUE CE FICHIER PEUT PROUVER, ET CE QU'IL NE PEUT PAS ─────────────────
+// jsdom ne calcule AUCUNE mise en page : aucune région n'y est jamais défilante,
+// et c'est pourquoi les douze vues étaient vertes en `test:interface` pendant que
+// le navigateur criait. Ce bloc ne mesure donc PAS le défilement — il mesure le
+// CONTRAT qui le rend nécessaire, et qui est vérifiable ici :
+//   ① la feuille de style DÉCLARE bien la colonne défilante (sinon le correctif
+//      n'aurait plus de raison d'être, et ce test le dirait) ;
+//   ② dans l'état signalé, la colonne n'a AUCUN descendant focalisable — c'est
+//      exactement la condition qui fait lever la règle axe ;
+//   ③ elle porte donc `tabindex="0"` ;
+//   ④ sa JUMELLE « Blocs et progression », elle, contient des boutons jamais
+//      désactivés : elle n'en a pas besoin, et n'en a pas. La différence de
+//      traitement est mesurée, pas décrétée — si `ZoneBlocs` se vide un jour,
+//      c'est ce cas-là qui préviendra.
+// La preuve en navigateur reste due à `e2e/accessibilite-onze-vues-l5.e2e.ts`.
+// =============================================================================
+describe('accès clavier à la colonne de notes (WCAG 2.1.1 / 2.1.3, niveau A)', () => {
+  /** Une session NON DÉMARRÉE : l'état exact où axe a relevé la violation. */
+  async function semerEntretienNonDemarre(): Promise<string> {
+    const id = uuidv7();
+    await ecrireLocal({
+      entite: 'interview',
+      id,
+      missionId: MISSION_ID,
+      action: 'upsert',
+      index: {
+        orgUnitId: ORG_UNIT_ID,
+        kind: 'entretien',
+        status: 'non_demarre',
+        scheduleStatus: 'planifie',
+        scheduledAt: null,
+      },
+      charge: { ...CHARGE_INTERVIEW, consentGiven: false, startedAt: null },
+    });
+    return id;
+  }
+
+  function colonne(nom: string): HTMLElement {
+    return requis(
+      document.querySelector<HTMLElement>(`aside[aria-label="${nom}"]`),
+      `colonne « ${nom} »`,
+    );
+  }
+
+  /** Ce qu'un clavier peut atteindre — `disabled` exclut, et c'est le point. */
+  function focalisables(dans: HTMLElement): Element[] {
+    return [
+      ...dans.querySelectorAll(
+        'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+      ),
+    ].filter((e) => e !== dans);
+  }
+
+  it('① la feuille de style déclare bien cette colonne DÉFILANTE — sinon ce test n’a plus d’objet', () => {
+    // Lue sur le DISQUE : sous Vitest, un import `?raw` de CSS rend une chaîne
+    // vide, et un `toContain` sur une chaîne vide passerait pour une vérification.
+    const css = readFileSync('apps/field/src/ecrans/entretien/entretien.css', 'utf8');
+    const regle = /\.axn-entretien__zone--laterale\s*\{[^}]*\}/g;
+    const blocs = [...css.matchAll(regle)].map((m) => m[0]);
+    expect(blocs.length, 'la classe de la colonne latérale a disparu').toBeGreaterThan(0);
+    expect(blocs.join('\n')).toMatch(/overflow-y:\s*auto/);
+    expect(blocs.join('\n')).toMatch(/max-height/);
+  });
+
+  it('@critique ② et ③ avant la première question : aucun focalisable dans la colonne, donc `tabindex="0"`', async () => {
+    const id = await semerEntretienNonDemarre();
+    await monterEntretien(id);
+    await waitFor(() => {
+      expect(document.querySelector('[aria-busy="true"]')).toBeNull();
+    });
+
+    const notes = colonne('Notes');
+    // ② La CONDITION qui fait lever la règle axe. Si un jour les zones cessaient
+    // d'être désactivées avant démarrage, ce cas rougirait — et le `tabindex`
+    // deviendrait discutable. C'est le lien entre le correctif et sa raison.
+    expect(
+      focalisables(notes).map((e) => e.tagName.toLowerCase()),
+      'la colonne a retrouvé des focalisables : le motif du `tabindex` a changé',
+    ).toEqual([]);
+    // ③ Donc la région elle-même doit être atteignable au clavier.
+    expect(
+      notes.getAttribute('tabindex'),
+      'colonne défilante sans arrêt de tabulation : un clavier seul ne peut pas la faire défiler',
+    ).toBe('0');
+  });
+
+  it('④ sa jumelle « Blocs et progression » contient des boutons vivants — elle n’a pas de `tabindex`', async () => {
+    await monterEntretien(interviewId);
+    await waitFor(() => {
+      expect(questionAffichee(TEXTE_ECHELLE)).toBeTruthy();
+    });
+    const blocs = colonne('Blocs et progression');
+    expect(focalisables(blocs).length).toBeGreaterThan(0);
+    expect(blocs.getAttribute('tabindex')).toBeNull();
   });
 });

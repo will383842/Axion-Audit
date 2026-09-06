@@ -10873,6 +10873,51 @@ Règle de précédence : sans objet — aucune divergence du pack, une classe de
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun ; une action locale, un script, aucune dépendance nouvelle.
 
+## 2026-09-06 — [L5a] L'écran de déverrouillage porte-t-il la pastille de synchronisation ?
+
+`RappelHorsLigne` (A28) rend les deux moitiés de §33.2 : la pastille discrète ET le rappel des
+capacités locales. Le déverrouillage est le seul écran rendu HORS de la coquille — celle-ci ne pose
+donc pas la sienne — et il vit avant l'ouverture du coffre. A28 a laissé le cas en réserve.
+
+Options :
+
+1. **Les deux moitiés, comme partout.** Défendable : §33.2 ne prévoit pas d'exception, et un écran
+   sans pastille est précisément le défaut que la porte P-C mesure.
+2. **Le rappel des capacités seul.** Une pastille y annoncerait un état de synchronisation dont
+   l'auditeur ne peut RIEN faire tant qu'il n'est pas entré — 03 §19.2 : « toujours visible mais
+   discret, jamais de bannière anxiogène ». Or « cet appareil fonctionne sans réseau » est
+   exactement ce qu'un auditeur bloqué dehors a besoin de lire (05 §31-3).
+
+Arbitrage : **option 2**, tranchée par Williams dans le mandat du 2026-09-04. Règle de précédence :
+03 §19.2 (§16-22) prime sur la lecture littérale de §33.2 quant à la FORME de la pastille, pas quant
+à l'exigence du rappel — celui-ci est rendu. Le composant reçoit `avecPastille` (défaut `true` : le
+silence reste sûr), et le cas est mesuré dans les deux sens par `EcranDeverrouillage.test.tsx`,
+y compris sur l'anomalie de coffre, où l'écran n'a plus aucune capacité à promettre.
+Décideur : **A01**, sur délégation du 2026-09-04 (Williams).
+Impact spec : aucun ; une propriété de composant et son arbitrage tracé.
+
+## 2026-09-06 — [L5a] Les dix autres écrans rendent-ils la pastille de `RappelHorsLigne` ?
+
+Mesure faite au branchement : la coquille pose DÉJÀ une `PastilleSync` dans son en-tête, pour les
+onze vues (décision A01 du 2026-09-05), alimentée par le **port de sync**. Celle de
+`RappelHorsLigne` est alimentée par `navigator.onLine`.
+
+Options :
+
+1. **La rendre.** Deux pastilles sur le même écran, nourries par deux sources : aujourd'hui elles
+   diraient la même chose, demain non — c'est mot pour mot le bloquant **B6** de la recette novice
+   du 2026-09-06, fermé au prix du module de traduction unique `app/etat-sync-affiche.ts`.
+2. **Ne rendre que le rappel** (`avecPastille={PASTILLE_PORTEE_PAR_LA_COQUILLE}`), la pastille
+   restant celle de l'en-tête.
+
+Arbitrage : **option 2**. §33.2 exige ses deux moitiés **sur l'écran**, pas dans un même composant ;
+l'en-tête porte l'une, le rappel porte l'autre. Règle de précédence : §32-36 (§33.2) lu avec §16-22
+(§19.2 « un fait, une source »). Conséquence assumée : le COMPTE d'éléments en attente n'est plus
+passé au rappel du cockpit — la pastille de l'en-tête l'affiche déjà, lu dans l'outbox, et deux
+comptes du même fait sur un écran sont la version chiffrée de B6.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun ; le rendu change, l'exigence est tenue.
+
 ## 2026-09-06 — [L5a/L7] Un badge sous AA, cru latent, était peint sur le statut le plus fréquent
 
 A28 a mesuré `.axn-badge--action` à **4,13:1**, sous le seuil AA de 4,5, sur du texte courant de
@@ -10902,3 +10947,31 @@ Règle de précédence : **§32-36 > §24-31** — §22.1 (contraste AA) command
 d'inventer une couleur hors charte pour s'en sortir.
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun ; une déclaration CSS change de jeton, la charte est intacte.
+
+## 2026-09-06 — [L5b] La pastille de l'écran d'entretien : l'aligner, ou la retirer ?
+
+Revue croisée A29 sur la PR #81, réserve bloquante ①. Mesure, coquille complète, vue `entretien`,
+état nominal, **réseau présent** : l'en-tête affiche « En attente de synchronisation · 4 en attente »
+(port de sync, outbox de l'appareil) et l'écran « Hors ligne · 5 en attente » (`navigator.onLine`,
+outbox de la mission). Deux états opposés, deux comptes du même fait, sur le même écran. C'est le
+bloquant B6, resté ouvert ici parce que le geste du 2026-09-06 n'avait porté que sur l'accueil.
+
+Options :
+
+1. **L'aligner sur `app/etat-sync-affiche.ts`.** Ferme la contradiction de MOTS, laisse deux
+   pastilles à trois centimètres — concordantes mais discordantes en COMPTE (mission vs appareil),
+   ou strictement identiques si l'on aligne aussi le compte, donc du bruit redondant.
+2. **La retirer**, l'en-tête la portant déjà pour les onze écrans.
+3. La laisser et corriger les quatre affirmations de la PR qui la disaient fermée.
+
+Arbitrage : **option 2**. C'est le geste que B6 a lui-même posé pour l'écran d'accueil le
+2026-09-06 (« l'en-tête la porte déjà, pour les onze écrans »), appliqué à l'écran qui l'avait
+manqué : un fait, une source, une pastille. L'option 1 laisserait un doublon que §17.3 — qui interdit
+toute notification intrusive en entretien — est le dernier endroit à vouloir. L'option 3 est écartée
+sans hésitation : **un dépôt qui documente comme fermé ce qui est ouvert perd le droit de croire ses
+propres registres.** Le compte d'outbox de la mission est retiré avec la pastille (un `useLiveQuery`
+sans lecteur est une lecture de base à chaque écriture, en pleine session).
+Règle de précédence : §16-22 (§19.2 « un fait, une source » ; §17.3) sur le confort d'affichage.
+La fermeture est désormais MESURÉE, coquille comprise, avec sa contre-épreuve — ce qui manquait.
+Décideur : **A01**, sur délégation du 2026-09-04, sur revue A29.
+Impact spec : aucun ; une pastille redondante en moins, l'exigence §33.2 inchangée.

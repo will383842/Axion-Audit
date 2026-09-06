@@ -426,3 +426,82 @@ describe('EcranDeverrouillage — R1 : aucune chaîne technique anglaise n’att
     expect(document.querySelector('form')).toBeNull();
   });
 });
+
+// =============================================================================
+// ÉTAT HORS LIGNE — ajouté par A21 le 2026-09-06 (branchement des onze vues).
+// (Croisement 09 §5.6 : écrit par l'agent qui a posé le branchement. Vaut comme
+// non-régression, pas comme revue croisée — A29 reste due.)
+//
+// ── L'ARBITRAGE QUE CES CAS RENDENT FALSIFIABLE ──────────────────────────────
+// Williams, 2026-09-04 (délégation à A01), tracé dans `DECISIONS.md` : sur CET
+// écran, « le rappel des capacités OUI, la pastille de synchronisation NON ».
+// L'écran vit AVANT l'ouverture du coffre et hors de la coquille — celle-ci ne
+// pose donc pas la sienne. Une pastille y annoncerait un état de sync dont
+// l'auditeur ne peut rien faire tant qu'il n'est pas entré (03 §19.2, « jamais
+// anxiogène ») ; « cet appareil fonctionne sans réseau » est au contraire ce
+// qu'un auditeur bloqué dehors a besoin de lire.
+//
+// Une décision qu'aucun test n'éprouve se perd au premier refactor : celle-ci
+// est mesurée dans les deux sens, et sur la seule famille d'erreurs où l'écran
+// n'a plus rien à promettre.
+// =============================================================================
+describe('EcranDeverrouillage — état hors ligne (§33.2) et l’arbitrage de la pastille', () => {
+  function reglerEnLigne(valeur: boolean): void {
+    Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => valeur });
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, 'onLine');
+  });
+
+  it('@critique hors réseau : les capacités locales sont énumérées, et AUCUNE pastille n’est rendue', () => {
+    reglerEnLigne(false);
+    terrain = terrainDeBase();
+    render(<EcranDeverrouillage />);
+
+    const rappel = document.querySelector<HTMLElement>('.axn-rappel-hors-ligne');
+    expect(
+      rappel,
+      'l’auditeur bloqué dehors doit lire ce que l’appareil sait faire',
+    ).not.toBeNull();
+    const capacites = [...(rappel?.querySelectorAll('li') ?? [])].map((li) => li.textContent);
+    expect(capacites.length).toBeGreaterThanOrEqual(3);
+    expect(capacites.join(' ')).toMatch(/sans (aucune )?(connexion|réseau)/i);
+
+    // L'ARBITRAGE, mesuré : aucune pastille, ni ici, ni ailleurs sur l'écran.
+    expect(rappel?.querySelector('[role="status"]')).toBeNull();
+    expect(document.querySelector('.axn-pastille-sync')).toBeNull();
+    // Et ce n'est pas une panne : hors ligne est le mode nominal (invariant 1).
+    expect(screen.queryByRole('alert')).toBeNull();
+    // Le formulaire reste entier — le rappel s'ajoute, il ne remplace rien.
+    expect(document.querySelector('form')).not.toBeNull();
+  });
+
+  it('avec réseau : le rappel se tait entièrement', () => {
+    reglerEnLigne(true);
+    terrain = terrainDeBase();
+    render(<EcranDeverrouillage />);
+    expect(document.querySelector('.axn-rappel-hors-ligne')).toBeNull();
+  });
+
+  it('@critique anomalie de coffre HORS LIGNE : plus une seule capacité promise', async () => {
+    // Sur cette famille d'erreurs, l'écran retire son formulaire (revue A29, R3)
+    // parce que « déverrouiller cet appareil » est devenu faux. La liste des
+    // capacités le deviendrait tout autant : la promesse doit tomber avec le
+    // geste, sinon l'écran dit à la fois « rien ne marche » et « voici ce qui
+    // marche ».
+    reglerEnLigne(false);
+    const anomalie = new CoffreIllisibleError('sa forme n’est pas celle attendue');
+    terrain = terrainDeBase({ ouvrir: () => Promise.reject(anomalie) });
+    render(<EcranDeverrouillage />);
+    // Anti-vacuité : AVANT le refus, le rappel est bien là.
+    expect(document.querySelector('.axn-rappel-hors-ligne')).not.toBeNull();
+
+    fireEvent.change(champMotDePasse(), { target: { value: MDP_SENTINELLE } });
+    fireEvent.click(boutonDeSoumission());
+    await screen.findByRole('alert');
+
+    expect(document.querySelector('form')).toBeNull();
+    expect(document.querySelector('.axn-rappel-hors-ligne')).toBeNull();
+  });
+});

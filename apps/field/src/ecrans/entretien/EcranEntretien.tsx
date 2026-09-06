@@ -24,7 +24,13 @@
 // ── LES QUATRE ÉTATS (03 §33.2) ─────────────────────────────────────────────
 // chargement (squelettes) · vide (aucun entretien ouvert → « Nouvel entretien »,
 // ou questionnaire vide) · erreur (session introuvable, cause + action) · hors
-// ligne (pastille dans l'en-tête, mode NOMINAL) · nominal.
+// ligne (mode NOMINAL) · nominal.
+//
+// L'état hors ligne a DEUX moitiés, et cet écran n'en portait qu'une : la
+// pastille — celle de la coquille, plus une qui lui était propre, ce qui était le
+// défaut. Le RAPPEL DES CAPACITÉS LOCALES est rendu par `RappelHorsLigne` sous la
+// garde `!partage` (§33.3 : rien d'interne en écran partagé, pas même une bonne
+// nouvelle) ; la pastille propre à cet écran a été retirée le 2026-09-06.
 //
 // Traçabilité : E13 (écran 3 zones, enregistrement continu — notes, ad hoc),
 // E12 (entretiens par interlocuteur, à-revoir / N-A), E37 (scoring intégralement
@@ -38,11 +44,15 @@ import {
   IndicateurEnregistrement,
   Message,
   Panneau,
-  PastilleSync,
+  RappelHorsLigne,
   Squelette,
   ZoneEtat,
   type EtatZone,
 } from '@axion/ui';
+import {
+  CAPACITES_HORS_LIGNE,
+  PASTILLE_PORTEE_PAR_LA_COQUILLE,
+} from '../../app/capacites-hors-ligne.js';
 import { useTerrain } from '../../app/contexte.js';
 import type { BaseLocale } from '../../local/base.js';
 import { contexteLocal } from '../../local/contexte.js';
@@ -95,11 +105,11 @@ type PanneauLateral = 'blocs' | 'notes' | null;
 
 const ID_NOTE_QUESTION = 'axn-note-de-question';
 
-const CAPACITES_HORS_LIGNE = [
-  'Répondre à chaque question, la marquer à revoir, sans objet ou non communiquée',
-  'Prendre des notes et des notes volantes',
-  'Ajouter une question ad hoc ou en retrouver une hors parcours',
-];
+// La liste de capacités de cet écran vit désormais dans
+// `app/capacites-hors-ligne.ts` (A21, 2026-09-06), déplacée telle quelle. Trois
+// listes séparées existaient pour une seule règle, et l'une d'elles promettait
+// encore une capture photo retirée des deux autres : c'est ce qu'on ne voit pas
+// quand la règle est écrite à trois endroits.
 
 /**
  * L'ordre de parcours. Le dépôt trie par `position` ; à position ÉGALE, une
@@ -223,18 +233,12 @@ export function EcranEntretien(): ReactNode {
     [base],
     undefined,
   );
-  const enAttente = useLiveQuery(
-    async () =>
-      base === null || missionId === undefined
-        ? 0
-        : base.outbox
-            .where('missionId')
-            .equals(missionId)
-            .filter((op) => op.statut === 'en_attente')
-            .count(),
-    [base, missionId],
-    0,
-  );
+  // Le COMPTE d'opérations en attente de la mission courante vivait ici, pour la
+  // pastille retirée plus bas (B6, troisième source). Il est retiré avec elle :
+  // l'en-tête de la coquille compte l'outbox de l'appareil, et deux comptes du
+  // même fait sur un écran sont la version chiffrée du défaut qu'on ferme. La
+  // requête n'est pas gardée « au cas où » — un `useLiveQuery` sans lecteur est
+  // une lecture de base à chaque écriture, en pleine session d'entretien.
 
   // ── Position ───────────────────────────────────────────────────────────────
   const [questionChoisie, setQuestionChoisie] = useState<string | null>(null);
@@ -696,9 +700,32 @@ export function EcranEntretien(): ReactNode {
                   ? {}
                   : { horodatage: enregistrement.horodatage })}
               />
-              {!partage && (
-                <PastilleSync etat={enLigne ? 'en-attente' : 'hors-ligne'} enAttente={enAttente} />
-              )}
+              {/*
+                ── B6, TROISIÈME SOURCE : LA PASTILLE DE CET ÉCRAN EST RETIRÉE ──
+                Mesuré par A29 le 2026-09-06, coquille complète, vue `entretien`,
+                état nominal, réseau PRÉSENT :
+                  en-tête   → « En attente de synchronisation · 4 en attente »
+                  cet écran → « Hors ligne · 5 en attente »
+                Deux états OPPOSÉS et deux comptes DIFFÉRENTS du même fait, sur le
+                même écran, à trois centimètres. C'est le bloquant B6 de la recette
+                novice, jamais fermé ici : le geste du 2026-09-06 n'avait porté que
+                sur l'écran d'accueil.
+
+                Les deux écarts ont la même racine. Cette pastille lisait
+                `navigator.onLine` — que B6 a précisément retiré du pilotage, voir
+                l'en-tête de `PastilleSyncCoquille.tsx` — et comptait l'outbox de la
+                MISSION, là où celle de la coquille compte celle de l'APPAREIL et
+                rend le statut le plus défavorable.
+
+                Le geste est celui que B6 a posé pour l'accueil, appliqué à l'écran
+                qui l'avait manqué : « l'en-tête la porte déjà, pour les onze
+                écrans ». Un fait, une source, une pastille. L'ALIGNER sur
+                `etat-sync-affiche.ts` plutôt que la retirer aurait laissé deux
+                pastilles concordantes en mots et toujours discordantes en compte —
+                ou strictement identiques à trois centimètres, donc du bruit, et
+                §17.3 fait de l'entretien le dernier endroit qui en veuille.
+                Arbitrage tracé dans `DECISIONS.md` (2026-09-06).
+              */}
               {!partage && (
                 <Bouton variante="discret" onClick={fermerEntretien}>
                   Quitter l’entretien
@@ -712,14 +739,21 @@ export function EcranEntretien(): ReactNode {
             />
           </header>
 
-          {!partage && !enLigne && (
-            <Message ton="info" titre="Hors ligne — la collecte continue">
-              <ul>
-                {CAPACITES_HORS_LIGNE.map((capacite) => (
-                  <li key={capacite}>{capacite}</li>
-                ))}
-              </ul>
-            </Message>
+          {/*
+            §33.2 — le rappel des capacités, désormais rendu par le composant
+            commun. Ce qui reste ÉCRIT ICI, et qui doit le rester : la garde
+            `!partage`. En mode écran partagé, l'interlocuteur voit la tablette ;
+            rien d'interne à l'outil ne s'affiche, pas même une bonne nouvelle.
+            La condition `!enLigne`, elle, a disparu — elle vit dans le composant,
+            qui ne rend rien quand le réseau est là.
+          */}
+          {!partage && (
+            <RappelHorsLigne
+              enLigne={enLigne}
+              capacites={CAPACITES_HORS_LIGNE.entretien}
+              introduction="Sans réseau, la collecte continue :"
+              avecPastille={PASTILLE_PORTEE_PAR_LA_COQUILLE}
+            />
           )}
 
           {enregistrement.erreur !== null && (
@@ -828,8 +862,39 @@ export function EcranEntretien(): ReactNode {
             )}
           </div>
 
+          {/*
+            ── `tabIndex={0}` : WCAG 2.1.1 / 2.1.3, niveau A ──────────────────
+            Relevé par le balayage axe des douze vues, dans un Chromium RÉEL, sur
+            « entretien — avant la première question » :
+              scrollable-region-focusable (serious) — « Scrollable region must
+              have keyboard access » → aside[aria-label="Notes"]
+
+            LE MÉCANISME, mesuré et non supposé. Cette colonne défile : le CSS lui
+            pose `max-height` + `overflow-y: auto` au-delà de 64rem
+            (`entretien.css`). La règle axe l'accepterait si elle contenait un
+            descendant focalisable — c'est le cas de sa jumelle « Blocs et
+            progression », dont les `<button>` ne sont jamais désactivés, et qui
+            n'est PAS signalée. Mais ici, avant le démarrage de l'entretien,
+            `ecriturePossible` est faux : les trois zones de notes et la capture
+            de note volante sont toutes `disabled`, donc AUCUNE n'est focalisable.
+            Une région qui défile sans un seul arrêt de tabulation est une région
+            qu'un auditeur au clavier seul ne peut pas faire défiler — ni y aller,
+            ni y descendre.
+
+            POURQUOI CE REMÈDE ET PAS UN AUTRE. Déplacer le défilement sur les
+            enfants aurait été le bon geste si la colonne empilait des blocs
+            indépendants ; ce n'est pas le cas — les trois sections forment une
+            pile `sticky` unique, et c'est bien elle qui doit défiler. Réactiver
+            les zones serait un changement FONCTIONNEL : elles sont verrouillées
+            avant le démarrage à dessein.
+
+            POURQUOI SEUL JSDOM NE POUVAIT PAS LE VOIR : il ne calcule aucune mise
+            en page, donc aucune région n'y est jamais défilante — les douze vues
+            étaient vertes en `test:interface`. C'est ce que le balayage en
+            navigateur ajoute, et il vient de le prouver sur l'écran-titre du lot.
+          */}
           {!partage && (
-            <aside className="axn-entretien__zone--laterale" aria-label="Notes">
+            <aside className="axn-entretien__zone--laterale" aria-label="Notes" tabIndex={0}>
               <PanneauNotes
                 cleNoteDeQuestion={`${question.id}-${String(cleNotes)}`}
                 noteDeQuestion={reponse?.note ?? ''}

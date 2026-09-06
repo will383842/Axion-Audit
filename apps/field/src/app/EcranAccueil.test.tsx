@@ -26,6 +26,7 @@ import { BaseLocale, cleEmbarquement, ecrireMeta } from '../local/base.js';
 import { creerDekEnveloppee, deriverKek, ouvrirCoffre, type Coffre } from '../local/coffre.js';
 import { installerContexteLocal, retirerContexteLocal } from '../local/contexte.js';
 import { appliquerDescente, ecrireLocal } from '../local/ecriture.js';
+import { CAPACITES_HORS_LIGNE } from './capacites-hors-ligne.js';
 import type { ValeurTerrain } from './contexte.js';
 import { EcranAccueil } from './EcranAccueil.js';
 
@@ -288,5 +289,64 @@ describe('EcranAccueil — état erreur (l’écart nommé par A29)', () => {
     } finally {
       silence.mockRestore();
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ÉTAT HORS LIGNE — ajouté par A21 le 2026-09-06 au branchement des onze vues.
+// (Croisement 09 §5.6 : ces cas sont écrits par l'agent qui a posé le
+// branchement. Non-régression, pas revue croisée — A29 reste due.)
+//
+// CE QUI SE JOUE ICI, ET QUI N'EST PAS DANS LE TEST TRANSVERSAL. Deux blocs
+// vivaient dans le MÊME `Message` permanent : la liste des capacités et la
+// mention photo. Ils ont désormais deux durées de vie opposées, et une seule
+// des deux erreurs se voit à l'œil —
+//   · la liste devient conditionnelle : affichée en permanence, ce n'était pas
+//     l'état hors ligne de §33.2 mais un texte d'accompagnement ;
+//   · la mention photo reste PERMANENTE. Elle répond à un geste que l'auditeur
+//     cherche avec ou sans réseau (bloquant B3, 2026-09-06). La faire
+//     disparaître au retour du réseau rouvrirait le trou qui a fait sortir une
+//     pièce d'audit vers un téléphone personnel — et rien, à l'écran, ne le
+//     signalerait : le texte serait simplement absent.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('EcranAccueil — état hors ligne (§33.2) et mention photo (B3)', () => {
+  function reglerEnLigne(valeur: boolean): void {
+    Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => valeur });
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, 'onLine');
+  });
+
+  it('@critique EN LIGNE : la mention photo reste affichée, et les capacités disparaissent', async () => {
+    reglerEnLigne(true);
+    terrain = terrainDeBase(await nouvelleBase());
+    render(<EcranAccueil />);
+    await waitFor(() => {
+      expect(estOccupe()).toBe(false);
+    });
+    // B3 — le démenti ne dépend pas du réseau. C'est LE point de ce test.
+    expect(document.body.textContent).toMatch(/capture photo n’est pas disponible/i);
+    expect(document.body.textContent).toMatch(/appareil personnel/i);
+    // Et le rappel des capacités, lui, se tait.
+    expect(document.querySelector('.axn-rappel-hors-ligne')).toBeNull();
+    expect(document.body.textContent).not.toContain(CAPACITES_HORS_LIGNE.accueil[0]);
+  });
+
+  it('@critique HORS LIGNE : les capacités apparaissent, et la mention photo est TOUJOURS là', async () => {
+    reglerEnLigne(false);
+    terrain = terrainDeBase(await nouvelleBase());
+    render(<EcranAccueil />);
+    await waitFor(() => {
+      expect(estOccupe()).toBe(false);
+    });
+    const rappel = document.querySelector<HTMLElement>('.axn-rappel-hors-ligne');
+    expect(rappel, 'aucun rappel des capacités locales sur l’écran d’embarquement').not.toBeNull();
+    expect([...(rappel?.querySelectorAll('li') ?? [])].map((li) => li.textContent)).toEqual([
+      ...CAPACITES_HORS_LIGNE.accueil,
+    ]);
+    expect(document.body.textContent).toMatch(/capture photo n’est pas disponible/i);
+    // La pastille reste celle de l'en-tête (B6) : le rappel n'en ouvre aucune.
+    expect(rappel?.querySelector('[role="status"]')).toBeNull();
   });
 });

@@ -30,9 +30,11 @@ import { BaseLocale, cleEmbarquement, ecrireMeta } from '../../local/base.js';
 import { creerDekEnveloppee, deriverKek, ouvrirCoffre } from '../../local/coffre.js';
 import { installerContexteLocal, retirerContexteLocal } from '../../local/contexte.js';
 import { appliquerDescente, ecrireLocal } from '../../local/ecriture.js';
+import { memoriserSessionCourante } from '../../session/position.js';
 import { EcranAgenda } from './EcranAgenda.js';
 import { EcranAujourdhui } from './EcranAujourdhui.js';
 import { EcranFinDeJournee } from './EcranFinDeJournee.js';
+import { EcranFinDeSession } from './EcranFinDeSession.js';
 import { EcranPilote } from './EcranPilote.js';
 import { EcranRestauration } from './EcranRestauration.js';
 
@@ -251,10 +253,15 @@ async function baseEmbarquee(options: { readonly sessionEnCours: boolean }): Pro
     ],
   });
   await ecrireMeta(base, cleEmbarquement(MISSION_ID), INSTANT);
+  // La session COURANTE — celle que lit `EcranFinDeSession`. Sans elle, il rend
+  // son état vide : un écran à deux boutons, où la mesure des cibles tactiles ne
+  // dirait rien des quatre transitions qu'un auditeur y tape réellement.
+  let derniereSession = '';
   for (const status of ['termine', options.sessionEnCours ? 'en_cours' : 'non_demarre'] as const) {
+    derniereSession = uuidv7();
     await ecrireLocal({
       entite: 'interview',
-      id: uuidv7(),
+      id: derniereSession,
       missionId: MISSION_ID,
       action: 'upsert',
       index: {
@@ -288,6 +295,7 @@ async function baseEmbarquee(options: { readonly sessionEnCours: boolean }): Pro
       },
     });
   }
+  await memoriserSessionCourante(base, derniereSession);
   return base;
 }
 
@@ -341,6 +349,17 @@ const ECRANS = [
   // aucun verrou en session de 45 min. Or c'est l'écran qu'un auditeur ouvre sur
   // une tablette de remplacement, au doigt, le soir. Il entre dans la grille.
   { nom: 'EcranRestauration', Composant: EcranRestauration },
+  // AJOUTÉ par A21 le 2026-09-06, pour la raison écrite juste au-dessus — et
+  // parce qu'elle n'avait pas été appliquée jusqu'au bout. Cinq écrans entraient
+  // dans cette grille ; `EcranFinDeSession`, livré le même jour, n'y est jamais
+  // entré. Il échappait donc EN BLOC aux mêmes gardes : cibles ≥ 44 px, jetons
+  // qui existent, aucun style en ligne coloré, aucun verrou sur 45 min.
+  //
+  // Ce n'est pas un écran secondaire : c'est celui qui porte « terminer ≠
+  // valider » (03 §19.1 V2.10), donc jusqu'à quatre boutons de transition tapés
+  // au doigt, debout, à la fin d'un entretien. C'est la moitié automatisable du
+  // point 14 de la recette matérielle ; le rendu peint sur iPad reste dû.
+  { nom: 'EcranFinDeSession', Composant: EcranFinDeSession },
 ] as const;
 
 beforeAll(async () => {

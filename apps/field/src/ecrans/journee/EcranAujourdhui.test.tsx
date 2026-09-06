@@ -432,16 +432,33 @@ describe('EcranAujourdhui — état HORS LIGNE', () => {
     render(<EcranAujourdhui />);
     await attendreLecture();
 
-    // Hors ligne n'est pas une panne (invariant 1) : `role="status"`, pas `alert`.
-    // Ciblé sur l'ÉTAT hors ligne (`EtatHorsLigne`, qui liste les capacités) —
-    // pas sur la `PastilleSync` de chaque mission, qui dit aussi « Hors ligne ».
-    const horsLigne = [...document.querySelectorAll<HTMLElement>('.axn-etat[role="status"]')].find(
-      (s) => s.querySelector('.axn-etat__capacites') !== null,
-    );
-    expect(horsLigne, 'l’état hors ligne doit être rendu, avec ses capacités').toBeDefined();
-    const capacites = within(requis(horsLigne, 'état hors ligne')).getAllByRole('listitem');
+    // ── CE QUE CE TEST CIBLE DEPUIS LE 2026-09-06 (A21) ────────────────────
+    // Le rendu est passé de `ZoneEtat nature="hors-ligne"` à `RappelHorsLigne` :
+    // même exigence de §33.2, un seul composant pour les onze vues.
+    const horsLigne = document.querySelector<HTMLElement>('.axn-rappel-hors-ligne');
+    expect(horsLigne, 'le rappel des capacités locales doit être rendu (§33.2)').not.toBeNull();
+    const capacites = within(requis(horsLigne, 'rappel hors ligne')).getAllByRole('listitem');
     expect(capacites.length).toBeGreaterThanOrEqual(3);
     expect(capacites.map((c) => c.textContent).join(' ')).toMatch(/sauvegarde de secours/i);
+
+    // ── LE MESSAGE DIT DÉSORMAIS CE QUE LA REQUÊTE MESURE (revue A29, ③) ───
+    // Il promettait d'interdire « une SECONDE pastille sur cet écran » en ne
+    // regardant qu'à l'INTÉRIEUR du bloc de rappel : l'écran pouvait en rendre
+    // autant qu'il voulait ailleurs, au vert. Un message qui promet plus que sa
+    // requête donne le vert à ce qu'il prétend interdire.
+    //
+    // On compte donc le DOCUMENT. Ce cockpit rend une pastille PAR CARTE DE
+    // MISSION — contextualisée par la mission qu'elle décrit, et traduite par
+    // `etat-sync-affiche.ts` comme celle de l'en-tête, donc jamais en
+    // contradiction de mots. Le harnais sème DEUX missions : deux pastilles,
+    // zéro dans le rappel. Le chiffre est déclaré, pas toléré.
+    expect(horsLigne?.querySelector('.axn-pastille-sync')).toBeNull();
+    const pastilles = [...document.querySelectorAll('.axn-pastille-sync')].map((p) =>
+      p.textContent.trim(),
+    );
+    expect(pastilles.length, `pastilles rendues : ${pastilles.join(' | ')}`).toBe(2);
+    // …et elles ne se contredisent pas : un seul mot d'état pour toutes.
+    expect(new Set(pastilles.map((t) => /^[^0-9]*/.exec(t)?.[0] ?? t)).size).toBe(1);
     // L'absence de réseau n'a déclenché AUCUNE alerte : celles qui existent sont
     // celles de l'invariant 8 (file non vide, jamais synchronisé), pas « hors ligne ».
     for (const alerte of screen.queryAllByRole('alert')) {
