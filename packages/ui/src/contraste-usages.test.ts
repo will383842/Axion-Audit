@@ -119,10 +119,11 @@ function combinaisons(css: string, jetons: ReadonlyMap<string, string>): Combina
  *   · si le contraste se dégrade → rouge ;
  *   · si quelqu'un le CORRIGE → rouge aussi, avec le message qui dit de retirer
  *     l'entrée. Le registre ne peut donc pas survivre à sa raison d'être.
- * Corriger l'écart ci-dessous suppose de bouger `--couleur-action-fond-doux`, qui
- * est un jeton de charte : c'est un arbitrage (CLAUDE.md §3-2), pas un correctif
- * d'implémentation. A28 mesure et rend ; il ne relève aucun seuil et ne repeint
- * aucune charte.
+ * Éclaircir un jeton de charte pour faire passer une paire serait un arbitrage
+ * (CLAUDE.md §3-2), pas un correctif d'implémentation : A28 mesure et rend ; il ne
+ * relève aucun seuil et ne repeint aucune charte. Choisir un AUTRE jeton existant
+ * pour une déclaration, en revanche, est un correctif ordinaire — c'est le chemin
+ * pris le 2026-09-06, décrit ci-dessous.
  */
 // LE REGISTRE EST VIDE, ET C'EST SON RÉSULTAT LE PLUS UTILE.
 //
@@ -132,10 +133,16 @@ function combinaisons(css: string, jetons: ReadonlyMap<string, string>): Combina
 // corriger l'écart sans retirer l'entrée rend ce fichier rouge. Un registre qui
 // peut survivre à sa raison d'être est une dérogation ; celui-ci ne le peut pas.
 //
-// Ce qui a été arbitré le même jour : plutôt que d'éclaircir un jeton de charte
-// (réservé à Williams, §3-2) ou de tolérer la combinaison, la variante `action`
-// de `Badge` a été RETIRÉE — aucun écran ne l'employait, et le type interdit
-// désormais `ton="action"`. L'entrée est partie avec elle.
+// Ce qui a été arbitré le même jour, et il faut le lire exactement : la variante
+// `action` de `Badge` est RESTÉE. Retirer la variante avait été envisagé, puis
+// ÉCARTÉ PAR LA MESURE — elle est employée, par une TABLE (`TON_STATUT` dans
+// `EcranPortefeuille.tsx`, où `en_cours` vaut `action`) que le `grep` de A28 ne
+// voyait pas, et c'est le compilateur qui l'a dit en refusant le type. Ce qui a
+// changé est la DÉCLARATION de `.axn-badge--action` dans `composants.css` : la
+// couleur du texte passe à un autre jeton EXISTANT de la famille terracotta,
+// au-dessus de AA. Aucun jeton de charte n'est modifié, aucun écran ne change de
+// sens. L'entrée du registre est partie parce que l'écart qu'elle figeait n'existe
+// plus, pas parce que son objet aurait disparu.
 //
 // Laisser la carte vide plutôt que de supprimer ce bloc est délibéré : la
 // prochaine dérogation devra s'écrire ICI, avec son chiffre et son motif, et
