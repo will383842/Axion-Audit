@@ -104,11 +104,35 @@ async function lireResume(base: BaseLocale): Promise<ResumeSocle> {
   };
 }
 
+// ── B3 (recette novice A54, 2026-09-06) : LA PROMESSE COÛTE PLUS QUE LE MANQUE ─
+// Cette liste promettait « et des photos ». La capture photo n'existe pas — le
+// manque est tracé et assumé. Ce qui ne l'était pas, c'est que la liste JUMELLE
+// du cockpit avait été corrigée le 2026-09-05 (majeur M6, A29) et pas celle-ci :
+// le mensonge avait été réparé à un endroit sur deux.
+//
+// Le coût réel n'est pas ergonomique. L'auditeur à qui le produit a promis de
+// photographier cherche le geste en entretien, trouve un bouton grisé, en
+// conclut qu'il n'a pas le droit — et photographie avec son TÉLÉPHONE PERSONNEL.
+// La pièce d'audit sort alors du coffre chiffré, de la sauvegarde de secours et
+// de l'invariant 8, pour entrer dans une pellicule privée. Ce coût est créé par
+// la PROMESSE, pas par l'absence : un produit qui ne promet rien ne produit pas
+// ce contournement. La ligne est donc retirée, et remplacée par ce qu'il faut
+// faire À LA PLACE — un contournement se prévient en offrant un geste, jamais
+// en se taisant.
+//
+// La capture elle-même est le lot L5d, séquencé APRÈS P-C. Ce retrait ne la
+// remplace pas : il retire ce qui, faute d'elle, fait sortir une pièce d'audit.
 const CAPACITES_HORS_LIGNE = [
   'Mener un entretien et enregistrer chaque réponse',
-  'Prendre des notes, des notes volantes et des photos',
+  'Prendre des notes et des notes volantes',
   'Retrouver n’importe quelle question du questionnaire figé',
 ];
+
+/** Ce que l'auditeur doit faire d'une pièce qu'il aurait photographiée. */
+const MENTION_PHOTO =
+  'La capture photo n’est pas disponible dans cette version. Décrivez l’élément dans une note ' +
+  'plutôt que de le photographier avec un appareil personnel : une photo prise hors de l’application ' +
+  'sort du coffre chiffré et de la sauvegarde de secours.';
 
 /** 05 §31-3, presque mot pour mot : rassurer AVANT de demander quoi que ce soit. */
 const MESSAGE_RECONNEXION =
@@ -305,6 +329,7 @@ export function EcranAccueil(): ReactNode {
             <li key={capacite}>{capacite}</li>
           ))}
         </ul>
+        <p>{MENTION_PHOTO}</p>
       </Message>
     </section>
   );

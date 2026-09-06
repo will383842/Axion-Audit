@@ -151,7 +151,10 @@ export function alerteEspace(etat: EtatStockage): string | null {
     case 'critique':
       return 'Espace de stockage presque saturé sur cet appareil. Synchronisez et exportez une sauvegarde MAINTENANT, puis libérez de l’espace avant de reprendre la collecte.';
     case 'tendu':
-      return 'L’espace de stockage de cet appareil se remplit. Synchronisez dès que possible et évitez les photos non indispensables.';
+      // B3 (A54, 2026-09-06) : ce message conseillait d'« éviter les photos non
+      // indispensables » — un conseil sur un geste qui n'existe pas, donc une
+      // troisième promesse de capture photo, dans le module le moins visible.
+      return 'L’espace de stockage de cet appareil se remplit. Synchronisez dès que possible, et exportez une sauvegarde de secours avant de libérer de l’espace.';
     case 'ok':
     case 'inconnu':
       return null;
