@@ -120,6 +120,21 @@ export const LIBELLES_MOTIF_NON_COMMUNIQUE: Record<MotifNonCommuniqueApi, string
  * réponse n'a pas de valeur — un « non communiqué » ou un « sans objet » en sont
  * les deux cas normaux, et ils se lisent aux drapeaux, pas à un texte vide.
  */
+// CE SCHEMA EST UN `strictObject`, ET DEUX LITTERAUX LE SUIVENT A LA MAIN.
+//
+// Ajouter ici un champ REQUIS (meme nullable) casse tout corps qui ne le porte
+// pas — et un corps rejete ne rend pas un tableau vaguement faux : il rend
+// l ETAT D ERREUR. Le cas s est produit le 2026-09-06 avec `nomRepondant`, et
+// il s est presente sous la forme la moins evidente qui soit : deux balayages
+// axe de L7b se plaignant d une « colonne Provenance introuvable ».
+//
+// Les deux littéraux a mettre a jour EN MEME TEMPS que ce schema :
+//   · `e2e/accessibilite-l7b.e2e.ts` (fixture `AGREGATION`, 4 reponses)
+//   · `apps/hq/src/tests-aide/fixtures-pilotage.ts`
+// Le premier n importe pas ce paquet a dessein (il n est pas resolvable depuis
+// la racine, et l y ajouter serait une modification de dependances pour la
+// commodite d un test — CLAUDE.md §3-1) : c est donc ce commentaire, et non le
+// compilateur, qui tient le lien. Il vaut ce qu il vaut ; il vaut mieux que rien.
 export const reponseAgregeeSchema = z.strictObject({
   answerId: z.uuid(),
   interviewId: z.uuid(),

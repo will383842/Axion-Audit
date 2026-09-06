@@ -280,6 +280,13 @@ const AGREGATION = {
           orgUnitId: UNITE_ID,
           orgUnitNom: 'Établissement unique',
           orgUnitInScope: true,
+          // `nomRepondant` est REQUIS et nullable depuis L7c : le contrat distingue
+          // « aucun consentement » (null) de « je n ai pas demande » (parametre absent),
+          // deux etats qu une cle absente confondait. Le schema partage etant un
+          // `z.strictObject`, l omettre ici ne rendait pas la table incomplete : cela
+          // faisait echouer l analyse, et l ecran basculait en etat ERREUR — ce que les
+          // balayages axe ont vu comme « colonne Provenance introuvable ». (2026-09-06)
+          nomRepondant: null,
           fonctionRepondant: 'Responsable de production',
           serviceRepondant: 'Production',
           provenance: 'entretien',
@@ -302,6 +309,7 @@ const AGREGATION = {
           orgUnitId: UNITE_ID,
           orgUnitNom: 'Établissement unique',
           orgUnitInScope: true,
+          nomRepondant: null,
           fonctionRepondant: 'Dirigeant',
           serviceRepondant: null,
           provenance: 'entretien',
@@ -324,6 +332,7 @@ const AGREGATION = {
           orgUnitId: UNITE_ID,
           orgUnitNom: 'Établissement unique',
           orgUnitInScope: true,
+          nomRepondant: null,
           fonctionRepondant: 'Opérateur',
           serviceRepondant: 'Production',
           provenance: 'observation',
@@ -346,6 +355,7 @@ const AGREGATION = {
           orgUnitId: UNITE_ID,
           orgUnitNom: 'Établissement unique',
           orgUnitInScope: true,
+          nomRepondant: null,
           fonctionRepondant: 'Comptable',
           serviceRepondant: 'Administration',
           provenance: 'document',
