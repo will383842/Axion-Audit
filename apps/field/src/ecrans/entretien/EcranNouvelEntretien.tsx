@@ -140,10 +140,15 @@ export function EcranNouvelEntretien(): ReactNode {
   return (
     <section className="axn-pile axn-nouvel-entretien" aria-labelledby="axn-nouvel-entretien-titre">
       <h1 id="axn-nouvel-entretien-titre">Nouvel entretien</h1>
-      <p>Trois champs. Tout le reste se fait pendant l’entretien, ou après.</p>
+      {/* B2 (recette novice A54, 2026-09-06) : cette promesse était rendue AVANT
+          la zone d'état. L'écran annonçait « Trois champs » et n'en affichait
+          aucun quand l'identité d'auditeur manquait — le titre promettait, le
+          corps refusait. Elle vit désormais DANS l'état nominal, c'est-à-dire
+          exactement quand les trois champs sont là. */}
 
       <ZoneEtat etat={etat}>
         <form onSubmit={soumettre} noValidate>
+          <p>Trois champs. Tout le reste se fait pendant l’entretien, ou après.</p>
           {missions !== undefined && missions.length > 1 && (
             <Selection
               libelle="Mission"

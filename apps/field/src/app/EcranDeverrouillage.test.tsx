@@ -70,6 +70,24 @@ function champMotDePasse(): HTMLInputElement {
   return champ;
 }
 
+/**
+ * Le second champ du PREMIER USAGE (M5, recette novice A54 du 2026-09-06) : le
+ * mot de passe d'appareil ne peut pas être récupéré, une faute de frappe au
+ * clavier virtuel rendait donc l'appareil illisible sans aucun filet.
+ */
+function champConfirmation(): HTMLInputElement | null {
+  const champs = [...document.querySelectorAll('input[type="password"]')];
+  const second = champs[1];
+  return second instanceof HTMLInputElement ? second : null;
+}
+
+/** Remplit ce que l'écran demande pour CRÉER une protection : les deux champs. */
+function saisirLaProtection(valeur: string): void {
+  fireEvent.change(champMotDePasse(), { target: { value: valeur } });
+  const confirmation = champConfirmation();
+  if (confirmation !== null) fireEvent.change(confirmation, { target: { value: valeur } });
+}
+
 function boutonDeSoumission(): HTMLButtonElement {
   const bouton =
     document.querySelector('button[type="submit"]') ?? screen.getAllByRole('button')[0];
@@ -303,7 +321,10 @@ describe('EcranDeverrouillage — R3 : anomalie de coffre AU PREMIER USAGE', () 
     expect(boutonDeSoumission()).not.toBeNull();
     expect(document.body.textContent).toContain('Première utilisation');
 
-    fireEvent.change(champMotDePasse(), { target: { value: MDP_SENTINELLE } });
+    // HARNAIS adapté le 2026-09-06 (fusion #59 × recette novice) : le premier
+    // usage demande désormais une CONFIRMATION (M5). Setup seul, aucune
+    // assertion touchée — à revalider par A26, qui possède ce fichier.
+    saisirLaProtection(MDP_SENTINELLE);
     fireEvent.click(boutonDeSoumission());
     await screen.findByRole('alert');
 
@@ -323,7 +344,10 @@ describe('EcranDeverrouillage — R3 : anomalie de coffre AU PREMIER USAGE', () 
     // Anti-vacuité : le titre de départ est bien celui du premier usage.
     expect(screen.getByRole('heading').textContent).toContain('Préparer cet appareil');
 
-    fireEvent.change(champMotDePasse(), { target: { value: MDP_SENTINELLE } });
+    // HARNAIS adapté le 2026-09-06 (fusion #59 × recette novice) : le premier
+    // usage demande désormais une CONFIRMATION (M5). Setup seul, aucune
+    // assertion touchée — à revalider par A26, qui possède ce fichier.
+    saisirLaProtection(MDP_SENTINELLE);
     fireEvent.click(boutonDeSoumission());
     const alerte = await screen.findByRole('alert');
 
@@ -348,7 +372,10 @@ describe('EcranDeverrouillage — R3 : anomalie de coffre AU PREMIER USAGE', () 
       );
     terrain = terrainDeBase({ premierUsage: true, ouvrir });
     render(<EcranDeverrouillage />);
-    fireEvent.change(champMotDePasse(), { target: { value: MDP_SENTINELLE } });
+    // HARNAIS adapté le 2026-09-06 (fusion #59 × recette novice) : le premier
+    // usage demande désormais une CONFIRMATION (M5). Setup seul, aucune
+    // assertion touchée — à revalider par A26, qui possède ce fichier.
+    saisirLaProtection(MDP_SENTINELLE);
     fireEvent.click(boutonDeSoumission());
     await screen.findByRole('alert');
 

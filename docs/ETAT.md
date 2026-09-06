@@ -3585,6 +3585,190 @@ tests d'acceptation — étanchéité par rôle, quatre états, keyset de bout e
 sur FIL-GC ; aucun n'est écrit par A32 (09 §5.6).
 Tests rouges connus : aucun.
 
+**Le second volet de B1 est fermé.** `apps/field/src/app/verrou.ts` entre dans
+`.github/coverage-critical-paths.json` — **14 chemins critiques**, seuil inchangé à 90. Le glob
+**RESSERRE** le seuil (mesuré 100 % sur les quatre métriques, dix points de marge) : même motif que
+`routes/users.ts` et la machine à états L3d. **`apps/field/src/app/**` n'est DÉLIBÉRÉMENT pas
+inscrit** (80,49 %) : il rougirait, et la seule sortie serait alors des tests ou un rétrécissement de
+périmètre — la faute que le bandeau du fichier interdit. La question de fond (la coquille est-elle
+critique ?) reste à A01, et se tranchera mieux quand L5b et L5c auront couvert le reste.
+
+**Pourquoi ce bloc existe, et c'est la leçon du jour.** Le bloc précédent disait « Recommandation de
+glob : **voir le rapport** ». Ce rapport était celui d'un agent : il ne vit que dans la session qui
+l'a lancé, et il disparaît avec elle. **Une recommandation qui n'entre pas dans un fichier est
+perdue**, même excellente, même tenant en huit lignes de JSON. Le renvoi a été remplacé par la chose
+elle-même.
+
+---
+
+## 2026-09-04 — [lot L5 / incrément L5c] — étape 1/7 — socle fusionné, deux défauts hérités
+
+Dernier commit : `a78f041` · Branche : lot/l5c · Poussé : oui
+Tâche : bloc réécrit en fin de session — il dépassait les 25 lignes de `check:prose`.
+Prochaine action : **faire corriger les deux défauts par leurs propriétaires** (A22, A24).
+Tests rouges connus : 1 — `app/EcranAccueil.test.tsx`, « @critique si la lecture locale REJETTE ».
+
+`lot/l5b` ne contenait pas `lot/l5a` : 14 commits manquants, fusionnés ici. Six conflits résolus
+par blocs depuis la base commune ; contrôle en multiset : aucune ligne non vide des versions
+complètes des deux branches n'est perdue, zones auto-fusionnées comprises.
+
+**Deux défauts d'INTÉGRATION, invisibles sur chaque branche prise seule** — dans les deux cas la
+garde vit sur une branche et le code gardé sur l'autre. ① `<AccesEntretien />` (L5b) relance
+l'erreur de lecture pendant le rendu et emporte l'écran d'accueil (L5a). ② La règle ESLint
+« écriture Dexie » (L5a) attrape `enAttente.current.clear()` de `session/enregistrement.ts`
+(L5b), qui est un `Map` : 2 erreurs, toutes deux fausses. Non corrigés — hors périmètre L5c.
+
+Socle mesuré : build OK · typecheck RC=0 · lint 2 erreurs · unit 1159 · interface 590/591.
+
+---
+
+## 2026-09-05 — [lot L5 / incrément L5c] — étape pipeline 2/7 → 3/7 (auto-revue)
+
+Dernier commit vert : `a417dec` · Branche : lot/l5c · Poussé : oui
+Tâche en cours : aucune. Incrément L5c implémenté, auto-revue rendue au pilote.
+Prochaine action : **revue croisée A29**, puis tests croisés A26 (E2E offline) et A27 (interface
+et appareils) — aucun test d'écran n'est écrit par moi (09 §5.6).
+Tests rouges connus : 1, HÉRITÉ et hors périmètre — `app/EcranAccueil.test.tsx`, défaut
+d'intégration L5a/L5b remonté le 2026-09-04 (A22/A24). Lint : 2 erreurs, mêmes origines.
+
+Livré : cockpit « Aujourd'hui » (§34.2) · agenda §25.2 et démarrage pré-rempli · les 6 `kind`
+dont l'atelier · proposition d'unité §25.3 · entretien complémentaire §25.6 · terminer ≠ valider
+et validation groupée §19.1 · **parcours express R1** (§29, arbitré dans L5c le 2026-09-04) ·
+fin de journée en un geste · compression R2 · export `.axionbackup` (11 §4) · bandeau §31-1.
+
+TDD tenu sur les deux parties que `CLAUDE.md` §4 nomme : la machine de validation (21 tests) et
+l'export chiffré (14 tests) ont tourné ROUGES avant que le code existe. Ils sont écrits par
+l'auteur du code — limite déclarée, A26/A27 passent derrière.
+
+Mesuré : unit **1258/1258** (trois passes) · interface 590/591 · typecheck 0 · format propre ·
+couverture export 98,91/94,87/100 et 100/100/100 · `check:decisions` 212 au format ·
+`check:tracabilite` 820 citations sans incohérence.
+
+Quatre doutes de spec tracés dans `DECISIONS.md`, aucun deviné. Deux fichiers partagés au lieu
+d'un : `app/vues.ts` (prévu) et `App.tsx` (rendu partagé par L5b avant moi) — remonté.
+
+---
+
+## 2026-09-05 — [lot L5 / incrément L5c] — étape 3/7 close — main rendue au pilote
+
+Dernier commit vert : (celui-ci) · Branche : lot/l5c · Poussé : oui
+Tâche en cours : aucune. Les trois points de l'arbitrage A01 du 2026-09-05 sont appliqués.
+Prochaine action : **A27 entre dans ce worktree pour les tests d'écran** — A23 en est sorti.
+Tests rouges connus : 1, hérité (`app/EcranAccueil.test.tsx`, défaut L5a/L5b). Lint : 2, hérités.
+
+Appliqué : vue initiale = RÈGLE (`ecrans/journee/vue-initiale.ts`, 7 tests, deux cas + reprise
+instantanée préservée) · `App.tsx` déclaré second fichier partagé dans `LOT_L5.md` §1 ·
+les quatre arbitrages du jour ratifiés par une entrée nouvelle (append-only respecté).
+
+Mesuré : unit **1265/1265** · interface 590/591 · typecheck 0 · format propre · gardes verts.
+
+---
+
+## 2026-09-05 — [lot L5 / incrément L5c] — étape 4/7 en cours (revue A29) — retours A27 fermés
+
+Dernier commit vert : `43a5522` · Branche : lot/l5c · Poussé : oui
+Tâche en cours : aucune — A29 lit en parallèle, main rendue au pilote.
+Prochaine action : **recevoir les constats d'A29 par le pilote**, les fermer, puis A02.
+Tests rouges connus : 1, hérité (`app/EcranAccueil.test.tsx`). Lint : 2, héritées.
+
+Les six rouges d'A27 (`66fb28c`, 89 tests) sont fermés — chacun était un défaut réel : tri du
+cockpit jamais utilisé côté écran · sync non gardée · une seule mission sauvegardée (11 §4 :
+le fichier est PAR MISSION, N fichiers) · agenda sans état d'erreur · participants dans un
+`<input>` · rappel du rituel orphelin. Ses tests ne sont pas touchés.
+
+Trois manques livrés : écran de restauration (vue `restauration`, 4 états, persistance exigée,
+mission marquée embarquée après import) · pastille de sync dans la coquille pour tous les
+écrans · R2 non branché : **aucune photo n'entre nulle part**, le point d'entrée est
+`ecrans/entretien/**` (A22), remonté.
+
+Mesuré : unit **1267/1267** · interface **679/680** · build OK · typecheck 0 · format propre.
+
+---
+
+## 2026-09-05 — [lot L5 / incrément L5c] — étape 4/7 — réserves A29 fermées
+
+Dernier commit vert : `c1f228d` · Branche : lot/l5c · Poussé : oui
+Tâche en cours : aucune — main rendue au pilote.
+Prochaine action : **rejeu A29**, puis contrôle d'acceptation A02.
+Tests rouges connus : 1, hérité (`app/EcranAccueil.test.tsx`, L5a). Lint : 2, héritées (L5b).
+
+B1 (bloquant) fermé : `EcranFinDeSession` livre « Terminer », « Rouvrir », « Valider » et le
+déverrouillage expert, atteint depuis la ligne de session du cockpit. La commande de mesure de la
+revue rend maintenant 8 lignes au lieu de zéro. `ecrans/entretien/**` non touché.
+M5 : le mot de passe d'export est vérifié contre le coffre — une faute de frappe ne produit plus
+un fichier inouvrable annoncé « produite ». M1 : la garde de version de schéma existe. M2 : la
+borne mono-unité est une égalité, 5 tests aux bornes. M6 : « Photographier » retiré. M7 : ce qui
+dépassait sort d'`App.tsx` vers `coquille-l5c.tsx`. M8 : perte déclarée, correction escaladée.
+M4 REFUSÉ par un test croisé d'A27 — motif écrit dans le code.
+
+Mesuré : unit **1276/1276** · interface **679/680** · build OK · typecheck 0 · format propre.
+
+---
+
+## 2026-09-05 — [lot L5 / incrément L5c] — étape 4/7 — `main` fusionné, main rendue
+
+Dernier commit vert : `f2f17a8` (merge origin/main) · Branche : lot/l5c · Poussé : oui
+Tâche en cours : aucune. **Aucune PR ouverte** — `lot/l5c` part de `lot/l5b`, #31 fusionne d'abord.
+Prochaine action : **rejeu A29**, puis A02.
+Tests rouges connus : **1**, hérité — `app/EcranAccueil.test.tsx` (L5a), chez A22. Lint : **0**.
+
+`main` portait L5a en SQUASH : seize fichiers en `add/add`, sans base commune. Fusion à trois
+branches PAR FICHIER avec `lot/l5a` nommé comme base — les quinze fichiers de code passent sans
+un conflit, et le correctif A51 de `coffre.ts` est vérifié présent. Les quatre fichiers
+append-only : bords de conflit inspectés AVANT résolution (l'incident de `lot/l7a`), les quatre
+coupures tombent entre deux entrées ; les deux côtés conservés, main d'abord pour que le dernier
+bloc d'ETAT reste celui de cette branche. Multiset : aucune ligne non vide perdue.
+
+`eslint.config.js` pris sur `main` après avoir vérifié qu'aucun sélecteur de L5b n'y manquait :
+**les 2 erreurs de lint héritées sont fermées**.
+
+Mesuré : build OK · typecheck 0 · lint 0 · format propre · unit **1287/1287** · interface
+**759/760**.
+## 2026-09-05 02h00 — [lot L1 / incrément E18 `external_ref`] — étape pipeline 4/7 (revue croisée A17, correctifs livrés)
+
+Dernier commit vert : `c77a021` (CI 33927012410) · Branche : `lot/l1-e18-external-ref` (PR #34) · Poussé : oui
+Tâche en cours : fermer les bloquants de `docs/portes/REVUE_A17_E18_2026-09-05.md`. **B-2** fermé par
+`63c68bc` (la relecture d'après coup avale son échec : 409 garanti, `details` au mieux — cause : seconde
+connexion du pool prise sous transaction, `max: 10`, timeout 5 s). **B-1** fermé par `d1f7b7d` (le bloc
+`06h45` rejoint la branche par fusion d'`origin/main` `1b54554`, contrôle par blocs 78 / 203). **B-3** est
+à A16 : les 5 cas du SIREN archivé et du `code` systématique sont sur la branche (`6a9db3c`, 38 tests
+verts localement). m-1 (citation drizzle 0.45.2) fermé dans `63c68bc`.
+Ce que cet incrément a livré depuis le bloc du 03 17h05 : le défaut ① (`b89dfdf`, 409 et plus 500 sur
+`external_ref` en double), les 16 cas d'A16 (`b713f84`), la symétrie du SIREN archivé et
+`details[0].code ∈ { fiche_active, fiche_archivee }` sur les deux 409 (`308ed1a`).
+Prochaine action : **A17 rejoue sa revue sur la tête de la branche** ; M-1 (rectification de la prémisse
+« `external_ref` n'est écrit par aucune route ») et M-2 (référence console non confrontée) sont des
+entrées `DECISIONS.md` de A01, pas de A13.
+Tests rouges connus : aucun sur la branche (Node v24 local, hors contrat — la CI fait foi).
+## 2026-09-05 00h35 — [lot L5 / incrément L5b] — étape pipeline 3/7 (refusion + auto-revue)
+
+Dernier commit vert : 6031d6b (fix(l5b) : une lecture locale qui échoue produit un ÉTAT) · Branche : lot/l5b · Poussé : oui
+Tâche en cours : refusion `origin/main` puis `origin/lot/l5a` dans `lot/l5b` (PR #31), et
+fermeture du défaut d'intégration `<AccesEntretien />` que seule la refusion pouvait révéler.
+Faits : `lot/l5a` est désormais ANCÊTRE de `lot/l5b` (14 commits intégrés : cinq bloquants PWA
+A29, icône iOS à la racine, balayage axe-core, 42 tests du verrou / réserve B1, verdict A51,
+F-22 / F-23 / F-25, règle ESLint « écriture Dexie » corrigée par A24) ; `main` aussi (#33, #35,
+#36, #37, #38, #39). Neuf conflits en tout, TOUS sur des registres ou des ajouts parallèles,
+résolus par blocs depuis la base commune en `diff3`, contrôlés en multi-ensembles sur les
+versions COMPLÈTES des deux branches — zéro ligne perdue, zéro ligne inventée.
+Mesuré ici (Node v24, hors contrat — la CI reste le juge) : build RC=0 · lint RC=0 ·
+typecheck RC=0 · test:unit 1159/1159 · test:interface 591/591 · les huit gardes `check:*` RC=0.
+Prochaine action : lire le run CI de la PR #31 et, s'il est vert, demander la revue croisée A29
+sur le diff de refusion (le correctif `AccesEntretien` n'a été relu par personne d'autre).
+Tests rouges connus : aucun. Avertissement `check:decisions` sur une date qui recule
+(« Quel rôle accède au référentiel client ? ») : PRÉEXISTANT, non bloquant, non corrigé ici.
+
+## 2026-09-05 01h00 — [lot L7 / incrément L7b] — étape pipeline 3/7 (auto-revue)
+
+Dernier commit vert : `58dbf14` (feat(l7b) : les deux écrans de pilotage) · Branche : `lot/l7b`
+(née de `lot/l7a`, worktree `_axl7`) · Poussé : oui
+Tâche en cours : auto-revue A32 de L7b — couverture par unité ET par source (§27.1), agrégation par
+question avec provenance et « non communiqué » visibles (M5.1, §27.4).
+Prochaine action : transmettre l'auto-revue à **A37** (revue croisée) et demander à **A36** les
+tests d'acceptation — étanchéité par rôle, quatre états, keyset de bout en bout, axe-core, p95 HTTP
+sur FIL-GC ; aucun n'est écrit par A32 (09 §5.6).
+Tests rouges connus : aucun.
+
 Livré : deux contrats (`packages/shared/src/{pilotage,agregation}.ts`), un domaine API en lecture
 seule (deux fonctions pures, un dépôt qui agrège en SQL, un service), deux routes
 `GET /v1/missions/:id/{coverage,aggregation}`, deux écrans console avec leurs quatre états et leur
@@ -3892,6 +4076,20 @@ Les tests d'écran restent verts **à raison** : ils reçoivent l'état en acces
 Après restauration, `git diff` **vide** : arbre identique à l'octet. Aucun fichier de production
 touché de ma main (09 §5.6).
 
+---
+
+## 2026-09-06 11h30 — [lot L5 / recette novice — correctifs A20] — étape pipeline 5/7
+
+Dernier commit vert : f856d4c (fix(l5) : les majeurs M1, M3, M7) · Branche : lot/l5-recette-novice · Poussé : oui
+Tâche en cours : les six bloquants du NO-GO de la recette novice n°1 (A54) sont FERMÉS et poussés —
+B1 message d'accueil, B2 sortie dans la coquille, B3 promesse photo, B4 rituel qui s'éteignait à vide,
+B5 échec déguisé en vide, B6 pastilles contradictoires. Trois majeurs fermés avec eux (M1, M3, M7).
+Prochaine action : A27 écrit les tests d'ACCEPTATION des six bloquants (les tests joints sont des
+tests de conception A20) ; Williams arbitre les six doutes de spec du rapport A54 §8, dont l'énoncé
+de la pastille avant L6a.
+Tests rouges connus : aucun. Interface 820/820 (rejouée 3×), unit 1364 dont 3 dépassements de délai
+sous charge (socle.test.ts, service.test.ts, garde-fous-eslint-ecriture-dexie.test.ts) — verts en
+isolation, machine lente, déjà présents avant ces correctifs.
 ## 2026-09-06 10h15 — [autopilote] — TOUT L5 DANS `main`, P-C refusée deux fois
 
 Dernier commit vert : `main` après #57 · Branche : `gouvernance/etat-07` · Poussé : oui
