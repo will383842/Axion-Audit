@@ -10676,3 +10676,30 @@ par retrait volontaire du champ. C'est la source du dépôt qui est jugée, pas 
 Règle de précédence : sans objet — aucune divergence du pack, une lacune d'outillage.
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun ; un script, trois câblages, aucune dépendance nouvelle.
+
+## 2026-09-06 — [CI] Un job qui rougit pour une panne de registre doit-il attendre un humain ?
+
+Le job « 7 · constructibilité des 4 images » a rougi deux fois en deux jours sans qu'une ligne du
+dépôt soit en cause : `unauthorized` sur GHCR le 05/09, `502 Bad Gateway` du Docker Hub sur
+`alpine:3.21` le 06/09. Les deux fois, une PR verte par ailleurs est restée bloquée jusqu'à ce qu'on
+relance à la main. Le même jour, `4 · integration` est tombé sur une coupure TLS pendant le
+téléchargement de Node : ce n'est pas un incident isolé, c'est une classe.
+
+Options :
+
+1. Relancer à la main. **Écartée** : ce n'est pas une décision, c'est le coût qu'on paie déjà.
+2. Une action de « retry » du marché. **Écartée** : dépendance nouvelle (§3-1) pour quinze lignes.
+3. **Deux tentatives, dans une action composite locale** — `.github/actions/construire-image`.
+
+Arbitrage : **option 3**. La seconde tentative n'a AUCUN `continue-on-error` : un Dockerfile fautif
+échoue deux fois et le job rougit, vingt secondes plus tard ; le cache `gha` rend la reconstruction
+quasi immédiate jusqu'à la couche qui casse. **Ce qui suit importe autant que le correctif** :
+GitHub Actions ne sait ni boucler sur une étape ni ancrer un bloc YAML, donc le `with:` est
+**écrit deux fois**, et l'action ne supprime pas cette répétition — elle la rend voisine. Le chemin
+de reprise ne s'emprunte qu'en panne : une divergence y produirait une image différente **sans que
+personne la voie**. `scripts/check-etapes-jumelles.mjs` compare donc les deux blocs à chaque CI et
+nomme la ligne fautive. Un commentaire qui demande de garder deux choses synchronisées n'est pas un
+garde-fou ; ce script en est un, et sa non-vacuité est prouvée par divergence volontaire.
+Règle de précédence : sans objet — aucune divergence du pack, une classe de panne d'outillage.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun ; une action locale, un script, aucune dépendance nouvelle.
