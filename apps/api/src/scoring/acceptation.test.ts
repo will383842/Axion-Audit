@@ -54,6 +54,7 @@ import { describe, expect, it } from 'vitest';
 import {
   resultatScoringMissionSchema,
   CHAMPS_FINANCIERS_SURVEILLES,
+  CODES_ANOMALIE_SCORING,
   TABLE_FINANCIERE,
 } from '@axion/shared';
 import type { NoeudScore, ResultatScoringMission, ResultatUnite } from '@axion/shared';
@@ -790,5 +791,643 @@ describe('étanchéité des sources du moteur — le garde-fou reçoit enfin ses
     // Sensibilité : le fichier a bien été lu, et il n'est pas vide après nettoyage.
     expect(source).toContain('interface ReponseACoter');
     expect(source).toContain('interface QuestionFigee');
+  });
+});
+
+// =============================================================================
+// ⑤ LES QUATRE CORRECTIFS DE LA REVUE CROISÉE — ÉPROUVÉS, PAS SUPPOSÉS
+// =============================================================================
+//
+// ── POURQUOI CE BLOC EXISTE, DIT PAR LE PRODUCTEUR LUI-MÊME ────────────────
+// « La couche d'acceptation reste verte — cela prouve que je n'ai rien cassé, pas
+// que les correctifs sont éprouvés. Elle a été écrite contre le moteur d'avant ;
+// aucune de ses 24 assertions ne couvre les quatre comportements nouveaux. »
+// C'est exact, et c'est la définition même du travail croisé : un correctif non
+// éprouvé est une intention, et une intention ne tient pas une porte. Le producteur
+// a vérifié par une sonde jetable, supprimée avant commit, et n'a écrit AUCUN test
+// d'acceptation (09 §5.6) — c'est la conduite attendue, et voici la fermeture.
+//
+// ── UN CORRECTIF EST UN ENDROIT NEUF OÙ SE CACHER ──────────────────────────
+// Chaque correctif est donc éprouvé sur SES DEUX BORDS : ce qu'il doit désormais
+// attraper, ET ce qu'il ne doit toujours PAS attraper. Un garde qui s'élargit en se
+// corrigeant échange un faux négatif contre un faux positif, et un drapeau rouge
+// qui se lève à tort se paie aussi cher qu'un drapeau qui manque : il use la
+// confiance de l'auditeur, qui finit par ne plus les lire.
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// ⑤.A — `QUESTION_BLOQUANTE_JAMAIS_POSEE` : l'absence totale, et sa FRONTIÈRE
+// -----------------------------------------------------------------------------
+describe('la question bloquante que personne n’a posée — et la frontière du mot « posée »', () => {
+  const BLOQUANTE = ID(0xe01);
+  const ORDINAIRE = ID(0xe02);
+
+  /** La bloquante, au poids que le cas exige — le poids ne doit rien gouverner ici. */
+  function bloquanteDePoids(poids: string): QuestionFigee {
+    return { ...questionBloquante(BLOQUANTE), weight: poids };
+  }
+
+  function anomaliesDe(resultat: ResultatScoringMission): readonly string[] {
+    return resultat.anomalies.map((anomalie) => anomalie.code);
+  }
+
+  /** Une mission par ailleurs PARFAITE, à laquelle on ajoute le cas éprouvé. */
+  function missionParfaiteSauf(
+    poidsBloquante: string,
+    reponsesBloquante: readonly ReponseACoter[] = [],
+  ): ResultatScoringMission {
+    return calculerScoringMission(
+      mission(
+        20,
+        RACINE_SEULE,
+        [bloquanteDePoids(poidsBloquante), questionEchelle(ORDINAIRE)],
+        [
+          reponse({
+            id: ID(0xe11),
+            question: ORDINAIRE,
+            unite: UNITE_A,
+            value: { type: 'scale_1_5', v: 5 },
+          }),
+          ...reponsesBloquante,
+        ],
+      ),
+    );
+  }
+
+  it('@critique à POIDS 0 — le score reste 5,00 sur 5, et l’anomalie NOMME la question', () => {
+    // Le trou d'origine : mission à 5,00, complétude 100 %, zéro drapeau, zéro
+    // anomalie — et la seule question qui fâche n'avait jamais été posée. Le
+    // correctif ne doit PAS changer le score (le poids gouverne toujours la
+    // moyenne) ; il doit rendre le silence impossible.
+    const resultat = missionParfaiteSauf('0');
+
+    expect(resultat.mission.score).toBe(ACCEPTATION.parfait);
+    expect(resultat.mission.completude.ratio).toBe(1);
+    expect(resultat.mission.completude.posees).toBe(1);
+    expect(resultat.drapeauxRouges).toHaveLength(0);
+
+    expect(anomaliesDe(resultat)).toStrictEqual(['QUESTION_BLOQUANTE_JAMAIS_POSEE']);
+    expect(resultat.anomalies[0]?.missionQuestionId).toBe(BLOQUANTE);
+    expect(resultat.anomalies[0]?.criticite).toBe('bloquant');
+    expect(resultat.anomalies[0]?.reponseId).toBeNull();
+    expect(resultat.anomalies[0]?.message).toContain('bloquante');
+    expect(() => resultatScoringMissionSchema.parse(resultat)).not.toThrow();
+  });
+
+  it('@critique à POIDS POSITIF aussi — le poids gouverne la moyenne, la criticité gouverne l’alerte', () => {
+    // Le compteur `nonRepondues` existait déjà ; il ne suffit pas. Un COMPTE ne
+    // nomme ni la question ni sa criticité : un analyste devant « 1 non répondue »
+    // ne sait pas s'il doit décrocher son téléphone.
+    const resultat = missionParfaiteSauf('3');
+
+    expect(resultat.mission.completude.nonRepondues).toBe(1);
+    expect(anomaliesDe(resultat)).toStrictEqual(['QUESTION_BLOQUANTE_JAMAIS_POSEE']);
+    expect(resultat.anomalies[0]?.missionQuestionId).toBe(BLOQUANTE);
+  });
+
+  it('@critique la FRONTIÈRE, côté « posée » : une réponse ORPHELINE, INCONNUE ou REFUSÉE suffit', () => {
+    // C'est ici que le jugement se joue : quelqu'un a été devant la question.
+    // Empiler « jamais posée » sur « hors périmètre » dirait deux fois le même fait
+    // sous deux noms, et deux anomalies pour un fait unique font douter des deux.
+    const orpheline = missionParfaiteSauf('1', [
+      reponse({
+        id: ID(0xe21),
+        question: BLOQUANTE,
+        unite: null,
+        value: { type: 'yes_no', v: 'non' },
+      }),
+    ]);
+    expect(anomaliesDe(orpheline)).toStrictEqual(['REPONSE_SANS_UNITE']);
+
+    const uniteInconnue = missionParfaiteSauf('1', [
+      reponse({
+        id: ID(0xe23),
+        question: BLOQUANTE,
+        unite: ID(0xdead),
+        value: { type: 'yes_no', v: 'non' },
+      }),
+    ]);
+    expect(anomaliesDe(uniteInconnue)).toStrictEqual(['REPONSE_UNITE_INCONNUE']);
+
+    // Le REFUS a son propre code depuis le premier jour : lui non plus ne se
+    // double pas — la question a bel et bien été posée, on a refusé d'y répondre.
+    const refusee = missionParfaiteSauf('1', [
+      reponse({ id: ID(0xe24), question: BLOQUANTE, unite: UNITE_A, withheld: true }),
+    ]);
+    expect(anomaliesDe(refusee)).toStrictEqual(['QUESTION_BLOQUANTE_NON_EVALUEE']);
+  });
+
+  it('@critique la FRONTIÈRE, côté HORS PÉRIMÈTRE — une seule anomalie, celle du périmètre', () => {
+    // Le cas se monte à part : il exige une seconde racine, sortie du périmètre.
+    const resultat = calculerScoringMission(
+      mission(
+        21,
+        [
+          { id: UNITE_A, parentId: null, headcount: 10, inScope: true },
+          { id: UNITE_B, parentId: null, headcount: 4, inScope: false },
+        ],
+        [bloquanteDePoids('1')],
+        [
+          reponse({
+            id: ID(0xe22),
+            question: BLOQUANTE,
+            unite: UNITE_B,
+            value: { type: 'yes_no', v: 'non' },
+          }),
+        ],
+      ),
+    );
+
+    expect(anomaliesDe(resultat)).toStrictEqual(['REPONSE_HORS_PERIMETRE']);
+    expect(resultat.anomalies[0]?.criticite).toBe('bloquant');
+  });
+
+  it('@critique la FRONTIÈRE, côté criticité : une question NON bloquante jamais posée ne dit rien', () => {
+    // « Évalué UNIQUEMENT si criticality = bloquant » (§32.1-6) vaut pour l'alerte
+    // comme pour le drapeau. Signaler chaque question non posée transformerait le
+    // rapport d'anomalies en inventaire de la collecte — et personne ne le lirait.
+    const resultat = calculerScoringMission(
+      mission(
+        22,
+        RACINE_SEULE,
+        [questionEchelle(ORDINAIRE), questionEchelle(ID(0xe31))],
+        [
+          reponse({
+            id: ID(0xe32),
+            question: ORDINAIRE,
+            unite: UNITE_A,
+            value: { type: 'scale_1_5', v: 5 },
+          }),
+        ],
+      ),
+    );
+
+    expect(resultat.mission.completude.nonRepondues).toBe(1);
+    expect(resultat.anomalies).toHaveLength(0);
+  });
+
+  it('@critique la PORTÉE est la MISSION, pas l’unité — une unité muette ne fait pas une alerte', () => {
+    // La borne qui protège du bruit : sur FIL-GC, trente unités ne sont jamais
+    // interrogées. Compter l'absence par unité produirait trente lignes par question
+    // bloquante. L'absence locale reste lisible là où elle se lit : le
+    // `nonRepondues` de l'unité muette.
+    const resultat = calculerScoringMission(
+      mission(
+        23,
+        [
+          { id: UNITE_A, parentId: null, headcount: 10, inScope: true },
+          { id: UNITE_B, parentId: UNITE_A, headcount: 10, inScope: true },
+        ],
+        [bloquanteDePoids('1')],
+        [
+          reponse({
+            id: ID(0xe41),
+            question: BLOQUANTE,
+            unite: UNITE_A,
+            value: { type: 'yes_no', v: 'oui' },
+          }),
+        ],
+      ),
+    );
+
+    expect(resultat.anomalies).toHaveLength(0);
+    expect(uniteDe(resultat, UNITE_B).propre.completude.nonRepondues).toBe(1);
+    expect(uniteDe(resultat, UNITE_A).propre.completude.cotees).toBe(1);
+  });
+
+  it('@critique les quatre jeux de référence n’émettent AUCUNE alerte neuve — le correctif ne bruite pas', () => {
+    // Non-régression du SILENCE, et elle vaut autant que celle des scores : un garde
+    // qui s'allume sur les jeux normaux est désarmé en une semaine.
+    for (const entree of [JEU_TPE, jeuGc(), JEU_ROLLUP, JEU_SCORE_PARFAIT]) {
+      const codes = calculerScoringMission(entree).anomalies.map((a) => a.code);
+      expect(codes.filter((code) => code === 'QUESTION_BLOQUANTE_JAMAIS_POSEE')).toStrictEqual([]);
+      expect(codes.filter((code) => code === 'QUESTION_FIGEE_EN_DOUBLON')).toStrictEqual([]);
+    }
+  });
+});
+
+// -----------------------------------------------------------------------------
+// ⑤.B — LE SEUIL SUR CHAQUE OPTION RETENUE, ET L'AGRÉGAT QUI RESTE LE SCORE
+// -----------------------------------------------------------------------------
+describe('le seuil regarde le DÉTAIL, la moyenne garde l’AGRÉGAT — les deux ne se croisent pas', () => {
+  const CHOIX = ID(0xf01);
+
+  /** Un choix multiple bloquant, options cotées 1 et 5, seuil « en dessous de 2 ». */
+  function questionChoix(
+    agregat: 'max' | 'mean',
+    scores: readonly [number, number] = [1, 5],
+  ): QuestionFigee {
+    return {
+      missionQuestionId: CHOIX,
+      blocCode: 'bloc_1',
+      answerType: 'multi_choice',
+      weight: '1',
+      scoring: { source: 'options', aggregate: agregat, red_flag: { below: 2 } },
+      options: [
+        { code: 'opt_a', label: 'Option A', score: scores[0] },
+        { code: 'opt_c', label: 'Option C', score: scores[1] },
+      ],
+      criticality: 'bloquant',
+    };
+  }
+
+  function jeuChoix(question: QuestionFigee, choisies: readonly string[]): ResultatScoringMission {
+    return calculerScoringMission(
+      mission(
+        30,
+        RACINE_SEULE,
+        [question],
+        [
+          reponse({
+            id: ID(0xf11),
+            question: CHOIX,
+            unite: UNITE_A,
+            value: { type: 'multi_choice', v: choisies },
+          }),
+        ],
+      ),
+    );
+  }
+
+  it('@critique `max` — le score reste l’AGRÉGAT (5), et le drapeau vient du DÉTAIL (option à 1)', () => {
+    // Le défaut fermé, et celui qui falsifiait la preuve n° 1 du producteur : en
+    // mode `below`, le drapeau se décidait sur un score qui EST DÉJÀ un agrégat.
+    // `max` prenait la MEILLEURE option et effaçait celle au rouge.
+    const resultat = jeuChoix(questionChoix('max'), ['opt_a', 'opt_c']);
+
+    // L'agrégat n'a pas bougé : la moyenne du §32.1-2 est intacte.
+    expect(resultat.mission.score).toBe(5);
+    expect(resultat.cotations[0]?.score).toBe(5);
+    // …et l'alerte est là quand même.
+    expect(resultat.drapeauxRouges).toHaveLength(1);
+    expect(resultat.drapeauxRouges[0]?.declencheur).toBe('seuil');
+    expect(resultat.drapeauxRouges[0]?.seuil).toBe(2);
+  });
+
+  it('@critique `mean` — le score reste 3, et le drapeau se lève sur l’option à 1', () => {
+    const resultat = jeuChoix(questionChoix('mean'), ['opt_a', 'opt_c']);
+
+    expect(resultat.mission.score).toBe(3);
+    expect(resultat.drapeauxRouges).toHaveLength(1);
+    expect(resultat.drapeauxRouges[0]?.seuil).toBe(2);
+  });
+
+  it('@critique le drapeau n’altère AUCUNE moyenne — bloc, unité et mission gardent l’agrégat', () => {
+    // La séparation dans l'autre sens : le canal des drapeaux ne passe par aucune
+    // moyenne, et il ne doit pas non plus en abaisser une. Un correctif d'alerte qui
+    // déplacerait le score serait un changement de barème déguisé.
+    const avec = jeuChoix(questionChoix('max'), ['opt_a', 'opt_c']);
+    const sans = jeuChoix({ ...questionChoix('max'), criticality: 'important' }, [
+      'opt_a',
+      'opt_c',
+    ]);
+
+    expect(avec.mission.score).toBe(sans.mission.score);
+    expect(uniteDe(avec, UNITE_A).propre.blocs[0]?.score).toBe(
+      uniteDe(sans, UNITE_A).propre.blocs[0]?.score,
+    );
+    expect(sans.drapeauxRouges).toHaveLength(0);
+  });
+
+  it('@critique une option NON RETENUE ne déclenche rien — seul le détail CHOISI compte', () => {
+    // LE FAUX POSITIF QUE CE CORRECTIF POUVAIT OUVRIR, et le premier endroit où
+    // regarder : le seuil lit désormais les scores élémentaires. S'il lisait le
+    // BARÈME au lieu de la RÉPONSE, toute question offrant une option à 1 lèverait
+    // un drapeau pour tout le monde — l'alerte deviendrait une propriété de la
+    // banque et non un constat d'audit.
+    const resultat = jeuChoix(questionChoix('max'), ['opt_c']);
+
+    expect(resultat.cotations[0]?.score).toBe(5);
+    expect(resultat.drapeauxRouges).toHaveLength(0);
+    expect(resultat.anomalies).toHaveLength(0);
+  });
+
+  it('@critique la borne ATTEINTE n’est pas FRANCHIE, au niveau élémentaire aussi', () => {
+    // « Strictement en dessous » était vrai de l'agrégat ; il doit rester vrai de
+    // chaque option. Options {2, 5} avec un seuil à 2 : rien ne se lève.
+    for (const agregat of ['max', 'mean'] as const) {
+      const resultat = jeuChoix(questionChoix(agregat, [2, 5]), ['opt_a', 'opt_c']);
+      expect(resultat.drapeauxRouges).toHaveLength(0);
+    }
+    // Et à 1,99 — sous la borne — il se lève : la condition est bien ATTEINTE,
+    // ce test n'est pas vide.
+    const souscBorne = jeuChoix(questionChoix('max', [1.99, 5]), ['opt_a', 'opt_c']);
+    expect(souscBorne.drapeauxRouges).toHaveLength(1);
+  });
+
+  it('@critique les types à score UNIQUE lisent toujours leur score — aucune régression', () => {
+    // `elementaires` n'existe que pour le choix multiple. Une échelle et des bandes
+    // doivent continuer à comparer le seuil au score, et lui seul.
+    const echelle: QuestionFigee = {
+      missionQuestionId: ID(0xf21),
+      blocCode: 'bloc_1',
+      answerType: 'scale_1_5',
+      weight: '1',
+      scoring: { map: 'identity', red_flag: { below: 2 } },
+      options: null,
+      criticality: 'bloquant',
+    };
+    const auRouge = calculerScoringMission(
+      mission(
+        31,
+        RACINE_SEULE,
+        [echelle],
+        [
+          reponse({
+            id: ID(0xf22),
+            question: ID(0xf21),
+            unite: UNITE_A,
+            value: { type: 'scale_1_5', v: 1 },
+          }),
+        ],
+      ),
+    );
+    const auVert = calculerScoringMission(
+      mission(
+        32,
+        RACINE_SEULE,
+        [echelle],
+        [
+          reponse({
+            id: ID(0xf23),
+            question: ID(0xf21),
+            unite: UNITE_A,
+            value: { type: 'scale_1_5', v: 4 },
+          }),
+        ],
+      ),
+    );
+
+    expect(auRouge.drapeauxRouges).toHaveLength(1);
+    expect(auRouge.drapeauxRouges[0]?.score).toBe(1);
+    expect(auVert.drapeauxRouges).toHaveLength(0);
+  });
+});
+
+// -----------------------------------------------------------------------------
+// ⑤.C — LA COERCITION ALIGNÉE : le drapeau compare comme le barème cote
+// -----------------------------------------------------------------------------
+describe('une seule règle de comparaison pour une même valeur — alignée, jamais élargie', () => {
+  const QUESTION = ID(0xf31);
+
+  function jeuValeurs(
+    map: Record<string, number>,
+    valeursDrapeau: readonly unknown[],
+    valeur: unknown,
+  ): ResultatScoringMission {
+    const question: QuestionFigee = {
+      missionQuestionId: QUESTION,
+      blocCode: 'bloc_1',
+      answerType: 'yes_no',
+      weight: '1',
+      scoring: { map, red_flag: { values: valeursDrapeau } },
+      options: null,
+      criticality: 'bloquant',
+    };
+    return calculerScoringMission(
+      mission(
+        33,
+        RACINE_SEULE,
+        [question],
+        [reponse({ id: ID(0xf32), question: QUESTION, unite: UNITE_A, value: { v: valeur } })],
+      ),
+    );
+  }
+
+  it('@critique le NOMBRE répondu correspond au TEXTE attendu — le trou d’origine est fermé', () => {
+    // Mesuré à la revue : le barème cotait 0 (il coerce `0` en clé `"0"`) et
+    // l'alerte se taisait (`Object.is(0, "0")` est faux). La même valeur était
+    // COMPRISE par le barème et IGNORÉE par le drapeau.
+    const resultat = jeuValeurs({ '1': 5, '0': 0 }, ['0'], 0);
+
+    expect(resultat.cotations[0]?.score).toBe(0);
+    expect(resultat.drapeauxRouges).toHaveLength(1);
+    expect(resultat.drapeauxRouges[0]?.declencheur).toBe('valeurs');
+    expect(resultat.drapeauxRouges[0]?.valeurDeclenchante).toBe('0');
+  });
+
+  it('@critique et RÉCIPROQUEMENT — le texte répondu correspond au nombre attendu', () => {
+    const resultat = jeuValeurs({ '1': 5, '0': 0 }, [0], '0');
+
+    expect(resultat.cotations[0]?.score).toBe(0);
+    expect(resultat.drapeauxRouges).toHaveLength(1);
+  });
+
+  it('@critique le cas nominal du pack est intact — « non » contre `["non"]`', () => {
+    const resultat = jeuValeurs({ oui: 5, non: 0 }, ['non'], 'non');
+    expect(resultat.drapeauxRouges).toHaveLength(1);
+    expect(resultat.drapeauxRouges[0]?.valeurDeclenchante).toBe('non');
+
+    const vert = jeuValeurs({ oui: 5, non: 0 }, ['non'], 'oui');
+    expect(vert.drapeauxRouges).toHaveLength(0);
+  });
+
+  it('@critique UNE VALEUR NON COERCIBLE NE SE MET PAS À CORRESPONDRE — identité stricte préservée', () => {
+    // LE FAUX POSITIF QUE CE CORRECTIF POUVAIT OUVRIR. Aligner n'est pas élargir :
+    // un booléen n'est pas la chaîne « true », un tableau n'est pas sa concaténation.
+    // Si la coercition mordait sur eux, `red_flag: {"values": ["true"]}` s'allumerait
+    // sur toute réponse booléenne vraie — et le barème, lui, ne saurait toujours pas
+    // la coter. L'alerte dirait alors quelque chose que le barème ne dit pas.
+    const booleen = jeuValeurs({ true: 5, false: 0 }, ['true'], true);
+    expect(booleen.drapeauxRouges).toHaveLength(0);
+    expect(booleen.cotations[0]?.motifNonCotable).toBe('valeur_inexploitable');
+
+    // …mais l'identité stricte, elle, fonctionne toujours : `true` contre `true`.
+    const strict = jeuValeurs({ true: 5, false: 0 }, [true], true);
+    expect(strict.drapeauxRouges).toHaveLength(1);
+  });
+
+  it('@critique deux valeurs qui ne désignent PAS la même chose ne correspondent pas', () => {
+    // Les bords de la coercition, là où une implémentation trop généreuse se
+    // trahirait : un zéro de tête, une notation exponentielle, une espace.
+    // `cleDeValeur` rend `String(n)` — c'est une NORMALISATION, pas une
+    // interprétation, et le barème refuse ces trois valeurs exactement comme
+    // l'alerte les refuse.
+    for (const [cle, valeur] of [
+      ['01', 1],
+      ['1e3', 1000],
+      [' 1', 1],
+    ] as const) {
+      const resultat = jeuValeurs({ [cle]: 0 }, [cle], valeur);
+      expect(resultat.drapeauxRouges).toHaveLength(0);
+      expect(resultat.cotations[0]?.motifNonCotable).toBe('valeur_inexploitable');
+    }
+  });
+});
+
+// -----------------------------------------------------------------------------
+// ⑤.D — LE DOUBLON DIT, ET LA CRITICITÉ PORTÉE PAR TOUTES LES ANOMALIES
+// -----------------------------------------------------------------------------
+describe('ce qui est écarté est dit — le doublon, et la criticité sur chaque anomalie', () => {
+  it('@critique un DOUBLON de question figée est signalé, et la PREMIÈRE ligne fait toujours foi', () => {
+    // La base l'interdit (clé primaire) : c'est de la défense en profondeur. Le cas
+    // qui comptait est celui-ci — la seconde ligne est la BLOQUANTE, et son drapeau
+    // disparaissait sans un mot. Il disparaît toujours (la première fait foi), mais
+    // le fait est désormais DIT, ce qui est la seule chose qu'un moteur puisse faire
+    // d'une donnée que rien ne permet d'arbitrer.
+    const premiere: QuestionFigee = {
+      ...questionBloquante(ID(0xf41)),
+      scoring: { map: { oui: 5, non: 0 } },
+      criticality: 'informatif',
+    };
+    const seconde = questionBloquante(ID(0xf41));
+    const resultat = calculerScoringMission(
+      mission(
+        34,
+        RACINE_SEULE,
+        [premiere, seconde],
+        [
+          reponse({
+            id: ID(0xf42),
+            question: ID(0xf41),
+            unite: UNITE_A,
+            value: { type: 'yes_no', v: 'non' },
+          }),
+        ],
+      ),
+    );
+
+    const doublons = resultat.anomalies.filter((a) => a.code === 'QUESTION_FIGEE_EN_DOUBLON');
+    expect(doublons).toHaveLength(1);
+    expect(doublons[0]?.missionQuestionId).toBe(ID(0xf41));
+    expect(doublons[0]?.criticite).toBe('bloquant');
+    // La première fait foi : elle n'est pas bloquante, donc aucun drapeau.
+    expect(resultat.drapeauxRouges).toHaveLength(0);
+    expect(resultat.cotations[0]?.score).toBe(0);
+  });
+
+  it('@critique LES NEUF CODES sont atteints par un même jeu, et chacun porte sa criticité', () => {
+    // MATRICE EXHAUSTIVE, dans les deux sens. ① tout code déclaré au contrat est
+    // ATTEINT par ce jeu — un code qu'aucun test ne provoque est une promesse que
+    // rien ne tient, et le jour où un dixième code apparaîtra, cette assertion
+    // rougira jusqu'à ce qu'on l'éprouve. ② `criticite` est renseignée partout SAUF
+    // là où la question est réellement inconnue.
+    const bloquanteRefusee = questionBloquante(ID(0x1101));
+    const bloquanteJamais = questionBloquante(ID(0x1102));
+    const bareme: QuestionFigee = {
+      ...questionEchelle(ID(0x1103)),
+      scoring: { map: 'ceci-n-est-pas-identity' },
+      criticality: 'important',
+    };
+    const doublon = questionEchelle(ID(0x1104));
+    const ordinaire = questionEchelle(ID(0x1105));
+    const bloquanteOrpheline = questionBloquante(ID(0x1106));
+    const bloquanteHorsPerimetre = questionBloquante(ID(0x1107));
+    const bloquanteUniteInconnue = questionBloquante(ID(0x1108));
+
+    const resultat = calculerScoringMission(
+      mission(
+        35,
+        [
+          { id: UNITE_A, parentId: null, headcount: 10, inScope: true },
+          { id: UNITE_B, parentId: null, headcount: 4, inScope: false },
+        ],
+        [
+          bloquanteRefusee,
+          bloquanteJamais,
+          bareme,
+          doublon,
+          doublon,
+          ordinaire,
+          bloquanteOrpheline,
+          bloquanteHorsPerimetre,
+          bloquanteUniteInconnue,
+        ],
+        [
+          // QUESTION_BLOQUANTE_NON_EVALUEE
+          reponse({ id: ID(0x1201), question: ID(0x1101), unite: UNITE_A, withheld: true }),
+          // VALEUR_INEXPLOITABLE (sur une question non bloquante : un seul code)
+          reponse({
+            id: ID(0x1202),
+            question: ID(0x1105),
+            unite: UNITE_A,
+            value: { type: 'scale_1_5', v: 42 },
+          }),
+          // REPONSE_SANS_QUESTION_FIGEE
+          reponse({
+            id: ID(0x1203),
+            question: ID(0xbeef),
+            unite: UNITE_A,
+            value: { type: 'scale_1_5', v: 3 },
+          }),
+          // REPONSE_SANS_UNITE
+          reponse({
+            id: ID(0x1204),
+            question: ID(0x1106),
+            unite: null,
+            value: { type: 'yes_no', v: 'non' },
+          }),
+          // REPONSE_HORS_PERIMETRE
+          reponse({
+            id: ID(0x1205),
+            question: ID(0x1107),
+            unite: UNITE_B,
+            value: { type: 'yes_no', v: 'non' },
+          }),
+          // REPONSE_UNITE_INCONNUE
+          reponse({
+            id: ID(0x1206),
+            question: ID(0x1108),
+            unite: ID(0xdea0),
+            value: { type: 'yes_no', v: 'non' },
+          }),
+        ],
+      ),
+    );
+
+    const codesAtteints = new Set(resultat.anomalies.map((a) => a.code));
+    expect([...codesAtteints].sort()).toStrictEqual(Object.values(CODES_ANOMALIE_SCORING).sort());
+
+    for (const anomalie of resultat.anomalies) {
+      if (anomalie.code === 'REPONSE_SANS_QUESTION_FIGEE') {
+        // La question n'existe pas au questionnaire figé : personne ne peut dire ce
+        // qu'elle valait. `null` est ici la seule réponse honnête.
+        expect(anomalie.criticite).toBeNull();
+        continue;
+      }
+      expect(anomalie.criticite).not.toBeNull();
+    }
+    expect(() => resultatScoringMissionSchema.parse(resultat)).not.toThrow();
+  });
+
+  it('@critique la criticité permet de TRIER — une bloquante tombée ne se lit plus comme un texte libre', () => {
+    // L'asymétrie relevée à la revue, prise par son usage : deux réponses tombent
+    // hors périmètre pour la même raison, mais l'une mérite un coup de téléphone et
+    // l'autre une note de bas de page. Avant, la console rendait la même ligne.
+    const bloquante = questionBloquante(ID(0x1301));
+    const libre: QuestionFigee = {
+      ...questionEchelle(ID(0x1302)),
+      criticality: 'informatif',
+    };
+    const resultat = calculerScoringMission(
+      mission(
+        36,
+        [
+          { id: UNITE_A, parentId: null, headcount: 10, inScope: true },
+          { id: UNITE_B, parentId: null, headcount: 4, inScope: false },
+        ],
+        [bloquante, libre],
+        [
+          reponse({
+            id: ID(0x1311),
+            question: ID(0x1301),
+            unite: UNITE_B,
+            value: { type: 'yes_no', v: 'non' },
+          }),
+          reponse({
+            id: ID(0x1312),
+            question: ID(0x1302),
+            unite: UNITE_B,
+            value: { type: 'scale_1_5', v: 3 },
+          }),
+        ],
+      ),
+    );
+
+    const parReponse = new Map(resultat.anomalies.map((a) => [a.reponseId, a]));
+    expect(parReponse.get(ID(0x1311))?.criticite).toBe('bloquant');
+    expect(parReponse.get(ID(0x1312))?.criticite).toBe('informatif');
+    // Le code, lui, est le même : c'est la criticité qui les sépare, et elle seule.
+    expect(parReponse.get(ID(0x1311))?.code).toBe(parReponse.get(ID(0x1312))?.code);
   });
 });
