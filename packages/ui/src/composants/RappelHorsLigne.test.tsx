@@ -20,7 +20,7 @@
 //      pastille — deux régions imbriquées font répéter ou avaler le message.
 // Traçabilité : E27, E44, E6.
 // =============================================================================
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { RappelHorsLigne } from './RappelHorsLigne.js';
 
@@ -185,5 +185,37 @@ describe('RappelHorsLigne — invariant 1 : hors ligne n’est PAS une panne', (
     const texte = container.textContent;
     expect(texte.length).toBeGreaterThan(0);
     expect(/\b(?:offline|pending|loading|retry|sync)\b/i.exec(texte)).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LES BORDS DE LA LISTE — ajoutés par A21 le 2026-09-06 (revue A29, remarques).
+// Toutes les assertions ci-dessus utilisent la MÊME constante à trois entrées
+// distinctes : ni le minimum que le type autorise (un), ni le cas où l'appelant
+// répète une ligne n'étaient éprouvés. Les deux sont arrivés par la revue, pas
+// par la relecture — c'est le propre des bords.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('RappelHorsLigne — les bords de `capacites`', () => {
+  it('rend une liste d’UN SEUL élément — le minimum que le type autorise', () => {
+    const seule = ['Restaurer une sauvegarde de secours, intégralement sans réseau'] as const;
+    render(<RappelHorsLigne enLigne={false} capacites={seule} />);
+    expect(screen.getAllByRole('listitem').map((e) => e.textContent)).toEqual([...seule]);
+    // Et la phrase d'introduction n'est pas au pluriel : elle ne compte pas.
+    expect(screen.getByText('Sans réseau, cet appareil sait encore :')).not.toBeNull();
+  });
+
+  it('rend DEUX entrées identiques sans en avaler une, et sans avertissement React', () => {
+    // La clé était le TEXTE : un doublon faisait crier React et pouvait perdre
+    // une ligne. Le composant ne doit rien exiger que son type ne dise —
+    // `ListeNonVide` promet « au moins un », jamais « tous distincts ».
+    const cri = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const doublon = ['Prendre des notes', 'Prendre des notes'] as const;
+      render(<RappelHorsLigne enLigne={false} capacites={doublon} />);
+      expect(screen.getAllByRole('listitem')).toHaveLength(2);
+      expect(cri, cri.mock.calls.map((a) => String(a[0])).join('\n')).not.toHaveBeenCalled();
+    } finally {
+      cri.mockRestore();
+    }
   });
 });

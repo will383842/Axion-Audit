@@ -99,8 +99,17 @@ export function RappelHorsLigne(proprietes: ProprietesRappelHorsLigne) {
       )}
       <p className="axn-rappel-hors-ligne__intro">{introduction}</p>
       <ul className="axn-rappel-hors-ligne__capacites">
-        {capacites.map((capacite) => (
-          <li key={capacite}>{capacite}</li>
+        {/*
+          `key={index}` et non `key={capacite}` (revue A29, 2026-09-06) : la clé
+          était le TEXTE, donc deux capacités identiques produisaient un
+          avertissement React et un `<li>` pouvait être avalé. Un composant du
+          design system ne doit rien exiger de ce qu'on lui passe qu'il ne dise
+          dans son type — et `ListeNonVide` promet « au moins un », jamais « tous
+          distincts ». La liste est statique et n'est jamais réordonnée : l'index
+          est ici une clé légitime, pas un raccourci.
+        */}
+        {capacites.map((capacite, index) => (
+          <li key={index}>{capacite}</li>
         ))}
       </ul>
     </div>
