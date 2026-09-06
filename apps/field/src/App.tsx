@@ -21,6 +21,8 @@ import { EcranDeverrouillage } from './app/EcranDeverrouillage.js';
 import { EcranStockage } from './app/EcranStockage.js';
 import { useTerrain } from './app/contexte.js';
 import { VUES } from './app/vues.js';
+import { EcranEntretien } from './ecrans/entretien/EcranEntretien.js';
+import { EcranNouvelEntretien } from './ecrans/entretien/EcranNouvelEntretien.js';
 
 function ContenuCourant(): ReactNode {
   const { vue } = useTerrain();
@@ -31,6 +33,11 @@ function ContenuCourant(): ReactNode {
       return <EcranStockage />;
     case 'accueil':
       return <EcranAccueil />;
+    // ── L5b (A22) ──
+    case 'nouvelEntretien':
+      return <EcranNouvelEntretien />;
+    case 'entretien':
+      return <EcranEntretien />;
   }
 }
 

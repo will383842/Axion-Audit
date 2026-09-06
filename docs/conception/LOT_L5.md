@@ -156,6 +156,62 @@ locale + machine à états = « modules critiques » de la DoD). `@filrouge` res
 **mode avion réel sur tablette** se rejoue à la main aux portes P-C et P-E (A27, checklist §15).
 Ce n'est pas un trou qu'on découvre, c'est un trou qu'on nomme.
 
+### Recette manuelle P-C — à exécuter par **A27** (appareils) et **A54** (novice)
+
+**Ajoutée le 2026-09-03, sur constat du second rejeu A29.** Elle ne remplace aucun test : elle
+nomme ce qu'aucun test ne peut voir. `jsdom` **n'évalue pas les media queries d'une feuille de
+style** ; la suite d'interface éprouve donc la STRUCTURE (les trois zones sont montées, aucune
+derrière un panneau), le COMPORTEMENT au seuil (le geste « Note » bascule de part et d'autre) et le
+CONTRAT JS ↔ CSS (le seuil de `REQUETE_TROIS_COLONNES` est celui d'`entretien.css`) — **jamais la
+mise en colonnes PEINTE**. C'est le livrable-titre de L5b (03 M3.1), et 03 §33.7 en fait un critère
+de porte : il se constate à l'œil, sur du matériel.
+
+| # | Appareil | À constater |
+| - | -------- | ----------- |
+| 1 | **iPad, paysage** (≥ 1024 px) | Les **trois zones CÔTE À CÔTE** — blocs · question · notes. Ni empilées, ni derrière un bouton. La note de question est saisissable **sans ouvrir de panneau**. |
+| 2 | **PC ≥ 1280 px** | Idem, et les rappels de raccourcis §33.3 sont visibles (pointeur fin). |
+| 3 | **iPad, portrait** (< 1024 px) | Le **repli en panneaux** : « Blocs et progression » et « Notes » deviennent deux boutons ; la question occupe seule la largeur. |
+| 4 | Les trois ci-dessus | Cibles tactiles ≥ 44 px (03 §22.1), aucun défilement horizontal. |
+
+**Si l'une des trois lignes 1-3 échoue, P-C n'est pas franchie** : la disposition en trois zones est
+le cœur du lot, pas un raffinement. Le résultat se copie dans `docs/portes/PORTE_C_<date>.md` avec
+la capture, comme toute preuve de porte (11 §9bis).
+
+#### Second point de recette : CINQ FORMES DE SAISIE NE SONT RENDUES PAR AUCUN TEST
+
+**Mesuré par A02 le 2026-09-03 (sa réserve R4, non bloquante et délibérément laissée ouverte),
+CORRIGÉ le même jour sur sa propre rectification.** Ce n'est PAS une infraction à la DoD — elle
+énumère sync, crypto locale, scoring et RBAC, jamais les écrans. Mais c'est ce que P-C doit savoir
+**avant** de cocher « une session de chaque type » :
+
+| Type de réponse | Comment il est rendu | Mesure |
+| --------------- | -------------------- | ------ |
+| `money` | `SaisieDevise` | `FNDA:0` — jamais exécutée |
+| `date` | `SaisieDate` | `FNDA:0` |
+| `single_choice` | `ChoixUnique` | `FNDA:0` |
+| `table` | `SaisieTableau` | `FNDA:0` |
+| **`multi_choice`** | **rendu EN LIGNE, aucune fonction nommée** | **`DA:153-186` à 0** — voir ci-dessous |
+| (porte d'entrée) | `AccesEntretien.tsx` | **0 % de lignes** |
+
+**ET LA RAISON DE CETTE CORRECTION VAUT PLUS QUE LA CORRECTION.** La première version de ce tableau
+listait QUATRE types et attribuait `single_choice` **et** `multi_choice` à `ChoixUnique`. C'est
+faux : `ChoixUnique` n'est appelé que pour `single_choice` ; `multi_choice` est rendu **en ligne**
+dans le `switch`, donc **il n'a aucune fonction à nommer et n'apparaît dans AUCUNE liste `FNDA:0`**.
+Il est vraiment non couvert — `lcov` donne ses lignes à zéro exécution — mais la métrique qui compte
+les FONCTIONS ne pouvait pas le dire. **Corollaire à retenir pour toute recette future : l'absence
+d'une entrée dans une liste `FNDA:0` ne prouve PAS qu'un type est couvert.** Le tableau destiné à
+rendre un trou visible en avait un de sa propre forme, et pour la raison qui a traversé tout ce lot
+— la mesure disponible répond à une autre question que celle posée.
+
+**Donc la recette répond EN SAISISSANT, pas en regardant** : au moins une question de chacun des
+**CINQ** types — `money` avec sa devise, `date`, `single_choice`, **`multi_choice` (cocher au moins
+deux options)**, `table` — puis rouvrir la session et vérifier que la valeur relue est bien celle
+saisie. Un rendu qui s'affiche mais n'enregistre pas serait invisible à l'œil ; c'est exactement ce
+qu'aucun test ne surveille aujourd'hui.
+`EcranEntretien.tsx` est par ailleurs à 11/26 fonctions couvertes : le doute de spec « faut-il
+mettre `apps/field/src/ecrans/**` sous seuil » est tracé dans `DECISIONS.md` du 2026-09-03 et
+attend **A01** — le motif « à extraire un jour » vaut pour le calendrier, pas pour le principe.
+
 ---
 
 ## 5. Ce que cette note NE tranche PAS — à arbitrer avant la première ligne de code

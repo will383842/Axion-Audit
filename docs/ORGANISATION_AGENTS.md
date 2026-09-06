@@ -140,9 +140,43 @@ ligne utile, une clé SSH « restreinte » qui ne l'aurait pas été.
 **Le vérificateur mesure, il ne relit pas.** Un résumé n'est pas une preuve : on exécute la commande
 et on lit sa sortie.
 
+> **AMENDEMENT DU 2026-09-05 — deux règles, chacune payée par un incident du jour.**
+>
+> **a. Un réviseur qui commite est un écrivain.** Le §1 disait « lecture en parallèle : sans
+> risque » — et c'est vrai de la lecture. Mais A17 (revue) et A16 (tests), placés dans le même
+> worktree, se sont télescopés : A17 a commité son verdict, **amendé par erreur le commit d'A16**, et
+> laissé un merge en cours ; A37 et A36 ont rejoué la même scène sur L7b. Aucune perte, deux fois la
+> même cause. **Règle** : un réviseur **dépose** son verdict dans `docs/portes/` et **ne touche jamais
+> à l'index** — ni `add`, ni `commit`, ni `push`. Le pilote le commite lui-même
+> (`git -C <worktree> add <fichier> && git commit`) une fois le testeur sorti. Tout `git add`,
+> `commit` ou `push` est une écriture, y compris pour un fichier Markdown.
+>
+> **b. Deux couches de tests, deux auteurs.** `CLAUDE.md` §4 impose le TDD (tests écrits AVANT, donc
+> par l'auteur) **et** le croisement (jamais par l'auteur). Les deux se lisent ensemble : les **tests
+> de conception** (TDD) sont écrits par l'auteur, déclarés dans leur en-tête, et **ne portent jamais
+> `@critique`** ; les **tests d'acceptation** (`@critique`, par rôle, 4 états, E2E, preuve par
+> bascule) sont écrits par un testeur croisé — A16, A26, A27, A36 — qui peut **contester** un test de
+> conception, jamais le **remplacer**. Une porte ne s'appuie que sur la seconde couche.
+> (`DECISIONS.md`, 2026-09-05, les deux entrées « [méthode] » et « [organisation] ».)
+
 ---
 
 ## 4. LES INTERDITS GIT
+
+> **AJOUT DU 2026-09-05 — refusionner `main` après un SQUASH MERGE.** Le dépôt fusionne en **squash**
+> (`CLAUDE.md` §7). Conséquence que personne n'avait écrite : quand `lot/l5a` entre dans `main`, son
+> historique disparaît. Une branche partie de `lot/l5a` **avant** ce squash — `lot/l5b`, `lot/l5c` —
+> ne partage donc **aucune base commune** avec les fichiers de `main` : git les voit en `add/add`, et
+> propose de choisir un côté. **Choisir perd tout un incrément**, dans un sens ou dans l'autre.
+>
+> **La parade, mesurée le 2026-09-05 sur `lot/l5c`** : fusion à trois branches **par fichier**, en
+> nommant la branche d'origine comme base — `git merge-file <à-nous> <base=lot/l5a> <de-main>`.
+> Quinze fichiers de code sont alors passés **sans un seul conflit**, là où la fusion ordinaire les
+> présentait tous comme irréconciliables.
+>
+> **Et on vérifie après, plutôt que de supposer** : que le correctif venu de `main` est présent, et
+> que les ajouts de la branche le sont aussi. Un `add/add` résolu sans contrôle est le plus silencieux
+> des écrasements — il ne laisse aucun marqueur.
 
 **a. `git commit` sans chemins emporte l'index ENTIER**, donc le travail qu'un voisin vient
 d'indexer. *Arrivé quatre fois le 2026-08-29, dont une où 2 700 lignes du travail de trois agents

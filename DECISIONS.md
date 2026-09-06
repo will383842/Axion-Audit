@@ -7362,6 +7362,24 @@ contourné (les lectures passent, et ont servi à confirmer le diagnostic sur le
 Décideur : **Williams** (instruction du 2026-09-03 : « je voudrais que tu fasses tout directement »).
 Impact spec : aucun. `CLAUDE.md` §7 et le §6 du dossier de porte restent en vigueur, mot pour mot.
 
+## 2026-09-02 — [L7a] Le client sur les cartes du portefeuille : un N+1 BORNÉ, accepté en V1
+
+Chaque carte de mission appelle `GET /v1/companies/:id` (dédupliqué par TanStack Query) : sur une page
+keyset de 50 missions, au plus 50 appels, en pratique bien moins (un client, plusieurs missions).
+
+Options :
+
+1. **Accepter en V1**, borné par la page keyset et la déduplication.
+2. Joindre `companyName` à la liste des missions — modifie `missionResponseSchema` (11 §8-2).
+3. Route de portefeuille dédiée, en L7b.
+
+Arbitrage : **option 1**, et l'option 3 est notée pour L7b (le tableau de bord 05 §8.3 aura de toute
+façon sa route). Modifier un schéma partagé pour un confort d'affichage inverse la précédence :
+l'API n'épouse pas l'écran. **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
 ## 2026-09-02 — [L5a] Revue croisée A29 : REFUSÉ, cinq bloquants sur l'axe PWA — verdict accepté
 
 A29 a relu les 59 fichiers de `lot/l5a` @ `ce4b29b`. Le coffre, le port d'écriture, la base
@@ -7424,6 +7442,44 @@ pas mentir).
 Décideur : A01
 Impact spec : aucun.
 
+## 2026-09-02 — [L7a → A-006] Le nom de l'en-tête anti-CSRF de la console : `X-Axion-Client`, ratifié
+
+Le contrat 11 §3 impose « cookies httpOnly + en-tête anti-CSRF custom » sans nommer l'en-tête. A30
+propose `X-Axion-Client: console` sur toute requête, et `X-Axion-Csrf: <jeton>` en double-soumission
+sur les écritures quand le serveur déposera un cookie lisible `axion_csrf`.
+
+Options :
+
+1. **Ratifier les deux noms** ; les constantes vivent dans `apps/hq/src/api/auth.ts` jusqu'à A-006,
+   qui les déplace dans `packages/shared` au moment où le serveur les lit (un seul nom, deux côtés).
+2. Attendre A-006 pour nommer — la console ne peut pas parler une langue qui n'existe pas encore.
+3. Réutiliser `X-Requested-With`.
+
+Arbitrage : **option 1.** L'option 3 est le nom que tout l'écosystème connaît, donc celui qu'un
+formulaire piégé n'a pas besoin de deviner ; un nom propre au produit dit aussi QUI parle, ce dont
+A-006 a besoin pour n'émettre le cookie qu'à la console. Rien ici n'est un contrôle : la sécurité
+reste serveur (invariant 3), la console se contente de poser l'en-tête. **Précédence : 11 §3.**
+
+Décideur : A01 — à confirmer par Williams à la porte, avec A-006
+Impact spec : aucun (le contrat 11 §3 est précisé, pas modifié).
+
+## 2026-09-02 — [L7a] Trois routes plutôt que deux : le portefeuille est un écran, pas un onglet de l'accueil
+
+Le découpage L7-min prévoyait accueil + avancement ; A36 attendait `/hq/missions` = « Portefeuille »
+distinct de l'accueil (H1). L7a livre les trois.
+
+Options :
+
+1. **Trois routes** — accueil (tour de contrôle 03 §18), portefeuille (liste keyset), avancement.
+2. Deux routes, le portefeuille dans l'accueil.
+
+Arbitrage : **option 1.** La tour de contrôle est une page d'alertes et de chiffres ; une liste
+paginée au même endroit en fait un écran à deux états de chargement et deux vides (§33.2). L'espace 2
+s'intitule « Pilotage mission — portefeuille ». **Règle de précédence sans objet.**
+
+Décideur : A01
+Impact spec : aucun.
+
 ## 2026-09-02 — [L5a] Une ligne dont l'op est en ÉCHEC n'est jamais écrasée par une descente
 
 `appliquerDescente` ne protège que les ops `en_attente` ; une ligne dont l'op est `rejetee` ou
@@ -7442,6 +7498,121 @@ décidé. **Précédence : invariant 7.** Obligation transmise à L6b, qui conso
 
 Décideur : A01
 Impact spec : aucun.
+
+## 2026-09-02 — [L7a] Revue croisée A37 : ACCEPTÉ SOUS RÉSERVE — un commit de fusion déguisé, des schémas recopiés, et l'ordre de fusion figé
+
+A37 a relu 36 fichiers (`a9dba96..d76c0a1`). **B1** : `63646f2`, étiqueté `feat(l7a)`, est un commit de
+FUSION (parents `main` et `lot/l3-suite`) — `lot/l7a` embarque L3 sans `ed8a852` (correctifs A51) ;
+un squash de L7a avant L3 livrerait L3 sous une autre étiquette, sans sa porte, dans sa version
+d'avant A51. **B2** : `apps/hq/src/api/contrats.ts:65-181` redéfinit 90 lignes de schémas que
+`@axion/shared` exporte sur cette même branche (11 §3 : « le front importe LES MÊMES schémas »), avec
+une justification devenue fausse. Cinq réserves (~0,3 j) : contradiction « tout est enregistré sur cet
+appareil » / « rien n'est saisi dans la console » (A-010), `formaterPourcentage` orpheline, accord
+« 1 mission affichées », état vide muet de l'avancement, `data-saisie-libre` sur un mot de passe.
+Doute : la résolution du point 5-1 de la note L7 s'est faite par fusion, non par rebase, sans trace.
+
+Options :
+
+1. **Ordre de fusion figé : L3 → `main`, puis `lot/l7a` rebasé sur `main`** avant toute PR L7a ;
+   B2 par ré-export depuis `@axion/shared` ; la contradiction hors-ligne retirée CÔTÉ CONSOLE (la
+   console n'affiche pas la phrase terrain), A-010 restant une fiche ; les quatre autres réserves
+   fermées dans l'incrément.
+2. Dégeler `packages/ui` pour A-010 maintenant.
+
+Arbitrage : **option 1.** La fusion de L3 dans L7a était le moyen le plus court de lever trois cales
+(point 5-1) ; l'étiqueter `feat` était une faute de trace, déclarée ici — la substance (une seule
+source de vérité pour les schémas) reste due, et B2 la rend concrète. Le gel de `packages/ui` a été
+posé pour que trois chantiers n'y écrivent pas en même temps ; le lever pour une phrase, c'est le
+lever pour tout. **Précédence : 11 §3** (B2) et **CLAUDE.md §7** (B1).
+
+Décideur : A01, sur revue A37
+Impact spec : aucun.
+
+## 2026-09-02 — [L7b] Sur quel vocabulaire se compte la « couverture par type de source » (§27.1) ?
+
+> **Texte FIGÉ le 2026-09-02 au §9.4 de `docs/conception/LOT_L7.md`, déposé ici le 2026-09-03**,
+> après l'entrée de L3 dans `main` — c'est la condition que la note posait. Sa date est celle de
+> l'arbitrage, pas celle du dépôt ; `check:decisions` signale donc une date qui recule, et c'est
+> **assumé**.
+>
+> **RECTIFICATION DU 2026-09-03, relevée par A02 (réserve R-L7a-2).** Ce bandeau disait « reproduit
+> **mot pour mot**, sans reformulation ». **C'était faux, et la faute est de la classe exacte que ce
+> dépôt pourchasse** : le texte figé écrivait « la couverture est un écart **prévu/planifié/réalisé** »
+> et le dépôt avait écrit « prévu/réalisé ». **Un mot perdu, et pas n'importe lequel** — c'est
+> précisément celui que le §6.2 de la note distingue du « prévu », et sans lui la colonne du milieu
+> de l'écran de couverture n'a plus de nom. La casse et deux tournures avaient également glissé.
+> Le texte est **rétabli** ci-dessous ; le mot « planifié » est revenu à sa place. Aucune autre
+> divergence sur le fond après recomptage mot à mot. **Une affirmation d'exactitude qui n'est pas
+> vérifiée vaut moins qu'une citation modeste** : c'est elle qui empêche le lecteur suivant de
+> vérifier, puisqu'elle lui dit que c'est déjà fait.
+
+Options :
+a) `answers.source` — 5 valeurs (entretien, observation, demonstration, document, releve).
+b) `interviews.kind` — les 5 sources de collecte du §27.1 (atelier, 6e kind, traité à part).
+
+Arbitrage : **b)**, et **a) est RETENUE POUR L'AUTRE ÉCRAN** (agrégation L7c, provenance par
+question). Preuve dans le 03, vérifiée ligne à ligne : l. 548 « Les 5 sources de collecte —
+GÉNÉRALISE la table `interviews` en SESSIONS DE COLLECTE » (le pack pose l'équivalence source =
+type de session) ; l. 549 « cinq types de sessions », table à 5 lignes, `atelier` absent (il arrive
+au §28.1 ; §32.6 l. 673 le range dans les 6 `interviews.kind`) ; l. 559 « le plan de mission
+planifie les CINQ types … l'écran de couverture contrôle la couverture PAR TYPE DE SOURCE » — même
+sujet des deux côtés, et la même ligne réserve le mot PROVENANCE à `answers.source`.
+Raison de fond : **ON NE PLANIFIE PAS UNE PROVENANCE.** La couverture est un écart
+**prévu/planifié/réalisé** et le critère L7-min du 07 exige qu'elle « reflète le plan
+d'entretiens » ; le plan publie
+`{orgUnitId, kind}`. Comptée sur `answers.source`, elle n'aurait aucune colonne « prévu » et le
+critère du 07 deviendrait inexprimable.
+Précédence (`CLAUDE.md`) : **§24-31 > §16-22** — le §27.1 prime sur la lecture courte du §16.6
+(« entretiens menés / prévus ») ; et §32-36 confirme sans contredire — le §36.3 impose dans
+`reponses.csv` « session + type + provenance », TROIS colonnes, donc deux vocabulaires assumés.
+`atelier` : rendu hors de la grille des cinq, réalisé seulement, jamais silencieux (marge de mission
+toujours affichée, y compris à zéro) — une session invisible est une session perdue.
+
+Décideur : **Williams** (délégation du 2026-09-02 à la session pilote).
+Impact spec : aucun — lecture du §27.1 confirmée, aucun amendement du pack ; note de conception
+`docs/conception/LOT_L7.md` §9 mise à jour (rectifie ses §6.1, §6.3 et §8.3).
+
+## 2026-09-03 — [L7b] « Prévu » recouvre trois notions : une colonne, deux, ou trois ?
+
+Arbitrage rendu par **A30** au §6.2 de `docs/conception/LOT_L7.md` et **jamais déposé** — relevé par
+A02 le 2026-09-03 (réserve **R-L7a-2**). Il est déposé ici **avant l'ouverture de L7b**, et l'ordre
+compte : sans lui, A32 coderait trois colonnes que rien n'atteste, et le premier relecteur qui
+demanderait « pourquoi trois ? » n'aurait qu'une note de conception pour toute réponse.
+
+Trois notions coexistent dans le dépôt, et les fondre perdrait de l'information :
+
+1. **PRÉVU (cible)** — le plan §32.4, `GET …/interview-plan`. Cible **calculée qui n'écrit rien**
+   (`sessionProposeeSchema` ; `POST …/apply` REPORTÉE), publiée par unité **et par `kind`** : elle
+   EST l'axe B du prévu, et c'est elle que vise le critère du 07 « la couverture reflète le plan ».
+2. **PLANIFIÉ (agenda)** — lignes `interviews` à `schedule_status` planifié. **Peut être vide alors
+   que le plan existe**, `apply` étant reportée : afficher 0/0 serait faux.
+3. **RÉALISÉ** — lignes `interviews` à `status` terminé.
+
+Options :
+
+1. Une colonne « prévu » unique, les trois notions fondues. Simple à l'écran, **faux** : un plan
+   existant sans agenda s'afficherait 0/0.
+2. Deux colonnes (prévu / réalisé). Perd la distinction entre un défaut d'agenda et un défaut de
+   terrain — c'est l'option que le dépôt appliquait de fait, faute d'arbitrage déposé.
+3. **Trois colonnes distinctes** (prévu / planifié / réalisé), **jamais un ratio unique**.
+
+Arbitrage : **option 3**. L'écart prévu → planifié est un **défaut d'agenda** ; l'écart planifié →
+réalisé est un **défaut de terrain**. Ce ne sont pas les mêmes alertes et elles ne s'adressent pas
+aux mêmes personnes : une moyenne les confondrait et n'appellerait personne.
+**Consigne structurante pour A32, et elle borne l'implémentation** : la colonne « prévu » **appelle
+le service de plan de L3** (`apps/api/src/domaines/plan-entretiens/`) et n'en réimplémente **aucune**
+règle §32.4. Une seconde implémentation des tranches d'effectif divergerait de la première au premier
+amendement, et la couverture affirmerait alors un prévu que le plan ne reconnaît pas. Si le service
+de L3 n'expose pas la forme utile, **on l'étend — on ne le recopie pas**.
+Règle de précédence : **§24-31 > §16-22** — le §27.1 (couverture par unité ET par type de source)
+prime sur la lecture courte du §16.6 « entretiens menés / prévus », qui ne connaît que deux termes.
+Précédence interne au pack **sans objet** : le pack ne nomme pas les trois notions, il ne se
+contredit pas — il est silencieux, et c'est le §6.2 qui les distingue.
+
+Décideur : **A30**, chef d'équipe console (note de conception §6.2, 2026-09-02) ; déposé le
+2026-09-03 sur constat d'A02.
+Impact spec : aucun sur `/docs`. Engage `packages/shared/src/pilotage.ts` et l'écran de couverture
+de **L7b**, qui ne sont pas encore écrits.
 
 ## 2026-09-02 — [L5a] Liste fermée §3.2 : `answerType`, `criticality`, `parentId` entrent ; le premier pull est descopé vers L6a
 
@@ -7493,6 +7664,495 @@ recopier. **Précédence : invariant 7** (N1) ; sans objet pour le reste.
 
 Décideur : A01, sur revue A29
 Impact spec : aucun.
+
+## 2026-09-03 — [L1 / L3a] `companies.external_ref` reçoit son unicité : l'escalade du 2026-08-31 est tranchée
+
+Reprise et **clôture** de l'entrée du 2026-08-31 « `companies.external_ref` n'a aucune contrainte
+d'unicité » (A17 → A10 → Williams), restée en attente trois jours. Le rappel du fait, inchangé : la
+colonne est la clé de liaison avec la console commerciale (04 « id client console axion-ia.com »,
+03 M8.1 « référentiel client partagé »). Un doublon signifierait qu'une même entreprise de la console
+correspond à deux fiches d'audit, et que ni la liaison M8.1 ni le webhook `client.updated` du 05 §8.6
+n'ont de cible déterminée. **Le défaut ne se manifesterait qu'au lot L13, loin de sa cause.**
+
+Options (les trois soumises le 2026-08-31, reproduites sans reformulation) :
+
+1. Ajouter au fichier 04 §7.1 un index **UNIQUE partiel** `companies(external_ref) WHERE external_ref
+IS NOT NULL` — symétrique exact de celui qui existe déjà sur `siren`, et même motif.
+2. Ne rien changer : la liaison console est L13 (Phase 2), et d'ici là `external_ref` n'est écrit par
+   aucune route (aucun schéma d'entrée de L3a ne l'expose — vérifié).
+3. Traiter la question au lot L13, avec le reste du contrat d'intégration.
+
+Arbitrage : **option 1**, rendue par Williams le 2026-09-03. Ce qu'elle emporte, et qui n'est pas
+anodin : **le fichier 04 est amendé**. `CLAUDE.md` §3-2 réserve cette signature à Williams ; elle est
+donnée ici, explicitement et pour ce seul objet. Le §7.1 gagne une ligne d'index, le sceau du pack
+(`docs/.pack-integrity.json`) est refait, une migration `0015` transcrit l'amendement, et
+`apps/api/schema-manifest.json` suit — sans quoi le contrôle « diff schéma-vs-04 » de la CI rougirait,
+ce qui est précisément la raison pour laquelle ce point était une escalade et non une correction.
+La migration porte un `@DOWN` réversible : un index se retire sans perte de donnée, contrairement à
+une contrainte de colonne — l'invariant 7 n'est pas en jeu ici, et c'est dit pour qu'on n'aille pas
+chercher une garantie qui n'a pas d'objet.
+Règle de précédence : **`CLAUDE.md` §3-2** (le fichier 04 est la signature de Williams) · 03 M8.1.
+Règle de précédence du pack **sans objet** : le pack était silencieux, il ne se contredisait pas.
+
+Décideur : **Williams**, 2026-09-03. Instruit par A10 le 2026-08-31, sur constat d'A17.
+Impact spec : **amendement horodaté du fichier 04 §7.1** + resceau de `docs/.pack-integrity.json`.
+
+## 2026-09-03 — [L7a] La fiche A-006 (cookies httpOnly de la console) est ABSORBÉE
+
+Fiche d'étage 2 ouverte le 2026-08-31 sur constat d'A51, revérifiée sur `main` le 2026-09-03 :
+`@fastify/cookie` 11.1.2 est épinglé au 11 §1 et présent dans `apps/api/package.json:21`, mais
+`git grep fastifyCookie -- apps/api/src` ne rend **rien**, et `/v1/auth/login` renvoie
+`{ accessToken, refreshToken }` **dans le corps**. `CLAUDE.md` §9 et 06 §8.1 imposent pourtant à la
+console des **cookies httpOnly SameSite=Lax + en-tête anti-CSRF**. Le Bearer du terrain est
+aujourd'hui le seul chemin d'authentification qui existe.
+
+Options : ABSORBÉE (budget pris sur la marge, 2 j max en Phase 1) · PHASE 2 (le défaut) · REFUSÉE.
+
+Arbitrage : **ABSORBÉE, dans L7a**, rendue par Williams le 2026-09-03 — l'arbitrage était calé à
+P-C, il est rendu avant. Le motif retenu est celui de la fiche : **ce n'est pas une fonctionnalité
+neuve, c'est une clause du contrat 11 §3 non encore tenue**, et sans elle L7-min n'est pas
+démontrable à P-E. Coût 0,5 j. Impact schéma **aucun**, impact crypto **aucun** — le jeton est le
+même, seul son transport change ; impact API : un chemin d'authentification de plus sur des routes
+existantes. Le plafond d'étage 1 n'est pas concerné : une fiche d'étage 2 absorbée s'impute sur la
+marge, pas sur les 0,5 j de micro-améliorations.
+**Séquencement, et il n'est pas cosmétique** : le contrôle d'acceptation A02 de l'incrément L7a
+s'exécute au moment de cet arbitrage, sur `ce1a80f`. « Un contrôle d'acceptation ne se tient pas sur
+un arbre qui bouge » (matrice E1-E47, leçon de la 1ʳᵉ passe L0). L'absorption est donc **posée mais
+non appliquée** : elle entre après le verdict A02, en incrément nommé, jamais sous le contrôle en
+cours. La proposer est un devoir, l'anticiper est une faute — l'appliquer sous une passe ouverte en
+serait une autre.
+Règle de précédence : **`CLAUDE.md` §6** (canal d'amélioration, étage 2 arbitré par Williams) ·
+11 §3 pour la clause elle-même. Précédence du pack sans objet — aucune divergence interne.
+
+Décideur : **Williams**, 2026-09-03.
+Impact spec : aucun sur `/docs` — la clause existait déjà au 11 §3 ; c'est le code qui la rejoint.
+
+## 2026-09-02 — [L5b] Rencontre tests A26 / code A22 : les tests adaptent leur ÉCHAFAUDAGE, jamais leurs assertions
+
+Écrits en parallèle sans se voir (règle de croisement 09 §5.6), les tests d'A26 supposaient un module
+`session/entretien.ts` (`demarrerEntretien`, `enregistrerReponse`, `typeSaisieReponse`) et un écran
+`<EcranEntretien missionId interviewId>` ; A22 a livré `ecriture-session.ts` / `ecriture-reponses.ts`
+(`ecrireReponse`) / `valeurs.ts`, et un écran SANS prop qui lit la session courante mémorisée
+(`position.ts` — la reprise là où l'auditeur s'est arrêté, 03 §17) derrière `AccesEntretien.tsx`.
+Première rencontre : 28/28 rouges sur l'écran, deux fichiers `session/` qui ne chargent pas — une seule
+cause, le contrat nominal.
+
+Options :
+
+1. **Les tests adaptent imports, props et amorçage** (mémoriser la session avant de monter) et gardent
+   chaque assertion ; tout ce qui rougit ensuite est un défaut d'A22, corrigé par A22.
+2. A22 ajoute une façade `entretien.ts` et des props à l'écran pour satisfaire les tests tels quels.
+3. Chacun corrige moitié-moitié.
+
+Arbitrage : **option 1.** Un test est le contrat du comportement observable, pas du nom d'un module
+ni de la façon dont un écran reçoit son contexte ; une façade écrite pour un test est du code de
+production sans consommateur réel (garde `graphe-modules`). La lecture de la session courante en
+mémoire locale est le mécanisme de reprise du 03 §17, pas un caprice. **Règle de précédence sans
+objet.**
+
+Décideur : A01
+Impact spec : aucun. `vitest.setup.interface.ts` : shim `matchMedia` (jsdom), étage 1.
+
+## 2026-09-02 — [L5b] La valeur d'une réponse oui/non est `'oui' | 'non'`, jamais un booléen
+
+Rencontre A26/A22 : `valeurs.ts` typait `yes_no` en `z.boolean()` ; le 04 §7.3 ne fixe la forme de `v`
+que par le barème (`{"map":{"oui":5,"non":0}}`), et `packages/shared` expose déjà `VALEURS_OUI_NON`.
+
+Options :
+
+1. **`'oui' | 'non'`**, la clé du barème partagé — scorable au siège sans traduction, affichable telle
+   quelle en descente.
+2. `true | false`, traduit au scoring.
+
+Arbitrage : **option 1.** Une valeur qui ne se score pas avec le barème du 04 sans une table de
+correspondance est une valeur dans la mauvaise forme ; la traduction est un endroit de plus où « oui »
+peut devenir 0. **Précédence : 04 §7.3** (le barème est la spec de la valeur).
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-02 — [L5b] Trois doutes de la rencontre tranchés : note volante orpheline, question ad hoc, garde à l'écriture
+
+Constats A26 : (a) `DemandeNoteVolante.interviewId: string` alors que le 04 (P1-5) et `IndexAttachment`
+admettent `null` ; (b) la question ad hoc est placée en fin de parcours par l'écran, « juste après la
+courante » par le test ; (c) 37 cas rouges pour une seule cause — `ecrireReponse` recopie `value` sans
+`valeurTypeeSchema`, sans contrôle du type de question, de `allowRangeSnapshot`, des bornes, ni du
+motif de non-communication contre la liste fermée.
+
+Options :
+
+1. **(a) `interviewId: string | null`** comme le 04 — la capture hors session est L5c, mais le type ne
+   doit pas interdire ce que la base admet ; **(b) la question ad hoc s'insère juste APRÈS la courante**
+   (03 §17.5 : elle naît d'une réponse, elle se pose dans la foulée) ; **(c) la validation est une garde
+   à l'ÉCRITURE**, pas un typage de lecture — une saisie refusée n'écrit rien et ne dégrade pas la
+   valeur valide.
+2. (a) garder `string` ; (b) fin de parcours ; (c) valider au push seulement.
+
+Arbitrage : **option 1 sur les trois.** Sur (c) : la PWA est la seule à connaître la question au
+moment de la saisie ; valider au push, c'est découvrir hors ligne, des heures plus tard, qu'une
+cotation n'existait pas. **Précédence : invariant 7** (rien n'est écrasé par une saisie invalide) et
+**05 §9.3** (le contrat d'ops porte des valeurs valides). Les trois autres défauts (fourchette
+incohérente émise par l'écran, note existante effacée à la reprise, état d'erreur transitoire au
+premier rendu) ne sont pas des doutes : ce sont des défauts, corrigés par A22.
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-02 — [L5b] Le script d'accord de participation a un libellé par défaut, et une seule définition
+
+03 §19.1 et le 06 exigent qu'un entretien ne démarre pas sans accord de participation. Le refus sans
+accord EST testé (`ecriture-session.ts`, `motifRefusEcriture`) ; la PHRASE que l'auditeur lit à la
+personne, elle, n'existait nulle part — ni dans le pack, ni dans le code. Un écran qui exige un
+accord sans dire ce à quoi la personne consent transforme une garantie RGPD en case à cocher.
+
+Options :
+
+1. **Poser un libellé par défaut V1**, en CONSTANTE UNIQUE (`PHRASE_SCRIPT_ACCORD`), jamais recopiée,
+   avec réserve explicite de relecture juridique avant la porte P-E.
+2. Laisser l'auditeur improviser — le refus reste testé, le propos ne l'est pas.
+3. Attendre un texte de juriste avant de livrer L5b.
+
+Arbitrage : **option 1.** Libellé retenu : « Cet entretien s'inscrit dans un audit d'organisation
+commandé par votre direction. Je note vos réponses dans un outil sécurisé ; elles servent uniquement
+à établir le diagnostic et le rapport d'audit. Le rapport ne vous attribue aucun propos
+nominativement. Vous pouvez refuser de répondre à une question, ou demander l'arrêt de l'entretien,
+à tout moment et sans avoir à vous justifier. Êtes-vous d'accord pour que nous commencions ? »
+Aucun nom de client, aucun libellé variable : **invariant 2** tenu par construction — le commanditaire
+est désigné par « votre direction », qui est vrai de toute mission. Une constante unique parce qu'un
+texte juridique recopié à deux endroits finit par exister en deux versions, dont une seule est relue.
+**Précédence : invariant 2** (aucune référence client) et **invariant 5** (interface en français) ;
+la règle §32-36 > §24-31 est sans objet, le pack est muet sur ce libellé.
+Réserve tracée en fiche `AMELIORATIONS.md` étage 1 : « relecture juridique du script d'accord avant
+la porte P-E » — c'est un libellé par défaut, pas un texte validé par un juriste.
+
+Décideur : Williams (délégation du 2026-09-02 à la session pilote)
+Impact spec : aucun.
+
+## 2026-09-03 — [L6a] Le serveur BORNE `client_updated_at` à 5 minutes symétriques, il ne le croit pas
+
+05 §9.4 règle les conflits au dernier écrivain (LWW) sur `client_updated_at`, une valeur produite par
+l'horloge de l'appareil. Le scénario §9.8 « horloge locale +3 h » n'est donc pas un cas de bord : une
+tablette en avance fait gagner sa saisie contre TOUTES les suivantes, définitivement, et rien ne le
+signale. Le pack décrit le décalage d'horloge (§9.2) mais ne dit pas ce que le serveur en fait.
+
+Options :
+
+1. **Borner** : au-delà de 5 minutes dans le futur (tolérance symétrique, donc ±5 min), le serveur
+   écrête `client_updated_at` à son propre `now()` et le journalise. Ni rejet, ni confiance aveugle.
+2. Rejeter l'opération — l'auditeur perd sa saisie pour un défaut d'horloge qu'il ne contrôle pas.
+3. Faire confiance à l'appareil — c'est l'état actuel, et c'est le défaut décrit ci-dessus.
+
+Arbitrage : **option 1.** Écrêter préserve la donnée (elle est acceptée) tout en retirant l'avantage
+indu au LWW ; journaliser rend le décalage VISIBLE plutôt que silencieux. La symétrie évite l'écueil
+inverse : une tablette en retard ne doit pas non plus perdre systématiquement.
+**Précédence : invariant 7** — « rien n'est jamais silencieusement écrasé » : une horloge fausse
+écrase silencieusement, c'est précisément ce que l'invariant interdit. Précision d'exécution du
+§9.4, pas un amendement.
+
+Décideur : Williams (délégation du 2026-09-02 à la session pilote)
+Impact spec : aucun.
+
+## 2026-09-03 — [L6b] Le curseur de pull est COMPOSITE `(updated_at, id)`, pas un timestamptz seul
+
+Le 11 §4 décrit le curseur de pull comme un `timestamptz` (`nextSince`). Un curseur mono-colonne a
+deux défauts mesurables, pas théoriques : il SAUTE les lignes qui partagent le même `updated_at` de
+part et d'autre d'une frontière de page, et il BOUCLE sans avancer si plus de `limit` lignes
+partagent la même seconde. Les deux sont silencieux : le terrain croit avoir tout reçu.
+
+Options :
+
+1. **Curseur composite `(updated_at, id)`**, ordre `ORDER BY updated_at, id` et prédicat
+   `(updated_at, id) > (:since, :sinceId)` — le keyset que le 11 §3 impose déjà partout ailleurs.
+2. Garder le timestamptz seul et compenser par un recouvrement d'une seconde — masque le saut, ne
+   supprime ni le doublon ni la boucle.
+
+Arbitrage : **option 1.** Le 11 §3 dit « Pagination : keyset partout (`?limit=50&after=<curseur>`),
+jamais d'offset » : un curseur non unique n'est pas un keyset, c'est un offset déguisé en date.
+**Précédence : 11 §3 (conventions d'API) sur la formulation illustrative du 11 §4** — précision
+d'exécution du §9.5, pas un amendement du pack. `nextSince` reste le nom du champ ; il porte
+désormais les deux composantes.
+
+Décideur : Williams (délégation du 2026-09-02 à la session pilote)
+Impact spec : aucun.
+
+## 2026-09-03 — [L5b] Ancres visibles ET consigne consultant : où chacune se pose sur une échelle
+
+Bloquant B2 de la revue A29. Le pack exige les DEUX et ne dit pas comment les composer : 03 §33.3
+veut les ancres de cotation visibles sous l'échelle, 03 M3.1 veut la consigne consultant au centre
+de l'écran, et 03 §17.5 rappelle que « la consigne porte le savoir-faire ». L'écran tranchait la
+contradiction en supprimant la consigne sur `scale_1_5` — le type le plus fréquent d'un audit.
+
+Options :
+
+1. **Les ancres restent sous l'échelle ; la consigne reste à SA place, au-dessus de la saisie, pour
+   les onze types.** La guidance d'une échelle est découpée par le parseur du pack : les fragments
+   `N = libellé` alimentent `EchelleAncree`, la prose alimente la consigne.
+2. Passer la consigne à `EchelleAncree` pour qu'elle la rende au-dessus de ses ancres — la consigne
+   change alors de place selon le type de question.
+3. Afficher la guidance brute au-dessus de l'échelle — l'auditeur lit deux fois « 1 = … 5 = … ».
+
+Arbitrage : **option 1.** Le critère qui départage est E23, « novice autonome en moins de
+30 minutes » : ce qui aide un novice n'est pas le placement optimal de chaque élément, c'est la
+CONSTANCE de placement d'un écran à l'autre. Une consigne qui se déplace selon le type de réponse
+oblige à la chercher onze fois. L'option 3 est écartée pour la raison inverse : une information
+affichée deux fois cesse d'être lue, et ce sont les ancres qu'on cesserait de lire — celles-là mêmes
+que §33.3 exige visibles. L'extraction se fait dans `lireAncresDeCotation` (packages/shared), par le
+MÊME découpage que les ancres et non par un second parseur : deux découpages du même texte finissent
+par ne plus être d'accord, et c'est la consigne qui disparaîtrait à nouveau.
+**Précédence : §32-36 (03 §33.3, ancres visibles) et §16-22 (03 §17.5, la consigne porte le
+savoir-faire) sont tous deux honorés — il n'y avait pas conflit de précédence, mais absence de
+règle de composition.** Elle est posée ici.
+
+Décideur : A20, sur bloquant A29
+Impact spec : aucun.
+
+## 2026-09-03 — [L5b] Deux options ad hoc au même code : on SUFFIXE, on ne refuse pas
+
+Non bloquante C4 de la revue A29. `codeDOption` normalise le libellé en écrasant la ponctuation :
+« Oui ! » et « Oui ? » rendaient tous deux `oui`. Deux options DISTINCTES proposées par l'auditeur
+devenaient indiscernables une fois écrites dans `answers.value` — et comme `value` EST la donnée
+d'audit, la confusion ne se voyait qu'au dépouillement, quand plus personne ne peut dire laquelle
+l'interlocuteur avait choisie.
+
+Options :
+
+1. **Suffixer** les collisions : `oui`, `oui_2`, `oui_3`… La première occurrence garde le code nu.
+2. **Refuser** la saisie et demander à l'auditeur de reformuler l'option.
+3. **Dédupliquer** en fusionnant les deux options en une seule.
+
+Arbitrage : **option 1.** L'option 2 arrête l'auditeur EN PLEINE QUESTION, devant un interlocuteur,
+pour une raison technique qu'il ne peut pas comprendre — 03 §17.4 (« rien de ce qui se dit ne doit
+attendre qu'on trouve la bonne case ») interdit ce genre d'obstacle. L'option 3 perd un choix que
+l'auditeur a délibérément écrit : c'est une suppression silencieuse de contenu. Le suffixe conserve
+les deux options, reste lisible dans un export, et ne change rien aux questionnaires qui n'ont
+jamais eu de collision. **Précédence : invariant 7** — « rien n'est jamais silencieusement écrasé
+ou supprimé » ; les options 2 et 3 y contreviennent chacune à leur façon.
+
+Décideur : A20, sur revue A29
+Impact spec : aucun.
+
+## 2026-09-03 — [L5b] Amendement horodaté à la décision B2 : pourquoi le test devait être écrit AVANT
+
+L'entrée du même jour « Ancres visibles ET consigne consultant : où chacune se pose sur une échelle »
+dit CE QUI a été décidé. Elle ne dit pas ce que la mise en œuvre a appris, et c'est la partie qui
+sert au lot suivant. Elle est ajoutée ici plutôt qu'insérée là-bas : `DECISIONS.md` est append-only
+(11 §9bis), une entrée ne se réécrit pas après coup.
+
+Options :
+
+1. **Consigner l'enseignement** comme amendement horodaté de l'entrée B2.
+2. Le laisser vivre dans le message de commit `c043c3d` et dans `ETAT.md` seuls.
+
+Arbitrage : **option 1.** Un message de commit se retrouve si on sait qu'il existe ; `DECISIONS.md`
+se lit au démarrage de chaque session. Ce qui doit survivre :
+
+**La première correction de B2 rendait `null`, et elle serait partie VERTE ET FAUSSE.** Elle
+collectait les fragments qui ne matchent PAS le motif d'ancre. Or `SEPARATEURS_ANCRES` vaut
+`/[·•;\r\n|]+/` : il ne coupe **ni sur l'espace ni sur le point**. « Faire préciser QUI valide. 1 =
+aucun » est donc **un seul fragment**, qui matche comme ancre — la consigne se faisait avaler par
+l'ancre qui la suit, et la fonction rendait « pas de consigne » avec l'air d'avoir travaillé. La
+prose vit DEVANT l'ancre, dans le même fragment ; on la récupère par
+`fragment.slice(0, trouve.index)`.
+
+Le test avait été écrit d'abord. Il a rougi sur `expected null to be 'Faire préciser QUI valide…'`,
+et c'est la seule raison pour laquelle le défaut a été vu : le correctif compilait, ne cassait aucun
+test existant, et fermait le bloquant **en apparence**. Sans TDD, le rejeu A29 aurait relu un
+diff plausible et la consigne serait restée absente de l'écran le plus fréquent de l'outil.
+
+**Corollaire opérationnel pour L5c et L6** : quand un correctif porte sur un PARSEUR, le test doit
+porter sur une entrée RÉELLE du domaine, jamais sur une entrée fabriquée à l'image de la
+compréhension qu'on a du parseur — c'est cette compréhension qui est fausse.
+**Précédence : sans objet** — aucune règle du pack n'est en cause, c'est une leçon de méthode
+adossée au pipeline 09 §3-2 (« TDD sur les parties critiques : tests écrits AVANT »).
+
+Décideur : A20
+Impact spec : aucun — amendement horodaté de l'entrée B2 du 2026-09-03.
+
+## 2026-09-03 — [L5b] Quand un libellé d'option VAUT DÉJÀ le suffixe généré : on cherche le premier code libre
+
+Réserve R3 du rejeu A29. L'arbitrage « suffixer plutôt que refuser » est endossé ; c'est son
+implémentation qui était incomplète. Mesuré : `['Oui', 'Oui 2', 'Oui !']` rendait
+`['oui', 'oui_2', 'oui_2']` — le suffixe généré entrait en collision avec un libellé qui vaut
+littéralement `oui_2`. La correction de C4 reproduisait donc exactement le défaut qu'elle fermait.
+
+Options :
+
+1. **Chercher le premier code LIBRE** : boucler tant que le candidat est pris, en consultant
+   l'ensemble de tous les codes déjà attribués.
+2. Réserver le motif `_<chiffre>` en refusant tout libellé qui s'y réduit.
+3. Préfixer les codes générés d'un marqueur (`oui__2`) pour qu'ils ne puissent jamais collisionner
+   avec un code issu d'un libellé.
+
+Arbitrage : **option 1.** L'option 2 rend imprévisible pour l'auditeur ce qu'il a le droit d'écrire,
+et pour une raison qu'aucun écran ne peut lui expliquer. L'option 3 fabrique un code illisible dans
+un export, alors que ces codes finissent dans `answers.value` et sont relus par un humain au
+dépouillement. L'option 1 ne demande rien à personne et se vérifie par une propriété simple :
+`new Set(codes).size === codes.length`, éprouvée sur trois ORDRES différents et un lot adverse —
+un compteur par base n'est qu'une approximation de la seule vérité, l'ensemble des codes attribués.
+Conséquence assumée : `['Oui', 'Oui !', 'Oui 2', 'Oui ?']` rend `['oui', 'oui_2', 'oui_2_2',
+'oui_3']`. Le code `oui_2_2` est laid ; il est UNIQUE, et l'unicité prime la beauté sur une donnée
+d'audit. **Précédence : invariant 7** — rien n'est silencieusement écrasé.
+
+Décideur : A20, sur réserve R3 du rejeu A29
+Impact spec : aucun.
+
+## 2026-09-03 — [L5b] Un module d'affichage au fuseau se rattache à E32, jamais à l'écran qui le consomme
+
+Réserve R5 du rejeu A29. `session/fuseau.ts` citait E13 (« écran d'entretien 3 zones ») au motif que
+l'indicateur « Enregistré à HH:mm » consomme son résultat. Conséquence mesurable : **E32 n'avait
+aucun code rattaché depuis ce module**, alors que le module ne fait QUE ce que E32 décrit. A02 coche
+la traçabilité dans les deux sens à l'étape 6 ; une exigence sans code rattaché s'y voit.
+
+Options :
+
+1. **Rattacher un module à l'exigence qu'il RÉALISE** — ici E32 (fuseaux, devises, interface
+   française), comme le fait déjà son jumeau `local/horloge.ts`.
+2. Le rattacher à l'écran qui le consomme, pour que la lecture « à quoi sert ce fichier » soit
+   immédiate.
+
+Arbitrage : **option 1**, et la règle vaut au-delà de ce fichier : **une glose cite ce que le module
+FAIT, pas ce qui l'appelle.** Un consommateur change ; ce que réalise un module ne change pas sans
+que le module change. La règle de l'option 2 ferait dériver toute la traçabilité vers les écrans, et
+les exigences transverses (fuseaux, sécurité, hors ligne) n'auraient plus jamais de code rattaché.
+Même correction pour `session/enregistrement.ts`, qui citait E38 (« sync ≥ 1×/jour + export de
+secours ») : la purge sur `pagehide` protège la SAISIE EN COURS sur l'appareil, elle ne remonte rien
+au siège et ne produit aucun export — E38 est servie par L5c et L6.
+**C'est la troisième occurrence de cette classe de défaut dans le lot** (E7 confondue avec
+l'invariant 7, puis ces deux-ci) : elle mérite un contrôle outillé et pas de la vigilance. Fiche
+`AMELIORATIONS.md` étage 2 à ouvrir — le garde actuel compare la glose au LIBELLÉ de l'exigence,
+il ne peut pas voir qu'un module réalise une AUTRE exigence que celle qu'il cite.
+**Précédence : sans objet** — le pack ne règle pas la forme des gloses ; 11 §9bis exige la
+traçabilité, pas sa syntaxe.
+
+Décideur : A20, sur réserve R5 du rejeu A29
+Impact spec : aucun.
+
+## 2026-09-03 — [L5b] Amendement à la règle R5 : elle porte sur le CRITÈRE DE CHOIX, jamais sur le NOMBRE de gloses
+
+L'entrée du même jour (« Un module d'affichage au fuseau se rattache à E32, jamais à l'écran qui le
+consomme ») pose une règle juste et incomplète. Lue vite, « une glose cite ce que le module FAIT »
+peut s'entendre « une glose = une exigence ». Ce serait un contresens coûteux, et A29 l'a signalé
+avant qu'il ne se généralise : `session/ecriture-reponses.ts` cite légitimement **E13 + E37 + E12 +
+E7**, parce qu'il réalise réellement les quatre.
+
+Options :
+
+1. **Préciser la règle** : elle départage QUELLES exigences citer, pas COMBIEN. Un module en réalise
+   souvent plusieurs ; il les cite toutes.
+2. Laisser la formulation en l'état et compter sur la lecture de bon sens.
+
+Arbitrage : **option 1**, et la règle complète s'énonce ainsi :
+**cite une exigence si le module la RÉALISE ; ne la cite pas s'il se contente de servir un module
+qui la réalise. Aucun plafond, aucun plancher au-delà de un.** Le test mental qui départage :
+« si cette exigence disparaissait du pack, ce fichier perdrait-il sa raison d'être, ou seulement un
+appelant ? » — le premier cas se cite, le second non. `fuseau.ts` perdrait sa raison d'être sans E32
+et n'en perdrait aucune sans E13 : c'est ce qui a tranché. `ecriture-reponses.ts` en perdrait une
+pour chacune des quatre qu'il cite.
+L'option 2 est écartée pour un motif mesuré cette nuit : trois gloses fausses dans un seul lot, dont
+deux passées sous le garde. Une règle qui repose sur la lecture de bon sens produit exactement ce
+que ce dépôt passe son temps à réparer. **Précédence : sans objet** — le pack exige la traçabilité
+(11 §9bis), pas sa syntaxe.
+
+Décideur : A20, sur précision A29
+Impact spec : aucun — amendement horodaté de l'entrée R5 du 2026-09-03.
+
+## 2026-09-03 — [L5b] AMENDEMENT HORODATÉ à la décision Williams du 2026-09-02 sur le script d'accord : le texte EN SERVICE n'est pas celui qui a été arbitré
+
+Réserve R3 du contrôle A02, et elle est fondée. L'entrée du 2026-09-02 (« Le script d'accord de
+participation a un libellé par défaut, et une seule définition », décideur **Williams**) fixe un
+libellé. Le texte réellement lu aux interlocuteurs — `DemarrageEntretien.tsx:19-23`, affiché
+ligne 53, version `v1` — **est un autre texte**. La divergence était documentée en fiche
+`AMELIORATIONS.md` ; elle ne l'était PAS ici. 11 §9bis : une décision non tracée dans ce format
+n'existe pas — et une session neuve lit la décision AVANT le code. Elle lisait donc, depuis 24 h, un
+engagement RGPD qui n'est pas celui qui est en service.
+
+**TROIS ÉCARTS, pas deux.** Le troisième a été trouvé par A02, ni par moi ni par le pilote :
+
+|     | Arbitré le 2026-09-02                                                                                                                     | En service (`v1`)                                                                                                                                  |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | « Le rapport ne vous attribue **aucun propos nominativement**. »                                                                          | « elles sont **consignées sous votre nom et votre fonction** »                                                                                     |
+| 2   | « Je note vos réponses dans un outil sécurisé ; elles servent **uniquement** à établir le diagnostic et le rapport d'audit. »             | « conservées de façon sécurisée, et **ne servent à aucune évaluation individuelle** »                                                              |
+| 3   | « Vous pouvez refuser de répondre à une question, **ou demander l'arrêt de l'entretien, à tout moment et sans avoir à vous justifier**. » | « Vous pouvez ne pas répondre à une question, **ou demander qu'une information ne soit pas communiquée**. » — **le droit d'INTERROMPRE a disparu** |
+
+Options :
+
+1. **Tracer l'écart ici et laisser les deux textes intacts** ; la rédaction va au juriste.
+2. Aligner le code sur le texte arbitré.
+3. Amender la décision pour qu'elle adopte le texte en service.
+
+Arbitrage : **option 1.** Les options 2 et 3 exigent toutes deux de choisir QUEL engagement RGPD
+l'entreprise prend envers des personnes physiques — l'attribution nominative dans le livrable et le
+droit d'interrompre un entretien ne sont pas des questions de rédaction. **Ce choix n'appartient pas
+à un agent**, et le trancher vite serait pire que l'écart lui-même. L'écart est donc RENDU VISIBLE
+là où il se lit en premier ; la fiche `AMELIORATIONS.md` porte la demande de relecture juridique
+avant P-E, avec la note d'exécution qui compte : le jour où le texte change,
+`VERSION_MENTION_INFORMATION` doit être incrémentée, sans quoi des sessions déjà collectées seraient
+rattachées à une version qu'elles n'ont jamais entendue (invariant 7).
+**Précédence : invariant 7** pour le versionnement ; sans objet pour le reste — le pack ne rédige
+pas ce texte, il exige seulement qu'il soit versionné et enregistré (06 §10.4).
+
+Décideur : A20, sur réserve R3 d'A02 — **la décision de fond reste à Williams**
+Impact spec : aucun — amendement horodaté de l'entrée du 2026-09-02.
+
+## 2026-09-03 — [L5b] Doute de spec transmis à A01 : `apps/field/src/ecrans/**` doit-il entrer dans les chemins critiques ?
+
+Mesuré : `EcranEntretien.tsx` est à **11/26 fonctions** et `AccesEntretien.tsx` à **0 % de lignes**,
+alors que ce dernier est la porte d'entrée de l'incrément. Cinq des douze formes de saisie
+(`SaisieDevise`, `SaisieDate`, `ChoixUnique`, `SaisieTableau`) sont à `FNDA:0` — aucun test ne les
+rend. Le glob `apps/field/src/ecrans/**` n'est PAS dans `.github/coverage-critical-paths.json`.
+
+Options :
+
+1. **Ne pas l'ajouter maintenant, et écrire pourquoi** — motif A29 : viser 90 % sur un composant de
+   872 lignes ferait courir après des rappels JSX sans rien prouver ; le vrai constat est que
+   l'orchestration d'écriture vit DANS le composant, ce qui la rend difficile à mesurer.
+2. L'ajouter tout de suite : la CI rougirait jusqu'à ce que les écrans soient testés.
+3. Extraire l'orchestration hors du composant, PUIS mettre le module extrait sous seuil.
+
+Arbitrage : **option 1 pour L5b — et la distinction d'A02 est conservée ici MOT POUR MOT, parce
+qu'elle est la vraie décision et qu'elle appartient à A01, pas à moi** :
+
+> Le motif d'A29 est recevable comme raison de **ne pas le faire MAINTENANT** ; il n'est pas
+> recevable comme raison de **ne pas le faire**.
+
+Le dépôt a déjà corrigé **trois fois** cette asymétrie, sous une formule qui vit dans
+`coverage-critical-paths.json` : « un seuil qui mesure le dépôt mais pas la route mesure la moitié
+qui ne décide de rien » — pour `scoping`, pour `users`, puis pour `local/**` où le port d'écriture a
+été joint au coffre. Un écran de collecte est la route de la donnée d'audit. **L'option 3 est donc
+la sortie, et elle est due à L5c ou à L6** ; ce qui est tranché ici n'est que le calendrier.
+En attendant, le trou est NOMMÉ dans la recette P-C et dans `apps/field/README.md`, pas seulement
+dans ce registre. **Précédence : sans objet** — la DoD (09 §3) énumère sync, crypto locale, scoring
+et RBAC ; les écrans n'y figurent pas, il n'y a donc pas d'infraction, mais une décision à prendre.
+
+Décideur : A20 pour le calendrier de L5b — **arbitrage de fond attendu d'A01**
+Impact spec : aucun.
+
+## 2026-09-03 — [L5b] Borne de la doctrine de retrait : jusqu'à UNE glose, jamais jusqu'à ZÉRO
+
+Amendement à l'entrée du même jour « la règle porte sur le CRITÈRE DE CHOIX, jamais sur le NOMBRE ».
+Elle disait « aucun plafond, aucun plancher au-delà de un » et j'ai appliqué le retrait sur
+`peripherie-entretien.test.ts` (E43 supprimée, quatre citations restantes). A02 valide la règle et
+pose la limite qui lui manquait — sans elle, elle autorise à rendre un fichier INVISIBLE en croyant
+l'assainir.
+
+Options :
+
+1. **Retirer une glose est légitime jusqu'à UNE citation restante, jamais jusqu'à ZÉRO.**
+2. Laisser la règle sans borne : un fichier dont aucune exigence ne passe le test perd ses gloses.
+
+Arbitrage : **option 1.** Le motif est mécanique, pas esthétique : `check:tracabilite` documente
+lui-même son angle mort n° 6 — « un fichier livré SANS aucune ligne de traçabilité est INVISIBLE
+pour ce script, il n'a aucune citation à vérifier ». Un fichier vidé de ses gloses échappe donc au
+contrôle du sens 1 **et** tombe sous le refus du sens 2 (code orphelin) que le gardien A02 applique
+à l'étape 6. Le retrait, poussé jusqu'à zéro, produirait exactement l'effet que la règle veut
+empêcher : un module qui n'est rattaché à rien.
+**Conséquence pratique** : si aucune exigence citée ne passe le test « ce fichier perdrait-il sa
+raison d'être ? », ce n'est pas la glose qu'il faut supprimer — c'est le fichier qui n'a pas de
+raison d'être, et cela remonte à A01 comme du code orphelin, pas comme une correction d'en-tête.
+**Précédence : sans objet** — le pack exige la traçabilité (11 §9bis), pas sa syntaxe.
+
+Décideur : A20, sur validation et borne posées par A02
+Impact spec : aucun — amendement horodaté de l'entrée R5 du 2026-09-03.
 
 ## 2026-09-03 — [gouvernance] La délégation de merge s'étend aux PR d'incrément #30, #31 et #32
 
@@ -7949,3 +8609,639 @@ ici. Règle de précédence : **§32-36 > §24-31** — 09 §5.9 (le 04 inviolab
 l'option 3 ; et 07 §12 (la table des lots) borne ce qui est livrable en Phase 1.
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun. **Amendement candidat à P-D** si l'option 3 est jugée nécessaire.
+
+## 2026-09-05 — [L5b] Un bloc imbriqué dans un écran doit-il lever son PROPRE `role="alert"` ?
+
+À la refusion `lot/l5a` → `lot/l5b`, le test `@critique` d'`EcranAccueil` (écrit par A26 sur L5a)
+tombe sur `<AccesEntretien />` (écrit par A22 sur L5b) : `useLiveQuery` **relance** le rejet de la
+lecture locale pendant le rendu, aucune frontière d'erreur ne le capte, l'arbre entier tombe — et
+l'état d'erreur que l'écran venait d'établir disparaît **au moment précis où il devait servir**.
+Le correctif est sans discussion (capter le rejet DANS la requête, comme le fait déjà `EcranAccueil`
+depuis R-L5a-7). La question qui reste : le bloc doit-il, en plus, afficher son propre état d'erreur
+en `ZoneEtat nature="erreur"` — donc un second `role="alert"` — pour tenir les 4 états du 03 §33.2 ?
+
+Options :
+
+1. **`ZoneEtat nature="erreur"`** dans le bloc : quatre états portés par le même composant partout,
+   mais **deux `role="alert"` pour une seule cause** sur un écran qui en lève déjà un.
+2. **`Message ton="avertissement"`** (`role="status"`) dans le bloc, l'alerte interruptive restant
+   celle de l'écran : une cause, une interruption ; le bloc dit la conséquence locale
+   (« impossible de vérifier si un entretien était en cours ») et garde « Nouvel entretien » actif.
+3. Ne rien afficher dans le bloc. **Écartée** : l'auditeur qui avait un entretien ouvert ne verrait
+   que « Nouvel entretien » et croirait qu'aucun n'était en cours — un silence qui ment (invariant 7).
+
+Arbitrage : **option 2, appliquée**. Les quatre états sont bien tous rendus (chargement · vide ·
+erreur · nominal), tous par des composants d'A21 ; seul le **rôle ARIA** de l'erreur change. Deux
+raisons, aucune n'est un artefact de test : `Message` lui-même documente que `alert` **interrompt**
+le lecteur d'écran et que le mettre partout revient à couper la parole à un auditeur malvoyant,
+quand 03 §17.3 interdit déjà toute notification intrusive en entretien ; et c'est la doctrine
+« une seule source pour une alerte » de R-L5a-8 — deux endroits qui annoncent le même fait finissent
+par l'annoncer différemment. **Précédence : sans objet** — 03 §33.2 exige les quatre états, il
+n'assigne aucun rôle ARIA ; aucune section du pack n'est en conflit avec une autre ici.
+
+Décideur : A22 pour le rendu de son composant — **le principe « un écran, une alerte » est soumis à
+A01**, qui peut le poser en convention 11 §3 s'il le juge général.
+Impact spec : aucun. Aucun test modifié : le test d'A26 avait raison, et il reste tel quel.
+
+## 2026-09-05 — [l5b] Aucune photo n'entre dans l'application : qui livre la capture, et où vivent les octets ?
+
+Constat mesuré sur `c5665e1` : `grep -rn "type=\"file\"|capture=|kind: 'photo'" apps/field/src
+packages/ui/src` ne rend **aucune ligne**. `compresserPhoto` (03 §29 R2, livré par L5c dans
+`sauvegarde/photos.ts`) n'a donc **aucun appelant possible** — la capture n'existe nulle part. Le
+pack la demande deux fois : 03 §17.4 (barre fixe « … Note · **Photo** · Recherche · Suivant ») et
+03 M3.1 (« ajout de pièce jointe (photo — tableau blanc, process affiché en atelier) »).
+Ce n'est pas une fonctionnalité manquante au sens de 09 §5.9 : elle est **spécifiée**. C'est une
+**attribution de lot restée vide** — `docs/conception/LOT_L5.md` met « photos » hors périmètre L5b
+et donne « compression R2 » à L5c : L5c a livré la compression, personne n'a livré la capture, et
+chaque branche est verte séparément. Même angle mort structurel que l'écart R-L5a-7 fermé ce jour.
+
+Trois obstacles, tous hors de la main d'A22 :
+
+1. `compresserPhoto` vit sur `lot/l5c`, non fusionnée et sous réserve A29 — l'appeler exige de
+   fusionner la branche d'un autre agent ou de dupliquer le module (on compose, on ne recrée pas).
+2. **Aucun endroit local ne peut recevoir les octets** : pas de table binaire dans `local/base.ts`,
+   et `chargeAttachmentSchema` n'a que des scalaires. La charge est **sérialisée en JSON avant
+   chiffrement** — un `Blob` ne peut pas transiter. Il faut une table **et** un
+   `VERSION_SCHEMA_LOCAL` incrémenté, donc une migration de données terrain : couche d'A24.
+3. L'attachement n'a **pas de statut d'envoi** local, alors que 05 §9.6 l'exige (« une réponse peut
+   être synchronisée avant sa photo ») ; le protocole de chunks est L6/A25.
+
+Options :
+
+1. A22 fusionne `lot/l5c` et étend le schéma local. **Écartée** : deux interdits d'un coup, et une
+   migration de données terrain décidée par l'agent qui en a le moins la vue.
+2. A22 n'écrit que les métadonnées, les octets sont abandonnés. **Écartée, et c'est la pire** :
+   l'écran promettrait une photo que rien ne conserve — la perte silencieuse que l'**invariant 7**
+   interdit.
+3. A22 s'arrête, mesure, trace, et rend le point. Le bouton `disabled` de `ZoneQuestion.tsx` reste :
+   il est **honnête** — il tient sa place du §17.4 et dit qu'il ne fait rien encore.
+
+Arbitrage : **option 3**, que le mandat de reprise d'A22 prévoit mot pour mot (« si le format
+d'attachement ou le protocole de chunks t'oblige à toucher un fichier qui n'est pas à toi,
+arrête-toi et remonte-le »). **Précédence : sans objet** — aucune divergence interne du pack :
+03 §17.4, 03 §29 R2 et 05 §9.6 concordent ; ce qui manque est une **attribution**, pas une règle.
+Ce que la décision demande : **un lot propriétaire de la chaîne photo de bout en bout** — schéma
+local binaire (A24) → capture dans l'écran de session (A22) → `compresserPhoto` (A23, déjà écrit) →
+statut d'envoi et chunks §9.6 (A25). Tant qu'elle n'est pas attribuée, `photos.ts` est du code sans
+appelant et 03 §17.4 n'est pas tenu.
+
+Décideur : **A20** (découpage L5b / L5c / couche locale), **A01** si l'attribution déborde sur L6.
+A22 ne tranche pas et n'anticipe pas.
+Impact spec : aucun amendement. Écart de conformité **ouvert et nommé** sur 03 §17.4 et 03 §29 R2 —
+à porter au contrôle A02 de la porte P-C.
+
+## 2026-09-05 — [méthode] TDD par l'auteur et règle de croisement : les deux se contredisent-elles ?
+
+`CLAUDE.md` §4 exige **le TDD** sur les parties critiques (« tests écrits AVANT ») et, deux lignes plus
+bas, que « le code de test n'est JAMAIS écrit par l'agent qui a écrit le code testé » (09 §5.6). Lus
+à la lettre, les deux sont incompatibles : celui qui écrit le test avant le code est l'auteur du
+code. A23 (L5c, 136 tests) et A32 (L7b, 990 lignes) ont écrit leurs tests de conception en le
+déclarant ; A37 le relève (M5) : déclaré, mais **non tracé**, donc inexistant au sens du §7.
+
+Options :
+
+1. Interdire à l'auteur tout test. **Écartée** : elle interdit le TDD que le §4 impose, et un test
+   écrit après coup par un tiers sur une machine à états n'est pas un test écrit _avant_.
+2. **Distinguer deux couches** : les **tests de conception** (TDD, écrits par l'auteur, déclarés
+   dans leur en-tête) et les **tests d'acceptation** (`@critique`, par rôle, 4 états, E2E, preuve par
+   bascule), **toujours écrits par un testeur croisé** (A16/A26/A27/A36). Le croisement est
+   satisfait par la **suite du testeur**, jamais par la réécriture de celle de l'auteur ; le testeur
+   peut contester un test de conception, pas le remplacer.
+3. Laisser au cas par cas. **Écartée** : c'est ce qui a produit M5 — une dérogation déclarée à
+   chaque incrément sans règle qui la fonde.
+
+Arbitrage : **option 2**, et elle décrit ce que le chantier fait déjà depuis L3 (A15 puis A16, A23
+puis A27, A32 puis A36). Deux bornes : un test de conception ne porte **jamais** `@critique` — la
+marque est réservée aux tests croisés, pour qu'une porte ne s'appuie que sur eux ; et l'en-tête de
+tout fichier de tests dit qui l'a écrit. Règle de précédence : **§16-22 > §1-15** — 09 §3-2 (TDD)
+et 09 §5.6 (croisement) sont lus ensemble, à deux couches, plutôt que l'un contre l'autre.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : `CLAUDE.md` §4 non modifié ; l'interprétation vit ici et dans `ORGANISATION_AGENTS.md`
+§3, amendé et daté.
+
+## 2026-09-05 — [organisation] Un réviseur qui commite son verdict est-il un « lecteur » ?
+
+Le pilote a placé A17 (revue) et A16 (tests) dans le même worktree, sur la foi du §1 d'`ORGANISATION_
+AGENTS.md` : « lecture en parallèle : sans risque ». A17 a commité son verdict, **amendé par erreur
+le commit d'A16**, et laissé un merge en cours. Idem A37 et A36 sur L7b (trois fichiers de test non
+suivis, `--no-verify` assumé pour ne pas les indexer). Aucune perte — mais deux incidents en une
+soirée sur la même cause.
+
+Options :
+
+1. Un worktree par réviseur. **Écartée** : une branche ne peut être extraite que dans un worktree ;
+   il faudrait un HEAD détaché et un report manuel du verdict.
+2. **Le réviseur DÉPOSE son verdict dans `docs/portes/` sans commiter ni indexer ; le pilote le
+   commite lui-même par `git -C <worktree> add <fichier> && git commit`**, une fois le testeur sorti.
+3. Sérialiser réviseur et testeur. **Écartée** : c'est une heure perdue par incrément pour un
+   fichier Markdown.
+
+Arbitrage : **option 2**. Un réviseur ne touche **jamais** à l'index : il écrit un fichier, il le
+nomme dans son rapport, et c'est tout. Le §1 du fichier est amendé : « lecture en parallèle : sans
+risque » devient « lecture : sans risque ; **tout `git add`, `commit` ou `push` est une écriture**,
+y compris pour un verdict ». Règle de précédence **sans objet** (organisation, hors pack).
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun ; `ORGANISATION_AGENTS.md` §1 et §3 amendés et datés.
+
+## 2026-09-05 — [L1 / E18] L'identifiant de la fiche en conflit n'est lisible qu'en prose (M-2)
+
+Constat d'A17, non arbitré — le pilote l'avait à tort présenté comme tranché en le confondant avec un
+autre doute du même verdict. Il est repris ici sur son mérite. `detailDeConflit` met l'**état** dans
+`details[0].code` et l'**identifiant** dans `details[0].message` (« Fiche archivée existante : <uuid> »).
+Or la doctrine d'`errorDetailSchema`, **dans le même fichier**, pose l'inverse : `message` « est de
+l'INTERFACE », « affiché TEL QUEL », et « distinguer en analysant une phrase française est
+précisément ce que le 11 §3 refuse ». Conséquence : la console à qui l'on promet un 409
+« ACTIONNABLE » doit extraire un UUID **par expression régulière**, dans une phrase qui a **quatre
+variantes** dans ce seul diff. Le comportement préexiste ; ce qui est nouveau, c'est qu'il est promu
+au rang de **contrat publié**, donc opposable.
+
+Options :
+
+1. **Ajouter un champ `entityId` OPTIONNEL à `errorDetailSchema`** ; le `message` garde sa rédaction
+   humaine, la machine lit `entityId` et **ne parse jamais le message**.
+2. Mettre l'identifiant dans `code`. **Écartée** : `code` est un vocabulaire **fermé**
+   (`fiche_active | fiche_archivee`) ; y verser un UUID le rend infini et inexploitable.
+3. Ne rien faire. **Écartée** : elle laisse un contrat publié en contradiction avec la doctrine du
+   fichier qui le publie — et c'est le genre d'écart qui se découvre au branchement de la console, à L13.
+
+Arbitrage : **option 1**, et **additive** : aucun message n'est modifié, aucun test existant ne rougit,
+la console gagne un champ et perd une expression régulière. Règle de précédence : **§16-22 > §1-15** —
+11 §3 (enveloppe d'erreur, jamais de littéral libre, jamais de distinction par le texte) est le texte
+le plus précis, et c'est lui que la doctrine d'`errors.ts` transcrit.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : **convention 11 §3 étendue** (escalade 11 §8-2, rendue ici) — un champ optionnel de plus
+dans `errorDetailSchema`. Aucun champ retiré, aucun renommé : les consommateurs existants ne bougent pas.
+
+## 2026-09-05 — [L1 / L3] `domaines/companies/**` est le seul domaine L3 hors du seuil de couverture
+
+Mesuré par A17 sur `e6af20a` : `.github/coverage-critical-paths.json` seuille tous les domaines L3
+**sauf** `companies`. Et s'il y était inscrit, **la CI serait rouge** — `depot.ts` 89,04 % de branches,
+`service.ts` 77,77 % de fonctions, 88,33 % de branches. Un job « couverture ≥ 90 % » vert ne dit donc
+rien de ce module, alors que c'est lui qui porte le RBAC admin des routes `companies` et les deux 409
+d'unicité.
+
+Options :
+
+1. Inscrire maintenant, dans #34. **Écartée** : la CI rougirait, et #34 est le dernier verrou d'une
+   file de quatre PR. Bloquer la file pour une dette héritée de L3 est disproportionné.
+2. **Inscrire dans un incrément nommé, immédiatement après la fusion de #34, en REMONTANT la
+   couverture — jamais en rétrécissant le glob.** Échéance : **avant P-E**.
+3. Ne pas inscrire. **Écartée** : c'est le rétrécissement de périmètre que le bandeau du fichier
+   interdit nommément, et le « faux vert » que F-31 vient de nous coûter ailleurs.
+
+Arbitrage : **option 2**. Si une branche s'avère structurellement inatteignable, elle est **documentée
+une par une** dans le fichier, comme L3 l'a fait — jamais écartée en silence. Règle de précédence
+**sans objet** (aucune divergence interne : le bandeau du fichier et la DoD disent la même chose).
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun. Dette de L3 nommée et datée, pas découverte à P-E.
+
+## 2026-09-05 — [méthode] La fiche A-015 est ABSORBÉE : sa condition de déclenchement est remplie
+
+La fiche A-015 (2026-09-04) proposait un pilote de fusion `union` pour les registres append-only, et
+se recommandait elle-même en **PHASE 2** — « sauf si un troisième défaut de fusion survient d'ici
+P-C, auquel cas ABSORBÉE ». Il est survenu le 2026-09-05, sur `lot/l7a`, **et c'est la session pilote
+qui l'a commis** : une résolution mécanique des marqueurs a coupé deux entrées de leurs champs
+`Décideur` et `Impact spec`. Trois défauts en quatre jours, tous sur les deux mêmes fichiers.
+
+Options :
+
+1. **Absorber maintenant** : `DECISIONS.md` et `AMELIORATIONS.md` en `merge=union`, `docs/ETAT.md`
+   exclu, et les gardes de format rendus **obligatoires après chaque fusion**.
+2. Tenir la Phase 2 comme la fiche le recommandait. **Écartée** : la fiche prévoyait elle-même son
+   propre renversement, et la condition est remplie — la tenir serait suivre la lettre contre le fait.
+3. Étendre `union` à `docs/ETAT.md` aussi. **Écartée** pour la raison écrite dans la fiche : « le
+   dernier bloc fait foi » ne se délègue pas à un automatisme qui décide seul de l'ordre.
+
+Arbitrage : **option 1**, avec une borne qui vaut plus que le pilote lui-même : **`union` ne sait pas
+reconnaître une entrée**. Quand un conflit tombe **au milieu** d'une entrée — c'est le défaut du jour —
+il produit la même entrée chimérique qu'une résolution manuelle. Il supprime le **travail**, jamais le
+**contrôle** : `check:decisions` et `check:prose` sont **dus après chaque fusion, avant le commit**,
+et ils sont les seuls à attraper ce défaut — le comptage de lignes répond « zéro perdue » dans les
+deux sens.
+Règle de précédence **sans objet** (convention d'outillage, hors pack).
+Décideur : **A01**, sur délégation du 2026-09-04, sur la clause de la fiche elle-même.
+Impact spec : `.gitattributes` amendé et commenté ; aucun fichier du pack modifié.
+
+## 2026-09-05 — [L7b] Deux routes de pilotage : `/coverage` créée, `/aggregation` avec `orgUnit` au lieu de `service`
+
+Le 11 §8-6 interdit de « créer une route non listée aux §8/§24.2 **sans la documenter** ». L7b en
+crée une, et renomme un paramètre d'une autre. Les deux sont ici.
+
+**① `GET /v1/missions/:id/coverage?limit=&after=` — ROUTE NOUVELLE.**
+Options :
+
+1. La greffer sur `GET /v1/missions/:id/dashboard` (05 §8.3, « complétude, à-revoir, dernière
+   sync »). Refusée : le tableau de bord est un RÉSUMÉ non paginé ; la couverture est une LISTE de
+   150 unités qui exige un curseur. Les fondre obligerait à paginer un résumé, ou à ne pas paginer
+   une liste — les deux sont faux.
+2. La greffer sur `GET /v1/missions/:id/org-units` en ajoutant des colonnes de couverture. Refusée :
+   l'arbre est une ressource d'ÉCRITURE (CRUD, validation, fusion) et son contrat sert déjà trois
+   écrans ; y coller des agrégats de collecte ferait payer à chaque appelant un calcul que deux
+   d'entre eux n'utilisent pas.
+3. **Une route de lecture dédiée**, `type: 'mission'`, keyset `(position, id)` — le MÊME curseur que
+   l'arbre, pour que les deux listes se lisent côte à côte dans le même ordre.
+
+Arbitrage : **option 3**. Le §16.6 nomme un « écran couverture » distinct, et le §27.1 lui donne son
+second axe ; une ressource nommée dans le pack mérite sa route. Les MARGES de mission voyagent **hors
+de l'enveloppe paginée** : une marge calculée sur la page serait un chiffre faux qui a l'air juste.
+Aucune marque `financier` : la réponse porte des comptes de sessions et des effectifs, jamais un
+montant (invariant 3, §18.3).
+
+**② `GET /v1/missions/:id/aggregation` — le paramètre `service` du 05 §8.5 devient `orgUnit`.**
+Options :
+
+1. Garder `?service=` et l'interpréter comme un identifiant de `services` (les 11 fonctions du
+   11 §5). Refusée : `services` qualifie la PERSONNE interrogée (`interviews.person_service_id`),
+   pas l'unité auditée — filtrer dessus répondrait à « qu'ont dit les gens des RH ? », pas à
+   « qu'a-t-on trouvé dans cette unité ? ».
+2. Garder `?service=` et l'interpréter comme une unité de `kind = 'service'`. Refusée : la couverture
+   d'un audit se lit sur TOUTE unité — filiale, établissement, équipe — et pas seulement sur celles
+   dont le `kind` est `service`. Le filtre serait muet sur un arbre qui n'en contient pas.
+3. **Renommer le paramètre `orgUnit`**, qui prend un identifiant d'unité.
+
+Arbitrage : **option 3**. Le fichier 04 le tranche déjà, note P2-1 : « `person_service_id` —
+fonction de la PERSONNE ; **l'unité d'audit est TOUJOURS `orgUnitId`** ». Le mot « service » du
+05 §8.5 désigne donc l'unité, et le nommer `orgUnit` supprime l'ambiguïté au lieu de la transmettre.
+Les deux autres filtres de M5.1 — « site/pays » et « interlocuteur » — **ne sont pas livrés** :
+les inventer sans écran qui les porte serait du produit deviné.
+Règle de précédence (`CLAUDE.md`) : **le fichier 04 fait foi sur le modèle** ; le 05 §8.5 esquisse
+une signature, il ne définit pas une colonne.
+
+Décideur : **A32** (agent de lot), sous revue croisée A37.
+Impact spec : aucun amendement de `/docs`. Le 05 §8.5 garde son texte ; l'écart de nommage est tracé
+ici et redit dans l'en-tête de `apps/api/src/routes/pilotage.ts`.
+
+## 2026-09-05 — [L7b] Le nom du répondant dans l'agrégation par question (M5.1) : NON PUBLIÉ, et la question remonte
+
+Le 03 M5.1 écrit : « Par question : toutes les réponses côte à côte avec **nom**/fonction/service du
+répondant. » Le contrat livré par L7b publie la **fonction** et le **service**, et **pas le nom**.
+
+Options :
+
+1. Publier `interviews.person_name` tel quel, comme M5.1 le dit littéralement.
+2. Le publier sous condition de `interviews.consent_given`.
+3. **Ne pas le publier en L7b**, et poser la question.
+
+Arbitrage : **option 3**, à titre CONSERVATOIRE et jusqu'à arbitrage humain. Trois éléments, et
+aucun ne tranche seul :
+— le §26 dit « verbatims **anonymisés ou attribués selon consentement** », donc le pack SAIT que
+l'attribution est conditionnelle, mais il ne dit **nulle part** sous quelle condition un nom
+s'affiche **au siège** (le §26 parle du RAPPORT) ;
+— `interviews.consent_given` est **nullable** au fichier 04 : « consentement inconnu » est un état
+atteignable, et il n'a pas de règle écrite ;
+— le 11 §2 interdit les noms dans les LOGS, pas dans les réponses — l'interdiction ne couvre donc
+pas ce cas, et l'invoquer serait un abus de citation.
+Ce qui fait pencher : l'asymétrie du coût. Ajouter un champ à un contrat de lecture est un
+incrément ; retirer un nom déjà parti au navigateur ne se rattrape pas. Et la valeur d'usage de M5.1
+— lire une divergence **direction ↔ terrain** — est portée par la FONCTION et l'UNITÉ, pas par le
+nom : l'écran reste utile sans lui.
+Règle de précédence (`CLAUDE.md`) : **§24-31 > §16-22** — le §26 (attribution conditionnelle) prime
+sur la formulation inconditionnelle de M5.1, mais il ne fournit pas la règle : d'où l'escalade.
+
+Décideur : **à trancher par Williams** (touche une donnée personnelle : `CLAUDE.md` §3-4). A32
+propose l'option 2 avec `consent_given = true` STRICT (le `null` ne vaut pas consentement) et le nom
+masqué par défaut derrière une action explicite de l'utilisateur.
+Impact spec : aucun aujourd'hui. Si l'option 2 est retenue, `reponseAgregeeSchema`
+(`packages/shared/src/agregation.ts`) gagne un champ nullable et le dépôt une colonne de plus.
+
+## 2026-09-05 — [L7b] « Profils rencontrés » (§16.6) : la colonne n'est PAS livrée, parce que la donnée n'existe pas
+
+Le §16.6 énumère ce que porte l'écran de couverture : « nombre d'entretiens menés / prévus,
+**profils rencontrés**, complétude des paquets, blocs non couverts ». Les trois autres sont livrés ;
+« profils rencontrés » ne l'est pas.
+
+Options :
+
+1. Le déduire de `interviews.person_service_id` → `services`. Refusée : `services` porte les **11
+   fonctions** (RH, finance, logistique…), `interlocutor_profiles` porte les **9 profils**
+   (dirigeant, DSI, salarié…). Ce sont deux référentiels distincts, seedés séparément (11 §5) ;
+   présenter l'un sous le nom de l'autre serait un mensonge d'étiquette.
+2. Le déduire de `interviews.person_role`, qui est du **texte libre**. Refusée : on afficherait une
+   liste de chaînes saisies à la main sous un intitulé qui promet un référentiel.
+3. Ajouter `interviews.interlocutor_profile_id` au fichier 04. **Hors du pouvoir d'un agent de lot**
+   (`CLAUDE.md` §3-2), et déjà écarté une fois : `DECISIONS.md` du 2026-09-01 [L3d] constate que
+   cette colonne **n'existe pas au 04**, et le plan §32.4 en a tiré la conséquence — il LISTE les
+   profils à couvrir, sans aucun chiffre.
+4. **Ne pas livrer la colonne**, et le dire.
+
+Arbitrage : **option 4**. Le plan publie les profils **à couvrir** ; rien en base ne dit lesquels ont
+été **rencontrés**. La confrontation prévu ↔ réalisé, qui est tout le sujet de la couverture, est
+donc **inexprimable sur cet axe** tant que le 04 ne porte pas le lien session ↔ profil. Afficher une
+colonne approchée serait pire que son absence : on croirait la lire.
+Règle de précédence (`CLAUDE.md`) : **le DDL vit exclusivement dans `/docs/04`** ; un écran ne
+fabrique pas une donnée que le modèle ne porte pas.
+
+Décideur : **à trancher par Williams** — c'est un amendement du fichier 04 (une colonne
+`interviews.interlocutor_profile_id`, nullable), donc une escalade §3-2, à peser contre son coût sur
+la sync (§9) et sur la saisie terrain (L5).
+Impact spec : aucun aujourd'hui. `uniteCouverteSchema` n'a **pas** de champ `profilsRencontres` — il
+n'est pas prévu vide, il est absent, pour qu'aucun appelant ne construise sur une promesse.
+
+## 2026-09-05 — [L7b] Ce que « planifié » compte exactement, et pourquoi `realise` y est inclus
+
+`schedule_status` a six valeurs (`a_planifier`, `planifie`, `confirme`, `realise`, `reporte`,
+`annule`). La note de conception §6.2 dit « lignes `interviews` à `schedule_status` planifié », sans
+énumérer. Le choix se lit, il ne se devine pas :
+
+Options :
+
+1. `schedule_status = 'planifie'` seul, à la lettre. **Refusée** : confirmer une session la ferait
+   sortir du compte, et la tenir aussi. Le nombre de sessions « planifiées » **baisserait quand
+   l'agenda avance** — un compteur qui recule pendant qu'on travaille est faux au sens le plus
+   littéral, et personne ne s'en apercevrait.
+2. Tout sauf `a_planifier`. Refusée : `annule` et `reporte` compteraient, alors qu'une session
+   annulée n'occupe aucune place dans l'agenda.
+3. **`planifie` ∪ `confirme` ∪ `realise`** — « la session a une place dans l'agenda ».
+
+Arbitrage : **option 3**, et la raison est la MONOTONIE : le passage d'un statut au suivant ne doit
+jamais faire décroître un compteur d'avancement. Deux définitions voisines sont figées avec elle :
+— `realise` = `interviews.status = 'termine'`, et rien d'autre — une session **commencée** n'est pas
+une session tenue ;
+— `aucuneSession` (l'alerte §16.6) se juge sur les sessions **ni annulées ni reportées**, quel que
+soit leur `kind` : une unité dont la session reste à planifier n'est pas une unité oubliée, et un
+**atelier** tenu suffit à retirer l'alerte (c'est un travail fait) sans pour autant couvrir une
+source du §27.1 (un atelier ne remplace pas une observation).
+Règle de précédence : **sans objet** — le pack ne définit pas ces ensembles, il est silencieux ;
+c'est une lecture, tracée pour qu'elle soit contestable.
+
+Décideur : **A32** (agent de lot), sous revue croisée A37.
+Impact spec : aucun. Les trois définitions vivent dans `packages/shared/src/pilotage.ts`
+(`celluleCouvertureSchema`) et dans le `filter (where …)` de `domaines/pilotage/depot.ts`, et les
+deux disent la même chose.
+
+## 2026-09-05 — [L7b] « Blocs non couverts » (§16.6) : une réponse « non communiquée » COMPTE comme bloc abordé
+
+Options :
+
+1. Un bloc est couvert s'il porte au moins une réponse **exploitable** (ni `withheld`, ni
+   `not_applicable`). Aligné sur la complétude du §32.1-3.
+2. **Un bloc est couvert s'il porte au moins une réponse, quelle qu'elle soit.**
+
+Arbitrage : **option 2**, et les deux notions restent SÉPARÉES. « Bloc non couvert » répond à « y
+est-on allé ? » ; la **complétude** (§27.4, §32.1-3) répond à « qu'en a-t-on tiré ? ». Un bloc où le
+client a refusé de répondre a bel et bien été ABORDÉ — le travail a été fait, et c'est la rubrique
+« Limites et réserves » du rapport qui portera le refus, pas la colonne de couverture. Les confondre
+ferait disparaître de l'écran un travail réellement accompli, et l'auditeur relancerait une unité
+déjà visitée.
+Règle de précédence : **§24-31 > §16-22** — le §27.4 (« le non-communiqué est un traitement NORMAL,
+pas une anomalie ») éclaire la lecture du §16.6.
+
+Décideur : **A32** (agent de lot), sous revue croisée A37.
+Impact spec : aucun. La complétude n'est pas livrée par L7b : elle appartient au scoring (**L8**), et
+l'écran de couverture ne l'approche pas.
+
+## 2026-09-05 — [L7b] Où s'affiche la marge de l'atelier quand sa colonne se replie ?
+
+`LOT_L7.md` §9.3 veut que « **seule la colonne** du tableau se replie » quand l'atelier est à zéro ;
+l'écran replie **la colonne et la marge**, contre deux fichiers de son propre commit (bloquant B1
+d'A37). A32 objecte, à raison : une cellule de `<tfoot>` sans colonne rendrait le tableau **malformé**.
+La spec dit « la marge reste affichée » sans dire **sous quelle forme**.
+
+Options :
+
+1. Garder la cellule de `<tfoot>` et laisser la colonne. **Écartée** : c'est afficher une colonne
+   vide sur toutes les missions sans atelier, ce que le §9.3 refuse précisément.
+2. **Sortir la marge de l'atelier de la grille** : ligne de synthèse (libellé + valeur) à côté ou
+   sous le tableau, **toujours visible, même à zéro**.
+3. Cellule de `<tfoot>` sur une colonne masquée en CSS. **Écartée** : un tableau dont le pied a plus
+   de cellules que l'en-tête est malformé pour un lecteur d'écran — on répare l'œil en cassant l'oreille.
+
+Arbitrage : **option 2**, et la note de conception l'avait déjà écrit sans en tirer la conséquence :
+elle dit « **atelier hors grille** ». Ce n'est donc pas la visibilité qui devait céder, c'est la
+**position**. Règle de précédence **sans objet** (mise en œuvre d'une note de conception).
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun ; `LOT_L7.md` §9.3 est **appliqué**, pas amendé.
+
+## 2026-09-05 — [L7b] Une zone de défilement inatteignable au clavier (WCAG 2.1.1, niveau A)
+
+A36 a mesuré, dans un **vrai navigateur** : la zone de défilement du tableau dense
+(`.axn-tableau-cadre`) n'est pas atteignable au clavier. C'est **WCAG 2.1.1, niveau A** — pas AA — et
+`03 §22.1` exige « navigation clavier intégrale ». Deux gestes possibles, la spec ne dit pas lequel.
+
+Options :
+
+1. **`tabindex="0"` + `role="region"` + `aria-label` sur le conteneur défilant.**
+2. Colonnes figées. **Écartée** : chantier bien plus lourd, **et elle ne résout pas le défilement au
+   clavier** — elle réduit le besoin de défiler, elle ne rend pas la zone atteignable.
+3. Ne rien faire avant P-E. **Écartée** : la DoD exige axe-core vert, et un niveau A ne se reporte pas.
+
+Arbitrage : **option 1**, motif ARIA canonique pour une région défilante. **À poser sur le composant
+partagé** s'il en existe un, pour que tout tableau dense en hérite — une correction posée écran par
+écran se perd au troisième écran.
+Deux défauts de contraste sont traités dans le même mouvement : **D1** (4,12:1 sur l'espace actif de
+la barre latérale, sur **toutes** les pages, donc non-régression de L7a) se corrige par un **jeton**.
+**D2** (4,49:1 dans le `<tfoot>`, échec de 0,01) ne se corrige **pas** par le contraste : le même jeton
+**passe dans le corps et tombe dans le pied**, donc le défaut est l'**emploi**, pas la valeur — **les
+marges ne sont pas une information tertiaire, ce sont les totaux**. Jeton de texte principal dans le
+pied : le contraste est réglé et la hiérarchie devient juste.
+Règle de précédence : **§16-22 > §1-15** — 03 §22.1 est le texte précis ; la DoD `CLAUDE.md` §5 exige
+axe-core vert.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun.
+
+## 2026-09-05 — [L6] Le transport authentifié du terrain n'est au périmètre d'aucun incrément
+
+Contrôle A02 de la note L6, réserve **B2** : `grep -rn "fetch(" apps/field/src` rend **0 occurrence**
+sur `main`, sur `lot/l5b` et sur `lot/l5c`. L'app terrain n'a jamais fait un appel HTTP. L5a a livré
+le _rangement_ du jeton (`local/jetons.ts`, chiffré sous la DEK) et **rien ne s'en sert**. Le
+scénario 8 du §9.8 — `@critique`, jamais skippable — n'a donc aucun porteur.
+
+Options :
+
+1. **Le transport entre à L6a.** Le push idempotent ne peut pas exister sans lui, et L6a est déjà
+   l'incrément qui ouvre la conversation avec le serveur.
+2. Un incrément dédié avant L6a. **Écartée** : il ne pourrait pas être testé — un client HTTP sans
+   route de sync en face n'a rien à prouver.
+3. Le laisser à L6c avec les scénarios. **Écartée** : L6a et L6b en dépendent tous les deux.
+
+Arbitrage : **option 1**. Le transport (Bearer depuis `jetons.ts`, refresh rotatif via
+`POST /v1/auth/refresh` livré par L2, détection de réutilisation serveur, distinction entre _pas de
+réseau_ et _jeton mort_, message 05 §31-3) est au périmètre de **L6a** ; le **test** du scénario 8
+reste à **L6c** avec les sept autres. Règle de précédence : **§24-31 > §16-22** — 05 §31-3 décrit le
+comportement hors ligne, 11 §3 fixe le mode d'authentification du terrain.
+Décideur : **A01**, sur délégation de Williams du 2026-09-04.
+Impact spec : aucun amendement ; `docs/conception/LOT_L6.md` amendée (A-2).
+
+## 2026-09-05 — [L6] `sync_log` n'a aucun écrivain applicatif : qui l'écrit ?
+
+Contrôle A02, réserve **B3** : la table existe (`drizzle/0007_transverse.sql`), le lecteur existe
+(`domaines/users/depot.ts`), et la **seule écriture du dépôt est une fixture de test**
+(`l2-users.integration.test.ts`). Conséquence : le garde-fou de réinitialisation de mot de passe
+(05 §9.7) reste à jamais en « aucune sync connue » — **test vert compris**, puisque le test ensemence
+la table à la main — et l'alerte « sync muette > 24 h » (invariant 8) n'a jamais de matière.
+
+Options :
+
+1. **L6a écrit la ligne `push`, L6b la ligne `pull`.** Deux garde-fous en dépendent.
+2. Laisser à un lot d'exploitation ultérieur. **Écartée** : le garde-fou de §9.7 est un critère du
+   07 ligne L2, déjà coché sur une table que personne n'alimente.
+3. Journaliser côté client. **Écartée** : `sync_log` est une table serveur, et un client hors ligne
+   ne peut rien y écrire.
+
+Arbitrage : **option 1**. À chaque synchronisation aboutie, le serveur écrit `user_id`, `device_id`,
+`direction`, `items_count`, `conflicts_count`, `outbox_remaining`, `started_at`/`ended_at`, `status`.
+Côté terrain, L6a ajoute la clé `sync:derniere-reussie:<missionId>` à `CLES_META` — ajout
+append-only, **sans montée de `VERSION_SCHEMA_LOCAL`** — sans laquelle `derniereSyncReussieLe` reste
+`null` et l'alerte de l'invariant 8 se déclenche pour toujours. Règle de précédence : **§24-31 >
+§1-15** — 05 §9.7 V2.9 définit nommément la donnée du garde-fou.
+Décideur : **A01**, sur délégation de Williams du 2026-09-04.
+Impact spec : aucun amendement ; `docs/conception/LOT_L6.md` amendée (A-3).
+
+## 2026-09-05 — [L6] Où vivent les routes de sync, et le seuil de couverture les atteint-il ?
+
+Contrôle A02, réserve **B5** : les globs `apps/field/src/sync/**` et `apps/api/src/sync/**` sont bien
+déclarés dans `.github/coverage-critical-paths.json`, mais l'arborescence réelle de l'API place les
+routes dans `apps/api/src/routes/*.ts` — **hors du glob**. Or c'est la route qui porte le contrôle
+§9.9 et le contrat §9.3. Le fichier de seuils a déjà refusé ce cas deux fois (`scoping`, puis
+`users`) : « un seuil qui mesure le dépôt mais pas la route mesure la moitié qui ne décide de rien ».
+
+Options :
+
+1. Ajouter un troisième glob `apps/api/src/routes/sync.ts`. **Écartée** : elle répare le seuil sans
+   réparer la cause, et laisse deux fichiers de sync dans deux arborescences.
+2. **Les routes de sync vivent DANS `apps/api/src/sync/`, avec leur domaine.** Un seul glob couvre
+   les deux moitiés.
+3. Ne rien décider et voir à la revue. **Écartée** : c'est une décision d'arborescence, elle se
+   prend avant la première ligne, jamais après.
+
+Arbitrage : **option 2**. `apps/api/src/sync/` porte `routes.ts`, `service.ts`, `depot.ts`,
+`proprietaire.ts`, `chunks.ts`, enregistrées dans `app.ts` avec le préfixe `/v1`. Écart assumé à la
+convention `routes/<x>.ts`, avec un précédent au dépôt : `apps/api/src/domaines/auth/routes.ts`
+colocalise déjà route et domaine. Règle de précédence : **le fichier 11 pour ce que le pack ne
+tranche pas** — le pack ne fixe aucune arborescence, la DoD 09 §3 fixe le seuil mesuré.
+Décideur : **A01**, sur délégation de Williams du 2026-09-04.
+Impact spec : aucun amendement ; `docs/conception/LOT_L6.md` amendée (A-5).
+
+## 2026-09-05 — [L6] Séquencement : L5d s'intercale-t-il avant L6, ou en parallèle ?
+
+Contrôle A02, réserve **B4** : la note L6 défendait « L5a → L5b → L5c → (P-C) → L6 seul → (P-D) ».
+La chaîne photo a reçu son lot propriétaire **L5d** le 2026-09-05 (PR #50), qui touche
+`local/base.ts` et **monte `VERSION_SCHEMA_LOCAL`**. Les scénarios 6 et 7 du §9.8 — dont le 7 est un
+critère d'acceptation nommé — ne sont pas atteignables sans lui.
+
+Options :
+
+1. **L5d en série, juste après P-C et avant L6a.** Le schéma local est stabilisé avant que le moteur
+   de sync s'écrive dessus.
+2. L5d en parallèle de L6a. **Écartée** : deux chantiers simultanés sur `local/base.ts` sont
+   exactement la collision de fichiers que `CLAUDE.md` §4 interdit.
+3. L5d en série entre L6b et L6c. **Écartée** : L6a et L6b auraient été écrits sur un schéma local
+   destiné à changer, et une migration locale se réécrirait au milieu du lot.
+
+Arbitrage : **option 1**. Séquence stricte **L5c → (P-C) → L5d → L6a → L6b → L6c → (P-D)**. Le coût
+est assumé et il se dit : **L5d retarde L6 d'environ une demi-journée**, moins cher qu'une migration
+locale réécrite au milieu de L6b. « L6 se développe SEUL » (09 §5.3) n'est pas affaibli, il est
+décalé : une fois L5d fusionné, plus rien ne tourne sur `apps/field/**` ni `apps/api/**`. Règle de
+précédence : **09 §5.3 et `CLAUDE.md` §4**, qui interdisent le parallélisme sur les mêmes fichiers.
+Décideur : **A01**, sur délégation de Williams du 2026-09-04.
+Impact spec : aucun amendement ; `docs/conception/LOT_L6.md` amendée (A-4).
+
+## 2026-09-05 — [gouvernance] La note L6 dépasse « ≤ 1 page » : écart accepté ou refusé ?
+
+Le gardien A02 mesure les cinq notes de conception du dépôt : **LOT_L7 476 · LOT_L2 247 · LOT_L5 191
+· LOT_L3 139 · LOT_L6 126**. La règle 09 §3-1bis dit « ≤ 1 page ». Aucune note ne la tient, aucune
+n'a été recalée. L'amendement du 2026-09-05 porte LOT_L6 au-delà de 126 lignes.
+
+Options :
+
+1. **Accepter l'écart pour LOT_L6 et le déclarer ici**, la règle générale restant à arbitrer.
+2. Recaler la note. **Écartée** : LOT_L6 est la plus COURTE des cinq, sur le lot le plus critique ;
+   un veto de forme sur le chemin critique est exactement ce que le veto ne doit pas être.
+3. Laisser l'écart implicite. **Écartée** : une règle que personne ne tient et que personne n'amende
+   s'éteint en silence, et la sixième note fera 500 lignes sans que personne sache pourquoi c'est
+   trop.
+
+Arbitrage : **option 1**. L'écart de format de `LOT_L6.md` est **accepté et déclaré** ; l'amendement
+du 2026-09-05 l'aggrave délibérément, puisqu'il ajoute la table « critère 07 → incrément porteur »
+dont l'absence était le trou du premier contrôle. La question générale — amender ou rétablir
+« ≤ 1 page » — reste ouverte (doute **D-A** de la note) et appartient à Williams. Règle de
+précédence : **09 §3-1bis** pour la forme, **07** pour le contenu exigible, qui prime.
+Décideur : **A01**, sur délégation de Williams du 2026-09-04.
+Impact spec : aucun amendement du pack ; écart de forme tracé.
+
+## 2026-09-05 — [L5] La chaîne PHOTO n'a de lot propriétaire nulle part : qui la livre ?
+
+A23 puis A22 l'ont mesuré indépendamment : **aucune photo n'entre dans l'application**. `grep` sur
+`type="file"`, `capture=`, `kind: 'photo'` dans `apps/field/src` et `packages/ui/src` → **zéro ligne**.
+`compresserPhoto` (R2, livrée par L5c) n'a donc **aucun appelant**, et 03 §17.4 n'est pas tenu. A22 a
+refusé de livrer, et ses trois obstacles sont hors de sa main : ① `compresserPhoto` vit sur `lot/l5c`,
+non fusionnée ; ② **aucun endroit local ne peut recevoir les octets** — pas de table binaire dans
+`local/base.ts`, et la charge est **sérialisée en JSON avant chiffrement**, ce qu'un `Blob` ne traverse
+pas : il faut une table **et** un `VERSION_SCHEMA_LOCAL` incrémenté, donc une migration de données
+terrain ; ③ l'attachement n'a **pas de statut d'envoi local**, que 05 §9.6 exige.
+
+Options :
+
+1. Livrer les métadonnées sans les octets. **Écartée, et c'est la pire des trois** : l'écran
+   promettrait une photo que rien ne conserve — la perte silencieuse que l'invariant 7 interdit.
+2. **Un incrément nommé `L5d`, propriétaire de la chaîne DE BOUT EN BOUT** : table binaire locale et
+   montée de `VERSION_SCHEMA_LOCAL` (A24) → capture depuis l'écran de session (A22) →
+   `compresserPhoto` (A23, **déjà écrite**) → statut d'envoi local (A22). **L'envoi lui-même reste
+   à L6c** (chunks §9.6), et la frontière est là, nette.
+3. Glisser la photo en Phase 2. **Écartée** : le fichier 07 met « compression photos R2 » dans la
+   ligne L5, et §27.1 compte les photos parmi les sources d'audit. Ce n'est pas un ajout, c'est du
+   périmètre noyau.
+
+Arbitrage : **option 2**. `L5d` s'ouvre **après P-C** (il touche le schéma local, donc L5a) et
+**avant L6c**. **Et le manque se DÉCLARE au contrôle A02 de P-C** plutôt que de disparaître : à cette
+date, 03 §17.4 n'est pas tenu et `photos.ts` est du code sans appelant — les deux doivent être écrits
+au dossier de porte, pas découverts à P-E. Règle de précédence : **§16-22 > §1-15** — le fichier 07,
+ligne L5, définit le lot ; 05 §9.6 fixe la frontière avec L6.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun amendement du pack ; **`VERSION_SCHEMA_LOCAL` montera** à L5d, ce qui est prévu
+par 05 §31-1 (migrations locales versionnées).
+
+## 2026-09-05 — [UI] Un écran, une alerte : convention ou choix local ?
+
+Sur `AccesEntretien`, A22 a routé l'échec de lecture vers `Message ton="avertissement"`
+(`role="status"`) et **non** vers `ZoneEtat nature="erreur"` (`role="alert"`), parce que l'écran porte
+déjà une alerte interruptive et que 03 §17.3 interdit la notification intrusive en entretien. Le choix
+est défendable et il demande une règle, sinon chaque écran tranchera dans son coin.
+
+Options :
+
+1. **Convention générale : au plus UN `role="alert"` par écran à la fois.** Il est réservé à ce qui
+   **bloque le geste en cours** ; toute autre erreur emprunte `role="status"` — et reste **visible**,
+   la dégradation portant sur l'annonce, jamais sur l'affichage.
+2. `role="alert"` sur toute erreur. **Écartée** : plusieurs alertes simultanées se masquent l'une
+   l'autre chez un lecteur d'écran — on croit renforcer le signal, on le détruit.
+3. Choix local, écran par écran. **Écartée** : c'est la porte ouverte à un écran où l'erreur
+   bloquante est en `status` et l'accessoire en `alert`.
+
+Arbitrage : **option 1**, avec une borne qui n'est pas négociable : **A28 vérifie qu'aucune erreur
+BLOQUANTE n'est passée en `status`** — la règle sert à hiérarchiser, jamais à taire. Règle de
+précédence : **§16-22 > §1-15** — 03 §17.3 (pas de notification intrusive en entretien) et §22.1.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun amendement ; convention portée par `packages/ui` et vérifiée par A28.
+
+## 2026-09-05 — [L6] La propriété §9.9 ne couvre que 3 des 5 entités synchronisées
+
+A20 l'a mesuré en amendant sa propre note : `ENTITES_SYNC` (`packages/shared/src/sync.ts`) compte
+**cinq** entités ; le 05 §9.9 n'en nomme que trois — `interviews`, `answers`, `attachments`.
+**`org_unit_proposal` et `question_adhoc` n'ont aucune règle de propriété écrite**, alors que la note
+posait « propriété §9.9 » comme si elle couvrait le lot entier. Un push croisé sur ces deux-là
+n'aurait donc **rien à refuser**.
+
+Options :
+
+1. **Étendre la règle aux deux entités manquantes, par le critère de l'amendement 04 S-3 :
+   propriétaire = le rattachement quand il existe, SINON l'auteur.** Une proposition d'unité et une
+   question ad hoc sont des créations d'auditeur sans rattachement à la session d'un autre : leur
+   propriétaire est leur auteur, et personne d'autre ne les modifie.
+2. Les laisser hors propriété. **Écartée** : une entité synchronisable sans règle de propriété est
+   une porte ouverte dans le contrat de sync — et elle ne se verrait qu'en production, sur la
+   mission d'un autre auditeur.
+3. Amender le 05 §9.9 maintenant. **Écartée** : fichier du pack, donc **revue de spec de P-D**
+   (09 §5.9). L'interprétation suffit à écrire L6a ; l'amendement se propose à P-D.
+
+Arbitrage : **option 1**, avec la ceinture qu'A20 a trouvée manquante dans sa propre note et qui
+compte autant que la règle : **le serveur ne croit jamais le `createdBy` ni le `conductedBy` du
+payload client**. §9.9 est une règle **serveur** — à la création, le propriétaire est **l'émetteur
+authentifié du push** ; un payload qui désigne quelqu'un d'autre rend `forbidden`. Sans cette phrase,
+un implémenteur pouvait lire S-3 et faire confiance au client, ce qui rendait la propriété de session
+**décorative**.
+Règle de précédence : **§16-22 > §1-15** — 05 §9.9 porte la propriété, 04 S-3 le critère ;
+l'invariant 3 (« écritures de sync réservées au propriétaire ») les commande tous deux.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun aujourd'hui. **Amendement candidat du 05 §9.9 à P-D**, pour que les cinq entités
+y soient nommées plutôt qu'interprétées.

@@ -2511,6 +2511,15 @@
       "columns": ["expire_le"],
       "source": "04 §7.1 — amendement du 2026-08-31 (DECISIONS.md)",
       "$motif": "La purge des envois abandonnes parcourt cette colonne."
+    },
+    {
+      "name": "uq_companies_external_ref",
+      "table": "companies",
+      "columns": ["external_ref"],
+      "unique": true,
+      "where": "(external_ref IS NOT NULL)",
+      "source": "04 §7.1 — amendement du 2026-09-03 (DECISIONS.md)",
+      "$motif": "Symétrique exact de uq_companies_siren : clé de liaison M8.1 avec la console axion-ia.com (03 M8.1, 05 §8.6), elle doit désigner une fiche et une seule. PARTIEL parce que le 04 marque la colonne NULL — une entreprise créée localement n'a aucun pendant dans la console, et le NULL répété reste accepté."
     }
   ],
   "indexEtablisParConvention": [

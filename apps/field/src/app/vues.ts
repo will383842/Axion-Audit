@@ -43,7 +43,9 @@ export const VUES = {
   deverrouillage: { titre: 'Déverrouiller', exigeCoffreOuvert: false },
   stockage: { titre: 'Stockage de l’appareil', exigeCoffreOuvert: false },
   accueil: { titre: 'Aujourd’hui', exigeCoffreOuvert: true },
-  // ── L5b (écran d'entretien) — à compléter par A22 ─────────────────────────
+  // ── L5b (écran d'entretien) — A22 ─────────────────────────────────────────
+  nouvelEntretien: { titre: 'Nouvel entretien', exigeCoffreOuvert: true },
+  entretien: { titre: 'Entretien', exigeCoffreOuvert: true },
   // ── L5c (journée, agenda, sauvegarde) — à compléter par A23 ───────────────
 } as const satisfies Record<string, DefinitionVue>;
 
