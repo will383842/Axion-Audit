@@ -119,24 +119,35 @@ function combinaisons(css: string, jetons: ReadonlyMap<string, string>): Combina
  *   · si le contraste se dégrade → rouge ;
  *   · si quelqu'un le CORRIGE → rouge aussi, avec le message qui dit de retirer
  *     l'entrée. Le registre ne peut donc pas survivre à sa raison d'être.
- * Corriger l'écart ci-dessous suppose de bouger `--couleur-action-fond-doux`, qui
- * est un jeton de charte : c'est un arbitrage (CLAUDE.md §3-2), pas un correctif
- * d'implémentation. A28 mesure et rend ; il ne relève aucun seuil et ne repeint
- * aucune charte.
+ * Éclaircir un jeton de charte pour faire passer une paire serait un arbitrage
+ * (CLAUDE.md §3-2), pas un correctif d'implémentation : A28 mesure et rend ; il ne
+ * relève aucun seuil et ne repeint aucune charte. Choisir un AUTRE jeton existant
+ * pour une déclaration, en revanche, est un correctif ordinaire — c'est le chemin
+ * pris le 2026-09-06, décrit ci-dessous.
  */
-const ECARTS_MESURES: ReadonlyMap<string, { ratio: number; motif: string }> = new Map([
-  [
-    '.axn-badge--action',
-    {
-      ratio: 4.13,
-      motif:
-        'le terracotta d’action sur le fond d’action DOUX — sous AA de 0,37. ' +
-        'Mesuré par A28 le 2026-09-06 ; AUCUN écran ne rend `Badge ton="action"` : ' +
-        'l’écart est LATENT, pas peint. Corriger suppose de modifier un jeton de ' +
-        'charte → arbitrage Williams, porté au rapport de la porte P-C.',
-    },
-  ],
-]);
+// LE REGISTRE EST VIDE, ET C'EST SON RÉSULTAT LE PLUS UTILE.
+//
+// Il a porté une entrée quelques heures : `.axn-badge--action`, mesuré à 4,13:1
+// par A28 le 2026-09-06, sous AA de 0,37. Le mécanisme conçu par A28 a
+// fonctionné exactement comme prévu — l'entrée exige l'ÉGALITÉ du ratio, donc
+// corriger l'écart sans retirer l'entrée rend ce fichier rouge. Un registre qui
+// peut survivre à sa raison d'être est une dérogation ; celui-ci ne le peut pas.
+//
+// Ce qui a été arbitré le même jour, et il faut le lire exactement : la variante
+// `action` de `Badge` est RESTÉE. Retirer la variante avait été envisagé, puis
+// ÉCARTÉ PAR LA MESURE — elle est employée, par une TABLE (`TON_STATUT` dans
+// `EcranPortefeuille.tsx`, où `en_cours` vaut `action`) que le `grep` de A28 ne
+// voyait pas, et c'est le compilateur qui l'a dit en refusant le type. Ce qui a
+// changé est la DÉCLARATION de `.axn-badge--action` dans `composants.css` : la
+// couleur du texte passe à un autre jeton EXISTANT de la famille terracotta,
+// au-dessus de AA. Aucun jeton de charte n'est modifié, aucun écran ne change de
+// sens. L'entrée du registre est partie parce que l'écart qu'elle figeait n'existe
+// plus, pas parce que son objet aurait disparu.
+//
+// Laisser la carte vide plutôt que de supprimer ce bloc est délibéré : la
+// prochaine dérogation devra s'écrire ICI, avec son chiffre et son motif, et
+// personne n'aura à réinventer le mécanisme qui l'empêche de dormir.
+const ECARTS_MESURES: ReadonlyMap<string, { ratio: number; motif: string }> = new Map();
 
 const JETONS = jetonsDeCouleur();
 const RELEVE = combinaisons(readFileSync(resolve(RACINE, 'composants.css'), 'utf8'), JETONS);

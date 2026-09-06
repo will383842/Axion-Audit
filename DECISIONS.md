@@ -10805,3 +10805,32 @@ passé au rappel du cockpit — la pastille de l'en-tête l'affiche déjà, lu d
 comptes du même fait sur un écran sont la version chiffrée de B6.
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun ; le rendu change, l'exigence est tenue.
+## 2026-09-06 — [L5a/L7] Un badge sous AA, cru latent, était peint sur le statut le plus fréquent
+
+A28 a mesuré `.axn-badge--action` à **4,13:1**, sous le seuil AA de 4,5, sur du texte courant de
+12 px — aucune exemption WCAG ne le couvre. Il l'a classé **latent** : son `grep` de `ton="action"`
+ne rendait aucun résultat, et il a donc porté l'écart au registre plutôt qu'au correctif.
+
+**Le grep cherchait la forme JSX. L'usage réel passe par une TABLE** — `TON_STATUT` dans
+`EcranPortefeuille.tsx`, où `en_cours` vaut `action`. Le badge est donc peint, sur le **statut le
+plus fréquent du portefeuille**. C'est le **compilateur** qui l'a dit, en refusant le type quand j'ai
+voulu retirer la variante. Un comptage dit qu'un symbole est absent ; il ne dit pas qu'un
+comportement l'est — troisième fois de la semaine.
+
+Options :
+
+1. Éclaircir `--couleur-action-fond-doux`. **Écartée** : jeton de charte, réservé à Williams
+   (§3-2), et ce jeton sert ailleurs (échelles d'état, piste d'anneau).
+2. Retirer la variante `action` de `Badge`. **Écartée après mesure** : elle est employée, et la
+   retirer forcerait un changement de SENS sur la console — `en_cours` n'a pas d'autre ton libre.
+3. **Choisir un autre jeton EXISTANT de la même famille terracotta** pour la couleur du texte.
+
+Arbitrage : **option 3**, `--couleur-action-fond-actif` (#8d3412) → **6,73:1**. Mesuré avant
+d'écrire, sur les trois candidats : `action-texte` 4,13 (sous AA), `action-fond-survol` 5,26,
+`action-fond-actif` 6,73. Aucun jeton n'est modifié, aucun écran ne change de sens, et
+`contraste-usages.test.ts` remesure la paire à chaque CI — le registre d'écarts repart **vide**, ce
+qui est son meilleur résultat possible.
+Règle de précédence : **§32-36 > §24-31** — §22.1 (contraste AA) commande, et l'invariant 4 interdit
+d'inventer une couleur hors charte pour s'en sortir.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun ; une déclaration CSS change de jeton, la charte est intacte.
