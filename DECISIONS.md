@@ -8822,6 +8822,174 @@ Règle de précédence **sans objet** (convention d'outillage, hors pack).
 Décideur : **A01**, sur délégation du 2026-09-04, sur la clause de la fiche elle-même.
 Impact spec : `.gitattributes` amendé et commenté ; aucun fichier du pack modifié.
 
+## 2026-09-05 — [L7b] Deux routes de pilotage : `/coverage` créée, `/aggregation` avec `orgUnit` au lieu de `service`
+
+Le 11 §8-6 interdit de « créer une route non listée aux §8/§24.2 **sans la documenter** ». L7b en
+crée une, et renomme un paramètre d'une autre. Les deux sont ici.
+
+**① `GET /v1/missions/:id/coverage?limit=&after=` — ROUTE NOUVELLE.**
+Options :
+
+1. La greffer sur `GET /v1/missions/:id/dashboard` (05 §8.3, « complétude, à-revoir, dernière
+   sync »). Refusée : le tableau de bord est un RÉSUMÉ non paginé ; la couverture est une LISTE de
+   150 unités qui exige un curseur. Les fondre obligerait à paginer un résumé, ou à ne pas paginer
+   une liste — les deux sont faux.
+2. La greffer sur `GET /v1/missions/:id/org-units` en ajoutant des colonnes de couverture. Refusée :
+   l'arbre est une ressource d'ÉCRITURE (CRUD, validation, fusion) et son contrat sert déjà trois
+   écrans ; y coller des agrégats de collecte ferait payer à chaque appelant un calcul que deux
+   d'entre eux n'utilisent pas.
+3. **Une route de lecture dédiée**, `type: 'mission'`, keyset `(position, id)` — le MÊME curseur que
+   l'arbre, pour que les deux listes se lisent côte à côte dans le même ordre.
+
+Arbitrage : **option 3**. Le §16.6 nomme un « écran couverture » distinct, et le §27.1 lui donne son
+second axe ; une ressource nommée dans le pack mérite sa route. Les MARGES de mission voyagent **hors
+de l'enveloppe paginée** : une marge calculée sur la page serait un chiffre faux qui a l'air juste.
+Aucune marque `financier` : la réponse porte des comptes de sessions et des effectifs, jamais un
+montant (invariant 3, §18.3).
+
+**② `GET /v1/missions/:id/aggregation` — le paramètre `service` du 05 §8.5 devient `orgUnit`.**
+Options :
+
+1. Garder `?service=` et l'interpréter comme un identifiant de `services` (les 11 fonctions du
+   11 §5). Refusée : `services` qualifie la PERSONNE interrogée (`interviews.person_service_id`),
+   pas l'unité auditée — filtrer dessus répondrait à « qu'ont dit les gens des RH ? », pas à
+   « qu'a-t-on trouvé dans cette unité ? ».
+2. Garder `?service=` et l'interpréter comme une unité de `kind = 'service'`. Refusée : la couverture
+   d'un audit se lit sur TOUTE unité — filiale, établissement, équipe — et pas seulement sur celles
+   dont le `kind` est `service`. Le filtre serait muet sur un arbre qui n'en contient pas.
+3. **Renommer le paramètre `orgUnit`**, qui prend un identifiant d'unité.
+
+Arbitrage : **option 3**. Le fichier 04 le tranche déjà, note P2-1 : « `person_service_id` —
+fonction de la PERSONNE ; **l'unité d'audit est TOUJOURS `orgUnitId`** ». Le mot « service » du
+05 §8.5 désigne donc l'unité, et le nommer `orgUnit` supprime l'ambiguïté au lieu de la transmettre.
+Les deux autres filtres de M5.1 — « site/pays » et « interlocuteur » — **ne sont pas livrés** :
+les inventer sans écran qui les porte serait du produit deviné.
+Règle de précédence (`CLAUDE.md`) : **le fichier 04 fait foi sur le modèle** ; le 05 §8.5 esquisse
+une signature, il ne définit pas une colonne.
+
+Décideur : **A32** (agent de lot), sous revue croisée A37.
+Impact spec : aucun amendement de `/docs`. Le 05 §8.5 garde son texte ; l'écart de nommage est tracé
+ici et redit dans l'en-tête de `apps/api/src/routes/pilotage.ts`.
+
+## 2026-09-05 — [L7b] Le nom du répondant dans l'agrégation par question (M5.1) : NON PUBLIÉ, et la question remonte
+
+Le 03 M5.1 écrit : « Par question : toutes les réponses côte à côte avec **nom**/fonction/service du
+répondant. » Le contrat livré par L7b publie la **fonction** et le **service**, et **pas le nom**.
+
+Options :
+
+1. Publier `interviews.person_name` tel quel, comme M5.1 le dit littéralement.
+2. Le publier sous condition de `interviews.consent_given`.
+3. **Ne pas le publier en L7b**, et poser la question.
+
+Arbitrage : **option 3**, à titre CONSERVATOIRE et jusqu'à arbitrage humain. Trois éléments, et
+aucun ne tranche seul :
+— le §26 dit « verbatims **anonymisés ou attribués selon consentement** », donc le pack SAIT que
+l'attribution est conditionnelle, mais il ne dit **nulle part** sous quelle condition un nom
+s'affiche **au siège** (le §26 parle du RAPPORT) ;
+— `interviews.consent_given` est **nullable** au fichier 04 : « consentement inconnu » est un état
+atteignable, et il n'a pas de règle écrite ;
+— le 11 §2 interdit les noms dans les LOGS, pas dans les réponses — l'interdiction ne couvre donc
+pas ce cas, et l'invoquer serait un abus de citation.
+Ce qui fait pencher : l'asymétrie du coût. Ajouter un champ à un contrat de lecture est un
+incrément ; retirer un nom déjà parti au navigateur ne se rattrape pas. Et la valeur d'usage de M5.1
+— lire une divergence **direction ↔ terrain** — est portée par la FONCTION et l'UNITÉ, pas par le
+nom : l'écran reste utile sans lui.
+Règle de précédence (`CLAUDE.md`) : **§24-31 > §16-22** — le §26 (attribution conditionnelle) prime
+sur la formulation inconditionnelle de M5.1, mais il ne fournit pas la règle : d'où l'escalade.
+
+Décideur : **à trancher par Williams** (touche une donnée personnelle : `CLAUDE.md` §3-4). A32
+propose l'option 2 avec `consent_given = true` STRICT (le `null` ne vaut pas consentement) et le nom
+masqué par défaut derrière une action explicite de l'utilisateur.
+Impact spec : aucun aujourd'hui. Si l'option 2 est retenue, `reponseAgregeeSchema`
+(`packages/shared/src/agregation.ts`) gagne un champ nullable et le dépôt une colonne de plus.
+
+## 2026-09-05 — [L7b] « Profils rencontrés » (§16.6) : la colonne n'est PAS livrée, parce que la donnée n'existe pas
+
+Le §16.6 énumère ce que porte l'écran de couverture : « nombre d'entretiens menés / prévus,
+**profils rencontrés**, complétude des paquets, blocs non couverts ». Les trois autres sont livrés ;
+« profils rencontrés » ne l'est pas.
+
+Options :
+
+1. Le déduire de `interviews.person_service_id` → `services`. Refusée : `services` porte les **11
+   fonctions** (RH, finance, logistique…), `interlocutor_profiles` porte les **9 profils**
+   (dirigeant, DSI, salarié…). Ce sont deux référentiels distincts, seedés séparément (11 §5) ;
+   présenter l'un sous le nom de l'autre serait un mensonge d'étiquette.
+2. Le déduire de `interviews.person_role`, qui est du **texte libre**. Refusée : on afficherait une
+   liste de chaînes saisies à la main sous un intitulé qui promet un référentiel.
+3. Ajouter `interviews.interlocutor_profile_id` au fichier 04. **Hors du pouvoir d'un agent de lot**
+   (`CLAUDE.md` §3-2), et déjà écarté une fois : `DECISIONS.md` du 2026-09-01 [L3d] constate que
+   cette colonne **n'existe pas au 04**, et le plan §32.4 en a tiré la conséquence — il LISTE les
+   profils à couvrir, sans aucun chiffre.
+4. **Ne pas livrer la colonne**, et le dire.
+
+Arbitrage : **option 4**. Le plan publie les profils **à couvrir** ; rien en base ne dit lesquels ont
+été **rencontrés**. La confrontation prévu ↔ réalisé, qui est tout le sujet de la couverture, est
+donc **inexprimable sur cet axe** tant que le 04 ne porte pas le lien session ↔ profil. Afficher une
+colonne approchée serait pire que son absence : on croirait la lire.
+Règle de précédence (`CLAUDE.md`) : **le DDL vit exclusivement dans `/docs/04`** ; un écran ne
+fabrique pas une donnée que le modèle ne porte pas.
+
+Décideur : **à trancher par Williams** — c'est un amendement du fichier 04 (une colonne
+`interviews.interlocutor_profile_id`, nullable), donc une escalade §3-2, à peser contre son coût sur
+la sync (§9) et sur la saisie terrain (L5).
+Impact spec : aucun aujourd'hui. `uniteCouverteSchema` n'a **pas** de champ `profilsRencontres` — il
+n'est pas prévu vide, il est absent, pour qu'aucun appelant ne construise sur une promesse.
+
+## 2026-09-05 — [L7b] Ce que « planifié » compte exactement, et pourquoi `realise` y est inclus
+
+`schedule_status` a six valeurs (`a_planifier`, `planifie`, `confirme`, `realise`, `reporte`,
+`annule`). La note de conception §6.2 dit « lignes `interviews` à `schedule_status` planifié », sans
+énumérer. Le choix se lit, il ne se devine pas :
+
+Options :
+
+1. `schedule_status = 'planifie'` seul, à la lettre. **Refusée** : confirmer une session la ferait
+   sortir du compte, et la tenir aussi. Le nombre de sessions « planifiées » **baisserait quand
+   l'agenda avance** — un compteur qui recule pendant qu'on travaille est faux au sens le plus
+   littéral, et personne ne s'en apercevrait.
+2. Tout sauf `a_planifier`. Refusée : `annule` et `reporte` compteraient, alors qu'une session
+   annulée n'occupe aucune place dans l'agenda.
+3. **`planifie` ∪ `confirme` ∪ `realise`** — « la session a une place dans l'agenda ».
+
+Arbitrage : **option 3**, et la raison est la MONOTONIE : le passage d'un statut au suivant ne doit
+jamais faire décroître un compteur d'avancement. Deux définitions voisines sont figées avec elle :
+— `realise` = `interviews.status = 'termine'`, et rien d'autre — une session **commencée** n'est pas
+une session tenue ;
+— `aucuneSession` (l'alerte §16.6) se juge sur les sessions **ni annulées ni reportées**, quel que
+soit leur `kind` : une unité dont la session reste à planifier n'est pas une unité oubliée, et un
+**atelier** tenu suffit à retirer l'alerte (c'est un travail fait) sans pour autant couvrir une
+source du §27.1 (un atelier ne remplace pas une observation).
+Règle de précédence : **sans objet** — le pack ne définit pas ces ensembles, il est silencieux ;
+c'est une lecture, tracée pour qu'elle soit contestable.
+
+Décideur : **A32** (agent de lot), sous revue croisée A37.
+Impact spec : aucun. Les trois définitions vivent dans `packages/shared/src/pilotage.ts`
+(`celluleCouvertureSchema`) et dans le `filter (where …)` de `domaines/pilotage/depot.ts`, et les
+deux disent la même chose.
+
+## 2026-09-05 — [L7b] « Blocs non couverts » (§16.6) : une réponse « non communiquée » COMPTE comme bloc abordé
+
+Options :
+
+1. Un bloc est couvert s'il porte au moins une réponse **exploitable** (ni `withheld`, ni
+   `not_applicable`). Aligné sur la complétude du §32.1-3.
+2. **Un bloc est couvert s'il porte au moins une réponse, quelle qu'elle soit.**
+
+Arbitrage : **option 2**, et les deux notions restent SÉPARÉES. « Bloc non couvert » répond à « y
+est-on allé ? » ; la **complétude** (§27.4, §32.1-3) répond à « qu'en a-t-on tiré ? ». Un bloc où le
+client a refusé de répondre a bel et bien été ABORDÉ — le travail a été fait, et c'est la rubrique
+« Limites et réserves » du rapport qui portera le refus, pas la colonne de couverture. Les confondre
+ferait disparaître de l'écran un travail réellement accompli, et l'auditeur relancerait une unité
+déjà visitée.
+Règle de précédence : **§24-31 > §16-22** — le §27.4 (« le non-communiqué est un traitement NORMAL,
+pas une anomalie ») éclaire la lecture du §16.6.
+
+Décideur : **A32** (agent de lot), sous revue croisée A37.
+Impact spec : aucun. La complétude n'est pas livrée par L7b : elle appartient au scoring (**L8**), et
+l'écran de couverture ne l'approche pas.
+
 ## 2026-09-05 — [L7b] Où s'affiche la marge de l'atelier quand sa colonne se replie ?
 
 `LOT_L7.md` §9.3 veut que « **seule la colonne** du tableau se replie » quand l'atelier est à zéro ;
@@ -8899,6 +9067,126 @@ notamment sur les octets que le garde N'ÉNUMÈRE PAS un par un (0x01 à 0x08, 0
 par la borne mais éprouvés par aucun cas nommé.
 Décideur : **A52**, à confirmer par **A01** à l'étape 4.
 Impact spec : aucun.
+## 2026-09-05 — [L6] Le transport authentifié du terrain n'est au périmètre d'aucun incrément
+
+Contrôle A02 de la note L6, réserve **B2** : `grep -rn "fetch(" apps/field/src` rend **0 occurrence**
+sur `main`, sur `lot/l5b` et sur `lot/l5c`. L'app terrain n'a jamais fait un appel HTTP. L5a a livré
+le _rangement_ du jeton (`local/jetons.ts`, chiffré sous la DEK) et **rien ne s'en sert**. Le
+scénario 8 du §9.8 — `@critique`, jamais skippable — n'a donc aucun porteur.
+
+Options :
+
+1. **Le transport entre à L6a.** Le push idempotent ne peut pas exister sans lui, et L6a est déjà
+   l'incrément qui ouvre la conversation avec le serveur.
+2. Un incrément dédié avant L6a. **Écartée** : il ne pourrait pas être testé — un client HTTP sans
+   route de sync en face n'a rien à prouver.
+3. Le laisser à L6c avec les scénarios. **Écartée** : L6a et L6b en dépendent tous les deux.
+
+Arbitrage : **option 1**. Le transport (Bearer depuis `jetons.ts`, refresh rotatif via
+`POST /v1/auth/refresh` livré par L2, détection de réutilisation serveur, distinction entre _pas de
+réseau_ et _jeton mort_, message 05 §31-3) est au périmètre de **L6a** ; le **test** du scénario 8
+reste à **L6c** avec les sept autres. Règle de précédence : **§24-31 > §16-22** — 05 §31-3 décrit le
+comportement hors ligne, 11 §3 fixe le mode d'authentification du terrain.
+Décideur : **A01**, sur délégation de Williams du 2026-09-04.
+Impact spec : aucun amendement ; `docs/conception/LOT_L6.md` amendée (A-2).
+
+## 2026-09-05 — [L6] `sync_log` n'a aucun écrivain applicatif : qui l'écrit ?
+
+Contrôle A02, réserve **B3** : la table existe (`drizzle/0007_transverse.sql`), le lecteur existe
+(`domaines/users/depot.ts`), et la **seule écriture du dépôt est une fixture de test**
+(`l2-users.integration.test.ts`). Conséquence : le garde-fou de réinitialisation de mot de passe
+(05 §9.7) reste à jamais en « aucune sync connue » — **test vert compris**, puisque le test ensemence
+la table à la main — et l'alerte « sync muette > 24 h » (invariant 8) n'a jamais de matière.
+
+Options :
+
+1. **L6a écrit la ligne `push`, L6b la ligne `pull`.** Deux garde-fous en dépendent.
+2. Laisser à un lot d'exploitation ultérieur. **Écartée** : le garde-fou de §9.7 est un critère du
+   07 ligne L2, déjà coché sur une table que personne n'alimente.
+3. Journaliser côté client. **Écartée** : `sync_log` est une table serveur, et un client hors ligne
+   ne peut rien y écrire.
+
+Arbitrage : **option 1**. À chaque synchronisation aboutie, le serveur écrit `user_id`, `device_id`,
+`direction`, `items_count`, `conflicts_count`, `outbox_remaining`, `started_at`/`ended_at`, `status`.
+Côté terrain, L6a ajoute la clé `sync:derniere-reussie:<missionId>` à `CLES_META` — ajout
+append-only, **sans montée de `VERSION_SCHEMA_LOCAL`** — sans laquelle `derniereSyncReussieLe` reste
+`null` et l'alerte de l'invariant 8 se déclenche pour toujours. Règle de précédence : **§24-31 >
+§1-15** — 05 §9.7 V2.9 définit nommément la donnée du garde-fou.
+Décideur : **A01**, sur délégation de Williams du 2026-09-04.
+Impact spec : aucun amendement ; `docs/conception/LOT_L6.md` amendée (A-3).
+
+## 2026-09-05 — [L6] Où vivent les routes de sync, et le seuil de couverture les atteint-il ?
+
+Contrôle A02, réserve **B5** : les globs `apps/field/src/sync/**` et `apps/api/src/sync/**` sont bien
+déclarés dans `.github/coverage-critical-paths.json`, mais l'arborescence réelle de l'API place les
+routes dans `apps/api/src/routes/*.ts` — **hors du glob**. Or c'est la route qui porte le contrôle
+§9.9 et le contrat §9.3. Le fichier de seuils a déjà refusé ce cas deux fois (`scoping`, puis
+`users`) : « un seuil qui mesure le dépôt mais pas la route mesure la moitié qui ne décide de rien ».
+
+Options :
+
+1. Ajouter un troisième glob `apps/api/src/routes/sync.ts`. **Écartée** : elle répare le seuil sans
+   réparer la cause, et laisse deux fichiers de sync dans deux arborescences.
+2. **Les routes de sync vivent DANS `apps/api/src/sync/`, avec leur domaine.** Un seul glob couvre
+   les deux moitiés.
+3. Ne rien décider et voir à la revue. **Écartée** : c'est une décision d'arborescence, elle se
+   prend avant la première ligne, jamais après.
+
+Arbitrage : **option 2**. `apps/api/src/sync/` porte `routes.ts`, `service.ts`, `depot.ts`,
+`proprietaire.ts`, `chunks.ts`, enregistrées dans `app.ts` avec le préfixe `/v1`. Écart assumé à la
+convention `routes/<x>.ts`, avec un précédent au dépôt : `apps/api/src/domaines/auth/routes.ts`
+colocalise déjà route et domaine. Règle de précédence : **le fichier 11 pour ce que le pack ne
+tranche pas** — le pack ne fixe aucune arborescence, la DoD 09 §3 fixe le seuil mesuré.
+Décideur : **A01**, sur délégation de Williams du 2026-09-04.
+Impact spec : aucun amendement ; `docs/conception/LOT_L6.md` amendée (A-5).
+
+## 2026-09-05 — [L6] Séquencement : L5d s'intercale-t-il avant L6, ou en parallèle ?
+
+Contrôle A02, réserve **B4** : la note L6 défendait « L5a → L5b → L5c → (P-C) → L6 seul → (P-D) ».
+La chaîne photo a reçu son lot propriétaire **L5d** le 2026-09-05 (PR #50), qui touche
+`local/base.ts` et **monte `VERSION_SCHEMA_LOCAL`**. Les scénarios 6 et 7 du §9.8 — dont le 7 est un
+critère d'acceptation nommé — ne sont pas atteignables sans lui.
+
+Options :
+
+1. **L5d en série, juste après P-C et avant L6a.** Le schéma local est stabilisé avant que le moteur
+   de sync s'écrive dessus.
+2. L5d en parallèle de L6a. **Écartée** : deux chantiers simultanés sur `local/base.ts` sont
+   exactement la collision de fichiers que `CLAUDE.md` §4 interdit.
+3. L5d en série entre L6b et L6c. **Écartée** : L6a et L6b auraient été écrits sur un schéma local
+   destiné à changer, et une migration locale se réécrirait au milieu du lot.
+
+Arbitrage : **option 1**. Séquence stricte **L5c → (P-C) → L5d → L6a → L6b → L6c → (P-D)**. Le coût
+est assumé et il se dit : **L5d retarde L6 d'environ une demi-journée**, moins cher qu'une migration
+locale réécrite au milieu de L6b. « L6 se développe SEUL » (09 §5.3) n'est pas affaibli, il est
+décalé : une fois L5d fusionné, plus rien ne tourne sur `apps/field/**` ni `apps/api/**`. Règle de
+précédence : **09 §5.3 et `CLAUDE.md` §4**, qui interdisent le parallélisme sur les mêmes fichiers.
+Décideur : **A01**, sur délégation de Williams du 2026-09-04.
+Impact spec : aucun amendement ; `docs/conception/LOT_L6.md` amendée (A-4).
+
+## 2026-09-05 — [gouvernance] La note L6 dépasse « ≤ 1 page » : écart accepté ou refusé ?
+
+Le gardien A02 mesure les cinq notes de conception du dépôt : **LOT_L7 476 · LOT_L2 247 · LOT_L5 191
+· LOT_L3 139 · LOT_L6 126**. La règle 09 §3-1bis dit « ≤ 1 page ». Aucune note ne la tient, aucune
+n'a été recalée. L'amendement du 2026-09-05 porte LOT_L6 au-delà de 126 lignes.
+
+Options :
+
+1. **Accepter l'écart pour LOT_L6 et le déclarer ici**, la règle générale restant à arbitrer.
+2. Recaler la note. **Écartée** : LOT_L6 est la plus COURTE des cinq, sur le lot le plus critique ;
+   un veto de forme sur le chemin critique est exactement ce que le veto ne doit pas être.
+3. Laisser l'écart implicite. **Écartée** : une règle que personne ne tient et que personne n'amende
+   s'éteint en silence, et la sixième note fera 500 lignes sans que personne sache pourquoi c'est
+   trop.
+
+Arbitrage : **option 1**. L'écart de format de `LOT_L6.md` est **accepté et déclaré** ; l'amendement
+du 2026-09-05 l'aggrave délibérément, puisqu'il ajoute la table « critère 07 → incrément porteur »
+dont l'absence était le trou du premier contrôle. La question générale — amender ou rétablir
+« ≤ 1 page » — reste ouverte (doute **D-A** de la note) et appartient à Williams. Règle de
+précédence : **09 §3-1bis** pour la forme, **07** pour le contenu exigible, qui prime.
+Décideur : **A01**, sur délégation de Williams du 2026-09-04.
+Impact spec : aucun amendement du pack ; écart de forme tracé.
+
 ## 2026-09-05 — [L5] La chaîne PHOTO n'a de lot propriétaire nulle part : qui la livre ?
 
 A23 puis A22 l'ont mesuré indépendamment : **aucune photo n'entre dans l'application**. `grep` sur

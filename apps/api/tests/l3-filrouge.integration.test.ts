@@ -190,6 +190,59 @@ const figeageSchema = z.object({
   parBloc: z.array(z.object({ blocCode: z.string(), total: z.number().int() }).loose()),
 });
 
+// ── Étape 5 (L7b) : le noyau lu du plan, de la couverture et de l'agrégation ──
+// Transcrit de `docs/conception/LOT_L7.md` §6.3 et de DECISIONS.md 2026-09-05,
+// jamais importé de `packages/shared` : le sujet ne valide pas sa propre réponse.
+const fourchetteSchema = z.object({ min: z.number().int(), max: z.number().int() });
+
+const planSchema = z.object({
+  unites: z.array(
+    z
+      .object({
+        orgUnitId: z.uuid(),
+        entretiens: fourchetteSchema,
+        sessionsComplementaires: z.array(z.object({ kind: z.string() }).loose()),
+      })
+      .loose(),
+  ),
+});
+
+const uniteCouvertureSchema = z
+  .object({
+    orgUnitId: z.uuid(),
+    nom: z.string(),
+    inScope: z.boolean(),
+    aucuneSession: z.boolean(),
+    parSource: z.array(z.object({ kind: z.string(), prevu: fourchetteSchema }).loose()),
+  })
+  .loose();
+
+const couvertureSchema = z.object({
+  unites: z.array(uniteCouvertureSchema),
+  nextCursor: z.string().nullable(),
+  marges: z.object({ unitesInScope: z.number().int() }).loose(),
+});
+
+const agregationSchema = z.object({
+  questions: z.array(
+    z
+      .object({
+        missionQuestionId: z.uuid(),
+        comptes: z.object({ posee: z.number().int() }).loose(),
+        reponses: z.array(z.unknown()),
+      })
+      .loose(),
+  ),
+  nextCursor: z.string().nullable(),
+  totaux: z
+    .object({
+      questions: z.number().int(),
+      questionsSansReponse: z.number().int(),
+      reponses: z.number().int(),
+    })
+    .loose(),
+});
+
 function lire<T>(schema: z.ZodType<T>, reponse: Reponse, etape: string): T {
   const analyse = schema.safeParse(reponse.json);
   if (!analyse.success) {
@@ -663,6 +716,100 @@ function decrireParcours(fixture: FixtureParcoursL3): void {
           'un `resync` silencieux (05 §8.3).',
       ).toBe('QUESTIONNAIRE_ALREADY_FROZEN');
       expect(await compterFigees(missionId)).toBe(totalPrevisualise);
+    });
+
+    // ── ALLONGEMENT L7b (A36, 09 §4bis : « chaque lot ne fait qu'ALLONGER ») ──
+    // La mission que l'étape 4 a figée est lue par le PILOTAGE : la couverture
+    // rend TOUTES les unités que l'étape 2 a importées, son prévu est celui de la
+    // route de plan de L3 (critère du 07, ligne L7-min : « la couverture reflète
+    // le plan d'entretiens »), et l'agrégation rend chaque question figée comme
+    // « jamais posée » — la collecte (L5/L6) n'est pas encore dans le parcours.
+    it(`@filrouge ${nom} · étape 5 : la couverture rend les ${String(fixture.arbre.unites + 1)} unités avec le prévu du plan, et l'agrégation rend ${String(fixture.questionsAttendues)} questions « jamais posées »`, async () => {
+      const { missionId, totalPrevisualise } = etat(fixture);
+
+      // LE PLAN, PAR SA ROUTE : la référence contre laquelle la couverture est jugée.
+      const plan = lire(
+        planSchema,
+        await appeler('GET', `/v1/missions/${missionId}/interview-plan`),
+        `${nom} étape 5 (plan)`,
+      );
+      const cibles = new Map(plan.unites.map((u) => [u.orgUnitId, u]));
+
+      // LA COUVERTURE, page après page (keyset, jamais d'offset).
+      const unites: z.infer<typeof uniteCouvertureSchema>[] = [];
+      let curseur: string | null = null;
+      let marges: unknown = undefined;
+      do {
+        const query: string =
+          curseur === null ? '?limit=50' : `?limit=50&after=${encodeURIComponent(curseur)}`;
+        const page = lire(
+          couvertureSchema,
+          await appeler('GET', `/v1/missions/${missionId}/coverage${query}`),
+          `${nom} étape 5 (couverture)`,
+        );
+        marges ??= page.marges;
+        expect(
+          page.marges,
+          'les marges sont celles de la mission, identiques sur chaque page',
+        ).toEqual(marges);
+        unites.push(...page.unites);
+        curseur = page.nextCursor;
+        if (unites.length > fixture.arbre.unites + 1) throw new Error('la pagination déborde');
+      } while (curseur !== null);
+
+      expect(unites, 'toutes les unités importées à l’étape 2, plus la racine').toHaveLength(
+        await compterUnites(missionId),
+      );
+      expect(new Set(unites.map((u) => u.orgUnitId)).size).toBe(unites.length);
+      // Aucune session à ce stade du parcours : toute unité du périmètre porte l'alerte §16.6.
+      expect(unites.filter((u) => u.inScope).every((u) => u.aucuneSession)).toBe(true);
+      // Le prévu de CHAQUE unité retenue par le plan est celui du plan, borne à borne.
+      let comparees = 0;
+      for (const unite of unites) {
+        const cible = cibles.get(unite.orgUnitId);
+        if (cible === undefined) continue;
+        comparees += 1;
+        const entretien = unite.parSource.find((c) => c.kind === 'entretien');
+        expect(entretien?.prevu, `${unite.nom} : prévu ≠ plan`).toEqual(cible.entretiens);
+        for (const complementaire of cible.sessionsComplementaires) {
+          const cellule = unite.parSource.find((c) => c.kind === complementaire.kind);
+          expect(
+            cellule?.prevu.min,
+            `${unite.nom} : ${complementaire.kind} ≠ plan`,
+          ).toBeGreaterThanOrEqual(1);
+        }
+      }
+      expect(comparees, 'le plan et la couverture parlent des MÊMES unités').toBe(
+        plan.unites.length,
+      );
+      expect(comparees).toBeGreaterThan(0);
+
+      // L'AGRÉGATION : le questionnaire figé, question par question, sans aucune réponse.
+      const questions: string[] = [];
+      let curseurQ: string | null = null;
+      do {
+        const query: string =
+          curseurQ === null ? '?limit=50' : `?limit=50&after=${encodeURIComponent(curseurQ)}`;
+        const page = lire(
+          agregationSchema,
+          await appeler('GET', `/v1/missions/${missionId}/aggregation${query}`),
+          `${nom} étape 5 (agrégation)`,
+        );
+        expect(page.totaux.questions).toBe(totalPrevisualise);
+        expect(
+          page.totaux.questionsSansReponse,
+          '§27.4 : « jamais posée » n’est ni un refus ni un sans objet',
+        ).toBe(totalPrevisualise);
+        expect(page.totaux.reponses).toBe(0);
+        for (const question of page.questions) {
+          expect(question.comptes.posee).toBe(0);
+          expect(question.reponses).toEqual([]);
+          questions.push(question.missionQuestionId);
+        }
+        curseurQ = page.nextCursor;
+        if (questions.length > totalPrevisualise) throw new Error('la pagination déborde');
+      } while (curseurQ !== null);
+      expect(new Set(questions).size).toBe(totalPrevisualise);
     });
   });
 }

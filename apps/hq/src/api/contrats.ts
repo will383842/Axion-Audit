@@ -76,3 +76,30 @@ export const LIBELLES_PERIMETRE_GEO: Record<PerimetreGeoMission, string> = {
   france: 'France',
   multi_pays: 'multi-pays',
 };
+
+// ── Pilotage : couverture (§27.1, §16.6) et agrégation (M5.1, §27.4) — L7b ───
+// Ré-exports PURS de `@axion/shared`, comme la section précédente : rien n'est
+// redéfini ici, et la console n'importe `@axion/shared` nulle part ailleurs.
+export {
+  SOURCES_COLLECTE,
+  LIBELLES_SOURCE_COLLECTE,
+  DESCRIPTIONS_SOURCE_COLLECTE,
+  KIND_HORS_GRILLE,
+  couvertureMissionSchema,
+  PROVENANCES_REPONSE,
+  LIBELLES_PROVENANCE_REPONSE,
+  LIBELLES_MOTIF_NON_COMMUNIQUE,
+  agregationMissionSchema,
+} from '@axion/shared';
+export type {
+  SourceCollecte,
+  CelluleCouverture,
+  UniteCouverte,
+  MargesCouverture,
+  CouvertureMission,
+  ProvenanceReponse,
+  MotifNonCommuniqueApi,
+  ReponseAgregee,
+  QuestionAgregee,
+  AgregationMission,
+} from '@axion/shared';

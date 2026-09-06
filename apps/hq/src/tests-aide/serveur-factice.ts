@@ -29,8 +29,11 @@
 // =============================================================================
 import { vi } from 'vitest';
 import {
+  agregationMissionSchema,
+  agregationQuerySchema,
   apiErrorSchema,
   companyResponseSchema,
+  couvertureMissionSchema,
   ERROR_CODES,
   HTTP_STATUS_BY_ERROR_CODE,
   loginRequestSchema,
@@ -39,12 +42,20 @@ import {
   missionResponseSchema,
   pageSchema,
   paginationQuerySchema,
+  type AgregationMission,
   type ApiError,
   type CompanyResponse,
+  type CouvertureMission,
   type ErrorCode,
   type MissionResponse,
 } from '@axion/shared';
 import { ENTREPRISES, ID, MISSIONS_CANONIQUES } from './fixtures-console.js';
+import {
+  AGREGATION_GC,
+  AGREGATION_QUATRE_CAS,
+  COUVERTURE_GC,
+  COUVERTURE_TPE,
+} from './fixtures-pilotage.js';
 
 /** Un appel HTTP tel que la console l'a réellement émis. */
 export interface AppelReseau {
@@ -74,6 +85,20 @@ export interface ScenarioServeur {
    * `TypeError` (câble débranché) — l'état « hors ligne » de §33.2.
    */
   readonly panne?: 'aucune' | 'serveur' | 'reseau';
+  /**
+   * PILOTAGE (L7b) — la couverture et l'agrégation de CHAQUE mission, entières :
+   * le serveur pagine lui-même (`limit`, `after`) et applique `block`. Défaut :
+   * FIL-TPE et FIL-GC des fixtures de pilotage.
+   */
+  readonly couvertures?: Readonly<Record<string, CouvertureMission>>;
+  readonly agregations?: Readonly<Record<string, AgregationMission>>;
+  /**
+   * Les missions dont le CONSULTANT est membre (`mission_users`). Les routes de
+   * pilotage sont `type: 'mission'` dans l'API réelle (L7b) : membre → 200,
+   * non-membre → 404 (jamais 403 — un 403 dirait que la mission existe), et
+   * l'administrateur voit tout (03 §34.1). Défaut : aucune.
+   */
+  readonly missionsDuConsultant?: readonly string[];
 }
 
 export interface ServeurFactice {
@@ -138,10 +163,38 @@ function decoderCurseur(curseur: string): number | null {
   return Number(correspondance[1]);
 }
 
+/**
+ * Curseurs du PILOTAGE — opaques ET signés de leur ressource, comme ceux de l'API
+ * réelle (`http/pagination.ts`) : le curseur de la couverture ne vaut rien pour
+ * l'agrégation. Un curseur numérique nu (`?after=2`) est refusé : ce serait un
+ * décalage déguisé.
+ */
+function encoderCurseurPilotage(ressource: 'couverture' | 'agregation', index: number): string {
+  return `curseur-${ressource}-${String(index)}`;
+}
+
+function decoderCurseurPilotage(
+  ressource: 'couverture' | 'agregation',
+  curseur: string,
+): number | null {
+  const correspondance = new RegExp(`^curseur-${ressource}-(\\d+)$`).exec(curseur);
+  if (correspondance === null) return null;
+  return Number(correspondance[1]);
+}
+
 export function installerServeurFactice(scenario: ScenarioServeur = {}): ServeurFactice {
   const missions = scenario.missions ?? MISSIONS_CANONIQUES;
   const entreprises = scenario.entreprises ?? ENTREPRISES;
   const panne = scenario.panne ?? 'aucune';
+  const couvertures = scenario.couvertures ?? {
+    [ID.missionTpe]: COUVERTURE_TPE,
+    [ID.missionGc]: COUVERTURE_GC,
+  };
+  const agregations = scenario.agregations ?? {
+    [ID.missionTpe]: AGREGATION_QUATRE_CAS,
+    [ID.missionGc]: AGREGATION_GC,
+  };
+  const missionsDuConsultant = scenario.missionsDuConsultant ?? [];
   const appels: AppelReseau[] = [];
   const appelsFinanciers: AppelReseau[] = [];
   const appelsInattendus: AppelReseau[] = [];
@@ -214,6 +267,77 @@ export function installerServeurFactice(scenario: ScenarioServeur = {}): Serveur
     if (panne === 'serveur') {
       return erreur('INTERNAL_ERROR', 'Une erreur interne est survenue.');
     }
+
+    // ── Pilotage (L7b) : politique `mission`, AVANT la garde « admin seul » ────
+    // C'est la politique RÉELLE de `routes/pilotage.ts` : membre ou administrateur.
+    // Le non-membre reçoit le 404 d'une mission inexistante — le même message,
+    // pour ne pas rétablir l'oracle que le 404 ferme.
+    const pilotage = /^\/v1\/missions\/([^/]+)\/(coverage|aggregation)$/.exec(chemin);
+    if (pilotage !== null && methode === 'GET') {
+      const missionId = pilotage[1] ?? '';
+      const vue = pilotage[2];
+      const introuvable = erreur('NOT_FOUND', 'Cette mission n’existe pas.');
+      if (serveur.role !== 'admin' && !missionsDuConsultant.includes(missionId)) {
+        return introuvable;
+      }
+      const parametres = Object.fromEntries(appel.url.searchParams.entries());
+      if (vue === 'coverage') {
+        const complete = couvertures[missionId];
+        if (complete === undefined) return introuvable;
+        const requete = paginationQuerySchema.safeParse(parametres);
+        if (!requete.success) return erreur('VALIDATION_FAILED', 'Pagination invalide.');
+        const depart =
+          requete.data.after === undefined
+            ? 0
+            : decoderCurseurPilotage('couverture', requete.data.after);
+        if (depart === null)
+          return erreur('INVALID_CURSOR', 'Le curseur de pagination est invalide.');
+        const unites = complete.unites.slice(depart, depart + requete.data.limit);
+        const fin = depart + unites.length;
+        return {
+          statut: 200,
+          corps: couvertureMissionSchema.parse({
+            ...complete,
+            unites,
+            nextCursor:
+              fin < complete.unites.length ? encoderCurseurPilotage('couverture', fin) : null,
+          }),
+        };
+      }
+      const complete = agregations[missionId];
+      if (complete === undefined) return introuvable;
+      const requete = agregationQuerySchema.safeParse(parametres);
+      if (!requete.success) return erreur('VALIDATION_FAILED', 'Filtre ou pagination invalide.');
+      const depart =
+        requete.data.after === undefined
+          ? 0
+          : decoderCurseurPilotage('agregation', requete.data.after);
+      if (depart === null)
+        return erreur('INVALID_CURSOR', 'Le curseur de pagination est invalide.');
+      const filtrees = complete.questions.filter(
+        (q) => requete.data.block === undefined || q.blocCode === requete.data.block,
+      );
+      const questions = filtrees.slice(depart, depart + requete.data.limit);
+      const fin = depart + questions.length;
+      const reponses = filtrees.flatMap((q) => q.reponses);
+      return {
+        statut: 200,
+        corps: agregationMissionSchema.parse({
+          ...complete,
+          filtre: { block: requete.data.block ?? null, orgUnit: requete.data.orgUnit ?? null },
+          questions,
+          nextCursor: fin < filtrees.length ? encoderCurseurPilotage('agregation', fin) : null,
+          // Les totaux portent sur la mission ENTIÈRE, filtre appliqué — jamais la page.
+          totaux: {
+            ...complete.totaux,
+            questions: filtrees.length,
+            questionsSansReponse: filtrees.filter((q) => q.comptes.posee === 0).length,
+            reponses: reponses.length,
+          },
+        }),
+      };
+    }
+
     if (serveur.role !== 'admin') {
       return erreur('FORBIDDEN', 'Cet espace est réservé aux administrateurs.');
     }
