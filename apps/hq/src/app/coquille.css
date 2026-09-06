@@ -699,3 +699,46 @@
 .axn-agregation__sans-valeur {
   color: var(--couleur-texte-tertiaire);
 }
+
+/* --- Export de mission (§36.3) — lot L7c ---------------------------------- */
+
+/* La liste des fichiers du ZIP se lit en UNE colonne : chaque description dit à
+   quelle rubrique du rapport §20.3 le fichier sert, et une grille à deux colonnes
+   couperait ces phrases en deux là où elles doivent se lire d'affilée. */
+.axn-fiche--liste {
+  grid-template-columns: 1fr;
+  gap: var(--espacement-4);
+}
+
+/* Le nom de fichier reste dans la police de l'interface : la console n'a pas
+   de jeton de police à chasse fixe, et en inventer un ici serait poser une
+   valeur en dur (invariant 4). Le contraste du texte principal suffit à le
+   distinguer de sa description. */
+.axn-fiche--liste dt code {
+  font-size: var(--typo-taille-sm);
+  color: var(--couleur-texte-principal);
+}
+
+.axn-fiche--liste dd {
+  font-variant-numeric: normal;
+  color: var(--couleur-texte-secondaire);
+  font-size: var(--typo-taille-sm);
+}
+
+/* Le texte d'aide sous une option : il PORTE la règle de consentement, il n'est
+   donc pas décoratif — d'où une taille lisible et non un gris de note de bas de
+   page. */
+.axn-aide {
+  margin: 0;
+  max-width: var(--taille-largeur-contenu-etroit);
+  color: var(--couleur-texte-secondaire);
+  font-size: var(--typo-taille-sm);
+}
+
+/* La bascule « afficher les répondants » de l'agrégation : à côté du filtre de
+   bloc, jamais dans un menu — une option qui découvre des noms se voit. */
+.axn-agregation__option-repondants {
+  display: flex;
+  align-items: center;
+  gap: var(--espacement-2);
+}

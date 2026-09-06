@@ -135,23 +135,18 @@ jobs:
           # suffit et est à durée de vie limitée : c'est le moindre accès.
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # La recette de construction vit dans une action locale, qui la rejoue une
+      # SECONDE fois si la première échoue. Motif, et ce que cela n'avale pas :
+      # l'encadré de `.github/actions/construire-image/action.yml`. En deux mots :
+      # ce job a rougi deux fois en deux jours pour des pannes de registre — GHCR
+      # « unauthorized », puis un 502 du Docker Hub — et chaque fois il a fallu
+      # qu'un humain relance.
       - name: Construire (et pousser) l'image
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        uses: ./.github/actions/construire-image
         with:
-          context: .
-          file: ${{ steps.reperage.outputs.dockerfile }}
-          push: ${{ inputs.pousser }}
-          # 02 §30.5 : taguées par SHA **et** par version.
-          tags: |
-            ${{ needs.metadonnees.outputs.prefixe }}-${{ matrix.image }}:${{ needs.metadonnees.outputs.tag_sha }}
-            ${{ needs.metadonnees.outputs.prefixe }}-${{ matrix.image }}:${{ needs.metadonnees.outputs.tag_version }}
-          build-args: |
-            APP_VERSION=${{ needs.metadonnees.outputs.tag_sha }}
-            VITE_APP_VERSION=${{ needs.metadonnees.outputs.tag_sha }}
-          labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ needs.metadonnees.outputs.tag_version }}
-          provenance: false
-          cache-from: type=gha,scope=${{ matrix.image }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+          image: ${{ matrix.image }}
+          dockerfile: ${{ steps.reperage.outputs.dockerfile }}
+          pousser: ${{ inputs.pousser }}
+          prefixe: ${{ needs.metadonnees.outputs.prefixe }}
+          tag_sha: ${{ needs.metadonnees.outputs.tag_sha }}
+          tag_version: ${{ needs.metadonnees.outputs.tag_version }}

@@ -129,6 +129,7 @@ export async function etablirLAgregation(
     missionId,
     page.items.map((question) => question.missionQuestionId),
     filtre,
+    requete.repondants,
   );
   const totaux = await compterTotauxAgregation(db, missionId, filtre);
 
@@ -142,5 +143,6 @@ export async function etablirLAgregation(
     reponses,
     nextCursor: page.nextCursor,
     totaux,
+    repondantsAffiches: requete.repondants,
   });
 }

@@ -1,0 +1,120 @@
+# =============================================================================
+# CONSTRUIRE UNE DES 4 IMAGES — LA RECETTE, ÉCRITE UNE SEULE FOIS
+# =============================================================================
+# ── POURQUOI CETTE ACTION EXISTE ────────────────────────────────────────────
+# Le job « 7 · constructibilité des 4 images » a rougi DEUX FOIS en deux jours
+# sans qu'une seule ligne du dépôt soit en cause :
+#   · 2026-09-05 — `unauthorized: authentication required` sur GHCR ;
+#   · 2026-09-06 — `502 Bad Gateway` du Docker Hub sur `alpine:3.21`, pendant la
+#     résolution des métadonnées de l'image de base.
+# Les deux fois, la PR est restée bloquée jusqu'à ce qu'un humain relance à la
+# main. Un job qui exige une intervention pour une panne de registre n'apprend
+# rien à personne : il déplace seulement le coût.
+#
+# ── POURQUOI UNE ACTION, ET CE QU'ELLE NE RÈGLE PAS ─────────────────────────
+# GitHub Actions ne sait ni boucler sur une étape, ni ancrer un bloc YAML : une
+# seconde tentative s'écrit forcément en recopiant le `with:`. **La duplication
+# est donc TOUJOURS LÀ, dix lignes plus bas, et il faut le dire plutôt que de
+# laisser croire le contraire.** Ce que l'action apporte est plus modeste et
+# reste utile : les deux exemplaires sont désormais VOISINS dans un seul
+# fichier, au lieu d'être noyés dans un workflow de 160 lignes — et surtout,
+# `scripts/check-etapes-jumelles.mjs` COMPARE les deux blocs à chaque CI. Un
+# commentaire qui demande de garder deux choses synchronisées n'est pas un
+# garde-fou ; ce script en est un.
+#
+# Écrire la boucle en `docker buildx build` aurait supprimé la répétition pour
+# de bon — mais le cache `type=gha` exige des variables que seule l'action
+# expose, et les récupérer demanderait une action tierce de plus. On perdrait le
+# cache des quatre images pour gagner dix lignes.
+#
+# Une action de « retry » du marché aurait aussi fait l'affaire — mais ce serait
+# une dépendance nouvelle (CLAUDE.md §3-1).
+#
+# ── CE QUE CETTE ACTION N'AVALE PAS ─────────────────────────────────────────
+# La seconde tentative n'a AUCUN `continue-on-error` : un Dockerfile fautif
+# échoue deux fois et le job rougit, simplement vingt secondes plus tard. Le
+# surcoût sur un vrai défaut est négligeable — le cache `gha` rend la
+# reconstruction quasi immédiate jusqu'à la couche qui casse.
+#
+# Traçabilité E36/E43 — lot L0 (07 §12), agent A52.
+# =============================================================================
+name: Construire une image Axion
+description: Construit (et pousse) une des 4 images, avec une seconde tentative si le registre hoquette.
+
+inputs:
+  image:
+    description: "Nom de l'image : api, worker, field ou hq."
+    required: true
+  dockerfile:
+    description: 'Chemin du Dockerfile, tel que localisé par le job appelant.'
+    required: true
+  pousser:
+    description: 'true = pousser sur GHCR ; false = build de vérification seul.'
+    required: true
+  prefixe:
+    description: 'Préfixe GHCR, sans le suffixe de service.'
+    required: true
+  tag_sha:
+    description: 'Tag SHA (02 §30.5).'
+    required: true
+  tag_version:
+    description: 'Tag de version (02 §30.5).'
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Construire (et pousser) l'image — 1re tentative
+      id: premiere
+      continue-on-error: true
+      uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+      with:
+        context: .
+        file: ${{ inputs.dockerfile }}
+        push: ${{ inputs.pousser }}
+        # 02 §30.5 : taguées par SHA **et** par version.
+        tags: |
+          ${{ inputs.prefixe }}-${{ inputs.image }}:${{ inputs.tag_sha }}
+          ${{ inputs.prefixe }}-${{ inputs.image }}:${{ inputs.tag_version }}
+        build-args: |
+          APP_VERSION=${{ inputs.tag_sha }}
+          VITE_APP_VERSION=${{ inputs.tag_sha }}
+        labels: |
+          org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          org.opencontainers.image.revision=${{ github.sha }}
+          org.opencontainers.image.version=${{ inputs.tag_version }}
+        provenance: false
+        cache-from: type=gha,scope=${{ inputs.image }}
+        cache-to: type=gha,mode=max,scope=${{ inputs.image }}
+
+    - name: Dire ce qui vient d'échouer, avant de réessayer
+      if: steps.premiere.outcome == 'failure'
+      shell: bash
+      run: |
+        echo "::warning title=Construction reprise::La 1re tentative de « ${{ inputs.image }} » a échoué. Seconde et DERNIÈRE tentative — si elle échoue, le job rougit. Les deux causes déjà observées étaient EXTERNES (GHCR « unauthorized » le 05/09, Docker Hub 502 sur l'image de base le 06/09) ; une troisième cause serait, elle, à chercher dans le dépôt."
+
+    # ⚠️ CE BLOC `with:` DOIT RESTER IDENTIQUE À CELUI DE LA 1re TENTATIVE.
+    # Ne le modifie jamais seul : `scripts/check-etapes-jumelles.mjs` compare les
+    # deux à chaque CI et refuse la moindre divergence. Sans cela, l'image
+    # construite dépendrait de si le registre a hoqueté ou non — et personne ne
+    # le verrait, puisque le chemin de reprise ne s'emprunte qu'en panne.
+    - name: Construire (et pousser) l'image — 2de tentative
+      if: steps.premiere.outcome == 'failure'
+      uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+      with:
+        context: .
+        file: ${{ inputs.dockerfile }}
+        push: ${{ inputs.pousser }}
+        tags: |
+          ${{ inputs.prefixe }}-${{ inputs.image }}:${{ inputs.tag_sha }}
+          ${{ inputs.prefixe }}-${{ inputs.image }}:${{ inputs.tag_version }}
+        build-args: |
+          APP_VERSION=${{ inputs.tag_sha }}
+          VITE_APP_VERSION=${{ inputs.tag_sha }}
+        labels: |
+          org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          org.opencontainers.image.revision=${{ github.sha }}
+          org.opencontainers.image.version=${{ inputs.tag_version }}
+        provenance: false
+        cache-from: type=gha,scope=${{ inputs.image }}
+        cache-to: type=gha,mode=max,scope=${{ inputs.image }}
