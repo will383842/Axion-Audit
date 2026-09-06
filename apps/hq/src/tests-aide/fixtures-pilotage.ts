@@ -311,6 +311,8 @@ interface SemisReponse {
   readonly provenance: ReponseAgregee['provenance'];
   readonly fonction?: string | null;
   readonly service?: string | null;
+  /** Le NOM n'est semé que si le semis le demande (2026-09-05, porte serveur). */
+  readonly nom?: string | null;
   readonly valeur?: string | null;
   readonly nonCommunique?: ReponseAgregee['motifNonCommunique'];
   readonly sansObjet?: string;
@@ -329,6 +331,7 @@ function reponse(semis: SemisReponse): ReponseAgregee {
     orgUnitInScope: true,
     fonctionRepondant: semis.fonction ?? null,
     serviceRepondant: semis.service ?? null,
+    nomRepondant: semis.nom ?? null,
     provenance: semis.provenance,
     valeurLisible: semis.valeur ?? null,
     nonCommunique: semis.nonCommunique !== undefined,
@@ -386,6 +389,8 @@ export function agregationDe(
   options: {
     readonly timezone?: string;
     readonly blocs?: readonly { code: string; libelle: string }[];
+    /** L7c : le serveur a-t-il SERVI les noms ? Faux par défaut, comme la route. */
+    readonly repondantsAffiches?: boolean;
   } = {},
 ): AgregationMission {
   const reponses = questions.flatMap((q) => q.reponses);
@@ -400,6 +405,7 @@ export function agregationDe(
       ]),
     ],
     filtre: { block: null, orgUnit: null },
+    repondantsAffiches: options.repondantsAffiches ?? false,
     questions: [...questions],
     nextCursor: null,
     totaux: {
