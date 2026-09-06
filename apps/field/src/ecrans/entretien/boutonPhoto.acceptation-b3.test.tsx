@@ -64,6 +64,11 @@ function rendreZoneQuestion(): void {
       onQuestionAdHoc={() => undefined}
       onPrecedent={() => undefined}
       onSuivant={() => undefined}
+      // Props ajoutées par M2 (dernière question) — inertes ici : `peutSuivant`
+      // est vrai, donc la branche « Terminer » ne se rend pas. Adaptation de
+      // SIGNATURE, aucune assertion de ce fichier n'est touchée (09 §5.6).
+      onTerminer={() => undefined}
+      libelleTerminer="Terminer l’entretien"
       peutPrecedent={false}
       peutSuivant
       afficherRaccourcis
@@ -126,6 +131,11 @@ describe('B3 — le motif du bouton est LU PAR UN ŒIL, pas seulement par un lec
         onQuestionAdHoc={() => undefined}
         onPrecedent={() => undefined}
         onSuivant={() => undefined}
+        // Props ajoutées par M2 (dernière question) — inertes ici : `peutSuivant`
+        // est vrai, donc la branche « Terminer » ne se rend pas. Adaptation de
+        // SIGNATURE, aucune assertion de ce fichier n'est touchée (09 §5.6).
+        onTerminer={() => undefined}
+        libelleTerminer="Terminer l’entretien"
         peutPrecedent={false}
         peutSuivant
         afficherRaccourcis

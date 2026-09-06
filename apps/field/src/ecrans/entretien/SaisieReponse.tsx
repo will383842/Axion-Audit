@@ -52,6 +52,7 @@ import {
   type LigneTableau,
   type ValeurTypee,
 } from '../../session/valeurs.js';
+import { ID_MOTIF_LECTURE_SEULE } from './motifs.js';
 
 export type Cadence = 'immediat' | 'differe';
 
@@ -519,6 +520,7 @@ function SaisieTableau(proprietes: {
             <Bouton
               variante="discret"
               disabled={desactive}
+              {...(desactive ? { 'aria-describedby': ID_MOTIF_LECTURE_SEULE } : {})}
               onClick={() => {
                 remplacer(
                   brouillon.filter((_, autre) => autre !== rang),
@@ -549,6 +551,7 @@ function SaisieTableau(proprietes: {
         variante="secondaire"
         taille="large"
         disabled={desactive}
+        {...(desactive ? { 'aria-describedby': ID_MOTIF_LECTURE_SEULE } : {})}
         onClick={() => {
           remplacer([...brouillon, {}], 'immediat');
         }}

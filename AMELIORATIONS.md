@@ -2268,3 +2268,46 @@ interdit d'implémenter une fiche d'étage 2 avant son arbitrage. La proposer es
 est une faute.
 
 **Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE
+
+---
+
+## A-0xx — L5 : donner au REFUS de participation son propre état de session
+
+**Étage 2 — PROPOSÉE, non implémentée.** Déposée par A22 le 2026-09-06, à la fermeture du doute de
+spec **D-1** (recette novice A54 §8-2 ; réserve de la porte P-C reprise par A02).
+Arbitrage lié : `DECISIONS.md`, 2026-09-06, « Que fait l'application quand l'interlocuteur REFUSE ».
+
+**Constat terrain.** Un interlocuteur qui refuse de participer est un fait ordinaire d'audit : il
+arrive, il a une cause, et il explique un trou dans les données. L'application n'offrait que la case
+« Accord de participation recueilli » ou l'impasse. Depuis ce jour, le refus **s'écrit** — une note
+horodatée sur la session, qui reste `non_demarre` et sans accord (correctif L5b, réversible et hors
+schéma). Ce que cette note NE FAIT PAS, et c'est l'objet de la fiche : elle ne change pas ce que le
+**siège** lit. La session refusée reste, pour la console et pour le scoring, une session simplement
+pas encore démarrée — indiscernable de celle qu'un auditeur n'a pas eu le temps d'ouvrir.
+
+**Valeur pour l'auditeur, et pour le rapport.** Trois conséquences se paient aujourd'hui en aval :
+la **couverture** d'une unité compte cette session comme à faire, donc l'agenda la rappellera tous
+les jours ; le **taux de complétude** ne distingue pas « personne n'a posé la question » de « on a
+demandé, on a essuyé un refus » — la même distinction qu'A01 a jugée décisive le 2026-09-06 sur
+`QUESTION_BLOQUANTE_JAMAIS_POSEE` ; et le **rapport** ne peut rien affirmer d'un refus, alors que
+c'est souvent le constat le plus parlant d'une mission.
+
+**Ce qui est proposé (deux formes, à trancher).**
+· **Forme légère** : réutiliser `schedule_status = 'annule'` (valeur DÉJÀ dans le 04) avec le motif
+en note, et faire dire à l'agenda et à la couverture ce que « annulé pour refus » signifie.
+Impact schéma **aucun** ; impact API : une op `upsert interview` dont l'index change de sens ; impact
+console : la lecture de `schedule_status` doit distinguer un report d'un refus.
+· **Forme complète** : un état ou un champ dédié dans le 04 (`interviews.refusal_reason`, ou une
+valeur `refuse` de `schedule_status`), avec sa remontée de sync et son rendu console.
+Impact schéma **oui** ; impact API **oui** ; impact crypto : le motif est une donnée de personne,
+donc charge chiffrée, jamais index.
+
+**Coût estimé.** Forme légère ~0,5 j (écran + agenda + couverture + tests). Forme complète ~1,5 j
+(migration 04, Zod partagé, sync, console, tests des deux côtés).
+
+**Pourquoi elle n'est pas faite dans L5b.** Elle touche le 04 ou le sens d'un champ d'index remonté
+au siège ; CLAUDE.md §3-2 réserve les deux à un arbitrage humain, et §6 interdit d'implémenter une
+fiche d'étage 2 avant son arbitrage. La note horodatée livrée aujourd'hui ne préempte aucune des deux
+formes : si l'une est retenue, la note reste vraie et se relit.
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE

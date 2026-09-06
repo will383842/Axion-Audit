@@ -29,10 +29,15 @@
 // Tout ce panneau est INTERNE : jamais rendu en écran partagé.
 // Traçabilité : E13 (écran 3 zones, notes volantes).
 // =============================================================================
-import { useState, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { Badge, Bouton, ZoneNotes } from '@axion/ui';
 import { formaterHeure } from '../../session/fuseau.js';
 import type { NoteVolanteLocale } from '../../session/notes-volantes.js';
+import {
+  MOTIF_NOTE_VOLANTE_VIDE,
+  MOTIF_NOTES_VERROUILLEES_DEFAUT,
+  MOTIF_RIEN_A_RATTACHER,
+} from './motifs.js';
 
 export interface ProprietesPanneauNotes {
   /** Change quand la question change (ou qu'une décision a réécrit la note) : remonte le brouillon. */
@@ -41,6 +46,14 @@ export interface ProprietesPanneauNotes {
   readonly onNoteDeQuestion: (texte: string) => void;
   /** `false` tant que l'écriture est refusée (entretien non démarré ou validé). */
   readonly ecriturePossible: boolean;
+  /**
+   * POURQUOI l'écriture est refusée — majeur **M1** de la recette novice A54.
+   *
+   * 03 §19.1 : « jamais un simple cadenas muet ». Ce motif est RENDU, et chaque
+   * bouton grisé de ce panneau le désigne (`aria-describedby`). Absent, une
+   * phrase de repli dit au moins ce qui manque le plus souvent : le démarrage.
+   */
+  readonly motifLectureSeule?: string;
   /** Change avec la session : remonte le brouillon du bloc-notes. */
   readonly cleBlocNotes: string;
   readonly notesGenerales: string;
@@ -70,6 +83,7 @@ export function PanneauNotes(proprietes: ProprietesPanneauNotes): ReactNode {
     noteDeQuestion,
     onNoteDeQuestion,
     ecriturePossible,
+    motifLectureSeule,
     cleBlocNotes,
     notesGenerales,
     onNotesGenerales,
@@ -83,8 +97,27 @@ export function PanneauNotes(proprietes: ProprietesPanneauNotes): ReactNode {
     idNoteDeQuestion,
   } = proprietes;
 
+  // M1 — ce panneau est rendu DEUX FOIS par l'écran d'entretien (la colonne
+  // droite et le panneau d'écran étroit) : ses identifiants de motif ne peuvent
+  // pas être des constantes, sinon deux nœuds portent le même `id` et
+  // `aria-describedby` désigne le mauvais. `useId` les rend uniques par instance.
+  const prefixe = useId();
+  const idVerrou = `${prefixe}-verrou`;
+  const idRienARattacher = `${prefixe}-rattacher`;
+  const motifVerrou = motifLectureSeule ?? MOTIF_NOTES_VERROUILLEES_DEFAUT;
+  const decritSiVerrouille = ecriturePossible ? {} : { 'aria-describedby': idVerrou };
+
   return (
     <div className="axn-notes">
+      {/* M1 : le motif du verrou est écrit UNE fois, en haut du panneau, et
+          désigné par chaque bouton grisé plus bas. Un motif recopié sous chaque
+          bouton finirait par dire trois choses différentes. */}
+      {!ecriturePossible && (
+        <p id={idVerrou} className="axn-champ__aide">
+          {motifVerrou}
+        </p>
+      )}
+
       <section className="axn-notes__section" aria-labelledby="axn-notes-question">
         <h3 id="axn-notes-question">Note sur cette question</h3>
         <Brouillon
@@ -93,7 +126,7 @@ export function PanneauNotes(proprietes: ProprietesPanneauNotes): ReactNode {
           initial={noteDeQuestion}
           lignes={4}
           desactive={!ecriturePossible}
-          {...(ecriturePossible ? {} : { aide: 'Démarrez l’entretien pour prendre des notes.' })}
+          {...(ecriturePossible ? {} : { aide: motifVerrou })}
           {...(idNoteDeQuestion === undefined ? {} : { id: idNoteDeQuestion })}
           onTexte={onNoteDeQuestion}
         />
@@ -113,7 +146,11 @@ export function PanneauNotes(proprietes: ProprietesPanneauNotes): ReactNode {
 
       <section className="axn-notes__section" aria-labelledby="axn-notes-volantes">
         <h3 id="axn-notes-volantes">Notes volantes</h3>
-        <CaptureNoteVolante desactive={!ecriturePossible} onCapturer={onCapturerNoteVolante} />
+        <CaptureNoteVolante
+          desactive={!ecriturePossible}
+          idMotifVerrou={ecriturePossible ? null : idVerrou}
+          onCapturer={onCapturerNoteVolante}
+        />
 
         {notesVolantes.length === 0 ? (
           <p className="axn-champ__aide">Aucune note volante dans cet entretien.</p>
@@ -139,6 +176,11 @@ export function PanneauNotes(proprietes: ProprietesPanneauNotes): ReactNode {
                       <Bouton
                         variante="secondaire"
                         disabled={!ecriturePossible || reponseCouranteId === null}
+                        {...(ecriturePossible
+                          ? reponseCouranteId === null
+                            ? { 'aria-describedby': idRienARattacher }
+                            : {}
+                          : decritSiVerrouille)}
                         onClick={() => {
                           onRattacher(note);
                         }}
@@ -150,6 +192,7 @@ export function PanneauNotes(proprietes: ProprietesPanneauNotes): ReactNode {
                       <Bouton
                         variante="discret"
                         disabled={!ecriturePossible}
+                        {...decritSiVerrouille}
                         onClick={() => {
                           onDetacher(note);
                         }}
@@ -160,6 +203,7 @@ export function PanneauNotes(proprietes: ProprietesPanneauNotes): ReactNode {
                     <Bouton
                       variante="discret"
                       disabled={!ecriturePossible}
+                      {...decritSiVerrouille}
                       onClick={() => {
                         onSupprimer(note);
                       }}
@@ -173,8 +217,8 @@ export function PanneauNotes(proprietes: ProprietesPanneauNotes): ReactNode {
           </ul>
         )}
         {reponseCouranteId === null && notesVolantes.some((note) => note.answerId === null) && (
-          <p className="axn-champ__aide">
-            Répondez d’abord à la question courante pour pouvoir y rattacher une note volante.
+          <p id={idRienARattacher} className="axn-champ__aide">
+            {MOTIF_RIEN_A_RATTACHER}
           </p>
         )}
       </section>
@@ -217,11 +261,14 @@ function Brouillon(proprietes: {
 
 function CaptureNoteVolante(proprietes: {
   readonly desactive: boolean;
+  /** L'identifiant du motif de verrou rendu par le panneau, ou `null`. */
+  readonly idMotifVerrou: string | null;
   readonly onCapturer: (texte: string) => Promise<boolean>;
 }): ReactNode {
-  const { desactive, onCapturer } = proprietes;
+  const { desactive, idMotifVerrou, onCapturer } = proprietes;
   const [brouillon, setBrouillon] = useState('');
   const [enCours, setEnCours] = useState(false);
+  const idMotifVide = `${useId()}-vide`;
 
   const capturer = (): void => {
     if (brouillon.trim() === '' || enCours) return;
@@ -270,11 +317,26 @@ function CaptureNoteVolante(proprietes: {
           setBrouillon(evenement.target.value);
         }}
       />
+      {/* M1 : « Garder cette note volante » était grisé sans un mot tant que le
+          champ était vide. Il dit maintenant ce qui manque — et le motif est
+          VISIBLE, pas seulement audible (leçon de B3). */}
+      {!desactive && brouillon.trim() === '' && (
+        <p id={idMotifVide} className="axn-champ__aide">
+          {MOTIF_NOTE_VOLANTE_VIDE}
+        </p>
+      )}
       <Bouton
         variante="secondaire"
         pleineLargeur
         chargement={enCours}
         disabled={desactive || brouillon.trim() === ''}
+        {...(desactive
+          ? idMotifVerrou === null
+            ? {}
+            : { 'aria-describedby': idMotifVerrou }
+          : brouillon.trim() === ''
+            ? { 'aria-describedby': idMotifVide }
+            : {})}
         onClick={capturer}
       >
         Garder cette note volante
