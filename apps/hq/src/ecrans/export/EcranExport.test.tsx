@@ -174,6 +174,17 @@ describe('EcranExport — la porte du nom des répondants', () => {
     const etiquette = boite.closest('label');
     expect(etiquette?.textContent ?? '').toMatch(/consentement/i);
   });
+
+  it('annonce les TROIS champs, jamais le nom seul (B-1, 2026-09-06)', async () => {
+    // Le libellé ne doit pas laisser croire qu'on peut lever l'anonymat à moitié :
+    // le serveur ferme la porte sur le nom, la fonction ET le service.
+    rendre();
+    const boite = await screen.findByRole('checkbox');
+    const libelle = boite.closest('label')?.textContent ?? '';
+    expect(libelle).toMatch(/nom/i);
+    expect(libelle).toMatch(/fonction/i);
+    expect(libelle).toMatch(/service/i);
+  });
 });
 
 describe('EcranExport — le téléchargement et ses retours', () => {

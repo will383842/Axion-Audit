@@ -16,22 +16,44 @@
 // réponses, soit quelques mégaoctets de texte, produits par le SIÈGE
 // (invariant 6). Les seules bornes qui comptent ici sont celles du `where`.
 //
+// ── LE DÉPÔT NE RÉSOUT AUCUN FUSEAU, ET C'EST VOULU (M-1, 2026-09-06) ─────
+// Il rend `org_units.timezone` TELLE QUELLE, `NULL` compris — parce que le `NULL`
+// a un sens : « hérite de l'arbre » (04 l. 62, §22.2). La résolution demande de
+// remonter les parents, donc l'arbre entier ; elle vit dans `service.ts`, en un
+// seul endroit. Les six lectures rendent donc des lignes SANS `fuseau` (`Omit`),
+// et c'est le compilateur qui garantit qu'aucune ne part vers un fichier avant
+// d'avoir été datée.
+//
 // ── CE QUE CE DÉPÔT NE LIT JAMAIS (invariant 3) ────────────────────────────
 // Ni `scoping_financials`, ni `scoping_estimates`, ni `estimation_params`, ni
 // `mission_rebaselines` (§25.1 : « visible ADMIN SEUL »). Aucun montant d'Axion
 // n'entre dans un fichier qui part chez le consultant qui rédige.
 //
-// ── LA PORTE DU NOM DU RÉPONDANT VIT ICI, ET NULLE PART AILLEURS ───────────
-// `person_name` n'est sélectionné QUE si l'appelant a passé `repondants=true`
-// ET pour les seules lignes dont `consent_given IS TRUE` — le `NULL` et le
-// `false` sont masqués de la même façon (arbitrage A01 du 2026-09-05). Le SQL
-// rend `null` dans tous les autres cas, si bien qu'aucun module d'écriture de
-// fichier ne peut ouvrir cette porte par mégarde. `person_email` n'est jamais lu.
+// ── LA PORTE DE L'IDENTIFICATION VIT ICI, ET NULLE PART AILLEURS ───────────
+// TROIS champs la passent, et non un seul : le **nom**, la **fonction** et le
+// **service** du répondant. Chacun n'est sélectionné QUE si l'appelant a passé
+// `repondants=true` ET pour les seules lignes dont `consent_given IS TRUE` — le
+// `NULL` et le `false` sont masqués de la même façon.
+//
+// ⚠ CORRECTION DU 2026-09-06 (bloquant B-1 d'A37, arbitrage A01) : la première
+// rédaction n'appliquait la porte qu'au NOM. C'était appliquer la règle là où la
+// décision l'EXCLUT — l'agrégation de L7b, un écran qui ne quitte pas la console —
+// et pas là où elle l'IMPOSE : l'export, **le seul fichier qui CIRCULE**. Le motif
+// est dans l'arbitrage du 2026-09-05 : « à trois, ils identifient une personne dans
+// une petite structure ». Dans une entreprise de huit personnes, « DAF » désigne
+// quelqu'un aussi sûrement qu'un nom.
+//
+// CE QUE CELA COÛTE, MESURÉ ET ASSUMÉ : la rubrique 11 du §20.3 (plan de formation
+// par population) est dégradée POUR LES SEULS RÉPONDANTS SANS CONSENTEMENT — et
+// c'est le résultat juste. La rubrique 4 (divergences direction ↔ terrain) ne l'est
+// PAS : elle se construit sur `unite_nom`, le TYPE DE SESSION et la PROVENANCE, qui
+// restent publiés sans condition parce que ce sont des propriétés de la COLLECTE,
+// pas de la personne. `person_email` n'est lu dans aucun cas.
 //
 // Traçabilité : E14 (consolidation) · E21 (auditeurs jamais d'accès aux montants)
 // · E22 (console) · E36 (exécutable par lots avec critères).
 // =============================================================================
-import { and, eq, isNull, ne, sql } from 'drizzle-orm';
+import { and, eq, isNull, ne, sql, type SQLWrapper } from 'drizzle-orm';
 import {
   aiSystems,
   answers,
@@ -64,6 +86,28 @@ import type {
 
 /** Le demandeur d'un export est celui d'un pilotage : même politique, même 404. */
 export type DemandeurDExport = DemandeurDePilotage;
+
+/**
+ * Une ligne telle que la BASE la rend : tout, sauf le fuseau.
+ *
+ * Le fuseau n'est pas une donnée de la ligne, c'est le RÉSULTAT d'une remontée
+ * d'arbre. L'`Omit` le dit au compilateur : aucune de ces lignes ne peut être
+ * écrite dans un fichier avant d'avoir été datée par le service.
+ */
+export type SansFuseau<T> = Omit<T, 'fuseau'>;
+
+/**
+ * Une pièce jointe, plus l'unité qui la datera.
+ *
+ * `orgUnitId` ne figure PAS dans `manifest.csv` (le §36.3 en fixe les colonnes :
+ * id, session, question, type, fichier) : il ne sert qu'à retrouver le fuseau. Une
+ * note volante n'a ni session ni réponse (P1-5) : son `orgUnitId` est nul, et sa
+ * ligne se date alors au fuseau de la MISSION — le seul cas où l'export y retombe
+ * par ABSENCE de site, et non par héritage.
+ */
+export interface PieceJointeADater extends SansFuseau<LignePieceJointeExport> {
+  readonly orgUnitId: string | null;
+}
 
 // -----------------------------------------------------------------------------
 // LA MISSION ET SON CLIENT
@@ -234,6 +278,14 @@ export interface UnitePourExport {
   readonly effectif: number | null;
   readonly inScope: boolean;
   readonly statut: string;
+  /**
+   * `org_units.timezone` — **NULLABLE**, et le `NULL` a un sens : « hérite de
+   * l'arbre » (04 l. 62 : « §22.2 — NULL = fuseau de la mission (héritage par
+   * l'arbre) »). Rendue telle quelle : la remplacer par un défaut ici rendrait
+   * l'héritage inexprimable, et un site de Singapour serait daté à Grenoble sans
+   * que rien ne le dise.
+   */
+  readonly timezone: string | null;
 }
 
 /**
@@ -257,6 +309,7 @@ export async function listerUnitesPourExport(
       effectif: orgUnits.headcount,
       inScope: orgUnits.inScope,
       statut: orgUnits.status,
+      timezone: orgUnits.timezone,
     })
     .from(orgUnits)
     .where(and(eq(orgUnits.missionId, missionId), ne(orgUnits.status, 'fusionnee')));
@@ -267,18 +320,20 @@ export async function listerUnitesPourExport(
 // -----------------------------------------------------------------------------
 
 /**
- * LA PORTE DU NOM, EN SQL — `consent_given IS TRUE`, et rien d'autre.
+ * LA PORTE, EN SQL — `consent_given IS TRUE`, et rien d'autre.
  *
  * `IS TRUE` traite `NULL` comme faux, ce qui est la demande exacte de l'arbitrage
  * (« le nul vaut non »). Écrire `= true` donnerait `NULL` pour un consentement
  * inconnu, donc une cellule vide — le même résultat par hasard, pas par règle. La
  * différence compte le jour où quelqu'un déplace ce fragment.
+ *
+ * ⚠ ELLE PREND LA COLONNE À PROTÉGER : une seule porte, TROIS usages. C'est
+ * exactement ainsi que le défaut B-1 était né — une expression écrite pour le nom
+ * seul, et deux colonnes voisines qui passaient à côté sans que rien ne le dise.
  */
-function nomSousConsentement(avecNoms: boolean) {
+function sousConsentement(colonne: SQLWrapper, avecNoms: boolean) {
   return avecNoms
-    ? sql<
-        string | null
-      >`case when ${interviews.consentGiven} is true then ${interviews.personName} else null end`
+    ? sql<string | null>`case when ${interviews.consentGiven} is true then ${colonne} else null end`
     : sql<string | null>`null::text`;
 }
 
@@ -286,7 +341,7 @@ export async function listerSessionsPourExport(
   executeur: ExecuteurSql,
   missionId: string,
   avecNoms: boolean,
-): Promise<readonly LigneSessionExport[]> {
+): Promise<readonly SansFuseau<LigneSessionExport>[]> {
   const auditeur = users;
   return executeur
     .select({
@@ -295,9 +350,10 @@ export async function listerSessionsPourExport(
       mode: interviews.mode,
       orgUnitId: interviews.orgUnitId,
       orgUnitNom: orgUnits.name,
-      fonctionPersonne: interviews.personRole,
-      servicePersonne: services.labelFr,
-      nomPersonne: nomSousConsentement(avecNoms),
+      // Les TROIS champs identifiants passent la même porte (B-1, 2026-09-06).
+      fonctionPersonne: sousConsentement(interviews.personRole, avecNoms),
+      servicePersonne: sousConsentement(services.labelFr, avecNoms),
+      nomPersonne: sousConsentement(interviews.personName, avecNoms),
       consentement: interviews.consentGiven,
       auditeurNom: auditeur.name,
       planifieeLe: interviews.scheduledAt,
@@ -340,7 +396,7 @@ export async function listerReponsesPourExport(
   executeur: ExecuteurSql,
   missionId: string,
   avecNoms: boolean,
-): Promise<readonly LigneReponseExport[]> {
+): Promise<readonly SansFuseau<LigneReponseExport>[]> {
   return executeur
     .select({
       answerId: answers.id,
@@ -361,9 +417,10 @@ export async function listerReponsesPourExport(
       sessionKind: interviews.kind,
       sessionMode: interviews.mode,
       provenance: answers.source,
-      fonctionRepondant: interviews.personRole,
-      serviceRepondant: services.labelFr,
-      nomRepondant: nomSousConsentement(avecNoms),
+      // Les TROIS champs identifiants passent la même porte (B-1, 2026-09-06).
+      fonctionRepondant: sousConsentement(interviews.personRole, avecNoms),
+      serviceRepondant: sousConsentement(services.labelFr, avecNoms),
+      nomRepondant: sousConsentement(interviews.personName, avecNoms),
       valeur: answers.value,
       optionsSnapshot: missionQuestions.optionsSnapshot,
       nonCommunique: answers.withheld,
@@ -394,7 +451,7 @@ export async function listerReponsesPourExport(
 export async function listerConstatsPourExport(
   executeur: ExecuteurSql,
   missionId: string,
-): Promise<readonly LigneConstatExport[]> {
+): Promise<readonly SansFuseau<LigneConstatExport>[]> {
   return executeur
     .select({
       id: findings.id,
@@ -429,7 +486,7 @@ export async function listerConstatsPourExport(
 export async function listerCasUsagePourExport(
   executeur: ExecuteurSql,
   missionId: string,
-): Promise<readonly LigneCasUsageExport[]> {
+): Promise<readonly SansFuseau<LigneCasUsageExport>[]> {
   return executeur
     .select({
       id: useCases.id,
@@ -472,7 +529,7 @@ export async function listerCasUsagePourExport(
 export async function listerOutilsPourExport(
   executeur: ExecuteurSql,
   missionId: string,
-): Promise<readonly LigneOutilExport[]> {
+): Promise<readonly SansFuseau<LigneOutilExport>[]> {
   return executeur
     .select({
       id: toolsInventory.id,
@@ -497,7 +554,7 @@ export async function listerOutilsPourExport(
 export async function listerSystemesIaPourExport(
   executeur: ExecuteurSql,
   missionId: string,
-): Promise<readonly LigneSystemeIaExport[]> {
+): Promise<readonly SansFuseau<LigneSystemeIaExport>[]> {
   return executeur
     .select({
       id: aiSystems.id,
@@ -535,25 +592,31 @@ export async function listerSystemesIaPourExport(
 export async function listerPiecesJointesPourExport(
   executeur: ExecuteurSql,
   missionId: string,
-): Promise<readonly LignePieceJointeExport[]> {
-  return executeur
-    .select({
-      id: attachments.id,
-      sessionId: attachments.interviewId,
-      answerId: attachments.answerId,
-      questionTexte: missionQuestions.textSnapshot,
-      kind: attachments.kind,
-      nomFichier: attachments.filename,
-      mime: attachments.mime,
-      tailleOctets: attachments.sizeBytes,
-      contenu: attachments.content,
-      creeLe: attachments.createdAt,
-    })
-    .from(attachments)
-    .leftJoin(answers, eq(answers.id, attachments.answerId))
-    .leftJoin(missionQuestions, eq(missionQuestions.id, answers.missionQuestionId))
-    .where(eq(attachments.missionId, missionId))
-    .orderBy(sql`${attachments.createdAt} asc`, sql`${attachments.id} asc`);
+): Promise<readonly PieceJointeADater[]> {
+  return (
+    executeur
+      .select({
+        id: attachments.id,
+        sessionId: attachments.interviewId,
+        answerId: attachments.answerId,
+        questionTexte: missionQuestions.textSnapshot,
+        orgUnitId: interviews.orgUnitId,
+        kind: attachments.kind,
+        nomFichier: attachments.filename,
+        mime: attachments.mime,
+        tailleOctets: attachments.sizeBytes,
+        contenu: attachments.content,
+        creeLe: attachments.createdAt,
+      })
+      .from(attachments)
+      .leftJoin(answers, eq(answers.id, attachments.answerId))
+      .leftJoin(missionQuestions, eq(missionQuestions.id, answers.missionQuestionId))
+      // La session, UNIQUEMENT pour retrouver l'unité qui datera la ligne. Jointure
+      // EXTERNE : une note volante n'a pas de session, et elle doit rester au manifeste.
+      .leftJoin(interviews, eq(interviews.id, attachments.interviewId))
+      .where(eq(attachments.missionId, missionId))
+      .orderBy(sql`${attachments.createdAt} asc`, sql`${attachments.id} asc`)
+  );
 }
 
 // -----------------------------------------------------------------------------

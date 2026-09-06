@@ -12,6 +12,17 @@
 // 2026-09-05). Un sur-ensemble coûte des colonnes ; un sous-ensemble coûte une
 // session de travail au rédacteur, et le critère du §36.3 avec elle.
 //
+// ── CHAQUE LIGNE PORTE SON FUSEAU (correction M-1 du 2026-09-06) ──────────
+// Un horodatage n'est PAS écrit dans le fuseau de la mission : il est écrit dans
+// celui du SITE AUDITÉ. Le §22.2 le dit en toutes lettres — « `missions.timezone`
+// **et `org_units.timezone`** (héritage arbre) […] heure locale du site audité » —
+// et c'est le motif entier de l'arbitrage du 2026-09-05 : « l'heure telle qu'elle a
+// été vécue par les gens interrogés ». Un entretien tenu à 16 h 40 à Singapour et
+// écrit `10:40+02:00` reste un instant EXACT, mais plus l'heure que le rapport doit
+// citer. Chaque ligne porte donc son `fuseau`, RÉSOLU EN AMONT (voir `service.ts`) ;
+// aucune fonction de ce fichier ne choisit un fuseau, ni n'en a par défaut — un
+// défaut est précisément ce qui a laissé passer le défaut.
+//
 // ── DEUX RÈGLES QUI SE VOIENT DANS LE CODE ────────────────────────────────
 //   · `aplatirValeur` est CELLE DE L'AGRÉGATION (`pilotage/valeur.ts`), importée,
 //     jamais recopiée : « choix = libellés, fourchette = 20 – 30, tableau = JSON »
@@ -72,6 +83,8 @@ export interface LigneArbreExport {
   readonly effectif: number | null;
   readonly inScope: boolean;
   readonly statut: string;
+  /** Le fuseau EFFECTIF de l'unité — le sien, ou celui dont elle hérite (§22.2). */
+  readonly fuseau: string;
   readonly sessionsPrevues: number;
   readonly sessionsRealisees: number;
 }
@@ -86,6 +99,10 @@ const ENTETE_ARBRE = [
   'effectif',
   'unite_in_scope',
   'statut',
+  // Le fuseau EFFECTIF de l'unité : c'est lui qui date toutes les lignes qui la
+  // citent. Sans cette colonne, un lecteur qui voit deux décalages différents dans
+  // sessions.csv n'a aucun moyen de savoir POURQUOI (§22.2).
+  'fuseau',
   'sessions_prevues',
   'sessions_realisees',
 ] as const;
@@ -109,6 +126,7 @@ export function ecrireArbre(unites: readonly LigneArbreExport[]): string {
       u.effectif,
       u.inScope,
       u.statut,
+      u.fuseau,
       u.sessionsPrevues,
       u.sessionsRealisees,
     ]),
@@ -171,6 +189,8 @@ export function ecrireUnitesHorsPerimetre(unites: readonly LigneArbreExport[]): 
 
 export interface LigneSessionExport {
   readonly id: string;
+  /** Le fuseau du SITE AUDITÉ, résolu en amont (§22.2, héritage de l'arbre). */
+  readonly fuseau: string;
   readonly kind: string;
   readonly mode: string | null;
   readonly orgUnitId: string;
@@ -219,7 +239,7 @@ function dureeEnMinutes(debut: Date | null, fin: Date | null): number | null {
   return Math.round(millisecondes / 60_000);
 }
 
-export function ecrireSessions(sessions: readonly LigneSessionExport[], fuseau: string): string {
+export function ecrireSessions(sessions: readonly LigneSessionExport[]): string {
   return ecrireCsv([
     [...ENTETE_SESSIONS],
     ...sessions.map((s) => [
@@ -233,11 +253,11 @@ export function ecrireSessions(sessions: readonly LigneSessionExport[], fuseau: 
       s.nomPersonne,
       s.consentement,
       s.auditeurNom,
-      horodatageExport(s.planifieeLe, fuseau),
+      horodatageExport(s.planifieeLe, s.fuseau),
       s.statutPlanification,
       s.statut,
-      horodatageExport(s.debutLe, fuseau),
-      horodatageExport(s.finLe, fuseau),
+      horodatageExport(s.debutLe, s.fuseau),
+      horodatageExport(s.finLe, s.fuseau),
       s.dureePrevueMin,
       dureeEnMinutes(s.debutLe, s.finLe),
       s.notesGenerales,
@@ -252,6 +272,8 @@ export function ecrireSessions(sessions: readonly LigneSessionExport[], fuseau: 
 export interface LigneReponseExport {
   readonly answerId: string;
   readonly sessionId: string;
+  /** Le fuseau du SITE AUDITÉ, résolu en amont (§22.2). */
+  readonly fuseau: string;
   readonly blocCode: string;
   readonly blocLibelle: string;
   readonly blocPosition: number | null;
@@ -344,7 +366,7 @@ function motifNonCommuniqueLisible(motif: string | null): string | null {
  * ⚠ Aucune colonne de score : le §36.3 les conditionne à L8, qui n'est pas livré.
  * Une colonne vide se lirait « aucun score pour cette réponse » (`DECISIONS.md`).
  */
-export function ecrireReponses(reponses: readonly LigneReponseExport[], fuseau: string): string {
+export function ecrireReponses(reponses: readonly LigneReponseExport[]): string {
   const triees = [...reponses].sort(
     (a, b) =>
       rang(a.blocPosition) - rang(b.blocPosition) ||
@@ -387,7 +409,7 @@ export function ecrireReponses(reponses: readonly LigneReponseExport[], fuseau: 
       r.horsParcours,
       r.note,
       r.revision,
-      horodatageExport(r.misAJourLe, fuseau),
+      horodatageExport(r.misAJourLe, r.fuseau),
     ]),
   ]);
 }
@@ -398,6 +420,8 @@ export function ecrireReponses(reponses: readonly LigneReponseExport[], fuseau: 
 
 export interface LigneConstatExport {
   readonly id: string;
+  /** Le fuseau de l'unité du constat, ou celui de la mission s'il n'en a pas. */
+  readonly fuseau: string;
   readonly orgUnitId: string | null;
   readonly orgUnitNom: string | null;
   readonly blocCode: string | null;
@@ -458,7 +482,7 @@ function sourcesDuConstat(brut: unknown): {
   };
 }
 
-export function ecrireConstats(constats: readonly LigneConstatExport[], fuseau: string): string {
+export function ecrireConstats(constats: readonly LigneConstatExport[]): string {
   return ecrireCsv([
     [...ENTETE_CONSTATS],
     ...constats.map((c): ValeurCellule[] => {
@@ -479,8 +503,8 @@ export function ecrireConstats(constats: readonly LigneConstatExport[], fuseau: 
         c.statutRemediation,
         c.vague,
         c.statut,
-        horodatageExport(c.creeLe, fuseau),
-        horodatageExport(c.misAJourLe, fuseau),
+        horodatageExport(c.creeLe, c.fuseau),
+        horodatageExport(c.misAJourLe, c.fuseau),
       ];
     }),
   ]);
@@ -492,6 +516,8 @@ export function ecrireConstats(constats: readonly LigneConstatExport[], fuseau: 
 
 export interface LigneCasUsageExport {
   readonly id: string;
+  /** Le fuseau de l'unité du cas d'usage, ou celui de la mission. */
+  readonly fuseau: string;
   readonly titre: string;
   readonly description: string | null;
   readonly orgUnitId: string | null;
@@ -560,7 +586,7 @@ const ENTETE_CAS_USAGE = [
  * §36.6-5 : « dire NON fait partie du rapport ». Filtrer les `ecarte` d'un export
  * ferait disparaître le livrable le plus fort de la page publique.
  */
-export function ecrireCasUsage(casUsage: readonly LigneCasUsageExport[], fuseau: string): string {
+export function ecrireCasUsage(casUsage: readonly LigneCasUsageExport[]): string {
   return ecrireCsv([
     [...ENTETE_CAS_USAGE],
     ...casUsage.map((c): ValeurCellule[] => [
@@ -591,8 +617,8 @@ export function ecrireCasUsage(casUsage: readonly LigneCasUsageExport[], fuseau:
       c.donneesDisponibles,
       c.approche,
       c.refTaxonomie,
-      horodatageExport(c.creeLe, fuseau),
-      horodatageExport(c.misAJourLe, fuseau),
+      horodatageExport(c.creeLe, c.fuseau),
+      horodatageExport(c.misAJourLe, c.fuseau),
     ]),
   ]);
 }
@@ -603,6 +629,8 @@ export function ecrireCasUsage(casUsage: readonly LigneCasUsageExport[], fuseau:
 
 export interface LigneOutilExport {
   readonly id: string;
+  /** Le fuseau de l'unité qui emploie l'outil, ou celui de la mission. */
+  readonly fuseau: string;
   readonly nom: string;
   readonly categorie: string;
   readonly editeur: string | null;
@@ -631,10 +659,7 @@ const ENTETE_OUTILS = [
   'cree_le',
 ] as const;
 
-export function ecrireInventaireOutils(
-  outils: readonly LigneOutilExport[],
-  fuseau: string,
-): string {
+export function ecrireInventaireOutils(outils: readonly LigneOutilExport[]): string {
   return ecrireCsv([
     [...ENTETE_OUTILS],
     ...outils.map((o): ValeurCellule[] => [
@@ -649,7 +674,7 @@ export function ecrireInventaireOutils(
       o.criticite,
       o.noteQualiteDonnees,
       o.sessionSourceId,
-      horodatageExport(o.creeLe, fuseau),
+      horodatageExport(o.creeLe, o.fuseau),
     ]),
   ]);
 }
@@ -660,6 +685,8 @@ export function ecrireInventaireOutils(
 
 export interface LigneSystemeIaExport {
   readonly id: string;
+  /** Le fuseau de l'unité concernée, ou celui de la mission. */
+  readonly fuseau: string;
   readonly nom: string;
   readonly editeur: string | null;
   readonly orgUnitId: string | null;
@@ -698,10 +725,7 @@ const ENTETE_REGISTRE_IA = [
   'mis_a_jour_le',
 ] as const;
 
-export function ecrireRegistreIa(
-  systemes: readonly LigneSystemeIaExport[],
-  fuseau: string,
-): string {
+export function ecrireRegistreIa(systemes: readonly LigneSystemeIaExport[]): string {
   return ecrireCsv([
     [...ENTETE_REGISTRE_IA],
     ...systemes.map((s): ValeurCellule[] => [
@@ -720,8 +744,8 @@ export function ecrireRegistreIa(
       s.statutConformite,
       s.source,
       s.notes,
-      horodatageExport(s.creeLe, fuseau),
-      horodatageExport(s.misAJourLe, fuseau),
+      horodatageExport(s.creeLe, s.fuseau),
+      horodatageExport(s.misAJourLe, s.fuseau),
     ]),
   ]);
 }
@@ -732,6 +756,8 @@ export function ecrireRegistreIa(
 
 export interface LignePieceJointeExport {
   readonly id: string;
+  /** Le fuseau de l'unité de la session d'origine, ou celui de la mission. */
+  readonly fuseau: string;
   readonly sessionId: string | null;
   readonly answerId: string | null;
   readonly questionTexte: string | null;
@@ -766,10 +792,7 @@ const ENTETE_MANIFESTE = [
  * `contenu_note` porte le corps des NOTES VOLANTES (`attachments.content`, P1-5) :
  * ce sont des observations d'auditeur, et elles n'ont pas de fichier derrière.
  */
-export function ecrireManifestePiecesJointes(
-  pieces: readonly LignePieceJointeExport[],
-  fuseau: string,
-): string {
+export function ecrireManifestePiecesJointes(pieces: readonly LignePieceJointeExport[]): string {
   return ecrireCsv([
     [...ENTETE_MANIFESTE],
     ...pieces.map((p): ValeurCellule[] => [
@@ -782,7 +805,7 @@ export function ecrireManifestePiecesJointes(
       p.mime,
       p.tailleOctets,
       p.contenu,
-      horodatageExport(p.creeLe, fuseau),
+      horodatageExport(p.creeLe, p.fuseau),
     ]),
   ]);
 }
@@ -801,6 +824,15 @@ export interface UniteBruteExport {
   readonly inScope: boolean;
   readonly statut: string;
 }
+
+/**
+ * Le fuseau EFFECTIF d'une unité — fourni, jamais calculé ici.
+ *
+ * La remontée d'arbre vit dans `service.ts` : elle a besoin de la mission, donc
+ * d'un contexte que ce module pur n'a pas. Passer la FONCTION plutôt que le
+ * résultat évite de recopier 150 fuseaux dans un tableau parallèle.
+ */
+export type FuseauDUnite = (orgUnitId: string | null | undefined) => string;
 
 /** Ce que la couverture rend par unité — deux nombres, pas un ratio. */
 export interface ComptesUniteExport {
@@ -851,6 +883,7 @@ function cheminsDesUnites(unites: readonly UniteBruteExport[]): Map<string, stri
 export function assemblerLignesArbre(
   unites: readonly UniteBruteExport[],
   comptes: readonly ComptesUniteExport[],
+  fuseauDe: FuseauDUnite,
 ): readonly LigneArbreExport[] {
   const parId = new Map(unites.map((u) => [u.id, u]));
   const chemins = cheminsDesUnites(unites);
@@ -868,6 +901,7 @@ export function assemblerLignesArbre(
       effectif: unite.effectif,
       inScope: unite.inScope,
       statut: unite.statut,
+      fuseau: fuseauDe(unite.id),
       sessionsPrevues: compte?.planifiees ?? 0,
       sessionsRealisees: compte?.realisees ?? 0,
     };

@@ -37,6 +37,8 @@ import {
 } from './fichiers.js';
 
 const FUSEAU = 'Europe/Paris';
+/** Le fuseau d'un SITE distant — M-1 : une archive n'a pas UN fuseau, elle en a un par site. */
+const FUSEAU_SINGAPOUR = 'Asia/Singapore';
 
 /** Identifiants SYNTHÉTIQUES (invariant 2 : aucune référence client, même en test). */
 const U1 = '01890000-0000-7000-8000-000000000001';
@@ -69,6 +71,7 @@ const ARBRE: LigneArbreExport[] = [
     effectif: 120,
     inScope: true,
     statut: 'valide',
+    fuseau: FUSEAU,
     sessionsPrevues: 3,
     sessionsRealisees: 2,
   },
@@ -82,6 +85,7 @@ const ARBRE: LigneArbreExport[] = [
     effectif: 40,
     inScope: false,
     statut: 'valide',
+    fuseau: FUSEAU,
     sessionsPrevues: 1,
     sessionsRealisees: 1,
   },
@@ -116,6 +120,7 @@ describe('arbre.csv — la structure, avec sa couverture (§36.3)', () => {
 function session(sur: Partial<LigneSessionExport> = {}): LigneSessionExport {
   return {
     id: S1,
+    fuseau: FUSEAU,
     kind: 'entretien',
     mode: 'sur_site',
     orgUnitId: U1,
@@ -138,32 +143,32 @@ function session(sur: Partial<LigneSessionExport> = {}): LigneSessionExport {
 
 describe('sessions.csv — « entretiens menés » du chapitre méthodologie (§20.3-3)', () => {
   it('écrit l’horodatage dans le fuseau de MISSION, avec son décalage', () => {
-    const ligne = lignes(ecrireSessions([session()], FUSEAU))[1] ?? '';
+    const ligne = lignes(ecrireSessions([session()]))[1] ?? '';
     expect(ligne).toContain('2026-10-14T09:30:00+02:00');
   });
 
   it('calcule la durée réelle en minutes — le chiffrage M9 s’en nourrit', () => {
-    const entete = colonnes(lignes(ecrireSessions([session()], FUSEAU))[0] ?? '');
-    const ligne = colonnes(lignes(ecrireSessions([session()], FUSEAU))[1] ?? '');
+    const entete = colonnes(lignes(ecrireSessions([session()]))[0] ?? '');
+    const ligne = colonnes(lignes(ecrireSessions([session()]))[1] ?? '');
     expect(ligne[entete.indexOf('duree_reelle_min')]).toBe('90');
   });
 
   it('laisse la durée réelle VIDE quand la session n’est pas terminée', () => {
     const sansFin = session({ finLe: null, statut: 'en_cours' });
-    const entete = colonnes(lignes(ecrireSessions([sansFin], FUSEAU))[0] ?? '');
-    const ligne = colonnes(lignes(ecrireSessions([sansFin], FUSEAU))[1] ?? '');
+    const entete = colonnes(lignes(ecrireSessions([sansFin]))[0] ?? '');
+    const ligne = colonnes(lignes(ecrireSessions([sansFin]))[1] ?? '');
     expect(ligne[entete.indexOf('duree_reelle_min')]).toBe('');
   });
 
   it('n’écrit AUCUN nom de personne quand le dépôt n’en a pas transmis', () => {
-    const csv = ecrireSessions([session()], FUSEAU);
+    const csv = ecrireSessions([session()]);
     const entete = colonnes(lignes(csv)[0] ?? '');
     const ligne = colonnes(lignes(csv)[1] ?? '');
     expect(ligne[entete.indexOf('nom_repondant')]).toBe('');
   });
 
   it('écrit le nom quand le dépôt l’a transmis — la porte est en amont', () => {
-    const csv = ecrireSessions([session({ nomPersonne: 'Camille Martin' })], FUSEAU);
+    const csv = ecrireSessions([session({ nomPersonne: 'Camille Martin' })]);
     const entete = colonnes(lignes(csv)[0] ?? '');
     const ligne = colonnes(lignes(csv)[1] ?? '');
     expect(ligne[entete.indexOf('nom_repondant')]).toBe('Camille Martin');
@@ -176,6 +181,7 @@ function reponse(sur: Partial<LigneReponseExport> = {}): LigneReponseExport {
   return {
     answerId: A1,
     sessionId: S1,
+    fuseau: FUSEAU,
     blocCode: 'bloc_2',
     blocLibelle: 'Processus',
     blocPosition: 2,
@@ -213,39 +219,34 @@ function reponse(sur: Partial<LigneReponseExport> = {}): LigneReponseExport {
 
 describe('reponses.csv — LE fichier central (§36.3)', () => {
   it('porte `answer_id` et `session_id` en tête : c’est ce que les constats citent', () => {
-    const entete = colonnes(lignes(ecrireReponses([reponse()], FUSEAU))[0] ?? '');
+    const entete = colonnes(lignes(ecrireReponses([reponse()]))[0] ?? '');
     expect(entete[0]).toBe('answer_id');
     expect(entete[1]).toBe('session_id');
   });
 
   it('trie bloc → unité → question, l’ordre dans lequel un rapport se rédige', () => {
-    const csv = ecrireReponses(
-      [
-        reponse({ answerId: A2, blocCode: 'bloc_3', blocPosition: 3, orgUnitNom: 'A' }),
-        reponse({ answerId: A1, blocCode: 'bloc_2', blocPosition: 2, orgUnitNom: 'Z' }),
-      ],
-      FUSEAU,
-    );
+    const csv = ecrireReponses([
+      reponse({ answerId: A2, blocCode: 'bloc_3', blocPosition: 3, orgUnitNom: 'A' }),
+      reponse({ answerId: A1, blocCode: 'bloc_2', blocPosition: 2, orgUnitNom: 'Z' }),
+    ]);
     const corps = lignes(csv).slice(1);
     expect(corps[0]).toContain('bloc_2');
     expect(corps[1]).toContain('bloc_3');
   });
 
   it('aplatit la valeur en texte lisible — jamais du JSON de base', () => {
-    const ligne = lignes(ecrireReponses([reponse()], FUSEAU))[1] ?? '';
+    const ligne = lignes(ecrireReponses([reponse()]))[1] ?? '';
     expect(ligne).toContain('3 / 5');
   });
 
   it('rend une fourchette « 20 – 30 », comme le §36.3 l’écrit', () => {
     const ligne =
-      lignes(
-        ecrireReponses([reponse({ valeur: { type: 'range', low: 20, high: 30 } })], FUSEAU),
-      )[1] ?? '';
+      lignes(ecrireReponses([reponse({ valeur: { type: 'range', low: 20, high: 30 } })]))[1] ?? '';
     expect(ligne).toContain('20 – 30');
   });
 
   it('garde les réponses des unités HORS PÉRIMÈTRE, marquées — jamais deux fichiers', () => {
-    const csv = ecrireReponses([reponse({ orgUnitInScope: false })], FUSEAU);
+    const csv = ecrireReponses([reponse({ orgUnitInScope: false })]);
     const entete = colonnes(lignes(csv)[0] ?? '');
     const ligne = colonnes(lignes(csv)[1] ?? '');
     expect(lignes(csv)).toHaveLength(2);
@@ -253,18 +254,15 @@ describe('reponses.csv — LE fichier central (§36.3)', () => {
   });
 
   it('distingue non communiqué, sans objet et à revoir — trois colonnes, trois motifs', () => {
-    const csv = ecrireReponses(
-      [
-        reponse({
-          valeur: null,
-          nonCommunique: true,
-          motifNonCommunique: 'confidentiel',
-          aRevoir: true,
-          motifARevoir: 'à recouper avec la DAF',
-        }),
-      ],
-      FUSEAU,
-    );
+    const csv = ecrireReponses([
+      reponse({
+        valeur: null,
+        nonCommunique: true,
+        motifNonCommunique: 'confidentiel',
+        aRevoir: true,
+        motifARevoir: 'à recouper avec la DAF',
+      }),
+    ]);
     const entete = colonnes(lignes(csv)[0] ?? '');
     const ligne = colonnes(lignes(csv)[1] ?? '');
     expect(ligne[entete.indexOf('non_communique')]).toBe('oui');
@@ -275,16 +273,16 @@ describe('reponses.csv — LE fichier central (§36.3)', () => {
   });
 
   it('n’expose AUCUNE colonne de score tant que L8 n’est pas livré', () => {
-    const entete = colonnes(lignes(ecrireReponses([reponse()], FUSEAU))[0] ?? '');
+    const entete = colonnes(lignes(ecrireReponses([reponse()]))[0] ?? '');
     expect(entete.some((c) => c.includes('score'))).toBe(false);
   });
 
   it('ne porte le nom du répondant que si le dépôt l’a transmis', () => {
-    const sans = colonnes(lignes(ecrireReponses([reponse()], FUSEAU))[1] ?? '');
+    const sans = colonnes(lignes(ecrireReponses([reponse()]))[1] ?? '');
     const avec = colonnes(
-      lignes(ecrireReponses([reponse({ nomRepondant: 'Camille Martin' })], FUSEAU))[1] ?? '',
+      lignes(ecrireReponses([reponse({ nomRepondant: 'Camille Martin' })]))[1] ?? '',
     );
-    const entete = colonnes(lignes(ecrireReponses([reponse()], FUSEAU))[0] ?? '');
+    const entete = colonnes(lignes(ecrireReponses([reponse()]))[0] ?? '');
     expect(sans[entete.indexOf('nom_repondant')]).toBe('');
     expect(avec[entete.indexOf('nom_repondant')]).toBe('Camille Martin');
   });
@@ -292,9 +290,39 @@ describe('reponses.csv — LE fichier central (§36.3)', () => {
 
 // -----------------------------------------------------------------------------
 
+describe('reponses.csv et sessions.csv — un fuseau PAR SITE (M-1, §22.2)', () => {
+  it('date deux lignes de deux sites dans DEUX fuseaux différents', () => {
+    // Le défaut que ce test ferme : un entretien tenu à 16 h 40 à Singapour
+    // s'écrivait « 10:40+02:00 » — instant exact, heure fausse pour le rapport.
+    const csv = ecrireReponses([
+      reponse({ answerId: A1, orgUnitNom: 'Siège', fuseau: FUSEAU }),
+      reponse({ answerId: A2, orgUnitNom: 'Usine', fuseau: FUSEAU_SINGAPOUR }),
+    ]);
+    const corps = lignes(csv).slice(1);
+    const entete = colonnes(lignes(csv)[0] ?? '');
+    const horodatage = (i: number) => colonnes(corps[i] ?? '')[entete.indexOf('horodatage')];
+
+    expect(horodatage(0)).toBe('2026-10-14T09:30:00+02:00');
+    expect(horodatage(1)).toBe('2026-10-14T15:30:00+08:00');
+  });
+
+  it('date les sessions au fuseau du site, pas à celui du siège', () => {
+    const csv = ecrireSessions([session({ fuseau: FUSEAU_SINGAPOUR })]);
+    expect(lignes(csv)[1]).toContain('+08:00');
+  });
+
+  it('publie le fuseau EFFECTIF de chaque unité dans arbre.csv', () => {
+    // Sans cette colonne, un lecteur qui voit deux décalages dans sessions.csv
+    // n'a aucun moyen de savoir pourquoi.
+    const entete = colonnes(lignes(ecrireArbre(ARBRE))[0] ?? '');
+    expect(entete).toContain('fuseau');
+  });
+});
+
 describe('constats.csv — la citation d’une source est vérifiable (§36.6-2)', () => {
   const constat: LigneConstatExport = {
     id: '01890000-0000-7000-8000-0000000000c1',
+    fuseau: FUSEAU,
     orgUnitId: U1,
     orgUnitNom: 'Direction générale',
     blocCode: 'bloc_2',
@@ -312,7 +340,7 @@ describe('constats.csv — la citation d’une source est vérifiable (§36.6-2)
   };
 
   it('éclate `sources` en trois colonnes de listes séparées par une barre', () => {
-    const csv = ecrireConstats([constat], FUSEAU);
+    const csv = ecrireConstats([constat]);
     const entete = colonnes(lignes(csv)[0] ?? '');
     const ligne = colonnes(lignes(csv)[1] ?? '');
     expect(ligne[entete.indexOf('sources_reponses')]).toBe(`${A1}${SEPARATEUR_LISTE_CELLULE}${A2}`);
@@ -323,8 +351,8 @@ describe('constats.csv — la citation d’une source est vérifiable (§36.6-2)
   it('les identifiants cités se retrouvent tels quels dans reponses.csv', () => {
     // C'est TOUT le §36.6-2 : la citation doit être un RECHERCHEV, pas une
     // promesse. On le vérifie sur les deux fichiers, ensemble.
-    const constats = lignes(ecrireConstats([constat], FUSEAU))[1] ?? '';
-    const reponses = ecrireReponses([reponse({ answerId: A1 }), reponse({ answerId: A2 })], FUSEAU);
+    const constats = lignes(ecrireConstats([constat]))[1] ?? '';
+    const reponses = ecrireReponses([reponse({ answerId: A1 }), reponse({ answerId: A2 })]);
     for (const identifiant of [A1, A2]) {
       expect(constats).toContain(identifiant);
       expect(reponses).toContain(identifiant);
@@ -333,7 +361,7 @@ describe('constats.csv — la citation d’une source est vérifiable (§36.6-2)
 
   it('supporte un `sources` malformé sans faire tomber l’export', () => {
     const abime = { ...constat, sources: 'ceci n’est pas un objet' };
-    expect(() => ecrireConstats([abime], FUSEAU)).not.toThrow();
+    expect(() => ecrireConstats([abime])).not.toThrow();
   });
 });
 
@@ -341,11 +369,11 @@ describe('constats.csv — la citation d’une source est vérifiable (§36.6-2)
 
 describe('les fichiers d’annexe — présents même vides, jamais absents', () => {
   it.each([
-    ['cas_usage', () => ecrireCasUsage([], FUSEAU)],
-    ['inventaire_outils', () => ecrireInventaireOutils([], FUSEAU)],
-    ['registre_ia', () => ecrireRegistreIa([], FUSEAU)],
+    ['cas_usage', () => ecrireCasUsage([])],
+    ['inventaire_outils', () => ecrireInventaireOutils([])],
+    ['registre_ia', () => ecrireRegistreIa([])],
     ['unites_hors_perimetre', () => ecrireUnitesHorsPerimetre([])],
-    ['manifest', () => ecrireManifestePiecesJointes([], FUSEAU)],
+    ['manifest', () => ecrireManifestePiecesJointes([])],
   ])('%s porte son en-tête et rien d’autre quand il n’y a rien', (_nom, ecrire) => {
     const contenu = lignes(ecrire());
     expect(contenu).toHaveLength(1);
@@ -384,21 +412,23 @@ describe('assemblerLignesArbre — le chemin, et les comptes de sessions', () =>
   ];
 
   it('construit le chemin complet, du sommet à la feuille', () => {
-    const lignesArbre = assemblerLignesArbre(BRUTES, []);
+    const lignesArbre = assemblerLignesArbre(BRUTES, [], () => FUSEAU);
     expect(lignesArbre[0]?.chemin).toBe('Groupe');
     expect(lignesArbre[1]?.chemin).toBe('Groupe > Usine Nord');
   });
 
   it('compte 0 et 0 pour une unité sans session — jamais une cellule vide', () => {
-    const lignesArbre = assemblerLignesArbre(BRUTES, []);
+    const lignesArbre = assemblerLignesArbre(BRUTES, [], () => FUSEAU);
     expect(lignesArbre[0]?.sessionsPrevues).toBe(0);
     expect(lignesArbre[0]?.sessionsRealisees).toBe(0);
   });
 
   it('reporte les comptes de la couverture sur la bonne unité', () => {
-    const lignesArbre = assemblerLignesArbre(BRUTES, [
-      { orgUnitId: U2, planifiees: 4, realisees: 3 },
-    ]);
+    const lignesArbre = assemblerLignesArbre(
+      BRUTES,
+      [{ orgUnitId: U2, planifiees: 4, realisees: 3 }],
+      () => FUSEAU,
+    );
     expect(lignesArbre[1]?.sessionsPrevues).toBe(4);
     expect(lignesArbre[1]?.sessionsRealisees).toBe(3);
   });
@@ -424,7 +454,7 @@ describe('assemblerLignesArbre — le chemin, et les comptes de sessions', () =>
         statut: 'valide',
       },
     ];
-    const lignesArbre = assemblerLignesArbre(cycle, []);
+    const lignesArbre = assemblerLignesArbre(cycle, [], () => FUSEAU);
     expect(lignesArbre).toHaveLength(2);
     expect(lignesArbre[0]?.chemin.length).toBeGreaterThan(0);
   });

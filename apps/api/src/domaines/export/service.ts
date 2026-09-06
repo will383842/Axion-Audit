@@ -15,6 +15,16 @@
 // fichiers sans savoir lequel nourrit quelle rubrique retourne dans l'outil, et
 // le critère tombe pour une raison qui n'a rien de technique.
 //
+// ── UN FUSEAU PAR SITE AUDITÉ, ET NON UN POUR TOUTE L'ARCHIVE (M-1) ───────
+// Corrigé le 2026-09-06 sur le constat M-1 d'A37. Le §22.2 impose « `missions
+// .timezone` **et `org_units.timezone`** (héritage arbre) […] heure locale du site
+// audité » ; l'arbitrage du 2026-09-05 écartait d'ailleurs son option 2 en écrivant
+// « une mission multi-pays en porte plusieurs » — puis retenait un fuseau unique
+// sans traiter le cas qu'il venait de nommer. Un entretien tenu à 16 h 40 à
+// Singapour s'écrivait `10:40+02:00` : instant exact, heure fausse pour le rapport.
+// `fuseauDeLUnite` remonte l'arbre jusqu'au premier fuseau posé, et retombe sur
+// celui de la mission — ce que le `NULL` du 04 signifie exactement.
+//
 // ── INVARIANT 6 : LE SIÈGE PRODUIT ─────────────────────────────────────────
 // Tout se fait ici — lecture, tri, aplatissement des valeurs, compression. Rien
 // n'est renvoyé au navigateur pour être assemblé, et rien, jamais, à `apps/field`.
@@ -64,6 +74,7 @@ import {
   listerSystemesIaPourExport,
   listerUnitesPourExport,
   type DemandeurDExport,
+  type UnitePourExport,
 } from './depot.js';
 import {
   dateDuJourDansLeFuseau,
@@ -90,16 +101,68 @@ const DEFINITION_COMPLETUDE =
   'Part des questions du questionnaire figé ayant reçu au moins une réponse, quelle qu’elle soit (y compris « non communiqué » et « sans objet »). Ce n’est PAS la complétude du scoring (03 §32.1-3), qui exclut les réponses non communiquées et qui sera calculée par le lot L8.';
 
 const MOTIF_SCORES_ABSENTS =
-  'Le scoring (03 §32.1) n’est pas livré à cette version de l’outil : aucun score par bloc ou par unité n’existe encore, et scores.csv est donc absent de cette archive (03 §36.3 : « si L8, sinon absent et signalé »).';
+  'Aucun score n’existe pour cette mission. Le moteur de scoring (03 §32.1) est livré depuis le lot L8, mais il n’est encore relié à aucune route ni à aucun dépôt : les tables block_scores et unit_scores ne sont écrites par personne, et scores.csv est donc absent de cette archive (03 §36.3 : « si L8, sinon absent et signalé »). Il apparaîtra dès que le calcul sera déclenché et persisté.';
 
 const MOTIF_PIECES_JOINTES =
   'Les fichiers eux-mêmes ne sont pas inclus : le téléchargement des pièces jointes appartient au lot L6c et n’est pas livré. Le manifeste liste ce qui a été collecté et permet de le réclamer.';
 
 const REGLE_REPONDANTS_OUVERTE =
-  'Les noms des répondants sont écrits UNIQUEMENT pour les sessions dont le consentement a été explicitement recueilli (consent_given = vrai). Un consentement inconnu ou refusé laisse la cellule vide.';
+  'Le NOM, la FONCTION et le SERVICE du répondant sont écrits UNIQUEMENT pour les sessions dont le consentement a été explicitement recueilli (consent_given = vrai). Un consentement inconnu ou refusé laisse les trois cellules vides : à trois, ces champs identifient une personne dans une petite structure (arbitrage du 2026-09-05, confirmé le 2026-09-06). L’unité auditée, le type de session et la provenance restent renseignés dans tous les cas — ce sont des propriétés de la collecte, pas de la personne.';
 
 const REGLE_REPONDANTS_FERMEE =
-  'Aucun nom de répondant n’est écrit dans cette archive : l’export a été demandé sans l’option « inclure les répondants ». Les fonctions et les services restent renseignés.';
+  'Cette archive n’identifie AUCUN répondant : l’export a été demandé sans l’option « inclure les répondants », donc ni le nom, ni la fonction, ni le service ne sont écrits. L’unité auditée, le type de session et la provenance le sont — la confrontation direction / terrain se lit sur l’unité (§20.3-4).';
+
+/**
+ * LE FUSEAU DE CHAQUE UNITÉ — le sien, sinon celui de son parent, sinon la mission.
+ *
+ * ── POURQUOI UNE REMONTÉE, ET PAS LA SEULE COLONNE DE L'UNITÉ ──────────────
+ * Le 04 pose `org_units.timezone` NULLABLE avec la mention « NULL = fuseau de la
+ * mission (héritage par l'arbre) ». « Héritage par l'arbre » veut dire que l'atelier
+ * d'une usine de Singapour, dont la colonne est nulle, est à l'heure de Singapour —
+ * pas à celle du siège. S'arrêter à la colonne de l'unité ferait retomber toutes les
+ * feuilles sur la mission, c'est-à-dire annuler l'héritage en croyant l'appliquer.
+ *
+ * ── LA BOUCLE EST BORNÉE ───────────────────────────────────────────────────
+ * Même garde que `assemblerLignesArbre` : un arbre lu en base peut contenir un
+ * cycle, et une remontée nue tournerait indéfiniment. Au-delà du nombre d'unités,
+ * on s'arrête sur le fuseau de la mission — un export imparfait vaut mieux qu'un
+ * serveur qui ne répond plus.
+ *
+ * Le résultat est mémorisé par unité : sur FIL-GC, ~8 000 réponses interrogent
+ * 150 unités, et une remontée par ligne referait le même chemin des milliers de fois.
+ */
+function resolveurDeFuseau(
+  unites: readonly UnitePourExport[],
+  fuseauDeLaMission: string,
+): (orgUnitId: string | null | undefined) => string {
+  const parId = new Map(unites.map((unite) => [unite.id, unite]));
+  const memo = new Map<string, string>();
+
+  return (orgUnitId) => {
+    if (orgUnitId === null || orgUnitId === undefined) return fuseauDeLaMission;
+    const memorise = memo.get(orgUnitId);
+    if (memorise !== undefined) return memorise;
+
+    let courante = parId.get(orgUnitId);
+    let garde = 0;
+    let trouve: string | null = null;
+    while (courante !== undefined && garde <= unites.length) {
+      if (courante.timezone !== null && courante.timezone.trim() !== '') {
+        trouve = courante.timezone;
+        break;
+      }
+      courante = courante.parentId === null ? undefined : parId.get(courante.parentId);
+      garde += 1;
+    }
+
+    // `fuseauEffectif` retombe sur UTC si l'identifiant est inconnu d'ICU : une
+    // colonne mal renseignée ne fait pas tomber l'export, elle se voit dans le
+    // décalage écrit et dans la colonne `fuseau` d'arbre.csv.
+    const resolu = trouve === null ? fuseauDeLaMission : fuseauEffectif(trouve);
+    memo.set(orgUnitId, resolu);
+    return resolu;
+  };
+}
 
 /** Ce que la route rend : un nom de fichier et des octets. */
 export interface ArchiveExport {
@@ -154,8 +217,25 @@ export async function produireExportDeMission(
     compterPourExport(db, missionId),
   ]);
 
-  const unites = assemblerLignesArbre(unitesBrutes, comptesParUnite);
+  // ① Le fuseau de chaque site AVANT tout le reste : c'est lui qui date les lignes.
+  const fuseauDe = resolveurDeFuseau(unitesBrutes, fuseau);
+  const unites = assemblerLignesArbre(unitesBrutes, comptesParUnite, fuseauDe);
   const horsPerimetre = unites.filter((unite) => !unite.inScope).length;
+
+  // ② Chaque ligne reçoit le fuseau de SON site. Le `Omit` du dépôt garantit
+  //    qu'aucune ne peut sauter cette étape : elle ne compilerait pas.
+  const dater = <T extends { readonly orgUnitId?: string | null }>(
+    lignes: readonly T[],
+  ): (T & { fuseau: string })[] =>
+    lignes.map((ligne) => ({ ...ligne, fuseau: fuseauDe(ligne.orgUnitId) }));
+
+  const sessionsDatees = dater(sessions);
+  const reponsesDatees = dater(reponses);
+  const constatsDates = dater(constats);
+  const casUsageDates = dater(casUsage);
+  const outilsDates = dater(outils);
+  const systemesIaDates = dater(systemesIa);
+  const piecesJointesDatees = dater(piecesJointes);
 
   const meta: MetaExport = metaExportSchema.parse({
     versionExport: VERSION_EXPORT,
@@ -219,16 +299,16 @@ export async function produireExportDeMission(
   const entrees: EntreeZip[] = [
     texte(FICHIERS_EXPORT.mission, `${JSON.stringify(meta, null, 2)}\n`),
     texte(FICHIERS_EXPORT.arbre, ecrireArbre(unites)),
-    texte(FICHIERS_EXPORT.sessions, ecrireSessions(sessions, fuseau)),
-    texte(FICHIERS_EXPORT.reponses, ecrireReponses(reponses, fuseau)),
-    texte(FICHIERS_EXPORT.constats, ecrireConstats(constats, fuseau)),
-    texte(FICHIERS_EXPORT.casUsage, ecrireCasUsage(casUsage, fuseau)),
-    texte(FICHIERS_EXPORT.inventaireOutils, ecrireInventaireOutils(outils, fuseau)),
-    texte(FICHIERS_EXPORT.registreIa, ecrireRegistreIa(systemesIa, fuseau)),
+    texte(FICHIERS_EXPORT.sessions, ecrireSessions(sessionsDatees)),
+    texte(FICHIERS_EXPORT.reponses, ecrireReponses(reponsesDatees)),
+    texte(FICHIERS_EXPORT.constats, ecrireConstats(constatsDates)),
+    texte(FICHIERS_EXPORT.casUsage, ecrireCasUsage(casUsageDates)),
+    texte(FICHIERS_EXPORT.inventaireOutils, ecrireInventaireOutils(outilsDates)),
+    texte(FICHIERS_EXPORT.registreIa, ecrireRegistreIa(systemesIaDates)),
     texte(FICHIERS_EXPORT.unitesHorsPerimetre, ecrireUnitesHorsPerimetre(unites)),
     texte(
       FICHIERS_EXPORT.manifestePiecesJointes,
-      ecrireManifestePiecesJointes(piecesJointes, fuseau),
+      ecrireManifestePiecesJointes(piecesJointesDatees),
     ),
     // `scores.csv` est ABSENT, et son absence est dite dans `mission.json` —
     // §36.3 : « si L8, sinon absent et signalé ». Un fichier vide se lirait

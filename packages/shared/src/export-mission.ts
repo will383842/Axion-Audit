@@ -107,7 +107,7 @@ export const DESCRIPTIONS_FICHIERS_EXPORT: Record<CleFichierExport, string> = {
   arbre:
     'Les unités de l’organisation, aplaties, avec leur effectif, leur appartenance au périmètre et leurs sessions prévues / réalisées. Nourrit la cartographie de l’organisation (§20.3-4).',
   sessions:
-    'Une ligne par session de collecte : type, mode, unité, fonction de la personne, auditeur, planifié / réalisé, durée, statut. Nourrit « entretiens menés » de la méthodologie (§20.3-3).',
+    'Une ligne par session de collecte : type, mode, unité, auditeur, planifié / réalisé, durée, statut. Nourrit « entretiens menés » de la méthodologie (§20.3-3). Le nom, la fonction et le service de la personne interrogée n’y figurent que si l’export a été demandé AVEC les répondants, et seulement là où le consentement a été recueilli.',
   reponses:
     'LE fichier central : une ligne par réponse, triée bloc → unité → question, avec provenance, non communiqué, sans objet, à revoir, hors parcours, note et horodatage. Nourrit toutes les rubriques d’analyse, et c’est lui que chaque constat cite (§36.6-2).',
   constats:

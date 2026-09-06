@@ -12,10 +12,13 @@
 //
 // ── LA CASE DES RÉPONDANTS EST UNE DÉCISION, PAS UN CONFORT ────────────────
 // Décochée par défaut. Cochée, elle ajoute `?repondants=true` à la requête, et le
-// SERVEUR n'écrit alors les noms que pour les sessions dont le consentement est
-// explicitement acquis (§26, arbitrage A01 du 2026-09-05). Le libellé le dit en
-// toutes lettres : une case qui promettrait « tous les noms » mentirait sur ce
-// que le serveur fait.
+// SERVEUR n'écrit alors le NOM, la FONCTION et le SERVICE que pour les sessions
+// dont le consentement est explicitement acquis (§26 ; arbitrage A01 du
+// 2026-09-05, confirmé le 2026-09-06 sur le constat B-1 d'A37).
+// LES TROIS VONT ENSEMBLE, et le libellé le dit : dans une structure de huit
+// personnes, « le DAF » désigne quelqu'un aussi sûrement qu'un nom. Une case qui
+// promettrait « seulement les noms » mentirait sur ce que le serveur fait, et
+// laisserait croire qu'on peut lever l'anonymat à moitié.
 //
 // ── AUCUNE OPTION INERTE ──────────────────────────────────────────────────
 // Il n'y a PAS de case « inclure les fichiers joints » : le téléchargement des
@@ -77,7 +80,7 @@ const ABSENTS: readonly { readonly nom: string; readonly motif: string }[] = [
   {
     nom: FICHIERS_EXPORT.scores,
     motif:
-      'Le scoring (03 §32.1) n’est pas encore livré : aucun score par bloc ou par unité n’existe. Le fichier est absent, et son absence est signalée dans mission.json.',
+      'Aucun score n’existe pour cette mission : le moteur de scoring (03 §32.1) est livré, mais aucune route ne le déclenche encore et rien ne persiste ses résultats. Le fichier est absent, et son absence est signalée dans mission.json.',
   },
   {
     nom: 'pieces_jointes/ (les fichiers)',
@@ -166,13 +169,16 @@ export function EcranExport({ id }: { id: string }): ReactNode {
             onChange={(evenement) => {
               setAvecRepondants(evenement.target.checked);
             }}
-            libelle="Inclure le nom des répondants pour les sessions dont le consentement a été recueilli"
+            libelle="Identifier les répondants (nom, fonction et service) là où le consentement a été recueilli"
           />
           <p className="axn-aide">
-            Décochée, l’archive ne porte aucun nom&nbsp;: les réponses restent identifiées par la
-            fonction, le service et l’unité. Cochée, le serveur n’écrit le nom que si le
-            consentement de la personne est <strong>explicitement acquis</strong> — un consentement
-            inconnu ou refusé laisse la cellule vide.
+            Décochée, l’archive <strong>n’identifie personne</strong>&nbsp;: ni nom, ni fonction, ni
+            service. Les réponses restent rattachées à leur <strong>unité</strong>, à leur type de
+            session et à leur provenance — c’est sur l’unité que se lit la confrontation direction
+            /&nbsp;terrain. Cochée, le serveur n’écrit ces trois champs que là où le consentement de
+            la personne est <strong>explicitement acquis</strong>&nbsp;; un consentement inconnu ou
+            refusé laisse les trois cellules vides. Les trois vont ensemble&nbsp;: dans une petite
+            structure, «&nbsp;le DAF&nbsp;» désigne quelqu’un aussi sûrement qu’un nom.
           </p>
 
           {telechargement.erreur !== null && (

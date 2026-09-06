@@ -109,17 +109,26 @@ fonction et le service le sont ; la question du nom est ouverte dans `DECISIONS.
 Ce n'est pas de l'ornement : le critère du §36.3 est « le rapport peut être rédigé EN ENTIER depuis
 le ZIP » ; dix fichiers sans mode d'emploi renvoient dans l'outil, et le critère tombe.
 
-Il **dit aussi ce que l'archive ne contient pas** : `scores.csv` (le scoring est en L8) et les
-fichiers des pièces jointes (leur téléchargement est en L6c). Aucune case à cocher inerte.
+Il **dit aussi ce que l'archive ne contient pas** : `scores.csv` (le moteur de scoring de L8 est
+livré, mais aucune route ne le déclenche ni ne persiste ses résultats — il n'existe donc aucun score
+à exporter) et les fichiers des pièces jointes (leur téléchargement est en L6c). Aucune case à cocher
+inerte.
 
-**Le nom des répondants** (arbitrage A01 du 2026-09-05) : une seule case, décochée par défaut, qui
-ajoute `?repondants=true` **à la requête**. La porte est SERVEUR — le nom n'est écrit que si
-`consent_given` vaut vrai, et sans le paramètre il n'est même pas lu en base. Masquer dans un
+**L'identification des répondants** (arbitrage A01 du 2026-09-05, confirmé le 2026-09-06) : une
+seule case, décochée par défaut, qui ajoute `?repondants=true` **à la requête**. La porte est
+SERVEUR, et elle porte sur **les trois champs ensemble** — nom, fonction ET service : dans une
+structure de huit personnes, « le DAF » désigne quelqu'un aussi sûrement qu'un nom. Ils ne sont
+écrits que là où `consent_given` vaut vrai, et sans le paramètre ils ne sont même pas lus en base.
+L'unité, le type de session et la provenance, eux, sont publiés sans condition : ce sont des
+propriétés de la collecte, et c'est sur l'unité que se lit la confrontation direction / terrain. Masquer dans un
 composant un nom déjà arrivé au navigateur ne serait pas le masquer (invariant 3). La même case
 existe sur l'écran d'agrégation, avec la même conséquence : la requête est relancée.
 
-**Les horodatages du ZIP** sont écrits à **l'heure de la mission**, avec leur décalage
-(`2026-10-14T09:30:00+02:00`) : un rapport se rédige avec ces heures-là.
+**Les horodatages du ZIP** sont écrits à **l'heure locale du site audité**, avec leur décalage
+(`2026-10-14T09:30:00+02:00`) : un rapport se rédige avec ces heures-là. Le fuseau d'une ligne est
+celui de son unité (`org_units.timezone`), hérité du parent si elle n'en porte pas, et à défaut celui
+de la mission (§22.2). Une mission multi-sites produit donc **plusieurs décalages** dans la même
+archive — c'est voulu, et la colonne `fuseau` d'`arbre.csv` dit lequel s'applique à quelle unité.
 
 ### Ce que L7c ne fait PAS (et pourquoi)
 

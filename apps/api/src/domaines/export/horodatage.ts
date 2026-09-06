@@ -2,8 +2,9 @@
 // LES HORODATAGES DE L'EXPORT — FONCTION PURE. Lot L7, incrément L7c.
 //
 // ── LA RÈGLE, ET SA RAISON ─────────────────────────────────────────────────
-// Tout instant écrit dans le ZIP l'est en ISO 8601 AVEC LE DÉCALAGE DU FUSEAU DE
-// MISSION : `2026-10-14T09:30:00+02:00`. Ce n'est pas une entorse à l'invariant 5
+// Tout instant écrit dans le ZIP l'est en ISO 8601 AVEC DÉCALAGE, et ce décalage
+// est celui du SITE AUDITÉ — l'unité, ou son parent, ou à défaut la mission
+// (§22.2, correction M-1 du 2026-09-06). `2026-10-14T09:30:00+02:00`. Ce n'est pas une entorse à l'invariant 5
 // (« UTC en base et en API, fuseau de mission à l'AFFICHAGE ») : l'export EST un
 // affichage — c'est le fichier avec lequel le rapport §20.3 se rédige, et un
 // rapport dit l'heure à laquelle la chose a eu lieu POUR CEUX QUI L'ONT VÉCUE.
@@ -25,7 +26,7 @@
 
 /** La phrase que `mission.json` porte, pour que la règle se lise avant les données. */
 export const FORMAT_HORODATAGE_EXPORT =
-  'ISO 8601 avec le décalage du fuseau de mission (ex. 2026-10-14T09:30:00+02:00). Les dates civiles (AAAA-MM-JJ) n’ont pas d’heure, donc pas de fuseau.';
+  'ISO 8601 avec décalage (ex. 2026-10-14T09:30:00+02:00). Chaque horodatage est écrit à l’heure LOCALE DU SITE AUDITÉ, et non à celle du siège : le fuseau est celui de l’unité (org_units.timezone), hérité de son parent quand elle n’en porte pas, et à défaut celui de la mission (03 §22.2). Une archive multi-sites contient donc plusieurs décalages, et c’est voulu — un rapport cite l’heure telle qu’elle a été vécue par les personnes interrogées. Le fuseau effectif de chaque unité est publié dans la colonne « fuseau » d’arbre.csv. Les horodatages de ce fichier mission.json et les dates civiles (AAAA-MM-JJ) font exception : les premiers sont des faits de MISSION, les secondes n’ont pas d’heure donc pas de fuseau.';
 
 /** Le fuseau de repli quand `missions.timezone` porte une valeur qu'ICU ignore. */
 const FUSEAU_DE_REPLI = 'UTC';

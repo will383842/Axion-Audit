@@ -333,9 +333,18 @@ leur greffon **et** dans `DECISIONS.md` (2026-09-05), comme le 11 §8-6 l'exige.
 - **Le conteneur ZIP est écrit avec `node:zlib`** (`domaines/export/zip.ts`) : la liste épinglée du
   11 §1 ne contient aucune bibliothèque d'archive, et en ajouter une est une escalade. L'horodatage
   MS-DOS est FIGÉ — deux exports du même état rendent le même fichier, donc se comparent.
-- **Les horodatages des CSV sont au fuseau de MISSION**, avec leur décalage
+- **Les horodatages des CSV sont au fuseau du SITE AUDITÉ**, avec leur décalage
   (`2026-10-14T09:30:00+02:00`). L'invariant 5 réserve l'UTC à la base et à l'API ; un export est un
   affichage, et un rapport se rédige avec l'heure vécue par les personnes interrogées.
+  **Précisément** (§22.2, correction M-1 du 2026-09-06) : le fuseau d'une ligne est celui de son
+  `org_units.timezone` ; si l'unité n'en porte pas, celui du premier parent qui en porte un
+  (« héritage arbre », ce que le `NULL` du 04 signifie) ; à défaut, `missions.timezone`. Une archive
+  multi-sites porte donc **plusieurs décalages** — un entretien tenu à 16 h 40 à Singapour s'écrit
+  `…T16:40:00+08:00`, et non `10:40+02:00`. Le fuseau effectif de chaque unité est publié dans la
+  colonne `fuseau` d'`arbre.csv`, pour qu'un lecteur qui voit deux décalages sache pourquoi. Font
+  exception : les horodatages de `mission.json` (faits de mission, donc au fuseau de la mission) et
+  les dates civiles `AAAA-MM-JJ`, qui n'ont pas d'heure donc pas de fuseau. La règle entière est
+  écrite dans `mission.json.formatHorodatage`, donc **dans l'archive**, avant les données.
 - **Le nom du répondant** n'est lu que si `?repondants=true` **et** `consent_given IS TRUE` — le
   `NULL` et le `false` sont masqués de la même façon (arbitrage A01, 2026-09-05). La porte est en
   SQL, pas dans une couche d'affichage. `person_email` n'est jamais lu.
@@ -349,12 +358,12 @@ format depuis sa spécification, sans importer une ligne de l'écrivain.
 
 ### Ce que l'export ne contient pas, et où c'est tranché
 
-| Absent                                            | Pourquoi                                                                                                        | Où                        |
-| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| `scores.csv`                                      | le scoring est en **L8** ; §36.3 : « sinon absent et signalé » — signalé dans `mission.json`                    | `DECISIONS.md` 2026-09-05 |
-| les FICHIERS des pièces jointes                   | aucun client d'objet dans l'API ; le téléchargement appartient à **L6c**. Manifeste seul                        | `DECISIONS.md` 2026-09-05 |
-| une colonne `motif` sur les unités hors périmètre | le 04 ne porte aucun motif SUR l'unité ; `mission_rebaselines` est admin seul                                   | `DECISIONS.md` 2026-09-05 |
-| un fichier de feuille de route                    | le §36.3 n'en liste aucun, alors que le §20.3-9/10 en a besoin — et **aucun lot livré n'écrit `roadmap_items`** | `DECISIONS.md` 2026-09-05 |
+| Absent                                            | Pourquoi                                                                                                                                                                                                                       | Où                        |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------- |
+| `scores.csv`                                      | le moteur L8 est livré (#61) mais **relié à aucune route ni dépôt** — `block_scores`/`unit_scores` ne sont écrites par personne, donc aucun score n’existe ; §36.3 : « sinon absent et signalé » — signalé dans `mission.json` | `DECISIONS.md` 2026-09-05 |
+| les FICHIERS des pièces jointes                   | aucun client d'objet dans l'API ; le téléchargement appartient à **L6c**. Manifeste seul                                                                                                                                       | `DECISIONS.md` 2026-09-05 |
+| une colonne `motif` sur les unités hors périmètre | le 04 ne porte aucun motif SUR l'unité ; `mission_rebaselines` est admin seul                                                                                                                                                  | `DECISIONS.md` 2026-09-05 |
+| un fichier de feuille de route                    | le §36.3 n'en liste aucun, alors que le §20.3-9/10 en a besoin — et **aucun lot livré n'écrit `roadmap_items`**                                                                                                                | `DECISIONS.md` 2026-09-05 |
 
 ## Conventions (contrat 11 §3, appliquées à toutes les routes)
 
