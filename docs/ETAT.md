@@ -3736,6 +3736,29 @@ au départ** — jamais à « zéro ». Trois bascules sur le test lui-même le 
 
 Prochaine action : suivre la CI de la PR #47, seul verrou restant de L7b.
 
+## 2026-09-06 10h20 — [lot L8 / moteur de scoring] — étape pipeline 3/7 (auto-revue)
+
+Dernier commit vert : c14778b (l’arbre bancal, l’énumération des barèmes, le glob)
+Branche : lot/l8-scoring · Poussé : oui
+Tâche en cours : reprise après coupure d'API — le moteur manquait, les tests l'attendaient.
+Prochaine action : passer le lot en REVUE CROISÉE (étape 4) ; A16 écrit la couche
+d'acceptation, en partant du moteur de garde sans `expect` déjà livré
+(`apps/api/tests/aide/etancheite-scoring.ts`, invariant 7).
+Tests rouges connus : aucun — `pnpm verify:rapide` intégralement vert (14 gardes, lint,
+format, typecheck, unit 51/1433, interface 42/717).
+
+Livré : `bareme.ts` (§32.1), `agregation.ts` (les quatre formules, le roll-up), `moteur.ts`
+(ventilation, anomalies, union des drapeaux). Les 92 tests de conception (ba7a560, écrits
+AVANT le code) sont verts sans qu'aucun attendu ait bougé : FIL-TPE 3,11 · FIL-GC 3,49 sur
+150 unités et 4 niveaux · roll-up 3,22 · score parfait 5,00 qui porte quand même son drapeau.
+74 tests POSTÉRIEURS au code s'ajoutent, et leur en-tête le dit (formes de barème malformées,
+arbre bancal). Couverture `apps/api/src/scoring/**` : 99,87 lignes / 100 fonctions / 96,79
+branches — le glob entre dans `cheminsCritiques` AU-DESSUS du seuil, inchangé.
+
+Quatre doutes de spec écrits dans `DECISIONS.md` plutôt que devinés. À relire en priorité :
+la doctrine 5 (« l'unité la plus défavorable ») ne change PAS le roll-up — si la lecture
+inverse était voulue, tous les scores consolidés changeraient, et ce serait un arbitrage de
+Williams, pas un correctif.
 ## 2026-09-05 02h20 — [lot L5 / incrément L5a — réserves A29] — étape pipeline 3/7 (auto-revue)
 
 Dernier commit vert : `e9d6712` (docs(l5a) : le code citait comme « réserve de spec » une question
