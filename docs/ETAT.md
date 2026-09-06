@@ -4144,3 +4144,31 @@ Trois arbitrages A01 tracés dans `DECISIONS.md`, une fiche d'étage 2 dans `AME
 `apps/api/src/scoring/**` : 99,65 lignes / 100 fonctions / 96,71 branches. La justification de
 l'arborescence est réécrite : le scoring est un calcul pur transverse sans dépôt ni route, au rang
 d'`auth/` et `http/` — le glob suit le code, il ne le place pas.
+
+## 2026-09-06 16h20 — [autopilote / avant rejeu P-C] — étape pipeline 4/7
+
+Dernier commit vert : `b6714ff` (L5 — les six bloquants de la recette novice) · Branche : `gouvernance/etat-08` · Poussé : oui
+Tâche en cours : quatre chantiers parallèles ferment tout ce que P-C refuse qui n'est PAS du matériel.
+Prochaine action : fusionner #58 et #67, puis **rejouer P-C EN ENTIER** dès les quatre chantiers rentrés.
+Tests rouges connus : aucun sur `main`. `7 · images / field` a flanché sur un **502 du Docker Hub** — panne du registre, relancée ; c'est la 2ᵉ fois que ce job tombe pour une cause externe.
+
+**#58 et #67 débloquées, et une trouvaille au passage.** Les deux étaient rouges sur des dégâts de la
+fusion `union` de `DECISIONS.md` (une ligne vide mangée, un `Impact spec :` avalé — repris tel quel du
+parent, pas réécrit). Mais la couverture de #58 tombait sur `EcranExport.test.tsx` avec pour seul
+message `coverage-summary.json absent` : la cause réelle était un `Blob` de jsdom que le `Response`
+d'undici refuse **sous Node 22** (la version du contrat) et accepte sous Node 24 (celle du poste).
+**Et surtout : `pnpm test:interface` n'était appelé par AUCUN job.** Les 61 fichiers du projet
+`interface` ne tournaient qu'en effet de bord de `test:coverage` — un test d'interface rouge se
+présentait donc au relecteur sous le libellé « couverture absente ». Une étape est ajoutée au job
+`3 · unit` (son nom est un contrat avec la protection de branche : on ne le renomme pas).
+**Troisième fois en trois jours qu'un garde vert ne gardait rien.**
+
+**Quatre chantiers ouverts, disjoints, pour vider P-C de tout ce qui n'est pas matériel** : ① les
+scénarios E2E hors ligne — `grep setOffline e2e/` rend toujours ZÉRO, ce qui à lui seul refuse quatre
+critères du fichier 07 ; ② `EcranRestauration.tsx`, 267 lignes, **11 % et aucun fichier de test** —
+le parachute qu'on n'a jamais ouvert ; ③ le bouton « Terminer » qui n'existe pas dans l'entretien, les
+boutons grisés muets, et le refus d'interlocuteur (D-1) ; ④ la police posée sur `.axn-coquille` seule
+(`documentElement` = Times New Roman, latent jusqu'au premier portail) et la grille des 4 états.
+
+**Ce qui restera dû à Williams après cela : les 17 points de machine réelle.** Ils ne se cochent pas
+sur `jsdom`, et la porte se rejoue EN ENTIER — un correctif isolé ne relance pas le chronomètre.
