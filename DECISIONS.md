@@ -9067,6 +9067,7 @@ notamment sur les octets que le garde N'ÉNUMÈRE PAS un par un (0x01 à 0x08, 0
 par la borne mais éprouvés par aucun cas nommé.
 Décideur : **A52**, à confirmer par **A01** à l'étape 4.
 Impact spec : aucun.
+
 ## 2026-09-05 — [L6] Le transport authentifié du terrain n'est au périmètre d'aucun incrément
 
 Contrôle A02 de la note L6, réserve **B2** : `grep -rn "fetch(" apps/field/src` rend **0 occurrence**
