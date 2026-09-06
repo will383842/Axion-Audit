@@ -10034,3 +10034,39 @@ l'invariant 3 (« écritures de sync réservées au propriétaire ») les comman
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun aujourd'hui. **Amendement candidat du 05 §9.9 à P-D**, pour que les cinq entités
 y soient nommées plutôt qu'interprétées.
+
+---
+
+## 2026-09-06 — [L5] Les six bloquants de la recette novice : ce qui se décide, et ce qui remonte
+
+La recette UX novice n°1 (A54) a rendu **NO-GO** sur P-C avec six bloquants. Cinq se corrigent sans
+rien interpréter : un message faux (B1), une sortie absente (B2), une promesse non tenue (B3), un
+garde-fou qui s'éteint à vide (B4), un échec déguisé en vide (B5). **B6 est le seul qui touche à un
+énoncé, et il est à cheval sur un désaccord déjà écrit** : la décision A01 du 2026-09-05 (« l'état de
+sync visible sur TOUS les écrans ») croise `LOT_L5.md` §3.6 (« jamais une pastille qui annonce plus
+qu'elle ne fait »).
+
+Options :
+
+1. **Séparer la RÈGLE de l'ÉNONCÉ. Corriger la règle maintenant, laisser le mot à Williams.** La
+   règle — un fait, une source — n'est pas discutable : deux pastilles qui se contredisent sur un
+   même écran sont fausses quel que soit leur libellé. Le mot, lui, est un choix de produit.
+2. Trancher aussi le libellé (« Synchronisation indisponible dans cette version »). **Écartée** :
+   c'est le doute §8-5 du rapport, remonté explicitement à l'arbitrage humain ; le trancher dans un
+   correctif de pilote reviendrait à répondre à une question qu'on a soi-même posée.
+3. Attendre l'arbitrage pour tout corriger. **Écartée** : la contradiction est un bloquant de porte,
+   et elle porte sur la seule question que l'invariant 8 impose chaque soir — « mes données sont-elles
+   sorties de cet appareil ? ».
+
+Arbitrage : **option 1**. L'état affiché vient du **port de sync** et de lui seul (ni `navigator.onLine`,
+ni le compte d'outbox) ; la traduction statut → pastille est **unique** (`app/etat-sync-affiche.ts`),
+partagée par la coquille et le cockpit ; la pastille en double de l'accueil est retirée. Les tests de
+conception attendent un **état**, jamais un libellé : le jour où le mot sera arbitré, il changera dans
+un seul fichier sans toucher un test.
+Règle de précédence : **§32-36 > §16-22** — 03 §33.2 (les quatre états, cause et action) et 03 §19.2
+(pastille discrète, jamais anxiogène) commandent ; `LOT_L5.md` §3.6 en est l'application au lot.
+Décideur : **A20**, dans son périmètre de chef d'équipe (intégration de la coquille) ; **le libellé
+reste à Williams**.
+Impact spec : aucun. **Six doutes de spec du rapport A54 §8 restent ouverts et NON tranchés** : deux
+vues nommées « Aujourd'hui », refus de participation, phrase-script RGPD, « fin de journée en un
+geste » face à la saisie du mot de passe d'export, énoncé de la pastille avant L6a, page `/design`.

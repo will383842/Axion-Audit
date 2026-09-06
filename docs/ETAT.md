@@ -3735,3 +3735,18 @@ au départ** — jamais à « zéro ». Trois bascules sur le test lui-même le 
    repassés verts au calme : à surveiller si la contention persiste.
 
 Prochaine action : suivre la CI de la PR #47, seul verrou restant de L7b.
+
+---
+
+## 2026-09-06 11h30 — [lot L5 / recette novice — correctifs A20] — étape pipeline 5/7
+
+Dernier commit vert : f856d4c (fix(l5) : les majeurs M1, M3, M7) · Branche : lot/l5-recette-novice · Poussé : oui
+Tâche en cours : les six bloquants du NO-GO de la recette novice n°1 (A54) sont FERMÉS et poussés —
+B1 message d'accueil, B2 sortie dans la coquille, B3 promesse photo, B4 rituel qui s'éteignait à vide,
+B5 échec déguisé en vide, B6 pastilles contradictoires. Trois majeurs fermés avec eux (M1, M3, M7).
+Prochaine action : A27 écrit les tests d'ACCEPTATION des six bloquants (les tests joints sont des
+tests de conception A20) ; Williams arbitre les six doutes de spec du rapport A54 §8, dont l'énoncé
+de la pastille avant L6a.
+Tests rouges connus : aucun. Interface 820/820 (rejouée 3×), unit 1364 dont 3 dépassements de délai
+sous charge (socle.test.ts, service.test.ts, garde-fous-eslint-ecriture-dexie.test.ts) — verts en
+isolation, machine lente, déjà présents avant ces correctifs.
