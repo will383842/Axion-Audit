@@ -10511,6 +10511,53 @@ Règle de précédence : **sans objet** entre le pack et lui-même — c'est un 
 sur une décision de gouvernance, pas une divergence de spécification.
 Décideur : **A30**, en application de l'arbitrage A01 du 2026-09-05 ; contestable par A36 et A37.
 Impact spec : aucun.
+## 2026-09-06 — [L8 → consommateur] Une mission non commencée doit-elle crier au loup ?
+
+Mesuré par la couche d'acceptation croisée, en cherchant **ce que les correctifs ont ouvert** :
+20 questions bloquantes et zéro réponse produisent **20 anomalies** `QUESTION_BLOQUANTE_JAMAIS_POSEE`,
+score mission `null`. Le moteur est une **fonction pure** : rien en lui ne distingue « la collecte
+n'a pas commencé » de « la collecte est finie avec un trou ». Les deux états lui sont identiques.
+
+Options :
+
+1. Que le moteur consulte `missions.status` et se taise avant la collecte. **Écartée** : il cesserait
+   d'être une fonction pure de ses entrées, deviendrait dépendant d'une machine à états, et
+   deux appelants légitimes (un aperçu à blanc, un rejeu de référence) perdraient l'information.
+2. **Le moteur dit tout ; le CONSOMMATEUR filtre selon `missions.status` (§32.2).** La contrainte est
+   écrite au brief du lot qui exposera le scoring — route ou console — et non enfouie dans un
+   commentaire du moteur.
+3. Ne rien faire. **Écartée, et c'est le vrai risque** : l'outil crierait au loup **pendant toute la
+   collecte**, et l'auditeur cesserait de lire les anomalies. Un signal qui se déclenche toujours
+   n'est plus un signal — il apprend à être ignoré, et il emporte les vrais avec lui.
+
+Arbitrage : **option 2**. Une fonction pure qui dit tout est réparable ; une fonction qui décide de
+se taire ne l'est pas. Règle de précédence **sans objet** (aucune divergence : le §32.1 spécifie le
+calcul, le §32.2 les états, et rien ne dit qui filtre).
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun. **Contrainte à porter au brief du lot qui exposera le scoring.**
+
+## 2026-09-06 — [L8] La proposition de drapeau est-elle validable par un humain en mode `max` ?
+
+Second constat de la même passe. Depuis que le seuil s'évalue sur **chaque option** avant agrégation,
+une proposition peut se lire : `{ declencheur: "seuil", seuil: 2, score: 5, valeurDeclenchante:
+"opt_a, opt_c" }`. Or le §16.5 exige une **validation humaine**. Le validateur lit donc « drapeau
+parce que sous 2 » **à côté de « score 5 »**, et la valeur déclenchante liste **toutes** les options
+sans dire **laquelle** a franchi le seuil.
+
+Options :
+
+1. Revenir au seuil sur l'agrégat. **Écartée** : c'est le défaut qu'on vient de fermer — l'agrégat
+   effaçait l'option au rouge.
+2. **La proposition porte le score ÉLÉMENTAIRE qui a déclenché et le code de l'option**, en plus de
+   l'agrégat.
+3. Ne rien faire. **Écartée** : rien n'est faux, et c'est précisément le danger — un humain pressé
+   classera la proposition en anomalie de l'outil et **écartera un finding vrai**.
+
+Arbitrage : **option 2**. C'est le prix de la séparation entre le détail et l'agrégat, et il se paie
+**au moment de la validation**, pas au calcul. Règle de précédence : **§16-22 > §1-15** — §16.5
+(validation humaine) est le texte qui commande la forme de la proposition.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun ; champ ajouté à une proposition, pas au schéma de données.
 
 ## 2026-09-06 — [L8] Une question bloquante JAMAIS POSÉE doit-elle produire une anomalie ?
 
