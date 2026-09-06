@@ -4090,3 +4090,32 @@ de la pastille avant L6a.
 Tests rouges connus : aucun. Interface 820/820 (rejouée 3×), unit 1364 dont 3 dépassements de délai
 sous charge (socle.test.ts, service.test.ts, garde-fous-eslint-ecriture-dexie.test.ts) — verts en
 isolation, machine lente, déjà présents avant ces correctifs.
+## 2026-09-06 10h15 — [autopilote] — TOUT L5 DANS `main`, P-C refusée deux fois
+
+Dernier commit vert : `main` après #57 · Branche : `gouvernance/etat-07` · Poussé : oui
+Tâche en cours : trois agents (acceptation L8, revue croisée L7c, fusion de la recette).
+Prochaine action : fusionner #58, #60, #61 dès CI verte ; puis **rejouer P-C EN ENTIER**.
+Tests rouges connus : `main` rouge sur `8 · deploy-staging` seulement (geste root, hors délégation).
+
+**`main` porte L0, L1, L2, L3, L5a+b+c, les six réserves de sécurité, L7a, L7b, E18**, le garde des
+octets de contrôle et `companies` au seuil. **Tous les lots fonctionnels sont écrits sauf L6** — qui
+ne s'ouvre qu'après P-C.
+
+**LA PORTE P-C EST REFUSÉE DEUX FOIS, et c'est le fait du jour** : **veto A02** et **NO-GO A54**.
+
+1. **Le veto a évité une perte silencieuse.** Fusionner L5c aurait **annulé F-22 (critique), F-23 et
+   F-25** — sept symboles de sécurité disparaissaient (`coffre-appareil.ts` 371 → 183 lignes). C'est
+   une fusion du pilote qui les avait effacés, l'auto-merge était armé, et **aucun garde ne pouvait
+   l'attraper** : l'anti-skip voit les tests désactivés, pas supprimés, et la couverture **passait**
+   parce que le code et ses tests avaient disparu **ensemble**. Réparé par fusion à trois branches —
+   puis **deux tests `@critique` ont trouvé ce que le comptage de symboles ne voyait pas** : le
+   message d'anomalie était perdu, l'auditeur n'aurait jamais lu « ne créez pas ».
+   **Un comptage dit qu'un correctif est PRÉSENT ; il ne dit pas qu'il est ATTEINT.**
+2. **Le NO-GO : 2 151 tests verts, et l'outil s'arrête à 3 minutes** pour un novice. Six bloquants,
+   fermés depuis — dont deux qu'aucun test ne pouvait voir : un écran de **création** de mot de passe
+   qui répond « incorrect », et une pile de navigation à **un seul élément** qui rendait « Retour »
+   inopérant après réouverture. Le plus coûteux était **la promesse photo** : elle pousse l'auditeur
+   vers son téléphone personnel, et la pièce d'audit sort du coffre chiffré.
+
+**Dû à une machine réelle : 17 points.** Ils ne se cochent pas sur `jsdom`, et la porte se rejoue
+**EN ENTIER** — un correctif isolé ne relance pas le chronomètre.
