@@ -10070,3 +10070,106 @@ reste à Williams**.
 Impact spec : aucun. **Six doutes de spec du rapport A54 §8 restent ouverts et NON tranchés** : deux
 vues nommées « Aujourd'hui », refus de participation, phrase-script RGPD, « fin de journée en un
 geste » face à la saisie du mot de passe d'export, énoncé de la pastille avant L6a, page `/design`.
+
+## 2026-09-06 — [L8] Le NON COMMUNIQUÉ reste-t-il au dénominateur de la complétude ?
+
+Le 03 §32.1 dit deux choses qui, lues côte à côte, ne disent pas la même chose :
+· au barème — « Réponse **non communiquée** ou **N/A** : exclue du numérateur ET du dénominateur » ;
+· à l'agrégation-3 — « **Complétude** = questions scorables répondues / questions scorables posées ».
+Si le refus sortait du dénominateur de la COMPLÉTUDE, un refus ne l'abaisserait jamais, et une mission
+où tout est refusé afficherait 100 % de complétude.
+
+Options :
+a) La phrase du barème porte sur le SCORE (Σ poids × score / Σ poids) et sur lui seul ; la complétude
+suit sa propre formule, où une question refusée est POSÉE et non RÉPONDUE — elle abaisse donc le
+ratio. b) L'exclusion vaut pour les deux, et la complétude ignore les refus. c) Demander.
+
+Arbitrage : **a)**, et ce n'est pas une lecture mais une CITATION : le §27.4 chiffre l'exemple —
+« score 3,2/5, établi sur **84 %** des questions — **6 non communiquées** ». Un pourcentage inférieur
+à 100 avec six refus n'est possible que si les refus sont au dénominateur. La phrase du §32.1 est donc
+la règle du numérateur du SCORE (« jamais de pénalité pour un refus », §27.4), pas celle de la
+complétude. Le SANS OBJET, lui, sort des deux : le §32.1 le nomme avec le refus pour le score, et une
+question qui ne se pose pas ici ne MANQUE pas — la compter absente ferait baisser la couverture d'une
+mission irréprochable.
+Règle de précédence : **§24-31 > §1-15** — le §27.4 est la section la plus précise sur le sujet, et
+c'est lui qui porte le chiffre.
+Décideur : A15, sur citation du §27.4. **À confirmer en revue croisée.**
+Impact spec : aucun. Amendement candidat de 03 §32.1-3, pour que la formule nomme le sans-objet
+(`cotées / (posées − sans objet)`) plutôt que de le laisser déduire.
+
+## 2026-09-06 — [L8] La doctrine 5 (« l'unité la plus défavorable fait la note ») change-t-elle le roll-up ?
+
+L'amendement du 2026-09-02 au 03 §32.4 pose cinq doctrines de cotation, dont la cinquième : « **l'unité
+la plus défavorable fait la note** à l'agrégation, les unités conformes vont au rapport comme bonnes
+pratiques », avec la mention « Mise en œuvre : … **scoring §32.1 (agrégation, doctrine 5)** ». Lue
+littéralement, elle remplacerait le roll-up du §32.1-4 (moyenne pondérée par `headcount`) par un
+MINIMUM — ce qui contredirait la section non amendée et changerait tous les scores consolidés.
+
+Options :
+a) La doctrine 5 est une règle du COTEUR HUMAIN : quand une seule réponse couvre plusieurs sites, il
+cote le pire. Le roll-up §32.1-4 reste une moyenne pondérée. b) Le roll-up devient un minimum.
+c) Demander avant d'écrire une ligne.
+
+Arbitrage : **a)**, sur trois preuves écrites et non sur une préférence :
+
+1. l'entrée d'arbitrage du 2026-09-02 conclut elle-même « **aucune section du pack en conflit** » —
+   or b) mettrait §32.4 en contradiction frontale avec §32.1-4 ;
+2. `docs/banque-questions/MODE_EMPLOI.md` §5bis, qui est la mise en œuvre nommée par l'amendement,
+   la glose « Même logique que la règle 2 **pour un terrain multi-sites** » et ajoute « **la
+   couverture par unité reste l'affaire de la mission (03 §27.1)** » — elle renvoie donc explicitement
+   l'agrégation par unité AILLEURS qu'à elle-même ;
+3. les quatre autres doctrines sont sans exception des règles de cotation d'UNE réponse (le silence,
+   le parc hétérogène, les notes 2 et 4, le NA). La cinquième est de la même famille.
+
+Le mot « agrégation » y désigne l'agrégation que fait le COTEUR dans sa tête devant plusieurs sites,
+pas celle que fait le moteur dans l'arbre.
+
+Règle de précédence : sans objet — il n'y a pas de conflit une fois la doctrine lue dans son registre.
+
+Décideur : A15. **Point signalé à la revue croisée** : si la lecture b) était voulue, tous les scores
+consolidés des jeux de référence changeraient, et il faudrait un arbitrage de Williams, pas un
+correctif.
+
+Impact spec : aucun. Amendement candidat de 03 §32.4, pour que la doctrine 5 dise « à la cotation
+d'une question couvrant plusieurs unités » plutôt que « à l'agrégation » — un seul mot qui a coûté une
+demi-heure de vérification et qui en coûtera plus au prochain lecteur.
+
+## 2026-09-06 — [L8] Un parent interrogé pour lui-même entre-t-il dans son propre score consolidé ?
+
+Le 03 §32.1-4 définit le roll-up comme la « moyenne pondérée par `headcount` **des enfants** ». Il ne
+dit pas ce que devient une unité PARENTE qui porte ses propres réponses — une direction où l'on a mené
+deux entretiens, en plus de ceux de ses cinq services.
+
+Options :
+a) Le parent est un terme de sa propre consolidation, pondéré par SON `headcount`. b) Seuls les
+enfants comptent : les réponses propres du parent n'apparaissent que dans son score PROPRE.
+c) Demander.
+
+Arbitrage : **a)**. b) ferait disparaître du score consolidé des données qui ont coûté deux entretiens,
+et aucune lecture ne peut vouloir qu'une donnée collectée s'évapore — l'invariant 7 (« rien n'est
+jamais silencieusement écrasé ») dit la même chose d'un autre côté. Le risque de a) — surpondérer le
+parent — est borné et VISIBLE : le score PROPRE reste publié à côté du score CONSOLIDÉ, si bien que
+les deux lectures restent disponibles et que personne n'a à croire celle-ci sur parole.
+Règle de précédence : sans objet — comblement d'un silence du §32.1-4, aucune section en conflit.
+Décideur : A15. Documenté en tête d'`apps/api/src/scoring/agregation.ts` et éprouvé par le jeu de
+référence 3 (164 / 51 = 3,22, où le terme « 20 × 5 » EST le parent).
+Impact spec : aucun. Amendement candidat de 03 §32.1-4.
+
+## 2026-09-06 — [L8] Une divergence d'écart-type sur autre chose qu'une échelle ?
+
+Le 03 §32.1-5 écrit « **sur échelle**, écart-type ≥ 1,5 … ; oui/non contradictoires si les deux valeurs
+coexistent ». Un oui/non produit pourtant des scores (5 et 0) dont l'écart-type vaut 2,5, donc toujours
+au-dessus du seuil : le calculer ferait remonter DEUX divergences pour un seul désaccord.
+
+Options :
+a) L'écart-type est réservé à `scale_1_5`, comme le pack l'écrit ; le oui/non a son propre type de
+divergence. b) L'écart-type se calcule sur tout ce qui a un score.
+
+Arbitrage : **a)** — le pack dit « sur échelle » et nomme séparément le cas oui/non. b) doublerait
+chaque contradiction oui/non sans rien apprendre, et le seuil de 1,5 n'a jamais été calibré sur une
+grandeur qui ne peut valoir que 0 ou 2,5. La contradiction oui/non se lit en outre sur les valeurs
+BRUTES et non sur les scores : le barème étant inversable question par question (§32.1), comparer des
+scores ferait dépendre la détection d'un choix de cotation.
+Règle de précédence : sans objet — transcription littérale.
+Décideur : A15.
+Impact spec : aucun.

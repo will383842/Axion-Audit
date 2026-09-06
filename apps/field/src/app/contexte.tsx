@@ -37,9 +37,6 @@ import {
   type BaseLocale,
 } from '../local/base.js';
 import { deverrouiller, initialiserCoffre, lireCoffreAuRepos } from '../local/coffre-appareil.js';
-// Importée de `coffre.js` et non de `coffre-appareil.js` à dessein : c'est la
-// RACINE de la famille d'anomalies (coffre illisible, paramètres hors bornes,
-// données sans coffre), et elle vit avec la cryptographie qui la produit.
 import { AnomalieCoffreError } from '../local/coffre.js';
 import { contexteLocal, installerContexteLocal, retirerContexteLocal } from '../local/contexte.js';
 import { instantMs, restaurerDecalage } from '../local/horloge.js';
