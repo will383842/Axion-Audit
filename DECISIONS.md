@@ -10805,6 +10805,7 @@ passé au rappel du cockpit — la pastille de l'en-tête l'affiche déjà, lu d
 comptes du même fait sur un écran sont la version chiffrée de B6.
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun ; le rendu change, l'exigence est tenue.
+
 ## 2026-09-06 — [L5a/L7] Un badge sous AA, cru latent, était peint sur le statut le plus fréquent
 
 A28 a mesuré `.axn-badge--action` à **4,13:1**, sous le seuil AA de 4,5, sur du texte courant de
