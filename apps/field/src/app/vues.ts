@@ -58,6 +58,11 @@ export const VUES = {
   finDeJournee: { titre: 'Fin de journée', exigeCoffreOuvert: true },
   restauration: { titre: 'Restaurer une sauvegarde', exigeCoffreOuvert: true },
   finDeSession: { titre: 'Fin de session', exigeCoffreOuvert: true },
+  // ── Rattachement de l'appareil à son auditeur (L5b, correctif) — A23 ──────
+  // `exigeCoffreOuvert: true` : l'identité est rangée CHIFFRÉE sous la DEK
+  // (`session/auditeur.ts`). Un écran de rattachement accessible coffre fermé
+  // écrirait dans un coffre qui n'est pas encore ouvert.
+  connexionSiege: { titre: 'Rattacher cet appareil', exigeCoffreOuvert: true },
 } as const satisfies Record<string, DefinitionVue>;
 
 export type CodeVue = keyof typeof VUES;

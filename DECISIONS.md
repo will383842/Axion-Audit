@@ -10676,3 +10676,115 @@ par retrait volontaire du champ. C'est la source du dépôt qui est jugée, pas 
 Règle de précédence : sans objet — aucune divergence du pack, une lacune d'outillage.
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun ; un script, trois câblages, aucune dépendance nouvelle.
+
+## 2026-09-06 — [L5b] Comment un appareil terrain apprend l'identité de son auditeur
+
+`memoriserIdentiteAuditeur` (`session/auditeur.ts`) n'a **aucun appelant de production** — mesuré
+deux fois, par A26 et par A54, qui s'est arrêté à `t+3 min` sur « Auditeur inconnu sur cet
+appareil ». Sans identité, aucune session ne peut naître : les critères 07 n° 3 et n° 7 de P-C sont
+incochables. Le pack ne décrit **nulle part** un provisionnement d'appareil : 03 §34.4 crée le
+compte au siège, 05 §9.7 dérive la KEK du mot de passe et de rien d'autre, 11 §4 n'emporte pas le
+compte dans `.axionbackup`. La lacune est réelle, pas une lecture manquée.
+
+Options :
+
+1. **Fabriquer un identifiant local** (UUID v7 d'appareil). **Écartée**, et pas pour le goût :
+   05 §9.9 fonde la propriété sur `interviews.conducted_by` ; un propriétaire inventé revient
+   `forbidden` au premier push et une journée d'entretiens reste bloquée dans l'outbox.
+2. **Saisie manuelle du couple (adresse, identifiant)** au premier usage. Sans réseau, donc
+   séduisante. **Écartée** : l'identifiant est un UUID de 36 caractères qu'aucun auditeur ne
+   connaît, rien ne le valide avant la première sync, et une faute de frappe produit exactement
+   l'issue de l'option 1 — découverte des jours plus tard. Coût novice prohibitif (E23).
+3. **Connexion au siège, une fois, en ligne** : `POST /v1/auth/login` (05 §8.1, route LIVRÉE en L2)
+   rend `userId`, seul identifiant que le serveur acceptera. Le socle L5a était déjà construit pour
+   la recevoir — `memoriserJetonSiege` et `memoriserIdentiteAuditeur` sont les deux moitiés d'un
+   écran qui n'existait pas.
+
+Arbitrage : **option 3**. Règle de précédence : **§32-36 > §1-15** — 03 §34.4 (« compte créé » au
+siège, habilitation serveur) prime sur toute commodité locale, et 05 §31-3 décrit déjà l'après
+(« si le refresh token expire pendant une longue période hors ligne, le déverrouillage local
+continue de fonctionner ») : le pack suppose donc une connexion antérieure. Le profil n'est pas dans
+la réponse de `login` : il vaut `PROFIL_PAR_DEFAUT` = `guide_strict`, le plus strict (03 §19.1),
+jusqu'à ce que le pull de L6a apporte `users.usage_profile`.
+**Ce qui reste vrai et doit être dit** : un appareil qui n'a JAMAIS vu le réseau ne peut pas
+collecter. Ce n'est pas un renoncement à l'invariant 1 — la collecte reste 100 % hors ligne APRÈS
+provisionnement — mais la recette A54 doit partir d'un appareil rattaché une fois, comme elle part
+déjà d'une mission embarquée. Le noter au scénario, pas le contourner.
+Décideur : **A01**, sur délégation de Williams du 2026-09-04.
+Impact spec : **aucun** — aucune route créée, aucun schéma 04 touché, aucune crypto modifiée ;
+`loginRequestSchema`/`loginResponseSchema` de `packages/shared` sont consommés tels quels.
+
+## 2026-09-06 — [L5] Une fixture E2E a-t-elle le droit de semer IndexedDB avant le premier pull ?
+
+Le premier pull est descopé vers L6a (`DECISIONS.md` 2026-09-02). Aucune mission ne peut donc être
+embarquée par un chemin de production, et les 8 scénarios hors ligne d'A26 n'ont rien à ouvrir.
+
+Options :
+
+1. **Attendre L6a.** Écartée : elle rend les scénarios `@critique` de L5 inécrivables jusqu'à L6,
+   c'est-à-dire jusqu'après la porte P-C qu'ils doivent servir.
+2. **Semer IndexedDB depuis la fixture, avec la CRYPTO DE PRODUCTION** (`deriverKek`, `ouvrirCoffre`,
+   `ecrireLocal`) — aucun octet de chiffrement réécrit, seulement des lignes posées par les mêmes
+   fonctions que l'application.
+3. Semer des lignes en clair. Écartée sans discussion : une fixture qui contourne le coffre teste un
+   schéma local qui n'existe pas, et masquerait précisément une régression de chiffrement.
+
+Arbitrage : **option 2**, à une condition qui en fait la valeur : la fixture n'a le droit d'écrire
+qu'à travers les fonctions de production. Elle remplace **l'API absente**, jamais une règle locale.
+**Retrait à L6a** : non — elle ne se retire pas, elle se **rebranche**. Le jour où le pull existe,
+au moins un scénario doit embarquer par le chemin réel ; les autres gardent la fixture, parce qu'un
+E2E de collecte n'a pas à rejouer un pull complet pour ouvrir une question. La fiche de porte P-D
+porte la vérification que ce rebranchement a eu lieu.
+Règle de précédence : sans objet — convention de test, aucune divergence du pack.
+Décideur : **A01**, sur délégation de Williams du 2026-09-04.
+Impact spec : aucun ; une ligne à la checklist de P-D.
+
+## 2026-09-06 — [L5] `durableStorage` accordé par CDP en E2E, et le scénario du REFUS
+
+05 §31-2 fait du refus de `navigator.storage.persist()` un chemin de production : « la mission
+N'EST PAS embarquée et l'écran guide l'utilisateur ». Chromium sous Playwright n'accorde pas la
+persistance spontanément.
+
+Options :
+
+1. Accorder `durableStorage` par CDP (`Browser.grantPermissions`) et ne jouer que le chemin accordé.
+2. **Accorder par CDP pour les scénarios de collecte, ET écrire un scénario dédié qui éprouve le
+   REFUS** — persistance non accordée, mission non embarquée, écran de guidage affiché.
+3. Ne rien accorder et laisser chaque scénario subir la décision du navigateur. Écartée : un
+   scénario dont le résultat dépend d'une heuristique d'engagement est un scénario intermittent.
+
+Arbitrage : **option 2**. La convention CDP est bonne pour ce qu'elle fait — poser une PRÉCONDITION,
+pas simuler un comportement — mais elle ne suffit pas : le refus est le chemin que Safari iPadOS
+sert le plus volontiers, et c'est celui qu'aucun test ne regarde. `preparerStockagePourMission`
+rend déjà `{statut: 'refuse', motif: 'persistance_refusee'}` : le scénario a une cible, il lui
+manquait un auteur. Il revient à **A26**, et la limite iOS reste celle du 11 §7 — Playwright ne
+couvre pas le service worker Safari, la tablette se rejoue à la main en P-C et P-E.
+Règle de précédence : sans objet — convention de test.
+Décideur : **A01**, sur délégation de Williams du 2026-09-04.
+Impact spec : aucun ; un scénario E2E de plus, assigné.
+
+## 2026-09-06 — [L5] « Coupure de courant en pleine saisie » : quelle moitié s'automatise ?
+
+Critère 07 n° 4 de P-C, littéral : « coupure de **courant** en pleine saisie = zéro perte ».
+Playwright ne coupe pas l'alimentation d'une machine.
+
+Options :
+
+1. Déclarer le critère automatisé par `context.close()` / kill de l'onglet. Écartée telle quelle :
+   ce serait faire dire à un test plus qu'il ne prouve — exactement le défaut que ce dépôt traque.
+2. Déclarer le critère **manuel intégral**, renvoyé à la recette matérielle. Écartée : elle laisserait
+   sans garde-fou automatisé la seule chose que le code contrôle vraiment, la durabilité de
+   l'écriture Dexie.
+3. **Le couper en deux, et nommer les deux moitiés.**
+
+Arbitrage : **option 3**. (a) MOITIÉ AUTOMATISABLE — mort de l'onglet en pleine saisie puis
+réouverture, y compris sur un **second profil navigateur** pour la restauration (`LOT_L5.md` §4) :
+elle éprouve ce qui dépend du code, la transaction Dexie et la reprise à la question en cours
+(03 §17.4). (b) MOITIÉ MATÉRIELLE — la coupure d'alimentation réelle, tablette débranchée en pleine
+frappe, assignée à la recette **P-C** (A27) et rejouée en **P-E**, avec sa ligne de preuve dans le
+fichier de porte. Elle éprouve ce que le code ne contrôle pas : le cache d'écriture du système de
+fichiers. Aucune des deux ne se coche à la place de l'autre ; le fichier de porte porte les deux
+lignes, et un `it()` qui prétendrait couvrir (b) serait un faux vert.
+Règle de précédence : **09 §5.7** — on ne simplifie pas une validation pour faire passer un test.
+Décideur : **A01**, sur délégation de Williams du 2026-09-04.
+Impact spec : aucun ; deux lignes distinctes à la checklist de P-C, au lieu d'une ambiguë.
