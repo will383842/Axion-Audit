@@ -38,6 +38,23 @@ git worktree add ../axion-l5a -b lot/l5a main
 Puis on ouvre une session **dans chaque dossier**. Elles ne peuvent alors plus s'écraser, même par
 erreur. Pour fermer un chantier terminé : `git worktree remove ../axion-l3`.
 
+> **⚠️ ON NE COMMITE PAS DEPUIS LE RÉPERTOIRE RACINE — ET GIT LE REFUSE DÉJÀ.**
+>
+> Le `.git/config` de la racine porte `core.bare = true` alors que la copie de travail y est
+> toujours et que `HEAD` y pointe sur une branche. `git status` et `git commit` y échouent donc sur
+> « this operation must be run in a work tree », pendant que les worktrees, eux, fonctionnent tous.
+>
+> **N'y touchez pas pour « réparer ».** Une session de lecture l'a signalé le 2026-09-06 comme une
+> anomalie possible ; c'en est une par la forme, mais elle tient exactement la règle d'or de ce
+> fichier — la racine est le seul endroit où deux sessions se marchent dessus par accident, et elle
+> se trouve mécaniquement close. `git config core.bare false` sur un dépôt qui porte trente
+> worktrees vivants, pendant que des agents écrivent, n'est pas un geste à faire sur une intuition.
+>
+> Ce qu'il faut savoir tient en une ligne : **travaillez dans un worktree, jamais à la racine**. Le
+> contournement pour une commande de lecture ponctuelle, et les autres pièges de cette machine, sont
+> dans `docs/REPRISE_AUTOPILOTE.md` — délibérément là-bas et pas ici, pour qu'un seul fichier en
+> fasse foi. Un fait recopié à deux endroits dérive.
+
 **Découper par fichiers, pas par envie.** Deux chantiers ne se croisent que s'ils ne partagent aucun
 fichier. `apps/api` (L3) et `apps/field` (L5a) sont disjoints : c'est un bon découpage.
 `CLAUDE.md` §4 impose deux exceptions : **jamais deux lots sur les mêmes fichiers**, et
