@@ -160,7 +160,10 @@ export function FournisseurTerrain({ children }: { readonly children: ReactNode 
         const coffre = await lireCoffreAuRepos(ouverte);
         if (abandonne()) return;
 
-        naviguer({ type: 'racine', vue: vueCourante(restaurerNavigation(vueMemorisee)) });
+        // B2 : la pile restaurée est reposée TELLE QUELLE. La collapser sur sa
+        // seule vue de sommet (`racine`) était ce qui privait la reprise de son
+        // dessous, donc de sa sortie.
+        naviguer({ type: 'restaurer', etat: restaurerNavigation(vueMemorisee) });
         setBase(ouverte);
         setPremierUsage(coffre === null);
         setPhase('verrouille');

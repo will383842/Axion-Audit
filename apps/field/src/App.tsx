@@ -6,6 +6,18 @@
 // bouton de verrouillage d'un geste (05 §9.7 : « l'auditeur qui pose sa tablette
 // verrouille lui-même — c'est LUI le premier périmètre de sécurité »).
 //
+// ── LA SORTIE EST DANS LA COQUILLE, UNE FOIS, POUR TOUS LES ÉCRANS ──────────
+// Bloquant **B2** de la recette novice n°1 (A54, 2026-09-06) : `peutRevenir()`
+// existait, documentait en toutes lettres que « le bouton retour de l'en-tête
+// s'y règle », et n'était câblé sur AUCUN bouton. Deux écrans n'offraient donc
+// que « Verrouiller » — en PWA installée, sans barre d'adresse, l'auditeur était
+// enfermé. Le geste retour système sauvait le navigateur, pas la tablette.
+//
+// Le retour est posé ICI et nulle part ailleurs : un bouton par écran, ce sont
+// onze occasions d'en oublier un, et c'est très exactement ce qui s'est produit
+// (deux écrans sur onze avaient leurs `actions`, les autres non). La coquille,
+// elle, ne peut pas oublier un écran : elle les rend tous.
+//
 // ── LE VERROU EST STRUCTUREL, PAS VISUEL ────────────────────────────────────
 // Quand le coffre est fermé, l'écran de déverrouillage n'est pas POSÉ DEVANT les
 // données : les données ne sont pas lisibles du tout, parce que le contexte local
@@ -14,12 +26,13 @@
 //
 // Traçabilité : E33 (sécurité / RGPD), E6 (hors ligne total, PC ET tablette).
 // =============================================================================
-import type { ReactNode } from 'react';
+import { useCallback, type ReactNode } from 'react';
 import { Bouton, EtatErreur, Squelette } from '@axion/ui';
 import { EcranAccueil } from './app/EcranAccueil.js';
 import { EcranDeverrouillage } from './app/EcranDeverrouillage.js';
 import { EcranStockage } from './app/EcranStockage.js';
 import { useTerrain } from './app/contexte.js';
+import { peutRevenir } from './app/navigation.js';
 import { VUES } from './app/vues.js';
 import { EcranEntretien } from './ecrans/entretien/EcranEntretien.js';
 import { EcranNouvelEntretien } from './ecrans/entretien/EcranNouvelEntretien.js';
@@ -76,8 +89,16 @@ function ContenuCourant(): ReactNode {
 }
 
 export function App(): ReactNode {
-  const { phase, panne, vue, verrou, fermer } = useTerrain();
+  const { phase, panne, vue, verrou, fermer, navigation, naviguer } = useTerrain();
   useVueInitiale();
+
+  // B2 — la sortie. Elle n'apparaît que s'il y a réellement où revenir : sur une
+  // racine, un bouton « Retour » qui ne fait rien serait le même mensonge que la
+  // pastille qui annonce plus qu'elle ne fait.
+  const retourPossible = peutRevenir(navigation);
+  const revenir = useCallback((): void => {
+    naviguer({ type: 'retour' });
+  }, [naviguer]);
 
   if (phase === 'chargement') {
     return (
@@ -118,6 +139,14 @@ export function App(): ReactNode {
   return (
     <div className="axn-coquille">
       <header className="axn-coquille__entete">
+        {/* Avant le titre : l'ordre de lecture d'un en-tête, et l'ordre de
+            tabulation. Le libellé est écrit, pas seulement une flèche — §33.6
+            interdit qu'une information soit portée par une icône seule. */}
+        {retourPossible && (
+          <Bouton variante="discret" onClick={revenir}>
+            Retour
+          </Bouton>
+        )}
         <h1 className="axn-coquille__titre">{VUES[vue].titre}</h1>
         {/* Décision A01 (2026-09-05) : l'état de synchronisation est visible sur
             TOUS les écrans. « Hors ligne = nominal » veut dire pas une erreur,
