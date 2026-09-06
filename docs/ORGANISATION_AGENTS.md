@@ -174,6 +174,21 @@ et on lit sa sortie.
 > Quinze fichiers de code sont alors passés **sans un seul conflit**, là où la fusion ordinaire les
 > présentait tous comme irréconciliables.
 >
+> **LA BASE EST LE POINT DE DÉPART DE LA BRANCHE, PAS LA TÊTE DE CELLE DONT ELLE EST ISSUE.**
+> Précision ajoutée le 2026-09-05 **parce que la phrase ci-dessus était ambiguë et a induit en
+> erreur**. Sur `lot/l7c`, la session pilote a nommé la **tête** de `lot/l7b` : or `l7c` en avait
+> bifurqué **avant** ses derniers correctifs, si bien que cette tête portait **29 entrées de
+> `DECISIONS.md` que `l7c` n'avait jamais eues**. `merge-file` les a lues comme une **suppression
+> volontaire** de notre côté, et les a jetées — **sans un seul marqueur**.
+> Le vrai point de départ se retrouve par `git log --oneline <branche>` (le commit dont le worktree
+> est parti) ou par `git merge-base <branche> <candidat>`.
+>
+> **Et ce qui l'a attrapé n'est pas un garde de format — les trois étaient verts — mais le COMPTAGE
+> DES ENTRÉES** : 231 là où `main` en portait 249. **Le contrôle qui compte les objets du fichier
+> voit ce que le contrôle qui compte les lignes ne voit pas.** Après toute fusion d'un registre :
+> compte les `^## ` de chaque parent et du résultat, et vérifie que **rien n'est perdu des deux
+> côtés** — `comm -23` dans les deux sens, pas une seule.
+>
 > **Et on vérifie après, plutôt que de supposer** : que le correctif venu de `main` est présent, et
 > que les ajouts de la branche le sont aussi. Un `add/add` résolu sans contrôle est le plus silencieux
 > des écrasements — il ne laisse aucun marqueur.

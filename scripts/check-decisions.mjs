@@ -120,6 +120,45 @@ for (const e of entrees) {
   }
 }
 
+// ── LA COUTURE DU DRIVER `union`, QUI A COÛTÉ TROIS PASSES LE 2026-09-06 ────
+// `.gitattributes` fusionne DECISIONS.md en `union` : les deux côtés sont gardés,
+// dans l'ordre, SANS conflit. Le driver ne connaît pas la notion d'entrée — il
+// recolle donc l'en-tête entrant directement sous le `Impact spec :` sortant, et
+// la ligne vide qui les séparait disparaît.
+//
+// Prettier le voit et le refuse. Mais il dit « Code style issues found », ce qui
+// envoie chercher un défaut de mise en forme là où il y a une CICATRICE DE
+// FUSION — et c'est trois fois en une journée qu'on l'a cherché ainsi. Ce garde
+// tourne avant lui dans la chaîne, et il nomme la cause.
+const collees = [];
+for (const e of entrees) {
+  if (e.ligne < 2) continue;
+  const avant = texte.split('\n')[e.ligne - 2];
+  if (avant !== undefined && avant.trim() !== '') {
+    collees.push({ ligne: e.ligne, titre: e.titre, avant: avant.trim() });
+  }
+}
+
+if (collees.length > 0) {
+  console.error(
+    `\n${ROUGE}✗ DECISIONS.md — ${String(collees.length)} entrée(s) COLLÉE(S) à la précédente${RAZ}\n`,
+  );
+  for (const c of collees) {
+    console.error(`  DECISIONS.md:${String(c.ligne)}  « ${c.titre.slice(0, 60)} »`);
+    console.error(`    la ligne juste au-dessus : « ${c.avant.slice(0, 70)} »\n`);
+  }
+  console.error("  C'est la signature du driver `merge=union` (voir `.gitattributes`) : il");
+  console.error('  garde les deux côtés sans jamais voir qu’il y avait une frontière d’entrée');
+  console.error('  entre eux. Insère UNE ligne vide avant chaque `## ` — et rien d’autre :');
+  console.error('  le fichier est append-only, on ne réécrit pas une entrée pour la recoller.');
+  console.error('');
+  console.error('  Puis vérifie ce que la fusion a VRAIMENT fait, car ce symptôme en annonce');
+  console.error('  d’autres : compare le nombre d’entrées du résultat à celui des DEUX parents');
+  console.error('  (`git show HEAD^1:DECISIONS.md | grep -c "^## "`), et cherche les lignes');
+  console.error('  d’un parent absentes du résultat. Une ligne mangée ne fait aucun bruit.');
+  process.exit(1);
+}
+
 if (anomalies.length > 0) {
   console.error(
     `\n${ROUGE}✗ DECISIONS.md — ${String(anomalies.length)} entrée(s) hors format${RAZ}\n`,

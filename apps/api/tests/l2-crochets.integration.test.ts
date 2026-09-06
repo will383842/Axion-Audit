@@ -1175,6 +1175,13 @@ describe('T5 — les ceintures 3 et 4 : sources et exécution', () => {
     // routes QUI EXISTENT et non celles auxquelles on a pensé.
     '/v1/missions/:id/coverage': { id: missionSemee },
     '/v1/missions/:id/aggregation': { id: missionSemee },
+
+    // ── L EXPORT DE MISSION (L7c, §36.3) ──────────────────────────────────────
+    // Meme mission semee, meme mecanisme ①. Cette route assemble la mission
+    // ENTIERE dans un seul document : c'est precisement le gabarit qu'un
+    // balayage sentinelle doit traverser, parce qu'un agregat est l'endroit ou
+    // un montant se glisse sans que personne ait ecrit son nom.
+    '/v1/missions/:id/export': { id: missionSemee },
     '/v1/org-units/:id': { id: uniteSemee },
     '/v1/org-units/:id/validate': { id: uniteSemee },
     '/v1/org-units/:id/merge': { id: uniteSemee },
