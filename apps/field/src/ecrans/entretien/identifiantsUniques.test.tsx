@@ -24,7 +24,7 @@
 // les `id` du document et exige qu'aucun ne se répète : la propriété, pas sa
 // forme du jour.
 //
-// Traçabilité : E44 (UX/UI §33.6 — accessibilité), E13 (écran 3 zones).
+// Traçabilité : E44 (UX/UI 2026-2027, tokens et police locale — la grille §33), E13 (écran 3 zones).
 // =============================================================================
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
