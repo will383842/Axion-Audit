@@ -2306,6 +2306,7 @@ toucher l'API : CLAUDE.md §3-2 et §3-6. Et CLAUDE.md §6 interdit d'implément
 avant son arbitrage. La proposer est un devoir, l'anticiper est une faute.
 
 **Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE
+
 ## A-0xx — L5 : donner au REFUS de participation son propre état de session
 
 **Étage 2 — PROPOSÉE, non implémentée.** Déposée par A22 le 2026-09-06, à la fermeture du doute de

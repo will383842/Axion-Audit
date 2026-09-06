@@ -10845,6 +10845,7 @@ lignes, et un `it()` qui prétendrait couvrir (b) serait un faux vert.
 Règle de précédence : **09 §5.7** — on ne simplifie pas une validation pour faire passer un test.
 Décideur : **A01**, sur délégation de Williams du 2026-09-04.
 Impact spec : aucun ; deux lignes distinctes à la checklist de P-C, au lieu d'une ambiguë.
+
 ## 2026-09-06 — [CI] Un job qui rougit pour une panne de registre doit-il attendre un humain ?
 
 Le job « 7 · constructibilité des 4 images » a rougi deux fois en deux jours sans qu'une ligne du
