@@ -10221,6 +10221,7 @@ Arbitrage : **option 2**. C'est le prix de la séparation entre le détail et l'
 (validation humaine) est le texte qui commande la forme de la proposition.
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun ; champ ajouté à une proposition, pas au schéma de données.
+
 ## 2026-09-06 — [L8] Une question bloquante JAMAIS POSÉE doit-elle produire une anomalie ?
 
 La revue croisée a mesuré le cas : une question `bloquant` de poids 0 sans aucune ligne `answers`
