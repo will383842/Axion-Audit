@@ -10310,3 +10310,34 @@ l'invariant 3 (« écritures de sync réservées au propriétaire ») les comman
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun aujourd'hui. **Amendement candidat du 05 §9.9 à P-D**, pour que les cinq entités
 y soient nommées plutôt qu'interprétées.
+
+## 2026-09-06 — [L7c] Fonction et service dans l'export : fermer la porte, ou amender la décision ?
+
+Constat bloquant d'A37, mesuré : `depot.ts:303-304` et `:364-365` lisent `fonctionPersonne` et
+`servicePersonne` **sans condition** ; seul `person_name` passe `nomSousConsentement`. Or la décision
+du 2026-09-05 dit que **dans l'export — le seul fichier qui CIRCULE — les trois champs passent
+ensemble par la même porte**. Preuve que ce n'est pas une lecture : le code applique la règle là où
+la décision l'**exclut** (agrégation L7b) et pas là où elle l'**impose**. A37 a refusé de prescrire,
+parce que fermer appauvrit les rubriques 4 et 11 du rapport — donc le critère du lot.
+
+Options :
+
+1. **Fermer strictement : les trois champs passent la même porte.**
+2. Amender la décision — nom sous consentement, fonction et service libres. **Écartée** : dans une
+   structure de huit personnes, « DAF » désigne quelqu'un aussi sûrement qu'un nom. La décision
+   disait exactement cela, et rien de nouveau ne la contredit.
+3. Généraliser par k-anonymat au-dessus d'un seuil. **Écartée** : ce mécanisme n'existe pas dans
+   l'export ; l'inventer ici est une extension de périmètre, et le seuil se poserait sans être éprouvé.
+
+Arbitrage : **option 1** — et la perte redoutée n'a pas lieu là où on la craignait. **Vérifié dans le
+code avant de trancher** : l'export porte déjà `unite_nom`, le **type de session** et la
+**provenance**. La rubrique 4 (« divergences direction / terrain ») se construit donc sur le **niveau
+d'unité et le type de session**, pas sur le métier du répondant : elle reste nourrie. La rubrique 11
+(plan de formation par population) est dégradée pour les répondants sans consentement, **et c'est le
+résultat juste** — quelqu'un qui n'a pas consenti à être nommé ne doit pas être identifiable par
+combinaison. Elle était de toute façon déjà partielle faute d'`interlocutor_profile_id`, amendement
+candidat à P-D tracé le 2026-09-05.
+Règle de précédence : **§24-31 > §16-22** — le §26 (attribution conditionnelle) prime sur la trame
+§20.3, et 06 §10 commande la donnée personnelle dans un fichier qui sort de l'outil.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun. La décision du 2026-09-05 est **appliquée**, pas amendée.
