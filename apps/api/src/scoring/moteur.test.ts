@@ -545,22 +545,22 @@ describe('les anomalies — le moteur ne lève jamais, il rapporte ce qu’il a 
   const idUnite = uid(0xb001);
   const idQuestion = uid(0xb002);
 
+  const questionDeBase: QuestionFigee = {
+    missionQuestionId: idQuestion,
+    blocCode: 'bloc_1',
+    answerType: 'scale_1_5',
+    weight: '1',
+    scoring: { map: 'identity' },
+    options: null,
+    criticality: 'important',
+  };
+
   const base: EntreeScoring = {
     missionId: idMission,
     parametres: PARAMETRES_SEED,
     blocs: ['bloc_1'],
     unites: [{ id: idUnite, parentId: null, headcount: 5, inScope: true }],
-    questions: [
-      {
-        missionQuestionId: idQuestion,
-        blocCode: 'bloc_1',
-        answerType: 'scale_1_5',
-        weight: '1',
-        scoring: { map: 'identity' },
-        options: null,
-        criticality: 'important',
-      },
-    ],
+    questions: [questionDeBase],
     reponses: [],
   };
 
@@ -614,7 +614,7 @@ describe('les anomalies — le moteur ne lève jamais, il rapporte ce qu’il a 
   it('un barème de forme inconnue est signalé une fois par question, et la question sort du calcul', () => {
     const r = calculerScoringMission({
       ...base,
-      questions: [{ ...base.questions[0]!, scoring: { bareme: 'maison' } }],
+      questions: [{ ...questionDeBase, scoring: { bareme: 'maison' } }],
       reponses: [reponse({})],
     });
     expect(r.anomalies.map((a) => a.code)).toContain('BAREME_INVALIDE');
