@@ -151,3 +151,31 @@
 .axn-journee__actions > * {
   min-height: var(--taille-cible-tactile-min);
 }
+
+/* ── Identité de la sauvegarde restaurée (constat A27, 2026-09-06) ───────── */
+/* D'OÙ vient ce qui vient d'être écrit : appareil d'origine, instant, mission.
+   Une liste de définition, parce que c'en est une — et parce qu'un lecteur
+   d'écran annonce alors le libellé avec sa valeur, au lieu de six fragments. */
+.axn-journee__identite {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacement-1);
+  font-size: var(--typo-taille-sm);
+}
+
+.axn-journee__identite > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espacement-2);
+}
+
+.axn-journee__identite dt {
+  color: var(--couleur-texte-secondaire);
+}
+
+.axn-journee__identite dd {
+  margin: 0;
+  font-weight: var(--typo-graisse-semi);
+  overflow-wrap: anywhere;
+}

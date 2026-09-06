@@ -30,6 +30,7 @@
 | L3a   | ~0,1 j   | 0,5 j   | ~0,4 j                                                                                                                                                    |
 | L3b-d | ~0,15 j  | 0,5 j   | ~0,35 j — plafonds explicites (120 s) sur deux crochets de tests L2, port de sync L5a déplacé hors du glob réservé à L6a ; le reste est d'étage 2 (A-007) |
 | L5b   | ~0,1 j   | 0,5 j   | ~0,4 j                                                                                                                                                    |
+| L5c   | ~0,05 j  | 0,5 j   | ~0,45 j — identité de la sauvegarde restaurée (A27, 2026-09-06)                                                                                           |
 
 ---
 
@@ -2268,3 +2269,70 @@ interdit d'implémenter une fiche d'étage 2 avant son arbitrage. La proposer es
 est une faute.
 
 **Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE
+
+---
+
+## A-0xx — L5 : donner au REFUS de participation son propre état de session
+
+**Étage 2 — PROPOSÉE, non implémentée.** Déposée par A22 le 2026-09-06, à la fermeture du doute de
+spec **D-1** (recette novice A54 §8-2 ; réserve de la porte P-C reprise par A02).
+Arbitrage lié : `DECISIONS.md`, 2026-09-06, « Que fait l'application quand l'interlocuteur REFUSE ».
+
+**Constat terrain.** Un interlocuteur qui refuse de participer est un fait ordinaire d'audit : il
+arrive, il a une cause, et il explique un trou dans les données. L'application n'offrait que la case
+« Accord de participation recueilli » ou l'impasse. Depuis ce jour, le refus **s'écrit** — une note
+horodatée sur la session, qui reste `non_demarre` et sans accord (correctif L5b, réversible et hors
+schéma). Ce que cette note NE FAIT PAS, et c'est l'objet de la fiche : elle ne change pas ce que le
+**siège** lit. La session refusée reste, pour la console et pour le scoring, une session simplement
+pas encore démarrée — indiscernable de celle qu'un auditeur n'a pas eu le temps d'ouvrir.
+
+**Valeur pour l'auditeur, et pour le rapport.** Trois conséquences se paient aujourd'hui en aval :
+la **couverture** d'une unité compte cette session comme à faire, donc l'agenda la rappellera tous
+les jours ; le **taux de complétude** ne distingue pas « personne n'a posé la question » de « on a
+demandé, on a essuyé un refus » — la même distinction qu'A01 a jugée décisive le 2026-09-06 sur
+`QUESTION_BLOQUANTE_JAMAIS_POSEE` ; et le **rapport** ne peut rien affirmer d'un refus, alors que
+c'est souvent le constat le plus parlant d'une mission.
+
+**Ce qui est proposé (deux formes, à trancher).**
+· **Forme légère** : réutiliser `schedule_status = 'annule'` (valeur DÉJÀ dans le 04) avec le motif
+en note, et faire dire à l'agenda et à la couverture ce que « annulé pour refus » signifie.
+Impact schéma **aucun** ; impact API : une op `upsert interview` dont l'index change de sens ; impact
+console : la lecture de `schedule_status` doit distinguer un report d'un refus.
+· **Forme complète** : un état ou un champ dédié dans le 04 (`interviews.refusal_reason`, ou une
+valeur `refuse` de `schedule_status`), avec sa remontée de sync et son rendu console.
+Impact schéma **oui** ; impact API **oui** ; impact crypto : le motif est une donnée de personne,
+donc charge chiffrée, jamais index.
+
+**Coût estimé.** Forme légère ~0,5 j (écran + agenda + couverture + tests). Forme complète ~1,5 j
+(migration 04, Zod partagé, sync, console, tests des deux côtés).
+
+**Pourquoi elle n'est pas faite dans L5b.** Elle touche le 04 ou le sens d'un champ d'index remonté
+au siège ; CLAUDE.md §3-2 réserve les deux à un arbitrage humain, et §6 interdit d'implémenter une
+fiche d'étage 2 avant son arbitrage. La note horodatée livrée aujourd'hui ne préempte aucune des deux
+formes : si l'une est retenue, la note reste vraie et se relit.
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE
+
+## 2026-09-06 — [L5c] Étage 1 — l'écran de restauration ne disait pas QUEL fichier il venait de restaurer
+
+**Constat (A27, revue de l'écran de restauration, 2026-09-06).** Après un succès, `EcranRestauration`
+affichait « 3 élément(s) de mission restauré(s) » et rien d'autre. Or l'en-tête `.axionbackup` porte
+EN CLAIR — donc lisible sans déchiffrer — le libellé de l'appareil d'origine et l'instant de
+production, et le rapport d'import connaît déjà `missionId`. Trois informations acquises, et tues.
+
+**Valeur pour l'auditeur.** Le geste réel est celui-ci : une clé USB, deux ou trois `.axionbackup`
+aux noms quasi identiques (`axion-<uuid>-<horodatage>.axionbackup`), 22 h, une tablette de
+remplacement. « 3 élément(s) restauré(s) » ne permet pas de vérifier qu'on a ouvert la sauvegarde de
+mercredi et non celle de mardi, ni la bonne mission. La vérification devait se faire APRÈS coup, en
+rouvrant sa journée — c'est-à-dire trop tard pour s'apercevoir tranquillement de l'erreur.
+
+**Ce qui a été fait.** `RapportImport` rend deux champs de plus (`libelleAppareilSource`,
+`sauvegardeCreeeLe`), recopiés de l'en-tête sans transformation ; l'écran les affiche avec le
+`missionId` dans une liste de définition, l'horodatage FORMATÉ (`formaterDateHeure`) et non en ISO.
+Un test dédié le couvre (`restauration.recette-a24.test.tsx`, §D).
+
+**Pourquoi c'est étage 1.** Ne touche NI le schéma 04, NI l'API, NI la crypto, NI le format
+`.axionbackup` (aucun champ ajouté au fichier : les deux valeurs y sont déjà, et le format d'ops
+n'est pas approché), NI le périmètre fonctionnel. C'est un affichage d'une information déjà acquise.
+
+**Coût :** ~0,05 j.
