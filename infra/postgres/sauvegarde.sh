@@ -483,12 +483,31 @@ R2_PREFIXE="${AXION_R2_PREFIXE:-staging}"
 
 # RELECTURE DE CONTRÔLE. « L'envoi a réussi » ne prouve rien : `mc` rend 0 dès
 # que la requête a abouti, pas quand l'objet est relisible à l'identique. Chaque
-# passe RETÉLÉCHARGE donc deux objets depuis R2 et compare leur SHA-256 à celui
+# passe RETÉLÉCHARGE donc trois objets depuis R2 et compare leur SHA-256 à celui
 # de la source — la dernière archive MinIO (le fichier qui porte les pièces
-# jointes) et `backup.info` (le fichier sans lequel AUCUNE restauration ne
-# démarre). Coût : l'egress R2 est facturé zéro, seul le temps se paie.
+# jointes), le dernier coffre de secrets, et `backup.info` (le fichier sans
+# lequel AUCUNE restauration ne démarre). Coût : l'egress R2 est facturé zéro,
+# seul le temps se paie.
 # `non` désactive la relecture ; c'est un réglage d'exploitation, pas un défaut.
+#
+# CE RÉGLAGE NE COMMANDE QUE LA COMPARAISON D'EMPREINTES, ET C'EST VOULU.
+# Le contrôle de PRÉSENCE — inventaire complet local↔distant, étape 6 — n'est
+# PAS désactivable : c'est lui qui a manqué le 2026-08-29 (§5.7ter du README
+# d'infra), et un garde-fou qu'on peut éteindre par une variable d'environnement
+# est un garde-fou qui sera éteint le jour où il dérange.
 R2_RELECTURE="${AXION_R2_VERIFIER_RELECTURE:-oui}"
+
+# PLAFOND DE PURGE DISTANTE. Depuis le 2026-08-31, la rétention distante n'est
+# plus portée par le `--remove` du miroir mais par une PASSE SÉPARÉE pilotée par
+# un inventaire (voir `expedier_r2`, étape 7). Ce plafond est ce qui empêche une
+# purge légitime de devenir un vidage : au-delà de ce POURCENTAGE des objets
+# distants, la passe ne supprime RIEN, le journal le dit et l'alerte part. Un
+# dépôt distant qui grossit d'une nuit se rattrape à la nuit suivante ; un dépôt
+# distant vidé ne se rattrape pas.
+R2_PURGE_MAX_PCT="${AXION_R2_PURGE_MAX_PCT:-50}"
+# Plancher absolu, en objets. Sur un dépôt distant encore petit, 50 % de 12
+# objets vaut 6, et une rotation d'archives ordinaire serait refusée pour rien.
+R2_PURGE_PLANCHER="${AXION_R2_PURGE_PLANCHER:-20}"
 
 # Nom de l'alias `mc`. Il n'est jamais lu depuis l'environnement : il ne désigne
 # rien de configurable, seulement la clé de la variable `MC_HOST_<alias>` par
@@ -1043,6 +1062,17 @@ esac
 case "$R2_RELECTURE" in
   oui | non) : ;;
   *) echouer "AXION_R2_VERIFIER_RELECTURE='$R2_RELECTURE' — attendu 'oui' ou 'non'." ;;
+esac
+# Les deux bornes de la purge distante sont contrôlées ICI, au démarrage, pour la
+# même raison que l'heure du créneau : une borne illisible découverte à 02h30
+# ferait sortir la passe au milieu d'une purge, c'est-à-dire au pire moment.
+case "$R2_PURGE_MAX_PCT" in
+  '' | *[!0-9]*) echouer "AXION_R2_PURGE_MAX_PCT='$R2_PURGE_MAX_PCT' — attendu un entier de 0 à 100." ;;
+esac
+[ "$R2_PURGE_MAX_PCT" -le 100 ] \
+  || echouer "AXION_R2_PURGE_MAX_PCT='$R2_PURGE_MAX_PCT' — attendu un entier de 0 à 100."
+case "$R2_PURGE_PLANCHER" in
+  '' | *[!0-9]*) echouer "AXION_R2_PURGE_PLANCHER='$R2_PURGE_PLANCHER' — attendu un entier positif ou nul." ;;
 esac
 # `mc` est copié dans l'image depuis `minio/mc`, au tag DÉJÀ épinglé par le
 # compose (infra/postgres/Dockerfile). S'il manque, l'image a été reconstruite
@@ -1689,10 +1719,16 @@ faire_tourner_minio() {
 # lecture seule, et un état persistant de `mc` serait une seconde source de
 # vérité pour les identifiants — celle qui survit à un changement de jeton.
 MC_TRAVAIL=''
+# Répertoire des inventaires de la passe (étape 6). Il est DISTINCT du répertoire
+# de configuration `mc` : celui-là porte des identifiants, celui-ci des listes de
+# noms d'objets. Les mélanger reviendrait à ranger un secret avec un journal.
+MC_INVENTAIRE=''
 
 preparer_mc() {
   MC_TRAVAIL="$(mktemp -d)"
   chmod 700 "$MC_TRAVAIL"
+  MC_INVENTAIRE="$(mktemp -d)"
+  chmod 700 "$MC_INVENTAIRE"
   # Les identifiants entrent ICI, et uniquement ici. Le nom de la variable est
   # construit depuis l'alias ; sa VALEUR n'est jamais journalisée ni renvoyée.
   export "MC_HOST_${R2_ALIAS}=https://${R2_ACCES}:${R2_SECRET}@${R2_HOTE}"
@@ -1711,6 +1747,10 @@ nettoyer_mc() {
     rm -rf "$MC_TRAVAIL"
   fi
   MC_TRAVAIL=''
+  if [ -n "${MC_INVENTAIRE:-}" ]; then
+    rm -rf "$MC_INVENTAIRE"
+  fi
+  MC_INVENTAIRE=''
 }
 
 # Enveloppe unique : tout appel à `mc` passe par ici, avec les mêmes drapeaux.
@@ -1741,14 +1781,59 @@ mcx() {
 }
 
 # -----------------------------------------------------------------------------
-# GARDE-FOU DU `--remove` — CE QUI EMPÊCHE UNE PANNE LOCALE DE DEVENIR UNE
-# SUPPRESSION DISTANTE.
+# POURQUOI IL N'Y A PLUS DE `--remove` DANS LE MIROIR — MESURÉ LE 2026-08-31.
 #
-# `mc mirror --remove` reproduit à distance les suppressions faites localement.
-# C'est ce qui aligne la rétention des deux côtés sans règle de cycle de vie chez
-# Cloudflare (invisible à `git`) — et c'est aussi ce qui, si le dépôt local
-# disparaissait, effacerait la copie distante juste après. On ne propage donc les
-# suppressions QUE si le local a l'air sain :
+# LE FAIT. Le 2026-08-29, `backup.info` — le fichier sans lequel AUCUNE
+# restauration pgBackRest ne démarre — a disparu du bucket : 1 613 objets
+# attendus, 1 611 présents, la passe déclarée RÉUSSIE. Le journal montrait son
+# transfert, puis une ligne de suppression « à source vide ».
+#
+# LA CAUSE, REPRODUITE EN BAC À SABLE (MinIO local + le `mc` du Dockerfile,
+# RELEASE.2025-04-16T18-13-26Z, dépôt de 1 572 objets) :
+#   · `mc mirror --remove` décide les suppressions à partir d'un LISTAGE VIVANT
+#     de la source, et retire à destination tout objet absent de ce listage —
+#     puis sort en 0. La passe se déclare réussie ;
+#   · un objet retiré de la source à t+5 s d'une passe de 36 s est encore
+#     TRANSFÉRÉ par cette passe (il figurait dans le listage) ;
+#   · la passe SUIVANTE émet, verbatim, la ligne du §5.7ter :
+#       {"status":"success","source":"","target":"…/backup.info", …}
+#     — « suppression à source vide » est la forme normale d'un enregistrement
+#     de suppression de `mc`, et le champ `source` vide en est la signature.
+#   Et deux passes par nuit sont ORDINAIRES ici : le chemin de rattrapage
+#   (`doit_rattraper_expedition`, bas de fichier) rejoue `expedier_r2` à chaque
+#   redémarrage du conteneur, c'est-à-dire à chaque hoquet de R2.
+#
+# CONDITION NÉCESSAIRE ET SUFFISANTE DE LA PERTE : qu'un objet soit présent à
+# destination et absent de la source À L'INSTANT OÙ `mc` la liste. Or `$DEPOT`
+# est un dépôt pgBackRest VIVANT — `archive-push` y écrit en continu, `backup` et
+# `expire` le réécrivent — parcouru pendant des dizaines de secondes. N'importe
+# quel état transitoire de ce répertoire devenait une suppression distante
+# DÉFINITIVE, et rien dans la passe ne s'en apercevait.
+#
+# CE QU'ON NE POUVAIT PAS FAIRE : retirer `--remove` et s'arrêter là. La
+# rétention distante n'est portée par personne d'autre — aucune règle de cycle de
+# vie chez Cloudflare (elle vivrait hors de `git`, invisible à une
+# reconstruction). Sans purge, le bucket croît sans fin : l'en-tête de ce fichier
+# chiffre 30 copies complètes d'un MinIO de 10 Go à ~300 Go, soit ~4,5 $/mois qui
+# ne redescendent jamais seuls.
+#
+# CE QU'ON FAIT À LA PLACE — LA PURGE EST UNE PASSE SÉPARÉE, PILOTÉE PAR
+# INVENTAIRE, ET ELLE NE PEUT PAS RETIRER CE QUE LA MÊME PASSE VIENT D'ÉCRIRE :
+#   1. inventaire local AVANT le miroir ;
+#   2. miroir en COPIE SEULE (`--overwrite`, sans `--remove`) ;
+#   3. inventaire local APRÈS, et inventaire distant ;
+#   4. on ne purge QUE `distant − (avant ∪ après)`. Un objet présent dans l'un
+#      des deux inventaires locaux est intouchable — c'est très exactement ce
+#      qui rend le défaut du 2026-08-29 IMPOSSIBLE : `backup.info` figurait dans
+#      les deux, et une absence transitoire devrait désormais enjamber deux
+#      listages indépendants séparés par toute la durée du miroir ;
+#   5. les objets VITAUX sont retirés de la liste de purge par leur NOM, en plus
+#      de tout le reste. Une ceinture par-dessus la bretelle, sur le seul fichier
+#      dont la perte coûte la restauration entière ;
+#   6. un PLAFOND (`R2_PURGE_MAX_PCT` / `R2_PURGE_PLANCHER`) : au-delà, aucune
+#      suppression, le journal le dit et l'alerte part.
+#
+# `depot_local_sain` reste, et garde la purge comme elle gardait `--remove` :
 #   · pgBackRest se déclare `status: ok` sur la stanza ;
 #   · il reste au moins une archive MinIO en local.
 #
@@ -1762,6 +1847,58 @@ depot_local_sain() {
   pgbackrest --stanza="$STANZA" info 2>/dev/null | grep -q 'status: ok' || return 1
   ls -1 "$ARCHIVES" 2>/dev/null | grep -qE "$MOTIF_MINIO" || return 1
   return 0
+}
+
+# -----------------------------------------------------------------------------
+# LES OBJETS VITAUX — CEUX QU'ON VÉRIFIE PAR LEUR NOM, PAS PAR UN COMPTAGE.
+#
+# Un inventaire complet dit « il manque un objet ». Il ne dit pas LEQUEL avant
+# qu'on lise la liste, et un WAL manquant n'a pas le même prix qu'un
+# `backup.info` manquant : le premier coûte quelques minutes de rejeu, le second
+# coûte la restauration ENTIÈRE. Ces quatre-là sont donc nommés.
+#
+# On n'exige à distance que ce qui existe ICI : un dépôt qui n'a pas encore
+# archivé de WAL n'a pas d'`archive.info`, et en réclamer la copie distante
+# ferait échouer la toute première nuit pour une raison inexistante.
+# -----------------------------------------------------------------------------
+objets_vitaux() {
+  local relatif
+  for relatif in "backup/${STANZA}/backup.info" \
+                 "backup/${STANZA}/backup.info.copy" \
+                 "archive/${STANZA}/archive.info" \
+                 "archive/${STANZA}/archive.info.copy"; do
+    if [ -f "$DEPOT/$relatif" ]; then
+      printf 'pgbackrest/%s\n' "$relatif"
+    fi
+  done
+}
+
+# -----------------------------------------------------------------------------
+# INVENTAIRE LOCAL — CE QUI DOIT SE TROUVER À DESTINATION, DIT EN CLÉS DISTANTES.
+#
+# Il reproduit exactement ce que le miroir envoie : le dépôt pgBackRest sous
+# `pgbackrest/`, les archives MinIO sous `minio/`, avec LES MÊMES EXCLUSIONS que
+# les `--exclude` du miroir. Une exclusion oubliée ici ferait un inventaire qui
+# réclame ce que personne n'envoie — un garde-fou rouge en permanence est aussi
+# inutile qu'un garde-fou vert en permanence, et il se fait éteindre plus vite.
+# -----------------------------------------------------------------------------
+inventaire_local() {
+  ( cd "$DEPOT" && find . -type f -printf '%P\n' ) | sed 's|^|pgbackrest/|'
+  # `|| true` : `grep -v` sort en 1 quand il ne laisse passer AUCUNE ligne (un
+  # répertoire d'archives vide, ou ne contenant que des `.partiel`), et
+  # `set -o pipefail` transformerait ce cas normal en échec de la passe.
+  { ( cd "$ARCHIVES" && find . -type f -printf '%P\n' ) \
+      | grep -vE '(^|/)\.derniere-|\.partiel$' || true; } | sed 's|^|minio/|'
+}
+
+# INVENTAIRE DISTANT. `mc find` rend une clé par ligne et rien d'autre — pas de
+# date, pas de taille, pas de colonne à découper. MESURÉ : son décompte est
+# identique à celui de `mc ls --recursive` (1 572 = 1 572), et c'est le même
+# listage que l'étape 8 payait déjà pour compter. Le contrôle exhaustif ne coûte
+# donc pas une requête de plus que l'échantillon de trois qu'il remplace.
+inventaire_distant() {
+  local racine="${R2_ALIAS}/${R2_BUCKET}/${1}/"
+  mcx find "$racine" | sed "s|^${racine}||"
 }
 
 # Relecture d'UN objet depuis R2, comparée à l'empreinte de la source locale.
@@ -1779,8 +1916,9 @@ relire_depuis_r2() {
 }
 
 expedier_r2() {
-  local base="${R2_PREFIXE}" retirer='' derniere empreinte_locale objets_distants
-  local debut fin
+  local base="${R2_PREFIXE}" derniere empreinte_locale objets_distants
+  local debut fin vital n_purge plafond manquants objet
+  local -a vitaux=()
   debut="$(date -u +%s)"
 
   preparer_mc
@@ -1806,30 +1944,35 @@ expedier_r2() {
   mcx ls "${R2_ALIAS}/${R2_BUCKET}/" >/dev/null \
     || echouer_expedition "bucket ${R2_BUCKET} injoignable ou refusé (réseau, jeton révoqué, bucket supprimé — mc ne les distingue pas)."
 
-  # 2. PROPAGATION DES SUPPRESSIONS : seulement si le local est sain.
-  if depot_local_sain; then
-    retirer='--remove'
-  else
-    journal "R2 : ATTENTION — dépôt local jugé NON SAIN : les suppressions ne seront PAS propagées (rétention distante figée cette nuit)."
-  fi
+  # 2. INVENTAIRE D'AVANT. Il est pris AVANT le miroir, et c'est ce qui rend le
+  #    contrôle de l'étape 6 honnête sans le rendre criard : tout ce qui sera
+  #    archivé PENDANT la passe (un segment WAL de plus, `archive-push` ne
+  #    s'arrête pas pour nous) n'y figure pas, et son absence à destination ne
+  #    sera donc pas comptée comme une perte. Le §5.7ter du README d'infra
+  #    qualifiait ce cas de « normal » à la lecture ; ici il l'est PAR
+  #    CONSTRUCTION, ce qui n'est pas la même chose.
+  inventaire_local | LC_ALL=C sort >"$MC_INVENTAIRE/avant" \
+    || echouer_expedition "inventaire local (avant) impossible : $DEPOT ou $ARCHIVES illisible."
 
-  # 3. LE DÉPÔT pgBackRest. `mc mirror` est incrémental : il ne renvoie que ce
-  #    qui a changé de taille ou de date. Les fichiers d'un dépôt pgBackRest sont
-  #    IMMUABLES une fois écrits, donc une nuit ordinaire n'envoie que la
-  #    sauvegarde du jour et ses WAL.
-  # shellcheck disable=SC2086  # $retirer est un drapeau ou rien — jamais un chemin
-  mcx mirror --overwrite $retirer "$DEPOT" "${R2_ALIAS}/${R2_BUCKET}/${base}/pgbackrest" \
+  # 3. LE DÉPÔT pgBackRest — EN COPIE SEULE. `mc mirror` est incrémental : il ne
+  #    renvoie que ce qui a changé de taille ou de date. Les fichiers d'un dépôt
+  #    pgBackRest sont IMMUABLES une fois écrits, donc une nuit ordinaire n'envoie
+  #    que la sauvegarde du jour et ses WAL.
+  #    PAS DE `--remove` ICI : voir le pavé au-dessus de `depot_local_sain`.
+  #    La purge a lieu à l'étape 7, sur un inventaire, après vérification.
+  mcx mirror --overwrite "$DEPOT" "${R2_ALIAS}/${R2_BUCKET}/${base}/pgbackrest" \
     || echouer_expedition "le miroir du dépôt pgBackRest a échoué."
 
   # 4. LES ARCHIVES MinIO. On exclut les `.partiel` (une passe interrompue n'est
   #    pas une archive) et les marqueurs de service, qui ne décrivent que l'état
   #    de CETTE machine et n'ont rien à faire dans une copie de secours.
-  # shellcheck disable=SC2086
-  mcx mirror --overwrite $retirer --exclude '*.partiel' --exclude '.derniere-*' \
+  #    `inventaire_local` reproduit ces deux exclusions — si l'une bouge ici, elle
+  #    doit bouger là-bas.
+  mcx mirror --overwrite --exclude '*.partiel' --exclude '.derniere-*' \
     "$ARCHIVES" "${R2_ALIAS}/${R2_BUCKET}/${base}/minio" \
     || echouer_expedition "le miroir des archives MinIO a échoué."
 
-  # 5. RELECTURE — la seule étape qui prouve quelque chose.
+  # 5. RELECTURE — la seule étape qui prouve le CONTENU.
   if [ "$R2_RELECTURE" = 'oui' ]; then
     relire_depuis_r2 "${base}/pgbackrest/backup/${STANZA}/backup.info" \
       "$(sha256sum "$DEPOT/backup/$STANZA/backup.info" | cut -d' ' -f1)"
@@ -1855,18 +1998,134 @@ expedier_r2() {
     journal 'R2 : relecture de contrôle DÉSACTIVÉE (AXION_R2_VERIFIER_RELECTURE=non) — le succès de mc est la seule garantie.'
   fi
 
-  # 6. COMPTAGE — un miroir muet qui n'aurait rien envoyé rendrait 0 comme un
-  #    miroir complet. Le nombre d'objets distants est le contre-indice le moins
-  #    cher qui existe.
-  objets_distants="$(mcx ls --recursive "${R2_ALIAS}/${R2_BUCKET}/${base}/" | wc -l)" \
-    || echouer_expedition 'comptage des objets distants impossible.'
+  # ---------------------------------------------------------------------------
+  # 6. INVENTAIRE — CE QUI DOIT ÊTRE LÀ, FACE À CE QUI EST LÀ.
+  #
+  # CE QUI ÉTAIT ÉCRIT ICI AVANT LE 2026-08-31, ET POURQUOI CE N'ÉTAIT PAS UN
+  # CONTRÔLE. La passe comptait les objets distants et vérifiait que le total
+  # était `> 0`, puis relisait TROIS objets sur ~1 600 — 0,2 %. Le 2026-08-29,
+  # `backup.info` a disparu et le contrôle l'a attrapé PAR CHANCE : la victime
+  # était l'un des trois. Un contrôle qui échantillonne deux millièmes d'un dépôt
+  # de sauvegarde ne contrôle pas, il rassure ; c'est la famille exacte de
+  # garde-fous que ce dépôt démonte depuis le lot L0.
+  #
+  # CE QUI EST ÉCRIT ICI MAINTENANT : la comparaison des deux INVENTAIRES
+  # complets. Coût : un `mc find` — le listage que le comptage payait déjà.
+  # ---------------------------------------------------------------------------
+  inventaire_local | LC_ALL=C sort >"$MC_INVENTAIRE/apres" \
+    || echouer_expedition "inventaire local (après) impossible : $DEPOT ou $ARCHIVES illisible."
+  inventaire_distant "$base" | LC_ALL=C sort >"$MC_INVENTAIRE/distant" \
+    || echouer_expedition "inventaire distant impossible (listage de ${R2_BUCKET}/${base} refusé)."
+
+  objets_distants="$(wc -l <"$MC_INVENTAIRE/distant")"
   [ "$objets_distants" -gt 0 ] || echouer_expedition \
     "le miroir s'est déclaré réussi mais ${R2_BUCKET}/${base} ne contient AUCUN objet."
+
+  # ATTENDU = ce qui était là AVANT le miroir ET qui y est ENCORE après. Un
+  # fichier expiré par pgBackRest pendant la passe sort de l'attendu au lieu de
+  # produire un faux rouge ; un fichier archivé pendant la passe n'y est jamais
+  # entré. Il ne reste dans `attendu` que ce dont l'absence à destination est une
+  # VRAIE perte.
+  LC_ALL=C comm -12 "$MC_INVENTAIRE/avant" "$MC_INVENTAIRE/apres" >"$MC_INVENTAIRE/attendu"
+  LC_ALL=C comm -23 "$MC_INVENTAIRE/attendu" "$MC_INVENTAIRE/distant" >"$MC_INVENTAIRE/manquants"
+  manquants="$(wc -l <"$MC_INVENTAIRE/manquants")"
+  if [ "$manquants" -gt 0 ]; then
+    # Les noms partent au journal, pas dans l'alerte : un nom d'objet n'est pas
+    # une donnée personnelle mais il n'a rien à faire dans un salon Telegram, et
+    # c'est le journal qu'on lit pour diagnostiquer. Dix suffisent à reconnaître
+    # la famille du trou ; le reste se lit dans l'inventaire au prochain passage.
+    journal "R2 : objets ATTENDUS et ABSENTS à destination (${manquants} au total, dix premiers) :"
+    head -10 "$MC_INVENTAIRE/manquants" | while IFS= read -r objet; do
+      journal "R2 :   manquant → ${objet}"
+    done
+    echouer_expedition \
+      "inventaire NON CONFORME : ${manquants} objet(s) sur $(wc -l <"$MC_INVENTAIRE/attendu") attendus manquent dans ${R2_BUCKET}/${base}, alors que le miroir s'est déclaré réussi. C'est le défaut du 2026-08-29 (README d'infra §5.7ter) : une passe verte avec un trou dedans."
+  fi
+  journal "R2 : inventaire conforme — $(wc -l <"$MC_INVENTAIRE/attendu") objet(s) attendu(s), tous présents à destination."
+
+  # ---------------------------------------------------------------------------
+  # 7. PURGE DISTANTE — CE QUI REMPLACE LE `--remove` DU MIROIR.
+  #
+  # Ne peut retirer QUE ce qui manque dans LES DEUX inventaires locaux. Un objet
+  # que la passe vient d'écrire figure dans « avant » : il est intouchable, et
+  # c'est la propriété qui rend le défaut du 2026-08-29 impossible à reproduire.
+  # ---------------------------------------------------------------------------
+  LC_ALL=C comm -13 "$MC_INVENTAIRE/avant" "$MC_INVENTAIRE/distant" >"$MC_INVENTAIRE/surnum1"
+  LC_ALL=C comm -13 "$MC_INVENTAIRE/apres" "$MC_INVENTAIRE/surnum1" >"$MC_INVENTAIRE/surnum2"
+  # Les objets vitaux sont retirés de la liste de purge PAR LEUR NOM, en plus de
+  # tout le reste. Ils ne peuvent déjà pas y être ; on l'écrit quand même, parce
+  # que le coût est une ligne et le prix de l'erreur est la restauration entière.
+  objets_vitaux | LC_ALL=C sort >"$MC_INVENTAIRE/vitaux"
+  LC_ALL=C comm -23 "$MC_INVENTAIRE/surnum2" "$MC_INVENTAIRE/vitaux" >"$MC_INVENTAIRE/a-purger"
+
+  n_purge="$(wc -l <"$MC_INVENTAIRE/a-purger")"
+  plafond=$(( objets_distants * R2_PURGE_MAX_PCT / 100 ))
+  [ "$plafond" -ge "$R2_PURGE_PLANCHER" ] || plafond="$R2_PURGE_PLANCHER"
+
+  if [ "$n_purge" -eq 0 ]; then
+    journal "R2 : rien à purger — le distant ne porte aucun objet que le local ait cessé de porter."
+  elif ! depot_local_sain; then
+    journal "R2 : ATTENTION — dépôt local jugé NON SAIN : les ${n_purge} suppression(s) ne sont PAS propagées (rétention distante figée cette nuit). La copie hors serveur, elle, est faite et vérifiée."
+  elif [ "$n_purge" -gt "$plafond" ]; then
+    # ON NE SUPPRIME RIEN, ET ON LE DIT FORT. Un bucket qui grossit d'une nuit se
+    # rattrape à la nuit suivante ; un bucket vidé ne se rattrape pas. Ce n'est
+    # PAS un échec d'expédition : la copie est sortie et vérifiée, seule la
+    # rétention attend un humain.
+    journal "R2 : purge REFUSÉE — ${n_purge} objet(s) à retirer dépassent le plafond de ${plafond} (${R2_PURGE_MAX_PCT} % de ${objets_distants}, plancher ${R2_PURGE_PLANCHER}). Aucune suppression n'a eu lieu."
+    notifier expedition "Axion Audit ($R2_PREFIXE) PURGE HORS SERVEUR REFUSEE : ${n_purge} objets etaient candidats a la suppression sur R2, au-dela du plafond de ${plafond}. RIEN n a ete supprime, la copie hors serveur est faite et verifiee. Un humain doit dire si cette purge est legitime (expiration pgBackRest) ou si le depot local a perdu quelque chose. Detail dans docker logs." || true
+  else
+    journal "R2 : purge de ${n_purge} objet(s) devenus absents du local (rétention pgBackRest et rotation MinIO)."
+    # LE CODE DE SORTIE DE `mc rm` NE SUFFIT PAS, ET C'EST MESURÉ (2026-08-31) :
+    # `mc rm` sur un objet INEXISTANT écrit « Failed to remove … Object does not
+    # exist » sur stderr ET SORT EN 0. Le `||` ci-dessous n'attrape donc que la
+    # panne franche (transport, jeton). Ce n'est pas grave ICI — une purge qui ne
+    # purge pas laisse des octets, pas un trou — mais il ne faut pas croire que
+    # cette ligne prouve la suppression. Ce qui la prouverait est le décompte de
+    # la passe suivante, et c'est très bien ainsi : dans le doute, ce script
+    # préfère garder.
+    while IFS= read -r objet; do
+      [ -n "$objet" ] || continue
+      mcx rm "${R2_ALIAS}/${R2_BUCKET}/${base}/${objet}" >/dev/null \
+        || echouer_expedition "suppression distante impossible de ${objet} — la rétention distante n'est plus alignée sur le local."
+    done <"$MC_INVENTAIRE/a-purger"
+    objets_distants=$(( objets_distants - n_purge ))
+  fi
+
+  # ---------------------------------------------------------------------------
+  # 8. LES OBJETS VITAUX, RELUS UN PAR UN, PAR LEUR NOM, APRÈS LA PURGE.
+  #
+  # C'est le dernier geste de la passe, et il est délibérément redondant avec
+  # l'étape 6 : celle-ci a comparé des listes, celui-ci REDEMANDE À R2. Si la
+  # purge s'était trompée — ou si l'inventaire distant avait menti par pagination
+  # — c'est ici que ça se voit, sur les quatre seuls fichiers dont la perte coûte
+  # la restauration entière.
+  #
+  # POURQUOI `mc cat` ET NON `mc ls` NI `mc stat` — LES DEUX ONT ÉTÉ MESURÉS LE
+  # 2026-08-31, ET LES DEUX MENTENT ICI :
+  #   · `mc ls <objet-absent>` sort en 0 avec une sortie VIDE. Un contrôle bâti
+  #     dessus serait vert sur du vide ;
+  #   · `mc stat <objet>` traite son argument comme un PRÉFIXE. Mesuré : sur un
+  #     bucket où `backup.info` a été supprimé mais où `backup.info.copy` reste,
+  #     `mc stat …/backup.info` sort en 0 et affiche `backup.info.copy`. Le
+  #     contrôle aurait été VERT sur l'objet même qu'il est censé garder, en
+  #     répondant sur un AUTRE fichier. C'est la première version de cette
+  #     étape-ci, prise en défaut par sa propre contre-épreuve avant livraison.
+  #   · `mc cat <objet>` exige l'objet EXACT : rc=1 sur l'absent, rc=0 sur le
+  #     présent. Il télécharge quelques kilo-octets — l'egress R2 est facturé
+  #     zéro — et c'est un vrai aller-retour, pas une question à un index.
+  # ---------------------------------------------------------------------------
+  mapfile -t vitaux < <(objets_vitaux)
+  for vital in "${vitaux[@]}"; do
+    mcx cat "${R2_ALIAS}/${R2_BUCKET}/${base}/${vital}" >/dev/null 2>&1 \
+      || echouer_expedition \
+        "l'objet VITAL ${vital} est ABSENT (ou illisible) dans ${R2_BUCKET}/${base} à la fin de la passe. Sans lui, aucune restauration ne démarre : la copie hors serveur est INUTILISABLE, même complète par ailleurs."
+  done
+  journal "R2 : objets vitaux présents et nommés — ${vitaux[*]}"
 
   nettoyer_mc
   trap - EXIT
   fin="$(date -u +%s)"
-  journal "R2 : expédition terminée — ${objets_distants} objet(s) sous ${base}/, en $((fin - debut)) s."
+  journal "R2 : expédition terminée — ${objets_distants} objet(s) sous ${base}/, inventaire comparé objet par objet, en $((fin - debut)) s."
 }
 
 # =============================================================================

@@ -6,35 +6,68 @@
 #     OWASP ASVS L2 avant recette ».
 #   · 07 §13 — « Sécurité : ZAP baseline en CI ».
 #   · 02 §30.6 — exécuté contre l'environnement STAGING, APRÈS déploiement
-#     (appelé en fin de deploy-staging.yml).
+#     (appelé en fin de deploy-staging.yml) ET une fois par nuit.
 #
 # ─────────────────────────────────────────────────────────────────────────────
-# STATUT BLOQUANT — LE POINT IMPORTANT DE CE FICHIER
+# CE QUE LE 2026-09-04 A APPRIS — constat F-31, et ses DEUX causes
 # ─────────────────────────────────────────────────────────────────────────────
-# AU LOT L0 : NON BLOQUANT. Motif factuel : il n'y a AUCUNE surface applicative
-# réelle à scanner (ni auth, ni route métier, ni formulaire) — seulement Caddy et
-# une éventuelle route de santé. Un scan sur du vide produirait soit un vert
-# creux, soit du bruit ; dans les deux cas une information fausse.
+# Le constat, tel qu'il a été rendu : « ZAP_BLOQUANT est resté à 'false' alors
+# que son point de contrôle exigeait la bascule à la porte L2, et le job est
+# skippé depuis le 2026-09-02 ». Mesuré ensuite, run par run :
 #
-# ➜ IL DEVIENT BLOQUANT AU **LOT L2**, dès qu'il existe de l'AUTHENTIFICATION
-#   (07 §12, L2 : « Auth JWT (login/refresh rotatif…), RBAC middleware,
-#   étanchéité financière »). C'est à partir de là qu'un en-tête de sécurité
-#   manquant, un cookie sans `Secure`/`HttpOnly`/`SameSite` ou une page d'erreur
-#   bavarde deviennent des défauts RÉELS — et le pack exige déjà @fastify/helmet
-#   (11 §3) et des cookies httpOnly SameSite=Lax.
+# CAUSE 1 — POURQUOI LE JOB NE TOURNAIT PLUS. Ce fichier n'a jamais été skippé
+#   par lui-même. Il est appelé par `deploy-staging.yml`, où le job `securite`
+#   déclarait `needs: [deployer]` SANS `if:` — donc `success()` implicite. Le job
+#   `deployer` porte, dans une seule étape shell sous `set -e`, la livraison ET
+#   des contrôles de GOUVERNANCE qui viennent APRÈS elle (empreinte du script
+#   distant, fraîcheur du clone du serveur). Depuis le 2026-09-02, l'un de ces
+#   contrôles rougit — le staging, lui, est bel et bien en service. Le scan de
+#   sécurité était donc devenu le DOMMAGE COLLATÉRAL d'un défaut d'hygiène de
+#   dépôt sans rapport avec lui. Le couplage est corrigé dans `deploy-staging.yml`
+#   (le scan suit désormais un FAIT MESURÉ — « staging répond » — et non
+#   l'absence de tout défaut ailleurs). Dernier scan réel : run 33603477826,
+#   2026-09-02 07h35 UTC. Premier run skippé : 33643594297, 2026-09-02 14h40 UTC.
 #
-# COMMENT LE RENDRE BLOQUANT AU L2 : passer `ZAP_BLOQUANT` ci-dessous à 'true'
-# (une ligne, versionnée, revue en PR). Il n'y a volontairement AUCUN
-# `continue-on-error` dans ce fichier : le caractère non bloquant est une
-# CONSTANTE EXPLICITE et lisible, pas un masquage d'échec (09 §5.7).
+# CAUSE 2 — ET CELLE-CI EST PIRE, PARCE QU'ELLE ÉTAIT INVISIBLE. La bascule
+#   `ZAP_BLOQUANT: 'true'` promise à la porte L2 était un GESTE VIDE : le scan
+#   passait `-I` à `zap-baseline.py` (« do not return failure on warning »), qui
+#   transforme un code 2 en code 0. Or aucune règle n'est configurée au niveau
+#   FAIL : le code 1 ne pouvait pas survenir non plus. Le seul code atteignable
+#   était donc 0, et la branche `ZAP_BLOQUANT=true` du verdict était MORTE.
+#   Quiconque aurait fait la bascule demandée à la porte L2 aurait coché un
+#   critère sans rien armer. Le commentaire du fichier aggravait le piège en
+#   énonçant une table de codes fausse (« 2 = avertissements (avec -I) » : c'est
+#   l'inverse, `-I` supprime le 2).
+#   MESURE A/B, 2026-09-05, même cible, même heure, image
+#   ghcr.io/zaproxy/zaproxy@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef :
+#     zap-baseline.py -a      → code 2   (7 WARN-NEW)
+#     zap-baseline.py -a -I   → code 0   (les MÊMES 7 WARN-NEW)
+#   `-I` est retiré. La garde est désormais ARMABLE.
 #
-# ⚖️ CETTE DÉROGATION EST UN ARBITRAGE HUMAIN, PAS UN CHOIX D'OUTILLAGE.
-# Le 11 §8-5 réserve à Williams « désactiver ou skipper un test » ; un scan de
-# sécurité non bloquant en est un. Elle est donc tracée dans `DECISIONS.md`,
-# entrée « [L0] ZAP baseline non bloquant jusqu'au lot L2 » (rédigée par A52,
-# portée par A01) — avec sa DATE DE BASCULE. Sans cette entrée datée, la ligne
-# `ZAP_BLOQUANT: 'false'` resterait à `false` par simple inertie, et l'échéance
-# « L2 » écrite ci-dessus ne serait qu'une bonne intention.
+# ─────────────────────────────────────────────────────────────────────────────
+# STATUT BLOQUANT — CE QUI EST DÉCIDÉ, CE QUI NE L'EST PAS
+# ─────────────────────────────────────────────────────────────────────────────
+# BLOQUANT EN TOUTES CIRCONSTANCES, sans passer par `ZAP_BLOQUANT` :
+#   · code 3 — le scanner n'a pas pu s'exécuter. Un scan qui ne tourne pas n'est
+#     pas un « scan non bloquant », c'est une ABSENCE de scan déguisée en scan.
+#   · code 1 — une règle de niveau FAIL a tiré (arbitrage déjà rendu).
+#   · code inconnu, ZAP_BLOQUANT mal orthographié, rapport JSON manquant.
+#
+# SOUMIS À `ZAP_BLOQUANT` : le code 2 (avertissements). Il reste à 'false' à ce
+# jour, et c'est un ARBITRAGE HUMAIN EN ATTENTE, pas un choix d'outillage :
+# le scan rend 2 sur 12 alertes réelles (1 Medium, 3 Low, 8 Informational),
+# listées et datées dans DECISIONS.md, entrée du 2026-09-05
+# « [securite] ZAP remis en service : bloquant tout de suite, ou après
+# traitement des 12 alertes ? ». AUCUN seuil n'a été baissé et AUCUNE règle
+# n'a été exclue pour obtenir un vert — la doctrine du dépôt l'interdit
+# explicitement, et elle vaut ici comme pour la couverture.
+# ⚠️ SI LA RÉPONSE EST « BLOQUANT » : passer `ZAP_BLOQUANT` à 'true' ET épingler
+# `ZAP_IMAGE` sur le digest relevé par l'étape « Identifier l'image ZAP ». Une
+# porte bloquante doit être reproductible.
+#
+# La garde elle-même vit dans `.github/scripts/zap-verdict.sh` et sa table de
+# vérité est REJOUÉE À CHAQUE RUN (`zap-verdict.test.sh`, 13 cas). Le point de
+# contrôle L2 avait échoué faute d'être éprouvable : il ne le sera plus.
 # ─────────────────────────────────────────────────────────────────────────────
 #
 # Traçabilité E36/E43 — lot L0 (outillage), exploité par A51 dès L2.
@@ -52,51 +85,50 @@ on:
   workflow_dispatch:
     inputs:
       cible:
-        description: 'URL de base à scanner.'
-        required: true
+        description: 'URL de base à scanner. Vide = vars.STAGING_BASE_URL.'
+        required: false
+        default: ''
         type: string
+  # ---------------------------------------------------------------------------
+  # LA SENTINELLE — c'est elle qui aurait vu F-31 en moins de 24 h.
+  # ---------------------------------------------------------------------------
+  # Tant que le scan ne s'exécutait QUE dans la foulée d'un déploiement, son
+  # absence était indiscernable d'une absence de déploiement : deux jours ont
+  # passé sans une ligne ZAP, et rien dans le dépôt ne le disait. Un scan
+  # nocturne rend cette absence BRUYANTE — s'il ne peut pas tourner, il rougit
+  # (code 3), et le rouge porte une date.
+  # ---------------------------------------------------------------------------
+  schedule:
+    - cron: '17 3 * * *'
 
 permissions:
   contents: read
 
 concurrency:
-  group: zap-${{ inputs.cible }}
-  cancel-in-progress: true
+  # `cancel-in-progress: false`, DÉLIBÉRÉMENT. Annuler un scan de sécurité pour
+  # économiser des minutes de runner produit exactement ce que ce fichier
+  # corrige : une absence de preuve que personne ne relit. Un scan commencé va
+  # au bout ; au pire il attend.
+  group: zap-${{ inputs.cible || vars.STAGING_BASE_URL || github.ref }}
+  cancel-in-progress: false
 
 env:
-  # ⚠️ PASSER À 'true' AU LOT L2 (voir bandeau). Une seule ligne à changer.
-  # Dérogation tracée : DECISIONS.md, « [L0] ZAP baseline non bloquant jusqu'au
-  # lot L2 » (11 §8-5).
+  # Voir le bandeau : 'false' est un ARBITRAGE EN ATTENTE, tracé et daté dans
+  # DECISIONS.md (2026-09-05). Les codes 1 et 3 restent bloquants quoi qu'il
+  # arrive — ce drapeau ne gouverne QUE le code 2.
   ZAP_BLOQUANT: 'false'
   # ---------------------------------------------------------------------------
   # IMAGE ZAP — `:stable` EST UN TAG MOBILE. Ce n'est PAS un épinglage.
   # ---------------------------------------------------------------------------
-  # Le commentaire précédent affirmait « épinglée (11 §1) » : c'était faux, et un
-  # commentaire faux est pire que pas de commentaire — il fait passer un contrôle
-  # pour acquis. `ghcr.io/zaproxy/zaproxy:stable` est repoussé à chaque release
-  # de ZAP : deux runs du même commit peuvent scanner avec deux scanners
-  # différents.
-  #
-  # POURQUOI ON LE GARDE MOBILE AU L0/L1 : les règles PASSIVES de ZAP sont la
-  # matière même du contrôle. Un scanner figé cesse silencieusement de détecter
-  # les classes de défaut apparues après son gel — c'est-à-dire qu'il devient
-  # vert pour de mauvaises raisons. Le gel du 11 §1 vise les dépendances qui
-  # ENTRENT dans le produit livré ; ZAP n'entre pas dans le produit, il
+  # Gardé mobile tant que le scan n'est pas bloquant : les règles PASSIVES de ZAP
+  # sont la matière même du contrôle, et un scanner figé cesse silencieusement de
+  # détecter les classes de défaut apparues après son gel — il devient vert pour
+  # de mauvaises raisons. Le gel du 11 §1 vise ce qui ENTRE dans le produit ; ZAP
   # l'inspecte depuis l'extérieur.
-  #
-  # CE QUE ÇA COÛTE, ET COMMENT C'EST COMPENSÉ :
-  #   · le run n'est pas reproductible à l'identique → l'étape « Identifier
-  #     l'image réellement utilisée » ci-dessous journalise le DIGEST tiré, qui
-  #     est archivé avec le rapport : on sait toujours APRÈS COUP ce qui a
-  #     tourné ;
-  #   · une régression de l'image casserait le scan → code 3, échec dur, jamais
-  #     silencieux (étape « Verdict »).
-  #
-  # ⚠️ AU LOT L2, quand `ZAP_BLOQUANT` passera à 'true' : REMPLACER ce tag par le
-  # DIGEST relevé dans les journaux (`ghcr.io/zaproxy/zaproxy@sha256:…`). Une
-  # porte bloquante doit être reproductible — sinon une PR devient rouge parce
-  # que le scanner a changé pendant la nuit, et personne ne peut le démontrer.
-  # ---------------------------------------------------------------------------
+  # Contrepartie assumée : le run n'est pas reproductible à l'identique, donc
+  # l'étape « Identifier l'image ZAP » journalise le DIGEST réellement tiré, qui
+  # est archivé avec le rapport. On sait toujours APRÈS COUP ce qui a tourné.
+  # ⚠️ À épingler sur ce digest le jour où ZAP_BLOQUANT passe à 'true'.
   ZAP_IMAGE: ghcr.io/zaproxy/zaproxy:stable
 
 jobs:
@@ -107,56 +139,132 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Vérifier la cible
+      # -----------------------------------------------------------------------
+      # LA GARDE MORD-ELLE ENCORE ? On le vérifie AVANT de scanner.
+      # -----------------------------------------------------------------------
+      # 13 cas, une seconde. C'est le contrôle qui manquait le 2026-09-02 : la
+      # logique de verdict vivait en ligne dans ce fichier, donc personne ne
+      # pouvait l'exécuter, donc personne n'a vu qu'elle ne pouvait plus mordre.
+      # Ce test échoue AVANT le scan : un résultat rendu par une garde cassée ne
+      # vaut rien, et il vaut mieux ne rien conclure que conclure faux.
+      # -----------------------------------------------------------------------
+      - name: Éprouver la garde (table de vérité du verdict)
+        run: bash .github/scripts/zap-verdict.test.sh
+
+      - name: Déterminer la cible
+        id: cible
+        env:
+          CIBLE_DEMANDEE: ${{ inputs.cible }}
+          CIBLE_DEFAUT: ${{ vars.STAGING_BASE_URL }}
         run: |
           set -euo pipefail
-          cible='${{ inputs.cible }}'
-          if [ -z "$cible" ]; then
-            echo "::error title=Cible ZAP absente::Aucune URL fournie. Renseigner la variable d'environment vars.STAGING_BASE_URL (GitHub → Settings → Environments → staging → Variables)."
+          cible="${CIBLE_DEMANDEE:-}"
+          if [ -z "${cible}" ]; then
+            # Cas du déclenchement nocturne (aucun `inputs`) ou d'un dispatch
+            # laissé vide : on retombe sur la variable de dépôt.
+            cible="${CIBLE_DEFAUT:-}"
+          fi
+          if [ -z "${cible}" ]; then
+            echo "::error title=Cible ZAP absente::Aucune URL fournie et vars.STAGING_BASE_URL est vide (GitHub → Settings → Secrets and variables → Actions → Variables). Sans cible, il n'y a pas de scan — et un job vert sans scan est exactement le défaut F-31."
             exit 1
           fi
+          echo "cible=${cible}" >> "$GITHUB_OUTPUT"
           echo "Cible du scan : ${cible}"
 
       # `:stable` étant un tag MOBILE (voir bloc `env:`), on relève le digest
       # RÉELLEMENT tiré : c'est la seule trace qui rende le run analysable après
-      # coup, et c'est la valeur à épingler au lot L2.
+      # coup, et c'est la valeur à épingler le jour de la bascule bloquante.
       - name: Identifier l'image ZAP réellement utilisée (digest)
+        id: image
         run: |
           set -euo pipefail
           docker pull "${ZAP_IMAGE}" >/dev/null
           digest="$(docker image inspect --format '{{index .RepoDigests 0}}' "${ZAP_IMAGE}")"
           echo "Image ZAP tirée : ${digest}"
-          {
-            echo "### Image ZAP de ce run"
-            echo "- Tag demandé : \`${ZAP_IMAGE}\` (**tag mobile**, pas un épinglage)"
-            echo "- Digest réellement tiré : \`${digest}\`"
-            echo "- Au lot L2 (\`ZAP_BLOQUANT: 'true'\`) : épingler ce digest."
-          } >> "$GITHUB_STEP_SUMMARY"
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
 
       - name: Lancer zap-baseline.py
         id: scan
+        env:
+          CIBLE: ${{ steps.cible.outputs.cible }}
         run: |
-          # `set +e` volontaire : le shell par défaut de GitHub Actions active
-          # `-e`, or le code de retour de ZAP est ici une DONNÉE, exploitée
-          # explicitement à l'étape « Verdict ». Ce n'est pas un masquage
-          # d'échec — rien n'est perdu, tout est tranché plus bas (09 §5.7).
+          # `set +e` volontaire : le code de retour de ZAP est ici une DONNÉE,
+          # tranchée explicitement par `.github/scripts/zap-verdict.sh`. Ce n'est
+          # pas un masquage d'échec — rien n'est perdu (09 §5.7).
           set +e
           set -uo pipefail
           mkdir -p rapport-zap && chmod 777 rapport-zap
+          # PAS de `-I` : ce drapeau supprimait le code 2 et rendait toute
+          # bascule bloquante inopérante (voir bandeau, cause 2). `-a` conserve
+          # les règles passives alpha.
           docker run --rm \
             -v "${GITHUB_WORKSPACE}/rapport-zap:/zap/wrk:rw" \
-            -t "${ZAP_IMAGE}" \
+            "${ZAP_IMAGE}" \
             zap-baseline.py \
-              -t '${{ inputs.cible }}' \
+              -t "${CIBLE}" \
               -r rapport-zap.html \
               -J rapport-zap.json \
-              -a \
-              -I
+              -a
           code=$?
-          # Codes zap-baseline.py : 0 = rien · 1 = alertes en ÉCHEC ·
-          # 2 = avertissements (avec -I) · 3 = erreur d'exécution.
           echo "code=${code}" >> "$GITHUB_OUTPUT"
           echo "ZAP a rendu le code ${code}."
+
+      # -----------------------------------------------------------------------
+      # UN SCAN SANS RAPPORT N'EST PAS UN SCAN.
+      # -----------------------------------------------------------------------
+      # Le rapport est la seule chose qu'un humain relira à la porte. S'il
+      # manque, on ne conclut pas : on rougit. Ce contrôle est indépendant du
+      # code de retour — un ZAP qui rend 0 sans écrire son JSON n'a rien prouvé.
+      # -----------------------------------------------------------------------
+      - name: Contrôler que le rapport existe
+        run: |
+          set -euo pipefail
+          if [ ! -s rapport-zap/rapport-zap.json ]; then
+            echo "::error title=Rapport ZAP absent::rapport-zap/rapport-zap.json est manquant ou vide. Le scanner n'a rien produit d'exploitable : on ne peut ni conclure ni relire à la porte. BLOQUANT quel que soit ZAP_BLOQUANT."
+            exit 1
+          fi
+          echo "Rapport JSON présent ($(wc -c < rapport-zap/rapport-zap.json) octets)."
+
+      # Le rapport ne sert à rien s'il faut le télécharger pour savoir s'il y a
+      # quelque chose dedans. Le résumé de run porte le décompte par sévérité.
+      - name: Publier le décompte par sévérité
+        if: always()
+        env:
+          CIBLE: ${{ steps.cible.outputs.cible }}
+          DIGEST: ${{ steps.image.outputs.digest }}
+          CODE: ${{ steps.scan.outputs.code }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### Scan ZAP baseline"
+            echo ""
+            echo "- Cible : \`${CIBLE:-?}\`"
+            echo "- Image : \`${DIGEST:-?}\` (tag \`${ZAP_IMAGE}\` — **mobile**, pas un épinglage)"
+            echo "- Code de retour : \`${CODE:-?}\` · mode bloquant sur avertissements : \`${ZAP_BLOQUANT}\`"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -s rapport-zap/rapport-zap.json ]; then
+            {
+              echo "| Sévérité | Alertes |"
+              echo "| --- | --- |"
+              jq -r '
+                [ .site[]?.alerts[]? ] as $a
+                | ["High","Medium","Low","Informational"][] as $n
+                | "| \($n) | \([ $a[] | select(.riskdesc | startswith($n)) ] | length) |"
+              ' rapport-zap/rapport-zap.json
+              echo ""
+              echo "<details><summary>Détail des alertes</summary>"
+              echo ""
+              jq -r '
+                .site[]?.alerts[]?
+                | "- **\(.riskdesc)** · [\(.pluginid)] \(.alert) — \(.instances | length) occurrence(s)"
+              ' rapport-zap/rapport-zap.json
+              echo ""
+              echo "</details>"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "_Aucun rapport JSON produit._" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Conserver le rapport ZAP
         if: always()
@@ -167,27 +275,12 @@ jobs:
           retention-days: 30
           if-no-files-found: warn
 
+      # Le verdict est un SCRIPT VERSIONNÉ, pas un bloc en ligne : c'est ce qui
+      # permet de l'éprouver (étape 2 de ce job) au lieu de l'espérer.
       - name: Verdict
+        env:
+          CODE: ${{ steps.scan.outputs.code }}
+          ARTEFACT: rapport-zap-${{ github.run_id }}
         run: |
           set -euo pipefail
-          code='${{ steps.scan.outputs.code }}'
-
-          if [ "$code" = "3" ]; then
-            # Une ERREUR D'EXÉCUTION du scanner n'est jamais tolérée, même au L0 :
-            # un scanner qui ne tourne pas n'est pas un scan « non bloquant »,
-            # c'est une absence de scan déguisée en scan.
-            echo "::error title=ZAP n'a pas pu s'exécuter::Code 3 — cible injoignable ou erreur interne. Le scan n'a PAS eu lieu ; ce n'est pas un résultat, c'est une panne."
-            exit 1
-          fi
-
-          if [ "$code" = "0" ]; then
-            echo "Aucune alerte ZAP."
-            exit 0
-          fi
-
-          if [ "${ZAP_BLOQUANT}" = "true" ]; then
-            echo "::error title=Alertes ZAP::Le scan a remonté des alertes (code ${code}) et ZAP_BLOQUANT=true (lot ≥ L2). Rapport dans l'artefact « rapport-zap-${{ github.run_id }} ». Traitement par A51 (09 §1) avant merge."
-            exit 1
-          fi
-
-          echo "::warning title=Alertes ZAP (non bloquant au lot L0/L1)::Le scan a remonté des alertes (code ${code}). NON BLOQUANT tant que ZAP_BLOQUANT='false' — statut assumé et daté : il DOIT passer à 'true' au LOT L2, dès l'arrivée de l'authentification (07 §12). Rapport dans l'artefact « rapport-zap-${{ github.run_id }} » : à lire, pas à ignorer."
+          bash .github/scripts/zap-verdict.sh "${CODE}" "${ZAP_BLOQUANT}" "${ARTEFACT}"

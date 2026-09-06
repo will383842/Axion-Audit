@@ -1,0 +1,56 @@
+#!/usr/bin/env sh
+# =============================================================================
+# HOOK PRE-PUSH — « zéro push rouge évitable » (CLAUDE.md §8, décision de
+# Williams du 2026-09-02).
+# =============================================================================
+# Constat mesuré : chaque push rouge coûte 7 à 12 minutes de CI avant de savoir,
+# et les trois derniers pushs rouges de lot/l3-suite et lot/l5a tombaient sur des
+# gardes qui tournent en 30 secondes sur le poste. Ce hook rejoue AVANT le push
+# tout ce que la CI vérifie sans conteneur : les 14 gardes, lint, typecheck,
+# tests unitaires (`pnpm verify:rapide`). L'intégration et le e2e restent à la
+# CI et à `pnpm verify` (obligatoire avant d'ouvrir une PR).
+#
+# CONTOURNEMENT : `git push --no-verify` saute ce hook. Jamais pour un push
+# destiné à une PR ; toléré UNIQUEMENT pour sauvegarder un `wip:` avant une
+# coupure (CLAUDE.md §8 : un commit non poussé n'existe pas), et ça se dit
+# dans ETAT.md.
+# =============================================================================
+set -e
+# Git exporte GIT_DIR (et parfois GIT_INDEX_FILE, GIT_PREFIX) dans l'environnement
+# d'un hook. Les tests des gardes (`scripts/garde-fous-*.test.ts`) font un `git init`
+# dans un dossier temporaire : avec GIT_DIR hérité, ce `git init` vise LE DÉPÔT
+# PRINCIPAL et échoue sur `.git/config` (« could not lock config file »). Mesuré le
+# 2026-09-02 sur trois pushs de suite, diagnostiqué à tort comme une contention.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_COMMON_DIR
+echo "[pre-push] rejeu local de la CI sans conteneur : 14 gardes + lint + typecheck + unit…"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POURQUOI CE HOOK PARLE AUTANT — ajouté le 2026-09-06.
+# Un agent a rapporté « hook sorti en code 0, plus de 15 min, et rien de poussé ».
+# Le diagnostic n'a PAS pu être reproduit, et c'est justement le problème : un
+# garde dont on ne sait pas dire s'il a réussi ou renoncé est pire qu'un garde
+# lent, parce qu'il fait douter de son verdict — et le doute mène au
+# `--no-verify`, qui est exactement ce que ce hook existe pour éviter.
+# On ne devine donc pas la cause : on rend le verdict INAMBIGU. `set -e` suffit à
+# arrêter le push ; ce qui manquait, c'est de DIRE lequel des deux cas s'est
+# produit, avec le code de sortie, pour que le prochain rapport soit une mesure
+# et non une impression.
+#
+# CAVEAT DE MACHINE, à connaître avant d'accuser le dépôt : sur un poste hors du
+# Node épinglé au 11 §1 (`>=22.11.0 <23`), Vitest lève parfois un
+# `Timeout calling "onTaskUpdate"` — un dépassement de son RAPPORTEUR — qui rend
+# un code 1 AVEC TOUS LES TESTS VERTS. Ce n'est pas une régression, et ce n'est
+# pas une raison de reconfigurer Vitest : la CI, elle, mesure sur le Node du
+# contrat. Vérifie ta version (`node --version`) avant de conclure quoi que ce
+# soit sur le dépôt.
+# ─────────────────────────────────────────────────────────────────────────────
+if pnpm verify:rapide; then
+  echo "[pre-push] OK — ce push ne peut plus rougir sur un garde, un type ou un test unitaire."
+else
+  code=$?
+  echo "[pre-push] ÉCHEC (code $code) — le push est ANNULÉ, rien n'a été envoyé." >&2
+  echo "[pre-push] Corrige, ou —si et seulement si— tu sauves un 'wip:' avant une" >&2
+  echo "[pre-push] coupure : 'git push --no-verify', et écris-le dans docs/ETAT.md." >&2
+  echo "[pre-push] node $(node --version) — hors 11 §1 ? vois le caveat en tête de ce fichier." >&2
+  exit $code
+fi

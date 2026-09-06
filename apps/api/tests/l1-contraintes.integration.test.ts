@@ -7,7 +7,9 @@
 // rate, et c'est donc celui qui compte le plus ici :
 //   • deux `companies` à `siren` NULL doivent être ACCEPTÉES (filiales
 //     étrangères, V2.2) ;
-//   • deux `questions` ad hoc à `code` NULL doivent être ACCEPTÉES (V2.9).
+//   • deux `questions` ad hoc à `code` NULL doivent être ACCEPTÉES (V2.9) ;
+//   • deux `companies` à `external_ref` NULL doivent être ACCEPTÉES — « NULL si
+//     local » (amendement du 04 §7.1 du 2026-09-03, E18).
 //
 // S'y ajoutent les CHECK d'énumération les plus porteuses de sens métier et la
 // cohérence composite de `step_validations`.
@@ -23,10 +25,13 @@ import {
   connecter,
   creerBaseEphemere,
   creerJeuDEssai,
+  lancerMigrations,
   MESSAGE_L1_ABSENT,
   migrationsLivrees,
   supprimerBaseEphemere,
+  tenterMigrations,
   uuidv7,
+  versionAvantLaMigrationQui,
   type JeuDEssai,
 } from './aide/base-l1.js';
 import { ENUMERATIONS_TESTEES } from './aide/specification-l1.js';
@@ -168,6 +173,220 @@ describe('L1 — unicité partielle companies(siren) WHERE siren IS NOT NULL (04
         `transcription naïve rate.`,
     );
   });
+});
+
+// -----------------------------------------------------------------------------
+// companies(external_ref) — index UNIQUE PARTIEL WHERE external_ref IS NOT NULL
+// -----------------------------------------------------------------------------
+// Traçabilité : E18 — « Liaison automatique clients axion-ia.com : console
+// maîtresse, devis signé → mission » (08_TRACABILITE.md, ligne E18 → M8, §20.6).
+// Règle éprouvée : 04 §7.1, AMENDEMENT DU 2026-09-03 — « index UNIQUE partiel
+// `companies(external_ref) WHERE external_ref IS NOT NULL` — symétrique exact de
+// l'unicité partielle qui existe déjà sur `siren` ». Arbitrage : DECISIONS.md du
+// 2026-09-03, « `companies.external_ref` reçoit son unicité », option 1, décideur
+// Williams. Le critère 3 du lot L1 (07 §12 : « contraintes UNIQUE (answers, siren
+// partiel, questions code+version) actives ») est ANTÉRIEUR à cet amendement et ne
+// cite donc pas cet index : il s'étend ici, il ne se recopie pas.
+//
+// POURQUOI DEUX MOITIÉS, ET POURQUOI C'EST LA SECONDE QUI EST FRAGILE.
+// La première — un doublon est refusé — est la raison d'être de l'index : 03 M8.1
+// fait d'`external_ref` la clé du référentiel client partagé (« id_console conservé
+// en clé étrangère `external_ref` »), et le webhook `client.updated` du 05 §8.6
+// n'aurait aucune cible déterminée si deux fiches la portaient.
+// La seconde — des `external_ref` NULL répétés restent acceptés — est celle qu'une
+// transcription rate : le 04 marque la colonne « NULL si local », et une entreprise
+// créée localement n'a AUCUN pendant dans la console. Un index non partiel
+// interdirait la deuxième création locale.
+//
+// CE QUE LE CAS NULL NE PEUT PAS PROUVER À LUI SEUL, dit ici pour qu'on ne s'y fie
+// pas plus qu'il ne le mérite : sur PostgreSQL 16, un UNIQUE ORDINAIRE accepte lui
+// aussi plusieurs NULL (ils y sont distincts par défaut). Le cas NULL attrape donc
+// un `NULLS NOT DISTINCT` ou un `NOT NULL` mal transcrits, mais PAS la perte de la
+// clause `WHERE` — il resterait vert sur un index devenu total. La moitié
+// STRUCTURELLE est donc éprouvée à part, dans le troisième test.
+describe('L1 — unicité partielle companies(external_ref) WHERE external_ref IS NOT NULL (04 §7.1, amendement du 2026-09-03)', () => {
+  const inserer = `INSERT INTO companies (id, name, external_ref, created_at, updated_at)
+                   VALUES ($1, $2, $3, now(), now())`;
+
+  it('deux entreprises à la MÊME external_ref sont refusées', async () => {
+    const reference = 'console-essai-unicite-0001';
+    await attendreAcceptation(
+      bd(),
+      inserer,
+      [uuidv7(), 'Entreprise fictive Sigma', reference],
+      'Première fiche portant cette référence console : acceptée.',
+    );
+
+    const erreur = await attendreRefus(
+      bd(),
+      inserer,
+      [uuidv7(), 'Entreprise fictive Sigma (doublon)', reference],
+      `Règle : 04 §7.1 (amendement du 2026-09-03) — index UNIQUE partiel\n` +
+        `companies(external_ref) WHERE external_ref IS NOT NULL.\n` +
+        `external_ref est « l'id client console axion-ia.com » (04 §7) et la clé du\n` +
+        `référentiel client partagé (03 M8.1). Deux fiches d'audit pour une même\n` +
+        `entreprise de la console : ni la liaison M8.1 ni le webhook « client.updated »\n` +
+        `(05 §8.6) n'ont plus de cible déterminée. Le défaut ne se manifesterait qu'au\n` +
+        `lot L13, très loin de sa cause.`,
+    );
+
+    expect(
+      erreur.code,
+      `Refus obtenu, mais pas pour la bonne raison : ${erreur.code} — ${erreur.message}.\n` +
+        `Attendu : violation d'unicité (23505).`,
+    ).toBe('23505');
+  });
+
+  it("deux entreprises à external_ref NULL sont ACCEPTÉES — la moitié qu'on oublie", async () => {
+    await attendreAcceptation(
+      bd(),
+      inserer,
+      [uuidv7(), 'Entreprise fictive locale 1', null],
+      `Règle : 04 §7 — « external_ref : id client console axion-ia.com (NULL si local) ».`,
+    );
+
+    await attendreAcceptation(
+      bd(),
+      inserer,
+      [uuidv7(), 'Entreprise fictive locale 2', null],
+      `Règle : 04 §7.1 — l'index est PARTIEL (WHERE external_ref IS NOT NULL).\n` +
+        `03 M8.1 prévoit explicitement la « création locale seulement si le client\n` +
+        `n'existe pas encore côté console » : ces fiches-là n'ont pas de référence, et\n` +
+        `elles sont la NORME tant que la liaison console (L13, Phase 2) n'existe pas —\n` +
+        `toute entreprise créée aujourd'hui porte external_ref NULL. Un\n` +
+        `UNIQUE … NULLS NOT DISTINCT (PG15+) ou une colonne passée NOT NULL\n` +
+        `n'accepterait qu'UNE SEULE entreprise dans tout l'outil.`,
+    );
+  });
+
+  it("l'index est PARTIEL dans le catalogue — ce que le cas NULL ne peut pas montrer", async () => {
+    const trouves = await bd().query<{ indexname: string; indexdef: string }>(
+      `SELECT indexname, indexdef FROM pg_indexes
+        WHERE schemaname = 'public' AND tablename = 'companies'
+          AND indexdef ILIKE '%UNIQUE%' AND indexdef ILIKE '%(external_ref)%'`,
+    );
+
+    expect(
+      trouves.rows.length,
+      `Attendu EXACTEMENT un index unique sur companies(external_ref) (04 §7.1,\n` +
+        `amendement du 2026-09-03). Trouvé ${String(trouves.rows.length)} :\n  ` +
+        trouves.rows.map((l) => l.indexdef).join('\n  '),
+    ).toBe(1);
+
+    const definition = trouves.rows[0]?.indexdef ?? '';
+
+    expect(
+      definition,
+      `L'index existe mais n'est PAS partiel : « ${definition} ».\n` +
+        `04 §7.1 exige « WHERE external_ref IS NOT NULL ». Sans cette clause l'index est\n` +
+        `total — et sur PostgreSQL 16 les deux tests de comportement ci-dessus\n` +
+        `resteraient VERTS, puisqu'un UNIQUE ordinaire tient déjà deux NULL pour\n` +
+        `distincts. La régression vers l'unicité totale ne se voit donc QUE d'ici.`,
+    ).toMatch(/WHERE \(external_ref IS NOT NULL\)/i);
+
+    expect(
+      definition,
+      `L'index porte NULLS NOT DISTINCT : « ${definition} ».\n` +
+        `Les fiches sans référence console (04 §7, « NULL si local ») seraient alors\n` +
+        `limitées à UNE SEULE dans toute la base.`,
+    ).not.toMatch(/NULLS NOT DISTINCT/i);
+  });
+
+  it("la montée REFUSE de poser l'unicité sur une base qui porte DÉJÀ des doublons", async () => {
+    // POURQUOI CE TEST EXISTE, alors qu'il éprouve un cas qui n'arrive jamais dans
+    // cette suite. Le garde `DO $$` de la migration ne peut s'exécuter utilement que
+    // sur une base contenant déjà deux fiches à la même référence console — une
+    // situation que ni un clone neuf, ni la CI, ni aucun autre test ne produit. Sa
+    // PREMIÈRE exécution réelle serait donc celle du déploiement, sur la base qui a
+    // le défaut, au pire moment pour découvrir qu'il ne mord pas. C'est la seule
+    // logique APPLICATIVE de cette migration ; tout le reste est du DDL, déjà tenu
+    // par le comparateur schéma-vs-04.
+    //
+    // Ce qui est vérifié n'est pas la prose du message, mais quatre faits : la montée
+    // ÉCHOUE ; elle échoue en NOMMANT la colonne ; le refus ne vient PAS de l'erreur
+    // brute de PostgreSQL (preuve que le garde a mordu AVANT le CREATE INDEX) ; elle
+    // ne laisse RIEN derrière elle, ni index ni ligne de journal. Ce dernier point est
+    // celui qui rend le déploiement rattrapable (02 §30.6, dry-run puis apply).
+    //
+    // La base est ramenée JUSTE AVANT la migration visée, désignée par ce qu'elle fait
+    // et non par son numéro. Base éphémère dédiée, supprimée en `finally` — celle du
+    // fichier ne bouge pas.
+    const cible = versionAvantLaMigrationQui(/ON companies \(external_ref\)/i);
+    const base = await creerBaseEphemere('gardeexternalref');
+    try {
+      await appliquerMontee(base.url);
+      await lancerMigrations(base.url, ['--down-to', cible]);
+
+      const bac = await connecter(base.url);
+      try {
+        const avant = await bac.query(
+          `SELECT indexname FROM pg_indexes
+            WHERE schemaname = 'public' AND tablename = 'companies'
+              AND indexdef ILIKE '%UNIQUE%' AND indexdef ILIKE '%(external_ref)%'`,
+        );
+        expect(
+          avant.rows.length,
+          `La descente n'a pas retiré l'index : le doublon ne pourra pas être créé, et ce\n` +
+            `test ne prouverait plus rien. 07 §12 ligne L1 : « migrations up/down propres ».`,
+        ).toBe(0);
+
+        const reference = 'console-essai-doublon-preexistant';
+        await bac.query(inserer, [uuidv7(), 'Entreprise fictive Tau', reference]);
+        await bac.query(inserer, [uuidv7(), 'Entreprise fictive Tau (doublon)', reference]);
+
+        const tentative = await tenterMigrations(base.url);
+
+        expect(
+          tentative.code,
+          `La montée a RÉUSSI sur une base portant deux fiches à la même référence\n` +
+            `console : l'unicité n'est donc pas réellement posée.\n\nSortie :\n${tentative.sortie}`,
+        ).not.toBe(0);
+
+        expect(
+          tentative.sortie,
+          `La montée a échoué sans jamais nommer external_ref. Un refus qui ne dit pas CE\n` +
+            `QUI bloque envoie chercher au mauvais endroit, en fenêtre de déploiement.\n\n` +
+            `Sortie :\n${tentative.sortie}`,
+        ).toMatch(/external_ref/);
+
+        expect(
+          tentative.sortie,
+          `Le refus vient de PostgreSQL lui-même (« could not create unique index »), pas\n` +
+            `du garde de la migration : celui-ci n'a donc pas mordu AVANT la création de\n` +
+            `l'index. Le résultat final est le même, l'explication non — et c'est\n` +
+            `l'explication qui décide du temps qu'il faudra pour réconcilier les deux\n` +
+            `fiches, un geste MÉTIER (invariant 7 : révision tracée, rien d'écrasé).\n\n` +
+            `Sortie :\n${tentative.sortie}`,
+        ).not.toMatch(/could not create unique index/i);
+
+        const apres = await bac.query(
+          `SELECT indexname FROM pg_indexes
+            WHERE schemaname = 'public' AND tablename = 'companies'
+              AND indexdef ILIKE '%UNIQUE%' AND indexdef ILIKE '%(external_ref)%'`,
+        );
+        expect(
+          apres.rows.length,
+          `La migration a échoué MAIS a laissé son index : le schéma est à moitié posé.\n` +
+            `Chaque migration s'exécute dans SA transaction (02 §30.6) — un échec doit\n` +
+            `laisser la base exactement où elle était.`,
+        ).toBe(0);
+
+        const journal = await bac.query<{ version: string }>(
+          `SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1`,
+        );
+        expect(
+          journal.rows[0]?.version,
+          `Le journal des migrations est passé au-delà de « ${cible} » alors que la montée\n` +
+            `a échoué : une base annoncée à jour sans l'être est pire qu'une base en\n` +
+            `retard, parce que plus rien ne rejouera la migration manquante.`,
+        ).toBe(cible);
+      } finally {
+        await bac.end();
+      }
+    } finally {
+      await supprimerBaseEphemere(base.nom);
+    }
+  }, 180_000);
 });
 
 // -----------------------------------------------------------------------------

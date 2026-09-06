@@ -1,0 +1,118 @@
+/* ============================================================================
+ * MISE EN PAGE DE LA COQUILLE TERRAIN — L5a
+ *
+ * Aucune valeur littérale : couleurs, espacements, rayons et tailles viennent
+ * TOUS des jetons de `packages/ui` (invariant 4, « aucune couleur/taille en
+ * dur »). Ce fichier ne DÉFINIT aucun jeton — il n'en consomme que.
+ *
+ * Il ne contient que de la structure (colonnes, empilements, en-tête collant) :
+ * tout ce qui a une apparence — champs, boutons, messages, états — vient des
+ * composants du design system, que L5 COMPOSE sans jamais les recréer
+ * (`LOT_L5.md` §2, dernière ligne du tableau).
+ * ========================================================================== */
+
+.axn-coquille {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--couleur-surface-fond);
+  color: var(--couleur-texte-principal);
+  font-family: var(--typo-police-corps);
+  font-size: var(--typo-taille-base);
+  line-height: var(--typo-interligne-normal);
+}
+
+/* En-tête toujours visible : le bouton de verrouillage manuel du 05 §9.7 doit
+   être atteignable « d'un geste sur toutes les vues terrain ». */
+.axn-coquille__entete {
+  position: sticky;
+  top: 0;
+  z-index: var(--taille-plan-bandeau);
+  display: flex;
+  align-items: center;
+  gap: var(--espacement-3);
+  padding: var(--espacement-3) var(--espacement-4);
+  padding-top: max(var(--espacement-3), env(safe-area-inset-top));
+  background: var(--couleur-surface-carte);
+  border-bottom: var(--taille-bordure-epaisseur) solid var(--couleur-bordure-discrete);
+}
+
+.axn-coquille__titre {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: var(--typo-taille-lg);
+  font-weight: var(--typo-graisse-semi);
+  line-height: var(--typo-interligne-serre);
+}
+
+/* Le fond est peint ICI, sur le <main>, et pas seulement sur le conteneur
+   `.axn-coquille`. Deux raisons, et aucune n'est cosmetique :
+   - un conteneur qui peint pendant que le repere principal reste TRANSPARENT
+     laisse la couleur de la charte dependre de ce qu'il y a derriere ;
+   - c'est le <main> que le controle de socle inspecte (e2e/socle.e2e.ts,
+     `document.querySelector('main')`), parce que c'est le repere que voit un
+     lecteur d'ecran. Un token declare mais non applique ne prouve rien.
+   La valeur vient du MEME jeton que `.axn-coquille` : invariant 4, une couleur
+   n'a qu'une source, meme quand deux elements la portent. */
+.axn-coquille__corps {
+  background: var(--couleur-surface-fond);
+  color: var(--couleur-texte-principal);
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: var(--taille-largeur-contenu-large);
+  margin: 0 auto;
+  padding: var(--espacement-5) var(--espacement-4);
+  padding-bottom: max(var(--espacement-5), env(safe-area-inset-bottom));
+}
+
+/* Empilement vertical simple, l'unité de composition de tous les écrans. */
+.axn-pile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacement-4);
+}
+
+.axn-pile--large {
+  width: 100%;
+  max-width: var(--taille-largeur-contenu-etroit);
+  margin: 0 auto;
+  gap: var(--espacement-5);
+}
+
+.axn-pile h1 {
+  margin: 0;
+  font-size: var(--typo-taille-2xl);
+  font-weight: var(--typo-graisse-semi);
+  line-height: var(--typo-interligne-serre);
+}
+
+.axn-pile h2 {
+  margin: 0;
+  font-size: var(--typo-taille-lg);
+  font-weight: var(--typo-graisse-semi);
+  line-height: var(--typo-interligne-serre);
+}
+
+.axn-pile p {
+  margin: 0;
+  color: var(--couleur-texte-secondaire);
+}
+
+.axn-pile form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacement-4);
+}
+
+/* Ligne d'indicateurs de l'en-tête (pastille de sync, espace disponible). */
+.axn-coquille__indicateurs {
+  display: flex;
+  align-items: center;
+  gap: var(--espacement-2);
+  flex-wrap: wrap;
+}
+
+.axn-coquille__mention {
+  font-size: var(--typo-taille-sm);
+  color: var(--couleur-texte-tertiaire);
+}

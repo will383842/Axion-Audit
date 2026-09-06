@@ -1,50 +1,165 @@
 // =============================================================================
-// Coquille de l'application terrain — lot L0.
+// LA COQUILLE DE L'APPLICATION TERRAIN — lot L5a
 //
-// Ce composant existe pour que l'image se construise et que le conteneur serve
-// quelque chose de vérifiable. Les écrans réels (3 zones, types de réponse,
-// agenda, validation d'entretien) sont le lot L5 — les esquisser ici créerait du
-// code à jeter et enfreindrait la règle « jamais deux lots en parallèle ».
+// Elle n'affiche presque rien : elle décide QUEL écran est légitime selon l'état
+// du socle, et porte le seul élément qui doit exister sur toutes les vues — le
+// bouton de verrouillage d'un geste (05 §9.7 : « l'auditeur qui pose sa tablette
+// verrouille lui-même — c'est LUI le premier périmètre de sécurité »).
 //
-// Aucune couleur en dur (invariant 4) : tout passe par les variables de
-// packages/ui. C'est déjà vrai sur cet écran d'attente.
-// Traçabilité : E17.
+// ── LA SORTIE EST DANS LA COQUILLE, UNE FOIS, POUR TOUS LES ÉCRANS ──────────
+// Bloquant **B2** de la recette novice n°1 (A54, 2026-09-06) : `peutRevenir()`
+// existait, documentait en toutes lettres que « le bouton retour de l'en-tête
+// s'y règle », et n'était câblé sur AUCUN bouton. Deux écrans n'offraient donc
+// que « Verrouiller » — en PWA installée, sans barre d'adresse, l'auditeur était
+// enfermé. Le geste retour système sauvait le navigateur, pas la tablette.
+//
+// Le retour est posé ICI et nulle part ailleurs : un bouton par écran, ce sont
+// onze occasions d'en oublier un, et c'est très exactement ce qui s'est produit
+// (deux écrans sur onze avaient leurs `actions`, les autres non). La coquille,
+// elle, ne peut pas oublier un écran : elle les rend tous.
+//
+// ── LE VERROU EST STRUCTUREL, PAS VISUEL ────────────────────────────────────
+// Quand le coffre est fermé, l'écran de déverrouillage n'est pas POSÉ DEVANT les
+// données : les données ne sont pas lisibles du tout, parce que le contexte local
+// a été retiré (`local/contexte.ts`). C'est la différence entre un verrou et un
+// rideau.
+//
+// Traçabilité : E33 (sécurité / RGPD), E6 (hors ligne total, PC ET tablette).
 // =============================================================================
-import type * as React from 'react';
+import { useCallback, type ReactNode } from 'react';
+import { Bouton, EtatErreur, Squelette } from '@axion/ui';
+import { EcranAccueil } from './app/EcranAccueil.js';
+import { EcranDeverrouillage } from './app/EcranDeverrouillage.js';
+import { EcranStockage } from './app/EcranStockage.js';
+import { useTerrain } from './app/contexte.js';
+import { peutRevenir } from './app/navigation.js';
+import { VUES } from './app/vues.js';
+import { EcranEntretien } from './ecrans/entretien/EcranEntretien.js';
+import { EcranNouvelEntretien } from './ecrans/entretien/EcranNouvelEntretien.js';
+import { EcranAgenda } from './ecrans/journee/EcranAgenda.js';
+import { EcranAujourdhui } from './ecrans/journee/EcranAujourdhui.js';
+import { EcranFinDeJournee } from './ecrans/journee/EcranFinDeJournee.js';
+import { EcranFinDeSession } from './ecrans/journee/EcranFinDeSession.js';
+import { EcranPilote } from './ecrans/journee/EcranPilote.js';
+import { EcranRestauration } from './ecrans/journee/EcranRestauration.js';
+import {
+  ComplementAccueil,
+  IndicateursCoquille,
+  useVueInitiale,
+} from './ecrans/journee/coquille-l5c.js';
 
-export function App(): React.JSX.Element {
-  return (
-    <main
-      style={{
-        minHeight: '100dvh',
-        display: 'grid',
-        placeItems: 'center',
-        padding: 'var(--espacement-6)',
-        background: 'var(--couleur-surface-fond)',
-        color: 'var(--couleur-texte-principal)',
-        fontFamily: 'var(--typo-police-corps)',
-      }}
-    >
-      <div style={{ maxWidth: 'var(--taille-largeur-contenu-etroit)', textAlign: 'center' }}>
-        <h1
-          style={{
-            fontSize: 'var(--typo-taille-2xl)',
-            fontWeight: 'var(--typo-graisse-semi)',
-            lineHeight: 'var(--typo-interligne-serre)',
-            marginBottom: 'var(--espacement-3)',
-          }}
-        >
-          Axion Audit — Terrain
-        </h1>
-        <p
-          style={{
-            color: 'var(--couleur-texte-secondaire)',
-            lineHeight: 'var(--typo-interligne-normal)',
-          }}
-        >
-          Socle technique en place. Les écrans de collecte arrivent au lot L5.
-        </p>
+function ContenuCourant(): ReactNode {
+  const { vue } = useTerrain();
+  switch (vue) {
+    case 'deverrouillage':
+      return <EcranDeverrouillage />;
+    case 'stockage':
+      return <EcranStockage />;
+    case 'accueil':
+      // `AccesRestauration` est COMPOSÉ ici, sous l'écran de L5a, et non ajouté
+      // dans `EcranAccueil.tsx` : ce fichier appartient à L5a et un correctif de
+      // sécurité y atterrit (A24). La coquille est le fichier partagé déclaré
+      // (LOT_L5.md §1, amendement 2026-09-05) ; c'est le seul endroit où L5c
+      // peut poser une porte d'entrée sans écrire chez un autre incrément.
+      return (
+        <>
+          <EcranAccueil />
+          <ComplementAccueil />
+        </>
+      );
+    // ── L5b (A22) ──
+    case 'nouvelEntretien':
+      return <EcranNouvelEntretien />;
+    case 'entretien':
+      return <EcranEntretien />;
+    // ── L5c (A23) ──
+    case 'aujourdhui':
+      return <EcranAujourdhui />;
+    case 'agenda':
+      return <EcranAgenda />;
+    case 'pilote':
+      return <EcranPilote />;
+    case 'finDeJournee':
+      return <EcranFinDeJournee />;
+    case 'restauration':
+      return <EcranRestauration />;
+    case 'finDeSession':
+      return <EcranFinDeSession />;
+  }
+}
+
+export function App(): ReactNode {
+  const { phase, panne, vue, verrou, fermer, navigation, naviguer } = useTerrain();
+  useVueInitiale();
+
+  // B2 — la sortie. Elle n'apparaît que s'il y a réellement où revenir : sur une
+  // racine, un bouton « Retour » qui ne fait rien serait le même mensonge que la
+  // pastille qui annonce plus qu'elle ne fait.
+  const retourPossible = peutRevenir(navigation);
+  const revenir = useCallback((): void => {
+    naviguer({ type: 'retour' });
+  }, [naviguer]);
+
+  if (phase === 'chargement') {
+    return (
+      <div className="axn-coquille">
+        <main className="axn-coquille__corps axn-pile" aria-busy="true">
+          <Squelette forme="titre" />
+          <Squelette forme="ligne" lignes={3} />
+        </main>
       </div>
-    </main>
+    );
+  }
+
+  if (phase === 'erreur') {
+    return (
+      <div className="axn-coquille">
+        <main className="axn-coquille__corps axn-pile axn-pile--large">
+          <EtatErreur
+            titre="Les données locales sont inaccessibles"
+            cause={panne?.cause ?? 'Cause inconnue.'}
+            action={panne?.action ?? 'Rechargez la page.'}
+          />
+        </main>
+      </div>
+    );
+  }
+
+  // Coffre fermé : une seule vue possible, et aucune donnée derrière elle.
+  if (phase === 'verrouille' || verrou.verrouille) {
+    return (
+      <div className="axn-coquille">
+        <main className="axn-coquille__corps">
+          <EcranDeverrouillage />
+        </main>
+      </div>
+    );
+  }
+
+  return (
+    <div className="axn-coquille">
+      <header className="axn-coquille__entete">
+        {/* Avant le titre : l'ordre de lecture d'un en-tête, et l'ordre de
+            tabulation. Le libellé est écrit, pas seulement une flèche — §33.6
+            interdit qu'une information soit portée par une icône seule. */}
+        {retourPossible && (
+          <Bouton variante="discret" onClick={revenir}>
+            Retour
+          </Bouton>
+        )}
+        <h1 className="axn-coquille__titre">{VUES[vue].titre}</h1>
+        {/* Décision A01 (2026-09-05) : l'état de synchronisation est visible sur
+            TOUS les écrans. « Hors ligne = nominal » veut dire pas une erreur,
+            pas invisible. Posée dans la coquille — le fichier partagé — plutôt
+            que répétée dans chaque écran. */}
+        <IndicateursCoquille />
+        <Bouton variante="discret" onClick={fermer}>
+          Verrouiller
+        </Bouton>
+      </header>
+      <main className="axn-coquille__corps">
+        <ContenuCourant />
+      </main>
+    </div>
   );
 }

@@ -1113,6 +1113,147 @@ services:
           memory: 512M
 
   # ---------------------------------------------------------------------------
+  # SONDE D'ALERTES — les quatre seuils ${ALERT_*} du 02 §11.3 et de l'invariant 8
+  # Fiche AMELIORATIONS.md « O-2 », ABSORBÉE le 2026-08-31 (décideur Williams).
+  #
+  # ┌─────────────────────────────────────────────────────────────────────────┐
+  # │ POURQUOI CE SERVICE EXISTE — ET POURQUOI IL N'EST PAS UN DOUBLON DE LA  │
+  # │ LIGNE CRON.                                                             │
+  # │                                                                         │
+  # │ `infra/scripts/sonde-alertes.sh` a d'abord été planifiée par            │
+  # │ `install-cron.sh`, sur l'HÔTE. Or l'hôte n'existe que sur le chemin     │
+  # │ « VPS dédié », que `infra/README.md` §7 marque JAMAIS JOUÉ. La sonde    │
+  # │ tenait donc l'invariant 8 sur le chemin DÉCRIT et sur aucun chemin      │
+  # │ EXPLOITÉ — c'est-à-dire qu'elle reproduisait, d'un cran plus loin, le   │
+  # │ défaut même qu'elle ferme : un garde-fou qui a l'air d'exister.         │
+  # │                                                                         │
+  # │ IL N'EXISTE AUCUN ORDONNANCEUR GÉNÉRAL DANS CETTE PILE. La seule chose  │
+  # │ qui y est planifiée est le service `sauvegarde`, dont la planification  │
+  # │ vit DANS son script. Cette forme a été arbitrée en tête de              │
+  # │ `infra/postgres/sauvegarde.sh` contre les deux autres : BullMQ (le      │
+  # │ worker n'a ni les accès ni les outils) et les tâches planifiées de      │
+  # │ Coolify (« leur définition vit dans la base de Coolify, pas dans ce     │
+  # │ dépôt : invisible à git, absente d'une reconstruction, et personne ne   │
+  # │ verrait qu'elle a disparu »). On REPREND ce motif ; on n'en invente pas │
+  # │ un second, et on ne demande à personne d'arbitrer deux fois.            │
+  # └─────────────────────────────────────────────────────────────────────────┘
+  #
+  # ┌─────────────────────────────────────────────────────────────────────────┐
+  # │ ⚠️ AUCUN SOCKET DOCKER, ET AUCUN VOLUME DE DONNÉES. C'EST LE POINT DUR. │
+  # │                                                                         │
+  # │ La version « hôte » de la sonde parle à PostgreSQL par `docker compose  │
+  # │ exec` et lit le magasin TLS par un conteneur jetable. Les deux exigent  │
+  # │ le socket Docker, qui donne le contrôle de la machine entière : le      │
+  # │ refus opposé au service `sauvegarde` vaut ici mot pour mot. Le portage  │
+  # │ remplace donc les deux accès :                                          │
+  # │   · PostgreSQL → connexion RÉSEAU sur le réseau interne `axion`, avec   │
+  # │     le mot de passe passé par `PGPASSWORD` (variable d'environnement du │
+  # │     seul appel `psql`, jamais un argument : invisible dans `ps`) ;      │
+  # │   · disque → `df /`, la couche overlay du conteneur, portée par le      │
+  # │     système de fichiers de `/var/lib/docker` — CELUI QUI PORTE AUSSI    │
+  # │     LES VOLUMES, donc celui qui se remplit. Zéro volume de données      │
+  # │     monté : donner `postgres_data` en lecture seule pour y faire un     │
+  # │     `df` ouvrirait les fichiers bruts de la base afin de mesurer un     │
+  # │     pourcentage. La mesure est juste, l'accès est nul.                  │
+  # │     SA LIMITE : si les volumes déménageaient sur un autre disque, cette │
+  # │     mesure porterait sur le mauvais — renseigner alors                  │
+  # │     AXION_SONDE_CHEMINS_DISQUE.                                         │
+  # │                                                                         │
+  # │ · CERTIFICAT TLS → SANS OBJET ICI, ET C'EST UNE MESURE, PAS UN RENONCE- │
+  # │   MENT. `CADDY_SITE_ADDRESS: ':8080'` fait écouter Caddy en HTTP simple │
+  # │   (voir son encadré « ADRESSES DE SITE ») : il ne tente aucun ACME et   │
+  # │   n'émet aucun certificat, donc `caddy_data` n'en contient AUCUN et le  │
+  # │   monter ne dirait rien. Le certificat qui compte est celui de Traefik, │
+  # │   qui vit dans les données de Coolify — hors de notre portée, et il     │
+  # │   doit le rester. **CONSÉQUENCE À ARBITRER : sur ce chemin,             │
+  # │   ALERT_CERT_EXPIRY_DAYS n'est honoré par PERSONNE.** La sonde le       │
+  # │   journalise à CHAQUE passe (catégorie « sans objet ») au lieu de le    │
+  # │   compter comme un vert. Voir infra/README.md §8, ligne 2i.             │
+  # └─────────────────────────────────────────────────────────────────────────┘
+  # ---------------------------------------------------------------------------
+  sonde:
+    <<: [*restart, *logging, *image-postgres]
+    # Même utilisateur que `sauvegarde` : le volume d'état naît `postgres` grâce
+    # au `chown /sonde` du Dockerfile. La sonde ne fait que LIRE, partout ailleurs.
+    user: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      TZ: ${TZ:-UTC}
+      APP_ENV: ${APP_ENV:-staging}
+      # `pile` commande TOUT : environnement lu dans le processus (Coolify
+      # n'expose aucun fichier .env), SQL par le réseau, certificat sans objet,
+      # et boucle de planification interne. Une seule variable, pas d'argument :
+      # la CONVENTION COOLIFY interdit un `command:` (voir `createstanza`), et un
+      # `entrypoint` porteur d'arguments serait une forme de plus à faire
+      # survivre à la réécriture de Coolify.
+      AXION_SONDE_MODE: pile
+      AXION_SONDE_ETAT_DIR: /sonde/etat
+      AXION_LOG_DIR: /sonde
+      # MÊME MINUTE que la ligne cron du chemin VPS : deux chemins qui sonnent au
+      # même moment se comparent ; deux chemins décalés se traduisent.
+      AXION_SONDE_MINUTE: ${AXION_SONDE_MINUTE:-17}
+      AXION_SONDE_ALERTE_INTERVALLE_H: ${AXION_SONDE_ALERTE_INTERVALLE_H:-24}
+      # Accès en LECTURE à la base. Mêmes valeurs que le service `postgres` —
+      # une divergence ferait échouer l'authentification toutes les heures.
+      POSTGRES_DB: ${POSTGRES_DB:-axion_audit}
+      POSTGRES_USER: ${POSTGRES_USER:-axion}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?variable obligatoire, mot de passe PostgreSQL}
+      # Le canal. `:-` ET NON `:?`, comme pour `sauvegarde` : sans canal la sonde
+      # mesure et journalise normalement, elle ne prévient personne — et elle
+      # l'écrit en toutes lettres à chaque alerte, en nommant le transport qui
+      # aurait servi. Bloquer un déploiement parce qu'une décision humaine manque
+      # serait un remède pire que le mal.
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      # LES QUATRE SEUILS — c'est tout l'objet de la fiche O-2. Ils étaient déjà
+      # injectés dans le service `worker`, qui ne les a JAMAIS LUS.
+      ALERT_DISK_USAGE_PERCENT: ${ALERT_DISK_USAGE_PERCENT:-80}
+      ALERT_LLM_JOB_MAX_MINUTES: ${ALERT_LLM_JOB_MAX_MINUTES:-5}
+      ALERT_CERT_EXPIRY_DAYS: ${ALERT_CERT_EXPIRY_DAYS:-15}
+      ALERT_SYNC_SILENT_HOURS: ${ALERT_SYNC_SILENT_HOURS:-24}
+    entrypoint: ['/usr/local/bin/axion-sonde-alertes']
+    # PAS DE `command:` — septième convention Coolify, voir l'encadré du service
+    # `createstanza`. Le `CMD ["postgres"]` hérité arrive donc en `$1` de notre
+    # point d'entrée : en mode `pile`, le script ne lit AUCUN argument (il ne lit
+    # `$1` que sur le chemin hôte, où c'est le chemin du `.env`). Il est inerte.
+    volumes:
+      # CIBLE LITTÉRALE, PAS INTERPOLÉE (convention 3, voir l'en-tête) — et
+      # SEUL volume monté : journal + marqueurs. Aucun accès aux données.
+      - sonde_etat:/sonde
+    networks: [axion]
+    # ┌─────────────────────────────────────────────────────────────────────────┐
+    # │ SONDE DE SANTÉ — elle lit UN marqueur, écrit APRÈS une passe terminée.  │
+    # │ Le mode de panne qu'elle attrape est celui que `docker ps` ne montre    │
+    # │ pas : un processus vivant dont la boucle ne repasse plus (un `psql`     │
+    # │ bloqué sur une socket à moitié ouverte, un `sleep` qui ne rend pas la   │
+    # │ main). `Up 6 days` sans qu'une seule passe n'ait abouti est exactement  │
+    # │ le garde-fou menteur que cette fiche démonte.                           │
+    # │ 10800 s = 3 h, soit trois cadences horaires : une passe manquée ne fait │
+    # │ pas rougir, trois oui. `start_period` couvre le premier démarrage, où   │
+    # │ la passe immédiate n'a pas encore écrit son marqueur.                   │
+    # │ DURÉES EN SECONDES — Coolify réécrit ce fichier, on n'introduit pas une │
+    # │ notation que sa réécriture n'a jamais rendue à l'identique.             │
+    # └─────────────────────────────────────────────────────────────────────────┘
+    healthcheck:
+      test: ['CMD-SHELL', 'test -n "$$(find /sonde/etat/.derniere-passe -mmin -180 2>/dev/null)"']
+      interval: 600s
+      timeout: 10s
+      retries: 3
+      start_period: 300s
+    # Swap neutralisé — encadré « DEUX MÉCANISMES DE PLAFOND ». 64 Mo : un `psql`,
+    # un `openssl s_client` et un `df`. C'est le plus petit service de la pile, et
+    # c'est normal — il ne fait que regarder.
+    mem_limit: 64M
+    memswap_limit: 64M
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: 64M
+
+  # ---------------------------------------------------------------------------
   # API Fastify — CONSTRUITE DEPUIS LE DÉPÔT, cible `runtime`.
   #
   # ┌─────────────────────────────────────────────────────────────────────────┐
@@ -1594,6 +1735,14 @@ volumes:
   # sauf si le garde-fou `depot_local_sain()` de sauvegarde.sh l'attrape.
   sauvegarde_archives:
     name: axion-coolify-sauvegarde-archives
+  # État de la SONDE D'ALERTES (fiche O-2) : son journal, ses marqueurs
+  # anti-harcèlement (fichiers VIDES, datés par leur seul mtime) et
+  # `.derniere-passe`, que lit sa sonde de santé. AUCUNE donnée métier n'y
+  # transite — c'est une propriété du script, pas une intention.
+  # Il est NOMMÉ et PERSISTANT à dessein : sans lui, chaque redéploiement
+  # oublierait qu'une alerte est déjà partie et la renverrait aussitôt.
+  sonde_etat:
+    name: axion-coolify-sonde-etat
   redis_data:
     name: axion-coolify-redis-data
   minio_data:

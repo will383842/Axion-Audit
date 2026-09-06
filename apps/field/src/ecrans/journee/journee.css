@@ -1,0 +1,153 @@
+/* ============================================================================
+ * ÉCRANS DE LA JOURNÉE — cockpit, agenda, fin de journée (L5c)
+ *
+ * AUCUNE VALEUR LITTÉRALE (invariant 4). Couleurs, espacements, rayons, tailles
+ * et durées viennent TOUS des jetons de `packages/ui` ; ce fichier n'en définit
+ * aucun, il n'en consomme que. Il ne porte que de la STRUCTURE — listes, cartes,
+ * bandeau collant : tout ce qui a une apparence vient des composants du design
+ * system, que L5 COMPOSE sans jamais les recréer (`LOT_L5.md` §2).
+ *
+ * Cibles tactiles ≥ 44 px (03 §22.1) : les lignes cliquables de l'agenda et du
+ * cockpit portent `min-height: var(--taille-cible-tactile-min)`. Ce n'est pas un
+ * confort — c'est la ligne qu'on tape en marchant dans un atelier.
+ * ========================================================================== */
+
+/* ── Cartes de la journée ───────────────────────────────────────────────── */
+.axn-journee__carte {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacement-3);
+  padding: var(--espacement-4);
+  background: var(--couleur-surface-carte);
+  border: var(--taille-bordure-epaisseur) solid var(--couleur-bordure-discrete);
+  border-radius: var(--taille-rayon-grand);
+}
+
+.axn-journee__entete-carte {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--espacement-3);
+  flex-wrap: wrap;
+}
+
+.axn-journee__titre-carte {
+  margin: 0;
+  font-size: var(--typo-taille-lg);
+  font-weight: var(--typo-graisse-semi);
+  line-height: var(--typo-interligne-serre);
+}
+
+/* ── Liste de sessions (agenda du jour, fin de journée) ─────────────────── */
+.axn-journee__liste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacement-2);
+}
+
+.axn-journee__session {
+  display: flex;
+  align-items: center;
+  gap: var(--espacement-3);
+  width: 100%;
+  min-height: var(--taille-cible-tactile-min);
+  padding: var(--espacement-3);
+  text-align: start;
+  background: var(--couleur-surface-fond);
+  border: var(--taille-bordure-epaisseur) solid var(--couleur-bordure-discrete);
+  border-radius: var(--taille-rayon-moyen);
+  color: var(--couleur-texte-principal);
+  font: inherit;
+  cursor: pointer;
+}
+
+.axn-journee__session:hover {
+  border-color: var(--couleur-action-fond);
+}
+
+.axn-journee__session:focus-visible {
+  outline: var(--taille-focus-epaisseur) solid var(--couleur-focus-anneau);
+  outline-offset: var(--taille-focus-decalage);
+}
+
+/* L'heure est en chiffres tabulaires : une colonne d'heures qui ne s'aligne pas
+   se lit deux fois (03 §19.2, §33.1). */
+.axn-journee__heure {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--typo-graisse-semi);
+}
+
+.axn-journee__details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacement-1);
+  min-width: 0;
+}
+
+.axn-journee__personne {
+  font-weight: var(--typo-graisse-semi);
+}
+
+.axn-journee__contexte {
+  font-size: var(--typo-taille-sm);
+  color: var(--couleur-texte-secondaire);
+}
+
+/* ── Pilote de mission (timeline verticale, 03 §17.2 / §19.2) ───────────── */
+.axn-journee__pilote {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacement-2);
+}
+
+.axn-journee__etape {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--espacement-3);
+  padding: var(--espacement-2) 0;
+}
+
+.axn-journee__etape-libelle {
+  font-weight: var(--typo-graisse-semi);
+}
+
+.axn-journee__manques {
+  margin: var(--espacement-1) 0 0;
+  padding-inline-start: var(--espacement-4);
+  font-size: var(--typo-taille-sm);
+  color: var(--couleur-texte-secondaire);
+}
+
+/* ── Bandeau de mise à jour (05 §31-1 : DISCRET, jamais anxiogène) ──────── */
+.axn-journee__bandeau-maj {
+  position: sticky;
+  top: 0;
+  z-index: var(--taille-plan-bandeau);
+  display: flex;
+  align-items: center;
+  gap: var(--espacement-3);
+  flex-wrap: wrap;
+  padding: var(--espacement-2) var(--espacement-4);
+  background: var(--couleur-info-fond);
+  color: var(--couleur-info-texte);
+  border-radius: var(--taille-rayon-moyen);
+  font-size: var(--typo-taille-sm);
+}
+
+/* ── Ligne d'actions (fin de visite, fin de journée) ────────────────────── */
+.axn-journee__actions {
+  display: flex;
+  gap: var(--espacement-3);
+  flex-wrap: wrap;
+}
+
+.axn-journee__actions > * {
+  min-height: var(--taille-cible-tactile-min);
+}

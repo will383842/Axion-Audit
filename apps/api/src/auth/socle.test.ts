@@ -51,10 +51,24 @@ process.env.APP_ENV ??= 'dev';
 // 5,3 s dans la suite complète. Un test qui échoue une fois sur deux selon la charge
 // n'est pas un test : il apprend à l'équipe à relancer au lieu de lire. Le coût est
 // payé ici, une fois, hors chronomètre.
+// LE PLAFOND EST EXPLICITE, ET IL EST LARGE — mesuré le 2026-09-01.
+//
+// Ce crochet est un PRÉCHAUFFAGE, pas une mesure : il ne prouve rien, il paie
+// hors chronomètre les ~3 s d'import à froid pour que les cas gardent leur budget
+// de 5 s. Or il portait le plafond par DÉFAUT de vitest, 10 s — et en suite
+// unitaire complète, sous contention, il l'a dépassé **deux fois sur deux**
+// (« Hook timed out in 10000ms »), ce qui annule les 12 cas du fichier et les
+// compte en « skipped ». En isolation, le même crochet met 4,5 s et les 12 cas
+// passent. Le préchauffage avait donc déplacé la fragilité du test vers le
+// crochet, sans que personne ne relève le plafond de ce dernier.
+//
+// 120 s n'est pas une tolérance à la lenteur : c'est l'aveu qu'un chargement de
+// module n'a pas de budget de temps à tenir. Si ce crochet met vraiment deux
+// minutes, ce n'est plus une contention, c'est une panne — et il échouera.
 beforeAll(async () => {
   await import('../app.js');
   await import('./politique.js');
-});
+}, 120_000);
 
 /** Le message d'une valeur levée, quelle que soit sa nature. */
 function messageDe(erreur: unknown): string {
@@ -208,8 +222,34 @@ describe('méta-test 2 — le paramètre nommé par la politique existe dans l�
   it('contre-épreuve : le paramètre PRÉSENT démarre, y compris avec une contrainte', async () => {
     const { construireApp } = await import('../app.js');
     const app = await construireApp();
+    // ─────────────────────────────────────────────────────────────────────────
+    // LE CHEMIN EST VOLONTAIREMENT UN CHEMIN QUE LE PRODUIT NE SERT PAS.
+    //
+    // Il portait `/v1/missions/:missionId` jusqu'au 2026-09-01. L'incrément L3b a
+    // livré la vraie route `GET /v1/missions/:id`, et Fastify a refusé de démarrer
+    // l'app : « Method 'GET' already declared for route '/v1/missions/:missionId' ».
+    // Un seul test rouge, mais rouge pour une raison qui n'a rien à voir avec ce
+    // qu'il éprouve — et c'est précisément ce qui le rendait trompeur.
+    //
+    // Ce que ce cas mesure est le SOCLE D'AUTORISATION : qu'une politique nommant
+    // un paramètre de mission démarre quand ce paramètre existe dans l'URL. Il n'a
+    // jamais eu besoin de viser une route réelle. Renommer le paramètre en `:id`
+    // n'aurait rien réglé — le doublon serait devenu exact.
+    //
+    // LE CHEMIN EST HORS DE `/v1`, ET C'EST LE POINT. Mon premier correctif posait
+    // `/v1/__meta__/:missionId` : la garantie tenait alors par CONVENTION (personne
+    // ne livrera cette route) et non par CONSTRUCTION, puisque `/v1` est justement
+    // le seul préfixe que `construireApp` monte. Le testeur de la ceinture 4 a fait
+    // mieux le même jour, sur le même besoin, et cet espace de nommage est le sien :
+    // `__temoin-negatif__` est RÉSERVÉ aux cas-témoins, hors de tout préfixe servi.
+    //
+    // La règle, écrite une fois : un cas-témoin négatif ne se construit jamais sur
+    // un chemin plausible. Une route « qui n'existe pas encore » n'est pas une
+    // absence, c'est un délai — ce fichier l'a appris le 2026-09-01, quand L3b a
+    // livré `GET /v1/missions/:id` et que Fastify a refusé de démarrer l'app.
+    // ─────────────────────────────────────────────────────────────────────────
     app.get(
-      '/v1/missions/:missionId',
+      '/__temoin-negatif__/socle-autorisation/:missionId',
       { config: { acces: { type: 'mission', parametreMission: 'missionId' } } },
       () => ({ ok: true }),
     );

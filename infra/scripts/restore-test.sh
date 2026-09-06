@@ -499,40 +499,164 @@ live_query() {
 # sur laquelle MinIO refuse de démarrer n'est pas une sauvegarde exploitable.
 # =============================================================================
 
-# Découvre le volume où le conteneur de sauvegarde ÉCRIT ses archives. Même
-# raison que pour le dépôt pgBackRest : on observe, on ne déduit pas. La
-# destination est lue dans l'environnement du conteneur lui-même (`AXION_ARCHIVES`),
-# avec le défaut documenté de `sauvegarde.sh` comme repli.
+# -----------------------------------------------------------------------------
+# DÉCOUVRIR LA SOURCE DES ARCHIVES MinIO — RÉÉCRITE LE 2026-08-31.
+# -----------------------------------------------------------------------------
+# CE QUI ÉCHOUAIT, mot pour mot, dans le journal de CI :
+#   « Le conteneur de sauvegarde « 5e8001bc9f06 » ne monte aucun volume sur
+#     « /sauvegarde ». L'emplacement des archives est introuvable. »
+#
+# La version précédente posait TROIS hypothèses en même temps, sans le dire, et
+# il suffisait qu'une seule tombe pour que le message accuse l'absence des
+# archives — alors que celles-ci sont là. Les trois ont été REJOUÉES en local
+# sur Docker (voir la contre-épreuve du rapport C3) et rougissent toutes avec ce
+# message-là :
+#   1. « il n'y a qu'UN conteneur de service `sauvegarde` » — `head -1` retenait
+#      le plus récent. Un reliquat arrêté d'un déploiement raté est plus récent
+#      que le conteneur vivant : la découverte s'arrêtait sur lui et mourait,
+#      alors qu'un autre conteneur du MÊME service portait le montage.
+#   2. « le montage est un VOLUME NOMMÉ » — `eq .Type "volume"` refuse un bind.
+#      Or `docker run -v` reprend indifféremment un nom de volume ou un chemin
+#      d'hôte : la restriction n'avait aucune contrepartie, elle ne faisait
+#      qu'exclure une topologie parfaitement restaurable.
+#   3. « la destination est celle qu'on attend » — `AXION_ARCHIVES` n'est
+#      DÉCLARÉE NULLE PART dans `infra/docker-compose.coolify.yml` (mesuré) : la
+#      lecture de l'environnement du conteneur ne rend jamais rien et le repli
+#      `/sauvegarde` est en réalité la seule branche vivante. Une destination
+#      remaniée par l'orchestrateur suffisait donc à tout faire tomber.
+#
+# CE QU'ON FAIT À LA PLACE, et c'est le geste DÉJÀ ÉPROUVÉ pour le dépôt
+# pgBackRest quinze lignes plus haut : on n'affine pas la déduction, ON REGARDE
+# LE CONTENU. Une source d'archives est une source qui CONTIENT
+# `minio-*.tar.zst.gpg` ; c'est une vérité observable, indépendante du nom, du
+# type de montage, de la destination et de l'orchestrateur. Comme là-haut :
+# plusieurs candidates ⇒ on REFUSE, parce que choisir serait deviner.
+#
+# LE PÉRIMÈTRE DE CET ÉLARGISSEMENT EST BORNÉ, et la borne est ce qui le rend
+# acceptable sur une machine qui héberge aussi une production étrangère : on
+# n'examine QUE les montages des conteneurs du service `sauvegarde` DE NOTRE
+# PROJET. On ne balaie pas la machine.
+#
+# ET LE MESSAGE D'ÉCHEC PORTE DÉSORMAIS SA PIÈCE À CONVICTION. L'ancien disait
+# ce qu'il n'avait pas trouvé et taisait ce qu'il avait vu : depuis un journal de
+# CI, sans accès au serveur, la cause était indevinable. Il énumère maintenant
+# les conteneurs examinés et TOUS leurs montages. Un garde qui ne montre pas ce
+# qu'il a observé fait perdre une nuit à chaque fois qu'il rougit.
+# -----------------------------------------------------------------------------
+
+# Tous les montages d'un conteneur, un par ligne : « type|source|destination ».
+# La source est le NOM pour un volume nommé, le CHEMIN D'HÔTE pour un bind —
+# c'est-à-dire, dans les deux cas, ce que `docker run -v <source>:…` sait
+# reprendre. Les tmpfs n'ont pas de source et sont écartés par le filtre.
+montages_du_conteneur() {
+  docker inspect "$1" --format \
+    '{{range .Mounts}}{{.Type}}|{{if .Name}}{{.Name}}{{else}}{{.Source}}{{end}}|{{.Destination}}
+{{end}}' 2>/dev/null | grep -v '^|*$' || true
+}
+
+# Une source porte-t-elle NOS archives ? Contrôle de CONTENU, pas de nom — même
+# principe que `depot_porte_notre_stanza()`. Le motif est celui qu'écrit
+# `infra/postgres/sauvegarde.sh` (`$ARCHIVES/minio-<horodatage>.tar.zst.gpg`) et
+# celui que relit l'extraction plus bas : les trois doivent bouger ensemble.
+source_porte_nos_archives() {
+  local src="$1"
+  [[ -n "$src" ]] || return 1
+  docker run --rm -v "${src}:/archives:ro" "$ALPINE_IMAGE" \
+    sh -c 'ls -1 /archives/minio-*.tar.zst.gpg >/dev/null 2>&1' >/dev/null 2>&1
+}
+
 decouvrir_volume_archives() {
   if [[ -n "${AXION_VOLUME_ARCHIVES:-}" ]]; then
     VOLUME_ARCHIVES="$AXION_VOLUME_ARCHIVES"
-    axion_log "Volume d'archives imposé à la main : $VOLUME_ARCHIVES"
+    # Le réglage manuel ne TAIT pas le contrôle, il le contourne seulement pour
+    # la découverte : on dit tout de suite s'il pointe vers une source sans
+    # archive, plutôt que de laisser l'extraction échouer trois écrans plus loin
+    # sur un message qui ferait soupçonner la passphrase.
+    if source_porte_nos_archives "$VOLUME_ARCHIVES"; then
+      axion_log "Source d'archives imposée à la main : $VOLUME_ARCHIVES (contient bien des minio-*.tar.zst.gpg)."
+    else
+      axion_warn "AXION_VOLUME_ARCHIVES désigne « $VOLUME_ARCHIVES », où AUCUNE archive minio-*.tar.zst.gpg n'est visible. On respecte le réglage — mais l'extraction échouera, et la cause est ici."
+    fi
     return 0
   fi
   [[ -n "$PROJET_DECOUVERT" ]] ||
     axion_die "Impossible de découvrir le volume d'archives : le projet de la pile vivante n'est pas identifié."
 
-  local id destination
-  id="$(docker ps --all \
-    --filter "label=com.docker.compose.project=${PROJET_DECOUVERT}" \
-    --filter "label=com.docker.compose.service=sauvegarde" \
-    --format '{{.ID}}' 2>/dev/null | head -1)"
-  [[ -n "$id" ]] ||
+  # Les conteneurs VIVANTS d'abord, puis TOUS (`--all` : le conteneur de
+  # sauvegarde peut être arrêté entre deux passes, son étiquetage reste vrai).
+  # On ne retient plus le premier venu : on les examine tous, dans cet ordre.
+  local ids
+  ids="$( {
+    docker ps \
+      --filter "label=com.docker.compose.project=${PROJET_DECOUVERT}" \
+      --filter "label=com.docker.compose.service=sauvegarde" \
+      --format '{{.ID}}' 2>/dev/null
+    docker ps --all \
+      --filter "label=com.docker.compose.project=${PROJET_DECOUVERT}" \
+      --filter "label=com.docker.compose.service=sauvegarde" \
+      --format '{{.ID}}' 2>/dev/null
+  } | awk 'NF && !vu[$0]++')"
+
+  [[ -n "$ids" ]] ||
     axion_die "Aucun conteneur de sauvegarde dans le projet « ${PROJET_DECOUVERT} ». Sans lui, on ne sait pas OÙ les archives sont écrites — et les chercher à un chemin supposé est exactement ce qui a fait échouer ce test pendant trois jours."
 
-  # `--all` : le conteneur peut être arrêté entre deux passes. Son étiquetage
-  # reste la vérité sur l'emplacement des archives.
-  destination="$(docker inspect "$id" --format \
-    '{{range .Config.Env}}{{if eq (index (split . "=") 0) "AXION_ARCHIVES"}}{{index (split . "=") 1}}{{end}}{{end}}' 2>/dev/null || true)"
-  [[ -n "$destination" ]] && axion_log "Destination d'archives lue dans le conteneur : $destination"
-  destination="${destination:-/sauvegarde}"
+  local id destination ligne src inventaire=""
 
-  VOLUME_ARCHIVES="$(docker inspect "$id" --format \
-    "{{range .Mounts}}{{if and (eq .Type \"volume\") (eq .Destination \"${destination}\")}}{{.Name}}{{end}}{{end}}" 2>/dev/null || true)"
-  [[ -n "$VOLUME_ARCHIVES" ]] ||
-    axion_die "Le conteneur de sauvegarde « $id » ne monte aucun volume sur « ${destination} ». L'emplacement des archives est introuvable ; poser AXION_VOLUME_ARCHIVES pour trancher à la main."
+  # --- Passe 1 : la destination DÉCLARÉE, sur chaque conteneur du service -----
+  while IFS= read -r id; do
+    [[ -z "$id" ]] && continue
+    destination="$(docker inspect "$id" --format \
+      '{{range .Config.Env}}{{if eq (index (split . "=") 0) "AXION_ARCHIVES"}}{{index (split . "=") 1}}{{end}}{{end}}' 2>/dev/null || true)"
+    [[ -n "$destination" ]] && axion_log "Destination d'archives lue dans le conteneur « $id » : $destination"
+    destination="${destination:-/sauvegarde}"
 
-  axion_log "Volume d'archives découvert : « $VOLUME_ARCHIVES » (monté en ${destination})."
+    inventaire="${inventaire}
+  conteneur ${id} (destination attendue ${destination}) :"
+    while IFS= read -r ligne; do
+      [[ -z "$ligne" ]] && continue
+      inventaire="${inventaire}
+    ${ligne}"
+      [[ "${ligne##*|}" == "$destination" ]] || continue
+      src="${ligne#*|}"; src="${src%|*}"
+      [[ -n "$src" ]] || continue
+      VOLUME_ARCHIVES="$src"
+      axion_log "Source d'archives découverte : « $VOLUME_ARCHIVES » (montée en ${destination} par le conteneur ${id}, type ${ligne%%|*})."
+      return 0
+    done < <(montages_du_conteneur "$id")
+  done <<<"$ids"
+
+  # --- Passe 2 : par le CONTENU, quand la destination a changé ---------------
+  # On ne devine pas une nouvelle destination : on cherche, parmi les montages
+  # DE NOS conteneurs de sauvegarde, celui qui contient réellement les archives.
+  axion_warn "Aucun montage à la destination attendue. Recherche par le CONTENU (minio-*.tar.zst.gpg) parmi les montages des conteneurs du service « sauvegarde » de ce projet."
+  local retenus=""
+  while IFS= read -r id; do
+    [[ -z "$id" ]] && continue
+    while IFS= read -r ligne; do
+      [[ -z "$ligne" ]] && continue
+      src="${ligne#*|}"; src="${src%|*}"
+      [[ -n "$src" ]] || continue
+      case " $retenus " in *" $src "*) continue ;; esac
+      if source_porte_nos_archives "$src"; then
+        retenus="$retenus $src"
+        axion_warn "Archives trouvées dans « $src », monté en « ${ligne##*|} » — CE N'EST PAS la destination attendue. Le test peut continuer, mais l'écart entre le compose et la machine doit être expliqué."
+      fi
+    done < <(montages_du_conteneur "$id")
+  done <<<"$ids"
+
+  # shellcheck disable=SC2086
+  set -- $retenus
+  if [[ "$#" -eq 1 ]]; then
+    VOLUME_ARCHIVES="$1"
+    axion_log "Source d'archives retenue par son contenu : « $VOLUME_ARCHIVES »."
+    return 0
+  fi
+  if [[ "$#" -gt 1 ]]; then
+    axion_die "PLUSIEURS montages des conteneurs de sauvegarde portent des archives minio-*.tar.zst.gpg :${retenus}. Choisir serait deviner. Poser AXION_VOLUME_ARCHIVES pour désigner celui qui fait foi."
+  fi
+
+  axion_die "Aucune source d'archives : ni à la destination attendue, ni par le contenu. Voici EXACTEMENT ce qui a été observé (type|source|destination) :${inventaire}
+  Trois lectures possibles, et elles se distinguent sur cet inventaire : (1) la destination du montage a changé — l'inventaire la nomme ; (2) le conteneur de sauvegarde n'a jamais écrit d'archive — regarder son journal et sa sonde ; (3) le volume d'archives a été vidé. Poser AXION_VOLUME_ARCHIVES pour trancher à la main."
 }
 
 restore_minio() {

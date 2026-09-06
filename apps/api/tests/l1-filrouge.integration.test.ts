@@ -16,6 +16,11 @@
 // parcours (L3 questionnaire, L5 terrain, L6 sync, L8 scoring) ; ils ne le
 // réécrivent pas.
 //
+// L3 A ALLONGÉ LE PARCOURS : `l3-filrouge.integration.test.ts` joue, PAR LES
+// ROUTES, création d'entreprise et de mission → import de l'arbre §35.2 (FIL-GC :
+// 150 unités sur 4 niveaux) → prévisualisation §33.4 → figeage M2, sur les deux
+// fixtures. Ce fichier-ci ne bouge pas : il reste la preuve « schéma seul ».
+//
 // Marqué @filrouge : jamais skippable (09 §5.7, DoD transverse).
 // =============================================================================
 import type { Client } from 'pg';

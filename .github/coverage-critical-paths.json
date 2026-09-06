@@ -171,6 +171,257 @@
         "sur 0e3aeae). Signale a Williams, applique immediatement."
       ],
       "$motif": "Ajoute le 2026-08-31 (DECISIONS.md, « L agent croise reprend l auteur du code sur six points », constat 4)."
+    },
+    {
+      "lot": "L3 (L3b)",
+      "module": "Missions — application de la machine a etats §32.2 (transitions, conditions, motifs codes)",
+      "glob": "apps/api/src/domaines/missions/**",
+      "reference": "docs/conception/LOT_L3.md §4 (« couverture ≥ 90 % mesurée sur services/questionnaire, services/org-units et la machine à états ») · 09 §3 · CLAUDE.md §4 (TDD : machine à états) et §5",
+      "_note_glob": [
+        "AJOUTE LE 2026-09-02 SUR MESURE, PAS AU JUGE. La revue croisee A17 (R-L3-4) a",
+        "releve que la note L3 §4 exigeait ce seuil et que rien ne le portait ; A01 a",
+        "refuse de seuiller a l aveugle. La verification isolee (16102dd) a mesure les",
+        "quatre metriques par module ; les entrees sont posees sur ces chiffres.",
+        "Deux modules sont SOUS le seuil au moment de l ajout (org-units : lignes 87,3,",
+        "branches 76,1 · missions : lignes 84,2, fonctions 84,6, branches 75,4) et",
+        "c est voulu : la regle de ce fichier dit qu un module sous le seuil se corrige",
+        "par des tests, jamais par un retrecissement de perimetre. La CI de la branche",
+        "est rouge tant que les tests manquent — c est le signal, pas un accident."
+      ],
+      "$mesure_16102dd": "84,2 / 84,2 / 84,6 / 75,4 — SOUS LE SEUIL a l ajout"
+    },
+    {
+      "lot": "L3 (L3a) + L1 (E18)",
+      "module": "Companies — RBAC admin des quatre routes, unicite SIREN et reference console, journalisation des modifications (invariant 7)",
+      "glob": "apps/api/src/domaines/companies/**",
+      "reference": "07 §12 lot L3 · 04 §7.1 (amendement du 2026-09-03) · 11 §3 · CLAUDE.md §5 · DECISIONS.md 2026-09-05 (« companies est le seul domaine L3 hors du seuil »)",
+      "_note_glob": [
+        "AJOUTE LE 2026-09-05, ET IL MANQUAIT DEPUIS L3. Le rejeu de la revue croisee",
+        "A17 sur E18 a mesure que companies etait LE SEUL domaine L3 absent de ce",
+        "fichier : un job « couverture ≥ 90 % » vert ne disait donc rien du module qui",
+        "porte le RBAC admin des quatre routes et les DEUX 409 d unicite. C est le faux",
+        "vert que ce fichier existe pour empecher, et il a vecu ici pendant tout L3.",
+        "",
+        "CE QUE LA MESURE A REVELE, ET QUI VAUT PLUS QUE LE CHIFFRE. Le trou n etait pas",
+        "du code defensif : dans modifierUneEntreprise, le PATCH de `name`, `sitesCount`",
+        "et `countries` n etait exerce par AUCUN test — donc la ligne qui ecrit la trace",
+        "de modification ne s executait jamais, et `memesPays` n etait jamais appele.",
+        "C est le chemin de JOURNALISATION de l invariant 7 qui n etait vu par personne.",
+        "Les trois tests manquants sont ajoutes par le meme increment.",
+        "",
+        "Restent non couverts, et ceux-la SONT defensifs — nommes un par un plutot",
+        "qu ecartes en silence : depot.ts:94 (INTERNAL_ERROR si les pays stockes violent",
+        "le schema), :489 (fin de parcours de la chaine de causes), :631 (relance d une",
+        "erreur non traduite), :697 (INSERT ... RETURNING qui ne rend rien) ·",
+        "service.ts:68-70 (incoherenceInterne) · routes/companies.ts:131 (auteur nul).",
+        "Aucun n est atteignable depuis l API sans fabriquer une course non deterministe.",
+        "",
+        "SI UNE METRIQUE RESTE SOUS 90 %, LA REPONSE EST DES TESTS, JAMAIS UN GLOB PLUS",
+        "ETROIT — regle du bandeau. Le precedent L3 juste au-dessus a inscrit deux",
+        "modules SOUS le seuil en l assumant : la CI rouge est le signal, pas l accident."
+      ],
+      "$mesure_b8982ff": "depot.ts 96,63 / 100 / 90,41 — au-dessus du seuil. service.ts 91,66 lignes mais fonctions 77,77 et branches 88,33 — SOUS LE SEUIL a l ajout ; les trois tests de PATCH de cet increment le remontent."
+    },
+    {
+      "lot": "L3 (L3c)",
+      "module": "Arbre org_units — import CSV §35.2 atomique, qualification §25.3, verrou d import",
+      "glob": "apps/api/src/domaines/org-units/**",
+      "reference": "docs/conception/LOT_L3.md §4 (« couverture ≥ 90 % mesurée sur services/questionnaire, services/org-units et la machine à états ») · 09 §3 · CLAUDE.md §4 (TDD : machine à états) et §5",
+      "$mesure_16102dd": "87,3 / 87,3 / 91,9 / 76,1 — SOUS LE SEUIL a l ajout"
+    },
+    {
+      "lot": "L3 (L3d)",
+      "module": "Questionnaire — assembleur M2, previsualisation §33.4, figeage (CAPTURE des 8 colonnes)",
+      "glob": "apps/api/src/domaines/questionnaire/**",
+      "reference": "docs/conception/LOT_L3.md §4 (« couverture ≥ 90 % mesurée sur services/questionnaire, services/org-units et la machine à états ») · 09 §3 · CLAUDE.md §4 (TDD : machine à états) et §5",
+      "$mesure_16102dd": "96,8 / 96,8 / 100 / 86,8 — branches sous le seuil a l ajout"
+    },
+    {
+      "lot": "L3 (L3d)",
+      "module": "Plan d entretiens §32.4 — generateur pur et lecture",
+      "glob": "apps/api/src/domaines/plan-entretiens/**",
+      "reference": "docs/conception/LOT_L3.md §4 (« couverture ≥ 90 % mesurée sur services/questionnaire, services/org-units et la machine à états ») · 09 §3 · CLAUDE.md §4 (TDD : machine à états) et §5",
+      "$mesure_16102dd": "99,4 / 99,4 / 100 / 94,7"
+    },
+    {
+      "lot": "L5a",
+      "module": "Couche locale terrain — coffre DEK/KEK, port d ecriture, base Dexie versionnee",
+      "glob": "apps/field/src/local/**",
+      "reference": "11 §6 (L5a) · 11 §4 (« Crypto navigateur » : WebCrypto + Argon2id, budgets < 50 ms / < 1 s) · 05 §9.7 · 06 §10.5 · docs/conception/LOT_L5.md §4 · 09 §3 (« crypto locale »)",
+      "_note_glob": [
+        "LE GLOB A CHANGE, ET CE N EST PAS UN ELARGISSEMENT DE CONFORT. L entree",
+        "d attente visait `apps/field/src/crypto/**` : ce repertoire N EXISTE PAS et",
+        "n a jamais ete construit. `crypto/` etait un nom ATTENDU, ecrit avant",
+        "livraison ; `local/` est l arborescence REELLE.",
+        "",
+        "ET SURTOUT, ON NE SEPARE PAS LES DEUX. Le coffre (`coffre.ts`,",
+        "`coffre-appareil.ts`, `enveloppe.ts`) et le PORT D ECRITURE (`ecriture.ts`)",
+        "sont la meme garantie lue de deux cotes : le coffre chiffre, le port est le",
+        "seul endroit qui ecrit — donc le seul qui appelle le coffre, et le seul qui",
+        "pousse l op d outbox dans la MEME transaction. Un seuil qui mesurerait la",
+        "cryptographie sans le site d ecriture mesurerait la moitie qui ne decide de",
+        "rien, exactement le constat deja fait pour `scoping` puis pour `users`.",
+        "",
+        "`formes.ts` reste DANS le glob : il porte la liste FERMEE des champs laisses",
+        "en clair dans l index local (LOT_L5.md §3.2), c est-a-dire la frontiere que le",
+        "test d etancheite verifie. L en ecarter serait le retrecissement que le",
+        "bandeau de ce fichier interdit."
+      ],
+      "$motif": "Deplace de cheminsAttendus le 2026-09-02 par A24 : L5a est LIVRE (base Dexie versionnee, DEK/KEK, port d ecriture, horloge, verrou, storage.persist())."
+    },
+    {
+      "lot": "L5a",
+      "module": "Machine a etats de session terrain — terminer ≠ valider (03 §19.1 V2.10)",
+      "glob": "apps/field/src/session/**",
+      "reference": "03 §19.1 (regle V2.10) · docs/conception/LOT_L5.md §4 · 09 §3 (DoD : couverture ≥ 90 % sur modules critiques)",
+      "_note_glob": [
+        "ENTREE JUMELLE, ABSENTE DE `cheminsAttendus` — la ceinture 2 ne l aurait donc",
+        "jamais reclamee. Elle y entre parce que docs/conception/LOT_L5.md §4 nomme",
+        "NOMMEMENT `apps/field/src/local/**` ET `apps/field/src/session/**` comme les",
+        "deux perimetres de la couverture ≥ 90 % du lot (« crypto locale + machine a",
+        "etats = modules critiques de la DoD »).",
+        "",
+        "CE QU UNE REGRESSION Y COUTERAIT, et c est pourquoi elle est critique : la",
+        "regle V2.10 « terminer ≠ valider » tient a cette seule table. Si `rouvrir`",
+        "cessait d etre autorise depuis `termine`, l auditeur perdrait la note de",
+        "couloir ; si `valider` devenait atteignable depuis `en_cours`, un entretien",
+        "se verrouillerait a chaud et toute correction deviendrait une revision tracee.",
+        "Aucun des deux ne casse un ecran : les deux changent le dossier d audit."
+      ],
+      "$motif": "Ajoute le 2026-09-02 par A24, sur consigne A01. Le glob RESSERRE le seuil, il ne le relache pas."
+    },
+    {
+      "lot": "L5a",
+      "module": "Verrouillage de la PWA terrain — deux seuils 15/60 min, Wake Lock, bouton d un geste",
+      "glob": "apps/field/src/app/verrou.ts",
+      "reference": "05 §9.7 (regle V2.10) · 03 §33.7 (session active de 45 min) · 11 §6 ligne L5a · 06 §10.5",
+      "_note_glob": [
+        "POSE LE 2026-09-03, a la fermeture de la reserve BLOQUANTE B1 du controle A02.",
+        "Le trou etait celui-ci : verrou.ts est NOMME au perimetre du 11 §6, il portait 227 lignes",
+        "et 0,00 % de couverture, et LE SEUIL NE POUVAIT PAS LE VOIR — apps/field/src/app/**",
+        "n etait declare ni dans cheminsCritiques ni dans cheminsAttendus. Un module critique",
+        "peut donc etre livre sans jamais entrer sous seuil : c est exactement le defaut que la",
+        "ceinture 2 avait attrape sur apps/api/src/auth/**, et il s est reproduit cote terrain.",
+        "",
+        "CE GLOB RESSERRE LE SEUIL, IL NE LE RELACHE PAS — meme motif que routes/users.ts et que",
+        "la machine a etats L3d. Mesure sur 1b89433 : 100 % lignes / 100 % branches / 100 %",
+        "fonctions / 100 % instructions, soit dix points de marge. Il ne peut pas rougir",
+        "aujourd hui ; il interdit une regression demain.",
+        "",
+        "CE QUI N EST DELIBEREMENT PAS INSCRIT : apps/field/src/app/** (mesure 80,49 %). L y",
+        "mettre ferait rougir la CI immediatement, et la seule sortie serait alors soit des tests,",
+        "soit un retrecissement de perimetre — c est-a-dire la faute que le bandeau interdit. La",
+        "question de fond (la coquille est-elle critique ?) appartient a A01 et se tranchera mieux",
+        "quand L5b et L5c auront couvert EcranAccueil.tsx et service-worker-client.ts."
+      ],
+      "$motif": "Recommandation A26 au rapport B1 (2026-09-03), appliquee par la session pilote. Le rapport d un agent ne survit pas a sa session : une recommandation qui n entre pas dans un fichier est perdue."
+    },
+    {
+      "lot": "L8",
+      "module": "Scoring (bareme §32.1, agregation, completude, drapeaux rouges)",
+      "glob": "apps/api/src/scoring/**",
+      "reference": "07 §12 lot L8 · 03 §32.1 · 09 §3 (« scoring »)",
+      "_note_glob": [
+        "POURQUOI LE SCORING VIT SOUS apps/api/src/scoring/ ET NON SOUS domaines/.",
+        "La premiere redaction de cette note disait « le glob est celui que l entree",
+        "d attente nommait ». C etait un fait vrai et une justification FAUSSE, et la",
+        "revue croisee du 2026-09-06 a eu raison de la refuser : un fichier de seuils de",
+        "couverture ne fonde pas une architecture. Le glob SUIT le code ; il ne le place",
+        "pas. La vraie raison, la voici.",
+        "",
+        "apps/api/src/domaines/<x>/ designe un DOMAINE METIER : une entite, son depot",
+        "(les requetes qui la lisent et l ecrivent), son service, ses routes. missions,",
+        "org-units, questionnaire, pilotage suivent tous cette forme — depot.ts +",
+        "service.ts, et une entree dans routes/.",
+        "",
+        "Le scoring n est pas de cette famille. C est un CALCUL PUR TRANSVERSE : trois",
+        "fonctions sans etat, sans depot, sans route, qui ne connaissent ni Drizzle ni",
+        "Fastify. On leur remet un instantane (entree.ts), elles rendent un resultat. Il",
+        "ne POSSEDE aucune table : il LIT le questionnaire fige (domaine questionnaire),",
+        "l arbre (domaine org-units) et les reponses (domaine collecte), et n en ecrit",
+        "aucune. Le ranger sous domaines/ lui pretendrait une propriete de donnees qu il",
+        "n a pas, et ferait attendre a la prochaine session un depot.ts qui n existera",
+        "jamais.",
+        "",
+        "Il est donc au meme rang que apps/api/src/auth/** et apps/api/src/http/**, qui",
+        "sont pour la meme raison hors de domaines/ : des couches transverses que",
+        "PLUSIEURS domaines consomment. Le jour ou une route de scoring existera, elle",
+        "ira dans routes/ et son depot dans le domaine qui possede les donnees — le",
+        "calcul, lui, restera ici.",
+        "",
+        "CE QUE LE GLOB COUVRE, ET POURQUOI TOUT Y RESTE : bareme.ts (la cotation d une",
+        "reponse, §32.1), agregation.ts (les quatre formules et le roll-up), moteur.ts",
+        "(la ventilation, les anomalies, l union des drapeaux), entree.ts (types seuls).",
+        "AUCUN des quatre n est ecarte, et moteur.ts en particulier : c est lui qui porte",
+        "le canal des drapeaux rouges, donc la clause qui decide du lot (07 ligne L8 :",
+        "« un drapeau rouge n est jamais masque par la moyenne »). L ecarter parce qu il",
+        "orchestre plutot qu il ne calcule serait le retrecissement que le bandeau de ce",
+        "fichier interdit — et ce serait la moitie qui decide, exactement le constat deja",
+        "fait pour scoping puis pour users.",
+        "",
+        "entree.ts EST RAPPORTE A 0,00 % ET CE N EST PAS UN TROU : il ne contient que des",
+        "interfaces, donc zero instruction executable. Le controle agrege couvert/total",
+        "sur l ensemble du module (check-coverage.mjs, « et non moyenne des fichiers »),",
+        "et un fichier dont le total vaut 0 n y pese rien. Le retirer du glob serait un",
+        "retrecissement sans objet.",
+        "",
+        "LES JEUX DE REFERENCE VIVENT HORS DU GLOB, DELIBEREMENT :",
+        "apps/api/tests/aide/scoring-jeux-de-reference.ts est de l outillage de test. Le",
+        "placer dans src/scoring/ l aurait fait entrer dans cette mesure, ou il aurait",
+        "gonfle le pourcentage sans rien prouver — une couverture vraie sur ce qu elle",
+        "observe, qui repond a une autre question que celle posee."
+      ],
+      "$mesure_livraison": "99,65 lignes / 99,65 instructions / 100 fonctions / 96,71 branches — mesure locale apres les quatre correctifs de la revue croisee du 2026-09-06 (190 tests, dont les 24 de la couche d acceptation croisee). AU-DESSUS DU SEUIL A L AJOUT comme apres correction, contrairement aux entrees L3 : le glob n a donc jamais eu a etre tenu par autre chose que des tests."
+    },
+    {
+      "lot": "L5c",
+      "module": "Export de secours chiffre (.axionbackup) — derivation, chiffrement, fusion a l import",
+      "glob": "apps/field/src/sauvegarde/sauvegarde.ts",
+      "reference": "11 §4 (format de fichier) · 05 §9.7 · 07 §12 lot L5 · invariant 8 · E38 · 09 §3 (« crypto locale »)",
+      "_note_glob": [
+        "LE GLOB A CHANGE DE NOM, ET C EST UNE CORRECTION DE NOM, PAS DE PERIMETRE.",
+        "L entree d attente visait `apps/field/src/backup/**` : ce repertoire N EXISTE PAS et",
+        "n a jamais ete construit. `backup` etait un nom ANGLAIS ecrit avant livraison, dans un",
+        "depot qui nomme en francais ; `sauvegarde/` est l arborescence REELLE. Le mode d emploi",
+        "de `cheminsAttendus` autorise nommement cette correction au moment du deplacement.",
+        "",
+        "IL VISE DEUX FICHIERS ET NON LE REPERTOIRE, ET LE MOTIF EST ECRIT PLUTOT QUE SUPPOSE.",
+        "L entree nomme UN module : « Export de secours chiffre (.axionbackup) ». Ce module,",
+        "ce sont `sauvegarde.ts` (derivation, chiffrement, fusion a l import) et `format.ts`",
+        "(les schemas Zod de la frontiere). Meme parti que `routes/scoping.ts` et",
+        "`routes/users.ts`, qui visent un fichier chacun pour la meme raison.",
+        "Mesure a la pose : sauvegarde.ts 98,90 lignes / 94,87 branches / 100 fonctions ·",
+        "format.ts 100 / 100 / 100. Les deux passent, avec de la marge.",
+        "",
+        "CE QUI N EST DELIBEREMENT PAS INSCRIT, AVEC SON CHIFFRE : `sauvegarde/photos.ts`",
+        "(compression R2), mesure a 26,76 % de lignes et 33,33 % de fonctions. DEUX raisons,",
+        "et aucune n est « pour faire passer le seuil » :",
+        "  · ce n est pas un module critique au sens de la DoD, qui en nomme quatre — moteur de",
+        "    sync, crypto locale, scoring, RBAC/propriete. La compression d une photo n en est",
+        "    aucun : elle reduit un volume, elle ne garde rien ;",
+        "  · ses chemins de rendu (`createImageBitmap`, `OffscreenCanvas.convertToBlob`, le repli",
+        "    `<canvas>`) N EXISTENT NI DANS NODE NI DANS JSDOM. Les y soumettre rendrait la CI",
+        "rouge pour une raison d OUTILLAGE et non de test — exactement le TROU DE MESURE que le",
+        "bandeau de ce fichier decrit pour `packages/shared`. Sa regle pure (`dimensionsCibles`)",
+        "EST couverte ; le reste se verifie en E2E et a la recette d appareils (A27).",
+        "Ce n est donc pas une dispense : c est un trou NOMME, et il est remonte a A01/A20."
+      ],
+      "$motif": "Deplace de cheminsAttendus le 2026-09-05 par A23, sur arbitrage A01 du 2026-09-04 (« tu le corriges en apps/field/src/sauvegarde/** »). Le glob final vise les deux fichiers qui SONT l export, le repertoire portant aussi photos.ts — ecart et chiffre publies ci-dessus."
+    },
+    {
+      "lot": "L5c",
+      "module": "Export de secours — schemas Zod de la frontiere du fichier .axionbackup",
+      "glob": "apps/field/src/sauvegarde/format.ts",
+      "reference": "11 §4 (format de fichier) · 05 §9.7 · E38",
+      "_note_glob": [
+        "SECOND GLOB DU MEME MODULE, et il est SEPARE parce que le controle",
+        "(.github/scripts/check-coverage.mjs) convertit UN glob par entree en expression",
+        "reguliere : deux chemins dans une meme chaine ne correspondraient a AUCUN fichier,",
+        "et le script sortirait « aucun fichier couvert ne correspond ». La forme suit donc",
+        "le meme partage que scoping (depot + route) et users (depot + route).",
+        "Mesure a la pose : 100 / 100 / 100."
+      ],
+      "$motif": "Pose le 2026-09-05 par A23, en meme temps que sauvegarde.ts."
     }
   ],
   "_cheminsAttendus_mode_emploi": [
@@ -182,20 +433,6 @@
     "Les globs sont au format `git ls-files` (pathspec)."
   ],
   "cheminsAttendus": [
-    {
-      "lot": "L5a",
-      "module": "Crypto locale terrain (DEK/KEK, WebCrypto, Argon2id)",
-      "glob": "apps/field/src/crypto/**",
-      "reference": "11 §6 (L5a) · 11 §4 (« Crypto navigateur ») · 09 §3 (« crypto locale »)",
-      "statut": "non livre"
-    },
-    {
-      "lot": "L5c",
-      "module": "Export de secours chiffre (.axionbackup)",
-      "glob": "apps/field/src/backup/**",
-      "reference": "11 §4 (format de fichier) · 07 §12 lot L5 · invariant 8",
-      "statut": "non livre"
-    },
     {
       "lot": "L6a",
       "module": "Moteur de sync — outbox et push idempotent (cote terrain)",
@@ -209,13 +446,6 @@
       "glob": "apps/api/src/sync/**",
       "reference": "07 §12 lot L6 · 11 §4 · 05 §9.3 et §9.9",
       "statut": "non livre"
-    },
-    {
-      "lot": "L8",
-      "module": "Scoring (bareme §32.1, agregation, completude, drapeaux rouges)",
-      "glob": "apps/api/src/scoring/**",
-      "reference": "07 §12 lot L8 · 03 §32.1 · 09 §3 (« scoring »)",
-      "statut": "non livre (lot DIFFERABLE — 07 §12)"
     }
   ]
 }

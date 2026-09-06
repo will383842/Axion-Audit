@@ -21,13 +21,15 @@
 
 ## Compteur du plafond étage 1
 
-| Lot  | Consommé | Plafond | Reste                     |
-| ---- | -------- | ------- | ------------------------- |
-| L0   | ~0,5 j   | 0,5 j   | 0 j (**plafond atteint**) |
-| L1   | ~0,3 j   | 0,5 j   | ~0,2 j                    |
-| L0-b | ~0,25 j  | 0,5 j   | ~0,25 j                   |
-| L2   | ~0,3 j   | 0,5 j   | ~0,2 j                    |
-| L3a  | ~0,1 j   | 0,5 j   | ~0,4 j                    |
+| Lot   | Consommé | Plafond | Reste                                                                                                                                                     |
+| ----- | -------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| L0    | ~0,5 j   | 0,5 j   | 0 j (**plafond atteint**)                                                                                                                                 |
+| L1    | ~0,3 j   | 0,5 j   | ~0,2 j                                                                                                                                                    |
+| L0-b  | ~0,25 j  | 0,5 j   | ~0,25 j                                                                                                                                                   |
+| L2    | ~0,3 j   | 0,5 j   | ~0,2 j                                                                                                                                                    |
+| L3a   | ~0,1 j   | 0,5 j   | ~0,4 j                                                                                                                                                    |
+| L3b-d | ~0,15 j  | 0,5 j   | ~0,35 j — plafonds explicites (120 s) sur deux crochets de tests L2, port de sync L5a déplacé hors du glob réservé à L6a ; le reste est d'étage 2 (A-007) |
+| L5b   | ~0,1 j   | 0,5 j   | ~0,4 j                                                                                                                                                    |
 
 ---
 
@@ -674,6 +676,85 @@ fiche est découpée : elle peut être absorbée **en partie**.
 **Ce que cette fiche NE propose PAS :** aucun code. `.claude/agents/a53-observabilite.md` existe dans
 le dépôt — l'agent est défini, il n'a jamais rien livré. C'est un choix à faire, pas un oubli à
 rattraper au jugé.
+
+### ✅ O-2 LIVRÉE le 2026-08-31 — `infra/scripts/sonde-alertes.sh`, planifiée par `install-cron.sh`
+
+Zéro dépendance nouvelle (`axion_notify` + `curl` existants). **Ce qui est réellement fermé, seuil
+par seuil, et ce qui ne l'est pas — la distinction est le livrable autant que le script :**
+
+| Seuil                       | Donnée qui le nourrit                | État RÉEL de cette donnée au 2026-08-31                                                                          |
+| --------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `ALERT_DISK_USAGE_PERCENT`  | `df` sur l'hôte                      | **DISPONIBLE.** Contrôle pleinement opérant, éprouvé sur un disque réel à 97 %.                                  |
+| `ALERT_CERT_EXPIRY_DAYS`    | magasin ACME de Caddy (`caddy_data`) | **DISPONIBLE** dès qu'un certificat existe. Éprouvé sur un volume portant un certificat à 9 j.                   |
+| `ALERT_SYNC_SILENT_HOURS`   | `sync_log` (04, migration 0007)      | **TABLE PRÉSENTE, AUCUN ÉCRIVAIN avant L6.** La requête est juste et s'exécute ; elle ne trouvera rien avant L6. |
+| `ALERT_LLM_JOB_MAX_MINUTES` | `llm_calls.duration_ms` (idem)       | **TABLE PRÉSENTE, AUCUN ÉCRIVAIN avant L11**, et mesure **POST HOC** (voir le point 1 ci-dessous).               |
+
+**La sonde ne rend jamais un vert sur une donnée absente.** Un contrôle dit trois choses : VERT,
+ALERTE, ou **AVEUGLEMENT** — et un aveuglement part sur le canal comme une alerte. `sync_log` vide
+alors qu'une mission est ouverte est traité comme une ALERTE ; `sync_log` vide sans aucune mission
+ouverte est journalisé « RIEN À SURVEILLER », explicitement pas comme un « tout va bien ».
+
+**Aucune donnée personnelle ne sort.** `sync_log.device_id` est du texte libre remonté par le client
+et rien n'interdit « iPad de <prénom> ». Un `device_id` conforme à un motif technique étroit sort tel
+quel ; **tout le reste sort en `emp:<12 hex>`** — empreinte SHA-256 tronquée, stable donc corrélable,
+non réversible. L'assainissement vit **dans la requête SQL**, au plus près de la source.
+
+#### Deux manques que cette livraison NE ferme PAS — proposés, jamais anticipés (09 §5.9, étage 2)
+
+1. **Un job LLM BLOQUÉ reste invisible.** `duration_ms` n'est écrit qu'à la FIN d'un appel : la sonde
+   voit les appels qui ONT été trop longs, jamais celui qui est en train de l'être — c'est-à-dire
+   probablement le cas que le 02 §11.3 vise. Voir les jobs EN VOL demande de lire les structures
+   internes de BullMQ dans Redis. Coût estimé : ~0,25 j. Impact schéma : aucun. À faire au lot L11,
+   avec le code qui produira enfin ces jobs.
+2. ~~**La pile Coolify — le chemin ÉPROUVÉ — n'exécute pas cette sonde.**~~ **FERMÉ le 2026-08-31
+   même jour** (voir ci-dessous) : une sonde qui ne tourne que sur un chemin JAMAIS JOUÉ tenait
+   l'invariant 8 sur le papier — c'est-à-dire qu'elle déplaçait d'un cran le défaut qu'elle ferme.
+
+### ✅ PORTAGE COOLIFY, 2026-08-31 — service `sonde` de `docker-compose.coolify.yml`
+
+Le MÊME script, la MÊME minute, les MÊMES seuils ; seuls les trois accès aux données changent,
+parce qu'un side-car n'a pas d'hôte et **ne doit jamais avoir le socket Docker** (refus déjà opposé
+au service `sauvegarde` — le portage ne revient pas dessus) :
+
+|               | chemin VPS (`MODE=hote`)               | pile Coolify (`MODE=pile`)                                                                                           |
+| ------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| déclenchement | `cron` (`install-cron.sh`)             | boucle interne du service                                                                                            |
+| environnement | `.env` en argument                     | processus (Coolify l'injecte)                                                                                        |
+| PostgreSQL    | `docker compose exec`                  | **réseau interne**, mot de passe par `PGPASSWORD` (jamais un argument : invisible dans `ps`)                         |
+| disque        | `df` sur les montages de l'hôte        | `df /` — l'overlay, porté par le système de fichiers qui porte AUSSI les volumes ; **aucun volume de données monté** |
+| certificat    | volume `caddy_data`, conteneur jetable | **sans objet** (voir le point 3)                                                                                     |
+
+**IL N'EXISTE AUCUN ORDONNANCEUR GÉNÉRAL DANS CETTE PILE, et on n'en a pas fabriqué.** La seule
+chose planifiée y est le service `sauvegarde`, dont la planification vit DANS son script — forme
+arbitrée en tête de `sauvegarde.sh` contre BullMQ et contre les tâches planifiées de Coolify
+(« invisibles à git, absentes d'une reconstruction »). On reprend ce motif ; on ne demande pas
+d'arbitrer deux fois la même question.
+
+**Zéro dépendance nouvelle, et un mur mesuré en chemin.** L'image de la pile
+(`postgres:16-bookworm`) **n'a ni `curl` ni `wget`** : `axion_notify`, qui n'appelait que `curl`,
+aurait journalisé « échec de l'envoi » à chaque alerte, indéfiniment — un canal branché, conforme à
+la lecture, et muet à l'exécution. `sauvegarde.sh` avait déjà rencontré ce mur et l'avait franchi
+seul, avec un client HTTPS écrit sur `openssl s_client`. **Ce transport est remonté dans
+`lib/common.sh`** plutôt que recopié une troisième fois : `curl` s'il existe, `openssl` sinon, et un
+refus explicite d'envoyer si le magasin de confiance manque — on ne dégrade jamais la vérification
+TLS pour faire partir un message portant un jeton de robot.
+
+#### Ce que le portage NE ferme PAS, et qui est nouveau
+
+3. **Sur la pile Coolify, `ALERT_CERT_EXPIRY_DAYS` n'est honoré par PERSONNE.** Mesuré, pas supposé :
+   `CADDY_SITE_ADDRESS: ':8080'` fait écouter Caddy en HTTP simple — son propre encadré écrit qu'« il
+   ne tente aucun ACME et ne présente aucun certificat » — et TLS est terminé par **Traefik**, dont le
+   magasin vit dans les données de Coolify. Cette pile n'y a aucun accès, et **doit** n'en avoir
+   aucun : `/data/coolify` porte aussi les secrets d'`axion-ia.com`. Monter `caddy_data` ne dirait
+   rien (il est vide de certificats par construction) et produirait un aveuglement permanent —
+   c'est-à-dire un cri sans cause, la façon la plus sûre de faire désactiver une sonde. La sonde
+   déclare donc ce contrôle **« sans objet »** à chaque passe : ni vert, ni aveuglement, jamais
+   silencieux. **Fermer ce trou est une décision d'infrastructure sur la supervision de Traefik —
+   elle n'appartient pas à cet agent.** infra/README.md §8, ligne 2j.
+
+**O-1 reste NON ARBITRÉE et rien de ce qui précède ne la prépare** (CLAUDE.md §3-7). La limite
+qu'elle seule lève est écrite en tête du script : cette sonde s'exécute sur la machine qu'elle
+surveille, et un système ne peut pas signaler sa propre absence.
 
 ---
 
@@ -1364,3 +1445,826 @@ cette décision — c'est le sens de la correction ci-dessus.
 **Origine.** Question de Williams le 2026-08-31 en examinant l'adaptation des questionnaires par
 entreprise. Rédigée par la session d'audit en lecture seule ; **corrigée et enregistrée par A01** ;
 **non implémentée** (09 §5.9).
+
+## 2026-08-31 — [infra/C3, étage 2, PROPOSÉE] `shellcheck` ne voit pas le script qui porte toute la sauvegarde
+
+**Constat, mesuré.** Le job `shellcheck` de la CI (`.github/workflows/ci.yml`, ligne ~152) analyse
+`git ls-files 'infra/scripts/*.sh'`. Or **le script de sauvegarde n'est pas là** : il vit dans
+`infra/postgres/sauvegarde.sh` (2 300 lignes), avec `sauvegarde-healthcheck.sh`, `healthcheck.sh` et
+`stanza-create.sh`. **Le seul code shell qui décide si les données quittent la machine est le seul
+que le garde-fou shell ne regarde pas.** Son nom même — « shellcheck (infra/scripts/\*.sh) » — dit
+exactement ce qu'il fait ; il ne ment pas, il est simplement posé au mauvais endroit.
+
+**Preuve.** `shellcheck --severity=warning --shell=bash infra/postgres/sauvegarde.sh` rend
+**7 constats** sur la version `main` (6 × SC2010 `ls | grep`, 1 × SC2046 mot non protégé, aux lignes
+1279, 1314, 1763, 1837, 1848, 1927, 1988 de `main`). Aucun n'est grave — les noms de fichiers du
+répertoire d'archives sont contraints par `MOTIF_MINIO`/`MOTIF_COFFRE`, donc `ls | grep` y est sans
+danger — **mais aucun n'a jamais été vu par la CI.**
+
+**Pourquoi ce n'est PAS de l'étage 1 et pourquoi le chantier C3 ne l'a pas fait au passage.** Élargir
+le glob à `infra/postgres/*.sh` rend la CI **rouge sur 7 constats préexistants**, dans du code que ce
+chantier n'a ni écrit ni mesuré. Les corriger d'office serait toucher, sans mandat, à la rotation des
+archives et au garde-fou de santé du dépôt local — exactement le genre de « pendant que j'y suis »
+que le pipeline interdit. Le correctif du miroir R2 livré ce jour **n'ajoute aucun de ces 7 constats**
+(vérifié : même liste avant et après).
+
+**Valeur.** Le jour où un `$` non protégé se glisse dans le chemin d'une purge distante, c'est la CI
+qui doit le dire, pas la nuit du sinistre.
+
+**Coût estimé.** ≈ 0,3 j : élargir le glob à `infra/postgres/*.sh` **et** traiter les 7 constats
+(remplacer les `ls | grep` par une boucle `for f in "$ARCHIVES"/*` avec test, protéger le `$(sb_ssh_opts)`).
+
+**Impact schéma / API : aucun.** Impact CI : un job élargi. Impact `infra/postgres/*.sh` : 7 sites.
+
+## 2026-09-01 — [L3, étage 2, PROPOSÉE] Le cadrage RBAC par mission n'est alimenté par aucune route
+
+**Constat, mesuré par A10 en préparant le brief L3d, pas déduit.** Le pack porte deux tables voisines
+et le lot L3 n'en écrit qu'une. `/v1/missions/:id/assignments` écrit **`work_assignments`** — c'est
+`03 §18.2` qui nomme cette table, il n'y a pas d'ambiguïté. Mais **`mission_users`**, la table qui
+porte le cadrage RBAC « qui a le droit de voir cette mission », **n'est écrite par aucune route de
+L0 à L3**.
+
+**Ce que ça coûte aujourd'hui, dit sans dramatiser.** Rien en production : le RBAC serveur est en
+place, les rôles fonctionnent, et l'étanchéité financière est éprouvée sur quatre ceintures. Ce qui
+manque est le **peuplement** du cadrage par mission. Conséquence directe et vérifiable : les tests
+qui veulent éprouver « un consultant affecté à la mission A ne voit pas la mission B » doivent
+**écrire `mission_users` en SQL direct**, puisqu'aucune route ne le fait. Un test qui doit contourner
+l'API pour se mettre en scène éprouve la base, pas le produit.
+
+**Valeur pour l'auditeur.** Le jour où une mission a deux consultants et un lead, c'est cette table
+qui dit qui entre. Tant qu'elle n'est peuplée que par des scripts, l'affectation d'un auditeur à une
+mission n'existe pas comme geste de produit.
+
+**Pourquoi ce n'est PAS de l'étage 1, et pourquoi L3 ne l'a pas fait au passage.** Cette route n'est
+**pas dans la ligne L3 du fichier 07**, qui est le seul brief du lot. L'ajouter serait du périmètre
+inventé par un agent — précisément ce que le canal d'amélioration existe pour empêcher (09 §5.9 :
+proposer est un devoir, anticiper est une faute). Elle touche en outre au **droit d'accès**, donc à
+la sécurité : `CLAUDE.md` §3-4 l'exclut d'office d'une décision d'autopilote.
+
+**Coût estimé.** ≈ 0,25 j : un dépôt, un service, deux routes (`POST` et `DELETE` d'une affectation),
+leurs schémas Zod, et les tests de rôle qui vont avec.
+
+**Impact schéma : aucun** — la table existe au 04, elle n'est simplement jamais remplie.
+**Impact API** : deux routes nouvelles, à documenter par une entrée `DECISIONS.md` (11 §8-6) puisque
+les §8/§24.2 ne les listent pas.
+
+**Trace** : `DECISIONS.md` 2026-09-01 « Aucune route n'écrit `mission_users` : faut-il en ouvrir
+une ? » — option 2 retenue, arbitrage de Williams attendu à la porte suivante.
+
+### FICHE A-007 — Le garde anti-skip ne voit pas les cas ANNULÉS par un crochet expiré
+
+**Constat terrain (A01, 2026-09-01 et 2026-09-02) :** `check:no-skipped-tests` lit les **sources** et
+refuse tout `.skip`, `runIf`, `todo`. Il est vert. Pourtant, trois fois en deux jours, des rapports
+vitest ont porté des cas « skipped » sans qu'aucune source n'en contienne : `socle.test.ts` (12) et
+`quota.test.ts` (5) le 2026-09-01, `l0-restauration` (4) le 2026-09-02 — à chaque fois un `beforeAll`
+expiré sous contention (10 s par défaut, ou une passe Docker tuée à 600 s), et vitest **annule** les
+cas qu'il précède en les comptant « skipped ». Un fichier peut donc être **rouge sans test rouge**,
+ou **vert avec des annulations**, et le garde ne le voit pas : il n'y a rien à attraper dans la source.
+La session de vérification isolée l'a relu comme un `skipIf` d'environnement — c'est dire à quel
+point le rapport ressemble à un skip écrit.
+
+**Valeur pour l'auditeur :** la DoD dit « aucun test sauté » et le pipeline dit « les tests sont la
+vérité terrain ». Une annulation silencieuse est un skip qui ne dit pas son nom, et elle survient
+précisément sous la charge — là où un test intermittent finit par être ignoré.
+
+**Proposition (étage 2) :** un garde qui lit le **rapport JSON** de vitest (`--reporter=json`) et
+refuse tout cas `skipped` non porté par la source ; en CI, sur les jobs `unit` et `integration`. Le
+remède immédiat appliqué en attendant : plafonds explicites (120 s) sur les crochets de préchauffage.
+
+**Coût estimé :** ≈ 0,3 j (script + branchement CI + son propre test témoin).
+**Impact schéma / API : aucun.** Impact CI : deux jobs lisent un rapport de plus.
+---
+
+# RÉSERVES DE LA PORTE P-B PORTÉES EN FICHES (2026-09-02, session de vérification)
+
+> Le gardien A02 a posé douze réserves à P-B ; trois exigeaient « une fiche `AMELIORATIONS.md` »
+> et n'en avaient pas au moment de la signature. Les voici, sans rien décider : l'arbitrage est à
+> Williams, à la porte P-C. Numérotation : **A-004 à A-006** ; la session pilote numérote à partir
+> de **A-007** (fiche « garde anti-annulation vitest », annoncée le 2026-09-02).
+
+## ÉTAGE 1 — micro-amélioration due (réserve R-B4)
+
+### FICHE A-004 — `reinitialiserCachePreparation` est orpheline (R-B4)
+
+**Constat (A02, fiche P-B §10.7).** `apps/api/src/dependances.ts:349` exporte
+`reinitialiserCachePreparation` ; **aucun appelant** dans le code de production ni dans les tests,
+et son commentaire affirme un consommateur qui n'existe pas. `CLAUDE.md` §4 étape 6 : le code
+orphelin est refusé.
+
+**Valeur.** Nulle en soi ; le coût est celui d'une fausse promesse dans le code, et d'un garde
+(`check:graphe-modules`) qui ne voit pas les exports morts, seulement les imports pendus.
+
+**Coût estimé.** 0,1 j : soit la brancher dans les tests qui sondent la préparation (si elle sert
+à isoler des cas), soit la retirer. **Étage 1, avant P-C**, par l'équipe 1.
+
+**Impact schéma / API / crypto : aucun.**
+
+## ÉTAGE 2 — fiches en attente d'arbitrage (réserves R-B6 et cookie)
+
+### FICHE A-005 — `packages/shared/src/redaction.ts` n'est sous aucun seuil de couverture (R-B6)
+
+**Constat (A02, fiche P-B §10.7 ; A51, verdict du 2026-08-31).** Le module qui porte l'invariant
+« aucune donnée personnelle dans les logs » est rapporté à **0,00 %** de couverture : `packages/shared/**`
+n'est pas dans `.github/coverage-critical-paths.json`, et le défaut d'outillage y est **déclaré**
+sans être tracé. A51 a en outre montré que la redaction est **contournable par tout objet portant
+un `toJSON()`** (correctif fusionné en `#17`, `redaction-journal-serialisation.test.ts`) : c'est
+précisément le genre de trou qu'un seuil mesuré aurait rendu visible plus tôt.
+
+**Valeur pour l'auditeur.** Directe : c'est la garantie RGPD des journaux (06 §10, invariant du
+`CLAUDE.md` §2). À L6c, les journaux porteront pour la première fois des données de sync réelles.
+
+**Coût estimé.** 0,3 j : ajouter `packages/shared/src/redaction.ts` aux chemins critiques avec le
+seuil de 90 %, écrire les cas manquants (formes sérialisées, tableaux imbriqués, `toJSON`, clés en
+français), et faire tourner le projet vitest `interface`/`unit` sur `packages/shared` dans le job
+`couverture`.
+
+**Impact schéma / API / crypto : aucun.** Impact CI : un chemin critique de plus.
+
+**Recommandation.** **ABSORBÉE, avant L6c** — c'est une réparation d'un défaut déclaré, sous 0,5 j :
+pré-autorisée par le point 4 du régime du 2026-08-31 si Williams ne s'y oppose pas.
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-C_
+
+### FICHE A-006 — Les cookies httpOnly de la console n'existent pas : `@fastify/cookie` est installé, jamais enregistré
+
+**Constat (A51, verdict du 2026-08-31 ; revérifié le 2026-09-02 sur `main`).** `CLAUDE.md` §9 et
+06 §8.1 imposent pour la console (`apps/hq`) une authentification par **cookies httpOnly
+SameSite=Lax + en-tête anti-CSRF**. `@fastify/cookie` est épinglé (décision du 2026-08-31) et
+installé, mais **`app.ts` ne l'enregistre pas** : `git grep cookie -- apps/api/src/app.ts` ne rend
+rien. Le mode Bearer du terrain est le seul chemin d'authentification qui existe. Sans objet pour L2
+(aucun écran console), ce qui a permis de signer P-B ; **dû au premier incrément de L7**.
+
+**Valeur pour l'auditeur.** Indirecte mais bloquante : sans cookie, la console n'a pas
+d'authentification conforme, et L7-min ne peut pas être démontré à P-E.
+
+**Coût estimé.** 0,5 j : enregistrement du plugin avec les attributs `httpOnly`, `secure`,
+`sameSite=lax`, émission à `/v1/auth/login` quand le client est la console, lecture dans le crochet
+d'identité (cookie OU Bearer, jamais les deux), en-tête anti-CSRF custom vérifié sur les écritures,
+tests d'intégration rôle × chemin (cookie sans en-tête → refus).
+
+**Impact schéma : aucun. Impact API : un chemin d'authentification de plus sur des routes existantes.
+Impact crypto : aucun** (le jeton est le même, seul le transport change).
+
+**Recommandation.** **ABSORBÉE dans L7a** — ce n'est pas une fonctionnalité nouvelle, c'est une
+clause du contrat 11 §3 non encore tenue. À planifier par A30 au brief de L7.
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-C_
+
+### FICHE A-008 — Le coffre terrain chiffre sans AAD : une enveloppe n'est pas liée à sa ligne
+
+**Constat terrain (A24, 2026-09-02, relevé par A29) :** AES-256-GCM sans données authentifiées
+additionnelles. Une enveloppe déchiffrable l'est **quelle que soit la ligne où on la colle** : un
+attaquant qui écrit déjà dans IndexedDB peut déplacer une réponse d'une question à une autre sans que
+le déchiffrement le voie. Lier l'enveloppe à sa ligne exigeait un troisième paramètre et cassait la
+signature publiée `dechiffrer(e, s)` en pleine rencontre tests × code.
+
+**Valeur pour l'auditeur :** un durcissement, pas une faille du modèle de menace 06 §10 — la menace
+suppose un attaquant qui a déjà passé le verrou et le coffre. Mais une réponse déplacée d'une question
+à une autre est une donnée fausse qui ne se signale pas.
+
+**Proposition (étage 2) :** AAD = `table:id:colonne`, posée par le port d'écriture, vérifiée par
+`dechiffrer`. Migration locale des enveloppes existantes au ré-enveloppement. À arbitrer à **P-C**.
+**Coût estimé :** ≈ 0,3 j. **Impact schéma / API : aucun.** Impact `apps/field/src/local/**` : coffre,
+port, tests. Trace : `DECISIONS.md` 2026-09-02 « Aucun AAD sur AES-GCM ».
+
+### FICHE A-009 — L'icône de la PWA terrain est PROVISOIRE : le dessin reste à Williams
+
+**Constat (A29, 2026-09-02, B2) :** le manifeste livré par L5a n'avait aucune icône — non installable,
+donc `storage.persist()` refusé sur iPad, donc aucune mission embarquable. La décision du 2026-08-28
+réserve le dessin de l'icône à Williams et interdit le demi-manifeste. **Défaut appliqué sous la règle
+« silence vaut accord »** (`DECISIONS.md` 2026-09-02) : un aplat aux couleurs des tokens (terracotta
+sur ivoire), généré par `apps/field/scripts/build-icones.mjs` à partir de `COULEURS_CHARTE`, 192 /
+512 / maskable / `apple-touch-icon`, marqué `"_provisoire": true` dans le manifeste.
+
+**Ce qui reste dû, à Williams :** l'icône de charte. Le remplacement est une substitution de
+fichiers PNG, sans code. À cocher à la porte **P-C**.
+**Coût estimé :** 0 j côté code. **Impact schéma / API : aucun.**
+
+## 2026-09-02 — [L7a, étage 2, PROPOSÉES] Deux composants de `packages/ui` parlent terrain à une console
+
+`packages/ui` est **figé** pendant les trois chantiers (gouvernance du 2026-09-02) ; ces deux constats
+sont donc des fiches, et leur correctif une PR à part, hors des trois branches.
+
+### FICHE A-010 — `EtatHorsLigne` porte un texte terrain que la console ne peut pas paramétrer
+
+- **Constat** : le composant affiche « tout est enregistré sur cet appareil » — vrai pour la PWA
+  (invariant 1), faux pour la console, qui n'enregistre rien localement. L7a l'utilise tel quel pour
+  l'état hors-ligne (§33.2), et le texte ment.
+- **Valeur pour l'utilisateur** : un état hors-ligne qui ne promet pas une sauvegarde qui n'existe pas.
+- **Coût estimé** : 0,1 j — une prop `message` avec le texte terrain par défaut ; un test par front.
+- **Impact schéma/API** : aucun. `packages/ui` figé → PR dédiée après le dégel.
+
+### FICHE A-011 — `ChampTexte` n'a pas de nature « secret »
+
+- **Constat** : le mot de passe de la console (et du terrain) est composé à la main autour d'un
+  `ChampTexte` sans `type="password"`, `autocomplete` ni bascule d'affichage — deux copies du même
+  montage, qui divergeront.
+- **Valeur pour l'utilisateur** : un champ secret uniforme, lisible par les gestionnaires de mots de
+  passe (`autocomplete="current-password"`), avec l'affichage temporaire attendu sur tablette.
+- **Coût estimé** : 0,2 j — une nature `secret` sur `ChampTexte`, remplacement des deux montages.
+- **Impact schéma/API** : aucun. `packages/ui` figé → PR dédiée après le dégel.
+
+## 2026-09-02 — [L7a / CI, étage 2, PROPOSÉE] Une panne de Docker Hub peint la porte en rouge, et rien ne le dit
+
+**Constat, mesuré et non supposé.** Sur `lot/l7a` à `bef11cc`, le run CI 33647967069 est ressorti
+`failure` avec **un seul job en échec sur dix-sept** : « 7 · constructibilité des 4 images / worker »,
+sur `ERROR: failed to solve: node:22.21.0-alpine: unexpected status from HEAD request to
+registry-1.docker.io: 502 Bad Gateway`. Les seize autres (lint, typecheck, unit, integration,
+couverture ≥ 90 %, e2e chromium, schema-diff, gitleaks, invariants, images api/hq/field) étaient
+verts. `gh run rerun 33647967069 --failed`, **sans une ligne de code changée**, a rendu le run
+`success` : 19 jobs verts, 1 sauté (deploy-staging, main uniquement), 0 échec — job worker
+`success` en 27 s (https://github.com/will383842/Axion-Audit/actions/runs/33647967069/job/100411638777).
+Diagnostic : indisponibilité du registre amont, pas un défaut du dépôt.
+
+**Pourquoi c'est un vrai problème de gouvernance, pas un incident.** Le §9bis conditionne le merge
+d'une porte à une CI verte, et le §9ter fait des tests « la vérité terrain ». Une panne d'un tiers
+produit exactement la même couleur qu'un vrai défaut : rouge. Le coût n'est pas la minute de
+rejeu, c'est le doute — et le réflexe qu'il installe, « relance, ça repassera », qui est le début
+d'une CI qu'on ne croit plus. C'est aussi ce qui vient de rendre FAUX le bloc `ETAT.md` du jour
+(« Tests rouges connus : aucun ») : le fichier disait le code, la CI disait le registre.
+
+**Valeur.** Un rouge de CI redevient un signal sur NOTRE code. Et l'étape 7 cesse de dépendre de la
+santé d'un registre public au moment précis où on la regarde.
+
+**Coût estimé.** 0,3 j : (1) épingler les images de base par **digest** (`node:22.21.0-alpine@sha256:…`)
+dans les quatre Dockerfiles — reproductibilité en prime, dans l'esprit du §1 `save-exact` ; (2) une
+politique de re-tentative bornée sur la seule étape de résolution d'image (jamais sur les tests —
+un test flaky se corrige, il ne se rejoue pas) ; (3) une ligne de journal distinguant « échec amont »
+d'« échec de dépôt », pour que la prochaine session n'ait pas à refaire ce diagnostic.
+
+**Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun.** Périmètre : `.github/workflows`
+et les quatre `Dockerfile` — chantier infra, **hors des trois branches de lot** (gouvernance du
+2026-09-02), donc PR dédiée.
+
+**Recommandation A30.** **PHASE 2** si la porte P-E est proche ; ABSORBÉE seulement si un chantier
+infra s'ouvre avant. Rien n'est implémenté ici : la fiche est proposée, pas anticipée (CLAUDE.md §3.7).
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-E_
+
+## 2026-09-02 — [L7a / outillage, étage 1, PROPOSÉE] Le garde-fou de durabilité fabrique des commits VIDES quand le push est impossible
+
+**Origine du diagnostic** : session tierce, pendant l'incident de partage de worktrees du 2026-09-02 ;
+**reproduit et mesuré par A30 dans `_axl7` le même soir**. La fiche est écrite ici parce que le défaut
+a été observé ici ; le correctif, lui, est un chantier outillage.
+
+**Le mécanisme.** `.claude/settings.json` déclare un hook `Stop` qui lance
+`scripts/hook-stop-durabilite.mjs`. Le script compte `modifs` (fichiers non commités) et `nonPousses`
+(commits sans amont), et s'il en trouve, **il refuse la fin de tour** en dictant la marche à suivre
+(l. 71-73) : « 1) `git add` + commit (préfixe `wip:` …) ; 2) `git push` ; 3) un bloc dans ETAT.md ».
+
+**Le défaut : le script ne connaît qu'un seul monde, celui où le push réussit.** Il mesure « des
+commits ne sont pas poussés » et en déduit « la session n'a pas poussé ». Ce sont deux choses
+différentes. Quand le push est **refusé** — branche verrouillée, course entre deux sessions sur le
+même worktree, crochet `pre-push` en échec, réseau —, la session ne peut satisfaire que la **première
+moitié** de la consigne. Et comme la première moitié exige un commit alors que l'arbre est propre,
+elle produit **un commit `wip:` vide**. Le garde-fou censé prouver la durabilité fabrique alors du
+bruit dans l'historique **à la place** du signal « je n'ai pas pu pousser ».
+
+**L'exemple, mesuré, et il est de la maison.** Le 2026-09-02 dans `_axl7`, `git push` a été rejeté par
+le crochet `pre-push` (`husky - pre-push script failed (code 1)`). L'arbre était propre : le commit
+d'empreinte demandé n'a pu exister qu'en `--allow-empty` — c'est `8fba2b2`,
+`wip(l7a): sauvegarde de session — empreinte pilote`, **zéro fichier, zéro ligne**. Il est aujourd'hui
+sur `origin`, et le squash de la PR l'effacera : le dépôt n'en souffre pas. Ce qui compte est
+ailleurs — **pendant plusieurs minutes, l'historique affirmait « sauvegardé » alors que rien n'était
+parti sur `origin`.** C'est exactement l'inverse de ce que le §8 de `CLAUDE.md` cherche à garantir
+(« un commit non poussé n'existe pas »).
+
+**Valeur.** Le garde-fou dirait la vérité au moment où elle compte : un push impossible est un
+incident à REMONTER (verrou, course, `pre-push` rouge), pas une négligence à corriger par un commit
+de plus. Aujourd'hui les deux situations produisent la même injonction, donc la même réaction — et la
+seule qui soit fausse.
+
+**Correctif proposé.** Distinguer les trois états au lieu de deux : (1) _rien à sauvegarder_ → laisser
+passer ; (2) _non poussé, push possible_ → la consigne actuelle ; (3) **push tenté et REFUSÉ** →
+laisser passer **en affichant l'incident** (« push refusé : `<motif>` — remonter au pilote, ne pas
+empiler de commit »). Deux garde-fous secondaires : **ne jamais suggérer un commit quand l'arbre est
+propre** (un `wip:` vide n'est une sauvegarde de rien), et **borner** à un seul refus consécutif.
+
+**Coût estimé.** 0,2 j dans `scripts/hook-stop-durabilite.mjs` seul : une condition de plus et deux
+messages. **Impact schéma : aucun. API : aucun. Crypto : aucun. Périmètre fonctionnel : aucun.**
+D'où l'**étage 1** — c'est de la robustesse d'outillage, pas une fonctionnalité.
+
+**Ce qui N'A PAS été touché, et pourquoi.** `.claude/settings.json` **n'est pas modifié** : une
+configuration de session est un arbitrage humain (CLAUDE.md §3). La fiche décrit, elle ne répare pas.
+Le correctif vise le seul script, et hors des trois branches de lot (chantier outillage, PR dédiée).
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-E_
+
+## 2026-09-02 — [L0/CI, étage 2, PROPOSÉE] `l0-restauration` rougit une fois sur deux en CI, et verdit à la relance
+
+### FICHE A-012 — Le test de restauration pgBackRest est instable en CI
+
+- **Constat** : run 33642357475 (`lot/l5a` @ `2c754b2`) — job « 4 · integration » rouge sur
+  `apps/api/tests/l0-restauration.integration.test.ts` : `FileMissingError: unable to open missing file
+'/var/lib/pgbackrest/archive/axion/archive.info'`. Relancé tel quel sans aucun changement : vert. Le même
+  test était vert sur `1892df3` vingt-cinq minutes plus tôt et sur `lot/l3-suite` toute la journée.
+  L'incrément L5a ne touche ni `infra/`, ni `apps/api`.
+- **Cause probable** : course entre `axion-stanza-create` (`--no-online`) et le premier `archive-push`
+  du serveur redémarré — `archive.info` n'existe pas encore quand la sauvegarde démarre. À MESURER par
+  A11/A53 avant de corriger : une relance qui verdit n'est pas un diagnostic.
+- **Valeur** : une CI qu'on relance « pour voir » est une CI qu'on finit par ne plus croire (09 §5.7 :
+  la CI reste seule juge — elle doit donc être juste).
+- **Coût estimé** : 0,25 j — attendre `archive.info` (ou `pgbackrest info` = stanza `ok`) avec délai
+  borné avant `backup`, et un cas de test qui reproduit la course.
+- **Impact schéma/API** : aucun. Lot L0 (A11 infra, A53 observabilité).
+
+---
+
+## 2026-09-02 (RÉÉCRITE LE 2026-09-03) — [L5b] **EN PRODUCTION — validation juridique URGENTE** : le script d'accord de participation
+
+> **CETTE FICHE A ÉTÉ FAUSSE PENDANT 24 H, ET SUR UN TEXTE JURIDIQUE.** Elle décrivait
+> `PHRASE_SCRIPT_ACCORD` comme un travail « à poser par A22 ». **Le texte est écrit, affiché et
+> lu.** Rien ici ne reste à écrire. Une fiche qui présente comme à faire ce qui est déjà en service
+> retarde la seule chose qui compte : la relecture.
+
+**FAIT MESURÉ (2026-09-03).** `apps/field/src/ecrans/entretien/DemarrageEntretien.tsx:19-23` définit
+la constante `PHRASE_SCRIPT_ACCORD` ; **la ligne 53 l'AFFICHE** dans un `<blockquote>` de l'écran
+« Avant la première question », précédé de « À lire à {nom} (mention d'information v1) ».
+Version : **`v1`** (`VERSION_MENTION_INFORMATION`, `session/ecriture-session.ts:32`), enregistrée sur
+chaque session dans `informationNoticeVersion` comme l'exige 06 §10.4.
+
+**CE QUI EST RÉELLEMENT EN JEU.** Ce texte est le support d'une information RGPD. Il est **lu à voix
+haute à chaque interlocuteur, avant chaque entretien**, avant que ses propos ne soient enregistrés.
+**Il a été rédigé par un agent. Aucun juriste ne l'a relu.** Et aucun test ne peut le relire : la
+suite vérifie qu'on ne démarre pas sans accord — elle ne peut pas vérifier que ce à quoi la personne
+consent est juste, complet et opposable.
+
+**ÉCART SUPPLÉMENTAIRE, TROUVÉ EN RÉÉCRIVANT CETTE FICHE — IL AGGRAVE L'URGENCE.** Le texte
+EN PRODUCTION n'est **pas** celui arbitré dans `DECISIONS.md` du 2026-09-02, et les deux ne disent
+pas la même chose sur le point le plus sensible :
+
+- **arbitré** : « Le rapport ne vous attribue aucun propos nominativement. »
+- **en production** : « elles sont consignées sous votre nom et votre fonction […] et ne servent à
+  aucune évaluation individuelle. »
+
+L'un promet la non-attribution dans le livrable, l'autre annonce une consignation nominative. Ce ne
+sont pas deux formulations d'une même promesse : ce sont **deux engagements différents**. La
+décision tracée ne décrit donc pas ce qui est lu aux personnes — et c'est la décision, pas le code,
+qu'une session neuve lit en premier. **Le rapprochement des deux appartient au juriste, pas à un
+agent : aucun des deux textes n'est réécrit ici.**
+
+**CE QUI EST DEMANDÉ, ET À QUI.** Relecture juridique **avant la porte P-E**, par un juriste, portant
+sur : (a) laquelle des deux formulations engage correctement le traitement, et sa cohérence de bout
+en bout avec la pseudonymisation du 03 §26.2 ; (b) ce qu'il advient des réponses déjà saisies quand
+une personne demande l'arrêt en cours d'entretien — le texte en production ne le dit pas ; (c) la
+base légale et le sort des mentions nominatives dans le rapport final.
+
+**Coût.** ~0,05 j côté équipe une fois le texte validé : remplacer la valeur de la constante,
+**incrémenter `VERSION_MENTION_INFORMATION`** (les sessions déjà collectées doivent rester
+rattachées à la version qu'elles ont réellement entendue — invariant 7), rejouer les tests de
+libellé. Le coût réel est celui de la relecture, hors équipe.
+
+**Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun. Impact périmètre fonctionnel :
+aucun.** Le compteur du plafond étage 1 n'est pas mouvementé : cette fiche est documentaire.
+
+**Arbitrage Williams :** ☐ TEXTE VALIDÉ ☐ TEXTE À REMPLACER ☐ RELECTURE JURIDIQUE COMMANDÉE
+— _porté à Williams le 2026-09-03 ; le texte est en service pendant ce temps._
+
+---
+
+## 2026-09-03 — [L5a/L5b] Étage 1 — deux libellés d'écran, relevés par le balayage axe et NON corrigés par lui
+
+**Constat (A28, balayage axe-core du 2026-09-03, `e2e/accessibilite-l5a.e2e.ts`).** Le scope des
+localisateurs sur le landmark `main` a fait apparaître deux défauts de libellé que le balayage
+lui-même ne signale pas — axe ne les compte pas comme des violations WCAG, et c'est précisément
+pourquoi ils vivaient là sans que rien ne les voie :
+
+1. **Deux `<h1>` de libellé IDENTIQUE sur « Aujourd'hui ».** `App.tsx` affiche `VUES[vue].titre`
+   dans un `<h1>` d'en-tête, et `EcranAccueil.tsx` affiche son propre `<h1>` dans `<main>`. Un
+   lecteur d'écran annonce donc deux titres de niveau 1 portant le même texte sur une page qui n'a
+   qu'un seul sujet.
+2. **Deux libellés DIFFÉRENTS pour le même écran.** Le registre `app/vues.ts` dit « Stockage de
+   l'appareil » ; `EcranStockage.tsx` dit « Stockage de cet appareil ». L'en-tête et le corps de
+   l'écran ne s'appellent pas pareil.
+
+**Valeur pour l'auditeur.** Le premier coûte à qui navigue au lecteur d'écran ou au clavier
+(03 §22.1, « navigation clavier intégrale ») ; le second est un flottement de vocabulaire dans une
+interface dont 03 §17.4 exige qu'elle soit sans jargon et sans surprise.
+
+**Ce qui est demandé, et à qui.** Correction par **A22** avec le reste de L5b, relue par le
+réviseur croisé comme n'importe quel code. **Pas par A28 ni par A20** : un test d'accessibilité qui
+corrige l'interface qu'il mesure ne mesure plus que son propre correctif.
+
+**Coût estimé.** ~0,05 j les deux. **Impact schéma : aucun. Impact API : aucun. Impact crypto :
+aucun. Impact périmètre fonctionnel : aucun. Étage 1**, autorisé d'office.
+
+---
+
+## 2026-09-03 — [transverse] Étage 2 — `pnpm verify` n'exécutait JAMAIS le projet `interface` : DÉFAUT RÉEL, **DÉJÀ CORRIGÉ** sur `lot/l3-suite`
+
+> **NE PAS RE-CHIFFRER CE CORRECTIF : IL EST ÉCRIT.** A10 l'a fermé le 2026-09-03 dans
+> **`e2e97b9`** (« verify lance enfin les trois projets vitest ») sur `lot/l3-suite`, et il entre
+> dans `main` avec la **PR #26**. Ce défaut se referme donc **par la fusion de L3, sans travail
+> supplémentaire**. La présente fiche est conservée pour le DIAGNOSTIC, qui reste la meilleure
+> explication écrite de la famille de défaut — pas pour proposer un travail déjà fait.
+
+**Constat, mesuré le 2026-09-03 sur `lot/l5a` (`pnpm verify`, RC=0) et sur `lot/l5b`.**
+`verify` se terminait par `test:unit && test:integration && test:e2e`, c'est-à-dire
+`vitest run --project unit`, `--project integration`, puis Playwright. **Aucune de ces trois
+commandes ne lançait le projet `interface`.** `check:test-projects` comptait pourtant
+`interface:29 · unit:29 · integration:17 · playwright:4` : **29 fichiers de test étaient analysés
+par les garde-fous et exécutés par personne** dans `verify`. Ils ne tournaient que sous
+`pnpm test:coverage` (`vitest run --coverage`, qui lance TOUS les projets), donc uniquement dans le
+job CI `coverage`. `test:critique` avait le même trou : `--project unit --project integration`.
+
+**Ce que ça coûte, et ce n'est pas théorique — c'est arrivé cette semaine.** Un `.test.tsx` rouge
+sort VERT de `pnpm verify`, VERT du hook pre-push, VERT des jobs CI `unit`, `integration` et `e2e`.
+Il ne rougit que dans le job `coverage` — où le message affiché est « couverture insuffisante » et
+non « test cassé ». C'est exactement le rouge de `lot/l5b` du 2026-09-02, et c'est pourquoi son bloc
+`ETAT.md` a pu écrire « Tests rouges connus : aucun » de bonne foi : les 162/162 d'A22 étaient vrais
+et répondaient à une autre question. Un garde-fou qui mesure vraiment, mais pas ce qu'on croit.
+
+**CONFIRMATION CROISÉE, et c'est ce qui donne son poids au diagnostic.** Deux équipes y sont
+arrivées par deux chemins indépendants et le même jour : A10 par la revue de l'outillage, A20 par le
+rouge de couverture de `lot/l5b` puis par un `pnpm verify` sur `lot/l5a`. Aucune des deux n'a lu la
+trouvaille de l'autre avant de la faire. Un défaut qu'on trouve deux fois n'est pas une hypothèse.
+
+**Ce que le correctif d'A10 apporte EN PLUS, et qui est le vrai fond.** `test:interface` ajouté et
+enchaîné dans `test`, `verify` ET `verify:rapide` — mais surtout un **sixième contrôle** dans
+`check:test-projects`, qui part du **PROJET** (« ce projet est-il lancé ? ») là où les cinq
+existants partaient du **FICHIER** (« ce fichier est-il capté ? »). C'est exactement l'angle mort
+qui faisait lire `interface:29` dans une sortie VERTE : les 29 fichiers étaient bien captés, et
+exécutés par personne. Prouvé par bascule deux fois (`test:interface` retiré de `verify` → sortie 1,
+« interface — 26 fichier(s) de test concerné(s) »). Une réparation qui se garde elle-même.
+
+**CE QUI RESTE PROPOSÉ, et rien d'autre : un job CI NOMMÉ.** Le correctif d'A10 fait exécuter les
+tests d'interface ; il ne change pas l'ÉTIQUETTE sous laquelle leur rouge s'affiche en CI. Donner au
+projet `interface` son propre job — plutôt que de le laisser rougir à l'intérieur du job `coverage`
+— pour qu'un `.test.tsx` cassé dise « interface » et non « couverture insuffisante ». Un rouge mal
+étiqueté se diagnostique deux fois. **Coût ~0,05 j (un bloc de job). Impact schéma : aucun. Impact
+API : aucun. Impact crypto : aucun. Impact périmètre : aucun.**
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-C_ · le correctif de fond
+(`e2e97b9`) n'attend PAS cet arbitrage : il arrive avec la PR #26.
+
+---
+
+## 2026-09-03 — [transverse] Étage 2, PROPOSÉE — une glose ABSENTE est refusée, une glose FAUSSE est COCHÉE
+
+**Constat, mesuré sur le seul lot L5b.** `check:tracabilite` compare la glose au LIBELLÉ de
+l'exigence citée. Il ne peut pas voir qu'un module réalise une **autre** exigence que celle qu'il
+cite. **Cinq** occurrences dans un seul lot, **dont quatre ont passé le garde** et n'ont été vues qu'en
+revue humaine :
+
+1. `session/fuseau.ts` citait **E13** (« écran 3 zones ») alors qu'il ne fait que du formatage au
+   fuseau de mission — donc **E32 n'avait aucun code rattaché depuis ce module** ;
+2. `session/enregistrement.ts` citait **E38** (« sync ≥ 1×/j + export de secours ») là où la purge
+   sur `pagehide` protège la saisie en cours et ne remonte rien au siège ;
+3. `session/valeurs.ts` citait **E30** (« 3 niveaux d’audit ») pour un module qui type les
+   DOUZE formes de valeur de réponse — alors que ses deux voisins immédiats du même incrément,
+   `SaisieReponse.tsx` et `ecriture-reponses.ts`, citaient déjà **E37** pour exactement ce sujet ;
+4. `session/peripherie-entretien.test.ts` citait **E43 (DoD)** — trouvée par l’auteur lui-même en
+   appliquant sa propre règle, et **RETIRÉE plutôt que remplacée** : une glose se supprime aussi
+   bien qu’elle s’ajoute, et c’est la moitié de la règle qu’on oublie ;
+5. `e2e/accessibilite-l5a.e2e.ts` et deux fichiers L5b citaient **E7** (« remontée continue au
+   siège ») en croyant citer l'**invariant 7** (« rien n'est silencieusement écrasé »). Collision de
+   nommage pure — celle-là, le garde l'a attrapée.
+
+**L'ARGUMENT QUI REND LA FICHE DÉCISIVE, et il n'est pas de moi (A29) : une glose ABSENTE est
+refusée par A02 à l'étape 6 ; une glose FAUSSE est COCHÉE.** La seconde est donc strictement pire
+que rien — elle achète la conformité apparente au prix de la conformité réelle — et c'est
+exactement celle que rien n'attrape aujourd'hui.
+
+**CE N'EST PAS UN GARDE CASSÉ : C'EST UN GARDE QUI N'EXISTE PAS. Requalification du
+2026-09-03 (constat A02), et elle change le coût que Williams arbitre.** Le dispositif ne
+s'est pas trompé — **il documente lui-même son trou**. `node scripts/check-tracabilite-exigences.mjs
+--angles-morts` l'énonce en toutes lettres : n° 1, « **il ne distingue pas un rattachement JUSTE**
+d'un rattachement faux » ; n° 3, « le rapprochement est **LEXICAL, pas sémantique** » ; n° 5,
+« ce script part des citations et remonte à la table — **il ne fait pas le chemin inverse** ».
+Les cinq gloses fausses de ce lot sont donc tombées EXACTEMENT dans ce que l'outil annonce ne pas
+voir. Cette fiche ne demande pas de RÉPARER un garde défaillant : elle demande d'en **CONSTRUIRE
+un second**, qui n'a jamais existé. Le contrôle ② ci-dessous est nommément l'angle mort n° 5.
+
+**Valeur pour l'auditeur.** Indirecte, et c'est le fond du contrôle d'acceptation : la matrice
+E1-E47 lue « dans les deux sens » (09 §3-6) est la seule preuve qu'aucune exigence n'a été oubliée.
+Une matrice alimentée par des gloses fausses est verte et ne prouve rien.
+
+**TROIS CONTRÔLES PROPOSÉS — décrits, PAS implémentés (11 §8 : `scripts/` et la CI relèvent du
+contrat d'ops ; 09 §5.9 : étage 2 jamais anticipé).**
+
+- **① L'exigence citée est-elle RÉALISÉE, ou seulement CONSOMMÉE ?** Motif approchable sans IA, et
+  c'est ce qui le rend implémentable : un module dont TOUTES les exigences citées sont également
+  citées par tous ses importateurs, et qui n'en cite aucune qui lui soit propre, dit « je cite ce
+  qui m'appelle ». Signalement, pas refus — le motif est heuristique et doit le rester.
+- **② LE SENS INVERSE, celui qui a manqué :** toute exigence du périmètre du lot doit avoir au
+  moins un module qui la réalise. `E32` sans aucun code rattaché aurait sauté aux yeux, et personne
+  n'aurait eu à lire `fuseau.ts` pour s'en apercevoir. C'est le contrôle le moins coûteux des trois
+  et le plus rentable.
+- **③ La collision `E7` / « invariant 7 ».** Purement lexicale : une glose qui cite `E7` et dont le
+  texte parle d'écrasement, de suppression ou de révision tracée cite l'invariant, pas l'exigence.
+  Un contrôle de mots suffit ; la même famille existe pour `E4`/invariant 4 (tokens) et
+  `E1`/invariant 1 (hors ligne), à vérifier avant d'écrire la liste.
+
+**QUATRIÈME ANGLE MORT, ÉTABLI PAR A02 LE 2026-09-03 ET NON DÉCLARÉ PAR L'OUTIL —
+`check:tracabilite` COMPTE DES OCCURRENCES DE NUMÉROS DANS DU TEXTE, PAS DES RATTACHEMENTS.**
+La preuve est dans la correction elle-même : le compteur est passé de 535 à **539 citations** alors
+que le travail consistait à DÉFAIRE une attache (`valeurs.ts` : E30 → E37, +3 par les mentions de
+prose expliquant l'erreur) et à en SUPPRIMER une (`peripherie-entretien.test.ts` : E43 retirée, +1
+par la prose qui l'explique). **Le compteur est monté pendant qu'une attache était défaite.** Un
+nombre qui augmente quand la chose qu'il prétend mesurer diminue ne mesure pas cette chose ; il
+mesure la longueur de la discussion à son sujet. C'est la même famille que les trois angles morts
+déclarés, et il faut le déclarer avec eux.
+
+**DEUX GLOSES LAISSÉES DEBOUT, AVEC LEUR MOTIF — et le motif est la moitié qui manquait.** Mon
+balayage des 36 fichiers de l'incrément les avait épargnées sans dire pourquoi, ce qui revenait à
+les avoir ratées :
+
+- `packages/shared/src/banque-questions.ts` cite « **E43 (conventions)** » — même forme que celle
+  que j'ai retirée. Elle reste : `git blame` la date de **`8eead2f4`, 2026-08-29, lot L4**, hors de
+  mon autorité d'incrément ; et elle est défendable au titre du 11 §3, ce fichier portant des
+  conventions de format partagées. La toucher aurait été un ajout de périmètre déguisé en ménage.
+- `apps/field/src/ecrans/entretien/EcranEntretien.test.tsx` cite **E27**. A02 la juge mince mais
+  **recevable** : ce fichier atteste des noms accessibles et de la gestion du focus, qui sont du
+  WCAG AA au sens du 03 §19.2. Conservée telle quelle.
+
+**Coût estimé.** ~0,5 j pour les trois, ② étant le tiers le plus simple et pouvant être livré seul.
+Le quatrième angle mort ci-dessus ne demande PAS un contrôle de plus : il demande que le compteur
+cesse d'être présenté comme une mesure de rattachement. Une ligne de libellé, coût nul.
+**Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun. Impact périmètre : aucun** — le
+contrôle ne change aucun comportement produit, il refuse des en-têtes.
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-C_
+
+---
+
+## 2026-09-03 — [transverse] Étage 2, PROPOSÉE — `vitest.config.ts` porte toujours `thresholds: {}`
+
+**Constat (A29, second rejeu, 2026-09-03).** La DoD transverse exige « couverture ≥ 90 % sur les
+modules critiques — MESURÉE ». Elle l'est : par `.github/scripts/check-coverage.mjs`, appelé par le
+job `coverage` de la CI. Mais `vitest.config.ts` déclare `thresholds: {}` — **aucun glob n'est
+opposable à Vitest lui-même**. Un développeur qui lance `pnpm test:coverage` en local voit des
+chiffres et n'obtient AUCUN échec, quel que soit leur niveau ; le commentaire du fichier annonce
+pourtant des seuils « par chemin, renseignés au fil des lots ».
+
+**Ce que ça coûte.** Rien aujourd'hui — la CI tient le seuil, et elle est la seule juge (09 §5.7).
+Le risque est de dérive : le jour où le job `coverage` serait renommé, déplacé ou conditionné, la
+DoD ne serait plus tenue par personne et la configuration continuerait d'annoncer qu'elle l'est.
+C'est la même forme que le défaut de `pnpm verify` qui n'exécutait pas le projet `interface`.
+
+**Proposé, NON appliqué — c'est le contrat d'ops (11 §8-2).** Soit renseigner `thresholds` avec les
+globs de `coverage-critical-paths.json`, soit — et c'est ma préférence — **retirer `thresholds` et
+écrire dans le fichier que le seuil vit dans `check-coverage.mjs`, à un seul endroit**. Deux seuils
+qui doivent rester égaux finissent toujours par diverger : c'est l'argument que ce dépôt applique
+déjà au numéro de version du schéma local. Coût ~0,1 j.
+**Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun. Impact périmètre : aucun.**
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-C_
+
+---
+
+### FICHE A-013 — `staging` sert le même conteneur depuis 21 h : Coolify échoue à lire le compose, en 9 secondes, et le déploiement n'a jamais lieu
+
+**Constat (mesuré le 2026-09-03 par accès direct au serveur, après relance délibérée du job en
+échec).** `main` est rouge depuis le 2026-09-02 14h40 UTC sur `8 · deploy-staging`. J'ai relancé le
+job sans changer une ligne : **il a échoué de la même façon**, ce qui établit un défaut
+**systématique** et non une panne passagère — le précédent Docker Hub, où un rejeu suffisait, ne
+s'applique pas.
+
+Le fait qui tranche, deux déploiements distincts à treize heures d'écart :
+
+| Déclenchement    | `deployment_uuid`          | Conteneur réellement en service       |
+| ---------------- | -------------------------- | ------------------------------------- |
+| 2026-09-02 14h48 | `ji178zfg0eeuywnsmqm0u543` | `/artifacts/tvgaihhwrs0g8kg9mwcmnnwv` |
+| 2026-09-03 03h46 | `7vafdkixhk0hit2wgig8w1es` | `/artifacts/tvgaihhwrs0g8kg9mwcmnnwv` |
+
+`docker inspect` sur le serveur : `api-wrunr6mwq2oxqq392i4myzjn-073253734194`, **Up 21 hours**, créé
+le 2026-09-02 07h34 UTC. **Le conteneur en service est celui du dernier déploiement réussi et n'a
+jamais été remplacé.**
+
+**La cause, lue dans la base Coolify** (`application_deployment_queues`) — le déploiement dure
+**9 secondes** (03:46:40 → 03:46:49) et se termine en `failed` :
+
+```
+Deployment failed: Failed to read Git source. Please verify repository access and try again.
+Error type: RuntimeException — /var/www/html/app/Models/Application.php:2119
+#0 ApplicationDeploymentJob.php(681): App\Models\Application->loadComposeFile()
+#1 ApplicationDeploymentJob.php(507): ->deploy_docker_compose_buildpack()
+```
+
+Le clone, lui, **réussit** : le journal montre `git ls-remote` rendant `8c5f9ff…`, puis
+`Cloning into '/artifacts/7vafdkixhk0hit2wgig8w1es'`. C'est la **lecture du fichier compose** qui
+échoue ensuite, pas l'accès au dépôt.
+
+**Ce que ce n'est PAS — écarté par mesure, pour que personne ne le recherche :**
+
+- **Pas l'espace disque** : `df -h /` → 29 % utilisés, 103 G libres ; inodes à 5 %.
+- **Pas un fichier absent** : Coolify attend `/infra/docker-compose.coolify.yml`
+  (`base_directory` = `/`, `build_pack` = `dockercompose`) ; `git ls-tree 8c5f9ff infra/` le trouve.
+- **Pas l'accès au dépôt** : le `git ls-remote` anonyme aboutit dans le journal même.
+- **Pas le commit `8c5f9ff` lui-même** : il ne touche **aucun** fichier compose
+  (`git show 8c5f9ff -- infra/docker-compose.coolify.yml` est vide) — il ne modifie que des
+  workflows et des scripts d'infra. La corrélation avec ce sha est celle de la tête de `main`, pas
+  celle d'une cause.
+
+**Dernier succès / premier échec**, sur la même application `wrunr6mwq2oxqq392i4myzjn` :
+
+```
+7vafdkixhk0hit2wgig8w1es | failed   | 2026-09-03 03:46 | 8c5f9ffa
+ji178zfg0eeuywnsmqm0u543 | failed   | 2026-09-02 14:48 | 8c5f9ffa
+tvgaihhwrs0g8kg9mwcmnnwv | finished | 2026-09-02 07:32 | f7a11b6a   <- le conteneur en service
+```
+
+**Valeur pour l'auditeur.** Aucune directement, et **bloquante pour tout le reste** : la DoD
+transverse exige « migrations up/down exécutées **sur staging** » et l'étape 7 du pipeline est une
+**démo sur staging**. Tant que staging sert du code périmé, **aucune porte ne peut être franchie** —
+ni P-C, ni P-D — et trois chantiers (L3, L5, L7) attendent derrière une cause qui ne leur appartient
+pas. _Un job d'infra tient trois chantiers._
+
+**Coût estimé.** Diagnostic : fait. Correction : inconnue tant que `loadComposeFile()` n'a pas été
+instrumenté — l'hypothèse la moins coûteuse à éprouver est un **redéploiement manuel depuis
+l'interface Coolify**, qui dira si le défaut est dans l'appel d'API ou dans la configuration de
+l'application. Ne PAS modifier `deploy-staging.sh` avant : le script n'est pas en cause, il **refuse
+de sortir vert**, et c'est exactement ce pour quoi il a été écrit.
+
+**Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun.** C'est de l'exploitation.
+
+**Deux constats annexes, à ne pas perdre.**
+
+1. **RETIRÉ — l'affirmation était fausse, et sa fausseté est instructive.** Cette fiche a d'abord
+   annoncé que `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` étaient **absents**. Ils ne le sont pas :
+   `gh secret list` les donne tous les deux, posés le 2026-08-28. L'erreur vient de la lecture du
+   journal : dans une sortie GitHub Actions, les lignes préfixées `^[[36;1m` sont **le source du
+   workflow que le runner affiche**, pas ce qu'il a émis. Le `echo "::error title=Alerte
+impossible::…"` que j'ai cité est une **branche conditionnelle non prise**, imprimée parce que
+   le runner affiche la commande. Les erreurs réellement émises se reconnaissent au préfixe
+   `##[error]` **sans** code couleur : il y en a **trois** dans ce run, et aucune ne concerne
+   Telegram. _Un journal de CI contient le code qui aurait pu s'exécuter à côté de ce qui s'est
+   exécuté — les confondre fait lire des pannes qui n'ont pas eu lieu._
+2. Coolify tourne sur `ghcr.io/coollabsio/coolify:latest` — **une étiquette non épinglée**, alors
+   que le contrat 11 §1 épingle tout le reste au patch près et que Renovate est désactivé en
+   Phase 1. Le conteneur est en service depuis 5 jours, donc il n'est pas la cause de CET incident ;
+   mais une infrastructure qui peut changer sous nos pieds sans qu'aucun commit ne l'enregistre est
+   la prochaine panne qu'on ne saura pas dater.
+
+**Recommandation.** **Étage 2 — PROPOSÉE**, arbitrage Williams, sur le seul point 2 : épingler
+Coolify est une décision d'exploitation, pas une amélioration de confort. Le point 1 n'existe pas.
+
+**Post-scriptum du 2026-09-03, à lire avant d'agir sur cette fiche.** Après sa rédaction, la
+commande que Coolify exécute pour vérifier l'accès au dépôt a été rejouée **par le canal exact de
+Coolify** (`instant_remote_process` vers l'hôte, depuis le conteneur `coolify`) : elle **réussit**,
+et rend le HEAD de `main`. Le point de rupture est donc localisé à la ligne près —
+`Application::loadComposeFile()` appelle `getGitRemoteStatus()`, qui lance `git ls-remote` **sur
+l'hôte** (`exec_in_docker: false`), et c'est son échec qui lève « Failed to read Git source » ;
+le `ls-remote` visible dans le journal de déploiement, lui, tourne **dans le conteneur d'aide** —
+deux commandes homonymes, deux endroits différents, et seule la première décide. La configuration
+de l'application porte par ailleurs `updated_at = 2026-09-03 04h30`, soit **après** le second échec.
+**Conséquence : le défaut n'est peut-être plus présent.** Un déploiement relancé le dira, et c'est
+la mesure qui manque à cette fiche.
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte suivante_
+
+### FICHE A-014 — Le garde pre-push s'exécute dans certains worktrees et pas dans d'autres, et rien ne dit lequel
+
+**Constat (mesuré le 2026-09-03, d'abord sur le worktree qui porte la fiche A-013 — c'est-à-dire sur
+moi-même — puis élargi par la session de vérification, qui a FALSIFIÉ la première rédaction de cette
+fiche).** Le régime de travail impose un `pre-push` qui rejoue `pnpm verify:rapide`, et
+`ORGANISATION_AGENTS.md` §9 impose **un worktree par chantier**. Le garde tient dans les uns et pas
+dans les autres :
+
+```
+$ for w in _axverif-l3 _axl3 _axl5conception _axdiag; do ls -1 $w/.husky/_/ | wc -l; done
+  _axverif-l3       16 entrées   pre-push PRÉSENT
+  _axl3             16 entrées   pre-push PRÉSENT
+  _axl5conception    0 entrée    pre-push ABSENT
+  _axdiag            0 entrée    pre-push ABSENT     <- celui d'où part cette fiche
+```
+
+`core.hooksPath` vaut `.husky/_` et vit dans le `.git` **partagé par tous les worktrees** ; mais
+`.husky/_/` est un répertoire **de l'arbre de travail**, peuplé par `husky` au moment du
+`pnpm install`. La condition n'est donc **pas** « worktree neuf » — c'est **« worktree où
+`pnpm install` n'a pas tourné »**, et ces deux énoncés ne se recouvrent qu'au début. Là où l'install
+a tourné, le garde s'exécute pleinement ; ailleurs, `git push` ne trouve aucun hook et **passe sans
+rien vérifier, en silence**.
+
+**Cette précision n'affaiblit pas la fiche, elle l'aggrave.** Un garde uniformément absent finirait
+par se voir. Un garde qui tient dans `_axl3` et pas dans `_axdiag`, sans que rien ne le signale
+dans un cas ni dans l'autre, ne se voit jamais : deux sessions font le même geste, l'une est
+contrôlée, l'autre non, et **les deux sorties sont identiques**.
+
+**Preuve par l'incident, et elle est de moi.** Mes deux pushes de la nuit (`lot/l6-conception`,
+`infra/diagnostic-staging`) sont passés sans une ligne de sortie de hook. J'ai cru le garde vert ;
+il était **absent**. La CI l'a rattrapé au coup suivant — `1 · lint` en `FAILURE` sur la PR #28,
+pour un `.md` qui ne passait pas `prettier --check`. C'est exactement le piège déjà consigné
+(`ORGANISATION_AGENTS.md` §2, incident du 2026-08-29), sauf qu'ici **le garde censé l'attraper
+avant la CI n'a jamais tourné**.
+
+**Valeur pour l'auditeur.** Aucune directement, et forte pour le chantier : _un garde muet est pire
+qu'un garde absent — il rassure_ (§5-2). Ici c'est la version la plus traître : le garde est
+**configuré**, il est **documenté**, il est **exigé** — et selon le répertoire d'où l'on pousse, il
+s'exécute ou non. Un chantier ouvert conformément au §9 pousse sans contrôle tant que l'install n'y
+a pas tourné, et personne ne peut le voir puisque **l'absence de sortie ressemble à un succès
+silencieux**.
+
+**Coût estimé.** Faible, mais c'est une décision, pas un réflexe. Trois pistes, à arbitrer :
+(a) documenter `pnpm install` comme première commande obligatoire de tout worktree neuf (§2 du
+fichier d'organisation) — le moins cher, le plus oubliable, et il ne supprime pas le silence ;
+(b) faire échouer bruyamment un `push` quand `.husky/_/pre-push` est absent, plutôt que de le
+laisser passer — transforme un silence en refus ; (c) versionner les hooks au lieu de les générer.
+**(b) est la seule qui respecte la règle « un contrôle qui ne trouve rien ne doit jamais sortir
+vert » (`CLAUDE.md` §5.7)** — et c'est la seule qui traite le vrai défaut, qui n'est pas l'absence
+du hook mais **l'impossibilité de savoir s'il a tourné**.
+
+**Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun.** Outillage.
+
+**Recommandation.** **Étage 2 — PROPOSÉE.** Ce n'est pas du confort : c'est le garde obligatoire
+avant toute PR qui n'existe pas dans les répertoires où le projet travaille. À rapprocher de la
+réparation en cours du garde `verify`, aveugle au projet `interface` — **deux gardes obligatoires,
+deux angles morts, découverts le même jour.**
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE — _à la porte suivante_
+
+---
+
+### FICHE A-015 — Les quatre fusions en attente ne butent QUE sur deux fichiers append-only
+
+> Étage 2 — **proposée, non implémentée** (09 §5.9). Ouverte le 2026-09-04 par la session pilote.
+> Numérotation : A-014 était le dernier pris (`infra/diagnostic-staging`).
+
+**Constat, mesuré et non déduit.** `git merge-tree --write-tree origin/main <branche>` sur les
+quatre branches en attente de fusion — `lot/l5a`, `lot/l5b`, `lot/l7a`, `lot/l1-e18-external-ref` —
+rend exactement le même verdict pour les quatre : **conflit sur `DECISIONS.md` et `docs/ETAT.md`,
+et sur rien d'autre. Zéro conflit de code, sur aucun fichier.** Le découpage en chantiers disjoints
+tient donc parfaitement ; ce qui coûte, c'est la tenue des registres partagés.
+
+**Ce que ça a déjà coûté.** Deux défauts de fusion en deux jours, tous deux sur ces mêmes fichiers,
+tous deux avec perte silencieuse : le 2026-09-02, une résolution par hunk a coupé deux entrées de
+leurs champs `Décideur` et `Impact spec` **en passant** un contrôle « aucune ligne perdue » ; le
+2026-09-03, un `git checkout --theirs` a écrasé 71 lignes ajoutées **hors du hunk**, que le diff du
+conflit ne montrait pas. Le second est le plus instructif : la faute était invisible dans l'outil
+même qui servait à la commettre.
+
+**Valeur.** Ce n'est pas du confort : c'est la suppression d'une classe entière de défauts sur les
+deux fichiers dont le pack dit qu'une entrée non tracée « n'existe pas ». Chaque incrément la paie.
+
+**Ce qui est proposé, et ce qui ne l'est PAS.** Un pilote de fusion `union` déclaré en
+`.gitattributes` pour `DECISIONS.md` et `AMELIORATIONS.md` : sur deux ajouts en fin de fichier, il
+garde les deux blocs sans marqueur, et `check:decisions` reste le juge du format — un champ coupé
+serait donc _bloqué_, pas seulement regretté.
+**`docs/ETAT.md` en est EXCLU, délibérément**, et c'est le cœur de la fiche : sa sémantique est
+« **le dernier bloc fait foi** ». Un pilote qui décide seul de l'ordre des blocs peut faire du bloc
+le plus ancien le dernier, et une session neuve suivrait alors une consigne périmée en croyant lire
+la plus récente. **Un automatisme qui se trompe sur ce fichier-là est pire que le travail manuel
+qu'il remplace** — c'est exactement le « garde qui ne garde rien » que ce dépôt pourchasse.
+
+**Coût estimé.** 0,25 j : deux lignes de `.gitattributes`, un test de fusion à blanc dans les deux
+sens sur un dépôt jetable (le gabarit existe : `infra/scripts/test-garde-clone.sh`), et une entrée
+au contrat 11 §3 disant que le pilote existe et pourquoi `ETAT.md` en est exclu.
+
+**Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun.** Impact convention : oui —
+c'est une convention 11 §3, donc une escalade 11 §8-2, d'où cette fiche plutôt qu'un commit.
+
+**Recommandation.** **PHASE 2**, sauf si un troisième défaut de fusion survient d'ici P-C — auquel
+cas ABSORBÉE. La procédure manuelle (résolution par blocs depuis la base commune, contrôle en
+multi-ensembles sur les versions **complètes**) est écrite, transmise à chaque agent qui fusionne, et
+elle a tenu à la fusion `lot/l5a` → `lot/l5c` du 2026-09-04. Tant qu'elle tient, l'automatisme est un
+confort ; le jour où elle cède, il devient une nécessité.
+
+> **2026-09-05 — ELLE A CÉDÉ, ET LA FICHE EST ABSORBÉE.** Le jour même, la session pilote a résolu
+> un conflit de `lot/l7a` en retirant mécaniquement les marqueurs : le conflit tombait **au milieu**
+> de deux entrées, et l'opération a fabriqué deux entrées ayant perdu leurs champs `Décideur` et
+> `Impact spec`. Troisième défaut en quatre jours, sur les deux mêmes fichiers — la condition que
+> cette fiche posait elle-même est remplie. `merge=union` posé sur `DECISIONS.md` et
+> `AMELIORATIONS.md` ; `docs/ETAT.md` reste exclu, pour la raison écrite plus haut.
+> **Et la borne apprise ce jour-là** : `union` ne reconnaît pas plus une entrée qu'un humain pressé.
+> Il supprime le travail, jamais le contrôle — `check:decisions` est **dû après chaque fusion**.
+> Arbitrage tracé : `DECISIONS.md`, 2026-09-05, « la fiche A-015 est ABSORBÉE ».
+
+**Arbitrage Williams :** ☑ **ABSORBÉE** (2026-09-05, sur la clause de la fiche) ☐ PHASE 2 ☐ REFUSÉE
+
+---
+
+## A-0xx — L4 : un contrôle bloquant à l'import sur `red_flag.below` + `multi_choice`
+
+**Étage 2 — PROPOSÉE, non implémentée.** Déposée par A15 le 2026-09-06, à la fermeture du défaut
+n° 2 de la revue croisée du lot L8.
+
+**Constat terrain.** Le moteur de scoring évalue désormais `red_flag.below` sur CHAQUE option retenue
+d'un choix multiple, et non sur l'agrégat (`DECISIONS.md`, 2026-09-06, arbitrage A01). Le défaut est
+donc fermé côté CALCUL. Mais la combinaison qui l'a produit — `answer_type = multi_choice` **et**
+`scoring.aggregate` **et** `scoring.red_flag.below` — reste une écriture que la banque de questions
+peut accepter sans que personne ne s'aperçoive qu'elle demande deux choses contradictoires : agréger
+pour la note, et ne pas agréger pour l'alerte.
+
+**Valeur pour l'auditeur.** Aucune question de la banque ne combine aujourd'hui les deux : le défaut
+était LATENT. C'est précisément l'argument. Le jour où un rédacteur les combinera, il ne saura pas
+que ce chemin a une histoire, et il n'a aucune raison de le savoir — la seule façon de la lui dire
+est un message d'import qui la lui dit. Un contrôle à l'import parle au moment où la question
+s'écrit ; un commentaire dans `bareme.ts` ne parle qu'à qui lit `bareme.ts`.
+
+**Ce qui est proposé.** À l'import de banque (03 §35.2, contrôles bloquants du L4), ajouter au
+contrôle « `scoring` valide si `poids > 0` » une vérification de cohérence : sur un `multi_choice`
+portant `red_flag.below`, exiger que le rédacteur ait vu la question — soit en refusant la ligne avec
+un message en français qui explique que le seuil s'évaluera option par option, soit en exigeant un
+champ explicite. Le choix entre « refuser » et « avertir » appartient à l'arbitrage : refuser est
+cohérent avec « une erreur = rien d'importé + rapport » (§35.2), avertir est moins brutal sur une
+combinaison qui est désormais CORRECTEMENT traitée par le moteur.
+
+**Coût estimé.** ~0,25 j — une règle de plus dans le validateur d'import L4 et son test.
+**Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun. Impact périmètre : aucun** (le
+calcul est déjà juste ; c'est un garde-fou de RÉDACTION).
+
+**Pourquoi elle n'est pas faite dans L8.** Elle touche l'import (L4), pas le scoring, et CLAUDE.md §6
+interdit d'implémenter une fiche d'étage 2 avant son arbitrage. La proposer est un devoir, l'anticiper
+est une faute.
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE

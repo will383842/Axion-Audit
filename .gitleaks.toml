@@ -107,6 +107,37 @@ regexes = [
   #   1. le jeton est l'exemple PUBLIC et canonique de la documentation JWT,
   #      tronqué de surcroît — il ne signe rien et n'ouvre rien ;
   #   2. la clé privée porte `leurre-de-test-sans-valeur` DANS SON CORPS, à la
+  # ---------------------------------------------------------------------------
+  # TROISIÈME LEURRE — le jeton de DÉMONSTRATION du verdict A51, 2026-09-01.
+  #
+  # Détecté DEUX FOIS (`generic-api-key`, entropie 4,19) dans
+  # `docs/portes/VERDICT_A51_SECURITE_2026-08-31.md`, lignes 327 et 741. Les deux
+  # trouvailles portent LA MÊME valeur : une seule entrée les couvre.
+  #
+  # CE QUE CETTE VALEUR EST, vérifiable sans rien croire sur parole :
+  # `eyJhbGciOiJIUzI1NiJ9` décode `{"alg":"HS256"}`, `eyJzdWIiOiJ4In0` décode
+  # `{"sub":"x"}`, et la signature est le mot `sig`. Ce jeton ne signe rien et
+  # n'ouvre rien ; l'adresse qui l'accompagne (`jean.dupont@client.fr`) est
+  # fictive. Ce n'est pas un secret retiré après coup : c'est la PREUVE de la
+  # faille F-01 — la redaction laissait sortir en clair une URL portant e-mail ET
+  # jeton. Supprimer l'exemple viderait le verdict de sa démonstration.
+  #
+  # POURQUOI PAS PAR EMPREINTE, alors que c'était l'arbitrage initial de Williams
+  # (2026-09-01) : l'encadré des deux leurres ci-dessus a déjà tranché ce point le
+  # 2026-08-29, et son argument tient ici — une empreinte porte le sha du commit
+  # ET le numéro de ligne. Ce fichier de porte vit et grossit ; au premier ajout
+  # au-dessus de la ligne 327, l'exemption cesse de correspondre et le garde se
+  # désarme SANS LE DIRE. La valeur exacte, elle, ne se périme pas. L'intention de
+  # l'arbitrage est tenue (le plus étroit possible, ni par chemin ni par règle) ;
+  # seul le mécanisme est aligné sur le précédent maison.
+  #
+  # ÉPREUVE, avec témoin — 2026-09-01, gitleaks v8.18.4, historique complet.
+  # Les chiffres sont dans DECISIONS.md, mesurés et non supposés.
+  #
+  # Trace : DECISIONS.md 2026-09-01 « Le jeton de démonstration d'A51 fait rougir
+  # gitleaks ».
+  # ---------------------------------------------------------------------------
+  '''eyJhbGciOiJIUzI1NiJ9\.eyJzdWIiOiJ4In0\.sig''',
   #      place du matériel cryptographique, et son fichier le dit déjà en
   #      commentaire.
   #

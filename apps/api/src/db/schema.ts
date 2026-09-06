@@ -530,8 +530,13 @@ export const missionQuestions = pgTable('mission_questions', {
 export const interviews = pgTable('interviews', {
   id: uuid('id').primaryKey(),
   missionId: uuid('mission_id').notNull(),
-  /** PROPRIÉTAIRE de la session : seul habilité à écrire via sync (§9.9). */
-  conductedBy: uuid('conducted_by').notNull(),
+  /**
+   * PROPRIÉTAIRE de la session : seul habilité à écrire via sync (§9.9).
+   * NULLABLE depuis l'amendement du 04 du 2026-09-02 (migration 0014) : une
+   * session PLANIFIÉE par le plan §32.4 n'a pas encore d'auditeur affecté. La
+   * règle « conduite ⇒ auditeur » vit dans le service, pas ici.
+   */
+  conductedBy: uuid('conducted_by'),
   kind: text('kind').$type<TypeSession>().notNull(),
   /** Défaut APPLICATIF : 'sur_site' si kind='entretien', NULL sinon (V2.8). */
   mode: text('mode').$type<ModeEntretien>(),

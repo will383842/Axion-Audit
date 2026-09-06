@@ -113,7 +113,15 @@ GARDE-FOUS EN PARALLÈLE (tous exigés par `build`) :
   coverage      09 §3        ≥ 90 % sur les modules critiques (après `unit`)
   check:pack    09 §5.2      1re étape du job `lint` — intégrité des 12 fichiers du pack
 
-DANS LE JOB `schema-diff`, APRÈS `pnpm schema:diff` :
+DANS LE JOB `schema-diff`, AUTOUR DE `pnpm schema:diff` :
+  migration garde-fou        09 §3 DoD « migrations up/down » — R-B7 / R-L3-2 (A02, 2026-09-02)
+    up complet → `pnpm db:migrate --down` (la dernière) → re-up → schema:diff = 0 écart,
+    puis base PEUPLÉE d'une session sans auditeur → `--down-to 0013` doit ÉCHOUER en
+    SQLSTATE 23502 (0014 au journal, colonne toujours NULLABLE, ligne intacte) → fixture
+    retirée → re-up → schema:diff. Chaque verdict est un `step` nommé, sans `|| true`.
+    Ce que ce job prouve : up ET down sur le Postgres JETABLE de la CI. Ce qu'il ne
+    prouve PAS : « sur staging » — ce mot de la DoD reste un geste humain de Williams,
+    tracé dans le fichier de porte.
   check:schema-inventaire    liste NOIRE (DECISIONS.md 2026-08-27) — aucun objet
                              que le fichier 04 n'autorise (triggers, règles, vues…)
 
@@ -149,7 +157,7 @@ comportement voulu (un script manquant est un trou de vérification, pas une ét
 | `pnpm check:test-projects`     | `ci.yml` job `anti-skip`, `.husky/pre-commit`               | Aucun test **orphelin** (hors `include`/dans `exclude` d’un projet vitest) ; suite d’intégration NON VIDE, `@filrouge` et `@critique` exigés depuis le lot L1 |
 | `pnpm build`                   | `ci.yml` job `build-sources`                                | Construit `packages/*` puis `apps/*` — une PR ne peut plus être verte avec un build cassé                                                                     |
 | `pnpm infra:config`            | `ci.yml` job `shellcheck`                                   | `docker compose config -q` sur `infra/docker-compose.yml` (avec un `.env` éphémère)                                                                           |
-| `pnpm db:migrate`              | `ci.yml` job `schema-diff`                                  | Applique les migrations sur `DATABASE_URL` — exécuté **si `apps/api/drizzle/` existe** (L1)                                                                   |
+| `pnpm db:migrate`              | `ci.yml` job `schema-diff`                                  | Applique les migrations sur `DATABASE_URL` ; appelé aussi avec `--down` et `--down-to 0013` (drapeaux transmis par pnpm à `apps/api/scripts/migrations.mjs`)  |
 | `pnpm schema:diff`             | `ci.yml` job `schema-diff`                                  | Compare le schéma réel au manifeste ; **code ≠ 0 au premier écart**                                                                                           |
 | `pnpm check:schema-inventaire` | `ci.yml` job `schema-diff`                                  | Liste **noire** complémentaire du diff : aucun objet que le fichier 04 n'autorise (`DECISIONS.md` 2026-08-27)                                                 |
 | `pnpm check:isolation-reseau`  | `ci.yml` job `anti-skip`                                    | Seul le frontal rejoint le réseau du proxy de l'hôte — l'ICC y est activé, tout autre conteneur atteindrait la base du voisin (mesure A54)                    |
@@ -248,6 +256,13 @@ que si l'arborescence du serveur diffère.
 > c'est-à-dire supprimerait de fait le test de restauration exigé par 02 §11.4 et par le critère L0.
 > `ops` porte donc une clé au périmètre réduit, **sans** approbation. **Choix non tranché par le
 > pack** → à arbitrer dans `DECISIONS.md`.
+
+> **Amendement 2026-09-02 (décision de Williams).** Le nocturne **vérifie avant d'éprouver** que le
+> clone `/opt/axion-audit/repo` est au sha de `main` (sha lu par `git ls-remote`, envoyé sur
+> l'entrée standard de `restore-test-ci.sh`) ; un clone hors de `main` est un **refus nommé, sans
+> restauration** (`REFUS_CLONE_HORS_MAIN`). Ce clone est remis au sha livré par le job
+> `8 · deploy-staging` à chaque fusion, par la clé de déploiement — sans qu'elle gagne aucun droit.
+> Mécanisme, garde-fous, test à blanc et geste manuel initial : `infra/README.md` §6.3.
 
 ### Ce qui n'est **pas** un secret GitHub
 

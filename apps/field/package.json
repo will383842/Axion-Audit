@@ -5,21 +5,32 @@
   "type": "module",
   "description": "PWA terrain offline-first (invariant 1) — React 18 + Vite. JAMAIS Next.js (11 §2).",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "dev": "node scripts/build-icones.mjs && vite",
+    "build": "tsc --noEmit && tsc --noEmit --project sw/tsconfig.json && node scripts/build-icones.mjs && vite build && node scripts/build-sw.mjs",
+    "build:sw": "node scripts/build-sw.mjs",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc --noEmit --project sw/tsconfig.json",
+    "build:icones": "node scripts/build-icones.mjs"
   },
   "dependencies": {
     "@axion/shared": "workspace:*",
     "@axion/ui": "workspace:*",
+    "dexie": "4.4.5",
+    "dexie-react-hooks": "4.4.0",
+    "hash-wasm": "4.12.0",
     "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "react-dom": "18.3.1",
+    "uuidv7": "1.2.1",
+    "workbox-precaching": "7.4.1",
+    "workbox-routing": "7.4.1",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@types/react": "18.3.31",
     "@types/react-dom": "18.3.7",
     "@vitejs/plugin-react": "5.2.0",
-    "vite": "7.3.6"
+    "fake-indexeddb": "6.2.5",
+    "vite": "7.3.6",
+    "workbox-build": "7.4.1"
   }
 }

@@ -10,6 +10,26 @@ export * from './pagination.js';
 export * from './temps.js';
 export * from './env.js';
 export * from './redaction.js';
+// Les deux vocabulaires de motifs viennent AVANT le journal : c'est une feuille du
+// graphe (elle n'importe rien), et `journal.ts` la consomme (arbitrage Williams du
+// 2026-09-02, « motif codé »).
+export * from './motifs.js';
 export * from './journal.js';
 export * from './scoping.js';
 export * from './users.js';
+export * from './companies.js';
+export * from './missions.js';
+export * from './org-units.js';
+export * from './questionnaire.js';
+export * from './plan-entretiens.js';
+export * from './assignments.js';
+// Le pilotage (couverture) et l'agrégation viennent APRÈS le plan : la couverture
+// se confronte au plan §32.4, elle ne le recalcule jamais (lot L7, incrément L7b).
+export * from './pilotage.js';
+export * from './agregation.js';
+export * from './sync.js';
+// Le scoring vient EN DERNIER : il consomme les vocabulaires de la banque
+// (criticités, bornes 0-5) et ceux du plan d'entretiens (groupes d'interlocuteur).
+// ⚠ NE PAS CONFONDRE avec './scoping.js' — une lettre d'écart, deux sujets sans
+// aucun rapport : l'un cote un audit, l'autre garde des montants (invariant 3).
+export * from './scoring.js';

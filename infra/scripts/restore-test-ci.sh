@@ -34,7 +34,11 @@ set -uo pipefail
 
 printf 'EMPREINTE_SCRIPT=%s\n' "$(sha256sum "${BASH_SOURCE[0]}" | cut -d' ' -f1)"
 
-RACINE="/opt/axion-audit/repo"
+# LE CLONE. Le second argument n existe que pour le test a blanc
+# (`infra/scripts/test-garde-clone.sh`) : la directive `command=` fixe la ligne
+# de commande et ne transmet AUCUN argument du client — par la cle de CI, cette
+# valeur est toujours celle par defaut.
+RACINE="${2:-/opt/axion-audit/repo}"
 # LE .env : ON POINTE VERS CELUI QUI EXISTE, ON N EN FABRIQUE PAS UN SECOND.
 #
 # `restore-test.sh` a besoin de 8 variables reelles, dont PGBACKREST_CIPHER_PASS
@@ -64,6 +68,34 @@ echec() {
 [ -d "${RACINE}" ] || echec "La copie du depot est absente de ${RACINE}. Sans elle, il n y a rien a executer — et un test de restauration qui ne trouve pas son script ne doit JAMAIS sortir vert."
 
 cd "${RACINE}" || echec "Impossible d entrer dans ${RACINE}."
+
+# =============================================================================
+# LE CLONE EST-IL AU SHA DE `main` ? ON LE VERIFIE AVANT D EPROUVER QUOI QUE CE
+# SOIT — decide par Williams le 2026-09-02 (DECISIONS.md).
+# =============================================================================
+# Le sha attendu arrive sur l entree standard (ligne 1), comme les entrees de
+# `deploy-staging.sh` — jamais par SSH_ORIGINAL_COMMAND, qui serait une surface
+# d injection. Il est VALIDE avant d etre compare. Depuis le 2026-09-02, c est
+# le job de deploiement qui remet le clone a niveau a chaque fusion sur `main` ;
+# si le clone n y est pas, c est qu une livraison a manque ou que quelqu un a
+# touche au clone, et un test de restauration sur un code qui n est pas celui
+# de `main` ne prouverait rien de datable. On REFUSE, on NOMME, et l on ne
+# restaure PAS : le verdict de restauration n existe pas cette nuit-la, et le
+# journal le dit en toutes lettres plutot que de laisser croire a un oubli.
+read -r SHA_ATTENDU || SHA_ATTENDU=""
+[[ "${SHA_ATTENDU}" =~ ^[0-9a-f]{40}$ ]] \
+  || { echo "REFUS_SHA_ATTENDU_ABSENT"; echec "Aucun sha attendu valide sur l entree standard (40 hexa). Le nocturne doit envoyer le sha de main ; a la main : printf '%s\\n' \"\$(git -C ${RACINE} rev-parse HEAD)\" | $0"; }
+
+COMMIT_SERVEUR="$(git rev-parse HEAD 2>/dev/null)" \
+  || echec "Impossible de lire HEAD dans ${RACINE} : le clone est-il un depot git lisible par ce compte ?"
+echo "COMMIT_SERVEUR=${COMMIT_SERVEUR}"
+
+if [ "${COMMIT_SERVEUR}" != "${SHA_ATTENDU}" ]; then
+  echo "REFUS_CLONE_HORS_MAIN attendu=${SHA_ATTENDU} serveur=${COMMIT_SERVEUR}"
+  echo "::error::Le clone ${RACINE} est au commit ${COMMIT_SERVEUR}, main est a ${SHA_ATTENDU}. RESTAURATION NON TENTEE : eprouver un code qui n est pas celui de main ne prouverait rien. Depuis le 2026-09-02 c est le job « 8 · deploy-staging » qui realigne ce clone a chaque fusion — verifier que celui de ${SHA_ATTENDU} a tourne VERT ; a defaut, a la main : git -C ${RACINE} fetch origin main && git -C ${RACINE} checkout --detach ${SHA_ATTENDU}" >&2
+  exit 3
+fi
+echo "Clone verifie : ${RACINE} est bien au sha de main (${COMMIT_SERVEUR})."
 
 [ -x ./infra/scripts/restore-test.sh ] || echec "./infra/scripts/restore-test.sh introuvable ou non executable sous ${RACINE}. Verifier le clone et les droits."
 

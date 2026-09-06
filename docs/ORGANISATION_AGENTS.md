@@ -91,6 +91,26 @@ produit un rapport de trois blocages dont **deux étaient faux**, faute de mesur
 > à ce qu'il compte finit par être appliqué au jugé, puis contesté, puis ignoré. **Trois règles nettes
 > valent mieux qu'un chiffre qui a l'air simple.**
 
+> **AMENDEMENT DU 2026-09-04 — Williams. Le plafond passe à SIX chantiers suivis.**
+> Motif : « toujours être au maximum des capacités de codage et d'implémentation pour ne pas perdre
+> de temps », dans le cadre de l'autopilote de bout en bout du même jour (`DECISIONS.md`).
+>
+> **Ce qui NE bouge PAS, et c'est ce qui rend l'amendement tenable** : la **contrainte 1**
+> (collision) reste un **interdit** — jamais deux lots sur les mêmes fichiers ; la **contrainte 2**
+> (mémoire) reste à **deux exécutions lourdes** simultanées, tous chantiers confondus ; **L6 se
+> développe toujours SEUL** (`CLAUDE.md` §4). Le plafond compte des **chantiers**, jamais des
+> exécutions, et jamais des agents.
+>
+> **Pourquoi ça tient ici, alors que le motif du plafond n'a pas changé.** Le §2 mesure ce qu'un
+> pilote tient en tête. Ce qui a changé n'est pas sa capacité, c'est la **preuve de disjonction** :
+> `git merge-tree` sur les quatre branches en attente rend le même verdict pour les quatre — conflit
+> sur `DECISIONS.md` et `docs/ETAT.md`, **et sur rien d'autre. Zéro conflit de code.** Six chantiers
+> qui ne partagent aucun fichier ne demandent pas six fois l'attention d'un : ils demandent six
+> rapports. **Le plafond d'attention se mesure aux fichiers partagés, pas au nombre de répertoires.**
+>
+> **La borne, et elle est réelle** : le jour où deux chantiers se disputent un fichier, ce n'est plus
+> l'amendement qui s'applique, c'est la contrainte 1 — et elle, elle ne se négocie pas.
+
 **Le nombre d'AGENTS par chantier, lui, n'a pas ce plafond.** Élargir en amont, sérialiser à
 l'exécution : dix agents peuvent écrire dix fichiers de tests en parallèle, ils ne peuvent pas les
 *lancer* en parallèle. Lecture, rédaction, revue et traçabilité coûtent de l'API, presque pas de RAM ;
@@ -120,9 +140,61 @@ ligne utile, une clé SSH « restreinte » qui ne l'aurait pas été.
 **Le vérificateur mesure, il ne relit pas.** Un résumé n'est pas une preuve : on exécute la commande
 et on lit sa sortie.
 
+> **AMENDEMENT DU 2026-09-05 — deux règles, chacune payée par un incident du jour.**
+>
+> **a. Un réviseur qui commite est un écrivain.** Le §1 disait « lecture en parallèle : sans
+> risque » — et c'est vrai de la lecture. Mais A17 (revue) et A16 (tests), placés dans le même
+> worktree, se sont télescopés : A17 a commité son verdict, **amendé par erreur le commit d'A16**, et
+> laissé un merge en cours ; A37 et A36 ont rejoué la même scène sur L7b. Aucune perte, deux fois la
+> même cause. **Règle** : un réviseur **dépose** son verdict dans `docs/portes/` et **ne touche jamais
+> à l'index** — ni `add`, ni `commit`, ni `push`. Le pilote le commite lui-même
+> (`git -C <worktree> add <fichier> && git commit`) une fois le testeur sorti. Tout `git add`,
+> `commit` ou `push` est une écriture, y compris pour un fichier Markdown.
+>
+> **b. Deux couches de tests, deux auteurs.** `CLAUDE.md` §4 impose le TDD (tests écrits AVANT, donc
+> par l'auteur) **et** le croisement (jamais par l'auteur). Les deux se lisent ensemble : les **tests
+> de conception** (TDD) sont écrits par l'auteur, déclarés dans leur en-tête, et **ne portent jamais
+> `@critique`** ; les **tests d'acceptation** (`@critique`, par rôle, 4 états, E2E, preuve par
+> bascule) sont écrits par un testeur croisé — A16, A26, A27, A36 — qui peut **contester** un test de
+> conception, jamais le **remplacer**. Une porte ne s'appuie que sur la seconde couche.
+> (`DECISIONS.md`, 2026-09-05, les deux entrées « [méthode] » et « [organisation] ».)
+
 ---
 
 ## 4. LES INTERDITS GIT
+
+> **AJOUT DU 2026-09-05 — refusionner `main` après un SQUASH MERGE.** Le dépôt fusionne en **squash**
+> (`CLAUDE.md` §7). Conséquence que personne n'avait écrite : quand `lot/l5a` entre dans `main`, son
+> historique disparaît. Une branche partie de `lot/l5a` **avant** ce squash — `lot/l5b`, `lot/l5c` —
+> ne partage donc **aucune base commune** avec les fichiers de `main` : git les voit en `add/add`, et
+> propose de choisir un côté. **Choisir perd tout un incrément**, dans un sens ou dans l'autre.
+>
+> **La parade, mesurée le 2026-09-05 sur `lot/l5c`** : fusion à trois branches **par fichier**, en
+> nommant la branche d'origine comme base — `git merge-file <à-nous> <base=lot/l5a> <de-main>`.
+> Quinze fichiers de code sont alors passés **sans un seul conflit**, là où la fusion ordinaire les
+> présentait tous comme irréconciliables.
+>
+> **Et on vérifie après, plutôt que de supposer** : que le correctif venu de `main` est présent, et
+> que les ajouts de la branche le sont aussi. Un `add/add` résolu sans contrôle est le plus silencieux
+> des écrasements — il ne laisse aucun marqueur.
+>
+> **LE FICHIER DANGEREUX EST CELUI QUE GIT DIT AVOIR AUTO-FUSIONNÉ, PAS CELUI EN CONFLIT.**
+> Ajouté le 2026-09-06, après que le même chemin a manqué de disparaître **deux fois dans la même
+> journée**. `apps/field/src/app/contexte.tsx` était marqué `M ` — auto-fusionné, déjà indexé, aucun
+> marqueur — et il avait perdu **tout le côté `main`** : l'import et le routage du constat
+> **critique** F-22, « un coffre présent mais illisible n'est pas un appareil neuf ».
+>
+> Un fichier en conflit **appelle** une vérification ; un fichier auto-fusionné n'en appelle aucune.
+> C'est `tsc` qui l'a rattrapé, pas une relecture — et seulement parce qu'un symbole devenait
+> introuvable. **Si la perte avait porté sur une branche `if` plutôt que sur un import, rien ne
+> l'aurait signalée.**
+>
+> **Donc, après toute fusion touchant du code de sécurité** : `git diff origin/main -- <fichier>` sur
+> les fichiers auto-fusionnés aussi, jamais seulement sur les conflictuels ; puis `pnpm build` et la
+> suite **avant** de commiter. Et rappelle-toi ce que le comptage ne dit pas : **un comptage de
+> symboles dit qu'un correctif est PRÉSENT, il ne dit pas qu'il est ATTEINT.** Seuls les tests le
+> disent — deux tests `@critique` ont trouvé, le même jour, un message d'anomalie perdu que le
+> comptage déclarait intact.
 
 **a. `git commit` sans chemins emporte l'index ENTIER**, donc le travail qu'un voisin vient
 d'indexer. *Arrivé quatre fois le 2026-08-29, dont une où 2 700 lignes du travail de trois agents
@@ -260,5 +332,42 @@ commande de réparation dans ce cas : **copier le dossier ailleurs d'abord**, pu
 
 ---
 
+## 9. TROIS CHANTIERS NOMMÉS, ET CE QUI LES REND POSSIBLES (Williams, 2026-09-02)
+
+Mesuré le 2026-09-02 : le chantier avance à 1 à 1,5 j-h de noyau par jour calendaire, soit un
+développeur et demi. Le plafond de trois chantiers existe depuis le 2026-08-31 et n'était utilisé
+qu'à moitié : L3 et L5 ont partagé un worktree pendant six heures. Williams tranche : **trois
+chantiers vraiment disjoints, chacun dans son worktree, avec son chef, en parallèle.**
+
+| Chantier | Chef | Worktree | Fichiers | Ne touche jamais |
+| --- | --- | --- | --- | --- |
+| **C1 — L3 backend** (fin de lot, porte) | A10 | `_axl3` · `lot/l3-suite` | `apps/api/**`, `packages/shared/src/{companies,missions,org-units,questionnaire,plan-entretiens}.ts` | `apps/field`, `apps/hq` |
+| **C2 — L5 terrain** (L5a → L5c) | A20 | `_axl5a` · `lot/l5a` puis `lot/l5b`, `lot/l5c` | `apps/field/**`, `packages/shared/src/sync.ts` | `apps/api`, `apps/hq` |
+| **C3 — L7-min console** | A30 | `_axl7` · `lot/l7a` | `apps/hq/**` | `apps/api`, `apps/field` |
+
+**Ce qui est commun et qui se sérialise** : `packages/shared/src/index.ts`, `DECISIONS.md`,
+`docs/ETAT.md`, `AMELIORATIONS.md`, le lockfile. Règle : **on y écrit en append, on fusionne `main`
+avant de pousser, jamais deux PR ouvertes sur le même de ces fichiers sans rebase.**
+`packages/ui` est **figé** pendant les trois chantiers ; un composant manquant = une fiche étage 1,
+livrée par A21 dans une PR à part.
+
+**Ce qui ne change pas** : L6 (sync) se développe **seul**, et **après la porte P-C, qui est la fin
+de L5 ENTIER** — L5a *et* L5b *et* L5c. `09 §6` : « P-C (fin L5) au plus tard le mardi de la semaine
+3 ; **ensuite** L6 se développe SEUL (§5.3) ; **jamais L5 et L6 menés de front** » ; `07:24` définit
+L5 comme « PWA terrain COMPLÈTE … en 3 incréments L5a/L5b/L5c ». **Ce paragraphe a porté « quand C2
+a livré L5a » du 2026-09-02 au 2026-09-03** : c'était une citation fautive, pas un arbitrage — la
+formulation « L6 après L5a » ne figure ni dans 07, ni dans 09, ni dans 11, ni dans 00_INDEX. Elle
+aurait fait démarrer L6 dans `apps/field/**` pendant que C2 y travaillait encore. *Un renvoi qui
+reformule sa source au lieu de la citer finit par dire autre chose qu'elle.* Deux exécutions
+lourdes au maximum sur la machine, une seule par chantier. La quatrième session est **interdite** :
+les trois chantiers sont trois chefs lancés depuis la session pilote ; la session de vérification
+mesure et ne produit rien.
+
+**Le chef rend compte** : à chaque incrément commité, une ligne dans ETAT.md (≤ 25 lignes par bloc,
+`check:prose`), et un message à A01 avec trois chiffres — tests écrits, tests verts, CI.
+
+---
+
 *Traçabilité : ce fichier outille `CLAUDE.md` §4, §5.6, §7 et §8. Il ne crée aucune convention
-nouvelle et n'amende aucune spécification. Arbitrage : `DECISIONS.md`, 2026-08-30.*
+nouvelle et n'amende aucune spécification. Arbitrage : `DECISIONS.md`, 2026-08-30 ; §9 :
+`DECISIONS.md`, 2026-09-02 (Williams).*

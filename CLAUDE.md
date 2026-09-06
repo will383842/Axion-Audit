@@ -121,6 +121,9 @@ date-fns · `@fontsource-variable/inter` (**police AUTO-HÉBERGÉE — jamais de
 (collision de fichiers, mémoire, attention du pilote), un worktree par chantier, les interdits git.
 **À lire AVANT d'ouvrir une seconde session — ce renvoi ne répète AUCUN chiffre, délibérément : un
 plafond recopié à deux endroits dérive, et c'est le renvoi qu'une session lit en premier.**
+**Trois chantiers disjoints, en parallèle, chacun dans son worktree avec son chef** (Williams,
+2026-09-02, `docs/ORGANISATION_AGENTS.md` §9) : **L3 backend / A10 · L5 terrain / A20 · L7 console /
+A30**. Ils ne partagent aucun fichier. L6 reste seul. Une session à part vérifie et ne produit rien.
 
 ---
 
@@ -169,6 +172,13 @@ plafond recopié à deux endroits dérive, et c'est le renvoi qu'une session lit
   Impact spec : aucun | amendement horodaté
   ```
   **Une décision non tracée dans ce format n'existe pas.**
+  **Et une entrée sans vrai choix n'en est pas une** (Williams, 2026-09-02) : on trace quand deux
+  options se défendaient, pas pour raconter le travail. **≤ 40 lignes** (garde `check:prose`).
+  Un constat, une mesure, une rectification vont dans le commit, le test ou le fichier de porte.
+- **PR de documentation seule** (`docs/`, `DECISIONS.md`, `AMELIORATIONS.md`, `ETAT.md`, journal,
+  fiche de porte déjà signée) : la session qui l'ouvre **arme l'auto-merge** (`gh pr merge --auto
+--squash`) dès la CI verte, sans attendre Williams (décision du 2026-09-02). Le code, les portes
+  non signées et tout ce que le §3 réserve restent à lui.
 - **Portes** : chaque porte produit `docs/portes/PORTE_<X>_<date>.md` — critères du fichier 07 copiés,
   cochés un à un **avec la preuve** (lien CI, capture, commande), verdict, signature humaine.
   **Le merge de la porte est conditionné à ce fichier commité.**
@@ -189,8 +199,17 @@ plafond recopié à deux endroits dérive, et c'est le renvoi qu'une session lit
   Prochaine action : <une phrase impérative — celle qu'une session neuve exécuterait>
   Tests rouges connus : <liste ou « aucun »>
   ```
+  **Un bloc = ≤ 25 lignes** (garde `check:prose`, Williams 2026-09-02) : faits, chiffres, prochaine
+  action. Le récit va dans le commit ou la fiche de porte. Un bloc long est un bloc qu'on ne lit pas.
 - **Commit + push toutes les ~2 h ou à chaque sous-tâche terminée.**
   **La durabilité vit sur `origin`, pas sur la machine : un commit non poussé n'existe pas.**
+- **Zéro push rouge évitable** (Williams, 2026-09-02) : le hook `pre-push` rejoue `pnpm verify:rapide`
+  (les 14 gardes, lint, typecheck, unitaires — tout ce que la CI vérifie sans conteneur).
+  **`pnpm verify` complet (intégration + e2e) est obligatoire AVANT d'ouvrir une PR.**
+  `--no-verify` : uniquement pour sauver un `wip:` avant une coupure, et ça s'écrit dans ETAT.md.
+- **Aucun arrêt silencieux** (régime du 2026-08-31, point 2) : une session ne rend pas la main avec
+  du travail non commité ou non poussé. Le hook `Stop` (`scripts/hook-stop-durabilite.mjs`) le
+  refuse mécaniquement. Bloquée > 15 min : elle écrit à Williams, question ET recommandation.
 - **Fin de session PROPRE** (préférée à la limite de contexte) : ETAT.md à jour + commit + push +
   une ligne de journal. **C'est un geste NORMAL, pas un échec.**
 - **Protocole de REPRISE** (toute session) : ETAT.md (dernier bloc) → `git log -5` + `git status` →
