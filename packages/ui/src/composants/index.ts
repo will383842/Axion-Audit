@@ -64,6 +64,13 @@ export type { ProprietesEtatHorsLigne } from './EtatHorsLigne.js';
 export { ZoneEtat } from './ZoneEtat.js';
 export type { ProprietesZoneEtat, EtatZone } from './ZoneEtat.js';
 
+// Le RAPPEL hors ligne — la moitié de §33.2 (« pastille discrète + rappel des
+// capacités locales ») que la consigne perdait écran par écran. Distinct
+// d'`EtatHorsLigne`, qui est l'état PLEIN rendu à la place du contenu : celui-ci
+// s'ajoute à un écran qui reste utilisable, et se tait quand le réseau est là.
+export { RappelHorsLigne } from './RappelHorsLigne.js';
+export type { ProprietesRappelHorsLigne, ListeNonVide } from './RappelHorsLigne.js';
+
 // --- Composants MÉTIER terrain (§33.5) ---------------------------------------
 export { EchelleAncree } from './EchelleAncree.js';
 export type { ProprietesEchelleAncree, AncreCotation } from './EchelleAncree.js';

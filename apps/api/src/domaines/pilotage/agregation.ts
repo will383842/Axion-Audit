@@ -61,6 +61,14 @@ export interface EntreeAgregation {
   readonly nextCursor: string | null;
   /** Agrégés en SQL sur la mission ENTIÈRE, filtres appliqués. */
   readonly totaux: TotauxAgregation;
+  /**
+   * Les noms des répondants ont-ils été DEMANDÉS ? (2026-09-05, L7c.)
+   *
+   * L'assembleur ne s'en sert pas pour filtrer — le dépôt a déjà rendu `null` là
+   * où la porte est fermée. Il le RECOPIE dans la réponse pour que l'écran sache
+   * distinguer « aucun consentement dans cette page » de « je n'ai pas demandé ».
+   */
+  readonly repondantsAffiches: boolean;
 }
 
 /**
@@ -104,6 +112,8 @@ function projeterReponse(ligne: LigneReponseAgregee, optionsSnapshot: unknown): 
     orgUnitInScope: ligne.orgUnitInScope,
     fonctionRepondant: ligne.fonctionRepondant,
     serviceRepondant: ligne.serviceRepondant,
+    // Le dépôt a déjà tranché : ce qui arrive ici est publiable tel quel.
+    nomRepondant: ligne.nomRepondant,
     provenance: provenanceConnue(ligne.provenance),
     valeurLisible: aplatirValeur(ligne.valeur, optionsSnapshot),
     nonCommunique: ligne.nonCommunique,
@@ -207,5 +217,6 @@ export function assemblerAgregation(entree: EntreeAgregation): AgregationMission
       aRevoir: entree.totaux.aRevoir,
       parProvenance: comptesParProvenance(entree.totaux.parProvenance),
     },
+    repondantsAffiches: entree.repondantsAffiches,
   };
 }

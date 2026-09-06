@@ -679,6 +679,25 @@ jobs:
 
       - name: pnpm lint
         run: pnpm lint
+
+      # -----------------------------------------------------------------------
+      # POURQUOI CE GARDE EST ICI, ET APRÈS `pnpm lint`.
+      #
+      # Il lit le contrat dans `packages/shared/dist` — le contrat RÉEL, pas sa
+      # source. `pnpm lint` construit les paquets ; le placer avant lui rendrait
+      # un rouge qui ne parle que de `dist` absent.
+      #
+      # CE QU'IL FERME (2026-09-06) : les corps littéraux servis par les tests
+      # E2E ne sont confrontés à aucun schéma par le compilateur. Deux fois le
+      # même jour, un champ requis ajouté au contrat les a fait rejeter, l'écran
+      # a basculé en ÉTAT D'ERREUR, et la CI a rapporté « colonne Provenance
+      # introuvable » — un balayage d'accessibilité accusé d'un défaut de
+      # contrat, vingt minutes après sa cause. Ce garde nomme le champ fautif en
+      # une seconde.
+      # -----------------------------------------------------------------------
+      - name: pnpm check:fixtures (corps littéraux vs contrat partagé)
+        run: pnpm check:fixtures
+
       # Le formatage est vérifié, jamais réécrit par la CI : un job qui corrige
       # le dépôt à la place de l'auteur masque le défaut au lieu de le signaler.
       - name: pnpm format:check
@@ -765,6 +784,26 @@ jobs:
         run: pnpm --recursive --filter "./packages/**" build
       - name: pnpm test:unit
         run: pnpm test:unit
+
+      # -----------------------------------------------------------------------
+      # POURQUOI LES TESTS D INTERFACE SONT ICI, DANS LE JOB « unit ».
+      #
+      # Le nom du job est un contrat avec la protection de branche : on ne le
+      # renomme pas, on lui ajoute une etape.
+      #
+      # LE DEFAUT QUE CELA FERME (2026-09-06) : les 61 fichiers du projet
+      # `interface` n etaient executes par AUCUN job. Ils ne tournaient qu au
+      # travers de `test:coverage`, qui lance tous les projets vitest — si bien
+      # qu un test d interface rouge se presentait au relecteur sous le libelle
+      # « coverage-summary.json absent », et non « un test est rouge ». Un garde
+      # dont le verdict ne nomme pas ce qu il a trouve ne garde rien.
+      #
+      # Le cas reel : `EcranExport.test.tsx` construisait sa fausse archive avec
+      # un `Blob` de jsdom, que le `Response` d undici refuse sous Node 22 et
+      # accepte sous Node 24. Vert sur le poste, rouge ici — et illisible.
+      # -----------------------------------------------------------------------
+      - name: pnpm test:interface (jsdom — voir l encadre ci-dessus)
+        run: pnpm test:interface
 
   # ---------------------------------------------------------------------------
   # 4/8 — TESTS D'INTÉGRATION (11 §7 : services postgres, redis, minio)

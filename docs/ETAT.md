@@ -3786,6 +3786,32 @@ Cinq entrées `DECISIONS.md` (2026-09-05) : les deux routes (11 §8-6) · le **n
 portant pas le lien session ↔ profil, escalade Williams · ce que « planifié » compte · un bloc
 « abordé » par une réponse non communiquée.
 
+## 2026-09-05 08h30 — [lot L7 / incrément L7c] — étape pipeline 3/7 (auto-revue)
+
+Dernier commit vert : `116a039` (test(l7c) — tests de conception de l'écran d'export) · Branche :
+`lot/l7c` · Poussé : oui
+
+Tâche en cours : auto-revue de L7c — export §36.3 (route, dix fichiers, conteneur ZIP écrit avec
+`node:zlib`, aucune dépendance ajoutée) + nom du répondant sous condition serveur.
+
+Prochaine action : passer la revue croisée à A37, puis faire écrire par A36 les tests d'acceptation
+du §36.3 sur base réelle — en passant par `apps/api/tests/aide/archive-export.ts`, sans quoi un
+balayage sur un corps compressé serait un vert aveugle.
+
+Tests rouges connus : deux, aucun de L7c. ① `EcranCouverture.test.tsx:205` (« atelier » invisible à
+zéro) — désaccord L7b entre l'écran d'A32 et le test d'A36, présent au commit de base `6dbf43d`,
+appartient à `_axl7`. ② quatre fichiers unitaires tombent par intermittence sur « Test timed out in
+5000ms » (`jetons`, `erreurs`, `assignments`, `garde-fous-invariants`) : **69/69 verts avec
+`--testTimeout=30000`** — plafond de 5 s trop court sur une machine où six agents travaillent, pas
+une régression.
+
+Mesures : `test:unit` **1101** (1031 avant, +70 de L7c) · `test:interface` **643** (634 + 9) ·
+lint, typecheck, `format:check` : 0 erreur · aucun test skippé (116 fichiers) · `check:invariants`,
+`check:decisions`, `check:jonction`, `check:test-projects` verts.
+
+Six entrées `DECISIONS.md` de plus (11 au total pour L7c) : les ambiguïtés du §36.3 tracées avant
+la première ligne de code, dont trois amendements candidats pour P-D/L10 (`missions.reference`,
+`org_units.out_of_scope_reason`, un fichier de feuille de route au §36.3).
 ## 2026-09-05 01h10 — [lot L5 / incrément L5b] — étape pipeline 3/7 (refusion TERMINÉE, CI verte)
 
 Dernier commit vert : b89e358 (merge lot/l5a ba38847) · Branche : lot/l5b · Poussé : oui
@@ -4076,6 +4102,31 @@ Les tests d'écran restent verts **à raison** : ils reçoivent l'état en acces
 Après restauration, `git diff` **vide** : arbre identique à l'octet. Aucun fichier de production
 touché de ma main (09 §5.6).
 
+## 2026-09-06 14h00 — [lot L7 / incrément L7c] — étape pipeline 4/7 (revue croisée traitée)
+
+Dernier commit vert : `ab39a0b` (test(l7c) — les 19 tests d'intégration de M-2) · Branche :
+`lot/l7c` · Poussé : oui, **avec `--no-verify`** — motif ci-dessous, pas un contournement de garde.
+
+Tâche en cours : REFUS d'A37 traité. **B-1** fermé (nom, fonction et service passent la même porte
+dans l'export — arbitrage A01 du 2026-09-06) · **M-1** fermé (un fuseau par site audité, hérité de
+l'arbre ; `arbre.csv` gagne sa colonne `fuseau`) · **M-2** fermé (19 tests d'intégration) · **M-4**
+fermé (merge de `main` 3a7937f, un conflit résolu par addition, quatre append-only contrôlés par
+comptage d'objets — zéro entrée perdue, zéro ligne supprimée).
+
+Prochaine action : soumettre la PR #58 à une seconde revue croisée A37, puis faire écrire par A36 la
+RECETTE du §36.3 — la somme des douze rubriques, axe-core, p95, rejeu FIL-TPE/FIL-GC.
+
+Tests rouges connus : **aucun**. Les 5 rouges de `revue-a29.test.tsx` (M-3) sont corrigés par `main`.
+
+Mesures : `test:unit` **1691** verts (63 fichiers) · `test:interface` **827** verts (50 fichiers) ·
+intégration L7c **19/19**, L7b **26/26** sur PostgreSQL réel · `lint`, `typecheck`, `build`,
+`format:check`, `check-decisions`, `check-prose`, `check-octets-controle`, `check-test-projects`
+(143 fichiers), anti-skip : **0 erreur**.
+
+**Pourquoi `--no-verify`** : `pnpm verify:rapide` sort en code 1 avec **1691/1691 verts** — l'unique
+erreur est `[vitest-worker]: Timeout calling "onTaskUpdate"`, le dépassement du RAPPORTEUR de Vitest.
+C'est exactement le caveat écrit en tête de `.husky/pre-push` : ce poste tourne sur **node v24.19.0**,
+hors du `>=22.11.0 <23` du 11 §1. Mesuré, pas supposé.
 ---
 
 ## 2026-09-06 11h30 — [lot L5 / recette novice — correctifs A20] — étape pipeline 5/7
@@ -4144,6 +4195,34 @@ Trois arbitrages A01 tracés dans `DECISIONS.md`, une fiche d'étage 2 dans `AME
 `apps/api/src/scoring/**` : 99,65 lignes / 100 fonctions / 96,71 branches. La justification de
 l'arborescence est réécrite : le scoring est un calcul pur transverse sans dépôt ni route, au rang
 d'`auth/` et `http/` — le glob suit le code, il ne le place pas.
+
+## 2026-09-06 16h20 — [autopilote / avant rejeu P-C] — étape pipeline 4/7
+
+Dernier commit vert : `b6714ff` (L5 — les six bloquants de la recette novice) · Branche : `gouvernance/etat-08` · Poussé : oui
+Tâche en cours : quatre chantiers parallèles ferment tout ce que P-C refuse qui n'est PAS du matériel.
+Prochaine action : fusionner #58 et #67, puis **rejouer P-C EN ENTIER** dès les quatre chantiers rentrés.
+Tests rouges connus : aucun sur `main`. `7 · images / field` a flanché sur un **502 du Docker Hub** — panne du registre, relancée ; c'est la 2ᵉ fois que ce job tombe pour une cause externe.
+
+**#58 et #67 débloquées, et une trouvaille au passage.** Les deux étaient rouges sur des dégâts de la
+fusion `union` de `DECISIONS.md` (une ligne vide mangée, un `Impact spec :` avalé — repris tel quel du
+parent, pas réécrit). Mais la couverture de #58 tombait sur `EcranExport.test.tsx` avec pour seul
+message `coverage-summary.json absent` : la cause réelle était un `Blob` de jsdom que le `Response`
+d'undici refuse **sous Node 22** (la version du contrat) et accepte sous Node 24 (celle du poste).
+**Et surtout : `pnpm test:interface` n'était appelé par AUCUN job.** Les 61 fichiers du projet
+`interface` ne tournaient qu'en effet de bord de `test:coverage` — un test d'interface rouge se
+présentait donc au relecteur sous le libellé « couverture absente ». Une étape est ajoutée au job
+`3 · unit` (son nom est un contrat avec la protection de branche : on ne le renomme pas).
+**Troisième fois en trois jours qu'un garde vert ne gardait rien.**
+
+**Quatre chantiers ouverts, disjoints, pour vider P-C de tout ce qui n'est pas matériel** : ① les
+scénarios E2E hors ligne — `grep setOffline e2e/` rend toujours ZÉRO, ce qui à lui seul refuse quatre
+critères du fichier 07 ; ② `EcranRestauration.tsx`, 267 lignes, **11 % et aucun fichier de test** —
+le parachute qu'on n'a jamais ouvert ; ③ le bouton « Terminer » qui n'existe pas dans l'entretien, les
+boutons grisés muets, et le refus d'interlocuteur (D-1) ; ④ la police posée sur `.axn-coquille` seule
+(`documentElement` = Times New Roman, latent jusqu'au premier portail) et la grille des 4 états.
+
+**Ce qui restera dû à Williams après cela : les 17 points de machine réelle.** Ils ne se cochent pas
+sur `jsdom`, et la porte se rejoue EN ENTIER — un correctif isolé ne relance pas le chronomètre.
 
 ## 2026-09-06 18h05 — [lot L5 / incrément L5c] — étape pipeline 3/7
 

@@ -18,6 +18,8 @@
 // partout, fil d'ariane constant ») :
 //   `/missions/:id/couverture`  → couverture par unité ET par source (§27.1)
 //   `/missions/:id/agregation`  → réponses par question (M5.1, §27.4)
+// Et celle de L7c :
+//   `/missions/:id/export`      → export de mission au format §36.3
 // Elles ne sont PAS des espaces de la barre latérale : les deux n'ont de sens
 // qu'une fois une mission choisie. Les brancher sur un espace exigerait un
 // sélecteur de mission, qui appartient à l'espace 6 et arrivera avec lui.
@@ -36,6 +38,7 @@ export type Route =
   | { readonly type: 'mission'; readonly id: string }
   | { readonly type: 'couverture'; readonly id: string }
   | { readonly type: 'agregation'; readonly id: string }
+  | { readonly type: 'export'; readonly id: string }
   | { readonly type: 'inconnue'; readonly chemin: string };
 
 export const ROUTE_ACCUEIL: Route = { type: 'accueil' };
@@ -56,12 +59,13 @@ export function analyserChemin(chemin: string): Route {
   // Les sous-écrans d'une mission. Le segment de fin est FERMÉ (une alternance,
   // pas un joker) : un chemin inventé reste « inconnue » et rend l'écran qui le
   // dit, plutôt qu'un écran vide sur un identifiant qui n'existe pas.
-  const sousEcran = /^\/missions\/([^/]+)\/(couverture|agregation)$/.exec(propre);
+  const sousEcran = /^\/missions\/([^/]+)\/(couverture|agregation|export)$/.exec(propre);
   const id = sousEcran?.[1];
   const vue = sousEcran?.[2];
   if (id !== undefined && UUID.test(id)) {
     if (vue === 'couverture') return { type: 'couverture', id: id.toLowerCase() };
     if (vue === 'agregation') return { type: 'agregation', id: id.toLowerCase() };
+    if (vue === 'export') return { type: 'export', id: id.toLowerCase() };
   }
   return { type: 'inconnue', chemin: propre };
 }
@@ -79,6 +83,8 @@ export function cheminDeRoute(route: Route): string {
       return `/missions/${route.id}/couverture`;
     case 'agregation':
       return `/missions/${route.id}/agregation`;
+    case 'export':
+      return `/missions/${route.id}/export`;
     case 'inconnue':
       return route.chemin;
   }
