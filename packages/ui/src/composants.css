@@ -772,6 +772,45 @@
 }
 
 /* ---------------------------------------------------------------------------
+   Rappel hors ligne — §33.2 : « pastille discrète + RAPPEL DES CAPACITÉS
+   LOCALES ». DISCRET est la contrainte : ce bloc s'ajoute à un écran qui garde
+   tout son contenu, il ne le remplace pas. Il ne prend donc ni la largeur ni le
+   centrage de `.axn-etat` — qui est un état PLEIN, rendu À LA PLACE du contenu —
+   et il n'emprunte pas le ton d'alerte : hors ligne est le mode NOMINAL de
+   l'invariant 1, pas une panne.
+   Contraste MESURÉ (A28) : texte-secondaire sur surface-carte = 7,52:1, AA tenu
+   à 14 px. La bordure est décorative : elle ne porte aucune information seule.
+   --------------------------------------------------------------------------- */
+
+.axn-rappel-hors-ligne {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--espacement-2);
+  padding: var(--espacement-3);
+  border: var(--taille-bordure-epaisseur) solid var(--couleur-bordure-discrete);
+  border-radius: var(--taille-rayon-grand);
+  background: var(--couleur-surface-carte);
+  font-family: var(--typo-police-corps);
+  font-size: var(--typo-taille-sm);
+  line-height: var(--typo-interligne-normal);
+  color: var(--couleur-texte-secondaire);
+}
+
+.axn-rappel-hors-ligne__intro {
+  margin: 0;
+}
+
+.axn-rappel-hors-ligne__capacites {
+  margin: 0;
+  padding-inline-start: var(--espacement-5);
+}
+
+.axn-rappel-hors-ligne__capacites li {
+  margin-block: var(--espacement-1);
+}
+
+/* ---------------------------------------------------------------------------
    Indicateur « Enregistré » — §33.3 : « pastille FURTIVE à chaque écriture
    locale ; la confiance se voit ». Furtive : elle occupe sa place en permanence
    (sinon la ligne saute à chaque frappe) et ne s'annonce qu'en changeant de texte.
