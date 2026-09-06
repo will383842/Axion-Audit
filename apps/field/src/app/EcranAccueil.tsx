@@ -31,7 +31,7 @@
 // Traçabilité : E38 (sauvegarde terrain : sync + export), E26 (alertes actives sur
 // les manques).
 // =============================================================================
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Bouton, Message, ZoneEtat, type EtatZone } from '@axion/ui';
 import { cleEmbarquement, clePersistance, type BaseLocale } from '../local/base.js';
@@ -152,7 +152,6 @@ export function EcranAccueil(): ReactNode {
   const { base, jetonSiege, rafraichirStockage, naviguer } = useTerrain();
   const [embarquement, setEmbarquement] = useState<ResultatEmbarquement | null>(null);
   const [enCours, setEnCours] = useState<string | null>(null);
-  const [etatsSync, setEtatsSync] = useState<readonly EtatSyncMission[]>([]);
 
   // R-L5a-7 : une lecture locale qui échoue produit un ÉTAT, pas une exception
   // qui emporte l'arbre. `useLiveQuery` propage le rejet au rendu ; on le capte
@@ -175,10 +174,18 @@ export function EcranAccueil(): ReactNode {
 
   // R-L5a-8 : le port est LA source de l'état de sync et de l'alerte de
   // l'invariant 8. On lui donne les comptes réels, il rend le verdict.
-  useEffect(() => {
-    if (resume === null) return;
-    setEtatsSync(
-      resume.missions.map((mission) => {
+  //
+  // Calculé en `useMemo` et non dans un `useEffect` (B6, 2026-09-06) : l'effet
+  // imposait un SECOND cycle de rendu avant que l'alerte « aucune sync connue »
+  // n'apparaisse. Tant qu'une pastille s'affichait dès le premier cycle, le
+  // décalage passait inaperçu ; il devenait une course dès qu'elle a été retirée.
+  // Une alerte de l'invariant 8 qui apparaît « un rendu plus tard » est une
+  // alerte qu'un auditeur pressé ne voit pas. `rafraichirEtat` est une écriture
+  // de cache idempotente, entièrement dérivée de `resume` : la rejouer donne le
+  // même résultat, et rien d'autre n'en dépend.
+  const etatsSync: readonly EtatSyncMission[] = useMemo(
+    () =>
+      (resume?.missions ?? []).map((mission) => {
         portSyncInerte.rafraichirEtat(
           mission.id,
           mission.operationsEnAttente,
@@ -186,8 +193,8 @@ export function EcranAccueil(): ReactNode {
         );
         return portSyncInerte.etat(mission.id);
       }),
-    );
-  }, [resume]);
+    [resume],
+  );
 
   const alertes = [
     ...new Set(
