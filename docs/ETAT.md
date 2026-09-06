@@ -4391,3 +4391,17 @@ Prochaine action : pousser, puis demander à A29 la re-revue des deux bloquantes
 Tests rouges connus : aucun. Le rouge d'`EcranAgenda` signalé hier est corrigé par #79.
 ⚠ 4 flakes de contention connus en `test:unit` sous charge (quota, garde-fous) : 1792/1792 en
 isolation. Environnement hors contrat : Node v24.19.0 — la CI reste juge (09 §5.7).
+
+## 2026-09-06 23h20 — [lot L5 / §33.2 + a11y] — étape pipeline 4/7
+
+Dernier commit vert : e4effd5 (merge : douzième vue + accès clavier) · Branche :
+fix/hors-ligne-branche · Poussé : non (au moment de ce bloc)
+Tâche en cours : deux choses apportées par la fusion de `main`. ① `connexionSiege` (#80) a fait
+**rougir `typecheck`** — le garde de type éprouvé en réel ; capacités déplacées depuis l'écran (4ᵉ
+liste en dur), `avecPastille` baissé (B6 rouvert par la 12ᵉ vue). ② WCAG 2.1.1/2.1.3 : la colonne
+de notes défile sans arrêt de tabulation avant démarrage (tous ses contrôles `disabled`) →
+`tabIndex={0}`, avec 3 cas de contrat DOM↔CSS et contre-épreuve.
+Prochaine action : pousser, et demander au chantier #82 de **rejouer le balayage axe sur
+`entretien`** — la fermeture en navigateur n'est pas prouvée de mon côté.
+Tests rouges connus : aucun. interface 1104/1104 · unit 1799/1799.
+Environnement hors contrat : Node v24.19.0 — la CI reste juge (09 §5.7).
