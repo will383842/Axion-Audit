@@ -50,6 +50,8 @@ const MISSION_ID = '0191e2a0-0000-7000-8000-00000000f5c1';
 const UNITE_ID = '0191e2a0-0000-7000-8000-00000000c5c1';
 const AUDITEUR_ID = '0191e2a0-0000-7000-8000-00000000e001';
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+/** Le fuseau de la mission embarquée — celui que `duJour` interroge (03 §32, E32). */
+const FUSEAU_MISSION = 'Europe/Paris';
 
 const KDF_TEST = {
   algo: 'argon2id',
@@ -111,8 +113,9 @@ async function installer(base: BaseLocale): Promise<Coffre> {
 }
 
 /**
- * Une mission embarquée avec une unité. L'horloge de l'application est réglée
- * sur l'instant RÉEL : les créneaux saisis « maintenant » sont donc du jour.
+ * Une mission embarquée avec une unité. L'horloge de l'application reste réglée
+ * sur l'instant RÉEL ; c'est `creneauLocal` qui garantit que le créneau saisi
+ * tombe dans le jour de mission, quelle que soit l'heure du passage.
  */
 async function embarquerMission(base: BaseLocale, avecIdentite = true): Promise<void> {
   const coffre = await installer(base);
@@ -128,7 +131,7 @@ async function embarquerMission(base: BaseLocale, avecIdentite = true): Promise<
         charge: {
           titre: 'Mission fictive FIL-TPE',
           companyId: '0191e2a0-0000-7000-8000-00000000cccc',
-          timezone: 'Europe/Paris',
+          timezone: FUSEAU_MISSION,
           auditLevel: 'standard',
           geoScope: 'france',
           countryCode: 'FR',
@@ -223,9 +226,55 @@ async function monterNominal(base: BaseLocale): Promise<void> {
   });
 }
 
-/** `'AAAA-MM-JJTHH:mm'` en heure LOCALE de l'appareil — ce que `datetime-local` rend. */
+/**
+ * Combien de millisecondes se sont écoulées depuis MINUIT dans le fuseau de la
+ * mission, pour l'instant donné. Lu par `Intl` plutôt que calculé : l'écart
+ * entre UTC et Paris vaut une heure ou deux selon la saison, et le recopier
+ * serait faux deux fois par an.
+ */
+function msDepuisMinuitMission(instant: number): number {
+  const parties = new Intl.DateTimeFormat('en-GB', {
+    timeZone: FUSEAU_MISSION,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date(instant));
+  const champ = (type: string): number => Number(parties.find((p) => p.type === type)?.value ?? 0);
+  return ((champ('hour') * 60 + champ('minute')) * 60 + champ('second')) * 1000;
+}
+
+/**
+ * `'AAAA-MM-JJTHH:mm'` en heure LOCALE de l'appareil — ce que `datetime-local` rend.
+ *
+ * ── POURQUOI LE CRÉNEAU EST BORNÉ AU JOUR DE MISSION ─────────────────────────
+ * `decalageMinutes` dit « un peu plus tard », pas « dans exactement tant » :
+ * aucune assertion de ce fichier ne mesure l'écart, elles vérifient que la
+ * session est DU JOUR (`depotSessions.duJour`, fuseau de la mission).
+ *
+ * Or le processus tourne en `TZ=UTC` (CI comme poste), et le jour civil de
+ * Paris se ferme à 22 h UTC l'été. Un `maintenant() + 4 h` joué après 18 h UTC
+ * tombait donc DEMAIN : `duJour` rendait une liste vide et le cas @critique
+ * « une session s'y rattache immédiatement » rougissait — sur l'heure qu'il
+ * était, pas sur une ligne de code. Mesuré le 2026-09-06 à 18 h 04 UTC, rouge
+ * trois fois sur trois, vert avec un décalage de 5 min : la CI passait parce
+ * qu'aucun de ses passages n'avait encore eu lieu après 20 h à Paris.
+ *
+ * ET CE N'ÉTAIT PAS UN CAS, C'EN ÉTAIT CINQ. Les décalages employés ici vont de
+ * 60 à 240 min : le fichier se dégradait par paliers à mesure que la soirée
+ * avançait — 240 dès 18 h UTC, 60 à partir de 21 h. Contre-épreuve faite en
+ * forçant la base à 23 h 50 heure de Paris : sans le plafond, CINQ cas
+ * @critique tombent ; avec, les quinze passent. Une suite dont le verdict
+ * dépend de l'heure du passage ne mesure pas ce qu'elle croit mesurer.
+ *
+ * Le créneau est donc plafonné à un quart d'heure avant la fin du jour de
+ * mission. Il reste postérieur à `maintenant()` — on ne recule jamais —, et il
+ * ne dépend plus de l'heure à laquelle la suite est lancée.
+ */
 function creneauLocal(decalageMinutes: number): string {
-  const d = new Date(Date.parse(maintenant()) + decalageMinutes * 60_000);
+  const base = Date.parse(maintenant());
+  const finDuJour = base + (86_400_000 - msDepuisMinuitMission(base));
+  const d = new Date(Math.min(base + decalageMinutes * 60_000, finDuJour - 15 * 60_000));
   const deux = (n: number) => String(n).padStart(2, '0');
   return `${String(d.getFullYear())}-${deux(d.getMonth() + 1)}-${deux(d.getDate())}T${deux(d.getHours())}:${deux(d.getMinutes())}`;
 }
@@ -344,7 +393,7 @@ describe('EcranAgenda — HORS LIGNE : le mode nominal de la planification (inva
     await planifier();
     await waitFor(async () => {
       expect(
-        (await depotSessions.duJour({ missionId: MISSION_ID, fuseau: 'Europe/Paris' })).length,
+        (await depotSessions.duJour({ missionId: MISSION_ID, fuseau: FUSEAU_MISSION })).length,
       ).toBe(1);
     });
   });
@@ -406,7 +455,7 @@ describe('EcranAgenda — les six types de session', () => {
     await waitFor(async () => {
       const [atelier] = await depotSessions.duJour({
         missionId: MISSION_ID,
-        fuseau: 'Europe/Paris',
+        fuseau: FUSEAU_MISSION,
       });
       expect(atelier?.kind).toBe('atelier');
       expect(atelier?.mode).toBeNull();
@@ -427,7 +476,7 @@ describe('EcranAgenda — les six types de session', () => {
     const alerte = await screen.findByRole('alert');
     expect(alerte.textContent).toMatch(/au moins un participant/i);
     expect(
-      (await depotSessions.duJour({ missionId: MISSION_ID, fuseau: 'Europe/Paris' })).length,
+      (await depotSessions.duJour({ missionId: MISSION_ID, fuseau: FUSEAU_MISSION })).length,
     ).toBe(0);
   });
 });
@@ -451,10 +500,10 @@ describe('EcranAgenda — planifier une session', () => {
 
     await waitFor(async () => {
       expect(
-        (await depotSessions.duJour({ missionId: MISSION_ID, fuseau: 'Europe/Paris' })).length,
+        (await depotSessions.duJour({ missionId: MISSION_ID, fuseau: FUSEAU_MISSION })).length,
       ).toBe(1);
     });
-    const [session] = await depotSessions.duJour({ missionId: MISSION_ID, fuseau: 'Europe/Paris' });
+    const [session] = await depotSessions.duJour({ missionId: MISSION_ID, fuseau: FUSEAU_MISSION });
     expect(session?.id).toMatch(UUID_V7);
     expect(session?.kind).toBe('entretien');
     expect(session?.mode).toBe('distanciel');
@@ -491,7 +540,7 @@ describe('EcranAgenda — planifier une session', () => {
     expect(alerte.textContent).toMatch(/identité d’auditeur/i);
     expect(alerte.textContent).toMatch(/connectez-vous/i);
     expect(
-      (await depotSessions.duJour({ missionId: MISSION_ID, fuseau: 'Europe/Paris' })).length,
+      (await depotSessions.duJour({ missionId: MISSION_ID, fuseau: FUSEAU_MISSION })).length,
     ).toBe(0);
   });
 
@@ -514,7 +563,7 @@ describe('EcranAgenda — planifier une session', () => {
     expect(lignes[0]?.scheduleStatus).toBe('a_planifier');
     expect(lignes[0]?.scheduledAt).toBeNull();
     expect(
-      (await depotSessions.duJour({ missionId: MISSION_ID, fuseau: 'Europe/Paris' })).length,
+      (await depotSessions.duJour({ missionId: MISSION_ID, fuseau: FUSEAU_MISSION })).length,
     ).toBe(0);
   });
 });
@@ -534,7 +583,7 @@ describe('EcranAgenda — chevauchement', () => {
     await planifier();
     await waitFor(async () => {
       expect(
-        (await depotSessions.duJour({ missionId: MISSION_ID, fuseau: 'Europe/Paris' })).length,
+        (await depotSessions.duJour({ missionId: MISSION_ID, fuseau: FUSEAU_MISSION })).length,
       ).toBe(1);
     });
 
@@ -543,7 +592,7 @@ describe('EcranAgenda — chevauchement', () => {
     await planifier();
     await waitFor(async () => {
       expect(
-        (await depotSessions.duJour({ missionId: MISSION_ID, fuseau: 'Europe/Paris' })).length,
+        (await depotSessions.duJour({ missionId: MISSION_ID, fuseau: FUSEAU_MISSION })).length,
       ).toBe(2);
     });
     const statuts = screen.getAllByRole('status').map((s) => s.textContent);
@@ -622,7 +671,7 @@ describe('EcranAgenda — proposition d’unité depuis le terrain', () => {
     await waitFor(async () => {
       const [session] = await depotSessions.duJour({
         missionId: MISSION_ID,
-        fuseau: 'Europe/Paris',
+        fuseau: FUSEAU_MISSION,
       });
       expect(session?.orgUnitId).toBe(proposeeId);
     });
