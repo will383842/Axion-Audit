@@ -22,9 +22,12 @@
 //      NOM de `scoping_financials`. Et la DISTINCTION qu'A32 remonte est éprouvée :
 //      une réponse d'audit de type `money` (`answers.value`, saisie par le
 //      consultant lui-même) est rendue, et la sentinelle ne la confond pas.
-//   3. AUCUN NOM DE RÉPONDANT — `person_name` et `person_email` ne traversent
-//      jamais l'agrégation (décision conservatoire du 2026-09-05), pour AUCUN
-//      rôle, administrateur compris.
+//   3. AUCUN NOM DE RÉPONDANT SANS DEMANDE EXPLICITE — `person_email` ne traverse
+//      JAMAIS l'agrégation ; `person_name` n'en sort que derrière
+//      `?repondants=true` ET `consent_given IS TRUE` (arbitrage A01 du 2026-09-05,
+//      livré par L7c). Ce fichier éprouve l'appel SANS le paramètre : la valeur
+//      est nulle pour tous les rôles, administrateur compris. Le cas AVEC le
+//      paramètre est éprouvé par `l7c-export.integration.test.ts`.
 //   4. KEYSET DE BOUT EN BOUT — FIL-GC, 150 unités, page de 50 → TROIS pages
 //      exactement, aucune ligne dupliquée ni sautée, marges identiques d'une page
 //      à l'autre ; curseur invalide → 400 `INVALID_CURSOR` ; curseur d'une AUTRE
@@ -995,15 +998,32 @@ describe('@critique le nom du répondant n’apparaît nulle part dans l’agré
         COURRIEL_REPONDANT_SENTINELLE,
       );
       const cles = clesDuJson(JSON.parse(reponse.corps));
-      for (const cle of [
-        'person_name',
-        'personName',
-        'person_email',
-        'personEmail',
-        'nomRepondant',
-      ]) {
+      for (const cle of ['person_name', 'personName', 'person_email', 'personEmail']) {
         expect(cles.has(cle), `${libelle} : la clé « ${cle} » existe dans la réponse`).toBe(false);
       }
+
+      // AMENDEMENT DU 2026-09-06 — `nomRepondant` était dans la liste ci-dessus
+      // quand ce test a été écrit, parce que L7b avait choisi, À TITRE
+      // CONSERVATOIRE, de ne pas publier le nom du tout. L'arbitrage A01 du
+      // 2026-09-05 a depuis tranché : le champ EXISTE au contrat, nullable, et il
+      // ne se remplit que derrière `?repondants=true` ET `consent_given IS TRUE`.
+      // Le champ existe pour que l'écran distingue « aucun consentement » de « je
+      // n'ai pas demandé » — deux états qu'une clé absente confondrait.
+      //
+      // CE QUE CE TEST CONTINUE DE PROUVER, ET QUI EST LE FOND : sans le
+      // paramètre, la VALEUR est `null` pour tout le monde, administrateur
+      // compris. L'assertion passe donc de « la clé n'existe pas » à « la clé
+      // existe et ne porte rien » — plus forte, puisqu'elle vérifie le contenu
+      // plutôt que l'absence.
+      expect(cles.has('nomRepondant'), `${libelle} : le contrat doit porter le champ`).toBe(true);
+      // Sur le CORPS BRUT, et non sur la ligne analysée : le schéma transcrit en
+      // tête de ce fichier est un `z.object` non strict, qui EFFACE les clés qu'il
+      // ne déclare pas. L'assertion porterait alors sur ce que le test a recopié,
+      // pas sur ce que la route a répondu — le contraire de ce qu'on veut prouver.
+      expect(
+        reponse.corps,
+        `${libelle} : un nom est sorti alors que rien ne l'avait demandé`,
+      ).not.toMatch(/"nomRepondant":\s*"/);
     }
   });
 

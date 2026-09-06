@@ -28,6 +28,9 @@ export * from './assignments.js';
 export * from './pilotage.js';
 export * from './agregation.js';
 export * from './sync.js';
+// L'export de mission (§36.3) vient APRÈS l'agrégation : il en relit les
+// vocabulaires (provenance, motifs de refus) et n'en définit aucun (lot L7c).
+export * from './export-mission.js';
 // Le scoring vient EN DERNIER : il consomme les vocabulaires de la banque
 // (criticités, bornes 0-5) et ceux du plan d'entretiens (groupes d'interlocuteur).
 // ⚠ NE PAS CONFONDRE avec './scoping.js' — une lettre d'écart, deux sujets sans
