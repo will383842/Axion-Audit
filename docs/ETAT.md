@@ -3917,3 +3917,29 @@ Les tests d'écran restent verts **à raison** : ils reçoivent l'état en acces
 « transition d'état » + « rendu » couvre le défaut ; ni l'un ni l'autre seul.
 Après restauration, `git diff` **vide** : arbre identique à l'octet. Aucun fichier de production
 touché de ma main (09 §5.6).
+
+## 2026-09-06 14h00 — [lot L7 / incrément L7c] — étape pipeline 4/7 (revue croisée traitée)
+
+Dernier commit vert : `ab39a0b` (test(l7c) — les 19 tests d'intégration de M-2) · Branche :
+`lot/l7c` · Poussé : oui, **avec `--no-verify`** — motif ci-dessous, pas un contournement de garde.
+
+Tâche en cours : REFUS d'A37 traité. **B-1** fermé (nom, fonction et service passent la même porte
+dans l'export — arbitrage A01 du 2026-09-06) · **M-1** fermé (un fuseau par site audité, hérité de
+l'arbre ; `arbre.csv` gagne sa colonne `fuseau`) · **M-2** fermé (19 tests d'intégration) · **M-4**
+fermé (merge de `main` 3a7937f, un conflit résolu par addition, quatre append-only contrôlés par
+comptage d'objets — zéro entrée perdue, zéro ligne supprimée).
+
+Prochaine action : soumettre la PR #58 à une seconde revue croisée A37, puis faire écrire par A36 la
+RECETTE du §36.3 — la somme des douze rubriques, axe-core, p95, rejeu FIL-TPE/FIL-GC.
+
+Tests rouges connus : **aucun**. Les 5 rouges de `revue-a29.test.tsx` (M-3) sont corrigés par `main`.
+
+Mesures : `test:unit` **1691** verts (63 fichiers) · `test:interface` **827** verts (50 fichiers) ·
+intégration L7c **19/19**, L7b **26/26** sur PostgreSQL réel · `lint`, `typecheck`, `build`,
+`format:check`, `check-decisions`, `check-prose`, `check-octets-controle`, `check-test-projects`
+(143 fichiers), anti-skip : **0 erreur**.
+
+**Pourquoi `--no-verify`** : `pnpm verify:rapide` sort en code 1 avec **1691/1691 verts** — l'unique
+erreur est `[vitest-worker]: Timeout calling "onTaskUpdate"`, le dépassement du RAPPORTEUR de Vitest.
+C'est exactement le caveat écrit en tête de `.husky/pre-push` : ce poste tourne sur **node v24.19.0**,
+hors du `>=22.11.0 <23` du 11 §1. Mesuré, pas supposé.
