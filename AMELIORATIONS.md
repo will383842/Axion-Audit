@@ -2312,6 +2312,7 @@ fiche d'étage 2 avant son arbitrage. La note horodatée livrée aujourd'hui ne 
 formes : si l'une est retenue, la note reste vraie et se relit.
 
 **Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE
+
 ## 2026-09-06 — [L5c] Étage 1 — l'écran de restauration ne disait pas QUEL fichier il venait de restaurer
 
 **Constat (A27, revue de l'écran de restauration, 2026-09-06).** Après un succès, `EcranRestauration`
