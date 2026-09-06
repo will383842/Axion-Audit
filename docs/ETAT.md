@@ -3891,3 +3891,29 @@ Les tests d'écran restent verts **à raison** : ils reçoivent l'état en acces
 « transition d'état » + « rendu » couvre le défaut ; ni l'un ni l'autre seul.
 Après restauration, `git diff` **vide** : arbre identique à l'octet. Aucun fichier de production
 touché de ma main (09 §5.6).
+
+## 2026-09-06 14h30 — [lot L8 / scoring] — étape 4/7 : retours de revue croisée fermés
+
+Dernier commit vert : à créer · Branche : lot/l8-scoring · Poussé : oui
+Tâche en cours : les quatre défauts relevés par la couche d'acceptation (PR #65) sont corrigés.
+Prochaine action : rendre la main à la revue croisée pour qu'elle éprouve les correctifs — les
+comportements corrigés ne sont couverts par AUCUNE assertion croisée aujourd'hui, et c'est le
+seul reste ouvert.
+Tests rouges connus : aucun. `pnpm test:unit` 60/1642, `test:interface` 49/817, scoring 190/190.
+⚠ Le lanceur vitest lève par intermittence `[vitest-worker]: Timeout calling "onTaskUpdate"` sous
+charge — TOUS les tests passent, seul le code de sortie rougit. Déjà présent au début de session,
+avant toute ligne de ce lot ; c'est la contention machine déjà notée le 05/09, pas une régression.
+
+Fermés : ① une question bloquante JAMAIS POSÉE produit désormais une anomalie qui la NOMME
+(`QUESTION_BLOQUANTE_JAMAIS_POSEE`), quel que soit son poids — c'est la septième façon de masquer,
+et la seule que mes preuves ne pouvaient pas voir puisqu'elles supposaient toutes une réponse qui
+existe · ② `red_flag.below` s'évalue sur CHAQUE option d'un choix multiple, plus sur l'agrégat qui
+effaçait l'option au rouge · ③ le drapeau compare comme le barème cote (coercition alignée) · ④ le
+doublon de question figée est signalé. Plus les asymétries : les anomalies portent la CRITICITÉ,
+et le commentaire d'`entree.ts` ne décrit plus un champ `revision` inexistant.
+
+Trois arbitrages A01 tracés dans `DECISIONS.md`, une fiche d'étage 2 dans `AMELIORATIONS.md`
+(contrôle d'import L4 sur `multi_choice` + `below` — proposée, PAS implémentée). Couverture
+`apps/api/src/scoring/**` : 99,65 lignes / 100 fonctions / 96,71 branches. La justification de
+l'arborescence est réécrite : le scoring est un calcul pur transverse sans dépôt ni route, au rang
+d'`auth/` et `http/` — le glob suit le code, il ne le place pas.
