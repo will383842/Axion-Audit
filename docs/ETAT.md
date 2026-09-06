@@ -3477,38 +3477,24 @@ Prochaine action : suivre la CI de la PR #47, seul verrou restant de L7b.
 
 ## 2026-09-06 10h20 — [lot L8 / moteur de scoring] — étape pipeline 3/7 (auto-revue)
 
-Dernier commit vert : à créer dans la foulée · Branche : lot/l8-scoring · Poussé : oui
+Dernier commit vert : 79bd6e2 (l'arbre bancal, l'énumération des barèmes, le glob)
+Branche : lot/l8-scoring · Poussé : oui
 Tâche en cours : reprise après coupure d'API — le moteur manquait, les tests l'attendaient.
-Prochaine action : passer le lot à la REVUE CROISÉE (étape 4) ; A16 écrit la couche
-d'acceptation, à commencer par les deux moteurs de garde sans `expect` déjà livrés
-(`apps/api/tests/aide/etancheite-scoring.ts` — invariant 7 : `answers` seule, jamais
-`answer_revisions`).
-Tests rouges connus : aucun. `pnpm verify:rapide` intégralement vert (14 gardes + lint +
-format + typecheck + unit 51/1433 + interface 42/717).
+Prochaine action : passer le lot en REVUE CROISÉE (étape 4) ; A16 écrit la couche
+d'acceptation, en partant du moteur de garde sans `expect` déjà livré
+(`apps/api/tests/aide/etancheite-scoring.ts`, invariant 7).
+Tests rouges connus : aucun — `pnpm verify:rapide` intégralement vert (14 gardes, lint,
+format, typecheck, unit 51/1433, interface 42/717).
 
-Ce qui a été livré, et dans quel ordre — c'est l'ordre qui fait la preuve :
-· `bareme.ts` (§32.1, les onze types de réponse), puis `agregation.ts` (les quatre
-  formules et le roll-up), puis `moteur.ts` (ventilation, anomalies, union des drapeaux).
-  Les tests de CONCEPTION les précédaient tous les trois (ba7a560, commit antérieur à
-  toute ligne de code) : 92 assertions écrites avant, 92 vertes après, **aucun attendu
-  modifié**. Les jeux de référence figés rendent les scores qui y étaient écrits à la
-  main : FIL-TPE 3,11 · FIL-GC 3,49 sur 150 unités et 4 niveaux · roll-up 3,22 · score
-  parfait 5,00 qui porte quand même son drapeau.
-· DEUX fichiers de tests POSTÉRIEURS au code, et leur en-tête le dit en toutes lettres
-  (`bareme-formes.test.ts`, `moteur-arbre.test.ts`, 74 assertions) : l'énumération des
-  formes de barème malformées (04 §7.3 cassé d'une façon nommée à chaque cas) et l'arbre
-  bancal (cycle, parent fantôme, sous-arbre hors périmètre). Le dire est la seule façon
-  de garder honnête l'affirmation « les tests ont précédé le moteur ».
-· Couverture mesurée sur `apps/api/src/scoring/**` : **99,87 lignes / 99,87 instructions /
-  100 fonctions / 96,79 branches**. Le glob est entré dans `cheminsCritiques` AU-DESSUS du
-  seuil — contrairement aux entrées L3, il n'a jamais eu à être tenu par autre chose que
-  des tests. Il n'a été ni rétréci ni corrigé.
+Livré : `bareme.ts` (§32.1), `agregation.ts` (les quatre formules, le roll-up), `moteur.ts`
+(ventilation, anomalies, union des drapeaux). Les 92 tests de conception (ba7a560, écrits
+AVANT le code) sont verts sans qu'aucun attendu ait bougé : FIL-TPE 3,11 · FIL-GC 3,49 sur
+150 unités et 4 niveaux · roll-up 3,22 · score parfait 5,00 qui porte quand même son drapeau.
+74 tests POSTÉRIEURS au code s'ajoutent, et leur en-tête le dit (formes de barème malformées,
+arbre bancal). Couverture `apps/api/src/scoring/**` : 99,87 lignes / 100 fonctions / 96,79
+branches — le glob entre dans `cheminsCritiques` AU-DESSUS du seuil, inchangé.
 
-Quatre doutes de spec portés à `DECISIONS.md` plutôt que devinés : le non-communiqué au
-dénominateur de la complétude (tranché par le CHIFFRE du §27.4, « 84 %, 6 non
-communiquées ») · la doctrine 5 « l'unité la plus défavorable » qui ne change PAS le
-roll-up (trois preuves écrites, dont l'arbitrage du 02/09 qui conclut lui-même « aucune
-section du pack en conflit ») · le parent comme terme de sa propre consolidation · l'écart-
-type réservé aux échelles. Le second est celui à relire en priorité : si la lecture inverse
-était voulue, TOUS les scores consolidés changeraient, et cela demanderait un arbitrage de
+Quatre doutes de spec écrits dans `DECISIONS.md` plutôt que devinés. À relire en priorité :
+la doctrine 5 (« l'unité la plus défavorable ») ne change PAS le roll-up — si la lecture
+inverse était voulue, tous les scores consolidés changeraient, et ce serait un arbitrage de
 Williams, pas un correctif.
