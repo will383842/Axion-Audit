@@ -4314,3 +4314,16 @@ partir de 20h heure de Paris — ce n'est pas une régression, c'est ce défaut.
 `pre-push` était ce même défaut d'horloge, vérifié seul juste avant : 992 verts, 1 rouge, et ce
 rouge est celui que #79 ferme. Rien de cette branche-là n'est masqué.
 
+
+## 2026-09-06 22h15 — [lot L5 / §33.2 hors ligne] — étape pipeline 4/7
+
+Dernier commit vert : 84ece12 (B6 fermé sur l'écran d'entretien) · Branche :
+fix/hors-ligne-branche · Poussé : non (au moment de ce bloc)
+Tâche en cours : les **4 réserves d'A29** sur la PR #81, dont 2 bloquantes, fermées — pastille de
+l'entretien retirée (B6, troisième source, MESURÉE coquille comprise) · trois capacités fausses
+réécrites contre le code (classe B3) · les gardes comptent désormais le document, plus l'intérieur
+du bloc · `nouvelEntretien` monté en NOMINAL (identité semée) · `key` au rang + deux cas de bord.
+Prochaine action : pousser, puis demander à A29 la re-revue des deux bloquantes fermées.
+Tests rouges connus : aucun. Le rouge d'`EcranAgenda` signalé hier est corrigé par #79.
+⚠ 4 flakes de contention connus en `test:unit` sous charge (quota, garde-fous) : 1792/1792 en
+isolation. Environnement hors contrat : Node v24.19.0 — la CI reste juge (09 §5.7).
