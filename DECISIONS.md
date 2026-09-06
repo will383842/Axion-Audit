@@ -10510,6 +10510,8 @@ assertion, commentée sur place avec sa date et son motif.
 Règle de précédence : **sans objet** entre le pack et lui-même — c'est un test qui a pris du retard
 sur une décision de gouvernance, pas une divergence de spécification.
 Décideur : **A30**, en application de l'arbitrage A01 du 2026-09-05 ; contestable par A36 et A37.
+Impact spec : aucun.
+
 ## 2026-09-06 — [L8] Une question bloquante JAMAIS POSÉE doit-elle produire une anomalie ?
 
 La revue croisée a mesuré le cas : une question `bloquant` de poids 0 sans aucune ligne `answers`
