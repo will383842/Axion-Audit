@@ -151,6 +151,11 @@ const MESSAGE_JETON_ILLISIBLE =
 export function EcranAccueil(): ReactNode {
   const { base, jetonSiege, rafraichirStockage, naviguer } = useTerrain();
   const [embarquement, setEmbarquement] = useState<ResultatEmbarquement | null>(null);
+  // Distinct d'un refus : un refus est une RÉPONSE du navigateur, que
+  // `ResultatEmbarquement` sait décrire. Ici la demande n'a pas abouti du tout,
+  // et fabriquer un faux `statut: 'refuse'` reviendrait à dire une chose qu'on
+  // ne sait pas — l'inverse de ce que §33.2 demande à un état d'erreur.
+  const [panneEmbarquement, setPanneEmbarquement] = useState<string | null>(null);
   const [enCours, setEnCours] = useState<string | null>(null);
 
   // R-L5a-7 : une lecture locale qui échoue produit un ÉTAT, pas une exception
@@ -208,6 +213,9 @@ export function EcranAccueil(): ReactNode {
     (missionId: string): void => {
       if (base === null) return;
       setEnCours(missionId);
+      // La panne précédente ne survit pas à une nouvelle tentative : la laisser
+      // à l'écran ferait lire un échec ancien comme le résultat du geste en cours.
+      setPanneEmbarquement(null);
       void embarquerMission(base, missionId)
         .then(async (resultat) => {
           setEmbarquement(resultat);
@@ -221,6 +229,25 @@ export function EcranAccueil(): ReactNode {
           if (resultat.statut === 'refuse' && resultat.persistance !== 'accordee') {
             naviguer({ type: 'aller', vue: 'stockage' });
           }
+        })
+        // LE `.catch` QUI MANQUAIT — même forme, même conséquence, autre écran.
+        //
+        // `embarquerMission` demande la persistance, et cette demande LÈVE sous
+        // WebKit en navigation privée. Sans cette branche, le rejet partait en
+        // promesse non gérée, `finally` éteignait le bouton, et rien n'était
+        // affiché : l'auditeur croyait sa mission embarquée alors qu'aucune
+        // donnée n'était descendue sur l'appareil. C'est l'invariant 1 qui
+        // tombe en silence — le pire moment pour l'apprendre étant le premier
+        // entretien, hors réseau.
+        //
+        // Frère du défaut A27-D1, relevé par A24, fermé ici le 2026-09-06.
+        .catch(() => {
+          setPanneEmbarquement(
+            'La mission n’a PAS été embarquée : le navigateur a refusé de répondre à la ' +
+              'demande de conservation, ce qu’il fait en navigation privée et quand la page ' +
+              'n’est pas servie de façon sécurisée. Ouvrez l’application dans une fenêtre ' +
+              'ordinaire, puis réessayez — ne partez pas en mission sur cet appareil avant.',
+          );
         })
         .finally(() => {
           setEnCours(null);
@@ -289,6 +316,15 @@ export function EcranAccueil(): ReactNode {
       {embarquement?.statut === 'refuse' && (
         <Message ton="avertissement" titre="Mission non embarquée">
           {embarquement.guidage}
+        </Message>
+      )}
+
+      {/* Ton ALERTE, pas avertissement : un refus se contourne, une demande qui
+          n'aboutit pas laisse l'appareil dans un état où l'auditeur croit avoir
+          embarqué. C'est l'invariant 1 qui est en jeu, pas un confort. */}
+      {panneEmbarquement !== null && (
+        <Message ton="alerte" titre="L’embarquement n’a pas abouti">
+          {panneEmbarquement}
         </Message>
       )}
 

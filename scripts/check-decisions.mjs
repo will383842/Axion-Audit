@@ -21,7 +21,7 @@
 //
 // Traçabilité : E36, E43, E47 (conventions, DECISIONS.md, portes matérialisées).
 // =============================================================================
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const ROUGE = '[31m';
@@ -120,31 +120,47 @@ for (const e of entrees) {
   }
 }
 
-// ── LA COUTURE DU DRIVER `union`, QUI A COÛTÉ TROIS PASSES LE 2026-09-06 ────
-// `.gitattributes` fusionne DECISIONS.md en `union` : les deux côtés sont gardés,
-// dans l'ordre, SANS conflit. Le driver ne connaît pas la notion d'entrée — il
-// recolle donc l'en-tête entrant directement sous le `Impact spec :` sortant, et
-// la ligne vide qui les séparait disparaît.
+// ── LA COUTURE DU DRIVER `union` — CINQ PASSES LE 2026-09-06 ───────────────
+// `.gitattributes` fusionne DECISIONS.md **et AMELIORATIONS.md** en `union` :
+// les deux côtés sont gardés, dans l'ordre, SANS conflit. Le driver ne connaît
+// pas la notion d'entrée — il recolle donc l'en-tête entrant directement sous la
+// dernière ligne du bloc sortant, et la ligne vide qui les séparait disparaît.
 //
 // Prettier le voit et le refuse. Mais il dit « Code style issues found », ce qui
 // envoie chercher un défaut de mise en forme là où il y a une CICATRICE DE
-// FUSION — et c'est trois fois en une journée qu'on l'a cherché ainsi. Ce garde
-// tourne avant lui dans la chaîne, et il nomme la cause.
+// FUSION. On l'a cherché ainsi cinq fois dans la même journée.
+//
+// LES DEUX FICHIERS, ET PAS SEULEMENT CELUI-CI. Ce contrôle n'a d'abord couvert
+// que DECISIONS.md ; `AMELIORATIONS.md` a produit la même cicatrice trois heures
+// plus tard, et n'avait, elle, personne pour la nommer. Un garde taillé pour un
+// fichier alors que la cause en touche deux est un garde à moitié posé.
+const FICHIERS_UNION = ['DECISIONS.md', 'AMELIORATIONS.md'];
+
 const collees = [];
-for (const e of entrees) {
-  if (e.ligne < 2) continue;
-  const avant = texte.split('\n')[e.ligne - 2];
-  if (avant !== undefined && avant.trim() !== '') {
-    collees.push({ ligne: e.ligne, titre: e.titre, avant: avant.trim() });
-  }
+for (const fichier of FICHIERS_UNION) {
+  const chemin = resolve(RACINE, fichier);
+  if (!existsSync(chemin)) continue;
+  const lignes = readFileSync(chemin, 'utf8').split('\n');
+  lignes.forEach((ligne, i) => {
+    if (!/^## /.test(ligne) || i === 0) return;
+    const avant = lignes[i - 1];
+    if (avant !== undefined && avant.trim() !== '') {
+      collees.push({
+        fichier,
+        ligne: i + 1,
+        titre: ligne.replace(/^## /, '').slice(0, 60),
+        avant: avant.trim(),
+      });
+    }
+  });
 }
 
 if (collees.length > 0) {
   console.error(
-    `\n${ROUGE}✗ DECISIONS.md — ${String(collees.length)} entrée(s) COLLÉE(S) à la précédente${RAZ}\n`,
+    `\n${ROUGE}✗ ${String(collees.length)} entrée(s) COLLÉE(S) à la précédente${RAZ}\n`,
   );
   for (const c of collees) {
-    console.error(`  DECISIONS.md:${String(c.ligne)}  « ${c.titre.slice(0, 60)} »`);
+    console.error(`  ${c.fichier}:${String(c.ligne)}  « ${c.titre} »`);
     console.error(`    la ligne juste au-dessus : « ${c.avant.slice(0, 70)} »\n`);
   }
   console.error("  C'est la signature du driver `merge=union` (voir `.gitattributes`) : il");

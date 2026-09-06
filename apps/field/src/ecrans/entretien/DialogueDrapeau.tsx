@@ -55,6 +55,9 @@ export function DialogueDrapeau(proprietes: ProprietesDialogueDrapeau): ReactNod
   const [motif, setMotif] = useState(motifActuel ?? '');
   const [motifNc, setMotifNc] = useState<MotifNonCommunique | null>(motifNonCommuniqueActuel);
   const nomGroupe = useId();
+  /** M1 (recette A54) : « Confirmer » était grisé sans un mot tant que le motif
+   *  manquait. Le motif de son verrou est rendu, et le bouton le désigne. */
+  const idMotifManquant = `${nomGroupe}-motif-manquant`;
 
   if (nature === null) return null;
 
@@ -90,7 +93,12 @@ export function DialogueDrapeau(proprietes: ProprietesDialogueDrapeau): ReactNod
           <Bouton variante="discret" onClick={onFermer}>
             Annuler
           </Bouton>
-          <Bouton variante="principal" disabled={!peutConfirmer} onClick={confirmer}>
+          <Bouton
+            variante="principal"
+            disabled={!peutConfirmer}
+            {...(peutConfirmer ? {} : { 'aria-describedby': idMotifManquant })}
+            onClick={confirmer}
+          >
             {dejaPose ? 'Mettre à jour' : 'Confirmer'}
           </Bouton>
         </>
@@ -117,6 +125,12 @@ export function DialogueDrapeau(proprietes: ProprietesDialogueDrapeau): ReactNod
               </label>
             ))}
           </div>
+          {!peutConfirmer && (
+            <p id={idMotifManquant} className="axn-champ__aide">
+              Choisissez un motif ci-dessus : « non communiqué » sort la question du calcul, et le
+              rapport doit pouvoir dire pourquoi.
+            </p>
+          )}
         </fieldset>
       )}
       <ZoneNotes

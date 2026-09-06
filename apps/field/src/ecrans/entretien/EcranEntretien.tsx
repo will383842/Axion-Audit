@@ -79,7 +79,9 @@ import {
 import { creerQuestionAdHoc } from '../../session/questions-adhoc.js';
 import { useRaccourcisEntretien, type ActionsRaccourcis } from '../../session/raccourcis.js';
 import type { ValeurTypee } from '../../session/valeurs.js';
-import { DemarrageEntretien } from './DemarrageEntretien.js';
+import { formaterDateHeure } from '../../session/fuseau.js';
+import { maintenant } from '../../local/horloge.js';
+import { construireNoteDeRefus, DemarrageEntretien } from './DemarrageEntretien.js';
 import { DialogueDrapeau, type DecisionDrapeau, type NatureDrapeau } from './DialogueDrapeau.js';
 import { DialogueQuestionAdHoc, type SaisieQuestionAdHoc } from './DialogueQuestionAdHoc.js';
 import { PaletteRecherche } from './PaletteRecherche.js';
@@ -341,6 +343,15 @@ export function EcranEntretien(): ReactNode {
     session === null || session === undefined ? null : motifRefusEcriture(session);
   const etatDeSession = session === null || session === undefined ? null : etatSession(session);
 
+  /**
+   * Ce que dit le geste de fin sur la dernière question (M2).
+   *
+   * Une session déjà terminée ou validée ne se « termine » pas une seconde fois :
+   * le bouton mène au même écran, il ne ment pas sur ce qui s'y passera. C'est la
+   * machine à états qui décide des gestes offerts là-bas, jamais ce libellé.
+   */
+  const libelleTerminer = etatDeSession === 'en_cours' ? 'Terminer l’entretien' : 'Fin de session';
+
   const ecrireValeur = useCallback(
     (valeur: ValeurTypee | null, cadence: Cadence): void => {
       if (session === null || session === undefined || question === undefined) return;
@@ -521,6 +532,51 @@ export function EcranEntretien(): ReactNode {
       naviguer({ type: 'racine', vue: 'accueil' });
     });
   }, [base, naviguer, purger]);
+
+  /**
+   * Le geste de FIN — majeur **M2** de la recette novice A54, réserve de P-C.
+   *
+   * Il ne termine RIEN par lui-même : il purge ce qui est en attente d'écriture,
+   * puis ouvre le récapitulatif du 03 §17.3 (`finDeSession`), où « Terminer » est
+   * une transition de la machine à états et où la note d'après-coup a sa place.
+   * C'est la chaîne « Terminer → note → Valider groupé » du §33.7.
+   *
+   * **La session courante n'est PAS oubliée** — à la différence de « Quitter ».
+   * `EcranFinDeSession` la RELIT (`lireSessionCourante`) : l'effacer ici le
+   * renverrait sur son état vide « Aucune session ouverte », juste après
+   * quarante-cinq minutes d'entretien.
+   */
+  const terminerEntretien = useCallback((): void => {
+    void purger().then(() => {
+      naviguer({ type: 'aller', vue: 'finDeSession' });
+    });
+  }, [naviguer, purger]);
+
+  /**
+   * L'interlocuteur REFUSE de participer (doute de spec **D-1**, tranché le
+   * 2026-09-06 — voir `DECISIONS.md`).
+   *
+   * Le refus s'écrit comme une note horodatée AJOUTÉE aux notes existantes : rien
+   * n'est écrasé (invariant 7). La session reste `non_demarre`, sans accord —
+   * aucune transition n'est franchie, aucun champ d'index ne change de sens. La
+   * modélisation d'un état de session dédié est une fiche `AMELIORATIONS.md`
+   * d'étage 2, et elle n'est pas anticipée ici (CLAUDE.md §3-7).
+   */
+  const refuserParticipation = useCallback(
+    async (motif: string): Promise<void> => {
+      if (session === null || session === undefined) return;
+      const ligne = construireNoteDeRefus(
+        motif,
+        formaterDateHeure(maintenant(), mission?.timezone),
+      );
+      const existantes = session.generalNotes ?? '';
+      await enregistrer(() =>
+        ecrireNotesGenerales(session, existantes === '' ? ligne : `${existantes}\n${ligne}`),
+      );
+      fermerEntretien();
+    },
+    [enregistrer, fermerEntretien, mission?.timezone, session],
+  );
 
   // ── Raccourcis et gestes ───────────────────────────────────────────────────
   const fenetreOuverte = drapeau !== null || recherche || adHoc || panneau !== null;
@@ -737,6 +793,7 @@ export function EcranEntretien(): ReactNode {
               <DemarrageEntretien
                 personName={session.personName ?? 'l’interlocuteur'}
                 onDemarrer={demarrer}
+                onRefus={refuserParticipation}
               />
             ) : reponse === undefined ? (
               <Squelette forme="carte" lignes={4} libelle="Lecture de la réponse" />
@@ -762,6 +819,8 @@ export function EcranEntretien(): ReactNode {
                 }}
                 onPrecedent={precedent}
                 onSuivant={suivant}
+                onTerminer={terminerEntretien}
+                libelleTerminer={libelleTerminer}
                 peutPrecedent={peutPrecedent}
                 peutSuivant={peutSuivant}
                 afficherRaccourcis={pointeurFin}
@@ -776,6 +835,7 @@ export function EcranEntretien(): ReactNode {
                 noteDeQuestion={reponse?.note ?? ''}
                 onNoteDeQuestion={ecrireNoteDeQuestion}
                 ecriturePossible={ecritureRefusee === null && reponse !== undefined}
+                {...(ecritureRefusee === null ? {} : { motifLectureSeule: ecritureRefusee })}
                 cleBlocNotes={session.id}
                 notesGenerales={session.generalNotes ?? ''}
                 onNotesGenerales={ecrireBlocNotes}
@@ -826,6 +886,7 @@ export function EcranEntretien(): ReactNode {
               noteDeQuestion={reponse?.note ?? ''}
               onNoteDeQuestion={ecrireNoteDeQuestion}
               ecriturePossible={ecritureRefusee === null && reponse !== undefined}
+              {...(ecritureRefusee === null ? {} : { motifLectureSeule: ecritureRefusee })}
               cleBlocNotes={`panneau-${session.id}`}
               notesGenerales={session.generalNotes ?? ''}
               onNotesGenerales={ecrireBlocNotes}
