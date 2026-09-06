@@ -44,6 +44,22 @@
 //     raison pour laquelle ce balayage vit dans un navigateur plutôt qu'en jsdom
 //     (03 §22.1 : « contraste WCAG AA minimum »).
 //
+// ── LE QUATRIÈME ÉTAT (§33.2), ET LE 3-SUR-11 QUI RESTE ────────────────────
+// Le réseau coupé est un ÉTAT d'écran, et il est NOMINAL (invariant 1). Mesuré
+// le 2026-09-06 sur `main` : **trois écrans sur onze** rendent quelque chose de
+// différent quand la connexion tombe — `aujourdhui`, `entretien`,
+// `restauration`. Ces trois-là sont balayés réseau coupé, avec l'anti-vacuité
+// qui va avec : le marqueur d'état hors ligne est vérifié ABSENT avant la
+// coupure et PRÉSENT après, sans quoi on rebalaierait le DOM d'en ligne en
+// croyant mesurer autre chose.
+//
+// Les huit autres ne le sont pas, et c'est un refus délibéré : leur DOM est
+// identique réseau coupé, et huit balayages qui ne mesurent rien remplaceraient
+// un trou par des verts vides — ce qui est pire, parce qu'un vert vide se coche.
+// La PR #81 branche `RappelHorsLigne` sur les onze vues ; chacune recevra alors
+// son `horsLigne`, trois lignes de table, sans changer une ligne de mécanique.
+// **Aucune assertion ne fige le chiffre 3** : #81 n'a pas à rougir en arrivant.
+//
 // ── ③ AUCUNE RÈGLE DÉSACTIVÉE, AUCUN PÉRIMÈTRE RÉTRÉCI ─────────────────────
 // Pas un `disableRules`, pas un `.include('main')`. Une vue qui rend une
 // violation réelle reste ROUGE, et le défaut part au producteur (09 §5.6 : A28
@@ -58,8 +74,9 @@
 // (09 §5.7 : aucune crypto n'est réécrite ici).
 //
 // ── LE RELEVÉ DU 2026-09-06 : CE QUE LE PASSAGE DE 3 À 11 VUES A TROUVÉ ────
-// Quatorze états balayés, treize verts, UN rouge. Le rouge est réel et il est
-// laissé rouge — la CI le dira, et c'est ce qu'on veut qu'elle dise.
+// Dix-sept états balayés — onze vues, dont trois aussi réseau coupé. Seize
+// verts, UN rouge. Le rouge est réel et il est laissé rouge : la CI le dira, et
+// c'est ce qu'on veut qu'elle dise.
 //
 //   A28-2 — `apps/field/src/ecrans/entretien/EcranEntretien.tsx`, ligne ~830,
 //   `<aside class="axn-entretien__zone--laterale" aria-label="Notes">`.
@@ -348,6 +365,40 @@ async function allerDerniereQuestion(page: Page): Promise<void> {
   await expect(page.getByRole('button', { name: 'Terminer l’entretien' })).toBeVisible();
 }
 
+/** L'écran de restauration, atteint depuis l'écran d'embarquement (03 §34.2). */
+async function allerRestauration(page: Page): Promise<void> {
+  await allerAccueil(page);
+  await page.getByRole('button', { name: 'Restaurer une sauvegarde de secours' }).click();
+  await expect(titreDEcran(page, 'Restaurer une sauvegarde')).toBeVisible();
+  await expect(page.getByLabel('Fichier de sauvegarde')).toBeVisible();
+  await expect(page.getByLabel('Votre mot de passe')).toBeVisible();
+}
+
+/**
+ * Coupe le réseau du contexte, sans recharger la page.
+ *
+ * ── POURQUOI SANS RECHARGEMENT, ET POURQUOI C'EST SUFFISANT ICI ────────────
+ * `hors-ligne-l5.e2e.ts` coupe puis REDÉMARRE À FROID : c'est son sujet, le
+ * précache du service worker. Le sujet d'ici est le RENDU de l'état hors ligne,
+ * et ce qui le pilote est `useEnLigne` (`session/media.ts`), c'est-à-dire
+ * l'événement `offline` et le drapeau `navigator.onLine`. On coupe donc, et on
+ * vérifie que le drapeau que lit l'interface a bien basculé.
+ *
+ * Ce même fichier note un artefact mesuré : après un RECHARGEMENT, le drapeau
+ * repasse à `true` alors que le réseau reste coupé. Ne pas recharger l'évite —
+ * et évite surtout d'attendre le service worker pour une question qui ne le
+ * concerne pas.
+ */
+async function couperLeReseau(page: Page): Promise<void> {
+  await page.context().setOffline(true);
+  await expect
+    .poll(() => page.evaluate(() => navigator.onLine), {
+      message: 'le drapeau que lit `useEnLigne` doit dire « hors ligne »',
+      timeout: 10_000,
+    })
+    .toBe(false);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // LA TABLE DES PARCOURS — le point où l'oubli devient une erreur de COMPILATION
 // ─────────────────────────────────────────────────────────────────────────────
@@ -358,11 +409,41 @@ interface Etat {
   readonly atteindre: (page: Page) => Promise<void>;
 }
 
+/**
+ * Le QUATRIÈME état du 03 §33.2 — celui que le réseau coupé fait apparaître.
+ *
+ * ── POURQUOI IL N'EST DÉCLARÉ QUE PAR TROIS VUES SUR ONZE ──────────────────
+ * Mesuré le 2026-09-06 sur `main` (`grep -rn "useEnLigne" apps/field/src`) :
+ * **trois écrans seulement** rendent quelque chose de différent quand la
+ * connexion tombe — `aujourdhui`, `entretien` et `restauration`. Les huit autres
+ * rendent, réseau coupé, exactement le même DOM qu'en ligne.
+ *
+ * Les balayer une seconde fois ne mesurerait donc RIEN, et ce fichier refuse
+ * précisément les balayages qui ne mesurent rien : ce serait remplacer un trou
+ * par huit verts vides, ce qui est pire, parce qu'un vert vide se coche.
+ *
+ * Le champ est OPTIONNEL et il attend : la PR #81 branche `RappelHorsLigne` sur
+ * les onze vues, et chacune recevra alors son `horsLigne` — trois lignes de
+ * table, aucun changement de mécanique. **Ce chiffre-là est donc un constat daté,
+ * pas une cible** : « 3 vues sur 11 rendent l'état hors ligne » est aujourd'hui
+ * vrai de l'APPLICATION, comme « 3 vues sur 11 sont balayées » l'était du
+ * BALAYAGE. Aucune assertion ne le fige, pour qu'#81 n'ait pas à rougir en
+ * arrivant.
+ */
+interface EtatHorsLigne {
+  /** L'état depuis lequel on coupe le réseau — un des `etats` ci-dessus. */
+  readonly depuis: (page: Page) => Promise<void>;
+  /** Ce que l'écran doit alors afficher : l'anti-vacuité de cet état-là. */
+  readonly marqueur: string;
+}
+
 interface Parcours {
   /** Un ou plusieurs états du même écran. Jamais zéro. */
   readonly etats: readonly Etat[];
   /** Millisecondes accordées au test — les parcours longs les demandent. */
   readonly delaiMs: number;
+  /** L'état hors ligne, quand l'écran en a un de distinct (voir ci-dessus). */
+  readonly horsLigne?: EtatHorsLigne;
 }
 
 const PARCOURS = {
@@ -419,10 +500,21 @@ const PARCOURS = {
       { libelle: 'collecte en cours, trois zones', atteindre: allerEntretienEnCours },
       { libelle: 'dernière question, geste de fin actif', atteindre: allerDerniereQuestion },
     ],
+    // On coupe depuis la COLLECTE EN COURS, et non depuis l'état d'avant la
+    // première question : celui-ci porte déjà le défaut A28-2, et deux rouges
+    // pour un seul défaut ne disent pas plus qu'un.
+    horsLigne: {
+      depuis: allerEntretienEnCours,
+      marqueur: 'Répondre à chaque question, la marquer à revoir, sans objet ou non communiquée',
+    },
   },
   aujourdhui: {
     delaiMs: 120_000,
     etats: [{ libelle: 'journée vide', atteindre: allerAujourdhui }],
+    horsLigne: {
+      depuis: allerAujourdhui,
+      marqueur: 'Ouvrir, mener et terminer une session de collecte',
+    },
   },
   agenda: {
     delaiMs: 120_000,
@@ -476,17 +568,12 @@ const PARCOURS = {
   restauration: {
     delaiMs: 120_000,
     etats: [
-      {
-        libelle: 'appareil de remplacement, avant dépôt du fichier',
-        atteindre: async (page: Page): Promise<void> => {
-          await allerAccueil(page);
-          await page.getByRole('button', { name: 'Restaurer une sauvegarde de secours' }).click();
-          await expect(titreDEcran(page, 'Restaurer une sauvegarde')).toBeVisible();
-          await expect(page.getByLabel('Fichier de sauvegarde')).toBeVisible();
-          await expect(page.getByLabel('Votre mot de passe')).toBeVisible();
-        },
-      },
+      { libelle: 'appareil de remplacement, avant dépôt du fichier', atteindre: allerRestauration },
     ],
+    horsLigne: {
+      depuis: allerRestauration,
+      marqueur: 'Restaurer une sauvegarde de secours, intégralement sans réseau',
+    },
   },
   finDeSession: {
     delaiMs: 180_000,
@@ -507,6 +594,18 @@ const PARCOURS = {
 /** Les codes viennent de la TABLE, dont le type vient du REGISTRE. */
 const CODES = Object.keys(PARCOURS) as readonly CodeVue[];
 
+/**
+ * Le parcours d'une vue, ÉLARGI au type déclaré.
+ *
+ * `as const satisfies` garde les types littéraux — ce qui est voulu, c'est lui
+ * qui refuse une vue sans parcours — mais il rend du même coup `horsLigne`
+ * inconnu des entrées qui ne le déclarent pas. On élargit une fois, ici, plutôt
+ * que de disperser des conversions dans le fichier.
+ */
+function parcoursDe(code: CodeVue): Parcours {
+  return PARCOURS[code];
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // A. LE COMPTE — il échoue si une vue du registre n'est pas balayée
 // ─────────────────────────────────────────────────────────────────────────────
@@ -517,8 +616,21 @@ test('contrôle d’anti-vacuité : les ONZE vues du registre ont un parcours ba
   // Le nombre EN CLAIR : le jour où il change, ce test le dit avant la porte.
   expect(registre.length, 'le registre a changé de taille — le rapport A28 aussi').toBe(11);
   for (const code of CODES) {
-    expect(PARCOURS[code].etats.length, `${code} : aucun état à balayer`).toBeGreaterThan(0);
+    expect(parcoursDe(code).etats.length, `${code} : aucun état à balayer`).toBeGreaterThan(0);
   }
+
+  // Le périmètre RÉEL, compté et annoté — jamais déclaré. C'est ce chiffre que
+  // le rapport A28 recopie, et c'est lui qu'on compare d'un lot à l'autre.
+  const etats = CODES.reduce((total, code) => total + parcoursDe(code).etats.length, 0);
+  const avecHorsLigne = CODES.filter((code) => parcoursDe(code).horsLigne !== undefined);
+  test.info().annotations.push({
+    type: 'mesure A28',
+    description:
+      `périmètre balayé : ${String(CODES.length)} vue(s) du registre · ` +
+      `${String(etats + avecHorsLigne.length)} état(s) · ` +
+      `état hors ligne distinct rendu par ${String(avecHorsLigne.length)} vue(s) : ` +
+      avecHorsLigne.join(', '),
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -537,7 +649,7 @@ test('contrôle d’anti-vacuité : les ONZE vues du registre ont un parcours ba
 //    moitié de ce qu'un producteur doit lire pour la fermer.
 // ─────────────────────────────────────────────────────────────────────────────
 for (const code of CODES) {
-  const parcours: Parcours = PARCOURS[code];
+  const parcours = parcoursDe(code);
 
   for (const etat of parcours.etats) {
     test(`@critique ${code} — « ${VUES[code].titre} » (${etat.libelle}) : aucune violation axe (A/AA, 2.0 et 2.1)`, async ({
@@ -546,6 +658,33 @@ for (const code of CODES) {
       test.setTimeout(parcours.delaiMs);
       await etat.atteindre(page);
       const griefs = await balayer(page, `${code} — ${etat.libelle}`);
+      expect(
+        griefs,
+        `axe-core — ${String(griefs.length)} violation(s) :\n${resumer(griefs)}\n` +
+          'Aucune règle n’a été désactivée et aucun périmètre rétréci (09 §5.7) : ' +
+          'le défaut est rendu à son producteur, il n’est pas corrigé ici (09 §5.6).',
+      ).toEqual([]);
+    });
+  }
+
+  // ── Le QUATRIÈME état du §33.2, là où l'écran en a un ────────────────────
+  const { horsLigne } = parcours;
+  if (horsLigne !== undefined) {
+    test(`@critique ${code} — « ${VUES[code].titre} » (réseau coupé, 4ᵉ état du §33.2) : aucune violation axe`, async ({
+      page,
+    }) => {
+      test.setTimeout(parcours.delaiMs);
+      await horsLigne.depuis(page);
+      // Anti-vacuité de CET état : sans ce contrôle, on rebalaierait le DOM
+      // d'en ligne et on croirait avoir mesuré l'état hors ligne.
+      await expect(page.getByText(horsLigne.marqueur)).toBeHidden();
+      await couperLeReseau(page);
+      await expect(
+        page.getByText(horsLigne.marqueur),
+        `${code} : réseau coupé, l’écran ne rend AUCUN état hors ligne (§33.2)`,
+      ).toBeVisible();
+
+      const griefs = await balayer(page, `${code} — réseau coupé`);
       expect(
         griefs,
         `axe-core — ${String(griefs.length)} violation(s) :\n${resumer(griefs)}\n` +
