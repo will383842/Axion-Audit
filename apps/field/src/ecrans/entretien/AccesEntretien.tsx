@@ -41,7 +41,8 @@ import { lireSessionCourante } from '../../session/position.js';
 
 /** Le résultat d'une lecture locale qui a le DROIT d'échouer, et qui le dit. */
 type LectureReprise =
-  { readonly ok: true; readonly session: SessionLocale | null } | { readonly ok: false };
+  | { readonly ok: true; readonly session: SessionLocale | null; readonly aUneMission: boolean }
+  | { readonly ok: false };
 
 /**
  * Ce que l'auditeur doit pouvoir faire quand même : rien dans ce message ne
@@ -64,7 +65,13 @@ export function AccesEntretien(): ReactNode {
     if (base === null) return undefined;
     try {
       const id = await lireSessionCourante(base);
-      return { ok: true, session: id === null ? null : await depotSessions.parId(id) };
+      return {
+        ok: true,
+        session: id === null ? null : await depotSessions.parId(id),
+        // M3 — lecture d'INDEX, sans déchiffrement : le nombre de missions, pas
+        // leur contenu. Le même critère que l'état vide de l'écran d'accueil.
+        aUneMission: (await base.missions.count()) > 0,
+      };
     } catch {
       return { ok: false };
     }
@@ -72,6 +79,7 @@ export function AccesEntretien(): ReactNode {
 
   const session = lecture?.ok === true ? lecture.session : null;
   const enEchec = lecture?.ok === false;
+  const aUneMission = lecture?.ok === true && lecture.aUneMission;
 
   const etat: EtatZone =
     lecture === undefined
@@ -80,8 +88,16 @@ export function AccesEntretien(): ReactNode {
         ? {
             nature: 'vide',
             titre: 'Aucun entretien en cours sur cet appareil',
-            description:
-              'Démarrez-en un avec « Nouvel entretien » : trois champs suffisent, le reste est optionnel.',
+            // ── M3 (recette novice A54, 2026-09-06) ────────────────────────
+            // Ce conseil était inconditionnel. Sur un appareil neuf, il
+            // s'empilait sous « Aucune mission sur cet appareil » et disait
+            // l'inverse : le premier état affirmait qu'on ne peut rien faire,
+            // le second qu'on peut commencer tout de suite — et le novice qui
+            // suivait le second tombait dans le cul-de-sac de B2. Deux états
+            // vides sur un écran doivent au moins dire la même chose.
+            description: aUneMission
+              ? 'Démarrez-en un avec « Nouvel entretien » : trois champs suffisent, le reste est optionnel.'
+              : 'Une mission doit d’abord être présente sur cet appareil : préparez-la ci-dessus, ou restaurez une sauvegarde de secours. Un entretien se tient toujours dans une mission.',
           }
         : { nature: 'nominal' };
 

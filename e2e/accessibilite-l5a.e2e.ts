@@ -100,6 +100,16 @@ async function balayer(page: Page, ecran: string): Promise<void> {
  */
 async function creerCoffreEtMesurer(page: Page): Promise<number> {
   await page.getByLabel(/Mot de passe/).fill(MOT_DE_PASSE);
+  // Le premier usage exige une CONFIRMATION depuis la recette novice (M5).
+  // Le motif ci-dessus est sensible à la casse : il désigne « Mot de passe » et
+  // NON « Confirmer le mot de passe ». Il fallait donc un second remplissage —
+  // et surtout PAS un motif élargi, qui aurait visé les deux champs à la fois et
+  // fait échouer le sélecteur sur une correspondance multiple.
+  // Sans cette ligne, la création est refusée, « Aujourd'hui » n'arrive jamais,
+  // et le job e2e tombe en délai d'attente SANS DIRE POURQUOI — c'est ainsi que
+  // ce fichier est resté rouge plusieurs commits d'affilée : le hook `pre-push`
+  // rejoue `verify:rapide`, qui n'inclut pas l'e2e.
+  await page.getByLabel(/Confirmer le mot de passe/).fill(MOT_DE_PASSE);
   const depart = Date.now();
   await page.getByRole('button', { name: 'Créer la protection de cet appareil' }).click();
   await expect(titreDEcran(page, 'Aujourd’hui')).toBeVisible({ timeout: 15_000 });

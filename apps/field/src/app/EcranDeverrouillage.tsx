@@ -36,6 +36,35 @@
 // un mot de passe court n'ajouterait aucune sécurité et interdirait l'accès à des
 // données déjà chiffrées.
 //
+// ── B1 (recette novice A54, 2026-09-06) : NE JAMAIS DIAGNOSTIQUER À VIDE ─────
+// Le bouton tapé champ vide répondait « Déverrouillage impossible / Mot de passe
+// incorrect » — sur l'écran qui CRÉE le mot de passe. Le novice cherchait un mot
+// de passe qui n'existe pas, et appelait le siège. La cause est structurelle : le
+// message venait de `deriverKek`, qui refuse une chaîne vide — et qui a raison de
+// la refuser ; la crypto n'est pas touchée. Un refus de crypto n'est simplement
+// pas une phrase d'accueil.
+//
+// L'écran valide donc AVANT d'appeler le coffre, et dit CE QUI EST ATTENDU.
+// « Mot de passe incorrect » n'est plus prononcé que lorsqu'un mot de passe a
+// réellement été présenté à un coffre existant.
+//
+// **Les quatre gardes sont ORDONNÉES, et l'ordre est un choix** : champ vide,
+// puis LONGUEUR, puis confirmation. La longueur passe avant la confirmation parce
+// qu'elle est plus actionnable — on ne fait pas retaper deux fois, debout chez un
+// client, un mot de passe que la politique refusera de toute façon.
+//
+// Le bouton reste ACTIF et répond : un bouton grisé muet est le « cadenas muet »
+// que 03 §19.1 interdit.
+//
+// ── M5 : LA CONFIRMATION, AU PREMIER USAGE SEULEMENT ────────────────────────
+// L'écran annonce lui-même que le mot de passe « ne peut pas être récupéré ». Une
+// faute de frappe sur un clavier virtuel d'iPad rendait donc l'appareil
+// définitivement illisible, sans aucun filet. La confirmation n'existe qu'au
+// premier usage : à la reprise, le coffre est le juge, et une seconde saisie ne
+// protégerait de rien. La LONGUEUR, elle, n'est pas inventée par cet écran : elle
+// vient de `MOT_DE_PASSE_LONGUEUR_MIN` (`packages/shared`) — une politique de
+// sécurité ne s'écrit pas dans un composant (11 §8).
+//
 // Traçabilité : E33 (sécurité / RGPD), E23 (hyper intuitif, novice < 30 min).
 // =============================================================================
 import { useCallback, useId, useState, type FormEvent, type ReactNode } from 'react';
@@ -53,7 +82,16 @@ const AIDE_HORS_LIGNE =
 // reste due dans les deux cas — c'est le quatrième état de cet écran.
 const AIDE_PREMIER_USAGE =
   `Choisissez un mot de passe d’au moins ${String(MOT_DE_PASSE_LONGUEUR_MIN)} caractères : il chiffrera les données de cet appareil. ` +
+  'Saisissez-le deux fois pour écarter une faute de frappe. ' +
   'La collecte fonctionnera ensuite sans réseau ; seule la synchronisation attendra une reconnexion.';
+
+/** B1 — ce que l'écran répond quand le champ est vide. Jamais un diagnostic. */
+const ATTENDU_PREMIER_USAGE = 'Saisissez un mot de passe pour protéger cet appareil.';
+const ATTENDU_REPRISE = 'Saisissez votre mot de passe pour déverrouiller la collecte.';
+const CONFIRMATION_ATTENDUE = 'Saisissez le mot de passe une seconde fois pour le confirmer.';
+const CONFIRMATION_DIFFERENTE =
+  'Les deux saisies sont différentes. Retapez le même mot de passe dans les deux champs : ' +
+  'sans lui, les données de cet appareil resteraient illisibles.';
 
 /** Ce que l'écran affiche d'une erreur : une cause, et l'action qui va avec (03 §17.6). */
 interface ErreurAffichee {
@@ -68,6 +106,14 @@ interface ErreurAffichee {
    * (revue A29 du 2026-09-05, R3).
    */
   readonly anomalie: boolean;
+}
+
+/**
+ * Une réponse de VALIDATION : une cause, aucune action, et surtout aucune
+ * anomalie — la saisie reste, le formulaire vit, et le coffre n'a pas été touché.
+ */
+function attendu(cause: string): ErreurAffichee {
+  return { cause, action: null, anomalie: false };
 }
 
 /**
@@ -104,6 +150,7 @@ function traduire(cause: unknown): ErreurAffichee {
 export function EcranDeverrouillage(): ReactNode {
   const { ouvrir, premierUsage } = useTerrain();
   const [motDePasse, setMotDePasse] = useState('');
+  const [confirmation, setConfirmation] = useState('');
   const [erreur, setErreur] = useState<ErreurAffichee | null>(null);
   const [enCours, setEnCours] = useState(false);
   const identifiant = useId();
@@ -112,18 +159,31 @@ export function EcranDeverrouillage(): ReactNode {
     (evenement: FormEvent<HTMLFormElement>): void => {
       evenement.preventDefault();
       if (enCours) return;
-      // La politique n'est opposée qu'au moment du CHOIX (premier usage) — et la
-      // saisie n'est pas effacée, pour que l'auditeur puisse la compléter plutôt
-      // que de tout retaper. Le coffre refusera de toute façon : cette garde-ci
-      // est le message, pas la garantie.
-      if (premierUsage && motDePasse.length < MOT_DE_PASSE_LONGUEUR_MIN) {
-        setErreur({
-          cause: new MotDePasseTropCourtError().message,
-          action: null,
-          anomalie: false,
-        });
+
+      // ── B1 : ce que l'écran sait AVANT d'appeler le coffre ────────────────
+      // Aucune de ces réponses n'est un diagnostic : elles disent ce qui est
+      // attendu. Aucune n'efface la saisie — l'auditeur complète plutôt qu'il ne
+      // retape. Le coffre n'est appelé que si la saisie a un sens.
+      if (motDePasse === '') {
+        setErreur(attendu(premierUsage ? ATTENDU_PREMIER_USAGE : ATTENDU_REPRISE));
         return;
       }
+      // La politique n'est opposée qu'au moment du CHOIX (premier usage). Le
+      // coffre refusera de toute façon : cette garde-ci est le message, pas la
+      // garantie.
+      if (premierUsage && motDePasse.length < MOT_DE_PASSE_LONGUEUR_MIN) {
+        setErreur(attendu(new MotDePasseTropCourtError().message));
+        return;
+      }
+      if (premierUsage && confirmation === '') {
+        setErreur(attendu(CONFIRMATION_ATTENDUE));
+        return;
+      }
+      if (premierUsage && confirmation !== motDePasse) {
+        setErreur(attendu(CONFIRMATION_DIFFERENTE));
+        return;
+      }
+
       setEnCours(true);
       setErreur(null);
       void ouvrir(motDePasse)
@@ -132,10 +192,11 @@ export function EcranDeverrouillage(): ReactNode {
         })
         .finally(() => {
           setMotDePasse('');
+          setConfirmation('');
           setEnCours(false);
         });
     },
-    [enCours, motDePasse, ouvrir, premierUsage],
+    [confirmation, enCours, motDePasse, ouvrir, premierUsage],
   );
 
   // Une anomalie de coffre ferme l'écran : plus de bouton, plus de saisie, plus
@@ -200,12 +261,34 @@ export function EcranDeverrouillage(): ReactNode {
             </p>
           </div>
 
+          {premierUsage && (
+            <div className="axn-champ">
+              <label className="axn-champ__libelle" htmlFor={`${identifiant}-confirmation`}>
+                Confirmer le mot de passe
+                <span className="axn-champ__obligatoire" aria-hidden="true">
+                  *
+                </span>
+              </label>
+              <input
+                id={`${identifiant}-confirmation`}
+                className="axn-champ__saisie"
+                type="password"
+                autoComplete="new-password"
+                required
+                data-saisie-libre="vrai"
+                aria-invalid={erreur !== null}
+                value={confirmation}
+                onChange={(evenement) => {
+                  setConfirmation(evenement.target.value);
+                }}
+              />
+            </div>
+          )}
+
           {erreur !== null && (
             <Message
               ton="alerte"
-              titre={
-                premierUsage ? 'Impossible de préparer cet appareil' : 'Déverrouillage impossible'
-              }
+              titre={premierUsage ? 'Protection non créée' : 'Déverrouillage impossible'}
               role="alert"
             >
               <p>{erreur.cause}</p>

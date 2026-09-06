@@ -39,7 +39,6 @@ import {
   Message,
   PastilleSync,
   ZoneEtat,
-  type EtatSync,
   type EtatZone,
 } from '@axion/ui';
 import {
@@ -51,10 +50,11 @@ import {
 } from '../../agenda/jour.js';
 import { LIBELLE_TYPE_SESSION } from '../../agenda/sessions.js';
 import { useTerrain } from '../../app/contexte.js';
+import { versEtatPastille } from '../../app/etat-sync-affiche.js';
 import { lireMeta } from '../../local/base.js';
 import { maintenant } from '../../local/horloge.js';
 import type { SessionLocale } from '../../local/depots/sessions.js';
-import { portSyncInerte, type StatutSync } from '../../local/port-sync.js';
+import { portSyncInerte } from '../../local/port-sync.js';
 import { memoriserSessionCourante } from '../../session/position.js';
 import { formaterHeure } from '../../session/fuseau.js';
 import { useEnLigne } from '../../session/media.js';
@@ -72,27 +72,10 @@ const CAPACITES_HORS_LIGNE = [
   'Exporter une sauvegarde de secours chiffrée',
 ];
 
-/**
- * Le statut du port traduit vers celui de la pastille.
- *
- * `indisponible` devient `hors-ligne` et NON `synchronise` : la pastille du
- * design system n'a pas d'état « pas encore construit », et lui faire dire
- * « synchronisé » serait le mensonge que `LOT_L5.md` §3.6 interdit nommément.
- * La phrase qui accompagne la pastille, elle, dit la vérité complète.
- */
-function versEtatPastille(statut: StatutSync): EtatSync {
-  switch (statut) {
-    case 'a_jour':
-      return 'synchronise';
-    case 'en_attente':
-      return 'en-attente';
-    case 'echec':
-      return 'echec';
-    case 'jamais_synchronisee':
-    case 'indisponible':
-      return 'hors-ligne';
-  }
-}
+// B6 (recette novice A54, 2026-09-06) : `versEtatPastille` vivait ICI, et la
+// pastille de la coquille en avait une autre — d'où deux pastilles qui se
+// contredisaient sur le même écran. La traduction est remontée dans
+// `app/etat-sync-affiche.ts`, une fois, pour la coquille comme pour ce cockpit.
 
 function nombreTerminees(journee: JourneeTerrain | null | undefined): number {
   return (journee?.sessionsDuJour ?? []).filter((session) => session.status === 'termine').length;

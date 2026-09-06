@@ -63,6 +63,18 @@ import { exporterSauvegarde, MotDePasseExportInvalideError } from '../../sauvega
 import { PROFIL_PAR_DEFAUT } from '../../session/auditeur.js';
 import './journee.css';
 
+/**
+ * Ce qui est dit quand le rituel s'est déroulé sans produire de sauvegarde.
+ *
+ * Il ne dit pas « erreur » : rien n'a échoué techniquement, l'auditeur n'a
+ * simplement pas donné son mot de passe, ou s'est trompé. Il dit ce qui n'est
+ * PAS protégé et ce qui reste à faire — 03 §17.6, cause et action.
+ */
+const MESSAGE_RITUEL_INCOMPLET =
+  'Vos données de collecte n’ont quitté cet appareil d’aucune façon ce soir. ' +
+  'Le rappel de fin de journée reste donc actif : ressaisissez votre mot de passe et relancez, ' +
+  'ou faites-le au plus tôt demain matin — aucune donnée ne doit vivre sur un seul appareil plus de 24 h.';
+
 /** Ce que le rituel a fait pour UNE mission — 11 §4 : un fichier `.axionbackup` PAR mission. */
 interface ResultatMission {
   readonly missionId: string;
@@ -77,6 +89,8 @@ interface ResultatRituel {
   readonly missions: readonly ResultatMission[];
   readonly validation: string;
   readonly refus: readonly RefusValidation[];
+  /** B4 — une sauvegarde a-t-elle été produite pour CHAQUE mission ? */
+  readonly sauvegardeComplete: boolean;
 }
 
 /**
@@ -229,8 +243,28 @@ export function EcranFinDeJournee(): ReactNode {
         validation = `${String(r.validees.length)} entretien(s) validé(s)${r.refusees.length > 0 ? `, ${String(r.refusees.length)} non validé(s)` : ''}.`;
       }
 
-      await ecrireMeta(base, CLE_DERNIER_RITUEL, maintenant());
-      setResultat({ missions, validation, refus });
+      // ── B4 (recette novice A54, 2026-09-06) : LE RITUEL NE S ÉTEINT PLUS À VIDE ─
+      // La date était écrite INCONDITIONNELLEMENT. Un mot de passe vide ou faux
+      // ne produisait donc AUCUNE sauvegarde — et éteignait quand même le rappel
+      // du cockpit, qui ne regarde que cette date (`rappelFinDeJournee`).
+      // L'auditeur se couchait rassuré, ses données n'avaient pas quitté
+      // l'appareil, et le garde-fou de l'invariant 8 s'était tu tout seul. C'est
+      // la forme la plus dangereuse du défaut que ce dépôt traque : un garde-fou
+      // qui annonce plus qu'il ne fait.
+      //
+      // La date ne s'écrit donc que si un fichier a réellement été produit pour
+      // CHAQUE mission. Une seule mission sans fichier laisse le rappel actif :
+      // l'invariant 8 se compte par mission, pas par soirée.
+      //
+      // Quand L6a livrera, une synchronisation RÉUSSIE deviendra la seconde
+      // façon de tenir l'invariant (« sync ≥ 1×/jour OU export ») ; aujourd'hui
+      // le port est inerte et ne peut pas la tenir, donc l'export est seul juge.
+      const sauvegardeComplete =
+        missions.length > 0 && missions.every((mission) => mission.fichierProduit);
+      if (sauvegardeComplete) {
+        await ecrireMeta(base, CLE_DERNIER_RITUEL, maintenant());
+      }
+      setResultat({ missions, validation, refus, sauvegardeComplete });
       setMotDePasse('');
       setCochees(null);
     })()
@@ -435,6 +469,15 @@ export function EcranFinDeJournee(): ReactNode {
               <Message ton="succes" titre="Validation des entretiens">
                 {resultat.validation}
               </Message>
+              {/* B4 : le rituel qui n'a rien sauvegardé le DIT, et il le dit en
+                  alerte. Sans cette phrase, l'auditeur verrait « Ce qui a été
+                  fait » suivi de trois encarts et en conclurait que sa journée
+                  est protégée — la même méprise que le rappel éteint. */}
+              {!resultat.sauvegardeComplete && (
+                <Message ton="alerte" titre="Aucune sauvegarde produite ce soir" role="alert">
+                  {MESSAGE_RITUEL_INCOMPLET}
+                </Message>
+              )}
               {resultat.refus.map((refus) => (
                 <Message key={refus.id} ton="avertissement" titre="Entretien non validé">
                   {refus.personName ?? 'Interlocuteur non nommé'} — {refus.motif}

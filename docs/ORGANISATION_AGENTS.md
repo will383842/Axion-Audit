@@ -177,6 +177,24 @@ et on lit sa sortie.
 > **Et on vérifie après, plutôt que de supposer** : que le correctif venu de `main` est présent, et
 > que les ajouts de la branche le sont aussi. Un `add/add` résolu sans contrôle est le plus silencieux
 > des écrasements — il ne laisse aucun marqueur.
+>
+> **LE FICHIER DANGEREUX EST CELUI QUE GIT DIT AVOIR AUTO-FUSIONNÉ, PAS CELUI EN CONFLIT.**
+> Ajouté le 2026-09-06, après que le même chemin a manqué de disparaître **deux fois dans la même
+> journée**. `apps/field/src/app/contexte.tsx` était marqué `M ` — auto-fusionné, déjà indexé, aucun
+> marqueur — et il avait perdu **tout le côté `main`** : l'import et le routage du constat
+> **critique** F-22, « un coffre présent mais illisible n'est pas un appareil neuf ».
+>
+> Un fichier en conflit **appelle** une vérification ; un fichier auto-fusionné n'en appelle aucune.
+> C'est `tsc` qui l'a rattrapé, pas une relecture — et seulement parce qu'un symbole devenait
+> introuvable. **Si la perte avait porté sur une branche `if` plutôt que sur un import, rien ne
+> l'aurait signalée.**
+>
+> **Donc, après toute fusion touchant du code de sécurité** : `git diff origin/main -- <fichier>` sur
+> les fichiers auto-fusionnés aussi, jamais seulement sur les conflictuels ; puis `pnpm build` et la
+> suite **avant** de commiter. Et rappelle-toi ce que le comptage ne dit pas : **un comptage de
+> symboles dit qu'un correctif est PRÉSENT, il ne dit pas qu'il est ATTEINT.** Seuls les tests le
+> disent — deux tests `@critique` ont trouvé, le même jour, un message d'anomalie perdu que le
+> comptage déclarait intact.
 
 **a. `git commit` sans chemins emporte l'index ENTIER**, donc le travail qu'un voisin vient
 d'indexer. *Arrivé quatre fois le 2026-08-29, dont une où 2 700 lignes du travail de trois agents

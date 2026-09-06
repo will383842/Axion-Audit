@@ -291,8 +291,46 @@ export const CODES_ANOMALIE_SCORING = {
    * UNE QUESTION `bloquant` QUI N'A PAS PU ÊTRE ÉVALUÉE — l'autre façon de masquer
    * un drapeau rouge, et la plus discrète : un refus poli sur la question qui
    * fâche, et le drapeau ne se déclenche jamais. Elle est donc COMPTÉE.
+   *
+   * Elle suppose qu'une RÉPONSE EXISTE : quelqu'un a été devant la question et n'a
+   * rien pu en tirer. Le cas où personne ne l'a jamais posée est le code suivant,
+   * et les deux ne se confondent pas — ils ne se corrigent pas de la même façon.
    */
   QUESTION_BLOQUANTE_NON_EVALUEE: 'QUESTION_BLOQUANTE_NON_EVALUEE',
+  /**
+   * UNE QUESTION `bloquant` QUE LA MISSION N'A JAMAIS POSÉE — aucune ligne
+   * `answers`, nulle part, pour aucune unité.
+   *
+   * LA SEPTIÈME FAÇON DE MASQUER UN POINT CRITIQUE, ET LA PLUS SILENCIEUSE DE
+   * TOUTES (relevé par la revue croisée, arbitré par A01 le 2026-09-06). À poids 0,
+   * la question n'entre dans AUCUN dénominateur : la mission peut afficher 5,00/5
+   * et 100 % de complétude alors que la seule question qui fâche n'a jamais été
+   * posée. Rien, absolument rien, ne le disait — pas même le compteur
+   * `nonRepondues`, qui ne la voyait pas.
+   *
+   * Elle est donc signalée QUEL QUE SOIT SON POIDS : le poids gouverne la moyenne,
+   * la criticité gouverne l'alerte. Et même à poids > 0, `nonRepondues` ne suffit
+   * pas — c'est un COMPTE, il ne nomme ni la question ni sa criticité, donc il
+   * n'est pas une trace exploitable par un analyste.
+   *
+   * PORTÉE, ÉCRITE POUR QU'ON NE LA CROIE PAS PLUS LARGE : le fait signalé est
+   * l'absence sur la MISSION ENTIÈRE. L'absence sur UNE unité alors que d'autres
+   * ont répondu reste lisible dans `completude.nonRepondues` de cette unité ; la
+   * signaler ici produirait, sur un arbre à 150 unités dont 30 ne sont jamais
+   * interrogées, trente lignes par question — du bruit qui noierait le signal
+   * que ce code existe pour porter.
+   */
+  QUESTION_BLOQUANTE_JAMAIS_POSEE: 'QUESTION_BLOQUANTE_JAMAIS_POSEE',
+  /**
+   * Deux lignes de questionnaire figé portent le même `mission_question_id`.
+   *
+   * La base l'interdit (clé primaire) : c'est de la défense en profondeur sur une
+   * entrée qui, un jour, viendra d'ailleurs que d'une requête — un export rejoué,
+   * un jeu d'essai, une reprise. Le moteur retient la PREMIÈRE et le DIT, parce
+   * que « ce qui est écarté est dit, jamais tu » vaut aussi quand ce qu'on écarte
+   * n'aurait jamais dû exister.
+   */
+  QUESTION_FIGEE_EN_DOUBLON: 'QUESTION_FIGEE_EN_DOUBLON',
 } as const;
 
 export type CodeAnomalieScoring =
@@ -309,6 +347,21 @@ export const anomalieScoringSchema = z.strictObject({
   reponseId: z.uuid().nullable(),
   missionQuestionId: z.uuid().nullable(),
   orgUnitId: z.uuid().nullable(),
+  /**
+   * LA CRITICITÉ DE LA QUESTION CONCERNÉE — ce qui permet de trier les anomalies
+   * par gravité plutôt que par ordre d'arrivée.
+   *
+   * Sans elle, une console ne pouvait pas distinguer « une question BLOQUANTE est
+   * tombée hors périmètre » de « un texte libre est tombé hors périmètre » : les
+   * deux rendaient la même ligne. Or la première mérite un coup de téléphone et la
+   * seconde une note de bas de page (asymétrie relevée par la revue croisée du
+   * 2026-09-06).
+   *
+   * `null` UNIQUEMENT quand la criticité est réellement inconnue — le seul cas est
+   * `REPONSE_SANS_QUESTION_FIGEE`, où la question n'existe pas dans le
+   * questionnaire figé et où personne ne peut donc dire ce qu'elle valait.
+   */
+  criticite: z.enum(CRITICITES).nullable(),
 });
 
 export type AnomalieScoring = z.infer<typeof anomalieScoringSchema>;

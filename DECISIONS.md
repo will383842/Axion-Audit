@@ -10035,6 +10035,42 @@ Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun aujourd'hui. **Amendement candidat du 05 §9.9 à P-D**, pour que les cinq entités
 y soient nommées plutôt qu'interprétées.
 
+---
+
+## 2026-09-06 — [L5] Les six bloquants de la recette novice : ce qui se décide, et ce qui remonte
+
+La recette UX novice n°1 (A54) a rendu **NO-GO** sur P-C avec six bloquants. Cinq se corrigent sans
+rien interpréter : un message faux (B1), une sortie absente (B2), une promesse non tenue (B3), un
+garde-fou qui s'éteint à vide (B4), un échec déguisé en vide (B5). **B6 est le seul qui touche à un
+énoncé, et il est à cheval sur un désaccord déjà écrit** : la décision A01 du 2026-09-05 (« l'état de
+sync visible sur TOUS les écrans ») croise `LOT_L5.md` §3.6 (« jamais une pastille qui annonce plus
+qu'elle ne fait »).
+
+Options :
+
+1. **Séparer la RÈGLE de l'ÉNONCÉ. Corriger la règle maintenant, laisser le mot à Williams.** La
+   règle — un fait, une source — n'est pas discutable : deux pastilles qui se contredisent sur un
+   même écran sont fausses quel que soit leur libellé. Le mot, lui, est un choix de produit.
+2. Trancher aussi le libellé (« Synchronisation indisponible dans cette version »). **Écartée** :
+   c'est le doute §8-5 du rapport, remonté explicitement à l'arbitrage humain ; le trancher dans un
+   correctif de pilote reviendrait à répondre à une question qu'on a soi-même posée.
+3. Attendre l'arbitrage pour tout corriger. **Écartée** : la contradiction est un bloquant de porte,
+   et elle porte sur la seule question que l'invariant 8 impose chaque soir — « mes données sont-elles
+   sorties de cet appareil ? ».
+
+Arbitrage : **option 1**. L'état affiché vient du **port de sync** et de lui seul (ni `navigator.onLine`,
+ni le compte d'outbox) ; la traduction statut → pastille est **unique** (`app/etat-sync-affiche.ts`),
+partagée par la coquille et le cockpit ; la pastille en double de l'accueil est retirée. Les tests de
+conception attendent un **état**, jamais un libellé : le jour où le mot sera arbitré, il changera dans
+un seul fichier sans toucher un test.
+Règle de précédence : **§32-36 > §16-22** — 03 §33.2 (les quatre états, cause et action) et 03 §19.2
+(pastille discrète, jamais anxiogène) commandent ; `LOT_L5.md` §3.6 en est l'application au lot.
+Décideur : **A20**, dans son périmètre de chef d'équipe (intégration de la coquille) ; **le libellé
+reste à Williams**.
+Impact spec : aucun. **Six doutes de spec du rapport A54 §8 restent ouverts et NON tranchés** : deux
+vues nommées « Aujourd'hui », refus de participation, phrase-script RGPD, « fin de journée en un
+geste » face à la saisie du mot de passe d'export, énoncé de la pastille avant L6a, page `/design`.
+
 ## 2026-09-06 — [L8] Le NON COMMUNIQUÉ reste-t-il au dénominateur de la complétude ?
 
 Le 03 §32.1 dit deux choses qui, lues côte à côte, ne disent pas la même chose :
@@ -10185,3 +10221,66 @@ Arbitrage : **option 2**. C'est le prix de la séparation entre le détail et l'
 (validation humaine) est le texte qui commande la forme de la proposition.
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun ; champ ajouté à une proposition, pas au schéma de données.
+## 2026-09-06 — [L8] Une question bloquante JAMAIS POSÉE doit-elle produire une anomalie ?
+
+La revue croisée a mesuré le cas : une question `bloquant` de poids 0 sans aucune ligne `answers`
+donne une mission à 5,00/5, 100 % de complétude, zéro anomalie et zéro drapeau. Elle est absente de
+`posees` parce que le poids 0 la sort de tous les dénominateurs. J'avais instrumenté le refus poli
+(`QUESTION_BLOQUANTE_NON_EVALUEE`) mais pas l'absence totale — mes six preuves supposaient toutes une
+réponse qui EXISTE.
+
+Options :
+a) Une anomalie dédiée, émise quel que soit le poids. b) Rien : à poids > 0 le compteur `nonRepondues`
+suffit. c) Élargir `QUESTION_BLOQUANTE_NON_EVALUEE` au cas sans réponse.
+
+Arbitrage : **a)**. b) est réfutée par la mesure — `nonRepondues` est un COMPTE, il ne nomme ni la
+question ni sa criticité, et à poids 0 il ne la voit même pas. c) confondrait deux faits qui ne se
+corrigent pas pareil : « on vous a demandé, vous avez refusé » et « personne n'a posé la question ».
+Nouveau code `QUESTION_BLOQUANTE_JAMAIS_POSEE`, émis quel que soit le poids — le poids gouverne la
+moyenne, la criticité gouverne l'alerte. Portée bornée à l'absence sur la MISSION ENTIÈRE : l'absence
+sur une seule unité reste lisible dans son `nonRepondues`, et la signaler produirait sur FIL-GC trente
+lignes par question bloquante.
+Règle de précédence : sans objet — comblement d'un silence du §32.1, aucune section en conflit.
+Décideur : **A01**, sur constat de la revue croisée. Mis en œuvre par A15.
+Impact spec : aucun. Le §32.1-6 conditionne le drapeau à `criticality='bloquant'` sans dire ce qui se
+passe quand la question n'est jamais posée ; amendement candidat.
+
+## 2026-09-06 — [L8] Le drapeau `below` s'évalue-t-il sur l'agrégat d'un choix multiple, ou sur chaque option ?
+
+Mesuré par la revue croisée : options {1, 5} et `red_flag {below: 2}` donnent `max` → 5 et `mean` → 3,
+donc AUCUN drapeau. L'option au rouge est effacée par l'agrégation avant que le seuil ne la voie —
+un drapeau masqué par une moyenne, un étage sous tous ceux que mes preuves visaient.
+
+Options :
+a) Le drapeau s'évalue sur CHAQUE option retenue, avant agrégation. b) Sur l'agrégat, comme
+aujourd'hui. c) Interdire `red_flag.below` sur un `multi_choice`.
+
+Arbitrage : **a)**. Motif : les doctrines de cotation arbitrées le 2026-09-02 disent « le système le
+plus défavorable fait la note » (2) et « l'unité la plus défavorable fait la note » (5) ; un `max` qui
+efface l'option au rouge dit exactement l'inverse de ce que le pack vient de trancher. L'agrégat reste
+le SCORE (la moyenne du §32.1-2 ne bouge pas) ; seule l'ALERTE regarde le détail — la séparation tenue
+partout ailleurs dans ce lot. c) est écartée ici mais RECOMMANDÉE en complément à l'import L4, en
+contrôle bloquant : voir `AMELIORATIONS.md`.
+Règle de précédence : **§32-36 > §24-31** — l'amendement du §32.4 (doctrines) est dans la tranche la
+plus forte, et il tranche ce que le §32.1-6 laissait implicite.
+Décideur : **A01**, sur constat de la revue croisée. Mis en œuvre par A15.
+Impact spec : aucun. Amendement candidat de 03 §32.1-6, pour que « `below` » dise sur QUOI il porte
+quand une réponse a plusieurs scores.
+
+## 2026-09-06 — [L8] Le drapeau `values` doit-il comparer comme le barème cote ?
+
+`cleDeValeur` coerce le nombre `1` en clé `"1"` — c'est ainsi qu'une table `{"1": 5}` cote une réponse
+numérique. `evaluerDrapeau` comparait par `Object.is` : la même valeur était COMPRISE par le barème et
+IGNORÉE par l'alerte.
+
+Options :
+a) La comparaison du drapeau suit la même coercition que la cotation. b) Le statu quo, en le
+documentant. c) Supprimer la coercition de la cotation.
+
+Arbitrage : **a)**. Deux règles de comparaison pour une même valeur, dans le même fichier, est un piège
+qui se paie un jour où personne ne regarde. c) casserait la cotation des tables à clés numériques. La
+coercition ne s'applique QUE lorsque les deux valeurs sont coercibles ; sinon on retombe sur l'identité
+stricte, pour aligner les deux lectures sans élargir la détection.
+Règle de précédence : sans objet — cohérence interne d'un module, aucune divergence de pack.
+Décideur : **A01**, sur constat de la revue croisée. Mis en œuvre par A15.
+Impact spec : aucun.
