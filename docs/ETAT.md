@@ -4302,3 +4302,25 @@ statut le plus fréquent du portefeuille, et c'est le **compilateur** qui l'a di
 
 **Un comptage dit qu'un symbole est absent ; il ne dit pas qu'un comportement l'est.** Troisième
 vérification de la semaine. Quatre gardes neufs en réponse, tous éprouvés par défaut volontaire.
+
+## 2026-09-06 20h45 — [lot L5 / incrément L5c] — étape pipeline 3/7
+
+Dernier commit vert : b1e5fe5 (fix(l5c) : cinq cas @critique dépendaient de l'heure) · Branche :
+fix/agenda-jour-mission · Poussé : oui
+Tâche en cours : session de reprise `axion-audit-c4`, en parallèle du pilote — je ne prends que ce
+qui n'avance pas. Trouvé : `EcranAgenda.test.tsx` dépend de l'HEURE DU PASSAGE. Créneau saisi à
+`maintenant() + 60 à 240 min`, vérifié « du jour » en Europe/Paris, processus en `TZ=UTC` : passé
+18h UTC le créneau tombe demain. Dégradation par paliers jusqu'à 21h UTC. Mesuré, pas déduit :
+#76 relancée à 18h03 est tombée sur `3 · unit`, verte à 17h26 sur le même arbre.
+Correctif PR #79 : plafond à 15 min avant la fin du jour de mission, borne lue par `Intl`, aucune
+ligne de production touchée. `interface` 993/993 (était 992+1). Contre-épreuve base forcée à 23h50
+Paris : sans plafond CINQ cas @critique tombent, avec plafond les quinze passent.
+Vérifié aussi : le veto V1 de P-C est FERMÉ sur `main` (7 symboles revenus, 82 `it(` sur les 4
+fichiers), et le rouge CI de `main` est le seul `deploy-staging` — geste root dû à Williams.
+Prochaine action : mener #79 au vert, la fusionner, puis mettre #75 et #76 à jour depuis `main`.
+Tests rouges connus : aucun sur cette branche. Sur toute branche SANS #79, `3 · unit` rougit à
+partir de 20h heure de Paris — ce n'est pas une régression, c'est ce défaut.
+`--no-verify` SIGNALÉ (§8) : `fix/badge-action` (96f0318) poussée ainsi. Son unique rouge au
+`pre-push` était ce même défaut d'horloge, vérifié seul juste avant : 992 verts, 1 rouge, et ce
+rouge est celui que #79 ferme. Rien de cette branche-là n'est masqué.
+
