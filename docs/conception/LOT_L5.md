@@ -26,6 +26,20 @@ construction : `src/ecrans/entretien/**` (A22) contre `src/ecrans/journee/**` (A
 append-only, une ligne par écran**. Créé par L5a avec les vues du socle ; L5b puis L5c y ajoutent
 leurs lignes dans cet ordre de fusion. Aucun autre fichier n'est écrit par deux incréments : si un
 troisième candidat apparaît, il remonte à A20 avant d'être touché, il ne se partage pas.
+**═══ AMENDEMENT DU 2026-09-05 (A01, sur délégation de Williams du 2026-09-04) ═══ Le
+« troisième candidat » est apparu, et il est ENREGISTRÉ : `apps/field/src/App.tsx` rejoint
+`vues.ts` dans la liste des fichiers partagés, sous le même régime — strictement append-only, un
+`case` par écran dans `ContenuCourant`, dans l'ordre de fusion des incréments.** **Précisé le 2026-09-05 (majeur M7 de la revue A29) : le régime déclaré était plus
+ÉTROIT que ce que L5c y avait mis** — un crochet de vue initiale, une pastille de synchronisation,
+une composition sous `accueil`. Un fichier partagé dont la règle ne couvre pas le contenu est un
+fichier qui se disputera. **Ce qui dépassait est SORTI** dans `ecrans/journee/coquille-l5c.tsx`, et
+la règle est maintenue telle quelle : `App.tsx` ne contient que de l'AIGUILLAGE — des `case`, et
+des APPELS à un module d'incrément. Un incrément qui a besoin d'ajouter un comportement à la
+coquille publie une fonction et l'appelle ; il n'écrit pas sa logique dans le fichier commun. Chronologie, pour
+que personne ne la devine : c'est **L5b** qui l'a rendu partagé (`case 'nouvelEntretien'`,
+`case 'entretien'`) sans le déclarer ; c'est **L5c** qui a suivi le même modèle ET l'a remonté au
+lieu de le taire — la conduite que ce paragraphe demandait. Une vue ajoutée à `vues.ts` sans son
+`case` est un écran injoignable : les deux fichiers s'amendent ensemble, ou pas du tout.
 Tests : **A26** (E2E offline) et **A27** (multi-appareils) — ni l'un ni l'autre n'écrit de code de
 production (09 §5.6). Revue croisée intégrale : **A29**. Accessibilité et budgets : **A28**.
 
@@ -235,9 +249,29 @@ attend **A01** — le motif « à extraire un jour » vaut pour le calendrier, p
    `kind='entretien'`, NULL sinon »). Ce défaut applicatif vit-il côté terrain (L5c) ou côté serveur
    (L6a) ? S'il vit des deux côtés, les deux dériveront. Je propose **terrain uniquement** — c'est là
    que la session naît. À confirmer.
-6. **Le « parcours express R1 » de la validation d'entretien** (07, ligne L5) n'est décrit nulle part
+6. ~~**Le « parcours express R1 » de la validation d'entretien** (07, ligne L5) n'est décrit nulle part
    dans 03 §19.1, qui ne connaît que guidé strict / expert et la validation groupée V2.10. Je ne sais
-   pas ce que R1 désigne. **Devine interdite : Williams.**
+   pas ce que R1 désigne. **Devine interdite : Williams.**~~
+
+   **═══ RECTIFICATION DU 2026-09-05 (A23, sur arbitrage A01 du 2026-09-04) ═══**
+   **Ce point est CLOS, et il l'était déjà quand il a été écrit : R1 EST spécifié.** Le texte
+   barré ci-dessus reste lisible parce qu'une note de conception ne se réécrit pas en silence —
+   mais il est faux sur son point principal.
+   R1 est au **03 §29** (corrections de la certification finale), verbatim : « **R1 — Parcours
+   EXPRESS micro** : en niveau `diagnostic_cadrage` sur structure mono-unité, les étapes du
+   pilote trivialement satisfaites se valident automatiquement ; pilote condensé (3 étapes
+   visibles). Guidé intégral dès > 1 unité ou > 3 entretiens. »
+   **Pourquoi la note ne l'a pas trouvé, et c'est la leçon utile** : elle l'a cherché au §19.1,
+   parce que le fichier 07 écrit « validation d'entretien (guidé strict/expert §19.1, parcours
+   express R1) » — la parenthèse pose R1 à côté d'un renvoi qui ne le porte pas. R1 ne concerne
+   d'ailleurs PAS la validation d'entretien : il porte sur les étapes du **pilote de mission**
+   (`step_validations`), à un autre niveau. Les deux vivent dans L5c sans se confondre.
+   **Arbitrage A01 (2026-09-04)** : R1 est dans L5 — le fichier 07 est la définition des lots ;
+   ni L5a ni L5b ne l'ont pris ; il revient à L5c, dont le mandat 09 §1 le nomme.
+   **Implémenté** : `apps/field/src/agenda/pilote.ts`, gardé par `pilote.test.ts`, qui relit les
+   deux seuils DANS le pack plutôt que de les recopier. Reste soumis à Williams : **quelles**
+   trois étapes sont visibles — le pack donne le nombre, jamais la liste (`DECISIONS.md`,
+   2026-09-05).
 7. **Chef d'équipe** : 09 §1 nomme A20 « chef d'équipe front » — L5 est bien le lot d'A20, contrairement
    au doute laissé au §6.7 de la note L2. Aucune correction attendue ici.
 
