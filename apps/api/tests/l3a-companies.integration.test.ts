@@ -55,9 +55,13 @@
 //      index mord le premier.
 //
 // ── CE QUE CE FICHIER NE PROUVE PAS, dit plutôt que sous-entendu ─────────────
-//   · il ne prouve rien sur les journaux `activity_log` : la porte d'écriture du
-//     journal appartient au lot L2 et a sa propre suite (`l2-journal`). Ce qui
-//     est vérifié ici, c'est que l'écriture RÉUSSIT — une entrée de journal qui
+//   · il ne prouvait rien sur les journaux `activity_log` — ET CE N'EST PLUS VRAI
+//     DEPUIS LE 2026-09-05 : la SECTION 17, ajoutée par A16, lit la table pour
+//     `company.update`. Le partage avec le lot L2 reste entier — `l2-journal`
+//     éprouve la PORTE d'écriture (borne sur `request.ip`, pureté de la table),
+//     la section 17 éprouve que `companies` la FRANCHIT et avec quel contenu.
+//     Pour `company.create`, en revanche, la phrase d'origine tient toujours : ce
+//     qui est vérifié, c'est que l'écriture RÉUSSIT — une entrée de journal qui
 //     lèverait ferait tomber les créations ;
 //   · il ne prouve pas la PERFORMANCE du balayage de noms (`lireNomsEntreprises`
 //     lit toutes les fiches vivantes à chaque écriture). C'est une dette écrite
@@ -2760,5 +2764,272 @@ describe('409 d’unicité — chemin dégradé (la relecture d’après coup É
     const relue = await appeler('GET', `/v1/companies/${idCandidate}`, { jeton: admin.jeton });
     expect(relue.statut).toBe(200);
     expect(fiche(relue).siren, 'la candidate n’a PAS reçu le SIREN').toBeNull();
+  });
+});
+
+// =============================================================================
+// 17. LA TRACE, ET NON PLUS SEULEMENT LA VALEUR — `company.update` (INVARIANT 7)
+// =============================================================================
+// AJOUTÉ LE 2026-09-05 PAR A16, ET VOICI CE QUE SON ABSENCE COÛTAIT.
+//
+// La mesure de couverture de `domaines/companies/**` (arbitrage `DECISIONS.md`
+// du 2026-09-05, « `domaines/companies/**` est le seul domaine L3 hors du seuil
+// de couverture ») a montré que TROIS branches de `modifierUneEntreprise`
+// n'étaient exercées par aucun test : le `PATCH` de `name` (`service.ts:362-364`),
+// celui de `sitesCount` (`:392-394`) et celui de `countries` (`:398-400`).
+// Conséquence directe et mesurée : `touches.push('name' | 'sites_count' |
+// 'countries')` ne s'exécutait JAMAIS, et `memesPays` (`:302-304`) n'était JAMAIS
+// APPELÉE.
+//
+// Ce n'est pas un trou de couverture cosmétique : c'est le CHEMIN DE
+// JOURNALISATION que personne ne voyait. Les tests de la section 9 éprouvent des
+// VALEURS (ce que la fiche vaut après coup) ; aucun n'éprouvait la TRACE (ce que
+// le journal en dit). Un `touches.push` supprimé par mégarde aurait laissé la
+// suite entière verte : la fiche aurait continué de changer, et la ligne
+// `company.update` aurait cessé de nommer la colonne touchée — c'est-à-dire
+// exactement la panne que l'invariant 7 (« toute correction de donnée = révision
+// tracée ») existe pour rendre impossible. Une modification silencieuse ne casse
+// aucun écran ; elle casse le dossier d'audit, huit mois plus tard, devant
+// quelqu'un qui conteste une donnée de mission.
+//
+// ── CE QUE CELA CORRIGE DANS L'EN-TÊTE DE CE FICHIER ────────────────────────
+// L'en-tête disait « il ne prouve rien sur les journaux `activity_log` ». C'était
+// vrai le jour où il a été écrit, et ce ne l'est plus pour `company.update` : ces
+// trois cas lisent la table. Le partage de responsabilité avec `l2-journal` reste
+// entier — `l2-journal` éprouve la PORTE d'écriture (borne sur `request.ip`,
+// pureté de la table, absence d'`update` et de `delete`) ; cette section-ci
+// éprouve que `companies` FRANCHIT cette porte, et avec le bon contenu. Les deux
+// sont nécessaires : une porte solide qu'on n'emprunte pas ne trace rien.
+//
+// ── ANTI-VACUITÉ, ET C'EST LA MOITIÉ DU TRAVAIL ─────────────────────────────
+// Chacun des trois relève `tracesDeModification(id)` AVANT le geste et exige un
+// tableau VIDE. Sans ce relevé, « il existe une ligne `company.update` » serait
+// satisfait par une ligne écrite par la création, par un test voisin, ou par un
+// `PATCH` antérieur du même `it` — et l'assertion passerait sans rien prouver du
+// geste qu'elle prétend décrire.
+//
+// Traçabilité : E19 · invariant 7 · 06 §10.4 (régime RGPD d'`activity_log`) ·
+// 09 §3 (DoD : couverture ≥ 90 % MESURÉE sur les modules critiques).
+// =============================================================================
+
+/**
+ * La forme du `meta` d'une ligne `company.update`, RÉÉCRITE ici depuis 06 §10.4 et
+ * la variante partagée — jamais importée du code testé.
+ *
+ * `z.array(z.string())` et non l'énumération fermée des colonnes : ce test doit
+ * pouvoir OBSERVER un nom de colonne hors catalogue et le rapporter, pas le
+ * refuser au parsing. Un contrat de lecture qui interdit l'anomalie ne peut pas
+ * la constater.
+ */
+const metaModificationSchema = z.object({ champs: z.array(z.string()) });
+
+interface TraceModification {
+  readonly auteurId: string | null;
+  readonly champs: readonly string[];
+}
+
+/**
+ * Les lignes `company.update` qui VISENT une fiche, dans l'ordre chronologique.
+ *
+ * Lecture SQL directe, et il n'y a pas d'autre voie honnête : aucune route ne rend
+ * le journal, et la réponse du `PATCH` ne dit rien de ce qui a été tracé. Passer
+ * par le dépôt du journal reviendrait à demander au sujet de témoigner de
+ * lui-même.
+ */
+async function tracesDeModification(entrepriseId: string): Promise<readonly TraceModification[]> {
+  const resultat = await bd().query<{ user_id: string | null; meta: unknown }>(
+    `SELECT user_id, meta FROM activity_log
+      WHERE action = 'company.update' AND entity_type = 'company' AND entity_id = $1
+      ORDER BY created_at, id`,
+    [entrepriseId],
+  );
+  return resultat.rows.map((ligne) => ({
+    auteurId: ligne.user_id,
+    champs: metaModificationSchema.parse(ligne.meta).champs,
+  }));
+}
+
+/** Le nom TEL QU'IL EST STOCKÉ. La réponse pourrait recopier le corps ; la ligne, non. */
+async function nomEnBase(id: string): Promise<string> {
+  const resultat = await bd().query<{ name: string }>('SELECT name FROM companies WHERE id = $1', [
+    id,
+  ]);
+  const trouve = resultat.rows[0]?.name;
+  if (trouve === undefined) throw new Error(`fiche ${id} absente`);
+  return trouve;
+}
+
+/** Le nombre de sites TEL QU'IL EST STOCKÉ. */
+async function sitesEnBase(id: string): Promise<number | null> {
+  const resultat = await bd().query<{ sites_count: number | null }>(
+    'SELECT sites_count FROM companies WHERE id = $1',
+    [id],
+  );
+  if (resultat.rowCount !== 1) throw new Error(`fiche ${id} absente`);
+  return resultat.rows[0]?.sites_count ?? null;
+}
+
+/**
+ * Les pays TELS QU'ILS SONT STOCKÉS, avec leur ORDRE.
+ *
+ * L'ordre est le sujet même du troisième test : la colonne est un JSONB, donc un
+ * TABLEAU et non un ensemble. Une aide qui trierait avant de rendre effacerait
+ * précisément la propriété à éprouver.
+ */
+async function paysEnBase(id: string): Promise<readonly string[]> {
+  const resultat = await bd().query<{ countries: unknown }>(
+    'SELECT countries FROM companies WHERE id = $1',
+    [id],
+  );
+  if (resultat.rowCount !== 1) throw new Error(`fiche ${id} absente`);
+  return z.array(z.string()).parse(resultat.rows[0]?.countries);
+}
+
+describe('PATCH /v1/companies/:id — la trace `company.update` (invariant 7)', () => {
+  it('@critique `PATCH` du NOM : la fiche change, la trace nomme `name` — et elle n’existait pas avant', async () => {
+    const admin = await creerCompte('admin', 'trace-nom');
+    const creee = await creer(admin.jeton, { name: 'Entreprise factice Rho', headcount: 4 });
+    const id = creee.ecriture.company.id;
+
+    expect(
+      await tracesDeModification(id),
+      'ANTI-VACUITÉ : une fiche qui vient de naître n’a aucune trace de MODIFICATION.\n' +
+        'Sans ce relevé, l’assertion finale serait satisfaite par une ligne écrite par\n' +
+        'la création, et ce test serait vert sans rapport avec le geste qu’il décrit.',
+    ).toEqual([]);
+
+    const nouveauNom = 'Entreprise factice Rho — raison sociale corrigée';
+    const renommee = await appeler('PATCH', `/v1/companies/${id}`, {
+      jeton: admin.jeton,
+      charge: { name: nouveauNom },
+    });
+    expect(renommee.statut, renommee.corps).toBe(200);
+    expect(ecriture(renommee).company.name).toBe(nouveauNom);
+    expect(
+      await nomEnBase(id),
+      'La réponse pourrait se contenter de recopier le corps reçu : seule la ligne en\n' +
+        'base prouve que l’écriture a eu lieu.',
+    ).toBe(nouveauNom);
+
+    const traces = await tracesDeModification(id);
+    expect(traces, 'un geste, une trace — ni zéro, ni deux').toHaveLength(1);
+    expect(
+      traces[0]?.champs,
+      'La trace nomme la COLONNE touchée, en `snake_case`, et elle seule. Un\n' +
+        '`touches.push` supprimé rendrait ici une liste vide — donc AUCUNE ligne du\n' +
+        'tout, puisque la variante `company.update` refuse une liste de champs vide.',
+    ).toEqual(['name']);
+    expect(traces[0]?.auteurId, 'et elle nomme l’auteur du geste').toBe(admin.id);
+  });
+
+  it('@critique `PATCH` de `sitesCount` : la trace nomme `sites_count`, et une valeur RÉÉCRITE À L’IDENTIQUE n’en produit aucune', async () => {
+    const admin = await creerCompte('admin', 'trace-sites');
+    const creee = await creer(admin.jeton, {
+      name: 'Entreprise factice Sigma',
+      sitesCount: 3,
+    });
+    const id = creee.ecriture.company.id;
+    expect(await tracesDeModification(id), 'aucune trace avant le premier geste').toEqual([]);
+
+    // ── LE CAS QUI NE DOIT RIEN ÉCRIRE ────────────────────────────────────
+    // Renvoyer la valeur déjà en base n'est PAS une modification. Une ligne
+    // `company.update` s'y écrirait quand même si la comparaison avant/après
+    // disparaissait — et le journal d'audit se remplirait de non-événements, ce
+    // qui le rend illisible le jour où on le relit.
+    const identique = await appeler('PATCH', `/v1/companies/${id}`, {
+      jeton: admin.jeton,
+      charge: { sitesCount: 3 },
+    });
+    expect(identique.statut, identique.corps).toBe(200);
+    expect(
+      await tracesDeModification(id),
+      'Un `PATCH` qui ne change rien ne trace rien — sinon le journal décrirait une\n' +
+        'modification qui n’a pas eu lieu.',
+    ).toEqual([]);
+
+    // ── LE CAS QUI DOIT ÉCRIRE ────────────────────────────────────────────
+    const changee = await appeler('PATCH', `/v1/companies/${id}`, {
+      jeton: admin.jeton,
+      charge: { sitesCount: 7 },
+    });
+    expect(changee.statut, changee.corps).toBe(200);
+    expect(ecriture(changee).company.sitesCount).toBe(7);
+    expect(await sitesEnBase(id), 'écrit en base, pas seulement rendu').toBe(7);
+
+    const traces = await tracesDeModification(id);
+    expect(traces, 'exactement une trace : celle du geste qui a changé quelque chose').toHaveLength(
+      1,
+    );
+    expect(
+      traces[0]?.champs,
+      'Le nom de la COLONNE (`sites_count`), pas celui de la propriété TypeScript\n' +
+        '(`sitesCount`) : une ligne d’audit doit se relire dans un `psql` sans\n' +
+        'traduction mentale (06 §10.4).',
+    ).toEqual(['sites_count']);
+    expect(traces[0]?.auteurId).toBe(admin.id);
+  });
+
+  it('@critique `PATCH` de `countries` : la même liste ne trace RIEN, un ORDRE différent trace `countries` — la colonne est un tableau, pas un ensemble', async () => {
+    // La comparaison des pays est la SEULE du `PATCH` qui ne passe pas par
+    // l'égalité de valeurs scalaires : deux tableaux distincts portant les mêmes
+    // codes sont « la même valeur ». `memesPays` porte cette décision, et elle
+    // n'était appelée par AUCUN test avant celui-ci — donc ni son sens « égal »
+    // ni son sens « différent » n'étaient tenus.
+    const admin = await creerCompte('admin', 'trace-pays');
+    const creee = await creer(admin.jeton, {
+      name: 'Entreprise factice Tau',
+      countries: ['FR', 'DE'],
+    });
+    const id = creee.ecriture.company.id;
+    expect(creee.ecriture.company.countries).toEqual(['FR', 'DE']);
+    expect(await tracesDeModification(id), 'aucune trace avant le premier geste').toEqual([]);
+
+    // ── SENS 1 DE `memesPays` : ÉGAL, donc RIEN ───────────────────────────
+    // En minuscules, pour que le passage soit aussi un contrôle de la
+    // normalisation : `['fr','de']` doit être reconnu comme `['FR','DE']`. Si la
+    // comparaison avait lieu AVANT la mise en majuscules, ce `PATCH` tracerait un
+    // changement de casse — une modification qui n'a pas eu lieu.
+    const identique = await appeler('PATCH', `/v1/companies/${id}`, {
+      jeton: admin.jeton,
+      charge: { countries: ['fr', 'de'] },
+    });
+    expect(identique.statut, identique.corps).toBe(200);
+    expect(await tracesDeModification(id), 'même liste, même ordre : aucune trace').toEqual([]);
+    expect(await paysEnBase(id), 'et rien n’a bougé en base').toEqual(['FR', 'DE']);
+
+    // ── SENS 2 : MÊME LONGUEUR, ORDRE DIFFÉRENT, donc TRACE ───────────────
+    // C'est le cas qui distingue un tableau d'un ensemble. Une comparaison qui
+    // trierait ou qui compterait les codes tiendrait les deux listes pour égales
+    // et n'écrirait RIEN — laissant en base une valeur qui ne correspond plus à
+    // la dernière écriture acceptée, sans une ligne pour le dire.
+    const reordonnee = await appeler('PATCH', `/v1/companies/${id}`, {
+      jeton: admin.jeton,
+      charge: { countries: ['DE', 'FR'] },
+    });
+    expect(reordonnee.statut, reordonnee.corps).toBe(200);
+    expect(ecriture(reordonnee).company.countries).toEqual(['DE', 'FR']);
+    expect(await paysEnBase(id), 'l’ordre demandé est celui qui est stocké').toEqual(['DE', 'FR']);
+
+    const apresReordre = await tracesDeModification(id);
+    expect(apresReordre, 'réordonner EST une modification, et elle se trace').toHaveLength(1);
+    expect(apresReordre[0]?.champs).toEqual(['countries']);
+    expect(apresReordre[0]?.auteurId).toBe(admin.id);
+
+    // ── SENS 3 : LONGUEUR DIFFÉRENTE, donc TRACE ──────────────────────────
+    const retiree = await appeler('PATCH', `/v1/companies/${id}`, {
+      jeton: admin.jeton,
+      charge: { countries: ['DE'] },
+    });
+    expect(retiree.statut, retiree.corps).toBe(200);
+    expect(await paysEnBase(id)).toEqual(['DE']);
+
+    const toutes = await tracesDeModification(id);
+    expect(
+      toutes,
+      'DEUX traces au total, et deux seulement : les deux gestes qui ont réellement\n' +
+        'changé la liste. Le premier `PATCH` — celui de la liste identique — ne doit\n' +
+        'toujours pas en avoir laissé.',
+    ).toHaveLength(2);
+    expect(toutes.map((trace) => trace.champs)).toEqual([['countries'], ['countries']]);
   });
 });
