@@ -104,6 +104,17 @@ export function PanneauNotes(proprietes: ProprietesPanneauNotes): ReactNode {
   const prefixe = useId();
   const idVerrou = `${prefixe}-verrou`;
   const idRienARattacher = `${prefixe}-rattacher`;
+  // Le même raisonnement vaut pour les TITRES des trois sections, et il valait
+  // déjà avant M1 : ils étaient des constantes (`axn-notes-question`, `-general`,
+  // `-volantes`) désignées par `aria-labelledby`. Sur écran LARGE, la colonne
+  // droite est montée en permanence ; ouvrir le panneau de notes monte la
+  // seconde instance PAR-DESSUS, et les trois identifiants existent alors en
+  // double dans le document. C'est `duplicate-id-aria` — une violation WCAG que
+  // le balayage axe ne voyait pas, faute d'ouvrir ce panneau-là sur cette
+  // largeur-là. Relevé par A22 en fermant M1 ; corrigé ici. (2026-09-06)
+  const idTitreQuestion = `${prefixe}-titre-question`;
+  const idTitreGeneral = `${prefixe}-titre-general`;
+  const idTitreVolantes = `${prefixe}-titre-volantes`;
   const motifVerrou = motifLectureSeule ?? MOTIF_NOTES_VERROUILLEES_DEFAUT;
   const decritSiVerrouille = ecriturePossible ? {} : { 'aria-describedby': idVerrou };
 
@@ -118,8 +129,8 @@ export function PanneauNotes(proprietes: ProprietesPanneauNotes): ReactNode {
         </p>
       )}
 
-      <section className="axn-notes__section" aria-labelledby="axn-notes-question">
-        <h3 id="axn-notes-question">Note sur cette question</h3>
+      <section className="axn-notes__section" aria-labelledby={idTitreQuestion}>
+        <h3 id={idTitreQuestion}>Note sur cette question</h3>
         <Brouillon
           key={cleNoteDeQuestion}
           libelle="Ce qui se dit à côté de la question"
@@ -132,8 +143,8 @@ export function PanneauNotes(proprietes: ProprietesPanneauNotes): ReactNode {
         />
       </section>
 
-      <section className="axn-notes__section" aria-labelledby="axn-notes-general">
-        <h3 id="axn-notes-general">Bloc-notes de l’entretien</h3>
+      <section className="axn-notes__section" aria-labelledby={idTitreGeneral}>
+        <h3 id={idTitreGeneral}>Bloc-notes de l’entretien</h3>
         <Brouillon
           key={cleBlocNotes}
           libelle="Contexte, ambiance, ce qui n’entre dans aucune question"
@@ -144,8 +155,8 @@ export function PanneauNotes(proprietes: ProprietesPanneauNotes): ReactNode {
         />
       </section>
 
-      <section className="axn-notes__section" aria-labelledby="axn-notes-volantes">
-        <h3 id="axn-notes-volantes">Notes volantes</h3>
+      <section className="axn-notes__section" aria-labelledby={idTitreVolantes}>
+        <h3 id={idTitreVolantes}>Notes volantes</h3>
         <CaptureNoteVolante
           desactive={!ecriturePossible}
           idMotifVerrou={ecriturePossible ? null : idVerrou}
