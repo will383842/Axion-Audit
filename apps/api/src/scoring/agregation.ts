@@ -155,18 +155,26 @@ export interface Terme {
  * score consolidé IDENTIQUE à son score propre, au dernier bit.
  */
 export function moyennePonderee(termes: readonly Terme[]): number | null {
-  const retenus = termes.filter((terme) => terme.valeur !== null && terme.poids > 0);
-  if (retenus.length === 0) return null;
+  // Le prédicat de type RESTREINT `valeur` à `number` pour la suite : sans lui, il
+  // faudrait écrire un repli (`?? 0`) sur une valeur dont on vient de prouver
+  // qu'elle n'est pas nulle — un chemin mort qu'aucun test ne pourrait atteindre.
+  const retenus = termes.filter(
+    (terme): terme is { readonly poids: number; readonly valeur: number } =>
+      terme.valeur !== null && terme.poids > 0,
+  );
   const premier = retenus[0];
-  if (retenus.length === 1 && premier !== undefined) return premier.valeur;
+  if (premier === undefined) return null;
+  if (retenus.length === 1) return premier.valeur;
 
   let numerateur = 0;
   let denominateur = 0;
   for (const terme of retenus) {
-    numerateur += terme.poids * (terme.valeur ?? 0);
+    numerateur += terme.poids * terme.valeur;
     denominateur += terme.poids;
   }
-  return denominateur > 0 ? numerateur / denominateur : null;
+  // `denominateur` est strictement positif : tous les termes retenus ont un poids
+  // strictement positif, et il y en a au moins deux ici.
+  return numerateur / denominateur;
 }
 
 // -----------------------------------------------------------------------------

@@ -283,6 +283,42 @@
         "quand L5b et L5c auront couvert EcranAccueil.tsx et service-worker-client.ts."
       ],
       "$motif": "Recommandation A26 au rapport B1 (2026-09-03), appliquee par la session pilote. Le rapport d un agent ne survit pas a sa session : une recommandation qui n entre pas dans un fichier est perdue."
+    },
+    {
+      "lot": "L8",
+      "module": "Scoring (bareme §32.1, agregation, completude, drapeaux rouges)",
+      "glob": "apps/api/src/scoring/**",
+      "reference": "07 §12 lot L8 · 03 §32.1 · 09 §3 (« scoring »)",
+      "_note_glob": [
+        "DEPLACE DE cheminsAttendus LE 2026-09-06, A LA LIVRAISON DU MOTEUR. Le glob est",
+        "celui que l entree d attente nommait, INCHANGE : apps/api/src/scoring/**. Il n a",
+        "ete ni retreci ni corrige, parce que l arborescence reelle est celle qui etait",
+        "attendue — contrairement a L5a (crypto/ attendu, local/ livre), il n y avait rien",
+        "a rectifier.",
+        "",
+        "CE QU IL COUVRE, ET POURQUOI TOUT Y RESTE : bareme.ts (la cotation d une reponse,",
+        "§32.1), agregation.ts (les quatre formules et le roll-up), moteur.ts (la",
+        "ventilation, les anomalies, l union des drapeaux), entree.ts (types seuls).",
+        "AUCUN des quatre n est ecarte, et moteur.ts en particulier : c est lui qui porte",
+        "le canal des drapeaux rouges, donc la clause qui decide du lot (07 ligne L8 : « un",
+        "drapeau rouge n est jamais masque par la moyenne »). L ecarter parce qu il",
+        "orchestre plutot qu il ne calcule serait le retrecissement que le bandeau de ce",
+        "fichier interdit — et ce serait la moitie qui decide, exactement le constat deja",
+        "fait pour scoping puis pour users.",
+        "",
+        "entree.ts EST RAPPORTE A 0,00 % ET CE N EST PAS UN TROU : il ne contient que des",
+        "interfaces, donc zero instruction executable. Le controle agrege couvert/total sur",
+        "l ensemble du module (check-coverage.mjs, « et non moyenne des fichiers »), et un",
+        "fichier dont le total vaut 0 n y pese rien. Le retirer du glob serait un",
+        "retrecissement sans objet.",
+        "",
+        "LES JEUX DE REFERENCE VIVENT HORS DU GLOB, DELIBEREMENT :",
+        "apps/api/tests/aide/scoring-jeux-de-reference.ts est de l outillage de test. Le",
+        "placer dans src/scoring/ l aurait fait entrer dans cette mesure, ou il aurait",
+        "gonfle le pourcentage sans rien prouver — une couverture vraie sur ce qu elle",
+        "observe, qui repond a une autre question que celle posee."
+      ],
+      "$mesure_livraison": "99,87 lignes / 99,87 instructions / 100 fonctions / 96,79 branches — mesure locale a la livraison (166 tests, apps/api/src/scoring/**). AU-DESSUS DU SEUIL A L AJOUT, contrairement aux entrees L3 : le glob n a donc jamais eu a etre tenu par autre chose que des tests."
     }
   ],
   "_cheminsAttendus_mode_emploi": [
@@ -314,13 +350,6 @@
       "glob": "apps/api/src/sync/**",
       "reference": "07 §12 lot L6 · 11 §4 · 05 §9.3 et §9.9",
       "statut": "non livre"
-    },
-    {
-      "lot": "L8",
-      "module": "Scoring (bareme §32.1, agregation, completude, drapeaux rouges)",
-      "glob": "apps/api/src/scoring/**",
-      "reference": "07 §12 lot L8 · 03 §32.1 · 09 §3 (« scoring »)",
-      "statut": "non livre (lot DIFFERABLE — 07 §12)"
     }
   ]
 }

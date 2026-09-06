@@ -126,9 +126,9 @@ describe('single_choice / multi_choice — les scores vivent dans `options[].sco
       scoring: { source: 'options' },
       options: [{ code: 'opt_a', label: 'A', score: null }],
     });
-    expect(coterReponse(sansScore, reponse({ type: 'single_choice', v: 'opt_a' })).motifNonCotable).toBe(
-      'valeur_inexploitable',
-    );
+    expect(
+      coterReponse(sansScore, reponse({ type: 'single_choice', v: 'opt_a' })).motifNonCotable,
+    ).toBe('valeur_inexploitable');
   });
 
   it('multi + `aggregate: max` prend le MAXIMUM des options choisies', () => {
@@ -137,7 +137,9 @@ describe('single_choice / multi_choice — les scores vivent dans `options[].sco
       scoring: { source: 'options', aggregate: 'max' },
       options: OPTIONS,
     });
-    expect(coterReponse(multi, reponse({ type: 'multi_choice', v: ['opt_a', 'opt_b'] })).score).toBe(3);
+    expect(
+      coterReponse(multi, reponse({ type: 'multi_choice', v: ['opt_a', 'opt_b'] })).score,
+    ).toBe(3);
   });
 
   it('multi + `aggregate: mean` prend la MOYENNE des options choisies', () => {
@@ -146,7 +148,9 @@ describe('single_choice / multi_choice — les scores vivent dans `options[].sco
       scoring: { source: 'options', aggregate: 'mean' },
       options: OPTIONS,
     });
-    expect(coterReponse(multi, reponse({ type: 'multi_choice', v: ['opt_a', 'opt_c'] })).score).toBe(3);
+    expect(
+      coterReponse(multi, reponse({ type: 'multi_choice', v: ['opt_a', 'opt_c'] })).score,
+    ).toBe(3);
   });
 
   it('`aggregate` absent vaut `max` — « par défaut » du §32.1, pas une invention du moteur', () => {
@@ -155,7 +159,9 @@ describe('single_choice / multi_choice — les scores vivent dans `options[].sco
       scoring: { source: 'options' },
       options: OPTIONS,
     });
-    expect(coterReponse(multi, reponse({ type: 'multi_choice', v: ['opt_a', 'opt_c'] })).score).toBe(5);
+    expect(
+      coterReponse(multi, reponse({ type: 'multi_choice', v: ['opt_a', 'opt_c'] })).score,
+    ).toBe(5);
   });
 
   it('une sélection VIDE est une absence de réponse, pas un zéro', () => {
@@ -315,7 +321,9 @@ describe('LE DRAPEAU ROUGE — déclenché par la CRITICITÉ, et par rien d’au
     const cote = coterReponse(bloquante, reponse({ type: 'yes_no', v: 'non' }));
     expect(cote.declencheurDrapeau).toBe('valeurs');
     expect(cote.valeurDeclenchante).toBe('non');
-    expect(coterReponse(bloquante, reponse({ type: 'yes_no', v: 'oui' })).declencheurDrapeau).toBeNull();
+    expect(
+      coterReponse(bloquante, reponse({ type: 'yes_no', v: 'oui' })).declencheurDrapeau,
+    ).toBeNull();
   });
 
   it('sur un choix multiple, `values` déclenche dès qu’UNE des options choisies y figure', () => {
@@ -326,7 +334,8 @@ describe('LE DRAPEAU ROUGE — déclenché par la CRITICITÉ, et par rien d’au
       criticality: 'bloquant',
     });
     expect(
-      coterReponse(bloquante, reponse({ type: 'multi_choice', v: ['opt_c', 'opt_a'] })).declencheurDrapeau,
+      coterReponse(bloquante, reponse({ type: 'multi_choice', v: ['opt_c', 'opt_a'] }))
+        .declencheurDrapeau,
     ).toBe('valeurs');
     expect(
       coterReponse(bloquante, reponse({ type: 'multi_choice', v: ['opt_c'] })).declencheurDrapeau,
@@ -344,7 +353,9 @@ describe('LE DRAPEAU ROUGE — déclenché par la CRITICITÉ, et par rien d’au
     expect(rouge.declencheurDrapeau).toBe('seuil');
     expect(rouge.seuilDrapeau).toBe(2);
     // 30 → score 3 → pas de drapeau.
-    expect(coterReponse(bloquante, reponse({ type: 'number', v: 30 })).declencheurDrapeau).toBeNull();
+    expect(
+      coterReponse(bloquante, reponse({ type: 'number', v: 30 })).declencheurDrapeau,
+    ).toBeNull();
   });
 
   it('une borne atteinte n’est pas une borne franchie : score = seuil ne déclenche pas', () => {
@@ -353,8 +364,12 @@ describe('LE DRAPEAU ROUGE — déclenché par la CRITICITÉ, et par rien d’au
       scoring: { map: 'identity', red_flag: { below: 2 } },
       criticality: 'bloquant',
     });
-    expect(coterReponse(bloquante, reponse({ type: 'scale_1_5', v: 2 })).declencheurDrapeau).toBeNull();
-    expect(coterReponse(bloquante, reponse({ type: 'scale_1_5', v: 1 })).declencheurDrapeau).toBe('seuil');
+    expect(
+      coterReponse(bloquante, reponse({ type: 'scale_1_5', v: 2 })).declencheurDrapeau,
+    ).toBeNull();
+    expect(coterReponse(bloquante, reponse({ type: 'scale_1_5', v: 1 })).declencheurDrapeau).toBe(
+      'seuil',
+    );
   });
 
   it('un `red_flag` sur une question NON bloquante ne déclenche pas — « évalué UNIQUEMENT si criticality=bloquant »', () => {

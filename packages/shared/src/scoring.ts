@@ -14,10 +14,15 @@
 // `scoping.ts` porte la sentinelle des données FINANCIÈRES (`scoping_financials`,
 // invariant 3 : routes admin exclusivement). Le présent fichier porte la COTATION
 // d'audit. Aucune valeur de `scoping_financials` n'entre jamais dans un score, et
-// un test de garde (`apps/api/src/scoring/etancheite.test.ts`) le vérifie sur les
-// sources du moteur plutôt que sur la mémoire de qui les relit. Une réponse
-// d'audit de type `money` est légitime — c'est `answers.value`, la parole d'un
-// interviewé, jamais le devis de la mission.
+// cela se VÉRIFIE sur les sources du moteur plutôt que sur la mémoire de qui les
+// relit : le balayage L2 `apps/api/tests/aide/etancheite-sources.ts` couvre déjà
+// `apps/api/src/scoring/**` (il balaie `apps/` en entier, et le scoring n'est pas
+// sur sa liste blanche), et `apps/api/tests/aide/etancheite-scoring.ts` y ajoute
+// la frontière PROPRE à ce lot — l'invariant 7, `answers` seule et JAMAIS
+// `answer_revisions`. Ces deux fichiers sont des MOTEURS sans `expect` : les
+// assertions appartiennent au testeur croisé (09 §5.6). Une réponse d'audit de
+// type `money` est légitime — c'est `answers.value`, la parole d'un interviewé,
+// jamais le devis de la mission.
 //
 // ── POURQUOI LE RÉSULTAT PORTE AUTANT DE COMPTES ────────────────────────────
 // Le critère d'acceptation du lot (07, ligne L8) tient en deux phrases : « jeux de

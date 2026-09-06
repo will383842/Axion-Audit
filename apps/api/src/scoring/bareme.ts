@@ -26,7 +26,8 @@
 // des scores plausibles et faux — la seule catégorie d'erreur qu'un dossier
 // d'audit ne peut pas absorber.
 //
-// Traçabilité : E14 (scores, drapeaux) · E43 (contrats partagés).
+// Traçabilité : E14 (consolidation, divergences, radar — les scores de base dont
+// tous trois sont faits) · E43 (exécutabilité autopilote : contrats partagés).
 // =============================================================================
 import {
   SCORE_MAX,
@@ -61,8 +62,14 @@ export interface CotationDetaillee {
   readonly declencheurDrapeau: DeclencheurDrapeauRouge | null;
   /** La borne de `red_flag.below`, ou `null` (déclencheur `valeurs`, ou aucun). */
   readonly seuilDrapeau: number | null;
-  /** Rendu texte COURT de la valeur qui a déclenché — jamais un verbatim. */
-  readonly valeurDeclenchante: string | null;
+  /**
+   * Rendu texte COURT de la valeur qui a déclenché — jamais un verbatim.
+   *
+   * VIDE quand aucun drapeau ne s’est levé, plutôt que `null` : le champ ne se lit
+   * QUE lorsque `declencheurDrapeau` est renseigné, et un `null` de plus obligerait
+   * chaque appelant à écrire un repli pour un cas qui n’arrive pas.
+   */
+  readonly valeurDeclenchante: string;
 }
 
 // -----------------------------------------------------------------------------
@@ -452,7 +459,20 @@ function coterParBandes(bareme: BaremeLu & { forme: 'bandes' }, valeur: ValeurLu
   return INEXPLOITABLE;
 }
 
-function coterValeur(bareme: BaremeLu, valeur: ValeurLue): Verdict {
+/**
+ * Un barème dont on peut TIRER un score — `aucun` et `invalide` en sont exclus PAR
+ * LE TYPE, et non par un test à l'exécution.
+ *
+ * `coterReponse` les a déjà écartés avant d'arriver ici. Les retester donnerait un
+ * chemin qu'aucun appel ne peut atteindre, donc qu'aucun test ne peut couvrir :
+ * du code mort qui a l'air vivant.
+ */
+type BaremeExploitable = Extract<
+  BaremeLu,
+  { forme: 'table' } | { forme: 'identite' } | { forme: 'options' } | { forme: 'bandes' }
+>;
+
+function coterValeur(bareme: BaremeExploitable, valeur: ValeurLue): Verdict {
   switch (bareme.forme) {
     case 'table':
       return coterParTable(bareme, valeur);
@@ -462,9 +482,6 @@ function coterValeur(bareme: BaremeLu, valeur: ValeurLue): Verdict {
       return coterParOptions(bareme, valeur);
     case 'bandes':
       return coterParBandes(bareme, valeur);
-    case 'aucun':
-    case 'invalide':
-      return { motif: 'hors_bareme' };
   }
 }
 
@@ -493,14 +510,13 @@ function valeursBrutes(valeur: ValeurLue): readonly unknown[] {
 
 function evaluerDrapeau(
   question: QuestionFigee,
-  bareme: BaremeLu,
+  bareme: BaremeExploitable,
   valeur: ValeurLue,
   score: number | null,
 ): Drapeau | null {
   // « évalué UNIQUEMENT si criticality='bloquant' » — la criticité gouverne le
   // drapeau, le poids gouverne la moyenne, le barème gouverne le score.
   if (question.criticality !== 'bloquant') return null;
-  if (bareme.forme === 'aucun' || bareme.forme === 'invalide') return null;
   const drapeau = bareme.drapeau;
   if (drapeau === null) return null;
 
@@ -540,7 +556,7 @@ function sansScore(
     baremeInvalide,
     declencheurDrapeau: null,
     seuilDrapeau: null,
-    valeurDeclenchante: null,
+    valeurDeclenchante: '',
   };
 }
 
@@ -579,6 +595,6 @@ export function coterReponse(question: QuestionFigee, reponse: ReponseACoter): C
     baremeInvalide: false,
     declencheurDrapeau: drapeau?.declencheur ?? null,
     seuilDrapeau: drapeau?.seuil ?? null,
-    valeurDeclenchante: drapeau?.valeur ?? null,
+    valeurDeclenchante: drapeau?.valeur ?? '',
   };
 }

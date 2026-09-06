@@ -28,7 +28,12 @@
 // prouver — une couverture vraie sur ce qu'elle observe, qui répond à une autre
 // question que celle posée.
 // =============================================================================
-import type { EntreeScoring, QuestionFigee, ReponseACoter, UnitePourScoring } from '../../src/scoring/entree.js';
+import type {
+  EntreeScoring,
+  QuestionFigee,
+  ReponseACoter,
+  UnitePourScoring,
+} from '../../src/scoring/entree.js';
 
 // -----------------------------------------------------------------------------
 // UUID SYNTHÉTIQUES — déterministes, valides, et reconnaissables à l'œil
@@ -290,7 +295,15 @@ export const ATTENDU_TPE = {
     ratio: 0.8,
     poidsTotal: 4,
   },
-  unite: { score: 3.11, posees: 11, cotees: 8, nonCommuniquees: 1, sansObjet: 1, nonRepondues: 1, ratio: 0.8 },
+  unite: {
+    score: 3.11,
+    posees: 11,
+    cotees: 8,
+    nonCommuniquees: 1,
+    sansObjet: 1,
+    nonRepondues: 1,
+    ratio: 0.8,
+  },
   mission: { score: 3.11, ratio: 0.8 },
   drapeauxRouges: 1,
 } as const;
@@ -373,7 +386,8 @@ const gcDirection = (d: number): string => uid(0x2200 + d);
 const gcService = (s: number): string => uid(0x2400 + s);
 const gcEntretien = (s: number): string => uid(0x3000 + s);
 const gcQuestion = (rep: number, k: number): string => uid(0x4000 + rep * 8 + k);
-const gcReponse = (s: number, rep: number, k: number): string => uid(0x10000 + s * 256 + rep * 8 + k);
+const gcReponse = (s: number, rep: number, k: number): string =>
+  uid(0x10000 + s * 256 + rep * 8 + k);
 
 export const GC = {
   missionId: GC_MISSION,

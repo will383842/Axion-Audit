@@ -63,7 +63,6 @@ import {
   noeudVide,
   COMPTEUR_VIDE,
   type BlocBrut,
-  type Compteur,
   type EtatQuestion,
   type NoeudBrut,
   type TermeRollup,
@@ -93,7 +92,42 @@ interface NoeudArbre {
   /** Le parent RETENU, ou `null` — jamais un identifiant absent d'`unites`. */
   readonly parentId: string | null;
   readonly niveau: number;
-  readonly enfants: readonly string[];
+  /**
+   * Les enfants forment une TRANCHE CONTIGUË `[debut, fin[` du tableau de parcours.
+   *
+   * Ce n'est pas une coïncidence à laquelle on se fie : le parcours par niveaux
+   * empile les enfants d'un nœud d'un seul tenant, au moment où il est traité. Les
+   * désigner par une tranche plutôt que par une liste d'identifiants permet au
+   * roll-up de les obtenir par un `slice` — c'est-à-dire des objets, jamais des
+   * clés à re-chercher, donc aucun repli à écrire pour le cas « et si la clé n'y
+   * était pas ? », cas qui ne peut pas se produire mais qu'un typage honnête
+   * obligerait à traiter. Moins de chemins morts, moins d'endroits où une
+   * régression future peut se cacher sans faire rougir quoi que ce soit.
+   */
+  debutEnfants: number;
+  finEnfants: number;
+}
+
+/**
+ * Tout ce qu'on calcule pour une unité, PORTÉ PAR L'UNITÉ ELLE-MÊME.
+ *
+ * Le premier jet rangeait chacun de ces champs dans une `Map` indexée par
+ * identifiant. Chaque relecture devait alors écrire un repli (`?? noeudVide(…)`,
+ * `?? []`) pour un cas — « et si l'identifiant n'y était pas ? » — qui ne peut pas
+ * se produire, puisque c'est le même code qui a rempli la table. Une dizaine de
+ * chemins morts, invisibles aux tests par construction, et autant d'endroits où
+ * une régression future aurait pu se loger sans que rien ne rougisse.
+ */
+interface Travail {
+  readonly noeud: NoeudArbre;
+  /** question → réponses cotées de CETTE unité. */
+  readonly reponses: Map<string, ReponseCotee[]>;
+  readonly drapeaux: PropositionDrapeauRouge[];
+  /** Le cumul du sous-arbre : ce nœud ET tous ses descendants. */
+  readonly drapeauxSousArbre: PropositionDrapeauRouge[];
+  readonly divergences: Divergence[];
+  propre: NoeudBrut;
+  consolide: NoeudBrut;
 }
 
 /** `headcount` NULL → poids 1 (§32.1-4, « règle affichée dans l'UI »). */
@@ -117,7 +151,7 @@ const MESSAGES_ANOMALIE: Record<CodeAnomalieScoring, string> = {
   BAREME_INVALIDE:
     "Barème figé d'une forme non reconnue : la question sort du calcul, aucun score n'est deviné.",
   VALEUR_INEXPLOITABLE:
-    "Valeur que le barème figé ne sait pas coter : aucun score, et surtout pas un zéro.",
+    'Valeur que le barème figé ne sait pas coter : aucun score, et surtout pas un zéro.',
   QUESTION_BLOQUANTE_NON_EVALUEE:
     "Question bloquante non évaluée : son drapeau rouge n'a donc pas pu être vérifié.",
 };
@@ -175,27 +209,32 @@ function ordonnerBlocs(entree: EntreeScoring): readonly string[] {
 // -----------------------------------------------------------------------------
 
 /**
- * Une unité est une RACINE si elle n'a pas de parent, si son parent est absent de
- * l'arbre fourni, ou si la chaîne des parents boucle.
+ * Le PARENT EFFECTIF d'une unité, ou `null` si elle doit être traitée en racine.
  *
- * Le rattachement fantôme et le cycle sont des données bancales, pas des cas de
- * programmation : un import CSV mal formé peut les produire. Les traiter en
- * racines garantit que TOUTE unité est parcourue exactement une fois — une unité
- * qu'un cycle rendrait inatteignable disparaîtrait du résultat sans un mot, et
- * c'est la disparition silencieuse que le dépôt refuse partout ailleurs.
+ * Trois façons de n'avoir pas de parent, et une seule est ordinaire : `parentId`
+ * nul, `parentId` qui ne désigne AUCUNE unité de l'arbre fourni, et chaîne de
+ * parents qui BOUCLE. Les deux dernières sont des données bancales, pas des cas de
+ * programmation — un import CSV mal formé peut les produire.
+ *
+ * Les traiter en racines garantit que TOUTE unité est parcourue exactement une
+ * fois. Une unité qu'un cycle rendrait inatteignable disparaîtrait du résultat
+ * sans un mot, et c'est la disparition silencieuse que ce dépôt refuse partout
+ * ailleurs. Une boucle infinie, elle, ne rendrait rien du tout.
  */
-function estRacine(unite: UnitePourScoring, index: ReadonlyMap<string, UnitePourScoring>): boolean {
-  if (unite.parentId === null) return true;
-  let courante = index.get(unite.parentId);
-  let pas = 0;
-  while (courante !== undefined) {
-    if (courante.id === unite.id) return true;
-    if (pas > index.size) return true;
-    if (courante.parentId === null) return false;
-    courante = index.get(courante.parentId);
-    pas += 1;
+function parentEffectif(
+  unite: UnitePourScoring,
+  index: ReadonlyMap<string, UnitePourScoring>,
+): UnitePourScoring | null {
+  if (unite.parentId === null) return null;
+  const parent = index.get(unite.parentId);
+  if (parent === undefined) return null;
+
+  let courante: UnitePourScoring | undefined = parent;
+  for (let pas = 0; pas <= index.size && courante !== undefined; pas += 1) {
+    if (courante.id === unite.id) return null;
+    courante = courante.parentId === null ? undefined : index.get(courante.parentId);
   }
-  return true;
+  return courante === undefined ? parent : null;
 }
 
 /**
@@ -206,51 +245,59 @@ function estRacine(unite: UnitePourScoring, index: ReadonlyMap<string, UnitePour
  * scoring. Son sous-arbre part avec elle : un service rattaché à une direction
  * sortie du périmètre n'a plus de parent dans le périmètre, et le publier
  * fabriquerait une racine que l'arbre réel n'a pas.
+ *
+ * Les enfants sont désignés par leur INDICE dans le tableau rendu, jamais par leur
+ * identifiant. Le roll-up n'a donc aucune table à interroger — et surtout aucun
+ * repli à écrire pour le cas « et si l'identifiant n'y était pas ? », cas qui ne
+ * peut pas se produire mais qu'un typage honnête obligerait à traiter. Moins de
+ * chemins morts, moins d'endroits où une régression peut se cacher.
  */
 function parcourirArbre(unites: readonly UnitePourScoring[]): readonly NoeudArbre[] {
   const index = new Map<string, UnitePourScoring>();
   for (const unite of unites) if (!index.has(unite.id)) index.set(unite.id, unite);
 
   const racines: UnitePourScoring[] = [];
-  const enfantsPar = new Map<string, string[]>();
+  const enfantsPar = new Map<string, UnitePourScoring[]>();
   for (const unite of unites) {
-    if (!index.has(unite.id)) continue;
-    if (estRacine(unite, index)) {
+    const parent = parentEffectif(unite, index);
+    if (parent === null) {
       racines.push(unite);
       continue;
     }
-    const parentId = unite.parentId;
-    if (parentId === null) continue;
-    const fratrie = enfantsPar.get(parentId);
-    if (fratrie === undefined) enfantsPar.set(parentId, [unite.id]);
-    else fratrie.push(unite.id);
+    const fratrie = enfantsPar.get(parent.id);
+    if (fratrie === undefined) enfantsPar.set(parent.id, [unite]);
+    else fratrie.push(unite);
   }
 
+  // Parcours PAR NIVEAUX, et `entries()` plutôt qu'une pile : l'itérateur d'un
+  // tableau visite les éléments AJOUTÉS pendant l'itération, si bien que la file
+  // et le résultat sont le même tableau. Aucune dépile qui puisse rendre
+  // `undefined`, donc aucun repli à écrire pour un cas qui n'arrive jamais.
   const noeuds: NoeudArbre[] = [];
-  const pile: { readonly unite: UnitePourScoring; readonly parentId: string | null; readonly niveau: number }[] =
-    racines
-      .slice()
-      .reverse()
-      .map((unite) => ({ unite, parentId: null, niveau: 0 }));
-
-  while (pile.length > 0) {
-    const courant = pile.pop();
-    if (courant === undefined) break;
-    if (!courant.unite.inScope) continue;
-    const enfants = (enfantsPar.get(courant.unite.id) ?? []).filter(
-      (id) => index.get(id)?.inScope === true,
-    );
-    noeuds.push({
-      unite: courant.unite,
-      parentId: courant.parentId,
-      niveau: courant.niveau,
-      enfants,
-    });
-    for (let i = enfants.length - 1; i >= 0; i -= 1) {
-      const enfant = index.get(enfants[i] ?? '');
-      if (enfant === undefined) continue;
-      pile.push({ unite: enfant, parentId: courant.unite.id, niveau: courant.niveau + 1 });
+  for (const racine of racines) {
+    if (racine.inScope) {
+      noeuds.push({
+        unite: racine,
+        parentId: null,
+        niveau: 0,
+        debutEnfants: 0,
+        finEnfants: 0,
+      });
     }
+  }
+  for (const noeud of noeuds) {
+    noeud.debutEnfants = noeuds.length;
+    for (const enfant of enfantsPar.get(noeud.unite.id) ?? []) {
+      if (!enfant.inScope) continue;
+      noeuds.push({
+        unite: enfant,
+        parentId: noeud.unite.id,
+        niveau: noeud.niveau + 1,
+        debutEnfants: 0,
+        finEnfants: 0,
+      });
+    }
+    noeud.finEnfants = noeuds.length;
   }
 
   return noeuds;
@@ -259,24 +306,6 @@ function parcourirArbre(unites: readonly UnitePourScoring[]): readonly NoeudArbr
 // -----------------------------------------------------------------------------
 // LE SCORE PROPRE D'UNE UNITÉ — §32.1-1, -2 et -3
 // -----------------------------------------------------------------------------
-
-/**
- * Dans quel état est une question, pour une unité donnée ?
- *
- * Ordre de priorité, et il vient du §27.4 : COTÉE dès qu'une réponse valide existe
- * (une divergence entre deux sessions ne rend pas la question sans réponse) ; puis
- * NON COMMUNIQUÉE — un refus l'emporte, parce qu'il doit se retrouver aux
- * « Limites et réserves » ; puis SANS OBJET ; puis NON RÉPONDUE, qui recouvre
- * l'absence totale de ligne comme la ligne sans valeur exploitable.
- */
-function etatDeQuestion(reponses: readonly ReponseCotee[]): EtatQuestion {
-  if (reponses.some((r) => r.cotation.score !== null)) return 'cotee';
-  if (reponses.some((r) => r.cotation.motifNonCotable === 'non_communique')) {
-    return 'non_communiquee';
-  }
-  if (reponses.some((r) => r.cotation.motifNonCotable === 'sans_objet')) return 'sans_objet';
-  return 'non_repondue';
-}
 
 /** Le score d'une question pour une unité = MOYENNE de ses réponses valides (§32.1-1). */
 function scoreDeQuestion(reponses: readonly ReponseCotee[]): number | null {
@@ -287,10 +316,38 @@ function scoreDeQuestion(reponses: readonly ReponseCotee[]): number | null {
   return scores.reduce((somme, score) => somme + score, 0) / scores.length;
 }
 
-interface AccumulateurBloc {
-  numerateur: number;
-  poidsTotal: number;
-  completude: Compteur;
+/**
+ * Dans quel état est une question SANS SCORE, pour une unité donnée ?
+ *
+ * L'ordre de priorité vient du §27.4 : le REFUS l'emporte, parce qu'il doit se
+ * retrouver aux « Limites et réserves » du rapport ; puis le SANS OBJET ; puis la
+ * NON-RÉPONSE, qui recouvre aussi bien l'absence totale de ligne que la ligne sans
+ * valeur exploitable. L'état COTÉE n'est pas décidé ici : il l'est par l'EXISTENCE
+ * d'un score, et une seule réponse valide suffit — une divergence entre deux
+ * sessions ne rend pas une question sans réponse.
+ */
+function etatSansScore(reponses: readonly ReponseCotee[]): EtatQuestion {
+  if (reponses.some((r) => r.cotation.motifNonCotable === 'non_communique')) {
+    return 'non_communiquee';
+  }
+  if (reponses.some((r) => r.cotation.motifNonCotable === 'sans_objet')) return 'sans_objet';
+  return 'non_repondue';
+}
+
+/**
+ * Les questions scorables GROUPÉES PAR BLOC, dans l'ordre d'affichage.
+ *
+ * Calculé UNE FOIS pour la mission, et non par unité : le groupement ne dépend pas
+ * de l'unité, et le refaire 150 fois sur FIL-GC serait 150 fois le même travail.
+ */
+function grouperParBloc(
+  ordreBlocs: readonly string[],
+  questionsScorables: readonly QuestionPreparee[],
+): readonly (readonly [string, readonly QuestionPreparee[]])[] {
+  return ordreBlocs.map((blocCode) => [
+    blocCode,
+    questionsScorables.filter((preparee) => preparee.question.blocCode === blocCode),
+  ]);
 }
 
 /**
@@ -302,40 +359,28 @@ interface AccumulateurBloc {
  * bloc de vingt — une pondération que personne n'a écrite.
  */
 function noeudPropre(
-  ordreBlocs: readonly string[],
-  questionsScorables: readonly QuestionPreparee[],
+  blocsGroupes: readonly (readonly [string, readonly QuestionPreparee[]])[],
   reponsesParQuestion: ReadonlyMap<string, readonly ReponseCotee[]>,
 ): NoeudBrut {
-  const accumulateurs = new Map<string, AccumulateurBloc>();
-  for (const blocCode of ordreBlocs) {
-    accumulateurs.set(blocCode, { numerateur: 0, poidsTotal: 0, completude: COMPTEUR_VIDE });
-  }
+  const blocs: BlocBrut[] = blocsGroupes.map(([blocCode, questionsDuBloc]) => {
+    let numerateur = 0;
+    let poidsTotal = 0;
+    let completude = COMPTEUR_VIDE;
 
-  for (const preparee of questionsScorables) {
-    const blocCode = preparee.question.blocCode;
-    const accumulateur = accumulateurs.get(blocCode);
-    if (accumulateur === undefined) continue;
-    const reponses = reponsesParQuestion.get(preparee.question.missionQuestionId) ?? [];
-    const etat = etatDeQuestion(reponses);
-    accumulateur.completude = compter(accumulateur.completude, etat);
-    if (etat !== 'cotee') continue;
-    const score = scoreDeQuestion(reponses);
-    if (score === null) continue;
-    accumulateur.numerateur += preparee.poids * score;
-    accumulateur.poidsTotal += preparee.poids;
-  }
+    for (const preparee of questionsDuBloc) {
+      const reponses = reponsesParQuestion.get(preparee.question.missionQuestionId) ?? [];
+      const score = scoreDeQuestion(reponses);
+      completude = compter(completude, score === null ? etatSansScore(reponses) : 'cotee');
+      if (score === null) continue;
+      numerateur += preparee.poids * score;
+      poidsTotal += preparee.poids;
+    }
 
-  const blocs: BlocBrut[] = ordreBlocs.map((blocCode) => {
-    const accumulateur = accumulateurs.get(blocCode) ?? {
-      numerateur: 0,
-      poidsTotal: 0,
-      completude: COMPTEUR_VIDE,
-    };
     return {
       blocCode,
-      score: accumulateur.poidsTotal > 0 ? accumulateur.numerateur / accumulateur.poidsTotal : null,
-      poidsTotal: accumulateur.poidsTotal,
-      completude: accumulateur.completude,
+      score: poidsTotal > 0 ? numerateur / poidsTotal : null,
+      poidsTotal,
+      completude,
     };
   });
 
@@ -483,15 +528,21 @@ export function calculerScoringMission(entree: EntreeScoring): ResultatScoringMi
   }
 
   // ── 2. L'ARBRE ─────────────────────────────────────────────────────────────
-  const noeuds = parcourirArbre(entree.unites);
-  const retenues = new Set(noeuds.map((noeud) => noeud.unite.id));
+  const travaux: Travail[] = parcourirArbre(entree.unites).map((noeud) => ({
+    noeud,
+    reponses: new Map<string, ReponseCotee[]>(),
+    drapeaux: [],
+    drapeauxSousArbre: [],
+    divergences: [],
+    propre: noeudVide(ordreBlocs),
+    consolide: noeudVide(ordreBlocs),
+  }));
+  const travailParUnite = new Map(travaux.map((travail) => [travail.noeud.unite.id, travail]));
   const connues = new Set(entree.unites.map((unite) => unite.id));
 
   // ── 3. LA VENTILATION DES RÉPONSES ─────────────────────────────────────────
   const cotations: CotationReponse[] = [];
   const drapeauxRouges: PropositionDrapeauRouge[] = [];
-  /** unité → question → réponses cotées. */
-  const parUnite = new Map<string, Map<string, ReponseCotee[]>>();
 
   for (const reponse of entree.reponses) {
     const preparee = questions.get(reponse.missionQuestionId);
@@ -525,7 +576,8 @@ export function calculerScoringMission(entree: EntreeScoring): ResultatScoringMi
       );
       continue;
     }
-    if (!retenues.has(orgUnitId)) {
+    const travail = travailParUnite.get(orgUnitId);
+    if (travail === undefined) {
       anomalies.push(
         anomalie(CODES_ANOMALIE_SCORING.REPONSE_HORS_PERIMETRE, {
           reponseId: reponse.id,
@@ -569,7 +621,7 @@ export function calculerScoringMission(entree: EntreeScoring): ResultatScoringMi
     }
 
     if (cotation.declencheurDrapeau !== null) {
-      drapeauxRouges.push({
+      const drapeau: PropositionDrapeauRouge = {
         reponseId: reponse.id,
         entretienId: reponse.interviewId,
         missionQuestionId: reponse.missionQuestionId,
@@ -579,103 +631,85 @@ export function calculerScoringMission(entree: EntreeScoring): ResultatScoringMi
         declencheur: cotation.declencheurDrapeau,
         seuil: cotation.seuilDrapeau,
         score: cotation.score,
-        valeurDeclenchante: cotation.valeurDeclenchante ?? '',
+        valeurDeclenchante: cotation.valeurDeclenchante,
         statut: 'propose',
-      });
+      };
+      // DEUX DESTINATIONS, ET C'EST LE POINT : la liste à plat de la mission (aucun
+      // filtre, aucun seuil) ET l'unité où il a été levé, d'où il remontera par
+      // union. Rien entre les deux ne peut le perdre.
+      drapeauxRouges.push(drapeau);
+      travail.drapeaux.push(drapeau);
     }
 
-    const parQuestion = parUnite.get(orgUnitId) ?? new Map<string, ReponseCotee[]>();
-    parUnite.set(orgUnitId, parQuestion);
-    const liste = parQuestion.get(reponse.missionQuestionId);
-    if (liste === undefined) parQuestion.set(reponse.missionQuestionId, [{ reponse, cotation }]);
+    const liste = travail.reponses.get(reponse.missionQuestionId);
+    if (liste === undefined)
+      travail.reponses.set(reponse.missionQuestionId, [{ reponse, cotation }]);
     else liste.push({ reponse, cotation });
   }
 
   // ── 4. LE SCORE PROPRE ET LES DIVERGENCES, UNITÉ PAR UNITÉ ────────────────
-  const propres = new Map<string, NoeudBrut>();
-  const divergencesParUnite = new Map<string, Divergence[]>();
+  const blocsGroupes = grouperParBloc(ordreBlocs, questionsScorables);
   const toutesDivergences: Divergence[] = [];
 
-  for (const noeud of noeuds) {
-    const reponsesParQuestion = parUnite.get(noeud.unite.id) ?? new Map<string, ReponseCotee[]>();
-    propres.set(
-      noeud.unite.id,
-      noeudPropre(ordreBlocs, questionsScorables, reponsesParQuestion),
-    );
+  for (const travail of travaux) {
+    travail.propre = noeudPropre(blocsGroupes, travail.reponses);
 
-    const trouvees: Divergence[] = [];
-    for (const [missionQuestionId, reponses] of reponsesParQuestion) {
+    for (const [missionQuestionId, reponses] of travail.reponses) {
       const preparee = questions.get(missionQuestionId);
       if (preparee === undefined) continue;
-      trouvees.push(
+      travail.divergences.push(
         ...divergencesDeQuestion(
           preparee.question,
-          noeud.unite.id,
+          travail.noeud.unite.id,
           reponses,
           entree.parametres.seuilDivergenceEcartType,
         ),
       );
     }
-    divergencesParUnite.set(noeud.unite.id, trouvees);
-    toutesDivergences.push(...trouvees);
+    toutesDivergences.push(...travail.divergences);
   }
 
   // ── 5. LE ROLL-UP §32.1-4 ET L'UNION DES DRAPEAUX ─────────────────────────
-  // Le parcours est en PRÉ-ORDRE : un parent précède toujours ses enfants. Le
-  // remonter à l'envers traite donc chaque enfant AVANT son parent, sans
-  // récursion — un arbre profond ne peut pas faire déborder la pile.
-  const consolides = new Map<string, NoeudBrut>();
-  const drapeauxParUnite = new Map<string, PropositionDrapeauRouge[]>();
-  for (const drapeau of drapeauxRouges) {
-    if (drapeau.orgUnitId === null) continue;
-    const liste = drapeauxParUnite.get(drapeau.orgUnitId);
-    if (liste === undefined) drapeauxParUnite.set(drapeau.orgUnitId, [drapeau]);
-    else liste.push(drapeau);
-  }
-  const drapeauxDuSousArbre = new Map<string, PropositionDrapeauRouge[]>();
-
-  for (let i = noeuds.length - 1; i >= 0; i -= 1) {
-    const noeud = noeuds[i];
-    if (noeud === undefined) continue;
-    const propre = propres.get(noeud.unite.id) ?? noeudVide(ordreBlocs);
-
-    const termes: TermeRollup[] = [{ poids: poidsDUnite(noeud.unite), noeud: propre }];
-    // UNION, jamais moyenne : le drapeau du niveau 4 arrive intact au niveau 0.
-    const cumulDrapeaux = [...(drapeauxParUnite.get(noeud.unite.id) ?? [])];
-    for (const enfantId of noeud.enfants) {
-      const consolideEnfant = consolides.get(enfantId);
-      const uniteEnfant = entree.unites.find((unite) => unite.id === enfantId);
-      if (consolideEnfant !== undefined && uniteEnfant !== undefined) {
-        termes.push({ poids: poidsDUnite(uniteEnfant), noeud: consolideEnfant });
-      }
-      cumulDrapeaux.push(...(drapeauxDuSousArbre.get(enfantId) ?? []));
+  // Le parcours va des racines vers les feuilles : un parent précède toujours ses
+  // enfants. Le remonter à l'envers traite donc chaque enfant AVANT son parent,
+  // sans récursion — un arbre profond ne peut pas faire déborder la pile.
+  for (const travail of [...travaux].reverse()) {
+    const termes: TermeRollup[] = [
+      { poids: poidsDUnite(travail.noeud.unite), noeud: travail.propre },
+    ];
+    // UNION, jamais moyenne : le drapeau du niveau 4 arrive intact au niveau 0,
+    // sans être pondéré par les 119 autres services ni comparé à un seuil.
+    travail.drapeauxSousArbre.push(...travail.drapeaux);
+    for (const enfant of travaux.slice(travail.noeud.debutEnfants, travail.noeud.finEnfants)) {
+      termes.push({ poids: poidsDUnite(enfant.noeud.unite), noeud: enfant.consolide });
+      travail.drapeauxSousArbre.push(...enfant.drapeauxSousArbre);
     }
 
-    consolides.set(noeud.unite.id, consolider(termes, ordreBlocs));
-    drapeauxDuSousArbre.set(noeud.unite.id, cumulDrapeaux);
+    travail.consolide = consolider(termes, ordreBlocs);
   }
 
   // ── 6. LA MISSION — le roll-up des RACINES (§32.1-4, « et l'entreprise ») ──
-  const racines = noeuds.filter((noeud) => noeud.parentId === null);
   const noeudMission = consolider(
-    racines.map((noeud) => ({
-      poids: poidsDUnite(noeud.unite),
-      noeud: consolides.get(noeud.unite.id) ?? noeudVide(ordreBlocs),
-    })),
+    travaux
+      .filter((travail) => travail.noeud.parentId === null)
+      .map((travail) => ({
+        poids: poidsDUnite(travail.noeud.unite),
+        noeud: travail.consolide,
+      })),
     ordreBlocs,
   );
 
   // ── 7. LA SORTIE ──────────────────────────────────────────────────────────
   const seuil = entree.parametres.seuilCompletudeBloc;
-  const unites: ResultatUnite[] = noeuds.map((noeud) => ({
-    orgUnitId: noeud.unite.id,
-    parentId: noeud.parentId,
-    niveau: noeud.niveau,
-    headcount: noeud.unite.headcount,
-    propre: figerNoeud(propres.get(noeud.unite.id) ?? noeudVide(ordreBlocs), seuil),
-    consolide: figerNoeud(consolides.get(noeud.unite.id) ?? noeudVide(ordreBlocs), seuil),
-    drapeauxRouges: drapeauxDuSousArbre.get(noeud.unite.id) ?? [],
-    divergences: divergencesParUnite.get(noeud.unite.id) ?? [],
+  const unites: ResultatUnite[] = travaux.map((travail) => ({
+    orgUnitId: travail.noeud.unite.id,
+    parentId: travail.noeud.parentId,
+    niveau: travail.noeud.niveau,
+    headcount: travail.noeud.unite.headcount,
+    propre: figerNoeud(travail.propre, seuil),
+    consolide: figerNoeud(travail.consolide, seuil),
+    drapeauxRouges: travail.drapeauxSousArbre,
+    divergences: travail.divergences,
   }));
 
   const mission: NoeudScore = figerNoeud(noeudMission, seuil);

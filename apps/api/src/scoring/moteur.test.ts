@@ -59,7 +59,10 @@ function unite(resultat: { unites: readonly ResultatUnite[] }, id: string): Resu
   return trouvee;
 }
 
-function bloc(noeud: { blocs: readonly { blocCode: string }[] }, code: string): {
+function bloc(
+  noeud: { blocs: readonly { blocCode: string }[] },
+  code: string,
+): {
   blocCode: string;
   score: number | null;
   poidsTotal: number;
@@ -217,7 +220,9 @@ describe('jeu de référence 2 (FIL-GC-S) — l’arbre canonique, 150 unités s
     expect(bloc(unite(resultat, GC.filialeDegradee).consolide, 'bloc_3').score).toBe(
       ATTENDU_GC.filialeDegradee.bloc_3,
     );
-    expect(unite(resultat, GC.filialeId(0)).consolide.score).toBe(ATTENDU_GC.filialeOrdinaire.score);
+    expect(unite(resultat, GC.filialeId(0)).consolide.score).toBe(
+      ATTENDU_GC.filialeOrdinaire.score,
+    );
   });
 
   it('la mission vaut 3,49 — 4190 / 1200, pondérée par les effectifs de filiale', () => {
@@ -409,9 +414,7 @@ describe('LE COMPTAGE — le canal des drapeaux ne filtre rien, sur AUCUN des qu
     'sur %s, la mission rend EXACTEMENT autant de drapeaux que de réponses qui déclenchent',
     (_nom, entree) => {
       const parQuestion = new Map(entree.questions.map((q) => [q.missionQuestionId, q]));
-      const uniteHorsPerimetre = new Set(
-        entree.unites.filter((u) => !u.inScope).map((u) => u.id),
-      );
+      const uniteHorsPerimetre = new Set(entree.unites.filter((u) => !u.inScope).map((u) => u.id));
       // Recomptage INDÉPENDANT du moteur : réponse par réponse, sans agrégation.
       const attendus = entree.reponses.filter((r) => {
         const question = parQuestion.get(r.missionQuestionId);
@@ -434,7 +437,10 @@ describe('§32.1-1 — le score d’une question pour une unité est la MOYENNE 
   const idUnite = uid(0x9002);
   const idMission = uid(0x9000);
 
-  function jeu(valeurs: readonly (number | null)[], options: { withheld?: boolean } = {}): EntreeScoring {
+  function jeu(
+    valeurs: readonly (number | null)[],
+    options: { withheld?: boolean } = {},
+  ): EntreeScoring {
     return {
       missionId: idMission,
       parametres: PARAMETRES_SEED,
@@ -600,10 +606,7 @@ describe('les anomalies — le moteur ne lève jamais, il rapporte ce qu’il a 
     const horsPerimetre = uid(0xb00f);
     const r = calculerScoringMission({
       ...base,
-      unites: [
-        ...base.unites,
-        { id: horsPerimetre, parentId: null, headcount: 5, inScope: false },
-      ],
+      unites: [...base.unites, { id: horsPerimetre, parentId: null, headcount: 5, inScope: false }],
       reponses: [reponse({ orgUnitId: horsPerimetre })],
     });
     expect(r.anomalies.map((a) => a.code)).toContain('REPONSE_HORS_PERIMETRE');
