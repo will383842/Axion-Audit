@@ -4342,6 +4342,21 @@ Prochaine action : signaler ce rouge de `main` à A20/A26 (correctif : figer l'h
 Tests rouges connus : `EcranAgenda.test.tsx` (ci-dessus, **hérité de `main`**). Le reste :
 `verify:rapide` exit 0 à 19h52 sur cette branche.
 
+## 2026-09-06 20h30 — [lot L5 / incrément L5a-L5c, §33.2] — étape pipeline 3/7
+
+Dernier commit vert : a41b7ad (`EcranFinDeSession` entre dans la grille) · Branche :
+fix/hors-ligne-branche · Poussé : non (au moment de ce bloc)
+Tâche en cours : branchement de `RappelHorsLigne` (A28) sur les **onze** vues terrain, listes de
+capacités regroupées dans `app/capacites-hors-ligne.ts` (garde de type par vue du registre), pastille
+laissée à l'en-tête de la coquille (B6), grille multi-appareils complétée.
+Prochaine action : pousser `fix/hors-ligne-branche`, ouvrir la PR vers `main`, demander la revue
+croisée A29 (elle est due sur `RappelHorsLigne` depuis A28, et sur ce branchement).
+Tests rouges connus : `EcranAgenda > l'unité proposée est ÉCRITE proposee` — **préexistant sur
+`main`** (vérifié par `git stash`), et **daté** : le test planifie à +4 h puis exige la session « du
+jour » ; passé **20 h locales**, le créneau bascule au lendemain et `duJour` ne la voit plus. Rouge
+tous les soirs, vert le matin. Hors périmètre (fichier L5c) → `git push --no-verify`, signalé ici.
+Environnement hors contrat : Node v24.19.0 contre `>=22.11.0 <23` — la CI reste juge (09 §5.7).
+
 
 ## 2026-09-06 20h45 — [lot L5 / incrément L5c] — étape pipeline 3/7
 
@@ -4363,4 +4378,31 @@ partir de 20h heure de Paris — ce n'est pas une régression, c'est ce défaut.
 `--no-verify` SIGNALÉ (§8) : `fix/badge-action` (96f0318) poussée ainsi. Son unique rouge au
 `pre-push` était ce même défaut d'horloge, vérifié seul juste avant : 992 verts, 1 rouge, et ce
 rouge est celui que #79 ferme. Rien de cette branche-là n'est masqué.
+
+## 2026-09-06 22h15 — [lot L5 / §33.2 hors ligne] — étape pipeline 4/7
+
+Dernier commit vert : 84ece12 (B6 fermé sur l'écran d'entretien) · Branche :
+fix/hors-ligne-branche · Poussé : non (au moment de ce bloc)
+Tâche en cours : les **4 réserves d'A29** sur la PR #81, dont 2 bloquantes, fermées — pastille de
+l'entretien retirée (B6, troisième source, MESURÉE coquille comprise) · trois capacités fausses
+réécrites contre le code (classe B3) · les gardes comptent désormais le document, plus l'intérieur
+du bloc · `nouvelEntretien` monté en NOMINAL (identité semée) · `key` au rang + deux cas de bord.
+Prochaine action : pousser, puis demander à A29 la re-revue des deux bloquantes fermées.
+Tests rouges connus : aucun. Le rouge d'`EcranAgenda` signalé hier est corrigé par #79.
+⚠ 4 flakes de contention connus en `test:unit` sous charge (quota, garde-fous) : 1792/1792 en
+isolation. Environnement hors contrat : Node v24.19.0 — la CI reste juge (09 §5.7).
+
+## 2026-09-06 23h20 — [lot L5 / §33.2 + a11y] — étape pipeline 4/7
+
+Dernier commit vert : e4effd5 (merge : douzième vue + accès clavier) · Branche :
+fix/hors-ligne-branche · Poussé : non (au moment de ce bloc)
+Tâche en cours : deux choses apportées par la fusion de `main`. ① `connexionSiege` (#80) a fait
+**rougir `typecheck`** — le garde de type éprouvé en réel ; capacités déplacées depuis l'écran (4ᵉ
+liste en dur), `avecPastille` baissé (B6 rouvert par la 12ᵉ vue). ② WCAG 2.1.1/2.1.3 : la colonne
+de notes défile sans arrêt de tabulation avant démarrage (tous ses contrôles `disabled`) →
+`tabIndex={0}`, avec 3 cas de contrat DOM↔CSS et contre-épreuve.
+Prochaine action : pousser, et demander au chantier #82 de **rejouer le balayage axe sur
+`entretien`** — la fermeture en navigateur n'est pas prouvée de mon côté.
+Tests rouges connus : aucun. interface 1104/1104 · unit 1799/1799.
+Environnement hors contrat : Node v24.19.0 — la CI reste juge (09 §5.7).
 

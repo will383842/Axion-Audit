@@ -14,8 +14,10 @@
 // Traçabilité : E6 (hors ligne total, PC ET tablette), E38 (sauvegarde terrain).
 // =============================================================================
 import { useCallback, useState, type ReactNode } from 'react';
-import { Bouton, EtatErreur, Message, ZoneEtat } from '@axion/ui';
+import { Bouton, EtatErreur, Message, RappelHorsLigne, ZoneEtat } from '@axion/ui';
 import { alerteEspace, exigerPersistance } from '../local/stockage.js';
+import { useEnLigne } from '../session/media.js';
+import { CAPACITES_HORS_LIGNE, PASTILLE_PORTEE_PAR_LA_COQUILLE } from './capacites-hors-ligne.js';
 import { useTerrain } from './contexte.js';
 
 /** Un volume en octets, lisible par un humain. Aucune bibliothèque pour cela. */
@@ -34,6 +36,7 @@ export function EcranStockage(): ReactNode {
   const { stockage, rafraichirStockage } = useTerrain();
   const [guidage, setGuidage] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
+  const enLigne = useEnLigne();
 
   const redemander = useCallback((): void => {
     setEnCours(true);
@@ -122,6 +125,17 @@ export function EcranStockage(): ReactNode {
           {alerte}
         </Message>
       )}
+
+      {/* §33.2 — le quatrième état. Il compte particulièrement ICI : l'écran
+          parle de conservation et d'espace, et l'auditeur qui y atterrit sans
+          réseau peut croire que la demande de conservation attend le siège. Elle
+          n'attend rien : `navigator.storage.persist()` est une décision du
+          navigateur, prise sur l'appareil. */}
+      <RappelHorsLigne
+        enLigne={enLigne}
+        capacites={CAPACITES_HORS_LIGNE.stockage}
+        avecPastille={PASTILLE_PORTEE_PAR_LA_COQUILLE}
+      />
     </section>
   );
 }

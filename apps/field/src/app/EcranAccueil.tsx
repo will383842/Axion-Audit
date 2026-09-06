@@ -33,10 +33,12 @@
 // =============================================================================
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Bouton, Message, ZoneEtat, type EtatZone } from '@axion/ui';
+import { Bouton, Message, RappelHorsLigne, ZoneEtat, type EtatZone } from '@axion/ui';
 import { cleEmbarquement, clePersistance, type BaseLocale } from '../local/base.js';
 import { embarquerMission, type ResultatEmbarquement } from '../local/embarquement.js';
 import { portSyncInerte, type EtatSyncMission } from '../local/port-sync.js';
+import { useEnLigne } from '../session/media.js';
+import { CAPACITES_HORS_LIGNE, PASTILLE_PORTEE_PAR_LA_COQUILLE } from './capacites-hors-ligne.js';
 import { useTerrain } from './contexte.js';
 import { AccesEntretien } from '../ecrans/entretien/AccesEntretien.js'; // raccordement L5b (A22)
 
@@ -122,11 +124,12 @@ async function lireResume(base: BaseLocale): Promise<ResumeSocle> {
 //
 // La capture elle-même est le lot L5d, séquencé APRÈS P-C. Ce retrait ne la
 // remplace pas : il retire ce qui, faute d'elle, fait sortir une pièce d'audit.
-const CAPACITES_HORS_LIGNE = [
-  'Mener un entretien et enregistrer chaque réponse',
-  'Prendre des notes et des notes volantes',
-  'Retrouver n’importe quelle question du questionnaire figé',
-];
+//
+// ── OÙ CETTE LISTE EST PARTIE (A21, 2026-09-06) ─────────────────────────────
+// Elle vit désormais dans `app/capacites-hors-ligne.ts`, avec ses dix sœurs, et
+// telle quelle. La raison est celle du paragraphe ci-dessus : « réparé à un
+// endroit sur deux » n'était pas une négligence, c'était la conséquence d'avoir
+// trois listes dans trois fichiers qu'aucune relecture ne rapproche.
 
 /** Ce que l'auditeur doit faire d'une pièce qu'il aurait photographiée. */
 const MENTION_PHOTO =
@@ -157,6 +160,7 @@ export function EcranAccueil(): ReactNode {
   // ne sait pas — l'inverse de ce que §33.2 demande à un état d'erreur.
   const [panneEmbarquement, setPanneEmbarquement] = useState<string | null>(null);
   const [enCours, setEnCours] = useState<string | null>(null);
+  const enLigne = useEnLigne();
 
   // R-L5a-7 : une lecture locale qui échoue produit un ÉTAT, pas une exception
   // qui emporte l'arbre. `useLiveQuery` propage le rejet au rendu ; on le capte
@@ -367,12 +371,27 @@ export function EcranAccueil(): ReactNode {
 
       <AccesEntretien />
 
-      <Message ton="info" titre="Ce que cet appareil sait faire sans réseau">
-        <ul>
-          {CAPACITES_HORS_LIGNE.map((capacite) => (
-            <li key={capacite}>{capacite}</li>
-          ))}
-        </ul>
+      {/*
+        ── CE QUI EST DEVENU CONDITIONNEL, ET CE QUI NE L'EST SURTOUT PAS ──────
+        La liste des capacités était affichée EN PERMANENCE ici : ce n'était donc
+        pas l'état hors ligne de §33.2, mais un texte d'accompagnement. Elle passe
+        dans `RappelHorsLigne`, qui se tait quand le réseau est là — c'est
+        l'auditeur qui vient de le perdre qui a besoin de la lire, pas celui qui
+        l'a.
+
+        La MENTION PHOTO, elle, reste permanente, et c'est le point : elle
+        répond à un geste que l'auditeur cherche en ligne comme hors ligne
+        (bloquant B3 du 2026-09-06). La faire disparaître au retour du réseau
+        rouvrirait exactement le trou qui a fait sortir une pièce d'audit vers un
+        téléphone personnel. Deux blocs, donc, et deux durées de vie.
+      */}
+      <RappelHorsLigne
+        enLigne={enLigne}
+        capacites={CAPACITES_HORS_LIGNE.accueil}
+        avecPastille={PASTILLE_PORTEE_PAR_LA_COQUILLE}
+      />
+
+      <Message ton="info" titre="La capture photo n’est pas disponible">
         <p>{MENTION_PHOTO}</p>
       </Message>
     </section>

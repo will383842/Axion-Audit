@@ -39,6 +39,10 @@
 import { useCallback, useId, useState, type FormEvent, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Bouton, Message, RappelHorsLigne, Squelette } from '@axion/ui';
+import {
+  CAPACITES_HORS_LIGNE,
+  PASTILLE_PORTEE_PAR_LA_COQUILLE,
+} from '../app/capacites-hors-ligne.js';
 import { useTerrain } from '../app/contexte.js';
 import { contexteLocal } from '../local/contexte.js';
 import { useEnLigne } from '../session/media.js';
@@ -200,15 +204,23 @@ export function EcranConnexion(): ReactNode {
 
       {/* L'état hors ligne : ici le réseau est NÉCESSAIRE, et le taire enverrait
           l'auditeur essayer en boucle. Le bouton reste actif — c'est la tentative
-          réelle qui tranche, jamais une heuristique de navigateur (leçon B6). */}
+          réelle qui tranche, jamais une heuristique de navigateur (leçon B6).
+
+          Deux ajustements d'A21 le 2026-09-06, à la fusion des deux chantiers :
+          · les capacités viennent du registre commun. Écrites ici en dur, elles
+            faisaient une QUATRIÈME liste — et c'est la divergence de trois
+            listes qui avait laissé une promesse de photo survivre à son retrait ;
+          · `avecPastille` baissé : cet écran est rendu DANS la coquille
+            (`App.tsx`), dont l'en-tête porte déjà une pastille alimentée par le
+            port de sync. En rendre une seconde, pilotée par `navigator.onLine`,
+            c'est le bloquant B6 — celui que la leçon citée deux lignes plus haut
+            cherchait justement à ne pas rouvrir. Compté sur le DOM par
+            `app/hors-ligne.test.tsx` (bloc D). */}
       <RappelHorsLigne
         enLigne={enLigne}
         introduction="Cet appareil semble hors ligne. Le rattachement demande une connexion, une seule fois. Sans réseau, cet appareil sait encore :"
-        capacites={[
-          'ouvrir ce qui est déjà enregistré ici',
-          'restaurer une sauvegarde de secours',
-          'collecter, dès qu’il sera rattaché',
-        ]}
+        capacites={CAPACITES_HORS_LIGNE.connexionSiege}
+        avecPastille={PASTILLE_PORTEE_PAR_LA_COQUILLE}
       />
 
       <form onSubmit={soumettre} noValidate>

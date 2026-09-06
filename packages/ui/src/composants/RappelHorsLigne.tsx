@@ -34,6 +34,24 @@
 // déjà un, et deux régions vivantes imbriquées font répéter — ou avaler — le
 // message par le lecteur d'écran. La pastille annonce le changement d'état ; la
 // liste est du texte statique, lu dans l'ordre du document.
+//
+// ── `avecPastille` : LA MÊME RAISON, D'UN CRAN PLUS HAUT (A21, 2026-09-06) ───
+// Ce composant porte les DEUX moitiés de §33.2 pour l'application qui n'a rien
+// d'autre. Mais §33.2 exige ces deux moitiés SUR L'ÉCRAN, pas dans un même
+// composant — et une application peut déjà poser sa pastille ailleurs. C'est le
+// cas de la PWA terrain : décision A01 du 2026-09-05, « l'état de synchronisation
+// est visible sur TOUS les écrans », une pastille unique dans l'en-tête de la
+// coquille, alimentée par le PORT DE SYNC.
+//
+// Rendre alors celle-ci en dessous ferait DEUX pastilles sur le même écran,
+// nourries par deux sources différentes (le port d'un côté, `navigator.onLine`
+// de l'autre) — c'est mot pour mot le bloquant B6 de la recette novice du
+// 2026-09-06, fermé au prix d'un module de traduction unique
+// (`app/etat-sync-affiche.ts`). Le drapeau existe pour ne pas le rouvrir.
+//
+// Il vaut `true` PAR DÉFAUT : un écran qui ne dit rien obtient les deux moitiés,
+// et c'est le silence qui doit être sûr. Le mettre à `false` est une déclaration
+// (« ma pastille est ailleurs »), pas une commodité.
 // =============================================================================
 import type { ComponentPropsWithoutRef } from 'react';
 import { classes } from './utilitaires.js';
@@ -51,6 +69,14 @@ export interface ProprietesRappelHorsLigne extends ComponentPropsWithoutRef<'div
   enAttente?: number;
   /** Phrase d'introduction de la liste. Toujours en français (invariant 5). */
   introduction?: string;
+  /**
+   * Ce composant rend-il lui-même la pastille de §19.2 ?
+   *
+   * `true` par défaut. Le passer à `false` déclare que l'écran porte SA pastille
+   * ailleurs — typiquement dans un en-tête commun. En rendre une seconde ici
+   * ferait deux pastilles nourries par deux sources sur le même écran (B6).
+   */
+  avecPastille?: boolean;
 }
 
 export function RappelHorsLigne(proprietes: ProprietesRappelHorsLigne) {
@@ -59,6 +85,7 @@ export function RappelHorsLigne(proprietes: ProprietesRappelHorsLigne) {
     capacites,
     enAttente,
     introduction = 'Sans réseau, cet appareil sait encore :',
+    avecPastille = true,
     className,
     ...reste
   } = proprietes;
@@ -67,11 +94,22 @@ export function RappelHorsLigne(proprietes: ProprietesRappelHorsLigne) {
 
   return (
     <div className={classes('axn-rappel-hors-ligne', className)} {...reste}>
-      <PastilleSync etat="hors-ligne" {...(enAttente === undefined ? {} : { enAttente })} />
+      {avecPastille && (
+        <PastilleSync etat="hors-ligne" {...(enAttente === undefined ? {} : { enAttente })} />
+      )}
       <p className="axn-rappel-hors-ligne__intro">{introduction}</p>
       <ul className="axn-rappel-hors-ligne__capacites">
-        {capacites.map((capacite) => (
-          <li key={capacite}>{capacite}</li>
+        {/*
+          `key={index}` et non `key={capacite}` (revue A29, 2026-09-06) : la clé
+          était le TEXTE, donc deux capacités identiques produisaient un
+          avertissement React et un `<li>` pouvait être avalé. Un composant du
+          design system ne doit rien exiger de ce qu'on lui passe qu'il ne dise
+          dans son type — et `ListeNonVide` promet « au moins un », jamais « tous
+          distincts ». La liste est statique et n'est jamais réordonnée : l'index
+          est ici une clé légitime, pas un raccourci.
+        */}
+        {capacites.map((capacite, index) => (
+          <li key={index}>{capacite}</li>
         ))}
       </ul>
     </div>
