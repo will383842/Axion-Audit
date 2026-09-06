@@ -27,7 +27,11 @@ respecter l'écart fait échouer la suite.
 - `tokens.css` — les mêmes valeurs en variables CSS, pour Tailwind et les feuilles de style.
   Il **importe `polices.css` en tête** : le jeton et la police qu'il nomme sont une seule promesse.
 - `polices.css` — les `@font-face` d'Inter variable auto-hébergée.
-- `tokens.test.ts` — les contrôles d'écart de teinte et de contraste.
+- `tokens.test.ts` — les contrôles d'écart de teinte et de contraste **de la palette**.
+- `contraste-usages.test.ts` — le contraste AA des **combinaisons réellement déclarées** par
+  `composants.css` (A28). Là où `tokens.test.ts` éprouve une liste écrite à la main, celui-ci lit la
+  feuille : une paire introduite demain entre dans la mesure sans que personne y pense.
+- `police-racine.test.tsx` — la police est posée sur `html`, pas seulement sur la coquille terrain.
 - `composants/` — les composants React de la grille §33 (voir ci-dessous).
 - `composants.css` — leurs styles, **qui ne font que consommer les jetons** : ce fichier ne
   contient ni une couleur littérale, ni une longueur en unité absolue, et il n'est pas exclu du
@@ -43,14 +47,14 @@ import { Bouton, EchelleAncree, ZoneEtat } from '@axion/ui';
 
 **Périmètre : les écrans du lot L5 (PWA terrain), et eux seuls.** Retenus : `Bouton` ·
 `ChampTexte` · `ZoneNotes` · `Selection` · `CaseACocher` · `Bascule` · `Badge` · `Message` ·
-`Dialogue` · `Panneau` · `Squelette` · `EtatVide` · `EtatErreur` · `EtatHorsLigne` · `ZoneEtat` ·
-`EchelleAncree` · `SegmenteONA` · `SaisieFourchette` · `PastilleSync` ·
+`Dialogue` · `Panneau` · `Squelette` · `EtatVide` · `EtatErreur` · `EtatHorsLigne` ·
+`RappelHorsLigne` · `ZoneEtat` · `EchelleAncree` · `SegmenteONA` · `SaisieFourchette` · `PastilleSync` ·
 `IndicateurEnregistrement` · `BandeauPartage` · `AnneauProgression` · `CarteSyntheseEntretien`.
 Écartés parce qu'ils appartiennent à la **console** (§33.4, desktop-first, hors V1 mobile) ou à la
 **dataviz de scoring** (L7-L8) : `TimelinePilote`, `Radar`, `Heatmap`, `CourbePrevuReel`, `Table`,
 `Tabs`, `Tooltip`, `Toast`.
 
-**Trois règles que les types imposent plutôt que de les recommander.**
+**Quatre règles que les types imposent plutôt que de les recommander.**
 
 1. `ZoneEtat` prend une **union discriminée** des cinq natures de §33.2 (nominal, chargement, vide,
    erreur, hors ligne). Un écran ne peut pas la rendre sans avoir décidé de ses quatre états, ni
@@ -59,6 +63,16 @@ import { Bouton, EchelleAncree, ZoneEtat } from '@axion/ui';
 2. Un `Bouton` sans libellé visible **exige** `libelleAccessible` (§33.6, « libellés explicites sur
    toute icône seule »).
 3. Un `Badge` **exige** son `children` : aucune information ne se porte par la couleur seule.
+4. `RappelHorsLigne` **exige une liste de capacités NON VIDE** (`[string, ...string[]]`) et porte
+   lui-même la condition `enLigne` : il ne rend rien quand le réseau est là. Les deux moitiés de
+   §33.2 (« pastille discrète **+ rappel des capacités locales** ») deviennent indissociables, et la
+   condition `{!enLigne && …}` cesse d'être une ligne qu'un écran sur deux oublie d'écrire.
+
+**`EtatHorsLigne` ou `RappelHorsLigne` ?** Le premier est l'état **PLEIN**, rendu **à la place** du
+contenu (via `ZoneEtat`). Le second **s'ajoute** à un écran qui reste entièrement utilisable — c'est
+le cas normal de cette application, où hors ligne est le mode nominal (invariant 1). Avant lui, trois
+écrans écrivaient ce rappel de trois façons différentes, dont deux en passant un enfant factice à une
+`ZoneEtat` qui l'ignore.
 
 **Les composants ne font rien d'autre qu'afficher.** Aucun n'appelle le réseau, ne lit Dexie, ne
 connaît une mission, ne formate une date (les horodatages arrivent **déjà formatés** au fuseau de la
@@ -96,6 +110,21 @@ ne pas oublier dans deux `main.tsx` est ce qui a produit le défaut relevé en r
 `--typo-police-corps` déclarait Inter, le build ne sortait aucun `@font-face` ni aucun `.woff2`, et
 c'est la police système qui s'affichait — pendant que `font-src 'self'` passait « vert » faute de
 police à garder).
+
+**Et elle est posée À LA RACINE du document, pas seulement sur la coquille terrain.** Jusqu'au
+2026-09-06, `getComputedStyle(document.documentElement).fontFamily` valait **`"Times New Roman"`** :
+seule `.axn-coquille` posait `--typo-police-corps`. Le défaut était **latent** — aucun composant
+n'utilise `createPortal` aujourd'hui — et serait devenu visible au premier dialogue rendu hors de
+l'arbre de l'application, en serif, sur l'écran d'un auditeur. La règle vit maintenant dans
+`tokens.css` (`:where(html, body)`, **spécificité nulle** : elle ne peut rien écraser), et elle a
+**deux contre-champs** parce qu'aucun des deux ne suffit :
+
+- `police-racine.test.tsx` (jsdom) rejoue la **cascade** — racine et nœud greffé sur `document.body`
+  — et contient la contre-épreuve : règle retirée, la mesure retombe sur la police du navigateur ;
+- `e2e/polices.e2e.ts` (Chromium) greffe un nœud **hors coquille**, comme le ferait un portail, et
+  compare sa **largeur peinte** à celle du même texte forcé en Times New Roman. Vérifié le
+  2026-09-06 : la règle retirée du build, les deux fronts rougissent sur `racine en « "Times New
+Roman" »`.
 
 **Ce qui est embarqué : 2 fichiers, ~131 Ko** sur les 1,9 Mo du paquet — axe `wght` seul (une seule
 police variable couvre les graisses 400/500/600/700), sous-ensembles `latin` (48 Ko, tout le

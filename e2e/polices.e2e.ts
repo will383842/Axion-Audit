@@ -318,6 +318,93 @@ for (const front of FRONTS) {
     });
 
     // -------------------------------------------------------------------------
+    // 4. LA RACINE PORTE-T-ELLE LA POLICE ? (le défaut latent des PORTAILS)
+    // -------------------------------------------------------------------------
+    test('@critique un nœud rendu HORS de la coquille ne naît pas en police par défaut', async ({
+      page,
+    }) => {
+      // POURQUOI CE TEST EXISTE. Recette novice A54 du 2026-09-06, reprise au
+      // contrôle A02 de P-C (critère 8) :
+      // « `getComputedStyle(document.documentElement).fontFamily` = "Times New
+      //   Roman" — seule `.axn-coquille` pose la police ; latent aujourd'hui
+      //   (aucun `createPortal`), VISIBLE AU PREMIER DIALOGUE RENDU HORS COQUILLE. »
+      //
+      // Le défaut ne se voit dans AUCUN des tests ci-dessus : la police est bien
+      // émise, bien servie, bien chargée, et bien peinte — DANS la coquille. Un
+      // dialogue, une infobulle ou un menu monté par un portail naît, lui, sur
+      // `document.body`, hors de cet arbre. Ce test greffe exactement ce nœud-là.
+      //
+      // Ce qu'il ajoute au test jsdom (`packages/ui/src/police-racine.test.tsx`) :
+      // jsdom ne résout pas `var()` et ne peint aucun glyphe. Ici, c'est le
+      // navigateur qui calcule la cascade ET qui dessine — donc la LARGEUR mesurée
+      // départage Inter d'un serif, ce qu'aucune lecture de `fontFamily` ne fait.
+      await page.goto(front.url);
+      await page.evaluate(() => document.fonts.ready);
+
+      const mesures = await page.evaluate(() => {
+        const TEXTE = 'Dialogue rendu hors coquille — 0123456789 AVWjgy';
+        const POSE = 'position:absolute;left:-9999px;top:0;white-space:pre;font-size:100px;';
+
+        // Ce que fait `createPortal` : un nœud greffé sur `document.body`, hors
+        // de l'arbre de l'application — donc hors de `.axn-coquille`.
+        const portail = document.createElement('div');
+        portail.textContent = TEXTE;
+        portail.style.cssText = POSE;
+        document.body.append(portail);
+
+        // Témoin : le MÊME texte forcé dans la police par défaut du navigateur.
+        // C'est la police que le portail aurait si la racine ne portait rien.
+        const temoin = document.createElement('div');
+        temoin.textContent = TEXTE;
+        temoin.style.cssText = POSE + `font-family:'Times New Roman',serif;`;
+        document.body.append(temoin);
+
+        const mesure = {
+          racine: getComputedStyle(document.documentElement).fontFamily,
+          portail: getComputedStyle(portail).fontFamily,
+          horsCoquille: portail.closest('.axn-coquille') === null,
+          largeurPortail: portail.getBoundingClientRect().width,
+          largeurTemoin: temoin.getBoundingClientRect().width,
+        };
+        portail.remove();
+        temoin.remove();
+        return mesure;
+      });
+
+      // (a) Le nœud sondé est bien HORS coquille — sans quoi le test mesurerait
+      //     la règle de la coquille et serait vert même si la racine ne portait rien.
+      expect(
+        mesures.horsCoquille,
+        'le nœud sondé est DANS la coquille : ce test ne mesure alors plus la racine',
+      ).toBe(true);
+
+      // (b) La racine elle-même porte la famille promise par les jetons.
+      expect(
+        mesures.racine,
+        `racine en « ${mesures.racine} » : le premier dialogue rendu dans un portail ` +
+          `s'afficherait dans la police par défaut du navigateur`,
+      ).toContain(FAMILLE_PROMISE);
+
+      // (c) …et le nœud hors coquille en hérite.
+      expect(
+        mesures.portail,
+        `nœud hors coquille en « ${mesures.portail} » au lieu de « ${FAMILLE_PROMISE} »`,
+      ).toContain(FAMILLE_PROMISE);
+
+      // (d) LA PREUVE PEINTE : à 100 px, le même texte ne peut pas mesurer la même
+      //     largeur en Inter et en Times New Roman. Une déclaration `font-family`
+      //     correcte sur une police absente rendrait (b) et (c) verts et celui-ci rouge.
+      const ecart =
+        Math.abs(mesures.largeurPortail - mesures.largeurTemoin) /
+        Math.max(mesures.largeurPortail, mesures.largeurTemoin);
+      expect(
+        ecart,
+        `le nœud hors coquille mesure ${String(mesures.largeurPortail)} px et le témoin serif ` +
+          `${String(mesures.largeurTemoin)} px : identiques, donc il est PEINT en police par défaut`,
+      ).toBeGreaterThan(0.01);
+    });
+
+    // -------------------------------------------------------------------------
     // 5. `latin-ext` EST-IL VRAIMENT GRATUIT ?
     // -------------------------------------------------------------------------
     test('le sous-ensemble étendu ne se télécharge que si un glyphe l’exige', async ({ page }) => {
