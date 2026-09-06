@@ -10341,6 +10341,7 @@ Règle de précédence : **§24-31 > §16-22** — le §26 (attribution conditio
 §20.3, et 06 §10 commande la donnée personnelle dans un fichier qui sort de l'outil.
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun. La décision du 2026-09-05 est **appliquée**, pas amendée.
+
 ## 2026-09-06 — [L8] Le NON COMMUNIQUÉ reste-t-il au dénominateur de la complétude ?
 
 Le 03 §32.1 dit deux choses qui, lues côte à côte, ne disent pas la même chose :
@@ -10442,4 +10443,36 @@ BRUTES et non sur les scores : le barème étant inversable question par questio
 scores ferait dépendre la détection d'un choix de cotation.
 Règle de précédence : sans objet — transcription littérale.
 Décideur : A15.
+Impact spec : aucun.
+
+## 2026-09-06 — [L7c] Un test `@critique` de L7b contredisait l'arbitrage qui le gouverne : amendé, pas désactivé
+
+En fermant B-1, la suite d'acceptation de L7b (écrite par A36) est passée au rouge sur UNE assertion :
+`l7b-pilotage.integration.test.ts` exigeait que la **clé** `nomRepondant` n'existe pas dans
+l'agrégation. Or l'arbitrage A01 du 2026-09-05 dit l'inverse — « `reponseAgregeeSchema` gagne un champ
+nullable », livré par L7c — et le champ existe précisément pour que l'écran distingue « aucun
+consentement » de « je n'ai pas demandé », deux états qu'une clé absente confond.
+
+Options :
+
+1. Retirer `nomRepondant` du contrat d'agrégation pour rendre le test vert. **Écartée** : ce serait
+   annuler un arbitrage humain pour satisfaire un test écrit AVANT lui, et reperdre la distinction
+   que M5.1 réclame.
+2. Désactiver ou marquer le test. **Écartée sans discussion** : `CLAUDE.md` §3-5, et il est `@critique`.
+3. **Amender l'assertion**, en la portant de « la clé n'existe pas » à « la clé existe et ne porte
+   AUCUNE valeur sans demande explicite ».
+
+Arbitrage : **option 3**. L'assertion amendée est **plus forte** que celle qu'elle remplace : elle
+vérifie un contenu là où l'autre vérifiait une absence, et elle porte sur le **corps brut** de la
+réponse — le schéma transcrit en tête du fichier est un `z.object` non strict qui efface les clés
+qu'il ne déclare pas, si bien qu'une assertion sur la ligne analysée aurait jugé ce que le test a
+recopié, et non ce que la route a répondu. Le fond que le test protégeait est intact et prouvé deux
+fois : ici sans le paramètre, et dans `l7c-export.integration.test.ts` pour les six cases
+(consentement vrai / faux / inconnu × avec et sans `?repondants=true`).
+**Je modifie un test que je n'ai pas écrit**, ce que la règle de croisement (09 §5.6) n'aime pas :
+c'est déclaré ici pour qu'A36 et A37 le contestent s'ils le jugent abusif, et le diff est d'une seule
+assertion, commentée sur place avec sa date et son motif.
+Règle de précédence : **sans objet** entre le pack et lui-même — c'est un test qui a pris du retard
+sur une décision de gouvernance, pas une divergence de spécification.
+Décideur : **A30**, en application de l'arbitrage A01 du 2026-09-05 ; contestable par A36 et A37.
 Impact spec : aucun.
