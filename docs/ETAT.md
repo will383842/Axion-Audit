@@ -4277,3 +4277,18 @@ justifié ici et doit être signalé), puis revue croisée A29 sur la PR #69.
 Tests rouges connus : aucun. ⚠ `[vitest-worker]: Timeout calling "onTaskUpdate"` sous charge — tous
 les tests passent, seul le code de sortie rougit ; antérieur à ce correctif.
 
+
+## 2026-09-06 20h30 — [lot L5 / incrément L5a-L5c, §33.2] — étape pipeline 3/7
+
+Dernier commit vert : a41b7ad (`EcranFinDeSession` entre dans la grille) · Branche :
+fix/hors-ligne-branche · Poussé : non (au moment de ce bloc)
+Tâche en cours : branchement de `RappelHorsLigne` (A28) sur les **onze** vues terrain, listes de
+capacités regroupées dans `app/capacites-hors-ligne.ts` (garde de type par vue du registre), pastille
+laissée à l'en-tête de la coquille (B6), grille multi-appareils complétée.
+Prochaine action : pousser `fix/hors-ligne-branche`, ouvrir la PR vers `main`, demander la revue
+croisée A29 (elle est due sur `RappelHorsLigne` depuis A28, et sur ce branchement).
+Tests rouges connus : `EcranAgenda > l'unité proposée est ÉCRITE proposee` — **préexistant sur
+`main`** (vérifié par `git stash`), et **daté** : le test planifie à +4 h puis exige la session « du
+jour » ; passé **20 h locales**, le créneau bascule au lendemain et `duJour` ne la voit plus. Rouge
+tous les soirs, vert le matin. Hors périmètre (fichier L5c) → `git push --no-verify`, signalé ici.
+Environnement hors contrat : Node v24.19.0 contre `>=22.11.0 <23` — la CI reste juge (09 §5.7).
