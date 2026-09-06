@@ -32,13 +32,14 @@
 //
 // ── CE QUI N'ENTRE PAS DANS CETTE RÉPONSE ───────────────────────────────────
 //   · aucun montant de `scoping_financials` ni de `scoping_estimates` (invariant 3) ;
-//   · aucun NOM DE PERSONNE. M5.1 écrit « nom/fonction/service du répondant » ;
-//     ce contrat publie la FONCTION et l'UNITÉ, jamais `interviews.person_name` ni
-//     `person_email`. Le pack ne dit nulle part sous quelle condition de
-//     consentement (§26 : « verbatims anonymisés ou attribués selon consentement »)
-//     un nom s'affiche au siège : la question est portée en `DECISIONS.md`
-//     (2026-09-05) et n'est pas devinée ici. Retirer un nom d'un contrat coûte
-//     moins qu'en publier un qui n'aurait pas dû sortir.
+//   · `person_email`, jamais, sous aucune condition ;
+//   · le NOM du répondant SANS l'avoir demandé. AMENDEMENT DU 2026-09-05 (L7c) :
+//     la question laissée ouverte par L7b est tranchée (arbitrage A01) — le nom
+//     s'affiche si, et seulement si, `consent_given = true` STRICT (le nul vaut
+//     non) ET si l'appelant a passé `?repondants=true`. Sans le paramètre,
+//     `nomRepondant` vaut `null` pour TOUTES les lignes, et le serveur ne l'a même
+//     pas lu. La porte est SERVEUR : masquer dans un composant un nom déjà arrivé
+//     au navigateur ne serait pas le masquer (invariant 3).
 //
 // ── LA RÉVISION COURANTE, ET RIEN D'AUTRE (invariant 7) ─────────────────────
 // `answers` porte la version COURANTE de chaque réponse ; les valeurs écrasées
@@ -119,6 +120,21 @@ export const LIBELLES_MOTIF_NON_COMMUNIQUE: Record<MotifNonCommuniqueApi, string
  * réponse n'a pas de valeur — un « non communiqué » ou un « sans objet » en sont
  * les deux cas normaux, et ils se lisent aux drapeaux, pas à un texte vide.
  */
+// CE SCHEMA EST UN `strictObject`, ET DEUX LITTERAUX LE SUIVENT A LA MAIN.
+//
+// Ajouter ici un champ REQUIS (meme nullable) casse tout corps qui ne le porte
+// pas — et un corps rejete ne rend pas un tableau vaguement faux : il rend
+// l ETAT D ERREUR. Le cas s est produit le 2026-09-06 avec `nomRepondant`, et
+// il s est presente sous la forme la moins evidente qui soit : deux balayages
+// axe de L7b se plaignant d une « colonne Provenance introuvable ».
+//
+// Les deux littéraux a mettre a jour EN MEME TEMPS que ce schema :
+//   · `e2e/accessibilite-l7b.e2e.ts` (fixture `AGREGATION`, 4 reponses)
+//   · `apps/hq/src/tests-aide/fixtures-pilotage.ts`
+// Le premier n importe pas ce paquet a dessein (il n est pas resolvable depuis
+// la racine, et l y ajouter serait une modification de dependances pour la
+// commodite d un test — CLAUDE.md §3-1) : c est donc ce commentaire, et non le
+// compilateur, qui tient le lien. Il vaut ce qu il vaut ; il vaut mieux que rien.
 export const reponseAgregeeSchema = z.strictObject({
   answerId: z.uuid(),
   interviewId: z.uuid(),
@@ -128,8 +144,16 @@ export const reponseAgregeeSchema = z.strictObject({
   orgUnitNom: z.string(),
   /** L'unité est-elle encore dans le périmètre ? (§25.1 — jamais un second fichier.) */
   orgUnitInScope: z.boolean(),
-  /** `interviews.person_role` — la FONCTION, jamais le nom (voir l'en-tête). */
+  /** `interviews.person_role` — la FONCTION du répondant. */
   fonctionRepondant: z.string().nullable(),
+  /**
+   * `interviews.person_name`, SOUS CONDITION — `null` par défaut, et `null`
+   * chaque fois que le consentement n'est pas explicitement acquis (§26,
+   * arbitrage A01 du 2026-09-05). Le champ EXISTE toujours dans le contrat :
+   * l'écran doit pouvoir dire « masqué » sans deviner si la version d'en face
+   * le connaît.
+   */
+  nomRepondant: z.string().nullable(),
   /** `services.label_fr` via `interviews.person_service_id` (P2-1). */
   serviceRepondant: z.string().nullable(),
   /** LA PROVENANCE (§27.1) — visible, jamais déduite du type de session. */
@@ -220,6 +244,16 @@ export type QuestionAgregee = z.infer<typeof questionAgregeeSchema>;
 export const agregationQuerySchema = z.object({
   block: z.string().min(1).max(64).optional(),
   orgUnit: z.uuid().optional(),
+  /**
+   * L'ACTION EXPLICITE qui ouvre l'attribution des réponses (2026-09-05).
+   * Une seule graphie acceptée : `z.coerce.boolean()` rendrait `true` pour la
+   * chaîne `"false"`, ce qui, sur une donnée personnelle, est le contraire exact
+   * de ce qui a été décidé. Voir `export-mission.ts`, même porte, même forme.
+   */
+  repondants: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((valeur) => valeur === 'true'),
   limit: z.coerce.number().int().min(1).max(200).default(50),
   after: z.string().min(1).optional(),
 });
@@ -238,6 +272,9 @@ export type AgregationQuery = z.infer<typeof agregationQuerySchema>;
  *
  * `blocs` et `totaux` sont calculés sur la mission ENTIÈRE (filtres appliqués),
  * jamais sur la page.
+ *
+ * `repondantsAffiches` dit à l'écran ce que le SERVEUR a décidé, plutôt que de le
+ * lui laisser supposer d'après le paramètre qu'il croit avoir envoyé.
  */
 export const agregationMissionSchema = z.strictObject({
   missionId: z.uuid(),
@@ -250,6 +287,8 @@ export const agregationMissionSchema = z.strictObject({
     block: z.string().nullable(),
     orgUnit: z.uuid().nullable(),
   }),
+  /** Les noms des répondants ont-ils été demandés ET servis (2026-09-05) ? */
+  repondantsAffiches: z.boolean(),
   questions: z.array(questionAgregeeSchema),
   nextCursor: z.string().nullable(),
   totaux: z.strictObject({

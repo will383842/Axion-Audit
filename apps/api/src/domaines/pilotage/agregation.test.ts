@@ -57,6 +57,9 @@ function reponse(
     orgUnitInScope: true,
     fonctionRepondant: 'Responsable logistique',
     serviceRepondant: 'Logistique et opérations',
+    // Le NOM est `null` par défaut : la porte du 2026-09-05 est FERMÉE tant que
+    // `repondants=true` n'est pas passé — c'est le cas nominal, pas l'exception.
+    nomRepondant: null,
     provenance: 'entretien',
     valeur: { type: 'scale_1_5', v: 3 },
     nonCommunique: false,
@@ -87,6 +90,7 @@ function entree(
     questions,
     reponses,
     nextCursor: null,
+    repondantsAffiches: false,
     totaux: {
       questions: questions.length,
       questionsAvecReponse: new Set(reponses.map((r) => r.missionQuestionId)).size,
