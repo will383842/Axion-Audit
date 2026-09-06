@@ -10137,3 +10137,67 @@ scores ferait dépendre la détection d'un choix de cotation.
 Règle de précédence : sans objet — transcription littérale.
 Décideur : A15.
 Impact spec : aucun.
+
+## 2026-09-06 — [L8] Une question bloquante JAMAIS POSÉE doit-elle produire une anomalie ?
+
+La revue croisée a mesuré le cas : une question `bloquant` de poids 0 sans aucune ligne `answers`
+donne une mission à 5,00/5, 100 % de complétude, zéro anomalie et zéro drapeau. Elle est absente de
+`posees` parce que le poids 0 la sort de tous les dénominateurs. J'avais instrumenté le refus poli
+(`QUESTION_BLOQUANTE_NON_EVALUEE`) mais pas l'absence totale — mes six preuves supposaient toutes une
+réponse qui EXISTE.
+
+Options :
+a) Une anomalie dédiée, émise quel que soit le poids. b) Rien : à poids > 0 le compteur `nonRepondues`
+suffit. c) Élargir `QUESTION_BLOQUANTE_NON_EVALUEE` au cas sans réponse.
+
+Arbitrage : **a)**. b) est réfutée par la mesure — `nonRepondues` est un COMPTE, il ne nomme ni la
+question ni sa criticité, et à poids 0 il ne la voit même pas. c) confondrait deux faits qui ne se
+corrigent pas pareil : « on vous a demandé, vous avez refusé » et « personne n'a posé la question ».
+Nouveau code `QUESTION_BLOQUANTE_JAMAIS_POSEE`, émis quel que soit le poids — le poids gouverne la
+moyenne, la criticité gouverne l'alerte. Portée bornée à l'absence sur la MISSION ENTIÈRE : l'absence
+sur une seule unité reste lisible dans son `nonRepondues`, et la signaler produirait sur FIL-GC trente
+lignes par question bloquante.
+Règle de précédence : sans objet — comblement d'un silence du §32.1, aucune section en conflit.
+Décideur : **A01**, sur constat de la revue croisée. Mis en œuvre par A15.
+Impact spec : aucun. Le §32.1-6 conditionne le drapeau à `criticality='bloquant'` sans dire ce qui se
+passe quand la question n'est jamais posée ; amendement candidat.
+
+## 2026-09-06 — [L8] Le drapeau `below` s'évalue-t-il sur l'agrégat d'un choix multiple, ou sur chaque option ?
+
+Mesuré par la revue croisée : options {1, 5} et `red_flag {below: 2}` donnent `max` → 5 et `mean` → 3,
+donc AUCUN drapeau. L'option au rouge est effacée par l'agrégation avant que le seuil ne la voie —
+un drapeau masqué par une moyenne, un étage sous tous ceux que mes preuves visaient.
+
+Options :
+a) Le drapeau s'évalue sur CHAQUE option retenue, avant agrégation. b) Sur l'agrégat, comme
+aujourd'hui. c) Interdire `red_flag.below` sur un `multi_choice`.
+
+Arbitrage : **a)**. Motif : les doctrines de cotation arbitrées le 2026-09-02 disent « le système le
+plus défavorable fait la note » (2) et « l'unité la plus défavorable fait la note » (5) ; un `max` qui
+efface l'option au rouge dit exactement l'inverse de ce que le pack vient de trancher. L'agrégat reste
+le SCORE (la moyenne du §32.1-2 ne bouge pas) ; seule l'ALERTE regarde le détail — la séparation tenue
+partout ailleurs dans ce lot. c) est écartée ici mais RECOMMANDÉE en complément à l'import L4, en
+contrôle bloquant : voir `AMELIORATIONS.md`.
+Règle de précédence : **§32-36 > §24-31** — l'amendement du §32.4 (doctrines) est dans la tranche la
+plus forte, et il tranche ce que le §32.1-6 laissait implicite.
+Décideur : **A01**, sur constat de la revue croisée. Mis en œuvre par A15.
+Impact spec : aucun. Amendement candidat de 03 §32.1-6, pour que « `below` » dise sur QUOI il porte
+quand une réponse a plusieurs scores.
+
+## 2026-09-06 — [L8] Le drapeau `values` doit-il comparer comme le barème cote ?
+
+`cleDeValeur` coerce le nombre `1` en clé `"1"` — c'est ainsi qu'une table `{"1": 5}` cote une réponse
+numérique. `evaluerDrapeau` comparait par `Object.is` : la même valeur était COMPRISE par le barème et
+IGNORÉE par l'alerte.
+
+Options :
+a) La comparaison du drapeau suit la même coercition que la cotation. b) Le statu quo, en le
+documentant. c) Supprimer la coercition de la cotation.
+
+Arbitrage : **a)**. Deux règles de comparaison pour une même valeur, dans le même fichier, est un piège
+qui se paie un jour où personne ne regarde. c) casserait la cotation des tables à clés numériques. La
+coercition ne s'applique QUE lorsque les deux valeurs sont coercibles ; sinon on retombe sur l'identité
+stricte, pour aligner les deux lectures sans élargir la détection.
+Règle de précédence : sans objet — cohérence interne d'un module, aucune divergence de pack.
+Décideur : **A01**, sur constat de la revue croisée. Mis en œuvre par A15.
+Impact spec : aucun.

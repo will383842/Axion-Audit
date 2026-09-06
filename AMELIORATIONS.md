@@ -2230,3 +2230,41 @@ confort ; le jour où elle cède, il devient une nécessité.
 > Arbitrage tracé : `DECISIONS.md`, 2026-09-05, « la fiche A-015 est ABSORBÉE ».
 
 **Arbitrage Williams :** ☑ **ABSORBÉE** (2026-09-05, sur la clause de la fiche) ☐ PHASE 2 ☐ REFUSÉE
+
+---
+
+## A-0xx — L4 : un contrôle bloquant à l'import sur `red_flag.below` + `multi_choice`
+
+**Étage 2 — PROPOSÉE, non implémentée.** Déposée par A15 le 2026-09-06, à la fermeture du défaut
+n° 2 de la revue croisée du lot L8.
+
+**Constat terrain.** Le moteur de scoring évalue désormais `red_flag.below` sur CHAQUE option retenue
+d'un choix multiple, et non sur l'agrégat (`DECISIONS.md`, 2026-09-06, arbitrage A01). Le défaut est
+donc fermé côté CALCUL. Mais la combinaison qui l'a produit — `answer_type = multi_choice` **et**
+`scoring.aggregate` **et** `scoring.red_flag.below` — reste une écriture que la banque de questions
+peut accepter sans que personne ne s'aperçoive qu'elle demande deux choses contradictoires : agréger
+pour la note, et ne pas agréger pour l'alerte.
+
+**Valeur pour l'auditeur.** Aucune question de la banque ne combine aujourd'hui les deux : le défaut
+était LATENT. C'est précisément l'argument. Le jour où un rédacteur les combinera, il ne saura pas
+que ce chemin a une histoire, et il n'a aucune raison de le savoir — la seule façon de la lui dire
+est un message d'import qui la lui dit. Un contrôle à l'import parle au moment où la question
+s'écrit ; un commentaire dans `bareme.ts` ne parle qu'à qui lit `bareme.ts`.
+
+**Ce qui est proposé.** À l'import de banque (03 §35.2, contrôles bloquants du L4), ajouter au
+contrôle « `scoring` valide si `poids > 0` » une vérification de cohérence : sur un `multi_choice`
+portant `red_flag.below`, exiger que le rédacteur ait vu la question — soit en refusant la ligne avec
+un message en français qui explique que le seuil s'évaluera option par option, soit en exigeant un
+champ explicite. Le choix entre « refuser » et « avertir » appartient à l'arbitrage : refuser est
+cohérent avec « une erreur = rien d'importé + rapport » (§35.2), avertir est moins brutal sur une
+combinaison qui est désormais CORRECTEMENT traitée par le moteur.
+
+**Coût estimé.** ~0,25 j — une règle de plus dans le validateur d'import L4 et son test.
+**Impact schéma : aucun. Impact API : aucun. Impact crypto : aucun. Impact périmètre : aucun** (le
+calcul est déjà juste ; c'est un garde-fou de RÉDACTION).
+
+**Pourquoi elle n'est pas faite dans L8.** Elle touche l'import (L4), pas le scoring, et CLAUDE.md §6
+interdit d'implémenter une fiche d'étage 2 avant son arbitrage. La proposer est un devoir, l'anticiper
+est une faute.
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE

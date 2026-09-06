@@ -43,6 +43,7 @@ import {
   type AnomalieScoring,
   type CodeAnomalieScoring,
   type CotationReponse,
+  type Criticite,
   type Divergence,
   type GroupeInterlocuteurPlan,
   type NoeudScore,
@@ -154,6 +155,10 @@ const MESSAGES_ANOMALIE: Record<CodeAnomalieScoring, string> = {
     'Valeur que le barème figé ne sait pas coter : aucun score, et surtout pas un zéro.',
   QUESTION_BLOQUANTE_NON_EVALUEE:
     "Question bloquante non évaluée : son drapeau rouge n'a donc pas pu être vérifié.",
+  QUESTION_BLOQUANTE_JAMAIS_POSEE:
+    "Question bloquante jamais posée : aucune réponse dans la mission, son drapeau rouge n'a donc jamais pu se lever.",
+  QUESTION_FIGEE_EN_DOUBLON:
+    'Question figée présente en double dans le questionnaire : la première ligne fait foi, la seconde est écartée.',
 };
 
 function anomalie(
@@ -162,6 +167,7 @@ function anomalie(
     reponseId?: string | null;
     missionQuestionId?: string | null;
     orgUnitId?: string | null;
+    criticite?: Criticite | null;
   } = {},
 ): AnomalieScoring {
   return {
@@ -170,6 +176,7 @@ function anomalie(
     reponseId: cibles.reponseId ?? null,
     missionQuestionId: cibles.missionQuestionId ?? null,
     orgUnitId: cibles.orgUnitId ?? null,
+    criticite: cibles.criticite ?? null,
   };
 }
 
@@ -510,11 +517,24 @@ export function calculerScoringMission(entree: EntreeScoring): ResultatScoringMi
   const questions = new Map<string, QuestionPreparee>();
   const questionsScorables: QuestionPreparee[] = [];
   for (const question of entree.questions) {
-    if (questions.has(question.missionQuestionId)) continue;
+    if (questions.has(question.missionQuestionId)) {
+      // La base l'interdit (clé primaire) : c'est de la défense en profondeur sur
+      // une entrée qui viendra un jour d'ailleurs qu'une requête. On retient la
+      // PREMIÈRE et on le DIT — « ce qui est écarté est dit, jamais tu » vaut
+      // aussi quand ce qu'on écarte n'aurait jamais dû exister.
+      anomalies.push(
+        anomalie(CODES_ANOMALIE_SCORING.QUESTION_FIGEE_EN_DOUBLON, {
+          missionQuestionId: question.missionQuestionId,
+          criticite: question.criticality,
+        }),
+      );
+      continue;
+    }
     if (lireBareme(question).forme === 'invalide') {
       anomalies.push(
         anomalie(CODES_ANOMALIE_SCORING.BAREME_INVALIDE, {
           missionQuestionId: question.missionQuestionId,
+          criticite: question.criticality,
         }),
       );
     }
@@ -562,6 +582,7 @@ export function calculerScoringMission(entree: EntreeScoring): ResultatScoringMi
         anomalie(CODES_ANOMALIE_SCORING.REPONSE_SANS_UNITE, {
           reponseId: reponse.id,
           missionQuestionId: reponse.missionQuestionId,
+          criticite: preparee.question.criticality,
         }),
       );
       continue;
@@ -572,6 +593,7 @@ export function calculerScoringMission(entree: EntreeScoring): ResultatScoringMi
           reponseId: reponse.id,
           missionQuestionId: reponse.missionQuestionId,
           orgUnitId,
+          criticite: preparee.question.criticality,
         }),
       );
       continue;
@@ -583,6 +605,7 @@ export function calculerScoringMission(entree: EntreeScoring): ResultatScoringMi
           reponseId: reponse.id,
           missionQuestionId: reponse.missionQuestionId,
           orgUnitId,
+          criticite: preparee.question.criticality,
         }),
       );
       continue;
@@ -602,6 +625,7 @@ export function calculerScoringMission(entree: EntreeScoring): ResultatScoringMi
           reponseId: reponse.id,
           missionQuestionId: reponse.missionQuestionId,
           orgUnitId,
+          criticite: preparee.question.criticality,
         }),
       );
     }
@@ -616,6 +640,7 @@ export function calculerScoringMission(entree: EntreeScoring): ResultatScoringMi
           reponseId: reponse.id,
           missionQuestionId: reponse.missionQuestionId,
           orgUnitId,
+          criticite: preparee.question.criticality,
         }),
       );
     }
@@ -645,6 +670,41 @@ export function calculerScoringMission(entree: EntreeScoring): ResultatScoringMi
     if (liste === undefined)
       travail.reponses.set(reponse.missionQuestionId, [{ reponse, cotation }]);
     else liste.push({ reponse, cotation });
+  }
+
+  // ── 3bis. LES QUESTIONS BLOQUANTES QUE PERSONNE N'A POSÉES ────────────────
+  //
+  // LA FAÇON LA PLUS SILENCIEUSE DE MASQUER UN POINT CRITIQUE, et celle qu'aucune
+  // des preuves de conception ne visait : elles attaquaient toutes une réponse qui
+  // EXISTE. Ici il n'y a pas de réponse du tout. À poids 0, la question n'entre
+  // dans aucun dénominateur — la mission affiche 5,00/5 et 100 % de complétude
+  // pendant que la seule question qui fâche n'a jamais été posée, et RIEN ne le
+  // dit : ni un drapeau, ni une anomalie, ni même `nonRepondues`, qui ne la voit
+  // pas. (Relevé par la revue croisée, arbitré par A01 le 2026-09-06.)
+  //
+  // Le fait signalé est l'absence sur la MISSION ENTIÈRE : une question à laquelle
+  // au moins UNE ligne `answers` répond a été posée, même si cette ligne s'est
+  // ensuite révélée orpheline (`REPONSE_SANS_UNITE`) ou hors périmètre — ces deux
+  // cas ont déjà leur anomalie, et en empiler une seconde dirait deux fois le
+  // même fait sous deux noms.
+  //
+  // L'absence sur UNE unité alors que d'autres ont répondu n'est pas signalée ici :
+  // elle reste lisible dans le `nonRepondues` de cette unité, et la signaler
+  // produirait sur FIL-GC — 150 unités dont 30 ne sont jamais interrogées — trente
+  // lignes par question bloquante. Du bruit qui noierait le signal.
+  const questionsRepondues = new Set(entree.reponses.map((r) => r.missionQuestionId));
+  for (const preparee of questions.values()) {
+    const question = preparee.question;
+    if (question.criticality !== 'bloquant') continue;
+    if (questionsRepondues.has(question.missionQuestionId)) continue;
+    // QUEL QUE SOIT LE POIDS : le poids gouverne la moyenne, la criticité gouverne
+    // l'alerte. C'est la séparation des trois leviers, tenue jusqu'ici.
+    anomalies.push(
+      anomalie(CODES_ANOMALIE_SCORING.QUESTION_BLOQUANTE_JAMAIS_POSEE, {
+        missionQuestionId: question.missionQuestionId,
+        criticite: question.criticality,
+      }),
+    );
   }
 
   // ── 4. LE SCORE PROPRE ET LES DIVERGENCES, UNITÉ PAR UNITÉ ────────────────

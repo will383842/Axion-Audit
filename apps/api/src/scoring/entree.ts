@@ -15,8 +15,13 @@
 //   2. **`answers`, JAMAIS `answer_revisions`** (invariant 7). `answers` porte la
 //      révision COURANTE ; l'archive porte les valeurs écrasées. Les lire toutes
 //      les deux compterait DEUX FOIS une réponse corrigée, et la moyenne du §32.1-1
-//      pencherait vers la valeur que l'auditeur a justement rectifiée. Le champ
-//      `revision` est ici pour être RENDU, pas pour ouvrir l'archive.
+//      pencherait vers la valeur que l'auditeur a justement rectifiée.
+//      `answers.revision` N'ENTRE PAS ICI, et c'est délibéré : le moteur cote la
+//      ligne COURANTE, quel que soit son numéro de révision — il n'a rien à en
+//      faire. (Une première rédaction de cet en-tête annonçait un champ `revision`
+//      que `ReponseACoter` n'a jamais porté ; la revue croisée du 2026-09-06 l'a
+//      relevé. Un commentaire qui décrit un champ absent finit par en faire ajouter
+//      un — et celui-là aurait ouvert la porte que ce paragraphe verrouille.)
 //
 //   3. **Aucun champ de `scoping_financials`** (invariant 3). Une réponse `money`
 //      est légitime : c'est `answers.value`, la parole d'un interviewé. Le devis de
