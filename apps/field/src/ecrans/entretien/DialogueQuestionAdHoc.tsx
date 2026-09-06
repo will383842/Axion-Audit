@@ -7,7 +7,7 @@
 // créée, pour y répondre pendant que l'interlocuteur parle.
 // Traçabilité : E13 (écran 3 zones — question ad hoc), E23 (hyper intuitif).
 // =============================================================================
-import { useState, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { Bouton, ChampTexte, Dialogue, Message, Selection, ZoneNotes } from '@axion/ui';
 import { TYPES_DE_REPONSE, type TypeDeReponse } from '@axion/shared';
 import { LIBELLE_TYPE_DE_REPONSE } from '../../session/valeurs.js';
@@ -44,6 +44,9 @@ export function DialogueQuestionAdHoc(proprietes: ProprietesDialogueQuestionAdHo
   const [enCours, setEnCours] = useState(false);
 
   const aDesOptions = type === 'single_choice' || type === 'multi_choice';
+  const texteManquant = texte.trim() === '';
+  /** M1 (recette A54) : le bouton grisé dit ce qui manque, à l'œil. */
+  const idTexteManquant = `${useId()}-texte-manquant`;
 
   const creer = (): void => {
     if (enCours) return;
@@ -83,7 +86,8 @@ export function DialogueQuestionAdHoc(proprietes: ProprietesDialogueQuestionAdHo
           <Bouton
             variante="principal"
             chargement={enCours}
-            disabled={texte.trim() === ''}
+            disabled={texteManquant}
+            {...(texteManquant ? { 'aria-describedby': idTexteManquant } : {})}
             onClick={creer}
           >
             Créer et y répondre
@@ -106,6 +110,12 @@ export function DialogueQuestionAdHoc(proprietes: ProprietesDialogueQuestionAdHo
           setTexte(evenement.target.value);
         }}
       />
+      {texteManquant && (
+        <p id={idTexteManquant} className="axn-champ__aide">
+          Écrivez la question posée : « Créer et y répondre » s’active dès que ce champ n’est plus
+          vide.
+        </p>
+      )}
       <Selection
         libelle="Type de réponse"
         options={OPTIONS_TYPES}
