@@ -58,7 +58,13 @@ function fetchFactice(entree: RequestInfo | URL): Promise<Response> {
 }
 
 function archiveFactice(): Response {
-  return new Response(new Blob([new Uint8Array([0x50, 0x4b, 0x03, 0x04])]), {
+  // Les quatre octets d une entete ZIP, passes BRUTS et non enveloppes dans un
+  // `Blob`. Sous Node 22 — la version du contrat (11 §1) — le `Response` d undici
+  // refuse le `Blob` de jsdom avec « object.stream is not a function » ; sous
+  // Node 24 il l accepte, si bien que le defaut ne se voit QUE dans la CI. Un
+  // `Uint8Array` est un BodyInit pour les deux, et `response.blob()` rend le
+  // meme Blob a l ecran teste.
+  return new Response(new Uint8Array([0x50, 0x4b, 0x03, 0x04]), {
     status: 200,
     headers: {
       'Content-Type': 'application/zip',

@@ -10575,3 +10575,29 @@ stricte, pour aligner les deux lectures sans élargir la détection.
 Règle de précédence : sans objet — cohérence interne d'un module, aucune divergence de pack.
 Décideur : **A01**, sur constat de la revue croisée. Mis en œuvre par A15.
 Impact spec : aucun.
+
+## 2026-09-06 — [L7c] Les 61 fichiers du projet `interface` n'étaient exécutés par aucun job de CI
+
+La couverture de #58 est tombée sur `EcranExport.test.tsx`, avec pour seul message
+`coverage/coverage-summary.json absent`. La cause réelle : `new Response(new Blob([…]))` — le
+`Response` d'undici refuse le `Blob` de jsdom sous **Node 22**, la version du contrat (11 §1), et
+l'accepte sous Node 24, celle de la machine. Vert en local, rouge en CI. Mais surtout : ce rouge ne
+se présentait nulle part comme « un test d'interface a échoué », parce que **`pnpm test:interface`
+n'est appelé par aucun job**. Les tests d'interface ne tournaient qu'en effet de bord de
+`test:coverage`, qui lance tous les projets vitest.
+
+Options :
+
+1. Corriger la fixture seule. **Écartée** : elle ferme le cas, pas la classe. Le prochain test
+   d'interface rouge se présentera encore sous un libellé de couverture.
+2. Créer un job `3bis · interface`. **Écartée** : un nouveau nom de job n'est pas couvert par la
+   protection de branche tant qu'un humain ne l'y ajoute pas — le garde naîtrait non bloquant.
+3. **Ajouter une étape `pnpm test:interface` au job `3 · unit` existant**, sans toucher à son nom.
+
+Arbitrage : **option 3**, plus la correction de la fixture (`Uint8Array` au lieu de `Blob` — un
+BodyInit valide pour undici comme pour jsdom). Le nom d'un job est un contrat avec la protection de
+branche : on ne le renomme pas, on lui ajoute une étape. C'est la troisième fois en trois jours
+qu'un garde vert ne gardait rien ; celui-ci nommait « couverture absente » un test rouge.
+Règle de précédence : sans objet — aucune divergence du pack, c'est une lacune d'outillage.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun ; une étape de CI et une fixture de test.
