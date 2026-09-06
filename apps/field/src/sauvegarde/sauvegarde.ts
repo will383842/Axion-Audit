@@ -376,6 +376,20 @@ function versEnregistrement(
 
 export interface RapportImport {
   readonly missionId: string;
+  /**
+   * D'OÙ vient ce qui vient d'être écrit — l'en-tête EN CLAIR du fichier, rendu
+   * tel quel (A27, constat 2026-09-06).
+   *
+   * « 3 élément(s) restauré(s) » ne permet pas de vérifier qu'on a restauré le
+   * BON fichier. Un auditeur qui a deux sauvegardes sur sa clé USB — celle de
+   * mardi et celle de mercredi, ou celle de deux missions — n'a, sans ces deux
+   * champs, aucun moyen de s'en apercevoir avant de rouvrir sa journée. Les
+   * deux valeurs sont dans l'en-tête, donc lisibles SANS déchiffrer ; ne pas
+   * les rendre revenait à taire une information déjà acquise.
+   */
+  readonly libelleAppareilSource: string;
+  /** ISO 8601 UTC — l'instant où la sauvegarde a été produite (11 §4 `created_at`). */
+  readonly sauvegardeCreeeLe: string;
   /** Lignes réellement écrites ou proposées à la fusion. */
   readonly lignesRestaurees: number;
   /**
@@ -495,6 +509,8 @@ export async function importerSauvegarde(
   const operations = contenu.data.operations.length;
   return {
     missionId: contenu.data.missionId,
+    libelleAppareilSource: valide.enTete.libelleAppareil,
+    sauvegardeCreeeLe: valide.enTete.creeLe,
     lignesRestaurees: enregistrements.length,
     operationsNonReinjectees: operations,
     avertissement:
