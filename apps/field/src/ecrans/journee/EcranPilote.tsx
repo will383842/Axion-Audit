@@ -30,10 +30,15 @@
 // =============================================================================
 import { type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Badge, Bouton, Message, ZoneEtat, type EtatZone } from '@axion/ui';
+import { Badge, Bouton, Message, RappelHorsLigne, ZoneEtat, type EtatZone } from '@axion/ui';
 import { construirePilote, type MesureMission, type PiloteMission } from '../../agenda/pilote.js';
+import {
+  CAPACITES_HORS_LIGNE,
+  PASTILLE_PORTEE_PAR_LA_COQUILLE,
+} from '../../app/capacites-hors-ligne.js';
 import { useTerrain } from '../../app/contexte.js';
 import { contexteLocal } from '../../local/contexte.js';
+import { useEnLigne } from '../../session/media.js';
 import { lireMissionsLocales } from '../../session/missions.js';
 import './journee.css';
 
@@ -73,6 +78,7 @@ async function mesurer(missionId: string, auditLevel: string): Promise<MesureMis
 
 export function EcranPilote(): ReactNode {
   const { base, naviguer } = useTerrain();
+  const enLigne = useEnLigne();
 
   const vues = useLiveQuery(
     async (): Promise<readonly VuePilote[] | null | undefined> => {
@@ -192,6 +198,17 @@ export function EcranPilote(): ReactNode {
           ))}
         </>
       </ZoneEtat>
+
+      {/* §33.2 — le quatrième état. Il vaut d'être dit ICI en particulier : cet
+          écran affiche des étapes « à faire » dont plusieurs se résolvent au
+          SIÈGE, et l'auditeur hors réseau pourrait croire que le calcul lui-même
+          attend une connexion. Il ne l'attend pas : tout est mesuré localement
+          (invariant 6 — le terrain constate, il ne fait pas avancer la mission). */}
+      <RappelHorsLigne
+        enLigne={enLigne}
+        capacites={CAPACITES_HORS_LIGNE.pilote}
+        avecPastille={PASTILLE_PORTEE_PAR_LA_COQUILLE}
+      />
     </section>
   );
 }

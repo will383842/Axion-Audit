@@ -84,12 +84,20 @@ Voir `docs/conception/LOT_L5.md` §4.
 | `sw/service-worker.ts`         | précache du shell, des polices et des icônes ; **aucun cache d'exécution de `/api`**            |
 | `scripts/build-icones.mjs`     | icônes PWA **provisoires**, générées depuis les jetons de la charte (voir ci-dessous)           |
 
-### Deux règles de socle que tout écran doit respecter
+### Trois règles de socle que tout écran doit respecter
 
 1. **Aucune écriture Dexie hors de `src/local/ecriture.ts`** (hors `meta`). C'est ce qui rend vraie,
    par construction, la règle « chaque écriture pousse une op dans l'outbox » (05 §9.2-2).
 2. **Aucun `new Date()` ni `Date.now()` hors de `src/local/horloge.ts`** — sinon l'appareil déréglé
    de +3 h du scénario 05 §9.8 gagne tous les arbitrages de conflit.
+3. **L'état hors ligne se rend avec `RappelHorsLigne`**, alimenté par
+   `src/app/capacites-hors-ligne.ts` (§33.2, seconde moitié). Les listes y sont regroupées, **une par
+   vue du registre**, et le type l'exige : un écran ajouté à `vues.ts` sans ses capacités ne compile
+   pas. **La pastille, elle, est celle de l'en-tête de la coquille** (décision A01 du 2026-09-05) :
+   les écrans passent `avecPastille={PASTILLE_PORTEE_PAR_LA_COQUILLE}` et n'en rendent jamais une
+   seconde. Le compte des onze vues est tenu par `src/app/hors-ligne.test.tsx`, pas par la vigilance
+   de chacun — c'est très exactement ce qui avait manqué : 3 vues sur 11 le rendaient, de trois
+   façons différentes.
 
 ### Ce que le socle refuse EXPLICITEMENT, et pourquoi
 

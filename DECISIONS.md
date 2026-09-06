@@ -10760,3 +10760,48 @@ garde-fou ; ce script en est un, et sa non-vacuité est prouvée par divergence 
 Règle de précédence : sans objet — aucune divergence du pack, une classe de panne d'outillage.
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun ; une action locale, un script, aucune dépendance nouvelle.
+
+## 2026-09-06 — [L5a] L'écran de déverrouillage porte-t-il la pastille de synchronisation ?
+
+`RappelHorsLigne` (A28) rend les deux moitiés de §33.2 : la pastille discrète ET le rappel des
+capacités locales. Le déverrouillage est le seul écran rendu HORS de la coquille — celle-ci ne pose
+donc pas la sienne — et il vit avant l'ouverture du coffre. A28 a laissé le cas en réserve.
+
+Options :
+
+1. **Les deux moitiés, comme partout.** Défendable : §33.2 ne prévoit pas d'exception, et un écran
+   sans pastille est précisément le défaut que la porte P-C mesure.
+2. **Le rappel des capacités seul.** Une pastille y annoncerait un état de synchronisation dont
+   l'auditeur ne peut RIEN faire tant qu'il n'est pas entré — 03 §19.2 : « toujours visible mais
+   discret, jamais de bannière anxiogène ». Or « cet appareil fonctionne sans réseau » est
+   exactement ce qu'un auditeur bloqué dehors a besoin de lire (05 §31-3).
+
+Arbitrage : **option 2**, tranchée par Williams dans le mandat du 2026-09-04. Règle de précédence :
+03 §19.2 (§16-22) prime sur la lecture littérale de §33.2 quant à la FORME de la pastille, pas quant
+à l'exigence du rappel — celui-ci est rendu. Le composant reçoit `avecPastille` (défaut `true` : le
+silence reste sûr), et le cas est mesuré dans les deux sens par `EcranDeverrouillage.test.tsx`,
+y compris sur l'anomalie de coffre, où l'écran n'a plus aucune capacité à promettre.
+Décideur : **A01**, sur délégation du 2026-09-04 (Williams).
+Impact spec : aucun ; une propriété de composant et son arbitrage tracé.
+
+## 2026-09-06 — [L5a] Les dix autres écrans rendent-ils la pastille de `RappelHorsLigne` ?
+
+Mesure faite au branchement : la coquille pose DÉJÀ une `PastilleSync` dans son en-tête, pour les
+onze vues (décision A01 du 2026-09-05), alimentée par le **port de sync**. Celle de
+`RappelHorsLigne` est alimentée par `navigator.onLine`.
+
+Options :
+
+1. **La rendre.** Deux pastilles sur le même écran, nourries par deux sources : aujourd'hui elles
+   diraient la même chose, demain non — c'est mot pour mot le bloquant **B6** de la recette novice
+   du 2026-09-06, fermé au prix du module de traduction unique `app/etat-sync-affiche.ts`.
+2. **Ne rendre que le rappel** (`avecPastille={PASTILLE_PORTEE_PAR_LA_COQUILLE}`), la pastille
+   restant celle de l'en-tête.
+
+Arbitrage : **option 2**. §33.2 exige ses deux moitiés **sur l'écran**, pas dans un même composant ;
+l'en-tête porte l'une, le rappel porte l'autre. Règle de précédence : §32-36 (§33.2) lu avec §16-22
+(§19.2 « un fait, une source »). Conséquence assumée : le COMPTE d'éléments en attente n'est plus
+passé au rappel du cockpit — la pastille de l'en-tête l'affiche déjà, lu dans l'outbox, et deux
+comptes du même fait sur un écran sont la version chiffrée de B6.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun ; le rendu change, l'exigence est tenue.

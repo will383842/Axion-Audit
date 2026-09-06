@@ -432,16 +432,24 @@ describe('EcranAujourdhui — état HORS LIGNE', () => {
     render(<EcranAujourdhui />);
     await attendreLecture();
 
-    // Hors ligne n'est pas une panne (invariant 1) : `role="status"`, pas `alert`.
-    // Ciblé sur l'ÉTAT hors ligne (`EtatHorsLigne`, qui liste les capacités) —
-    // pas sur la `PastilleSync` de chaque mission, qui dit aussi « Hors ligne ».
-    const horsLigne = [...document.querySelectorAll<HTMLElement>('.axn-etat[role="status"]')].find(
-      (s) => s.querySelector('.axn-etat__capacites') !== null,
-    );
-    expect(horsLigne, 'l’état hors ligne doit être rendu, avec ses capacités').toBeDefined();
-    const capacites = within(requis(horsLigne, 'état hors ligne')).getAllByRole('listitem');
+    // ── CE QUE CE TEST CIBLE DEPUIS LE 2026-09-06 (A21) ────────────────────
+    // Le rendu est passé de `ZoneEtat nature="hors-ligne"` à `RappelHorsLigne` :
+    // même exigence de §33.2, un seul composant pour les onze vues. Deux
+    // conséquences MESURÉES ici, et non supposées :
+    //   · le bloc porte `.axn-rappel-hors-ligne` et énumère toujours ;
+    //   · il n'ouvre PLUS de région vivante — la pastille est celle de l'en-tête
+    //     de la coquille, posée une fois pour tous les écrans (décision A01 du
+    //     2026-09-05). Deux pastilles nourries par deux sources sur le même
+    //     écran, c'est le bloquant B6, et il a été fermé au prix d'un module.
+    const horsLigne = document.querySelector<HTMLElement>('.axn-rappel-hors-ligne');
+    expect(horsLigne, 'le rappel des capacités locales doit être rendu (§33.2)').not.toBeNull();
+    const capacites = within(requis(horsLigne, 'rappel hors ligne')).getAllByRole('listitem');
     expect(capacites.length).toBeGreaterThanOrEqual(3);
     expect(capacites.map((c) => c.textContent).join(' ')).toMatch(/sauvegarde de secours/i);
+    expect(
+      horsLigne?.querySelector('[role="status"]'),
+      'une SECONDE pastille sur cet écran : c’est B6 qui se rouvre',
+    ).toBeNull();
     // L'absence de réseau n'a déclenché AUCUNE alerte : celles qui existent sont
     // celles de l'invariant 8 (file non vide, jamais synchronisé), pas « hors ligne ».
     for (const alerte of screen.queryAllByRole('alert')) {

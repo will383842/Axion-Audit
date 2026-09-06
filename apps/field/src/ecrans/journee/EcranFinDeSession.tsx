@@ -39,7 +39,18 @@
 // =============================================================================
 import { useCallback, useState, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Bouton, CarteSyntheseEntretien, Message, ZoneEtat, type EtatZone } from '@axion/ui';
+import {
+  Bouton,
+  CarteSyntheseEntretien,
+  Message,
+  RappelHorsLigne,
+  ZoneEtat,
+  type EtatZone,
+} from '@axion/ui';
+import {
+  CAPACITES_HORS_LIGNE,
+  PASTILLE_PORTEE_PAR_LA_COQUILLE,
+} from '../../app/capacites-hors-ligne.js';
 import { LIBELLE_TYPE_SESSION } from '../../agenda/sessions.js';
 import {
   AVERTISSEMENT_PERTE_VALIDATION,
@@ -55,6 +66,7 @@ import { depotSessions, type SessionLocale } from '../../local/depots/sessions.j
 import { PROFIL_PAR_DEFAUT } from '../../session/auditeur.js';
 import { etatSession, peutTransiter } from '../../session/machine.js';
 import { lireSessionCourante } from '../../session/position.js';
+import { useEnLigne } from '../../session/media.js';
 import { lireNotesVolantes } from '../../session/notes-volantes.js';
 import './journee.css';
 
@@ -84,6 +96,7 @@ export function EcranFinDeSession(): ReactNode {
   const [motif, setMotif] = useState('');
   const [erreur, setErreur] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
+  const enLigne = useEnLigne();
 
   // ── B5 (recette novice A54, 2026-09-06) : L'ÉCHEC N'EST PAS LE VIDE ────────
   // La lecture était enveloppée dans un `catch { return null }`, et `null` était
@@ -348,6 +361,16 @@ export function EcranFinDeSession(): ReactNode {
           )}
         </>
       </ZoneEtat>
+
+      {/* §33.2 — le quatrième état. Terminer, rouvrir, valider et déverrouiller
+          sont QUATRE transitions locales : la machine à états vit sur l'appareil
+          (`session/machine.ts`), et aucune ne consulte le siège. Un auditeur qui
+          l'ignore attend le réseau pour clore sa session — et ne la clôt pas. */}
+      <RappelHorsLigne
+        enLigne={enLigne}
+        capacites={CAPACITES_HORS_LIGNE.finDeSession}
+        avecPastille={PASTILLE_PORTEE_PAR_LA_COQUILLE}
+      />
     </section>
   );
 }

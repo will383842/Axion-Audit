@@ -68,9 +68,11 @@
 // Traçabilité : E33 (sécurité / RGPD), E23 (hyper intuitif, novice < 30 min).
 // =============================================================================
 import { useCallback, useId, useState, type FormEvent, type ReactNode } from 'react';
-import { Bouton, Message } from '@axion/ui';
+import { Bouton, Message, RappelHorsLigne } from '@axion/ui';
 import { MOT_DE_PASSE_LONGUEUR_MIN } from '@axion/shared';
 import { AnomalieCoffreError, MotDePasseTropCourtError } from '../local/coffre.js';
+import { useEnLigne } from '../session/media.js';
+import { CAPACITES_HORS_LIGNE } from './capacites-hors-ligne.js';
 import { useTerrain } from './contexte.js';
 
 const AIDE_HORS_LIGNE =
@@ -154,6 +156,7 @@ export function EcranDeverrouillage(): ReactNode {
   const [erreur, setErreur] = useState<ErreurAffichee | null>(null);
   const [enCours, setEnCours] = useState(false);
   const identifiant = useId();
+  const enLigne = useEnLigne();
 
   const soumettre = useCallback(
     (evenement: FormEvent<HTMLFormElement>): void => {
@@ -300,6 +303,31 @@ export function EcranDeverrouillage(): ReactNode {
             {premierUsage ? 'Créer la protection de cet appareil' : 'Déverrouiller'}
           </Bouton>
         </form>
+      )}
+
+      {/*
+        §33.2, seconde moitié : LE RAPPEL DES CAPACITÉS, SANS LA PASTILLE.
+
+        Arbitrage A01 du 2026-09-04, sur délégation de Williams (voir
+        `DECISIONS.md`) : cet écran vit AVANT l'ouverture du coffre, et il est le
+        seul rendu hors de la coquille — celle-ci ne pose donc pas sa pastille
+        ici. Une pastille y annoncerait un état de synchronisation dont
+        l'auditeur ne peut RIEN faire tant qu'il n'est pas entré (03 §19.2 :
+        « jamais anxiogène »). « Cet appareil fonctionne sans réseau » est, lui,
+        exactement ce qu'un auditeur bloqué dehors a besoin de lire.
+
+        `!anomalie` : sur une anomalie de coffre, « déverrouiller cet appareil »
+        serait faux — et c'est le seul cas où cet écran n'a plus de capacité à
+        promettre. La règle est la même que celle du formulaire, deux lignes plus
+        haut (revue A29 du 2026-09-05, R3).
+      */}
+      {!anomalie && (
+        <RappelHorsLigne
+          enLigne={enLigne}
+          capacites={CAPACITES_HORS_LIGNE.deverrouillage}
+          introduction="Sans réseau, cet appareil reste utilisable :"
+          avecPastille={false}
+        />
       )}
     </section>
   );

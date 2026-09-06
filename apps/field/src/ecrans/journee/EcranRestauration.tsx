@@ -63,7 +63,11 @@
 // E6 (hors ligne total), E33 (sécurité / RGPD).
 // =============================================================================
 import { useCallback, useId, useState, type ReactNode } from 'react';
-import { Bouton, Message, ZoneEtat, type EtatZone } from '@axion/ui';
+import { Bouton, Message, RappelHorsLigne, ZoneEtat, type EtatZone } from '@axion/ui';
+import {
+  CAPACITES_HORS_LIGNE,
+  PASTILLE_PORTEE_PAR_LA_COQUILLE,
+} from '../../app/capacites-hors-ligne.js';
 import { useTerrain } from '../../app/contexte.js';
 import { exigerPersistance, guidageSansPersistance } from '../../local/stockage.js';
 import { deposerFichier } from '../../sauvegarde/depot.js';
@@ -540,16 +544,17 @@ export function EcranRestauration(): ReactNode {
         </>
       </ZoneEtat>
 
-      {!enLigne && (
-        <ZoneEtat
-          etat={{
-            nature: 'hors-ligne',
-            capacites: ['Restaurer une sauvegarde de secours, intégralement sans réseau'],
-          }}
-        >
-          <span />
-        </ZoneEtat>
-      )}
+      {/* §33.2 — le rappel des capacités. Il remplace un `ZoneEtat` de nature
+          « hors-ligne » auquel il fallait passer un `<span />` d'enfant pour
+          compiler, alors que cette nature IGNORE ses enfants : le contournement
+          disparaît avec lui. L'introduction est celle de cet écran — un appareil
+          de remplacement, à l'hôtel, sans réseau, est le cas NOMINAL ici. */}
+      <RappelHorsLigne
+        enLigne={enLigne}
+        capacites={CAPACITES_HORS_LIGNE.restauration}
+        introduction="Sans réseau, cette restauration reste possible :"
+        avecPastille={PASTILLE_PORTEE_PAR_LA_COQUILLE}
+      />
     </section>
   );
 }

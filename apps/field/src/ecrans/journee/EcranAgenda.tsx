@@ -30,11 +30,16 @@ import {
   Bouton,
   ChampTexte,
   Message,
+  RappelHorsLigne,
   Selection,
   ZoneEtat,
   ZoneNotes,
   type EtatZone,
 } from '@axion/ui';
+import {
+  CAPACITES_HORS_LIGNE,
+  PASTILLE_PORTEE_PAR_LA_COQUILLE,
+} from '../../app/capacites-hors-ligne.js';
 import {
   AIDE_TYPE_SESSION,
   chevauchements,
@@ -52,6 +57,7 @@ import { depotSessions } from '../../local/depots/sessions.js';
 import { MODES_ENTRETIEN, TYPES_DE_SESSION, TYPES_UNITE } from '../../local/formes.js';
 import { lireIdentiteAuditeur } from '../../session/auditeur.js';
 import { formaterHeure } from '../../session/fuseau.js';
+import { useEnLigne } from '../../session/media.js';
 import { lireMissionsLocales, lireUnites, type MissionLocale } from '../../session/missions.js';
 import './journee.css';
 
@@ -70,6 +76,7 @@ function versUtc(saisieLocale: string): string | null {
 export function EcranAgenda(): ReactNode {
   const { base, naviguer } = useTerrain();
   const identifiant = useId();
+  const enLigne = useEnLigne();
 
   const [missionId, setMissionId] = useState('');
   const [orgUnitId, setOrgUnitId] = useState('');
@@ -527,6 +534,15 @@ export function EcranAgenda(): ReactNode {
           )}
         </>
       </ZoneEtat>
+
+      {/* §33.2 — le quatrième état. L'en-tête de cet écran l'annonçait déjà en
+          commentaire (« hors ligne (nominal ici : toute la planification se fait
+          sans réseau) ») sans que rien ne le RENDE. C'est cette ligne-là. */}
+      <RappelHorsLigne
+        enLigne={enLigne}
+        capacites={CAPACITES_HORS_LIGNE.agenda}
+        avecPastille={PASTILLE_PORTEE_PAR_LA_COQUILLE}
+      />
     </section>
   );
 }

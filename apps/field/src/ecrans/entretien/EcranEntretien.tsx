@@ -39,10 +39,15 @@ import {
   Message,
   Panneau,
   PastilleSync,
+  RappelHorsLigne,
   Squelette,
   ZoneEtat,
   type EtatZone,
 } from '@axion/ui';
+import {
+  CAPACITES_HORS_LIGNE,
+  PASTILLE_PORTEE_PAR_LA_COQUILLE,
+} from '../../app/capacites-hors-ligne.js';
 import { useTerrain } from '../../app/contexte.js';
 import type { BaseLocale } from '../../local/base.js';
 import { contexteLocal } from '../../local/contexte.js';
@@ -95,11 +100,11 @@ type PanneauLateral = 'blocs' | 'notes' | null;
 
 const ID_NOTE_QUESTION = 'axn-note-de-question';
 
-const CAPACITES_HORS_LIGNE = [
-  'Répondre à chaque question, la marquer à revoir, sans objet ou non communiquée',
-  'Prendre des notes et des notes volantes',
-  'Ajouter une question ad hoc ou en retrouver une hors parcours',
-];
+// La liste de capacités de cet écran vit désormais dans
+// `app/capacites-hors-ligne.ts` (A21, 2026-09-06), déplacée telle quelle. Trois
+// listes séparées existaient pour une seule règle, et l'une d'elles promettait
+// encore une capture photo retirée des deux autres : c'est ce qu'on ne voit pas
+// quand la règle est écrite à trois endroits.
 
 /**
  * L'ordre de parcours. Le dépôt trie par `position` ; à position ÉGALE, une
@@ -712,14 +717,21 @@ export function EcranEntretien(): ReactNode {
             />
           </header>
 
-          {!partage && !enLigne && (
-            <Message ton="info" titre="Hors ligne — la collecte continue">
-              <ul>
-                {CAPACITES_HORS_LIGNE.map((capacite) => (
-                  <li key={capacite}>{capacite}</li>
-                ))}
-              </ul>
-            </Message>
+          {/*
+            §33.2 — le rappel des capacités, désormais rendu par le composant
+            commun. Ce qui reste ÉCRIT ICI, et qui doit le rester : la garde
+            `!partage`. En mode écran partagé, l'interlocuteur voit la tablette ;
+            rien d'interne à l'outil ne s'affiche, pas même une bonne nouvelle.
+            La condition `!enLigne`, elle, a disparu — elle vit dans le composant,
+            qui ne rend rien quand le réseau est là.
+          */}
+          {!partage && (
+            <RappelHorsLigne
+              enLigne={enLigne}
+              capacites={CAPACITES_HORS_LIGNE.entretien}
+              introduction="Sans réseau, la collecte continue :"
+              avecPastille={PASTILLE_PORTEE_PAR_LA_COQUILLE}
+            />
           )}
 
           {enregistrement.erreur !== null && (

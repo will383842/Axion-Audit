@@ -40,7 +40,11 @@
 // =============================================================================
 import { useCallback, useId, useState, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Bouton, CaseACocher, Message, ZoneEtat, type EtatZone } from '@axion/ui';
+import { Bouton, CaseACocher, Message, RappelHorsLigne, ZoneEtat, type EtatZone } from '@axion/ui';
+import {
+  CAPACITES_HORS_LIGNE,
+  PASTILLE_PORTEE_PAR_LA_COQUILLE,
+} from '../../app/capacites-hors-ligne.js';
 import {
   CLE_DERNIER_RITUEL,
   construireJournee,
@@ -62,6 +66,7 @@ import { deposerFichier } from '../../sauvegarde/depot.js';
 import { nomFichierSauvegarde } from '../../sauvegarde/format.js';
 import { exporterSauvegarde, MotDePasseExportInvalideError } from '../../sauvegarde/sauvegarde.js';
 import { PROFIL_PAR_DEFAUT } from '../../session/auditeur.js';
+import { useEnLigne } from '../../session/media.js';
 import './journee.css';
 
 /**
@@ -97,6 +102,7 @@ interface ResultatRituel {
 export function EcranFinDeJournee(): ReactNode {
   const { base, naviguer } = useTerrain();
   const identifiant = useId();
+  const enLigne = useEnLigne();
   const [motDePasse, setMotDePasse] = useState('');
   const [cochees, setCochees] = useState<Set<string> | null>(null);
   const [enCours, setEnCours] = useState(false);
@@ -471,6 +477,17 @@ export function EcranFinDeJournee(): ReactNode {
           )}
         </>
       </ZoneEtat>
+
+      {/* §33.2 — le quatrième état, et c'est l'écran où il compte le plus. Le
+          rituel du soir enchaîne une sync FORCÉE et un export : sans réseau, la
+          première ne partira pas, et l'auditeur pourrait en conclure que le geste
+          entier est perdu. Or c'est l'inverse — c'est précisément quand la sync
+          n'aboutit pas que l'export de secours tient l'invariant 8. */}
+      <RappelHorsLigne
+        enLigne={enLigne}
+        capacites={CAPACITES_HORS_LIGNE.finDeJournee}
+        avecPastille={PASTILLE_PORTEE_PAR_LA_COQUILLE}
+      />
     </section>
   );
 }

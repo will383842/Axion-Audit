@@ -46,6 +46,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { uuidv7 } from 'uuidv7';
+import { CAPACITES_HORS_LIGNE } from '../../app/capacites-hors-ligne.js';
 import { FournisseurTerrain, useTerrain, type ValeurTerrain } from '../../app/contexte.js';
 import { contexteLocal } from '../../local/contexte.js';
 import { depotReponses } from '../../local/depots/reponses.js';
@@ -1258,5 +1259,88 @@ describe('R4 — les trois zones de M3.1, au-dessus du seuil', () => {
     const seuilJs = /min-width:\s*([\d.]+)rem/.exec(REQUETE_TROIS_COLONNES)?.[1];
     expect(seuilJs).toBeDefined();
     expect(css).toContain(`@media (min-width: ${String(seuilJs)}rem)`);
+  });
+});
+
+// =============================================================================
+// G. L'ÉTAT HORS LIGNE — ajouté par A21 le 2026-09-06 (branchement des onze vues)
+//
+// (Croisement 09 §5.6 : ces cas sont écrits par l'agent qui a posé le
+// branchement. Non-régression, pas revue croisée — A29 reste due.)
+//
+// L'en-tête de ce fichier annonçait les quatre états et rangeait le hors ligne
+// dans « pastille dans l'en-tête, mode NOMINAL » — la moitié GAUCHE de §33.2.
+// La moitié droite, le rappel des capacités locales, existait à l'écran depuis
+// L5b mais n'était éprouvée nulle part : elle a pu changer de forme trois fois
+// sans qu'un test bouge. Ce bloc la mesure, et il mesure surtout ce que le
+// composant commun NE PEUT PAS savoir — la garde du mode écran partagé.
+// =============================================================================
+describe('état hors ligne (03 §33.2) — le rappel des capacités, et la garde du mode partagé', () => {
+  function reglerEnLigne(valeur: boolean): void {
+    Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => valeur });
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, 'onLine');
+  });
+
+  it('@critique hors réseau, en écran PRIVÉ : les capacités de CET écran sont énumérées', async () => {
+    reglerEnLigne(false);
+    await monterEntretien(interviewId);
+    await waitFor(() => {
+      expect(questionAffichee(TEXTE_ECHELLE)).toBeTruthy();
+    });
+
+    const rappel = document.querySelector<HTMLElement>('.axn-rappel-hors-ligne');
+    expect(rappel, 'aucun rappel des capacités locales en entretien (§33.2)').not.toBeNull();
+    expect([...(rappel?.querySelectorAll('li') ?? [])].map((li) => li.textContent)).toEqual([
+      ...CAPACITES_HORS_LIGNE.entretien,
+    ]);
+    // Hors ligne est le mode NOMINAL du terrain (invariant 1) : §17.3 interdit
+    // toute notification intrusive en entretien, et une alerte en serait une.
+    for (const alerte of screen.queryAllByRole('alert')) {
+      expect(alerte.textContent).not.toMatch(/hors ligne|sans réseau/i);
+    }
+    // La pastille de l'entretien est celle de son en-tête : le rappel n'en
+    // ajoute pas une seconde à trois centimètres (bloquant B6, 2026-09-06).
+    expect(rappel?.querySelector('[role="status"]')).toBeNull();
+  });
+
+  it('@critique hors réseau, en écran PARTAGÉ : plus rien de tout cela n’est dans le DOM', async () => {
+    // La garde `!partage` est la seule chose que le composant commun ne peut pas
+    // porter : il ne sait pas qu'un interlocuteur regarde la tablette. Sans elle,
+    // basculer en écran partagé laisserait s'afficher un encadré qui parle de
+    // l'outil, de sa synchronisation et de ce qu'il sait faire — §33.3 : rien
+    // d'interne, pas même une bonne nouvelle.
+    reglerEnLigne(false);
+    await monterEntretien(interviewPartageId);
+    await waitFor(() => {
+      expect(questionAffichee(TEXTE_ECHELLE)).toBeTruthy();
+    });
+    // Anti-vacuité : en privé, le rappel est bien là — sans quoi l'assertion
+    // d'après serait verte pour la mauvaise raison.
+    expect(document.querySelector('.axn-rappel-hors-ligne')).not.toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /passer en écran partagé/i }));
+    await screen.findByText(/écran partagé — les éléments internes sont masqués/i);
+
+    expect(document.querySelector('.axn-rappel-hors-ligne')).toBeNull();
+    for (const capacite of CAPACITES_HORS_LIGNE.entretien) {
+      expect(document.body.textContent, `fuite en écran partagé : ${capacite}`).not.toContain(
+        capacite,
+      );
+    }
+    // La question, elle, reste : c'est ce qu'on montre à l'interviewé.
+    expect(questionAffichee(TEXTE_ECHELLE)).toBeTruthy();
+  });
+
+  it('avec réseau : le rappel se tait, et le reste de l’écran ne bouge pas', async () => {
+    reglerEnLigne(true);
+    await monterEntretien(interviewId);
+    await waitFor(() => {
+      expect(questionAffichee(TEXTE_ECHELLE)).toBeTruthy();
+    });
+    expect(document.querySelector('.axn-rappel-hors-ligne')).toBeNull();
+    expect(screen.getAllByRole('radio')).toHaveLength(5);
   });
 });
