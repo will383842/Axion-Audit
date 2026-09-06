@@ -4144,3 +4144,19 @@ Trois arbitrages A01 tracés dans `DECISIONS.md`, une fiche d'étage 2 dans `AME
 `apps/api/src/scoring/**` : 99,65 lignes / 100 fonctions / 96,71 branches. La justification de
 l'arborescence est réécrite : le scoring est un calcul pur transverse sans dépôt ni route, au rang
 d'`auth/` et `http/` — le glob suit le code, il ne le place pas.
+
+## 2026-09-06 18h05 — [lot L5 / incrément L5c] — étape pipeline 3/7
+
+Dernier commit vert : 6a970d5 (fix(l5c) : le stockage qui leve ne fige plus l ecran de
+restauration) · Branche : fix/ecran-restauration · Poussé : oui
+Tâche en cours : correctif A24 du défaut A27-D1 + arbitrage D-A27-1, auto-revue signée.
+Livré : `exigerPersistance()` ne rejette plus dans le vide — porte de sortie UNIQUE (`.catch`
+terminal + reclassement `EchecStockage`/`EchecLecture`), l'écran ne se fige plus sur son squelette.
+D-A27-1 appliqué : refus guidé D'ABORD, reprise explicite « Restaurer quand même », alerte
+`role="alert"` et ré-export mis en avant après le succès. `accept=".axionbackup"` RETIRÉ (UTI iOS).
+Identité de la sauvegarde restaurée affichée (étage 1).
+Mesure : 2606 → 2620 verts, 0 rouge (2 rouges au départ : D1 + flake `quota.test.ts`).
+Couverture `EcranRestauration.tsx` 100/100/100/100 · `photos.ts` 100 · `depot.ts` 100.
+Prochaine action : commiter, pousser, et demander la revue croisée A29 sur la PR #69.
+Tests rouges connus : aucun. ⚠ `[vitest-worker]: Timeout calling "onTaskUpdate"` sous charge —
+tous les tests passent, seul le code de sortie rougit ; déjà présent avant ce correctif.
