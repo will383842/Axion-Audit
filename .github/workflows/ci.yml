@@ -679,6 +679,25 @@ jobs:
 
       - name: pnpm lint
         run: pnpm lint
+
+      # -----------------------------------------------------------------------
+      # POURQUOI CE GARDE EST ICI, ET APRÈS `pnpm lint`.
+      #
+      # Il lit le contrat dans `packages/shared/dist` — le contrat RÉEL, pas sa
+      # source. `pnpm lint` construit les paquets ; le placer avant lui rendrait
+      # un rouge qui ne parle que de `dist` absent.
+      #
+      # CE QU'IL FERME (2026-09-06) : les corps littéraux servis par les tests
+      # E2E ne sont confrontés à aucun schéma par le compilateur. Deux fois le
+      # même jour, un champ requis ajouté au contrat les a fait rejeter, l'écran
+      # a basculé en ÉTAT D'ERREUR, et la CI a rapporté « colonne Provenance
+      # introuvable » — un balayage d'accessibilité accusé d'un défaut de
+      # contrat, vingt minutes après sa cause. Ce garde nomme le champ fautif en
+      # une seconde.
+      # -----------------------------------------------------------------------
+      - name: pnpm check:fixtures (corps littéraux vs contrat partagé)
+        run: pnpm check:fixtures
+
       # Le formatage est vérifié, jamais réécrit par la CI : un job qui corrige
       # le dépôt à la place de l'auteur masque le défaut au lieu de le signaler.
       - name: pnpm format:check

@@ -253,6 +253,9 @@ const AGREGATION = {
     { code: 'b2', libelle: 'Production' },
   ],
   filtre: { block: null, orgUnit: null },
+  // Le SERVEUR dit ce qu'il a servi, plutôt que de laisser l'écran le supposer
+  // d'après le paramètre qu'il croit avoir envoyé. Ici aucun nom n'est demandé.
+  repondantsAffiches: false,
   questions: [
     {
       missionQuestionId: '018f0000-0000-7000-8000-0000000000d1',
@@ -281,10 +284,10 @@ const AGREGATION = {
           orgUnitNom: 'Établissement unique',
           orgUnitInScope: true,
           // `nomRepondant` est REQUIS et nullable depuis L7c : le contrat distingue
-          // « aucun consentement » (null) de « je n ai pas demande » (parametre absent),
-          // deux etats qu une cle absente confondait. Le schema partage etant un
-          // `z.strictObject`, l omettre ici ne rendait pas la table incomplete : cela
-          // faisait echouer l analyse, et l ecran basculait en etat ERREUR — ce que les
+          // « aucun consentement » (null) de « je n'ai pas demandé » (paramètre absent),
+          // deux états qu'une clé absente confondait. Le schéma partagé étant un
+          // `z.strictObject`, l'omettre ici ne rendait pas la table incomplète : cela
+          // faisait échouer l'analyse, et l'écran basculait en état ERREUR — ce que les
           // balayages axe ont vu comme « colonne Provenance introuvable ». (2026-09-06)
           nomRepondant: null,
           fonctionRepondant: 'Responsable de production',
@@ -453,6 +456,36 @@ async function balayer(page: Page, ecran: string): Promise<void> {
   ).toEqual([]);
 }
 
+/**
+ * REFUSE L'ÉTAT D'ERREUR QUAND ON N'EN VOULAIT PAS — et dit POURQUOI il arrive.
+ *
+ * Les corps servis ci-dessous sont des littéraux écrits à la main : le contrat
+ * partagé est un `z.strictObject`, il n'est pas résolvable depuis la racine, et
+ * aucun compilateur ne les confronte. Quand un champ REQUIS apparaît dans le
+ * schéma, l'analyse échoue et l'écran bascule en ÉTAT D'ERREUR — où il n'y a ni
+ * colonne, ni ligne, ni texte.
+ *
+ * C'EST ARRIVÉ DEUX FOIS LE MÊME JOUR (2026-09-06), avec `nomRepondant` puis
+ * `repondantsAffiches`, tous deux nés de L7c. Les deux fois, le symptôme affiché
+ * par la CI a été « colonne Provenance introuvable » : un échec qui accuse
+ * l'accessibilité d'un défaut de contrat, à vingt minutes de sa cause.
+ *
+ * Cette assertion ne rend pas le test plus strict — elle le rend PARLANT. Elle
+ * s'appelle après le titre, donc après que l'écran a fini de charger.
+ */
+async function refuserEtatErreur(page: Page, ecran: string): Promise<void> {
+  await expect(
+    page.getByRole('button', { name: 'Réessayer' }),
+    [
+      `L’écran « ${ecran} » est en ÉTAT D’ERREUR alors qu’un corps lui a été SERVI.`,
+      'Ce n’est presque jamais un défaut de l’écran : c’est le corps servi qui a été',
+      'REJETÉ par le contrat partagé — un `z.strictObject`, où un seul champ requis',
+      'manquant suffit à faire basculer l’écran entier.',
+      'Compare les fixtures de CE fichier à `packages/shared/src/agregation.ts`.',
+    ].join('\n'),
+  ).toBeHidden();
+}
+
 type Corps = Record<string, unknown>;
 
 /**
@@ -512,6 +545,7 @@ test.describe('L7b — accessibilité de l’écran Couverture (03 §27.1)', () 
     await expect(
       page.getByRole('heading', { name: 'Couverture de la mission', level: 1 }),
     ).toBeVisible();
+    await refuserEtatErreur(page, 'couverture (nominal)');
     await expect(page.getByRole('columnheader', { name: 'Analyse documentaire' })).toBeVisible();
     await expect(page.getByRole('rowheader', { name: 'Atelier de production' })).toBeVisible();
     await expect(page.locator('tr[data-alerte="true"]')).toHaveCount(1);
@@ -522,6 +556,7 @@ test.describe('L7b — accessibilité de l’écran Couverture (03 §27.1)', () 
   test('état VIDE : l’écran dit quoi faire — aucune violation axe', async ({ page }) => {
     await servirApi(page, { couverture: COUVERTURE_VIDE, agregation: null });
     await page.goto(URL_COUVERTURE);
+    await refuserEtatErreur(page, 'couverture (vide)');
     await expect(page.getByText('Aucune unité dans l’arbre de cette mission')).toBeVisible();
     await balayer(page, 'couverture (vide)');
   });
@@ -545,6 +580,7 @@ test.describe('L7b — accessibilité de l’écran Agrégation (M5.1, §27.4)',
     await expect(
       page.getByRole('heading', { name: 'Agrégation par question', level: 1 }),
     ).toBeVisible();
+    await refuserEtatErreur(page, 'agrégation (nominal)');
     // Les quatre rendus distincts doivent être à l'écran AU MOMENT du balayage.
     await expect(page.getByRole('columnheader', { name: 'Provenance' })).toBeVisible();
     await expect(page.getByText('Un tableau de bord mensuel, tenu à la main.')).toBeVisible();
@@ -555,6 +591,7 @@ test.describe('L7b — accessibilité de l’écran Agrégation (M5.1, §27.4)',
   test('état VIDE : aucune donnée collectée — aucune violation axe', async ({ page }) => {
     await servirApi(page, { couverture: null, agregation: AGREGATION_VIDE });
     await page.goto(URL_AGREGATION);
+    await refuserEtatErreur(page, 'agrégation (vide)');
     await expect(page.getByText('Aucune donnée collectée à ce jour')).toBeVisible();
     await balayer(page, 'agrégation (vide)');
   });

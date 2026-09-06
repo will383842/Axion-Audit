@@ -10601,3 +10601,30 @@ qu'un garde vert ne gardait rien ; celui-ci nommait « couverture absente » un 
 Règle de précédence : sans objet — aucune divergence du pack, c'est une lacune d'outillage.
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun ; une étape de CI et une fixture de test.
+
+## 2026-09-06 — [L7c] Un corps littéral servi par un test E2E n'est confronté à aucun contrat
+
+Deux cycles de CI ont été dépensés le même jour sur la même cause. `e2e/accessibilite-l7b.e2e.ts`
+sert l'API avec des corps écrits à la main ; `agregationMissionSchema` est un `z.strictObject` ; le
+paquet partagé n'est pas résolvable depuis la racine. Quand L7c a ajouté `nomRepondant` puis
+`repondantsAffiches`, les corps ont été rejetés, l'écran a basculé en ÉTAT D'ERREUR, et la CI a
+rapporté **« colonne Provenance introuvable »** — un balayage d'accessibilité accusé d'un défaut de
+contrat, à vingt minutes de sa cause. Le garde d'A36 fonctionnait comme prévu ; il tombait loin.
+
+Options :
+
+1. Ajouter `@axion/shared` aux dépendances de la racine et typer la fixture. **Écartée** : c'est une
+   modification de dépendances pour la commodité d'un test (§3-1). A36 l'avait déjà refusée, avec
+   raison, et une décision de gouvernance ne se renverse pas pour gagner vingt minutes.
+2. Ne rien faire, la fixture est corrigée. **Écartée** : ferme le cas, pas la classe. Le champ
+   suivant coûtera le même détour, et le message trompeur sera le même.
+3. **Un garde de CI** qui extrait le texte des littéraux, le fait transpiler par TypeScript,
+   l'évalue et le soumet au schéma réel importé du `dist`.
+
+Arbitrage : **option 3** — `scripts/check-fixtures-contrat.mjs`, câblé dans `verify:rapide`, `verify`
+et le job `1 · lint` (après `pnpm lint`, qui construit les paquets ; avant lui, le garde ne parlerait
+que d'un `dist` absent). Il nomme le champ fautif **en une seconde**, et sa non-vacuité est prouvée
+par retrait volontaire du champ. C'est la source du dépôt qui est jugée, pas une copie.
+Règle de précédence : sans objet — aucune divergence du pack, une lacune d'outillage.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun ; un script, trois câblages, aucune dépendance nouvelle.
