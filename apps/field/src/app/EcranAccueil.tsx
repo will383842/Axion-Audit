@@ -33,7 +33,7 @@
 // =============================================================================
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Bouton, Message, PastilleSync, ZoneEtat, type EtatZone } from '@axion/ui';
+import { Bouton, Message, ZoneEtat, type EtatZone } from '@axion/ui';
 import { cleEmbarquement, clePersistance, type BaseLocale } from '../local/base.js';
 import { embarquerMission, type ResultatEmbarquement } from '../local/embarquement.js';
 import { portSyncInerte, type EtatSyncMission } from '../local/port-sync.js';
@@ -246,12 +246,13 @@ export function EcranAccueil(): ReactNode {
     <section className="axn-pile">
       <h1>Aujourd’hui</h1>
 
-      <div className="axn-coquille__indicateurs">
-        <PastilleSync
-          etat={(resume?.operationsEnAttente ?? 0) > 0 ? 'en-attente' : 'hors-ligne'}
-          {...(resume === null ? {} : { enAttente: resume.operationsEnAttente })}
-        />
-      </div>
+      {/* B6 (recette novice A54, 2026-09-06) : la pastille de CET écran est
+          RETIRÉE. Elle déduisait son état du nombre d'opérations en file — donc
+          « Hors ligne » dès que l'outbox est vide, quel que soit le réseau —
+          pendant que celle de l'en-tête, trois centimètres plus haut, annonçait
+          « En attente de synchronisation ». Deux pastilles, un seul fait, deux
+          réponses opposées, et aucune vraie. L'en-tête la porte pour les onze
+          écrans (décision A01 du 2026-09-05) ; un fait, une source. */}
 
       {(jetonSiege === 'absent' || jetonSiege === 'expire') && (
         <Message ton="info" titre="Connexion au siège">
