@@ -3477,7 +3477,7 @@ Prochaine action : suivre la CI de la PR #47, seul verrou restant de L7b.
 
 ## 2026-09-06 10h20 — [lot L8 / moteur de scoring] — étape pipeline 3/7 (auto-revue)
 
-Dernier commit vert : 79bd6e2 (l'arbre bancal, l'énumération des barèmes, le glob)
+Dernier commit vert : c14778b (l’arbre bancal, l’énumération des barèmes, le glob)
 Branche : lot/l8-scoring · Poussé : oui
 Tâche en cours : reprise après coupure d'API — le moteur manquait, les tests l'attendaient.
 Prochaine action : passer le lot en REVUE CROISÉE (étape 4) ; A16 écrit la couche
