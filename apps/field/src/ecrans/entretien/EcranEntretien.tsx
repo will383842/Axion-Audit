@@ -24,7 +24,13 @@
 // ── LES QUATRE ÉTATS (03 §33.2) ─────────────────────────────────────────────
 // chargement (squelettes) · vide (aucun entretien ouvert → « Nouvel entretien »,
 // ou questionnaire vide) · erreur (session introuvable, cause + action) · hors
-// ligne (pastille dans l'en-tête, mode NOMINAL) · nominal.
+// ligne (mode NOMINAL) · nominal.
+//
+// L'état hors ligne a DEUX moitiés, et cet écran n'en portait qu'une : la
+// pastille — celle de la coquille, plus une qui lui était propre, ce qui était le
+// défaut. Le RAPPEL DES CAPACITÉS LOCALES est rendu par `RappelHorsLigne` sous la
+// garde `!partage` (§33.3 : rien d'interne en écran partagé, pas même une bonne
+// nouvelle) ; la pastille propre à cet écran a été retirée le 2026-09-06.
 //
 // Traçabilité : E13 (écran 3 zones, enregistrement continu — notes, ad hoc),
 // E12 (entretiens par interlocuteur, à-revoir / N-A), E37 (scoring intégralement
@@ -38,7 +44,6 @@ import {
   IndicateurEnregistrement,
   Message,
   Panneau,
-  PastilleSync,
   RappelHorsLigne,
   Squelette,
   ZoneEtat,
@@ -228,18 +233,12 @@ export function EcranEntretien(): ReactNode {
     [base],
     undefined,
   );
-  const enAttente = useLiveQuery(
-    async () =>
-      base === null || missionId === undefined
-        ? 0
-        : base.outbox
-            .where('missionId')
-            .equals(missionId)
-            .filter((op) => op.statut === 'en_attente')
-            .count(),
-    [base, missionId],
-    0,
-  );
+  // Le COMPTE d'opérations en attente de la mission courante vivait ici, pour la
+  // pastille retirée plus bas (B6, troisième source). Il est retiré avec elle :
+  // l'en-tête de la coquille compte l'outbox de l'appareil, et deux comptes du
+  // même fait sur un écran sont la version chiffrée du défaut qu'on ferme. La
+  // requête n'est pas gardée « au cas où » — un `useLiveQuery` sans lecteur est
+  // une lecture de base à chaque écriture, en pleine session d'entretien.
 
   // ── Position ───────────────────────────────────────────────────────────────
   const [questionChoisie, setQuestionChoisie] = useState<string | null>(null);
@@ -701,9 +700,32 @@ export function EcranEntretien(): ReactNode {
                   ? {}
                   : { horodatage: enregistrement.horodatage })}
               />
-              {!partage && (
-                <PastilleSync etat={enLigne ? 'en-attente' : 'hors-ligne'} enAttente={enAttente} />
-              )}
+              {/*
+                ── B6, TROISIÈME SOURCE : LA PASTILLE DE CET ÉCRAN EST RETIRÉE ──
+                Mesuré par A29 le 2026-09-06, coquille complète, vue `entretien`,
+                état nominal, réseau PRÉSENT :
+                  en-tête   → « En attente de synchronisation · 4 en attente »
+                  cet écran → « Hors ligne · 5 en attente »
+                Deux états OPPOSÉS et deux comptes DIFFÉRENTS du même fait, sur le
+                même écran, à trois centimètres. C'est le bloquant B6 de la recette
+                novice, jamais fermé ici : le geste du 2026-09-06 n'avait porté que
+                sur l'écran d'accueil.
+
+                Les deux écarts ont la même racine. Cette pastille lisait
+                `navigator.onLine` — que B6 a précisément retiré du pilotage, voir
+                l'en-tête de `PastilleSyncCoquille.tsx` — et comptait l'outbox de la
+                MISSION, là où celle de la coquille compte celle de l'APPAREIL et
+                rend le statut le plus défavorable.
+
+                Le geste est celui que B6 a posé pour l'accueil, appliqué à l'écran
+                qui l'avait manqué : « l'en-tête la porte déjà, pour les onze
+                écrans ». Un fait, une source, une pastille. L'ALIGNER sur
+                `etat-sync-affiche.ts` plutôt que la retirer aurait laissé deux
+                pastilles concordantes en mots et toujours discordantes en compte —
+                ou strictement identiques à trois centimètres, donc du bruit, et
+                §17.3 fait de l'entretien le dernier endroit qui en veuille.
+                Arbitrage tracé dans `DECISIONS.md` (2026-09-06).
+              */}
               {!partage && (
                 <Bouton variante="discret" onClick={fermerEntretien}>
                   Quitter l’entretien

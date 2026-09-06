@@ -39,7 +39,10 @@ import { BaseLocale, cleEmbarquement, ecrireMeta } from '../local/base.js';
 import { creerDekEnveloppee, deriverKek, ouvrirCoffre } from '../local/coffre.js';
 import { installerContexteLocal, retirerContexteLocal } from '../local/contexte.js';
 import { appliquerDescente, ecrireLocal } from '../local/ecriture.js';
-import { memoriserSessionCourante } from '../session/position.js';
+import { jetonsDeRecherche } from '../local/formes.js';
+import { memoriserIdentiteAuditeur } from '../session/auditeur.js';
+import { memoriserQuestionCourante, memoriserSessionCourante } from '../session/position.js';
+import { App } from '../App.js';
 import { EcranNouvelEntretien } from '../ecrans/entretien/EcranNouvelEntretien.js';
 import { EcranAgenda } from '../ecrans/journee/EcranAgenda.js';
 import { EcranAujourdhui } from '../ecrans/journee/EcranAujourdhui.js';
@@ -95,6 +98,8 @@ const INSTANT = '2026-09-06T12:00:00.000Z';
 const MISSION_ID = '0191e2a0-0000-7000-8000-0000000a1f5f';
 const UNITE_ID = '0191e2a0-0000-7000-8000-0000000a1c5f';
 const AUDITEUR_ID = '0191e2a0-0000-7000-8000-0000000a1e01';
+const QUESTION_ID = '0191e2a0-0000-7000-8000-0000000a1401';
+const TEXTE_QUESTION = 'Question fictive — la collecte fonctionne-t-elle sans réseau ?';
 const KDF_TEST = {
   algo: 'argon2id',
   memoireKio: 1024,
@@ -120,6 +125,15 @@ async function baseEmbarquee(): Promise<BaseLocale> {
   bases.push(base);
   const coffre = await ouvrirCoffre(kek, await creerDekEnveloppee(kek));
   installerContexteLocal({ base, coffre });
+  // L'IDENTITÉ DE L'AUDITEUR — ajoutée le 2026-09-06 (revue A29, réserve ④).
+  // Sans elle, `EcranNouvelEntretien` rend son état d'ERREUR (« Auditeur inconnu
+  // sur cet appareil », zéro bouton) : le rappel étant posé hors de la
+  // `ZoneEtat`, le cas passait au vert en mesurant un écran que l'auditeur ne
+  // voit jamais ainsi. Un test vert sur l'état d'erreur d'un écran n'éprouve pas
+  // son branchement nominal — et c'était précisément la vue dont la capacité
+  // était fausse. On ne fabrique pas un propriétaire de session (05 §9.9) : on
+  // sème celui que le harnais des autres fichiers de L5 sème déjà.
+  await memoriserIdentiteAuditeur(base, coffre, { id: AUDITEUR_ID, profil: 'guide_strict' });
   await appliquerDescente({
     missionId: MISSION_ID,
     serverTime: INSTANT,
@@ -165,6 +179,34 @@ async function baseEmbarquee(): Promise<BaseLocale> {
           clientCreatedAt: INSTANT,
         },
       },
+      // Une question FIGÉE : sans elle, l'écran d'entretien rend son état vide,
+      // et la mesure des pastilles ci-dessous ne prouverait rien — c'est dans le
+      // bloc NOMINAL que la pastille retirée par B6 vivait.
+      {
+        table: 'missionQuestions',
+        index: {
+          id: QUESTION_ID,
+          missionId: MISSION_ID,
+          position: 1,
+          texteSnapshot: TEXTE_QUESTION,
+          motsCles: jetonsDeRecherche(TEXTE_QUESTION),
+          answerType: 'yes_no',
+          criticality: 'important',
+          clientUpdatedAt: INSTANT,
+          supprimeLe: null,
+        },
+        charge: {
+          questionId: '0191e2a0-0000-7000-8000-0000000a1401',
+          questionVersion: 1,
+          guidanceSnapshot: null,
+          optionsSnapshot: null,
+          scoringSnapshot: null,
+          weightSnapshot: 1,
+          allowRangeSnapshot: false,
+          addedAdHoc: false,
+          blockCode: 'bloc_fictif',
+        },
+      },
     ],
   });
   await ecrireMeta(base, cleEmbarquement(MISSION_ID), INSTANT);
@@ -205,9 +247,11 @@ async function baseEmbarquee(): Promise<BaseLocale> {
       clientCreatedAt: INSTANT,
     },
   });
-  // `EcranFinDeSession` lit la session COURANTE : sans elle, il rendrait son
-  // état vide, et l'on mesurerait un écran que l'auditeur ne voit jamais ainsi.
+  // `EcranFinDeSession` et `EcranEntretien` lisent la session COURANTE — et la
+  // question courante. Sans elles, ils rendent leur état vide, et l'on mesurerait
+  // des écrans que l'auditeur ne voit jamais ainsi.
   await memoriserSessionCourante(base, sessionId);
+  await memoriserQuestionCourante(base, sessionId, QUESTION_ID);
   return base;
 }
 
@@ -334,8 +378,12 @@ describe('branchement — les onze sources rendent le rappel, chacune avec ses c
       const source = lues.get(code) ?? '';
       expect(source).toContain('RappelHorsLigne');
       expect(source).toContain(`CAPACITES_HORS_LIGNE.${code}`);
-      // La pastille est portée UNE fois par la coquille (décision A01 du
-      // 2026-09-05). Un écran qui en rendrait une seconde rouvrirait B6.
+      // Le RAPPEL ne rend pas de pastille : la coquille en porte une (décision
+      // A01 du 2026-09-05). CE QUE CETTE LIGNE NE DIT PAS — et disait à tort
+      // jusqu'au 2026-09-06 (revue A29, réserve ③) : elle n'interdit pas à
+      // l'écran d'en rendre une AILLEURS. C'est le comptage du bloc D qui le
+      // mesure, sur le DOM, coquille comprise. Un message qui promet plus que sa
+      // requête donne le vert à ce qu'il prétend interdire.
       expect(source).toMatch(/avecPastille=\{(?:PASTILLE_PORTEE_PAR_LA_COQUILLE|false)\}/);
     });
   }
@@ -407,4 +455,111 @@ describe('rendu — hors réseau, chaque écran rappelle CE QU’IL sait faire',
     await monter(EcranRestauration, 'restauration');
     expect(rappel()?.textContent).toContain('Sans réseau, cette restauration reste possible :');
   });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// D. UN FAIT, UNE SOURCE, UNE PASTILLE — le comptage que le bloc B ne fait pas
+//
+// AJOUTÉ le 2026-09-06 (revue A29, réserves ① et ③). Le bloc B lit les sources
+// et vérifie que le RAPPEL ne rend pas de pastille. C'est vrai, et c'est
+// insuffisant : deux écrans passaient cette lecture tout en rendant la leur
+// ailleurs — `EcranEntretien` en particulier, dont A29 a mesuré, coquille
+// complète et RÉSEAU PRÉSENT, « En attente de synchronisation · 4 en attente »
+// dans l'en-tête et « Hors ligne · 5 en attente » trois centimètres plus bas.
+// Deux états opposés, deux comptes du même fait. Le bloquant B6, resté ouvert
+// sur cet écran parce que le geste du 2026-09-06 n'avait porté que sur l'accueil.
+//
+// Ce bloc compte donc les `.axn-pastille-sync` du DOCUMENT ENTIER, coquille
+// comprise, dans les deux états du réseau. La table ci-dessous déclare, écran par
+// écran, combien il en reste — et chaque valeur non nulle porte sa raison. Une
+// pastille ajoutée quelque part fait rougir la vue concernée, nommément.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('B6 — combien de pastilles l’auditeur voit-il réellement, coquille comprise', () => {
+  /** Pastilles rendues par l'ÉCRAN seul (hors coquille), et leur raison. */
+  const PASTILLES_DE_L_ECRAN = {
+    // L'écran de déverrouillage est rendu HORS coquille : zéro pastille au total,
+    // et c'est l'arbitrage de Williams du 2026-09-04, pas un oubli.
+    deverrouillage: 0,
+    stockage: 0,
+    accueil: 0, // retirée par B6 le 2026-09-06 (recette novice A54).
+    nouvelEntretien: 0,
+    entretien: 0, // retirée le 2026-09-06 : c'était la TROISIÈME source (A29 ①).
+    // Le cockpit rend une pastille PAR CARTE DE MISSION, contextualisée par la
+    // mission qu'elle décrit — et toutes traduites par `etat-sync-affiche.ts`,
+    // donc jamais en contradiction de mots avec l'en-tête. Le harnais sème UNE
+    // mission : une pastille. A29 l'a examiné et l'a jugé acceptable ; il est
+    // déclaré ici plutôt que toléré en silence.
+    aujourdhui: 1,
+    agenda: 0,
+    pilote: 0,
+    finDeJournee: 0,
+    restauration: 0,
+    finDeSession: 0,
+  } as const satisfies Record<CodeVue, number>;
+
+  function pastilles(): readonly string[] {
+    return [...document.querySelectorAll('.axn-pastille-sync')].map((p) => p.textContent.trim());
+  }
+
+  for (const code of CODES) {
+    const { Composant } = ECRANS[code];
+    if (Composant === null) continue;
+
+    for (const enLigne of [true, false]) {
+      it(`@critique ${code} (réseau ${enLigne ? 'présent' : 'absent'}) : l’écran seul rend ${String(PASTILLES_DE_L_ECRAN[code])} pastille(s)`, async () => {
+        reglerEnLigne(enLigne);
+        await monter(Composant, code);
+        const vues = pastilles();
+        expect(vues.length, `pastilles rendues : ${vues.join(' | ')}`).toBe(
+          PASTILLES_DE_L_ECRAN[code],
+        );
+      });
+    }
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// E. LA MESURE D'A29, REJOUÉE — la coquille COMPLÈTE, sur l'écran d'entretien
+//
+// Les blocs précédents montent les écrans SANS `App` : ils ne peuvent donc pas
+// voir la pastille de l'en-tête, et c'est exactement l'angle mort qui a laissé
+// B6 ouvert sur cette vue. Ce bloc monte la coquille entière, à l'endroit et
+// dans l'état où A29 a relevé les deux pastilles contradictoires.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('B6 — l’écran d’entretien dans la coquille : une seule pastille, un seul compte', () => {
+  async function monterCoquille(vue: CodeVue): Promise<void> {
+    const base = await baseEmbarquee();
+    terrain = terrainSur(base, vue);
+    render(<App />);
+    // Attendre le CONTENU, pas la pastille : celle de l'en-tête paraît avant que
+    // l'entretien soit lu, et l'on compterait alors les pastilles d'un écran
+    // encore en chargement — donc d'un écran où celle qu'on traque n'est pas
+    // ENCORE rendue. Mesuré : sans cette attente, le cas se lit sur « Ouverture
+    // de l'entretien… ». Un test qui mesure trop tôt est un test qui ment.
+    await waitFor(() => {
+      expect(document.body.textContent).toContain(TEXTE_QUESTION);
+    });
+  }
+
+  for (const enLigne of [true, false]) {
+    it(`@critique réseau ${enLigne ? 'PRÉSENT' : 'absent'} : UNE pastille sur la vue « entretien », jamais deux qui se contredisent`, async () => {
+      reglerEnLigne(enLigne);
+      await monterCoquille('entretien');
+
+      const vues = [...document.querySelectorAll('.axn-pastille-sync')].map((p) =>
+        p.textContent.trim(),
+      );
+      expect(
+        vues.length,
+        `A29 en a mesuré DEUX ici le 2026-09-06 — trouvé : ${vues.join(' | ')}`,
+      ).toBe(1);
+      // Un seul compte affiché, donc aucun « n en attente » contradictoire.
+      expect(
+        [...document.querySelectorAll('.axn-pastille-sync__compte')].length,
+      ).toBeLessThanOrEqual(1);
+      // Et le contenu de l'entretien est bien rendu : sans lui, ce test
+      // compterait les pastilles d'un écran vide et ne prouverait rien.
+      expect(document.body.textContent).toContain(TEXTE_QUESTION);
+    }, 20_000);
+  }
 });

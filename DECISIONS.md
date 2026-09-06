@@ -10835,3 +10835,31 @@ Règle de précédence : **§32-36 > §24-31** — §22.1 (contraste AA) command
 d'inventer une couleur hors charte pour s'en sortir.
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun ; une déclaration CSS change de jeton, la charte est intacte.
+
+## 2026-09-06 — [L5b] La pastille de l'écran d'entretien : l'aligner, ou la retirer ?
+
+Revue croisée A29 sur la PR #81, réserve bloquante ①. Mesure, coquille complète, vue `entretien`,
+état nominal, **réseau présent** : l'en-tête affiche « En attente de synchronisation · 4 en attente »
+(port de sync, outbox de l'appareil) et l'écran « Hors ligne · 5 en attente » (`navigator.onLine`,
+outbox de la mission). Deux états opposés, deux comptes du même fait, sur le même écran. C'est le
+bloquant B6, resté ouvert ici parce que le geste du 2026-09-06 n'avait porté que sur l'accueil.
+
+Options :
+
+1. **L'aligner sur `app/etat-sync-affiche.ts`.** Ferme la contradiction de MOTS, laisse deux
+   pastilles à trois centimètres — concordantes mais discordantes en COMPTE (mission vs appareil),
+   ou strictement identiques si l'on aligne aussi le compte, donc du bruit redondant.
+2. **La retirer**, l'en-tête la portant déjà pour les onze écrans.
+3. La laisser et corriger les quatre affirmations de la PR qui la disaient fermée.
+
+Arbitrage : **option 2**. C'est le geste que B6 a lui-même posé pour l'écran d'accueil le
+2026-09-06 (« l'en-tête la porte déjà, pour les onze écrans »), appliqué à l'écran qui l'avait
+manqué : un fait, une source, une pastille. L'option 1 laisserait un doublon que §17.3 — qui interdit
+toute notification intrusive en entretien — est le dernier endroit à vouloir. L'option 3 est écartée
+sans hésitation : **un dépôt qui documente comme fermé ce qui est ouvert perd le droit de croire ses
+propres registres.** Le compte d'outbox de la mission est retiré avec la pastille (un `useLiveQuery`
+sans lecteur est une lecture de base à chaque écriture, en pleine session).
+Règle de précédence : §16-22 (§19.2 « un fait, une source » ; §17.3) sur le confort d'affichage.
+La fermeture est désormais MESURÉE, coquille comprise, avec sa contre-épreuve — ce qui manquait.
+Décideur : **A01**, sur délégation du 2026-09-04, sur revue A29.
+Impact spec : aucun ; une pastille redondante en moins, l'exigence §33.2 inchangée.

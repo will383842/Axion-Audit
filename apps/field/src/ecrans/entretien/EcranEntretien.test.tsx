@@ -1301,9 +1301,25 @@ describe('état hors ligne (03 §33.2) — le rappel des capacités, et la garde
     for (const alerte of screen.queryAllByRole('alert')) {
       expect(alerte.textContent).not.toMatch(/hors ligne|sans réseau/i);
     }
-    // La pastille de l'entretien est celle de son en-tête : le rappel n'en
-    // ajoute pas une seconde à trois centimètres (bloquant B6, 2026-09-06).
-    expect(rappel?.querySelector('[role="status"]')).toBeNull();
+    // ── B6, MESURÉ SUR LE DOCUMENT (revue A29, réserves ① et ③) ────────────
+    // Cette ligne regardait à l'INTÉRIEUR du bloc de rappel et son commentaire
+    // affirmait pourtant que l'écran n'en rendait pas une seconde. C'était faux :
+    // l'écran en rendait une, à trois centimètres de celle de la coquille,
+    // pilotée par `navigator.onLine` et comptant l'outbox de la MISSION — A29 a
+    // relevé « En attente de synchronisation · 4 en attente » au-dessus de
+    // « Hors ligne · 5 en attente », RÉSEAU PRÉSENT. Elle est retirée (un fait,
+    // une source, une pastille), et la requête compte désormais le DOCUMENT.
+    //
+    // Ici l'écran est monté SANS coquille : le compte attendu est donc ZÉRO.
+    // Coquille comprise, la mesure vaut UN et vit dans `app/hors-ligne.test.tsx`,
+    // avec sa contre-épreuve.
+    const pastilles = [...document.querySelectorAll('.axn-pastille-sync')].map((p) =>
+      p.textContent.trim(),
+    );
+    expect(
+      pastilles,
+      `l’écran d’entretien rend sa propre pastille : ${pastilles.join(' | ')}`,
+    ).toEqual([]);
   });
 
   it('@critique hors réseau, en écran PARTAGÉ : plus rien de tout cela n’est dans le DOM', async () => {
