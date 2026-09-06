@@ -42,6 +42,25 @@ export function EcranStockage(): ReactNode {
         setGuidage(resultat.accordee ? null : resultat.guidage);
         await rafraichirStockage();
       })
+      // LE `.catch` QUI MANQUAIT — ET L'ÉCRAN OÙ IL MANQUAIT LE PLUS.
+      //
+      // `navigator.storage.persist()` et `.estimate()` LÈVENT sous WebKit en
+      // navigation privée et en contexte non sécurisé, c'est-à-dire sur l'iPad
+      // même que 03 §22.1 vise. Sans cette branche, le rejet partait en promesse
+      // non gérée, `finally` éteignait le chargement, et `setGuidage` n'était
+      // jamais rappelé : le bouton « Redemander » de l'écran DONT L'UNIQUE
+      // RAISON D'ÊTRE est de réparer le stockage devenait un bouton mort.
+      //
+      // Ce n'est pas un écran figé — c'est pire à sa façon : un écran qui a
+      // l'air d'aller bien. Frère du défaut A27-D1 d'`EcranRestauration`, trouvé
+      // par A24 en l'instruisant, fermé ici le 2026-09-06.
+      .catch(() => {
+        setGuidage(
+          'Le navigateur a refusé de répondre à la demande de conservation. C’est ce qu’il ' +
+            'fait en navigation privée, et quand la page n’est pas servie de façon sécurisée. ' +
+            'Ouvrez l’application dans une fenêtre ordinaire, puis redemandez.',
+        );
+      })
       .finally(() => {
         setEnCours(false);
       });

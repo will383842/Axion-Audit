@@ -113,14 +113,43 @@ export type ResultatPersistance =
       readonly etat: EtatStockage;
     };
 
-const GUIDAGE_REFUS =
-  'Le navigateur refuse de garantir la conservation des données de cet appareil. ' +
+// ── UN GUIDAGE SE COMPOSE : LE CONSTAT, LE REMÈDE, PUIS LA CONSÉQUENCE ─────
+// Ces textes n'avaient qu'un appelant — l'embarquement — et le refus se
+// terminait donc par SA conséquence : « la mission ne peut pas être embarquée ».
+// D-A27-1 (DECISIONS.md, 2026-09-06) autorise la RESTAURATION sans persistance.
+// Lui servir la même phrase afficherait un refus définitif juste au-dessus du
+// bouton qui passe outre : deux affirmations contraires dans le même cadre, ce
+// que §17.6 interdit avant tout. Le constat et le remède sont donc nommés une
+// seule fois — les deux écrans doivent prescrire le MÊME geste — et seule la
+// conséquence appartient à l'appelant.
+const CONSTAT_REFUS =
+  'Le navigateur refuse de garantir la conservation des données de cet appareil.';
+const REMEDE_REFUS =
   'Installez l’application sur l’écran d’accueil (Partager, puis « Sur l’écran d’accueil »), ' +
-  'puis libérez de l’espace si nécessaire, et réessayez. Tant que ce n’est pas fait, la mission ne peut pas être embarquée.';
+  'puis libérez de l’espace si nécessaire, et réessayez.';
 
-const GUIDAGE_INDISPONIBLE =
-  'Ce navigateur ne sait pas garantir la conservation des données hors ligne. ' +
+const CONSTAT_INDISPONIBLE =
+  'Ce navigateur ne sait pas garantir la conservation des données hors ligne.';
+const REMEDE_INDISPONIBLE =
   'Utilisez Safari (iPad, version 16.4 ou plus) ou Chrome/Edge à jour, puis installez l’application sur l’écran d’accueil.';
+
+const GUIDAGE_REFUS = `${CONSTAT_REFUS} ${REMEDE_REFUS} Tant que ce n’est pas fait, la mission ne peut pas être embarquée.`;
+
+const GUIDAGE_INDISPONIBLE = `${CONSTAT_INDISPONIBLE} ${REMEDE_INDISPONIBLE}`;
+
+/**
+ * Le même guidage, privé de la conséquence propre à l'embarquement.
+ *
+ * Il dit la cause et le geste — rien de moins que `guidage` — mais il ne conclut
+ * pas à un refus, parce que la restauration, elle, n'est pas refusée (D-A27-1).
+ * L'écran de restauration ajoute sa propre conséquence, qui est l'invitation à
+ * passer outre puis à ré-exporter aussitôt.
+ */
+export function guidageSansPersistance(motif: MotifRefusPersistance): string {
+  return motif === 'api_indisponible'
+    ? `${CONSTAT_INDISPONIBLE} ${REMEDE_INDISPONIBLE}`
+    : `${CONSTAT_REFUS} ${REMEDE_REFUS}`;
+}
 
 /**
  * La porte d'entrée du 05 §31-2 : sans persistance ACCORDÉE, la mission n'est pas
