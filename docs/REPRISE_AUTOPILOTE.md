@@ -141,6 +141,11 @@ le pilote le commite. Les deux règles ont été payées par des incidents daté
 2. **Une garde d'anti-vacuité ne doit jamais s'appuyer sur l'état du code de production.** Un test
    exigeait « au moins une violation » avant sa bascule : il est devenu impossible à satisfaire le
    jour où le défaut a été corrigé. **Une bascule fabrique sa propre condition.**
-3. **` ` écrit par les outils d'édition devient un octet réel.** C'est ainsi que trois octets
-   nuls ont rendu un fichier invisible à `ripgrep`. La parade est un appel de fonction, jamais
-   l'échappement.
+3. **L'échappement Unicode d'un octet nul, écrit par les outils d'édition, devient un octet réel
+   à l'écriture.** C'est ainsi que trois octets
+   nuls ont rendu un fichier invisible à `ripgrep`. La parade est un appel de fonction —
+   `String.fromCharCode(0)` dans une constante nommée — **jamais l'échappement**.
+   **Cette ligne en est la preuve** : sa première rédaction citait la séquence en clair pour
+   l'expliquer, et a produit un octet nul réel **dans ce fichier même**. Le garde
+   `check:octets-controle` l'a attrapé au premier passage. **Ne cite jamais cette séquence
+   littéralement, pas même pour en parler.**
