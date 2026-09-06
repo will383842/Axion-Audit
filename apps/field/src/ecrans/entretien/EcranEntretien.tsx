@@ -862,8 +862,39 @@ export function EcranEntretien(): ReactNode {
             )}
           </div>
 
+          {/*
+            ── `tabIndex={0}` : WCAG 2.1.1 / 2.1.3, niveau A ──────────────────
+            Relevé par le balayage axe des douze vues, dans un Chromium RÉEL, sur
+            « entretien — avant la première question » :
+              scrollable-region-focusable (serious) — « Scrollable region must
+              have keyboard access » → aside[aria-label="Notes"]
+
+            LE MÉCANISME, mesuré et non supposé. Cette colonne défile : le CSS lui
+            pose `max-height` + `overflow-y: auto` au-delà de 64rem
+            (`entretien.css`). La règle axe l'accepterait si elle contenait un
+            descendant focalisable — c'est le cas de sa jumelle « Blocs et
+            progression », dont les `<button>` ne sont jamais désactivés, et qui
+            n'est PAS signalée. Mais ici, avant le démarrage de l'entretien,
+            `ecriturePossible` est faux : les trois zones de notes et la capture
+            de note volante sont toutes `disabled`, donc AUCUNE n'est focalisable.
+            Une région qui défile sans un seul arrêt de tabulation est une région
+            qu'un auditeur au clavier seul ne peut pas faire défiler — ni y aller,
+            ni y descendre.
+
+            POURQUOI CE REMÈDE ET PAS UN AUTRE. Déplacer le défilement sur les
+            enfants aurait été le bon geste si la colonne empilait des blocs
+            indépendants ; ce n'est pas le cas — les trois sections forment une
+            pile `sticky` unique, et c'est bien elle qui doit défiler. Réactiver
+            les zones serait un changement FONCTIONNEL : elles sont verrouillées
+            avant le démarrage à dessein.
+
+            POURQUOI SEUL JSDOM NE POUVAIT PAS LE VOIR : il ne calcule aucune mise
+            en page, donc aucune région n'y est jamais défilante — les douze vues
+            étaient vertes en `test:interface`. C'est ce que le balayage en
+            navigateur ajoute, et il vient de le prouver sur l'écran-titre du lot.
+          */}
           {!partage && (
-            <aside className="axn-entretien__zone--laterale" aria-label="Notes">
+            <aside className="axn-entretien__zone--laterale" aria-label="Notes" tabIndex={0}>
               <PanneauNotes
                 cleNoteDeQuestion={`${question.id}-${String(cleNotes)}`}
                 noteDeQuestion={reponse?.note ?? ''}

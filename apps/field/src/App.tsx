@@ -47,6 +47,8 @@ import {
   IndicateursCoquille,
   useVueInitiale,
 } from './ecrans/journee/coquille-l5c.js';
+import { EcranConnexion } from './siege/EcranConnexion.js';
+import { AccesRattachement } from './siege/coquille-siege.js';
 
 function ContenuCourant(): ReactNode {
   const { vue } = useTerrain();
@@ -85,6 +87,9 @@ function ContenuCourant(): ReactNode {
       return <EcranRestauration />;
     case 'finDeSession':
       return <EcranFinDeSession />;
+    // ── Rattachement de l'appareil à son auditeur (A23) ──
+    case 'connexionSiege':
+      return <EcranConnexion />;
   }
 }
 
@@ -158,6 +163,12 @@ export function App(): ReactNode {
         </Bouton>
       </header>
       <main className="axn-coquille__corps">
+        {/* Un appareil sans identité d'auditeur ne peut ouvrir aucun entretien
+            (05 §9.9). Le rappel et son geste sont posés dans la coquille, comme
+            le bouton Retour : depuis n'importe quel écran, et sans qu'aucun
+            écran ait à s'en souvenir. Il ne rend rien une fois l'appareil
+            rattaché. */}
+        <AccesRattachement />
         <ContenuCourant />
       </main>
     </div>

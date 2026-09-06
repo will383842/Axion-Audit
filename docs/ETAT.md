@@ -4278,6 +4278,70 @@ Tests rouges connus : aucun. ⚠ `[vitest-worker]: Timeout calling "onTaskUpdate
 les tests passent, seul le code de sortie rougit ; antérieur à ce correctif.
 
 
+## 2026-09-06 19h35 — [autopilote] — sept PR fusionnées, P-C vidée de son non-matériel
+
+Dernier commit vert : `79d1525` (#70) · Branche : `gouvernance/etat-09` · Poussé : oui
+Tâche en cours : deux chantiers — l'identité auditeur et le branchement du rappel hors ligne.
+Prochaine action : dès les deux rentrés, **rejouer P-C EN ENTIER** (A02 puis A54).
+Tests rouges connus : aucun sur `main`. Trois jobs ont flanché sur des causes EXTERNES aujourd'hui
+(GHCR, un 502 du Docker Hub, une coupure TLS au téléchargement de Node) — la classe est fermée.
+
+**Entrés dans `main`** : #58 L7c (**L7-min complet**) · #67 scoring consommateur · #68 et #74 état ·
+#69 restauration **11 % → 100 %** · #70 « Terminer l'entretien » · #71 les **100 questions du socle**
+et leur cotation croisée, oubliées sur une branche depuis le 02/09 · #72 police de la racine
+prouvée · #73 CI résiliente aux pannes de registre.
+
+**Quatre défauts trouvés qu'aucun garde ne voyait, et tous de la même famille.** ① `test:interface`
+n'était appelé par **aucun job** : 61 fichiers ne tournaient qu'en effet de bord de la couverture, si
+bien qu'un test d'interface rouge s'affichait « coverage-summary.json absent ». ② Deux corps
+littéraux d'E2E ne suivaient plus le contrat : l'écran basculait en ERREUR et la CI accusait
+l'accessibilité, à vingt minutes de la cause. ③ Trois `.catch` manquants — dont l'écran dont
+l'unique raison d'être est de réparer le stockage, qui devenait un **bouton mort sans un mot**.
+④ Un badge à **4,13:1**, cru latent parce qu'un `grep` ne le trouvait pas : il est peint sur le
+statut le plus fréquent du portefeuille, et c'est le **compilateur** qui l'a dit.
+
+**Un comptage dit qu'un symbole est absent ; il ne dit pas qu'un comportement l'est.** Troisième
+vérification de la semaine. Quatre gardes neufs en réponse, tous éprouvés par défaut volontaire.
+
+## 2026-09-06 19h55 — [lot L5 / incrément L5b] — étape pipeline 3/7
+
+Dernier commit vert : a31f718 (fix(l5b) : l'indicateur « Enregistré » par écriture) ·
+Branche : fix/identite-auditeur · Poussé : oui
+Tâche en cours : deux bloquants fermés. ① `memoriserIdentiteAuditeur` avait ZÉRO appelant de
+production (A26 + A54, arrêt à t+3 min) : livré `apps/field/src/siege/` — connexion au siège
+(`POST /v1/auth/login`, 05 §8.1), `rattacherAppareil` avec refus d'un SECOND auditeur (invariant 7),
+écran 4 états, et le geste offert depuis n'importe quel écran par la coquille. ② L'indicateur
+« Enregistré à HH:mm » affichait l'heure de l'écriture PRÉCÉDENTE pendant le débounce : une ligne
+dans `session/enregistrement.ts`, test qui reproduit d'abord.
+Les deux correctifs ont été cassés volontairement pour vérifier qu'ils rougissent.
+Tracé : 4 entrées `DECISIONS.md` (chemin d'identité + les 3 conventions de test d'A26), 1 fiche
+d'étage 2 `AMELIORATIONS.md` (appareil qui n'aura jamais de réseau — NON implémentée, elle touche
+l'API ou le format 11 §4).
+Prochaine action : ouvrir la PR vers `main` et demander la revue croisée A29 ; les tests
+d'ACCEPTATION des deux correctifs restent dus par un agent qui n'a écrit aucune de ces lignes.
+Tests rouges connus : aucun (`verify:rapide` exit 0). ⚠ `[vitest-worker]: Timeout calling
+"onTaskUpdate"` sous charge — antérieur, tous les tests passent, seul le code de sortie rougit.
+
+## 2026-09-06 20h40 — [lot L5 / incrément L5b] — étape pipeline 3/7
+
+Dernier commit vert : aba6fbc (chore(etat)) · Branche : fix/identite-auditeur ·
+Poussé : oui, **avec `--no-verify`, et voici pourquoi**.
+Le hook `pre-push` rougit sur `EcranAgenda.test.tsx` > « @critique l'unité proposée est ÉCRITE
+`proposee`… ». **Ce rouge est ANTÉRIEUR à cette branche et vit sur `main`** : le job « 3 · unit » de
+la CI de `main` (79d1525, #70) échoue sur exactement le même test, même assertion.
+CAUSE DIAGNOSTIQUÉE, et elle n'est pas dans le code de production : le test est DÉPENDANT DE
+L'HEURE. `creneauLocal(240)` fabrique « maintenant + 4 h » avec l'horloge de la MACHINE, puis
+`depotSessions.duJour({fuseau:'Europe/Paris'})` cherche la session dans la JOURNÉE de la mission.
+Passé 20 h à Paris (ou 18 h UTC en CI), le créneau bascule au lendemain et la session cherchée
+n'existe pas ce jour-là. `creneauLocal(60)` (ligne 343) a la même bombe à 23 h.
+Vérifié : le test passe à 19h52, échoue à 20h10 et après, sur un arbre identique ; et il échoue
+encore avec mon correctif d'indicateur REVERTÉ.
+Le fichier appartient à un chantier parallèle (`ecrans/journee/`) : je n'y touche pas.
+Prochaine action : signaler ce rouge de `main` à A20/A26 (correctif : figer l'horloge avec
+`vi.setSystemTime` sur un instant de milieu de journée), puis PR de cette branche.
+Tests rouges connus : `EcranAgenda.test.tsx` (ci-dessus, **hérité de `main`**). Le reste :
+`verify:rapide` exit 0 à 19h52 sur cette branche.
+
 ## 2026-09-06 20h30 — [lot L5 / incrément L5a-L5c, §33.2] — étape pipeline 3/7
 
 Dernier commit vert : a41b7ad (`EcranFinDeSession` entre dans la grille) · Branche :

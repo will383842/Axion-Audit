@@ -158,4 +158,21 @@ export const CAPACITES_HORS_LIGNE = {
     'Relire le récapitulatif : questions sans réponse, points à revoir, accord',
     'Prendre des notes et des notes volantes',
   ],
+
+  // ── Le rattachement au siège (L5b, PR #80) ───────────────────────────────
+  // LE SEUL ÉCRAN DONT LA FONCTION EXIGE LE RÉSEAU, et c'est pour cela que le
+  // rappel y compte le plus : le taire enverrait l'auditeur réessayer en boucle.
+  //
+  // Ces trois lignes ont été écrites par l'auteur de #80 DIRECTEMENT dans son
+  // écran, en dur — une quatrième liste, à peine ce fichier créé pour qu'il n'y
+  // en ait qu'une. Ce n'est pas un reproche : c'est la démonstration que le
+  // regroupement ne tient pas par discipline. Elles sont déplacées telles
+  // quelles, au style des autres (majuscule, infinitif), et le garde de type les
+  // exigeait de toute façon — la douzième vue a fait rougir `pnpm typecheck` à
+  // la fusion, ce qui est exactement son travail.
+  connexionSiege: [
+    'Ouvrir ce qui est déjà enregistré sur cet appareil',
+    'Restaurer une sauvegarde de secours chiffrée',
+    'Collecter, dès que cet appareil sera rattaché',
+  ],
 } as const satisfies Record<CodeVue, ListeNonVide<string>>;

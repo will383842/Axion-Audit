@@ -1,5 +1,5 @@
 // =============================================================================
-// LE QUATRIÈME ÉTAT, SUR LES ONZE VUES — §33.2, seconde moitié
+// LE QUATRIÈME ÉTAT, SUR TOUTES LES VUES DU REGISTRE (onze, puis douze) — §33.2, seconde moitié
 //
 // ── DÉCLARATION DE CROISEMENT (09 §5.6), FAITE AVANT LES ASSERTIONS ─────────
 // Ce fichier est écrit par A21, qui a aussi posé le branchement qu'il mesure. Il
@@ -11,16 +11,18 @@
 // Le contrôle A02 de P-C a mesuré 3 vues sur 11 rendant le rappel des capacités
 // locales. Le défaut n'était pas dans un écran : il était dans le fait que
 // PERSONNE ne comptait les onze. Onze tests d'écran, chacun vert chez lui,
-// laissent passer exactement ce défaut-là — et le laisseront passer à nouveau au
-// douzième écran.
+// laissent passer exactement ce défaut-là — et l'auraient laissé passer au
+// douzième. Le douzième est arrivé le jour même (PR #80, `connexionSiege`) : il
+// n'a PAS compilé tant qu'il n'était pas entré dans les trois tables de ce
+// fichier. La phrase ci-dessus n'est plus une prédiction, c'est un constat.
 //
 // Ce fichier compte, et il compte depuis le REGISTRE (`VUES`) :
 //   · `satisfies Record<CodeVue, …>` sur sa propre table d'écrans — une vue
 //     ajoutée à `vues.ts` ne compile pas ici tant qu'elle n'y est pas entrée ;
 //   · chaque source d'écran est lue : elle doit brancher `RappelHorsLigne` sur
 //     SA clé de capacités, pas sur celle du voisin ;
-//   · dix des onze écrans sont RÉELLEMENT montés, hors ligne puis en ligne. Le
-//     onzième (`entretien`) l'est dans `ecrans/entretien/EcranEntretien.test.tsx`,
+//   · tous les écrans sauf un sont RÉELLEMENT montés, hors ligne puis en ligne.
+//     Le seul absent (`entretien`) est monté dans `ecrans/entretien/EcranEntretien.test.tsx`,
 //     où vit déjà son harnais — et où se mesure sa garde propre, le mode écran
 //     partagé.
 //
@@ -55,6 +57,7 @@ import type { ValeurTerrain } from './contexte.js';
 import { EcranAccueil } from './EcranAccueil.js';
 import { EcranDeverrouillage } from './EcranDeverrouillage.js';
 import { EcranStockage } from './EcranStockage.js';
+import { EcranConnexion } from '../siege/EcranConnexion.js';
 import { VUES, type CodeVue } from './vues.js';
 
 const RACINE_SRC = resolve(import.meta.dirname, '..');
@@ -87,6 +90,12 @@ const ECRANS = {
   finDeJournee: { Composant: EcranFinDeJournee, source: 'ecrans/journee/EcranFinDeJournee.tsx' },
   restauration: { Composant: EcranRestauration, source: 'ecrans/journee/EcranRestauration.tsx' },
   finDeSession: { Composant: EcranFinDeSession, source: 'ecrans/journee/EcranFinDeSession.tsx' },
+  // LA DOUZIÈME VUE, entrée par la PR #80 le 2026-09-06. Elle n'est pas arrivée
+  // ici par vigilance : `pnpm typecheck` a REFUSÉ la fusion tant qu'elle
+  // manquait — dans ce fichier, dans `capacites-hors-ligne.ts` et dans la table
+  // des pastilles plus bas. Le garde de type éprouvé en conditions réelles, sur
+  // une vue qu'aucun des deux chantiers n'avait vue venir.
+  connexionSiege: { Composant: EcranConnexion, source: 'siege/EcranConnexion.tsx' },
 } as const satisfies Record<CodeVue, Ecran>;
 
 const CODES = Object.keys(ECRANS) as readonly CodeVue[];
@@ -118,22 +127,39 @@ vi.mock('./contexte.js', () => ({
 const bases: BaseLocale[] = [];
 let compteur = 0;
 
-async function baseEmbarquee(): Promise<BaseLocale> {
+/**
+ * Une base embarquée, dans l'état où l'auditeur voit RÉELLEMENT l'écran mesuré.
+ *
+ * ── L'IDENTITÉ DE L'AUDITEUR, ET POURQUOI ELLE EST UN PARAMÈTRE ─────────────
+ * Ajoutée le 2026-09-06 (revue A29, réserve ④) : sans elle,
+ * `EcranNouvelEntretien` rend son état d'ERREUR (« Auditeur inconnu sur cet
+ * appareil », zéro bouton), et le rappel étant posé hors de la `ZoneEtat`, le cas
+ * passait au vert en mesurant un écran que personne ne voit ainsi.
+ *
+ * `connexionSiege` (PR #80) demande exactement l'INVERSE : quand l'appareil est
+ * déjà rattaché, l'écran retire son formulaire — et avec lui le rappel, à juste
+ * titre. Il n'y a plus de geste, donc plus de capacité à promettre ; c'est la même
+ * règle que l'anomalie de coffre sur le déverrouillage. On y va parce qu'on n'est
+ * PAS rattaché : c'est cet état-là qu'il faut mesurer.
+ *
+ * Les deux cas disent une seule chose, et c'est pour cela que le paramètre existe
+ * plutôt qu'une valeur fixe : **un test doit monter l'écran dans l'état où on le
+ * rencontre**, sinon il mesure un écran imaginaire et son vert ne vaut rien.
+ * On ne fabrique jamais un propriétaire de session (05 §9.9) : on sème celui que
+ * le harnais des autres fichiers de L5 sème déjà.
+ */
+async function baseEmbarquee(
+  options: { readonly identite: boolean } = { identite: true },
+): Promise<BaseLocale> {
   compteur += 1;
   const base = new BaseLocale(`axion-test-hors-ligne-${String(compteur)}`);
   await base.open();
   bases.push(base);
   const coffre = await ouvrirCoffre(kek, await creerDekEnveloppee(kek));
   installerContexteLocal({ base, coffre });
-  // L'IDENTITÉ DE L'AUDITEUR — ajoutée le 2026-09-06 (revue A29, réserve ④).
-  // Sans elle, `EcranNouvelEntretien` rend son état d'ERREUR (« Auditeur inconnu
-  // sur cet appareil », zéro bouton) : le rappel étant posé hors de la
-  // `ZoneEtat`, le cas passait au vert en mesurant un écran que l'auditeur ne
-  // voit jamais ainsi. Un test vert sur l'état d'erreur d'un écran n'éprouve pas
-  // son branchement nominal — et c'était précisément la vue dont la capacité
-  // était fausse. On ne fabrique pas un propriétaire de session (05 §9.9) : on
-  // sème celui que le harnais des autres fichiers de L5 sème déjà.
-  await memoriserIdentiteAuditeur(base, coffre, { id: AUDITEUR_ID, profil: 'guide_strict' });
+  if (options.identite) {
+    await memoriserIdentiteAuditeur(base, coffre, { id: AUDITEUR_ID, profil: 'guide_strict' });
+  }
   await appliquerDescente({
     missionId: MISSION_ID,
     serverTime: INSTANT,
@@ -303,9 +329,14 @@ function capacitesRendues(): readonly string[] {
   return [...bloc.querySelectorAll('li')].map((li) => li.textContent);
 }
 
-/** Monte l'écran et attend qu'aucune zone ne soit plus « occupée ». */
+/** Monte l'écran, dans SON état nominal, et attend la fin du chargement. */
 async function monter(Composant: ComponentType, vue: CodeVue): Promise<void> {
-  const base = vue === 'deverrouillage' || vue === 'stockage' ? null : await baseEmbarquee();
+  const base =
+    vue === 'deverrouillage' || vue === 'stockage'
+      ? null
+      : // `connexionSiege` sans identité : c'est l'état où l'on ATTEINT cet écran.
+        // Rattaché, il retire son formulaire et son rappel — mesuré plus bas.
+        await baseEmbarquee({ identite: vue !== 'connexionSiege' });
   terrain = terrainSur(base, vue);
   render(<Composant />);
   await waitFor(() => {
@@ -333,9 +364,9 @@ afterEach(async () => {
 // A. LE REGISTRE ET LES CAPACITÉS — aucune vue sans les siennes
 // ─────────────────────────────────────────────────────────────────────────────
 describe('capacités hors ligne — une liste par vue du registre, et rien qui promette à faux', () => {
-  it('contrôle d’anti-vacuité : la table compte bien les ONZE vues du registre', () => {
+  it('contrôle d’anti-vacuité : la table compte bien TOUTES les vues du registre', () => {
     expect(CODES.length).toBe(Object.keys(VUES).length);
-    expect(CODES.length).toBe(11);
+    expect(CODES.length).toBe(Object.keys(VUES).length);
     expect(Object.keys(CAPACITES_HORS_LIGNE).sort()).toEqual([...CODES].sort());
   });
 
@@ -361,13 +392,13 @@ describe('capacités hors ligne — une liste par vue du registre, et rien qui p
 // ─────────────────────────────────────────────────────────────────────────────
 // B. LE BRANCHEMENT, LU DANS LES SOURCES — chaque écran sur SA clé
 // ─────────────────────────────────────────────────────────────────────────────
-describe('branchement — les onze sources rendent le rappel, chacune avec ses capacités', () => {
+describe('branchement — chaque source rend le rappel, chacune avec ses capacités', () => {
   const lues = new Map<CodeVue, string>(
     CODES.map((code) => [code, readFileSync(resolve(RACINE_SRC, ECRANS[code].source), 'utf8')]),
   );
 
-  it('contrôle d’anti-vacuité : les onze sources sont lues, et ne sont pas vides', () => {
-    expect(lues.size).toBe(11);
+  it('contrôle d’anti-vacuité : toutes les sources sont lues, et ne sont pas vides', () => {
+    expect(lues.size).toBe(CODES.length);
     for (const [code, source] of lues) {
       expect(source.length, code).toBeGreaterThan(500);
     }
@@ -495,6 +526,10 @@ describe('B6 — combien de pastilles l’auditeur voit-il réellement, coquille
     finDeJournee: 0,
     restauration: 0,
     finDeSession: 0,
+    // La douzième vue est rendue DANS la coquille () : sa pastille est
+    // celle de l'en-tête. Le rappel livré par #80 en rendait une seconde — le
+    // drapeau est baissé le 2026-09-06, et ce zéro est ce qui le tient.
+    connexionSiege: 0,
   } as const satisfies Record<CodeVue, number>;
 
   function pastilles(): readonly string[] {
@@ -562,4 +597,39 @@ describe('B6 — l’écran d’entretien dans la coquille : une seule pastille,
       expect(document.body.textContent).toContain(TEXTE_QUESTION);
     }, 20_000);
   }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// F. LE CAS OÙ IL N'Y A PLUS RIEN À PROMETTRE — et où le rappel doit se taire
+//
+// Deux écrans retirent leur geste principal dans un cas précis : le
+// déverrouillage sur une anomalie de coffre, et le rattachement quand l'appareil
+// est DÉJÀ rattaché. Le rappel des capacités part avec le geste, et c'est
+// délibéré : un écran qui dirait à la fois « il n'y a plus rien à faire ici » et
+// « voici ce que vous pouvez faire » demande à l'auditeur de trancher entre deux
+// de ses propres phrases.
+//
+// Le cas du déverrouillage est mesuré dans `app/EcranDeverrouillage.test.tsx`.
+// Celui-ci mesure l'autre — sans quoi la règle serait tenue à un endroit sur deux,
+// ce qui est très exactement la façon dont les défauts de ce lot sont nés.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('rattachement déjà fait — le rappel se retire avec le geste', () => {
+  it('@critique hors réseau, appareil DÉJÀ rattaché : aucun formulaire, et aucune capacité promise', async () => {
+    reglerEnLigne(false);
+    // Anti-vacuité : le même écran, NON rattaché et hors ligne, rend bien son
+    // rappel (c'est le cas @critique du bloc C). Ici, seule l'identité change.
+    const base = await baseEmbarquee({ identite: true });
+    terrain = terrainSur(base, 'connexionSiege');
+    render(<EcranConnexion />);
+    await waitFor(() => {
+      expect(document.querySelector('[aria-busy="true"]')).toBeNull();
+    });
+
+    expect(document.body.textContent).toMatch(/appareil est rattaché/i);
+    expect(document.querySelector('form')).toBeNull();
+    expect(rappel(), 'un écran sans geste ne promet aucune capacité').toBeNull();
+    for (const capacite of CAPACITES_HORS_LIGNE.connexionSiege) {
+      expect(document.body.textContent).not.toContain(capacite);
+    }
+  });
 });

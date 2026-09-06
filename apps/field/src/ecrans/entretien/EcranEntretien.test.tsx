@@ -1360,3 +1360,112 @@ describe('état hors ligne (03 §33.2) — le rappel des capacités, et la garde
     expect(screen.getAllByRole('radio')).toHaveLength(5);
   });
 });
+
+// =============================================================================
+// H. LA COLONNE DE NOTES DÉFILE — ET IL FAUT POUVOIR LA FAIRE DÉFILER AU CLAVIER
+//
+// (Croisement 09 §5.6 : écrit par A21, qui a posé le correctif. Non-régression,
+// pas revue croisée.)
+//
+// ── D'OÙ VIENT CE BLOC ──────────────────────────────────────────────────────
+// Balayage axe des douze vues dans un Chromium RÉEL, 2026-09-06 :
+//   entretien — avant la première question
+//   scrollable-region-focusable (serious, wcag2a / wcag211 / wcag213)
+//   « Scrollable region must have keyboard access » → aside[aria-label="Notes"]
+//
+// ── CE QUE CE FICHIER PEUT PROUVER, ET CE QU'IL NE PEUT PAS ─────────────────
+// jsdom ne calcule AUCUNE mise en page : aucune région n'y est jamais défilante,
+// et c'est pourquoi les douze vues étaient vertes en `test:interface` pendant que
+// le navigateur criait. Ce bloc ne mesure donc PAS le défilement — il mesure le
+// CONTRAT qui le rend nécessaire, et qui est vérifiable ici :
+//   ① la feuille de style DÉCLARE bien la colonne défilante (sinon le correctif
+//      n'aurait plus de raison d'être, et ce test le dirait) ;
+//   ② dans l'état signalé, la colonne n'a AUCUN descendant focalisable — c'est
+//      exactement la condition qui fait lever la règle axe ;
+//   ③ elle porte donc `tabindex="0"` ;
+//   ④ sa JUMELLE « Blocs et progression », elle, contient des boutons jamais
+//      désactivés : elle n'en a pas besoin, et n'en a pas. La différence de
+//      traitement est mesurée, pas décrétée — si `ZoneBlocs` se vide un jour,
+//      c'est ce cas-là qui préviendra.
+// La preuve en navigateur reste due à `e2e/accessibilite-onze-vues-l5.e2e.ts`.
+// =============================================================================
+describe('accès clavier à la colonne de notes (WCAG 2.1.1 / 2.1.3, niveau A)', () => {
+  /** Une session NON DÉMARRÉE : l'état exact où axe a relevé la violation. */
+  async function semerEntretienNonDemarre(): Promise<string> {
+    const id = uuidv7();
+    await ecrireLocal({
+      entite: 'interview',
+      id,
+      missionId: MISSION_ID,
+      action: 'upsert',
+      index: {
+        orgUnitId: ORG_UNIT_ID,
+        kind: 'entretien',
+        status: 'non_demarre',
+        scheduleStatus: 'planifie',
+        scheduledAt: null,
+      },
+      charge: { ...CHARGE_INTERVIEW, consentGiven: false, startedAt: null },
+    });
+    return id;
+  }
+
+  function colonne(nom: string): HTMLElement {
+    return requis(
+      document.querySelector<HTMLElement>(`aside[aria-label="${nom}"]`),
+      `colonne « ${nom} »`,
+    );
+  }
+
+  /** Ce qu'un clavier peut atteindre — `disabled` exclut, et c'est le point. */
+  function focalisables(dans: HTMLElement): Element[] {
+    return [
+      ...dans.querySelectorAll(
+        'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+      ),
+    ].filter((e) => e !== dans);
+  }
+
+  it('① la feuille de style déclare bien cette colonne DÉFILANTE — sinon ce test n’a plus d’objet', () => {
+    // Lue sur le DISQUE : sous Vitest, un import `?raw` de CSS rend une chaîne
+    // vide, et un `toContain` sur une chaîne vide passerait pour une vérification.
+    const css = readFileSync('apps/field/src/ecrans/entretien/entretien.css', 'utf8');
+    const regle = /\.axn-entretien__zone--laterale\s*\{[^}]*\}/g;
+    const blocs = [...css.matchAll(regle)].map((m) => m[0]);
+    expect(blocs.length, 'la classe de la colonne latérale a disparu').toBeGreaterThan(0);
+    expect(blocs.join('\n')).toMatch(/overflow-y:\s*auto/);
+    expect(blocs.join('\n')).toMatch(/max-height/);
+  });
+
+  it('@critique ② et ③ avant la première question : aucun focalisable dans la colonne, donc `tabindex="0"`', async () => {
+    const id = await semerEntretienNonDemarre();
+    await monterEntretien(id);
+    await waitFor(() => {
+      expect(document.querySelector('[aria-busy="true"]')).toBeNull();
+    });
+
+    const notes = colonne('Notes');
+    // ② La CONDITION qui fait lever la règle axe. Si un jour les zones cessaient
+    // d'être désactivées avant démarrage, ce cas rougirait — et le `tabindex`
+    // deviendrait discutable. C'est le lien entre le correctif et sa raison.
+    expect(
+      focalisables(notes).map((e) => e.tagName.toLowerCase()),
+      'la colonne a retrouvé des focalisables : le motif du `tabindex` a changé',
+    ).toEqual([]);
+    // ③ Donc la région elle-même doit être atteignable au clavier.
+    expect(
+      notes.getAttribute('tabindex'),
+      'colonne défilante sans arrêt de tabulation : un clavier seul ne peut pas la faire défiler',
+    ).toBe('0');
+  });
+
+  it('④ sa jumelle « Blocs et progression » contient des boutons vivants — elle n’a pas de `tabindex`', async () => {
+    await monterEntretien(interviewId);
+    await waitFor(() => {
+      expect(questionAffichee(TEXTE_ECHELLE)).toBeTruthy();
+    });
+    const blocs = colonne('Blocs et progression');
+    expect(focalisables(blocs).length).toBeGreaterThan(0);
+    expect(blocs.getAttribute('tabindex')).toBeNull();
+  });
+});
