@@ -14,6 +14,9 @@
 //     **Le travail en attente est PURGÉ quand la page se cache ou se décharge**
 //     (`pagehide`, `visibilitychange`) : c'est ce qui borne la perte à zéro sur
 //     un onglet tué en pleine saisie (critère P-C), et pas au délai du débounce.
+//     **Il repasse l'indicateur en « Enregistrement… » DÈS la frappe** : tant
+//     qu'un travail attend, dire « Enregistré » parlerait de l'écriture d'avant
+//     (défaut mesuré par A26, corrigé le 2026-09-06 — voir `differer`).
 //
 // Les écritures sont SÉRIALISÉES : deux `ecrireLocal` concurrents sur la même
 // réponse liraient le même `existante` et produiraient deux révisions égales.
@@ -100,6 +103,19 @@ export function useEnregistrementContinu(fuseau: string | undefined): Enregistre
     (cle: string, travail: () => Promise<unknown>): void => {
       const precedent = enAttente.current.get(cle);
       if (precedent !== undefined) clearTimeout(precedent.minuterie);
+      // ── L'INDICATEUR CESSE DE PARLER DE L'ÉCRITURE PRÉCÉDENTE ──────────────
+      // Mesuré par A26 : pendant les ~300 ms du débounce, l'écran affichait
+      // encore « Enregistré à HH:mm » — l'heure de l'écriture d'AVANT — alors
+      // que la frappe en cours n'était pas commitée. L'auditeur lisait une
+      // confirmation qui ne portait pas sur son geste.
+      //
+      // La ligne ci-dessous ne change RIEN à la durabilité (la purge sur
+      // `pagehide` borne déjà la perte à zéro) : elle rend l'indicateur VRAI.
+      // « Enregistrement… » pendant qu'une écriture attend est exactement l'état
+      // réel ; l'en-tête de ce fichier l'exigeait déjà du chemin immédiat, le
+      // chemin débouncé ne le tenait pas. Un garde-fou qui annonce plus qu'il ne
+      // fait est pire qu'un garde-fou absent (03 §33.3, invariant 7).
+      if (vivant.current) setEtat('enregistrement');
       const minuterie = setTimeout(() => {
         enAttente.current.delete(cle);
         void executer(travail);
