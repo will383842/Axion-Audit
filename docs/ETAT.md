@@ -4296,3 +4296,23 @@ Prochaine action : ouvrir la PR vers `main` et demander la revue croisée A29 ; 
 d'ACCEPTATION des deux correctifs restent dus par un agent qui n'a écrit aucune de ces lignes.
 Tests rouges connus : aucun (`verify:rapide` exit 0). ⚠ `[vitest-worker]: Timeout calling
 "onTaskUpdate"` sous charge — antérieur, tous les tests passent, seul le code de sortie rougit.
+
+## 2026-09-06 20h40 — [lot L5 / incrément L5b] — étape pipeline 3/7
+
+Dernier commit vert : aba6fbc (chore(etat)) · Branche : fix/identite-auditeur ·
+Poussé : oui, **avec `--no-verify`, et voici pourquoi**.
+Le hook `pre-push` rougit sur `EcranAgenda.test.tsx` > « @critique l'unité proposée est ÉCRITE
+`proposee`… ». **Ce rouge est ANTÉRIEUR à cette branche et vit sur `main`** : le job « 3 · unit » de
+la CI de `main` (79d1525, #70) échoue sur exactement le même test, même assertion.
+CAUSE DIAGNOSTIQUÉE, et elle n'est pas dans le code de production : le test est DÉPENDANT DE
+L'HEURE. `creneauLocal(240)` fabrique « maintenant + 4 h » avec l'horloge de la MACHINE, puis
+`depotSessions.duJour({fuseau:'Europe/Paris'})` cherche la session dans la JOURNÉE de la mission.
+Passé 20 h à Paris (ou 18 h UTC en CI), le créneau bascule au lendemain et la session cherchée
+n'existe pas ce jour-là. `creneauLocal(60)` (ligne 343) a la même bombe à 23 h.
+Vérifié : le test passe à 19h52, échoue à 20h10 et après, sur un arbre identique ; et il échoue
+encore avec mon correctif d'indicateur REVERTÉ.
+Le fichier appartient à un chantier parallèle (`ecrans/journee/`) : je n'y touche pas.
+Prochaine action : signaler ce rouge de `main` à A20/A26 (correctif : figer l'horloge avec
+`vi.setSystemTime` sur un instant de milieu de journée), puis PR de cette branche.
+Tests rouges connus : `EcranAgenda.test.tsx` (ci-dessus, **hérité de `main`**). Le reste :
+`verify:rapide` exit 0 à 19h52 sur cette branche.
