@@ -31,9 +31,9 @@
 // Traçabilité : E38 (sauvegarde terrain : sync + export), E26 (alertes actives sur
 // les manques).
 // =============================================================================
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Bouton, Message, PastilleSync, ZoneEtat, type EtatZone } from '@axion/ui';
+import { Bouton, Message, ZoneEtat, type EtatZone } from '@axion/ui';
 import { cleEmbarquement, clePersistance, type BaseLocale } from '../local/base.js';
 import { embarquerMission, type ResultatEmbarquement } from '../local/embarquement.js';
 import { portSyncInerte, type EtatSyncMission } from '../local/port-sync.js';
@@ -104,11 +104,35 @@ async function lireResume(base: BaseLocale): Promise<ResumeSocle> {
   };
 }
 
+// ── B3 (recette novice A54, 2026-09-06) : LA PROMESSE COÛTE PLUS QUE LE MANQUE ─
+// Cette liste promettait « et des photos ». La capture photo n'existe pas — le
+// manque est tracé et assumé. Ce qui ne l'était pas, c'est que la liste JUMELLE
+// du cockpit avait été corrigée le 2026-09-05 (majeur M6, A29) et pas celle-ci :
+// le mensonge avait été réparé à un endroit sur deux.
+//
+// Le coût réel n'est pas ergonomique. L'auditeur à qui le produit a promis de
+// photographier cherche le geste en entretien, trouve un bouton grisé, en
+// conclut qu'il n'a pas le droit — et photographie avec son TÉLÉPHONE PERSONNEL.
+// La pièce d'audit sort alors du coffre chiffré, de la sauvegarde de secours et
+// de l'invariant 8, pour entrer dans une pellicule privée. Ce coût est créé par
+// la PROMESSE, pas par l'absence : un produit qui ne promet rien ne produit pas
+// ce contournement. La ligne est donc retirée, et remplacée par ce qu'il faut
+// faire À LA PLACE — un contournement se prévient en offrant un geste, jamais
+// en se taisant.
+//
+// La capture elle-même est le lot L5d, séquencé APRÈS P-C. Ce retrait ne la
+// remplace pas : il retire ce qui, faute d'elle, fait sortir une pièce d'audit.
 const CAPACITES_HORS_LIGNE = [
   'Mener un entretien et enregistrer chaque réponse',
-  'Prendre des notes, des notes volantes et des photos',
+  'Prendre des notes et des notes volantes',
   'Retrouver n’importe quelle question du questionnaire figé',
 ];
+
+/** Ce que l'auditeur doit faire d'une pièce qu'il aurait photographiée. */
+const MENTION_PHOTO =
+  'La capture photo n’est pas disponible dans cette version. Décrivez l’élément dans une note ' +
+  'plutôt que de le photographier avec un appareil personnel : une photo prise hors de l’application ' +
+  'sort du coffre chiffré et de la sauvegarde de secours.';
 
 /** 05 §31-3, presque mot pour mot : rassurer AVANT de demander quoi que ce soit. */
 const MESSAGE_RECONNEXION =
@@ -128,7 +152,6 @@ export function EcranAccueil(): ReactNode {
   const { base, jetonSiege, rafraichirStockage, naviguer } = useTerrain();
   const [embarquement, setEmbarquement] = useState<ResultatEmbarquement | null>(null);
   const [enCours, setEnCours] = useState<string | null>(null);
-  const [etatsSync, setEtatsSync] = useState<readonly EtatSyncMission[]>([]);
 
   // R-L5a-7 : une lecture locale qui échoue produit un ÉTAT, pas une exception
   // qui emporte l'arbre. `useLiveQuery` propage le rejet au rendu ; on le capte
@@ -151,10 +174,18 @@ export function EcranAccueil(): ReactNode {
 
   // R-L5a-8 : le port est LA source de l'état de sync et de l'alerte de
   // l'invariant 8. On lui donne les comptes réels, il rend le verdict.
-  useEffect(() => {
-    if (resume === null) return;
-    setEtatsSync(
-      resume.missions.map((mission) => {
+  //
+  // Calculé en `useMemo` et non dans un `useEffect` (B6, 2026-09-06) : l'effet
+  // imposait un SECOND cycle de rendu avant que l'alerte « aucune sync connue »
+  // n'apparaisse. Tant qu'une pastille s'affichait dès le premier cycle, le
+  // décalage passait inaperçu ; il devenait une course dès qu'elle a été retirée.
+  // Une alerte de l'invariant 8 qui apparaît « un rendu plus tard » est une
+  // alerte qu'un auditeur pressé ne voit pas. `rafraichirEtat` est une écriture
+  // de cache idempotente, entièrement dérivée de `resume` : la rejouer donne le
+  // même résultat, et rien d'autre n'en dépend.
+  const etatsSync: readonly EtatSyncMission[] = useMemo(
+    () =>
+      (resume?.missions ?? []).map((mission) => {
         portSyncInerte.rafraichirEtat(
           mission.id,
           mission.operationsEnAttente,
@@ -162,8 +193,8 @@ export function EcranAccueil(): ReactNode {
         );
         return portSyncInerte.etat(mission.id);
       }),
-    );
-  }, [resume]);
+    [resume],
+  );
 
   const alertes = [
     ...new Set(
@@ -222,12 +253,13 @@ export function EcranAccueil(): ReactNode {
     <section className="axn-pile">
       <h1>Aujourd’hui</h1>
 
-      <div className="axn-coquille__indicateurs">
-        <PastilleSync
-          etat={(resume?.operationsEnAttente ?? 0) > 0 ? 'en-attente' : 'hors-ligne'}
-          {...(resume === null ? {} : { enAttente: resume.operationsEnAttente })}
-        />
-      </div>
+      {/* B6 (recette novice A54, 2026-09-06) : la pastille de CET écran est
+          RETIRÉE. Elle déduisait son état du nombre d'opérations en file — donc
+          « Hors ligne » dès que l'outbox est vide, quel que soit le réseau —
+          pendant que celle de l'en-tête, trois centimètres plus haut, annonçait
+          « En attente de synchronisation ». Deux pastilles, un seul fait, deux
+          réponses opposées, et aucune vraie. L'en-tête la porte pour les onze
+          écrans (décision A01 du 2026-09-05) ; un fait, une source. */}
 
       {(jetonSiege === 'absent' || jetonSiege === 'expire') && (
         <Message ton="info" titre="Connexion au siège">
@@ -305,6 +337,7 @@ export function EcranAccueil(): ReactNode {
             <li key={capacite}>{capacite}</li>
           ))}
         </ul>
+        <p>{MENTION_PHOTO}</p>
       </Message>
     </section>
   );

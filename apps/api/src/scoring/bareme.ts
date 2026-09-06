@@ -393,7 +393,17 @@ function rendreCourt(valeur: ValeurLue): string {
 // LA COTATION D'UNE VALEUR SELON SON BARÈME
 // -----------------------------------------------------------------------------
 
-type Verdict = { readonly score: number } | { readonly motif: MotifNonCotable };
+/**
+ * Le résultat d'une cotation, et — quand ils diffèrent — les scores ÉLÉMENTAIRES
+ * dont le score final est fait.
+ *
+ * `elementaires` n'existe que pour le CHOIX MULTIPLE, seul cas du §32.1 où une
+ * réponse porte plusieurs scores avant d'en faire un seul (`aggregate: max|mean`).
+ * Il est là pour le DRAPEAU ROUGE, et pour rien d'autre : voir `evaluerDrapeau`.
+ */
+type Verdict =
+  | { readonly score: number; readonly elementaires?: readonly number[] }
+  | { readonly motif: MotifNonCotable };
 
 const INEXPLOITABLE: Verdict = { motif: 'valeur_inexploitable' };
 const SANS_REPONSE: Verdict = { motif: 'sans_reponse' };
@@ -439,10 +449,16 @@ function coterParOptions(bareme: BaremeLu & { forme: 'options' }, valeur: Valeur
     if (score === null) return INEXPLOITABLE;
     scores.push(score);
   }
+  // Les scores ÉLÉMENTAIRES voyagent à côté de l'agrégat : l'agrégation est la
+  // bonne règle pour la MOYENNE (§32.1-2) et la mauvaise pour l'ALERTE. Voir
+  // `evaluerDrapeau`.
   if (bareme.agregat === 'mean') {
-    return { score: scores.reduce((somme, s) => somme + s, 0) / scores.length };
+    return {
+      score: scores.reduce((somme, s) => somme + s, 0) / scores.length,
+      elementaires: scores,
+    };
   }
-  return { score: Math.max(...scores) };
+  return { score: Math.max(...scores), elementaires: scores };
 }
 
 function coterParBandes(bareme: BaremeLu & { forme: 'bandes' }, valeur: ValeurLue): Verdict {
@@ -508,11 +524,33 @@ function valeursBrutes(valeur: ValeurLue): readonly unknown[] {
   return [];
 }
 
+/**
+ * Deux valeurs désignent-elles la même chose, AU SENS OÙ LE BARÈME LES COMPARE ?
+ *
+ * LA MÊME COERCITION QUE LA COTATION, ET C'EST TOUT L'ENJEU. `cleDeValeur` rend
+ * `"1"` pour le nombre `1` comme pour la chaîne `"1"` — c'est ainsi qu'une table
+ * `{"1": 5}` sait coter une réponse numérique. Comparer les drapeaux par
+ * `Object.is` faisait diverger les deux lectures : la même valeur était COMPRISE
+ * par le barème et IGNORÉE par l'alerte. Deux règles de comparaison pour une même
+ * valeur, dans le même fichier, est un piège qui se paie un jour où personne ne
+ * regarde (relevé par la revue croisée, arbitré par A01 le 2026-09-06).
+ *
+ * Quand l'une des deux n'est PAS coercible (un booléen, un objet), on retombe sur
+ * l'identité stricte : `true` ne devient pas `"true"`, faute de quoi on élargirait
+ * la détection au lieu de l'aligner.
+ */
+function memeValeur(brute: unknown, attendue: unknown): boolean {
+  const cleBrute = cleDeValeur(brute);
+  const cleAttendue = cleDeValeur(attendue);
+  if (cleBrute !== null && cleAttendue !== null) return cleBrute === cleAttendue;
+  return Object.is(brute, attendue);
+}
+
 function evaluerDrapeau(
   question: QuestionFigee,
   bareme: BaremeExploitable,
   valeur: ValeurLue,
-  score: number | null,
+  verdict: Verdict,
 ): Drapeau | null {
   // « évalué UNIQUEMENT si criticality='bloquant' » — la criticité gouverne le
   // drapeau, le poids gouverne la moyenne, le barème gouverne le score.
@@ -525,7 +563,7 @@ function evaluerDrapeau(
     // marquer « non » sur une question dont le barème cote « non » à 3.
     for (const brute of valeursBrutes(valeur)) {
       for (const attendue of drapeau.valeurs) {
-        if (Object.is(brute, attendue)) {
+        if (memeValeur(brute, attendue)) {
           return { declencheur: 'valeurs', seuil: null, valeur: String(brute) };
         }
       }
@@ -534,8 +572,27 @@ function evaluerDrapeau(
   }
 
   // `below` compare le SCORE (0-5), la seule grandeur commune à tous les types.
+  //
+  // ── SUR CHAQUE OPTION RETENUE, ET NON SUR L'AGRÉGAT ────────────────────────
+  // Le défaut que ceci ferme : un choix multiple d'options {1, 5} avec
+  // `red_flag {below: 2}` rendait 5 en `max` et 3 en `mean`, donc AUCUN drapeau —
+  // l'option au rouge était effacée par l'agrégation AVANT que le seuil ne la
+  // voie. C'était un drapeau masqué par une moyenne, un étage sous tous ceux que
+  // les preuves de conception visaient : elles attaquaient le bloc, l'unité et le
+  // roll-up, tous en aval de ce point.
+  //
+  // L'arbitrage (A01, 2026-09-06) suit les doctrines de cotation du 2026-09-02 :
+  // « le système le plus défavorable fait la note » (2) et « l'unité la plus
+  // défavorable fait la note » (5). Un `max` qui efface l'option au rouge dit
+  // exactement l'inverse de la doctrine que le pack vient d'arbitrer.
+  //
+  // L'agrégat reste le SCORE (la moyenne du §32.1-2 ne bouge pas) ; seule
+  // l'ALERTE regarde le détail. C'est la même séparation que partout ailleurs
+  // dans ce lot : le canal des drapeaux ne passe par aucune moyenne.
+  if (!('score' in verdict)) return null;
+  const aEvaluer = verdict.elementaires ?? [verdict.score];
   // Une borne ATTEINTE n'est pas une borne FRANCHIE : strictement en dessous.
-  if (score === null || score >= drapeau.borne) return null;
+  if (!aEvaluer.some((valeurCotee) => valeurCotee < drapeau.borne)) return null;
   return { declencheur: 'seuil', seuil: drapeau.borne, valeur: rendreCourt(valeur) };
 }
 
@@ -585,7 +642,7 @@ export function coterReponse(question: QuestionFigee, reponse: ReponseACoter): C
   const valeur = lireValeur(reponse.value);
   const verdict = coterValeur(bareme, valeur);
   const score = 'score' in verdict ? verdict.score : null;
-  const drapeau = evaluerDrapeau(question, bareme, valeur, score);
+  const drapeau = evaluerDrapeau(question, bareme, valeur, verdict);
 
   return {
     reponseId: reponse.id,

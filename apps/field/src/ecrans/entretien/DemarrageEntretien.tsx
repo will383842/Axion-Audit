@@ -64,11 +64,25 @@ export function DemarrageEntretien(proprietes: ProprietesDemarrageEntretien): Re
           {erreur}
         </Message>
       )}
+      {/* M1 (recette novice A54, 2026-09-06) : ce bouton était le deuxième des
+          trois « boutons grisés muets » du parcours. Il reste grisé — l'accord
+          est un fait d'audit horodaté, pas une case de confort — mais il DIT
+          pourquoi, à l'œil comme au lecteur d'écran. 03 §19.1 : « précisément ce
+          qui manque […] jamais un simple cadenas muet ».
+          Ce que fait l'application si l'interlocuteur REFUSE reste un doute de
+          spec ouvert (rapport A54 §8-2) : rien n'est décidé ici. */}
+      {!accord && (
+        <p id="axn-demarrage-verrou" className="axn-champ__aide">
+          Le bouton s’active dès que la case ci-dessus est cochée : l’accord de participation est
+          enregistré et horodaté avec la session.
+        </p>
+      )}
       <Bouton
         taille="large"
         pleineLargeur
         chargement={enCours}
         disabled={!accord}
+        {...(accord ? {} : { 'aria-describedby': 'axn-demarrage-verrou' })}
         onClick={demarrer}
       >
         Démarrer l’entretien

@@ -150,3 +150,17 @@
   outline: var(--taille-focus-epaisseur) solid var(--couleur-focus-anneau);
   outline-offset: var(--taille-focus-decalage);
 }
+
+/* ── M7 (recette novice A54, 2026-09-06) : LA RACINE PORTE LA POLICE ─────────
+ * `getComputedStyle(document.documentElement).fontFamily` valait
+ * « Times New Roman » : seule la coquille terrain posait `--typo-police-corps`,
+ * et aucun texte ne vit aujourd'hui hors d'elle. Le défaut était donc LATENT —
+ * le premier dialogue rendu dans un portail, hors de l'arbre de la coquille,
+ * se serait affiché en serif, sur un écran d'auditeur, sans que rien ne l'ait
+ * annoncé. Il est posé ici, dans les jetons, parce que la police EST un jeton :
+ * les deux applications le reçoivent par le même fichier, et aucune n'a à s'en
+ * souvenir. `:where()` garde une spécificité nulle : toute règle existante
+ * continue de l'emporter, ce correctif ne peut rien écraser. */
+:where(html, body) {
+  font-family: var(--typo-police-corps);
+}

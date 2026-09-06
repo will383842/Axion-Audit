@@ -6,7 +6,19 @@
 // Précédent · À revoir · N/A · Note · Photo · Recherche · Suivant (en bas à
 // droite). « Non communiqué » (§27.4, sur TOUTE question) et « Fourchette »
 // (§27.4, où la question l'admet) sont sur la question elle-même, à côté des
-// états. Photo est L5c : le bouton garde sa place, désactivé, et le dit.
+// états. Photo n'est pas livrée : le bouton garde sa place, désactivé, et il dit
+// POURQUOI — à l'œil, et pas seulement aux lecteurs d'écran.
+//
+// ── B3 (recette novice A54, 2026-09-06) ─────────────────────────────────────
+// Le motif ne vivait que dans `libelleAccessible`, c'est-à-dire dans l'attribut
+// `aria-label` : un auditeur voyant ne le lit JAMAIS. Devant son interlocuteur,
+// il voit un bouton gris et muet, en conclut qu'il n'a pas le droit, n'insiste
+// pas — et photographie avec son téléphone personnel. La pièce d'audit sort du
+// coffre chiffré et de l'invariant 8. 03 §19.1 interdit nommément le « simple
+// cadenas muet » ; la règle vaut pour un geste comme pour un verrou.
+//
+// Le libellé porte donc « (bientôt) », et l'infobulle porte la phrase entière.
+// Ni l'un ni l'autre ne remplace la capture : elle est le lot L5d, après P-C.
 //
 // PAS d'avancement automatique après cotation (V2.10) : coter n'est pas finir
 // une question. L'avance est toujours volontaire — Suivant, ↵ ou balayage.
@@ -25,6 +37,17 @@ import { fourchetteAdmise, lireValeurTypee, type ValeurTypee } from '../../sessi
 import type { NatureDrapeau } from './DialogueDrapeau.js';
 import { SaisieReponse, type Cadence } from './SaisieReponse.js';
 import { libelleDeBloc } from './ZoneBlocs.js';
+
+/**
+ * Pourquoi le bouton « Photo » est désactivé — dit à l'œil ET au lecteur d'écran.
+ *
+ * Exporté : c'est la phrase que les tests d'acceptation d'A27 iront chercher, et
+ * une phrase que deux fichiers récrivent différemment est une phrase qui finira
+ * par dire deux choses (c'est le défaut de la liste de capacités, corrigé au même
+ * commit).
+ */
+export const MOTIF_PHOTO_INDISPONIBLE =
+  'la capture photo n’est pas disponible dans cette version ; décrivez l’élément dans une note plutôt que de le photographier avec un appareil personnel';
 
 export interface ProprietesZoneQuestion {
   readonly question: QuestionLocale;
@@ -233,9 +256,10 @@ export function ZoneQuestion(proprietes: ProprietesZoneQuestion): ReactNode {
             <Bouton
               variante="discret"
               disabled
-              libelleAccessible="Photo — disponible dans une prochaine version"
+              title={MOTIF_PHOTO_INDISPONIBLE}
+              libelleAccessible={`Photo — ${MOTIF_PHOTO_INDISPONIBLE}`}
             >
-              Photo
+              Photo (bientôt)
             </Bouton>
             <Bouton variante="discret" onClick={onRecherche}>
               Recherche{afficherRaccourcis ? ' (/)' : ''}

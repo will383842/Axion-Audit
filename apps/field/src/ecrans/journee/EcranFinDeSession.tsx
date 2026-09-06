@@ -58,6 +58,17 @@ import { lireSessionCourante } from '../../session/position.js';
 import { lireNotesVolantes } from '../../session/notes-volantes.js';
 import './journee.css';
 
+/**
+ * Le résultat de la lecture locale — trois situations, jamais confondues.
+ *
+ * `undefined` (absent de l'union, porté par `useLiveQuery`) = pas encore
+ * répondu ; `{ ok: false }` = la lecture a ÉCHOUÉ ; `{ ok: true, vue: null }` =
+ * la lecture a réussi et il n'y a aucune session ouverte. B5 est né de la
+ * fusion des deux dernières.
+ */
+type LectureSession =
+  { readonly ok: true; readonly vue: VueSession | null } | { readonly ok: false };
+
 interface VueSession {
   readonly session: SessionLocale;
   readonly repondu: number;
@@ -74,33 +85,57 @@ export function EcranFinDeSession(): ReactNode {
   const [erreur, setErreur] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
 
-  const vue = useLiveQuery(
-    async (): Promise<VueSession | null | undefined> => {
+  // ── B5 (recette novice A54, 2026-09-06) : L'ÉCHEC N'EST PAS LE VIDE ────────
+  // La lecture était enveloppée dans un `catch { return null }`, et `null` était
+  // rendu comme l'état VIDE : « Aucune session ouverte ». Une PANNE DE LECTURE du
+  // stockage local annonçait donc à l'auditeur que son entretien n'existe pas —
+  // il vient d'y passer quarante-cinq minutes. C'est le même défaut que le coffre
+  // illisible lu comme « absent », et 03 §33.2 sépare « vide » et « erreur »
+  // précisément pour qu'il ne se produise pas.
+  //
+  // L'écran voisin (`EcranAujourdhui`) fait déjà la bonne chose avec le même
+  // motif ; c'était donc une incohérence entre deux écrans du même incrément. La
+  // lecture rend désormais une union discriminée — la forme employée par
+  // `EcranAccueil` (`LectureSocle`) —, et les trois situations ont chacune leur
+  // rendu : `undefined` = chargement, `{ ok: false }` = panne, `{ ok: true,
+  // vue: null }` = aucune session ouverte.
+  const lecture = useLiveQuery(
+    async (): Promise<LectureSession | undefined> => {
       if (base === null) return undefined;
       try {
         const id = await lireSessionCourante(base);
-        if (id === null) return null;
+        if (id === null) return { ok: true, vue: null };
         const session = await depotSessions.parId(id);
-        if (session === null) return null;
+        if (session === null) return { ok: true, vue: null };
         const avancement = await depotReponses.avancement(id);
         const questions = await depotQuestions.parMission(session.missionId);
         const pieces = await lireNotesVolantes(id);
         return {
-          session,
-          repondu: avancement.repondues,
-          total: questions.length,
-          aRevoir: avancement.aRevoir,
-          na: avancement.nonApplicables,
-          nonCommunique: avancement.nonCommuniquees,
-          pieces: pieces.length,
+          ok: true,
+          vue: {
+            session,
+            repondu: avancement.repondues,
+            total: questions.length,
+            aRevoir: avancement.aRevoir,
+            na: avancement.nonApplicables,
+            nonCommunique: avancement.nonCommuniquees,
+            pieces: pieces.length,
+          },
         };
       } catch {
-        return null;
+        // La cause technique ne monte pas à l'écran (11 §2) ; l'écran dit la
+        // cause MÉTIER et l'action, ce que 03 §33.2 exige.
+        return { ok: false };
       }
     },
     [base],
     undefined,
   );
+
+  /** La session à rendre. `null` couvre à la fois « aucune » et « panne » : dans
+   *  les deux cas il n'y a pas de synthèse à afficher, et c'est `etat` — juste
+   *  en dessous — qui dit LAQUELLE des deux situations l'auditeur regarde. */
+  const vue: VueSession | null = lecture?.ok === true ? lecture.vue : null;
 
   /**
    * Exécute un geste et revient à la journée s'il aboutit.
@@ -126,26 +161,42 @@ export function EcranFinDeSession(): ReactNode {
     [naviguer],
   );
 
+  /** Le retour à la journée — la même sortie, quel que soit l'état. */
+  const retourALaJournee = (
+    <Bouton
+      onClick={() => {
+        naviguer({ type: 'racine', vue: 'aujourdhui' });
+      }}
+    >
+      Revenir à ma journée
+    </Bouton>
+  );
+
   const etat: EtatZone =
-    vue === undefined
+    lecture === undefined
       ? { nature: 'chargement', libelle: 'Lecture de la session', lignes: 4 }
-      : vue === null
+      : !lecture.ok
         ? {
-            nature: 'vide',
-            titre: 'Aucune session ouverte',
-            description:
-              'Ouvrez une session depuis votre journée, puis revenez ici pour la terminer ou la valider.',
-            actions: (
-              <Bouton
-                onClick={() => {
-                  naviguer({ type: 'racine', vue: 'aujourdhui' });
-                }}
-              >
-                Revenir à ma journée
-              </Bouton>
-            ),
+            // B5 — l'état qui manquait. Il dit que la session EXISTE PEUT-ÊTRE et
+            // que rien n'a été supprimé : c'est exactement ce que l'auditeur a
+            // besoin d'entendre avant de refaire quarante-cinq minutes d'entretien.
+            nature: 'erreur',
+            titre: 'La session n’a pas pu être lue',
+            cause:
+              'Le stockage local de cet appareil n’a pas répondu. Cela ne veut PAS dire que votre entretien n’existe pas : rien n’a été supprimé.',
+            action:
+              'Rechargez la page, puis rouvrez cette session depuis votre journée. Si l’erreur revient, exportez une sauvegarde de secours avant de poursuivre la collecte, et signalez-le.',
+            actions: retourALaJournee,
           }
-        : { nature: 'nominal' };
+        : lecture.vue === null
+          ? {
+              nature: 'vide',
+              titre: 'Aucune session ouverte',
+              description:
+                'Ouvrez une session depuis votre journée, puis revenez ici pour la terminer ou la valider.',
+              actions: retourALaJournee,
+            }
+          : { nature: 'nominal' };
 
   const session = vue?.session ?? null;
   const courant = session === null ? null : etatSession(session);
@@ -156,7 +207,7 @@ export function EcranFinDeSession(): ReactNode {
 
   // 03 §17.3 : le récapitulatif nomme ce qui manque. Il n'empêche rien.
   const manques: string[] = [];
-  if (vue !== undefined && vue !== null) {
+  if (vue !== null) {
     if (vue.total > vue.repondu) {
       manques.push(`${String(vue.total - vue.repondu)} question(s) sans réponse.`);
     }
@@ -170,7 +221,7 @@ export function EcranFinDeSession(): ReactNode {
 
       <ZoneEtat etat={etat}>
         <>
-          {session !== null && vue != null && (
+          {session !== null && vue !== null && (
             <>
               <CarteSyntheseEntretien
                 titre={session.personName ?? LIBELLE_TYPE_SESSION[session.kind]}

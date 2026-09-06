@@ -6,36 +6,70 @@
 // anxiogène) ». Posée UNE fois dans l'en-tête commun (`App.tsx`), pas dans
 // chaque écran.
 //
-// ── CE QU'ELLE NE DIT JAMAIS ────────────────────────────────────────────────
-// `synchronise`. Tant que L6a n'a pas livré, le port est inerte : rien n'est
-// jamais synchronisé, et une pastille verte serait « le garde-fou qui annonce
-// plus qu'il ne fait » (LOT_L5.md §3.6). Hors réseau → `hors-ligne` ; en ligne →
-// `en-attente`, avec le compte RÉEL d'opérations lu dans l'outbox. L6a
-// remplacera la source, pas la pastille.
+// ── B6 (recette novice A54, 2026-09-06) : DEUX PASTILLES, DEUX MENSONGES ────
+// Celle-ci était pilotée par `navigator.onLine` SEUL et annonçait « En attente
+// de synchronisation » alors que le port est inerte et qu'il n'y avait, le plus
+// souvent, rien à remonter. Trois centimètres plus bas, celle de l'accueil disait
+// « Hors ligne », déduite du COMPTE D'OUTBOX — donc « hors ligne » dès que la
+// file est vide, quel que soit le réseau. A54 a relevé les deux, sur le même
+// écran, se contredisant.
+//
+// Deux gestes, dans le même commit : la pastille de l'accueil est retirée
+// (l'en-tête la porte déjà, pour les onze écrans), et celle-ci ne déduit plus son
+// état d'un fait qui n'est pas le sien. Sa source est le PORT DE SYNC — le seul
+// qui sache ce que l'application peut réellement faire — via la traduction
+// unique de `app/etat-sync-affiche.ts`, partagée avec le cockpit.
+//
+// Le compte d'opérations, lui, reste affiché : c'est un nombre VRAI, lu dans
+// l'outbox, et c'est celui qui dit à l'auditeur ce qui ne vit encore que sur sa
+// tablette.
+//
+// **`navigator.onLine` ne pilote plus rien ici, et c'est délibéré** : tant que
+// L6a n'a pas livré, être en ligne ne change rien à la réponse — rien ne sort de
+// l'appareil. Le réseau reste dit là où il est actionnable : le cockpit rend son
+// état hors ligne complet, avec les capacités locales, quand la connexion tombe.
+// L6a REMPLACERA la source de cette pastille, pas la pastille.
 //
 // Traçabilité : E7 (remontée continue dès qu'il y a du réseau), E6 (hors ligne
-// total).
+// total), E38 (sauvegarde terrain).
 // =============================================================================
 import type { ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { PastilleSync } from '@axion/ui';
 import { useTerrain } from '../../app/contexte.js';
-import { useEnLigne } from '../../session/media.js';
+import {
+  MENTION_SYNC_INDISPONIBLE,
+  statutSyncAppareil,
+  versEtatPastille,
+} from '../../app/etat-sync-affiche.js';
+import { portSyncInerte } from '../../local/port-sync.js';
 
 export function PastilleSyncCoquille(): ReactNode {
   const { base } = useTerrain();
-  const enLigne = useEnLigne();
-  // Lecture d'INDEX (`statut`), aucun déchiffrement : posée à chaque rendu de
-  // l'en-tête, elle doit rester gratuite. `null` = base fermée, on ne compte pas.
-  const enAttente = useLiveQuery(
-    async () => (base === null ? null : base.outbox.where('statut').equals('en_attente').count()),
+  // Lecture d'INDEX (`id`, `statut`), aucun déchiffrement : posée à chaque rendu
+  // de l'en-tête, elle doit rester gratuite. C'est précisément ce que la liste
+  // fermée du `LOT_L5.md` §3.2 rend possible. `null` = base fermée.
+  const lecture = useLiveQuery(
+    async () => {
+      if (base === null) return null;
+      const missions = await base.missions.toArray();
+      return {
+        statut: statutSyncAppareil(
+          missions.map((mission) => portSyncInerte.etat(mission.id).statut),
+        ),
+        enAttente: await base.outbox.where('statut').equals('en_attente').count(),
+      };
+    },
     [base],
     null,
   );
+
+  const statut = lecture?.statut ?? 'indisponible';
   return (
     <PastilleSync
-      etat={enLigne ? 'en-attente' : 'hors-ligne'}
-      {...(enAttente === null ? {} : { enAttente })}
+      etat={versEtatPastille(statut)}
+      {...(statut === 'indisponible' ? { title: MENTION_SYNC_INDISPONIBLE } : {})}
+      {...(lecture === null ? {} : { enAttente: lecture.enAttente })}
     />
   );
 }
