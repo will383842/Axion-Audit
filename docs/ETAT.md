@@ -4277,3 +4277,28 @@ justifié ici et doit être signalé), puis revue croisée A29 sur la PR #69.
 Tests rouges connus : aucun. ⚠ `[vitest-worker]: Timeout calling "onTaskUpdate"` sous charge — tous
 les tests passent, seul le code de sortie rougit ; antérieur à ce correctif.
 
+
+## 2026-09-06 19h35 — [autopilote] — sept PR fusionnées, P-C vidée de son non-matériel
+
+Dernier commit vert : `79d1525` (#70) · Branche : `gouvernance/etat-09` · Poussé : oui
+Tâche en cours : deux chantiers — l'identité auditeur et le branchement du rappel hors ligne.
+Prochaine action : dès les deux rentrés, **rejouer P-C EN ENTIER** (A02 puis A54).
+Tests rouges connus : aucun sur `main`. Trois jobs ont flanché sur des causes EXTERNES aujourd'hui
+(GHCR, un 502 du Docker Hub, une coupure TLS au téléchargement de Node) — la classe est fermée.
+
+**Entrés dans `main`** : #58 L7c (**L7-min complet**) · #67 scoring consommateur · #68 et #74 état ·
+#69 restauration **11 % → 100 %** · #70 « Terminer l'entretien » · #71 les **100 questions du socle**
+et leur cotation croisée, oubliées sur une branche depuis le 02/09 · #72 police de la racine
+prouvée · #73 CI résiliente aux pannes de registre.
+
+**Quatre défauts trouvés qu'aucun garde ne voyait, et tous de la même famille.** ① `test:interface`
+n'était appelé par **aucun job** : 61 fichiers ne tournaient qu'en effet de bord de la couverture, si
+bien qu'un test d'interface rouge s'affichait « coverage-summary.json absent ». ② Deux corps
+littéraux d'E2E ne suivaient plus le contrat : l'écran basculait en ERREUR et la CI accusait
+l'accessibilité, à vingt minutes de la cause. ③ Trois `.catch` manquants — dont l'écran dont
+l'unique raison d'être est de réparer le stockage, qui devenait un **bouton mort sans un mot**.
+④ Un badge à **4,13:1**, cru latent parce qu'un `grep` ne le trouvait pas : il est peint sur le
+statut le plus fréquent du portefeuille, et c'est le **compilateur** qui l'a dit.
+
+**Un comptage dit qu'un symbole est absent ; il ne dit pas qu'un comportement l'est.** Troisième
+vérification de la semaine. Quatre gardes neufs en réponse, tous éprouvés par défaut volontaire.
