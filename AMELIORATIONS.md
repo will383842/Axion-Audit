@@ -30,6 +30,7 @@
 | L3a   | ~0,1 j   | 0,5 j   | ~0,4 j                                                                                                                                                    |
 | L3b-d | ~0,15 j  | 0,5 j   | ~0,35 j — plafonds explicites (120 s) sur deux crochets de tests L2, port de sync L5a déplacé hors du glob réservé à L6a ; le reste est d'étage 2 (A-007) |
 | L5b   | ~0,1 j   | 0,5 j   | ~0,4 j                                                                                                                                                    |
+| L5c   | ~0,05 j  | 0,5 j   | ~0,45 j — identité de la sauvegarde restaurée (A27, 2026-09-06)                                                                                           |
 
 ---
 
@@ -2268,3 +2269,29 @@ interdit d'implémenter une fiche d'étage 2 avant son arbitrage. La proposer es
 est une faute.
 
 **Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE
+
+---
+
+## 2026-09-06 — [L5c] Étage 1 — l'écran de restauration ne disait pas QUEL fichier il venait de restaurer
+
+**Constat (A27, revue de l'écran de restauration, 2026-09-06).** Après un succès, `EcranRestauration`
+affichait « 3 élément(s) de mission restauré(s) » et rien d'autre. Or l'en-tête `.axionbackup` porte
+EN CLAIR — donc lisible sans déchiffrer — le libellé de l'appareil d'origine et l'instant de
+production, et le rapport d'import connaît déjà `missionId`. Trois informations acquises, et tues.
+
+**Valeur pour l'auditeur.** Le geste réel est celui-ci : une clé USB, deux ou trois `.axionbackup`
+aux noms quasi identiques (`axion-<uuid>-<horodatage>.axionbackup`), 22 h, une tablette de
+remplacement. « 3 élément(s) restauré(s) » ne permet pas de vérifier qu'on a ouvert la sauvegarde de
+mercredi et non celle de mardi, ni la bonne mission. La vérification devait se faire APRÈS coup, en
+rouvrant sa journée — c'est-à-dire trop tard pour s'apercevoir tranquillement de l'erreur.
+
+**Ce qui a été fait.** `RapportImport` rend deux champs de plus (`libelleAppareilSource`,
+`sauvegardeCreeeLe`), recopiés de l'en-tête sans transformation ; l'écran les affiche avec le
+`missionId` dans une liste de définition, l'horodatage FORMATÉ (`formaterDateHeure`) et non en ISO.
+Un test dédié le couvre (`restauration.recette-a24.test.tsx`, §D).
+
+**Pourquoi c'est étage 1.** Ne touche NI le schéma 04, NI l'API, NI la crypto, NI le format
+`.axionbackup` (aucun champ ajouté au fichier : les deux valeurs y sont déjà, et le format d'ops
+n'est pas approché), NI le périmètre fonctionnel. C'est un affichage d'une information déjà acquise.
+
+**Coût :** ~0,05 j.

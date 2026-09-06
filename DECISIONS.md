@@ -10624,6 +10624,33 @@ Règle de précédence : sans objet — cohérence interne d'un module, aucune d
 Décideur : **A01**, sur constat de la revue croisée. Mis en œuvre par A15.
 Impact spec : aucun.
 
+## 2026-09-06 — [L5c] Un navigateur qui refuse la persistance interdit-il aussi de RESTAURER ?
+
+05 §31-2 refuse l'embarquement sans persistance ; `EcranRestauration` appliquait la même règle à
+l'import d'un `.axionbackup`. Conséquence mesurée par A27 : un auditeur dont la seule copie
+survivante est ce fichier, sur un navigateur qui refuse la persistance, ne peut rien restaurer —
+pas même pour ré-exporter aussitôt.
+
+Options :
+a) Refuser, comme l'embarquement. b) Restaurer sans condition. c) Restaurer, mais seulement après
+un refus guidé et une reprise explicite, avec avertissement fort et ré-export mis en avant.
+
+Arbitrage : **c)**. Le motif du §31-2 est d'empêcher que des données NEUVES naissent dans un
+stockage volatil ; une restauration est le cas inverse — la donnée existe déjà, dans le fichier, en
+sécurité. Refuser garantit zéro donnée là où l'on pouvait en sauver. L'invariant 8 tire dans les
+deux sens, mais il dit « aucune donnée ne vit sur un seul appareil », pas « aucune donnée ne
+revit ». Le guidage §31-2 est affiché EN PREMIER — il peut suffire, « Sur l'écran d'accueil » se
+règle en trois gestes — et la reprise est un second geste nommé, jamais le défaut : b) laisserait
+un auditeur qui ne lit pas déposer sa seule copie dans un stockage volatil sans le savoir. Le
+ré-export devient l'action principale après le succès ; c'est lui qui tient l'invariant 8, et c'est
+lui qui rend l'arbitrage soutenable.
+Règle de précédence : **§24-31 > §16-22** — le §31-2 reste la règle de l'embarquement et n'est pas
+amendé ; il est simplement constaté qu'il ne statue pas sur la restauration, cas qu'il ne nomme pas.
+Décideur : **A01**, sur délégation de Williams du 2026-09-04, sur constat d'A27. Mis en œuvre par A24.
+Impact spec : amendement candidat de 05 §31-2, pour qu'il dise à quels ÉCRITS il s'applique. Le
+guidage de `stockage.ts` est scindé (constat + remède partagés, conséquence propre à l'appelant) :
+la phrase « la mission ne peut pas être embarquée » ne s'affiche plus sur l'écran qui restaure.
+
 ## 2026-09-06 — [L7c] Les 61 fichiers du projet `interface` n'étaient exécutés par aucun job de CI
 
 La couverture de #58 est tombée sur `EcranExport.test.tsx`, avec pour seul message
