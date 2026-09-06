@@ -4357,6 +4357,7 @@ jour » ; passé **20 h locales**, le créneau bascule au lendemain et `duJour` 
 tous les soirs, vert le matin. Hors périmètre (fichier L5c) → `git push --no-verify`, signalé ici.
 Environnement hors contrat : Node v24.19.0 contre `>=22.11.0 <23` — la CI reste juge (09 §5.7).
 
+
 ## 2026-09-06 20h45 — [lot L5 / incrément L5c] — étape pipeline 3/7
 
 Dernier commit vert : b1e5fe5 (fix(l5c) : cinq cas @critique dépendaient de l'heure) · Branche :
@@ -4377,7 +4378,6 @@ partir de 20h heure de Paris — ce n'est pas une régression, c'est ce défaut.
 `--no-verify` SIGNALÉ (§8) : `fix/badge-action` (96f0318) poussée ainsi. Son unique rouge au
 `pre-push` était ce même défaut d'horloge, vérifié seul juste avant : 992 verts, 1 rouge, et ce
 rouge est celui que #79 ferme. Rien de cette branche-là n'est masqué.
-
 
 ## 2026-09-06 22h15 — [lot L5 / §33.2 hors ligne] — étape pipeline 4/7
 
@@ -4405,3 +4405,4 @@ Prochaine action : pousser, et demander au chantier #82 de **rejouer le balayage
 `entretien`** — la fermeture en navigateur n'est pas prouvée de mon côté.
 Tests rouges connus : aucun. interface 1104/1104 · unit 1799/1799.
 Environnement hors contrat : Node v24.19.0 — la CI reste juge (09 §5.7).
+
