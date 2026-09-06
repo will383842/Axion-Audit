@@ -86,8 +86,17 @@
 // ── LE RELEVÉ DU 2026-09-06 : CE QUE LE PASSAGE DE 3 À 12 VUES A TROUVÉ ────
 // Dix-huit états balayés — douze vues (dont l'écran d'entretien dans trois de
 // ses moments), plus quatre de ces vues une seconde fois réseau coupé.
-// Dix-sept verts, UN rouge. Le rouge est réel et il est laissé rouge : la CI le
-// dira, et c'est ce qu'on veut qu'elle dise.
+// Dix-sept verts, UN rouge : **A28-2**, décrit juste en dessous. Il a été laissé
+// rouge à dessein, rendu à A22, et la CI l'a dit — c'est ce qu'on voulait qu'elle
+// dise.
+//
+// SUITE, ET C'EST LE RÉSULTAT DE CE CHANTIER : **A22 a livré le 2026-09-06**
+// (`tabIndex={0}`, PR #81, commit `48860e9`, avec le mécanisme documenté sur
+// place). Le relevé complet passe à **DIX-HUIT VERTS SUR DIX-HUIT**, mesuré. La
+// boucle mesurer → rendre → corriger → remesurer s'est fermée dans la journée,
+// sans qu'aucune règle soit désactivée et sans qu'A28 touche au code qu'il
+// mesure. Le paragraphe ci-dessous est conservé au passé : c'est la trace du
+// défaut, pas un état courant.
 //
 //   A28-2 — `apps/field/src/ecrans/entretien/EcranEntretien.tsx`, ligne ~830,
 //   `<aside class="axn-entretien__zone--laterale" aria-label="Notes">`.
@@ -115,7 +124,8 @@
 //   (`.axn-tableau-cadre`, même règle, même niveau A). Deux écrans, deux
 //   incréments, deux équipes, un seul motif : une zone qu'on fait défiler à la
 //   souris et jamais au clavier. Rendu à A22 (producteur de L5b) ; **non
-//   corrigé ici** (09 §5.6 : A28 ne touche pas au code qu'il mesure).
+//   corrigé ici** (09 §5.6 : A28 ne touche pas au code qu'il mesure) —
+//   **et fermé par A22 le jour même**, voir plus haut.
 //
 // ── CE QUE CE FICHIER NE MESURE PAS, ET NE PRÉTEND PAS MESURER ─────────────
 // Ni p95 d'interaction, ni listes longues de FIL-GC, ni chiffrement par
@@ -328,8 +338,18 @@ async function allerAccueil(page: Page): Promise<void> {
   await allerAujourdhui(page);
   await page.getByRole('button', { name: 'Missions et stockage de l’appareil' }).click();
   await expect(titreDEcran(page, 'Aujourd’hui')).toBeVisible();
+  // L'ancre PROPRE À L'ÉCRAN (constat A28-1 : `accueil` et `aujourdhui` portent
+  // le même titre, donc le titre ne suffit pas). Elle tient parce qu'elle dépend
+  // de `mission.embarquee`, l'état que ce parcours pose — et de rien d'autre.
+  //
+  // Ce qui NE peut pas servir d'ancre ici : le titre du rappel hors ligne.
+  // `RappelHorsLigne` rend `null` quand `enLigne` vaut vrai (son garde, ligne 93)
+  // et ce helper navigue EN LIGNE ; depuis que #81 a rendu la liste de l'accueil
+  // conditionnelle, l'exiger revenait à exiger un texte que l'écran a raison de
+  // ne pas peindre. C'est ce qui faisait tomber `accueil` et les deux
+  // `restauration`, qui passent par ici — trois cas, une seule cause.
+  // Le rappel est éprouvé là où il doit l'être : au 4ᵉ état du §33.2, plus bas.
   await expect(page.getByText('Données présentes sur cet appareil')).toBeVisible();
-  await expect(page.getByText('Ce que cet appareil sait faire sans réseau')).toBeVisible();
 }
 
 /** Le formulaire en trois champs (03 §17.1), atteint depuis le cockpit. */
@@ -643,11 +663,18 @@ const PARCOURS = {
     delaiMs: 120_000,
     etats: [{ libelle: 'appareil non rattaché, formulaire', atteindre: allerConnexionSiege }],
     // Le seul écran qui EXIGE le réseau : son rappel hors ligne ne dit donc pas
-    // « tout marche », il dit ce qui marche encore. C'est aussi le seul écran de
-    // `main` qui rende déjà `RappelHorsLigne` — celui que #81 portera partout.
+    // « tout marche », il dit ce qui marche encore. Depuis que #81 est entrée,
+    // les DOUZE vues rendent `RappelHorsLigne` ; celle-ci n'est plus l'exception.
+    //
+    // Le marqueur est RECOPIÉ de `apps/field/src/app/capacites-hors-ligne.ts`,
+    // jamais reformulé. Il l'avait été ici, et lui seul des quatre : le test
+    // attendait « ouvrir ce qui est déjà enregistré ici » là où l'écran peint
+    // « … sur cet appareil ». `getByText` cherche une sous-chaîne sensible à la
+    // casse — une paraphrase ne peut donc que rendre un faux rouge, et elle
+    // accusait l'écran d'un manquement au §33.2 qu'il ne commettait pas.
     horsLigne: {
       depuis: allerConnexionSiege,
-      marqueur: 'ouvrir ce qui est déjà enregistré ici',
+      marqueur: 'Ouvrir ce qui est déjà enregistré sur cet appareil',
     },
   },
 } as const satisfies Record<CodeVue, Parcours>;
