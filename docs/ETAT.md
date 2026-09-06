@@ -3498,3 +3498,135 @@ Quatre doutes de spec écrits dans `DECISIONS.md` plutôt que devinés. À relir
 la doctrine 5 (« l'unité la plus défavorable ») ne change PAS le roll-up — si la lecture
 inverse était voulue, tous les scores consolidés changeraient, et ce serait un arbitrage de
 Williams, pas un correctif.
+## 2026-09-05 02h20 — [lot L5 / incrément L5a — réserves A29] — étape pipeline 3/7 (auto-revue)
+
+Dernier commit vert : `e9d6712` (docs(l5a) : le code citait comme « réserve de spec » une question
+tranchée) · Branche : `lot/l5a-reserves` (partie de `lot/l5a` à `236450c`) · Poussé : oui
+Tâche en cours : les six réserves d'A24 dans la revue croisée A29 du 2026-09-05 sont **fermées** —
+R1 (bornes KDF + filet d'anomalie), R3 (l'écran ne propose plus ce qu'il interdit), R4 (la garde de
+présence lit la LIGNE), R2 (glose ESLint vraie dans les deux sens), R6 (la base est fermée), R5.
+Un commit par réserve, aucun test écrit (09 §5.6) : la liste des cas est remise à **A26**.
+Prochaine action : **A26 écrit les 14 tests listés au rapport A24** (dont les quatre jeux de
+paramètres d'A29 et le cas « ligne présente, valeur nulle »), puis **A29 rejoue la revue croisée**.
+Tests rouges connus : aucun. `pnpm build`, `lint --max-warnings=0`, `typecheck`, `format:check`
+verts ; `test:unit` **965/965**, `test:interface` **516/516**, 0 skippé. Machine sur Node v24, hors
+contrat (11 §1 : Node 22 LTS) — **la CI reste seule juge**.
+
+**Ce qui reste ouvert d'A29** : **R7** (aucun bloc `ETAT.md` pour l'incrément — ce bloc-ci ne couvre
+que les réserves, pas les correctifs de F-22/F-23/F-25) et **R8** (la règle ESLint hors périmètre,
+sans ligne `AMELIORATIONS.md` ni entrée `DECISIONS.md` — R2 en élargit encore la surface). Les deux
+appartiennent à la signature A20 et au contrôle A02, pas à A24.
+
+**Couverture** : `apps/field/src/local/**` **96,32 % lignes / 91,95 % branches** — au-dessus du seuil.
+Mais `coffre.ts` SEUL passe de 95,10 % à **89,51 %** : les planchers KDF et `CoffreInexploitableError`
+n'ont pas encore de test. La porte de CI agrège par glob et reste verte ; le trou est réel et nommé.
+
+## 2026-09-05 06h00 — [lot L5 / incrément L5a — réserves A29] — étape pipeline 3/7 (auto-revue)
+
+Dernier commit vert : `923a5f0` (merge `origin/main`) · Branche : `lot/l5a-reserves` · Poussé : oui
+**Le bloc de 02h20 annonçait « Poussé : oui » à tort** : la branche n'existait pas sur `origin`
+(`git ls-remote` : vide). Rien n'était perdu, mais rien n'existait non plus (CLAUDE.md §8).
+Tâche en cours : **#30 fusionnée** (`ab6dcf5`), `origin/main` intégré ; les six réserves A29 (R1 à
+R6) sont fermées **et re-mesurées** par sondes hors dépôt sur les modules réels.
+Prochaine action : **A26 écrit les tests listés au rapport A24** (les quatre jeux de paramètres
+d'A29, « ligne présente valeur nulle », anomalie en premier usage, `.modify()`), puis A29 rejoue.
+Tests rouges connus : **aucun**. `build` · `lint --max-warnings=0` · `typecheck` · `format:check` ·
+**14 gardes** : tous 0. `test:unit` **965/965** · `test:interface` **516/516** · **0 skippé**.
+
+Fusion mesurée, non relue : `main` a fusionné #30 **en squash**, d'où sept conflits `add/add`. Les
+sept fichiers y sont **identiques octet à octet** à l'état d'avant correctifs (`236450c`), donc la
+version de branche en est un **sur-ensemble prouvé**. Append-only fusionnés seuls, contrôlés par
+**multiensemble** d'en-têtes (les titres de section se répètent : un contrôle par lignes uniques les
+compte mal) — `DECISIONS.md` 209 · `ETAT.md` 84 · `AMELIORATIONS.md` 29, **0 perdu, 0 inventé,
+0 ligne supprimée** contre chacun des deux parents.
+
+`pnpm test:unit` sort en **code 1 alors que les 965 tests passent** : `[vitest-worker]: Timeout
+calling "onTaskUpdate"`, le RPC du *reporter*, jamais un test. `--pool=forks` → **code 0** en 34 s.
+Machine sous **Node v24.19.0**, hors contrat (11 §1). Rien n'a été reconfiguré : **la CI sous Node 22
+reste seule juge** (09 §5.7).
+
+Restent ouverts d'A29 : **R7** et **R8** — signature A20 et contrôle A02, pas A24.
+**Couverture** : `local/**` 96,32 % ; mais `coffre.ts` seul **89,51 %**, sous le seuil : les planchers
+KDF et `CoffreInexploitableError` n'ont pas encore de test, et A24 n'en écrit pas (09 §5.6).
+
+## 2026-09-05 06h20 — [lot L5 / incrément L5a — réserves A29] — étape pipeline 3/7 (auto-revue)
+
+Dernier commit vert : `ad58f61` · Branche : `lot/l5a-reserves` · Poussé : **oui, vérifié**
+(`* [new branch] lot/l5a-reserves`, hook `pre-push` **intégralement vert**, `test:unit` compris).
+Tâche en cours : deux chiffres du bloc de 06h00 sont corrigés ci-dessous, mesurés et non repris.
+Prochaine action : **A26 écrit les tests listés au rapport A24**, en priorité ceux qui couvrent les
+planchers KDF, `CoffreInexploitableError` et le filet `sousFiletDAnomalie`.
+Tests rouges connus : **aucun** — `test:unit` 965/965, `test:interface` 516/516, 0 skippé.
+
+**Correction 1 — le code de sortie de `test:unit`.** Le bloc de 06h00 le donnait pour sortant en
+code 1 ; c'est **intermittent**, pas systématique. Mesuré 4 fois : 2 échecs en `--pool=threads`
+(965 verts + `[vitest-worker]: Timeout calling "onTaskUpdate"`, le RPC du *reporter*), **2 succès**
+dont celui du hook `pre-push` qui a laissé passer ce push. Le symptôme est une contention sous
+**Node v24.19.0**, hors contrat (11 §1). Rien n'a été reconfiguré ; la CI sous Node 22 reste juge.
+Une session qui verrait ce code 1 ne doit **pas** chercher un test rouge : il n'y en a pas.
+
+**Correction 2 — la couverture, mesurée sur l'arbre fusionné** (`--coverage`, unit + interface) :
+`apps/field/src/local/**` **95,55 % lignes / 92,27 % branches** (et non 96,32 / 91,95) — au-dessus du
+seuil. Mais **deux modules de crypto ont BAISSÉ** en gagnant leurs garde-fous, faute de tests :
+`coffre.ts` **89,51 % / 87,69 %** (était 95,10) — **sous les 90 % de la DoD** — et
+`coffre-appareil.ts` **95,54 % / 87,80 %** (était 99,23). Les lignes non couvertes sont exactement
+les correctifs d'A29 : planchers KDF, `CoffreInexploitableError`, `sousFiletDAnomalie`.
+**La porte de CI agrège par glob et reste verte : le trou est réel, nommé, et non contourné.**
+Il se ferme quand A26 livre — A24 n'écrit pas ses propres tests (09 §5.6).
+
+**Le hook `pre-push` a mordu à raison** : le bloc de 06h00 faisait 38 lignes pour un maximum de 25
+(`check:prose`). Réécrit, pas tronqué.
+
+## 2026-09-05 08h05 — [lot L5 / incrément L5a — réserves A29] — étape pipeline 5/7 (tests)
+
+Dernier commit vert : `c08ecb6` · Branche : `lot/l5a-reserves` · Poussé : **non — push en attente**
+de la fin de `test:integration` (en cours, Testcontainers).
+Tâche en cours : A26 a livré les tests des six réserves A29 fermées par A24 ; aucun fichier de
+production touché (`git diff` hors `*.test.ts(x)` vide, vérifié après six bascules).
+Prochaine action : **pousser `c08ecb6`** dès `test:integration` vert, puis rendre le rapport A26 à
+A20 pour la signature de fin d'incrément (11 §6).
+Tests rouges connus : **aucun**.
+
+**Le trou du bloc de 06h20 est fermé, et il est mesuré par la porte de CI elle-même**
+(`node .github/scripts/check-coverage.mjs`, unit + interface) :
+`coffre.ts` **89,51 → 100 %** lignes / 87,69 → 100 branches ; `coffre-appareil.ts` **95,54 → 100 %** /
+87,80 → 100 ; glob `apps/field/src/local/**` **96,32 → 99,04 %** lignes / 91,95 → 95,80 branches.
++68 cas (1 481 → 1 549 en unit + interface), 35 marques `@critique`, 0 skippé.
+
+**Écart de méthode à ne pas reprendre en l'état** : le bloc de 06h20 donne le glob à 95,55 / 92,27.
+Le chiffre rendu par `check-coverage.mjs` — celui de la porte — était 96,32 / 91,95 avant, 99,04 /
+95,80 après. C'est le second qu'il faut citer : la porte ne lit pas une autre grandeur, elle lit
+celle-là.
+
+**Le flottement de `test:unit` est confirmé, et il n'a pas changé de nature** : `--pool=threads`
+sort parfois en code 1 sur `[vitest-worker]: Timeout calling "onTaskUpdate"` ; une passe a aussi vu
+deux **timeouts à 5 s** dans `apps/api/.../assignments/service.test.ts`, qui passe en 4,4 s isolé.
+`--pool=forks` : **3 passes sur 3 vertes**, 1 022/1 022. Contention sous Node v24.19.0, hors contrat.
+
+
+## 2026-09-06 09h05 — [lot L5 / incrément L5a — réserves A29] — étape pipeline 5/7 (tests)
+
+Dernier commit vert : `83be944` · Branche : `lot/l5a-reserves` · Poussé : push en cours (hook long).
+Tâche en cours : A26 a réintégré `main` (12 commits : L5b, L7a, L7b, E18) et REMESURÉ.
+Prochaine action : rendre le rapport A26 à A20 pour la signature de fin d'incrément (11 §6).
+Tests rouges connus : **aucun** — 89 fichiers, **2 052 tests verts**, 0 skippé (`--pool=forks`).
+
+**La fusion n'a rien coûté aux deux fichiers du coffre.** Conflit sur `docs/ETAT.md` SEUL, et des
+deux côtés c'était de l'ajout de blocs : blocs de `main` d'abord, les miens ensuite, aucun réécrit.
+Remesure par la porte elle-même (`check-coverage.mjs`, unit + interface) : `coffre.ts` **100 %**
+lignes / 98,52 branches · `coffre-appareil.ts` **100 / 100** · glob « Couche locale terrain »
+**99,04 / 95,65**. Les 89,51 % qui manquaient à la DoD sont fermés et le restent après fusion.
+
+**Les trois bascules ont été REJOUÉES sur l'arbre fusionné**, parce qu'une preuve faite avant une
+fusion ne prouve plus rien après elle :
+· **R1** — plancher mémoire ramené à une constante (coefficient retiré) ⇒ `m=15,p=2` et `m=31,p=4`
+rougissent, **et elles seules** ; les cas `p=1` restent verts, ce qui est correct : à `p=1` le
+coefficient est indiscernable d'une constante.
+· **R4** — garde de PRÉSENCE ramenée à une garde de VALEUR ⇒ les deux tests `valeur:null` et « sans
+propriété `valeur` » rougissent, tandis que l'**anti-vacuité** (ligne absente ⇒ appareil neuf
+préparable) reste VERTE, comme elle doit.
+· **R3** — `setPremierUsage(false)` neutralisée ⇒ un seul test rougit, celui de `contexte.tsx`.
+Les tests d'écran restent verts **à raison** : ils reçoivent l'état en accessoire. Le couple
+« transition d'état » + « rendu » couvre le défaut ; ni l'un ni l'autre seul.
+Après restauration, `git diff` **vide** : arbre identique à l'octet. Aucun fichier de production
+touché de ma main (09 §5.6).
