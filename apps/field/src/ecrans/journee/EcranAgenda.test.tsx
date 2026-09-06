@@ -224,8 +224,28 @@ async function monterNominal(base: BaseLocale): Promise<void> {
 }
 
 /** `'AAAA-MM-JJTHH:mm'` en heure LOCALE de l'appareil — ce que `datetime-local` rend. */
+/**
+ * UN CRÉNEAU DU JOUR CIVIL COURANT — ancré sur 08:00, jamais sur « maintenant ».
+ *
+ * LE DÉFAUT QUE CELA FERME (2026-09-06). Ce helper rendait `maintenant() + N`.
+ * `depotSessions.duJour` ne garde que les sessions dont le JOUR CIVIL est celui
+ * de la référence : à 20 h 18, un créneau à +240 min tombait le lendemain, la
+ * session sortait du jour, et le cas @critique « une session s'y rattache
+ * immédiatement » lisait `undefined`.
+ *
+ * Le test échouait donc **tous les soirs, quatre heures sur vingt-quatre**, et le
+ * code était juste. Il est resté invisible depuis le 2026-09-05 parce qu'AUCUN
+ * job de CI ne lançait `pnpm test:interface` — la lacune fermée le matin même,
+ * qui a rendu ce rouge visible le soir. Un test daté est un test qui ment la
+ * moitié du temps, et on ne sait jamais laquelle.
+ *
+ * L'ancrage à 08:00 garde les créneaux DISTINCTS (les décalages vont jusqu'à
+ * 240 min, donc 08:00–12:00) et ORDONNÉS, sans jamais franchir minuit.
+ */
 function creneauLocal(decalageMinutes: number): string {
-  const d = new Date(Date.parse(maintenant()) + decalageMinutes * 60_000);
+  const ancre = new Date(Date.parse(maintenant()));
+  ancre.setHours(8, 0, 0, 0);
+  const d = new Date(ancre.getTime() + decalageMinutes * 60_000);
   const deux = (n: number) => String(n).padStart(2, '0');
   return `${String(d.getFullYear())}-${deux(d.getMonth() + 1)}-${deux(d.getDate())}T${deux(d.getHours())}:${deux(d.getMinutes())}`;
 }

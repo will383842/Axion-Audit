@@ -10760,3 +10760,33 @@ garde-fou ; ce script en est un, et sa non-vacuité est prouvée par divergence 
 Règle de précédence : sans objet — aucune divergence du pack, une classe de panne d'outillage.
 Décideur : **A01**, sur délégation du 2026-09-04.
 Impact spec : aucun ; une action locale, un script, aucune dépendance nouvelle.
+
+## 2026-09-06 — [L5c] Un test `@critique` daté, rouge quatre heures sur vingt-quatre depuis sa naissance
+
+`EcranAgenda.test.tsx` planifiait sa session à `maintenant() + 240 min`. `depotSessions.duJour` ne
+garde que les sessions dont le **jour civil** est celui de la référence — à 20 h 18, le créneau
+tombait le lendemain, la session sortait du jour, et le cas `@critique` « une session s'y rattache
+immédiatement » lisait `undefined`. **Le code était juste ; le test mentait.**
+
+Il est né le 2026-09-05 et n'a jamais été vu, parce qu'**aucun job de CI ne lançait
+`pnpm test:interface`** — la lacune fermée le matin même. Le garde posé à 14 h a rendu visible à
+20 h un rouge vieux de deux jours. C'est exactement ce qu'on lui demandait, et cela valide au
+passage le motif de son ajout mieux qu'un argument.
+
+Options :
+
+1. Figer l'horloge de l'application par `restaurerDecalage`. **Écartée** : `appliquerDescente`
+   règle le décalage depuis le `serverTime` de la descente, donc l'ordre des appels déciderait du
+   résultat — on remplacerait une dépendance à l'heure par une dépendance à l'ordre, plus discrète.
+2. Réduire le décalage à 60 min. **Écartée** : cela déplace la fenêtre de 20 h à 23 h, sans la
+   fermer. Un test qui ment moins souvent ment quand même.
+3. **Ancrer le créneau sur 08:00 du jour civil courant**, décalages conservés.
+
+Arbitrage : **option 3**. Les décalages vont jusqu'à 240 min, donc 08:00–12:00 : les créneaux
+restent DISTINCTS et ORDONNÉS, et ne franchissent jamais minuit. **Épreuve sur les 24 heures** :
+l'ancienne arithmétique quitte le jour civil 4 h sur 24, la nouvelle 0 h sur 24. Les 15 cas du
+fichier et les 154 de `ecrans/journee` passent.
+Règle de précédence : sans objet — le pack ne parle pas des fixtures de test.
+Décideur : **A01**, sur délégation du 2026-09-04. Modification d'un test que je n'ai pas écrit :
+déclarée ici, comme 09 §5.6 l'exige, et bornée à une fonction d'aide.
+Impact spec : aucun ; un helper de test, aucune ligne de production.
