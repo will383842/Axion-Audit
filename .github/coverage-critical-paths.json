@@ -191,6 +191,38 @@
       "$mesure_16102dd": "84,2 / 84,2 / 84,6 / 75,4 — SOUS LE SEUIL a l ajout"
     },
     {
+      "lot": "L3 (L3a) + L1 (E18)",
+      "module": "Companies — RBAC admin des quatre routes, unicite SIREN et reference console, journalisation des modifications (invariant 7)",
+      "glob": "apps/api/src/domaines/companies/**",
+      "reference": "07 §12 lot L3 · 04 §7.1 (amendement du 2026-09-03) · 11 §3 · CLAUDE.md §5 · DECISIONS.md 2026-09-05 (« companies est le seul domaine L3 hors du seuil »)",
+      "_note_glob": [
+        "AJOUTE LE 2026-09-05, ET IL MANQUAIT DEPUIS L3. Le rejeu de la revue croisee",
+        "A17 sur E18 a mesure que companies etait LE SEUL domaine L3 absent de ce",
+        "fichier : un job « couverture ≥ 90 % » vert ne disait donc rien du module qui",
+        "porte le RBAC admin des quatre routes et les DEUX 409 d unicite. C est le faux",
+        "vert que ce fichier existe pour empecher, et il a vecu ici pendant tout L3.",
+        "",
+        "CE QUE LA MESURE A REVELE, ET QUI VAUT PLUS QUE LE CHIFFRE. Le trou n etait pas",
+        "du code defensif : dans modifierUneEntreprise, le PATCH de `name`, `sitesCount`",
+        "et `countries` n etait exerce par AUCUN test — donc la ligne qui ecrit la trace",
+        "de modification ne s executait jamais, et `memesPays` n etait jamais appele.",
+        "C est le chemin de JOURNALISATION de l invariant 7 qui n etait vu par personne.",
+        "Les trois tests manquants sont ajoutes par le meme increment.",
+        "",
+        "Restent non couverts, et ceux-la SONT defensifs — nommes un par un plutot",
+        "qu ecartes en silence : depot.ts:94 (INTERNAL_ERROR si les pays stockes violent",
+        "le schema), :489 (fin de parcours de la chaine de causes), :631 (relance d une",
+        "erreur non traduite), :697 (INSERT ... RETURNING qui ne rend rien) ·",
+        "service.ts:68-70 (incoherenceInterne) · routes/companies.ts:131 (auteur nul).",
+        "Aucun n est atteignable depuis l API sans fabriquer une course non deterministe.",
+        "",
+        "SI UNE METRIQUE RESTE SOUS 90 %, LA REPONSE EST DES TESTS, JAMAIS UN GLOB PLUS",
+        "ETROIT — regle du bandeau. Le precedent L3 juste au-dessus a inscrit deux",
+        "modules SOUS le seuil en l assumant : la CI rouge est le signal, pas l accident."
+      ],
+      "$mesure_b8982ff": "depot.ts 96,63 / 100 / 90,41 — au-dessus du seuil. service.ts 91,66 lignes mais fonctions 77,77 et branches 88,33 — SOUS LE SEUIL a l ajout ; les trois tests de PATCH de cet increment le remontent."
+    },
+    {
       "lot": "L3 (L3c)",
       "module": "Arbre org_units — import CSV §35.2 atomique, qualification §25.3, verrou d import",
       "glob": "apps/api/src/domaines/org-units/**",

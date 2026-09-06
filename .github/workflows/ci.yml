@@ -396,6 +396,35 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: ./.github/actions/setup-node-pnpm
 
+      # -----------------------------------------------------------------------
+      # AUCUN OCTET DE CONTRÔLE DANS UNE SOURCE VERSIONNÉE — et il passe AVANT
+      # tous les autres contrôles de ce job, délibérément.
+      #
+      # Le 2026-09-04, `apps/api/src/domaines/pilotage/couverture.ts` portait
+      # trois octets 0x00. Mesure par deux agents indépendants : ripgrep OMET le
+      # fichier sans un mot, `grep` ne rend que « Binary file … matches », `file`
+      # répond `data`. TOUT contrôle de ce dépôt qui repose sur un `grep` —
+      # check-invariants, check-porte-journal, check-prose, l'anti-skip
+      # ci-dessous — devient alors MENTEUR sur ce fichier-là, et son vert ne
+      # veut plus rien dire. Ce contrôle protège donc la validité des autres :
+      # il doit s'exécuter en premier, et son échec doit arrêter le job.
+      #
+      # POURQUOI UNE ÉTAPE ICI ET PAS UN JOB NEUF, et c'est un choix, pas une
+      # facilité : le NOM d'un job est un contrat avec la protection de branche
+      # de `main`. Un job neuf n'appartient à aucune liste de checks requis tant
+      # que Williams ne l'y ajoute pas — il tournerait donc en ne bloquant RIEN,
+      # exactement comme la bascule ZAP qui n'a rien armé pendant huit jours.
+      # Greffée sur un job DÉJÀ requis et dont le nom ne bouge pas, cette étape
+      # bloque le merge dès sa première exécution. (Le jour où on veut un job
+      # dédié, on l'AJOUTE et on l'inscrit dans la protection — on ne RENOMME
+      # jamais celui-ci.)
+      #
+      # Ce job héberge déjà check-test-projects, check-isolation-reseau et
+      # check-compose-coolify : c'est le job des gardes du dépôt, pas seulement
+      # celui de l'anti-skip.
+      - name: pnpm check:octets-controle
+        run: pnpm check:octets-controle
+
       - name: pnpm check:no-skipped-tests
         run: pnpm check:no-skipped-tests
 

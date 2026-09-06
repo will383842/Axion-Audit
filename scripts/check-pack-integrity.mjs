@@ -22,9 +22,15 @@ import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const ROUGE = '[31m';
-const VERT = '[32m';
-const RAZ = '[0m';
+// Couleurs ANSI. L'octet ESC vient d'un APPEL DE FONCTION, jamais d'une séquence
+// d'échappement écrite à la main : l'outillage d'édition de la chaîne d'agents la
+// convertit en OCTET RÉEL à l'écriture, et un octet de contrôle dans une source la
+// rend invisible aux `grep` des étapes 3, 4 et 6 du pipeline (mesuré le 2026-09-04 ;
+// garde `scripts/check-octets-controle.mjs`).
+const ESC = String.fromCharCode(27);
+const ROUGE = `${ESC}[31m`;
+const VERT = `${ESC}[32m`;
+const RAZ = `${ESC}[0m`;
 
 const RACINE = resolve(import.meta.dirname, '..');
 const MANIFESTE = resolve(RACINE, 'docs/.pack-integrity.json');
