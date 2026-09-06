@@ -10653,6 +10653,7 @@ Décideur : **A22**, pour la seule part réversible et hors schéma. La modélis
 **Williams**, à la porte, sur la fiche `AMELIORATIONS.md` déposée le même jour.
 Impact spec : aucun. Amendement candidat de 03 §34.2, qui devrait dire ce que devient une session
 refusée — et si elle compte dans la couverture d'une unité.
+
 ## 2026-09-06 — [L5c] Un navigateur qui refuse la persistance interdit-il aussi de RESTAURER ?
 
 05 §31-2 refuse l'embarquement sans persistance ; `EcranRestauration` appliquait la même règle à
