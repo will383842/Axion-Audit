@@ -55,11 +55,17 @@ import { readFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
-const ROUGE = '[31m';
-const VERT = '[32m';
-const JAUNE = '[33m';
-const GRIS = '[90m';
-const RAZ = '[0m';
+// Couleurs ANSI. L'octet ESC vient d'un APPEL DE FONCTION, jamais d'une séquence
+// d'échappement écrite à la main : l'outillage d'édition de la chaîne d'agents la
+// convertit en OCTET RÉEL à l'écriture, et un octet de contrôle dans une source la
+// rend invisible aux `grep` des étapes 3, 4 et 6 du pipeline (mesuré le 2026-09-04 ;
+// garde `scripts/check-octets-controle.mjs`).
+const ESC = String.fromCharCode(27);
+const ROUGE = `${ESC}[31m`;
+const VERT = `${ESC}[32m`;
+const JAUNE = `${ESC}[33m`;
+const GRIS = `${ESC}[90m`;
+const RAZ = `${ESC}[0m`;
 
 const RACINE = resolve(import.meta.dirname, '..');
 const TABLE_EXECUTION = 'docs/TRACABILITE_E1-E47.md';
