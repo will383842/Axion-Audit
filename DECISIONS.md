@@ -10511,6 +10511,7 @@ Règle de précédence : **sans objet** entre le pack et lui-même — c'est un 
 sur une décision de gouvernance, pas une divergence de spécification.
 Décideur : **A30**, en application de l'arbitrage A01 du 2026-09-05 ; contestable par A36 et A37.
 Impact spec : aucun.
+
 ## 2026-09-06 — [L8 → consommateur] Une mission non commencée doit-elle crier au loup ?
 
 Mesuré par la couche d'acceptation croisée, en cherchant **ce que les correctifs ont ouvert** :
