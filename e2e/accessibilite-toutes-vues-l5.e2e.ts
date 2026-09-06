@@ -1,5 +1,5 @@
 // =============================================================================
-// E2E — AXE-CORE SUR LES **ONZE** VUES DU TERRAIN (lot L5) — agent A28
+// E2E — AXE-CORE SUR **TOUTES** LES VUES DU TERRAIN (lot L5) — agent A28
 //
 // ── LE CONSTAT QUI OUVRE CE FICHIER, ET IL EST DE MOI ───────────────────────
 // Rapport A28 du 2026-09-06, en toutes lettres : « Périmètre d'axe-core
@@ -12,7 +12,7 @@
 // une case cochée : c'est la famille de faux vert que ce dépôt traque.
 //
 // ── CE QUE CE FICHIER AJOUTE, ET CE QU'IL NE REMPLACE PAS ───────────────────
-// Il balaie les ONZE vues du registre, sur un appareil ÉQUIPÉ — coffre créé,
+// Il balaie TOUTES les vues du registre, sur un appareil ÉQUIPÉ — coffre créé,
 // identité d'auditeur rattachée, mission embarquée. `accessibilite-l5a.e2e.ts`
 // reste en place et garde ce qu'il est seul à tenir : le premier usage (aucun
 // coffre au monde) et le BUDGET de dérivation de clé du 11 §4. Les deux fichiers
@@ -44,21 +44,22 @@
 //     raison pour laquelle ce balayage vit dans un navigateur plutôt qu'en jsdom
 //     (03 §22.1 : « contraste WCAG AA minimum »).
 //
-// ── LE QUATRIÈME ÉTAT (§33.2), ET LE 3-SUR-11 QUI RESTE ────────────────────
+// ── LE QUATRIÈME ÉTAT (§33.2), ET LE 4-SUR-12 QUI RESTE ────────────────────
 // Le réseau coupé est un ÉTAT d'écran, et il est NOMINAL (invariant 1). Mesuré
-// le 2026-09-06 sur `main` : **trois écrans sur onze** rendent quelque chose de
-// différent quand la connexion tombe — `aujourdhui`, `entretien`,
-// `restauration`. Ces trois-là sont balayés réseau coupé, avec l'anti-vacuité
-// qui va avec : le marqueur d'état hors ligne est vérifié ABSENT avant la
-// coupure et PRÉSENT après, sans quoi on rebalaierait le DOM d'en ligne en
-// croyant mesurer autre chose.
+// le 2026-09-06 sur `main` (`grep -rn "useEnLigne\|RappelHorsLigne"`) : **quatre
+// écrans sur douze** rendent quelque chose de différent quand la connexion tombe
+// — `aujourdhui`, `entretien`, `restauration` et `connexionSiege`. Ces quatre-là
+// sont balayés réseau coupé, avec l'anti-vacuité qui va avec : le marqueur
+// d'état hors ligne est vérifié ABSENT avant la coupure et PRÉSENT après, sans
+// quoi on rebalaierait le DOM d'en ligne en croyant mesurer autre chose.
 //
 // Les huit autres ne le sont pas, et c'est un refus délibéré : leur DOM est
 // identique réseau coupé, et huit balayages qui ne mesurent rien remplaceraient
 // un trou par des verts vides — ce qui est pire, parce qu'un vert vide se coche.
-// La PR #81 branche `RappelHorsLigne` sur les onze vues ; chacune recevra alors
-// son `horsLigne`, trois lignes de table, sans changer une ligne de mécanique.
-// **Aucune assertion ne fige le chiffre 3** : #81 n'a pas à rougir en arrivant.
+// La PR #81 branche `RappelHorsLigne` sur les autres vues ; chacune recevra
+// alors son `horsLigne`, trois lignes de table, sans changer une ligne de
+// mécanique. **Aucune assertion ne fige le chiffre 4** : #81 n'a pas à rougir en
+// arrivant, et ce chiffre est un constat daté, pas une cible.
 //
 // ── ③ AUCUNE RÈGLE DÉSACTIVÉE, AUCUN PÉRIMÈTRE RÉTRÉCI ─────────────────────
 // Pas un `disableRules`, pas un `.include('main')`. Une vue qui rend une
@@ -73,10 +74,20 @@
 // vient de la fixture d'A26, qui produit ses octets avec la crypto de PRODUCTION
 // (09 §5.7 : aucune crypto n'est réécrite ici).
 //
-// ── LE RELEVÉ DU 2026-09-06 : CE QUE LE PASSAGE DE 3 À 11 VUES A TROUVÉ ────
-// Dix-sept états balayés — onze vues, dont trois aussi réseau coupé. Seize
-// verts, UN rouge. Le rouge est réel et il est laissé rouge : la CI le dira, et
-// c'est ce qu'on veut qu'elle dise.
+// ── LE GARDE A TIRÉ LE JOUR MÊME, ET CE N'EST PAS UNE FIGURE DE STYLE ──────
+// Écrit sur onze vues le 2026-09-06 ; la PR #80 en a ajouté une DOUZIÈME
+// (`connexionSiege`) quelques heures plus tard. Le `satisfies` ci-dessous a
+// refusé de compiler — `Property 'connexionSiege' is missing` — avant qu'aucun
+// test ne tourne. Le douzième écran est donc né avec son balayage, ce que ce
+// fichier promettait et qu'une liste recopiée n'aurait pas tenu une journée.
+// Le fichier a été renommé pour la même raison : `accessibilite-onze-vues`
+// serait devenu, en une journée, la liste périmée qu'il dénonce.
+//
+// ── LE RELEVÉ DU 2026-09-06 : CE QUE LE PASSAGE DE 3 À 12 VUES A TROUVÉ ────
+// Dix-huit états balayés — douze vues (dont l'écran d'entretien dans trois de
+// ses moments), plus quatre de ces vues une seconde fois réseau coupé.
+// Dix-sept verts, UN rouge. Le rouge est réel et il est laissé rouge : la CI le
+// dira, et c'est ce qu'on veut qu'elle dise.
 //
 //   A28-2 — `apps/field/src/ecrans/entretien/EcranEntretien.tsx`, ligne ~830,
 //   `<aside class="axn-entretien__zone--laterale" aria-label="Notes">`.
@@ -179,6 +190,22 @@ function sansPreparationDeStockage(depart: GrainesAppareil): GrainesAppareil {
         !ligne.cle.startsWith('mission:embarquee:') &&
         !ligne.cle.startsWith('mission:persistance:'),
     ),
+  };
+}
+
+/**
+ * Les mêmes graines, PRIVÉES de l'identité d'auditeur.
+ *
+ * C'est l'appareil qui n'appartient encore à personne — l'état d'une tablette
+ * neuve, et le seul depuis lequel `AccesRattachement` propose son geste
+ * (`siege/coquille-siege.tsx`, arrivé avec la PR #80). Avec une identité,
+ * l'écran de rattachement rend son état « Appareil rattaché » : ni formulaire,
+ * ni rappel hors ligne. On balaierait le bon écran dans le mauvais état.
+ */
+function sansIdentiteAuditeur(depart: GrainesAppareil): GrainesAppareil {
+  return {
+    tables: depart.tables,
+    meta: depart.meta.filter((ligne) => ligne.cle !== 'auth:utilisateur'),
   };
 }
 
@@ -365,6 +392,24 @@ async function allerDerniereQuestion(page: Page): Promise<void> {
   await expect(page.getByRole('button', { name: 'Terminer l’entretien' })).toBeVisible();
 }
 
+/**
+ * L'écran de rattachement de l'appareil à son auditeur (PR #80).
+ *
+ * L'appareil est semé SANS identité : c'est la seule condition dans laquelle le
+ * rappel de la coquille propose le geste, et c'est aussi le seul état de cet
+ * écran qu'un auditeur rencontre avant d'avoir un compte dessus.
+ */
+async function allerConnexionSiege(page: Page): Promise<void> {
+  await planterAppareil(page, sansIdentiteAuditeur(await graines()));
+  await deverrouillerAppareil(page, MOT_DE_PASSE_APPAREIL);
+  await expect(page.getByText('Cet appareil n’est rattaché à aucun auditeur')).toBeVisible();
+  await page.getByRole('button', { name: 'Rattacher cet appareil' }).click();
+  await expect(titreDEcran(page, 'Rattacher cet appareil')).toBeVisible();
+  await expect(page.getByText('Pourquoi cette étape')).toBeVisible();
+  await expect(page.getByLabel(/Adresse de votre compte/)).toBeVisible();
+  await expect(page.getByLabel(/Mot de passe du compte/)).toBeVisible();
+}
+
 /** L'écran de restauration, atteint depuis l'écran d'embarquement (03 §34.2). */
 async function allerRestauration(page: Page): Promise<void> {
   await allerAccueil(page);
@@ -412,23 +457,23 @@ interface Etat {
 /**
  * Le QUATRIÈME état du 03 §33.2 — celui que le réseau coupé fait apparaître.
  *
- * ── POURQUOI IL N'EST DÉCLARÉ QUE PAR TROIS VUES SUR ONZE ──────────────────
- * Mesuré le 2026-09-06 sur `main` (`grep -rn "useEnLigne" apps/field/src`) :
- * **trois écrans seulement** rendent quelque chose de différent quand la
- * connexion tombe — `aujourdhui`, `entretien` et `restauration`. Les huit autres
- * rendent, réseau coupé, exactement le même DOM qu'en ligne.
+ * ── POURQUOI IL N'EST DÉCLARÉ QUE PAR QUATRE VUES SUR DOUZE ────────────────
+ * Mesuré le 2026-09-06 sur `main` : **quatre écrans seulement** rendent quelque
+ * chose de différent quand la connexion tombe — `aujourdhui`, `entretien` et
+ * `restauration` (par `useEnLigne`), plus `connexionSiege` (par
+ * `RappelHorsLigne`, PR #80). Les huit autres rendent, réseau coupé, exactement
+ * le même DOM qu'en ligne.
  *
  * Les balayer une seconde fois ne mesurerait donc RIEN, et ce fichier refuse
  * précisément les balayages qui ne mesurent rien : ce serait remplacer un trou
  * par huit verts vides, ce qui est pire, parce qu'un vert vide se coche.
  *
  * Le champ est OPTIONNEL et il attend : la PR #81 branche `RappelHorsLigne` sur
- * les onze vues, et chacune recevra alors son `horsLigne` — trois lignes de
- * table, aucun changement de mécanique. **Ce chiffre-là est donc un constat daté,
- * pas une cible** : « 3 vues sur 11 rendent l'état hors ligne » est aujourd'hui
- * vrai de l'APPLICATION, comme « 3 vues sur 11 sont balayées » l'était du
- * BALAYAGE. Aucune assertion ne le fige, pour qu'#81 n'ait pas à rougir en
- * arrivant.
+ * les autres vues, et chacune recevra alors son `horsLigne` — trois lignes de
+ * table, aucun changement de mécanique. **Ce chiffre-là est un constat daté, pas
+ * une cible** : « 4 vues sur 12 rendent l'état hors ligne » est aujourd'hui vrai
+ * de l'APPLICATION, comme « 3 vues sur 11 sont balayées » l'était du BALAYAGE.
+ * Aucune assertion ne le fige, pour qu'#81 n'ait pas à rougir en arrivant.
  */
 interface EtatHorsLigne {
   /** L'état depuis lequel on coupe le réseau — un des `etats` ci-dessus. */
@@ -589,6 +634,22 @@ const PARCOURS = {
       },
     ],
   },
+  // ── La DOUZIÈME vue, arrivée avec la PR #80 le 2026-09-06 ────────────────
+  // Elle n'a pas été ajoutée ici « au cas où » : le `satisfies` ci-dessous a
+  // REFUSÉ DE COMPILER à la minute où `vues.ts` a reçu sa ligne. C'est
+  // exactement ce que ce fichier promettait — le douzième écran naît avec son
+  // balayage ou ne naît pas — et c'est arrivé le jour même.
+  connexionSiege: {
+    delaiMs: 120_000,
+    etats: [{ libelle: 'appareil non rattaché, formulaire', atteindre: allerConnexionSiege }],
+    // Le seul écran qui EXIGE le réseau : son rappel hors ligne ne dit donc pas
+    // « tout marche », il dit ce qui marche encore. C'est aussi le seul écran de
+    // `main` qui rende déjà `RappelHorsLigne` — celui que #81 portera partout.
+    horsLigne: {
+      depuis: allerConnexionSiege,
+      marqueur: 'ouvrir ce qui est déjà enregistré ici',
+    },
+  },
 } as const satisfies Record<CodeVue, Parcours>;
 
 /** Les codes viennent de la TABLE, dont le type vient du REGISTRE. */
@@ -609,12 +670,14 @@ function parcoursDe(code: CodeVue): Parcours {
 // ─────────────────────────────────────────────────────────────────────────────
 // A. LE COMPTE — il échoue si une vue du registre n'est pas balayée
 // ─────────────────────────────────────────────────────────────────────────────
-test('contrôle d’anti-vacuité : les ONZE vues du registre ont un parcours balayé', () => {
+test('contrôle d’anti-vacuité : toutes les vues du registre ont un parcours balayé', () => {
   const registre = Object.keys(VUES);
   expect(CODES.length, 'une vue du registre n’a pas de parcours').toBe(registre.length);
   expect([...CODES].sort()).toEqual([...registre].sort());
   // Le nombre EN CLAIR : le jour où il change, ce test le dit avant la porte.
-  expect(registre.length, 'le registre a changé de taille — le rapport A28 aussi').toBe(11);
+  // Il est passé de 11 à 12 le 2026-09-06 (PR #80, `connexionSiege`) — et c'est
+  // le `satisfies` qui l'a dit le premier, à la compilation.
+  expect(registre.length, 'le registre a changé de taille — le rapport A28 aussi').toBe(12);
   for (const code of CODES) {
     expect(parcoursDe(code).etats.length, `${code} : aucun état à balayer`).toBeGreaterThan(0);
   }
