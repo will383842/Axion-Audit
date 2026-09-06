@@ -2272,6 +2272,41 @@ est une faute.
 
 ---
 
+## 2026-09-06 — [L5b] Étage 2, PROPOSÉE — provisionner un appareil qui n'aura JAMAIS de réseau
+
+**Déposée par A23** en fermant le bloquant « aucune identité d'auditeur en production »
+(`DECISIONS.md`, 2026-09-06). Le chemin livré — `POST /v1/auth/login`, une fois, en ligne — est le
+seul qui produise un `users.id` que le serveur acceptera (05 §9.9). Cette fiche porte ce qu'il ne
+couvre pas, et le porte explicitement plutôt que de le laisser se découvrir en recette.
+
+**Constat terrain.** Un appareil qui n'a jamais vu le réseau ne peut pas être rattaché, donc ne peut
+ouvrir aucun entretien. Le cas n'est pas théorique : tablette de remplacement sortie du carton le
+matin d'une visite, site sans Wi-Fi ni couverture, auditeur qui part sans être passé au bureau.
+Aujourd'hui l'application le DIT clairement (écran « Rattacher cet appareil », état hors ligne) —
+elle n'y répond pas.
+
+**Valeur pour l'auditeur.** Une journée d'entretiens sauvée, une fois par an peut-être, mais celle-là
+ne se rattrape pas : les interlocuteurs ne se re-convoquent pas.
+
+**Ce qui est proposé (deux formes, à arbitrer).**
+① **Code d'appareil** remis par l'admin : une chaîne courte, vérifiable hors ligne, qui porte le
+`users.id` et une somme de contrôle — l'auditeur la saisit une fois. Coût novice acceptable si elle
+fait ~12 caractères groupés ; prohibitif si c'est un UUID de 36 (option écartée le 2026-09-06).
+② **Identité emportée par l'export de secours** : `.axionbackup` (11 §4) ne porte pas le compte
+aujourd'hui ; l'y ajouter rendrait un appareil de remplacement immédiatement opérationnel à partir
+de la sauvegarde de la veille — ce qui est déjà le geste prévu par l'invariant 8.
+
+**Coût estimé.** ① ~0,5 j (format du code, vérification, écran, tests). ② ~0,5 j.
+**Impact schéma : aucun. Impact crypto : aucun** (② re-chiffre déjà tout sous le mot de passe).
+**Impact API : ① aucune route nouvelle si le code est fabriqué par l'admin dans la console ; sinon
+une route d'émission. Impact format de fichier : ② modifie l'en-tête `.axionbackup` (11 §4).**
+
+**Pourquoi elle n'est pas faite ici.** ② touche un format de fichier spécifié au 11 §4, ① peut
+toucher l'API : CLAUDE.md §3-2 et §3-6. Et CLAUDE.md §6 interdit d'implémenter une fiche d'étage 2
+avant son arbitrage. La proposer est un devoir, l'anticiper est une faute.
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE
+
 ## A-0xx — L5 : donner au REFUS de participation son propre état de session
 
 **Étage 2 — PROPOSÉE, non implémentée.** Déposée par A22 le 2026-09-06, à la fermeture du doute de
