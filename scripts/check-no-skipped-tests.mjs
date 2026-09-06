@@ -46,6 +46,16 @@
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 
+// Couleurs ANSI. L'octet ESC vient d'un APPEL DE FONCTION, jamais d'une séquence
+// d'échappement écrite à la main : l'outillage d'édition de la chaîne d'agents la
+// convertit en OCTET RÉEL à l'écriture, et un octet de contrôle dans une source la
+// rend invisible aux `grep` des étapes 3, 4 et 6 du pipeline (mesuré le 2026-09-04 ;
+// garde `scripts/check-octets-controle.mjs`).
+const ESC = String.fromCharCode(27);
+const ROUGE = `${ESC}[31m`;
+const VERT = `${ESC}[32m`;
+const RAZ = `${ESC}[0m`;
+
 /**
  * Modificateurs AUTORISÉS sur un point d'entrée de test. Tout le reste est refusé.
  *
@@ -152,7 +162,7 @@ const fichiers = fichiersDeTest();
 // affirmait sa conclusion sans avoir rien regardé. C'est le défaut d'origine de ce
 // lot, ici par une autre porte.
 if (fichiers.length === 0) {
-  console.error('\n[31m✗ GARDE-FOU ANTI-SKIP : aucun fichier de test trouvé.[0m');
+  console.error(`\n${ROUGE}✗ GARDE-FOU ANTI-SKIP : aucun fichier de test trouvé.${RAZ}`);
   console.error(
     '  `git ls-files` ne rend aucun `*.test.ts` / `*.spec.ts` / `*.e2e.ts`. Ce contrôle\n' +
       "  n'a donc RIEN vérifié — et un contrôle qui ne vérifie rien ne rend pas EXIT=0.\n",
@@ -182,7 +192,7 @@ for (const fichier of fichiers) {
 }
 
 if (infractions.length > 0) {
-  console.error('\n[31m✗ GARDE-FOU ANTI-SKIP : build rouge[0m');
+  console.error(`\n${ROUGE}✗ GARDE-FOU ANTI-SKIP : build rouge${RAZ}`);
   console.error('  Règle 09 §5.7 et DoD transverse : « tous les tests verts, AUCUN test skippé ».');
   console.error('  Les tests marqués @critique et @filrouge ne sont JAMAIS skippables (11 §2).\n');
   for (const i of infractions) {
@@ -199,5 +209,5 @@ if (infractions.length > 0) {
 
 const total = fichiers.length;
 console.log(
-  `[32m✓[0m garde-fou anti-skip : aucun test désactivé (${total} fichier(s) de test analysé(s)).`,
+  `${VERT}✓${RAZ} garde-fou anti-skip : aucun test désactivé (${total} fichier(s) de test analysé(s)).`,
 );
