@@ -21,7 +21,7 @@
 // d'imports entre deux composants dont l'un rend l'autre. Une feuille sans
 // dépendance ferme la question, et garantit qu'une seule chaîne existe.
 //
-// Traçabilité : E23 (hyper intuitif, novice < 30 min), E44 (UX/UI — grille §33).
+// Traçabilité : E23 (hyper intuitif, novice < 30 min), E44 (UX/UI 2026-2027 — tokens, police locale, grille §33).
 // =============================================================================
 
 /** Le motif « lecture seule » de la zone question — rendu par `ZoneQuestion`. */
