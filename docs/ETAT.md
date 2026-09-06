@@ -3580,3 +3580,30 @@ sort parfois en code 1 sur `[vitest-worker]: Timeout calling "onTaskUpdate"` ; u
 deux **timeouts à 5 s** dans `apps/api/.../assignments/service.test.ts`, qui passe en 4,4 s isolé.
 `--pool=forks` : **3 passes sur 3 vertes**, 1 022/1 022. Contention sous Node v24.19.0, hors contrat.
 
+
+## 2026-09-06 09h05 — [lot L5 / incrément L5a — réserves A29] — étape pipeline 5/7 (tests)
+
+Dernier commit vert : `83be944` · Branche : `lot/l5a-reserves` · Poussé : push en cours (hook long).
+Tâche en cours : A26 a réintégré `main` (12 commits : L5b, L7a, L7b, E18) et REMESURÉ.
+Prochaine action : rendre le rapport A26 à A20 pour la signature de fin d'incrément (11 §6).
+Tests rouges connus : **aucun** — 89 fichiers, **2 052 tests verts**, 0 skippé (`--pool=forks`).
+
+**La fusion n'a rien coûté aux deux fichiers du coffre.** Conflit sur `docs/ETAT.md` SEUL, et des
+deux côtés c'était de l'ajout de blocs : blocs de `main` d'abord, les miens ensuite, aucun réécrit.
+Remesure par la porte elle-même (`check-coverage.mjs`, unit + interface) : `coffre.ts` **100 %**
+lignes / 98,52 branches · `coffre-appareil.ts` **100 / 100** · glob « Couche locale terrain »
+**99,04 / 95,65**. Les 89,51 % qui manquaient à la DoD sont fermés et le restent après fusion.
+
+**Les trois bascules ont été REJOUÉES sur l'arbre fusionné**, parce qu'une preuve faite avant une
+fusion ne prouve plus rien après elle :
+· **R1** — plancher mémoire ramené à une constante (coefficient retiré) ⇒ `m=15,p=2` et `m=31,p=4`
+rougissent, **et elles seules** ; les cas `p=1` restent verts, ce qui est correct : à `p=1` le
+coefficient est indiscernable d'une constante.
+· **R4** — garde de PRÉSENCE ramenée à une garde de VALEUR ⇒ les deux tests `valeur:null` et « sans
+propriété `valeur` » rougissent, tandis que l'**anti-vacuité** (ligne absente ⇒ appareil neuf
+préparable) reste VERTE, comme elle doit.
+· **R3** — `setPremierUsage(false)` neutralisée ⇒ un seul test rougit, celui de `contexte.tsx`.
+Les tests d'écran restent verts **à raison** : ils reçoivent l'état en accessoire. Le couple
+« transition d'état » + « rendu » couvre le défaut ; ni l'un ni l'autre seul.
+Après restauration, `git diff` **vide** : arbre identique à l'octet. Aucun fichier de production
+touché de ma main (09 §5.6).
