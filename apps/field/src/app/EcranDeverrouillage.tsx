@@ -19,45 +19,71 @@
 // est ci-dessous, il n'y a pas d'état vide (l'écran EST le contenu) et le hors
 // ligne est le mode NOMINAL — d'où la mention explicite plutôt qu'une pastille.
 //
-// ── B1 (recette novice A54, 2026-09-06) : NE JAMAIS DIAGNOSTIQUER À VIDE ─────
-// Le bouton tapé champ vide, au PREMIER usage, répondait « Déverrouillage
-// impossible / Mot de passe incorrect » — sur l'écran qui CRÉE le mot de passe.
-// Le novice cherchait un mot de passe qui n'existe pas, et appelait le siège.
-// La cause est structurelle : le message venait de `deriverKek`, qui refuse une
-// chaîne vide — et qui a raison de la refuser ; la crypto n'est pas touchée. Un
-// refus de crypto n'est pas une phrase d'accueil.
+// ── L'ÉTAT D'ERREUR A DEUX FORMES, ET C'EST DÉLIBÉRÉ (revue A29, R3) ────────
+// Une erreur ORDINAIRE (mot de passe faux, mot de passe trop court) laisse le
+// formulaire vivant : on se trompe de touche, on recommence. Une ANOMALIE DE
+// COFFRE, elle, retire le formulaire — bouton compris. La raison n'est pas de
+// style : sur cette famille-là, l'écran affichait « Ne créez PAS de protection
+// sur cet appareil » juste au-dessus d'un bouton actif « Créer la protection de
+// cet appareil ». 03 §33.2 demande un état d'erreur COHÉRENT ; ici, le message
+// le plus cliquable était celui qui détruit la journée de collecte.
 //
-// L'écran valide donc AVANT d'appeler le coffre, et chaque message est écrit
-// pour la situation où il paraît : on dit CE QUI EST ATTENDU quand rien n'a été
-// saisi, et on ne parle de « mot de passe incorrect » que lorsqu'un mot de passe
-// a réellement été présenté à un coffre existant.
+// ── LA POLITIQUE DE MOT DE PASSE EST DITE AVANT D'ÊTRE OPPOSÉE (A51, F-23) ──
+// Le coffre la GARANTIT (`verifierPolitiqueMotDePasse`) ; l'écran, lui, doit la
+// dire — au moment du choix, pas après un refus. Un auditeur qui découvre une
+// règle en la violant a déjà perdu confiance dans l'outil. Elle n'est annoncée et
+// opposée qu'au PREMIER usage : au déverrouillage d'un coffre existant, refuser
+// un mot de passe court n'ajouterait aucune sécurité et interdirait l'accès à des
+// données déjà chiffrées.
+//
+// ── B1 (recette novice A54, 2026-09-06) : NE JAMAIS DIAGNOSTIQUER À VIDE ─────
+// Le bouton tapé champ vide répondait « Déverrouillage impossible / Mot de passe
+// incorrect » — sur l'écran qui CRÉE le mot de passe. Le novice cherchait un mot
+// de passe qui n'existe pas, et appelait le siège. La cause est structurelle : le
+// message venait de `deriverKek`, qui refuse une chaîne vide — et qui a raison de
+// la refuser ; la crypto n'est pas touchée. Un refus de crypto n'est simplement
+// pas une phrase d'accueil.
+//
+// L'écran valide donc AVANT d'appeler le coffre, et dit CE QUI EST ATTENDU.
+// « Mot de passe incorrect » n'est plus prononcé que lorsqu'un mot de passe a
+// réellement été présenté à un coffre existant.
+//
+// **Les quatre gardes sont ORDONNÉES, et l'ordre est un choix** : champ vide,
+// puis LONGUEUR, puis confirmation. La longueur passe avant la confirmation parce
+// qu'elle est plus actionnable — on ne fait pas retaper deux fois, debout chez un
+// client, un mot de passe que la politique refusera de toute façon.
 //
 // Le bouton reste ACTIF et répond : un bouton grisé muet est le « cadenas muet »
-// que 03 §19.1 interdit — le défaut jumeau (M1) du même parcours.
+// que 03 §19.1 interdit.
 //
 // ── M5 : LA CONFIRMATION, AU PREMIER USAGE SEULEMENT ────────────────────────
-// L'écran annonce lui-même que le mot de passe « ne peut pas être récupéré ».
-// Une faute de frappe sur un clavier virtuel d'iPad rendait donc l'appareil
+// L'écran annonce lui-même que le mot de passe « ne peut pas être récupéré ». Une
+// faute de frappe sur un clavier virtuel d'iPad rendait donc l'appareil
 // définitivement illisible, sans aucun filet. La confirmation n'existe qu'au
 // premier usage : à la reprise, le coffre est le juge, et une seconde saisie ne
-// protégerait de rien. Aucune règle de LONGUEUR n'est inventée — le pack n'en
-// pose aucune, et un minimum improvisé serait une politique de sécurité écrite
-// par un écran (11 §8).
+// protégerait de rien. La LONGUEUR, elle, n'est pas inventée par cet écran : elle
+// vient de `MOT_DE_PASSE_LONGUEUR_MIN` (`packages/shared`) — une politique de
+// sécurité ne s'écrit pas dans un composant (11 §8).
 //
 // Traçabilité : E33 (sécurité / RGPD), E23 (hyper intuitif, novice < 30 min).
 // =============================================================================
 import { useCallback, useId, useState, type FormEvent, type ReactNode } from 'react';
 import { Bouton, Message } from '@axion/ui';
+import { MOT_DE_PASSE_LONGUEUR_MIN } from '@axion/shared';
+import { AnomalieCoffreError, MotDePasseTropCourtError } from '../local/coffre.js';
 import { useTerrain } from './contexte.js';
 
 const AIDE_HORS_LIGNE =
   'Votre mot de passe déverrouille les données de cet appareil, sans réseau. ' +
   'Si la connexion au siège a expiré, la collecte continue : seule la synchronisation attendra une reconnexion.';
 
-/** Au premier usage, la saisie CRÉE : l'aide dit ce qu'on attend, pas ce qui manque. */
+// Au premier usage, la même aide dirait faux : le mot de passe ne DÉVERROUILLE
+// rien encore, il crée la protection. La mention hors ligne (05 §31-3), elle,
+// reste due dans les deux cas — c'est le quatrième état de cet écran.
 const AIDE_PREMIER_USAGE =
-  'Choisissez un mot de passe et retenez-le : il sera demandé à chaque reprise, il n’est envoyé nulle part et ' +
-  'il ne peut pas être récupéré. Saisissez-le deux fois pour écarter une faute de frappe.';
+  `Choisissez un mot de passe d’au moins ${String(MOT_DE_PASSE_LONGUEUR_MIN)} caractères : il chiffrera les données de cet appareil. ` +
+  'Saisissez-le deux fois pour écarter une faute de frappe. ' +
+  'La collecte fonctionnera ensuite sans réseau ; seule la synchronisation attendra une reconnexion.';
 
 /** B1 — ce que l'écran répond quand le champ est vide. Jamais un diagnostic. */
 const ATTENDU_PREMIER_USAGE = 'Saisissez un mot de passe pour protéger cet appareil.';
@@ -67,17 +93,67 @@ const CONFIRMATION_DIFFERENTE =
   'Les deux saisies sont différentes. Retapez le même mot de passe dans les deux champs : ' +
   'sans lui, les données de cet appareil resteraient illisibles.';
 
+/** Ce que l'écran affiche d'une erreur : une cause, et l'action qui va avec (03 §17.6). */
+interface ErreurAffichee {
+  readonly cause: string;
+  readonly action: string | null;
+  /**
+   * Anomalie du coffre — c'est-à-dire : il n'y a RIEN à réessayer ici.
+   *
+   * Ce n'est pas un détail d'affichage. Sur cette famille d'erreurs, et sur elle
+   * seule, le geste que l'écran doit empêcher est celui que l'écran propose : le
+   * formulaire et son bouton disparaissent, il ne reste que la cause et l'action
+   * (revue A29 du 2026-09-05, R3).
+   */
+  readonly anomalie: boolean;
+}
+
+/**
+ * Une réponse de VALIDATION : une cause, aucune action, et surtout aucune
+ * anomalie — la saisie reste, le formulaire vit, et le coffre n'a pas été touché.
+ */
+function attendu(cause: string): ErreurAffichee {
+  return { cause, action: null, anomalie: false };
+}
+
+/**
+ * Traduit une erreur en cause + action, sans jamais inventer ni technique brute.
+ *
+ * Les anomalies de coffre (A51 F-22/F-25) portent leur propre action, et elle
+ * compte plus que la cause : « ne créez PAS de nouvelle protection ». La perdre en
+ * route reviendrait à laisser l'auditeur devant un écran qui dit que rien ne
+ * marche, sans lui dire ce qui détruirait ses données.
+ *
+ * La branche `Error` ci-dessous n'affiche QUE des messages métier de `coffre.ts`,
+ * tous écrits en français, et c'est `local/coffre-appareil.ts` qui le garantit en
+ * enveloppant au plus près toute panne technique du chiffrement (revue A29, R1).
+ * Sans ce filet, un `DataError: Invalid key length` de WebCrypto s'afficherait ici
+ * tel quel — en anglais, sans action, et surtout sans le « ne créez PAS ».
+ */
+function traduire(cause: unknown): ErreurAffichee {
+  if (cause instanceof AnomalieCoffreError) {
+    return { cause: cause.message, action: cause.action, anomalie: true };
+  }
+  // Le message vient de l'erreur métier (`coffre.ts`), en français et sans trace
+  // technique : 03 §17.6, « aucune erreur technique brute n'atteint l'écran ».
+  // Aucun mot de passe n'est journalisé, ici ni ailleurs.
+  if (cause instanceof Error) {
+    return { cause: cause.message, action: null, anomalie: false };
+  }
+  return {
+    cause: 'Le déverrouillage a échoué.',
+    action: 'Réessayez ; aucune donnée locale n’a été modifiée.',
+    anomalie: false,
+  };
+}
+
 export function EcranDeverrouillage(): ReactNode {
   const { ouvrir, premierUsage } = useTerrain();
   const [motDePasse, setMotDePasse] = useState('');
   const [confirmation, setConfirmation] = useState('');
-  const [erreur, setErreur] = useState<string | null>(null);
+  const [erreur, setErreur] = useState<ErreurAffichee | null>(null);
   const [enCours, setEnCours] = useState(false);
   const identifiant = useId();
-
-  // B1 — le titre de l'encart suit la situation. « Déverrouillage impossible »
-  // sur un écran de création est un contresens : c'est celui qu'a lu A54.
-  const titreErreur = premierUsage ? 'Protection non créée' : 'Déverrouillage impossible';
 
   const soumettre = useCallback(
     (evenement: FormEvent<HTMLFormElement>): void => {
@@ -85,18 +161,26 @@ export function EcranDeverrouillage(): ReactNode {
       if (enCours) return;
 
       // ── B1 : ce que l'écran sait AVANT d'appeler le coffre ────────────────
-      // Aucune de ces trois réponses n'est un diagnostic : elles disent ce qui
-      // est attendu. Le coffre n'est appelé que si la saisie a un sens.
+      // Aucune de ces réponses n'est un diagnostic : elles disent ce qui est
+      // attendu. Aucune n'efface la saisie — l'auditeur complète plutôt qu'il ne
+      // retape. Le coffre n'est appelé que si la saisie a un sens.
       if (motDePasse === '') {
-        setErreur(premierUsage ? ATTENDU_PREMIER_USAGE : ATTENDU_REPRISE);
+        setErreur(attendu(premierUsage ? ATTENDU_PREMIER_USAGE : ATTENDU_REPRISE));
+        return;
+      }
+      // La politique n'est opposée qu'au moment du CHOIX (premier usage). Le
+      // coffre refusera de toute façon : cette garde-ci est le message, pas la
+      // garantie.
+      if (premierUsage && motDePasse.length < MOT_DE_PASSE_LONGUEUR_MIN) {
+        setErreur(attendu(new MotDePasseTropCourtError().message));
         return;
       }
       if (premierUsage && confirmation === '') {
-        setErreur(CONFIRMATION_ATTENDUE);
+        setErreur(attendu(CONFIRMATION_ATTENDUE));
         return;
       }
       if (premierUsage && confirmation !== motDePasse) {
-        setErreur(CONFIRMATION_DIFFERENTE);
+        setErreur(attendu(CONFIRMATION_DIFFERENTE));
         return;
       }
 
@@ -104,14 +188,7 @@ export function EcranDeverrouillage(): ReactNode {
       setErreur(null);
       void ouvrir(motDePasse)
         .catch((cause: unknown) => {
-          // Le message vient de l'erreur métier (`coffre.ts`), en français et sans
-          // trace technique : 03 §17.6, « aucune erreur technique brute n'atteint
-          // l'écran ». Aucun mot de passe n'est journalisé, ici ni ailleurs.
-          setErreur(
-            cause instanceof Error
-              ? cause.message
-              : 'Le déverrouillage a échoué. Réessayez ; aucune donnée locale n’a été modifiée.',
-          );
+          setErreur(traduire(cause));
         })
         .finally(() => {
           setMotDePasse('');
@@ -122,81 +199,108 @@ export function EcranDeverrouillage(): ReactNode {
     [confirmation, enCours, motDePasse, ouvrir, premierUsage],
   );
 
+  // Une anomalie de coffre ferme l'écran : plus de bouton, plus de saisie, plus
+  // d'invitation à « préparer » — voir `ErreurAffichee.anomalie`. La coquille met
+  // par ailleurs `premierUsage` à `false` sur le même événement (`contexte.tsx`) ;
+  // les deux gardes sont volontairement indépendantes, parce qu'ici la garde qui
+  // manque est celle qui détruit une journée de collecte.
+  const anomalie = erreur?.anomalie === true;
+
   return (
     <section className="axn-pile axn-pile--large" aria-labelledby={`${identifiant}-titre`}>
       <h1 id={`${identifiant}-titre`}>
-        {premierUsage ? 'Préparer cet appareil' : 'Déverrouiller la collecte'}
+        {anomalie
+          ? 'Anomalie du coffre de cet appareil'
+          : premierUsage
+            ? 'Préparer cet appareil'
+            : 'Déverrouiller la collecte'}
       </h1>
 
-      {premierUsage && (
+      {premierUsage && !anomalie && (
         <Message ton="info" titre="Première utilisation de cet appareil">
           Votre mot de passe protège les données d’audit stockées ici. Il n’est envoyé nulle part et
           ne peut pas être récupéré : sans lui, les données de cet appareil resteront illisibles.
+          Choisissez-en un d’au moins {MOT_DE_PASSE_LONGUEUR_MIN} caractères.
         </Message>
       )}
 
-      <form onSubmit={soumettre} noValidate>
-        <div className="axn-champ">
-          <label className="axn-champ__libelle" htmlFor={`${identifiant}-mdp`}>
-            Mot de passe
-            <span className="axn-champ__obligatoire" aria-hidden="true">
-              *
-            </span>
-          </label>
-          <input
-            id={`${identifiant}-mdp`}
-            className="axn-champ__saisie"
-            type="password"
-            autoComplete="current-password"
-            required
-            autoFocus
-            data-saisie-libre="vrai"
-            aria-invalid={erreur !== null}
-            aria-describedby={`${identifiant}-aide`}
-            value={motDePasse}
-            onChange={(evenement) => {
-              setMotDePasse(evenement.target.value);
-            }}
-          />
-          <p id={`${identifiant}-aide`} className="axn-champ__aide">
-            {premierUsage ? AIDE_PREMIER_USAGE : AIDE_HORS_LIGNE}
-          </p>
-        </div>
+      {anomalie && (
+        <Message ton="alerte" titre="Cet appareil ne peut pas être ouvert" role="alert">
+          <p>{erreur.cause}</p>
+          {erreur.action !== null && <p>{erreur.action}</p>}
+        </Message>
+      )}
 
-        {premierUsage && (
+      {!anomalie && (
+        <form onSubmit={soumettre} noValidate>
           <div className="axn-champ">
-            <label className="axn-champ__libelle" htmlFor={`${identifiant}-confirmation`}>
-              Confirmer le mot de passe
+            <label className="axn-champ__libelle" htmlFor={`${identifiant}-mdp`}>
+              Mot de passe
               <span className="axn-champ__obligatoire" aria-hidden="true">
                 *
               </span>
             </label>
             <input
-              id={`${identifiant}-confirmation`}
+              id={`${identifiant}-mdp`}
               className="axn-champ__saisie"
               type="password"
-              autoComplete="new-password"
+              autoComplete={premierUsage ? 'new-password' : 'current-password'}
               required
+              {...(premierUsage ? { minLength: MOT_DE_PASSE_LONGUEUR_MIN } : {})}
+              autoFocus
               data-saisie-libre="vrai"
               aria-invalid={erreur !== null}
-              value={confirmation}
+              aria-describedby={`${identifiant}-aide`}
+              value={motDePasse}
               onChange={(evenement) => {
-                setConfirmation(evenement.target.value);
+                setMotDePasse(evenement.target.value);
               }}
             />
+            <p id={`${identifiant}-aide`} className="axn-champ__aide">
+              {premierUsage ? AIDE_PREMIER_USAGE : AIDE_HORS_LIGNE}
+            </p>
           </div>
-        )}
 
-        {erreur !== null && (
-          <Message ton="alerte" titre={titreErreur} role="alert">
-            {erreur}
-          </Message>
-        )}
+          {premierUsage && (
+            <div className="axn-champ">
+              <label className="axn-champ__libelle" htmlFor={`${identifiant}-confirmation`}>
+                Confirmer le mot de passe
+                <span className="axn-champ__obligatoire" aria-hidden="true">
+                  *
+                </span>
+              </label>
+              <input
+                id={`${identifiant}-confirmation`}
+                className="axn-champ__saisie"
+                type="password"
+                autoComplete="new-password"
+                required
+                data-saisie-libre="vrai"
+                aria-invalid={erreur !== null}
+                value={confirmation}
+                onChange={(evenement) => {
+                  setConfirmation(evenement.target.value);
+                }}
+              />
+            </div>
+          )}
 
-        <Bouton type="submit" pleineLargeur taille="large" chargement={enCours}>
-          {premierUsage ? 'Créer la protection de cet appareil' : 'Déverrouiller'}
-        </Bouton>
-      </form>
+          {erreur !== null && (
+            <Message
+              ton="alerte"
+              titre={premierUsage ? 'Protection non créée' : 'Déverrouillage impossible'}
+              role="alert"
+            >
+              <p>{erreur.cause}</p>
+              {erreur.action !== null && <p>{erreur.action}</p>}
+            </Message>
+          )}
+
+          <Bouton type="submit" pleineLargeur taille="large" chargement={enCours}>
+            {premierUsage ? 'Créer la protection de cet appareil' : 'Déverrouiller'}
+          </Bouton>
+        </form>
+      )}
     </section>
   );
 }

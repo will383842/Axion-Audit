@@ -3279,126 +3279,49 @@ ses 15 renvois internes. **Seules les lettres changent** — aucune mesure, aucu
 — et la renumérotation est **déclarée en tête de section**, pas faite en silence.
 Gardes rejoués : `check:decisions` ✓ · `check:tracabilite` ✓ 751 citations, 369 fichiers, 0 incohérence.
 
-## 2026-09-02 17h20 — [lot L5 / incrément L5a] — étape pipeline 5/7 (fin de session propre)
-Dernier commit vert : 069c46a (docs: fiche A-012)   ·   Branche : lot/l5a   ·   Poussé : oui
-Tâche en cours : L5a corrigé après A29 REFUSÉ, puis A29 REJEU = ACCEPTÉ SOUS RÉSERVE (0 bloquant) ;
-ses réserves N1-N3 fermées dans 2c754b2 (275+ tests verts, CI verte après relance — l0-restauration
-instable, fiche A-012, pas L5a). R-L5a-6 (axe-core inutilisé) et R-L5a-9 (décisions L5a sur
-lot/l3-suite) reconstituées et tracées : la première se ferme par A28, la seconde par l'ordre de
-fusion (L3 → main → main dans lot/l5a AVANT la PR L5a).
-Prochaine action : après la PR L3 fusionnée, `git merge origin/main` dans lot/l5a (append-only
-« main d'abord »), vérifier par grep que les cinq entrées [L5a] du 2026-09-02 (Argon2id, AAD,
-validé, liste fermée, dépendances) sont présentes, rejouer `pnpm test:unit` + interface, pousser,
-lancer A28 (axe sur les trois écrans + mesure de dérivation < 1 s), puis A20 signe, A02 contrôle,
-PR lot/l5a → main (Williams fusionne). lot/l5b (162/162) attend cette PR pour intégrer main.
-Tests rouges connus : aucun. À Williams : icône PWA provisoire (A-009), script d'accord (L5b).
+## 2026-09-05 02h00 — [lot L1 / incrément E18 `external_ref`] — étape pipeline 4/7 (revue croisée A17, correctifs livrés)
 
-## 2026-09-03 06h00 — [lot L5 / incrément L5a] — étape pipeline 5/7
-Dernier commit vert : d589b03 (test(l5a) : balayage axe-core + budget de dérivation, A28) · Branche : lot/l5a · Poussé : oui
-Tâche en cours : R-L5a-6 est FERMÉE, et par une mesure. `@axe-core/playwright`, installé par
-dérogation 11 §8-1 et appelé nulle part, est enfin utilisé : `e2e/accessibilite-l5a.e2e.ts`, cinq cas,
-0 violation sur les trois écrans du socle (déverrouillage premier usage ET coffre existant, Aujourd'hui
-en état vide, Stockage), tags wcag2a + wcag2aa + wcag21a + wcag21aa, aucun `disableRules`.
-Dérivation Argon2id mesurée dans le navigateur : création 284 ms, réouverture 199 ms, budget
-11 §4 = 1000 ms. C'est une BORNE SUPÉRIEURE de bout en bout, elle majore la dérivation seule ; le
-chiffre de l'iPad reste dû à A27 à la porte P-C. Bascule faite : une image sans `alt` injectée fait
-sortir `image-alt`, le vert n'est donc pas un balayage qui ne balaie rien.
-Deux constats A28-1 remontés à A29, non corrigés ici (un test d'accessibilité ne modifie pas
-l'interface qu'il mesure) : sur « Aujourd'hui », la coquille et l'écran affichent DEUX `<h1>` de
-libellé identique ; l'écran Stockage porte deux libellés différents (« de l'appareil » dans `VUES`,
-« de cet appareil » à l'écran).
-Prochaine action : ATTENDRE que la PR L3 entre dans `main` (ordre de fusion figé, DECISIONS.md A37 —
-`main` est à 8c5f9ff, L3 n'y est PAS), puis `git merge origin/main` dans lot/l5a, vérifier PAR GREP
-que les cinq entrées [L5a] du 2026-09-02 (Argon2id, AAD, `validé`, liste fermée, dépendances de test)
-survivent à la fusion — c'est la fermeture de R-L5a-9 — rejouer `pnpm verify`, puis PR lot/l5a → main.
-Tests rouges connus : aucun. `verify:rapide` vert au pre-push (865 tests unitaires) ; les 5 cas
-Playwright d'accessibilité verts localement.
-Réserve de méthode à connaître : `pnpm test:unit` ne lance PAS le projet `interface` — un vert local
-peut donc répondre à une autre question que la CI. Mesurer avec `pnpm test:coverage`.
+Dernier commit vert : `c77a021` (CI 33927012410) · Branche : `lot/l1-e18-external-ref` (PR #34) · Poussé : oui
+Tâche en cours : fermer les bloquants de `docs/portes/REVUE_A17_E18_2026-09-05.md`. **B-2** fermé par
+`63c68bc` (la relecture d'après coup avale son échec : 409 garanti, `details` au mieux — cause : seconde
+connexion du pool prise sous transaction, `max: 10`, timeout 5 s). **B-1** fermé par `d1f7b7d` (le bloc
+`06h45` rejoint la branche par fusion d'`origin/main` `1b54554`, contrôle par blocs 78 / 203). **B-3** est
+à A16 : les 5 cas du SIREN archivé et du `code` systématique sont sur la branche (`6a9db3c`, 38 tests
+verts localement). m-1 (citation drizzle 0.45.2) fermé dans `63c68bc`.
+Ce que cet incrément a livré depuis le bloc du 03 17h05 : le défaut ① (`b89dfdf`, 409 et plus 500 sur
+`external_ref` en double), les 16 cas d'A16 (`b713f84`), la symétrie du SIREN archivé et
+`details[0].code ∈ { fiche_active, fiche_archivee }` sur les deux 409 (`308ed1a`).
+Prochaine action : **A17 rejoue sa revue sur la tête de la branche** ; M-1 (rectification de la prémisse
+« `external_ref` n'est écrit par aucune route ») et M-2 (référence console non confrontée) sont des
+entrées `DECISIONS.md` de A01, pas de A13.
+Tests rouges connus : aucun sur la branche (Node v24 local, hors contrat — la CI fait foi).
+## 2026-09-05 00h35 — [lot L5 / incrément L5b] — étape pipeline 3/7 (refusion + auto-revue)
 
-## 2026-09-03 06h35 — [lot L5 / incrément L5a] — étape pipeline 5/7 (fin d'incrément, session close)
-Dernier commit vert : (celui-ci) · Branche : lot/l5a · Poussé : oui
-Tâche en cours : rien. Incrément L5a terminé côté A20, en attente de L3.
-`pnpm verify` COMPLET exécuté sur cette branche le 2026-09-03 — **RC=0**, chiffres bruts :
-build OK · lint (`--max-warnings=0`) OK · format:check OK · typecheck strict OK · pack 12/12 ·
-DECISIONS 125 entrées au format · prose OK · invariants 16 règles vertes · jonctions 50 scripts /
-105 variables / 10 fichiers de CI · graphe 104 modules, 0 import pendu · activity_log 234 fichiers ·
-traçabilité 468 citations / 297 fichiers · anti-skip 79 fichiers, aucun test désactivé ·
-projets de test 79 (interface:29 · unit:29 · integration:17 · playwright:4) · isolation réseau OK ·
-Coolify OK · exécutabilité OK · **test:unit 29 fichiers / 647 verts · test:integration 17 / 308 verts
-· test:e2e 45 verts** (dont les 5 d'accessibilité A28). Total exécuté : 1000 tests.
-DÉFAUT STRUCTUREL MIS EN ÉVIDENCE PAR CE VERIFY, fiche étage 2 posée sur lot/l5b : `pnpm verify`
-n'exécute JAMAIS le projet `interface`. Ses trois suites finales sont `--project unit`,
-`--project integration` et Playwright ; les 29 fichiers `.test.tsx` ne tournent que sous
-`pnpm test:coverage`, donc dans le seul job CI `coverage`. Un `.test.tsx` rouge sort donc VERT de
-`verify`, du pre-push et des jobs `unit`/`integration`/`e2e`. Ne pas lire ce RC=0 comme « toute
-l'interface est verte » : il ne le dit pas.
-Prochaine action : ATTENDRE que L3 entre dans `main` (`main` = 8c5f9ff, L3 n'y est pas ; le dossier
-de porte se contredit et `deploy-staging` est rouge — chez Williams). Ensuite seulement :
-`git merge origin/main` dans lot/l5a, puis GREP des cinq entrées [L5a] du 2026-09-02 (Argon2id, AAD,
-`validé`, liste fermée, dépendances de test) — c'est la fermeture de R-L5a-9 — puis PR lot/l5a → main.
-Aucun merge et aucune PR n'ont été faits ici.
-Tests rouges connus : aucun.
+Dernier commit vert : 6031d6b (fix(l5b) : une lecture locale qui échoue produit un ÉTAT) · Branche : lot/l5b · Poussé : oui
+Tâche en cours : refusion `origin/main` puis `origin/lot/l5a` dans `lot/l5b` (PR #31), et
+fermeture du défaut d'intégration `<AccesEntretien />` que seule la refusion pouvait révéler.
+Faits : `lot/l5a` est désormais ANCÊTRE de `lot/l5b` (14 commits intégrés : cinq bloquants PWA
+A29, icône iOS à la racine, balayage axe-core, 42 tests du verrou / réserve B1, verdict A51,
+F-22 / F-23 / F-25, règle ESLint « écriture Dexie » corrigée par A24) ; `main` aussi (#33, #35,
+#36, #37, #38, #39). Neuf conflits en tout, TOUS sur des registres ou des ajouts parallèles,
+résolus par blocs depuis la base commune en `diff3`, contrôlés en multi-ensembles sur les
+versions COMPLÈTES des deux branches — zéro ligne perdue, zéro ligne inventée.
+Mesuré ici (Node v24, hors contrat — la CI reste le juge) : build RC=0 · lint RC=0 ·
+typecheck RC=0 · test:unit 1159/1159 · test:interface 591/591 · les huit gardes `check:*` RC=0.
+Prochaine action : lire le run CI de la PR #31 et, s'il est vert, demander la revue croisée A29
+sur le diff de refusion (le correctif `AccesEntretien` n'a été relu par personne d'autre).
+Tests rouges connus : aucun. Avertissement `check:decisions` sur une date qui recule
+(« Quel rôle accède au référentiel client ? ») : PRÉEXISTANT, non bloquant, non corrigé ici.
 
-## 2026-09-03 11h30 — [lot L5 / incrément L5a] — étape 5/7 → `main` intégré, **R-L5a-9 FERMÉE**
+## 2026-09-05 01h00 — [lot L7 / incrément L7b] — étape pipeline 3/7 (auto-revue)
 
-Dernier commit vert : (celui-ci) · Branche : lot/l5a · Poussé : oui
-Tâche en cours : aucune. La « prochaine action » du bloc précédent est exécutée, dans l'ordre exact.
-Prochaine action : PR `lot/l5a` → `main`, puis A02 (contrôle d'acceptation) sur l'incrément.
-Tests rouges connus : aucun ici. `main` reste rouge sur `8 · deploy-staging` (empreinte du script
-serveur), hors périmètre L5a et couvert par la réserve R-L3-2-bis.
-
-L3 est dans `main` (`042fe76`, tag `v0.l3`), #29 aussi (`508ae15`). `git merge origin/main` joué.
-**Quatre conflits, dont deux qui ne sont pas de la prose.** `packages/shared/src/index.ts` : additif,
-les six modules L3 de `main` et le `sync` de la branche coexistent, `typecheck` vert sur six projets.
-`.github/coverage-critical-paths.json` : additif, 13 entrées, seuil inchangé à 90, JSON revalidé —
-le bandeau du fichier interdit d'en retirer une seule.
-
-**UNE FAUTE DE MÉTHODE, ET ELLE VAUT D'ÊTRE ÉCRITE.** Les deux fichiers append-only ont d'abord été
-résolus « côté main puis côté branche, par hunk ». La vérification par multi-ensembles de lignes
-disait « aucune ligne perdue » — et elle était vraie. `check:decisions` a quand même refusé :
-**deux entrées avaient été coupées de leurs champs `Décideur` / `Impact spec`**, le hunk ne tombant
-pas sur une frontière d'entrée. Aucune ligne perdue et structure détruite sont compatibles.
-Résolution refaite **par blocs depuis la base commune** (`4b3f7ee`) : base 119 entrées + 68 de `main`
-+ 6 de la branche = 193, toutes au format. ETAT : 62 + 9 + 3 = 74 blocs.
-
-**R-L5a-9 fermée par la mesure.** Les cinq entrées `[L5a]` du 2026-09-02, écrites à l'origine sur
-`lot/l3-suite`, survivent : Argon2id, AAD, état `validé`, liste fermée, dépendances de test.
-
-## 2026-09-03 13h00 — [lot L5 / incrément L5a] — étape 5/7 → réserve **B1 FERMÉE** (verrou testé)
-
-Dernier commit vert : (celui-ci) · Branche : lot/l5a · Poussé : oui
-Tâche en cours : aucune. B1 du contrôle A02 est traitée par A26, sans toucher au code de production.
-Prochaine action : A20 affecte le second volet de B1 (le glob de couverture) et A01 tranche B2
-(verdict A51 sur L5a) ; la PR #30 reste ouverte, aucun merge n'a été fait ici.
-Tests rouges connus : aucun.
-
-`apps/field/src/app/verrou.ts` passe de **0,00 %** à **100 %** (lignes, branches, fonctions, v8),
-`contexte.tsx` de 0,00 % à **80,00 %**, et `apps/field/src/app/**` de 40,11 % à **80,49 %**.
-Deux fichiers écrits, aucun autre touché : `app/verrou.test.tsx` (33 tests) et `app/contexte.test.tsx`
-(9 tests), tous deux au projet `interface` (jsdom + minuteurs simulés — une échéance de 15/60 min ne
-s'observe pas autrement). `test:interface` : 31 fichiers, **508 tests verts**. `test:unit` inchangé
-(39 fichiers, 923 tests). Ni `.skip`, ni `.only` ; `check:test-projects` et `check:no-skipped-tests`
-verts sur 97 fichiers.
-
-**Le scénario qui n'avait jamais été joué l'est** : une session active de 45 min ne se verrouille
-JAMAIS (03 §33.7, recette P-C), au niveau du hook ET dans la coquille complète. Doublé de son
-contrôle d'anti-vacuité : les mêmes 45 min HORS session verrouillent bien.
-
-**Preuve par bascule, trois mutations posées puis retirées** : seuil de session 60 → 30 min = 8 tests
-rouges ; `scroll` retiré des interactions = 1 rouge ; recomparaison à l'horloge au retour au premier
-plan supprimée = 1 rouge. `verrou.ts` restauré à l'identique (SHA-1 `b101c45`, `git diff` vide).
-
-**Deux défauts rendus à A24/A20, NON corrigés par moi** (09 §5.6) : `verrou.ts:192`, `verrouEcran`
-n'est jamais remis à `null` après un `release` système — le Wake Lock n'est donc pas redemandé au
-retour au premier plan ; et `contexte.tsx:281`, le `useMemo` ne mémoïse rien, `useVerrou` rendant un
-objet neuf à chaque rendu. Aucun n'est bloquant.
-
-## 2026-09-03 13h50 — [lot L5 / incrément L5a] — le glob de couverture est POSÉ, plus « à voir »
-
-Dernier commit vert : (celui-ci) · Branche : lot/l5a · Poussé : oui
-Tâche : aucune. Bloc écrit par la session **pilote**, à sa fermeture.
-Prochaine action : **A51 sur `lot/l5a`** (réserve **B2**, seule bloquante restante). Puis merge #30.
+Dernier commit vert : `58dbf14` (feat(l7b) : les deux écrans de pilotage) · Branche : `lot/l7b`
+(née de `lot/l7a`, worktree `_axl7`) · Poussé : oui
+Tâche en cours : auto-revue A32 de L7b — couverture par unité ET par source (§27.1), agrégation par
+question avec provenance et « non communiqué » visibles (M5.1, §27.4).
+Prochaine action : transmettre l'auto-revue à **A37** (revue croisée) et demander à **A36** les
+tests d'acceptation — étanchéité par rôle, quatre états, keyset de bout en bout, axe-core, p95 HTTP
+sur FIL-GC ; aucun n'est écrit par A32 (09 §5.6).
 Tests rouges connus : aucun.
 
 **Le second volet de B1 est fermé.** `apps/field/src/app/verrou.ts` entre dans
@@ -3735,6 +3658,139 @@ au départ** — jamais à « zéro ». Trois bascules sur le test lui-même le 
    repassés verts au calme : à surveiller si la contention persiste.
 
 Prochaine action : suivre la CI de la PR #47, seul verrou restant de L7b.
+
+## 2026-09-05 02h20 — [lot L5 / incrément L5a — réserves A29] — étape pipeline 3/7 (auto-revue)
+
+Dernier commit vert : `e9d6712` (docs(l5a) : le code citait comme « réserve de spec » une question
+tranchée) · Branche : `lot/l5a-reserves` (partie de `lot/l5a` à `236450c`) · Poussé : oui
+Tâche en cours : les six réserves d'A24 dans la revue croisée A29 du 2026-09-05 sont **fermées** —
+R1 (bornes KDF + filet d'anomalie), R3 (l'écran ne propose plus ce qu'il interdit), R4 (la garde de
+présence lit la LIGNE), R2 (glose ESLint vraie dans les deux sens), R6 (la base est fermée), R5.
+Un commit par réserve, aucun test écrit (09 §5.6) : la liste des cas est remise à **A26**.
+Prochaine action : **A26 écrit les 14 tests listés au rapport A24** (dont les quatre jeux de
+paramètres d'A29 et le cas « ligne présente, valeur nulle »), puis **A29 rejoue la revue croisée**.
+Tests rouges connus : aucun. `pnpm build`, `lint --max-warnings=0`, `typecheck`, `format:check`
+verts ; `test:unit` **965/965**, `test:interface` **516/516**, 0 skippé. Machine sur Node v24, hors
+contrat (11 §1 : Node 22 LTS) — **la CI reste seule juge**.
+
+**Ce qui reste ouvert d'A29** : **R7** (aucun bloc `ETAT.md` pour l'incrément — ce bloc-ci ne couvre
+que les réserves, pas les correctifs de F-22/F-23/F-25) et **R8** (la règle ESLint hors périmètre,
+sans ligne `AMELIORATIONS.md` ni entrée `DECISIONS.md` — R2 en élargit encore la surface). Les deux
+appartiennent à la signature A20 et au contrôle A02, pas à A24.
+
+**Couverture** : `apps/field/src/local/**` **96,32 % lignes / 91,95 % branches** — au-dessus du seuil.
+Mais `coffre.ts` SEUL passe de 95,10 % à **89,51 %** : les planchers KDF et `CoffreInexploitableError`
+n'ont pas encore de test. La porte de CI agrège par glob et reste verte ; le trou est réel et nommé.
+
+## 2026-09-05 06h00 — [lot L5 / incrément L5a — réserves A29] — étape pipeline 3/7 (auto-revue)
+
+Dernier commit vert : `923a5f0` (merge `origin/main`) · Branche : `lot/l5a-reserves` · Poussé : oui
+**Le bloc de 02h20 annonçait « Poussé : oui » à tort** : la branche n'existait pas sur `origin`
+(`git ls-remote` : vide). Rien n'était perdu, mais rien n'existait non plus (CLAUDE.md §8).
+Tâche en cours : **#30 fusionnée** (`ab6dcf5`), `origin/main` intégré ; les six réserves A29 (R1 à
+R6) sont fermées **et re-mesurées** par sondes hors dépôt sur les modules réels.
+Prochaine action : **A26 écrit les tests listés au rapport A24** (les quatre jeux de paramètres
+d'A29, « ligne présente valeur nulle », anomalie en premier usage, `.modify()`), puis A29 rejoue.
+Tests rouges connus : **aucun**. `build` · `lint --max-warnings=0` · `typecheck` · `format:check` ·
+**14 gardes** : tous 0. `test:unit` **965/965** · `test:interface` **516/516** · **0 skippé**.
+
+Fusion mesurée, non relue : `main` a fusionné #30 **en squash**, d'où sept conflits `add/add`. Les
+sept fichiers y sont **identiques octet à octet** à l'état d'avant correctifs (`236450c`), donc la
+version de branche en est un **sur-ensemble prouvé**. Append-only fusionnés seuls, contrôlés par
+**multiensemble** d'en-têtes (les titres de section se répètent : un contrôle par lignes uniques les
+compte mal) — `DECISIONS.md` 209 · `ETAT.md` 84 · `AMELIORATIONS.md` 29, **0 perdu, 0 inventé,
+0 ligne supprimée** contre chacun des deux parents.
+
+`pnpm test:unit` sort en **code 1 alors que les 965 tests passent** : `[vitest-worker]: Timeout
+calling "onTaskUpdate"`, le RPC du *reporter*, jamais un test. `--pool=forks` → **code 0** en 34 s.
+Machine sous **Node v24.19.0**, hors contrat (11 §1). Rien n'a été reconfiguré : **la CI sous Node 22
+reste seule juge** (09 §5.7).
+
+Restent ouverts d'A29 : **R7** et **R8** — signature A20 et contrôle A02, pas A24.
+**Couverture** : `local/**` 96,32 % ; mais `coffre.ts` seul **89,51 %**, sous le seuil : les planchers
+KDF et `CoffreInexploitableError` n'ont pas encore de test, et A24 n'en écrit pas (09 §5.6).
+
+## 2026-09-05 06h20 — [lot L5 / incrément L5a — réserves A29] — étape pipeline 3/7 (auto-revue)
+
+Dernier commit vert : `ad58f61` · Branche : `lot/l5a-reserves` · Poussé : **oui, vérifié**
+(`* [new branch] lot/l5a-reserves`, hook `pre-push` **intégralement vert**, `test:unit` compris).
+Tâche en cours : deux chiffres du bloc de 06h00 sont corrigés ci-dessous, mesurés et non repris.
+Prochaine action : **A26 écrit les tests listés au rapport A24**, en priorité ceux qui couvrent les
+planchers KDF, `CoffreInexploitableError` et le filet `sousFiletDAnomalie`.
+Tests rouges connus : **aucun** — `test:unit` 965/965, `test:interface` 516/516, 0 skippé.
+
+**Correction 1 — le code de sortie de `test:unit`.** Le bloc de 06h00 le donnait pour sortant en
+code 1 ; c'est **intermittent**, pas systématique. Mesuré 4 fois : 2 échecs en `--pool=threads`
+(965 verts + `[vitest-worker]: Timeout calling "onTaskUpdate"`, le RPC du *reporter*), **2 succès**
+dont celui du hook `pre-push` qui a laissé passer ce push. Le symptôme est une contention sous
+**Node v24.19.0**, hors contrat (11 §1). Rien n'a été reconfiguré ; la CI sous Node 22 reste juge.
+Une session qui verrait ce code 1 ne doit **pas** chercher un test rouge : il n'y en a pas.
+
+**Correction 2 — la couverture, mesurée sur l'arbre fusionné** (`--coverage`, unit + interface) :
+`apps/field/src/local/**` **95,55 % lignes / 92,27 % branches** (et non 96,32 / 91,95) — au-dessus du
+seuil. Mais **deux modules de crypto ont BAISSÉ** en gagnant leurs garde-fous, faute de tests :
+`coffre.ts` **89,51 % / 87,69 %** (était 95,10) — **sous les 90 % de la DoD** — et
+`coffre-appareil.ts` **95,54 % / 87,80 %** (était 99,23). Les lignes non couvertes sont exactement
+les correctifs d'A29 : planchers KDF, `CoffreInexploitableError`, `sousFiletDAnomalie`.
+**La porte de CI agrège par glob et reste verte : le trou est réel, nommé, et non contourné.**
+Il se ferme quand A26 livre — A24 n'écrit pas ses propres tests (09 §5.6).
+
+**Le hook `pre-push` a mordu à raison** : le bloc de 06h00 faisait 38 lignes pour un maximum de 25
+(`check:prose`). Réécrit, pas tronqué.
+
+## 2026-09-05 08h05 — [lot L5 / incrément L5a — réserves A29] — étape pipeline 5/7 (tests)
+
+Dernier commit vert : `c08ecb6` · Branche : `lot/l5a-reserves` · Poussé : **non — push en attente**
+de la fin de `test:integration` (en cours, Testcontainers).
+Tâche en cours : A26 a livré les tests des six réserves A29 fermées par A24 ; aucun fichier de
+production touché (`git diff` hors `*.test.ts(x)` vide, vérifié après six bascules).
+Prochaine action : **pousser `c08ecb6`** dès `test:integration` vert, puis rendre le rapport A26 à
+A20 pour la signature de fin d'incrément (11 §6).
+Tests rouges connus : **aucun**.
+
+**Le trou du bloc de 06h20 est fermé, et il est mesuré par la porte de CI elle-même**
+(`node .github/scripts/check-coverage.mjs`, unit + interface) :
+`coffre.ts` **89,51 → 100 %** lignes / 87,69 → 100 branches ; `coffre-appareil.ts` **95,54 → 100 %** /
+87,80 → 100 ; glob `apps/field/src/local/**` **96,32 → 99,04 %** lignes / 91,95 → 95,80 branches.
++68 cas (1 481 → 1 549 en unit + interface), 35 marques `@critique`, 0 skippé.
+
+**Écart de méthode à ne pas reprendre en l'état** : le bloc de 06h20 donne le glob à 95,55 / 92,27.
+Le chiffre rendu par `check-coverage.mjs` — celui de la porte — était 96,32 / 91,95 avant, 99,04 /
+95,80 après. C'est le second qu'il faut citer : la porte ne lit pas une autre grandeur, elle lit
+celle-là.
+
+**Le flottement de `test:unit` est confirmé, et il n'a pas changé de nature** : `--pool=threads`
+sort parfois en code 1 sur `[vitest-worker]: Timeout calling "onTaskUpdate"` ; une passe a aussi vu
+deux **timeouts à 5 s** dans `apps/api/.../assignments/service.test.ts`, qui passe en 4,4 s isolé.
+`--pool=forks` : **3 passes sur 3 vertes**, 1 022/1 022. Contention sous Node v24.19.0, hors contrat.
+
+
+## 2026-09-06 09h05 — [lot L5 / incrément L5a — réserves A29] — étape pipeline 5/7 (tests)
+
+Dernier commit vert : `83be944` · Branche : `lot/l5a-reserves` · Poussé : push en cours (hook long).
+Tâche en cours : A26 a réintégré `main` (12 commits : L5b, L7a, L7b, E18) et REMESURÉ.
+Prochaine action : rendre le rapport A26 à A20 pour la signature de fin d'incrément (11 §6).
+Tests rouges connus : **aucun** — 89 fichiers, **2 052 tests verts**, 0 skippé (`--pool=forks`).
+
+**La fusion n'a rien coûté aux deux fichiers du coffre.** Conflit sur `docs/ETAT.md` SEUL, et des
+deux côtés c'était de l'ajout de blocs : blocs de `main` d'abord, les miens ensuite, aucun réécrit.
+Remesure par la porte elle-même (`check-coverage.mjs`, unit + interface) : `coffre.ts` **100 %**
+lignes / 98,52 branches · `coffre-appareil.ts` **100 / 100** · glob « Couche locale terrain »
+**99,04 / 95,65**. Les 89,51 % qui manquaient à la DoD sont fermés et le restent après fusion.
+
+**Les trois bascules ont été REJOUÉES sur l'arbre fusionné**, parce qu'une preuve faite avant une
+fusion ne prouve plus rien après elle :
+· **R1** — plancher mémoire ramené à une constante (coefficient retiré) ⇒ `m=15,p=2` et `m=31,p=4`
+rougissent, **et elles seules** ; les cas `p=1` restent verts, ce qui est correct : à `p=1` le
+coefficient est indiscernable d'une constante.
+· **R4** — garde de PRÉSENCE ramenée à une garde de VALEUR ⇒ les deux tests `valeur:null` et « sans
+propriété `valeur` » rougissent, tandis que l'**anti-vacuité** (ligne absente ⇒ appareil neuf
+préparable) reste VERTE, comme elle doit.
+· **R3** — `setPremierUsage(false)` neutralisée ⇒ un seul test rougit, celui de `contexte.tsx`.
+Les tests d'écran restent verts **à raison** : ils reçoivent l'état en accessoire. Le couple
+« transition d'état » + « rendu » couvre le défaut ; ni l'un ni l'autre seul.
+Après restauration, `git diff` **vide** : arbre identique à l'octet. Aucun fichier de production
+touché de ma main (09 §5.6).
 
 ---
 
