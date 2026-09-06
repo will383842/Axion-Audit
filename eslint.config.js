@@ -149,8 +149,19 @@ const HORLOGE_DE_L_APPAREIL = [
 // =============================================================================
 // ÉCRITURE DEXIE — 05 §9.2-2 : « CHAQUE écriture pousse une opération dans l’outbox »
 // =============================================================================
-/** Les verbes d’écriture de Dexie 4 — et eux seuls. */
-const VERBES_ECRITURE_DEXIE = 'put|add|delete|update|clear|bulkPut|bulkAdd|bulkDelete';
+/**
+ * Les verbes d’écriture de Dexie 4 — et eux seuls.
+ *
+ * `modify` et `bulkUpdate` ont été AJOUTÉS le 2026-09-05 (revue A29, R2). Ils
+ * manquaient alors même que le commentaire du sélecteur ② citait `.modify(…)`
+ * comme un cas VU : mesuré par A29, il était muet. Ce sont des écritures de plein
+ * droit — `Collection.modify()` et `Table.bulkUpdate()`, `dexie@4.4.5`
+ * (`dist/dexie.d.ts:443,446,792`) —, et la descente par lots de L6a s’en servira.
+ * Une écriture qui échappe à la règle est une écriture sans op d’outbox : « une
+ * donnée que la synchronisation ne remontera jamais », dit le message ci-dessous.
+ */
+const VERBES_ECRITURE_DEXIE =
+  'put|add|delete|update|modify|clear|bulkPut|bulkAdd|bulkDelete|bulkUpdate';
 
 /**
  * Les NEUF tables de `SCHEMA_LOCAL` (05 §9.1, `local/base.ts`).
@@ -190,9 +201,19 @@ const ECRITURE_DEXIE = [
     // ② L’écriture au bout d’une CHAÎNE : `db.table('answers').delete(…)`,
     // `base.answers.where('missionId').equals(id).delete()`, `.toCollection().modify(…)`.
     // Le nom de la table n’est plus lisible dans l’AST à cet endroit ; c’est la
-    // forme « appel PUIS verbe d’écriture » qui trahit Dexie. Une collection en
-    // mémoire ne s’écrit pas ainsi — on n’appelle pas `.clear()` sur le RÉSULTAT
-    // d’un appel pour vider un `Map`.
+    // forme « appel PUIS verbe d’écriture » qui trahit Dexie.
+    //
+    // CE SÉLECTEUR A UN FAUX POSITIF, ET IL EST ÉCRIT ICI PLUTÔT QUE NIÉ. Toute
+    // écriture sur le RÉSULTAT d’un appel est reprise, y compris quand ce résultat
+    // est une collection en mémoire : `fichiers.get(id).clear()` sur un
+    // `Map<string, Set<…>>` mord, et A29 l’a mesuré. La version précédente de ce
+    // commentaire jurait le contraire (« une collection en mémoire ne s’écrit pas
+    // ainsi ») — c’était faux, et c’était le défaut même que ce commentaire venait
+    // corriger. Le contournement, quand le cas se présentera, tient en une ligne :
+    // extraire le résultat dans une variable (`const dejaVus = fichiers.get(id);`),
+    // qui est un angle mort DÉCLARÉ de la règle. Resserrer le sélecteur coûterait
+    // la couverture de `db.table('x').delete()`, qui est une vraie écriture Dexie ;
+    // le faux positif est donc ASSUMÉ, et il est exceptionnel.
     selector: `CallExpression[callee.object.type='CallExpression'][callee.property.name=/^(${VERBES_ECRITURE_DEXIE})$/]`,
     message: MESSAGE_ECRITURE_DEXIE,
   },
@@ -328,24 +349,44 @@ export default tseslint.config(
   // C’est le même piège que celui documenté en bas de ce fichier pour la
   // pagination ; il coûte trois blocs et se paie une fois.
   //
-  // CE QUE CES RÈGLES VOIENT, ET CE QU’ELLES NE VOIENT PAS — dit AVANT le code,
-  // et RÉÉCRIT le 2026-09-04 parce que la version précédente décrivait ce qu’on
-  // espérait, pas ce qui était en vigueur :
-  //   · VU — `base.<table>.put/add/delete/update/clear/bulk*(…)` sur les neuf
-  //     tables de `SCHEMA_LOCAL`, et toute écriture au bout d’une chaîne d’appels
-  //     (`db.table('x').delete(…)`, `.where(…).equals(…).delete()`) ;
+  // CE QUE CES RÈGLES VOIENT, ET CE QU’ELLES NE VOIENT PAS — dit AVANT le code.
+  // Réécrit le 2026-09-04 parce que la version d’avant décrivait ce qu’on
+  // espérait ; RE-réécrit le 2026-09-05 (revue A29, R2) parce que la correction
+  // avait reproduit la faute qu’elle corrigeait, dans les DEUX sens : elle
+  // annonçait couvrir `.modify(…)` sans le voir, et jurait épargner des
+  // collections en mémoire sur lesquelles elle mordait. Chaque ligne ci-dessous a
+  // été MESURÉE sur la configuration livrée, pas déduite du sélecteur :
+  //   · VU — `base.<table>.<verbe>(…)` sur les neuf tables de `SCHEMA_LOCAL`, où
+  //     `<verbe>` est l’un des dix de `VERBES_ECRITURE_DEXIE` — `bulkUpdate` et
+  //     `modify` COMPRIS depuis le 2026-09-05 ;
+  //   · VU — toute écriture au bout d’une chaîne d’appels, quel que soit le nom de
+  //     la table : `db.table('x').delete(…)`, `.where(…).equals(…).delete()`,
+  //     `.toCollection().modify(…)`, `.where(…).equals(…).modify(…)` ;
   //   · PAS VU — l’écriture par alias : `const t = base.answers; t.put(…)`.
   //     L’objet devient un identifiant simple et échappe au sélecteur. Choix
   //     CONSERVATEUR et délibéré : viser aussi les identifiants ferait rougir
   //     `unSet.add(x)` partout, et une règle qui crie à tort finit désactivée ;
+  //   · PAS VU — l’accès par clé CALCULÉE : `base['answers'].put(…)`. La propriété
+  //     n’est plus un nom dans l’AST, et le sélecteur ① la manque. Angle mort réel,
+  //     découvert par mesure et déclaré ici plutôt que corrigé : le fermer
+  //     demanderait de viser `computed=true`, donc de reprendre `unMap['x'].set()` ;
   //   · PAS VU — une table AJOUTÉE à `SCHEMA_LOCAL` sans l’être à `TABLES_LOCALES`.
   //     C’est le coût assumé de la précision : la liste précédente, elle, visait
   //     tout objet à deux niveaux et mordait sur `refUneMap.current.clear()` —
   //     une règle qui accuse une file en mémoire d’être une écriture de sync
   //     apprend surtout à ceux qui la lisent qu’il faut s’en méfier ;
+  //   · FAUX POSITIF ASSUMÉ, et c’est le pendant honnête du point précédent — le
+  //     sélecteur ② mord sur une écriture faite au résultat d’un appel MÊME quand
+  //     ce résultat est une collection en mémoire : `fichiers.get(id).clear()` sur
+  //     un `Map<string, Set<…>>` est repris. Le contournement est une variable
+  //     intermédiaire (l’alias, cf. ci-dessus) ; le détail est au sélecteur ② ;
   //   · l’horloge lue par une bibliothèque tierce ;
   //   · les fichiers de test, exclus : ils fabriquent des jeux de données et des
   //     horodatages déterministes, c’est leur métier.
+  //
+  // Ces neuf lignes sont éprouvées par `scripts/garde-fous-eslint-ecriture-dexie
+  // .test.ts`, écrit par A26 : une glose qui n’est pas testée redevient un espoir
+  // au premier changement de sélecteur.
   {
     // ① + ② — le cas général : ni horloge, ni écriture Dexie.
     files: ['apps/field/src/**/*.{ts,tsx}'],
