@@ -26,6 +26,7 @@ import { routesOrgUnits } from './routes/org-units.js';
 import { routesQuestionnaire } from './routes/questionnaire.js';
 import { routesAssignments } from './routes/assignments.js';
 import { routesInterviews } from './routes/interviews.js';
+import { routesPilotage } from './routes/pilotage.js';
 
 // =============================================================================
 // PÉRIMÈTRE DE CONFIANCE DES EN-TÊTES DE PROXY — correctif de sécurité.
@@ -267,6 +268,14 @@ export async function construireApp(): Promise<FastifyInstance> {
   // ligne de `mission_users` — et que `PolitiqueAcces` est une union exclusive
   // qu'A01 a refusé d'élargir (`DECISIONS.md` 2026-08-29).
   await app.register(routesInterviews, { prefix: '/v1' });
+  // Pilotage de mission (03 §16.6, §27.1, M5.1) — lot L7/L7b. DEUX routes de
+  // LECTURE : la couverture par unité et par source, et l'agrégation par question.
+  // Politique « mission » : le crochet vérifie l'identité et le compte, et
+  // l'appartenance se vérifie DANS LE DÉPÔT — un non-membre reçoit 404, jamais
+  // 403. Aucune des deux ne porte la marque financière : le pilotage compte des
+  // sessions et relit des réponses d'audit, il ne touche aucun montant
+  // (invariant 3, §18.3 — « l'auditeur ne voit jamais le TJM »).
+  await app.register(routesPilotage, { prefix: '/v1' });
 
   return app;
 }

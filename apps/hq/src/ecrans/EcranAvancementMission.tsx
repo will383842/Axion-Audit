@@ -9,11 +9,17 @@
 //      évidence, ceux d'avant marqués passés. Dérivés de `STATUTS_MISSION` : la
 //      console ne connaît pas un sixième statut que le contrat ignore.
 //
-// Ce que cet écran NE montre PAS, et qui arrive en L7b avec sa route et son
-// schéma partagé : complétude, à-revoir, dernière sync (05 §8.3 `dashboard`),
-// couverture par unité ET par type de source (§27.1). Heatmap et avance/retard
-// sont différables. Aucune donnée financière ne transite (invariant 3) — le
-// contrat ne la porte pas, l'écran ne peut donc pas l'afficher.
+// Ce que cet écran NE montre PAS : complétude, à-revoir, dernière sync (05 §8.3
+// `dashboard`). Heatmap et avance/retard sont différables. Aucune donnée
+// financière ne transite (invariant 3) — le contrat ne la porte pas, l'écran ne
+// peut donc pas l'afficher.
+//
+// ── AJOUT L7b : LE DRILL-DOWN (§22.3) ───────────────────────────────────────
+// Deux liens mènent aux écrans du lot L7b — la COUVERTURE (par unité ET par
+// source, §27.1) et l'AGRÉGATION par question (M5.1, provenance et « non
+// communiqué » visibles). Ce sont des liens et non des onglets : l'URL d'un
+// écran de couverture doit être collable dans un message, et le bouton
+// « précédent » du navigateur doit y remonter d'un cran.
 //
 // Dates : un instant (`deliveredAt`, `updatedAt`) au FUSEAU DE LA MISSION ; une
 // date civile (`startPlanned`, `ndaSignedAt`) telle quelle (`format/dates.ts`).
@@ -145,6 +151,37 @@ function Fiche({ mission }: { mission: MissionResponse }): ReactNode {
   );
 }
 
+/**
+ * LE DRILL-DOWN (§22.3) — deux VRAIS liens, jamais des onglets.
+ *
+ * Chaque vue a son URL : collable dans un message, ouvrable dans un nouvel
+ * onglet, et le bouton « précédent » du navigateur y remonte d'un cran. Le
+ * résumé sous chaque lien dit ce qu'on y trouve — un lien nu obligerait à
+ * l'ouvrir pour le savoir.
+ */
+function VuesDePilotage({ id }: { id: string }): ReactNode {
+  const couverture = { type: 'couverture', id } as const;
+  const agregation = { type: 'agregation', id } as const;
+  return (
+    <nav className="axn-vues-pilotage" aria-label="Vues de pilotage de la mission">
+      <a href={hrefDeRoute(couverture)} onClick={auClicLienInterne(couverture)}>
+        <strong>Couverture</strong>
+        <span>
+          Par unité <em>et</em> par source de collecte : ce qui est prévu, planifié, réalisé, et les
+          unités du périmètre qu’aucune session n’a encore touchées.
+        </span>
+      </a>
+      <a href={hrefDeRoute(agregation)} onClick={auClicLienInterne(agregation)}>
+        <strong>Agrégation par question</strong>
+        <span>
+          Toutes les réponses côte à côte, avec leur provenance et le statut « non communiqué »
+          rendu visible.
+        </span>
+      </a>
+    </nav>
+  );
+}
+
 export function EcranAvancementMission({ id }: { id: string }): ReactNode {
   const requete = useMission(id);
   const retourPortefeuille = (
@@ -179,6 +216,7 @@ export function EcranAvancementMission({ id }: { id: string }): ReactNode {
             <Client companyId={mission.companyId} />
             <Jalons statut={mission.status} />
             <Fiche mission={mission} />
+            <VuesDePilotage id={id} />
           </>
         )}
       </ZoneEtat>

@@ -32,6 +32,12 @@ export function espaceDeRoute(route: Route): CodeEspace | null {
       return 'tour_de_controle';
     case 'portefeuille':
     case 'mission':
+    // Les deux sous-écrans de L7b restent SOUS l'espace 2 : la barre latérale
+    // continue d'éclairer « Pilotage mission » pendant qu'on lit la couverture
+    // ou l'agrégation d'une mission — on n'a pas changé d'espace, on a creusé.
+    // eslint-disable-next-line no-fallthrough -- cases groupés, aucun corps intercalé
+    case 'couverture':
+    case 'agregation':
       return 'pilotage_mission';
     case 'inconnue':
       return null;
