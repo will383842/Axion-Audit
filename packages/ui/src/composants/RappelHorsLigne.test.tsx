@@ -105,6 +105,49 @@ describe('RappelHorsLigne — §33.2 : le rappel des CAPACITÉS LOCALES', () => 
   });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// `avecPastille` — ajouté par A21 le 2026-09-06 au branchement des onze vues.
+// MÊME DÉCLARATION DE CROISEMENT : la propriété et ces quatre cas sont écrits
+// dans la même passe, par A21. Non-régression, pas revue croisée (A29 due).
+//
+// Ce que ces cas tiennent : la PWA terrain pose UNE pastille dans l'en-tête de
+// sa coquille (décision A01, 2026-09-05) pour les onze écrans. En rendre une
+// seconde ici, nourrie par `navigator.onLine` alors que celle de l'en-tête l'est
+// par le port de sync, rouvrirait le bloquant B6 du 2026-09-06 : deux pastilles,
+// deux sources, un seul écran. Le défaut RESTE `true` — le silence doit être sûr.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('RappelHorsLigne — `avecPastille` : la pastille peut vivre ailleurs', () => {
+  it('la rend PAR DÉFAUT : un écran qui ne déclare rien obtient les deux moitiés de §33.2', () => {
+    render(<RappelHorsLigne enLigne={false} capacites={CAPACITES} />);
+    expect(screen.getByRole('status').textContent).toContain('Hors ligne');
+  });
+
+  it('la retire quand l’écran déclare la porter ailleurs — et RIEN d’autre ne bouge', () => {
+    render(<RappelHorsLigne enLigne={false} capacites={CAPACITES} avecPastille={false} />);
+    expect(screen.queryByRole('status')).toBeNull();
+    // La moitié qui compte reste entière : c'est elle que §33.2 réclamait.
+    expect(screen.getAllByRole('listitem').map((e) => e.textContent)).toEqual([...CAPACITES]);
+    expect(screen.getByText('Sans réseau, cet appareil sait encore :')).not.toBeNull();
+  });
+
+  it('CONTRE-ÉPREUVE : sans pastille, plus AUCUNE région vivante n’est ouverte', () => {
+    // Si le drapeau cessait d'être consulté, ce cas rougirait — c'est le seul
+    // moyen de savoir que la seconde pastille a réellement disparu de l'écran.
+    const { container } = render(
+      <RappelHorsLigne enLigne={false} capacites={CAPACITES} avecPastille={false} />,
+    );
+    expect(container.querySelectorAll('[role="status"]')).toHaveLength(0);
+    expect(container.querySelectorAll('[aria-live]')).toHaveLength(0);
+  });
+
+  it('se tait quand même en ligne, drapeau baissé ou levé', () => {
+    const { container } = render(
+      <RappelHorsLigne enLigne capacites={CAPACITES} avecPastille={false} />,
+    );
+    expect(container.innerHTML).toBe('');
+  });
+});
+
 describe('RappelHorsLigne — invariant 1 : hors ligne n’est PAS une panne', () => {
   it('n’expose JAMAIS `role="alert"` (§17.3 : aucune notification intrusive)', () => {
     render(<RappelHorsLigne enLigne={false} capacites={CAPACITES} />);
