@@ -23,6 +23,10 @@ export * from './org-units.js';
 export * from './questionnaire.js';
 export * from './plan-entretiens.js';
 export * from './assignments.js';
+// Le pilotage (couverture) et l'agrégation viennent APRÈS le plan : la couverture
+// se confronte au plan §32.4, elle ne le recalcule jamais (lot L7, incrément L7b).
+export * from './pilotage.js';
+export * from './agregation.js';
 export * from './sync.js';
 // Le scoring vient EN DERNIER : il consomme les vocabulaires de la banque
 // (criticités, bornes 0-5) et ceux du plan d'entretiens (groupes d'interlocuteur).

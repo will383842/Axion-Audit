@@ -98,9 +98,19 @@
   background: var(--couleur-surface-enfoncee);
 }
 
+/* ── D1 (mesuré par A36, axe-core) — L'ESPACE ACTIF ÉCHOUAIT LE CONTRASTE AA ──
+   Le jeton de TEXTE d'action sur le fond doux d'action donnait 4,12:1, sous le
+   4,5:1 de WCAG 1.4.3 (AA). Il est sur TOUTES les pages de la console : c'était
+   donc aussi une non-régression sur les trois écrans de L7a.
+   Le correctif prend le jeton le plus SOMBRE de la même rampe d'action
+   (`--couleur-action-fond-actif`, l'état pressé d'un bouton) : ~6,7:1 sur le même
+   fond, et l'état actif garde son identité terracotta. Basculer sur le jeton de
+   texte principal aurait passé aussi, mais aurait effacé l'indice de couleur qui
+   dit « vous êtes ici » — on corrige le contraste, on ne supprime pas
+   l'information. Un jeton remplace un jeton, aucune valeur en dur (invariant 4). */
 .axn-console__espace[aria-current='page'] {
   background: var(--couleur-action-fond-doux);
-  color: var(--couleur-action-texte);
+  color: var(--couleur-action-fond-actif);
   font-weight: var(--typo-graisse-semi);
 }
 
@@ -479,4 +489,213 @@
     border-right: 0;
     border-bottom: var(--taille-bordure-epaisseur) solid var(--couleur-bordure-discrete);
   }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PILOTAGE — COUVERTURE ET AGRÉGATION (lot L7b)
+   ═══════════════════════════════════════════════════════════════════════════
+   Aucune couleur, aucune taille en dur : TOUT vient des jetons de
+   `@axion/ui/tokens.css` (invariant 4). Deux points de vigilance, écrits ici
+   parce qu'ils se relisent :
+
+   ① L'ALERTE EST UN ROUGE DISTINCT. `--couleur-alerte-*` n'est pas le
+      terracotta d'action (`--couleur-action-*`) : une unité du périmètre sans
+      aucune session (§16.6) doit se distinguer d'un bouton, et l'échelle de
+      complétude ne doit jamais emprunter ce rouge-là.
+
+   ② IL N'Y A PAS D'ÉCHELLE DE COULEUR ICI, et c'est délibéré. La couverture se
+      lit en TROIS états seulement — attendue et couverte, attendue et
+      manquante, non attendue — donc trois jetons existants suffisent. La
+      HEATMAP (§16.4) et son échelle de complétude appartiennent au lot L8 ;
+      poser ici une échelle qu'aucun écran de L7b n'utilise créerait un jeton
+      orphelin, puis deux échelles concurrentes. */
+
+/* --- Vues de pilotage : le drill-down depuis la fiche mission -------------- */
+
+.axn-vues-pilotage {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(var(--taille-largeur-contenu-etroit), 1fr));
+  gap: var(--espacement-4);
+}
+
+.axn-vues-pilotage a {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacement-1);
+  padding: var(--espacement-4);
+  background: var(--couleur-surface-carte);
+  border: var(--taille-bordure-epaisseur) solid var(--couleur-bordure-discrete);
+  border-radius: var(--taille-rayon-moyen);
+  color: inherit;
+  text-decoration: none;
+}
+
+.axn-vues-pilotage a:hover {
+  border-color: var(--couleur-action-bordure);
+}
+
+.axn-vues-pilotage span {
+  font-size: var(--typo-taille-sm);
+  color: var(--couleur-texte-secondaire);
+}
+
+/* --- Tableau de couverture ------------------------------------------------- */
+
+.axn-couverture__unite {
+  display: inline-block;
+}
+
+/* ── D2 (mesuré par A36) — LE JETON N'EST PAS EN CAUSE, SON EMPLOI L'ÉTAIT ────
+   Le jeton de texte TERTIAIRE donne 4,49:1 sur la surface enfoncée — l'en-tête
+   et le pied du tableau — et échoue AA de 0,01 ; sur la surface carte (le corps),
+   le même jeton passe à 5,2:1. Le défaut n'était donc ni le jeton ni le fond : on
+   avait rangé en information tertiaire deux choses qui n'en sont pas — le
+   sous-titre d'une colonne et, dans le pied, LES TOTAUX DE LA MISSION.
+   Corrigé en montant d'un cran (SECONDAIRE, ~6,5:1 sur enfoncée, ~7,5:1 sur
+   carte) : le contraste passe ET la hiérarchie visuelle devient juste. La valeur
+   du jeton tertiaire n'est pas touchée — elle sert ailleurs, et l'abaisser pour
+   un seul emploi aurait assombri toute la console pour une mauvaise raison.
+   Effet de bord réglé au passage : au SURVOL, une ligne du corps prend la surface
+   enfoncée ; le tertiaire y serait retombé à 4,49:1, dans un état qu'axe-core ne
+   balaie pas. Le secondaire tient sur les deux fonds. */
+.axn-couverture__note {
+  display: block;
+  font-size: var(--typo-taille-xs);
+  font-weight: var(--typo-graisse-normale);
+  color: var(--couleur-texte-secondaire);
+}
+
+.axn-couverture__cellule {
+  text-align: center;
+}
+
+.axn-couverture__realise {
+  font-weight: var(--typo-graisse-semi);
+}
+
+.axn-couverture__separateur {
+  color: var(--couleur-texte-secondaire);
+  padding: 0 var(--espacement-1);
+}
+
+.axn-couverture__prevu {
+  color: var(--couleur-texte-secondaire);
+}
+
+/* D2 — voir `.axn-couverture__note` : le « planifié » est un COMPTE, pas une
+   décoration. Il tient désormais sur les trois fonds (carte, survol, pied). */
+.axn-couverture__planifie {
+  display: block;
+  font-size: var(--typo-taille-xs);
+  color: var(--couleur-texte-secondaire);
+}
+
+/* Source EXIGÉE par le plan et NON couverte : l'écart qui appelle une action. */
+.axn-couverture__cellule[data-manquante='true'] {
+  background: var(--couleur-avertissement-fond);
+  color: var(--couleur-avertissement-texte);
+}
+
+/* Source que le plan n'exige pas : rien ne manque, donc rien ne s'allume. */
+.axn-couverture__cellule[data-attendue='false'] {
+  color: var(--couleur-texte-tertiaire);
+}
+
+/* ① L'ALERTE §16.6 — un rouge DISTINCT de l'action et de l'avertissement. */
+.axn-couverture tbody tr[data-alerte='true'] > th {
+  box-shadow: inset var(--taille-bordure-epaisseur-forte) 0 0 var(--couleur-alerte-bordure);
+}
+
+/* La colonne hors grille (§27.1) est visuellement DÉTACHÉE : un atelier n'est
+   pas une source de collecte, et la grille ne doit pas le laisser croire. */
+.axn-couverture .axn-couverture__hors-grille {
+  border-left: var(--taille-bordure-epaisseur-forte) solid var(--couleur-bordure-nette);
+  text-align: center;
+  color: var(--couleur-texte-secondaire);
+}
+
+.axn-couverture__marges > th,
+.axn-couverture__marges > td {
+  background: var(--couleur-surface-enfoncee);
+  font-weight: var(--typo-graisse-moyenne);
+  border-top: var(--taille-bordure-epaisseur-forte) solid var(--couleur-bordure-nette);
+}
+
+/* B1 — LA SYNTHÈSE DES ATELIERS, hors du tableau et TOUJOURS rendue.
+   Elle porte la même bordure d'appel que la colonne hors grille : l'œil relie les
+   deux sans qu'on ait à l'écrire, et il reste clair que ce chiffre ne fait pas
+   partie de la grille des cinq sources. */
+.axn-couverture__hors-grille-synthese {
+  margin: 0;
+  padding: var(--espacement-3) var(--espacement-4);
+  border-left: var(--taille-bordure-epaisseur-forte) solid var(--couleur-bordure-nette);
+  background: var(--couleur-surface-carte);
+  border-radius: var(--taille-rayon-petit);
+  color: var(--couleur-texte-secondaire);
+  font-size: var(--typo-taille-sm);
+}
+
+.axn-couverture__avertissements {
+  margin: 0;
+  padding-inline-start: var(--espacement-6);
+  color: var(--couleur-texte-secondaire);
+  font-size: var(--typo-taille-sm);
+}
+
+.axn-couverture__horodatage {
+  color: var(--couleur-texte-tertiaire);
+  font-size: var(--typo-taille-sm);
+}
+
+/* --- Agrégation par question ---------------------------------------------- */
+
+.axn-agregation__filtres {
+  display: flex;
+  gap: var(--espacement-4);
+  align-items: flex-end;
+}
+
+.axn-agregation__question {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacement-3);
+  padding: var(--espacement-4);
+  background: var(--couleur-surface-carte);
+  border: var(--taille-bordure-epaisseur) solid var(--couleur-bordure-discrete);
+  border-radius: var(--taille-rayon-moyen);
+}
+
+.axn-agregation__question h2 {
+  margin: 0;
+  font-size: var(--typo-taille-lg);
+  font-weight: var(--typo-graisse-semi);
+  line-height: var(--typo-interligne-serre);
+}
+
+.axn-agregation__meta,
+.axn-agregation__comptes {
+  margin: 0;
+  font-size: var(--typo-taille-sm);
+  color: var(--couleur-texte-secondaire);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Le QUATRIÈME cas du §27.4 — « personne ne l'a posée ». Il a sa phrase et son
+   fond : le rendre comme une liste vide le confondrait avec un chargement. */
+.axn-agregation__jamais-posee {
+  margin: 0;
+  padding: var(--espacement-3);
+  background: var(--couleur-surface-enfoncee);
+  border-radius: var(--taille-rayon-petit);
+  color: var(--couleur-texte-secondaire);
+  font-size: var(--typo-taille-sm);
+}
+
+.axn-agregation__valeur {
+  white-space: normal;
+  min-width: calc(var(--taille-largeur-contenu-etroit) / 2);
+}
+
+.axn-agregation__sans-valeur {
+  color: var(--couleur-texte-tertiaire);
 }

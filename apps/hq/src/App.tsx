@@ -40,6 +40,8 @@ import { EcranAccueil } from './ecrans/EcranAccueil.js';
 import { EcranAvancementMission } from './ecrans/EcranAvancementMission.js';
 import { EcranConnexion } from './ecrans/EcranConnexion.js';
 import { EcranPortefeuille } from './ecrans/EcranPortefeuille.js';
+import { EcranCouverture } from './ecrans/couverture/EcranCouverture.js';
+import { EcranAgregation } from './ecrans/agregation/EcranAgregation.js';
 
 /** Version injectée par la CI (SHA court) — `dev` en local. Voir le Dockerfile. */
 const VERSION: string =
@@ -76,7 +78,9 @@ function FilDAriane({ route }: { route: Route }): ReactNode {
             <span aria-current="page">Portefeuille</span>
           </li>
         )}
-        {route.type === 'mission' && (
+        {(route.type === 'mission' ||
+          route.type === 'couverture' ||
+          route.type === 'agregation') && (
           <>
             <li>
               <a
@@ -87,8 +91,30 @@ function FilDAriane({ route }: { route: Route }): ReactNode {
               </a>
             </li>
             <li>
-              <span aria-current="page">Mission</span>
+              {route.type === 'mission' ? (
+                <span aria-current="page">Mission</span>
+              ) : (
+                // Le fil reste CONSTANT (§22.3) : depuis un sous-écran, « Mission »
+                // redevient un lien — la remontée d'un cran, celle que le bouton
+                // « précédent » du navigateur fait aussi.
+                <a
+                  href={hrefDeRoute({ type: 'mission', id: route.id })}
+                  onClick={auClicLienInterne({ type: 'mission', id: route.id })}
+                >
+                  Mission
+                </a>
+              )}
             </li>
+            {route.type === 'couverture' && (
+              <li>
+                <span aria-current="page">Couverture</span>
+              </li>
+            )}
+            {route.type === 'agregation' && (
+              <li>
+                <span aria-current="page">Agrégation</span>
+              </li>
+            )}
           </>
         )}
         {route.type === 'inconnue' && (
@@ -109,6 +135,10 @@ function Contenu({ route }: { route: Route }): ReactNode {
       return <EcranPortefeuille />;
     case 'mission':
       return <EcranAvancementMission id={route.id} />;
+    case 'couverture':
+      return <EcranCouverture id={route.id} />;
+    case 'agregation':
+      return <EcranAgregation id={route.id} />;
     case 'inconnue':
       return (
         <EtatVide
