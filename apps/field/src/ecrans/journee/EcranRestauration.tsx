@@ -13,21 +13,51 @@
 //   · le FICHIER `.axionbackup` — lu localement, jamais envoyé nulle part ;
 //   · le MOT DE PASSE — la seule clé du fichier (11 §4 : dérivée du mot de passe,
 //     pas de la DEK de cet appareil, qui n'a jamais vu ces données) ;
-//   · la PERSISTANCE du stockage (05 §31-2), exigée AVANT d'écrire : restaurer
-//     une mission dans un stockage que le navigateur peut effacer serait
-//     recréer la perte qu'on vient de réparer. Refus = rien n'est écrit, et
-//     l'écran guide.
+//   · la PERSISTANCE du stockage (05 §31-2), demandée AVANT d'écrire. Un refus
+//     n'écrit rien et l'écran guide — mais il n'enferme plus : voir D-A27-1.
+//
+// ── D-A27-1 : LA RESTAURATION PROCÈDE SANS PERSISTANCE, L'EMBARQUEMENT NON ──
+// (DECISIONS.md, 2026-09-06 — A01 sur délégation de Williams.)
+// 05 §31-2 refuse l'EMBARQUEMENT sans persistance, et son motif est net : ne pas
+// laisser naître des données NEUVES dans un stockage que le navigateur peut
+// effacer. Une restauration est la situation inverse — la donnée existe déjà,
+// dans le fichier, en sécurité — et sur un navigateur qui refuse la persistance,
+// refuser reviendrait à garantir ZÉRO donnée là où l'on pouvait en sauver.
+// L'écran fait donc les deux : il affiche le guidage EN PREMIER (il peut suffire
+// — « Sur l'écran d'accueil » se règle en trois gestes), et il laisse passer
+// outre par une action explicite, jamais par défaut. Après quoi le RÉ-EXPORT est
+// l'action mise en avant : c'est lui qui rend l'arbitrage tenable, puisque la
+// copie survivante ne doit pas rester seule sur un stockage non garanti
+// (invariant 8).
+//
+// ── DÉFAUT A27-D1, FERMÉ ICI ────────────────────────────────────────────────
+// `exigerPersistance()` était appelé HORS de tout `try`, dans une IIFE lancée par
+// `void`. Or `navigator.storage.persist()` et `.estimate()` LÈVENT — `SecurityError`
+// sur WebKit en navigation privée et en contexte non sécurisé, c'est-à-dire sur
+// l'iPad même que 03 §22.1 vise. Le rejet partait en promesse non gérée,
+// `setPhase` n'était jamais rappelé, et l'écran restait DÉFINITIVEMENT sur son
+// squelette « Déchiffrement et restauration en cours », sans cause, sans action
+// et sans issue (l'état `en_cours` retire le formulaire, `Recommencer`
+// n'appartient qu'à l'état d'erreur). Deux gardes le ferment, et il en faut deux :
+//   ① un `try` autour du seul appel qui n'en avait pas, pour NOMMER la cause ;
+//   ② un `.catch` terminal sur l'IIFE, filet de sécurité structurel — le jour où
+//      quelqu'un ajoutera un `await` au-dessus du `try`, l'écran dira quelque
+//      chose au lieu de se figer. C'est le même parti qu'`EcranFinDeJournee`.
 //
 // ── CE QU'IL DIT, ET NE TAIT PAS ────────────────────────────────────────────
 // Le nombre d'opérations d'outbox présentes dans le fichier et NON réinjectées
 // (DECISIONS.md 2026-09-05) : les données sont restaurées, la file ne l'est pas
 // dans cette version. Le domaine le rend ; l'écran l'affiche tel quel — même
 // parti que le port de sync inerte, jamais une pastille verte.
+// Et, depuis le constat A27 du 2026-09-06, D'OÙ vient ce qu'il vient d'écrire :
+// l'appareil d'origine et l'instant de la sauvegarde. « 3 élément(s) restauré(s) »
+// ne permettait pas de vérifier qu'on avait restauré le BON fichier.
 //
 // Les quatre états (03 §33.2) : vide (aucun fichier choisi — dit quoi faire),
 // chargement (lecture + dérivation Argon2id, qui peut prendre une seconde sur
 // tablette), erreur (mauvais mot de passe / fichier illisible / persistance
-// refusée — cause + action), hors ligne (nominal : tout se fait sans réseau).
+// refusée / stockage en panne — cause + action + une SORTIE), hors ligne
+// (nominal : tout se fait sans réseau).
 //
 // Traçabilité : E38 (sauvegarde terrain : sync ≥ 1×/j + export de secours),
 // E6 (hors ligne total), E33 (sécurité / RGPD).
@@ -35,9 +65,16 @@
 import { useCallback, useId, useState, type ReactNode } from 'react';
 import { Bouton, Message, ZoneEtat, type EtatZone } from '@axion/ui';
 import { useTerrain } from '../../app/contexte.js';
-import { exigerPersistance } from '../../local/stockage.js';
-import { EXTENSION_SAUVEGARDE } from '../../sauvegarde/format.js';
-import { importerSauvegarde, type RapportImport } from '../../sauvegarde/sauvegarde.js';
+import { exigerPersistance, guidageSansPersistance } from '../../local/stockage.js';
+import { deposerFichier } from '../../sauvegarde/depot.js';
+import { EXTENSION_SAUVEGARDE, nomFichierSauvegarde } from '../../sauvegarde/format.js';
+import {
+  exporterSauvegarde,
+  importerSauvegarde,
+  MotDePasseExportInvalideError,
+  type RapportImport,
+} from '../../sauvegarde/sauvegarde.js';
+import { formaterDateHeure } from '../../session/fuseau.js';
 import { useEnLigne } from '../../session/media.js';
 import './journee.css';
 
@@ -45,8 +82,105 @@ type Phase =
   | { readonly nature: 'vide' }
   | { readonly nature: 'pret'; readonly fichier: File }
   | { readonly nature: 'en_cours' }
-  | { readonly nature: 'erreur'; readonly cause: string; readonly action: string }
-  | { readonly nature: 'restauree'; readonly rapport: RapportImport };
+  | {
+      readonly nature: 'erreur';
+      readonly cause: string;
+      readonly action: string;
+      /**
+       * Le fichier à reprendre SANS exiger la persistance (D-A27-1), ou `null`
+       * quand l'échec n'a rien à voir avec le stockage — un mauvais mot de passe
+       * ne se répare pas en passant outre, et proposer de le faire apprendrait à
+       * l'auditeur à cliquer sur « quand même » devant n'importe quel refus.
+       */
+      readonly repriseSansPersistance: File | null;
+    }
+  | {
+      readonly nature: 'restauree';
+      readonly rapport: RapportImport;
+      /** `false` = restauré sur un stockage que le navigateur peut effacer. */
+      readonly persistanceAccordee: boolean;
+    };
+
+/** Le ré-export proposé juste après la restauration — son propre petit état. */
+type Reexport =
+  | { readonly nature: 'repos' }
+  | { readonly nature: 'saisie' }
+  | { readonly nature: 'en_cours' }
+  | { readonly nature: 'fait'; readonly nom: string }
+  | { readonly nature: 'echec'; readonly message: string };
+
+const CAUSE_STOCKAGE_INJOIGNABLE =
+  'Le stockage de cet appareil n’a pas pu être interrogé : le navigateur a refusé la question elle-même.';
+
+const ACTION_STOCKAGE_INJOIGNABLE =
+  'C’est le cas en navigation privée, et sur une page ouverte hors HTTPS. Quittez la navigation privée, ' +
+  'ouvrez l’application depuis l’écran d’accueil, puis réessayez — ou restaurez quand même, ' +
+  'en ré-exportant une sauvegarde aussitôt.';
+
+/**
+ * ── LES DEUX ÉCHECS QUI SE RECLASSENT, ET POURQUOI ILS REMONTENT ────────────
+ * A27-D1 venait d'un `await` hors de tout `try`. La parade n'est pas d'ajouter
+ * un `try` de plus — il en manquerait un le jour où quelqu'un ajoute un `await`
+ * — mais de n'avoir plus qu'UNE SEULE porte de sortie : tout rejet de la
+ * séquence traverse le `.catch` terminal, qui rend une phase d'erreur. Les deux
+ * échecs que l'écran sait NOMMER se marquent donc au passage, au lieu d'être
+ * devinés à l'arrivée. Un troisième cas, inconnu, y arrive quand même — et
+ * l'écran parle, au lieu de se figer sur son squelette.
+ */
+class EchecStockage extends Error {
+  override readonly name = 'EchecStockage';
+}
+
+class EchecLecture extends Error {
+  override readonly name = 'EchecLecture';
+}
+
+/** Lit le fichier choisi comme du JSON. Tout échec de lecture est un `EchecLecture`. */
+async function lireJson(fichier: File): Promise<unknown> {
+  try {
+    return JSON.parse(await fichier.text());
+  } catch {
+    throw new EchecLecture('fichier illisible comme JSON');
+  }
+}
+
+/**
+ * Traduit un rejet en phase d'erreur : une cause, une action, et — pour le seul
+ * échec de stockage — la reprise de D-A27-1.
+ *
+ * Fonction PURE et à part : c'est elle qui décide de ce que l'auditeur lit un
+ * soir d'incident, et elle doit pouvoir être éprouvée cas par cas sans monter
+ * un écran. Un mauvais mot de passe n'ouvre PAS la reprise sans persistance :
+ * il ne se répare pas en passant outre, et proposer « quand même » devant
+ * n'importe quel refus apprendrait à cliquer sans lire.
+ */
+function classerEchec(cause: unknown, fichier: File): Phase {
+  if (cause instanceof EchecStockage) {
+    return {
+      nature: 'erreur',
+      cause: CAUSE_STOCKAGE_INJOIGNABLE,
+      action: ACTION_STOCKAGE_INJOIGNABLE,
+      repriseSansPersistance: fichier,
+    };
+  }
+  if (cause instanceof EchecLecture) {
+    return {
+      nature: 'erreur',
+      cause: 'Ce fichier n’est pas lisible comme une sauvegarde Axion.',
+      action: `Vérifiez que vous avez choisi un fichier ${EXTENSION_SAUVEGARDE}, non modifié.`,
+      repriseSansPersistance: null,
+    };
+  }
+  // Les deux erreurs du domaine portent déjà cause ET action, en français ; un
+  // rejet qui n'est pas une `Error` (une API qui `throw 'message'`) ne fuit pas
+  // son détail technique à l'écran (§33.2 : « code technique replié »).
+  return {
+    nature: 'erreur',
+    cause: cause instanceof Error ? cause.message : 'La restauration a échoué.',
+    action: 'Vérifiez le mot de passe et le fichier, puis réessayez. Rien n’a été modifié.',
+    repriseSansPersistance: null,
+  };
+}
 
 export function EcranRestauration(): ReactNode {
   const { naviguer } = useTerrain();
@@ -54,54 +188,106 @@ export function EcranRestauration(): ReactNode {
   const identifiant = useId();
   const [motDePasse, setMotDePasse] = useState('');
   const [phase, setPhase] = useState<Phase>({ nature: 'vide' });
+  const [reexport, setReexport] = useState<Reexport>({ nature: 'repos' });
+  const [motDePasseExport, setMotDePasseExport] = useState('');
 
   const choisir = useCallback((fichier: File | null): void => {
     setPhase(fichier === null ? { nature: 'vide' } : { nature: 'pret', fichier });
   }, []);
 
-  const restaurer = useCallback((): void => {
-    if (phase.nature !== 'pret') return;
-    const { fichier } = phase;
-    setPhase({ nature: 'en_cours' });
+  /**
+   * Le geste, avec ou sans l'exigence de persistance.
+   *
+   * `exigerLaPersistance` n'est pas un drapeau de confort : il porte la
+   * différence entre le chemin nominal (05 §31-2 : on demande, et un refus
+   * guide) et la reprise explicite de D-A27-1 (on a lu le guidage, on passe
+   * outre en connaissance de cause). Aucun des deux n'est un défaut de l'autre.
+   */
+  const lancer = useCallback(
+    (fichier: File, exigerLaPersistance: boolean): void => {
+      setPhase({ nature: 'en_cours' });
 
-    void (async (): Promise<void> => {
-      // 05 §31-2 : la persistance AVANT d'écrire. Un refus ne restaure rien.
-      const persistance = await exigerPersistance();
-      if (!persistance.accordee) {
-        setPhase({
-          nature: 'erreur',
-          cause: 'Le navigateur ne garantit pas de conserver les données sur cet appareil.',
-          action: persistance.guidage,
-        });
-        return;
-      }
+      void (async (): Promise<void> => {
+        let persistanceAccordee = false;
 
-      let contenu: unknown;
-      try {
-        contenu = JSON.parse(await fichier.text());
-      } catch {
-        setPhase({
-          nature: 'erreur',
-          cause: 'Ce fichier n’est pas lisible comme une sauvegarde Axion.',
-          action: `Vérifiez que vous avez choisi un fichier ${EXTENSION_SAUVEGARDE}, non modifié.`,
-        });
-        return;
-      }
+        if (exigerLaPersistance) {
+          // ── A27-D1 : le seul appel qui n'était gardé par rien ─────────────
+          // `persist()` et `estimate()` LÈVENT sur WebKit en navigation privée
+          // et hors contexte sécurisé. Le rejet est reclassé, pas avalé : il
+          // ressort par la porte unique, avec sa cause et sa reprise.
+          const verdict = await exigerPersistance().catch(() => {
+            throw new EchecStockage('navigator.storage a rejeté');
+          });
+          if (!verdict.accordee) {
+            setPhase({
+              nature: 'erreur',
+              cause: 'Le navigateur ne garantit pas de conserver les données sur cet appareil.',
+              // Le guidage SANS sa conclusion d'embarquement : ici, la
+              // restauration n'est pas refusée, elle attend une décision.
+              action: guidageSansPersistance(verdict.motif),
+              repriseSansPersistance: fichier,
+            });
+            return;
+          }
+          persistanceAccordee = true;
+        }
 
-      try {
-        const rapport = await importerSauvegarde(contenu, motDePasse);
+        const rapport = await importerSauvegarde(await lireJson(fichier), motDePasse);
         setMotDePasse('');
-        setPhase({ nature: 'restauree', rapport });
-      } catch (erreur) {
-        // Les deux erreurs du domaine portent déjà cause ET action, en français.
-        setPhase({
-          nature: 'erreur',
-          cause: erreur instanceof Error ? erreur.message : 'La restauration a échoué.',
-          action: 'Vérifiez le mot de passe et le fichier, puis réessayez. Rien n’a été modifié.',
+        setPhase({ nature: 'restauree', rapport, persistanceAccordee });
+      })().catch((cause: unknown) => {
+        setPhase(classerEchec(cause, fichier));
+      });
+    },
+    [motDePasse],
+  );
+
+  /**
+   * Le fichier choisi, ou `null`. Extrait ici, et pas testé dans le gestionnaire :
+   * un garde `if (phase.nature !== 'pret') return;` aurait été une branche que
+   * rien ne peut atteindre — le bouton est fermé dans tous les autres états — donc
+   * du code qu'aucun test ne peut honnêtement couvrir. Ce qui ne peut pas arriver
+   * ne se garde pas : ça se rend impossible.
+   */
+  const fichierPret = phase.nature === 'pret' ? phase.fichier : null;
+
+  /**
+   * Le ré-export depuis CET appareil, juste après la restauration.
+   *
+   * Le mot de passe est redemandé, et ce n'est pas une lourdeur : celui de la
+   * restauration a été effacé de l'état à la seconde du succès (11 §4 — il est
+   * la clé du fichier), et le prolonger pour épargner une saisie serait rallonger
+   * la vie d'un secret en mémoire pour un gain de confort. Le champ porte un
+   * libellé distinct : ce n'est plus la clé du fichier reçu, c'est celle du
+   * fichier qu'on va produire.
+   */
+  const reexporter = useCallback(
+    (missionId: string): void => {
+      setReexport({ nature: 'en_cours' });
+      void (async (): Promise<void> => {
+        const produit = await exporterSauvegarde({ missionId, motDePasse: motDePasseExport });
+        const nom = nomFichierSauvegarde(missionId, produit.enTete.creeLe);
+        deposerFichier(nom, JSON.stringify(produit));
+        setMotDePasseExport('');
+        setReexport({ nature: 'fait', nom });
+      })().catch((cause: unknown) => {
+        setReexport({
+          nature: 'echec',
+          message:
+            cause instanceof MotDePasseExportInvalideError
+              ? cause.message
+              : 'La sauvegarde n’a pas pu être produite sur cet appareil. Vos données restaurées restent en place ; réessayez, et prévenez le siège si l’échec persiste.',
         });
-      }
-    })();
-  }, [motDePasse, phase]);
+      });
+    },
+    [motDePasseExport],
+  );
+
+  // Le fichier repris est extrait AVANT le JSX, et pas lu depuis `phase` dans le
+  // gestionnaire : TypeScript ne conserve pas l'affinage d'une PROPRIÉTÉ à
+  // l'intérieur d'une fonction imbriquée. Une variable locale dit la même chose
+  // au lecteur, et la dit aussi au compilateur.
+  const repriseSansPersistance = phase.nature === 'erreur' ? phase.repriseSansPersistance : null;
 
   const etat: EtatZone =
     phase.nature === 'en_cours'
@@ -113,14 +299,26 @@ export function EcranRestauration(): ReactNode {
             cause: phase.cause,
             action: phase.action,
             actions: (
-              <Bouton
-                variante="secondaire"
-                onClick={() => {
-                  setPhase({ nature: 'vide' });
-                }}
-              >
-                Recommencer
-              </Bouton>
+              <>
+                {repriseSansPersistance !== null && (
+                  <Bouton
+                    taille="large"
+                    onClick={() => {
+                      lancer(repriseSansPersistance, false);
+                    }}
+                  >
+                    Restaurer quand même, sans garantie de conservation
+                  </Bouton>
+                )}
+                <Bouton
+                  variante="secondaire"
+                  onClick={() => {
+                    setPhase({ nature: 'vide' });
+                  }}
+                >
+                  Recommencer
+                </Bouton>
+              </>
             ),
           }
         : { nature: 'nominal' };
@@ -142,14 +340,61 @@ export function EcranRestauration(): ReactNode {
                 {phase.rapport.lignesRestaurees} élément(s) de mission restauré(s). La mission est
                 maintenant présente sur cet appareil.
               </Message>
+
+              {/* Constat A27 (2026-09-06) : DE QUEL fichier vient ce qui vient
+                  d'être écrit. Deux sauvegardes sur la même clé USB — mardi et
+                  mercredi, ou deux missions — ne se distinguaient d'aucune façon
+                  avant de rouvrir la journée. Les deux valeurs sont dans l'en-tête
+                  EN CLAIR : les taire revenait à cacher une information acquise. */}
+              <dl className="axn-journee__identite">
+                <div>
+                  <dt>Appareil d’origine</dt>
+                  <dd>{phase.rapport.libelleAppareilSource}</dd>
+                </div>
+                <div>
+                  <dt>Sauvegarde produite le</dt>
+                  <dd>{formaterDateHeure(phase.rapport.sauvegardeCreeeLe, undefined)}</dd>
+                </div>
+                <div>
+                  <dt>Mission</dt>
+                  <dd>{phase.rapport.missionId}</dd>
+                </div>
+              </dl>
+
               {phase.rapport.avertissement !== null && (
                 <Message ton="avertissement" titre="File d’envoi non restaurée">
                   {phase.rapport.avertissement}
                 </Message>
               )}
+
+              {/* D-A27-1 : l'avertissement fort, jamais une pastille discrète. */}
+              {!phase.persistanceAccordee && (
+                <Message ton="alerte" titre="Stockage non garanti sur cet appareil">
+                  Le navigateur ne s’engage pas à conserver ces données : il peut les effacer pour
+                  récupérer de l’espace, et iOS le fait au bout de quelques jours sans usage. Vos
+                  données sont là, mais elles ne sont pas à l’abri ici. Produisez une sauvegarde
+                  maintenant, et synchronisez dès qu’un réseau est disponible.
+                </Message>
+              )}
+
+              {/* Le ré-export : mis en avant, jamais enfoui dans un menu. Il est
+                  l'action PRINCIPALE quand la persistance n'a pas été accordée —
+                  c'est ce qui rend D-A27-1 tenable au regard de l'invariant 8. */}
               <div className="axn-journee__actions">
+                {reexport.nature === 'repos' ? (
+                  <Bouton
+                    taille="large"
+                    variante={phase.persistanceAccordee ? 'secondaire' : 'principal'}
+                    onClick={() => {
+                      setReexport({ nature: 'saisie' });
+                    }}
+                  >
+                    Exporter une sauvegarde depuis cet appareil
+                  </Bouton>
+                ) : null}
                 <Bouton
                   taille="large"
+                  variante={phase.persistanceAccordee ? 'principal' : 'secondaire'}
                   onClick={() => {
                     naviguer({ type: 'racine', vue: 'aujourdhui' });
                   }}
@@ -157,6 +402,54 @@ export function EcranRestauration(): ReactNode {
                   Ouvrir ma journée
                 </Bouton>
               </div>
+
+              {(reexport.nature === 'saisie' || reexport.nature === 'en_cours') && (
+                <div className="axn-champ">
+                  <label className="axn-champ__libelle" htmlFor={`${identifiant}-mdp-export`}>
+                    Mot de passe de cet appareil
+                  </label>
+                  <input
+                    id={`${identifiant}-mdp-export`}
+                    className="axn-champ__saisie"
+                    type="password"
+                    autoComplete="current-password"
+                    data-saisie-libre="vrai"
+                    aria-describedby={`${identifiant}-mdp-export-aide`}
+                    value={motDePasseExport}
+                    onChange={(evenement) => {
+                      setMotDePasseExport(evenement.target.value);
+                    }}
+                  />
+                  <p id={`${identifiant}-mdp-export-aide`} className="axn-champ__aide">
+                    Il chiffrera le nouveau fichier, et sera le seul moyen de le rouvrir.
+                  </p>
+                  <div className="axn-journee__actions">
+                    <Bouton
+                      taille="large"
+                      disabled={reexport.nature === 'en_cours' || motDePasseExport === ''}
+                      onClick={() => {
+                        reexporter(phase.rapport.missionId);
+                      }}
+                    >
+                      Produire le fichier de sauvegarde
+                    </Bouton>
+                  </div>
+                </div>
+              )}
+
+              {reexport.nature === 'fait' && (
+                <Message ton="succes" titre="Nouvelle sauvegarde produite">
+                  Fichier déposé sur cet appareil : {reexport.nom}. Mettez-le à l’abri (clé USB,
+                  second appareil) — aucune donnée ne doit vivre sur un seul appareil plus de 24 h
+                  ouvrées.
+                </Message>
+              )}
+
+              {reexport.nature === 'echec' && (
+                <Message ton="alerte" titre="Sauvegarde non produite">
+                  {reexport.message}
+                </Message>
+              )}
             </div>
           ) : (
             <div className="axn-journee__carte">
@@ -168,11 +461,21 @@ export function EcranRestauration(): ReactNode {
                 <label className="axn-champ__libelle" htmlFor={`${identifiant}-fichier`}>
                   Fichier de sauvegarde
                 </label>
+                {/* PAS d'attribut `accept`, et c'est délibéré (constat A27,
+                    2026-09-06). iOS mappe `accept` sur des UTI ; `.axionbackup`
+                    n'en est pas un, et une extension inconnue GRISE tous les
+                    fichiers dans le sélecteur Files — sur l'appareil même pour
+                    lequel cet écran existe. Le filtre est donc retiré plutôt que
+                    deviné, ce qui est de toute façon plus juste : c'est le
+                    déchiffrement qui dit si un fichier est bon, jamais son nom.
+                    Un fichier qui n'en est pas un est refusé deux lignes plus
+                    bas, avec sa cause et son action, et un test l'éprouve.
+                    Reste dû à un iPad réel : vérifier que le sélecteur Files
+                    n'oppose aucun autre filtre (P-C, checklist 07 §15). */}
                 <input
                   id={`${identifiant}-fichier`}
                   className="axn-champ__saisie"
                   type="file"
-                  accept={EXTENSION_SAUVEGARDE}
                   aria-describedby={`${identifiant}-fichier-aide`}
                   onChange={(evenement) => {
                     choisir(evenement.target.files?.[0] ?? null);
@@ -208,13 +511,21 @@ export function EcranRestauration(): ReactNode {
               </div>
 
               <div className="axn-journee__actions">
-                <Bouton
-                  taille="large"
-                  disabled={phase.nature !== 'pret' || motDePasse === ''}
-                  onClick={restaurer}
-                >
-                  Restaurer sur cet appareil
-                </Bouton>
+                {fichierPret === null ? (
+                  <Bouton taille="large" disabled>
+                    Restaurer sur cet appareil
+                  </Bouton>
+                ) : (
+                  <Bouton
+                    taille="large"
+                    disabled={motDePasse === ''}
+                    onClick={() => {
+                      lancer(fichierPret, true);
+                    }}
+                  >
+                    Restaurer sur cet appareil
+                  </Bouton>
+                )}
                 <Bouton
                   variante="secondaire"
                   onClick={() => {

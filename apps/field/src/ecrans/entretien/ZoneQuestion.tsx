@@ -35,6 +35,11 @@ import type { ReponseLocale } from '../../local/depots/reponses.js';
 import { LIBELLE_MOTIF_NON_COMMUNIQUE } from '../../session/ecriture-reponses.js';
 import { fourchetteAdmise, lireValeurTypee, type ValeurTypee } from '../../session/valeurs.js';
 import type { NatureDrapeau } from './DialogueDrapeau.js';
+import {
+  ID_MOTIF_LECTURE_SEULE,
+  ID_MOTIF_PREMIERE_QUESTION,
+  MOTIF_PREMIERE_QUESTION,
+} from './motifs.js';
 import { SaisieReponse, type Cadence } from './SaisieReponse.js';
 import { libelleDeBloc } from './ZoneBlocs.js';
 
@@ -68,6 +73,16 @@ export interface ProprietesZoneQuestion {
   readonly onQuestionAdHoc: () => void;
   readonly onPrecedent: () => void;
   readonly onSuivant: () => void;
+  /**
+   * Le geste de FIN, offert à la place du « Suivant » grisé sur la dernière
+   * question — majeur **M2** de la recette novice A54, réserve de la porte P-C.
+   * Cette zone ne sait pas ce que « terminer » veut dire pour la session : elle
+   * appelle, l'écran décide (et fournit `libelleTerminer`).
+   */
+  readonly onTerminer: () => void;
+  /** Ce que dit ce geste — « Terminer l'entretien », ou autre chose si la
+   *  session est déjà terminée. Une session ne se termine pas deux fois. */
+  readonly libelleTerminer: string;
   readonly peutPrecedent: boolean;
   readonly peutSuivant: boolean;
   readonly afficherRaccourcis: boolean;
@@ -91,6 +106,8 @@ export function ZoneQuestion(proprietes: ProprietesZoneQuestion): ReactNode {
     onQuestionAdHoc,
     onPrecedent,
     onSuivant,
+    onTerminer,
+    libelleTerminer,
     peutPrecedent,
     peutSuivant,
     afficherRaccourcis,
@@ -113,6 +130,9 @@ export function ZoneQuestion(proprietes: ProprietesZoneQuestion): ReactNode {
     question.answerType === 'scale_1_5'
       ? lireAncresDeCotation(question.guidanceSnapshot).consigne
       : question.guidanceSnapshot;
+
+  /** M1 : ce qu'un bouton grisé doit désigner. Vide quand rien n'est grisé. */
+  const decritSiDesactive = desactive ? { 'aria-describedby': ID_MOTIF_LECTURE_SEULE } : {};
 
   return (
     <article className="axn-question" aria-labelledby="axn-question-texte">
@@ -176,8 +196,11 @@ export function ZoneQuestion(proprietes: ProprietesZoneQuestion): ReactNode {
         </div>
       )}
 
+      {/* M1 : ce message n'informe plus seulement, il est DÉSIGNÉ par chaque
+          bouton qu'il explique (`aria-describedby`). Un motif rendu à côté d'un
+          bouton gris n'est un motif que si l'on sait qu'il parle de lui. */}
       {ecritureRefusee !== null && (
-        <Message ton="info" titre="Lecture seule">
+        <Message id={ID_MOTIF_LECTURE_SEULE} ton="info" titre="Lecture seule">
           {ecritureRefusee}
         </Message>
       )}
@@ -188,6 +211,7 @@ export function ZoneQuestion(proprietes: ProprietesZoneQuestion): ReactNode {
             libelle="Répondre en fourchette"
             actif={fourchette}
             disabled={desactive}
+            {...decritSiDesactive}
             onBasculer={onFourchette}
           />
         )}
@@ -212,20 +236,31 @@ export function ZoneQuestion(proprietes: ProprietesZoneQuestion): ReactNode {
             variante={nonCommunique ? 'secondaire' : 'discret'}
             aria-pressed={nonCommunique}
             disabled={desactive}
+            {...decritSiDesactive}
             onClick={() => {
               onDrapeau('non_communique');
             }}
           >
             Non communiqué
           </Bouton>
-          <Bouton variante="discret" disabled={desactive} onClick={onQuestionAdHoc}>
+          <Bouton
+            variante="discret"
+            disabled={desactive}
+            {...decritSiDesactive}
+            onClick={onQuestionAdHoc}
+          >
             Ajouter une question
           </Bouton>
         </div>
       )}
 
       <div className="axn-question__actions" role="toolbar" aria-label="Actions sur la question">
-        <Bouton variante="secondaire" disabled={!peutPrecedent} onClick={onPrecedent}>
+        <Bouton
+          variante="secondaire"
+          disabled={!peutPrecedent}
+          {...(peutPrecedent ? {} : { 'aria-describedby': ID_MOTIF_PREMIERE_QUESTION })}
+          onClick={onPrecedent}
+        >
           Précédent
         </Bouton>
         {!partage && (
@@ -234,6 +269,7 @@ export function ZoneQuestion(proprietes: ProprietesZoneQuestion): ReactNode {
               variante={aRevoir ? 'secondaire' : 'discret'}
               aria-pressed={aRevoir}
               disabled={desactive}
+              {...decritSiDesactive}
               onClick={() => {
                 onDrapeau('a_revoir');
               }}
@@ -244,13 +280,14 @@ export function ZoneQuestion(proprietes: ProprietesZoneQuestion): ReactNode {
               variante={sansObjet ? 'secondaire' : 'discret'}
               aria-pressed={sansObjet}
               disabled={desactive}
+              {...decritSiDesactive}
               onClick={() => {
                 onDrapeau('sans_objet');
               }}
             >
               N/A{afficherRaccourcis ? ' (A)' : ''}
             </Bouton>
-            <Bouton variante="discret" disabled={desactive} onClick={onNote}>
+            <Bouton variante="discret" disabled={desactive} {...decritSiDesactive} onClick={onNote}>
               Note
             </Bouton>
             <Bouton
@@ -266,15 +303,43 @@ export function ZoneQuestion(proprietes: ProprietesZoneQuestion): ReactNode {
             </Bouton>
           </>
         )}
-        <Bouton
-          className="axn-question__actions--suivant"
-          variante="principal"
-          disabled={!peutSuivant}
-          onClick={onSuivant}
-        >
-          Suivant{afficherRaccourcis ? ' (↵)' : ''}
-        </Bouton>
+        {/* ── M2 (recette novice A54, 2026-09-06) ──────────────────────────
+            Sur la dernière question, ce bouton était GRISÉ, et le seul geste
+            restant était « Quitter l'entretien » — un libellé qui dit
+            *abandonner*, pas *finir*. Le novice qui venait de poser sa dernière
+            question devait deviner que « quitter » était le bon geste, revenir
+            au cockpit, retrouver sa ligne et taper un second bouton : très
+            exactement le « retour en arrière » que la porte P-C mesure.
+
+            L'action principale dit donc ce qu'elle fait, et elle est CLIQUABLE.
+            Elle ne termine RIEN par elle-même : elle mène au récapitulatif du
+            §17.3, où « Terminer » est une transition de la machine à états.
+            Terminer et quitter restent deux gestes distincts — l'un est un fait
+            d'audit, l'autre une navigation. */}
+        {peutSuivant ? (
+          <Bouton
+            className="axn-question__actions--suivant"
+            variante="principal"
+            onClick={onSuivant}
+          >
+            Suivant{afficherRaccourcis ? ' (↵)' : ''}
+          </Bouton>
+        ) : (
+          <Bouton
+            className="axn-question__actions--suivant"
+            variante="principal"
+            onClick={onTerminer}
+          >
+            {libelleTerminer}
+          </Bouton>
+        )}
       </div>
+
+      {!peutPrecedent && (
+        <p id={ID_MOTIF_PREMIERE_QUESTION} className="axn-champ__aide">
+          {MOTIF_PREMIERE_QUESTION}
+        </p>
+      )}
     </article>
   );
 }

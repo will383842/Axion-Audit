@@ -34,6 +34,7 @@ import { EcranAgenda } from './EcranAgenda.js';
 import { EcranAujourdhui } from './EcranAujourdhui.js';
 import { EcranFinDeJournee } from './EcranFinDeJournee.js';
 import { EcranPilote } from './EcranPilote.js';
+import { EcranRestauration } from './EcranRestauration.js';
 
 // -----------------------------------------------------------------------------
 // Chemins — depuis ce fichier, jamais depuis le répertoire courant.
@@ -333,6 +334,13 @@ const ECRANS = [
   { nom: 'EcranAgenda', Composant: EcranAgenda },
   { nom: 'EcranPilote', Composant: EcranPilote },
   { nom: 'EcranFinDeJournee', Composant: EcranFinDeJournee },
+  // AJOUTÉ par A27 le 2026-09-06 : l'angle mort structurel relevé par A02 au
+  // contrôle de P-C — « les deux écrans les plus récents sont les seuls que la
+  // grille ne mesure pas ». `EcranRestauration` échappait EN BLOC aux gardes de
+  // ce fichier : cibles ≥ 44 px, jetons existants, aucun style en ligne coloré,
+  // aucun verrou en session de 45 min. Or c'est l'écran qu'un auditeur ouvre sur
+  // une tablette de remplacement, au doigt, le soir. Il entre dans la grille.
+  { nom: 'EcranRestauration', Composant: EcranRestauration },
 ] as const;
 
 beforeAll(async () => {
@@ -354,7 +362,7 @@ afterEach(async () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // A. CIBLES TACTILES ≥ 44 px (03 §22.1) — mesurées sur le contrat DOM ↔ CSS
 // ─────────────────────────────────────────────────────────────────────────────
-describe('tactile ≥ 44 px — chaque élément interactif des quatre écrans', () => {
+describe('tactile ≥ 44 px — chaque élément interactif des écrans de la journée', () => {
   const jetons = jetonsDefinis();
   const regles = [
     ...reglesMinHeight(lire(resolve(RACINE_UI, 'composants.css')), jetons),

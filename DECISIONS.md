@@ -10624,6 +10624,63 @@ Règle de précédence : sans objet — cohérence interne d'un module, aucune d
 Décideur : **A01**, sur constat de la revue croisée. Mis en œuvre par A15.
 Impact spec : aucun.
 
+## 2026-09-06 — [L5b] Que fait l'application quand l'interlocuteur REFUSE de participer ?
+
+Doute de spec **D-1** (recette novice A54 §8-2, repris par A02 en réserve de P-C). 03 §34.2 dit « ne
+reste que l'accord de participation » et le pack ne dit **rien** du refus. L'écran n'offrait que la
+case cochée ou l'impasse : le refus, qui est un **fait d'audit** (une unité non couverte, une donnée
+manquante qui a une cause), ne se distinguait pas d'une session jamais ouverte.
+
+Options :
+a) Statu quo : l'auditeur quitte l'écran, rien n'est écrit. b) Le refus s'écrit comme une **note
+horodatée** sur la session, qui reste `non_demarre` et sans accord. c) `schedule_status = 'annule'`
+(valeur existante du 04) plus un motif. d) Un champ ou une table de refus dans le 04.
+
+Arbitrage : **b)**, et **c)/d) proposées sans être implémentées** (fiche `AMELIORATIONS.md`, étage 2).
+a) est réfutée par 03 §17.3 — « terminer reste possible mais **l'état est tracé** » : le pack trace
+même ce qui manque, il ne laisse pas un fait d'audit sans écriture. d) touche le 04 : CLAUDE.md §3-2
+l'interdit sans arbitrage humain. c) est plus juste sémantiquement mais change ce que le **siège**
+lit d'une session — la couverture d'une unité, le dénominateur d'un taux de complétude, ce qu'un
+rapport peut affirmer — et cela ne se décide pas depuis un écran de saisie ; c'est aussi une écriture
+d'index, donc une op de sync, hors du périmètre L5b.
+b) est la seule forme **réversible** : une note ne préempte aucune modélisation, et si c) est retenue
+demain, la note reste vraie. Elle est nommément citée comme recevable par le mandat de correction.
+Règle de précédence : **§32-36 > §24-31** — §34.2 (cockpit, tranche haute) pose l'accord sans traiter
+le refus ; §17.3 (tranche basse) donne la doctrine applicable, « l'état est tracé », qu'aucune section
+haute ne contredit. Aucune section ne décrit un refus : c'est un silence comblé au minimum, pas un
+arbitrage entre deux textes.
+Décideur : **A22**, pour la seule part réversible et hors schéma. La modélisation (c/d) revient à
+**Williams**, à la porte, sur la fiche `AMELIORATIONS.md` déposée le même jour.
+Impact spec : aucun. Amendement candidat de 03 §34.2, qui devrait dire ce que devient une session
+refusée — et si elle compte dans la couverture d'une unité.
+
+## 2026-09-06 — [L5c] Un navigateur qui refuse la persistance interdit-il aussi de RESTAURER ?
+
+05 §31-2 refuse l'embarquement sans persistance ; `EcranRestauration` appliquait la même règle à
+l'import d'un `.axionbackup`. Conséquence mesurée par A27 : un auditeur dont la seule copie
+survivante est ce fichier, sur un navigateur qui refuse la persistance, ne peut rien restaurer —
+pas même pour ré-exporter aussitôt.
+
+Options :
+a) Refuser, comme l'embarquement. b) Restaurer sans condition. c) Restaurer, mais seulement après
+un refus guidé et une reprise explicite, avec avertissement fort et ré-export mis en avant.
+
+Arbitrage : **c)**. Le motif du §31-2 est d'empêcher que des données NEUVES naissent dans un
+stockage volatil ; une restauration est le cas inverse — la donnée existe déjà, dans le fichier, en
+sécurité. Refuser garantit zéro donnée là où l'on pouvait en sauver. L'invariant 8 tire dans les
+deux sens, mais il dit « aucune donnée ne vit sur un seul appareil », pas « aucune donnée ne
+revit ». Le guidage §31-2 est affiché EN PREMIER — il peut suffire, « Sur l'écran d'accueil » se
+règle en trois gestes — et la reprise est un second geste nommé, jamais le défaut : b) laisserait
+un auditeur qui ne lit pas déposer sa seule copie dans un stockage volatil sans le savoir. Le
+ré-export devient l'action principale après le succès ; c'est lui qui tient l'invariant 8, et c'est
+lui qui rend l'arbitrage soutenable.
+Règle de précédence : **§24-31 > §16-22** — le §31-2 reste la règle de l'embarquement et n'est pas
+amendé ; il est simplement constaté qu'il ne statue pas sur la restauration, cas qu'il ne nomme pas.
+Décideur : **A01**, sur délégation de Williams du 2026-09-04, sur constat d'A27. Mis en œuvre par A24.
+Impact spec : amendement candidat de 05 §31-2, pour qu'il dise à quels ÉCRITS il s'applique. Le
+guidage de `stockage.ts` est scindé (constat + remède partagés, conséquence propre à l'appelant) :
+la phrase « la mission ne peut pas être embarquée » ne s'affiche plus sur l'écran qui restaure.
+
 ## 2026-09-06 — [L7c] Les 61 fichiers du projet `interface` n'étaient exécutés par aucun job de CI
 
 La couverture de #58 est tombée sur `EcranExport.test.tsx`, avec pour seul message
@@ -10788,3 +10845,29 @@ lignes, et un `it()` qui prétendrait couvrir (b) serait un faux vert.
 Règle de précédence : **09 §5.7** — on ne simplifie pas une validation pour faire passer un test.
 Décideur : **A01**, sur délégation de Williams du 2026-09-04.
 Impact spec : aucun ; deux lignes distinctes à la checklist de P-C, au lieu d'une ambiguë.
+## 2026-09-06 — [CI] Un job qui rougit pour une panne de registre doit-il attendre un humain ?
+
+Le job « 7 · constructibilité des 4 images » a rougi deux fois en deux jours sans qu'une ligne du
+dépôt soit en cause : `unauthorized` sur GHCR le 05/09, `502 Bad Gateway` du Docker Hub sur
+`alpine:3.21` le 06/09. Les deux fois, une PR verte par ailleurs est restée bloquée jusqu'à ce qu'on
+relance à la main. Le même jour, `4 · integration` est tombé sur une coupure TLS pendant le
+téléchargement de Node : ce n'est pas un incident isolé, c'est une classe.
+
+Options :
+
+1. Relancer à la main. **Écartée** : ce n'est pas une décision, c'est le coût qu'on paie déjà.
+2. Une action de « retry » du marché. **Écartée** : dépendance nouvelle (§3-1) pour quinze lignes.
+3. **Deux tentatives, dans une action composite locale** — `.github/actions/construire-image`.
+
+Arbitrage : **option 3**. La seconde tentative n'a AUCUN `continue-on-error` : un Dockerfile fautif
+échoue deux fois et le job rougit, vingt secondes plus tard ; le cache `gha` rend la reconstruction
+quasi immédiate jusqu'à la couche qui casse. **Ce qui suit importe autant que le correctif** :
+GitHub Actions ne sait ni boucler sur une étape ni ancrer un bloc YAML, donc le `with:` est
+**écrit deux fois**, et l'action ne supprime pas cette répétition — elle la rend voisine. Le chemin
+de reprise ne s'emprunte qu'en panne : une divergence y produirait une image différente **sans que
+personne la voie**. `scripts/check-etapes-jumelles.mjs` compare donc les deux blocs à chaque CI et
+nomme la ligne fautive. Un commentaire qui demande de garder deux choses synchronisées n'est pas un
+garde-fou ; ce script en est un, et sa non-vacuité est prouvée par divergence volontaire.
+Règle de précédence : sans objet — aucune divergence du pack, une classe de panne d'outillage.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun ; une action locale, un script, aucune dépendance nouvelle.

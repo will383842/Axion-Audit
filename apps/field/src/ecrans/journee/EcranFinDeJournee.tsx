@@ -58,6 +58,7 @@ import { useTerrain } from '../../app/contexte.js';
 import { ecrireMeta, lireMeta } from '../../local/base.js';
 import { maintenant } from '../../local/horloge.js';
 import { portSyncInerte } from '../../local/port-sync.js';
+import { deposerFichier } from '../../sauvegarde/depot.js';
 import { nomFichierSauvegarde } from '../../sauvegarde/format.js';
 import { exporterSauvegarde, MotDePasseExportInvalideError } from '../../sauvegarde/sauvegarde.js';
 import { PROFIL_PAR_DEFAUT } from '../../session/auditeur.js';
@@ -91,23 +92,6 @@ interface ResultatRituel {
   readonly refus: readonly RefusValidation[];
   /** B4 — une sauvegarde a-t-elle été produite pour CHAQUE mission ? */
   readonly sauvegardeComplete: boolean;
-}
-
-/**
- * Dépose le fichier sur l'appareil.
- *
- * 05 §9.7 : « fichier unique chiffré […] **déposable sur le stockage de
- * l'appareil ou une clé USB** ». Un `<a download>` synthétique est le seul
- * mécanisme disponible hors ligne dans un navigateur ; `showSaveFilePicker`
- * n'existe pas sur Safari, qui est la cible dure (03 §22.1).
- */
-function deposerFichier(nom: string, contenu: string): void {
-  const url = URL.createObjectURL(new Blob([contenu], { type: 'application/json' }));
-  const lien = document.createElement('a');
-  lien.href = url;
-  lien.download = nom;
-  lien.click();
-  URL.revokeObjectURL(url);
 }
 
 export function EcranFinDeJournee(): ReactNode {
