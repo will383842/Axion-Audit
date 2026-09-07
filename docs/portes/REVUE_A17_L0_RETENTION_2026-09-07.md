@@ -215,3 +215,38 @@ lui-même réclamé.
 
 **Signature revue croisée : A17 — 2026-09-07.** Aucune ligne produite : `git status` vide dans les
 deux arbres.
+
+---
+
+## ADDENDUM DU PILOTE — 2026-09-07, après arbitrage A01. La « règle juste » de cette revue est FAUSSE
+
+> Ce rapport n'est pas réécrit — il est signé, et une revue qu'on retouche ne vaut plus rien. Mais
+> il contient une recommandation qui a été **mesurée fausse** depuis, et la laisser sans marque
+> ferait qu'une prochaine reprise l'appliquerait. C'est le seul objet de cet ajout.
+
+Le §5 ci-dessus, comme `docs/ETAT.md` et le message de clôture de la PR #90, désignent la même
+sortie : « la règle juste est déjà écrite à `sauvegarde.sh:1355` — **tant que l'hebdomadaire a des
+places** ». Autrement dit : n'appliquer le veto de semaine que tant que l'étage hebdomadaire n'est
+pas épuisé.
+
+**Construite et exécutée, elle ne ferme pas le cas 2 de cette revue même.** Mesuré par A01 sur
+940 séries, puis reproduit indépendamment par le pilote sur la fonction réelle :
+
+| série | `main` (`c8ad9ba`) | « règle juste » (option C) | PR #91 (`mois_encore_sous`) |
+| --- | --- | --- | --- |
+| cas 2 — `20260831` seule d'août | 10 gardées, **août perdu** | 10 gardées, **août perdu** | 11, août présent |
+| contre-exemple R1-a | 13 gardées, 4 mois | 14 gardées, 5 mois | 14 gardées, 5 mois |
+
+**Sur le cas 2, l'option C est identique à `main` : elle ne change rien.** La raison est structurelle
+et tient en une phrase — la semaine du 31 août est tenue par l'étage **QUOTIDIEN** (le 1ᵉʳ septembre
+y tombe aussi), pas par l'hebdomadaire. **Aucune règle indexée sur « l'hebdomadaire est plein » ne
+peut sauver cette archive**, puisque l'hebdomadaire n'y est pour rien. A01 mesure de surcroît que
+l'option C supprime ce que `main` gardait dans 90 séries sur 940, contre 12 pour la PR #91.
+
+La question à poser n'était donc pas « l'étage hebdomadaire a-t-il encore des places ? » mais
+« **ce mois revient-il plus bas dans la série ?** » — la seule qui rende le veto inoffensif.
+
+Ce qui vaut d'être retenu au-delà du correctif : **la recommandation de sortie d'une revue est,
+elle aussi, une affirmation jamais remesurée.** Elle était portée par trois documents du dépôt, dont
+celui-ci, et elle était fausse. Arbitrage complet : `DECISIONS.md`, 2026-09-07, « Dernière place
+mensuelle disputée », décideur A01. Réserves R1-a à R4-a : `REVUE_A17_PR91_2026-09-07.md`.

@@ -1307,15 +1307,59 @@ faire_tourner_par_rang() {
   local rang=0 gardes=0 supprimes=0 f raison
   local semaine mois semaines_prises=' ' mois_pris=' ' nb_semaines=0 nb_mois=0
   local a_garder=''
+  local serie paires reste mois_encore_sous g
+
+  # LA SÉRIE EST LUE UNE SEULE FOIS, et pas seulement par économie : le veto de
+  # semaine ci-dessous doit savoir si le mois courant REVIENT plus bas, et une
+  # relecture du répertoire à chaque candidat pourrait voir un état différent.
+  # `|| true` N'EST PAS UNE POLITESSE : `grep` rend 1 quand RIEN ne correspond,
+  # et sous `set -o pipefail` une AFFECTATION hérite de ce code — `set -e` tue
+  # alors la passe entière. La boucle d'origine y échappait pour une raison de
+  # syntaxe et non de conception : une substitution dans un en-tête de `for` ne
+  # porte pas son statut au `set -e`, une affectation si. Le cas n'est pas
+  # théorique — le motif du COFFRE ne correspond à rien tant que
+  # `BACKUP_SECRETS_PASSPHRASE` n'est pas posée, ce qui est l'état par défaut.
+  serie="$(ls -1 "$ARCHIVES" 2>/dev/null | grep -E "$motif" | sort -r || true)"
+
+  # Le mois de CHAQUE archive, calculé une fois — `nom:AAAAMM`, dans l'ordre de
+  # la série. Le prix est honnête : 120 sous-shells `cle_periode` de plus, soit
+  # 0,67 s → 2,42 s sur 120 archives, une fois par nuit. Et il N'EST PAS
+  # justifié par un homme de paille : l'alternative n'est pas de relire le mois
+  # au carré, c'est ZÉRO sous-shell de plus, puisque les mois forment des blocs
+  # contigus dans la série triée et que « le mois revient-il plus bas ? » se lit
+  # sur la SEULE entrée suivante. La table est préférée pour une autre raison —
+  # elle ne dépend pas de cette contiguïté, alors que la lecture par voisin en
+  # dépend entièrement, et une propriété du tri qu'on oublierait un jour est
+  # exactement ce qui se paie ici. Et la calculer par `cle_periode` plutôt qu'en
+  # redécoupant les noms ici garde UNE seule définition du mois — deux découpes
+  # qui divergent seraient le défaut que ce fichier a déjà payé deux fois.
+  #
+  # FRAGILITÉ ASSUMÉE, relevée par A17 : `${paires#*"$f:$mois" }` est correcte
+  # PARCE QUE les deux motifs passés à cette fonction sont ancrés `^…$` et de
+  # longueur fixe. Un motif à longueur variable rendrait un nom SUFFIXE d'un
+  # autre capable d'arrêter le décapage trop tôt, donc `mois_encore_sous=1` à
+  # tort, donc un veto, donc une suppression. Si un tel motif arrive un jour,
+  # c'est cette ligne qu'il faut relire.
+  paires=''
+  for g in $serie; do paires="$paires$g:$(cle_periode "$g" mois) "; done
 
   # Les noms sont produits par ce script seul, sans espace ni caractère exotique :
   # le tri de `ls` est sûr ici, et l'horodatage se trie lexicographiquement comme
   # chronologiquement.
-  for f in $(ls -1 "$ARCHIVES" 2>/dev/null | grep -E "$motif" | sort -r); do
+  for f in $serie; do
     rang=$((rang + 1))
     semaine="$(cle_periode "$f" semaine)"
     mois="$(cle_periode "$f" mois)"
     raison=''
+
+    # LE MOIS DE CETTE ARCHIVE REVIENT-IL PLUS BAS DANS LA SÉRIE ? C'est la
+    # question dont dépend le veto de semaine, et elle n'était pas posée.
+    # `reste` = tout ce qui suit la paire de `$f` ; on y cherche le même mois.
+    reste="${paires#*"$f:$mois" }"
+    case " $reste " in
+      *":$mois "*) mois_encore_sous=1 ;;
+      *) mois_encore_sous=0 ;;
+    esac
 
     if [ "$rang" -le "$quotidiennes" ]; then
       raison="quotidienne ${rang}/${quotidiennes}"
@@ -1330,7 +1374,8 @@ faire_tourner_par_rang() {
       raison="hebdomadaire ${nb_semaines}/${hebdomadaires} (semaine ISO ${semaine})"
     elif [ "$nb_mois" -lt "$mensuelles" ] &&
          [ "${mois_pris#* "$mois" }" = "$mois_pris" ] &&
-         [ "${semaines_prises#* "$semaine" }" = "$semaines_prises" ]; then
+         { [ "${semaines_prises#* "$semaine" }" = "$semaines_prises" ] ||
+           [ "$mois_encore_sous" = 0 ]; }; then
       # LA TROISIÈME CONDITION EST CELLE QUI MANQUAIT, ET LE CODE CONTREDISAIT
       # SON PROPRE COMMENTAIRE. Plus bas, dans le bloc `if [ -n "$raison" ]`, la
       # réservation dit sans ambiguïté : « toute archive gardée, quel que soit
@@ -1357,15 +1402,74 @@ faire_tourner_par_rang() {
       # dorénavant que l'hebdomadaire ait fini, ce que la décision D-2 disait
       # déjà et que le code ne faisait pas.
       #
-      # LE MOIS N'EST JAMAIS SAUTÉ POUR AUTANT, ET C'EST MESURÉ, PAS DÉDUIT. La
-      # descente continue et la condition est réévaluée sur l'archive suivante
-      # DU MÊME MOIS. Contre-épreuve du 2026-09-07, hebdomadaire forcé à 0 pour
-      # que seul le mensuel puisse couvrir août : le 31 août est refusé (sa
-      # semaine 202636 est tenue par le quotidien) et c'est le 30 août qui est
-      # gardé « mensuelle 1/3 (mois 202608) » — plus tôt dans le MÊME mois, et
-      # non un saut vers juillet. Avec l'hebdomadaire à 4, c'est lui qui prend le
-      # 30 août et réserve le mois au passage : dans les deux cas août est tenu.
-      # Éprouvé sur les sept jours de la semaine.
+      # LE MOIS N'EST JAMAIS SAUTÉ POUR AUTANT — et c'est `mois_encore_sous` qui
+      # le garantit, pas la bonne volonté du calendrier. Le raisonnement d'origine
+      # était : « la descente continue et la condition est réévaluée sur l'archive
+      # suivante DU MÊME MOIS ». Il est juste, et il ne vaut QUE SI une telle
+      # archive existe. La réserve R1 de la revue A17 du 2026-09-07 l'a mesuré :
+      # sur une série CREUSE, le veto supprimait la dernière archive de son mois
+      # et le mois disparaissait — 13 gardées au lieu de 14, juillet 2026 sans
+      # aucune archive, une place mensuelle sur trois gaspillée. Le correctif
+      # réinstallait donc, une ligne plus bas, le défaut même qu'il corrigeait :
+      # un commentaire qui promet ce que le code ne tient pas.
+      #
+      # D-2 (Williams, 2026-08-28) tranche le doute dans un seul sens : « le coût
+      # d'une archive gardée en trop est de quelques mégaoctets ; celui d'une
+      # archive supprimée à tort est une restauration impossible. » Le veto ne
+      # s'applique donc QUE quand il ne peut rien coûter — quand le mois revient
+      # plus bas et sera réexaminé.
+      #
+      # MESURÉ, ET LA MESURE EST DANS LA CI — pas dans un banc jetable. Les trois
+      # séries creuses vivent désormais dans `l0-sauvegarde.integration.test.ts`,
+      # écrites par un agent qui n'a écrit ni #86 ni ce correctif (09 §5.6), et
+      # chacune TOMBE sur le code d'avant (c8ad9ba) :
+      #   · creuse (R1, cas 1)    13 → 14 gardées, juillet retrouvé, 4 → 5 mois
+      #   · août seul (R1, cas 2) 10 → 11 gardées, août retrouvé, 2 → 3 mois
+      #   · coût de R1-a          13 → 14 gardées, MAIS 20260430 supprimée
+      # La série dense de 120 j reste INCHANGÉE (14 gardées, plus ancienne
+      # 20260531) : le gain de profondeur de #86 (99 j contre 69) est intégralement
+      # tenu, et c'est le seul cas qui se présente en production — une sauvegarde
+      # par nuit ne fait pas une série creuse.
+      #
+      # UN CHIFFRE ORPHELIN, SIGNALÉ PLUTÔT QUE RECOPIÉ : la revue A17 du
+      # 2026-09-07 décrit son cas 2 en prose et annonce « 12 gardées → 11 » sans
+      # écrire la série qui les produit. La série qui est ici, et dans le test,
+      # rend 10 → 11. Les deux peuvent être justes sur deux séries différentes ;
+      # aucune des deux ne peut être vérifiée sur celle de l'autre, faute qu'elle
+      # ait été notée. Celle du test est écrite, donc rejouable — c'est elle qui
+      # fait foi désormais. Relevé par A16, qui a refusé de choisir un chiffre
+      # qu'il ne pouvait pas mesurer.
+      #
+      # CE QUE CETTE CONDITION COÛTE — la vraie borne, mesurée, et elle n'est pas
+      # celle qu'on croyait. Le cas « le mois revient plus bas mais les étages
+      # sont épuisés avant » NE PEUT PAS SE PRODUIRE : les noms commencent par
+      # AAAAMMJJ, le tri est lexicographique, donc les mois forment des blocs
+      # CONTIGUS. Entre la première archive vetoée d'un mois et la dernière du
+      # même mois, aucune archive d'un autre mois n'est examinée — `nb_mois` ne
+      # peut donc croître que sur ce mois-là, auquel cas il est couvert. Vérifié
+      # par A17 sur 400 séries : 0 mois perdu avec une place mensuelle libre.
+      #
+      # LE COÛT RÉEL est ailleurs, et il est réel : garder l'archive vetoée
+      # DÉPENSE UNE PLACE MENSUELLE PLUS HAUT dans la série, ce qui peut évincer
+      # le mois le plus PROFOND du plan. Contre-exemple déterministe mesuré par
+      # A17 le 2026-09-07 (plan 7/4/3, série creuse) : avant ce correctif le plan
+      # descendait au 20260430 (130 j, 2 mensuelles sur 3) ; après, il couvre
+      # trois mois mais s'arrête au 20260530 (100 j) — le 20260430 est supprimé.
+      # Mesuré sur 1 000 séries : ~1,3 % des séries CREUSES sont concernées,
+      # 0 % des séries denses. Sur ces mêmes séries, jamais moins de fichiers
+      # gardés, jamais moins de mois couverts, jamais sous les ~90 jours de
+      # D-2 option (c). L'arbitrage — couverture de mois CONTRE profondeur du
+      # plan, quand les deux se disputent la dernière place mensuelle — n'est
+      # pas tranché par D-2 seule : les deux branches suppriment quelque chose.
+      # TRANCHÉ : `DECISIONS.md`, 2026-09-07, « Dernière place mensuelle disputée »,
+      # décideur A01 — OPTION A, la couverture de mois. Trois raisons, toutes
+      # tirées de D-2 et non d'un jugement d'opportunité : les DEUX branches
+      # tiennent le plancher de ~90 j, donc ce qu'on abandonne ici est au-delà de
+      # la promesse tandis qu'un mois à trou est dedans ; une archive MinIO est un
+      # miroir CUMULATIF, donc la plus profonde est la plus REDONDANTE alors qu'un
+      # mois manquant retire un point distinct ; et sur le contre-exemple, le
+      # comportement d'avant supprimait DEUX archives pour en sauver une tout en
+      # laissant une place du plan (13 sur 14) INUTILISÉE.
       nb_mois=$((nb_mois + 1))
       raison="mensuelle ${nb_mois}/${mensuelles} (mois ${mois})"
     fi
@@ -1382,7 +1486,14 @@ faire_tourner_par_rang() {
   done
 
   # Second passage : on ne supprime qu'après avoir arrêté le plan complet.
-  for f in $(ls -1 "$ARCHIVES" 2>/dev/null | grep -E "$motif" | sort -r); do
+  # ET IL PARCOURT `$serie`, PAS LE RÉPERTOIRE. Jusqu'au 2026-09-07 cette boucle
+  # relisait `ls`, ce qui rendait FAUSSE la phrase « la série est lue une seule
+  # fois » écrite plus haut — et la relecture qui subsistait pilotait la SEULE
+  # action destructrice de la fonction, là où une vue divergente coûte le plus
+  # cher. Sans conséquence dans une passe mono-processus ; mais une propriété
+  # affirmée et non tenue est le défaut que ce fichier a déjà payé trois fois.
+  # Réserve R3-a de la revue croisée A17 du 2026-09-07.
+  for f in $serie; do
     case " $a_garder " in
       *" $f "*) continue ;;
     esac

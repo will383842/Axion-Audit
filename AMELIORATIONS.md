@@ -2431,3 +2431,39 @@ traités — c'est précisément pourquoi ce n'est pas une micro-amélioration d
 rien n'a été touché dans cette PR.
 
 **Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE
+
+## 2026-09-07 — [L0] Étage 2 — la série vide de la rotation est désormais silencieuse, et indiscernable d'une panne
+
+**Constat (revue croisée A17, PR #91, doute de spec n° 2).** Depuis le commit `3d5e85a`,
+`faire_tourner_par_rang()` lit sa série par `serie="$(ls … | grep … || true)"`. Le `|| true` est
+**nécessaire** — sans lui, `grep` sans correspondance rend 1, `set -o pipefail` propage, et une
+affectation porte ce code à `set -e` : la passe entière mourait dès que le motif du coffre ne
+correspondait à rien, c'est-à-dire par défaut. Mais il rend **indiscernables** trois états qui ne
+se valent pas : aucune archive à faire tourner (normal), `$ARCHIVES` illisible ou disparu (grave),
+et un motif devenu invalide après une modification du script (grave).
+
+**Ce que ça coûte aujourd'hui, exactement.** Le contrôle de cohérence de fin de fonction passe
+trivialement — `0 − 0 = 0` — et n'émet rien. Le journal ne porte aucune ligne. Un exploitant qui
+lit le journal à 02h30 voit une rotation qui n'a rien dit, et ne peut pas savoir si c'est parce
+qu'il n'y avait rien, ou parce que le répertoire de sauvegarde a disparu.
+
+**Ce que ce n'est PAS.** Ni une régression de la PR #91, ni un défaut qu'elle introduit : la forme
+d'origine (`for f in $(ls | grep …)`) avalait déjà le même silence, par syntaxe plutôt que par
+choix, et le répertoire illisible produisait déjà une rotation inerte sans le dire. La PR rend le
+silence **visible dans le code** ; elle ne le crée pas. C'est pourquoi rien n'a été touché ici.
+
+**Ce qui est proposé (étage 2, NON implémenté).** Distinguer les trois cas avant la rotation :
+tester l'existence et la lisibilité de `$ARCHIVES` (message explicite sinon), puis journaliser
+« rotation : aucune archive pour le motif … » quand la série est vide et que le répertoire, lui,
+est bien là. Deux lignes de journal, aucune logique de décision touchée.
+
+**Pourquoi ce n'est pas de l'étage 1.** Ça ajoute un chemin d'erreur à un script d'exploitation
+qui tourne sans témoin, et tout chemin d'erreur nouveau doit être éprouvé sur le banc conteneurisé
+— indisponible dans le conteneur d'autopilote (Docker absent). Le faire sans mesure serait
+exactement le défaut que ce fichier a déjà payé trois fois.
+
+**Coût estimé.** ~0,25 j dont l'essentiel est la contre-épreuve (répertoire absent, répertoire
+illisible, série vide légitime). Impact schéma **aucun** · API **aucun** · crypto **aucun** ·
+périmètre **aucun**.
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE
