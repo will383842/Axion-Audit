@@ -4493,3 +4493,29 @@ TESTS, écrits par le même agent que la page (écart 09 §5.6, signalé en têt
 Tests rouges connus : aucun. unit 1806/1806 · interface 1126/1126 · e2e 83/83 (5 neufs sur
 `/design` : axe-core vert, `color-contrast` prouvé exécuté) · intégration rejouée sur l’arbre fusionné.
 Environnement hors contrat : Node v24.19.0 — la CI reste juge (09 §5.7).
+
+## 2026-09-07 06h00 — [autopilote] — CLÔTURE DE SESSION, R1 reste ouverte
+
+Dernier commit vert : `1290a1c` (#89) · Branche : `gouvernance/cloture-finale` · Poussé : oui
+Tâche en cours : aucune. **R1 n'est PAS corrigée** — son agent n'a rien rendu avant la clôture.
+Prochaine action : **fermer R1** (spéc. complète dans `docs/portes/REVUE_A17_L0_RETENTION_2026-09-07.md`), puis **rejouer P-C EN ENTIER**.
+Tests rouges connus : aucun — **et c'est le piège** : aucun test ne couvre le cas de R1.
+
+**CE QU'UNE REPRISE DOIT SAVOIR, DANS L'ORDRE.**
+
+**1. Une régression de sauvegarde est dans `main` et la CI ne la voit pas.** R1 : le correctif #86
+supprime une archive que le code d'avant gardait — série creuse, 14 → 13, **juillet 2026 disparaît**,
+place mensuelle non dépensée. D-2 (Williams) tranche contre : « une archive supprimée à tort est une
+restauration impossible ». **La porte L0 n'est pas franchissable en l'état.** Ne PAS revenir en
+arrière : le code d'avant est pire sur le chemin nominal (69-75 j contre 99-105). La règle juste est
+déjà écrite à `sauvegarde.sh:1355` — « **tant que** l'hebdomadaire a des places ». Trois réserves
+mineures l'accompagnent (R2 substitut de date qui fuit en silence · R3 contrôle tautologique ·
+R4 citation fausse dans un message d'exploitation).
+
+**2. L'arbitrage fautif était celui du pilote**, pas de l'agent : « l'option 2 ne peut rien retirer ».
+C'est ce que R1 réfute. Transcris les deux séries du réviseur **telles quelles** — c'est ce qui
+rétablit le croisement 09 §5.6 que la première passe n'avait pas.
+
+**3. Fermé cette nuit** : staging (déploie à nouveau), la page `/design` — qui a trouvé 3 défauts
+réels dont une collision de classe cassant l'échelle de cotation **dans toute la console** —, l'état
+hors ligne 12/12, axe 12/12, l'identité auditeur. **34 PR.**
