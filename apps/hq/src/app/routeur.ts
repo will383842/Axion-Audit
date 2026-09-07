@@ -24,6 +24,13 @@
 // qu'une fois une mission choisie. Les brancher sur un espace exigerait un
 // sélecteur de mission, qui appartient à l'espace 6 et arrivera avec lui.
 //
+// Enfin la page de RÉFÉRENCE VISUELLE (03 §19.2, §33.5), hors des sept espaces :
+//   `/design`                   → le design system, ses états et ses trous
+// Elle n'appartient à aucun espace de §22.3 et n'en ouvre aucun : c'est de
+// l'outillage interne, atteint par un lien discret en pied de barre latérale.
+// Lui donner une entrée numérotée abîmerait la carte des sept espaces, qui est
+// la carte du PRODUIT — et cette page n'est pas du produit.
+//
 // La base vient de `base.ts`, partagée avec `vite.config.ts` : le routeur ne
 // connaît pas `/hq` — un seul endroit le sait.
 //
@@ -39,10 +46,12 @@ export type Route =
   | { readonly type: 'couverture'; readonly id: string }
   | { readonly type: 'agregation'; readonly id: string }
   | { readonly type: 'export'; readonly id: string }
+  | { readonly type: 'design' }
   | { readonly type: 'inconnue'; readonly chemin: string };
 
 export const ROUTE_ACCUEIL: Route = { type: 'accueil' };
 export const ROUTE_PORTEFEUILLE: Route = { type: 'portefeuille' };
+export const ROUTE_DESIGN: Route = { type: 'design' };
 
 /** Un identifiant de mission est un UUID ; tout autre segment est une route inconnue. */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -52,6 +61,7 @@ export function analyserChemin(chemin: string): Route {
   const propre = chemin.replace(/\/+$/, '') || '/';
   if (propre === '/') return ROUTE_ACCUEIL;
   if (propre === '/missions') return ROUTE_PORTEFEUILLE;
+  if (propre === '/design') return ROUTE_DESIGN;
   const mission = /^\/missions\/([^/]+)$/.exec(propre);
   if (mission?.[1] !== undefined && UUID.test(mission[1])) {
     return { type: 'mission', id: mission[1].toLowerCase() };
@@ -85,6 +95,8 @@ export function cheminDeRoute(route: Route): string {
       return `/missions/${route.id}/agregation`;
     case 'export':
       return `/missions/${route.id}/export`;
+    case 'design':
+      return '/design';
     case 'inconnue':
       return route.chemin;
   }

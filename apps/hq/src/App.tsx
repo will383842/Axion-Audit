@@ -42,6 +42,7 @@ import { EcranConnexion } from './ecrans/EcranConnexion.js';
 import { EcranPortefeuille } from './ecrans/EcranPortefeuille.js';
 import { EcranCouverture } from './ecrans/couverture/EcranCouverture.js';
 import { EcranAgregation } from './ecrans/agregation/EcranAgregation.js';
+import { EcranDesign } from './ecrans/design/EcranDesign.js';
 import { EcranExport } from './ecrans/export/EcranExport.js';
 
 /** Version injectée par la CI (SHA court) — `dev` en local. Voir le Dockerfile. */
@@ -77,6 +78,11 @@ function FilDAriane({ route }: { route: Route }): ReactNode {
         {route.type === 'portefeuille' && (
           <li>
             <span aria-current="page">Portefeuille</span>
+          </li>
+        )}
+        {route.type === 'design' && (
+          <li>
+            <span aria-current="page">Design system</span>
           </li>
         )}
         {(route.type === 'mission' ||
@@ -148,6 +154,8 @@ function Contenu({ route }: { route: Route }): ReactNode {
       return <EcranAgregation id={route.id} />;
     case 'export':
       return <EcranExport id={route.id} />;
+    case 'design':
+      return <EcranDesign />;
     case 'inconnue':
       return (
         <EtatVide
@@ -211,7 +219,14 @@ export function App(): ReactNode {
               <FilDAriane route={route} />
             </header>
             <main id="contenu" className="axn-console__corps" tabIndex={-1}>
-              {session.absente ? (
+              {/* `/design` est la SEULE route servie même sans session : elle
+                  n'appelle rien, ne lit aucune donnée de mission et ne montre
+                  que le design system (03 §19.2 « référence de recette
+                  visuelle »). Exiger une authentification pour la regarder
+                  reviendrait à ce qu'elle ne soit pas consultée — et il n'y a
+                  rien à y protéger : invariant 3 protège des DONNÉES, pas une
+                  planche de jetons. */}
+              {session.absente && route.type !== 'design' ? (
                 <EcranConnexion
                   onConnecte={apresConnexion}
                   sessionNonEtablie={session.nonEtablie}

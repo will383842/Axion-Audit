@@ -2371,3 +2371,38 @@ Un test dédié le couvre (`restauration.recette-a24.test.tsx`, §D).
 n'est pas approché), NI le périmètre fonctionnel. C'est un affichage d'une information déjà acquise.
 
 **Coût :** ~0,05 j.
+
+## 2026-09-07 — [packages/ui] Étage 2 — le dépôt n'a aucune remise à zéro du modèle de boîte
+
+**Constat (A21, en construisant la page `/design`, 2026-09-07).** `grep -rn "box-sizing"` sur
+`packages/ui/src/*.css`, `apps/hq/src/app/coquille.css` et `apps/field/src/app/coquille.css` rend
+**zéro occurrence**. Le modèle de boîte est donc `content-box` partout, et toute règle
+`width: 100%` accompagnée d'une garniture déborde de son conteneur de la garniture et du filet.
+Quatre familles de règles sont dans ce cas dans `composants.css` : `.axn-champ__saisie` (mesurée),
+`.axn-bouton--pleine-largeur`, `.axn-superposition--dialogue` et `.axn-superposition--bas/--cote`.
+
+**Mesure.** Sur `/design`, conteneur de ~380 px : `ChampTexte` et `ZoneNotes` sortent de leur cadre
+de **9 à 11 px**. Le défaut ne se voyait nulle part ailleurs parce qu'aucun écran ne met un
+composant du paquet dans un conteneur étroit — c'est exactement ce que la page apporte.
+
+**Valeur.** Un champ qui dépasse son cadre est laid partout et FAUX sur tablette en portrait
+(768 px) dès qu'une colonne se resserre : la fin d'une saisie longue passe sous le bord. Le bouton
+pleine largeur et le panneau bas ont le même défaut latent, dans le geste terrain le plus fréquent.
+
+**Ce qui a été fait dans ce lot (étage 1, borné).** `box-sizing: border-box` sur
+`.axn-champ__saisie` SEULEMENT — là où le débordement est mesuré. Aucune autre règle touchée.
+
+**Ce qui est proposé (étage 2, NON implémenté).** La remise à zéro standard
+`*, *::before, *::after { box-sizing: border-box }` dans `tokens.css`, à côté des règles de police
+déjà posées en spécificité nulle.
+
+**Pourquoi ce n'est pas fait ici.** Elle change le calcul de largeur de **tous** les éléments des
+deux fronts. Aucun test ne la couvrirait : jsdom ne met rien en page, et la seule vérification
+sérieuse est une passe visuelle écran par écran, sur les douze vues terrain et les six de la
+console. C'est un geste de recette, pas un geste de chantier — et CLAUDE.md §6 interdit
+d'implémenter une fiche d'étage 2 avant son arbitrage.
+
+**Coût estimé.** ~0,25 j de correctif + ~0,5 j de passe visuelle sur les 18 vues.
+Impact schéma **aucun** · impact API **aucun** · impact crypto **aucun** · impact périmètre **aucun**.
+
+**Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE

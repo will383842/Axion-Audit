@@ -21,6 +21,7 @@ import {
   auClicLienInterne,
   hrefDeRoute,
   ROUTE_ACCUEIL,
+  ROUTE_DESIGN,
   ROUTE_PORTEFEUILLE,
   type Route,
 } from './routeur.js';
@@ -44,6 +45,9 @@ export function espaceDeRoute(route: Route): CodeEspace | null {
     // eslint-disable-next-line no-fallthrough -- idem
     case 'export':
       return 'pilotage_mission';
+    // `/design` n'est pas un espace de §22.3 mais de l'outillage interne : aucun
+    // des sept ne s'éclaire quand on la consulte, et c'est exact.
+    case 'design':
     case 'inconnue':
       return null;
   }
@@ -114,6 +118,19 @@ export function BarreLaterale({ routeCourante, version }: ProprietesBarreLateral
           );
         })}
       </ul>
+      {/* Outillage interne, DÉLIBÉRÉMENT hors de la liste numérotée : les sept
+          espaces sont la carte du produit (§22.3), et une page de référence
+          visuelle n'en fait pas partie. Elle reste un VRAI lien — collable,
+          ouvrable dans un onglet, atteignable au clavier. */}
+      <p className="axn-console__outillage">
+        <a
+          href={hrefDeRoute(ROUTE_DESIGN)}
+          aria-current={routeCourante.type === 'design' ? 'page' : undefined}
+          onClick={auClicLienInterne(ROUTE_DESIGN)}
+        >
+          Design system
+        </a>
+      </p>
     </nav>
   );
 }

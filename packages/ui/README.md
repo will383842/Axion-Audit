@@ -54,6 +54,27 @@ import { Bouton, EchelleAncree, ZoneEtat } from '@axion/ui';
 **dataviz de scoring** (L7-L8) : `TimelinePilote`, `Radar`, `Heatmap`, `CourbePrevuReel`, `Table`,
 `Tabs`, `Tooltip`, `Toast`.
 
+**Ces deux listes ne vivent plus en prose.** `src/inventaire.ts` porte l'énumération de §33.5 telle
+qu'elle est écrite dans le pack, chaque nom confronté à ce que le paquet en a fait :
+`{ etat: 'livre', composant }` — où `composant` est vérifié par le type comme un export RÉEL — ou
+`{ etat: 'absent', motif, ou }`, et **une absence sans motif ne compile pas**. Le même fichier dérive
+`NomComposantUI` des exports de `composants/index.ts` (les exportations de valeur à majuscule
+initiale, c'est-à-dire la convention que React impose déjà) : c'est ce type qui empêche la page
+`/design` d'oublier un composant. De la prose ne rougit pas ; un `satisfies`, si.
+
+## La page `/design` — la recette visuelle, enfin honorée
+
+§33.5 exige « états complets (§19.2) **+ exemple sur /design** ». La page vit dans la **console**
+(`apps/hq/src/ecrans/design/`, arbitrage `DECISIONS.md` du 2026-09-07) : le paquet terrain est
+précaché sous contrainte de quota (05 §31), et une planche de charte se relit sur grand écran.
+Elle rend les **34 composants** — les 24 ci-dessus et les 10 icônes — chacun dans au moins **deux
+états distincts**, les jetons de §33.1, et les huit absences déclarées avec leur motif.
+Un composant ajouté à ce paquet **fait échouer `pnpm typecheck`** tant qu'il n'a pas sa fiche.
+
+```bash
+pnpm --filter @axion/hq dev    # puis http://localhost:5174/hq/design
+```
+
 **Quatre règles que les types imposent plutôt que de les recommander.**
 
 1. `ZoneEtat` prend une **union discriminée** des cinq natures de §33.2 (nominal, chargement, vide,
