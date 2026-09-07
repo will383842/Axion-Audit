@@ -82,11 +82,14 @@ paru apporter 291 lignes dont **zéro n'était absente** de l'autre.
 **21,5 jours-homme livrés sur les 26 du plan** (table du fichier 07).
 **`main` est VERT, `8 · deploy-staging` inclus** — c'est neuf, voir le §5.
 
-> **PREMIÈRE CHOSE À FAIRE EN REPRENANT, et elle n'est pas dans le §1** : deux agents tournaient
-> encore à la clôture — la **revue croisée de #86** (rétention des sauvegardes, A17) et la page
-> **`/design`** (§33.5, A21). Ils n'avaient rien poussé. `git ls-remote --heads origin | grep -E
-> "design|revue"` : si une branche existe, relis-la ; sinon **ce travail est à refaire**, et les deux
-> mandats sont résumés dans le dernier bloc de `docs/ETAT.md`.
+> **CE PARAGRAPHE EST CLOS — ne le rejoue pas (mesuré le 2026-09-07 à 16h20).** Il ordonnait de
+> refaire deux travaux laissés en plan à la clôture : la **revue croisée de #86** (rétention des
+> sauvegardes, A17) et la page **`/design`** (§33.5, A21). **Les deux sont dans `main`** — #88 et
+> #89, fusionnés APRÈS la rédaction de ce fichier : `docs/portes/REVUE_A17_L0_RETENTION_2026-09-07.md`
+> et `apps/hq/src/ecrans/design/EcranDesign.tsx`. Aucune branche `design`/`revue` ne subsiste, et
+> **c'est normal** : le dépôt fusionne en squash, donc l'absence de branche ne prouvait RIEN dans un
+> sens ni dans l'autre. Le test qu'il fallait faire était de chercher le TRAVAIL, pas la branche —
+> `git log --oneline -15` l'a dit en une commande.
 
 **Le neuvième — L6, la synchronisation — n'a AUCUNE ligne de moteur, et c'est délibéré** :
 `CLAUDE.md` §4 impose qu'il se développe seul, après la porte P-C. Sa note de conception est validée,

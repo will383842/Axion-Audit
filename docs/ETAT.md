@@ -4661,3 +4661,29 @@ l'artefact, et le proxy de sortie de ce conteneur refuse le stockage blob d'Azur
 (`connect_rejected`). Je ne connais donc PAS le nombre d'alertes des trois cibles, et je me refuse à
 l'extrapoler des 12 du 2026-09-05 — c'est précisément le chiffre dont Williams a besoin pour trancher
 `ZAP_BLOQUANT` à P-C. **Il est lisible sur la page du run, et il expire au 2026-10-07.**
+
+## 2026-09-07 16h25 — [porte P-C / rejeu] — étape pipeline 6/7 en cours
+
+Dernier commit vert : 8e70f39 (main) · Branche : gouvernance/etat-09 · Poussé : oui
+Tâche en cours : rejeu de P-C EN ENTIER. A02 (contrôle d'acceptation) et A54 (recette novice)
+tournent ; un balayage d'horloge à 33 instants rejoue `unit`+`interface` sur les 24 h et les 7 jours.
+Prochaine action : recevoir les deux verdicts, commiter leurs fiches, puis dire à Williams ce qui
+reste à SA main — c'est là qu'est le goulot, pas dans le code.
+Tests rouges connus : aucun. `install`, `build`, `verify:rapide` : exit 0 sur `8e70f39`.
+
+**Le décompte ZAP que le bloc de 13h30 déclarait illisible d'ici est LU** : il n'était pas seulement
+dans l'artefact Azure, il est aussi dans le journal du job `101756583935`. Les trois cibles rendent
+le MÊME verdict : **FAIL-NEW 0 · WARN-NEW 7 · PASS 63**, sept familles identiques (10015, 10049,
+10055, 10094, 10109, 90004, 90005). Zéro alerte haute.
+**Conséquence qui n'est pas dans le dossier, et qui décide de la bascule** : `zap-verdict.sh` rend
+le code 2 bloquant dès que `ZAP_BLOQUANT` vaut `'true'`. Basculer AUJOURD'HUI rendrait `main` ROUGE
+sur les trois cibles. La bascule de P-C exige donc d'abord de traiter ou d'ignorer explicitement ces
+sept familles — sinon le geste ferme la chaîne au lieu de l'armer.
+
+**Deux notes du dépôt sont périmées, mesuré :** ① `REPRISE_AUTOPILOTE.md` §4 ordonne de refaire la
+revue croisée de #86 et la page `/design` — les deux sont DANS `main` (#88, #89) ; le paragraphe est
+corrigé par ce commit. ② Le hook d'arrêt a compté « 42 commits non poussés » sur une référence
+`origin/main` périmée du clone (5bc7ca9) ; après `git fetch origin main`, `origin/main == HEAD`.
+
+**Non jouable dans ce conteneur** : aucun démon Docker, donc ni `test:integration` ni `test:e2e`,
+donc pas de `pnpm verify` complet. Seul `verify:rapide` fait foi ici.
