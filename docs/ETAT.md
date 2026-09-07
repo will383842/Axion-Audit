@@ -4406,3 +4406,21 @@ Prochaine action : pousser, et demander au chantier #82 de **rejouer le balayage
 Tests rouges connus : aucun. interface 1104/1104 · unit 1799/1799.
 Environnement hors contrat : Node v24.19.0 — la CI reste juge (09 §5.7).
 
+
+## 2026-09-07 03h55 — [lot L0 / rétention 3 étages] — étape pipeline 3/7
+
+Dernier commit vert : a59c46a (origin/main) · Branche : fix/retention-semaine-iso · Poussé : non
+(au moment de ce bloc)
+Tâche en cours : `main` rouge sur `@critique` rétention. **Hypothèse « le script » confirmée par la
+mesure**, et plus large que le rouge ne le disait : la branche mensuelle de
+`faire_tourner_par_rang()` lisait `mois_pris` sans jamais lire `semaines_prises`, alors que le
+commentaire de la réservation promet « sa semaine ET son mois ». Correctif : une condition.
+Mesure, script réel, sept jours forcés — avant : plan arrêté au 20260630 **les sept jours** (69 à
+75 j de portée) ; après : 20260531 (99 à 105 j), 14 archives, ≥ 4 semaines et ≥ 3 mois. Mois non
+sauté (contre-épreuve hebdomadaire à 0 : le 30 août remplace le 31, même mois).
+Le cas `@critique` ne voyait le défaut que 6 jours sur 7 : il est désormais joué sur les SEPT à
+dates fixes (substitut `date`, `aide/faux-date.sh`) et mesure aussi la PROFONDEUR.
+Prochaine action : pousser et ouvrir la PR vers `main` en fermant la PR #83 (son entrée
+`DECISIONS.md` est reprise ici, complétée de l'arbitrage et de la mesure).
+Tests rouges connus : aucun. l0-sauvegarde 67/67 · unit + interface 1104/1104 verts.
+Environnement hors contrat : Node v24.19.0 — la CI reste juge (09 §5.7).

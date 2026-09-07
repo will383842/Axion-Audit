@@ -10975,3 +10975,46 @@ Règle de précédence : §16-22 (§19.2 « un fait, une source » ; §17.3) sur
 La fermeture est désormais MESURÉE, coquille comprise, avec sa contre-épreuve — ce qui manquait.
 Décideur : **A01**, sur délégation du 2026-09-04, sur revue A29.
 Impact spec : aucun ; une pastille redondante en moins, l'exigence §33.2 inchangée.
+
+## 2026-09-07 — [L0] L'étage mensuel de la rétention peut-il se servir dans une semaine déjà couverte ?
+
+`main` (`a59c46a`) est rouge depuis 00h03 UTC sur un seul cas `@critique` :
+`l0-sauvegarde.integration.test.ts` — « la semaine ISO 202636 est couverte À LA FOIS par l'étage
+quotidien et par un étage inférieur ». Vert à 23h52 sur la PR, rouge onze minutes plus tard sur
+`main` : rien n'a changé que la date.
+
+**La cause, prouvée par le calendrier et non déduite.** L'étage quotidien garde le 1ᵉʳ au
+7 septembre ; le 1ᵉʳ au 6 sont en semaine ISO 202636, le 7 en 202637. L'étage mensuel doit couvrir
+août : il prend l'archive la plus récente d'août, le **31 août — un lundi, donc lui aussi en
+202636**. La semaine est comptée deux fois. Dans `faire_tourner_par_rang()`
+(`infra/postgres/sauvegarde.sh`), la branche mensuelle teste `mois_pris` et **jamais**
+`semaines_prises`, à la différence de la branche hebdomadaire.
+
+Options :
+
+1. **Le TEST est trop strict** : il exigerait une propriété jamais promise.
+2. **Le SCRIPT gaspille une place** : le mensuel doit aussi respecter `semaines_prises`.
+3. Ne rien faire. **Écartée** : `main` reste rouge et bloque deux PR qui n'y sont pour rien.
+
+Arbitrage : **option 2 — le script.** L'option 1 tombe à la lecture du fichier lui-même : la
+réservation, vingt lignes plus bas, écrit « toute archive gardée, quel que soit l'étage, RÉSERVE sa
+semaine ET son mois POUR LES ÉTAGES DU DESSOUS ». **La propriété est promise en toutes lettres, les
+deux moitiés qui remplissent sont écrites, et un seul des deux lecteurs consultait.** Le test ne
+demandait rien de plus que ce que le script dit faire : ce n'était pas un arbitrage entre deux
+lectures défendables, c'était un commentaire qui promet plus que le code ne tient. L'option 2 ne
+peut d'ailleurs rien retirer — elle déplace une place d'une semaine déjà couverte vers une semaine
+qui ne l'est pas, le plan atteint plus loin, jamais moins.
+Règle de précédence : **invariant 8** commande (un plan qui remonte moins loin qu'annoncé ment sur
+ce qu'il restaure) ; §2 (aucun `@critique` relâché) écarte l'option 1.
+Décideur : **A01**, sur délégation de Williams du 2026-09-04.
+Impact spec : aucun. 02 §11.4 et D-2 (7/4/3) inchangés ; c'est leur mise en œuvre qui ne les tenait
+pas.
+
+**Mesure A11 — le défaut n'était pas rare, il frappait LES SEPT JOURS.** Script réel, banc
+conteneurisé, 120 archives, jours forcés. Avant : le plan s'arrête au 20260630 les sept jours, soit
+69 à 75 j de portée. Après : 20260531, soit 99 à 105 j. 14 archives avant comme après, ≥ 4 semaines
+ISO et ≥ 3 mois distincts. **Le mois n'est pas sauté** — contre-épreuve hebdomadaire forcé à 0 : le
+31 août est refusé, le 30 août est gardé « mensuelle 1/3 (202608) », plus tôt dans le MÊME mois. Le
+cas `@critique` ne voyait le défaut que six jours sur sept : le dimanche, la fenêtre quotidienne
+tient dans une seule semaine ISO, le chevauchement disparaît et le gaspillage reste (75 j). Le cas
+est donc joué sur les SEPT jours à dates fixes (`aide/faux-date.sh`) et mesure aussi la PROFONDEUR.
