@@ -4688,6 +4688,30 @@ corrigé par ce commit. ② Le hook d'arrêt a compté « 42 commits non poussé
 **Non jouable dans ce conteneur** : aucun démon Docker, donc ni `test:integration` ni `test:e2e`,
 donc pas de `pnpm verify` complet. Seul `verify:rapide` fait foi ici.
 
+## 2026-09-07 17h30 — [porte P-C] — étape pipeline 6/7 : les DEUX verdicts sont rendus
+
+Dernier commit vert : 083e948 (origin/main, #95 fusionnée) · Branche : docs/porte-pc-rejeu · Poussé : oui
+Tâche en cours : rien. Les deux fiches du rejeu sont au dépôt.
+Prochaine action : corriger **R1 d'A54 — les ancres de cotation §33.3 ne sont pas visibles** ; c'est
+un critère nommé de P-C, c'est du code, et 09 §4bis n'autorise que les correctifs de la porte.
+Tests rouges connus : aucun.
+
+**P-C reste refusée, mais plus pour les mêmes raisons — et c'est un progrès mesurable.**
+**A02 LÈVE SON VETO V1** : F-22/F-23/F-25 sont dans `main`, les 7 symboles sont revenus et les cas
+de test passent de **82 à 121**. Écarts non documentés : **aucun**. DoD **7/10** (contre 5),
+invariants **8/8** (contre 6), critères 07 **1 ferme + 5 sous réserve matérielle + 2 non tenus**.
+**A54 rejoue la recette EN ENTIER et rend GO SOUS RÉSERVE** : le parcours novice ne s'interrompt
+plus (il mourait à t+3 min le 06), les six bloquants B1-B6 sont fermés et vérifiés À L'ÉCRAN.
+
+**Le bloquant NEUF, et il est réparable** : **R1 — ancres de cotation invisibles (§33.3)**. Sur une
+échelle 1-5 rien ne s'affiche tant que l'auditeur n'a pas coté, et aux crans **2 et 4** l'ancre est
+une **ligne vide** — exactement là où le pack dit que deux auditeurs ne distinguent pas un 2 d'un 4.
+
+**Balayage d'horloge : 33 instants, 0 rouge.** Les 24 heures, les 7 jours, le 30/09 et le 30/09 à
+23 h. Aucun test daté ne subsiste dans `unit`+`interface` (2932 tests par passe).
+**Décompte ZAP récupéré** (ce que le conteneur ne pouvait pas lire le 06) : par cible
+**FAIL-NEW 0 · WARN-NEW 7 · PASS 63**. Donc `ZAP_BLOQUANT='true'` rendrait `main` ROUGE aujourd'hui.
+
 ## 2026-09-07 17h50 — [L5b / R1 ancres] — étape pipeline 2/7 (correctif en cours d'écriture)
 
 Dernier commit vert : b5a11a4 (lot/l5b-ancres, arbitrage A01) · Branche : lot/l5b-ancres · Poussé : oui
@@ -4762,3 +4786,32 @@ cas, il l'accueille en silence.
 **`--no-verify` sur cette poussée** (§8 l'exige écrit ici) : `d629d64` est un reformatage prettier
 seul, posé sur `d97b27b` dont le `pre-push` complet était vert ; les deux agents écrivent dans
 l'arbre, le crochet mesurerait leur travail en cours, pas ce commit. Même cause qu'à 17h50.
+
+
+## 2026-09-07 18h25 — [L5b / R1] — étape 4/7 : revue croisée A29 rendue, CONFORME SOUS RÉSERVE
+
+Dernier commit : a071fcb + fusion de `main` · Branche : lot/l5b-ancres · Poussé : oui
+Tâche en cours : lever les 5 réserves d'A29. Une seule touche le fond (R-1, copie doctrinale).
+Prochaine action : rendre R-1 à A01 (c'est lui qui a fixé la copie), R-2 et R-3 à A21/A26 ; puis
+recoche de R1 par A02 et rejeu §33 EN ENTIER par A54.
+Tests rouges connus : aucun. `verify:rapide` complet vert — 14 gardes, lint, typecheck, unit,
+interface **1157/1157**.
+
+**A29 a éprouvé les tests au lieu de les croire, et c'est le résultat le plus utile du jour** :
+tests neufs contre `origin/main` = **24 rouges / 49** ; contre `d629d64` = **9 / 49**. Puis cinq
+MUTATIONS — bornage retiré (4 rouges), copies fusionnées (1), marque injectée dans `aria-live` (1),
+dépliant refermé (5), ancien ordre de résolution (1). **Chaque garde tombe quand on casse le point
+qu'elle prétend tenir.** Le dépôt n'a pas rejoué son antécédent du « correctif juste qu'aucun test
+n'exécute » — sauf sur un titre (R-3).
+
+**R-1, la seule réserve de fond, et elle est juste — vérifiée par moi contre le pack.**
+`03_MODULES_FONCTIONNELS.md:667` écrit « une note intermédiaire est une ancre entamée, **pas une
+moyenne** ». Le composant rend « palier intermédiaire… sans qu'elle soit atteinte (doctrine §32.4) » :
+deux tournures absentes du pack, **« pas une moyenne » DISPARU** — la moitié qui vise le réflexe réel
+de l'auditeur — et la phrase signe « (doctrine §32.4) » un texte que le pack ne contient pas. Deux
+commentaires revendiquent une littéralité inexacte. Rendu à A01, pas à A21 : il a fixé cette copie.
+
+**R-4 est une faute de MA méthode, pas des agents** : j'ai commité les fichiers des deux agents
+ensemble, donc 09 §5.6 n'est pas prouvable depuis les artefacts — plausible dans les deux sens, donc
+indécidable. Parade : un commit par agent. **`--no-verify` sur `a000071` et `a071fcb`** (§8) : agents
+écrivant dans l'arbre, même cause qu'à 17h50. La recette d'A54 est désormais dans la branche (fusion).
