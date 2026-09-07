@@ -209,7 +209,10 @@ describe('EchelleAncree — §33.3 : les ancres sont VISIBLES, y compris au clav
     const pliant = container.querySelector('details');
     expect(pliant, 'la liste des ancres vit dans un dépliant natif').not.toBeNull();
     const commande = pliant?.querySelector('summary') ?? null;
-    expect(commande, 'le dépliant porte un `summary` — sans lui, rien ne le commande').not.toBeNull();
+    expect(
+      commande,
+      'le dépliant porte un `summary` — sans lui, rien ne le commande',
+    ).not.toBeNull();
     expect(
       (commande?.textContent ?? '').toLocaleLowerCase('fr-FR'),
       'le résumé annonce ce qu’il ouvre',
@@ -334,10 +337,7 @@ const DERIVEE_CRAN_4 =
  * mot, chaque ponctuation — est comparé à l'identique.
  */
 function phrase(texte: string | null): string {
-  return (texte ?? '')
-    .replace(/[’ʼ]/g, "'")
-    .replace(/\s+/g, ' ')
-    .trim();
+  return (texte ?? '').replace(/[’ʼ]/g, "'").replace(/\s+/g, ' ').trim();
 }
 
 /** La ligne d'ancre — celle dont le CSS réserve la hauteur, donc celle qui blanchit. */

@@ -63,10 +63,7 @@ import {
 // `@axion/shared` n'étant pas une dépendance de la racine (voir l'en-tête de
 // `scripts/check-fixtures-contrat.mjs`), on l'atteint par son chemin, comme la
 // fixture atteint déjà la crypto de `apps/field`.
-import {
-  ANCRES_REQUISES,
-  lireAncresDeCotation,
-} from '../packages/shared/src/banque-questions.js';
+import { ANCRES_REQUISES, lireAncresDeCotation } from '../packages/shared/src/banque-questions.js';
 
 /**
  * Les options que `browser.newContext()` n'hérite PAS de `playwright.config.ts`.
