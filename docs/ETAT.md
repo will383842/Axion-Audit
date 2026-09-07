@@ -4863,3 +4863,31 @@ date au fuseau de l'appareil (R2 d'A54, ouverte au code). **7/8 + 1 écart docum
 **L'angle mort de la DoD est mesuré, pas supposé** : `ariaSnapshot()` en Chromium réel rend
 `button "09:30 Marie Dupont Entretien · Chef d'atelier"` — **correct**, A01 avait raison. Et
 `axe-core` ne teste que la **non-vacuité** du nom (`button-name`), jamais sa justesse. Doute D-8.
+
+## 2026-09-07 19h25 — [P-C / R1] — étape 6/7 close : R1 fermé, un constat NEUF le remplace
+
+Dernier commit : 0c2e49d + rejeu A54 · Branche : lot/l5b-ancres · Poussé : oui
+Tâche en cours : rien. Les deux verdicts sont rendus (A02 : R1 COCHÉ · A54 : GO SOUS RÉSERVE).
+Prochaine action : ouvrir la PR vers `main` (squash, **SANS auto-merge** — elle porte du code), avec
+le tableau d'attribution fichier→agent contresigné A20. Puis N1 à l'arbitrage.
+Tests rouges connus : aucun. A54 : 46/46 à l'écran, axe 12 vues/12. Interface 1160/1160.
+
+**R1 est fermé, mesuré à l'écran par A54 et non déduit d'un vert** : avant tout geste, les 5 crans
+portent un texte, les 3 ancres de banque sont lues, les crans 2 et 4 portent la doctrine, le
+dépliant est `open`. Son constat « le chemin des ancres n'est éprouvé nulle part » est **caduc**.
+
+**N1, LE CONSTAT NEUF, et il naît du correctif lui-même.** Sur iPad **paysage** en mode privé,
+l'ancre du cran 5 commence **285 px sous le bord** : **1 ancre sur 5** est lisible sans défiler
+(5/5 en portrait). Cause physique mesurée : un libellé dérivé fait **126 px** en colonne étroite
+contre 21 px pour une ancre de banque ; la liste passe de 163 à **436 px**. **C'est la citation
+verbatim qui pousse les ancres hors de l'écran** — les deux arbitrages du jour sont physiquement
+liés, et personne ne l'avait vu en les rendant séparément.
+
+**N2 — et c'est le point de méthode le plus durable de la journée.** La garde reste verte, et
+sincèrement : **`toBeVisible()` de Playwright ne regarde PAS le viewport.** C'est le même angle mort
+que `jsdom`, remonté d'un cran — documenté pour jsdom, jamais nommé pour Playwright. Nous venons
+donc de cocher R1 sur une garde qui ne voit pas ce qu'A54 a vu à l'œil.
+
+**Doute pour Williams, et A54 refuse de trancher seul** : que veut dire « visible » pour une ancre
+qu'il faut atteindre **en défilant** ? Tant que ce n'est pas tranché, N1 est un constat d'usage, pas
+un défaut opposable.
