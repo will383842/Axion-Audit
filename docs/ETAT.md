@@ -4815,3 +4815,26 @@ commentaires revendiquent une littéralité inexacte. Rendu à A01, pas à A21 :
 ensemble, donc 09 §5.6 n'est pas prouvable depuis les artefacts — plausible dans les deux sens, donc
 indécidable. Parade : un commit par agent. **`--no-verify` sur `a000071` et `a071fcb`** (§8) : agents
 écrivant dans l'arbre, même cause qu'à 17h50. La recette d'A54 est désormais dans la branche (fusion).
+
+## 2026-09-07 18h40 — [L5b / R1] — étape 2/7, troisième tour : A21 rendu, A26 en cours
+
+Dernier commit : A21 seul (voir ci-dessous) · Branche : lot/l5b-ancres · Poussé : oui
+Tâche en cours : A26 aligne ses constantes sur la citation exacte et écrit la garde anti-paraphrase.
+Prochaine action : à son retour, `verify:rapide`, puis recoche de R1 par A02 et rejeu §33 EN ENTIER
+par A54. Puis PR (avec code : PAS d'auto-merge).
+Tests rouges connus : **7 sur 49**, transitoires et attendus — détail ci-dessous.
+
+**Les 7 rouges sont l'état NORMAL du croisement 09 §5.6, pas un défaut.** A21 a remplacé la
+paraphrase par la citation exacte du pack ; les constantes d'A26 assèrent encore l'ancienne copie,
+et A26 écrit en ce moment. Un test qui rougit parce que la copie a changé **fait exactement son
+travail** : c'est la garde anti-paraphrase avant l'heure. Elle sera verte quand A26 aura aligné
+`DERIVEE_CRAN_2` / `DERIVEE_CRAN_4` et ajouté la garde qui exige littéralement le fragment
+« une ancre entamée, pas une moyenne » — celui que la paraphrase avait mangé.
+
+**Commit PAR AGENT à partir de maintenant** (réserve R-4 d'A29, faute de ma méthode) : le fichier
+d'A21 et celui d'A26 ne partagent plus un commit, pour que 09 §5.6 soit prouvable depuis les
+artefacts et non depuis la prose des messages de commit.
+
+**`--no-verify` sur cette poussée** (§8) : la suite n'est pas verte, c'est le cas que §8 prévoit —
+préfixe `wip:`, branche `lot/**`, jamais `main`, et le squash l'effacera. `packages/ui` typecheck
+exit 0.
