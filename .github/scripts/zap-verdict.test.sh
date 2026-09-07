@@ -3,10 +3,17 @@
 # ÉPREUVE DE LA GARDE ZAP — table de vérité, jouée à CHAQUE run du scan
 # =============================================================================
 # « Une garde dont on n'a pas vérifié qu'elle mord n'est pas une garde. »
-# Ce fichier exécute `zap-verdict.sh` sur les 10 combinaisons qui existent et
+# Ce fichier exécute `zap-verdict.sh` sur toutes les combinaisons qui existent et
 # vérifie le code de sortie de chacune. Il tourne AVANT le scan, dans le même
 # job : si la garde cesse de mordre, on l'apprend en une seconde, pas au
 # prochain incident.
+#
+# ÉTENDU LE 2026-09-07 (couverture `/hq` + `/api`, condition d'A01 du
+# 2026-09-05). Le scan porte désormais sur PLUSIEURS cibles, donc le verdict
+# tranche PLUSIEURS codes. C'est exactement le genre de changement qui fait
+# perdre une garde en silence : la règle « 1 et 3 bloquent en toutes
+# circonstances » n'a de valeur que si elle vaut aussi quand le 3 est NOYÉ dans
+# des 0. Les cas multi-cibles ci-dessous existent pour cette seule raison.
 #
 # Il ne remplace PAS la preuve de bout en bout (le scanner rend-il bien 2 sur
 # une alerte réelle ?) : celle-là se mesure contre la cible, et elle est
@@ -59,6 +66,30 @@ echo "── UNE FAUTE DE FRAPPE NE DÉSARME PAS LA GARDE ───────�
 eprouver 1 0  True  "'True' n'est pas 'true' : erreur dure, pas 'donc non bloquant'"
 eprouver 1 2  oui   "'oui' : erreur dure"
 eprouver 1 2  ""    "mode vide : erreur dure"
+
+# -----------------------------------------------------------------------------
+# MULTI-CIBLES — LA RÈGLE NE SE RELÂCHE PAS PARCE QU'IL Y A TROIS SCANS
+# -----------------------------------------------------------------------------
+# Le danger propre au multi-cibles est la MOYENNE : deux cibles vertes et une
+# en panne « ça va globalement ». Non — la couverture annoncée à la porte ne
+# serait pas celle qui a tourné. Le verdict global est le PLUS SÉVÈRE des
+# verdicts unitaires, et ces cas le prouvent dans les deux sens.
+echo "── PLUSIEURS CIBLES : LE PLUS SÉVÈRE L'EMPORTE ──────────────────────────"
+eprouver 1 "terrain=0 console=0 api=3"  false "un code 3 NOYÉ dans des 0 : rouge — la cible n'a pas été scannée"
+eprouver 1 "terrain=0 console=1 api=0"  false "un code 1 ISOLÉ : rouge MÊME hors mode bloquant"
+eprouver 1 "terrain=0 console=0 api=7"  false "un code inconnu parmi des 0 : on ferme"
+eprouver 0 "terrain=2 console=2 api=2"  false "trois fois 2 hors mode bloquant : vert AVEC trois ::warning"
+eprouver 1 "terrain=2 console=2 api=2"  true  "trois fois 2 en mode bloquant : rouge"
+eprouver 0 "terrain=0 console=0 api=0"  true  "trois fois 0 en mode bloquant : vert"
+eprouver 0 "terrain=0 console=2 api=0"  false "un seul 2 hors mode bloquant : vert"
+eprouver 1 "terrain=0 console=2 api=0"  true  "le MÊME cas en mode bloquant : rouge"
+eprouver 0 "0 2 0"                      false "codes NUS (forme historique, sans étiquette) : encore lus"
+eprouver 1 "0 3"                        false "codes nus dont un 3 : rouge"
+eprouver 1 "terrain=0 console=0 api=0"  True  "faute de frappe du mode, même en multi-cibles : erreur dure"
+echo "── UNE LISTE MALFORMÉE N'EST PAS UNE LISTE VERTE ────────────────────────"
+eprouver 1 "terrain=0 console="          false "étiquette sans code : on ne devine pas"
+eprouver 1 "=2 console=0"                false "code sans étiquette : on ne devine pas"
+eprouver 1 "   "                         false "liste vide : un verdict sur zéro code n'est pas un verdict"
 
 echo
 if [ "${echecs}" -ne 0 ]; then
