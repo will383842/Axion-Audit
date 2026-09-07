@@ -125,8 +125,13 @@ verdict_unitaire() {
 # --- Découpe de la liste -----------------------------------------------------
 # `${codes}` est délibérément NON protégé par des guillemets : c'est la découpe
 # par IFS qui sépare les éléments (espaces ET retours à la ligne).
+# `set -f` désarme le GLOBBING pendant cette seule boucle : sans lui, un code
+# contenant `*` (donc un appelant fautif) se transformerait en liste de fichiers
+# du répertoire courant, et la garde trancherait sur des noms de fichiers.
 etiquettes=()
 valeurs=()
+set -f
+# shellcheck disable=SC2086 # découpe par IFS VOULUE ; globbing neutralisé par `set -f`.
 for element in ${codes}; do
   if [ "${element#*=}" != "${element}" ]; then
     etiquettes+=("${element%%=*}")
@@ -137,6 +142,7 @@ for element in ${codes}; do
     valeurs+=("${element}")
   fi
 done
+set +f
 
 nb="${#valeurs[@]}"
 
@@ -147,7 +153,7 @@ fi
 
 # --- Agrégation : le PLUS SÉVÈRE l'emporte, toujours -------------------------
 bloquantes=''
-for i in $(seq 0 $((nb - 1))); do
+for ((i = 0; i < nb; i++)); do
   ou="${etiquettes[${i}]}"
   code="${valeurs[${i}]}"
 

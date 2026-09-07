@@ -4591,3 +4591,24 @@ dépôt poursuit : une assertion écrite une fois et jamais remesurée.
 (« LES RÔLES », ligne 23). Je l'avais « vérifiée » en lisant le CONTENU de la ligne 23, jamais la
 section qui la contient. Sept occurrences corrigées (DECISIONS.md ×4, le test ×3).
 Le bloc de 11h00 annonçait aussi « étape 5/7 » : la revue croisée est l'étape **4**.
+
+## 2026-09-07 12h30 — [P-C point 7 / ZAP] — étape pipeline 4/7 (verdict A51 rendu, revue croisée due)
+
+Dernier commit vert : 0d89af0 (main, 21 jobs verts) · Branche : fix/zap-perimetre-hq-api · Poussé : oui
+Tâche en cours : périmètre ZAP étendu à `/hq` et `/api` (moitié NON authentifiée). Verdict A51 : RÉSERVES — la moitié authentifiée est bloquée sur un compte de staging qui n'existe pas.
+Prochaine action : ouvrir la PR, faire relire par un réviseur qui n'a rien produit, attendre la CI. Le premier run donnera le décompte réel d'alertes — inconnu à ce jour.
+Tests rouges connus : aucun. Table de vérité ZAP 13 → 27 cas, 27/27.
+
+**Ce que la table de vérité étendue achète, mesuré par moi et pas seulement rapporté** : la table
+ANCIENNE (13 cas) rejouée contre un script dont l'agrégation est INVERSÉE rend **13/13 conformes**,
+donc verte — elle est aveugle au défaut d'agrégation. La NEUVE en fait tomber **7**, dont
+`terrain=0 console=0 api=3` : un scanner en panne sur `/api`, noyé entre deux cibles saines, serait
+passé sans un mot. C'est F-31 revenu par la porte de l'agrégation. Les 14 cas neufs sont porteurs.
+Rétrocompatibilité vérifiée au passage : l'ancienne table contre le script ACTUEL rend 13/13.
+
+**Ce qui n'est PAS couvert, et qu'aucun vert ne doit laisser croire** : aucune route authentifiée,
+aucun `Set-Cookie`, aucune règle active. Un scan passif sur une SPA et une API sans spec voit des
+EN-TÊTES DE RÉPONSE, c'est tout. **Le point 7 de P-C n'est pas coché** — il en porte la moitié.
+
+`--no-verify` employé sur deux poussées de cette branche (CLAUDE.md §8 l'exige écrit ici) : A51
+tenait les fichiers `.github/` en cours d'écriture. Le dernier état passe tous les gardes.
