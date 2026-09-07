@@ -93,14 +93,17 @@ describe('aucune application ne redéfinit globalement une classe de @axion/ui',
     expect(duPaquet.has('axn-bouton')).toBe(true);
   });
 
-  it.each(FEUILLES_APPLICATIVES)('%s ne pose aucune classe du paquet en sélecteur seul', (feuille) => {
-    const collisions = selecteursSeuls(lire(feuille)).filter((classe) => duPaquet.has(classe));
-    expect(
-      [...new Set(collisions)],
-      `${feuille} redéfinit une classe de @axion/ui pour TOUT le paquet. ` +
-        'Renommez la règle applicative, ou bornez-la à son contexte.',
-    ).toEqual([]);
-  });
+  it.each(FEUILLES_APPLICATIVES)(
+    '%s ne pose aucune classe du paquet en sélecteur seul',
+    (feuille) => {
+      const collisions = selecteursSeuls(lire(feuille)).filter((classe) => duPaquet.has(classe));
+      expect(
+        [...new Set(collisions)],
+        `${feuille} redéfinit une classe de @axion/ui pour TOUT le paquet. ` +
+          'Renommez la règle applicative, ou bornez-la à son contexte.',
+      ).toEqual([]);
+    },
+  );
 
   it('CONTRE-ÉPREUVE — le garde mord sur une redéfinition fabriquée, et épargne une surcharge bornée', () => {
     // Sans ces deux lignes, une expression régulière cassée rendrait le bloc
