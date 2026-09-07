@@ -114,31 +114,104 @@ const FUSEAU_MISSION = 'Europe/Paris';
  */
 type TypeDeReponse = IndexMissionQuestion['answerType'];
 
+// ---------------------------------------------------------------------------
+// LA GUIDANCE DE L'ÉCHELLE 1-5 — corrigée le 2026-09-07, et pourquoi c'était
+// une CORRECTION et non un enrichissement.
+//
+// Cette fixture portait une question `scale_1_5` avec `guidanceSnapshot: null`,
+// donc ZÉRO ancre. Cet état est INTERDIT par le contrôle d'import de la banque
+// (`packages/shared/src/banque-questions.ts` : `ANCRES_ABSENTES`, contrôle
+// BLOQUANT du §32.4) : aucune question de ce genre ne peut entrer en banque,
+// donc aucune ne peut descendre sur un appareil. La fixture décrivait un
+// appareil IMPOSSIBLE — un faux témoin.
+//
+// Ce que ce faux témoin coûtait est exactement ce que la recette A54 a buté :
+// « ancres de cotation visibles » est un critère NOMMÉ de la porte P-C, et
+// aucune donnée du dépôt ne permettait de l'éprouver de bout en bout. Un écran
+// qui n'affiche rien parce que la donnée est vide a l'air de fonctionner.
+//
+// Invariant 2 : entreprise FICTIVE, mission FIL-TPE. Rien de cette guidance ne
+// vient d'un client — c'est de la doctrine d'atelier écrite pour le test.
+// ---------------------------------------------------------------------------
+
+/**
+ * Les ancres §32.4 de la question à échelle, sous leur forme LUE.
+ *
+ * Elles sont déclarées ici, et la chaîne `guidance_fr` est FABRIQUÉE à partir
+ * d'elles : les tests comparent donc l'écran à cette liste, jamais à une seconde
+ * copie du même texte qui dériverait le jour où l'une des deux est retouchée.
+ *
+ * Les niveaux 1, 3 et 5 — et eux seuls — parce que c'est ce que `ANCRES_REQUISES`
+ * exige et ce que la banque contient réellement : 2 et 4 restent facultatifs. Une
+ * fixture qui ancrerait les cinq crans masquerait précisément le cas que le
+ * correctif R1 traite.
+ */
+export const ANCRES_ECHELLE_FIL_TPE = [
+  { niveau: 1, libelle: 'aucun outil, tout vit sur des carnets et dans les mémoires' },
+  { niveau: 3, libelle: 'un outil existe et sert la facturation, mais l’atelier le contourne' },
+  {
+    niveau: 5,
+    libelle: 'l’outil porte le flux de bout en bout, et ses écarts sont revus chaque semaine',
+  },
+] as const;
+
+/**
+ * La CONSIGNE consultant, ce qui reste de la guidance une fois les ancres ôtées.
+ *
+ * Elle n'est pas décorative : `lireAncresDeCotation` la sépare des ancres et
+ * l'écran la rend au centre (03 M3.1). Sans elle, la fixture n'éprouverait que
+ * la moitié du parseur.
+ *
+ * Aucun chiffre suivi de « = » ou « : » ici — une telle tournure se ferait lire
+ * comme une ancre par le parseur du pack, et la consigne se retrouverait
+ * amputée. C'est une contrainte de RÉDACTION de la banque, pas du test.
+ */
+export const CONSIGNE_ECHELLE_FIL_TPE =
+  'Faire décrire une commande récente de bout en bout avant de coter, ' +
+  'en demandant qui ressaisit quoi, et à quel moment.';
+
+/**
+ * `guidance_fr` telle qu'un administrateur l'importe : ancres puis consigne,
+ * séparées par le « · » qu'emploie le pack.
+ */
+export const GUIDANCE_ECHELLE_FIL_TPE = [
+  ...ANCRES_ECHELLE_FIL_TPE.map((ancre) => `${String(ancre.niveau)} = ${ancre.libelle}`),
+  CONSIGNE_ECHELLE_FIL_TPE,
+].join(' · ');
+
 /** Les questions figées de la fixture. La première est libre : c'est celle qu'on saisit. */
 const QUESTIONS: readonly {
   readonly id: string;
   readonly texte: string;
   readonly type: TypeDeReponse;
+  /** `guidance_fr` figée au moment de l'assemblage (04 : `guidance_snapshot`). */
+  readonly guidance: string | null;
 }[] = [
   {
     id: '01920000-0000-7000-8000-000000000011',
     texte: 'Décrivez le déroulement d’une commande, de sa réception à sa livraison.',
     type: 'free_text',
+    guidance: null,
   },
   {
     id: '01920000-0000-7000-8000-000000000012',
     texte: 'Les procédures de l’atelier sont-elles écrites ?',
     type: 'yes_no',
+    guidance: null,
   },
   {
     id: '01920000-0000-7000-8000-000000000013',
     texte: 'À quel point l’outil de gestion couvre-t-il vos besoins ?',
     type: 'scale_1_5',
+    guidance: GUIDANCE_ECHELLE_FIL_TPE,
   },
 ];
 
 /** Le texte de la première question : les tests le cherchent à l'écran. */
 export const PREMIERE_QUESTION = QUESTIONS[0]?.texte ?? '';
+
+/** Le texte de la question à ÉCHELLE — celle qui porte les ancres du §32.4. */
+export const QUESTION_ECHELLE = QUESTIONS[2]?.texte ?? '';
 
 export const MISSION_FIL_TPE = {
   id: MISSION_ID,
@@ -234,7 +307,7 @@ export async function semerAppareil(motDePasse: string): Promise<GrainesAppareil
     const charge: ChargeMissionQuestion = {
       questionId: QUESTION_BANQUE_ID,
       questionVersion: 1,
-      guidanceSnapshot: null,
+      guidanceSnapshot: question.guidance,
       optionsSnapshot: null,
       scoringSnapshot: null,
       weightSnapshot: null,

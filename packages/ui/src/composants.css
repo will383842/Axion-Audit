@@ -693,6 +693,21 @@
   color: var(--couleur-texte-secondaire);
 }
 
+/* Marque des crans DÉRIVÉS (2 et 4, quand la banque ne les documente pas). Elle
+   porte un MOT — « Dérivé » —, jamais une teinte seule : §33.6 interdit qu'une
+   information tienne à la couleur. Le cadre et la graisse ne font que le
+   détacher du texte qu'il qualifie. */
+.axn-choix__derivee {
+  margin-inline-end: var(--espacement-2);
+  padding-inline: var(--espacement-2);
+  border: var(--taille-bordure-epaisseur) solid var(--couleur-bordure-nette);
+  border-radius: var(--taille-rayon-petit);
+  font-size: var(--typo-taille-xs);
+  font-weight: var(--typo-graisse-semi);
+  color: var(--couleur-texte-tertiaire);
+  white-space: nowrap;
+}
+
 .axn-choix__toutes-ancres {
   font-size: var(--typo-taille-sm);
   color: var(--couleur-texte-secondaire);
