@@ -129,22 +129,37 @@ collision que `CLAUDE.md` §4 interdit.
   « mot de passe invalide »**, donc l'auditeur ne voit jamais l'avertissement sur une corruption réelle.
 - **ZAP** : bascule bloquante à **P-C**, et **le scan doit d'abord couvrir `/hq` et `/api`** — il ne
   voit aujourd'hui que six URL de coquille statique.
-- **`staging` est rouge depuis le 2026-09-02 — et la raison écrite ici était FAUSSE.**
-  Ce fichier a affirmé pendant deux jours qu'« aucun chemin API n'existe » et que le geste
-  « revient à Williams ». **Le job `8 · deploy-staging` ouvre déjà une session `ssh root@` avec le
-  secret `DEPLOY_SSH_KEY`, présent au niveau du dépôt depuis le 2026-08-30.** Ce qui manquait
-  n'était pas un droit : c'était un workflow qui s'en serve. Le dossier P-DESCOPE écrivait, lui,
-  « SSH sortant refusé à l'agent » là où il fallait lire « personne n'a essayé ».
+- **`staging` est rouge depuis le 2026-09-02, et le geste revient bien à Williams — MAIS c'est
+  désormais MESURÉ, plus supposé.** Cette distinction est le seul contenu utile de ce point.
 
-  `.github/workflows/ops-poser-enveloppeurs.yml` fait le geste, à déclenchement manuel, et il le
-  **prouve** en relisant les empreintes sur le serveur — un `install` qui rend 0 ne dit pas que le
-  bon contenu est arrivé.
+  Ce fichier affirmait « aucun chemin API n'existe » **et** « clé de déploiement restreinte au
+  script périmé lui-même ». La session pilote a cru la première moitié fausse, l'a déclarée telle,
+  **et l'a écrit ici** — puis a construit `.github/workflows/ops-poser-enveloppeurs.yml` pour le
+  prouver. **Le workflow a échoué, et il a eu raison contre elle** (run du 2026-09-07 03h06) :
 
-  **La leçon dépasse le serveur, et c'est pour elle que ce point reste écrit ici** : une affirmation
-  posée une fois, jamais remesurée, gouverne ensuite toutes les décisions qui la citent. Celle-ci a
-  coûté cinq jours, et je l'ai recopiée telle quelle dans un rapport à Williams — c'est lui qui l'a
-  mise en doute. **Quand ce fichier dit « impossible », demande-lui depuis quand personne n'a
-  essayé.**
+  ```
+  EMPREINTE_SCRIPT=68fbc455ea60df8019b41566e48d737e0ec6cb1915742e55d0cb619a3d0ed0fd
+  ##[error]stdin: jeton absent.
+  ```
+
+  La connexion s'ouvre — l'hôte répond — mais la clé est verrouillée par une directive `command=`
+  d'`authorized_keys` : elle exécute l'enveloppeur, **et rien d'autre**. Aucune commande arbitraire,
+  donc aucun `install`. L'en-tête de `infra/scripts/deploy-staging.sh` le disait déjà en toutes
+  lettres : « ni shell, ni lecture de fichier, ni redirection de port ». **La seconde moitié de
+  l'affirmation était donc VRAIE**, et seule la première (« aucun chemin API ») était trop large.
+
+  Ce que le run apporte quand même, et ce n'est pas rien : l'empreinte du serveur (`68fbc455…`)
+  **confirme par la mesure** qu'il exécute l'ancien enveloppeur là où le dépôt attend `74926ac9…`.
+
+  **Le workflow n'est pas perdu : il devient le harnais de VÉRIFICATION du geste humain.** Williams
+  pose les deux fichiers, on le relance, et il dit par les empreintes si c'est bon — au lieu de
+  laisser croire.
+
+  **Et la leçon tient dans les deux sens, ce qui la rend meilleure que celle qu'on avait écrite** :
+  une affirmation jamais remesurée gouverne les décisions qui la citent — **mais une réfutation trop
+  rapide en gouverne d'autres.** Ici, la bonne question n'était pas « depuis quand personne n'a
+  essayé », c'était « qu'est-ce que la clé peut faire, exactement ». **Mesure avant d'affirmer, y
+  compris quand tu affirmes que quelqu'un d'autre s'est trompé.**
 
 ---
 
@@ -155,12 +170,15 @@ d'incréments, **et les portes P-C / P-D / P-E**, sous quatre bornes qui portent
 jamais sur *ce qui est dû* — dossier de porte intégral avec preuve par critère, DoD non amendée, une
 porte échouée reste échouée, tout est re-signable.
 
-**Jamais délégué** : **l'amendement du fichier 04**, réservé à la revue de spec de **P-D** (09 §5.9).
+**Jamais délégué** : **le geste root sur staging**, et **l'amendement du fichier 04**, réservé à la
+revue de spec de **P-D** (09 §5.9).
 
-> *Le geste root sur staging figurait ici jusqu'au 2026-09-07, au motif qu'« une permission système
-> ne se délègue pas ». Elle l'était déjà, depuis le 2026-08-30, par le secret `DEPLOY_SSH_KEY` —
-> voir le point « staging » du §5. La phrase était juste en principe et fausse en fait : la
-> permission n'avait pas à être déléguée, elle était donnée.*
+> *Le 2026-09-07, la session pilote a cru pouvoir retirer le geste root de cette liste, au motif que
+> le secret `DEPLOY_SSH_KEY` donnait déjà l'accès. Elle a construit le workflow qui devait le
+> prouver — et **il a prouvé le contraire** : la clé est verrouillée par `command=` et n'exécute que
+> l'enveloppeur. La ligne est donc rétablie, non plus par principe mais **par mesure**. Voir le
+> point « staging » du §5 : c'est le seul endroit du fichier où une affirmation a été réfutée, puis
+> la réfutation elle-même réfutée, et les deux erreurs y sont écrites.*
 
 **Le pipeline en 7 étapes n'a pas de raccourci.** En particulier : le code de test n'est jamais écrit
 par l'agent qui a écrit le code testé, et **un réviseur ne commite jamais** — il dépose son verdict,
