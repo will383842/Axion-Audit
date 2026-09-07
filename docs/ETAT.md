@@ -4635,3 +4635,29 @@ puis rendait 0 partout). Contre-épreuves : code 1 sur chaque cas fautif, code 0
 **Erreur de recopie de ma part, relevée par A17** : `GITHUB_TOKEN` figurait dans ma propre sortie de
 `grep` et je l'ai omis de l'inventaire des secrets, dans DECISIONS.md ET REPRISE_AUTOPILOTE. La
 conclusion (« rien d'applicatif ») tenait ; l'énumération, elle, était incomplète.
+
+## 2026-09-07 13h30 — [P-C point 7] — PREMIER scan ZAP à trois cibles, mesuré sur staging réel
+
+Dernier commit vert : 806ecfb (main, 21 jobs verts, deploy-staging et ZAP compris) · Branche : docs/etat-premier-scan-zap · Poussé : oui
+Tâche en cours : rien en cours. #91, #92, #93 fusionnés ; `main` vert de bout en bout.
+Prochaine action : plus rien de substantiel ne se joue sans Williams. Ne pas inventer de chantier — relire 07 et le présent bloc.
+Tests rouges connus : aucun.
+
+**Le scan étendu a RÉELLEMENT tourné, et ce n'est plus une extrapolation.** Run `34125104959`,
+image `sha256:781a2bda…`, cibles résolues sur `audit-staging.axion-ia.com` :
+
+```
+CODES: terrain=2 console=2 api=2
+Verdict ZAP global : aucune des 3 cible(s) ne bloque.
+```
+
+**Aucun code 3, aucun code 1** : `/hq/` et `/api/v1/health` ont donc bien été atteints et scannés —
+la cible API ne rend pas 404, et les en-têtes analysés sont ceux de l'API. Trois `::warning`
+distincts, un par cible, chacun nommant son sous-dossier de rapport. Artefact `rapport-zap-34125104959`,
+**9 fichiers**, 3 par cible, **conservé 30 jours**.
+
+**CE QUE JE N'AI PAS PU MESURER** : le décompte par sévérité. Il vit dans le résumé de job et dans
+l'artefact, et le proxy de sortie de ce conteneur refuse le stockage blob d'Azure
+(`connect_rejected`). Je ne connais donc PAS le nombre d'alertes des trois cibles, et je me refuse à
+l'extrapoler des 12 du 2026-09-05 — c'est précisément le chiffre dont Williams a besoin pour trancher
+`ZAP_BLOQUANT` à P-C. **Il est lisible sur la page du run, et il expire au 2026-10-07.**
