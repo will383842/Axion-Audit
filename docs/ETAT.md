@@ -4451,3 +4451,26 @@ l'identité auditeur enfin joignable, et une région défilante inaccessible au 
 
 **Ce qui reste : P-C, puis L5d, puis L6.** Les 10 points de recette sur appareil physique sont dus à
 Williams ; les 7 qui exigeaient un serveur sont désormais jouables.
+
+## 2026-09-07 05h00 — [L0 / rétention] — RÉGRESSION DANS `main`, correctif en cours
+
+Dernier commit vert : `main` après #87 · Branche : `gouvernance/revue-r1` · Poussé : oui
+Tâche en cours : correctif de R1 sur `fix/retention-veto-borne` ; page `/design` sur `feat/page-design` (3 commits poussés, PR non ouverte).
+Prochaine action : **fermer R1**, puis ouvrir la PR `/design`, puis **rejouer P-C EN ENTIER**.
+Tests rouges connus : aucun — **et c'est le problème** : aucun test ne couvre le cas de R1.
+
+**R1 EST DANS `main` ET LA CI NE LA VOIT PAS.** La revue croisée A17 (`docs/portes/
+REVUE_A17_L0_RETENTION_2026-09-07.md`, à lire en entier) a mesuré que le correctif #86 **supprime
+une archive que le code d'avant gardait** : sur une série creuse, 14 gardées deviennent 13 et
+**juillet 2026 disparaît**, place mensuelle non dépensée. Le veto de semaine s'applique même quand
+l'étage hebdomadaire est **épuisé** — il ne protège alors plus rien, il détruit.
+
+**D-2 (Williams, 2026-08-28) tranche contre** : « une archive supprimée à tort est une restauration
+impossible ». **La porte L0 n'est pas franchissable en l'état.** Ne pas revenir en arrière : le code
+d'avant est strictement pire sur le chemin nominal (69-75 j contre 99-105). Le correctif va en avant,
+et la règle juste est déjà écrite à `sauvegarde.sh:1355` — « **tant que** l'hebdomadaire a des places ».
+
+**L'arbitrage fautif est le mien** (« l'option 2 ne peut rien retirer ») : c'est ce que R1 réfute.
+Trois réserves mineures partent avec le correctif — R2 (substitut de date qui laisse fuir en
+silence), R3 (contrôle tautologique le jour même de son écriture), R4 (« 02 §11.4 » cité à tort dans
+cinq endroits dont un message d'exploitation).
