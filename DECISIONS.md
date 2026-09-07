@@ -11185,3 +11185,36 @@ n'implémente pas encore.
 Décideur : **Williams** (question posée par **A51** le 2026-09-07).
 Impact spec : aucun. La condition d'A01 du 2026-09-05 n'est pas amendée — elle est **constatée
 ambiguë** sur son mécanisme, et la présente entrée porte la question et sa date.
+
+## 2026-09-07 — [L5b] Les ancres de cotation doivent-elles être lisibles AVANT toute interaction ?
+
+R1 de la recette A54 du jour. Sur `scale_1_5`, `EchelleAncree` n'affiche l'ancre qu'au survol, au
+focus ou après cotation (`affichee = survolee ?? valeur`, ligne 77) ; les cinq ancres dorment
+derrière un `<details>` sans `open` (ligne 135) ; les crans 2 et 4 rendent une chaîne vide dans un
+bloc à hauteur réservée, donc une ligne blanche (ligne 131). Au doigt il n'y a ni survol ni focus :
+l'auditeur cote d'abord et comprend ensuite. « Ancres visibles » est un critère NOMMÉ de P-C (07:24).
+
+Options :
+a) L'état actuel tient la lettre de §33.3 (« sous le curseur » = sous la valeur courante) : on
+documente l'écart et on coche le critère.
+b) Ancres rendues SANS interaction, dépliant ouvert par défaut ; les crans 2 et 4 portent le
+libellé dérivé de la doctrine 3 (§32.4) ; la ligne d'ancre n'est jamais vide.
+c) b) plus l'abandon du dépliant au profit d'un libellé sous chaque cran (refonte de mise en page).
+
+Arbitrage : b).
+Précédence §32-36 (00_INDEX) : deux textes de la bande haute concordent et priment. §33.3 donne le
+MOTIF — « la cotation homogène ne dépend pas de la mémoire du consultant » : une ancre qui
+n'apparaît qu'APRÈS la note ne soutient plus la décision, elle la commente. §33.5 est littéral :
+« ÉchelleAncrée (slider 1-5 + ancres DÉPLIÉES) » — un dépliant fermé contredit le mot. a) tombe.
+Pour les crans 2 et 4, on n'invente aucun texte : l'amendement §32.4 du 2026-09-02 (doctrine 3,
+Williams) dit « la note 2 (resp. 4) exige au moins un élément établi de l'ancre 3 (resp. 5) » et
+« prime sur toute lecture locale d'une guidance ». C'est cette phrase qui se rend, marquée comme
+DÉRIVÉE et non comme ancre de banque — jamais un blanc, jamais un « entre X et Y » qui situe sans
+dire comment coter. c) tombe : refonte hors du périmètre d'une porte refusée (09 §4bis).
+`ANCRES_REQUISES = [1, 3, 5]` n'est PAS touché — le rendu dérive, il n'exige rien de plus à
+l'import. La fixture `e2e/fixtures/appareil-terrain.ts:237` porte une `scale_1_5` avec
+`guidanceSnapshot: null`, état que le contrôle d'import INTERDIT : elle est corrigée dans le même
+correctif, sans quoi le critère de porte n'est éprouvé de bout en bout nulle part.
+
+Décideur : A01
+Impact spec : aucun — application de 03 §33.3, 03 §33.5 et de l'amendement §32.4 du 2026-09-02.
