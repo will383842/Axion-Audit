@@ -10975,3 +10975,38 @@ Règle de précédence : §16-22 (§19.2 « un fait, une source » ; §17.3) sur
 La fermeture est désormais MESURÉE, coquille comprise, avec sa contre-épreuve — ce qui manquait.
 Décideur : **A01**, sur délégation du 2026-09-04, sur revue A29.
 Impact spec : aucun ; une pastille redondante en moins, l'exigence §33.2 inchangée.
+
+## 2026-09-07 — [L0] L'étage mensuel de la rétention peut-il se servir dans une semaine déjà couverte ?
+
+`main` (`a59c46a`) est rouge depuis 00h03 UTC sur un seul cas `@critique` :
+`l0-sauvegarde.integration.test.ts:785` — « la semaine ISO 202636 est couverte À LA FOIS par
+l'étage quotidien et par un étage inférieur ». Vert à 23h52 sur la PR, rouge onze minutes plus
+tard sur `main` : rien n'a changé que la date.
+
+**La cause, prouvée par le calendrier et non déduite.** L'étage quotidien garde le 1ᵉʳ au
+7 septembre ; le 1ᵉʳ au 6 sont en semaine ISO 202636, le 7 en 202637. L'étage mensuel doit
+couvrir août : il prend l'archive la plus récente d'août, le **31 août — un lundi, donc lui
+aussi en 202636**. La semaine est comptée deux fois. Dans `faire_tourner_par_rang()`
+(`infra/postgres/sauvegarde.sh`), la branche mensuelle teste `mois_pris` et **jamais**
+`semaines_prises`, à la différence de la branche hebdomadaire.
+
+Options :
+
+1. **Le TEST est trop strict.** Le script promet « chaque étage réserve pour les étages du
+   DESSOUS » ; le mensuel étant sous l'hebdomadaire, ne pas regarder les semaines est cohérent
+   avec cette phrase. L'assertion exige une propriété jamais promise. Coût : relâcher un
+   `@critique`, ce que §2 interdit de faire à la légère.
+2. **Le SCRIPT gaspille une place.** Le mensuel devrait aussi respecter `semaines_prises`.
+   Coût : change le plan de rétention réel des sauvegardes — invariant 8, exploitation.
+3. Ne rien faire. **Écartée** : `main` reste rouge, et un `@critique` rouge toléré est
+   précisément ce que §2 refuse.
+
+Recommandation : **option 2**, mais elle n'est pas mienne à prendre. Le défaut est rare — il
+exige que le dernier jour du mois précédent partage sa semaine ISO avec le début du mois
+courant — et c'est ce qui l'a rendu invisible jusqu'à ce lundi.
+
+Arbitrage : **RÉSERVÉ À WILLIAMS**. Règle de précédence : invariant 8 (sauvegarde) et §3-4
+(« toucher à la sécurité/crypto autrement que spécifié ») commandent — un plan de rétention
+n'est pas un détail d'implémentation, et le pack ne tranche pas ce cas.
+Décideur : **Williams**.
+Impact spec : à déterminer — l'option 2 demande un amendement horodaté du plan de rétention.
