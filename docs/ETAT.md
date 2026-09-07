@@ -4735,3 +4735,30 @@ le pilote — qui deviendrait sinon l'auteur du test d'un code qu'il vient d'ado
 **`--no-verify` employé sur cette poussée** (CLAUDE.md §8 l'exige écrit ici) : le `pre-push` a été
 joué normalement et a échoué **à juste titre**, sur ce rouge réel. C'est le cas que §8 prévoit —
 « sauver un `wip:` », préfixe porté, sur une branche `lot/**`, jamais sur `main`. Le squash l'effacera.
+
+## 2026-09-07 18h05 — [L5b / R1 ancres] — étape 2/7, second tour d'arbitrage en cours
+
+Dernier commit : d629d64 (lot/l5b-ancres) · Branche : lot/l5b-ancres · Poussé : oui
+Tâche en cours : A21 applique les 5 points du second tour A01 ; A26 écrit les cas neufs (échelle
+0-10 sans dérivation, `ancres: []` avec et sans valeur, les 3 copies vérifiées au texte).
+Prochaine action : à leur retour, `pnpm verify:rapide` complet, puis revue croisée A29, recoche de
+R1 par A02, et rejeu §33 EN ENTIER par A54 (09 §4bis). Puis PR.
+Tests rouges connus : aucun — 36/36 sur EchelleAncree, interface 1144/1144, unit 1806/1806.
+
+**Le premier tour est vert et poussé.** Ancres dépliées par défaut, crans 2 et 4 rendus par le
+libellé dérivé de la doctrine §32.4, plus aucun chemin ne rend `''`, fixture E2E corrigée.
+**A26 a mesuré le rouge d'AVANT dans un worktree détaché sur `b5a11a4` : 12 cas sur 36.** Et son
+E2E pré-correctif dit le défaut mieux que n'importe quel comptage — *le texte était dans le DOM et
+invisible*. Une recherche de texte l'aurait déclaré couvert ; `toBeVisible()` le refuse. Elle a
+d'abord dû casser un symlink `@axion/ui` qui reramenait vers le paquet déjà corrigé : **le premier
+essai était un faux vert**, et elle l'a vu.
+
+**Le second tour d'A01 corrige un défaut que personne n'avait vu** : quand `ancres` est vide ET
+`valeur === null`, l'écran invitait à « voir son ancre » — une ancre qui n'existe pas. C'est R1 sous
+une autre forme. Il borne aussi la dérivation à `noteMin === 1 && noteMax === 5` et refuse le report
+« le jour où le cas se présente » : dans un composant partagé, un report non écrit n'attend pas le
+cas, il l'accueille en silence.
+
+**`--no-verify` sur cette poussée** (§8 l'exige écrit ici) : `d629d64` est un reformatage prettier
+seul, posé sur `d97b27b` dont le `pre-push` complet était vert ; les deux agents écrivent dans
+l'arbre, le crochet mesurerait leur travail en cours, pas ce commit. Même cause qu'à 17h50.
