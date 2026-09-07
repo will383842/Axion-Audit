@@ -99,9 +99,34 @@ son contrat d'opérations et la propriété serveur sont tranchés et tracés.
 | Ce qui reste | Où | État |
 | --- | --- | --- |
 | **Porte P-C** | `docs/portes/` | **Refusée deux fois**, se rejoue EN ENTIER (09 §4bis). **Seul goulot du chantier — c'est par là qu'on reprend** |
-| **17 vérifications matérielles** | fiche dédiée | 10 exigent un appareil physique, dues à Williams. **Les 7 « serveur » sont désormais JOUABLES** (staging réparé) |
+| **17 vérifications matérielles** | fiche dédiée | 10 exigent un appareil physique, dues à Williams. **Les 7 « serveur » ne sont PAS jouables pour autant** — voir la rectification du 2026-09-07 sous ce tableau |
 | **L5d — chaîne photo** | non ouvert | Après P-C, avant L6c. `compresserPhoto` est du code sans appelant, assumé et tracé |
 | **L6a/b/c — sync** | non ouvert | 4,5 j, SEUL, après P-C. Dernier gros morceau |
+
+### RECTIFICATION DU 2026-09-07 — « les 7 serveur sont jouables » était FAUX, et le vérifier a pris dix minutes
+
+La ligne d'origine disait : « Les 7 “serveur” sont désormais JOUABLES (staging réparé) ». Staging
+**est** réparé, et c'est vrai ; la conclusion qu'on en tirait ne l'est pas. Mesuré point par point :
+
+- **Points 1 à 5** (embarquement FIL-TPE/FIL-GC, cockpit sur vraies données, entretien complet,
+  6 `kind` de session, 5 formes de saisie) exigent tous **une identité d'auditeur sur staging**.
+  Or **aucun compte de test n'existe** : inventaire des `secrets.*` de `.github/workflows/*.yml`
+  → `DEPLOY_*`, `COOLIFY_*`, `TELEGRAM_*`, `RESTORE_SSH_KEY`, `AXION_CLIENTS_SURVEILLES`. **Rien
+  d'applicatif.** Sans compte, pas d'appareil rattaché, donc pas de mission embarquée, donc aucun
+  des cinq. **Dus à Williams** — c'est lui qui crée le compte et pose le secret.
+- **Point 6** (migrations up/down sur staging) : le dépôt le dit déjà lui-même, et l'a écrit avant
+  moi. `.github/workflows/ci.yml` : « Ce job prouve up ET down sur le Postgres JETABLE de la CI ; il
+  ne prouve rien sur staging. L'exécution sur staging reste un geste **HUMAIN**, à tracer par
+  Williams dans le fichier de porte (A02, 2026-09-02). » **Dû à Williams.**
+- **Point 7** (ZAP sur `/hq` et `/api`) : **la seule moitié jouable en dépôt**, et elle n'est qu'une
+  moitié — l'arbitrage A01 du 2026-09-05 dit « authentification comprise », ce qui bute sur le même
+  compte manquant que les points 1 à 5. La couverture non authentifiée est en cours ; la bascule
+  `ZAP_BLOQUANT='true'` vient **après**, au dossier de porte, jamais avant.
+
+**Donc : P-C est bloquée sur Williams dans sa quasi-totalité, pas seulement sur ses 10 points
+matériels.** Le dire tôt vaut mieux que le découvrir à la porte. Et la leçon est celle du §5 : une
+affirmation vraie (« staging est réparé ») en a fait passer une fausse (« donc les 7 sont jouables »)
+parce que personne n'a vérifié le pas entre les deux.
 
 **Ce qui a été fermé le 2026-09-06**, et qui vaut d'être su parce que la même famille reviendra :
 `pnpm test:interface` n'était lancé par **aucun job de CI** (61 fichiers ne tournaient qu'en effet de
