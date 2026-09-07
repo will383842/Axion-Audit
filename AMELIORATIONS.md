@@ -2500,25 +2500,51 @@ d'interface et le rejeu d'A54 — pas cette phrase.
 
 À prendre par **A30** dans le flux normal de C3, **après** la porte. Coût : une phrase.
 
-## 2026-09-07 — [L5] Étage 1 EN ATTENTE — deux écrans de la journée collent leurs libellés à la synthèse vocale
+## 2026-09-07 — [L5] DÉFAUT SUSPECTÉ, À MESURER — hors périmètre 09 §4bis, arbitrage à la porte
 
-**Constat (A21, en balayant au-delà de son périmètre après la sonde d'A29).** Le défaut R-2 du
-correctif R1 — deux `<span>` frères séparés par un simple retour à la ligne, que JSX supprime à la
-compilation, donc **collés dans le nom accessible** — n'était pas isolé.
+**RECTIFIÉE le 2026-09-07 après vérification d'A01. La première rédaction de cette fiche — la
+mienne — affirmait trop.** Elle est conservée ici sous sa forme corrigée, et l'erreur est dite parce
+qu'elle est instructive.
 
-`apps/field/src/ecrans/journee/EcranAujourdhui.tsx:131-135` et `EcranAgenda.tsx` empilent
-`heure` / `personne` / `contexte` en spans frères sans nœud de texte entre eux. Un lecteur d'écran
-annonce donc vraisemblablement « 09h30Marie DupontEntretien ». **Vérifié structurellement par moi
-(construction identique) ; le mécanisme a été vérifié par A21 sur le JS compilé du cas jumeau de
-`packages/ui`. Il reste à mesurer sur ces deux écrans précis** — c'est une nuance, pas une réserve.
+**Le constat d'origine (A21, en balayant au-delà de son périmètre avec la sonde d'A29).** Le défaut
+R-2 du correctif R1 — deux `<span>` frères séparés par un simple retour à la ligne, que JSX supprime,
+donc **collés dans le nom accessible** — semblait se répéter dans
+`apps/field/src/ecrans/journee/EcranAujourdhui.tsx:131-138` et `EcranAgenda.tsx` : « 09h30Marie
+DupontEntretien » à la synthèse vocale. A21 avait écrit « **vraisemblablement** » ; j'ai porté le
+constat en durcissant ce mot, et c'est ma faute.
 
-**Ce qu'aucun garde ne voyait** : `axe-core` est **vert** sur ces vues. Cette famille de défaut ne
-produit ni contraste insuffisant, ni rôle manquant, ni libellé absent — le texte est là, il est
-seulement **aggloméré**. C'est le pendant exact de la leçon du 06 : _un comptage dit qu'un symbole
-est présent, il ne dit pas qu'un comportement l'est._
+**Ce qu'A01 a vérifié, et que je n'avais pas regardé : le CSS.** `journee.css:78-92` —
+`.axn-journee__heure` porte `flex: 0 0 auto` (son parent est donc flex) et `.axn-journee__details`
+est `display: flex; flex-direction: column`. **Ces `<span>` sont des éléments flex, donc
+blockifiés**, et l'algorithme de nom accessible insère une séparation entre nœuds de niveau bloc. Le
+nom rendu est vraisemblablement `09h30 Marie Dupont Entretien · …`, **correct**. Le cas
+d'`EchelleAncree` était différent : ses spans étaient réellement **inline** dans un `<dd>`.
 
-**NON EXÉCUTÉE, et le motif est de périmètre.** 09 §4bis : la porte P-C est refusée, seuls les
-correctifs de SES critères sont autorisés. Ces deux écrans relèvent d'A22/A23, pas d'A21, qui a eu
-raison de ne pas y toucher. **À porter au contrôle A02 de P-C** : l'écran « Aujourd'hui » est le
-critère 07 n° 1, et §33.6 est dans la grille que la porte vérifie — c'est à la porte de dire si
-elle l'absorbe ou le renvoie. Coût estimé : un nœud de texte par écran, plus la garde `textContent`.
+**La leçon, et c'est celle du §5 de `REPRISE_AUTOPILOTE.md` resservie** : une affirmation vraie (« ce
+motif JSX colle les noms accessibles ») en a fait passer une fausse (« donc ces deux écrans sont
+atteints ») parce que personne n'a vérifié le pas entre les deux — ici, le `display` calculé. Et
+`jsdom` ne pouvait pas trancher : il ne calcule **ni la visibilité ni le nom accessible**, donc une
+sonde sur `textContent` voit « 09h30Marie Dupont » que le défaut existe ou non.
+
+**CE QUI RESTE DÛ POUR RENDRE CETTE FICHE ARBITRABLE** — sinon la porte statuerait sur un fantôme :
+
+1. **Une mesure, pas une prédiction** : `accessibleName()` sur le rôle `button` dans le Chromium réel
+   déjà employé par A26 et A54 — trois écrans, trois valeurs relevées.
+2. **Le périmètre réel de la famille** : rejouer la sonde d'A29 en distinguant les enfants
+   **blockifiés** (probablement sains) des enfants **restés inline** (seuls suspects). Ce tri donnera
+   le coût, peut-être très inférieur à ce que la sonde brute annonce.
+3. **Le remède, qui n'est PAS celui d'`EchelleAncree`** : sur un **contrôle**, le bon correctif est un
+   `aria-label` explicite en français composé côté écran — déterministe quel que soit le `display`
+   calculé. Le nœud de texte imposé dans la `<dd>` valait pour du **contenu**, pas pour un nom
+   accessible. Deux mécanismes, deux remèdes ; les confondre produirait une correction qui dépend
+   d'une ligne de CSS que le prochain refactor déplacera.
+4. **La leçon transverse, et c'est le vrai enjeu** : **`axe-core` est VERT** sur cette famille. Notre
+   DoD coche « axe-core vert » et nous avons lu cette case comme « le nom accessible est correct » —
+   **elle ne le dit pas**. Une garde de nom accessible en navigateur réel serait à instruire, et
+   c'est plus large que trois écrans. **À porter par A02 au contrôle de traçabilité.**
+
+**Classement, exact plutôt qu'ordonné** : ce n'est **pas** de l'étage 2 (aucune fonctionnalité ne
+manque), et son traitement d'étage 1 est **suspendu par 09 §4bis** (porte refusée, périmètre gelé).
+La mesure, elle, est autorisée sous périmètre gelé — elle ne modifie aucun fichier de production.
+L'écran « Aujourd'hui » étant le critère 07 n° 1, c'est à la porte d'arbitrer, **avec le relevé sous
+les yeux**.

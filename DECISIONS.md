@@ -11278,3 +11278,30 @@ entamée, pas une moyenne (doctrine §32.4). » · idem cran 4, avec l'ancre 5.
 
 Décideur : A01
 Impact spec : aucun — retour à la lettre de l'amendement §32.4 du 2026-09-02.
+
+## 2026-09-07 — [L5b] Le dépliant liste-t-il les ancres REÇUES, ou les cinq crans de l'échelle ?
+
+Doute déclaré par A26 depuis deux tours : son test exige les crans 2 et 4 dans la `<dl>`. Le
+comportement est implémenté et pinné, mais ma consigne ne vivait que dans un message d'affectation —
+au sens du §7, elle n'existait donc pas.
+
+Options :
+a) Lister les seules ancres reçues (`ancres.map`) — le comportement d'AVANT R1, et la lecture
+littérale du `<summary>` : un cran sans ancre de banque n'a pas d'ancre à montrer.
+b) Lister les cinq crans de l'échelle (`notes.map`), ceux sans ancre de banque portant le libellé
+dérivé ou la copie de repli.
+
+Arbitrage : b).
+Précédence §32-36 : §33.3 veut que « la cotation homogène ne dépende pas de la mémoire du
+consultant » et §33.5 veut les ancres « dépliées ». Sous a), un cran absent de la banque DISPARAÎT
+de la liste : l'auditeur ne peut plus distinguer « pas d'ancre pour ce cran » de « ce cran n'existe
+pas » — c'est le blanc de R1 déplacé d'une ligne à l'autre, et cette fois sans même une ligne
+blanche pour le trahir. Sous a) encore, la troisième copie de repli n'aurait aucun endroit où
+s'afficher : A26 l'a déduit seule, et sa déduction est exacte. Le coût est d'une à deux lignes dans
+un dépliant déjà ouvert ; la lacune, elle, est invisible. b) l'emporte.
+Portée : l'échelle 1-5. Hors de cette amplitude la dérivation ne se déclenche pas (arbitrage du même
+jour) et la question du nombre de lignes ne se pose pas tant que Williams n'a ouvert aucune autre
+amplitude.
+
+Décideur : A01
+Impact spec : aucun.
