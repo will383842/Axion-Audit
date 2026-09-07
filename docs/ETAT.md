@@ -4687,3 +4687,27 @@ corrigé par ce commit. ② Le hook d'arrêt a compté « 42 commits non poussé
 
 **Non jouable dans ce conteneur** : aucun démon Docker, donc ni `test:integration` ni `test:e2e`,
 donc pas de `pnpm verify` complet. Seul `verify:rapide` fait foi ici.
+
+## 2026-09-07 17h30 — [porte P-C] — étape pipeline 6/7 : les DEUX verdicts sont rendus
+
+Dernier commit vert : 083e948 (origin/main, #95 fusionnée) · Branche : docs/porte-pc-rejeu · Poussé : oui
+Tâche en cours : rien. Les deux fiches du rejeu sont au dépôt.
+Prochaine action : corriger **R1 d'A54 — les ancres de cotation §33.3 ne sont pas visibles** ; c'est
+un critère nommé de P-C, c'est du code, et 09 §4bis n'autorise que les correctifs de la porte.
+Tests rouges connus : aucun.
+
+**P-C reste refusée, mais plus pour les mêmes raisons — et c'est un progrès mesurable.**
+**A02 LÈVE SON VETO V1** : F-22/F-23/F-25 sont dans `main`, les 7 symboles sont revenus et les cas
+de test passent de **82 à 121**. Écarts non documentés : **aucun**. DoD **7/10** (contre 5),
+invariants **8/8** (contre 6), critères 07 **1 ferme + 5 sous réserve matérielle + 2 non tenus**.
+**A54 rejoue la recette EN ENTIER et rend GO SOUS RÉSERVE** : le parcours novice ne s'interrompt
+plus (il mourait à t+3 min le 06), les six bloquants B1-B6 sont fermés et vérifiés À L'ÉCRAN.
+
+**Le bloquant NEUF, et il est réparable** : **R1 — ancres de cotation invisibles (§33.3)**. Sur une
+échelle 1-5 rien ne s'affiche tant que l'auditeur n'a pas coté, et aux crans **2 et 4** l'ancre est
+une **ligne vide** — exactement là où le pack dit que deux auditeurs ne distinguent pas un 2 d'un 4.
+
+**Balayage d'horloge : 33 instants, 0 rouge.** Les 24 heures, les 7 jours, le 30/09 et le 30/09 à
+23 h. Aucun test daté ne subsiste dans `unit`+`interface` (2932 tests par passe).
+**Décompte ZAP récupéré** (ce que le conteneur ne pouvait pas lire le 06) : par cible
+**FAIL-NEW 0 · WARN-NEW 7 · PASS 63**. Donc `ZAP_BLOQUANT='true'` rendrait `main` ROUGE aujourd'hui.
