@@ -73,6 +73,27 @@
 // échantillons ne se laisse pas sauver par deux valeurs basses. La médiane est
 // annotée à côté — c'est elle qui se compare d'un lot à l'autre.
 //
+// ── LE RELEVÉ DU 2026-09-07, POUR QU'IL Y AIT UNE BASE DE COMPARAISON ──────
+// Cinq exécutions, 40 écritures chacune, Chromium de bureau dans le conteneur de
+// développement. Chiffres en millisecondes :
+//   · chiffrement (2 enveloppes) — médiane 0,50 à 0,55 · p95 0,60 à 1,80 ·
+//     max 0,60 à 3,10  → le budget de 50 ms est tenu avec un facteur ~30 ;
+//   · écriture complète (transaction comprise) — médiane 4,40 à 6,90 ·
+//     p95 6,30 à 12,50 · max 8,30 à 17,70 → facteur ~4 sur le p95.
+// C'est ce second chiffre qui décide : la crypto n'est pas le coût d'une
+// écriture, IndexedDB l'est. Un futur dépassement viendrait donc de la base ou
+// de la taille des charges, pas d'AES-GCM — et c'est utile à savoir avant de
+// chercher au mauvais endroit. `performance.now()` est grossi à 0,1 ms par
+// Chromium hors isolation : la résolution est cent fois plus fine que le seuil.
+//
+// CONTRE-ÉPREUVE, faite le même jour, parce qu'un budget vert dont on n'a pas
+// montré qu'il peut rougir ne mesure rien :
+//   · seuil abaissé à 5 ms   → ROUGE sur « écriture complète » (p95 7,60) ;
+//   · seuil abaissé à 0,4 ms → ROUGE sur « chiffrement » (p95 0,60) ;
+//   · sonde débranchée (le crochet `outbox` visant un magasin inexistant) →
+//     ROUGE sur l'anti-vacuité, 0 écriture observée, et NON vert-sans-rien.
+// Les trois seuils ont été rétablis et le test est reparti vert.
+//
 // ── LA LIMITE, ÉCRITE PLUTÔT QUE TUE ───────────────────────────────────────
 // **Un runner de CI n'est pas un iPad.** 11 §7 nomme déjà cette limite pour le
 // service worker iOS, et elle vaut ici. Ce fichier ne prétend pas mesurer la
@@ -123,6 +144,18 @@ interface Echantillon {
   readonly ecritureMs: number | null;
 }
 
+/**
+ * Ce que la sonde pose sur `globalThis` de la page.
+ *
+ * Type de COMPILATION seulement : rien ne traverse la frontière du navigateur:
+ * il décrit le même objet des deux côtés, ce qui évite qu'un renommage d'un
+ * côté passe inaperçu de l'autre.
+ */
+interface SondeA28 {
+  readonly echantillons: readonly Echantillon[];
+  readonly reinitialiser: () => void;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // LA SONDE — posée sur les API du NAVIGATEUR, jamais sur le code mesuré
 // ─────────────────────────────────────────────────────────────────────────────
@@ -145,7 +178,7 @@ async function installerSonde(page: Page): Promise<void> {
     let debutsChiffrement: number[] = [];
     let putLigneMiroir: number | null = null;
 
-    (globalThis as unknown as Record<string, unknown>)['__sondeA28'] = {
+    (globalThis as unknown as { __sondeA28: SondeA28 }).__sondeA28 = {
       echantillons,
       /** Repart de zéro : appelée une fois arrivé sur l'écran à mesurer. */
       reinitialiser(): void {
@@ -155,25 +188,35 @@ async function installerSonde(page: Page): Promise<void> {
       },
     };
 
-    type FonctionOpaque = (...args: unknown[]) => unknown;
+    // Les prototypes, vus au travers du strict minimum qu'on leur emprunte. Les
+    // signatures d'origine sont surchargées et paramétrées ; les retyper ici
+    // n'apprendrait rien à personne, alors que `unknown` dit exactement ce que
+    // la sonde sait de ces valeurs : qu'elle les fait passer, sans les lire.
+    interface PrototypeChiffrant {
+      encrypt: (...args: unknown[]) => unknown;
+    }
+    interface PrototypeMagasin {
+      put: (...args: unknown[]) => unknown;
+      add: (...args: unknown[]) => unknown;
+    }
 
     // ① Le départ de chaque enveloppe. On enregistre l'INSTANT D'APPEL, pas la
     //    fin : le début de la première enveloppe est le début de l'écriture.
-    const prototypeSubtle = SubtleCrypto.prototype as unknown as Record<string, FonctionOpaque>;
-    const chiffrerOrigine = prototypeSubtle['encrypt'] as FonctionOpaque;
-    prototypeSubtle['encrypt'] = function (this: SubtleCrypto, ...args: unknown[]): unknown {
+    const prototypeSubtle = SubtleCrypto.prototype as unknown as PrototypeChiffrant;
+    const chiffrerOrigine = prototypeSubtle.encrypt;
+    prototypeSubtle.encrypt = function (this: SubtleCrypto, ...args: unknown[]): unknown {
       debutsChiffrement.push(performance.now());
       return chiffrerOrigine.apply(this, args);
     };
 
-    const prototypeMagasin = IDBObjectStore.prototype as unknown as Record<string, FonctionOpaque>;
-    const poserOrigine = prototypeMagasin['put'] as FonctionOpaque;
-    const ajouterOrigine = prototypeMagasin['add'] as FonctionOpaque;
+    const prototypeMagasin = IDBObjectStore.prototype as unknown as PrototypeMagasin;
+    const poserOrigine = prototypeMagasin.put;
+    const ajouterOrigine = prototypeMagasin.add;
 
     // ② La fin du chiffrement : le `put` de la ligne miroir, premier geste à
     //    l'intérieur de la transaction. Tout ce qui suit est de la base, pas de
     //    la crypto.
-    prototypeMagasin['put'] = function (this: IDBObjectStore, ...args: unknown[]): unknown {
+    prototypeMagasin.put = function (this: IDBObjectStore, ...args: unknown[]): unknown {
       if (this.name !== 'outbox' && debutsChiffrement.length > 0 && putLigneMiroir === null) {
         putLigneMiroir = performance.now();
       }
@@ -183,8 +226,8 @@ async function installerSonde(page: Page): Promise<void> {
     // ③ L'`add` dans `outbox` SIGNE l'écriture : `appliquerDescente` n'y écrit
     //    jamais (la garantie est structurelle, sa transaction n'inclut pas la
     //    table). Un échantillon n'est donc jamais fabriqué par une descente.
-    prototypeMagasin['add'] = function (this: IDBObjectStore, ...args: unknown[]): unknown {
-      const transaction = this.name === 'magasin-inexistant' ? this.transaction : null;
+    prototypeMagasin.add = function (this: IDBObjectStore, ...args: unknown[]): unknown {
+      const transaction = this.name === 'outbox' ? this.transaction : null;
       const resultat = ajouterOrigine.apply(this, args);
       const debut = debutsChiffrement[0];
       if (transaction !== null && debut !== undefined && putLigneMiroir !== null) {
@@ -212,9 +255,7 @@ async function installerSonde(page: Page): Promise<void> {
 /** Le relevé de la sonde, recopié hors de la page. */
 async function lireSonde(page: Page): Promise<readonly Echantillon[]> {
   return page.evaluate(() => {
-    const sonde = (
-      globalThis as unknown as Record<string, { echantillons: Echantillon[] } | undefined>
-    )['__sondeA28'];
+    const { __sondeA28: sonde } = globalThis as unknown as { __sondeA28?: SondeA28 };
     if (sonde === undefined) throw new Error('la sonde A28 n’est pas installée');
     return sonde.echantillons.map((echantillon) => ({ ...echantillon }));
   });
@@ -222,9 +263,7 @@ async function lireSonde(page: Page): Promise<readonly Echantillon[]> {
 
 async function reinitialiserSonde(page: Page): Promise<void> {
   await page.evaluate(() => {
-    const sonde = (
-      globalThis as unknown as Record<string, { reinitialiser: () => void } | undefined>
-    )['__sondeA28'];
+    const { __sondeA28: sonde } = globalThis as unknown as { __sondeA28?: SondeA28 };
     if (sonde === undefined) throw new Error('la sonde A28 n’est pas installée');
     sonde.reinitialiser();
   });
@@ -356,13 +395,10 @@ test.describe('L5 — budget de chiffrement par écriture (11 §4 : < 50 ms)', (
     // On attend les ÉCRITURES, pas les clics : `enregistrer()` sérialise la file
     // et rend la main avant que la transaction ait commité.
     await expect
-      .poll(
-        async () => (await lireSonde(page)).filter((e) => e.ecritureMs !== null).length,
-        {
-          message: 'les écritures mesurées doivent toutes avoir commité',
-          timeout: 30_000,
-        },
-      )
+      .poll(async () => (await lireSonde(page)).filter((e) => e.ecritureMs !== null).length, {
+        message: 'les écritures mesurées doivent toutes avoir commité',
+        timeout: 30_000,
+      })
       .toBeGreaterThanOrEqual(ECRITURES_MESUREES);
 
     const echantillons = (await lireSonde(page)).filter((e) => e.ecritureMs !== null);
