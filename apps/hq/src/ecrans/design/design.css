@@ -1,0 +1,378 @@
+/* ============================================================================
+ * MISE EN PAGE DE LA PAGE `/design` — console siège, desktop-first (03 §33.4).
+ *
+ * Aucune valeur littérale : couleurs, espacements, rayons, tailles et durées
+ * viennent TOUS des jetons de `packages/ui` (invariant 4). Ce fichier ne DÉFINIT
+ * aucun jeton — il n'en consomme que. Même règle, mêmes jetons que
+ * `app/coquille.css` : il n'y a pas deux façons de peindre un fond ivoire.
+ *
+ * Il ne contient que de la STRUCTURE. Tout ce qui a une apparence de contrôle —
+ * boutons, badges, états, échelles — vient des composants du design system, et
+ * c'est bien le sujet de la page : ce qu'on regarde ici doit être exactement ce
+ * qu'un écran de production rend.
+ * ========================================================================== */
+
+.axn-design {
+  max-width: var(--taille-largeur-contenu-large);
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacement-6);
+}
+
+.axn-design h1 {
+  font-size: var(--typo-taille-3xl);
+  line-height: var(--typo-interligne-serre);
+  margin: 0;
+}
+
+.axn-design__chapeau {
+  max-width: var(--taille-largeur-contenu-etroit);
+  margin: 0;
+  color: var(--couleur-texte-secondaire);
+}
+
+.axn-design code {
+  font-family: var(--typo-police-mono);
+  font-size: var(--typo-taille-sm);
+}
+
+/* --- Sommaire ------------------------------------------------------------- */
+
+.axn-design__sommaire ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espacement-2);
+}
+
+.axn-design__sommaire a {
+  display: inline-block;
+  min-height: var(--taille-cible-tactile-min);
+  padding: var(--espacement-3) var(--espacement-4);
+  border: var(--taille-bordure-epaisseur) solid var(--couleur-bordure-discrete);
+  border-radius: var(--taille-rayon-moyen);
+  background: var(--couleur-surface-carte);
+  color: var(--couleur-action-texte);
+}
+
+/* --- Sections ------------------------------------------------------------- */
+
+.axn-design__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacement-4);
+  padding: var(--espacement-6);
+  background: var(--couleur-surface-carte);
+  border: var(--taille-bordure-epaisseur) solid var(--couleur-bordure-discrete);
+  border-radius: var(--taille-rayon-grand);
+  scroll-margin-top: var(--espacement-4);
+}
+
+.axn-design__section h2 {
+  font-size: var(--typo-taille-2xl);
+  line-height: var(--typo-interligne-serre);
+  margin: 0;
+}
+
+.axn-design__section h3 {
+  font-size: var(--typo-taille-xl);
+  line-height: var(--typo-interligne-serre);
+  margin: 0;
+}
+
+.axn-design__section p {
+  max-width: var(--taille-largeur-contenu-large);
+  margin: 0;
+}
+
+.axn-design__appui {
+  padding: var(--espacement-4);
+  border-left: var(--taille-bordure-epaisseur-forte) solid var(--couleur-info-bordure);
+  background: var(--couleur-info-fond);
+  border-radius: var(--taille-rayon-petit);
+}
+
+/* --- Jetons de couleur ---------------------------------------------------- */
+
+.axn-design__jetons {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  /* Trois colonnes de pastilles sur un écran de console (§33.4, ≥ 1280 px) : la
+     largeur mini est DÉRIVÉE d'un jeton, jamais posée en pixels. */
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(calc(var(--taille-largeur-contenu-etroit) / 2), 1fr)
+  );
+  gap: var(--espacement-3);
+}
+
+.axn-design__jeton {
+  display: flex;
+  align-items: center;
+  gap: var(--espacement-3);
+}
+
+.axn-design__pastille {
+  display: inline-block;
+  flex: none;
+  width: var(--espacement-8);
+  height: var(--espacement-8);
+  border: var(--taille-bordure-epaisseur) solid var(--couleur-bordure-nette);
+  border-radius: var(--taille-rayon-moyen);
+}
+
+.axn-design__jeton-nom {
+  display: flex;
+  flex-direction: column;
+}
+
+.axn-design__jeton-nom small,
+.axn-design__typo small,
+.axn-design__echelle small {
+  color: var(--couleur-texte-secondaire);
+  font-size: var(--typo-taille-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.axn-design__duo {
+  display: flex;
+  gap: var(--espacement-6);
+  flex-wrap: wrap;
+}
+
+.axn-design__duo-item {
+  display: flex;
+  align-items: center;
+  gap: var(--espacement-3);
+}
+
+/* --- Échelles ------------------------------------------------------------- */
+
+.axn-design__echelle,
+.axn-design__typo {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacement-2);
+}
+
+.axn-design__echelle li {
+  display: grid;
+  grid-template-columns: calc(var(--taille-largeur-contenu-etroit) / 2) 1fr auto;
+  align-items: center;
+  gap: var(--espacement-3);
+}
+
+.axn-design__barre {
+  display: block;
+  height: var(--espacement-3);
+  background: var(--couleur-action-fond);
+  border-radius: var(--taille-rayon-petit);
+}
+
+.axn-design__typo li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--espacement-4);
+  flex-wrap: wrap;
+}
+
+/* --- Tableaux de jetons --------------------------------------------------- */
+
+.axn-design__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.axn-design__table caption {
+  text-align: left;
+  padding-bottom: var(--espacement-2);
+  color: var(--couleur-texte-secondaire);
+  font-size: var(--typo-taille-sm);
+}
+
+.axn-design__table th,
+.axn-design__table td {
+  text-align: left;
+  vertical-align: top;
+  padding: var(--espacement-2) var(--espacement-3);
+  border-bottom: var(--taille-bordure-epaisseur) solid var(--couleur-bordure-discrete);
+}
+
+.axn-design__table thead th {
+  color: var(--couleur-texte-secondaire);
+  font-size: var(--typo-taille-sm);
+}
+
+/* --- Fiches et vignettes -------------------------------------------------- */
+
+.axn-design__fiche {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacement-4);
+  padding: var(--espacement-5);
+  background: var(--couleur-surface-fond);
+  border: var(--taille-bordure-epaisseur) solid var(--couleur-bordure-discrete);
+  border-radius: var(--taille-rayon-grand);
+  scroll-margin-top: var(--espacement-4);
+}
+
+.axn-design__fiche-entete {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacement-1);
+}
+
+.axn-design__fiche-entete h3 {
+  margin: 0;
+  font-size: var(--typo-taille-lg);
+}
+
+.axn-design__role {
+  color: var(--couleur-texte-principal);
+}
+
+.axn-design__origine {
+  color: var(--couleur-texte-secondaire);
+  font-size: var(--typo-taille-sm);
+}
+
+.axn-design__vignettes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  /* Deux vignettes de front : la page compte 34 fiches, une colonne unique en
+     ferait un rouleau. Même règle — la mini vient d'un jeton, pas d'un pixel. */
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(calc(var(--taille-largeur-contenu-etroit) * 0.75), 1fr)
+  );
+  gap: var(--espacement-4);
+}
+
+.axn-design__vignette {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacement-3);
+  padding: var(--espacement-4);
+  background: var(--couleur-surface-carte);
+  border: var(--taille-bordure-epaisseur) solid var(--couleur-bordure-discrete);
+  border-radius: var(--taille-rayon-moyen);
+}
+
+.axn-design__vignette-entete {
+  display: flex;
+  align-items: center;
+  gap: var(--espacement-2);
+  flex-wrap: wrap;
+}
+
+.axn-design__vignette-entete h4 {
+  margin: 0;
+  font-size: var(--typo-taille-base);
+  line-height: var(--typo-interligne-serre);
+}
+
+.axn-design__propos {
+  color: var(--couleur-texte-secondaire);
+  font-size: var(--typo-taille-sm);
+}
+
+.axn-design__apercu {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacement-3);
+  padding: var(--espacement-4);
+  background: var(--couleur-surface-fond);
+  border: var(--taille-bordure-epaisseur) dashed var(--couleur-bordure-discrete);
+  border-radius: var(--taille-rayon-moyen);
+}
+
+/* --- Étiquettes d'état ---------------------------------------------------- */
+
+/* Chaque étiquette porte son MOT : la couleur n'est jamais seule à informer
+   (§33.6). Les fonds reprennent les jetons sémantiques déjà définis. */
+.axn-design__etiquette {
+  display: inline-block;
+  padding: var(--espacement-1) var(--espacement-2);
+  border-radius: var(--taille-rayon-petit);
+  font-size: var(--typo-taille-xs);
+  font-weight: var(--typo-graisse-semi);
+  background: var(--couleur-surface-enfoncee);
+  color: var(--couleur-texte-secondaire);
+  border: var(--taille-bordure-epaisseur) solid var(--couleur-bordure-nette);
+}
+
+.axn-design__etiquette--erreur {
+  background: var(--couleur-alerte-fond);
+  color: var(--couleur-alerte-texte);
+  border-color: var(--couleur-alerte-bordure);
+}
+
+.axn-design__etiquette--vide {
+  background: var(--couleur-avertissement-fond);
+  color: var(--couleur-avertissement-texte);
+  border-color: var(--couleur-avertissement-bordure);
+}
+
+.axn-design__etiquette--hors-ligne,
+.axn-design__etiquette--chargement {
+  background: var(--couleur-info-fond);
+  color: var(--couleur-info-texte);
+  border-color: var(--couleur-info-bordure);
+}
+
+.axn-design__etiquette--nominal {
+  background: var(--couleur-succes-fond);
+  color: var(--couleur-succes-texte);
+  border-color: var(--couleur-succes-bordure);
+}
+
+/* --- Menus détails -------------------------------------------------------- */
+
+.axn-design__rang {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--espacement-3);
+}
+
+.axn-design__motif {
+  color: var(--couleur-texte-secondaire);
+  font-size: var(--typo-taille-sm);
+}
+
+.axn-design__liste {
+  margin: 0;
+  padding-left: var(--espacement-5);
+}
+
+.axn-design__icone-ligne {
+  display: flex;
+  align-items: center;
+  gap: var(--espacement-2);
+}
+
+.axn-design__bande-icones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espacement-4);
+  font-size: var(--typo-taille-2xl);
+  color: var(--couleur-texte-secondaire);
+}
+
+.axn-design__limites {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacement-3);
+  margin: 0;
+  padding-left: var(--espacement-5);
+}

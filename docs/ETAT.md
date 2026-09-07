@@ -4474,3 +4474,22 @@ et la règle juste est déjà écrite à `sauvegarde.sh:1355` — « **tant que*
 Trois réserves mineures partent avec le correctif — R2 (substitut de date qui laisse fuir en
 silence), R3 (contrôle tautologique le jour même de son écriture), R4 (« 02 §11.4 » cité à tort dans
 cinq endroits dont un message d'exploitation).
+
+## 2026-09-07 06h40 — [L5/L7 · réserve NB-2 §33.5] — étape pipeline 3/7
+
+Dernier commit vert : d29ce71 (page /design) · Branche : feat/page-design · Poussé : oui — PR #89
+Tâche en cours : la page `/design` de §33.5, qui n’existait nulle part, est livrée dans `apps/hq`
+(arbitrage `DECISIONS.md` 2026-09-07 : quota du précache terrain 05 §31 + desktop-first §33.4).
+34 composants, chacun en ≥ 2 états distincts · jetons §33.1 · les **8 absences de §33.5** motivées.
+Garde : `satisfies Record<NomComposantUI, FicheComposant>` sur les exports RÉELS du paquet —
+éprouvé en retirant `Badge` : typecheck rouge avant qu’aucun test ne tourne.
+La page a trouvé **3 défauts réels et pré-existants** : `.axn-chiffres` du design system redéfini
+en grille par `apps/hq/coquille.css` (EchelleAncree exigeait 977 px, débordait dans TOUTE la
+console) → renommé + garde `collision-classes.test.ts` ; aucun `box-sizing` dans le dépôt
+(ChampTexte/ZoneNotes hors cadre de 9-11 px) → corrigé où c’est mesuré, reste en fiche étage 2 ;
+2 incohérences de ma propre réconciliation §33.5, trouvées par le test.
+Prochaine action : demander à A29 la revue croisée de la PR #89 — dont CELLE DES
+TESTS, écrits par le même agent que la page (écart 09 §5.6, signalé en tête du fichier de test).
+Tests rouges connus : aucun. unit 1806/1806 · interface 1126/1126 · e2e 83/83 (5 neufs sur
+`/design` : axe-core vert, `color-contrast` prouvé exécuté) · intégration rejouée sur l’arbre fusionné.
+Environnement hors contrat : Node v24.19.0 — la CI reste juge (09 §5.7).

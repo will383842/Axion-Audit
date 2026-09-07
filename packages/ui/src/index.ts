@@ -13,3 +13,7 @@
 // =============================================================================
 export * from './tokens.js';
 export * from './composants/index.js';
+// L'inventaire §33.5 en types : la source dont la page `/design` (console,
+// `apps/hq/src/ecrans/design/`) dérive sa galerie, et le seul endroit où une
+// absence de composant est DÉCLARÉE plutôt que tue.
+export * from './inventaire.js';

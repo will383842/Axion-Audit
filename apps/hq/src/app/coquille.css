@@ -73,6 +73,27 @@
   color: var(--couleur-texte-tertiaire);
 }
 
+/* Outillage interne, en pied de barre et HORS de la liste numérotée : la page
+   `/design` n'est pas un espace de §22.3. Le pousser en bas (`margin-top: auto`)
+   dit visuellement ce que la structure dit déjà — ce n'est pas du produit. */
+.axn-console__outillage {
+  margin: auto 0 0;
+}
+
+.axn-console__outillage a {
+  display: flex;
+  align-items: center;
+  min-height: var(--taille-controle-hauteur);
+  padding: 0 var(--espacement-3);
+  border-radius: var(--taille-rayon-petit);
+  color: var(--couleur-texte-secondaire);
+  font-size: var(--typo-taille-sm);
+}
+
+.axn-console__outillage a:hover {
+  background: var(--couleur-surface-enfoncee);
+}
+
 .axn-console__espaces {
   list-style: none;
   margin: 0;
@@ -446,7 +467,20 @@
 
 /* --- Chiffres clés ---------------------------------------------------------- */
 
-.axn-chiffres {
+/* RENOMMÉE le 2026-09-07 (`.axn-chiffres` → `.axn-chiffres-cles`), et le défaut
+   qu'elle causait était RÉEL, pas théorique.
+   `.axn-chiffres` appartient au design system (`packages/ui/src/composants.css`,
+   ligne 40) : c'est l'UTILITAIRE de chiffres tabulaires, porté par les crans de
+   `EchelleAncree`, les compteurs de `CarteSyntheseEntretien` et les nombres de
+   `PastilleSync`. Cette feuille étant chargée APRÈS `composants.css`, la règle
+   ci-dessous gagnait, et transformait cet utilitaire en GRILLE — pour tout le
+   monde, dans toute la console. Mesuré sur `/design` : `EchelleAncree` prenait
+   une largeur minimale de 977 px (5 crans × 189 px, la colonne mini de cette
+   grille) et débordait de son conteneur.
+   L'élément d'accueil garde les DEUX classes : `axn-chiffres` pour les chiffres
+   tabulaires (ce que son test vérifie), `axn-chiffres-cles` pour la disposition.
+   Un nom, une intention. Garde : `collision-classes.test.ts`. */
+.axn-chiffres-cles {
   display: grid;
   grid-template-columns: repeat(
     auto-fit,

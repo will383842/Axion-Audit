@@ -16,6 +16,7 @@ cinq écrans avec leurs **quatre états** §33.2, un client HTTP typé Zod in/ou
 | `/missions/:id/couverture` | Couverture — unité × source (§27.1)      | 2            | `GET /v1/missions/:id/coverage?limit=&after=`   |
 | `/missions/:id/agregation` | Agrégation par question (M5.1, §27.4)    | 2 → 6        | `GET /v1/missions/:id/aggregation`              |
 | `/missions/:id/export`     | Export de mission — l'archive §36.3      | 2 → 6        | `GET /v1/missions/:id/export?repondants=`       |
+| `/design`                  | Design system — référence de recette     | **aucun**    | aucune : page entièrement statique              |
 
 Les deux écrans de L7b sont des **drill-down d'une mission**, pas des espaces de la barre : ils n'ont
 de sens qu'une mission choisie. Les brancher sur un espace exigerait un sélecteur de mission, qui
@@ -25,6 +26,34 @@ fiche de mission, par deux liens à URL réelle — collables, ouvrables dans un
 
 Les espaces 3 à 7 sont **visibles et fermés** dans la barre (mention « Phase 2 » / « différé » /
 « bientôt ») : la carte de l'outil est entière, aucun lien ne mène à une page vide.
+
+### `/design` — la référence de recette visuelle (§19.2, §33.5)
+
+§33.5 finit par sept mots qui n'avaient jamais été honorés : « Chacun : états complets (§19.2) **+
+exemple sur /design** ». La page **n'existait nulle part** — réserve **NB-2** du contrôle A02 du
+2026-09-06, M6 de la recette novice. Elle vit ici plutôt que dans la PWA (arbitrage tracé,
+`DECISIONS.md` 2026-09-07) : le paquet terrain est précaché sous contrainte de quota (05 §31), et une
+planche de charte se relit sur un grand écran.
+
+Elle montre les **34 composants exportés** par `@axion/ui`, chacun dans **au moins deux états** — et
+l'un d'eux est toujours celui qu'on oublie : le désactivé **avec son motif**, l'erreur, le vide, le
+chargement, le hors-ligne. Elle montre aussi les **jetons** de §33.1 (les cinq crans neutres compris)
+et, en toutes lettres, les **huit composants que §33.5 nomme sans qu'ils existent**, chacun avec son
+motif : une galerie qui tait ses trous est une galerie qui ment.
+
+**Elle ne peut pas oublier un composant.** `apps/hq/src/ecrans/design/catalogue.ts` porte
+`satisfies Record<NomComposantUI, FicheComposant>`, où `NomComposantUI` est **lu sur les exports
+réels** du paquet (`packages/ui/src/inventaire.ts`). Un composant exporté et absent de la galerie
+**ne compile pas** — éprouvé en retirant `Badge` : `Property 'Badge' is missing`, avant qu'aucun test
+ne tourne. Ce que le type ne dit pas (deux états **distincts**, les quatre de §33.2 présents, aucune
+couleur en dur dans le DOM rendu, aucun mot anglais hors citation `lang="en"`) est mesuré par
+`EcranDesign.test.tsx` (22 tests) ; `e2e/accessibilite-design.e2e.ts` passe axe-core sur la page
+entière, avec la contre-vérification que `color-contrast` a réellement tourné.
+
+Elle est **la seule route servie sans session** : elle n'appelle rien, ne lit aucune donnée de
+mission, et l'invariant 3 protège des données, pas une planche de jetons. Elle n'entre dans **aucun**
+des sept espaces de §22.3 — c'est de l'outillage, pas du produit — et se rejoint par un lien discret
+en pied de barre latérale.
 
 ### Les deux lectures de la couverture — le cœur de L7b
 

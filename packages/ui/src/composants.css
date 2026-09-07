@@ -193,6 +193,14 @@
 }
 
 .axn-champ__saisie {
+  /* `width: 100%` SANS `border-box` déborde du conteneur de sa propre garniture
+     et de son filet — MESURÉ le 2026-09-07 sur `/design` : 9 à 11 px hors du
+     cadre, pour `ChampTexte` comme pour `ZoneNotes`, dès que le conteneur est
+     étroit. Le dépôt n'a AUCUNE remise à zéro globale du modèle de boîte ; la
+     poser dépasse ce chantier (fiche `AMELIORATIONS.md` du 2026-09-07, étage 2 :
+     elle change le rendu de tous les écrans et demande une passe visuelle).
+     Ici, la propriété est posée là où le débordement est mesuré. */
+  box-sizing: border-box;
   width: 100%;
   min-height: var(--taille-controle-hauteur);
   padding: var(--espacement-2) var(--espacement-3);

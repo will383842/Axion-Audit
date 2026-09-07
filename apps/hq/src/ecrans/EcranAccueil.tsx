@@ -94,7 +94,12 @@ function ChiffresCles({
   const enAnalyse = missions.filter((m) => m.status === 'en_analyse').length;
   const prefixe = partiel ? 'au moins ' : '';
   return (
-    <div className="axn-chiffres" aria-label="Chiffres clés">
+    // Deux classes, deux intentions : `axn-chiffres` est l'UTILITAIRE de chiffres
+    // tabulaires du design system, `axn-chiffres-cles` la disposition en grille de
+    // cet écran. Elles étaient confondues sous un seul nom jusqu'au 2026-09-07, et
+    // la console redéfinissait alors l'utilitaire pour tout le paquet — voir
+    // `app/coquille.css` et le garde `app/collision-classes.test.ts`.
+    <div className="axn-chiffres axn-chiffres-cles" aria-label="Chiffres clés">
       <div className="axn-chiffre">
         <span className="axn-chiffre__valeur">
           {prefixe}

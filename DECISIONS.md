@@ -10976,6 +10976,31 @@ La fermeture est désormais MESURÉE, coquille comprise, avec sa contre-épreuve
 Décideur : **A01**, sur délégation du 2026-09-04, sur revue A29.
 Impact spec : aucun ; une pastille redondante en moins, l'exigence §33.2 inchangée.
 
+## 2026-09-07 — [L5/L7] Dans quelle application vit la page `/design` ?
+
+§33.5 exige « un exemple sur /design » et §19.2 la décrit (« storybook léger … référence de recette
+visuelle ») ; **aucun des douze fichiers du pack ne dit dans quelle application elle vit.** La page
+n'existait nulle part : réserve NB-2 du contrôle A02 du 2026-09-06.
+
+Options :
+
+1. **`apps/field`** — au plus près des composants, qui sont tous nés pour le terrain.
+2. **`apps/hq`** — la console siège.
+3. Une troisième application, ou un Storybook. Écartée d'emblée : dépendance hors 11 §1 (§3-1), et
+   une application de plus à servir, construire et déployer pour une page.
+
+Arbitrage : **option 2, `apps/hq`**. Deux motifs mesurables. (a) Le paquet terrain est **précaché par
+le service worker** (737 Kio au dernier build) et vit sous contrainte de quota (05 §31) : y embarquer
+une galerie de 34 composants coûterait du stockage sur la tablette pour zéro valeur en mission —
+invariant 6, « le terrain collecte ». (b) §33.4 pose la console en desktop-first ≥ 1280 px, et une
+planche de charte se relit sur un grand écran, par un relecteur de porte ou un designer. La page ne
+consomme AUCUNE donnée et reste servie sans session : l'invariant 3 protège des données, pas des
+jetons. Elle n'entre PAS dans les sept espaces de §22.3 — c'est de l'outillage, pas du produit — et
+n'est atteinte que par un lien discret en pied de barre latérale.
+Règle de précédence : §32-36 (§33.4 desktop-first, §33.2) sur §16-22, puis 05 §31 pour le quota.
+Décideur : **A01**, sur délégation du 2026-09-04.
+Impact spec : aucun ; le pack ne tranchait pas, la décision comble un silence sans l'amender.
+
 ## 2026-09-07 — [L0] L'étage mensuel de la rétention peut-il se servir dans une semaine déjà couverte ?
 
 `main` (`a59c46a`) est rouge depuis 00h03 UTC sur un seul cas `@critique` :
