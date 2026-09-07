@@ -739,30 +739,49 @@ cas ont été joués sur base jetable :
 
 ### 5.3 Rétention — décidée, chiffrée, et son coût disque
 
-| Quoi                 | Règle                                          | D'où elle vient                         |
-| -------------------- | ---------------------------------------------- | --------------------------------------- |
-| Complètes PostgreSQL | `repo1-retention-full-type=time`, **30 jours** | 02 §11.4, `${BACKUP_RETENTION_DAYS}`    |
-| Incrémentales        | suivent la complète dont elles dépendent       | `pgbackrest`                            |
-| WAL archivés         | `repo1-retention-archive-type=full`            | conservés pour toute complète retenue   |
-| **Archives MinIO**   | **30 archives** (une par jour)                 | **alignées sur les 30 j de PostgreSQL** |
+| Quoi                 | Règle                                                                                               | D'où elle vient                                              |
+| -------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Complètes PostgreSQL | `repo1-retention-full-type=time`, **30 jours**                                                      | 02 §11.4, `${BACKUP_RETENTION_DAYS}`                         |
+| Incrémentales        | suivent la complète dont elles dépendent                                                            | `pgbackrest`                                                 |
+| WAL archivés         | `repo1-retention-archive-type=full`                                                                 | conservés pour toute complète retenue                        |
+| **Archives MinIO**   | **7 quotidiennes + 4 hebdomadaires + 3 mensuelles** — au plus **14** archives, portée **~90 jours** | **décision D-2** (Williams, 2026-08-28), `AXION_RETENTION_*` |
 
-**Pourquoi l'alignement n'est pas cosmétique.** Une restauration PostgreSQL de J-25 désigne des
-pièces jointes ; si MinIO n'était gardé que 14 jours, ces pièces n'existeraient dans aucune archive.
-Deux rétentions différentes, c'est une restauration à moitié possible.
+> **Cette ligne annonçait « 30 archives, une par jour, alignées sur les 30 j de PostgreSQL » jusqu'au
+> 2026-09-07.** C'était l'état d'avant la décision **D-2** du 2026-08-28, qui a remplacé le plan plat
+> par les trois étages. Le runbook décrivait donc une rétention que le service n'appliquait plus
+> depuis dix jours — corrigé ici même.
+
+**Pourquoi deux rétentions différentes ne sont PAS une restauration à moitié possible**, contrairement
+à ce que cette section affirmait. Entre J-7 et J-30, la granularité MinIO passe du jour à la semaine
+alors que PostgreSQL garde son PITR au jour. Une restauration PostgreSQL de J-25 désigne des pièces
+jointes, et l'archive MinIO la plus proche peut dater de trois jours plus tôt — **sans conséquence** :
+une archive MinIO est un miroir **complet et cumulatif** du volume, et l'**invariant 7** interdit toute
+suppression silencieuse de pièce jointe. L'archive la plus RÉCENTE contient donc tout ce que
+contenaient les anciennes. Le raisonnement complet, avec le seul cas résiduel et pourquoi
+l'invariant 7 le ferme, est dans `DECISIONS.md` (D-2).
+
+**Ce que la portée de ~90 jours suppose, et qui n'est pas gratuit** (mesuré le 2026-09-07, banc
+conteneurisé, sept jours de la semaine forcés) : que l'étage mensuel ne dépense pas ses places sur des
+semaines que les étages du dessus couvrent déjà, **et** qu'il ne laisse jamais une place inemployée
+plutôt que de garder une archive. Les deux moitiés ont manqué au code, à quelques heures d'écart, le
+2026-09-07 ; les deux sont éprouvées en série DENSE et en série CREUSE dans
+`apps/api/tests/l0-sauvegarde.integration.test.ts`.
 
 **Ce que ça coûte, à partir des mesures du jour :**
 
-| Poste                     | Mesuré                         | Règle d'extrapolation                                            |
-| ------------------------- | ------------------------------ | ---------------------------------------------------------------- |
-| Une complète PostgreSQL   | 3,8 Mo pour 32,1 Mo de cluster | **≈ taille du cluster ÷ 8,4** (zstd-3)                           |
-| Une incrémentale (à vide) | 8,3 Ko                         | proportionnelle aux blocs modifiés du jour                       |
-| Dépôt pgBackRest complet  | **15 Mo** après une complète   | ≈ 5 complètes (30 j ÷ 7) + 30 incr. + WAL                        |
-| Une archive MinIO         | 1,3 Mo pour 1,26 Mo d'objets   | **≈ taille de MinIO** (les pièces jointes sont déjà compressées) |
-| **Archives MinIO à 30 j** | —                              | **30 × la taille de MinIO** — le poste qui pèse                  |
+| Poste                        | Mesuré                         | Règle d'extrapolation                                            |
+| ---------------------------- | ------------------------------ | ---------------------------------------------------------------- |
+| Une complète PostgreSQL      | 3,8 Mo pour 32,1 Mo de cluster | **≈ taille du cluster ÷ 8,4** (zstd-3)                           |
+| Une incrémentale (à vide)    | 8,3 Ko                         | proportionnelle aux blocs modifiés du jour                       |
+| Dépôt pgBackRest complet     | **15 Mo** après une complète   | ≈ 5 complètes (30 j ÷ 7) + 30 incr. + WAL                        |
+| Une archive MinIO            | 1,3 Mo pour 1,26 Mo d'objets   | **≈ taille de MinIO** (les pièces jointes sont déjà compressées) |
+| **Archives MinIO, plan D-2** | —                              | **au plus 14 × la taille de MinIO** — le poste qui pèse          |
 
-> **C'est le poste MinIO qui décide.** Les archives sont des copies **complètes** : à 1 Go de pièces
-> jointes, la rétention à 30 jours réclame **≈ 30 Go**. Sur un disque de 150 Go partagé avec la
-> production d'un tiers, ce n'est pas soutenable longtemps. Le script **refuse d'écrire** au-delà de
+> **C'est le poste MinIO qui décide, et c'est pourquoi D-2 existe.** Les archives sont des copies
+> **complètes** : à 1 Go de pièces jointes, l'ancien plan plat à 30 jours réclamait **≈ 30 Go**, le
+> plan à trois étages en réclame **≈ 14 Go pour une portée trois fois plus longue**. Sur un disque de
+> 150 Go partagé avec la production d'un tiers, la différence n'est pas cosmétique. Le script
+> **refuse d'écrire** au-delà de
 > `AXION_ARCHIVES_MAX_MO` (20 Go par défaut) et nomme la décision à prendre plutôt que de remplir le
 > disque du voisin. **Une sauvegarde MinIO incrémentale, ou une destination externe, devra être
 > tranchée avant que les premières missions produisent des pièces jointes.**

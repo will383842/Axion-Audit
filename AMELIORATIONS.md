@@ -2398,3 +2398,21 @@ traités — c'est précisément pourquoi ce n'est pas une micro-amélioration d
 rien n'a été touché dans cette PR.
 
 **Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE
+
+## 2026-09-07 — [L0] Étage 1 — le runbook §5.3 décrivait une rétention abandonnée depuis dix jours
+
+**Constat (A11, `fix/retention-veto-borne`, en traitant la réserve R4 d'A17).** La réserve portait sur
+une référence fausse (« 02 §11.4 promet trois mois », alors que le §11.4 ne fixe que les 30 j de
+PostgreSQL et que les ~90 j viennent de **D-2 option (c)**). En allant vérifier ce que le pack promet
+vraiment, `infra/README.md` §5.3 — **le tableau que lit un exploitant avant une restauration** — s'est
+révélé arrêté à l'état d'AVANT D-2 : « Archives MinIO : 30 archives, une par jour, alignées sur les
+30 j de PostgreSQL », suivi de « Deux rétentions différentes, c'est une restauration à moitié
+possible ». Cette dernière phrase est exactement la conclusion que D-2 a examinée et **réfutée** le
+2026-08-28 (miroir cumulatif + invariant 7). Le service applique 7/4/3 depuis dix jours ; le runbook
+annonçait 30 archives plates.
+
+**Ce qui a été fait.** Le tableau, la phrase et la ligne de coût sont alignés sur D-2, avec un encadré
+qui DIT que la ligne précédente était périmée plutôt que de la remplacer en silence.
+
+**Pourquoi c'est étage 1.** Correction documentaire : ne touche NI le schéma 04, NI l'API, NI la
+crypto, NI le périmètre fonctionnel. **Coût :** ~0,05 j.

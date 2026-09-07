@@ -1289,8 +1289,12 @@ cle_periode() {
 # plan ne remonterait jamais.
 #
 # « ET DES SEMAINES ENCORE LIBRES » vaut pour le mensuel AUSSI, et cette moitié
-# de phrase a manqué au code jusqu'au 2026-09-07. Le détail est sur la condition
-# elle-même, plus bas : c'est là qu'on le lit en la relisant, pas ici.
+# de phrase a manqué au code jusqu'au 2026-09-07. Elle ne vaut cependant que
+# comme un REPORT : une archive dont la semaine est déjà prise est MISE DE CÔTÉ,
+# jamais écartée. Si la descente se termine sur une place mensuelle inemployée,
+# la boucle de REPRISE la ressert aux archives reportées. Le détail est sur la
+# condition elle-même et sur cette boucle, plus bas : c'est là qu'on les lit en
+# les relisant, pas ici.
 #
 # LA DÉCISION DE GARDER OU DE SUPPRIMER EST PRISE POUR TOUTE LA SÉRIE AVANT LE
 # PREMIER `rm`. Une boucle qui supprimerait en même temps qu'elle décide
@@ -1307,6 +1311,14 @@ faire_tourner_par_rang() {
   local rang=0 gardes=0 supprimes=0 f raison
   local semaine mois semaines_prises=' ' mois_pris=' ' nb_semaines=0 nb_mois=0
   local a_garder=''
+  # `mois_mensuels` ne compte QUE les mois servis par l'étage mensuel, et c'est
+  # volontairement plus étroit que `mois_pris` (qui compte aussi ce que le
+  # quotidien et l'hebdomadaire ont réservé). La boucle de reprise, tout en bas,
+  # a besoin de savoir « ce mois a-t-il déjà consommé une PLACE MENSUELLE ? » et
+  # non « ce mois est-il couvert ? » — sans quoi elle refuserait de dépenser une
+  # place qui, autrement, resterait libre pour rien.
+  local mois_mensuels=' '
+  local -a differees=()
 
   # Les noms sont produits par ce script seul, sans espace ni caractère exotique :
   # le tri de `ls` est sûr ici, et l'horodatage se trie lexicographiquement comme
@@ -1329,8 +1341,27 @@ faire_tourner_par_rang() {
       nb_semaines=$((nb_semaines + 1))
       raison="hebdomadaire ${nb_semaines}/${hebdomadaires} (semaine ISO ${semaine})"
     elif [ "$nb_mois" -lt "$mensuelles" ] &&
-         [ "${mois_pris#* "$mois" }" = "$mois_pris" ] &&
-         [ "${semaines_prises#* "$semaine" }" = "$semaines_prises" ]; then
+         [ "${mois_pris#* "$mois" }" = "$mois_pris" ]; then
+      # LA SEMAINE NE FAIT PLUS PARTIE DE LA CONDITION D'ENTRÉE, ET C'EST LE
+      # CORRECTIF DU 2026-09-07 (soir) — elle décide seulement de GARDER MAINTENANT
+      # ou de REPORTER. Le veto de semaine, écrit le matin même comme une
+      # troisième condition sur cette ligne, s'appliquait AUSSI quand l'étage
+      # hebdomadaire était épuisé. Là il ne protège plus rien : il ne libère
+      # aucune place, il en gaspille une. Relevé par A17 en revue croisée sur une
+      # série CREUSE — celle que les mesures du matin ne pouvaient pas voir,
+      # parce qu'elles jouaient toutes 120 jours CONSÉCUTIFS :
+      #
+      #   20260907…20260901 20260830 20260823 20260816 20260802 20260731
+      #   20260630 20260531   —   plan 7/4/3
+      #
+      # 14 archives en entrée, 14 places au plan, et l'ancienne rédaction en
+      # gardait 13 : `20260731` supprimée alors que l'hebdomadaire était à 4/4,
+      # juillet 2026 sans une seule archive, et 2 places mensuelles dépensées sur
+      # 3. Sur une série DENSE le report est sans conséquence — le mois suivant
+      # offre trente autres candidates ; sur une série CREUSE il peut être
+      # définitif. C'est la densité, jamais le jour de la semaine, qui sépare les
+      # deux cas.
+      #
       # LA TROISIÈME CONDITION EST CELLE QUI MANQUAIT, ET LE CODE CONTREDISAIT
       # SON PROPRE COMMENTAIRE. Plus bas, dans le bloc `if [ -n "$raison" ]`, la
       # réservation dit sans ambiguïté : « toute archive gardée, quel que soit
@@ -1345,29 +1376,43 @@ faire_tourner_par_rang() {
       # (un lundi), l’archive du 31 août était gardée « mensuelle 1/3 » quand les
       # quatre hebdomadaires choisies juste après — 30, 23, 16 et 9 août — sont
       # TOUTES d'août. Le mois était couvert de toute façon ; le plan s'arrêtait
-      # au 30 juin au lieu du 31 mai, soit 69 jours au lieu de 99, LÀ OÙ
-      # 02 §11.4 EN PROMET TROIS MOIS. Aucun compte d'archives ne bougeait (14
-      # avant, 14 après) : seule la profondeur le disait.
+      # au 30 juin au lieu du 31 mai, soit 69 jours au lieu de 99, là où la
+      # décision D-2 (option c) annonce ~90 jours. Le 02 §11.4, lui, ne fixe que
+      # la rétention PostgreSQL (30 j) et ne prescrit RIEN pour le volume
+      # applicatif : c'est D-2 qui promet les trois mois, et le §11.4 était cité
+      # à tort ici jusqu'au 2026-09-07 au soir. Aucun compte d'archives ne
+      # bougeait (14 avant, 14 après) : seule la profondeur le disait.
       #
-      # CE QUE CETTE CONDITION FAIT, ET C'EST PLUS QUE D'ÉVITER UN DOUBLON : tant
-      # que l'hebdomadaire a des places, toute archive dont la semaine est LIBRE
-      # lui revient (sa branche est testée d'abord). Le mensuel ne pouvait donc
-      # se déclencher AVANT lui qu'en se servant dans une semaine déjà prise —
-      # exactement ce qui est désormais interdit. L'étage mensuel attend
-      # dorénavant que l'hebdomadaire ait fini, ce que la décision D-2 disait
-      # déjà et que le code ne faisait pas.
+      # CE QUE FAIT LA PRÉFÉRENCE DE SEMAINE, ET SOUS QUELLE CONDITION : tant que
+      # l'étage hebdomadaire a des places, toute archive dont la semaine est
+      # LIBRE lui revient (sa branche est testée d'abord). Le mensuel ne peut
+      # donc se déclencher avant lui qu'en se servant dans une semaine déjà
+      # prise — et cette dépense-là ne rapporte rien tant qu'une autre archive du
+      # même mois reste atteignable. D'où le report.
       #
-      # LE MOIS N'EST JAMAIS SAUTÉ POUR AUTANT, ET C'EST MESURÉ, PAS DÉDUIT. La
-      # descente continue et la condition est réévaluée sur l'archive suivante
-      # DU MÊME MOIS. Contre-épreuve du 2026-09-07, hebdomadaire forcé à 0 pour
-      # que seul le mensuel puisse couvrir août : le 31 août est refusé (sa
-      # semaine 202636 est tenue par le quotidien) et c'est le 30 août qui est
-      # gardé « mensuelle 1/3 (mois 202608) » — plus tôt dans le MÊME mois, et
-      # non un saut vers juillet. Avec l'hebdomadaire à 4, c'est lui qui prend le
-      # 30 août et réserve le mois au passage : dans les deux cas août est tenu.
-      # Éprouvé sur les sept jours de la semaine.
-      nb_mois=$((nb_mois + 1))
-      raison="mensuelle ${nb_mois}/${mensuelles} (mois ${mois})"
+      # CE QUE LE REPORT NE FAIT PAS : SAUTER UN MOIS. Deux issues, et deux
+      # seulement. Soit la descente rencontre plus bas une archive du MÊME mois
+      # dont la semaine est libre, et c'est elle qui prend la place — plus
+      # profond, même mois. Soit il n'y en a aucune, et la boucle de REPRISE (en
+      # bas de cette fonction) rend sa place à l'archive reportée dès qu'une
+      # place mensuelle est restée libre. LE CAS CREUX EST CELUI-LÀ, et il est
+      # mesuré, pas déduit : `20260831` seule archive d'août, sa semaine ISO
+      # 202636 tenue par l'étage quotidien, aucune autre candidate d'août — la
+      # reprise la garde, et août survit. Sans elle, août disparaissait pendant
+      # que 3 places mensuelles sur 3 restaient inemployées.
+      #
+      # Éprouvé sur les sept jours de la semaine, en série DENSE (120 jours
+      # consécutifs) ET en série CREUSE (les deux séries d'A17).
+      if [ "${semaines_prises#* "$semaine" }" = "$semaines_prises" ]; then
+        nb_mois=$((nb_mois + 1))
+        mois_mensuels="$mois_mensuels$mois "
+        raison="mensuelle ${nb_mois}/${mensuelles} (mois ${mois})"
+      else
+        # REPORT, PAS REFUS. `raison` reste vide : l'archive n'est pas gardée
+        # ICI, et la descente continue sans consommer de place. La liste est
+        # ordonnée du plus récent au plus ancien, comme la descente.
+        differees+=("$f")
+      fi
     fi
 
     if [ -n "$raison" ]; then
@@ -1379,6 +1424,39 @@ faire_tourner_par_rang() {
       [ -n "$semaine" ] && semaines_prises="$semaines_prises$semaine "
       [ -n "$mois" ] && mois_pris="$mois_pris$mois "
     fi
+  done
+
+  # ---------------------------------------------------------------------------
+  # REPRISE DE FIN DE PLAN — UNE PLACE QUI DORT NE JUSTIFIE JAMAIS UNE SUPPRESSION
+  #
+  # La descente est finie ; `differees` porte les archives que la préférence de
+  # semaine a mises de côté et que personne n'est venu remplacer. S'il reste des
+  # places mensuelles, elles leur reviennent. C'est la traduction directe de D-2,
+  # écrite noir sur blanc dans la décision de Williams du 2026-08-28 : « le coût
+  # d'une archive gardée en trop est de quelques mégaoctets ; celui d'une archive
+  # supprimée à tort est une restauration impossible ». Une préférence qui
+  # DÉTRUIT au lieu de déplacer fait exactement l'échange interdit.
+  #
+  # LE PARCOURS EST CELUI DE LA DESCENTE (du plus récent au plus ancien) et le
+  # filtre est `mois_mensuels`, pas `mois_pris` : deux reports du même mois ne
+  # doivent pas consommer deux places, mais un mois déjà couvert par l'étage
+  # hebdomadaire ne doit pas EMPÊCHER une reprise — la place serait perdue pour
+  # personne, et l'archive avec.
+  #
+  # AUCUNE RÉSERVATION N'EST FAITE ICI, et ce n'est pas un oubli : la descente
+  # est terminée, plus aucune décision ne lit `semaines_prises` ni `mois_pris`.
+  # Seul `mois_mensuels` sert encore, à cette boucle et à elle seule.
+  # ---------------------------------------------------------------------------
+  for f in "${differees[@]}"; do
+    [ "$nb_mois" -lt "$mensuelles" ] || break
+    mois="$(cle_periode "$f" mois)"
+    [ -n "$mois" ] || continue
+    [ "${mois_mensuels#* "$mois" }" = "$mois_mensuels" ] || continue
+    nb_mois=$((nb_mois + 1))
+    mois_mensuels="$mois_mensuels$mois "
+    gardes=$((gardes + 1))
+    a_garder="$a_garder $f"
+    journal "rotation : $f gardée — mensuelle ${nb_mois}/${mensuelles} (mois ${mois}, reprise de fin de plan : sa semaine était déjà couverte, mais la place mensuelle serait restée inemployée)"
   done
 
   # Second passage : on ne supprime qu'après avoir arrêté le plan complet.

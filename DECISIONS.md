@@ -11018,3 +11018,39 @@ ISO et ≥ 3 mois distincts. **Le mois n'est pas sauté** — contre-épreuve he
 cas `@critique` ne voyait le défaut que six jours sur sept : le dimanche, la fenêtre quotidienne
 tient dans une seule semaine ISO, le chevauchement disparaît et le gaspillage reste (75 j). Le cas
 est donc joué sur les SEPT jours à dates fixes (`aide/faux-date.sh`) et mesure aussi la PROFONDEUR.
+
+## 2026-09-07 — [L0] Le veto de semaine doit-il s'appliquer quand l'étage hebdomadaire est ÉPUISÉ ?
+
+Le correctif du matin (PR #86) a ajouté à la branche mensuelle une troisième condition : ne pas se
+servir dans une semaine déjà prise. A17, en revue croisée, a mesuré ce qu'aucune des sept mesures
+d'A11 ne pouvait voir — **elles jouaient toutes une série DENSE de 120 jours consécutifs**. Sur série
+CREUSE (`20260907…20260901 20260830 20260823 20260816 20260802 20260731 20260630 20260531`, plan
+7/4/3), le veto s'applique alors que l'hebdomadaire est à 4/4 : il ne libère plus aucune place, il en
+gaspille une. 13 archives gardées pour 14 places, `20260731` **supprimée**, juillet 2026 sans aucune
+archive, 2 places mensuelles dépensées sur 3.
+
+Options :
+
+1. **Borner le veto à `nb_semaines < hebdomadaires`.** Répare la série 1 ; ne répare PAS la série 2
+   d'A17 (`20260831` seule archive d'août, semaine 202636 tenue par le quotidien, hebdomadaire encore
+   libre) — août disparaît quand même.
+2. **Faire du veto un REPORT** : l'archive écartée est mise de côté, et reprend une place mensuelle
+   si la descente s'achève sur une place inemployée.
+3. Revenir avant #86. Écartée : la profondeur retombe de 99-105 j à 69-75 j.
+
+Arbitrage : **option 2.** Seule à tenir les deux bouts — le gain de #86 (99-105 j en série dense,
+mesuré) ET l'interdiction de supprimer ce que le code d'avant gardait.
+Règle de précédence : **D-2** (Williams, 2026-08-28) tranche explicitement ce conflit — « le coût
+d'une archive gardée en trop est de quelques mégaoctets ; celui d'une archive supprimée à tort est une
+restauration impossible ». Un veto qui détruit fait l'échange que D-2 interdit ; l'option 1 le fait
+encore, plus rarement.
+
+**L'ARBITRAGE DU MATIN ÉTAIT FAUX, ET LE NOMMER EST LE SEUL MOYEN DE NE PAS LE REFAIRE.** L'entrée
+du 2026-09-07 (« option 2 — le script ») affirmait : « L'option 2 ne peut d'ailleurs rien retirer —
+elle déplace une place d'une semaine déjà couverte vers une semaine qui ne l'est pas, le plan atteint
+plus loin, jamais moins. » **C'est faux**, et R1 le réfute par la mesure. Le défaut n'est pas d'avoir
+choisi le script contre le test : c'est d'avoir déclaré une propriété UNIVERSELLE (« jamais moins »)
+à partir d'un seul régime d'entrée. Sept mesures, sept jours, **une seule densité** : la variable qui
+comptait n'était pas le jour de la semaine.
+Décideur : **A01**, sur délégation de Williams du 2026-09-04 — rectifiant son propre arbitrage.
+Impact spec : aucun. D-2 (7/4/3) inchangé ; sa mise en œuvre le tient enfin dans les deux régimes.

@@ -424,16 +424,77 @@ beforeAll(async () => {
   expect(copieFauxDate.code, `Copie du faux date impossible :\n${copieFauxDate.sortie}`).toBe(0);
   const droitsFauxDate = dansConteneur(`chmod 0755 ${FAUX}/date`, {}, 'root');
   expect(droitsFauxDate.code, `Droits du faux date :\n${droitsFauxDate.sortie}`).toBe(0);
-  // Le substitut est ÉPROUVÉ ici, avant le premier cas : un banc dont l'outil de
-  // mesure est faux rend des verdicts faux. Deux propriétés, les deux qui
-  // comptent — le relatif est décalé, l'ABSOLU ne l'est pas.
-  const controle = dansConteneur('date -u +%Y%m%d; date -u -d 20260831 +%G%V', {
-    AXION_TEST_AUJOURDHUI: '2026-09-07',
-  });
+  // ---------------------------------------------------------------------------
+  // LE SUBSTITUT EST ÉPROUVÉ ICI, AVANT LE PREMIER CAS — ET LE PREMIER CONTRÔLE
+  // ÉCRIT NE PROUVAIT RIEN.
+  //
+  // Il lançait `date -u +%Y%m%d; date -u -d 20260831 +%G%V` sous
+  // `AXION_TEST_AUJOURDHUI=2026-09-07` et attendait `20260907` et `202636`.
+  // A17 l'a rejoué SANS aucun substitut, avec le vrai `date` : les deux valeurs
+  // sortent quand même. La seconde assertion ne discrimine JAMAIS (une date
+  // absolue rend la même semaine ISO avec ou sans substitut, c'est même la
+  // propriété qu'on voulait vérifier) ; la première ne discrimine que si l'on
+  // n'est pas le 2026-09-07 — c'est-à-dire précisément pas le jour où le banc a
+  // été écrit, ni celui où il en avait besoin. Un contrôle d'instrument qui
+  // passe quand l'instrument est absent ne contrôle pas l'instrument.
+  //
+  // LE CONTRÔLE RÉÉCRIT TIENT LES QUATRE PROPRIÉTÉS, ET CHACUNE PEUT ÉCHOUER :
+  //   1. INERTIE — sans la variable, le substitut rend la date RÉELLE du
+  //      conteneur, relevée par `/usr/bin/date` qui court-circuite le `PATH`.
+  //      C'est la propriété qui protège les cinquante-huit autres cas du
+  //      fichier, et le contrôle d'origine ne la regardait pas du tout.
+  //   2. DÉCALAGE — avec la variable, sur une date VOLONTAIREMENT ancienne
+  //      (2019-03-04) qu'aucune horloge de CI ne peut rendre par hasard.
+  //      `--date tomorrow`, avec une ESPACE, est dans la liste : cette écriture
+  //      traversait le substitut sans être vue jusqu'au 2026-09-07 au soir.
+  //   3. ABSOLU INTACT — `20260831` reste en semaine 202636, et non en 201910.
+  //   4. REFUS BRUYANT — une forme relative que le substitut ne sait PAS
+  //      traiter arrête le processus (code 64) au lieu de se résoudre en
+  //      silence sur l'horloge réelle.
+  // ---------------------------------------------------------------------------
+  const CALENDRIER_DE_CONTROLE = { AXION_TEST_AUJOURDHUI: '2019-03-04' } as const;
+
+  const jourReel = dansConteneur('/usr/bin/date -u +%Y%m%d').sortie.trim();
+  const inerte = dansConteneur('date -u +%Y%m%d');
   expect(
-    controle.sortie.split('\n').map((l) => l.trim()),
-    `Le substitut de \`date\` ne se comporte pas comme annoncé :\n${controle.sortie}`,
-  ).toEqual(expect.arrayContaining(['20260907', '202636']));
+    inerte.sortie.trim(),
+    `Sans \`AXION_TEST_AUJOURDHUI\`, le substitut DOIT être inerte : les 58 autres\n` +
+      `cas de ce fichier lisent l'horloge réelle du conteneur.\n` +
+      `Attendu ${jourReel}, obtenu :\n${inerte.sortie}`,
+  ).toBe(jourReel);
+
+  const decale = dansConteneur(
+    [
+      'date -u +%Y%m%d',
+      'date -u -d today +%Y%m%d',
+      'date -u -d yesterday +%Y%m%d',
+      'date -u -d tomorrow +%Y%m%d',
+      'date -u --date tomorrow +%Y%m%d',
+      'date -u -d 20260831 +%G%V',
+      'date -u -d "2026-08-31 02:30:00" +%Y%m%d',
+    ].join('; '),
+    CALENDRIER_DE_CONTROLE,
+  );
+  expect(
+    decale.sortie
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l !== ''),
+    `Le substitut de \`date\` ne se comporte pas comme son en-tête l'annonce :\n${decale.sortie}`,
+  ).toEqual(['20190304', '20190304', '20190303', '20190305', '20190305', '202636', '20260831']);
+
+  const refus = dansConteneur('date -u -d "-7 days" +%Y%m%d', CALENDRIER_DE_CONTROLE);
+  expect(
+    refus.code,
+    `Une forme relative que le substitut ne sait pas traiter DOIT arrêter le\n` +
+      `processus. La laisser passer, c'est la résoudre sur l'horloge réelle sous\n` +
+      `un calendrier fixé — un vert qui ne mesure rien.\nSortie :\n${refus.sortie}`,
+  ).toBe(64);
+  expect(refus.sortie).toContain('NON PRISE EN CHARGE');
+  expect(
+    refus.sortie,
+    `Le refus a tout de même rendu une date — il n'a donc rien refusé.`,
+  ).not.toMatch(/^\s*\d{8}\s*$/m);
 }, 900_000);
 
 /**
@@ -860,7 +921,16 @@ describe('sauvegarde.sh — rétention à trois étages (D-2)', () => {
       }
 
       // LA PROFONDEUR, qui est la RAISON D'ÊTRE des deux étages du bas et la
-      // seule chose que l'exploitant lise vraiment : 02 §11.4 promet trois mois.
+      // seule chose que l'exploitant lise vraiment. D'OÙ VIENT LE SEUIL, ET IL
+      // NE VIENT PAS D'OÙ CE FICHIER LE DISAIT : c'est la décision D-2 de
+      // Williams (2026-08-28), option (c), qui annonce « au plus 14 archives et
+      // une couverture de ~90 jours ». Le 02 §11.4 ne fixe QUE la rétention
+      // PostgreSQL — 30 jours — et ne prescrit RIEN pour le volume applicatif ;
+      // D-2 le dit d'ailleurs en toutes lettres dans son « Impact spec ».
+      // Ce fichier lui attribuait « trois mois » depuis le 2026-09-07, relevé
+      // par A17 : le seuil `>= 90` est juste, c'était la référence qui ne
+      // l'était pas — et elle partait dans un message d'échec que lit un
+      // exploitant à 2 h du matin.
       // Le non-chevauchement est le moyen ; la profondeur est la promesse, et
       // c'est elle qu'il faut mesurer — le défaut du 2026-09-07 la ramenait à
       // 69 jours sans qu'aucun compte d'archives ne bouge (toujours 14).
@@ -870,7 +940,8 @@ describe('sauvegarde.sh — rétention à trois étages (D-2)', () => {
       );
       expect(
         Number(ecart.trim()),
-        `Le plan ne remonte que jusqu'au ${plusAncienne} — 02 §11.4 en promet trois mois.\n` +
+        `Le plan ne remonte que jusqu'au ${plusAncienne} — la décision D-2 (option c,\n` +
+          `Williams 2026-08-28) en annonce ~90 jours pour au plus 14 archives.\n` +
           `Archives gardées :\n${gpg.join('\n')}`,
       ).toBeGreaterThanOrEqual(90);
 
@@ -878,6 +949,115 @@ describe('sauvegarde.sh — rétention à trois étages (D-2)', () => {
       // manquante signerait une suppression à moitié faite.
       const empreintes = contenu(archives).filter((f) => f.endsWith('.tar.zst.gpg.sha256'));
       expect(empreintes.map((f) => f.replace(/\.sha256$/, '')).sort()).toEqual([...gpg].sort());
+    }, 300_000);
+  }
+  // ===========================================================================
+  // SÉRIE CREUSE — CE QUE LES SEPT CAS CI-DESSUS NE POUVAIENT PAS VOIR
+  //
+  // Les sept cas ci-dessus jouent tous une série DENSE : 120 jours CONSÉCUTIFS.
+  // La densité était donc une CONSTANTE du banc, jamais une variable — et c'est
+  // exactement là que le correctif du 2026-09-07 (PR #86) a introduit un défaut
+  // que ses propres mesures ne pouvaient pas voir. Sur une série dense, chaque
+  // mois offre une trentaine de candidates ; refuser la plus récente n'a aucune
+  // conséquence, une autre suit immédiatement. Sur une série CREUSE, la refuser
+  // peut être la refuser DÉFINITIVEMENT.
+  //
+  // LES DEUX SÉRIES CI-DESSOUS SONT CELLES D'A17, transcrites telles quelles
+  // depuis sa revue croisée (09 §5.6 : le cas qui éprouve un correctif n'est pas
+  // écrit par l'agent qui l'a produit ; ces deux-là ne le sont pas). Mesurées par
+  // elle sur `main` en `3431fe4` :
+  //
+  //   série 1 — 14 archives en entrée, plan 7/4/3 : 13 gardées, `20260731`
+  //             SUPPRIMÉE, juillet 2026 sans aucune archive, et 2 places
+  //             mensuelles dépensées sur 3. Le veto de semaine s'est appliqué
+  //             alors que l'étage hebdomadaire était à 4/4 : il ne libérait plus
+  //             rien, il détruisait.
+  //   série 2 — `20260831` seule archive d'août, sa semaine ISO 202636 tenue par
+  //             l'étage quotidien : août disparaît, places mensuelles 0/3.
+  //
+  // CE QUE LE BANC AJOUTE AUX DEUX SÉRIES D'A17 : la QUEUE est celle d'A17, à la
+  // date près ; c'est la fenêtre quotidienne qui glisse sur les sept jours de la
+  // semaine de référence. Au lundi 2026-09-07 la série jouée est donc EXACTEMENT
+  // la sienne. Les six autres jours font varier la seule chose qui manquait aux
+  // sept cas denses — le rapport entre la fenêtre quotidienne et la queue.
+  // ===========================================================================
+
+  /** Queue creuse d'A17, série 1 — `20260802` et `20260731` sont en MÊME semaine ISO 202631. */
+  const QUEUE_CREUSE_1: readonly string[] = [
+    '20260830',
+    '20260823',
+    '20260816',
+    '20260802',
+    '20260731',
+    '20260630',
+    '20260531',
+  ];
+
+  /** Queue creuse d'A17, série 2 — `20260831` est la SEULE archive d'août. */
+  const QUEUE_CREUSE_2: readonly string[] = ['20260831', '20260731', '20260630', '20260531'];
+
+  /** Les mois AAAAMM distincts d'une liste de jours AAAAMMJJ. */
+  function moisDe(jours: readonly string[]): string[] {
+    return [...new Set(jours.map((j) => j.slice(0, 6)))].sort();
+  }
+
+  /**
+   * Joue une série CREUSE et vérifie LA propriété que R1 a mise en défaut :
+   * **une place de plan qui dort ne justifie JAMAIS une suppression.**
+   *
+   * Les deux séries tiennent en 14 et 11 archives, pour un plan qui en garde
+   * 14 : la bonne réponse est donc « aucune suppression », et elle ne se discute
+   * pas. C'est la formulation la plus stricte de D-2 (« le coût d'une archive
+   * gardée en trop est de quelques mégaoctets ; celui d'une archive supprimée à
+   * tort est une restauration impossible ») que ce banc puisse écrire.
+   */
+  function eprouverSerieCreuse(aujourdhui: string, queue: readonly string[]): void {
+    const archives = repertoireNeuf();
+    // Six veilles + l'archive que la passe RÉELLE va écrire « aujourd'hui » =
+    // les sept quotidiennes ; la queue est posée telle quelle.
+    const veilles = joursAvant('yesterday', 6, aujourdhui);
+    const entree = [...veilles, aujourdhui.replaceAll('-', ''), ...queue];
+    poserArchivesDatees(archives, [...veilles, ...queue]);
+
+    const journal = jouerUnePasse(archives, {
+      AXION_TEST_AUJOURDHUI: aujourdhui,
+      AXION_RETENTION_QUOTIDIENNES: '7',
+      AXION_RETENTION_HEBDOMADAIRES: '4',
+      AXION_RETENTION_MENSUELLES: '3',
+    });
+    expect(journal.sortie).toContain('passe terminée avec succès');
+
+    const gardees = contenu(archives)
+      .filter((f) => f.endsWith('.tar.zst.gpg'))
+      .map((f) => f.slice(6, 14))
+      .sort();
+
+    // 1. AUCUNE SUPPRESSION. Le plan a 14 places, la série en compte au plus 14.
+    expect(
+      gardees,
+      `Le plan 7/4/3 offre 14 places et la série n'en réclame que ${String(entree.length)}.\n` +
+        `Une archive a pourtant été supprimée alors qu'une place restait libre —\n` +
+        `c'est l'échange que D-2 interdit.\nEntrée :\n${[...entree].sort().join('\n')}\n` +
+        `Gardées :\n${gardees.join('\n')}\nJournal :\n${journal.sortie}`,
+    ).toEqual([...entree].sort());
+
+    // 2. AUCUN MOIS PERDU. Redondante avec (1) sur ces deux séries, et
+    //    délibérément écrite quand même : c'est la propriété que l'exploitant
+    //    lit dans le runbook, et c'est elle qui survivrait à un changement de
+    //    série. Le compte, lui, est une conséquence.
+    expect(
+      moisDe(gardees),
+      `Un mois entier de la série a disparu du plan.\nJournal :\n${journal.sortie}`,
+    ).toEqual(moisDe(entree));
+  }
+
+  for (const [nomDuJour, aujourdhui] of SEMAINE_DE_REFERENCE) {
+    it(`@critique série CREUSE d'A17 nº1 — 14 archives, 14 gardées, juillet tenu — ${nomDuJour} ${aujourdhui}`, () => {
+      eprouverSerieCreuse(aujourdhui, QUEUE_CREUSE_1);
+    }, 300_000);
+
+    it(`@critique série CREUSE d'A17 nº2 — le 31 août est la seule archive d'août — ${nomDuJour} ${aujourdhui}`, () => {
+      eprouverSerieCreuse(aujourdhui, QUEUE_CREUSE_2);
     }, 300_000);
   }
 
