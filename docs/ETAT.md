@@ -4533,3 +4533,20 @@ semaine du 31 août est tenue par l'étage QUOTIDIEN, pas par l'hebdomadaire. Me
 940 séries, reproduit par le pilote : sur ce cas l'option C est identique à `main` — août reste
 perdu — et elle supprime ce que `main` gardait 7,5× plus souvent que #91. La bonne question est
 « ce mois revient-il plus bas ? ». Ne pas appliquer la recommandation des blocs précédents.
+
+## 2026-09-07 10h30 — [lot L0 → L5] — étape pipeline 7/7 pour R1, 2/7 pour le budget A28
+
+Dernier commit vert : 35582fa (fix(l0) — R1, #91 fusionnée, 13 jobs verts) · Branche : fix/budget-chiffrement-l5 · Poussé : non
+Tâche en cours : R1 est CLOSE — les 3 séries creuses s'exécutent VERTES dans le job d'intégration, pas seulement au banc. Les 4 réserves d'A17 sont levées, l'arbitrage A01 est tracé. Ouvert ensuite : le budget 11 §4 « chiffrement < 50 ms/écriture », jamais mesuré depuis L5a (NB6 puis NB-10), confié à A28.
+Prochaine action : recevoir la mesure d'A28 avec sa contre-épreuve, la commiter sur cette branche, ouvrir la PR ; puis attaquer P-C, seul goulot du chantier.
+Tests rouges connus : aucun. `main` à 35582fa.
+
+**IL N'Y A PAS DE « PORTE L0 ».** Les portes du fichier 09 sont P-A, P-B, P-C, P-D, P-DESCOPE, P-E.
+P-A (fin L0-L1, restauration depuis zéro) est FRANCHIE depuis le 2026-08-27. La rétention relève de
+son périmètre, mais aucune porte ne s'ouvre du fait de R1 : elle se referme, c'est tout. Les revues
+A17 et l'arbitrage A01 parlent de « porte L0 » par commodité — le mot n'existe pas au fichier 09,
+et le croire ferait attendre une signature humaine qui n'est due nulle part.
+
+**Le goulot reste P-C** (refusée DEUX fois, se rejoue EN ENTIER — 09 §4bis), et ce qui la bloque est
+matériel : 10 des 17 vérifications exigent un iPad physique, dues à Williams. Les 7 « serveur » sont
+jouables depuis que staging est réparé.
