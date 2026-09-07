@@ -37,9 +37,9 @@
 //
 // D'où : le dépliant est ouvert par défaut (`ancresDepliees`), il liste les CINQ
 // crans et non les seules ancres reçues, et la ligne d'ancre ne rend JAMAIS `''`.
-// Les crans 2 et 4 sans ancre de banque reçoivent le libellé DÉRIVÉ de la
-// doctrine 3 du §32.4 (amendement du 2026-09-02) — aucun texte inventé ici, et
-// marqué « Ancre dérivée » PAR DES MOTS, jamais par une teinte seule (§33.6).
+// Les crans 2 et 4 sans ancre de banque reçoivent la doctrine 3 du §32.4
+// (amendement du 2026-09-02) CITÉE, et non résumée — aucun texte inventé ici,
+// et marqué « Ancre dérivée » PAR DES MOTS, jamais par une teinte seule (§33.6).
 // La dérivation vit ICI, et non dans l'écran de saisie : le terrain, la console
 // et /design doivent en avoir UNE seule implémentation. Elle est bornée à
 // l'échelle 1-5, seule échelle dont le pack décrive les paliers.
@@ -70,13 +70,23 @@ const ANCRE_VOISINE_DU_CRAN: ReadonlyMap<number, number> = new Map([
 
 /**
  * Libellés DÉRIVÉS des crans intermédiaires. Ce ne sont pas des ancres de
- * banque : c'est la doctrine 3 du §32.4 (amendement du 2026-09-02) rendue mot
- * pour mot. Volontairement NON exporté : le test doit redire cette phrase de
- * son côté, sinon il ne comparerait le composant qu'à lui-même.
+ * banque.
+ *
+ * Citée VERBATIM de la doctrine 3 du §32.4 (03:667), à la seule résolution de
+ * « (resp. 5) » et à la majuscule initiale près. Toute autre reformulation
+ * exigerait une entrée DECISIONS et le retrait de l'attribution.
+ *
+ * Le fragment « pas une moyenne » n'est pas décoratif : c'est la moitié qui
+ * corrige le GESTE de l'auditeur — le réflexe est de moyenner entre deux ancres,
+ * la doctrine dit d'entamer la suivante. La paraphrase qui l'avait perdu a coûté
+ * une revue (DECISIONS, 2026-09-07).
+ *
+ * Volontairement NON exporté : le test doit redire cette phrase de son côté,
+ * sinon il ne comparerait le composant qu'à lui-même.
  */
 const LIBELLES_ANCRES_DERIVEES: Readonly<Record<number, string>> = {
-  2: '2 — palier intermédiaire : au moins un élément de l’ancre 3 est établi, sans qu’elle soit atteinte (doctrine §32.4).',
-  4: '4 — palier intermédiaire : au moins un élément de l’ancre 5 est établi, sans qu’elle soit atteinte (doctrine §32.4).',
+  2: 'La note 2 exige au moins un élément établi de l’ancre 3 — une note intermédiaire est une ancre entamée, pas une moyenne (doctrine §32.4).',
+  4: 'La note 4 exige au moins un élément établi de l’ancre 5 — une note intermédiaire est une ancre entamée, pas une moyenne (doctrine §32.4).',
 };
 
 /** Ce qu'on affiche pour un cran, et d'où ça vient (banque ou dérivation). */
@@ -266,9 +276,9 @@ export function EchelleAncree(proprietes: ProprietesEchelleAncree) {
           vide : sans cela, le bloc réservé devient une ligne blanche.
           Le texte y est rendu SEUL, sans la marque « Ancre dérivée » : la ligne est
           annoncée par `aria-live` à chaque changement de cran, et la marque s'y
-          répéterait à voix haute sans rien ajouter — le libellé dérivé se
-          nomme lui-même (« palier intermédiaire… doctrine §32.4 »), et la
-          provenance se lit dans le dépliant, où les cinq crans se comparent. */}
+          répéterait à voix haute sans rien ajouter — le libellé dérivé se nomme
+          lui-même (« La note 2 exige… (doctrine §32.4) »), et la provenance se
+          lit dans le dépliant, où tous les crans se comparent. */}
       <p id={idAncre} className="axn-choix__ancre" aria-live="polite">
         {ligneAncre.texte}
       </p>
@@ -288,8 +298,20 @@ export function EchelleAncree(proprietes: ProprietesEchelleAncree) {
                       §33.6 interdit l'information portée par la seule couleur,
                       et un lecteur d'écran qui parcourt la liste annonce cette
                       marque HORS de tout contexte visuel — « dérivé » y
-                      flotterait, « ancre dérivée » se comprend. */}
-                  {ligne.derivee && <span className="axn-choix__derivee">Ancre dérivée</span>}
+                      flotterait, « ancre dérivée » se comprend.
+
+                      Le `{' '}` n'est PAS un artifice de mise en page : JSX
+                      supprime le blanc entre deux éléments frères, et le nom
+                      accessible se calcule sur le TEXTE, pas sur les marges.
+                      Sans ce nœud, la marge CSS séparait à l'œil ce qu'un
+                      lecteur d'écran annonçait collé — « Ancre dérivéeLa note 2
+                      exige… ». Une séparation qui n'existe qu'en CSS est
+                      exactement ce que §33.6 refuse. */}
+                  {ligne.derivee && (
+                    <>
+                      <span className="axn-choix__derivee">Ancre dérivée</span>{' '}
+                    </>
+                  )}
                   <span>{ligne.texte}</span>
                 </dd>
               </div>
