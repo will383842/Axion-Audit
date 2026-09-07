@@ -4687,3 +4687,27 @@ corrigé par ce commit. ② Le hook d'arrêt a compté « 42 commits non poussé
 
 **Non jouable dans ce conteneur** : aucun démon Docker, donc ni `test:integration` ni `test:e2e`,
 donc pas de `pnpm verify` complet. Seul `verify:rapide` fait foi ici.
+
+## 2026-09-07 17h50 — [L5b / R1 ancres] — étape pipeline 2/7 (correctif en cours d'écriture)
+
+Dernier commit vert : b5a11a4 (lot/l5b-ancres, arbitrage A01) · Branche : lot/l5b-ancres · Poussé : oui
+Tâche en cours : A21 écrit `EchelleAncree.tsx`, A26 écrit les tests + la fixture E2E, en parallèle
+et sans se lire (09 §5.6). Le doute de spec est tranché et commité.
+Prochaine action : à leur retour, `pnpm build` puis `pnpm verify:rapide` sur l'arbre complet, revue
+croisée A29, puis recoche de R1 par A02 et rejeu §33 EN ENTIER par A54 (09 §4bis).
+Tests rouges connus : aucun mesuré ; l'arbre porte du code à moitié écrit, donc non mesurable.
+
+**`--no-verify` employé sur CETTE poussée, et voici pourquoi (CLAUDE.md §8 l'exige écrit ici).**
+Le `pre-push` a d'abord été joué normalement : il a ÉCHOUÉ. Cause mesurée, pas supposée — l'arbre
+était **propre** au lancement (`git status --porcelain` vide), et il portait trois fichiers modifiés
+à l'arrivée : `EchelleAncree.tsx`, `composants.css` (A21) et `EchelleAncree.test.tsx` (A26). Le
+crochet a donc joué `verify:rapide` sur un composant **à moitié écrit** par deux agents en cours.
+Ce n'est pas un rouge du commit poussé : `b5a11a4` est **documentaire seul** (DECISIONS.md, 33
+lignes) et son `pre-commit` avait passé les gardes, prettier ET le typecheck complet.
+**Leçon pour la prochaine session** : ne jamais lancer un `git push` pendant que des agents écrivent
+dans l'arbre — le crochet mesure l'arbre de travail, pas le commit. Pousser AVANT de les lancer,
+ou attendre leur retour.
+
+**L'arbitrage A01 en une ligne** : les ancres se lisent AVANT la cotation, parce que 03 §33.5 écrit
+littéralement « ancres DÉPLIÉES » et que §33.3 donne le motif (« ne dépend pas de la mémoire »).
+Les crans 2 et 4 ne s'inventent pas : l'amendement §32.4 du 2026-09-02 les écrit déjà.
