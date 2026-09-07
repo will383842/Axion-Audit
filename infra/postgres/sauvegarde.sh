@@ -1419,11 +1419,26 @@ faire_tourner_par_rang() {
       # s'applique donc QUE quand il ne peut rien coûter — quand le mois revient
       # plus bas et sera réexaminé.
       #
-      # MESURÉ le 2026-09-07 sur la fonction réelle, trois séries :
-      #   · creuse (R1, cas 1)   13 → 14 gardées, juillet retrouvé, 5 mois couverts
-      #   · août seul (R1, cas 2) 10 → 11 gardées, août retrouvé
-      #   · dense 120 j (gain #86) 14 gardées, plus ancienne 20260531 — INCHANGÉ
-      # Le gain de profondeur de #86 (99 j contre 69) est donc intégralement tenu.
+      # MESURÉ, ET LA MESURE EST DANS LA CI — pas dans un banc jetable. Les trois
+      # séries creuses vivent désormais dans `l0-sauvegarde.integration.test.ts`,
+      # écrites par un agent qui n'a écrit ni #86 ni ce correctif (09 §5.6), et
+      # chacune TOMBE sur le code d'avant (c8ad9ba) :
+      #   · creuse (R1, cas 1)    13 → 14 gardées, juillet retrouvé, 4 → 5 mois
+      #   · août seul (R1, cas 2) 10 → 11 gardées, août retrouvé, 2 → 3 mois
+      #   · coût de R1-a          13 → 14 gardées, MAIS 20260430 supprimée
+      # La série dense de 120 j reste INCHANGÉE (14 gardées, plus ancienne
+      # 20260531) : le gain de profondeur de #86 (99 j contre 69) est intégralement
+      # tenu, et c'est le seul cas qui se présente en production — une sauvegarde
+      # par nuit ne fait pas une série creuse.
+      #
+      # UN CHIFFRE ORPHELIN, SIGNALÉ PLUTÔT QUE RECOPIÉ : la revue A17 du
+      # 2026-09-07 décrit son cas 2 en prose et annonce « 12 gardées → 11 » sans
+      # écrire la série qui les produit. La série qui est ici, et dans le test,
+      # rend 10 → 11. Les deux peuvent être justes sur deux séries différentes ;
+      # aucune des deux ne peut être vérifiée sur celle de l'autre, faute qu'elle
+      # ait été notée. Celle du test est écrite, donc rejouable — c'est elle qui
+      # fait foi désormais. Relevé par A16, qui a refusé de choisir un chiffre
+      # qu'il ne pouvait pas mesurer.
       #
       # CE QUE CETTE CONDITION COÛTE — la vraie borne, mesurée, et elle n'est pas
       # celle qu'on croyait. Le cas « le mois revient plus bas mais les étages
@@ -1446,7 +1461,11 @@ faire_tourner_par_rang() {
       # D-2 option (c). L'arbitrage — couverture de mois CONTRE profondeur du
       # plan, quand les deux se disputent la dernière place mensuelle — n'est
       # pas tranché par D-2 seule : les deux branches suppriment quelque chose.
-      # Il est posé dans `DECISIONS.md` au 2026-09-07, décideur A01.
+      # Il est SAISI de A01 le 2026-09-07 et sera tracé dans `DECISIONS.md` avant
+      # la fusion. Tant que cette ligne n'est pas remplacée par la date et le
+      # verdict, l'arbitrage est OUVERT et le comportement ci-dessous est
+      # provisoire — dire l'inverse serait, une fois de plus dans ce fichier,
+      # promettre ce que le dépôt ne tient pas. Relevé par A16.
       nb_mois=$((nb_mois + 1))
       raison="mensuelle ${nb_mois}/${mensuelles} (mois ${mois})"
     fi

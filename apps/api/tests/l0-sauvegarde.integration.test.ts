@@ -881,6 +881,301 @@ describe('sauvegarde.sh — rétention à trois étages (D-2)', () => {
     }, 300_000);
   }
 
+  // ---------------------------------------------------------------------------
+  // LES SÉRIES CREUSES — L'ANGLE MORT QUE LES SEPT CAS CI-DESSUS NE VOIENT PAS
+  //
+  // Les sept cas ci-dessus posent 119 jours CONSÉCUTIFS. Sur une série dense,
+  // l'archive suivante du même mois existe TOUJOURS : le veto de semaine de
+  // l'étage mensuel ne peut jamais coûter un mois entier, et la propriété qu'il
+  // faut garder n'y est même pas sollicitée. Aucune série creuse n'existait dans
+  // ce fichier — et c'est très exactement par là qu'une régression de rétention
+  // est entrée dans `main` le 2026-09-06 SANS QUE LA CI NE BRONCHE : 13 archives
+  // gardées au lieu de 14, juillet 2026 sans aucune archive, une place mensuelle
+  // sur trois gaspillée. Elle n'a été vue qu'à la revue croisée, APRÈS la fusion
+  // (réserve R1 de `docs/portes/REVUE_A17_L0_RETENTION_2026-09-07.md`).
+  //
+  // Une série creuse — des trous entre les archives, ce que laisse une panne de
+  // service ou un serveur éteint — est donc posée ici, trois fois. Les dates sont
+  // ABSOLUES et le jour est FIXÉ : ces cas ne dépendent pas du calendrier réel.
+  //
+  // ⚠️ `20260907` N'EST JAMAIS POSÉE : c'est la passe RÉELLE qui l'écrit, au jour
+  // fixé par `AXION_TEST_AUJOURDHUI`. La série complète d'un cas est donc sa
+  // liste PLUS le 7 septembre — même convention que les sept cas ci-dessus, qui
+  // posent 119 jours pour une série de 120.
+  //
+  // CHAQUE CHIFFRE ASSERTÉ ICI EST MESURÉ, JAMAIS DÉDUIT : `cle_periode` et
+  // `faire_tourner_par_rang` ont été extraites du script et jouées sur les deux
+  // états du code — celui d'avant le correctif R1 et celui d'après. Toutes les
+  // assertions de ces trois cas sont ROUGES sur le code d'avant. Un test qui
+  // passerait dans les deux états ne testerait rien.
+  //
+  // ⚠️ CROISEMENT 09 §5.6 : ces trois cas sont écrits par A16, qui n'a produit
+  // aucune ligne de `sauvegarde.sh` — ni le défaut R1, ni son correctif.
+  // ---------------------------------------------------------------------------
+  const JOUR_FIXE = '2026-09-07';
+  const PLAN_7_4_3: Readonly<Record<string, string>> = {
+    AXION_TEST_AUJOURDHUI: JOUR_FIXE,
+    AXION_RETENTION_QUOTIDIENNES: '7',
+    AXION_RETENTION_HEBDOMADAIRES: '4',
+    AXION_RETENTION_MENSUELLES: '3',
+  };
+
+  /** Les dates (AAAAMMJJ) des archives restantes, de la plus récente à la plus ancienne. */
+  function datesRestantes(archives: string): string[] {
+    return contenu(archives)
+      .filter((f) => f.endsWith('.tar.zst.gpg'))
+      .map((f) => f.slice(6, 14))
+      .sort()
+      .reverse();
+  }
+
+  /** Les mois (AAAAMM) couverts par une liste de dates, triés du plus ancien au plus récent. */
+  function moisCouverts(dates: readonly string[]): string[] {
+    return [...new Set(dates.map((d) => d.slice(0, 6)))].sort();
+  }
+
+  /** L'empreinte de chaque archive restante suit son archive — ni orpheline, ni manquante. */
+  function empreintesCoherentes(archives: string): void {
+    const tout = contenu(archives);
+    const gpg = tout.filter((f) => f.endsWith('.tar.zst.gpg'));
+    const empreintes = tout.filter((f) => f.endsWith('.tar.zst.gpg.sha256'));
+    expect(
+      empreintes.map((f) => f.replace(/\.sha256$/, '')).sort(),
+      `Une \`.sha256\` orpheline ou manquante signerait une suppression à moitié faite :\n${tout.join('\n')}`,
+    ).toEqual([...gpg].sort());
+  }
+
+  it('@critique série CREUSE (R1) — le veto de semaine ne supprime plus la dernière archive de son mois', () => {
+    // LA SÉRIE DE LA REVUE A17 §2, TRANSCRITE TELLE QUELLE.
+    // Ce qui se joue au 31 juillet : c'est la SEULE archive de juillet, et sa
+    // semaine ISO (202631) est déjà prise par le 2 août — un dimanche, donc la
+    // même semaine — que l'étage hebdomadaire vient de retenir en 4/4. Le veto
+    // de semaine ne libère alors AUCUNE place puisque l'hebdomadaire est épuisé :
+    // il en gaspille une, et juillet 2026 disparaît du plan. C'est le défaut R1.
+    const archives = repertoireNeuf();
+    poserArchivesDatees(archives, [
+      '20260906',
+      '20260905',
+      '20260904',
+      '20260903',
+      '20260902',
+      '20260901',
+      '20260830',
+      '20260823',
+      '20260816',
+      '20260802',
+      '20260731',
+      '20260630',
+      '20260531',
+    ]);
+
+    const journal = jouerUnePasse(archives, PLAN_7_4_3);
+    expect(journal.sortie).toContain('passe terminée avec succès');
+
+    const restantes = datesRestantes(archives);
+    // MESURÉ sur la fonction réelle : 14 gardées après le correctif R1, 13 avant.
+    // La série entière tient dans le plan 7+4+3 — RIEN ne doit être supprimé.
+    expect(restantes, `archives restantes :\n${restantes.join('\n')}`).toEqual([
+      '20260907',
+      '20260906',
+      '20260905',
+      '20260904',
+      '20260903',
+      '20260902',
+      '20260901',
+      '20260830',
+      '20260823',
+      '20260816',
+      '20260802',
+      '20260731',
+      '20260630',
+      '20260531',
+    ]);
+    expect(restantes).toHaveLength(14);
+    expect(
+      restantes,
+      `Le 31 juillet est la seule archive de juillet 2026. La supprimer, c'est\n` +
+        `perdre le mois entier — et D-2 tranche dans un seul sens : « le coût d'une\n` +
+        `archive gardée en trop est de quelques mégaoctets ; celui d'une archive\n` +
+        `supprimée à tort est une restauration impossible. »\n` +
+        `Restantes :\n${restantes.join('\n')}`,
+    ).toContain('20260731');
+
+    // CINQ mois distincts couverts, dont juillet. Avant le correctif : quatre.
+    expect(moisCouverts(restantes)).toEqual(['202605', '202606', '202607', '202608', '202609']);
+
+    // Le journal NOMME l'étage qui garde chaque archive : les trois places
+    // mensuelles sont dépensées sur trois mois distincts, et le 31 juillet est
+    // bien gardé par l'étage mensuel — pas par accident de rang.
+    expect(journal.sortie).toContain(
+      'minio-20260731T023000Z.tar.zst.gpg gardée — mensuelle 1/3 (mois 202607)',
+    );
+    expect(journal.sortie).toContain(
+      'minio-20260630T023000Z.tar.zst.gpg gardée — mensuelle 2/3 (mois 202606)',
+    );
+    expect(journal.sortie).toContain(
+      'minio-20260531T023000Z.tar.zst.gpg gardée — mensuelle 3/3 (mois 202605)',
+    );
+
+    empreintesCoherentes(archives);
+  }, 300_000);
+
+  it('@critique série CREUSE (R1) — le 31 août SEULE archive de son mois n’est pas sacrifié', () => {
+    // Le second cas de la revue A17 §2, plus court et plus net : août 2026 n'a
+    // qu'UNE archive, le 31, et sa semaine ISO (202636) est tenue par l'étage
+    // quotidien (le 1er septembre y tombe aussi). Le veto de semaine la refusait
+    // et août sortait du plan — alors que le budget de 14 restait inutilisé.
+    const archives = repertoireNeuf();
+    poserArchivesDatees(archives, [
+      '20260906',
+      '20260905',
+      '20260904',
+      '20260903',
+      '20260902',
+      '20260901',
+      '20260831',
+      '20260726',
+      '20260719',
+      '20260712',
+    ]);
+
+    const journal = jouerUnePasse(archives, PLAN_7_4_3);
+    expect(journal.sortie).toContain('passe terminée avec succès');
+
+    const restantes = datesRestantes(archives);
+    // MESURÉ : 11 gardées après le correctif, 10 avant (le 31 août supprimé).
+    expect(restantes, `archives restantes :\n${restantes.join('\n')}`).toEqual([
+      '20260907',
+      '20260906',
+      '20260905',
+      '20260904',
+      '20260903',
+      '20260902',
+      '20260901',
+      '20260831',
+      '20260726',
+      '20260719',
+      '20260712',
+    ]);
+    expect(restantes).toHaveLength(11);
+    expect(
+      moisCouverts(restantes),
+      `Août 2026 n'a qu'une archive : sans elle, le mois n'existe plus.\n` +
+        `Restantes :\n${restantes.join('\n')}`,
+    ).toEqual(['202607', '202608', '202609']);
+    expect(journal.sortie).toContain(
+      'minio-20260831T023000Z.tar.zst.gpg gardée — mensuelle 1/3 (mois 202608)',
+    );
+
+    empreintesCoherentes(archives);
+  }, 300_000);
+
+  it('@critique série CREUSE — le COÛT ASSUMÉ du correctif R1, verrouillé tel qu’il est mesuré', () => {
+    // POURQUOI CE CAS EXISTE, ET POURQUOI IL N'EST PAS UN BUG À CORRIGER.
+    //
+    // Le correctif R1 n'est pas gratuit : en rendant au plan deux archives que le
+    // veto lui prenait (le 31 août et le 30 juin, chacune seule de son mois), il
+    // remplit le budget de 14 plus haut dans la série — et la plus profonde,
+    // `20260430`, en sort. Sur le code d'avant le correctif, cette série gardait
+    // 13 fichiers dont le 30 avril, et le plan remontait à 130 jours ; après, elle
+    // en garde 14, le 30 avril est supprimé et le plan remonte à 100 jours.
+    // C'est un ÉCHANGE — deux mois récents complets contre un mois très ancien —
+    // et non un défaut : D-2 option (c) demande ~90 jours, et 100 les tiennent.
+    // L'échange lui-même (couverture de mois CONTRE profondeur du plan, quand les
+    // deux se disputent la dernière place mensuelle) n'est tranché ni par D-2 ni
+    // par 02 §11.4 : son arbitrage revient à A01, et ce test ne le préjuge pas —
+    // il fige ce que le code FAIT aujourd'hui, mesuré, pour que tout changement
+    // de ce comportement soit un choix explicite et non une dérive silencieuse.
+    //
+    // CE CAS VERROUILLE LE COMPORTEMENT MESURÉ, PAS LE COMPORTEMENT SOUHAITÉ.
+    // Sans lui, la CI validerait sans broncher une future régression symétrique :
+    // celle qui ferait à nouveau du veto un destructeur, ou celle qui viderait le
+    // budget par l'autre bout. C'est précisément ce qui s'est produit le
+    // 2026-09-06, faute d'une seule série creuse dans ce fichier.
+    const archives = repertoireNeuf();
+    poserArchivesDatees(archives, [
+      '20260906',
+      '20260905',
+      '20260904',
+      '20260903',
+      '20260902',
+      '20260901',
+      '20260831',
+      '20260724',
+      '20260717',
+      '20260710',
+      '20260703',
+      '20260630',
+      '20260530',
+      '20260430',
+    ]);
+
+    const journal = jouerUnePasse(archives, PLAN_7_4_3);
+    expect(journal.sortie).toContain('passe terminée avec succès');
+
+    const restantes = datesRestantes(archives);
+    // MESURÉ deux fois, indépendamment : 14 gardées, la plus ancienne est le
+    // 30 mai, et le 30 avril est SUPPRIMÉ. Avant le correctif : 13 gardées, plus
+    // ancienne `20260430`.
+    expect(restantes, `archives restantes :\n${restantes.join('\n')}`).toEqual([
+      '20260907',
+      '20260906',
+      '20260905',
+      '20260904',
+      '20260903',
+      '20260902',
+      '20260901',
+      '20260831',
+      '20260724',
+      '20260717',
+      '20260710',
+      '20260703',
+      '20260630',
+      '20260530',
+    ]);
+    expect(restantes).toHaveLength(14);
+    expect(restantes.at(-1)).toBe('20260530');
+    expect(
+      restantes,
+      `Le 30 avril est la contrepartie ASSUMÉE du correctif R1 : le budget de 14\n` +
+        `se remplit plus haut. S'il réapparaît, ce n'est pas ce test qu'il faut\n` +
+        `changer — c'est la rotation qui a rechangé de comportement.`,
+    ).not.toContain('20260430');
+    // La suppression est TRACÉE : une archive qui disparaît sans une ligne de
+    // journal est une archive que personne ne peut expliquer à 2 h du matin.
+    expect(journal.sortie).toContain(
+      'rotation : suppression de minio-20260430T023000Z.tar.zst.gpg (hors plan 7/4/3)',
+    );
+
+    // Les TROIS places mensuelles sont dépensées, sur trois mois distincts —
+    // c'est ce que le correctif achète en échange du 30 avril.
+    expect(journal.sortie).toContain(
+      'minio-20260831T023000Z.tar.zst.gpg gardée — mensuelle 1/3 (mois 202608)',
+    );
+    expect(journal.sortie).toContain(
+      'minio-20260630T023000Z.tar.zst.gpg gardée — mensuelle 2/3 (mois 202606)',
+    );
+    expect(journal.sortie).toContain(
+      'minio-20260530T023000Z.tar.zst.gpg gardée — mensuelle 3/3 (mois 202605)',
+    );
+    expect(moisCouverts(restantes)).toEqual(['202605', '202606', '202607', '202608', '202609']);
+
+    // LA PROFONDEUR RESTE TENUE — c'est la seule promesse que l'exploitant lit.
+    // 100 jours du 30 mai au 7 septembre, mesurés par le calendrier du conteneur
+    // et non par une soustraction recopiée ici.
+    const { sortie: ecart } = dansConteneur(
+      `echo $(( ( $(date -u -d "${JOUR_FIXE}" +%s) - $(date -u -d "20260530" +%s) ) / 86400 ))`,
+    );
+    expect(
+      Number(ecart.trim()),
+      `Le plan ne remonte que jusqu'au 20260530 — D-2 en promet trois mois.\n` +
+        `Restantes :\n${restantes.join('\n')}`,
+    ).toBe(100);
+    expect(Number(ecart.trim())).toBeGreaterThanOrEqual(90);
+
+    empreintesCoherentes(archives);
+  }, 300_000);
+
   it('@critique une archive dont la date est ILLISIBLE n’est JAMAIS supprimée', () => {
     const archives = repertoireNeuf();
     // `20250145` passe le motif (8 chiffres) et n'est pas une date. Elle est
