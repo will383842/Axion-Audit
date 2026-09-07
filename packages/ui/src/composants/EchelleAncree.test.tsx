@@ -363,9 +363,14 @@ function dePliant(racine: HTMLElement): HTMLDetailsElement {
 function EchelleAuDoigt({
   ancres,
   desactive = false,
+  noteMin = 1,
+  noteMax = 5,
 }: {
   readonly ancres: readonly AncreCotation[];
   readonly desactive?: boolean;
+  /** L'amplitude. Elle n'est plus décorative : la dérivation y est BORNÉE. */
+  readonly noteMin?: number;
+  readonly noteMax?: number;
 }) {
   const [valeur, setValeur] = useState<number | null>(null);
   return (
@@ -375,6 +380,8 @@ function EchelleAuDoigt({
       ancres={ancres}
       onChangement={setValeur}
       desactive={desactive}
+      noteMin={noteMin}
+      noteMax={noteMax}
     />
   );
 }

@@ -694,9 +694,9 @@
 }
 
 /* Marque des crans DÉRIVÉS (2 et 4, quand la banque ne les documente pas). Elle
-   porte un MOT — « Dérivé » —, jamais une teinte seule : §33.6 interdit qu'une
-   information tienne à la couleur. Le cadre et la graisse ne font que le
-   détacher du texte qu'il qualifie. */
+   porte des MOTS — « Ancre dérivée » —, jamais une teinte seule : §33.6 interdit
+   qu'une information tienne à la couleur. Le cadre et la graisse ne font que la
+   détacher du texte qu'elle qualifie. */
 .axn-choix__derivee {
   margin-inline-end: var(--espacement-2);
   padding-inline: var(--espacement-2);

@@ -83,13 +83,40 @@ interface LigneAncre {
 }
 
 /**
+ * Textes de repli. Ils NOMMENT la source du manque — « la banque ne fournit
+ * pas » —, et ce choix de mots n'est pas cosmétique : « aucune ancre n'est
+ * fournie » laisse l'auditeur se demander si son écran a échoué, quand la seule
+ * chose à faire est de remonter une question incomplète à la banque (M1.1).
+ * Trois copies et non une : « comparez avec les ancres voisines » n'a de sens
+ * que sur la ligne de cotation, et « ci-dessous » n'aurait désigné rien du tout
+ * pour un lecteur DÉJÀ dans le dépliant.
+ */
+const REPLI_SANS_AUCUNE_ANCRE = 'Aucune ancre de cotation n’est fournie pour cette question.';
+const REPLI_DEPLIANT = 'La banque ne fournit pas d’ancre pour ce niveau.';
+const repliDeLaLigne = (note: number): string =>
+  `La banque ne fournit pas d’ancre pour la note ${String(note)} : comparez avec les ancres voisines.`;
+
+/** L'invitation, tant qu'aucune note n'est posée ET qu'il y a bien des ancres. */
+const INVITATION_A_COTER = 'Sélectionnez une note pour voir son ancre.';
+
+/**
  * Ancre de banque du cran, sinon libellé dérivé si le cran est intermédiaire ET
  * que son ancre voisine existe, sinon `null` — au dernier cas, l'appelant décide
  * du texte de repli, mais il n'a JAMAIS le droit de ne rien dire.
+ *
+ * `derivationAutorisee` borne la dérivation à l'échelle 1-5 (A01, 2026-09-07).
+ * Sur une échelle 0-10 ou 1-4, « au moins un élément de l'ancre 3 est établi »
+ * énoncerait une règle de cotation que le pack n'a jamais écrite, et l'énoncerait
+ * sous la forme même d'une ancre — donc invisible comme invention.
  */
-function resoudreAncre(note: number, ancres: readonly AncreCotation[]): LigneAncre | null {
+function resoudreAncre(
+  note: number,
+  ancres: readonly AncreCotation[],
+  derivationAutorisee: boolean,
+): LigneAncre | null {
   const deBanque = ancres.find((ancre) => ancre.note === note)?.texte;
   if (deBanque !== undefined) return { texte: deBanque, derivee: false };
+  if (!derivationAutorisee) return null;
 
   const voisine = ANCRE_VOISINE_DU_CRAN.get(note);
   const derive = LIBELLES_ANCRES_DERIVEES[note];
@@ -151,30 +178,37 @@ export function EchelleAncree(proprietes: ProprietesEchelleAncree) {
 
   const notes = Array.from({ length: noteMax - noteMin + 1 }, (_, rang) => noteMin + rang);
 
-  // Le repli quand rien n'est résolu. Il DIT quelque chose : un bloc à hauteur
-  // réservée qui ne contient rien se lit comme un bogue d'affichage, et un
-  // lecteur d'écran n'annonce alors strictement rien.
-  const texteDeRepli = (note: number): string =>
-    ancres.length > 0
-      ? `Aucune ancre n’est fournie pour la note ${String(note)} : appuyez-vous sur les ancres ci-dessous.`
-      : 'Aucune ancre de cotation n’est fournie pour cette question.';
+  // La doctrine 3 du §32.4 parle des notes 2 et 4 D'UNE ÉCHELLE 1-5. Hors de cet
+  // intervalle, dériver reviendrait à inventer une règle de cotation — et à
+  // l'afficher sous la forme d'une ancre, donc sans que rien ne la signale.
+  const derivationAutorisee = noteMin === 1 && noteMax === 5;
 
-  // Ordre imposé (arbitrage A01) : ancre de banque → libellé dérivé → invitation
-  // tant que rien n'est coté → texte de repli explicite. Jamais `''`.
+  // Ordre imposé (arbitrage A01, second tour) : aucune ancre du tout → ancre de
+  // banque → libellé dérivé → invitation tant que rien n'est coté → repli qui
+  // nomme la source du manque. La ligne ne reste jamais vide, et ne promet
+  // jamais une ancre qui n'existe pas.
   const ligneAncre = ((): LigneAncre => {
+    // Sans AUCUNE ancre, « sélectionnez une note pour voir son ancre » invite à
+    // découvrir ce qui n'existe pas : c'est le défaut R1 sous une autre forme.
+    if (ancres.length === 0) return { texte: REPLI_SANS_AUCUNE_ANCRE, derivee: false };
+
     if (affichee !== null) {
-      const resolue = resoudreAncre(affichee, ancres);
+      const resolue = resoudreAncre(affichee, ancres, derivationAutorisee);
       if (resolue !== null) return resolue;
-      if (valeur !== null) return { texte: texteDeRepli(affichee), derivee: false };
     }
-    return { texte: 'Sélectionnez une note pour voir son ancre.', derivee: false };
+    if (valeur === null) return { texte: INVITATION_A_COTER, derivee: false };
+    // `valeur` est posée, donc `affichee` aussi (`survolee ?? valeur`).
+    return { texte: repliDeLaLigne(affichee ?? valeur), derivee: false };
   })();
 
-  // Les CINQ crans, et non les seules ancres reçues : un cran absent de la
-  // banque doit se voir comme un cran, pas disparaître de la liste.
+  // Tous les crans de l'échelle, et non les seules ancres reçues : un cran absent
+  // de la banque doit se voir comme un cran, pas disparaître de la liste.
   const lignesDepliant = notes.map((note) => ({
     note,
-    ...(resoudreAncre(note, ancres) ?? { texte: texteDeRepli(note), derivee: false }),
+    ...(resoudreAncre(note, ancres, derivationAutorisee) ?? {
+      texte: REPLI_DEPLIANT,
+      derivee: false,
+    }),
   }));
 
   return (
@@ -246,9 +280,12 @@ export function EchelleAncree(proprietes: ProprietesEchelleAncree) {
               <div key={ligne.note} className="axn-choix__paire">
                 <dt className="axn-chiffres">{ligne.note}</dt>
                 <dd>
-                  {/* Un MOT, pas une teinte : §33.6 interdit de porter une
-                      information par la seule couleur. */}
-                  {ligne.derivee && <span className="axn-choix__derivee">Dérivé</span>}
+                  {/* Un GROUPE NOMINAL, pas une teinte ni un participe seul :
+                      §33.6 interdit l'information portée par la seule couleur,
+                      et un lecteur d'écran qui parcourt la liste annonce cette
+                      marque HORS de tout contexte visuel — « dérivé » y
+                      flotterait, « ancre dérivée » se comprend. */}
+                  {ligne.derivee && <span className="axn-choix__derivee">Ancre dérivée</span>}
                   <span>{ligne.texte}</span>
                 </dd>
               </div>
