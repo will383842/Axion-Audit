@@ -97,7 +97,7 @@ import {
 } from './fixtures/appareil-terrain.js';
 
 /** 11 §4, en toutes lettres : « chiffrement < 50 ms/écriture ». */
-const BUDGET_MS = 50;
+const BUDGET_MS = 0.4;
 
 /**
  * Le nombre d'écritures mesurées.
