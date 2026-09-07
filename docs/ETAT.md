@@ -4591,3 +4591,47 @@ dépôt poursuit : une assertion écrite une fois et jamais remesurée.
 (« LES RÔLES », ligne 23). Je l'avais « vérifiée » en lisant le CONTENU de la ligne 23, jamais la
 section qui la contient. Sept occurrences corrigées (DECISIONS.md ×4, le test ×3).
 Le bloc de 11h00 annonçait aussi « étape 5/7 » : la revue croisée est l'étape **4**.
+
+## 2026-09-07 12h30 — [P-C point 7 / ZAP] — étape pipeline 4/7 (verdict A51 rendu, revue croisée due)
+
+Dernier commit vert : 0d89af0 (main, 21 jobs verts) · Branche : fix/zap-perimetre-hq-api · Poussé : oui
+Tâche en cours : périmètre ZAP étendu à `/hq` et `/api` (moitié NON authentifiée). Verdict A51 : RÉSERVES — la moitié authentifiée est bloquée sur un compte de staging qui n'existe pas.
+Prochaine action : ouvrir la PR, faire relire par un réviseur qui n'a rien produit, attendre la CI. Le premier run donnera le décompte réel d'alertes — inconnu à ce jour.
+Tests rouges connus : aucun. Table de vérité ZAP 13 → 27 cas, 27/27.
+
+**Ce que la table de vérité étendue achète, mesuré par moi et pas seulement rapporté** : la table
+ANCIENNE (13 cas) rejouée contre un script dont l'agrégation est INVERSÉE rend **13/13 conformes**,
+donc verte — elle est aveugle au défaut d'agrégation. La NEUVE en fait tomber **7**, dont
+`terrain=0 console=0 api=3` : un scanner en panne sur `/api`, noyé entre deux cibles saines, serait
+passé sans un mot. C'est F-31 revenu par la porte de l'agrégation. Les 14 cas neufs sont porteurs.
+Rétrocompatibilité vérifiée au passage : l'ancienne table contre le script ACTUEL rend 13/13.
+
+**Ce qui n'est PAS couvert, et qu'aucun vert ne doit laisser croire** : aucune route authentifiée,
+aucun `Set-Cookie`, aucune règle active. Un scan passif sur une SPA et une API sans spec voit des
+EN-TÊTES DE RÉPONSE, c'est tout. **Le point 7 de P-C n'est pas coché** — il en porte la moitié.
+
+`--no-verify` employé sur deux poussées de cette branche (CLAUDE.md §8 l'exige écrit ici) : A51
+tenait les fichiers `.github/` en cours d'écriture. Le dernier état passe tous les gardes.
+
+## 2026-09-07 13h00 — [P-C point 7 / ZAP] — étape pipeline 4/7 close, 5/7 en cours
+
+Dernier commit vert : ee787cf (PR #93, 20 jobs verts) · Branche : fix/zap-perimetre-hq-api · Poussé : oui
+Tâche en cours : les 8 réserves d'A17 sont levées, chacune rejouée par le pilote avant correction. Aucune n'était bloquante ; R1 l'était moralement.
+Prochaine action : pousser, attendre la CI, fusionner #93. Le premier VRAI scan à trois cibles n'aura lieu qu'au déploiement ou au cron 03h17 — la CI de la PR ne prouve QUE la table, les gardes et la syntaxe.
+Tests rouges connus : aucun. Table de vérité 27/27, trois gardes neufs éprouvés.
+
+**R1 mérite d'être retenue, et elle est de moi.** Le commentaire que j'ai écrit affirmait qu'un
+`[ … ] && code=…` serait un piège sous `set -e`. C'est FAUX — mesuré : sortie 0. Le membre gauche
+d'une liste `&&` court-circuitée est exempté d'`errexit`. Et **le même fichier pratique ce motif
+vingt lignes plus haut**. J'ai donc condamné en 457 ce que le fichier fait en 299, dans le commit
+dont la thèse est que ce fichier a déjà payé deux fois le prix d'un commentaire qui ment. Le trouver
+demandait de tester une règle de bash que tout le monde croit connaître.
+
+**Trois gardes neufs, chacun éprouvé et pas seulement ajouté** : unicité des étiquettes (une cible en
+double écrasait un rapport en silence et faussait le décompte dans le sens rassurant) · schéma et
+espace de l'URL de base · structure du rapport JSON (`{}` de 3 octets passait « rapport présent »
+puis rendait 0 partout). Contre-épreuves : code 1 sur chaque cas fautif, code 0 sur le nominal.
+
+**Erreur de recopie de ma part, relevée par A17** : `GITHUB_TOKEN` figurait dans ma propre sortie de
+`grep` et je l'ai omis de l'inventaire des secrets, dans DECISIONS.md ET REPRISE_AUTOPILOTE. La
+conclusion (« rien d'applicatif ») tenait ; l'énumération, elle, était incomplète.

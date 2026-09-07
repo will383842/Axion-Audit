@@ -11139,3 +11139,49 @@ Trois conséquences opposables, écrites avant les mesures qu'elles jugeront :
 
 Décideur : **A01**, sur délégation de Williams du 2026-09-04.
 Impact spec : aucun. 11 §4 et 09 §1 inchangés — interprétation, pas amendement.
+
+## 2026-09-07 — [securite] « Authentification comprise » pour ZAP : quel mécanisme, alors qu'il n'existe AUCUN cookie de session ?
+
+L'arbitrage du 2026-09-05 (A01) conditionne la bascule `ZAP_BLOQUANT` à une couverture de `/hq` et
+`/api` « **authentification comprise** ». La moitié NON authentifiée est livrée et éprouvée. La
+seconde bute sur un constat **mesuré par A51**, qui change l'énoncé de la condition :
+
+**`POST /v1/auth/login` ne pose AUCUN cookie.** `grep -rn "setCookie" apps/api/src` → rien ; la
+réponse (`authSessionSchema`, `packages/shared/src/auth.ts:133`) porte SIX champs :
+`accessToken`, `refreshToken`, `tokenType:'Bearer'`, `accessExpiresAt`, `refreshExpiresAt`,
+`userId` — dont `accessExpiresAt`, qui porte le piège des 15 min décrit plus bas.
+Le mécanisme cookie httpOnly + en-tête anti-CSRF du 11 §3 est **côté console seulement, en attente
+de A-006**. « Authentification comprise » ne peut donc pas signifier « auditer les attributs des
+cookies de session » : il n'y en a pas à auditer.
+
+Options :
+
+1. **P-C se contente d'un scan authentifié Bearer** — jeton frais minté par le job, injecté en
+   en-tête. Aucune dépendance nouvelle. Couvre `/hq` et `/api` derrière l'authentification.
+2. **Le point 7 attend A-006** et le mécanisme cookie, pour auditer ce que 11 §3 décrit vraiment.
+   Coût : P-C attend un lot qui n'est pas ouvert.
+
+Arbitrage : **EN ATTENTE — Williams**, et il ne peut pas être rendu autrement : **les deux options
+exigent d'abord un compte de test sur staging, qui n'existe pas.** Inventaire des `secrets.*` des
+workflows : `DEPLOY_*`, `COOLIFY_*`, `TELEGRAM_*`, `RESTORE_SSH_KEY`, `AXION_CLIENTS_SURVEILLES`, plus
+`GITHUB_TOKEN` que GitHub fournit lui-même — **rien d'applicatif**. Le geste est le sien, la question l'accompagne.
+
+**Trois conditions qu'A51 refuse de s'accorder à lui-même, et qui viennent avec** :
+(a) le compte doit être du rôle **le plus faible** (`lecteur`), jamais `admin` — l'invariant 3
+réserve `scoping_financials` aux routes admin, et un scanner qui s'y promène déposerait des extraits
+financiers dans un artefact de CI ; (b) **le pack ne prévoit nulle part un compte non humain** : s'il
+ne le dit pas, ce n'est pas une permission ; (c) un artefact de CI conservé 30 jours peut-il contenir
+des extraits de réponses **authentifiées** de staging ? Ni 06 §10.4 ni 11 §2 ne le tranchent — donc
+non, tant que ce n'est pas écrit.
+
+**Et un piège à ne pas se laisser passer si l'option 1 est retenue** : l'access token vaut 15 min
+(11 §3) et un scan à trois cibles dure ~12 min. Un jeton expiré en cours de route ferait scanner des
+**401** que ZAP rapporterait en vert — la version « scan » du contrôle-qui-ment de F-31. Le job devra
+donc PROUVER qu'au moins une réponse authentifiée est un 200 sur une route qui exige un jeton.
+
+Règle de précédence : **sans objet** — aucune divergence interne au pack ; 07 §13 et 09 §1 demandent
+le scan, ils ne disent pas ce qu'il authentifie, et 11 §3 décrit un mécanisme que le serveur
+n'implémente pas encore.
+Décideur : **Williams** (question posée par **A51** le 2026-09-07).
+Impact spec : aucun. La condition d'A01 du 2026-09-05 n'est pas amendée — elle est **constatée
+ambiguë** sur son mécanisme, et la présente entrée porte la question et sa date.

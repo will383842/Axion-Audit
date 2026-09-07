@@ -45,6 +45,80 @@
 #   `-I` est retiré. La garde est désormais ARMABLE.
 #
 # ─────────────────────────────────────────────────────────────────────────────
+# CE QUE LE SCAN COUVRE — ET CE QU'IL NE COUVRE PAS. À LIRE AVANT DE S'EN SERVIR
+# ─────────────────────────────────────────────────────────────────────────────
+# CONSTAT MESURÉ (2026-09-05) : le scan ne voyait que **6 URL** — la coquille
+# statique d'`apps/field`. Ni `/hq`, ni `/api`, ni aucune route
+# d'authentification. Basculer `ZAP_BLOQUANT` dans cet état aurait fait rougir
+# `main` sur les en-têtes d'une page statique SANS garder la surface qu'il
+# fallait garder. D'où la condition posée par A01 (DECISIONS.md, 2026-09-05,
+# « ZAP : l'arbitrage EN ATTENTE est rendu ») : **avant P-C, le scan doit
+# couvrir `/hq` et `/api`** ; le dossier de porte P-C coche la couverture
+# étendue **PUIS** la bascule. Ce fichier livre la PREMIÈRE moitié, et rien
+# d'autre : `ZAP_BLOQUANT` reste à 'false' — la bascule n'appartient pas à ce
+# commit.
+#
+# POURQUOI TROIS EXÉCUTIONS ET NON UNE — le choix de forme, et ses concurrents.
+#   `zap-baseline.py` prend **UNE** cible (`-t`) et araigne depuis elle. Les
+#   deux fronts sont des SPA : leur `index.html` ne contient qu'un `<script
+#   type="module">` et son manifeste — il n'y a RIEN à crawler, et c'est là
+#   toute l'explication des 6 URL. Aucun réglage de ZAP ne répare cela.
+#   Ont été examinés puis écartés :
+#     · `zap-api-scan.py -f openapi` — **hors de portée** : le dépôt n'a AUCUNE
+#       spec OpenAPI et `@fastify/swagger` n'est pas dans la liste épinglée
+#       (11 §1). L'ajouter serait une dépendance hors liste (CLAUDE.md §3-1),
+#       donc un arbitrage humain, pas un geste d'outillage.
+#     · un fichier de CONTEXTE ZAP — il borne la PORTÉE d'un scan, il ne fournit
+#       pas de points d'entrée. Il ne crée aucune URL à voir.
+#     · `-z` (options passées à ZAP) — ne sait pas amorcer une liste d'URL.
+#     · une MATRICE de jobs — techniquement possible, mais elle délègue
+#       l'agrégation du verdict à la sémantique de GitHub. Or `fail-fast`
+#       annulerait des scans frères, et un job `cancelled` ne rougit pas plus
+#       qu'un `skipped` : ce serait remettre en place la mécanique EXACTE de
+#       F-31. La boucle ci-dessous garde l'agrégation dans un script VERSIONNÉ
+#       et ÉPROUVÉ (`zap-verdict.sh` + sa table de vérité), ce qu'une matrice ne
+#       permet pas.
+#   Donc : une boucle sur des points d'entrée nommés, un rapport par cible, et
+#   UN verdict qui prend le PLUS SÉVÈRE des codes. Coût : ~3× le temps de scan
+#   (d'où `timeout-minutes: 30`), une seule image tirée.
+#
+# CE QUE CETTE COUVERTURE ATTEINT RÉELLEMENT :
+#   · les en-têtes de réponse de la coquille terrain (inchangé) ;
+#   · les en-têtes ET les fichiers de la coquille CONSOLE (`/hq/`), qui a ses
+#     propres assets, son propre `Cache-Control` et son `X-Robots-Tag` ;
+#   · les en-têtes des réponses de l'**API elle-même** (helmet, CSP `'none'`,
+#     HSTS, type de contenu, fuite éventuelle de bannière serveur) sur une
+#     réponse 200 réelle.
+#
+# CE QU'ELLE N'ATTEINT PAS — ET IL FAUT LE DIRE, PAS LE LAISSER CROIRE :
+#   · AUCUNE route authentifiée. Un scan passif non authentifié ne voit pas une
+#     ligne de ce que l'invariant 3 protège (RBAC, `scoping_financials`,
+#     propriété des écritures de sync). Ces murs se testent par les tests
+#     d'intrusion croisés de la porte P-B, PAS par ZAP.
+#   · AUCUN `Set-Cookie`. Les attributs `httpOnly` / `Secure` / `SameSite` des
+#     cookies de la console (11 §3) n'apparaissent que sur une réponse de
+#     `POST /api/v1/auth/login` AVEC des identifiants valides. Un spider fait du
+#     GET : il obtient 404 et ne voit rien. C'est la moitié authentifiée, et
+#     elle est BLOQUÉE sur un geste humain (aucun compte de test de staging
+#     n'existe, aucun secret ne le porte).
+#   · `/v1/auth/*` n'est DÉLIBÉRÉMENT pas un point d'entrée du spider : en GET
+#     ces routes rendent 404 (valeur passive nulle) et elles portent le plafond
+#     de 10 req/min/IP (11 §3) — le scanner mesurerait le limiteur au lieu de la
+#     route, et consommerait le quota de connexion de son adresse.
+#   · AUCUNE règle active : `zap-baseline.py` est un scan PASSIF. Pas
+#     d'injection, pas de traversée, pas de force brute.
+#   Conclusion sans détour : **cette extension ne coche pas le point 7 du
+#   dossier P-C**. Elle rend la bascule `ZAP_BLOQUANT` DÉFENDABLE ; elle ne
+#   remplace aucun test d'autorisation.
+#
+# EFFET ATTENDU SUR LE DÉCOMPTE : plus de surface = PLUS d'alertes que les 12
+# de la mesure du 2026-09-05. C'est le RÉSULTAT RECHERCHÉ, pas une régression.
+# AUCUNE règle n'est exclue, AUCUN seuil n'est baissé, `-I` n'est pas remis :
+# l'option 3 (« rendre bloquant en excluant les règles gênantes ») a été écartée
+# en toutes lettres — un scan vert par exclusion est le contrôle-qui-ment de
+# F-31.
+#
+# ─────────────────────────────────────────────────────────────────────────────
 # STATUT BLOQUANT — CE QUI EST DÉCIDÉ, CE QUI NE L'EST PAS
 # ─────────────────────────────────────────────────────────────────────────────
 # BLOQUANT EN TOUTES CIRCONSTANCES, sans passer par `ZAP_BLOQUANT` :
@@ -54,20 +128,23 @@
 #   · code inconnu, ZAP_BLOQUANT mal orthographié, rapport JSON manquant.
 #
 # SOUMIS À `ZAP_BLOQUANT` : le code 2 (avertissements). Il reste à 'false' à ce
-# jour, et c'est un ARBITRAGE HUMAIN EN ATTENTE, pas un choix d'outillage :
-# le scan rend 2 sur 12 alertes réelles (1 Medium, 3 Low, 8 Informational),
-# listées et datées dans DECISIONS.md, entrée du 2026-09-05
-# « [securite] ZAP remis en service : bloquant tout de suite, ou après
-# traitement des 12 alertes ? ». AUCUN seuil n'a été baissé et AUCUNE règle
-# n'a été exclue pour obtenir un vert — la doctrine du dépôt l'interdit
-# explicitement, et elle vaut ici comme pour la couverture.
-# ⚠️ SI LA RÉPONSE EST « BLOQUANT » : passer `ZAP_BLOQUANT` à 'true' ET épingler
-# `ZAP_IMAGE` sur le digest relevé par l'étape « Identifier l'image ZAP ». Une
-# porte bloquante doit être reproductible.
+# jour, et c'est un ARBITRAGE RENDU, borné et daté : DECISIONS.md, 2026-09-05,
+# « ZAP : l'arbitrage EN ATTENTE de l'entrée précédente est rendu » — option 2,
+# **échéance porte P-C**, bascule conditionnée à la couverture étendue de `/hq`
+# et `/api`. AUCUN seuil n'a été baissé et AUCUNE règle n'a été exclue pour
+# obtenir un vert — la doctrine du dépôt l'interdit explicitement, et elle vaut
+# ici comme pour la couverture.
+# ⚠️ AU DOSSIER DE PORTE P-C, DANS CET ORDRE : (1) constater la couverture
+# étendue sur un run réel — trois cibles, trois rapports, trois codes ; (2) SEULEMENT
+# ENSUITE passer `ZAP_BLOQUANT` à 'true' ET épingler `ZAP_IMAGE` sur le digest
+# relevé par l'étape « Identifier l'image ZAP ». Une porte bloquante doit être
+# reproductible. La bascule n'est PAS un geste d'outillage : elle se coche à la
+# porte, par Williams.
 #
 # La garde elle-même vit dans `.github/scripts/zap-verdict.sh` et sa table de
-# vérité est REJOUÉE À CHAQUE RUN (`zap-verdict.test.sh`, 13 cas). Le point de
-# contrôle L2 avait échoué faute d'être éprouvable : il ne le sera plus.
+# vérité est REJOUÉE À CHAQUE RUN (`zap-verdict.test.sh`, **27 cas** depuis
+# l'extension multi-cibles du 2026-09-07). Le point de contrôle L2 avait échoué
+# faute d'être éprouvable : il ne le sera plus.
 # ─────────────────────────────────────────────────────────────────────────────
 #
 # Traçabilité E36/E43 — lot L0 (outillage), exploité par A51 dès L2.
@@ -130,46 +207,158 @@ env:
   # est archivé avec le rapport. On sait toujours APRÈS COUP ce qui a tourné.
   # ⚠️ À épingler sur ce digest le jour où ZAP_BLOQUANT passe à 'true'.
   ZAP_IMAGE: ghcr.io/zaproxy/zaproxy:stable
+  # ---------------------------------------------------------------------------
+  # POINTS D'ENTRÉE DU SPIDER — `<étiquette>=<chemin>`, un par ligne.
+  # ---------------------------------------------------------------------------
+  # L'étiquette nomme la cible dans le rapport, dans le résumé de job et dans le
+  # verdict : un rouge doit dire LAQUELLE des trois, sans ouvrir d'artefact.
+  # Elle est contrainte à [a-z0-9-] (elle devient un nom de dossier).
+  # Le chemin est concaténé à l'URL de base ; il commence par `/`.
+  #
+  # Le routage vient de `infra/caddy/Caddyfile` — un seul domaine, pas de CORS
+  # (11 §2) :
+  #   `/`               → PWA terrain (apps/field)
+  #   `/hq/`            → console siège (apps/hq). LA BARRE FINALE EST REQUISE :
+  #                       `/hq` rend un 308 vers `/hq/`
+  #                       (infra/caddy/fronts.static.caddy) et le spider
+  #                       dépenserait son amorce sur une redirection.
+  #   `/api/*`          → API, préfixe RETIRÉ → l'API voit `/v1/…`. D'où
+  #                       `/api/v1/health`, choisie parce qu'elle rend un **200
+  #                       JSON réel** : c'est la seule façon de faire analyser à
+  #                       ZAP les en-têtes que l'API pose ELLE-MÊME (helmet,
+  #                       06 §10.2) plutôt que ceux de Caddy sur un 404.
+  #
+  # NE PAS Y AJOUTER `/api/v1/auth/*` : voir le bandeau (404 en GET, valeur
+  # passive nulle, et le plafond de 10 req/min/IP du 11 §3 que le scanner
+  # consommerait). Ce qu'il faudrait vraiment y voir — les attributs des cookies
+  # de session — exige un scan AUTHENTIFIÉ, qui n'existe pas encore.
+  ZAP_CHEMINS: |
+    terrain=/
+    console=/hq/
+    api=/api/v1/health
 
 jobs:
   baseline:
     name: Scan passif (baseline)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # 20 min suffisaient pour UNE cible. Il y en a trois, chacune avec son
+    # araignée (1 min) et son attente de scan passif. Marge prise sur mesure :
+    # ~4 min par cible observées le 2026-09-05, ×3, plus le tirage de l'image.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # -----------------------------------------------------------------------
       # LA GARDE MORD-ELLE ENCORE ? On le vérifie AVANT de scanner.
       # -----------------------------------------------------------------------
-      # 13 cas, une seconde. C'est le contrôle qui manquait le 2026-09-02 : la
+      # 27 cas, une seconde. C'est le contrôle qui manquait le 2026-09-02 : la
       # logique de verdict vivait en ligne dans ce fichier, donc personne ne
       # pouvait l'exécuter, donc personne n'a vu qu'elle ne pouvait plus mordre.
       # Ce test échoue AVANT le scan : un résultat rendu par une garde cassée ne
       # vaut rien, et il vaut mieux ne rien conclure que conclure faux.
+      # 14 cas ont été AJOUTÉS le 2026-09-07 avec le multi-cibles. Ils ne sont
+      # pas décoratifs : mesuré, l'ancienne table de 13 cas reste **13/13 VERTE**
+      # face à un verdict dont l'agrégation aurait été une moyenne — celui qui
+      # laisse passer un code 3 sur `/api` entre deux cibles à 0. Le défaut que
+      # ce fichier corrige serait revenu par la porte de l'agrégation.
       # -----------------------------------------------------------------------
       - name: Éprouver la garde (table de vérité du verdict)
         run: bash .github/scripts/zap-verdict.test.sh
 
-      - name: Déterminer la cible
+      # -----------------------------------------------------------------------
+      # LES CIBLES — une base, N points d'entrée, et RIEN n'est deviné.
+      # -----------------------------------------------------------------------
+      # Cette étape refuse de partir sur une liste vide ou malformée. Motif : le
+      # verdict est rendu sur des codes, et une liste vide produirait un job vert
+      # qui n'a rien scanné. C'est la forme pure de F-31, et elle doit mourir ici
+      # plutôt que d'être rattrapée trois étapes plus loin.
+      # -----------------------------------------------------------------------
+      - name: Déterminer les cibles
         id: cible
         env:
           CIBLE_DEMANDEE: ${{ inputs.cible }}
           CIBLE_DEFAUT: ${{ vars.STAGING_BASE_URL }}
         run: |
           set -euo pipefail
-          cible="${CIBLE_DEMANDEE:-}"
-          if [ -z "${cible}" ]; then
+          base="${CIBLE_DEMANDEE:-}"
+          if [ -z "${base}" ]; then
             # Cas du déclenchement nocturne (aucun `inputs`) ou d'un dispatch
             # laissé vide : on retombe sur la variable de dépôt.
-            cible="${CIBLE_DEFAUT:-}"
+            base="${CIBLE_DEFAUT:-}"
           fi
-          if [ -z "${cible}" ]; then
+          if [ -z "${base}" ]; then
             echo "::error title=Cible ZAP absente::Aucune URL fournie et vars.STAGING_BASE_URL est vide (GitHub → Settings → Secrets and variables → Actions → Variables). Sans cible, il n'y a pas de scan — et un job vert sans scan est exactement le défaut F-31."
             exit 1
           fi
-          echo "cible=${cible}" >> "$GITHUB_OUTPUT"
-          echo "Cible du scan : ${cible}"
+          # L'URL DE BASE EST VALIDÉE COMME LE RESTE, et elle ne l'était pas.
+          # Réserve R3 d'A17 : l'étape validait l'étiquette (deux contrôles) et
+          # le chemin (deux contrôles) mais acceptait `example.com` sans schéma
+          # et `https://s/ /x` avec une espace — cette dernière se scindant en
+          # DEUX éléments dans la boucle de scan. Fail-closed en aval dans les
+          # deux cas (ZAP rend 3, ou le rapport manque), donc jamais de vert
+          # imprudent ; mais une étape qui se dit validante ne laisse pas sa
+          # seule entrée libre du dehors sans contrôle.
+          case "${base}" in
+            *[[:space:]]*)
+              echo "::error title=URL de base ZAP invalide::« ${base} » contient une espace. L'URL est développée sans guillemets dans la boucle de scan : elle se scinderait en plusieurs cibles, et le scan viserait autre chose que ce qui est écrit."
+              exit 1
+              ;;
+            https://*|http://*) ;;
+            *)
+              echo "::error title=URL de base ZAP sans schéma::« ${base} » ne commence ni par https:// ni par http://. ZAP ne saurait pas quoi en faire, et le job rougirait vingt minutes plus tard sur un code 3 au lieu de rougir ici."
+              exit 1
+              ;;
+          esac
+          base="${base%/}"
+
+          cibles=''
+          nb=0
+          # Les étiquettes déjà vues — l'unicité N'ÉTAIT PAS contrôlée alors que
+          # l'étiquette « devient un nom de dossier ». Réserve R2 d'A17, mesurée :
+          # avec deux cibles étiquetées `terrain`, deux scans tournent mais UN
+          # SEUL rapport survit (le second écrase le premier), l'artefact n'en
+          # contient qu'un, et le résumé imprime deux lignes qui lisent toutes
+          # deux le MÊME rapport — un décompte faux, dans le sens flatteur.
+          # Le verdict, lui, restait juste (les deux codes sont dans la liste) :
+          # c'est donc un piège tendu à qui ajoutera la quatrième cible, pas un
+          # défaut vivant. On le ferme avant qu'il ne morde.
+          vues=' '
+          while IFS= read -r ligne; do
+            ligne="$(printf '%s' "${ligne}" | tr -d '[:space:]')"
+            [ -z "${ligne}" ] && continue
+            etiquette="${ligne%%=*}"
+            chemin="${ligne#*=}"
+            if ! printf '%s' "${etiquette}" | grep -Eq '^[a-z0-9-]+$'; then
+              echo "::error title=Étiquette de cible invalide::« ${etiquette} » n'est pas dans [a-z0-9-]. L'étiquette devient un nom de dossier de rapport et le nom que porte le verdict : elle doit être lisible et sûre. Corriger ZAP_CHEMINS dans ce fichier."
+              exit 1
+            fi
+            case "${chemin}" in
+              /*) ;;
+              *)
+                echo "::error title=Chemin de cible invalide::« ${chemin} » (étiquette ${etiquette}) ne commence pas par « / ». Le chemin est concaténé à l'URL de base ; sans barre initiale l'URL produite viserait autre chose que ce qui est écrit."
+                exit 1
+                ;;
+            esac
+            case "${vues}" in
+              *" ${etiquette} "*)
+                echo "::error title=Étiquette de cible en double::« ${etiquette} » apparaît deux fois dans ZAP_CHEMINS. L'étiquette est un nom de dossier : le second scan ÉCRASERAIT le rapport du premier, l'artefact n'en porterait qu'un, et le résumé imprimerait deux lignes lisant le même fichier — un décompte faux dans le sens rassurant. Le verdict resterait juste, ce qui rend le défaut d'autant plus discret."
+                exit 1
+                ;;
+            esac
+            vues="${vues}${etiquette} "
+            cibles="${cibles} ${etiquette}=${base}${chemin}"
+            nb=$((nb + 1))
+          done <<< "${ZAP_CHEMINS}"
+
+          if [ "${nb}" -eq 0 ]; then
+            echo "::error title=Aucun point d'entrée à scanner::ZAP_CHEMINS est vide. Un scan sans cible est un job vert qui ne mesure rien — c'est exactement F-31. BLOQUANT."
+            exit 1
+          fi
+
+          echo "cibles=${cibles# }" >> "$GITHUB_OUTPUT"
+          echo "base=${base}" >> "$GITHUB_OUTPUT"
+          echo "Base : ${base}"
+          echo "${nb} point(s) d'entrée :${cibles}"
 
       # `:stable` étant un tag MOBILE (voir bloc `env:`), on relève le digest
       # RÉELLEMENT tiré : c'est la seule trace qui rende le run analysable après
@@ -183,31 +372,52 @@ jobs:
           echo "Image ZAP tirée : ${digest}"
           echo "digest=${digest}" >> "$GITHUB_OUTPUT"
 
-      - name: Lancer zap-baseline.py
+      # -----------------------------------------------------------------------
+      # UNE EXÉCUTION PAR POINT D'ENTRÉE — un rapport par cible, un code par
+      # cible. La boucle ne s'arrête PAS à la première cible fâchée : un scan
+      # abandonné en cours de route rendrait une couverture partielle qu'on
+      # croirait complète.
+      # -----------------------------------------------------------------------
+      - name: Lancer zap-baseline.py sur chaque point d'entrée
         id: scan
         env:
-          CIBLE: ${{ steps.cible.outputs.cible }}
+          CIBLES: ${{ steps.cible.outputs.cibles }}
         run: |
           # `set +e` volontaire : le code de retour de ZAP est ici une DONNÉE,
           # tranchée explicitement par `.github/scripts/zap-verdict.sh`. Ce n'est
-          # pas un masquage d'échec — rien n'est perdu (09 §5.7).
+          # pas un masquage d'échec — rien n'est perdu (09 §5.7). L'absence de
+          # rapport est contrôlée à l'étape suivante, sous `set -e`.
           set +e
           set -uo pipefail
-          mkdir -p rapport-zap && chmod 777 rapport-zap
-          # PAS de `-I` : ce drapeau supprimait le code 2 et rendait toute
-          # bascule bloquante inopérante (voir bandeau, cause 2). `-a` conserve
-          # les règles passives alpha.
-          docker run --rm \
-            -v "${GITHUB_WORKSPACE}/rapport-zap:/zap/wrk:rw" \
-            "${ZAP_IMAGE}" \
-            zap-baseline.py \
-              -t "${CIBLE}" \
-              -r rapport-zap.html \
-              -J rapport-zap.json \
-              -a
-          code=$?
-          echo "code=${code}" >> "$GITHUB_OUTPUT"
-          echo "ZAP a rendu le code ${code}."
+          codes=''
+          for entree in ${CIBLES}; do
+            etiquette="${entree%%=*}"
+            url="${entree#*=}"
+            mkdir -p "rapport-zap/${etiquette}"
+            # 777 : le conteneur ZAP écrit sous son propre uid dans /zap/wrk.
+            chmod 777 "rapport-zap/${etiquette}"
+            echo "::group::ZAP baseline — ${etiquette} → ${url}"
+            # PAS de `-I` : ce drapeau supprimait le code 2 et rendait toute
+            # bascule bloquante inopérante (voir bandeau, cause 2). `-a` conserve
+            # les règles passives alpha. AUCUN `-c … IGNORE`, AUCUN seuil
+            # abaissé : la couverture s'étend, la sévérité ne bouge pas.
+            docker run --rm \
+              -v "${GITHUB_WORKSPACE}/rapport-zap/${etiquette}:/zap/wrk:rw" \
+              "${ZAP_IMAGE}" \
+              zap-baseline.py \
+                -t "${url}" \
+                -r rapport-zap.html \
+                -J rapport-zap.json \
+                -a
+            # Relevé IMMÉDIATEMENT : la moindre commande intercalée (un `echo`
+            # d'endgroup, par exemple) écraserait `$?` par SON propre statut.
+            code=$?
+            echo "::endgroup::"
+            echo "ZAP [${etiquette}] ← ${url} → code ${code}"
+            codes="${codes} ${etiquette}=${code}"
+          done
+          echo "codes=${codes# }" >> "$GITHUB_OUTPUT"
+          echo "Codes relevés :${codes}"
 
       # -----------------------------------------------------------------------
       # UN SCAN SANS RAPPORT N'EST PAS UN SCAN.
@@ -215,58 +425,153 @@ jobs:
       # Le rapport est la seule chose qu'un humain relira à la porte. S'il
       # manque, on ne conclut pas : on rougit. Ce contrôle est indépendant du
       # code de retour — un ZAP qui rend 0 sans écrire son JSON n'a rien prouvé.
+      # Il vaut CIBLE PAR CIBLE : deux rapports sur trois, c'est une couverture
+      # de deux tiers présentée comme entière.
       # -----------------------------------------------------------------------
-      - name: Contrôler que le rapport existe
+      - name: Contrôler que chaque rapport existe
+        env:
+          CIBLES: ${{ steps.cible.outputs.cibles }}
         run: |
           set -euo pipefail
-          if [ ! -s rapport-zap/rapport-zap.json ]; then
-            echo "::error title=Rapport ZAP absent::rapport-zap/rapport-zap.json est manquant ou vide. Le scanner n'a rien produit d'exploitable : on ne peut ni conclure ni relire à la porte. BLOQUANT quel que soit ZAP_BLOQUANT."
+          manquants=''
+          for entree in ${CIBLES}; do
+            etiquette="${entree%%=*}"
+            fichier="rapport-zap/${etiquette}/rapport-zap.json"
+            # `-s` NE SUFFIT PAS, et c'est la question 5 posée à l'envers.
+            # Réserve R4 d'A17, mesurée : un fichier contenant `{}` — trois
+            # octets — passe « rapport présent », puis le décompte rend 0 sur
+            # les quatre sévérités. Le seul endroit du fichier où le contrôle
+            # d'existence et le décompte peuvent, ENSEMBLE, rassurer sur rien.
+            # On exige donc que le JSON soit valide ET qu'il porte un `site` :
+            # c'est la structure que le décompte lit ensuite, et un rapport qui
+            # ne la porte pas n'est pas un rapport de scan.
+            if [ ! -s "${fichier}" ]; then
+              manquants="${manquants} ${etiquette}"
+            elif ! jq -e 'has("site") and (.site | type == "array")' "${fichier}" >/dev/null 2>&1; then
+              echo "::error title=Rapport ZAP sans site::${fichier} est un JSON qui ne porte pas de tableau « site » — c'est la structure que lit le décompte par sévérité. Un rapport qui ne l'a pas ferait afficher des zéros partout : rassurant, et faux. BLOQUANT quel que soit ZAP_BLOQUANT."
+              manquants="${manquants} ${etiquette}"
+            else
+              echo "Rapport JSON présent et structuré pour ${etiquette} ($(wc -c < "${fichier}") octets)."
+            fi
+          done
+          if [ -n "${manquants}" ]; then
+            echo "::error title=Rapport ZAP absent::Aucun JSON exploitable pour :${manquants}. Le scanner n'a rien produit pour ces cibles : on ne peut ni conclure ni relire à la porte, et la couverture annoncée ne serait pas celle qui a tourné. BLOQUANT quel que soit ZAP_BLOQUANT."
             exit 1
           fi
-          echo "Rapport JSON présent ($(wc -c < rapport-zap/rapport-zap.json) octets)."
 
+      # -----------------------------------------------------------------------
+      # LE DÉCOMPTE SE LIT SANS TÉLÉCHARGER QUOI QUE CE SOIT.
+      # -----------------------------------------------------------------------
       # Le rapport ne sert à rien s'il faut le télécharger pour savoir s'il y a
-      # quelque chose dedans. Le résumé de run porte le décompte par sévérité.
-      - name: Publier le décompte par sévérité
+      # quelque chose dedans. Le RÉSUMÉ DE JOB est le bon canal, et c'est mesuré :
+      # le rapporteur `github` ne remonte PAS d'annotation sur un run vert — un
+      # décompte publié par annotations serait donc invisible exactement quand on
+      # veut le lire, c'est-à-dire tant que ZAP_BLOQUANT vaut 'false'.
+      # Une section PAR CIBLE, plus une ligne de total : trois rapports agrégés
+      # en un seul chiffre cacheraient laquelle des trois se dégrade.
+      # -----------------------------------------------------------------------
+      - name: Publier le décompte par sévérité (par cible)
         if: always()
         env:
-          CIBLE: ${{ steps.cible.outputs.cible }}
+          CIBLES: ${{ steps.cible.outputs.cibles }}
           DIGEST: ${{ steps.image.outputs.digest }}
-          CODE: ${{ steps.scan.outputs.code }}
+          CODES: ${{ steps.scan.outputs.codes }}
         run: |
           set -euo pipefail
           {
-            echo "### Scan ZAP baseline"
+            echo "### Scan ZAP baseline — couverture étendue (terrain · console · API)"
             echo ""
-            echo "- Cible : \`${CIBLE:-?}\`"
             echo "- Image : \`${DIGEST:-?}\` (tag \`${ZAP_IMAGE}\` — **mobile**, pas un épinglage)"
-            echo "- Code de retour : \`${CODE:-?}\` · mode bloquant sur avertissements : \`${ZAP_BLOQUANT}\`"
+            echo "- Codes de retour : \`${CODES:-aucun}\` · mode bloquant sur avertissements : \`${ZAP_BLOQUANT}\`"
+            echo "- Scan **passif** et **non authentifié** : il analyse des en-têtes de réponse."
+            echo "  Il ne teste NI le RBAC, NI la propriété des écritures, NI les cookies de session."
+            echo "  Voir le bandeau du workflow, section « ce qu'il ne couvre pas »."
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
-          if [ -s rapport-zap/rapport-zap.json ]; then
-            {
-              echo "| Sévérité | Alertes |"
-              echo "| --- | --- |"
-              jq -r '
+
+          # Vue d'ensemble D'ABORD : une ligne par cible, lisible d'un coup d'œil
+          # dans le résumé de job, sans dépliage et sans artefact à télécharger.
+          {
+            echo "| Cible | URL | Code | High | Medium | Low | Info |"
+            echo "| --- | --- | --- | --- | --- | --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for entree in ${CIBLES:-}; do
+            etiquette="${entree%%=*}"
+            url="${entree#*=}"
+            fichier="rapport-zap/${etiquette}/rapport-zap.json"
+            code='?'
+            for paire in ${CODES:-}; do
+              # La forme `if … fi` est retenue pour sa lisibilité, PAS parce
+              # qu'un `[ … ] && code=…` serait dangereux : il ne l'est pas.
+              # Mesuré le 2026-09-07, réserve R1 de la revue croisée A17 —
+              # `set -euo pipefail; for p in a=1 b=2; do [ "${p%%=*}" = "zzz" ]
+              # && c="${p#*=}"; done; echo APRES` → sortie 0, « APRES » affiché.
+              # Le membre gauche d'une liste `&&` est EXEMPTÉ d'`errexit` ; bash
+              # ne sort que si l'AND-list est la dernière commande d'une
+              # fonction. Ce fichier pratique d'ailleurs ce motif vingt lignes
+              # plus haut (`[ -z "${ligne}" ] && continue`).
+              # La version précédente de ce commentaire affirmait l'inverse.
+              # Elle condamnait donc ici ce que le fichier fait plus haut — et
+              # c'est la moitié invisible de F-31 (« le commentaire aggravait le
+              # piège en énonçant une table de codes fausse ») rejouée dans le
+              # commit même qui la met en accusation.
+              if [ "${paire%%=*}" = "${etiquette}" ]; then code="${paire#*=}"; fi
+            done
+            if [ -s "${fichier}" ]; then
+              compte="$(jq -r '
                 [ .site[]?.alerts[]? ] as $a
-                | ["High","Medium","Low","Informational"][] as $n
-                | "| \($n) | \([ $a[] | select(.riskdesc | startswith($n)) ] | length) |"
-              ' rapport-zap/rapport-zap.json
+                | ["High","Medium","Low","Informational"]
+                | map(. as $n | [ $a[] | select(.riskdesc | startswith($n)) ] | length | tostring)
+                | join(" | ")
+              ' "${fichier}")"
+            else
+              compte="? | ? | ? | ?"
+            fi
+            echo "| \`${etiquette}\` | ${url} | ${code} | ${compte} |" >> "$GITHUB_STEP_SUMMARY"
+          done
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          for entree in ${CIBLES:-}; do
+            etiquette="${entree%%=*}"
+            url="${entree#*=}"
+            fichier="rapport-zap/${etiquette}/rapport-zap.json"
+            {
+              echo "#### \`${etiquette}\` — ${url}"
               echo ""
-              echo "<details><summary>Détail des alertes</summary>"
-              echo ""
-              jq -r '
-                .site[]?.alerts[]?
-                | "- **\(.riskdesc)** · [\(.pluginid)] \(.alert) — \(.instances | length) occurrence(s)"
-              ' rapport-zap/rapport-zap.json
-              echo ""
-              echo "</details>"
             } >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "_Aucun rapport JSON produit._" >> "$GITHUB_STEP_SUMMARY"
+            if [ -s "${fichier}" ]; then
+              {
+                echo "| Sévérité | Alertes |"
+                echo "| --- | --- |"
+                jq -r '
+                  [ .site[]?.alerts[]? ] as $a
+                  | ["High","Medium","Low","Informational"][] as $n
+                  | "| \($n) | \([ $a[] | select(.riskdesc | startswith($n)) ] | length) |"
+                ' "${fichier}"
+                echo ""
+                echo "<details><summary>Détail des alertes — ${etiquette}</summary>"
+                echo ""
+                jq -r '
+                  .site[]?.alerts[]?
+                  | "- **\(.riskdesc)** · [\(.pluginid)] \(.alert) — \(.instances | length) occurrence(s)"
+                ' "${fichier}"
+                echo ""
+                echo "</details>"
+                echo ""
+              } >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "_Aucun rapport JSON produit pour cette cible._" >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+
+          if [ -z "${CIBLES:-}" ]; then
+            echo "_Aucune cible résolue : le job a échoué avant de scanner._" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      - name: Conserver le rapport ZAP
+      # Un artefact, un sous-dossier par cible (`rapport-zap/<étiquette>/`) : les
+      # rapports ne se mélangent pas et l'on sait toujours lequel décrit quoi.
+      - name: Conserver les rapports ZAP
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -276,11 +581,13 @@ jobs:
           if-no-files-found: warn
 
       # Le verdict est un SCRIPT VERSIONNÉ, pas un bloc en ligne : c'est ce qui
-      # permet de l'éprouver (étape 2 de ce job) au lieu de l'espérer.
+      # permet de l'éprouver (étape 2 de ce job) au lieu de l'espérer. Il reçoit
+      # TOUS les codes et prend le PLUS SÉVÈRE : les codes 1 et 3 bloquent sur
+      # n'importe quelle cible, y compris noyés dans des 0.
       - name: Verdict
         env:
-          CODE: ${{ steps.scan.outputs.code }}
+          CODES: ${{ steps.scan.outputs.codes }}
           ARTEFACT: rapport-zap-${{ github.run_id }}
         run: |
           set -euo pipefail
-          bash .github/scripts/zap-verdict.sh "${CODE}" "${ZAP_BLOQUANT}" "${ARTEFACT}"
+          bash .github/scripts/zap-verdict.sh "${CODES}" "${ZAP_BLOQUANT}" "${ARTEFACT}"
