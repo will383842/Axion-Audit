@@ -11244,3 +11244,37 @@ Si une échelle d'une autre amplitude devient nécessaire, c'est une question de
 
 Décideur : A01
 Impact spec : aucun — bornage à la lettre de §33.3 et de l'amendement §32.4 du 2026-09-02.
+
+## 2026-09-07 — [L5b] Une doctrine du pack se CITE-t-elle, ou se rend-elle en langue d'écran ?
+
+R-1 de la revue A29. La copie que J'AI imposée paraphrase la doctrine 3 du §32.4 (03:667) et
+s'attribue au pack : « palier intermédiaire » et « sans qu'elle soit atteinte » n'y figurent pas,
+« une ancre entamée, PAS UNE MOYENNE » en a disparu, et la ligne se clôt par « (doctrine §32.4) ».
+Deux commentaires (`EchelleAncree.tsx:72`, `.test.tsx:330`) revendiquent en outre un « mot pour mot »
+qui n'est pas vrai.
+
+Options :
+a) Acter la paraphrase : le pack écrit pour un rédacteur de banque, pas pour un auditeur en entretien.
+b) Aligner sur la lettre, et poser la règle générale pour tout rendu de doctrine à venir.
+
+Arbitrage : b), et la règle qui va avec.
+Précédence §32-36 : l'amendement §32.4 du 2026-09-02 dit lui-même que les doctrines « priment sur
+toute lecture locale d'une guidance » — une paraphrase EST une lecture locale. Celle-ci a coûté la
+moitié opérationnelle de la règle : « pas une moyenne » vise le réflexe réel de l'auditeur ; ce que
+j'avais gardé décrit l'état, ce que j'avais retiré corrige le geste. a) tombe aussi sur les faits :
+la langue du pack est ici PLUS courte que la mienne — l'argument d'ergonomie n'a rien à défendre.
+
+RÈGLE, opposable à tout écran qui rendra une doctrine : un texte qui S'ATTRIBUE au pack (« doctrine
+§32.4 », « §x ») est une CITATION VERBATIM. Seules adaptations permises, mécaniques et limitées à
+cette liste : résoudre un « (resp. X) », poser la majuscule initiale, la ponctuation d'insertion.
+Toute reformulation exige une entrée DECISIONS portant le mot PARAPHRASE et RETIRANT l'attribution.
+Si la langue du pack est jugée impraticable à l'écran, on ne la réécrit pas en douce : on cite, et
+on ajoute à côté une aide NON attribuée — ou on demande un amendement à Williams (11 §8 : seule la
+revue de spec de P-D amende).
+
+Copies alignées (le préfixe « 2 — » disparaît : le `dt` porte déjà le numéro, R-2) :
+« La note 2 exige au moins un élément établi de l'ancre 3 — une note intermédiaire est une ancre
+entamée, pas une moyenne (doctrine §32.4). » · idem cran 4, avec l'ancre 5.
+
+Décideur : A01
+Impact spec : aucun — retour à la lettre de l'amendement §32.4 du 2026-09-02.
