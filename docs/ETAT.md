@@ -4550,3 +4550,22 @@ et le croire ferait attendre une signature humaine qui n'est due nulle part.
 **Le goulot reste P-C** (refusée DEUX fois, se rejoue EN ENTIER — 09 §4bis), et ce qui la bloque est
 matériel : 10 des 17 vérifications exigent un iPad physique, dues à Williams. Les 7 « serveur » sont
 jouables depuis que staging est réparé.
+
+## 2026-09-07 11h00 — [lot L5 / budget A28] — étape pipeline 5/7 (mesure faite, revue croisée due)
+
+Dernier commit vert : 35582fa (main, 21 jobs verts, deploy-staging compris) · Branche : fix/budget-chiffrement-l5 · Poussé : oui
+Tâche en cours : NB6/NB-10 fermée côté mesure. `e2e/budget-chiffrement-l5.e2e.ts` mesure 40 écritures RÉELLES par le chemin de production, sonde posée sur les API du navigateur — aucune porte d'instrumentation dans l'application (09 §5.6). Doute de périmètre (2 enveloppes seules vs écriture complète) saisi de A01 ; le test assère LES DEUX bornes, donc l'arbitrage ne peut pas le rendre faux.
+Prochaine action : recevoir l'arbitrage A01, ouvrir la PR, faire relire par A29 (réviseur front, n'a rien produit) ; puis P-C point 7 — ZAP sur /hq et /api.
+Tests rouges connus : aucun.
+
+Chiffres : chiffrement p95 **0,60–1,80 ms** · écriture complète p95 **6,30–12,50 ms** · budget 50 ms.
+**Le vert n'est pas le constat utile — sa répartition l'est : la crypto ne coûte RIEN, IndexedDB
+coûte dix fois plus.** Un dépassement futur viendra de la base ou de la taille des charges, jamais
+d'AES-GCM ; le chercher dans la crypto coûterait une journée. Contre-épreuve rejouée par le pilote
+et pas seulement rapportée : à `BUDGET_MS = 3` le test rougit (p95 7,5 ms), vert à 50.
+**Mesuré sur chromium-1194 via un config HORS ARBRE** (Playwright 1.62 épingle 1234, absent du
+conteneur) : ce ne sont pas les chiffres de la CI, et ce n'est pas un iPad — A27 reste dû à P-C.
+
+`--no-verify` employé sur quatre poussées `wip:` de cette branche (CLAUDE.md §8 l'exige écrit ici) :
+la branche portait le fichier d'A28 en cours d'écriture, que prettier refusait. Aucune poussée sur
+`main` ne l'a utilisé ; le dernier état de la branche passe tous les gardes.

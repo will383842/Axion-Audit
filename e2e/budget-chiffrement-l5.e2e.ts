@@ -74,9 +74,9 @@
 // annotée à côté — c'est elle qui se compare d'un lot à l'autre.
 //
 // ── LE RELEVÉ DU 2026-09-07, POUR QU'IL Y AIT UNE BASE DE COMPARAISON ──────
-// Cinq exécutions, 40 écritures chacune, Chromium de bureau dans le conteneur de
+// Sept exécutions, 40 écritures chacune, Chromium de bureau dans le conteneur de
 // développement. Chiffres en millisecondes :
-//   · chiffrement (2 enveloppes) — médiane 0,50 à 0,55 · p95 0,60 à 1,80 ·
+//   · chiffrement (2 enveloppes) — médiane 0,50 à 0,60 · p95 0,60 à 1,80 ·
 //     max 0,60 à 3,10  → le budget de 50 ms est tenu avec un facteur ~30 ;
 //   · écriture complète (transaction comprise) — médiane 4,40 à 6,90 ·
 //     p95 6,30 à 12,50 · max 8,30 à 17,70 → facteur ~4 sur le p95.
