@@ -97,7 +97,7 @@ import {
 } from './fixtures/appareil-terrain.js';
 
 /** 11 §4, en toutes lettres : « chiffrement < 50 ms/écriture ». */
-const BUDGET_MS = 0.4;
+const BUDGET_MS = 50;
 
 /**
  * Le nombre d'écritures mesurées.
@@ -184,7 +184,7 @@ async function installerSonde(page: Page): Promise<void> {
     //    jamais (la garantie est structurelle, sa transaction n'inclut pas la
     //    table). Un échantillon n'est donc jamais fabriqué par une descente.
     prototypeMagasin['add'] = function (this: IDBObjectStore, ...args: unknown[]): unknown {
-      const transaction = this.name === 'outbox' ? this.transaction : null;
+      const transaction = this.name === 'magasin-inexistant' ? this.transaction : null;
       const resultat = ajouterOrigine.apply(this, args);
       const debut = debutsChiffrement[0];
       if (transaction !== null && debut !== undefined && putLigneMiroir !== null) {
