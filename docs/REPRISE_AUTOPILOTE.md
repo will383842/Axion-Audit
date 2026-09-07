@@ -76,10 +76,17 @@ paru apporter 291 lignes dont **zéro n'était absente** de l'autre.
 
 ---
 
-## 4. ÉTAT MESURÉ AU 2026-09-07 02h30 UTC — À VÉRIFIER, PAS À CROIRE
+## 4. ÉTAT MESURÉ AU 2026-09-07 04h05 UTC — À VÉRIFIER, PAS À CROIRE
 
 **`main` porte huit lots sur neuf** : L0, L1, L2, L3, L4, L5 (a+b+c), L7-min (a+b+c) et L8.
 **21,5 jours-homme livrés sur les 26 du plan** (table du fichier 07).
+**`main` est VERT, `8 · deploy-staging` inclus** — c'est neuf, voir le §5.
+
+> **PREMIÈRE CHOSE À FAIRE EN REPRENANT, et elle n'est pas dans le §1** : deux agents tournaient
+> encore à la clôture — la **revue croisée de #86** (rétention des sauvegardes, A17) et la page
+> **`/design`** (§33.5, A21). Ils n'avaient rien poussé. `git ls-remote --heads origin | grep -E
+> "design|revue"` : si une branche existe, relis-la ; sinon **ce travail est à refaire**, et les deux
+> mandats sont résumés dans le dernier bloc de `docs/ETAT.md`.
 
 **Le neuvième — L6, la synchronisation — n'a AUCUNE ligne de moteur, et c'est délibéré** :
 `CLAUDE.md` §4 impose qu'il se développe seul, après la porte P-C. Sa note de conception est validée,
@@ -91,8 +98,8 @@ son contrat d'opérations et la propriété serveur sont tranchés et tracés.
 
 | Ce qui reste | Où | État |
 | --- | --- | --- |
-| **Porte P-C** | `docs/portes/` | **Refusée deux fois**, se rejoue EN ENTIER (09 §4bis). Seul goulot du chantier |
-| **17 vérifications matérielles** | fiche dédiée | 7 exigent un serveur, 10 un appareil physique. Dues à Williams |
+| **Porte P-C** | `docs/portes/` | **Refusée deux fois**, se rejoue EN ENTIER (09 §4bis). **Seul goulot du chantier — c'est par là qu'on reprend** |
+| **17 vérifications matérielles** | fiche dédiée | 10 exigent un appareil physique, dues à Williams. **Les 7 « serveur » sont désormais JOUABLES** (staging réparé) |
 | **L5d — chaîne photo** | non ouvert | Après P-C, avant L6c. `compresserPhoto` est du code sans appelant, assumé et tracé |
 | **L6a/b/c — sync** | non ouvert | 4,5 j, SEUL, après P-C. Dernier gros morceau |
 
@@ -129,37 +136,32 @@ collision que `CLAUDE.md` §4 interdit.
   « mot de passe invalide »**, donc l'auditeur ne voit jamais l'avertissement sur une corruption réelle.
 - **ZAP** : bascule bloquante à **P-C**, et **le scan doit d'abord couvrir `/hq` et `/api`** — il ne
   voit aujourd'hui que six URL de coquille statique.
-- **`staging` est rouge depuis le 2026-09-02, et le geste revient bien à Williams — MAIS c'est
-  désormais MESURÉ, plus supposé.** Cette distinction est le seul contenu utile de ce point.
+- **`staging` A ÉTÉ RÉPARÉ le 2026-09-07 à 04h00 — n'ouvre pas ce chantier.** Le serveur annonce
+  `EMPREINTE_SCRIPT=74926ac9…` et `8 · deploy-staging` rend `success`. La réserve n° 1 du dossier
+  P-DESCOPE, ouverte depuis le 02/09, est close **de bout en bout**.
 
-  Ce fichier affirmait « aucun chemin API n'existe » **et** « clé de déploiement restreinte au
-  script périmé lui-même ». La session pilote a cru la première moitié fausse, l'a déclarée telle,
-  **et l'a écrit ici** — puis a construit `.github/workflows/ops-poser-enveloppeurs.yml` pour le
-  prouver. **Le workflow a échoué, et il a eu raison contre elle** (run du 2026-09-07 03h06) :
+  **Ce qui bloquait, et pourquoi cinq jours** : le clone `/opt/axion-audit/repo` était figé sur
+  `e234756`. Les deux `install` de la procédure §6.3 copiaient donc **l'ancien fichier sur
+  lui-même** — ils réussissaient sans rien changer, et personne ne pouvait le voir. Il fallait
+  `git fetch origin main && git checkout --detach <sha>` **avant**. La procédure le dit ; elle ne le
+  rend pas évident. Si le cas revient, c'est la première chose à vérifier.
 
-  ```
-  EMPREINTE_SCRIPT=68fbc455ea60df8019b41566e48d737e0ec6cb1915742e55d0cb619a3d0ed0fd
-  ##[error]stdin: jeton absent.
-  ```
+  **DEUX LEÇONS DE MÉTHODE, ET LA SECONDE EST LA PLUS UTILE DU FICHIER.**
 
-  La connexion s'ouvre — l'hôte répond — mais la clé est verrouillée par une directive `command=`
-  d'`authorized_keys` : elle exécute l'enveloppeur, **et rien d'autre**. Aucune commande arbitraire,
-  donc aucun `install`. L'en-tête de `infra/scripts/deploy-staging.sh` le disait déjà en toutes
-  lettres : « ni shell, ni lecture de fichier, ni redirection de port ». **La seconde moitié de
-  l'affirmation était donc VRAIE**, et seule la première (« aucun chemin API ») était trop large.
+  Ce point affirmait « aucun chemin API n'existe » **et** « clé de déploiement restreinte au script
+  périmé lui-même ». La session pilote a cru la première moitié fausse, l'a déclarée telle **et l'a
+  écrit ici**, puis a construit `.github/workflows/ops-poser-enveloppeurs.yml` pour le prouver.
+  **Le workflow a prouvé le contraire** : `command=` d'`authorized_keys` n'autorise que
+  l'enveloppeur — « ni shell, ni lecture de fichier, ni redirection de port », comme l'en-tête de
+  `infra/scripts/deploy-staging.sh` le disait déjà. **La seconde moitié était vraie.**
 
-  Ce que le run apporte quand même, et ce n'est pas rien : l'empreinte du serveur (`68fbc455…`)
-  **confirme par la mesure** qu'il exécute l'ancien enveloppeur là où le dépôt attend `74926ac9…`.
+  Donc : *une affirmation jamais remesurée gouverne les décisions qui la citent — **mais une
+  réfutation trop rapide en gouverne d'autres.*** La bonne question n'était pas « depuis quand
+  personne n'a essayé », c'était « que peut faire cette clé, exactement ». **Mesure avant
+  d'affirmer, y compris quand tu affirmes que quelqu'un d'autre s'est trompé.**
 
-  **Le workflow n'est pas perdu : il devient le harnais de VÉRIFICATION du geste humain.** Williams
-  pose les deux fichiers, on le relance, et il dit par les empreintes si c'est bon — au lieu de
-  laisser croire.
-
-  **Et la leçon tient dans les deux sens, ce qui la rend meilleure que celle qu'on avait écrite** :
-  une affirmation jamais remesurée gouverne les décisions qui la citent — **mais une réfutation trop
-  rapide en gouverne d'autres.** Ici, la bonne question n'était pas « depuis quand personne n'a
-  essayé », c'était « qu'est-ce que la clé peut faire, exactement ». **Mesure avant d'affirmer, y
-  compris quand tu affirmes que quelqu'un d'autre s'est trompé.**
+  **Le workflow reste, et il sert** : il est le harnais qui vérifie l'empreinte du serveur en une
+  minute, sans rien déployer. Relance-le au moindre doute sur l'état des enveloppeurs.
 
 ---
 

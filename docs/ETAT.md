@@ -4424,3 +4424,30 @@ Prochaine action : pousser et ouvrir la PR vers `main` en fermant la PR #83 (son
 `DECISIONS.md` est reprise ici, complétée de l'arbitrage et de la mesure).
 Tests rouges connus : aucun. l0-sauvegarde 67/67 · unit + interface 1104/1104 verts.
 Environnement hors contrat : Node v24.19.0 — la CI reste juge (09 §5.7).
+
+## 2026-09-07 04h05 — [autopilote] — FIN DE SESSION PROPRE, staging fermé
+
+Dernier commit vert : `235c2cd` (#85) · Branche : `gouvernance/cloture-session` · Poussé : oui
+Tâche en cours : deux agents finissent — revue croisée de #86, page `/design`.
+Prochaine action : **rejouer P-C EN ENTIER** (contrôle A02, puis recette novice A54).
+Tests rouges connus : aucun. `main` vert, **`8 · deploy-staging` inclus**.
+
+**LA RÉSERVE N° 1, OUVERTE DEPUIS LE 02/09, EST FERMÉE DE BOUT EN BOUT.** Le serveur annonce
+`EMPREINTE_SCRIPT=74926ac9…` et le déploiement rend `success`. Chemin exact : le clone
+`/opt/axion-audit/repo` était figé sur `e234756`, donc les deux `install` de la procédure §6.3
+copiaient **l'ancien fichier sur lui-même** — ils réussissaient sans rien changer. Il fallait
+`git fetch && git checkout --detach` AVANT. La procédure le disait ; elle ne le rendait pas évident.
+
+**Et une leçon de méthode, payée deux fois dans la même nuit.** J'ai déclaré fausse l'affirmation
+« clé de déploiement restreinte au script périmé », construit le workflow qui devait le prouver — et
+**il a prouvé le contraire** : `command=` d'`authorized_keys` n'autorise que l'enveloppeur. La moitié
+que je réfutais était vraie. *Une affirmation jamais remesurée gouverne les décisions qui la citent ;
+une réfutation trop rapide en gouverne d'autres.* Écrit dans `REPRISE_AUTOPILOTE` §5.
+
+**31 PR fusionnées** depuis le 06/09 · **8 lots sur 9** dans `main` · 321 entrées `DECISIONS.md`.
+Fermé cette nuit : la rétention remonte 99 jours au lieu de 69 (invariant 8, cinq mois d'invisibilité
+parce qu'aucun COMPTE ne bougeait), l'état hors ligne sur 12 vues sur 12, axe sur 12 vues sur 12,
+l'identité auditeur enfin joignable, et une région défilante inaccessible au clavier (WCAG A).
+
+**Ce qui reste : P-C, puis L5d, puis L6.** Les 10 points de recette sur appareil physique sont dus à
+Williams ; les 7 qui exigeaient un serveur sont désormais jouables.
