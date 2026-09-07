@@ -76,25 +76,47 @@ paru apporter 291 lignes dont **zéro n'était absente** de l'autre.
 
 ---
 
-## 4. ÉTAT MESURÉ AU 2026-09-05 06h50 UTC — À VÉRIFIER, PAS À CROIRE
+## 4. ÉTAT MESURÉ AU 2026-09-07 04h05 UTC — À VÉRIFIER, PAS À CROIRE
 
-**`main` porte L0, L1, L2, L3, L5a, L5b, L7a, L7b et E18.** Tags `v0.l0`, `v0.l2`, `v0.l3`.
+**`main` porte huit lots sur neuf** : L0, L1, L2, L3, L4, L5 (a+b+c), L7-min (a+b+c) et L8.
+**21,5 jours-homme livrés sur les 26 du plan** (table du fichier 07).
+**`main` est VERT, `8 · deploy-staging` inclus** — c'est neuf, voir le §5.
 
-> **Une limite d'API a coupé six agents à 06h40 UTC** (réinitialisation 10h20 Paris). **Rien n'a été
-> perdu** : tout a été poussé sur `origin`, vérifié deux fois, worktree par worktree. Chaque branche
-> ci-dessous porte donc du travail réel, à des degrés d'avancement différents. **Relis ce qui est là
-> avant d'écrire quoi que ce soit** — un brief précédent affirmait « rien n'a été commité » alors que
-> six correctifs l'étaient, sans être poussés.
+> **PREMIÈRE CHOSE À FAIRE EN REPRENANT, et elle n'est pas dans le §1** : deux agents tournaient
+> encore à la clôture — la **revue croisée de #86** (rétention des sauvegardes, A17) et la page
+> **`/design`** (§33.5, A21). Ils n'avaient rien poussé. `git ls-remote --heads origin | grep -E
+> "design|revue"` : si une branche existe, relis-la ; sinon **ce travail est à refaire**, et les deux
+> mandats sont résumés dans le dernier bloc de `docs/ETAT.md`.
 
-| Chantier | Branche | État à la coupure |
+**Le neuvième — L6, la synchronisation — n'a AUCUNE ligne de moteur, et c'est délibéré** :
+`CLAUDE.md` §4 impose qu'il se développe seul, après la porte P-C. Sa note de conception est validée,
+son contrat d'opérations et la propriété serveur sont tranchés et tracés.
+
+> **Ne recopie pas ces chiffres dans un rapport sans les remesurer** — ils datent de la ligne
+> ci-dessus. `git log --oneline -1 origin/main`, `gh pr list` et la suite de tests disent la vérité ;
+> ce fichier dit seulement où regarder.
+
+| Ce qui reste | Où | État |
 | --- | --- | --- |
-| **L5c** | PR **#52** | Complet, en attente de fusion. **Dernier incrément avant P-C** |
-| **L7c** | `lot/l7c` | Export §36.3 — l'agent en était au bloc `ETAT` et au balayage final |
-| **L5a réserves** | `lot/l5a-reserves` | Six réserves fermées ; tests croisés A26 **en cours** |
-| **Couverture `companies`** | `lot/l3-couverture-companies` | Build vert, mesure sur base post-#34 en cours |
-| **L8 scoring** | `lot/l8-scoring` | **`wip:`** — contrat partagé et jeux de référence écrits, **moteur non écrit**, rien de vert |
-| **Garde octets** | `chore/garde-octets-controle` | Script écrit ; l'étape de CI restait à brancher |
-| **Note L6 amendée** | PR **#53** | 8/8 scénarios ont un porteur |
+| **Porte P-C** | `docs/portes/` | **Refusée deux fois**, se rejoue EN ENTIER (09 §4bis). **Seul goulot du chantier — c'est par là qu'on reprend** |
+| **17 vérifications matérielles** | fiche dédiée | 10 exigent un appareil physique, dues à Williams. **Les 7 « serveur » sont désormais JOUABLES** (staging réparé) |
+| **L5d — chaîne photo** | non ouvert | Après P-C, avant L6c. `compresserPhoto` est du code sans appelant, assumé et tracé |
+| **L6a/b/c — sync** | non ouvert | 4,5 j, SEUL, après P-C. Dernier gros morceau |
+
+**Ce qui a été fermé le 2026-09-06**, et qui vaut d'être su parce que la même famille reviendra :
+`pnpm test:interface` n'était lancé par **aucun job de CI** (61 fichiers ne tournaient qu'en effet de
+bord de la couverture) · deux corps littéraux d'E2E ne suivaient plus le contrat partagé, et la CI
+accusait **l'accessibilité** à vingt minutes de la cause · trois `.catch` manquants sur
+`storage.persist()`, dont celui de l'écran dont l'unique raison d'être est de réparer le stockage ·
+un badge sous AA cru latent parce qu'un `grep` ne le trouvait pas — il est peint sur le statut le
+plus fréquent du portefeuille, et c'est le **compilateur** qui l'a dit.
+
+**Un comptage dit qu'un symbole est absent ; il ne dit pas qu'un comportement l'est.**
+
+**Deux tests DATÉS trouvés en douze heures**, et c'est un motif, pas une coïncidence : l'un échouait
+tous les soirs passé 20 h (créneau `maintenant() + 4 h` franchissant minuit), l'autre certains jours
+seulement (semaine ISO du dernier jour du mois). **Éprouve tout test sensible au temps sur les 24
+heures et les 7 jours, jamais sur l'instant où tu le lances.**
 
 **Séquence imposée ensuite** : `L5c → porte P-C → L5d (chaîne photo) → L6a → L6b → L6c → porte P-D`.
 L5d passe **avant** L6 : il touche le schéma local, et deux chantiers dessus en même temps sont la
@@ -114,9 +136,32 @@ collision que `CLAUDE.md` §4 interdit.
   « mot de passe invalide »**, donc l'auditeur ne voit jamais l'avertissement sur une corruption réelle.
 - **ZAP** : bascule bloquante à **P-C**, et **le scan doit d'abord couvrir `/hq` et `/api`** — il ne
   voit aujourd'hui que six URL de coquille statique.
-- **`staging` est rouge** et le restera : le correctif demande un `install -m 755` **en root sur le
-  serveur**. Aucun chemin API n'existe (jetons Coolify en secrets GitHub non lisibles ; clé de
-  déploiement restreinte au script périmé lui-même). **C'est le seul geste qui revient à Williams.**
+- **`staging` A ÉTÉ RÉPARÉ le 2026-09-07 à 04h00 — n'ouvre pas ce chantier.** Le serveur annonce
+  `EMPREINTE_SCRIPT=74926ac9…` et `8 · deploy-staging` rend `success`. La réserve n° 1 du dossier
+  P-DESCOPE, ouverte depuis le 02/09, est close **de bout en bout**.
+
+  **Ce qui bloquait, et pourquoi cinq jours** : le clone `/opt/axion-audit/repo` était figé sur
+  `e234756`. Les deux `install` de la procédure §6.3 copiaient donc **l'ancien fichier sur
+  lui-même** — ils réussissaient sans rien changer, et personne ne pouvait le voir. Il fallait
+  `git fetch origin main && git checkout --detach <sha>` **avant**. La procédure le dit ; elle ne le
+  rend pas évident. Si le cas revient, c'est la première chose à vérifier.
+
+  **DEUX LEÇONS DE MÉTHODE, ET LA SECONDE EST LA PLUS UTILE DU FICHIER.**
+
+  Ce point affirmait « aucun chemin API n'existe » **et** « clé de déploiement restreinte au script
+  périmé lui-même ». La session pilote a cru la première moitié fausse, l'a déclarée telle **et l'a
+  écrit ici**, puis a construit `.github/workflows/ops-poser-enveloppeurs.yml` pour le prouver.
+  **Le workflow a prouvé le contraire** : `command=` d'`authorized_keys` n'autorise que
+  l'enveloppeur — « ni shell, ni lecture de fichier, ni redirection de port », comme l'en-tête de
+  `infra/scripts/deploy-staging.sh` le disait déjà. **La seconde moitié était vraie.**
+
+  Donc : *une affirmation jamais remesurée gouverne les décisions qui la citent — **mais une
+  réfutation trop rapide en gouverne d'autres.*** La bonne question n'était pas « depuis quand
+  personne n'a essayé », c'était « que peut faire cette clé, exactement ». **Mesure avant
+  d'affirmer, y compris quand tu affirmes que quelqu'un d'autre s'est trompé.**
+
+  **Le workflow reste, et il sert** : il est le harnais qui vérifie l'empreinte du serveur en une
+  minute, sans rien déployer. Relance-le au moindre doute sur l'état des enveloppeurs.
 
 ---
 
@@ -127,8 +172,15 @@ d'incréments, **et les portes P-C / P-D / P-E**, sous quatre bornes qui portent
 jamais sur *ce qui est dû* — dossier de porte intégral avec preuve par critère, DoD non amendée, une
 porte échouée reste échouée, tout est re-signable.
 
-**Jamais délégué** : le geste root sur staging (une permission système ne se délègue pas), et
-**l'amendement du fichier 04**, réservé à la revue de spec de **P-D** (09 §5.9).
+**Jamais délégué** : **le geste root sur staging**, et **l'amendement du fichier 04**, réservé à la
+revue de spec de **P-D** (09 §5.9).
+
+> *Le 2026-09-07, la session pilote a cru pouvoir retirer le geste root de cette liste, au motif que
+> le secret `DEPLOY_SSH_KEY` donnait déjà l'accès. Elle a construit le workflow qui devait le
+> prouver — et **il a prouvé le contraire** : la clé est verrouillée par `command=` et n'exécute que
+> l'enveloppeur. La ligne est donc rétablie, non plus par principe mais **par mesure**. Voir le
+> point « staging » du §5 : c'est le seul endroit du fichier où une affirmation a été réfutée, puis
+> la réfutation elle-même réfutée, et les deux erreurs y sont écrites.*
 
 **Le pipeline en 7 étapes n'a pas de raccourci.** En particulier : le code de test n'est jamais écrit
 par l'agent qui a écrit le code testé, et **un réviseur ne commite jamais** — il dépose son verdict,
