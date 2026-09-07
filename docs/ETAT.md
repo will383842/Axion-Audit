@@ -4838,3 +4838,28 @@ artefacts et non depuis la prose des messages de commit.
 **`--no-verify` sur cette poussée** (§8) : la suite n'est pas verte, c'est le cas que §8 prévoit —
 préfixe `wip:`, branche `lot/**`, jamais `main`, et le squash l'effacera. `packages/ui` typecheck
 exit 0.
+
+## 2026-09-07 19h10 — [L5b / R1] — étape 6/7 : R1 est COCHÉ par A02, preuve exécutée
+
+Dernier commit : ef2dea0 + recoche A02 · Branche : lot/l5b-ancres · Poussé : oui
+Tâche en cours : A54 rejoue la grille §33 EN ENTIER (fichier TEMP visible dans l'arbre, c'est le sien).
+Prochaine action : à son verdict, `pnpm verify:rapide`, puis PR vers main **sans auto-merge**
+(elle porte du code). Le tableau d'attribution fichier→agent doit être contresigné A20.
+Tests rouges connus : aucun. Interface 1160/1160, EchelleAncree 52/52, hors-ligne-l5 7/7.
+
+**A02 a exécuté la garde que j'avais annoncée injouable ici, et j'avais tort.** A29 et moi disions
+« dû à un environnement complet » ; A54 avait déclaré le matin l'instrument qui lève l'obstacle —
+config Playwright HORS dépôt, `executablePath` vers le chromium-1194 du conteneur. Résultat mesuré
+sur `ef2dea0` : `@critique cotation — les ancres se LISENT avant le premier tap` **VERT**, et la
+**mutation** (dépliant refermé dans une copie du bundle) rend **ROUGE** avec le symptôme exact de la
+recette — `toBeVisible() failed · Received: hidden`. **La garde mord.**
+
+**Deux corrections qu'A02 fait à SON PROPRE contrôle du jour, et qu'il n'enterre pas** : B3-bis tombe
+(la recette avait bien été rejouée), mais surtout **l'invariant 5 n'est PAS 8/8** —
+`EcranFinDeJournee.tsx:333` rend l'ISO UTC brut et `EcranRestauration.tsx:360-364` un UUID plus une
+date au fuseau de l'appareil (R2 d'A54, ouverte au code). **7/8 + 1 écart documenté.**
+**P-C reste non franchissable — mais plus à cause de R1.**
+
+**L'angle mort de la DoD est mesuré, pas supposé** : `ariaSnapshot()` en Chromium réel rend
+`button "09:30 Marie Dupont Entretien · Chef d'atelier"` — **correct**, A01 avait raison. Et
+`axe-core` ne teste que la **non-vacuité** du nom (`button-name`), jamais sa justesse. Doute D-8.
