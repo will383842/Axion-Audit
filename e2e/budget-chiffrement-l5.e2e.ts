@@ -20,28 +20,33 @@
 // dit pourquoi : une transaction IndexedDB se referme dès qu'elle rend la main à
 // `crypto.subtle`. Une écriture = DEUX enveloppes, toujours.
 //
-// ── LE DOUTE DE SPEC, ASSUMÉ ET NON TRANCHÉ ICI ────────────────────────────
+// ── LE DOUTE DE SPEC, POSÉ PAR A28 ET TRANCHÉ DEPUIS ───────────────────────
 // 11 §4 écrit, sous la puce « Crypto navigateur » : « Budgets d'acceptation
 // (A28) : chiffrement < 50 ms/écriture ». Le SUJET est « chiffrement », l'UNITÉ
-// est « par écriture ». Deux lectures se défendent :
+// est « par écriture ». Deux lectures se défendaient :
 //   (a) les deux enveloppes seules, la transaction Dexie n'étant pas de la
 //       crypto et n'étant pas ce que la puce nomme ;
 //   (b) l'écriture complète, transaction comprise — c'est le geste que
 //       l'auditeur attend, et « /écriture » désignerait alors l'opération.
-// A28 ne tranche pas seul un doute de spec (CLAUDE.md §3, 09 §5.7) : l'entrée
-// `DECISIONS.md` est PROPOSÉE dans le rapport A28 du 2026-09-07 et attend son
-// arbitre. En attendant, **les deux bornes sont mesurées et les deux sont
-// assertées**. C'est la seule position qui ne devine rien : si la borne (b) —
-// la plus large — tient sous 50 ms, alors (a) tient a fortiori, et l'arbitrage
-// à venir ne pourra pas rendre ce fichier faux, seulement redondant d'une
-// assertion.
+// A28 n'a pas tranché seul (CLAUDE.md §3) et a proposé l'entrée. **A01 a rendu
+// l'arbitrage le 2026-09-07 : (a).** Le fait décisif est au fichier 09 §1
+// (« LES RÔLES », ligne 23), qui énumère la charge d'A28 — « p95 interactions
+// <100 ms, benchmark chiffrement <50 ms/écriture » : DEUX budgets distincts,
+// dans la même parenthèse. Les fondre laisserait « p95 interactions » sans objet.
+//
+// **CE FICHIER PORTE DONC DEUX BORNES SOUS DEUX SEUILS DIFFÉRENTS**, et non
+// deux lectures d'un même seuil : les enveloppes sous 50 ms (11 §4), l'écriture
+// complète sous 100 ms (09 §1, dont elle est une condition nécessaire). Aucune
+// n'est surnuméraire — elles bornent deux choses. Si l'arbitrage était un jour
+// rejugé, ce sont ces deux constantes qu'il faudrait changer, sciemment.
 //
 // ── COMMENT LA MESURE EST PRISE, ET POURQUOI PAS AUTREMENT ─────────────────
 // Le chemin mesuré est celui de PRODUCTION : appareil semé par la fixture d'A26,
 // coffre ouvert par Argon2id dans le navigateur, entretien créé par les trois
 // champs du 03 §17.1, puis des réponses cotées au doigt sur `SegmenteONA`.
-// Chaque clic déclenche `enregistrer()` → `enregistrerReponse()` →
-// `ecrireLocal()`. Aucune primitive n'est appelée à la main : un micro-banc sur
+// Chaque clic déclenche `enregistrer()` → `ecrireReponse()`
+// (`apps/field/src/session/ecriture-reponses.ts:120`) → `ecrireLocal()`.
+// Aucune primitive n'est appelée à la main : un micro-banc sur
 // `crypto.subtle.encrypt` isolé mesurerait AES-GCM, pas ce que 11 §4 borne.
 //
 // La SONDE est posée par `page.addInitScript` et n'enveloppe que des API du
@@ -79,20 +84,33 @@
 //   · chiffrement (2 enveloppes) — médiane 0,50 à 0,60 · p95 0,60 à 1,80 ·
 //     max 0,60 à 3,10  → le budget de 50 ms est tenu avec un facteur ~30 ;
 //   · écriture complète (transaction comprise) — médiane 4,40 à 6,90 ·
-//     p95 6,30 à 12,50 · max 8,30 à 17,70 → facteur ~4 sur le p95.
+//     p95 6,30 à 12,50 · max 8,30 à 17,70 → facteur ~8 sur son propre seuil de
+//     100 ms (09 §1). Le « facteur ~4 » qu'annonçait ce paragraphe se rapportait
+//     aux 50 ms, seuil qui ne la gouverne plus depuis l'arbitrage.
 // C'est ce second chiffre qui décide : la crypto n'est pas le coût d'une
 // écriture, IndexedDB l'est. Un futur dépassement viendrait donc de la base ou
 // de la taille des charges, pas d'AES-GCM — et c'est utile à savoir avant de
 // chercher au mauvais endroit. `performance.now()` est grossi à 0,1 ms par
 // Chromium hors isolation : la résolution est cent fois plus fine que le seuil.
 //
-// CONTRE-ÉPREUVE, faite le même jour, parce qu'un budget vert dont on n'a pas
-// montré qu'il peut rougir ne mesure rien :
-//   · seuil abaissé à 5 ms   → ROUGE sur « écriture complète » (p95 7,60) ;
-//   · seuil abaissé à 0,4 ms → ROUGE sur « chiffrement » (p95 0,60) ;
+// CONTRE-ÉPREUVE, parce qu'un budget vert dont on n'a pas montré qu'il peut
+// rougir ne mesure rien. Rejouée APRÈS l'arbitrage, sur les deux constantes
+// telles qu'elles sont écrites ci-dessous — chacune doit pouvoir rougir SEULE :
+//   · `BUDGET_MS` → 0,4 ms            → ROUGE sur « chiffrement » (p95 0,80) ;
+//   · `BUDGET_INTERACTION_MS` → 3 ms  → ROUGE sur « écriture complète » (p95 6,90) ;
 //   · sonde débranchée (le crochet `outbox` visant un magasin inexistant) →
-//     ROUGE sur l'anti-vacuité, 0 écriture observée, et NON vert-sans-rien.
-// Les trois seuils ont été rétablis et le test est reparti vert.
+//     ROUGE sur l'anti-vacuité, 0 écriture observée, et NON vert-sans-rien ;
+//   · un `encrypt` parasite injecté dans la page (régression de production
+//     simulée) → ROUGE sur l'anti-vacuité des enveloppes, « attendu 2, reçu 4 ».
+// Les seuils ont été rétablis et le test est reparti vert.
+//
+// ⚠️ CE PARAGRAPHE EST UNE MESURE, PAS UNE INTENTION — il se rejoue tel quel.
+// Sa version précédente annonçait « seuil abaissé à 5 ms → ROUGE sur écriture
+// complète » : vrai avant l'arbitrage, quand une seule constante gouvernait les
+// deux assertions ; FAUX ensuite, et personne ne l'avait rejoué. Relevé par la
+// revue croisée A29 (réserve R2). Si tu changes une constante, rejoue ces
+// lignes — une contre-épreuve écrite qui ne se reproduit plus est exactement le
+// défaut que ce fichier prétend combattre.
 //
 // ── LA LIMITE, ÉCRITE PLUTÔT QUE TUE ───────────────────────────────────────
 // **Un runner de CI n'est pas un iPad.** 11 §7 nomme déjà cette limite pour le
@@ -106,6 +124,8 @@
 // E36 (CI exécutable), E43 (exécutabilité autopilote — budgets d'acceptation du
 // 11 §4).
 // =============================================================================
+import { appendFileSync } from 'node:fs';
+
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import {
   deverrouillerAppareil,
@@ -121,7 +141,7 @@ import {
 const BUDGET_MS = 50;
 
 /**
- * 09 §3, en toutes lettres : « A28 agent accessibilité/perf (… **p95 interactions
+ * 09 §1, en toutes lettres : « A28 agent accessibilité/perf (… **p95 interactions
  * < 100 ms**, benchmark chiffrement < 50 ms/écriture) ». DEUX budgets distincts,
  * dans la même parenthèse — et c'est ce qui tranche le périmètre du 11 §4.
  *
@@ -444,7 +464,7 @@ test.describe('L5 — budget de chiffrement par écriture (11 §4 : < 50 ms)', (
 
     const releve =
       `n=${String(echantillons.length)} écriture(s) · budgets : 11 §4 ${String(BUDGET_MS)} ms ` +
-      `sur les enveloppes, 09 §3 ${String(BUDGET_INTERACTION_MS)} ms sur l'écriture complète · ` +
+      `sur les enveloppes, 09 §1 ${String(BUDGET_INTERACTION_MS)} ms sur l'écriture complète · ` +
       `chiffrement (2 enveloppes) médiane ${arrondi(mediane(chiffrements))} ms, ` +
       `p95 ${arrondi(p95(chiffrements))} ms, max ${arrondi(Math.max(...chiffrements))} ms · ` +
       `écriture complète (transaction Dexie comprise) médiane ${arrondi(mediane(ecritures))} ms, ` +
@@ -454,14 +474,33 @@ test.describe('L5 — budget de chiffrement par écriture (11 §4 : < 50 ms)', (
     // Le chiffre est LU par A20 et recopié dans le rapport A28 : un budget
     // « vert » sans son chiffre n'est pas une mesure, c'est une opinion. Une
     // ANNOTATION plutôt qu'un `console.log` — `no-console` vaut aussi pour les
-    // tests, et l'annotation est portée par le rapporteur `github`, donc lisible
-    // en CI même quand le test passe.
+    // tests — et elle est portée par le rapport HTML.
     test.info().annotations.push({ type: 'mesure A28', description: releve });
+
+    // MAIS L'ANNOTATION SEULE NE SUFFIT PAS, ET C'EST MESURÉ. Le rapporteur
+    // `github` ne remonte les annotations que sur un ÉCHEC : sur le run vert du
+    // 2026-09-07 (job `5 · e2e`, PR #92), le journal de CI ne contient que
+    // « 84 passed » — le relevé n'y figure nulle part. Il ne vivait que dans un
+    // artefact de 5 Mo que personne ne téléchargera. Un chiffre qu'il faut
+    // déterrer n'est pas un chiffre publié, et « lisible en CI » était donc une
+    // promesse que le code ne tenait pas — le défaut même que ce dépôt traque.
+    //
+    // Le résumé de job, lui, s'affiche sur la page du run sans rien télécharger.
+    // Échec silencieux assumé : hors CI la variable n'existe pas, et une panne
+    // d'écriture ne doit JAMAIS faire rougir une mesure de performance.
+    const resume = process.env.GITHUB_STEP_SUMMARY;
+    if (resume !== undefined && resume !== '') {
+      try {
+        appendFileSync(resume, `\n**Mesure A28 — budget de chiffrement** — ${releve}\n`, 'utf8');
+      } catch {
+        /* le relevé reste dans l'annotation et dans le rapport HTML */
+      }
+    }
 
     // ── DEUX BORNES, CHACUNE SOUS LA RÈGLE QUI LA POSSÈDE ───────────────────
     // Et non deux lectures d'un même seuil : l'arbitrage A01 du 2026-09-07 a
     // tranché que le 11 §4 borne les ENVELOPPES, la transaction relevant du
-    // second budget d'A28 (09 §3). Aucune des deux n'est surnuméraire — elles
+    // second budget d'A28 (09 §1). Aucune des deux n'est surnuméraire — elles
     // bornent deux choses différentes, et la seconde couvre ce que la première
     // ne couvre pas. Les marges sont d'ailleurs dissymétriques : facteur ~30 sur
     // les enveloppes, ~8 sur l'écriture complète. La première ne peut pas rougir
@@ -472,7 +511,7 @@ test.describe('L5 — budget de chiffrement par écriture (11 §4 : < 50 ms)', (
     );
     expect(
       p95(ecritures),
-      `écriture complète, condition nécessaire du budget d'interactions (09 §3) — ${releve}`,
+      `écriture complète, condition nécessaire du budget d'interactions (09 §1) — ${releve}`,
     ).toBeLessThan(BUDGET_INTERACTION_MS);
   });
 });

@@ -4569,3 +4569,25 @@ conteneur) : ce ne sont pas les chiffres de la CI, et ce n'est pas un iPad — A
 `--no-verify` employé sur quatre poussées `wip:` de cette branche (CLAUDE.md §8 l'exige écrit ici) :
 la branche portait le fichier d'A28 en cours d'écriture, que prettier refusait. Aucune poussée sur
 `main` ne l'a utilisé ; le dernier état de la branche passe tous les gardes.
+
+## 2026-09-07 11h45 — [lot L5 / budget A28] — étape pipeline 4/7 (revue croisée A29 rendue)
+
+Dernier commit vert : ba9df5d (PR #92, 20 jobs verts) · Branche : fix/budget-chiffrement-l5 · Poussé : oui
+Tâche en cours : lever les 4 réserves d'A29. Les trois bloquantes sont documentaires et toutes vérifiées par le pilote avant correction.
+Prochaine action : pousser les correctifs, attendre la CI, fusionner #92 ; puis P-C point 7 — ZAP sur /hq et /api.
+Tests rouges connus : aucun.
+
+**RECTIFICATION DU BLOC DE 11h00 — il consignait une contre-épreuve FAUSSE.** J'y écrivais : « à
+`BUDGET_MS = 3` le test rougit (p95 7,5 ms), vert à 50 ». C'était vrai AVANT l'arbitrage A01, quand
+une seule constante gouvernait les deux assertions ; ce ne l'est plus depuis que l'écriture complète
+relève de `BUDGET_INTERACTION_MS`. Mesuré par A29 puis **rejoué par moi sur `ba9df5d` : VERT.**
+La constante qui rougit à 3 est `BUDGET_INTERACTION_MS`, pas `BUDGET_MS`.
+C'est grave et pas cosmétique : CLAUDE.md §8 ordonne à une reprise de rejouer les tests plutôt que
+de croire ETAT.md. Elle aurait obtenu un vert, cru le banc cassé, et cherché au mauvais endroit.
+J'ai écrit ce bloc avant le rethreshold et ne l'ai pas relu après — exactement le défaut que ce
+dépôt poursuit : une assertion écrite une fois et jamais remesurée.
+
+**Et ma citation « 09 §3 » était fausse** : la phrase qui porte l'arbitrage est à **09 §1**
+(« LES RÔLES », ligne 23). Je l'avais « vérifiée » en lisant le CONTENU de la ligne 23, jamais la
+section qui la contient. Sept occurrences corrigées (DECISIONS.md ×4, le test ×3).
+Le bloc de 11h00 annonçait aussi « étape 5/7 » : la revue croisée est l'étape **4**.
