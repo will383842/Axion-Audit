@@ -67,10 +67,10 @@ const ANCRE_VOISINE_DU_CRAN: ReadonlyMap<number, number> = new Map([
 /**
  * Libellés DÉRIVÉS des crans intermédiaires. Ce ne sont pas des ancres de
  * banque : c'est la doctrine 3 du §32.4 (amendement du 2026-09-02) rendue mot
- * pour mot. Exportés pour que les tests s'y adossent au lieu de les recopier —
- * une copie recopiée est une copie qui dérive.
+ * pour mot. Volontairement NON exporté : le test doit redire cette phrase de
+ * son côté, sinon il ne comparerait le composant qu'à lui-même.
  */
-export const LIBELLES_ANCRES_DERIVEES: Readonly<Record<number, string>> = {
+const LIBELLES_ANCRES_DERIVEES: Readonly<Record<number, string>> = {
   2: '2 — palier intermédiaire : au moins un élément de l’ancre 3 est établi, sans qu’elle soit atteinte (doctrine §32.4).',
   4: '4 — palier intermédiaire : au moins un élément de l’ancre 5 est établi, sans qu’elle soit atteinte (doctrine §32.4).',
 };

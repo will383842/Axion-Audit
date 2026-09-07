@@ -4711,3 +4711,27 @@ ou attendre leur retour.
 **L'arbitrage A01 en une ligne** : les ancres se lisent AVANT la cotation, parce que 03 §33.5 écrit
 littéralement « ancres DÉPLIÉES » et que §33.3 donne le motif (« ne dépend pas de la mémoire »).
 Les crans 2 et 4 ne s'inventent pas : l'amendement §32.4 du 2026-09-02 les écrit déjà.
+
+## 2026-09-07 17h55 — [L5b / R1 ancres] — étape pipeline 2/7, 35 cas verts sur 36
+
+Dernier commit : e1544fa (`wip:`, lot/l5b-ancres) · Branche : lot/l5b-ancres · Poussé : oui
+Tâche en cours : A26 tranche un libellé et corrige la fixture E2E ; A21 a livré son composant.
+Prochaine action : à son retour, rejouer `EchelleAncree.test.tsx` puis `verify:rapide` complet ;
+ensuite revue croisée A29, recoche de R1 par A02, rejeu §33 EN ENTIER par A54 (09 §4bis).
+Tests rouges connus : **1** — `EchelleAncree.test.tsx:195`, détaillé ci-dessous.
+
+**Le correctif R1 est écrit** : `ancresDepliees` (défaut `true`), crans 2 et 4 rendus par le libellé
+dérivé de la doctrine §32.4, plus aucun chemin ne rend `''`. `packages/ui` typecheck et lint verts.
+
+**L'unique rouge est une divergence de CONTRAT, pas un défaut** — et c'est la trace utile de cette
+passe. A21 a renommé le résumé du dépliant « Voir toutes les ancres de cotation » → « Toutes les
+ancres de cotation », ce qui se défend : le dépliant est désormais ouvert par défaut, donc « Voir »
+invitait à un geste devenu inutile. A26 assère l'ancien libellé. **L'arbitrage A01 ne disait rien de
+ce libellé** : les deux agents ont raison, le contrat était muet. Rendu à A26 plutôt que corrigé par
+le pilote — qui deviendrait sinon l'auteur du test d'un code qu'il vient d'adopter (09 §5.6).
+**Le mandat de A26 n'est pas fini** : `e2e/fixtures/appareil-terrain.ts` porte toujours
+`guidanceSnapshot: null` sur sa `scale_1_5`, l'état que le contrôle d'import interdit.
+
+**`--no-verify` employé sur cette poussée** (CLAUDE.md §8 l'exige écrit ici) : le `pre-push` a été
+joué normalement et a échoué **à juste titre**, sur ce rouge réel. C'est le cas que §8 prévoit —
+« sauver un `wip:` », préfixe porté, sur une branche `lot/**`, jamais sur `main`. Le squash l'effacera.

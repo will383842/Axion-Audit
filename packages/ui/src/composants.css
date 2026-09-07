@@ -704,7 +704,10 @@
   border-radius: var(--taille-rayon-petit);
   font-size: var(--typo-taille-xs);
   font-weight: var(--typo-graisse-semi);
-  color: var(--couleur-texte-tertiaire);
+  /* Secondaire et non tertiaire : à 0,75 rem, le tertiaire tombe à 4,49:1 sur la
+     surface enfoncée — sous le seuil AA d'un cheveu, et pour un mot qui qualifie
+     la phrase à côté de lui. */
+  color: var(--couleur-texte-secondaire);
   white-space: nowrap;
 }
 

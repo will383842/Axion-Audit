@@ -29,7 +29,7 @@
 | L2    | ~0,3 j   | 0,5 j   | ~0,2 j                                                                                                                                                    |
 | L3a   | ~0,1 j   | 0,5 j   | ~0,4 j                                                                                                                                                    |
 | L3b-d | ~0,15 j  | 0,5 j   | ~0,35 j — plafonds explicites (120 s) sur deux crochets de tests L2, port de sync L5a déplacé hors du glob réservé à L6a ; le reste est d'étage 2 (A-007) |
-| L5b   | ~0,1 j   | 0,5 j   | ~0,4 j                                                                                                                                                    |
+| L5b   | ~0,12 j  | 0,5 j   | ~0,38 j — libellé du dépliant des ancres rendu vrai dans les deux états (A21, 2026-09-07)                                                                 |
 | L5c   | ~0,05 j  | 0,5 j   | ~0,45 j — identité de la sauvegarde restaurée (A27, 2026-09-06)                                                                                           |
 
 ---
@@ -2467,3 +2467,20 @@ illisible, série vide légitime). Impact schéma **aucun** · API **aucun** · 
 périmètre **aucun**.
 
 **Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE
+
+## 2026-09-07 — [L5b] Étage 1 — le dépliant des ancres disait « Voir » ce qui était déjà ouvert
+
+**Constat (A21, pendant le correctif R1).** L'arbitrage A01 du jour ouvre par défaut le dépliant des
+cinq ancres de cotation (`ancresDepliees`, défaut `true`, 03 §33.5 : « ancres DÉPLIÉES »). Son
+`<summary>` continuait d'annoncer « **Voir** toutes les ancres de cotation » — une invitation à
+ouvrir ce qui est ouvert. Intitulé rendu vrai dans les deux états : « Toutes les ancres de cotation ».
+
+**Pourquoi c'est de l'étage 1** : ni le schéma 04, ni l'API, ni la crypto, ni le périmètre
+fonctionnel. Un libellé, et il découle mécaniquement d'un correctif déjà arbitré.
+
+**Ce que ça a coûté, et il faut le dire** : une divergence de contrat entre A21 et A26, qui asserait
+l'ancien libellé — 1 cas rouge sur 36, rendu à A26 plutôt que corrigé par le pilote (09 §5.6). La
+leçon n'est pas le libellé, c'est que **deux agents en parallèle sur un même composant ont besoin
+que le contrat nomme aussi les chaînes d'interface**, pas seulement le comportement.
+
+Coût : négligeable (~0,02 j). **Compteur L5b : ~0,12 j consommé sur 0,5 j.**

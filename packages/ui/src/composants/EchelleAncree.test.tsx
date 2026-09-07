@@ -188,12 +188,32 @@ describe('EchelleAncree — §33.3 : les ancres sont VISIBLES, y compris au clav
     expect(crans().filter((c) => c.checked)).toEqual([]);
   });
 
-  it('rend TOUTES les ancres consultables d’un seul geste, sans quitter la question', () => {
-    render(
+  it('rend TOUTES les ancres consultables sans quitter la question', () => {
+    // ── CE QUE CE TEST A CESSÉ D'EXIGER, ET POURQUOI (2026-09-07) ─────────────
+    // Il figeait la chaîne « Voir toutes les ancres de cotation ». Le correctif
+    // R1 ouvre le dépliant PAR DÉFAUT (03 §33.5) : « Voir » invitait alors à un
+    // geste devenu inutile, et A21 l'a retiré. L'arbitrage A01 est MUET sur ce
+    // libellé — aucun des deux n'avait tort, et un test qui arbitre ce que la
+    // spécification ne tranche pas transforme une question de rédaction en
+    // échec de build.
+    //
+    // Ce qui est EXIGIBLE, en revanche, tient au pack et pas à une préférence :
+    // la liste est commandée par un `<summary>` (donc un contrôle nommé,
+    // atteignable au clavier), ce résumé DIT de quoi il s'agit — il porte le
+    // mot « ancres » —, et les libellés sont là. Le jour où quelqu'un
+    // remplacerait le résumé par un « … » ou par une icône seule, ce test
+    // mordrait ; le jour où l'on préfère « Toutes les ancres », il se tait.
+    const { container } = render(
       <EchelleAncree libelle={LIBELLE} valeur={null} ancres={ANCRES} onChangement={vi.fn()} />,
     );
-    const commande = screen.getByText('Voir toutes les ancres de cotation');
-    expect(commande.tagName).toBe('SUMMARY');
+    const pliant = container.querySelector('details');
+    expect(pliant, 'la liste des ancres vit dans un dépliant natif').not.toBeNull();
+    const commande = pliant?.querySelector('summary') ?? null;
+    expect(commande, 'le dépliant porte un `summary` — sans lui, rien ne le commande').not.toBeNull();
+    expect(
+      (commande?.textContent ?? '').toLocaleLowerCase('fr-FR'),
+      'le résumé annonce ce qu’il ouvre',
+    ).toContain('ancres');
     for (const ancre of ANCRES) {
       expect(screen.getAllByText(ancre.texte).length).toBeGreaterThan(0);
     }
