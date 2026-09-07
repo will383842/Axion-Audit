@@ -4407,19 +4407,39 @@ Tests rouges connus : aucun. interface 1104/1104 · unit 1799/1799.
 Environnement hors contrat : Node v24.19.0 — la CI reste juge (09 §5.7).
 
 
-## 2026-09-07 05h30 — [L5/L7 · réserve NB-2 §33.5] — étape pipeline 3/7
+## 2026-09-07 03h55 — [lot L0 / rétention 3 étages] — étape pipeline 3/7
 
-Dernier commit vert : a59c46a (axe-core 12 vues sur 12) · Branche : feat/page-design · Poussé : non
-Tâche en cours : la page `/design` de §33.5, qui n'existait nulle part, est livrée dans `apps/hq`
+Dernier commit vert : a59c46a (origin/main) · Branche : fix/retention-semaine-iso · Poussé : non
+(au moment de ce bloc)
+Tâche en cours : `main` rouge sur `@critique` rétention. **Hypothèse « le script » confirmée par la
+mesure**, et plus large que le rouge ne le disait : la branche mensuelle de
+`faire_tourner_par_rang()` lisait `mois_pris` sans jamais lire `semaines_prises`, alors que le
+commentaire de la réservation promet « sa semaine ET son mois ». Correctif : une condition.
+Mesure, script réel, sept jours forcés — avant : plan arrêté au 20260630 **les sept jours** (69 à
+75 j de portée) ; après : 20260531 (99 à 105 j), 14 archives, ≥ 4 semaines et ≥ 3 mois. Mois non
+sauté (contre-épreuve hebdomadaire à 0 : le 30 août remplace le 31, même mois).
+Le cas `@critique` ne voyait le défaut que 6 jours sur 7 : il est désormais joué sur les SEPT à
+dates fixes (substitut `date`, `aide/faux-date.sh`) et mesure aussi la PROFONDEUR.
+Prochaine action : pousser et ouvrir la PR vers `main` en fermant la PR #83 (son entrée
+`DECISIONS.md` est reprise ici, complétée de l'arbitrage et de la mesure).
+Tests rouges connus : aucun. l0-sauvegarde 67/67 · unit + interface 1104/1104 verts.
+Environnement hors contrat : Node v24.19.0 — la CI reste juge (09 §5.7).
+
+## 2026-09-07 05h55 — [L5/L7 · réserve NB-2 §33.5] — étape pipeline 3/7
+
+Dernier commit vert : 6ea1ec2 (page /design) · Branche : feat/page-design · Poussé : non
+Tâche en cours : la page `/design` de §33.5, qui n’existait nulle part, est livrée dans `apps/hq`
 (arbitrage `DECISIONS.md` 2026-09-07 : quota du précache terrain 05 §31 + desktop-first §33.4).
-Elle rend les **34 composants exportés**, chacun en ≥ 2 états distincts, les jetons §33.1, et les
-**8 absences de §33.5** avec leur motif. Garde : `satisfies Record<NomComposantUI, FicheComposant>`
-où `NomComposantUI` est LU sur les exports réels (`packages/ui/src/inventaire.ts`) — éprouvé en
-retirant `Badge` : `Property 'Badge' is missing`, typecheck rouge avant tout test.
-Le test a trouvé 2 incohérences réelles de ma réconciliation §33.5 (`Message`, `EtatHorsLigne`
-déclarés « §33.5 » à tort) : corrigées, pas contournées.
-Prochaine action : ouvrir la PR vers `main`, et demander à A29 la revue croisée — dont CELLE DES
+34 composants, chacun en ≥ 2 états distincts · jetons §33.1 · les **8 absences de §33.5** motivées.
+Garde : `satisfies Record<NomComposantUI, FicheComposant>` sur les exports RÉELS du paquet —
+éprouvé en retirant `Badge` : typecheck rouge avant qu’aucun test ne tourne.
+La page a trouvé **3 défauts réels et pré-existants** : `.axn-chiffres` du design system redéfini
+en grille par `apps/hq/coquille.css` (EchelleAncree exigeait 977 px, débordait dans TOUTE la
+console) → renommé + garde `collision-classes.test.ts` ; aucun `box-sizing` dans le dépôt
+(ChampTexte/ZoneNotes hors cadre de 9-11 px) → corrigé où c’est mesuré, reste en fiche étage 2 ;
+2 incohérences de ma propre réconciliation §33.5, trouvées par le test.
+Prochaine action : ouvrir la PR vers `main` et demander à A29 la revue croisée — dont CELLE DES
 TESTS, écrits par le même agent que la page (écart 09 §5.6, signalé en tête du fichier de test).
-Tests rouges connus : aucun. unit 1799/1799 · interface 1126/1126 · e2e 83/83 (dont 5 neufs sur
-`/design`, axe-core vert avec `color-contrast` prouvé exécuté). Intégration en cours de rejeu.
+Tests rouges connus : aucun. unit 1799/1799 · interface 1126/1126 · e2e 83/83 (5 neufs sur
+`/design` : axe-core vert, `color-contrast` prouvé exécuté). Intégration à rejouer après fusion.
 Environnement hors contrat : Node v24.19.0 — la CI reste juge (09 §5.7).

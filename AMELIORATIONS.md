@@ -2405,4 +2405,29 @@ d'implémenter une fiche d'étage 2 avant son arbitrage.
 **Coût estimé.** ~0,25 j de correctif + ~0,5 j de passe visuelle sur les 18 vues.
 Impact schéma **aucun** · impact API **aucun** · impact crypto **aucun** · impact périmètre **aucun**.
 
+## 2026-09-07 — [L0] Étage 2 — `shellcheck` ne regarde pas le script de sauvegarde, le plus long du dépôt
+
+**Constat (A11, `fix/retention-semaine-iso`, 2026-09-07).** Le job `shellcheck` de la CI analyse
+`infra/scripts/*.sh` et `.github/scripts/*.sh`. **`infra/postgres/*.sh` n'y est pas.**
+`sauvegarde.sh` — 2 481 lignes, le fichier qui tient l'invariant 8 — n'est analysé par rien, non
+plus que `stanza-create.sh` et `sauvegarde-healthcheck.sh`. Mesuré aujourd'hui, `shellcheck
+--severity=warning --shell=bash` sur `sauvegarde.sh` : **9 avertissements** (7 × SC2010,
+2 × SC2046). Le nom du job le dit d'ailleurs lui-même — « shellcheck (infra/scripts/*.sh) » — sans
+que personne n'ait relevé que le périmètre annoncé n'était pas le périmètre attendu.
+
+**Ce que ça ne dit PAS.** Le défaut de rétention corrigé aujourd'hui n'était pas de cette classe :
+aucune analyse statique ne voit qu'un étage de rétention teste `mois_pris` et pas
+`semaines_prises`. Cette fiche ne prétend donc pas que `shellcheck` l'aurait attrapé. Ce qu'elle
+dit est plus simple et plus gênant : le seul code du dépôt dont une défaillance silencieuse ne se
+découvre qu'à la restauration — c'est-à-dire le jour où il est trop tard — est aussi le seul code
+d'exploitation qu'aucun analyseur ne relit.
+
+**Coût estimé.** ~0,25 j : élargir le pathspec à `infra/postgres/*.sh`, PUIS traiter les 9
+avertissements. Les SC2010 demandent de remplacer `ls | grep` par une boucle sur glob dans du code
+qui tourne à 02h30 sans témoin — donc avec une contre-épreuve sur le banc, pas d'un trait de `sed`.
+
+**Impact schéma/API :** aucun. **Impact CI :** le job devient ROUGE tant que les 9 ne sont pas
+traités — c'est précisément pourquoi ce n'est pas une micro-amélioration d'étage 1, et pourquoi
+rien n'a été touché dans cette PR.
+
 **Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE

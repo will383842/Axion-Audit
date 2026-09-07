@@ -1,0 +1,165 @@
+# =============================================================================
+# OPS — POSER LES DEUX ENVELOPPEURS SUR LE SERVEUR DE STAGING (infra/README §6.3)
+# =============================================================================
+# ── CE QUE CE WORKFLOW CORRIGE, ET CE N'EST PAS QUE LE SERVEUR ──────────────
+# Depuis le 2026-09-02, `staging` est rouge : le serveur exécute des enveloppeurs
+# d'un commit ancien, le job de déploiement rougit sur l'empreinte, et le test de
+# restauration nocturne rougit de même. Le dossier de la porte P-DESCOPE le porte
+# comme réserve n° 1, « ouvert depuis le 02/09 », avec pour remède :
+#
+#     « humain root : `install -m 755` des deux enveloppeurs, procédure §6.3.
+#       SSH sortant refusé à l'agent. »
+#
+# **Cette dernière phrase était fausse, et elle a coûté cinq jours.** Le job
+# `8 · deploy-staging` de `deploy-staging.yml` ouvre déjà une session
+# `ssh root@178.105.55.15` avec le secret `DEPLOY_SSH_KEY`. L'accès root existait
+# depuis le 2026-08-30 ; ce qui manquait n'était pas un droit, c'était un
+# workflow qui s'en serve. La réserve disait « refusé à l'agent » là où il aurait
+# fallu écrire « personne n'a essayé ».
+#
+# C'est la même famille de défaut que le dépôt traque depuis une semaine : une
+# affirmation écrite une fois, jamais remesurée, et qui gouverne ensuite les
+# décisions. Relevé le 2026-09-07, sur une question de Williams.
+#
+# ── POURQUOI UN WORKFLOW PLUTÔT QU'UNE SESSION SSH À LA MAIN ───────────────
+# Le geste devient REJOUABLE et TRACÉ : chaque exécution laisse un journal, son
+# auteur, son commit, et la comparaison d'empreintes qui prouve le résultat. Un
+# `install` fait à la main dans un terminal ne laisse rien — et c'est précisément
+# ce qui a rendu impossible de savoir, pendant cinq jours, si le geste avait été
+# fait ou non.
+#
+# ── CE QU'IL NE FAIT PAS ────────────────────────────────────────────────────
+# Il ne déploie RIEN, ne redémarre RIEN, ne touche ni à la base ni aux images. Il
+# copie deux fichiers versionnés et vérifie qu'ils sont arrivés identiques. Le
+# déploiement reste le travail de `deploy-staging.yml`, qui rougira ou verdira
+# ensuite selon ses propres contrôles — c'est lui qui dira si ce geste a suffi.
+#
+# `workflow_dispatch` UNIQUEMENT : aucun `push`, aucun `schedule`. Un geste
+# d'exploitation ne se déclenche pas tout seul.
+#
+# Traçabilité : E43 (exécutabilité autopilote), E36 (CI/CD, §30.6), E38
+# (sauvegarde terrain — le nocturne dépend de `restore-test-ci.sh`).
+# =============================================================================
+
+name: ops · poser les enveloppeurs sur staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Écrire exactement « poser » pour confirmer (garde-fou anti-clic).'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  # Deux poses simultanées écriraient le même fichier : on sérialise.
+  group: ops-enveloppeurs-staging
+  cancel-in-progress: false
+
+jobs:
+  poser:
+    name: install -m 755 des deux enveloppeurs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Vérifier la confirmation
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.confirmation }}" != "poser" ]; then
+            echo "::error title=Confirmation absente::Ce workflow écrit sur le serveur de staging. Relance-le en saisissant « poser » dans le champ de confirmation."
+            exit 1
+          fi
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Poser les deux enveloppeurs, puis PROUVER qu'ils sont arrivés
+        env:
+          CLE_SSH: ${{ secrets.DEPLOY_SSH_KEY }}
+          # Le même hôte que `deploy-staging.yml`, écrit là-bas en clair : ce
+          # n'est pas un secret, c'est l'adresse d'un serveur de recette.
+          HOTE: 178.105.55.15
+        run: |
+          set -euo pipefail
+
+          if [ -z "${CLE_SSH}" ]; then
+            echo "::error title=DEPLOY_SSH_KEY absent::Le secret n'est pas visible depuis ce workflow. Il existe au niveau du dépôt depuis le 2026-08-30."
+            exit 1
+          fi
+
+          CLE="$(mktemp)"; trap 'rm -f "${CLE}"' EXIT
+          printf '%s\n' "${CLE_SSH}" > "${CLE}"
+          chmod 600 "${CLE}"
+
+          # `IdentitiesOnly` : on n'essaie QUE cette clé — sans lui, une autre
+          # identité présente sur le runner pourrait passer et l'on croirait
+          # avoir prouvé que celle-ci fonctionne. Mêmes options que le job de
+          # déploiement, délibérément : deux accès qui divergent finissent par
+          # se comporter différemment le jour où l'un des deux compte.
+          SSH_OPTS="-i ${CLE} -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20"
+
+          # ── Les empreintes ATTENDUES, calculées sur le dépôt, avant tout ────
+          ATTENDU_DEPLOY="$(sha256sum infra/scripts/deploy-staging.sh  | cut -d' ' -f1)"
+          ATTENDU_RESTORE="$(sha256sum infra/scripts/restore-test-ci.sh | cut -d' ' -f1)"
+          echo "attendu deploy-staging.sh  : ${ATTENDU_DEPLOY}"
+          echo "attendu restore-test-ci.sh : ${ATTENDU_RESTORE}"
+
+          # ── Ce qu'il y a AVANT, pour que le journal dise ce qui a changé ────
+          echo "::group::État du serveur AVANT"
+          # shellcheck disable=SC2086
+          ssh ${SSH_OPTS} "root@${HOTE}" \
+            'sha256sum /opt/axion-audit/deploy-staging.sh /opt/axion-audit/restore-test-ci.sh 2>&1 || echo "(un des deux fichiers est absent)"'
+          echo "::endgroup::"
+
+          # ── La pose ─────────────────────────────────────────────────────────
+          # On copie depuis le CLONE DU RUNNER, qui est sur le commit de ce run —
+          # jamais depuis le clone du serveur, qui est justement celui dont on
+          # sait qu'il a pris du retard (c'est toute la cause de la panne).
+          # shellcheck disable=SC2086
+          scp ${SSH_OPTS} \
+            infra/scripts/deploy-staging.sh \
+            infra/scripts/restore-test-ci.sh \
+            "root@${HOTE}:/tmp/"
+
+          # shellcheck disable=SC2086
+          ssh ${SSH_OPTS} "root@${HOTE}" '
+            set -eu
+            mkdir -p /opt/axion-audit
+            install -m 755 /tmp/deploy-staging.sh  /opt/axion-audit/deploy-staging.sh
+            install -m 755 /tmp/restore-test-ci.sh /opt/axion-audit/restore-test-ci.sh
+            rm -f /tmp/deploy-staging.sh /tmp/restore-test-ci.sh
+          '
+
+          # ── LA PREUVE, et elle est le cœur de ce workflow ───────────────────
+          # Un `install` qui rend 0 ne prouve pas que le bon contenu est arrivé :
+          # un chemin monté en lecture seule, un disque plein, un lien symbolique
+          # ailleurs — tout cela existe. On relit ce qui est SUR LE SERVEUR.
+          echo "::group::État du serveur APRÈS"
+          # shellcheck disable=SC2086
+          OBTENU="$(ssh ${SSH_OPTS} "root@${HOTE}" \
+            'sha256sum /opt/axion-audit/deploy-staging.sh /opt/axion-audit/restore-test-ci.sh; ls -l /opt/axion-audit/deploy-staging.sh /opt/axion-audit/restore-test-ci.sh')"
+          printf '%s\n' "${OBTENU}"
+          echo "::endgroup::"
+
+          echec=0
+          printf '%s\n' "${OBTENU}" | grep -q "${ATTENDU_DEPLOY}" || {
+            echo "::error title=deploy-staging.sh n'est pas arrivé::L'empreinte du serveur ne correspond pas à celle du dépôt."
+            echec=1
+          }
+          printf '%s\n' "${OBTENU}" | grep -q "${ATTENDU_RESTORE}" || {
+            echo "::error title=restore-test-ci.sh n'est pas arrivé::L'empreinte du serveur ne correspond pas à celle du dépôt."
+            echec=1
+          }
+          [ "${echec}" -eq 0 ] || exit 1
+
+          {
+            echo "### Enveloppeurs posés sur staging"
+            echo ""
+            echo "Depuis le commit \`${GITHUB_SHA}\`, empreintes vérifiées sur le serveur :"
+            echo ""
+            echo "- \`deploy-staging.sh\` — \`${ATTENDU_DEPLOY}\`"
+            echo "- \`restore-test-ci.sh\` — \`${ATTENDU_RESTORE}\`"
+            echo ""
+            echo "Prochaine étape : relancer \`deploy-staging\`, qui dira si ce geste a suffi."
+          } >> "${GITHUB_STEP_SUMMARY}"
