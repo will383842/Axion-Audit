@@ -2499,3 +2499,26 @@ preuve de R1 pour la porte, ce sont le E2E sur émulation iPad avec la fixture c
 d'interface et le rejeu d'A54 — pas cette phrase.
 
 À prendre par **A30** dans le flux normal de C3, **après** la porte. Coût : une phrase.
+
+## 2026-09-07 — [L5] Étage 1 EN ATTENTE — deux écrans de la journée collent leurs libellés à la synthèse vocale
+
+**Constat (A21, en balayant au-delà de son périmètre après la sonde d'A29).** Le défaut R-2 du
+correctif R1 — deux `<span>` frères séparés par un simple retour à la ligne, que JSX supprime à la
+compilation, donc **collés dans le nom accessible** — n'était pas isolé.
+
+`apps/field/src/ecrans/journee/EcranAujourdhui.tsx:131-135` et `EcranAgenda.tsx` empilent
+`heure` / `personne` / `contexte` en spans frères sans nœud de texte entre eux. Un lecteur d'écran
+annonce donc vraisemblablement « 09h30Marie DupontEntretien ». **Vérifié structurellement par moi
+(construction identique) ; le mécanisme a été vérifié par A21 sur le JS compilé du cas jumeau de
+`packages/ui`. Il reste à mesurer sur ces deux écrans précis** — c'est une nuance, pas une réserve.
+
+**Ce qu'aucun garde ne voyait** : `axe-core` est **vert** sur ces vues. Cette famille de défaut ne
+produit ni contraste insuffisant, ni rôle manquant, ni libellé absent — le texte est là, il est
+seulement **aggloméré**. C'est le pendant exact de la leçon du 06 : _un comptage dit qu'un symbole
+est présent, il ne dit pas qu'un comportement l'est._
+
+**NON EXÉCUTÉE, et le motif est de périmètre.** 09 §4bis : la porte P-C est refusée, seuls les
+correctifs de SES critères sont autorisés. Ces deux écrans relèvent d'A22/A23, pas d'A21, qui a eu
+raison de ne pas y toucher. **À porter au contrôle A02 de P-C** : l'écran « Aujourd'hui » est le
+critère 07 n° 1, et §33.6 est dans la grille que la porte vérifie — c'est à la porte de dire si
+elle l'absorbe ou le renvoie. Coût estimé : un nœud de texte par écran, plus la garde `textContent`.
