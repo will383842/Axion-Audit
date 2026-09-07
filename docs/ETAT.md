@@ -4519,3 +4519,17 @@ rétablit le croisement 09 §5.6 que la première passe n'avait pas.
 **3. Fermé cette nuit** : staging (déploie à nouveau), la page `/design` — qui a trouvé 3 défauts
 réels dont une collision de classe cassant l'échelle de cotation **dans toute la console** —, l'état
 hors ligne 12/12, axe 12/12, l'identité auditeur. **34 PR.**
+
+## 2026-09-07 10h00 — [lot L0 / PR #91 rétention] — étape pipeline 4/7 (revue croisée levée)
+
+Dernier commit vert : 0cc29c9 (test(l0): R4-a — trois series CREUSES entrent dans la CI) · Branche : fix/retention-r1-mois-perdu · Poussé : oui
+Tâche en cours : lever les 4 réserves d'A17 sur #91. R1-a/R2-a/R3-a corrigées et poussées ; R4-a livrée par A16 (3 séries creuses, toutes rouges sur c8ad9ba) ; arbitrage A01 rendu — option A, DECISIONS.md 2026-09-07.
+Prochaine action : attendre la CI verte sur les 3 cas R4-a (non exécutables ici, Docker absent du conteneur), puis fusionner #91 et ouvrir la porte L0.
+Tests rouges connus : aucun. Les 3 cas R4-a ne sont pas exécutés localement — collecte et compilation seules (70 cas, 0 skippé) ; la CI tranche.
+
+**RECTIFICATION — la « règle juste » que les blocs du 07/09 04h05 et 06h00 recommandent est FAUSSE.**
+« Tant que l'hebdomadaire a des places » (`sauvegarde.sh:1355`) ne ferme PAS le cas 2 de R1 : la
+semaine du 31 août est tenue par l'étage QUOTIDIEN, pas par l'hebdomadaire. Mesuré par A01 sur
+940 séries, reproduit par le pilote : sur ce cas l'option C est identique à `main` — août reste
+perdu — et elle supprime ce que `main` gardait 7,5× plus souvent que #91. La bonne question est
+« ce mois revient-il plus bas ? ». Ne pas appliquer la recommandation des blocs précédents.

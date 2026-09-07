@@ -11043,3 +11043,53 @@ ISO et ≥ 3 mois distincts. **Le mois n'est pas sauté** — contre-épreuve he
 cas `@critique` ne voyait le défaut que six jours sur sept : le dimanche, la fenêtre quotidienne
 tient dans une seule semaine ISO, le chevauchement disparaît et le gaspillage reste (75 j). Le cas
 est donc joué sur les SEPT jours à dates fixes (`aide/faux-date.sh`) et mesure aussi la PROFONDEUR.
+
+## 2026-09-07 — [L0] Dernière place mensuelle disputée : couvrir un mois de plus, ou atteindre un mois plus profond ?
+
+Réserve R1 de la revue A17, renvoyée à l'arbitrage. La PR #91 relâche le veto de semaine
+(`mois_encore_sous`) et, sur une série CREUSE, supprime une archive que `main` gardait. **Les deux
+branches suppriment** : la phrase de D-2 sur le coût d'une suppression ne tranche pas à elle seule.
+
+Options :
+
+- **(A) couverture de mois** — #91 : plan continu, qui s'arrête plus tôt.
+- **(B) profondeur** — `main` : plan qui remonte plus loin, un mois à trou.
+- **(C)** veto appliqué seulement **tant que l'hebdomadaire a des places** — la « règle juste »
+  désignée par A17 (`sauvegarde.sh:1355`) et par ETAT.md. **Construite et mesurée : écartée.**
+- **(D)** double passe (relâcher seulement si la profondeur ne baisse pas). Écartée : elle élit
+  entre deux plans, règle de sélection qu'aucun texte du pack ne porte (11 §8-6).
+
+Arbitrage : **option A — la PR #91 fusionne en l'état sur ce point.**
+
+Mesure A01 indépendante d'A17 : fonctions extraites verbatim (`git show`), banc sous
+`set -euo pipefail`, 940 séries sur 3 modèles + les deux cas d'A17, reproduits à l'identique.
+
+- **(C) ne ferme pas le cas 2 d'A17** : le 31 août reste supprimé, car sa semaine est tenue par
+  l'étage QUOTIDIEN et non par l'hebdomadaire — aucune règle indexée sur « l'hebdo est plein » ne
+  peut le sauver. Et (C) supprime ce que `main` gardait dans **90/940** séries, contre 12 pour #91.
+- #91 supprime ce que `main` gardait : **12/940 (1,28 %)**, dont **0 sur série dense** (production).
+- #91 garde moins de fichiers : **0/940**. Couvre moins de mois : **0/940**.
+- Profondeur sous le plancher de 90 j là où `main` tenait : **0/940** ; pire cas mesuré **100 j**.
+- Les 12 cas sont un ÉCHANGE, pas une perte : fichiers et mois à nombre égal, un mois PROCHE gagné
+  contre le mois le PLUS PROFOND (série #592 : 202608 gagné, 202602 perdu).
+
+Ce qui tranche est D-2 elle-même, non un jugement d'opportunité :
+
+1. D-2 option (c) promet ~90 j, et **les deux branches tiennent ce plancher partout**. Ce que #91
+   abandonne est au-delà de la promesse ; ce que `main` laisse en trou est dedans.
+2. D-2 établit qu'une archive MinIO est un **miroir complet et cumulatif**, et l'invariant 7 interdit
+   toute suppression silencieuse : l'archive la plus PROFONDE est donc la plus REDONDANTE — son
+   contenu vit dans toutes les plus récentes. Un mois à trou retire un point distinct.
+3. D-2 compare des coûts de SUPPRESSION, et ce comptage discrimine : sur le contre-exemple, `main`
+   supprime DEUX archives (20260831, 20260630) pour en sauver une, et ne garde que **13 places sur
+   14**. Elle laisse une place du plan inutilisée en supprimant — l'échange que D-2 refuse.
+
+Règle de précédence : **invariant 8** (un plan ne ment pas sur ce qu'il restaure) commande, appuyé
+par l'**invariant 7** (cumulativité) qui fonde le point 2 ; D-2 option (c) fixe le plancher. Aucune
+divergence §32-36 / §24-31 / §16-22 / §1-15 à départager : le pack ne prescrit rien pour la rétention
+du volume applicatif — D-2 seule le fait, et 02 §11.4 (30 j) ne vise que PostgreSQL.
+
+Décideur : **A01**, sur délégation de Williams du 2026-09-04.
+Impact spec : aucun ; D-2 (7/4/3, ~90 j) inchangée. **Rectification** : l'entrée du 2026-09-07 sur
+#86 affirmait « l'option 2 ne peut d'ailleurs rien retirer […] jamais moins ». C'est faux, R1 le
+prouve, et c'est cette phrase qui a produit le défaut. Append-only : non réécrite, corrigée ici.

@@ -1461,11 +1461,15 @@ faire_tourner_par_rang() {
       # D-2 option (c). L'arbitrage — couverture de mois CONTRE profondeur du
       # plan, quand les deux se disputent la dernière place mensuelle — n'est
       # pas tranché par D-2 seule : les deux branches suppriment quelque chose.
-      # Il est SAISI de A01 le 2026-09-07 et sera tracé dans `DECISIONS.md` avant
-      # la fusion. Tant que cette ligne n'est pas remplacée par la date et le
-      # verdict, l'arbitrage est OUVERT et le comportement ci-dessous est
-      # provisoire — dire l'inverse serait, une fois de plus dans ce fichier,
-      # promettre ce que le dépôt ne tient pas. Relevé par A16.
+      # TRANCHÉ : `DECISIONS.md`, 2026-09-07, « Dernière place mensuelle disputée »,
+      # décideur A01 — OPTION A, la couverture de mois. Trois raisons, toutes
+      # tirées de D-2 et non d'un jugement d'opportunité : les DEUX branches
+      # tiennent le plancher de ~90 j, donc ce qu'on abandonne ici est au-delà de
+      # la promesse tandis qu'un mois à trou est dedans ; une archive MinIO est un
+      # miroir CUMULATIF, donc la plus profonde est la plus REDONDANTE alors qu'un
+      # mois manquant retire un point distinct ; et sur le contre-exemple, le
+      # comportement d'avant supprimait DEUX archives pour en sauver une tout en
+      # laissant une place du plan (13 sur 14) INUTILISÉE.
       nb_mois=$((nb_mois + 1))
       raison="mensuelle ${nb_mois}/${mensuelles} (mois ${mois})"
     fi
