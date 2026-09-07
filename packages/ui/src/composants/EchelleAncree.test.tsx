@@ -312,21 +312,41 @@ const ANCRES_DE_BANQUE: readonly AncreCotation[] = [
 ];
 
 /**
- * La copie EXACTE des crans dérivés (arbitrage A01 du 2026-09-07).
+ * La copie des crans dérivés (arbitrage A01 du 2026-09-07, troisième tour —
+ * DECISIONS.md, commit `7a7e85a`).
  *
- * Elle n'est pas inventée par le composant : c'est la phrase de l'amendement
- * §32.4 du 2026-09-02 (doctrine 3, Williams) — « la note 2 (resp. 4) exige au
- * moins un élément établi de l'ancre 3 (resp. 5) ». Un test qui n'exigerait
- * qu'un texte NON VIDE laisserait passer « entre l'ancre 1 et l'ancre 3 », qui
- * situe une position sans dire comment coter : c'est précisément la proposition
- * que l'arbitrage a écartée.
+ * Citée VERBATIM de la doctrine 3 du §32.4 (03:667), à la seule résolution de
+ * « (resp. 5) » et à la majuscule initiale près. Toute autre reformulation
+ * exigerait une entrée DECISIONS et le retrait de l'attribution.
+ *
+ * ── CE QUE LA VERSION PRÉCÉDENTE AVAIT PERDU, ET POURQUOI ON LE GARDE ────────
+ * La copie du premier tour paraphrasait (« palier intermédiaire », « sans
+ * qu'elle soit atteinte ») et avait mangé la seconde moitié de la doctrine :
+ * « une note intermédiaire est une ancre entamée, PAS UNE MOYENNE ». Ce qu'elle
+ * gardait décrivait un ÉTAT ; ce qu'elle retirait corrige un GESTE — et c'est
+ * ce geste-là, faire la moyenne entre deux ancres, qui est le réflexe réel de
+ * l'auditeur en entretien. Une phrase amputée qui signe quand même
+ * « (doctrine §32.4) » emprunte l'autorité du pack sans en porter le contenu.
  */
 const DERIVEE_CRAN_2 =
-  '2 — palier intermédiaire : au moins un élément de l’ancre 3 est établi, ' +
-  'sans qu’elle soit atteinte (doctrine §32.4).';
+  'La note 2 exige au moins un élément établi de l’ancre 3 — une note ' +
+  'intermédiaire est une ancre entamée, pas une moyenne (doctrine §32.4).';
 const DERIVEE_CRAN_4 =
-  '4 — palier intermédiaire : au moins un élément de l’ancre 5 est établi, ' +
-  'sans qu’elle soit atteinte (doctrine §32.4).';
+  'La note 4 exige au moins un élément établi de l’ancre 5 — une note ' +
+  'intermédiaire est une ancre entamée, pas une moyenne (doctrine §32.4).';
+
+/**
+ * LE FRAGMENT QUI AVAIT DISPARU — sa propre garde, et elle est délibérément
+ * SÉPARÉE de la copie complète.
+ *
+ * Comparer la phrase entière attrape déjà toute réécriture. Mais le jour où
+ * quelqu'un raccourcira la copie « pour la dalle », il modifiera la constante
+ * ET le composant du même geste, et le test restera vert : c'est exactement
+ * ainsi que ce fragment s'est perdu la première fois. Cette garde-ci nomme le
+ * morceau qui doit survivre, quoi qu'il arrive au reste. Le supprimer demande
+ * de supprimer un test qui dit pourquoi il existe — pas de le laisser filer.
+ */
+const EMPREINTE_DOCTRINE = 'une ancre entamée, pas une moyenne';
 
 /**
  * LES TROIS COPIES DE REPLI, et la marque — arbitrage A01 du 2026-09-07,
@@ -426,8 +446,19 @@ function taperSur(note: number): void {
 }
 
 describe('EchelleAncree — R1 (a) : les ancres sont LUES AVANT le premier geste', () => {
-  it('rend les libellés 1, 3 et 5 SANS aucune interaction', () => {
-    render(
+  it('rend les libellés 1, 3 et 5 SANS aucune interaction, dépliant OUVERT', () => {
+    // ── R-3 DE LA REVUE A29 : CE TEST PROMETTAIT PLUS QU'IL NE MESURAIT ───────
+    // Dans sa première forme, il était VERT sur le composant d'AVANT R1. Motif :
+    // jsdom ne calcule aucune visibilité, et `getAllByText` trouve donc le texte
+    // d'un `<details>` FERMÉ. Il portait le nom du défaut sans le mesurer — le
+    // pire titre possible, puisque c'est celui qu'on cite dans une fiche de
+    // porte. La présence du texte ne dit rien tant que le contenant est replié :
+    // les deux assertions ne valent qu'ENSEMBLE, et elles restent ici ensemble.
+    //
+    // Ce que même cette paire ne prouve pas : ce qu'un ŒIL voit. Seule
+    // `toBeVisible()` de Playwright le mesure — voir le scénario iPad de
+    // `e2e/hors-ligne-l5.e2e.ts`, qui échoue « hidden » sur le code d'avant.
+    const { container } = render(
       <EchelleAncree
         libelle={LIBELLE}
         valeur={null}
@@ -435,6 +466,10 @@ describe('EchelleAncree — R1 (a) : les ancres sont LUES AVANT le premier geste
         onChangement={vi.fn()}
       />,
     );
+    expect(
+      dePliant(container).open,
+      'les libellés ne sont « lisibles » que si le dépliant est ouvert',
+    ).toBe(true);
     for (const ancre of ANCRES_DE_BANQUE) {
       expect(
         screen.getAllByText(ancre.texte).length,
@@ -532,6 +567,60 @@ describe('EchelleAncree — R1 (a) : les ancres sont LUES AVANT le premier geste
       expect(phrase(paire.textContent)).not.toContain(MARQUE_DERIVEE);
     }
   });
+
+  it('SÉPARE la marque du libellé dans le texte lu, pas seulement à l’écran (R-2)', () => {
+    // ── CE QUE CETTE GARDE MESURE, ET CE QU'ELLE REFUSE DE MESURER ───────────
+    // La marque et la phrase vivaient collées dans le texte accessible —
+    // `dd = [Ancre dérivée][La note 2 exige…]` —, la séparation n'existant que
+    // dans la mise en forme. À l'œil, deux blocs distincts ; à l'oreille, un
+    // seul mot-valise : « Ancre dérivéeLa note deux exige… ». Une synthèse
+    // vocale ne lit pas une bordure.
+    //
+    // Elle s'écrit donc sur `textContent` et JAMAIS sur une classe : vérifier
+    // `.axn-choix__derivee` validerait l'apparence en laissant intact ce qui
+    // est prononcé. Et elle n'impose aucun séparateur particulier — tiret,
+    // point médian, retour à la ligne : ce qu'elle exige est qu'il y ait au
+    // moins UNE espace entre les deux, quelle qu'en soit la source.
+    const { container } = render(
+      <EchelleAncree
+        libelle={LIBELLE}
+        valeur={null}
+        ancres={ANCRES_DE_BANQUE}
+        onChangement={vi.fn()}
+      />,
+    );
+    const attendus = new Map([
+      ['2', phrase(DERIVEE_CRAN_2)],
+      ['4', phrase(DERIVEE_CRAN_4)],
+    ]);
+
+    let verifiees = 0;
+    for (const paire of container.querySelectorAll('.axn-choix__paire')) {
+      const niveau = phrase(paire.querySelector('dt')?.textContent ?? null);
+      const attendu = attendus.get(niveau);
+      if (attendu === undefined) continue;
+
+      const definition = phrase(paire.querySelector('dd')?.textContent ?? null);
+      const debutMarque = definition.indexOf(MARQUE_DERIVEE);
+      const debutPhrase = definition.indexOf(attendu);
+      expect(debutMarque, `la marque manque au niveau ${niveau}`).toBeGreaterThanOrEqual(0);
+      expect(debutPhrase, `la doctrine manque au niveau ${niveau}`).toBeGreaterThanOrEqual(0);
+
+      // L'ordre n'est pas imposé : on mesure l'ESPACE entre les deux, où qu'ils
+      // soient. Un composant qui poserait la marque après la phrase reste libre.
+      const entreDeux =
+        debutMarque < debutPhrase
+          ? definition.slice(debutMarque + MARQUE_DERIVEE.length, debutPhrase)
+          : definition.slice(debutPhrase + attendu.length, debutMarque);
+      expect(
+        /\s/.test(entreDeux),
+        `au niveau ${niveau}, la marque et le libellé sont collés dans le texte lu : ` +
+          `« …${definition.slice(Math.max(0, debutMarque - 5), debutMarque + 40)}… »`,
+      ).toBe(true);
+      verifiees += 1;
+    }
+    expect(verifiees, 'les deux entrées dérivées ont été vérifiées').toBe(2);
+  });
 });
 
 describe('EchelleAncree — R1 (b) : les crans 2 et 4 disent COMMENT coter, jamais rien', () => {
@@ -575,8 +664,8 @@ describe('EchelleAncree — R1 (b) : les crans 2 et 4 disent COMMENT coter, jama
     taperSur(2);
     const surCranDerive = phrase(ligneAncre(container).textContent);
 
-    expect(surAncreDeBanque).not.toContain('palier intermédiaire');
-    expect(surCranDerive).toContain('palier intermédiaire');
+    expect(surAncreDeBanque).not.toContain(EMPREINTE_DOCTRINE);
+    expect(surCranDerive).toContain(EMPREINTE_DOCTRINE);
     expect(surCranDerive).not.toBe(surAncreDeBanque);
   });
 
@@ -593,6 +682,47 @@ describe('EchelleAncree — R1 (b) : les crans 2 et 4 disent COMMENT coter, jama
     expect(ligne, 'la ligne annoncée est la phrase de doctrine, sans préfixe').toBe(
       phrase(DERIVEE_CRAN_2),
     );
+  });
+
+  it('garde la MOITIÉ OPÉRATIONNELLE de la doctrine : « pas une moyenne »', () => {
+    // ── R-1 DE LA REVUE A29, ET LA RAISON D'ÊTRE DE CETTE GARDE ──────────────
+    // La copie du premier tour décrivait un ÉTAT (« un élément est établi, sans
+    // que l'ancre soit atteinte ») et avait perdu ce que la doctrine 3 corrige :
+    // un GESTE. « Une note intermédiaire est une ancre entamée, PAS UNE
+    // MOYENNE » vise le réflexe réel de l'auditeur — poser 2 parce que la
+    // réponse lui semble « entre 1 et 3 ». Sans cette phrase, l'écran décrit et
+    // ne redresse rien, tout en signant « (doctrine §32.4) ».
+    //
+    // Le fragment est exigé LITTÉRALEMENT et séparément de la copie complète :
+    // le jour où quelqu'un raccourcira la phrase, il touchera la constante et le
+    // composant du même geste, et une comparaison de phrase entière resterait
+    // verte. Celle-ci nomme le morceau qui doit survivre.
+    for (const note of [2, 4]) {
+      const { container, unmount } = render(<EchelleAuDoigt ancres={ANCRES_DE_BANQUE} />);
+      taperSur(note);
+      expect(
+        phrase(ligneAncre(container).textContent),
+        `le cran ${String(note)} ne dit plus « pas une moyenne » — la doctrine est amputée`,
+      ).toContain(EMPREINTE_DOCTRINE);
+      unmount();
+    }
+  });
+
+  it('cite la doctrine JUSQU’AU BOUT dans le dépliant aussi', () => {
+    // Deux endroits rendent la doctrine ; la garde doit tenir aux deux, sinon
+    // elle protège la ligne et laisse la liste dériver.
+    const { container } = render(
+      <EchelleAncree
+        libelle={LIBELLE}
+        valeur={null}
+        ancres={ANCRES_DE_BANQUE}
+        onChangement={vi.fn()}
+      />,
+    );
+    const liste = phrase(container.querySelector('.axn-choix__liste-ancres')?.textContent ?? null);
+    expect(liste).toContain(EMPREINTE_DOCTRINE);
+    expect(liste).toContain(phrase(DERIVEE_CRAN_2));
+    expect(liste).toContain(phrase(DERIVEE_CRAN_4));
   });
 
   it('ne rend JAMAIS une ligne d’ancre vide, sur AUCUN des cinq crans', () => {
@@ -683,7 +813,7 @@ describe('EchelleAncree — R1 : hors de l’échelle 1-5, la doctrine se TAIT',
       //    1-5 », et l'amendement §32.4 est écrit POUR cette amplitude. Ailleurs,
       //    l'écrire serait inventer une spécification (CLAUDE.md §3).
       expect(ligne, 'la phrase de doctrine ne vaut que sur l’échelle 1-5').not.toContain(
-        'palier intermédiaire',
+        EMPREINTE_DOCTRINE,
       );
       // ② …et le silence n'est pas le blanc : la copie de repli NOMME la note.
       //    Sans ce second contrôle, un composant qui rendrait '' passerait.
@@ -697,7 +827,7 @@ describe('EchelleAncree — R1 : hors de l’échelle 1-5, la doctrine se TAIT',
     );
     taperSur(4);
     const surQuatre = phrase(ligneAncre(container).textContent);
-    expect(surQuatre).not.toContain('palier intermédiaire');
+    expect(surQuatre).not.toContain(EMPREINTE_DOCTRINE);
     expect(surQuatre).toContain(phrase(repliSurLaNote(4)));
 
     // Une ancre RÉELLE reste servie : le bornage retire l'invention, pas la
@@ -717,7 +847,7 @@ describe('EchelleAncree — R1 : hors de l’échelle 1-5, la doctrine se TAIT',
     taperSur(0);
     const ligne = phrase(ligneAncre(container).textContent);
     expect(ligne).toContain(phrase(repliSurLaNote(0)));
-    expect(ligne).not.toContain('palier intermédiaire');
+    expect(ligne).not.toContain(EMPREINTE_DOCTRINE);
   });
 
   it('ne rend jamais une ligne vide sur AUCUN des onze crans d’une échelle 0-10', () => {
@@ -766,7 +896,7 @@ describe('EchelleAncree — R1 : une question SANS ancre le dit, au lieu d’en 
     taperSur(2);
     const ligne = phrase(ligneAncre(container).textContent);
     expect(ligne).not.toContain('comparez avec les ancres voisines');
-    expect(ligne).not.toContain('palier intermédiaire');
+    expect(ligne).not.toContain(EMPREINTE_DOCTRINE);
     expect(ligne).toBe(phrase(REPLI_SANS_AUCUNE_ANCRE));
   });
 
@@ -816,7 +946,7 @@ describe('EchelleAncree — R1 : dans le dépliant, on ne renvoie pas le lecteur
       expect(definition, `le niveau ${niveau} est listé sans définition`).not.toBe('');
       // Hors 1-5, AUCUNE entrée ne peut porter la doctrine.
       expect(definition, `le niveau ${niveau} invente une règle de cotation`).not.toContain(
-        'palier intermédiaire',
+        EMPREINTE_DOCTRINE,
       );
       if (!libellesDeBanque.some((libelle) => definition.includes(libelle))) {
         expect(definition, `le niveau ${niveau} n’a pas la copie du dépliant`).toContain(

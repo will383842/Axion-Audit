@@ -680,10 +680,12 @@ test('@critique cotation — les ancres se LISENT avant le premier tap (iPad ém
   await expect(echelle.locator('input[value="2"]')).toBeChecked();
   // Le cran 2 n'a pas d'ancre de banque (`ANCRES_REQUISES = [1, 3, 5]`) : c'est
   // ici que l'écran rendait une ligne VIDE dans un bloc à hauteur réservée. Il
-  // doit maintenant dire comment coter. La phrase exacte est figée par les
+  // doit maintenant dire comment coter. La phrase entière est figée par les
   // tests unitaires du composant ; ce qui se mesure ici, c'est qu'elle arrive
-  // jusqu'à la dalle.
-  await expect(ligneAncre).toContainText('palier intermédiaire');
+  // jusqu'à la dalle — et on y cherche le fragment qu'une paraphrase avait déjà
+  // mangé une fois (doctrine 3 du §32.4, 03:667), parce que c'est LUI qui
+  // corrige le geste de l'auditeur et non l'habillage autour.
+  await expect(ligneAncre).toContainText('une ancre entamée, pas une moyenne');
   await expect(ligneAncre).not.toHaveText('');
 
   // La cotation est ÉCRITE, pas seulement affichée : sans cette ligne, l'écran
