@@ -4533,3 +4533,61 @@ semaine du 31 août est tenue par l'étage QUOTIDIEN, pas par l'hebdomadaire. Me
 940 séries, reproduit par le pilote : sur ce cas l'option C est identique à `main` — août reste
 perdu — et elle supprime ce que `main` gardait 7,5× plus souvent que #91. La bonne question est
 « ce mois revient-il plus bas ? ». Ne pas appliquer la recommandation des blocs précédents.
+
+## 2026-09-07 10h30 — [lot L0 → L5] — étape pipeline 7/7 pour R1, 2/7 pour le budget A28
+
+Dernier commit vert : 35582fa (fix(l0) — R1, #91 fusionnée, 13 jobs verts) · Branche : fix/budget-chiffrement-l5 · Poussé : non
+Tâche en cours : R1 est CLOSE — les 3 séries creuses s'exécutent VERTES dans le job d'intégration, pas seulement au banc. Les 4 réserves d'A17 sont levées, l'arbitrage A01 est tracé. Ouvert ensuite : le budget 11 §4 « chiffrement < 50 ms/écriture », jamais mesuré depuis L5a (NB6 puis NB-10), confié à A28.
+Prochaine action : recevoir la mesure d'A28 avec sa contre-épreuve, la commiter sur cette branche, ouvrir la PR ; puis attaquer P-C, seul goulot du chantier.
+Tests rouges connus : aucun. `main` à 35582fa.
+
+**IL N'Y A PAS DE « PORTE L0 ».** Les portes du fichier 09 sont P-A, P-B, P-C, P-D, P-DESCOPE, P-E.
+P-A (fin L0-L1, restauration depuis zéro) est FRANCHIE depuis le 2026-08-27. La rétention relève de
+son périmètre, mais aucune porte ne s'ouvre du fait de R1 : elle se referme, c'est tout. Les revues
+A17 et l'arbitrage A01 parlent de « porte L0 » par commodité — le mot n'existe pas au fichier 09,
+et le croire ferait attendre une signature humaine qui n'est due nulle part.
+
+**Le goulot reste P-C** (refusée DEUX fois, se rejoue EN ENTIER — 09 §4bis), et ce qui la bloque est
+matériel : 10 des 17 vérifications exigent un iPad physique, dues à Williams. Les 7 « serveur » sont
+jouables depuis que staging est réparé.
+
+## 2026-09-07 11h00 — [lot L5 / budget A28] — étape pipeline 5/7 (mesure faite, revue croisée due)
+
+Dernier commit vert : 35582fa (main, 21 jobs verts, deploy-staging compris) · Branche : fix/budget-chiffrement-l5 · Poussé : oui
+Tâche en cours : NB6/NB-10 fermée côté mesure. `e2e/budget-chiffrement-l5.e2e.ts` mesure 40 écritures RÉELLES par le chemin de production, sonde posée sur les API du navigateur — aucune porte d'instrumentation dans l'application (09 §5.6). Doute de périmètre (2 enveloppes seules vs écriture complète) saisi de A01 ; le test assère LES DEUX bornes, donc l'arbitrage ne peut pas le rendre faux.
+Prochaine action : recevoir l'arbitrage A01, ouvrir la PR, faire relire par A29 (réviseur front, n'a rien produit) ; puis P-C point 7 — ZAP sur /hq et /api.
+Tests rouges connus : aucun.
+
+Chiffres : chiffrement p95 **0,60–1,80 ms** · écriture complète p95 **6,30–12,50 ms** · budget 50 ms.
+**Le vert n'est pas le constat utile — sa répartition l'est : la crypto ne coûte RIEN, IndexedDB
+coûte dix fois plus.** Un dépassement futur viendra de la base ou de la taille des charges, jamais
+d'AES-GCM ; le chercher dans la crypto coûterait une journée. Contre-épreuve rejouée par le pilote
+et pas seulement rapportée : à `BUDGET_MS = 3` le test rougit (p95 7,5 ms), vert à 50.
+**Mesuré sur chromium-1194 via un config HORS ARBRE** (Playwright 1.62 épingle 1234, absent du
+conteneur) : ce ne sont pas les chiffres de la CI, et ce n'est pas un iPad — A27 reste dû à P-C.
+
+`--no-verify` employé sur quatre poussées `wip:` de cette branche (CLAUDE.md §8 l'exige écrit ici) :
+la branche portait le fichier d'A28 en cours d'écriture, que prettier refusait. Aucune poussée sur
+`main` ne l'a utilisé ; le dernier état de la branche passe tous les gardes.
+
+## 2026-09-07 11h45 — [lot L5 / budget A28] — étape pipeline 4/7 (revue croisée A29 rendue)
+
+Dernier commit vert : ba9df5d (PR #92, 20 jobs verts) · Branche : fix/budget-chiffrement-l5 · Poussé : oui
+Tâche en cours : lever les 4 réserves d'A29. Les trois bloquantes sont documentaires et toutes vérifiées par le pilote avant correction.
+Prochaine action : pousser les correctifs, attendre la CI, fusionner #92 ; puis P-C point 7 — ZAP sur /hq et /api.
+Tests rouges connus : aucun.
+
+**RECTIFICATION DU BLOC DE 11h00 — il consignait une contre-épreuve FAUSSE.** J'y écrivais : « à
+`BUDGET_MS = 3` le test rougit (p95 7,5 ms), vert à 50 ». C'était vrai AVANT l'arbitrage A01, quand
+une seule constante gouvernait les deux assertions ; ce ne l'est plus depuis que l'écriture complète
+relève de `BUDGET_INTERACTION_MS`. Mesuré par A29 puis **rejoué par moi sur `ba9df5d` : VERT.**
+La constante qui rougit à 3 est `BUDGET_INTERACTION_MS`, pas `BUDGET_MS`.
+C'est grave et pas cosmétique : CLAUDE.md §8 ordonne à une reprise de rejouer les tests plutôt que
+de croire ETAT.md. Elle aurait obtenu un vert, cru le banc cassé, et cherché au mauvais endroit.
+J'ai écrit ce bloc avant le rethreshold et ne l'ai pas relu après — exactement le défaut que ce
+dépôt poursuit : une assertion écrite une fois et jamais remesurée.
+
+**Et ma citation « 09 §3 » était fausse** : la phrase qui porte l'arbitrage est à **09 §1**
+(« LES RÔLES », ligne 23). Je l'avais « vérifiée » en lisant le CONTENU de la ligne 23, jamais la
+section qui la contient. Sept occurrences corrigées (DECISIONS.md ×4, le test ×3).
+Le bloc de 11h00 annonçait aussi « étape 5/7 » : la revue croisée est l'étape **4**.
