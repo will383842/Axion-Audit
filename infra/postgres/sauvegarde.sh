@@ -1312,7 +1312,14 @@ faire_tourner_par_rang() {
   # LA SÉRIE EST LUE UNE SEULE FOIS, et pas seulement par économie : le veto de
   # semaine ci-dessous doit savoir si le mois courant REVIENT plus bas, et une
   # relecture du répertoire à chaque candidat pourrait voir un état différent.
-  serie="$(ls -1 "$ARCHIVES" 2>/dev/null | grep -E "$motif" | sort -r)"
+  # `|| true` N'EST PAS UNE POLITESSE : `grep` rend 1 quand RIEN ne correspond,
+  # et sous `set -o pipefail` une AFFECTATION hérite de ce code — `set -e` tue
+  # alors la passe entière. La boucle d'origine y échappait pour une raison de
+  # syntaxe et non de conception : une substitution dans un en-tête de `for` ne
+  # porte pas son statut au `set -e`, une affectation si. Le cas n'est pas
+  # théorique — le motif du COFFRE ne correspond à rien tant que
+  # `BACKUP_SECRETS_PASSPHRASE` n'est pas posée, ce qui est l'état par défaut.
+  serie="$(ls -1 "$ARCHIVES" 2>/dev/null | grep -E "$motif" | sort -r || true)"
 
   # Le mois de CHAQUE archive, calculé une fois — `nom:AAAAMM`, dans l'ordre de
   # la série. Sans cette table, savoir si un mois revient plus bas coûterait une
