@@ -485,7 +485,13 @@ test.describe('L5 — budget de chiffrement par écriture (11 §4 : < 50 ms)', (
     // déterrer n'est pas un chiffre publié, et « lisible en CI » était donc une
     // promesse que le code ne tenait pas — le défaut même que ce dépôt traque.
     //
-    // Le résumé de job, lui, s'affiche sur la page du run sans rien télécharger.
+    // Le résumé de job, lui, est rendu sur la page du run sans rien télécharger.
+    // CE QUI EST MESURÉ ICI, ET CE QUI NE L'EST PAS : l'écriture de la ligne
+    // quand la variable est posée est vérifiée (relevé complet, contrôlé sur un
+    // fichier local). Que GitHub la RENDE ne l'est pas — les résumés de job ne
+    // sont exposés par aucun point d'entrée de l'API REST (`output` du check-run
+    // est vide, vérifié), donc c'est le comportement documenté de la variable qui
+    // est invoqué, pas une mesure. À regarder sur la page du job du prochain run.
     // Échec silencieux assumé : hors CI la variable n'existe pas, et une panne
     // d'écriture ne doit JAMAIS faire rougir une mesure de performance.
     const resume = process.env.GITHUB_STEP_SUMMARY;

@@ -158,5 +158,14 @@ même quand le test passe ». **C'est faux, et c'est mesuré** : le journal du j
 green ne contient que « 84 passed » — le relevé n'y figure nulle part, il ne vit que dans un
 artefact de 5 Mo. La remarque n° 3 d'A29 le rend d'ailleurs critique : ce fichier livre son
 annotation plus que son assertion. Le relevé est désormais **aussi** écrit dans
-`GITHUB_STEP_SUMMARY`, visible sur la page du run sans rien télécharger, avec échec silencieux
-assumé hors CI. Même classe de défaut que R2 : une promesse que le code ne tenait pas.
+`GITHUB_STEP_SUMMARY`, avec échec silencieux assumé hors CI. Même classe de défaut que R2 : une
+promesse que le code ne tenait pas.
+
+> **CE QUE JE N'AI PAS PU VÉRIFIER DE MA PROPRE CORRECTION, ET JE REFUSE DE L'ÉCRIRE COMME ACQUIS.**
+> Mesuré ici : avec `GITHUB_STEP_SUMMARY` posé sur un fichier, la ligne y est bien écrite (relevé
+> complet, contrôlé). **Non mesuré : que GitHub la RENDE sur la page du run.** Les résumés de job
+> ne sont exposés par aucun point d'entrée de l'API REST — `output` du check-run est vide (`len 0`,
+> vérifié sur le run vert de `42d412c`) — donc depuis ce conteneur je ne peux pas le prouver. Je
+> m'appuie sur le comportement documenté de la variable, pas sur une mesure.
+> **Le prochain run le montrera ou non ; c'est à regarder sur la page du job, pas à croire ici.**
+> L'écrire comme prouvé serait refaire, sur la correction elle-même, la faute qu'elle corrige.
