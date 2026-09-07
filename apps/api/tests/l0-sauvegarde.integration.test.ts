@@ -30,7 +30,7 @@
 // rotation, permissions, rattrapage, garde-fous d'entrée. L'expédition est la
 // plus grande surface non testée de ce lot ; elle est remontée comme telle.
 //
-// QUATRE SUBSTITUTIONS, ET ELLES SONT NOMMÉES :
+// CINQ SUBSTITUTIONS, ET ELLES SONT NOMMÉES :
 //   · `pgbackrest` est remplacé par un exécutable factice placé EN TÊTE de
 //     `PATH`. La moitié PostgreSQL de la passe a son propre fichier
 //     (`l0-restauration.integration.test.ts`) où elle tourne pour de vrai, dépôt
@@ -53,6 +53,12 @@
 //     passe, par `set -e`, sans rien changer à ce qui est sauvegardé. Sans cette
 //     substitution, chaque cas vert coûterait la durée du `timeout` — et une
 //     suite qui dure une demi-heure finit par ne plus être exécutée.
+//   · `date` est remplacé par `aide/faux-date.sh`, qui FIXE le jour courant
+//     quand `AXION_TEST_AUJOURDHUI` est posée et `exec` le vrai `date` sinon.
+//     Il n'existe que pour la rétention à trois étages, dont la propriété
+//     dépend du JOUR DE LA SEMAINE : elle s'éprouve donc sur les sept, à dates
+//     absolues, au lieu de dépendre du jour où la CI tourne. Les dates absolues
+//     traversent intactes — sans quoi le banc mentirait sur ce qu'il mesure.
 //
 // CONSÉQUENCE À CONNAÎTRE : une passe RÉUSSIE ne rend donc jamais 0. Les cas
 // « la passe réussit » s'assertent sur les ARTEFACTS (archives, empreintes,
@@ -399,6 +405,35 @@ beforeAll(async () => {
   expect(copieFauxMc.code, `Copie du faux mc impossible :\n${copieFauxMc.sortie}`).toBe(0);
   const droitsFauxMc = dansConteneur(`chmod 0755 ${FAUX}/mc`, {}, 'root');
   expect(droitsFauxMc.code, `Droits du faux mc :\n${droitsFauxMc.sortie}`).toBe(0);
+
+  // ---------------------------------------------------------------------------
+  // CINQUIÈME SUBSTITUTION — `date`, ET ELLE EST INERTE PAR DÉFAUT.
+  //
+  // Ajoutée le 2026-09-07 après un ROUGE de CI qui n'existait QUE le lundi. Elle
+  // fait du jour de la semaine une ENTRÉE du banc au lieu d'une circonstance :
+  // sans `AXION_TEST_AUJOURDHUI`, `aide/faux-date.sh` `exec` le vrai `date` et
+  // aucun autre cas de ce fichier ne change de comportement. Son en-tête dit ce
+  // qu'elle décale et — plus important — ce qu'elle laisse INTACT : les dates
+  // absolues, c'est-à-dire celles que la rotation lit dans les noms d'archives.
+  // ---------------------------------------------------------------------------
+  const copieFauxDate = docker([
+    'cp',
+    resolve(RACINE_DEPOT, 'apps', 'api', 'tests', 'aide', 'faux-date.sh'),
+    `${CONTENEUR}:${FAUX}/date`,
+  ]);
+  expect(copieFauxDate.code, `Copie du faux date impossible :\n${copieFauxDate.sortie}`).toBe(0);
+  const droitsFauxDate = dansConteneur(`chmod 0755 ${FAUX}/date`, {}, 'root');
+  expect(droitsFauxDate.code, `Droits du faux date :\n${droitsFauxDate.sortie}`).toBe(0);
+  // Le substitut est ÉPROUVÉ ici, avant le premier cas : un banc dont l'outil de
+  // mesure est faux rend des verdicts faux. Deux propriétés, les deux qui
+  // comptent — le relatif est décalé, l'ABSOLU ne l'est pas.
+  const controle = dansConteneur('date -u +%Y%m%d; date -u -d 20260831 +%G%V', {
+    AXION_TEST_AUJOURDHUI: '2026-09-07',
+  });
+  expect(
+    controle.sortie.split('\n').map((l) => l.trim()),
+    `Le substitut de \`date\` ne se comporte pas comme annoncé :\n${controle.sortie}`,
+  ).toEqual(expect.arrayContaining(['20260907', '202636']));
 }, 900_000);
 
 /**
@@ -706,9 +741,10 @@ describe('sauvegarde.sh — rétention à trois étages (D-2)', () => {
   }
 
   /** Les `n` jours qui précèdent `depart` (inclus), au format AAAAMMJJ. */
-  function joursAvant(depart: string, n: number): string[] {
+  function joursAvant(depart: string, n: number, aujourdhui: string): string[] {
     const { sortie } = dansConteneur(
       `for i in $(seq 0 ${String(n - 1)}); do date -u -d "${depart} -$i days" +%Y%m%d; done`,
+      { AXION_TEST_AUJOURDHUI: aujourdhui },
     );
     const jours = sortie
       .split('\n')
@@ -718,87 +754,145 @@ describe('sauvegarde.sh — rétention à trois étages (D-2)', () => {
     return jours;
   }
 
-  it('@critique 120 archives quotidiennes se réduisent à 7 + 4 + 3, et pas au hasard', () => {
-    const archives = repertoireNeuf();
-    // 119 jours qui s'arrêtent la VEILLE : la 120ᵉ archive sera celle que la
-    // passe réelle va écrire aujourd'hui.
-    poserArchivesDatees(archives, joursAvant('yesterday', 119));
+  /**
+   * LES SEPT JOURS DE LA SEMAINE, ET PAS « AUJOURD'HUI ».
+   *
+   * Le cas ci-dessous a été ROUGE en CI le 2026-09-07 et VERT le 2026-09-06 —
+   * même code, même image, même commande. La fenêtre quotidienne de 7 jours
+   * couvre DEUX semaines ISO tous les jours sauf le dimanche, où elle en couvre
+   * exactement une : le dimanche masquait un défaut réel de `sauvegarde.sh` (une
+   * place mensuelle dépensée sur un mois que l'étage hebdomadaire allait couvrir
+   * de toute façon, décrit en tête de `faire_tourner_par_rang`).
+   *
+   * Un cas dont le verdict dépend du jour où on le lance ne mesure pas ce qu'il
+   * croit mesurer. Le calendrier du conteneur est donc FIXÉ, par un substitut de
+   * `date` (`aide/faux-date.sh`), et la propriété s'éprouve sur les sept jours
+   * d'une semaine ABSOLUE choisie une fois pour toutes : du lundi 2026-09-07 au
+   * dimanche 2026-09-13. Cette semaine-là est celle de l'échec ; elle traverse
+   * une frontière de mois (août → septembre), ce qui est exactement le terrain
+   * où l'étage mensuel et l'étage hebdomadaire se disputent une place.
+   *
+   * Sept cas SÉPARÉS et non une boucle dans un seul `it` : chaque passe coûte
+   * quelques secondes de `docker exec` SYNCHRONE, et l'`afterEach` de ce fichier
+   * rend la main à la boucle d'événements entre deux cas — sept passes dans un
+   * seul cas reformeraient la plage de blocage de plus d'une minute qui fait
+   * expirer le RPC de vitest (voir l'en-tête).
+   */
+  const SEMAINE_DE_REFERENCE: readonly (readonly [string, string])[] = [
+    ['lundi', '2026-09-07'],
+    ['mardi', '2026-09-08'],
+    ['mercredi', '2026-09-09'],
+    ['jeudi', '2026-09-10'],
+    ['vendredi', '2026-09-11'],
+    ['samedi', '2026-09-12'],
+    ['dimanche', '2026-09-13'],
+  ];
 
-    const journal = jouerUnePasse(archives, {
-      AXION_RETENTION_QUOTIDIENNES: '7',
-      AXION_RETENTION_HEBDOMADAIRES: '4',
-      AXION_RETENTION_MENSUELLES: '3',
-    });
-    expect(journal.sortie).toContain('passe terminée avec succès');
+  for (const [nomDuJour, aujourdhui] of SEMAINE_DE_REFERENCE) {
+    it(`@critique 120 archives se réduisent à 7 + 4 + 3, et pas au hasard — ${nomDuJour} ${aujourdhui}`, () => {
+      const archives = repertoireNeuf();
+      // 119 jours qui s'arrêtent la VEILLE : la 120ᵉ archive sera celle que la
+      // passe réelle va écrire « aujourd'hui », c'est-à-dire au jour fixé.
+      poserArchivesDatees(archives, joursAvant('yesterday', 119, aujourdhui));
 
-    const gpg = contenu(archives).filter((f) => f.endsWith('.tar.zst.gpg'));
-    expect(gpg, `archives restantes :\n${gpg.join('\n')}`).toHaveLength(14);
+      const journal = jouerUnePasse(archives, {
+        AXION_TEST_AUJOURDHUI: aujourdhui,
+        AXION_RETENTION_QUOTIDIENNES: '7',
+        AXION_RETENTION_HEBDOMADAIRES: '4',
+        AXION_RETENTION_MENSUELLES: '3',
+      });
+      expect(journal.sortie).toContain('passe terminée avec succès');
 
-    // Les 7 plus récentes sont 7 jours CONSÉCUTIFS : l'étage quotidien ne doit
-    // pas laisser de trou, sans quoi ce ne serait plus un étage quotidien.
-    const septRecentes = [...gpg]
-      .sort()
-      .slice(-7)
-      .map((f) => f.slice(6, 14));
-    expect(septRecentes).toEqual(joursAvant('today', 7).reverse());
+      const gpg = contenu(archives).filter((f) => f.endsWith('.tar.zst.gpg'));
+      expect(gpg, `archives restantes :\n${gpg.join('\n')}`).toHaveLength(14);
 
-    // Les 7 autres tombent chacune dans une SEMAINE ISO ou un MOIS distinct :
-    // c'est la propriété qui distingue un vrai plan à étages d'un simple
-    // « garder 14 ». Elle est vérifiée par le calendrier du conteneur, pas par
-    // une liste de dates recopiées à la main dans ce test.
-    const anciennes = [...gpg]
-      .sort()
-      .slice(0, 7)
-      .map((f) => f.slice(6, 14));
-    const periodesDe = (jours: readonly string[]): string[] => {
-      const { sortie } = dansConteneur(
-        jours.map((j) => `date -u -d "${j}" +%G%V:%Y%m`).join(' && '),
+      // Les 7 plus récentes sont 7 jours CONSÉCUTIFS : l'étage quotidien ne doit
+      // pas laisser de trou, sans quoi ce ne serait plus un étage quotidien.
+      const septRecentes = [...gpg]
+        .sort()
+        .slice(-7)
+        .map((f) => f.slice(6, 14));
+      expect(septRecentes).toEqual(joursAvant('today', 7, aujourdhui).reverse());
+
+      // Les 7 autres tombent chacune dans une SEMAINE ISO ou un MOIS distinct :
+      // c'est la propriété qui distingue un vrai plan à étages d'un simple
+      // « garder 14 ». Elle est vérifiée par le calendrier du conteneur, pas par
+      // une liste de dates recopiées à la main dans ce test.
+      const anciennes = [...gpg]
+        .sort()
+        .slice(0, 7)
+        .map((f) => f.slice(6, 14));
+      const periodesDe = (jours: readonly string[]): string[] => {
+        // Dates ABSOLUES : aucune raison de fixer le calendrier ici, et le
+        // substitut les laisse d'ailleurs traverser intactes.
+        const { sortie } = dansConteneur(
+          jours.map((j) => `date -u -d "${j}" +%G%V:%Y%m`).join(' && '),
+        );
+        const p = sortie
+          .split('\n')
+          .map((l) => l.trim())
+          .filter((l) => l !== '');
+        expect(p).toHaveLength(jours.length);
+        return p;
+      };
+      const perAnciennes = periodesDe(anciennes);
+      const semaines = new Set(perAnciennes.map((p) => p.split(':')[0] ?? ''));
+      const mois = new Set(perAnciennes.map((p) => p.split(':')[1] ?? ''));
+      // Au moins 4 semaines ISO distinctes (l'étage hebdomadaire) et au moins
+      // 3 mois distincts (le mensuel) : c'est la propriété qui distingue un vrai
+      // plan à étages d'un simple « garder 14 ».
+      expect(semaines.size).toBeGreaterThanOrEqual(4);
+      expect(mois.size).toBeGreaterThanOrEqual(3);
+
+      // LE NON-CHEVAUCHEMENT, qui est le cœur de la règle : aucune archive des
+      // étages du dessous ne tombe dans une semaine déjà couverte par l'étage
+      // quotidien. Sans lui, les 7 quotidiennes mangeraient les places
+      // hebdomadaires et le plan ne remonterait jamais au-delà d'une semaine.
+      const semainesQuotidiennes = new Set(
+        periodesDe(septRecentes).map((p) => p.split(':')[0] ?? ''),
       );
-      const p = sortie
-        .split('\n')
-        .map((l) => l.trim())
-        .filter((l) => l !== '');
-      expect(p).toHaveLength(jours.length);
-      return p;
-    };
-    const perAnciennes = periodesDe(anciennes);
-    const semaines = new Set(perAnciennes.map((p) => p.split(':')[0] ?? ''));
-    const mois = new Set(perAnciennes.map((p) => p.split(':')[1] ?? ''));
-    // Au moins 4 semaines ISO distinctes (l'étage hebdomadaire) et au moins
-    // 3 mois distincts (le mensuel) : c'est la propriété qui distingue un vrai
-    // plan à étages d'un simple « garder 14 ».
-    expect(semaines.size).toBeGreaterThanOrEqual(4);
-    expect(mois.size).toBeGreaterThanOrEqual(3);
+      for (const s of semaines) {
+        expect(
+          semainesQuotidiennes.has(s),
+          `La semaine ISO ${s} est couverte À LA FOIS par l'étage quotidien et par ` +
+            `un étage inférieur : une place hebdomadaire a été gaspillée.`,
+        ).toBe(false);
+      }
 
-    // LE NON-CHEVAUCHEMENT, qui est le cœur de la règle : aucune archive des
-    // étages du dessous ne tombe dans une semaine déjà couverte par l'étage
-    // quotidien. Sans lui, les 7 quotidiennes mangeraient les places
-    // hebdomadaires et le plan ne remonterait jamais au-delà d'une semaine.
-    const semainesQuotidiennes = new Set(
-      periodesDe(septRecentes).map((p) => p.split(':')[0] ?? ''),
-    );
-    for (const s of semaines) {
+      // LA PROFONDEUR, qui est la RAISON D'ÊTRE des deux étages du bas et la
+      // seule chose que l'exploitant lise vraiment : 02 §11.4 promet trois mois.
+      // Le non-chevauchement est le moyen ; la profondeur est la promesse, et
+      // c'est elle qu'il faut mesurer — le défaut du 2026-09-07 la ramenait à
+      // 69 jours sans qu'aucun compte d'archives ne bouge (toujours 14).
+      const plusAncienne = [...gpg].sort()[0]?.slice(6, 14) ?? '';
+      const { sortie: ecart } = dansConteneur(
+        `echo $(( ( $(date -u -d "${aujourdhui}" +%s) - $(date -u -d "${plusAncienne}" +%s) ) / 86400 ))`,
+      );
       expect(
-        semainesQuotidiennes.has(s),
-        `La semaine ISO ${s} est couverte À LA FOIS par l'étage quotidien et par ` +
-          `un étage inférieur : une place hebdomadaire a été gaspillée.`,
-      ).toBe(false);
-    }
+        Number(ecart.trim()),
+        `Le plan ne remonte que jusqu'au ${plusAncienne} — 02 §11.4 en promet trois mois.\n` +
+          `Archives gardées :\n${gpg.join('\n')}`,
+      ).toBeGreaterThanOrEqual(90);
 
-    // Chaque archive gardée a gardé son empreinte : une `.sha256` orpheline ou
-    // manquante signerait une suppression à moitié faite.
-    const empreintes = contenu(archives).filter((f) => f.endsWith('.tar.zst.gpg.sha256'));
-    expect(empreintes.map((f) => f.replace(/\.sha256$/, '')).sort()).toEqual([...gpg].sort());
-  }, 300_000);
+      // Chaque archive gardée a gardé son empreinte : une `.sha256` orpheline ou
+      // manquante signerait une suppression à moitié faite.
+      const empreintes = contenu(archives).filter((f) => f.endsWith('.tar.zst.gpg.sha256'));
+      expect(empreintes.map((f) => f.replace(/\.sha256$/, '')).sort()).toEqual([...gpg].sort());
+    }, 300_000);
+  }
 
   it('@critique une archive dont la date est ILLISIBLE n’est JAMAIS supprimée', () => {
     const archives = repertoireNeuf();
     // `20250145` passe le motif (8 chiffres) et n'est pas une date. Elle est
     // posée ANCIENNE — donc au-delà de l'étage quotidien — pour que ce soit bien
     // la branche « par précaution » qui décide, et pas le rang.
-    poserArchivesDatees(archives, [...joursAvant('yesterday', 3), '20250145']);
+    // Le jour est FIXÉ, comme pour les sept cas ci-dessus : ce cas ne dépend pas
+    // du calendrier, et il n'y a aucune raison de le laisser en dépendre.
+    const aujourdhui = '2026-09-07';
+    poserArchivesDatees(archives, [...joursAvant('yesterday', 3, aujourdhui), '20250145']);
 
     const journal = jouerUnePasse(archives, {
+      AXION_TEST_AUJOURDHUI: aujourdhui,
       AXION_RETENTION_QUOTIDIENNES: '2',
       AXION_RETENTION_HEBDOMADAIRES: '0',
       AXION_RETENTION_MENSUELLES: '0',

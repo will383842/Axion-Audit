@@ -1283,9 +1283,14 @@ cle_periode() {
 # L'ordre est le seul qui donne un plan lisible : on descend du plus récent au
 # plus ancien, l'étage quotidien se sert le premier, puis l'hebdomadaire ne
 # réclame que des semaines encore libres, puis le mensuel que des mois encore
-# libres. Une archive gardée par un étage RÉSERVE sa semaine ET son mois : sans
-# cela, les 7 quotidiennes d'une même semaine laisseraient l'étage hebdomadaire
-# se resservir dans cette même semaine, et le plan ne remonterait jamais.
+# libres ET des semaines encore libres. Une archive gardée par un étage RÉSERVE
+# sa semaine ET son mois : sans cela, les 7 quotidiennes d'une même semaine
+# laisseraient l'étage hebdomadaire se resservir dans cette même semaine, et le
+# plan ne remonterait jamais.
+#
+# « ET DES SEMAINES ENCORE LIBRES » vaut pour le mensuel AUSSI, et cette moitié
+# de phrase a manqué au code jusqu'au 2026-09-07. Le détail est sur la condition
+# elle-même, plus bas : c'est là qu'on le lit en la relisant, pas ici.
 #
 # LA DÉCISION DE GARDER OU DE SUPPRIMER EST PRISE POUR TOUTE LA SÉRIE AVANT LE
 # PREMIER `rm`. Une boucle qui supprimerait en même temps qu'elle décide
@@ -1324,7 +1329,43 @@ faire_tourner_par_rang() {
       nb_semaines=$((nb_semaines + 1))
       raison="hebdomadaire ${nb_semaines}/${hebdomadaires} (semaine ISO ${semaine})"
     elif [ "$nb_mois" -lt "$mensuelles" ] &&
-         [ "${mois_pris#* "$mois" }" = "$mois_pris" ]; then
+         [ "${mois_pris#* "$mois" }" = "$mois_pris" ] &&
+         [ "${semaines_prises#* "$semaine" }" = "$semaines_prises" ]; then
+      # LA TROISIÈME CONDITION EST CELLE QUI MANQUAIT, ET LE CODE CONTREDISAIT
+      # SON PROPRE COMMENTAIRE. Plus bas, dans le bloc `if [ -n "$raison" ]`, la
+      # réservation dit sans ambiguïté : « toute archive gardée, quel que soit
+      # l’étage, RÉSERVE sa semaine ET son mois POUR LES ÉTAGES DU DESSOUS ».
+      # Les deux moitiés qui REMPLISSENT sont écrites ; un seul lecteur consultait.
+      # Le mensuel ne testait que `mois_pris` — jamais `semaines_prises`, à la
+      # différence de l'hebdomadaire juste au-dessus. La propriété était donc
+      # PROMISE en toutes lettres et non tenue : ce n'était pas une lecture
+      # discutable de la décision D-2, c’était un défaut d’implémentation.
+      # Le mensuel pouvait donc dépenser une place sur une semaine que le
+      # quotidien tenait déjà, et elle ne rapportait RIEN : mesuré le 2026-09-07
+      # (un lundi), l’archive du 31 août était gardée « mensuelle 1/3 » quand les
+      # quatre hebdomadaires choisies juste après — 30, 23, 16 et 9 août — sont
+      # TOUTES d'août. Le mois était couvert de toute façon ; le plan s'arrêtait
+      # au 30 juin au lieu du 31 mai, soit 69 jours au lieu de 99, LÀ OÙ
+      # 02 §11.4 EN PROMET TROIS MOIS. Aucun compte d'archives ne bougeait (14
+      # avant, 14 après) : seule la profondeur le disait.
+      #
+      # CE QUE CETTE CONDITION FAIT, ET C'EST PLUS QUE D'ÉVITER UN DOUBLON : tant
+      # que l'hebdomadaire a des places, toute archive dont la semaine est LIBRE
+      # lui revient (sa branche est testée d'abord). Le mensuel ne pouvait donc
+      # se déclencher AVANT lui qu'en se servant dans une semaine déjà prise —
+      # exactement ce qui est désormais interdit. L'étage mensuel attend
+      # dorénavant que l'hebdomadaire ait fini, ce que la décision D-2 disait
+      # déjà et que le code ne faisait pas.
+      #
+      # LE MOIS N'EST JAMAIS SAUTÉ POUR AUTANT, ET C'EST MESURÉ, PAS DÉDUIT. La
+      # descente continue et la condition est réévaluée sur l'archive suivante
+      # DU MÊME MOIS. Contre-épreuve du 2026-09-07, hebdomadaire forcé à 0 pour
+      # que seul le mensuel puisse couvrir août : le 31 août est refusé (sa
+      # semaine 202636 est tenue par le quotidien) et c'est le 30 août qui est
+      # gardé « mensuelle 1/3 (mois 202608) » — plus tôt dans le MÊME mois, et
+      # non un saut vers juillet. Avec l'hebdomadaire à 4, c'est lui qui prend le
+      # 30 août et réserve le mois au passage : dans les deux cas août est tenu.
+      # Éprouvé sur les sept jours de la semaine.
       nb_mois=$((nb_mois + 1))
       raison="mensuelle ${nb_mois}/${mensuelles} (mois ${mois})"
     fi
