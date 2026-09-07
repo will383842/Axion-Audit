@@ -11218,3 +11218,29 @@ correctif, sans quoi le critère de porte n'est éprouvé de bout en bout nulle 
 
 Décideur : A01
 Impact spec : aucun — application de 03 §33.3, 03 §33.5 et de l'amendement §32.4 du 2026-09-02.
+
+## 2026-09-07 — [L5b] La dérivation des crans 2 et 4 vaut-elle sur toute amplitude, ou sur la seule échelle 1-5 ?
+
+Soulevé par A21 en implémentant R1 : `resoudreAncre` déclenche le libellé dérivé sur le NUMÉRO du
+cran (2 ou 4), sans exiger `noteMin === 1 && noteMax === 5`. C'est la lecture littérale de mon
+contrat, et le composant expose bien `noteMin`/`noteMax`.
+
+Options :
+a) Garder le déclenchement sur le numéro du cran, quelle que soit l'amplitude.
+b) Borner la dérivation à `noteMin === 1 && noteMax === 5` ; hors de là, texte de repli.
+c) Trancher « le jour où le cas se présente ».
+
+Arbitrage : b).
+Précédence §32-36 : l'amendement §32.4 du 2026-09-02 énonce « la note 2 (resp. 4) exige au moins un
+élément établi de l'ancre 3 (resp. 5) », et §33.3 ouvre par « sur TOUTE ÉCHELLE 1-5 ». La doctrine
+est écrite POUR cette amplitude et ne dit rien d'une autre : sur une échelle 0-10 ou 1-4, le libellé
+dérivé ferait affirmer au composant une règle de cotation que le pack n'a jamais écrite — c'est de
+l'invention de spec (CLAUDE.md §3), et elle serait invisible puisqu'elle se lirait comme une ancre.
+c) est écartée : un report implicite dans un composant partagé n'attend pas le cas, il l'accueille en
+silence — personne ne relira ce fil le jour où quelqu'un passera `noteMin`/`noteMax`.
+Hors 1-5 la ligne reste explicite (texte de repli) : ni mensonge, ni blanc.
+Si une échelle d'une autre amplitude devient nécessaire, c'est une question de SPEC pour Williams
+(les types de réponse sont figés en 04 et §32.4), jamais un choix de composant.
+
+Décideur : A01
+Impact spec : aucun — bornage à la lettre de §33.3 et de l'amendement §32.4 du 2026-09-02.

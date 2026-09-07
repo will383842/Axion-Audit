@@ -2484,3 +2484,18 @@ leçon n'est pas le libellé, c'est que **deux agents en parallèle sur un même
 que le contrat nomme aussi les chaînes d'interface**, pas seulement le comportement.
 
 Coût : négligeable (~0,02 j). **Compteur L5b : ~0,12 j consommé sur 0,5 j.**
+
+## 2026-09-07 — [L5b/R1] Étage 1 EN ATTENTE — la fiche `/design` démontre les crans dérivés sans les nommer
+
+**Constat (A21, relayé par A01).** `apps/hq/src/ecrans/design/fiches-metier.tsx` illustre déjà les
+crans dérivés — la fiche passe des ancres `[1, 3, 5]`, donc les crans 2 et 4 s'y rendent dérivés —
+mais son texte de propos ne les mentionne pas : un lecteur voit la marque « Ancre dérivée » sans
+savoir qu'elle est attendue.
+
+**NON EXÉCUTÉE, et le motif est de périmètre, pas de coût.** Nous sommes sous 09 §4bis (porte
+refusée : seuls les correctifs de ses critères sont autorisés), et `apps/hq/**` est le territoire du
+chantier C3. A01 : « la fiche `/design` est un catalogue : elle illustre, elle ne prouve pas ». La
+preuve de R1 pour la porte, ce sont le E2E sur émulation iPad avec la fixture corrigée, les tests
+d'interface et le rejeu d'A54 — pas cette phrase.
+
+À prendre par **A30** dans le flux normal de C3, **après** la porte. Coût : une phrase.
