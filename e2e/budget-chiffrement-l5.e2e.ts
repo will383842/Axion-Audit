@@ -121,6 +121,21 @@ import {
 const BUDGET_MS = 50;
 
 /**
+ * 09 §3, en toutes lettres : « A28 agent accessibilité/perf (… **p95 interactions
+ * < 100 ms**, benchmark chiffrement < 50 ms/écriture) ». DEUX budgets distincts,
+ * dans la même parenthèse — et c'est ce qui tranche le périmètre du 11 §4.
+ *
+ * L'écriture locale complète n'est donc PAS bornée par les 50 ms ci-dessus : le
+ * budget du 11 §4 porte sur les enveloppes (arbitrage A01, `DECISIONS.md`
+ * 2026-09-07). Elle n'est pas pour autant sans borne — elle relève du SECOND
+ * budget d'A28, dont elle est une **condition nécessaire** : si la transaction
+ * seule dépassait 100 ms, aucune interaction ne pourrait tenir. Ce n'est pas la
+ * mesure complète du budget d'interactions pour autant : le trajet tap → peinture
+ * n'est pas mesuré ici, et reste dû sur les listes longues de FIL-GC à P-E.
+ */
+const BUDGET_INTERACTION_MS = 100;
+
+/**
  * Le nombre d'écritures mesurées.
  *
  * Quarante, et pas dix : un p95 se lit sur au moins deux dizaines d'échantillons
@@ -428,7 +443,8 @@ test.describe('L5 — budget de chiffrement par écriture (11 §4 : < 50 ms)', (
     const ecritures = echantillons.map((e) => e.ecritureMs ?? 0);
 
     const releve =
-      `n=${String(echantillons.length)} écriture(s) · budget 11 §4 : ${String(BUDGET_MS)} ms · ` +
+      `n=${String(echantillons.length)} écriture(s) · budgets : 11 §4 ${String(BUDGET_MS)} ms ` +
+      `sur les enveloppes, 09 §3 ${String(BUDGET_INTERACTION_MS)} ms sur l'écriture complète · ` +
       `chiffrement (2 enveloppes) médiane ${arrondi(mediane(chiffrements))} ms, ` +
       `p95 ${arrondi(p95(chiffrements))} ms, max ${arrondi(Math.max(...chiffrements))} ms · ` +
       `écriture complète (transaction Dexie comprise) médiane ${arrondi(mediane(ecritures))} ms, ` +
@@ -442,10 +458,21 @@ test.describe('L5 — budget de chiffrement par écriture (11 §4 : < 50 ms)', (
     // en CI même quand le test passe.
     test.info().annotations.push({ type: 'mesure A28', description: releve });
 
-    // ── LES DEUX LECTURES DU 11 §4, ASSERTÉES TOUTES LES DEUX ───────────────
-    expect(p95(chiffrements), `chiffrement des deux enveloppes — ${releve}`).toBeLessThan(
+    // ── DEUX BORNES, CHACUNE SOUS LA RÈGLE QUI LA POSSÈDE ───────────────────
+    // Et non deux lectures d'un même seuil : l'arbitrage A01 du 2026-09-07 a
+    // tranché que le 11 §4 borne les ENVELOPPES, la transaction relevant du
+    // second budget d'A28 (09 §3). Aucune des deux n'est surnuméraire — elles
+    // bornent deux choses différentes, et la seconde couvre ce que la première
+    // ne couvre pas. Les marges sont d'ailleurs dissymétriques : facteur ~30 sur
+    // les enveloppes, ~8 sur l'écriture complète. La première ne peut pas rougir
+    // sur un runner chargé ; la seconde le peut, et c'est pour ça qu'elle porte
+    // le seuil de la règle qui la possède plutôt qu'un seuil emprunté.
+    expect(p95(chiffrements), `chiffrement des deux enveloppes (11 §4) — ${releve}`).toBeLessThan(
       BUDGET_MS,
     );
-    expect(p95(ecritures), `écriture complète — ${releve}`).toBeLessThan(BUDGET_MS);
+    expect(
+      p95(ecritures),
+      `écriture complète, condition nécessaire du budget d'interactions (09 §3) — ${releve}`,
+    ).toBeLessThan(BUDGET_INTERACTION_MS);
   });
 });

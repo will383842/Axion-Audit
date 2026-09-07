@@ -11093,3 +11093,49 @@ Décideur : **A01**, sur délégation de Williams du 2026-09-04.
 Impact spec : aucun ; D-2 (7/4/3, ~90 j) inchangée. **Rectification** : l'entrée du 2026-09-07 sur
 #86 affirmait « l'option 2 ne peut d'ailleurs rien retirer […] jamais moins ». C'est faux, R1 le
 prouve, et c'est cette phrase qui a produit le défaut. Append-only : non réécrite, corrigée ici.
+
+## 2026-09-07 — [L5] Le budget « chiffrement < 50 ms/écriture » (11 §4) borne-t-il les deux enveloppes, ou l'écriture Dexie complète ?
+
+Doute renvoyé par A28. `ecrireLocal` (`apps/field/src/local/ecriture.ts:153`) fait deux
+`coffre.chiffrer` PUIS une transaction `rw` sur deux tables. Le banc les mesure toutes les deux et
+les deux tiennent : l'arbitrage ne peut rendre aucune assertion fausse. Il fixe ce qu'un ROUGE
+futur voudra dire — et sur quoi A27 mesurera l'iPad. C'est pour cela qu'il se prend MAINTENANT,
+pendant que tout est vert : après un rouge, la même phrase serait un déplacement de but.
+
+Options :
+
+- **(a) les deux enveloppes seules** — la puce s'intitule « Crypto navigateur », et une
+  transaction IndexedDB n'est pas de la crypto.
+- **(b) l'écriture complète, transaction comprise** — « /écriture » désignerait le geste entier.
+
+Arbitrage : **(a) — et la transaction n'est pas pour autant sans borne : elle relève du SECOND
+budget d'A28, pas de celui-ci.**
+
+09 §3 énumère la charge d'A28 : « p95 interactions <100 ms, **benchmark chiffrement** <50
+ms/écriture ». Deux budgets distincts, dans la même parenthèse. (b) les fondrait en un seul et
+laisserait « p95 interactions » sans objet propre. Le budget voisin de 11 §4 — « dérivation de clé
+< 1 s » — est lui aussi une opération de crypto pure : « /écriture » est le DÉNOMINATEUR (une
+écriture chiffre deux fois), pas le périmètre. Enfin `ecriture.ts` chiffre hors transaction pour
+éviter `TransactionInactiveError`, pas pour la performance : faire porter le budget sur cette
+frontière laisserait l'implémentation choisir son propre examen.
+
+Ce qui empêche (a) d'être un seuil vide n'est donc pas d'élargir le seuil, c'est l'autre budget.
+Mesure A28 (40 écritures) : chiffrement p95 0,60–1,80 ms — facteur ~30 ; écriture complète p95
+6,30–12,50 ms — facteur ~4 sur 50, ~8 sur 100. **La crypto ne coûte rien, IndexedDB coûte dix fois
+plus** : un dépassement viendra de la base ou de la taille des charges, jamais d'AES-GCM.
+
+Règle de précédence : sans objet — aucune divergence entre §32-36 / §24-31 / §16-22 / §1-15, et
+aucune de ces sections ne borne la latence d'écriture locale. Le contrat 11 gouverne donc, et c'est
+09 §3 qui lève son ambiguïté — par le texte du pack, non par une préférence.
+
+Trois conséquences opposables, écrites avant les mesures qu'elles jugeront :
+
+1. Les DEUX assertions du banc restent, chacune sous SON seuil : enveloppes < 50 ms (11 §4),
+   écriture complète < 100 ms (09 §3, condition nécessaire du budget d'interactions). Aucune n'est
+   surnuméraire — elles bornent deux choses, et la seconde couvre ce que (a) ne couvre pas.
+2. **A27, iPad, P-C** : seuil opposable 50 ms aux enveloppes, 100 ms à l'écriture complète.
+3. Le relevé A28 vaut pour `chromium-1194` via une config hors arbre (1.62.1 épingle
+   `chromium-1234`, absent du conteneur) : ce ne sont NI les chiffres de la CI, NI un iPad.
+
+Décideur : **A01**, sur délégation de Williams du 2026-09-04.
+Impact spec : aucun. 11 §4 et 09 §3 inchangés — interprétation, pas amendement.
