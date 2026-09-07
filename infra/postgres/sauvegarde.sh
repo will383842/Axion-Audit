@@ -1307,15 +1307,40 @@ faire_tourner_par_rang() {
   local rang=0 gardes=0 supprimes=0 f raison
   local semaine mois semaines_prises=' ' mois_pris=' ' nb_semaines=0 nb_mois=0
   local a_garder=''
+  local serie paires reste mois_encore_sous g
+
+  # LA SÉRIE EST LUE UNE SEULE FOIS, et pas seulement par économie : le veto de
+  # semaine ci-dessous doit savoir si le mois courant REVIENT plus bas, et une
+  # relecture du répertoire à chaque candidat pourrait voir un état différent.
+  serie="$(ls -1 "$ARCHIVES" 2>/dev/null | grep -E "$motif" | sort -r)"
+
+  # Le mois de CHAQUE archive, calculé une fois — `nom:AAAAMM`, dans l'ordre de
+  # la série. Sans cette table, savoir si un mois revient plus bas coûterait une
+  # substitution de commande par candidat et par candidat, soit le carré de la
+  # série : 14 400 sous-shells pour 120 archives. Et la calculer par `cle_periode`
+  # plutôt qu'en redécoupant les noms ici garde UNE seule définition du mois —
+  # deux découpes qui divergent seraient exactement le défaut que ce fichier a
+  # déjà payé deux fois.
+  paires=''
+  for g in $serie; do paires="$paires$g:$(cle_periode "$g" mois) "; done
 
   # Les noms sont produits par ce script seul, sans espace ni caractère exotique :
   # le tri de `ls` est sûr ici, et l'horodatage se trie lexicographiquement comme
   # chronologiquement.
-  for f in $(ls -1 "$ARCHIVES" 2>/dev/null | grep -E "$motif" | sort -r); do
+  for f in $serie; do
     rang=$((rang + 1))
     semaine="$(cle_periode "$f" semaine)"
     mois="$(cle_periode "$f" mois)"
     raison=''
+
+    # LE MOIS DE CETTE ARCHIVE REVIENT-IL PLUS BAS DANS LA SÉRIE ? C'est la
+    # question dont dépend le veto de semaine, et elle n'était pas posée.
+    # `reste` = tout ce qui suit la paire de `$f` ; on y cherche le même mois.
+    reste="${paires#*"$f:$mois" }"
+    case " $reste " in
+      *":$mois "*) mois_encore_sous=1 ;;
+      *) mois_encore_sous=0 ;;
+    esac
 
     if [ "$rang" -le "$quotidiennes" ]; then
       raison="quotidienne ${rang}/${quotidiennes}"
@@ -1330,7 +1355,8 @@ faire_tourner_par_rang() {
       raison="hebdomadaire ${nb_semaines}/${hebdomadaires} (semaine ISO ${semaine})"
     elif [ "$nb_mois" -lt "$mensuelles" ] &&
          [ "${mois_pris#* "$mois" }" = "$mois_pris" ] &&
-         [ "${semaines_prises#* "$semaine" }" = "$semaines_prises" ]; then
+         { [ "${semaines_prises#* "$semaine" }" = "$semaines_prises" ] ||
+           [ "$mois_encore_sous" = 0 ]; }; then
       # LA TROISIÈME CONDITION EST CELLE QUI MANQUAIT, ET LE CODE CONTREDISAIT
       # SON PROPRE COMMENTAIRE. Plus bas, dans le bloc `if [ -n "$raison" ]`, la
       # réservation dit sans ambiguïté : « toute archive gardée, quel que soit
@@ -1357,15 +1383,33 @@ faire_tourner_par_rang() {
       # dorénavant que l'hebdomadaire ait fini, ce que la décision D-2 disait
       # déjà et que le code ne faisait pas.
       #
-      # LE MOIS N'EST JAMAIS SAUTÉ POUR AUTANT, ET C'EST MESURÉ, PAS DÉDUIT. La
-      # descente continue et la condition est réévaluée sur l'archive suivante
-      # DU MÊME MOIS. Contre-épreuve du 2026-09-07, hebdomadaire forcé à 0 pour
-      # que seul le mensuel puisse couvrir août : le 31 août est refusé (sa
-      # semaine 202636 est tenue par le quotidien) et c'est le 30 août qui est
-      # gardé « mensuelle 1/3 (mois 202608) » — plus tôt dans le MÊME mois, et
-      # non un saut vers juillet. Avec l'hebdomadaire à 4, c'est lui qui prend le
-      # 30 août et réserve le mois au passage : dans les deux cas août est tenu.
-      # Éprouvé sur les sept jours de la semaine.
+      # LE MOIS N'EST JAMAIS SAUTÉ POUR AUTANT — et c'est `mois_encore_sous` qui
+      # le garantit, pas la bonne volonté du calendrier. Le raisonnement d'origine
+      # était : « la descente continue et la condition est réévaluée sur l'archive
+      # suivante DU MÊME MOIS ». Il est juste, et il ne vaut QUE SI une telle
+      # archive existe. La réserve R1 de la revue A17 du 2026-09-07 l'a mesuré :
+      # sur une série CREUSE, le veto supprimait la dernière archive de son mois
+      # et le mois disparaissait — 13 gardées au lieu de 14, juillet 2026 sans
+      # aucune archive, une place mensuelle sur trois gaspillée. Le correctif
+      # réinstallait donc, une ligne plus bas, le défaut même qu'il corrigeait :
+      # un commentaire qui promet ce que le code ne tient pas.
+      #
+      # D-2 (Williams, 2026-08-28) tranche le doute dans un seul sens : « le coût
+      # d'une archive gardée en trop est de quelques mégaoctets ; celui d'une
+      # archive supprimée à tort est une restauration impossible. » Le veto ne
+      # s'applique donc QUE quand il ne peut rien coûter — quand le mois revient
+      # plus bas et sera réexaminé.
+      #
+      # MESURÉ le 2026-09-07 sur la fonction réelle, trois séries :
+      #   · creuse (R1, cas 1)   13 → 14 gardées, juillet retrouvé, 5 mois couverts
+      #   · août seul (R1, cas 2) 10 → 11 gardées, août retrouvé
+      #   · dense 120 j (gain #86) 14 gardées, plus ancienne 20260531 — INCHANGÉ
+      # Le gain de profondeur de #86 (99 j contre 69) est donc intégralement tenu.
+      #
+      # BORNE ASSUMÉE : si le mois revient plus bas mais que TOUS les étages sont
+      # épuisés avant qu'on n'y arrive, le mois est perdu malgré tout. Ce cas
+      # suppose un plan déjà plein sur des mois plus profonds ; il n'est pas pire
+      # que l'état d'avant #86, et il n'est pas couvert par une mesure.
       nb_mois=$((nb_mois + 1))
       raison="mensuelle ${nb_mois}/${mensuelles} (mois ${mois})"
     fi
