@@ -11147,7 +11147,9 @@ L'arbitrage du 2026-09-05 (A01) conditionne la bascule `ZAP_BLOQUANT` à une cou
 seconde bute sur un constat **mesuré par A51**, qui change l'énoncé de la condition :
 
 **`POST /v1/auth/login` ne pose AUCUN cookie.** `grep -rn "setCookie" apps/api/src` → rien ; la
-réponse est `{accessToken, refreshToken, tokenType:'Bearer'}` (`packages/shared/src/auth.ts:134`).
+réponse (`authSessionSchema`, `packages/shared/src/auth.ts:133`) porte SIX champs :
+`accessToken`, `refreshToken`, `tokenType:'Bearer'`, `accessExpiresAt`, `refreshExpiresAt`,
+`userId` — dont `accessExpiresAt`, qui porte le piège des 15 min décrit plus bas.
 Le mécanisme cookie httpOnly + en-tête anti-CSRF du 11 §3 est **côté console seulement, en attente
 de A-006**. « Authentification comprise » ne peut donc pas signifier « auditer les attributs des
 cookies de session » : il n'y en a pas à auditer.
@@ -11161,8 +11163,8 @@ Options :
 
 Arbitrage : **EN ATTENTE — Williams**, et il ne peut pas être rendu autrement : **les deux options
 exigent d'abord un compte de test sur staging, qui n'existe pas.** Inventaire des `secrets.*` des
-workflows : `DEPLOY_*`, `COOLIFY_*`, `TELEGRAM_*`, `RESTORE_SSH_KEY`, `AXION_CLIENTS_SURVEILLES` —
-rien d'applicatif. Le geste est le sien, la question l'accompagne.
+workflows : `DEPLOY_*`, `COOLIFY_*`, `TELEGRAM_*`, `RESTORE_SSH_KEY`, `AXION_CLIENTS_SURVEILLES`, plus
+`GITHUB_TOKEN` que GitHub fournit lui-même — **rien d'applicatif**. Le geste est le sien, la question l'accompagne.
 
 **Trois conditions qu'A51 refuse de s'accorder à lui-même, et qui viennent avec** :
 (a) le compte doit être du rôle **le plus faible** (`lecteur`), jamais `admin` — l'invariant 3

@@ -359,8 +359,16 @@ dans le dépôt. Ce qui précède doit être **relu sur le dépôt** avant d'êt
 - [ ] Vérifier que le job `schema-diff` **cesse** d'afficher son avertissement dès que L1 commite
       ses migrations + son `schema-manifest.json`. S'il l'affiche encore, le contrôle du critère L1
       « diff schéma-vs-04 = zéro écart » n'a pas lieu.
-- [ ] Au **lot L2** : passer `ZAP_BLOQUANT` à `'true'` dans `zap-baseline.yml`, **et** y épingler
-      le digest ZAP relevé dans les journaux (`ghcr.io/zaproxy/zaproxy@sha256:…`).
+- [ ] À la **porte P-C** — et NON « au lot L2 », jalon déjà franchi : passer `ZAP_BLOQUANT` à
+      `'true'` dans `zap-baseline.yml`, **et** y épingler le digest ZAP relevé dans les journaux
+      (`ghcr.io/zaproxy/zaproxy@sha256:…`). L'échéance a été déplacée par l'arbitrage A01 du
+      2026-09-05 (`DECISIONS.md`), qui la **conditionne** : la couverture doit d'abord s'étendre à
+      `/hq` et `/api`, **authentification comprise**, sinon la bascule protégerait encore une page
+      statique. La moitié non authentifiée est livrée le 2026-09-07 ; la moitié authentifiée attend
+      un compte de test sur staging, qui n'existe pas — c'est un geste de Williams.
+      _Cette case disait « au lot L2 » jusqu'au 2026-09-07, désignant un jalon franchi sans un mot
+      de la condition : elle aurait fait cocher la bascule sans rien armer, ce qui est exactement
+      ce qui s'est produit à la porte L2 (F-31, cause 2)._
 - [ ] Au **lot L2** : déplacer `apps/api/src/rbac/**` **et** `apps/api/src/auth/**` de
       `.cheminsAttendus` vers `.cheminsCritiques` dans `.github/coverage-critical-paths.json`. La
       « ceinture 2 » du job `coverage` teste désormais **chaque** module séparément : en oublier un

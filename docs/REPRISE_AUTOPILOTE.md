@@ -111,8 +111,8 @@ La ligne d'origine disait : « Les 7 “serveur” sont désormais JOUABLES (sta
 - **Points 1 à 5** (embarquement FIL-TPE/FIL-GC, cockpit sur vraies données, entretien complet,
   6 `kind` de session, 5 formes de saisie) exigent tous **une identité d'auditeur sur staging**.
   Or **aucun compte de test n'existe** : inventaire des `secrets.*` de `.github/workflows/*.yml`
-  → `DEPLOY_*`, `COOLIFY_*`, `TELEGRAM_*`, `RESTORE_SSH_KEY`, `AXION_CLIENTS_SURVEILLES`. **Rien
-  d'applicatif.** Sans compte, pas d'appareil rattaché, donc pas de mission embarquée, donc aucun
+  → `DEPLOY_*`, `COOLIFY_*`, `TELEGRAM_*`, `RESTORE_SSH_KEY`, `AXION_CLIENTS_SURVEILLES`, plus
+  `GITHUB_TOKEN` que GitHub fournit lui-même. **Rien d'applicatif.** Sans compte, pas d'appareil rattaché, donc pas de mission embarquée, donc aucun
   des cinq. **Dus à Williams** — c'est lui qui crée le compte et pose le secret.
 - **Point 6** (migrations up/down sur staging) : le dépôt le dit déjà lui-même, et l'a écrit avant
   moi. `.github/workflows/ci.yml` : « Ce job prouve up ET down sur le Postgres JETABLE de la CI ; il

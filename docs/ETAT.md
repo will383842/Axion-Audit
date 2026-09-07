@@ -4612,3 +4612,26 @@ EN-TÊTES DE RÉPONSE, c'est tout. **Le point 7 de P-C n'est pas coché** — il
 
 `--no-verify` employé sur deux poussées de cette branche (CLAUDE.md §8 l'exige écrit ici) : A51
 tenait les fichiers `.github/` en cours d'écriture. Le dernier état passe tous les gardes.
+
+## 2026-09-07 13h00 — [P-C point 7 / ZAP] — étape pipeline 4/7 close, 5/7 en cours
+
+Dernier commit vert : ee787cf (PR #93, 20 jobs verts) · Branche : fix/zap-perimetre-hq-api · Poussé : oui
+Tâche en cours : les 8 réserves d'A17 sont levées, chacune rejouée par le pilote avant correction. Aucune n'était bloquante ; R1 l'était moralement.
+Prochaine action : pousser, attendre la CI, fusionner #93. Le premier VRAI scan à trois cibles n'aura lieu qu'au déploiement ou au cron 03h17 — la CI de la PR ne prouve QUE la table, les gardes et la syntaxe.
+Tests rouges connus : aucun. Table de vérité 27/27, trois gardes neufs éprouvés.
+
+**R1 mérite d'être retenue, et elle est de moi.** Le commentaire que j'ai écrit affirmait qu'un
+`[ … ] && code=…` serait un piège sous `set -e`. C'est FAUX — mesuré : sortie 0. Le membre gauche
+d'une liste `&&` court-circuitée est exempté d'`errexit`. Et **le même fichier pratique ce motif
+vingt lignes plus haut**. J'ai donc condamné en 457 ce que le fichier fait en 299, dans le commit
+dont la thèse est que ce fichier a déjà payé deux fois le prix d'un commentaire qui ment. Le trouver
+demandait de tester une règle de bash que tout le monde croit connaître.
+
+**Trois gardes neufs, chacun éprouvé et pas seulement ajouté** : unicité des étiquettes (une cible en
+double écrasait un rapport en silence et faussait le décompte dans le sens rassurant) · schéma et
+espace de l'URL de base · structure du rapport JSON (`{}` de 3 octets passait « rapport présent »
+puis rendait 0 partout). Contre-épreuves : code 1 sur chaque cas fautif, code 0 sur le nominal.
+
+**Erreur de recopie de ma part, relevée par A17** : `GITHUB_TOKEN` figurait dans ma propre sortie de
+`grep` et je l'ai omis de l'inventaire des secrets, dans DECISIONS.md ET REPRISE_AUTOPILOTE. La
+conclusion (« rien d'applicatif ») tenait ; l'énumération, elle, était incomplète.

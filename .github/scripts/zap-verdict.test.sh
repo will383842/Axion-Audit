@@ -33,10 +33,23 @@ eprouver() {
   local obtenu
   total=$((total + 1))
   set +e
-  # `bash <script>` et non `<script>` : le bit exécutable ne survit pas au dépôt
-  # (git a enregistré 100644 depuis Windows), et un 126 « permission denied »
-  # ferait dire au test que la garde ne mord plus alors qu'elle n'a pas tourné.
-  # Mesuré : run 33925076306, 13/13 cas faux pour cette seule raison.
+  # `bash <script>` et non `<script>` : un 126 « permission denied » ferait dire
+  # au test que la garde ne mord plus alors qu'elle n'a pas tourné. Le choix est
+  # bon et il reste — c'est sa JUSTIFICATION qui était fausse.
+  #
+  # Elle affirmait : « le bit exécutable ne survit pas au dépôt (git a enregistré
+  # 100644 depuis Windows) ». Réfuté en une commande par la revue croisée A17 du
+  # 2026-09-07 : `git ls-tree` sur le commit de création rend **100755**, et
+  # `git ls-files -s` le rend encore aujourd'hui. Mieux, `check:executabilite`
+  # (`MODE_EXECUTABLE = '100755'`, joué sur tout `*.sh` du dépôt) rend un 100644
+  # STRUCTURELLEMENT impossible pour un `.sh` à shebang.
+  # L'assertion s'appuyait sur une mesure datée (« run 33925076306 ») — et c'est
+  # ce format qui donne à une affirmation fausse sa force de persuasion : le
+  # run avait bien 13/13 cas faux, mais pas pour cette raison-là.
+  #
+  # Ce qui reste vrai, et qui suffit à garder `bash` : l'invocation directe
+  # dépendrait d'un bit que rien ne garantit hors de ce dépôt-ci (archive, copie,
+  # montage `noexec`, banc de réviseur). Le coût est nul, la dépendance en moins.
   bash "${verdict}" "${code}" "${bloquant}" "epreuve" >/dev/null 2>&1
   obtenu=$?
   set -e

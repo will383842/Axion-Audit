@@ -290,10 +290,39 @@ jobs:
             echo "::error title=Cible ZAP absente::Aucune URL fournie et vars.STAGING_BASE_URL est vide (GitHub → Settings → Secrets and variables → Actions → Variables). Sans cible, il n'y a pas de scan — et un job vert sans scan est exactement le défaut F-31."
             exit 1
           fi
+          # L'URL DE BASE EST VALIDÉE COMME LE RESTE, et elle ne l'était pas.
+          # Réserve R3 d'A17 : l'étape validait l'étiquette (deux contrôles) et
+          # le chemin (deux contrôles) mais acceptait `example.com` sans schéma
+          # et `https://s/ /x` avec une espace — cette dernière se scindant en
+          # DEUX éléments dans la boucle de scan. Fail-closed en aval dans les
+          # deux cas (ZAP rend 3, ou le rapport manque), donc jamais de vert
+          # imprudent ; mais une étape qui se dit validante ne laisse pas sa
+          # seule entrée libre du dehors sans contrôle.
+          case "${base}" in
+            *[[:space:]]*)
+              echo "::error title=URL de base ZAP invalide::« ${base} » contient une espace. L'URL est développée sans guillemets dans la boucle de scan : elle se scinderait en plusieurs cibles, et le scan viserait autre chose que ce qui est écrit."
+              exit 1
+              ;;
+            https://*|http://*) ;;
+            *)
+              echo "::error title=URL de base ZAP sans schéma::« ${base} » ne commence ni par https:// ni par http://. ZAP ne saurait pas quoi en faire, et le job rougirait vingt minutes plus tard sur un code 3 au lieu de rougir ici."
+              exit 1
+              ;;
+          esac
           base="${base%/}"
 
           cibles=''
           nb=0
+          # Les étiquettes déjà vues — l'unicité N'ÉTAIT PAS contrôlée alors que
+          # l'étiquette « devient un nom de dossier ». Réserve R2 d'A17, mesurée :
+          # avec deux cibles étiquetées `terrain`, deux scans tournent mais UN
+          # SEUL rapport survit (le second écrase le premier), l'artefact n'en
+          # contient qu'un, et le résumé imprime deux lignes qui lisent toutes
+          # deux le MÊME rapport — un décompte faux, dans le sens flatteur.
+          # Le verdict, lui, restait juste (les deux codes sont dans la liste) :
+          # c'est donc un piège tendu à qui ajoutera la quatrième cible, pas un
+          # défaut vivant. On le ferme avant qu'il ne morde.
+          vues=' '
           while IFS= read -r ligne; do
             ligne="$(printf '%s' "${ligne}" | tr -d '[:space:]')"
             [ -z "${ligne}" ] && continue
@@ -310,6 +339,13 @@ jobs:
                 exit 1
                 ;;
             esac
+            case "${vues}" in
+              *" ${etiquette} "*)
+                echo "::error title=Étiquette de cible en double::« ${etiquette} » apparaît deux fois dans ZAP_CHEMINS. L'étiquette est un nom de dossier : le second scan ÉCRASERAIT le rapport du premier, l'artefact n'en porterait qu'un, et le résumé imprimerait deux lignes lisant le même fichier — un décompte faux dans le sens rassurant. Le verdict resterait juste, ce qui rend le défaut d'autant plus discret."
+                exit 1
+                ;;
+            esac
+            vues="${vues}${etiquette} "
             cibles="${cibles} ${etiquette}=${base}${chemin}"
             nb=$((nb + 1))
           done <<< "${ZAP_CHEMINS}"
@@ -401,10 +437,21 @@ jobs:
           for entree in ${CIBLES}; do
             etiquette="${entree%%=*}"
             fichier="rapport-zap/${etiquette}/rapport-zap.json"
+            # `-s` NE SUFFIT PAS, et c'est la question 5 posée à l'envers.
+            # Réserve R4 d'A17, mesurée : un fichier contenant `{}` — trois
+            # octets — passe « rapport présent », puis le décompte rend 0 sur
+            # les quatre sévérités. Le seul endroit du fichier où le contrôle
+            # d'existence et le décompte peuvent, ENSEMBLE, rassurer sur rien.
+            # On exige donc que le JSON soit valide ET qu'il porte un `site` :
+            # c'est la structure que le décompte lit ensuite, et un rapport qui
+            # ne la porte pas n'est pas un rapport de scan.
             if [ ! -s "${fichier}" ]; then
               manquants="${manquants} ${etiquette}"
+            elif ! jq -e 'has("site") and (.site | type == "array")' "${fichier}" >/dev/null 2>&1; then
+              echo "::error title=Rapport ZAP sans site::${fichier} est un JSON qui ne porte pas de tableau « site » — c'est la structure que lit le décompte par sévérité. Un rapport qui ne l'a pas ferait afficher des zéros partout : rassurant, et faux. BLOQUANT quel que soit ZAP_BLOQUANT."
+              manquants="${manquants} ${etiquette}"
             else
-              echo "Rapport JSON présent pour ${etiquette} ($(wc -c < "${fichier}") octets)."
+              echo "Rapport JSON présent et structuré pour ${etiquette} ($(wc -c < "${fichier}") octets)."
             fi
           done
           if [ -n "${manquants}" ]; then
@@ -454,8 +501,20 @@ jobs:
             fichier="rapport-zap/${etiquette}/rapport-zap.json"
             code='?'
             for paire in ${CODES:-}; do
-              # Un `[ … ] && code=…` serait un piège sous `set -e` : quand le test
-              # échoue, la liste entière échoue et l'étape sortirait ici.
+              # La forme `if … fi` est retenue pour sa lisibilité, PAS parce
+              # qu'un `[ … ] && code=…` serait dangereux : il ne l'est pas.
+              # Mesuré le 2026-09-07, réserve R1 de la revue croisée A17 —
+              # `set -euo pipefail; for p in a=1 b=2; do [ "${p%%=*}" = "zzz" ]
+              # && c="${p#*=}"; done; echo APRES` → sortie 0, « APRES » affiché.
+              # Le membre gauche d'une liste `&&` est EXEMPTÉ d'`errexit` ; bash
+              # ne sort que si l'AND-list est la dernière commande d'une
+              # fonction. Ce fichier pratique d'ailleurs ce motif vingt lignes
+              # plus haut (`[ -z "${ligne}" ] && continue`).
+              # La version précédente de ce commentaire affirmait l'inverse.
+              # Elle condamnait donc ici ce que le fichier fait plus haut — et
+              # c'est la moitié invisible de F-31 (« le commentaire aggravait le
+              # piège en énonçant une table de codes fausse ») rejouée dans le
+              # commit même qui la met en accusation.
               if [ "${paire%%=*}" = "${etiquette}" ]; then code="${paire#*=}"; fi
             done
             if [ -s "${fichier}" ]; then
