@@ -329,6 +329,39 @@ const DERIVEE_CRAN_4 =
   'sans qu’elle soit atteinte (doctrine §32.4).';
 
 /**
+ * LES TROIS COPIES DE REPLI, et la marque — arbitrage A01 du 2026-09-07,
+ * second tour (DECISIONS.md, commit `48bd8d2`).
+ *
+ * Elles ne sont pas interchangeables, et c'est tout leur intérêt :
+ *   · la première nomme LA NOTE et renvoie aux ancres voisines — l'auditeur a
+ *     une échelle ancrée, mais pas sur ce cran-là ;
+ *   · la deuxième dit que la QUESTION n'en a aucune — le renvoi aux voisines
+ *     serait un mensonge, il n'y a pas de voisine ;
+ *   · la troisième vit DANS le dépliant, où « comparez ci-dessous » n'aurait
+ *     aucun sens : le lecteur y est déjà.
+ * Un composant qui servirait la même phrase partout passerait un test qui ne
+ * vérifierait que la non-vacuité. C'est pourquoi chacune est vérifiée AU TEXTE,
+ * dans le contexte qui est le sien, et jamais par une classe CSS.
+ */
+const REPLI_SANS_AUCUNE_ANCRE = 'Aucune ancre de cotation n’est fournie pour cette question.';
+const REPLI_DEPLIANT = 'La banque ne fournit pas d’ancre pour ce niveau.';
+function repliSurLaNote(note: number): string {
+  return (
+    `La banque ne fournit pas d’ancre pour la note ${String(note)} : ` +
+    'comparez avec les ancres voisines.'
+  );
+}
+
+/**
+ * La marque des entrées dérivées : « Ancre dérivée », et non « Dérivé ».
+ *
+ * Elle se lit SEULE dans le flux d'un lecteur d'écran qui parcourt la liste de
+ * définitions — « Dérivé » n'y disait pas de quoi. §33.6 : l'information ne
+ * tient jamais à une teinte, donc elle tient à ces deux mots.
+ */
+const MARQUE_DERIVEE = 'Ancre dérivée';
+
+/**
  * Compare des PHRASES, pas des glyphes.
  *
  * L'apostrophe typographique et l'espace insécable avant le deux-points sont des
@@ -463,6 +496,42 @@ describe('EchelleAncree — R1 (a) : les ancres sont LUES AVANT le premier geste
       if (niveau === '4') expect(definition).toContain(phrase(DERIVEE_CRAN_4));
     }
   });
+
+  it('NOMME les entrées dérivées dans la liste — deux mots, pas une teinte (§33.6)', () => {
+    // « Ancre dérivée » et non « Dérivé » : un lecteur d'écran parcourt la liste
+    // de définitions terme par terme, et « Dérivé » seul ne dit pas de quoi.
+    // La marque est cherchée DANS l'entrée du niveau 2, pas n'importe où dans le
+    // composant : posée ailleurs, elle ne qualifierait rien.
+    const { container } = render(
+      <EchelleAncree
+        libelle={LIBELLE}
+        valeur={null}
+        ancres={ANCRES_DE_BANQUE}
+        onChangement={vi.fn()}
+      />,
+    );
+    const paires = [...container.querySelectorAll('.axn-choix__paire')];
+    const derivees = paires.filter((paire) =>
+      ['2', '4'].includes(phrase(paire.querySelector('dt')?.textContent ?? null)),
+    );
+    expect(
+      derivees.length,
+      'les crans 2 et 4 sont listés — sinon la marque n’a rien à qualifier',
+    ).toBe(2);
+    for (const paire of derivees) {
+      expect(phrase(paire.textContent)).toContain(MARQUE_DERIVEE);
+    }
+
+    // Et la marque ne déborde pas sur les ancres de banque : une marque partout
+    // ne distingue rien.
+    const deBanque = paires.filter((paire) =>
+      ['1', '3', '5'].includes(phrase(paire.querySelector('dt')?.textContent ?? null)),
+    );
+    expect(deBanque.length).toBe(3);
+    for (const paire of deBanque) {
+      expect(phrase(paire.textContent)).not.toContain(MARQUE_DERIVEE);
+    }
+  });
 });
 
 describe('EchelleAncree — R1 (b) : les crans 2 et 4 disent COMMENT coter, jamais rien', () => {
@@ -511,6 +580,21 @@ describe('EchelleAncree — R1 (b) : les crans 2 et 4 disent COMMENT coter, jama
     expect(surCranDerive).not.toBe(surAncreDeBanque);
   });
 
+  it('n’ANNONCE pas la marque : la ligne `aria-live` rend la phrase, et rien d’autre', () => {
+    // La marque « Ancre dérivée » qualifie une ENTRÉE DE LISTE qu'on parcourt.
+    // Dans une région live, elle serait rejouée à voix haute à chaque cran
+    // survolé ou coté — du bruit devant l'information, à la cadence où
+    // l'auditeur cote. Elle appartient au dépliant ; ici, la phrase suffit, et
+    // elle se distingue déjà par ses mots (test précédent).
+    const { container } = render(<EchelleAuDoigt ancres={ANCRES_DE_BANQUE} />);
+    taperSur(2);
+    const ligne = phrase(ligneAncre(container).textContent);
+    expect(ligne).not.toContain(MARQUE_DERIVEE);
+    expect(ligne, 'la ligne annoncée est la phrase de doctrine, sans préfixe').toBe(
+      phrase(DERIVEE_CRAN_2),
+    );
+  });
+
   it('ne rend JAMAIS une ligne d’ancre vide, sur AUCUN des cinq crans', () => {
     // L'anti-vacuité se mesure sur le TEXTE RENDU. Elle ne consulte ni la liste
     // d'ancres passée en propriété, ni un état du composant : une garde qui
@@ -528,13 +612,14 @@ describe('EchelleAncree — R1 (b) : les crans 2 et 4 disent COMMENT coter, jama
 
   it('dit quelque chose d’UTILE même quand l’ancre voisine manque aussi', () => {
     // Cran 2 sans ancre 3 : la dérivation est impossible, et un blanc reste un
-    // blanc. Le texte neutre n'est pas figé ici — son libellé appartient au
-    // composant — mais son EXISTENCE, oui.
+    // blanc. La copie N'EST PLUS libre depuis le second tour d'arbitrage : elle
+    // NOMME la note et renvoie aux ancres voisines — il y en a, elles ne
+    // couvrent simplement pas ce cran-là.
     const { container } = render(
       <EchelleAuDoigt ancres={[{ note: 1, texte: 'Aucune pratique identifiée' }]} />,
     );
     taperSur(2);
-    expect(phrase(ligneAncre(container).textContent)).not.toBe('');
+    expect(phrase(ligneAncre(container).textContent)).toContain(phrase(repliSurLaNote(2)));
   });
 
   it('ne prétend pas dériver du néant : la phrase de doctrine exige l’ancre voisine', () => {
@@ -553,6 +638,218 @@ describe('EchelleAncree — R1 (b) : les crans 2 et 4 disent COMMENT coter, jama
     // l'aveugle — au sens propre.
     const { container } = render(<EchelleAuDoigt ancres={ANCRES_DE_BANQUE} />);
     expect(ligneAncre(container).getAttribute('aria-live')).toBe('polite');
+  });
+});
+
+// =============================================================================
+// R1, SECOND TOUR — LES TROIS COPIES, LA MARQUE, ET LE BORNAGE DE LA DÉRIVATION
+// (arbitrage A01 du 2026-09-07, DECISIONS.md commit `48bd8d2`)
+//
+// Ce que ce bloc éprouve n'est plus « y a-t-il du texte » mais « EST-CE LE BON
+// TEXTE, AU BON ENDROIT ». La nuance est tout le sujet : les trois copies de
+// repli disent trois choses différentes, et servir l'une à la place de l'autre
+// est une régression qu'aucune mesure de non-vacuité ne peut voir.
+//
+// Le point dur est le BORNAGE. Un composant qui dérive sur le seul NUMÉRO du
+// cran fait affirmer à la doctrine §32.4 une règle de cotation que le pack n'a
+// jamais écrite dès qu'on lui passe une autre amplitude — et de façon invisible,
+// puisque le texte dérivé se lit exactement comme une ancre. Les tests de cette
+// section échouent donc DEUX FOIS sur une échelle 0-10 : une fois parce que la
+// doctrine ne doit PAS s'y afficher, une fois parce qu'un repli explicite DOIT
+// s'y afficher. Un seul de ces deux contrôles laisserait passer la moitié du
+// défaut.
+// =============================================================================
+
+describe('EchelleAncree — R1 : hors de l’échelle 1-5, la doctrine se TAIT', () => {
+  /** Les mêmes ancres de banque, sur une échelle qui n'est pas celle du pack. */
+  const AMPLITUDES = [
+    { nom: '0-10', noteMin: 0, noteMax: 10 },
+    { nom: '1-4', noteMin: 1, noteMax: 4 },
+  ] as const;
+
+  for (const amplitude of AMPLITUDES) {
+    it(`n’invente aucune règle de cotation sur une échelle ${amplitude.nom}`, () => {
+      const { container } = render(
+        <EchelleAuDoigt
+          ancres={ANCRES_DE_BANQUE}
+          noteMin={amplitude.noteMin}
+          noteMax={amplitude.noteMax}
+        />,
+      );
+      taperSur(2);
+      const ligne = phrase(ligneAncre(container).textContent);
+
+      // ① La doctrine ne s'affiche pas : §33.3 ouvre par « sur TOUTE ÉCHELLE
+      //    1-5 », et l'amendement §32.4 est écrit POUR cette amplitude. Ailleurs,
+      //    l'écrire serait inventer une spécification (CLAUDE.md §3).
+      expect(ligne, 'la phrase de doctrine ne vaut que sur l’échelle 1-5').not.toContain(
+        'palier intermédiaire',
+      );
+      // ② …et le silence n'est pas le blanc : la copie de repli NOMME la note.
+      //    Sans ce second contrôle, un composant qui rendrait '' passerait.
+      expect(ligne).toContain(phrase(repliSurLaNote(2)));
+    });
+  }
+
+  it('borne aussi le cran 4 — et laisse les ancres de banque intactes hors 1-5', () => {
+    const { container } = render(
+      <EchelleAuDoigt ancres={ANCRES_DE_BANQUE} noteMin={0} noteMax={10} />,
+    );
+    taperSur(4);
+    const surQuatre = phrase(ligneAncre(container).textContent);
+    expect(surQuatre).not.toContain('palier intermédiaire');
+    expect(surQuatre).toContain(phrase(repliSurLaNote(4)));
+
+    // Une ancre RÉELLE reste servie : le bornage retire l'invention, pas la
+    // banque. Un composant qui se tairait aussi sur le 3 aurait « réussi » le
+    // contrôle précédent pour la pire des raisons.
+    taperSur(3);
+    expect(phrase(ligneAncre(container).textContent)).toContain('Documenté mais non appliqué');
+  });
+
+  it('nomme la note sur un cran que l’échelle 1-5 ne connaît même pas', () => {
+    // Le cran 0 n'existe pas dans le §32.4 : aucune ancre, aucune dérivation
+    // possible, et pourtant l'auditeur vient de le taper. La ligne doit lui
+    // parler de SA note.
+    const { container } = render(
+      <EchelleAuDoigt ancres={ANCRES_DE_BANQUE} noteMin={0} noteMax={10} />,
+    );
+    taperSur(0);
+    const ligne = phrase(ligneAncre(container).textContent);
+    expect(ligne).toContain(phrase(repliSurLaNote(0)));
+    expect(ligne).not.toContain('palier intermédiaire');
+  });
+
+  it('ne rend jamais une ligne vide sur AUCUN des onze crans d’une échelle 0-10', () => {
+    for (const note of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
+      const { container, unmount } = render(
+        <EchelleAuDoigt ancres={ANCRES_DE_BANQUE} noteMin={0} noteMax={10} />,
+      );
+      taperSur(note);
+      expect(
+        phrase(ligneAncre(container).textContent),
+        `la ligne d’ancre est blanche sur le cran ${String(note)}`,
+      ).not.toBe('');
+      unmount();
+    }
+  });
+});
+
+describe('EchelleAncree — R1 : une question SANS ancre le dit, au lieu d’en promettre une', () => {
+  // ── LE DÉFAUT QUE CE BLOC ATTRAPE, ET QUE PERSONNE N'AVAIT VU ──────────────
+  // `ancres: []` et `valeur === null` rendaient « Sélectionnez une note pour
+  // voir son ancre. » : une invitation à découvrir quelque chose qui n'existe
+  // pas. L'auditeur cote, ne voit rien venir, et conclut que l'application est
+  // cassée — alors que c'est la QUESTION qui n'a pas d'ancre. L'ordre arbitré
+  // met donc ce cas EN TÊTE : liste vide → on le dit, quelle que soit la valeur.
+  it('remplace l’invitation par le constat quand la question n’a AUCUNE ancre', () => {
+    const { container } = render(
+      <EchelleAncree libelle={LIBELLE} valeur={null} ancres={[]} onChangement={vi.fn()} />,
+    );
+    const ligne = phrase(ligneAncre(container).textContent);
+    expect(ligne).toBe(phrase(REPLI_SANS_AUCUNE_ANCRE));
+    expect(ligne, 'ne promet pas une ancre qui n’existe pas').not.toContain('voir son ancre');
+  });
+
+  it('tient le même discours une fois la note posée', () => {
+    const { container } = render(<EchelleAuDoigt ancres={[]} />);
+    taperSur(3);
+    expect(phrase(ligneAncre(container).textContent)).toBe(phrase(REPLI_SANS_AUCUNE_ANCRE));
+  });
+
+  it('ne renvoie PAS à des ancres voisines qui n’existent pas', () => {
+    // La copie « comparez avec les ancres voisines » suppose des voisines. Sur
+    // une question sans aucune ancre, elle enverrait l'auditeur chercher un
+    // texte absent — c'est la différence exacte entre les deux copies, et elle
+    // ne se voit que si on l'exige.
+    const { container } = render(<EchelleAuDoigt ancres={[]} />);
+    taperSur(2);
+    const ligne = phrase(ligneAncre(container).textContent);
+    expect(ligne).not.toContain('comparez avec les ancres voisines');
+    expect(ligne).not.toContain('palier intermédiaire');
+    expect(ligne).toBe(phrase(REPLI_SANS_AUCUNE_ANCRE));
+  });
+
+  it('distingue « aucune ancre sur la question » de « aucune ancre sur CE cran »', () => {
+    // Deux situations, deux phrases. Un composant qui servirait la même dans
+    // les deux cas passerait n'importe quel contrôle de non-vacuité — et
+    // dirait à l'auditeur soit qu'il n'y a rien alors qu'il y a trois ancres,
+    // soit d'aller comparer avec rien.
+    const sansAucune = render(<EchelleAuDoigt ancres={[]} />);
+    taperSur(2);
+    const surQuestionNue = phrase(ligneAncre(sansAucune.container).textContent);
+    sansAucune.unmount();
+
+    const partielle = render(<EchelleAuDoigt ancres={[{ note: 1, texte: 'Rien de formalisé' }]} />);
+    taperSur(2);
+    const surCranNu = phrase(ligneAncre(partielle.container).textContent);
+
+    expect(surQuestionNue).toBe(phrase(REPLI_SANS_AUCUNE_ANCRE));
+    expect(surCranNu).toContain(phrase(repliSurLaNote(2)));
+    expect(surCranNu).not.toBe(surQuestionNue);
+  });
+});
+
+describe('EchelleAncree — R1 : dans le dépliant, on ne renvoie pas le lecteur où il est déjà', () => {
+  it('rend une copie PROPRE au dépliant sur les niveaux non ancrés (hors 1-5)', () => {
+    // « comparez ci-dessous » n'a aucun sens dans la liste : le lecteur y est.
+    // La copie du dépliant est donc une TROISIÈME phrase, et ce test la lit au
+    // texte, dans la liste, jamais par une classe.
+    const { container } = render(
+      <EchelleAncree
+        libelle={LIBELLE}
+        valeur={null}
+        ancres={ANCRES_DE_BANQUE}
+        onChangement={vi.fn()}
+        noteMin={0}
+        noteMax={10}
+      />,
+    );
+    const libellesDeBanque = ANCRES_DE_BANQUE.map((ancre) => phrase(ancre.texte));
+    const paires = [...container.querySelectorAll('.axn-choix__paire')];
+    expect(paires.length, 'le dépliant liste bien quelque chose').toBeGreaterThan(0);
+
+    let repliesVus = 0;
+    for (const paire of paires) {
+      const niveau = phrase(paire.querySelector('dt')?.textContent ?? null);
+      const definition = phrase(paire.querySelector('dd')?.textContent ?? null);
+      expect(definition, `le niveau ${niveau} est listé sans définition`).not.toBe('');
+      // Hors 1-5, AUCUNE entrée ne peut porter la doctrine.
+      expect(definition, `le niveau ${niveau} invente une règle de cotation`).not.toContain(
+        'palier intermédiaire',
+      );
+      if (!libellesDeBanque.some((libelle) => definition.includes(libelle))) {
+        expect(definition, `le niveau ${niveau} n’a pas la copie du dépliant`).toContain(
+          phrase(REPLI_DEPLIANT),
+        );
+        expect(
+          definition,
+          'la copie du dépliant ne renvoie pas « ci-dessous » : on y est',
+        ).not.toContain('comparez avec les ancres voisines');
+        repliesVus += 1;
+      }
+    }
+    expect(
+      repliesVus,
+      'une échelle 0-10 ancrée en 1, 3 et 5 a des niveaux non ancrés',
+    ).toBeGreaterThan(0);
+  });
+
+  it('n’emploie PAS la copie de la ligne d’ancre dans le dépliant, ni l’inverse', () => {
+    // Les deux phrases se ressemblent assez pour qu'on les confonde en les
+    // écrivant ; elles ne servent pas au même endroit. Ce test fige la
+    // frontière — sinon, la première réécriture les fusionnera « pour
+    // simplifier », et le §33.6 y perdra sa lisibilité.
+    const { container } = render(
+      <EchelleAuDoigt ancres={ANCRES_DE_BANQUE} noteMin={0} noteMax={10} />,
+    );
+    taperSur(2);
+    expect(phrase(ligneAncre(container).textContent)).not.toContain(phrase(REPLI_DEPLIANT));
+
+    const listeEntiere = phrase(
+      container.querySelector('.axn-choix__liste-ancres')?.textContent ?? null,
+    );
+    expect(listeEntiere).not.toContain('comparez avec les ancres voisines');
   });
 });
 

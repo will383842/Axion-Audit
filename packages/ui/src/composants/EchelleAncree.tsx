@@ -39,9 +39,13 @@
 // crans et non les seules ancres reçues, et la ligne d'ancre ne rend JAMAIS `''`.
 // Les crans 2 et 4 sans ancre de banque reçoivent le libellé DÉRIVÉ de la
 // doctrine 3 du §32.4 (amendement du 2026-09-02) — aucun texte inventé ici, et
-// marqué comme dérivé PAR UN MOT, jamais par une teinte seule (§33.6).
+// marqué « Ancre dérivée » PAR DES MOTS, jamais par une teinte seule (§33.6).
 // La dérivation vit ICI, et non dans l'écran de saisie : le terrain, la console
-// et /design doivent en avoir UNE seule implémentation.
+// et /design doivent en avoir UNE seule implémentation. Elle est bornée à
+// l'échelle 1-5, seule échelle dont le pack décrive les paliers.
+//
+// Et la ligne ne MENT pas davantage qu'elle ne blanchit : sans aucune ancre,
+// elle le dit, au lieu d'inviter à en découvrir une (A01, second tour).
 // =============================================================================
 import { useId, useState } from 'react';
 import { classes } from './utilitaires.js';
@@ -260,7 +264,7 @@ export function EchelleAncree(proprietes: ProprietesEchelleAncree) {
           au-dessus d'elle. `aria-live` la lit au clavier, où le survol n'existe
           pas — c'est le focus qui déclenche le changement. Elle n'est jamais
           vide : sans cela, le bloc réservé devient une ligne blanche.
-          Le texte y est rendu SEUL, sans la marque « Dérivé » : cette ligne est
+          Le texte y est rendu SEUL, sans la marque « Ancre dérivée » : la ligne est
           annoncée par `aria-live` à chaque changement de cran, et la marque s'y
           répéterait à voix haute sans rien ajouter — le libellé dérivé se
           nomme lui-même (« palier intermédiaire… doctrine §32.4 »), et la
