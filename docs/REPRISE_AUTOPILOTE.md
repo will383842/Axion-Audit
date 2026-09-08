@@ -39,9 +39,26 @@
   `>=22.11.0 <23`. **Un vert local n'est pas une preuve — la CI l'est**, elle mesure sur le Node du
   contrat. Vitest y lève parfois un `Timeout calling "onTaskUpdate"` **avec tous les tests verts** :
   c'est un artefact de son rapporteur, pas une régression.
-- **`.git/config` du répertoire principal porte `core.bare = true`** alors qu'il a un index et sa
-  copie de travail. `git status` y échoue. Contournement sans rien modifier :
-  `git --work-tree=. -c core.bare=false <commande>`.
+- **`.git/config` du répertoire principal porte `core.bare = true`, et c'est une RÈGLE, pas une
+  panne** (`docs/ORGANISATION_AGENTS.md`, PR #74) : la racine est le **hub à worktrees**, on n'y
+  travaille pas, on y ouvre des chantiers. **Ne la « répare » pas.**
+  Ce qu'il faut en savoir, dans l'ordre où ça mord :
+  1. `git status` et `git log` y échouent. Lecture sans rien modifier :
+     `git --work-tree=. -c core.bare=false <commande>`.
+  2. **Aucun commit n'y est possible**, même avec ce contournement : le hook `pre-commit` appelle
+     `lint-staged`, qui sort en `✖ Current directory is not a git directory!` — **après** avoir
+     passé `check:pack`, `check:jonction`, `check:test-projects` et `check:decisions`. L'échec
+     arrive donc tard, tous les gardes métier déjà verts, et **il ne nomme pas sa cause**.
+     Mesuré le 2026-09-08 en voulant commiter sept entrées `DECISIONS.md`.
+  3. **La parade est de ne pas commiter là** : `git worktree add -b <branche> ../_ax<nom> origin/main`,
+     puis travailler dedans. Si le travail est déjà dans la copie de la racine :
+     `git --work-tree=. -c core.bare=false diff --cached > <patch>` puis **`git apply --3way <patch>`**
+     dans le worktree neuf. **`--3way`, jamais un `apply` simple** : la racine peut être en retard de
+     plusieurs commits sur `main`, et l'`apply` simple échoue alors par `patch does not apply`, ce qui
+     ressemble à un conflit de contenu sans en être un.
+  4. Puis remets la racine propre (`checkout -- <fichiers>`, `checkout main`, supprime la branche
+     créée) : une copie de travail modifiée sur un hub qu'aucun garde ne surveille est un piège pour
+     la session suivante.
 - **Le dépôt fusionne en SQUASH.** Quand une branche entre dans `main`, son historique disparaît :
   une branche sœur partie d'elle **avant** le squash n'a plus de base commune, et git présente tout
   en `add/add`. Choisir un côté **perd un incrément entier**. La parade est écrite dans
