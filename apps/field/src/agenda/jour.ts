@@ -37,10 +37,11 @@
 // Traçabilité : E23 (hyper intuitif, novice < 30 min), E6 (hors ligne total),
 // E38 (sauvegarde terrain, invariant 8).
 // =============================================================================
+import { cleDerniereSyncReussie, lireMeta, type BaseLocale } from '../local/base.js';
 import { contexteLocal } from '../local/contexte.js';
 import { depotOutbox } from '../local/depots/outbox.js';
 import { depotReponses } from '../local/depots/reponses.js';
-import { depotSessions, type SessionLocale } from '../local/depots/sessions.js';
+import { depotSessions, jourCivil, type SessionLocale } from '../local/depots/sessions.js';
 import { chargeMissionSchema, type ChargeMission, type IndexMission } from '../local/formes.js';
 import {
   evaluerAlerteSauvegarde,
@@ -114,6 +115,27 @@ async function lireMissions(): Promise<MissionDuJour[]> {
 }
 
 /**
+ * Le dernier succès de synchronisation d'une mission, LU dans `meta` (03 §34.2,
+ * arbitrage A01 D-6 du 2026-09-08 : « alimenter ce slot avec la vérité locale,
+ * “jamais” compris »).
+ *
+ * `null` couvre trois cas, et c'est voulu : la clé absente (aucun push réussi
+ * depuis cet appareil — ou une base créée avant l'existence de la clé, invariant
+ * 7 : elle se lit, elle ne se répare pas), une valeur d'un autre type, une chaîne
+ * qui n'est pas un instant. Dans les trois, la seule phrase honnête est « jamais
+ * synchronisée » ; une date illisible affichée comme un succès serait le
+ * garde-fou qui annonce plus qu'il ne fait.
+ */
+async function lireDerniereSyncReussie(
+  base: BaseLocale,
+  missionId: string,
+): Promise<string | null> {
+  const valeur = await lireMeta(base, cleDerniereSyncReussie(missionId));
+  if (typeof valeur !== 'string' || Number.isNaN(Date.parse(valeur))) return null;
+  return valeur;
+}
+
+/**
  * Les alertes personnelles d'une mission — les TROIS du §34.2, calculées
  * localement.
  *
@@ -174,6 +196,7 @@ export async function construireJournee(
   port: PortSync,
   instantIso?: string,
 ): Promise<JourneeTerrain> {
+  const { base } = contexteLocal();
   const missions = await lireMissions();
   const etats: EtatMissionDuJour[] = [];
   const toutesSessions: SessionLocale[] = [];
@@ -195,12 +218,21 @@ export async function construireJournee(
     const comptes = await depotOutbox.compterParStatut(mission.id);
     const bloquees = comptes.rejetee + comptes.a_examiner;
 
+    // Le dernier succès est LU lui aussi — dans `meta`, comme le compte ci-dessus
+    // dans l'outbox — et non pris au port, qui ne persiste rien. Il nourrit À LA
+    // FOIS l'alerte de l'invariant 8 et la carte du cockpit : une source pour un
+    // fait (B6). Le STATUT, lui, reste celui du port : une clé `meta` prouve
+    // qu'une sync a réussi UN JOUR, pas que l'appareil est à jour maintenant —
+    // « jamais de pastille verte sans serveur » (LOT_L5.md §3.6, borne A01).
+    const derniereSyncReussieLe = await lireDerniereSyncReussie(base, mission.id);
+
     const etatPort = port.etat(mission.id);
     const sync: EtatSyncMission = {
       ...etatPort,
+      derniereSyncReussieLe,
       operationsEnAttente: comptes.en_attente,
       operationsBloquees: bloquees,
-      alerte: evaluerAlerteSauvegarde(etatPort.derniereSyncReussieLe, comptes.en_attente),
+      alerte: evaluerAlerteSauvegarde(derniereSyncReussieLe, comptes.en_attente),
     };
 
     const etat = { mission, sessions, aRevoirOuverts, sync };
@@ -238,6 +270,28 @@ export async function construireJournee(
  * Il est calculé sur le DERNIER EXPORT, pas sur l'heure : un auditeur qui a
  * exporté à midi avant de reprendre la route a fait son rituel. Rendre `null`
  * quand il n'y a rien à dire — un rappel permanent n'est plus un rappel.
+ *
+ * ── « DU JOUR » : LE JOUR CIVIL DE LA MISSION, PAS LE JOUR UTC ──────────────
+ * Ce rappel comparait deux `slice(0, 10)` — deux jours UTC. À UTC+14, minuit
+ * UTC tombe à 14 h locale : un rituel fait le matin « couvrait » la matinée du
+ * lendemain, et un rituel fait la veille au soir éteignait le rappel d'un jour
+ * qui venait de commencer sur le site — la nuit de données non sauvegardées que
+ * l'invariant 8 interdit. Or la `journee` reçue est déjà découpée au fuseau de
+ * MISSION (`depotSessions.duJour`, `jourCivil`) : le rappel était en désaccord
+ * avec l'objet dont il parle. Arbitrage A01 du 2026-09-08 : « le jour civil du
+ * rappel se calcule au fuseau de la mission concernée — ce n'est pas un choix
+ * entre deux options, c'est l'alignement sur la journée dont il parle ».
+ *
+ * ── PLUSIEURS MISSIONS, PLUSIEURS FUSEAUX : `every`, PAS `some` ─────────────
+ * Le rituel est UN geste pour tout l'appareil, mais « l'invariant 8 se compte
+ * par mission, pas par soirée » (`EcranFinDeJournee`, B4). Le rappel ne s'éteint
+ * donc que si le rituel couvre le jour courant de CHAQUE mission embarquée : dès
+ * qu'un nouveau jour a commencé sur l'un des sites, il y a un jour de collecte
+ * possible que rien n'a encore protégé. `some` éteindrait le rappel sur la foi
+ * du fuseau le plus en retard — et un rituel fait à 22 h à Paris tairait le
+ * rappel du matin déjà entamé à Hô Chi Minh-Ville. Le conservateur est la seule
+ * lecture qui n'expose jamais de données par indulgence ; son coût est un
+ * `Message` d'information de plus, sans verrou (03 §33.7).
  */
 export function rappelFinDeJournee(
   dernierExportIso: string | null,
@@ -249,8 +303,18 @@ export function rappelFinDeJournee(
     journee.missions.some((m) => (m.sync.operationsEnAttente ?? 0) > 0);
   if (!aQuelqueChoseAProteger) return null;
 
-  const jour = instantIso.slice(0, 10);
-  if (dernierExportIso !== null && dernierExportIso.slice(0, 10) === jour) return null;
+  if (dernierExportIso !== null) {
+    // Sans mission embarquée, le fuseau de l'appareil — jamais une valeur en dur
+    // (invariant 2) ; et `every` sur une liste vide ne doit pas valoir « couvert ».
+    const fuseaux: readonly (string | undefined)[] =
+      journee.missions.length === 0
+        ? [undefined]
+        : journee.missions.map(({ mission }) => mission.timezone);
+    const couvreChaqueMission = fuseaux.every(
+      (fuseau) => jourCivil(dernierExportIso, fuseau) === jourCivil(instantIso, fuseau),
+    );
+    if (couvreChaqueMission) return null;
+  }
 
   return 'Le rituel de fin de journée n’a pas encore été fait : synchronisation, sauvegarde de secours et validation des entretiens terminés.';
 }
