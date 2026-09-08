@@ -4990,3 +4990,25 @@ zones est reprise (la zone centrale prenait la première cellule libre, 246 px).
 d'émulation, pas la preuve de P-C — DECISIONS 2026-09-08), puis PR. PR #97 (R1) attend le merge
 de Williams ; ce chantier en dépend (base `lot/l5b-ancres`) — si #97 est squashée avant, refusionner
 par fichier selon ORGANISATION_AGENTS §4, base = `94930c6`.
+
+## 2026-09-08 13h30 — [lot L5 / N1 — porte P-C] — étape pipeline 4/7 (revue croisée rendue, réserves en cours)
+
+Dernier commit vert : ae9736f · Branche : fix/n1-ancres-paysage (rebasée sur main, #97 squashée) ·
+Poussé : NON — la réécriture de branche attend la main de Williams (`--force-with-lease`).
+Tâche en cours : A21 ferme R-4/R-5/R-6, A26 ferme R-2/R-3/R-7/R-8/R-11 ; le pilote écrit la fiche.
+Prochaine action : commiter les fermetures sous leur étiquette, rejouer A29 sur les réserves, puis
+`pnpm verify` complet et PR vers main (squash, SANS auto-merge).
+Tests rouges connus : aucun — 4 gardes N1 VERTES, hors-ligne-l5 11/11, axe 24/24, interface 158/158.
+
+**Rectification du bloc de 07h50, qui disait faux sur deux points (R-1 d'A29, bloquant).** La barre
+d'actions n'a PAS « perdu `sticky` » : elle est **scindée** — les cinq outils passent dans le flux,
+seule la navigation Précédent/Suivant reste collante (81 px au lieu de quatre rangées), ce qui garde
+« Suivant au pouce » (§17.4). Et ce n'est pas la zone centrale qui « prenait la première cellule » :
+c'est `RappelHorsLigne` et les `Message` d'erreur, enfants directs de la grille, qui la prenaient —
+la question tombait en colonne 3 (246 px), **hors ligne seulement**. Le `grid-column` explicite ferme
+ça ; les colonnes passent en `1fr 2fr 1fr` (iPad paysage et PC partagent une grille de 1024 px).
+
+**Marges au cran 5, entier ET dégagé** : paysage privé 169 px (aucune position avant) · paysage
+partagé 245 · portrait ≥ 548 · PC 1280×720 79. A29 a reprouvé par mutation que la garde protège les
+DEUX leviers. Réserve R-9 : une rangée collante de plus resterait verte — marge d'une rangée, à
+porter au rejeu A54 sur iPad réel. Trois entrées A01 du jour, §5.6 démontré commit par commit.
