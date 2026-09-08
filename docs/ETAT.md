@@ -4942,3 +4942,29 @@ inventer une convention de dépôt relève du §3.
 `git reset --hard origin/main` sans vérifier ma branche courante — j'étais sur une branche de
 travail, que j'ai donc repointée sur `main`. Rien perdu (le travail était fusionné), mais sur une
 branche non fusionnée la commande l'aurait détruite. Le hook `Stop` l'a vu, pas moi.
+
+## 2026-09-08 06h55 — [lot L5 / N1 — porte P-C] — étape pipeline 1bis/7 (arbitrage rendu)
+
+Dernier commit : 94930c6 · Branche : fix/n1-ancres-paysage (base lot/l5b-ancres) · Poussé : oui
+Tâche en cours : A26 mesure la co-visibilité ancre/pastilles sur les quatre combinaisons iPad.
+Prochaine action : lire la mesure d'A26 ; si rouge, lancer A21 sur la mise en page (09 §4bis) ;
+si verte, N1 se ferme par la mesure et rien n'est à corriger.
+Tests rouges connus : aucun à ce stade — la garde N1 est en cours d'écriture, elle DOIT sortir rouge.
+
+**Le doute que la recette A54 refusait de trancher est arbitré (A01)** : « visible » veut dire
+**co-visible avec la zone de cotation**. Ce que §33.3 interdit n'est pas le défilement, c'est de
+perdre les pastilles de vue en lisant l'ancre. Les deux moitiés du texte convergent — « s'affichent
+SOUS le curseur » énonce une relation spatiale, « la cotation homogène ne dépend pas de la mémoire
+du consultant » en donne le motif. **N1 est donc OPPOSABLE à P-C**, critère nommé (03 §33.7, 07:24).
+
+**L'option « aucun défilement » a été écartée pour un motif qui vaut au-delà de N1** : la hauteur
+d'une ancre est une **donnée de banque** (§32.4, longueur libre). Un critère de porte qu'un
+rédacteur de guidance casse en écrivant trois lignes de plus n'est pas opposable — et l'imposer
+aurait été inventer de la spec (CLAUDE.md §3).
+
+**Aucun des quatre arbitrages du 2026-09-07 n'est amendé** : la citation verbatim reste verbatim,
+la co-visibilité n'exigeant pas que les cinq ancres tiennent à l'écran.
+
+**Et c'est la GARDE qui tranche N1, pas l'arithmétique** : sur les seuls chiffres de la recette, la
+co-visibilité pourrait passer par un défilement modéré. A54 a observé le contraire à l'écran. A01 a
+écrit le critère pour que la mesure départage — verte, N1 se ferme ; rouge, le correctif est autorisé.

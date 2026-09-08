@@ -11383,3 +11383,47 @@ corrige que le remède.
 Décideur : **A01 | Williams** (correctif posé par le pilote le 2026-09-08).
 Impact spec : aucun. Ceci ne modifie pas l'entrée précédente — l'entrée précédente reste vraie sur
 le constat, et fausse sur ce qu'elle recommandait de faire en attendant.
+
+## 2026-09-08 — [L5b] Une ancre qu'il faut atteindre en défilant est-elle « visible » ?
+
+N1 de la recette A54 du 2026-09-07, qui refuse de le trancher seule. Mesuré sur l'écran d'entretien,
+iPad paysage (fenêtre 810 px, mode privé) : pastilles de cotation jusqu'à 562, ancres de 722 à
+1158 — 1 ancre sur 5 lisible sans défiler, le cran 5 commence 285 px sous le bord, et lire l'ancre 4
+fait sortir les pastilles du champ. Portrait : 5/5. « Ancres visibles » est un critère NOMMÉ de P-C
+(03 §33.7, 07:24).
+
+Options :
+a) Aucun défilement : les cinq ancres tiennent dans le viewport à l'ouverture, toute orientation.
+b) Co-visibilité : l'ancre lue et la bande des cinq pastilles restent ensemble dans le champ ; un
+défilement qui les garde ensemble est acceptable.
+c) Constat d'usage : §33.3 exige que les ancres s'affichent, pas qu'elles tiennent dans un
+viewport ; N1 sort de P-C et devient une fiche AMELIORATIONS (étage 2).
+
+Arbitrage : b) — et N1 est donc OPPOSABLE à P-C.
+Précédence §32-36 (00_INDEX) : §33.3 porte les deux moitiés de la règle, et c'est la subordonnée qui
+commande. « S'affichent SOUS le curseur » énonce une relation SPATIALE à la zone de cotation ; « la
+cotation homogène ne dépend pas de la mémoire du consultant » en donne le motif. Un auditeur qui
+descend lire l'ancre 4 puis remonte coter sans elle cote de mémoire — nommément ce que la clause
+interdit. c) tombe : elle garde la lettre en abandonnant la seule phrase qui dit pourquoi, et laisse
+à « ancres visibles » (§33.7) un contenu que `toBeVisible()` satisfait sur un écran où l'auditeur
+voit une ancre sur cinq. a) tombe aussi : nulle part le pack n'écrit une obligation de tenue dans le
+viewport, et la hauteur d'une ancre est une DONNÉE de banque (§32.4, longueur libre) — un critère de
+porte que le contenu d'une guidance peut casser à volonté n'est pas opposable, et l'imposer serait
+inventer de la spec (CLAUDE.md §3). §22.1 (« jamais de champ masqué par le clavier ») converge, mais
+ne fonde rien : bande inférieure.
+
+Critère opérationnel, à mesurer et non à apprécier : sur `scale_1_5`, pour CHAQUE cran de 1 à 5, il
+existe une position de défilement où l'ancre de ce cran ET la bande des cinq pastilles sont
+simultanément entières dans le viewport — vérifié sur la cible la plus dure (iPad, §22.1), portrait
+ET paysage, mode privé ET écran partagé. La garde N2 est DUE : sans elle ce critère de P-C n'est
+prouvé nulle part. C'est elle qui ferme N1, pas un avis.
+
+Bornes pour A21, qui conçoit : aucun des quatre arbitrages du 2026-09-07 n'est amendé — citation
+verbatim inchangée, cinq crans listés, dépliant ouvert, aucune ligne vide, aucune ancre conditionnée
+au survol. La co-visibilité n'exige PAS que les cinq ancres tiennent à l'écran : mise en page,
+ancrage de la zone de cotation, repli des crans non retenus restent ouverts. Si A21 établit que
+seule la citation peut céder, il revient ici : l'entrée « une doctrine se cite-t-elle » du
+2026-09-07 prévoit déjà la voie (citer + aide non attribuée, ou amendement Williams).
+
+Décideur : A01
+Impact spec : aucun — interprétation de 03 §33.3 et §33.7 ; aucun amendement, aucune spec nouvelle.
