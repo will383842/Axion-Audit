@@ -78,6 +78,15 @@ qu'**aucune exigence dont L0 avait la charge n'a été oubliée**.
 > **Pourquoi cette forme plutôt qu'une réécriture.** Une matrice qui se réécrit perd la seule chose
 > qu'elle sait faire : montrer qu'une exigence a reculé. C'est le mécanisme déjà employé au §H.0.
 
+> **AMENDEMENT DU 2026-09-08 — L5c, L7b, L7c, L8, E18, L5b/R1, N1 et les treize correctifs de P-C.**
+> Le tableau ci-dessous porte l'état **après L1**, déjà amendé une première fois par le §A.quinquies
+> (2026-08-31). Il est **amendé une seconde fois par le §A.sexies**, qui fait foi pour les
+> **23 exigences qu'il nomme**. Aucune ligne datée n'est réécrite — mécanisme du §H.0, employé pour
+> la troisième fois. **Ce que ce rattrapage corrige n'est pas une erreur de mesure : c'est un
+> RETARD.** Le dernier titre du fichier était `## N.5 — … 2026-09-03` alors que `main` avait reçu
+> six incréments de plus ; le gardien tenait sa propre réserve **NB-9-bis** ouverte depuis le
+> 2026-09-06. Un instrument en retard de six incréments ne mesure plus, il rassure.
+
 | #   | Exigence (abrégé)                          | État après **L1**         | Preuve / emplacement                                                                                            | Reste à faire → lot           |
 | --- | ------------------------------------------ | ------------------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------- |
 | E1  | Méthodologie 8+1 blocs                     | **partiellement amorcée** | **Seed exécuté par moi** (`node apps/api/scripts/seed.mjs`) : `blocks=9` (`bloc_1`…`bloc_9`, le 9ᵉ portant l'AI Act) · `services=11` (les 11 fonctions de la taxonomie). DDL : `apps/api/drizzle/0003_questionnaire.sql` (`blocks`), `0001_referentiels.sql` (`services`). Gardé par `apps/api/tests/l1-seed.integration.test.ts` (13 tests verts) | Ciblage par bloc → L3 (M2) · import banque → L4 · restitution par bloc → L10 |
@@ -243,6 +252,73 @@ routes + colonnes, testé » — est intégralement satisfait et éprouvé, pas 
 porte : le **CRUD users** (tâche T3) avec le garde-fou de réinitialisation §9.7 et la règle
 d'affectation §34.4. Le fichier 07 en fait un critère d'acceptation du lot (« reset refusé si outbox
 non vide signalé »). **La porte P-B ne peut pas cocher ce critère.**
+
+## A.sexies — ÉTAT APRÈS L5c, L7b, L7c, L8, E18, L5b/R1, N1 ET LES CORRECTIFS DE P-C (2026-09-08) — **la table qui fait foi pour les 23 exigences ci-dessous**
+
+**Périmètre : `f4e1c49..8d9e531` sur `origin/main`, 60 commits de première ligne, dont 33 portent du
+code** (les 27 autres sont documentaires — mesuré commit par commit, `git show --name-only` filtré
+hors `docs/`, `DECISIONS.md`, `AMELIORATIONS.md`, `ETAT.md`). L'inventaire artefact par artefact est
+au **§O**, qui est le sens 2 de cette même passe ; la présente table est le sens 1.
+
+**Conditions de mesure.** Poste de développement, **Node v24.19.0 — toujours hors de l'épingle 11 §1**
+(`>=22.11.0 <23`) ; aucune suite complète rejouée en local (une suite qui dure plus longtemps qu'une
+passe ne prouve rien de plus que la CI du même commit). **La preuve d'exécution employée ici est la CI
+du commit contrôlé** : run **`34280146797`**, `head_sha` **`8d9e531`**, `conclusion: success`,
+**21 jobs sur 21**, lus **un par un** (`gh api …/jobs`), dont `3 · unit`, `4 · integration`,
+`5 · e2e (chromium)`, `couverture ≥ 90 % (modules critiques — 09 §3)`, `6 · schema-diff (vs
+fichier 04)`, `gitleaks`, `aucun test désactivé ni orphelin`, `8 · deploy-staging` et
+`ZAP baseline (staging)`. **Aucun `skipped`.**
+
+**Règle appliquée sans exception** (mode d'emploi §2) : **aucune exigence ne passe à `couverte` sur la
+foi d'un code livré**. L5c, L7b, L7c et L8 ont livré beaucoup ; **P-C n'est pas franchie** et **P-E ne
+s'est pas ouverte** — ce qui est livré et testé reste `partiellement amorcée`, la colonne de droite
+disant ce qui manque.
+
+| #   | Exigence (abrégé) | État au 2026-09-08 | Ce que ces six incréments y ajoutent — et ce qui manque encore |
+| --- | ----------------- | ------------------ | -------------------------------------------------------------- |
+| E4  | Arbre organisationnel à profondeur libre | partiellement amorcée | **APPORT L7b** : `apps/api/src/domaines/pilotage/couverture.ts` parcourt l'arbre `org_units` et rend la couverture **par unité** — l'en-tête cite `E25 · E4`, glose vérifiée en ouvrant le 08 (l. 16). **APPORT L7c** : `arbre.csv` et `unites_hors_perimetre.csv` sortent dans le ZIP §36.3. Reste : **import CSV d'arbre** (L3) et profondeur exercée hors fixture |
+| E5  | Scoring par unité, heatmap | partiellement amorcée | **APPORT L8** : `apps/api/src/scoring/agregation.ts` agrège **par unité** et publie le score **propre** À CÔTÉ du **consolidé** (arbitrage tracé : « aucune lecture ne peut vouloir qu'une donnée collectée s'évapore » — invariant 7 pris par l'autre bout) ; `moteur-arbre.test.ts` l'éprouve. **Ne va pas plus loin, et il faut le dire** : **aucune route, aucun écran ne publie ces scores** — `check:graphe-modules` nomme `scoring/moteur.ts` parmi les 25 modules dont le seul consommateur est un test. Heatmap → Phase 2 |
+| E10 | Banque de questions unique versionnée | **inchangée** | **Le titre de la PR #71 promet plus que son contenu, et c'est mesuré** : « les 100 questions du socle … entrent dans main » — `git show --stat f14b660` rend **un** fichier, `docs/ETAT.md`, **+23 lignes**. Le matériel vit en `docs/banque-questions/` (**contenu**, pas code) et la cotation croisée humaine est fixée au **15/09**. **Aucun code n'a changé : E10 ne bouge pas** |
+| E12 | Entretiens par interlocuteur, à-revoir, ad hoc | partiellement amorcée | **APPORT L5c** : `agenda/{sessions,jour,pilote,validation,unites,ecriture-session}.ts` — **six `kind` de session**, agenda agrégé, reprise ; **77 cas** unitaires sur `agenda/**`, dont **57 `@critique`**. **APPORT L7b** : l'agrégation par question rend les réponses côte à côte côté siège. Reste : démonstration sur données réelles (geste de porte) |
+| E13 | Écran 3 zones, enregistrement continu | partiellement amorcée | **#70** livre le geste « **Terminer** » et des boutons grisés **qui disent pourquoi** (`boutonsGrises.recette-m1`, `terminer.recette-m2`, `refus.recette-d1`) ; **#80** donne à l'identité d'auditeur un **chemin de production** (`siege/{connexion,EcranConnexion,coquille-siege}`) — « Enregistré » cesse de mentir ; **#97/#101** rendent les ancres lisibles **avant** la cotation et co-visibles en iPad paysage. La **mise en colonnes peinte** reste hors de `jsdom`, mais elle n'est plus non mesurée : `e2e/fixtures/champ-de-vision.ts` regarde le **viewport** |
+| E14 | Consolidation, divergences, radar | partiellement amorcée — **l'exigence qui avance le plus** | **L7b** : `pilotage/agregation.ts` + `EcranAgregation` (66 cas unitaires de pilotage · 20 déclarations d'intégration **portant 30 marques `@critique`** — des `it.each`, qui s'étendent à l'exécution · 18 d'interface). **L8** : `scoring/{bareme,agregation,moteur}.ts` — **173 cas, 49 `@critique`** — et `apps/api/src/scoring/**` **entre dans les 18 globs du seuil 90 %** (job `couverture` vert). **L7c** : `reponses.csv` rend le croisé bloc × unité lisible hors de l'outil. Reste : le **radar** — `scores.csv` est **absent du ZIP** (tracé `DECISIONS.md` 2026-09-05) et rien ne publie un score |
+| E18 | Liaison console axion-ia.com | partiellement amorcée | **APPORT E18 (PR #34)** : migration **`0015_unicite_companies_external_ref.sql`** (index UNIQUE partiel, symétrique exact de celui de `siren`), code d'erreur dédié dans `packages/shared/src/errors.ts`, dépôt et route alignés. **Le fichier 04 §7.1 a été AMENDÉ**, sur escalade du 2026-08-31 et **arbitrage tracé le 2026-09-03** : c'est pourquoi `6 · schema-diff` reste vert — le schéma n'a pas divergé du 04, **le 04 a bougé avec lui**, seul chemin autorisé (11 §8-2). Reste : la liaison elle-même → **L13** |
+| E21 | Auditeurs jamais d'accès aux montants | **`couverte`** — et **re-éprouvée par L7c** | La propriété n'est pas retombée, et elle a été vérifiée **là où elle risquait le plus** : un fichier qui **sort de l'outil**. A37 a relu `export/depot.ts` **table par table** — les 16 tables importées ne comprennent **ni `scopingFinancials`, ni `scopingEstimates`, ni `estimationParams`, ni `missionRebaselines`** ; la route d'export ne porte **aucune** marque `financier`, et son en-tête l'écrit. **La ceinture ③ du §A.quinquies a rejoué et tenu** |
+| E22 | Console de pilotage, 7 espaces | partiellement amorcée | **+3 écrans réels sous l'espace 2** (`EcranCouverture` et `EcranAgregation` en L7b, `EcranExport` en L7c) et **+1 écran `/design`** (#89, §33.5). L7a n'avait qu'une coquille : la console **rend maintenant des données**. Reste : espaces 3 à 7, et la porte **P-E** |
+| E23 | Hyper intuitif, novice autonome < 30 min | **passe de `non commencée` à `partiellement amorcée`** — le NO-GO est levé, **la certification ne l'est pas** | **Les six bloquants d'A54 sont corrigés ET testés** : 21 fichiers `recette-*`/`acceptation-*`, **135 cas, 90 `@critique`**, écrits par un agent qui n'a pas produit le correctif (09 §5.6, déclaré dans les en-têtes eux-mêmes). **Deux rejeux intégraux existent** (`RECETTE_NOVICE_L5_2026-09-07.md` et `…_REJEU.md`), **tous deux GO SOUS RÉSERVE** ; la recoche du critère n° 6 (2026-09-08) constate que **B3-bis est CADUC**. **Ne passe pas plus haut** : A54 écrit lui-même que « < 30 min **sans aide** » est **NON CERTIFIÉ**, et **P-C n'est pas franchie** |
+| E24 | Validation obligatoire de chaque étape | partiellement amorcée | `agenda/validation.ts` à **100 %** de lignes, geste « Terminer » livré (#70), `EcranFinDeSession` sorti de 7,69 % → **66,05 l. / 30,00 f.** (mesure A02 du 2026-09-07). **Ce qui reste est un trou de MESURE autant que de code** : `apps/field/src/ecrans/**` **n'est dans aucun des 18 globs critiques** — le 66 % est **invisible** au job vert. Doute **D-4**, sans arbitrage depuis le 2026-09-03 |
+| E25 | Zéro oubli (plan, couverture, contrôles) | partiellement amorcée — **l'objet que L7a promettait est arrivé** | `GET /v1/missions/:id/coverage` + `EcranCouverture` : **l'« écran de couverture » du libellé existe**, avec sa route, ses 66 cas de domaine et ses 30 `@critique` d'intégration. **La sur-citation R-L7a-4 est FERMÉE** : `EcranAccueil.tsx:23` et `EcranPortefeuille.tsx:21` ne citent plus E25, ils **portent le commentaire du retrait** — un dépôt qui dit ce qu'il a enlevé. Reste : plan d'entretiens, contrôles de fin d'entretien/visite, transitions gardées |
+| E27 | Design moderne, charte, WCAG AA | partiellement amorcée | **`/design` livrée** (#89) avec `packages/ui/src/inventaire.ts` en `satisfies Record<NomComposantUI, FicheComposant>` : **un composant exporté et absent NE COMPILE PAS** — la §33.5 cesse d'être une intention. Le badge « en cours » **repasse sous AA** (#76) et `contraste-usages.test.ts` interdit son retour. **axe-core : 12 vues terrain sur 12** (#82), plus `accessibilite-design` et `accessibilite-l7b`. Reste : dataviz, et le verdict de porte |
+| E32 | Fuseaux, devises, interface française | partiellement amorcée | **APPORT L7c** : `export/horodatage.ts` — UTC en donnée, fuseau de **mission** à l'affichage, date civile jamais convertie ; l'export traduit `motif_non_communique` **en français** (§27.4). ⚠️ **Écart NOMMÉ, non refermé** : `AMELIORATIONS.md` 2026-09-08, « le jour civil des rituels se calcule en **UTC** » — **étage 2, PROPOSÉE, non implémentée**, ce qui est le régime correct (09 §5.9) mais laisse l'invariant 5 imparfait côté terrain |
+| E33 | Sécurité / RGPD | partiellement amorcée — **RÉTABLIE après le recul V1** | Les **sept symboles** F-22/F-23/F-25 sont revenus et **121 cas** couvrent les quatre fichiers du coffre (82 le 2026-09-06) ; le coffre passe de 89,51 % à **100 %** (#59). Le budget 11 §4 « chiffrement < 50 ms/écriture » est **mesuré pour la première fois** (`e2e/budget-chiffrement-l5.e2e.ts`, #92). **L7c ferme la porte du consentement** : `export/depot.ts:354-355` fait passer `fonctionPersonne` et `servicePersonne` par `sousConsentement(…)` — le bloquant B-1 d'A37 l'avait trouvée ouverte ; arbitrage A01 du 2026-09-06, **option 1**, appliqué dans le code fusionné |
+| E36 | Exécutable par lots avec critères | partiellement amorcée — **et c'est la ligne que cette passe répare** | **NB-9-bis était l'écart** : la matrice s'arrêtait au 2026-09-03 et portait 460 lignes dupliquées ; §O.1 le mesure et le referme. Gardes neufs **et câblés** : `check:octets-controle` (#56, avec sa suite d'injection), `check:etapes-jumelles` (#73), `check:fixtures-contrat` (#58). **181 fichiers de test, 0 skippé** (`check:no-skipped-tests` RC=0, exécuté par moi). ⚠️ Reste : **14 fichiers de la chaîne d'export citent E36 à tort** (§O.10-2) |
+| E37 | Scoring intégralement spécifié | partiellement amorcée | **APPORT L8, et c'est la part que le fichier 07 lui confie** : barème §32.1 **par type de réponse**, fourchette et non-communiqué **hors calcul**, complétude, agrégation pondérée, **quatre façons de masquer un drapeau rouge fermées** (#66) et une couche d'**acceptation croisée** écrite par un autre agent (#65). **173 cas, 49 `@critique`** ; le glob `apps/api/src/scoring/**` est **entré dans le seuil 90 %** — le chiffre est gardé, pas déclaré. Reste : **aucune route ne l'expose**, `scores.csv` absent du ZIP ; le contrôle bloquant à l'import était déjà acquis en L4 |
+| E38 | Sauvegarde terrain (sync ≥ 1×/j + export testé) | partiellement amorcée | **La moitié « export » est tenue de bout en bout** : `.axionbackup` conforme au 11 §4 (sel neuf à chaque export, clé dérivée du **mot de passe**), **restauré sur un second profil navigateur en E2E**, `EcranRestauration` passé de 11,11 % à **100 / 100 / 100 / 100**, `sauvegarde.ts` et `format.ts` **entrés dans les globs critiques**. Le rituel de fin de journée **ne s'éteint plus à vide** (B4, testé dans les deux sens). **L'autre moitié — la sync — reste L6** |
+| E40 | ROI normé, échantillonnage, **ancres de cotation** | partiellement amorcée | **Les ancres §32.4 cessent d'être une donnée pour devenir un geste** : `EchelleAncree` passe à **52 cas** (36 avant), les ancres se lisent **AVANT** la cotation (#97) et **sans perdre les pastilles de vue** en iPad paysage (#101) ; la garde regarde le **viewport**, et A02 a vérifié qu'elle **mord** par mutation (dépliant refermé → rouge). Reste : formule ROI → L11 |
+| E43 | Exécutabilité autopilote | partiellement amorcée | **Trois routes nouvelles, trois entrées `DECISIONS.md` au format 11 §9bis** (`/coverage` et `/aggregation` le 2026-09-05, `GET /v1/missions/:id/export` le même jour) : le 11 §8-6 est tenu, **vérifié entrée par entrée**. Le ZIP s'écrit avec `node:zlib` — **aucune dépendance ajoutée** (11 §1). ⚠️ **Régression de gouvernance mesurée** : `DECISIONS.md` porte **342 titres pour 321 uniques**, soit **21 entrées dupliquées** — même famille de défaut que le doublon de ce fichier (NB-13) |
+| E44 | UX/UI 2026-2027, grille §33 | partiellement amorcée — **le plus grand mouvement de la passe** | **4 états : de 4 vues sur 11 à 12 sur 12**, tenus **par le type** (`app/capacites-hors-ligne.ts`, `satisfies Record<CodeVue, …>` : une vue nouvelle **ne compile pas** sans son état hors ligne — le dépôt l'a éprouvé le jour même, la douzième vue de #80 n'a pas compilé). **axe-core 12/12**, table engendrée depuis le registre, **anti-vacuité en trois temps**. `/design` livrée. Reste : **P-C non franchie** |
+| E45 | Pilotage humain (habilitation, cockpit) | partiellement amorcée | Le **cockpit « Aujourd'hui »** est livré, testé (`EcranAujourdhui` 93,51 % l.) et sa **pastille de sync est unique et honnête** (`app/etat-sync-affiche.ts`, B6). **« Sync par mission » a été tranché** le 2026-09-08 (D-6, #102) : le critère 07 demande d'**AFFICHER** l'état de sync, pas de synchroniser — ce que L5 tient. Reste : la sync elle-même (**L6b**) et le **refus serveur** d'affectation sans `habilitated_at`, **toujours dû depuis L2** |
+| E47 | Profondeur fonctionnelle + conventions | partiellement amorcée | **Le format d'export de mission §36.3 est livré** — nommément l'un des objets d'E47 au fichier 08 : ZIP + `mission.json` + `reponses.csv` + `sessions.csv`, `arbre.csv`, `constats.csv`, `cas_usage.csv`, `registre_ia.csv`, `inventaire_outils.csv`, `unites_hors_perimetre.csv`, `pieces_jointes/manifest.csv`. **Épreuve rubrique par rubrique par A37** sur la trame 01 §20.3 : **7 nourries, 3 partielles, 2 non nourries**. ⚠️ **Et aucun fichier de la chaîne d'export ne cite E47** (§O.10-2) |
+
+### A.sexies bis — Synthèse chiffrée au 2026-09-08
+
+| État                    | Nombre | Écart depuis le 2026-08-31 (§A.quinquies bis)                              |
+| ----------------------- | ------ | -------------------------------------------------------------------------- |
+| `couverte`              | **1**  | inchangé — E21, et elle a **rejoué** sous L7c plutôt que d'être reconduite  |
+| `partiellement amorcée` | **46** | +2 — E22 (L7a, §N.1) et **E23** (cette passe)                               |
+| `non commencée`         | **0**  | −2 — **c'est la première fois du projet**                                   |
+
+**Zéro `non commencée` n'est PAS une bonne nouvelle en soi, et je refuse de la présenter comme telle.**
+Cela signifie seulement que chacune des 47 exigences a désormais **au moins une ligne de code qui s'y
+rattache** — pas qu'une seule de plus soit satisfaite. **Une seule exigence est `couverte` après huit
+lots.** Le vocabulaire à trois valeurs de ce fichier existe précisément pour que ce chiffre-là reste
+lisible quand tout le reste grossit.
+
+**Ce que la ligne L7-min du fichier 07 exigeait et qui n'est PAS tenu**, dit ici plutôt que découvert
+à P-E : « **le rapport §20.3 peut être rédigé EN ENTIER depuis le ZIP, sans retourner dans l'outil** ».
+**Deux rubriques sur douze ne sont nourries par aucun fichier** (plan d'action 12 mois, trajectoire à
+3 ans : `roadmap_items` n'est dans aucune entrée du §36.3) et **une troisième attend L8 dans le ZIP**
+(`scores.csv`). **La porte P-E ne peut pas cocher ce critère en l'état.**
 
 ---
 
@@ -2729,466 +2805,6 @@ _Passe effectuée le 2026-09-03 par A02, gardien de la spécification, sur `lot/
 en lecture seule sur le code. Aucune ligne datée antérieure de ce fichier n'a été modifiée.
 Dossier complet : `docs/portes/CONTROLE_A02_L5a_2026-09-03.md`._
 
-
-> **RENUMÉROTATION DU 2026-09-03, déclarée ici plutôt que silencieuse.** Cette section a été
-> écrite sous la lettre **K** sur `lot/l5b` pendant que `lot/l3-suite` en écrivait une autre, elle
-> aussi **K**, datée du 2026-09-02 (ci-dessus). À la fusion, deux sections ne peuvent pas porter la
-> même lettre : l'antérieure garde **K**, celle-ci devient **L**. Seules les LETTRES ont changé —
-> aucune mesure, aucun verdict, aucune date. Les renvois internes ont suivi (15 lignes touchées).
-
-# L. CONTRÔLE D'ACCEPTATION DE L'INCRÉMENT L5b — A02, 2026-09-03, sur `b3d8886`
-
-Périmètre mesuré : `git diff ce4b29b..b3d8886` — 42 fichiers, 10 515 insertions.
-Dossier complet, preuves et verdict : `docs/portes/CONTROLE_A02_L5b_2026-09-03.md`.
-
-## L.1 — Sens 1, exigences → code (périmètre L5b du 11 §6)
-
-| Exigence | Réalisée par | Constat |
-|---|---|---|
-| **E13** écran 3 zones, une question à la fois, enregistrement continu (M3.1, §17.4) | `ecrans/entretien/{EcranEntretien,ZoneBlocs,ZoneQuestion,PanneauNotes}.tsx`, `entretien.css`, `session/{enregistrement,position}.ts` | COUVERTE — structure éprouvée (faisceau R4 ①②③) ; la mise en colonnes PEINTE est reportée à la recette manuelle P-C, jsdom n'évaluant pas les media queries |
-| **E12** entretiens par interlocuteur, pause/reprise, à-revoir, notes, ad hoc (M3) | `DialogueDrapeau.tsx`, `DialogueQuestionAdHoc.tsx`, `EcranNouvelEntretien.tsx`, `session/{ecriture-session,notes-volantes,questions-adhoc,missions}.ts` | COUVERTE |
-| **E37** barème par type de réponse ; fourchette et non communiqué hors calcul (§32.1, §27.4) | `session/valeurs.ts` (12 formes + `range`), `session/ecriture-reponses.ts` (`withheld`, `MOTIFS_NON_COMMUNIQUE`, `notApplicable`, `horsParcours`), `SaisieReponse.tsx` | COUVERTE côté DONNÉE (100 % lignes sur `valeurs.ts`) — **non éprouvée côté SAISIE**, voir L.3 |
-| **E23** hyper intuitif, zéro bouton sauvegarder (§17) | `session/{enregistrement,raccourcis,gestes}.ts` | COUVERTE |
-| **E44** raccourcis complets, ancres visibles, 4 états (§33) | `session/{raccourcis,gestes,media}.ts`, `shared/banque-questions.ts` (`lireAncresDeCotation` + `consigne`) | PARTIELLE — les 4 états sont présents sur les écrans et listes livrés ; **axe-core n'est exécuté nulle part** (L.4) |
-| **E6** hors ligne total, PC ET tablette | tout `session/**`, `local/base.ts` | COUVERTE |
-| **E7** remontée continue — une op d'outbox à chaque geste | `ecriture-reponses.ts`, `ecriture-session.ts`, `notes-volantes.ts`, `questions-adhoc.ts` | COUVERTE |
-| **E33** RGPD — chiffrement local, accord de participation versionné (06 §10.4) | `DemarrageEntretien.tsx`, `session/{ecriture-session,auditeur}.ts` | COUVERTE — **avec l'écart de texte L.5** |
-| **E32** fuseau de mission à l'affichage, devises (§22.2) | `session/fuseau.ts` (E32 cité — correction R5 confirmée), `valeurs.ts` (`money` + ISO 4217) | COUVERTE — `valeurs.ts` réalise la part « devises » sans la citer (sous-citation, non bloquante) |
-
-Le contrôle qui avait manqué pour E32 est refait **exigence par exigence**, pas déduit des
-citations : E32 a désormais du code qui la réalise.
-
-Hors périmètre L5b, cochées ailleurs — je refuse explicitement de les cocher ici :
-**E24** (validation d'entretien strict/expert) et **E25** (contrôles de fin d'entretien, écran de
-couverture) → **L5c** · **E38** (export de secours chiffré) → **L5c** · **E26** (centre d'alertes)
-→ L5c/L7 · **E9** (multi-consultants, propriété §9.9) → **L6a**.
-
-## L.2 — Sens 2, code → exigences : aucun orphelin, **une glose FAUSSE**
-
-29 fichiers de source livrés, **29 lignes `Traçabilité :`**. Aucune route, aucune table, aucun job :
-le diff sur `apps/api/drizzle/**` et `apps/api/schema-manifest.json` est **VIDE** (mesuré).
-**Zéro code orphelin.**
-
-Deux fichiers de `packages/shared` relus au titre du 11 §8-2 : `sync.ts` = modification de
-**commentaire seulement** (renvoi de chemin cassé, C7 d'A29), donc **pas de déclencheur** sur le
-contrat d'ops ; `banque-questions.ts` = ajout **additif** du champ `consigne` (bloquant B2 d'A29),
-typecheck vert sur les cinq paquets, amendement tracé.
-
-### ÉCART L.2-a — `apps/field/src/session/valeurs.ts:45-46` cite **E30**, qui ne le concerne pas
-
-Fichier 08 : `E30 | 3 niveaux d'audit (diagnostic cadrage / opérationnel / stratégique groupe)
-alignés sur l'offre publique 8 étapes | §20.1, §20.2`.
-
-`valeurs.ts` type les douze formes de valeur de réponse et les valide à l'écriture. Aucun rapport
-avec les niveaux d'audit. Règle opposable, arbitrée en `DECISIONS.md` du 2026-09-03 (« Amendement à
-la règle R5 ») : « cite une exigence si le module la RÉALISE ». Test qui départage : si E30
-disparaissait du pack, `valeurs.ts` ne perdrait **rien**.
-
-Ce qui rend le constat certain plutôt qu'interprétatif : dans le **même incrément**,
-`SaisieReponse.tsx:26-27` et `session/ecriture-reponses.ts:33-34` citent **E37 (« fourchettes
-§27.4 »)** pour exactement ce sujet, et 03 §32.1 traite bien la fourchette (« borne BASSE ») et le
-non communiqué (« exclue du numérateur ET du dénominateur »).
-
-**QUATRIÈME occurrence de la classe** après E7/invariant 7, `fuseau.ts` (E13→E32) et
-`enregistrement.ts` (E38→E13/E6). Celle-ci franchit `check:tracabilite` (RC=0, 535 citations,
-« aucune incohérence » — le garde ne vérifie que l'existence du numéro, il le dit lui-même à
-`--angles-morts` n° 1 et n° 3), **le rejeu A29**, et la fiche étage 2 ouverte le jour même sur ce
-défaut exact (`AMELIORATIONS.md:1686`).
-
-Sous-citations relevées, **non bloquantes** : `session/media.ts` porte le seuil des trois colonnes
-sans citer E13 · `entretien.css` nomme 03 M3.1 sans ligne `Traçabilité :` (le garde ne balaie pas
-le CSS) · `notes-adhoc-hors-parcours.test.ts:24` cite « E7 » **sans glose** — angle mort n° 2.
-
-## L.3 — Ce que le chiffre de couverture annoncé mesure, et ce qu'il ne mesure pas
-
-`apps/field/src/session/**` : lignes **98,76 %** · fonctions **98,41 %** · branches **94,03 %** —
-remesuré, exact. Ce glob (`.github/coverage-critical-paths.json`, entrée « Machine a etats de
-session terrain ») **ne contient aucun composant d'écran** ; `apps/field/src/ecrans/**` n'est sous
-aucun seuil opposable, ni dans `cheminsCritiques`, ni dans `cheminsAttendus`.
-
-Mesure par fonction (`coverage/lcov.info`, enregistrements `FNDA`) sur `SaisieReponse.tsx` — le
-fichier qui EST « TOUS les types de réponse » du brief 11 §6 :
-
-| Fonction | Ligne | Exécutions | Type de réponse |
-|---|---|---|---|
-| `SaisieDevise` | 322 | **0** | `money` |
-| `SaisieDate` | 347 | **0** | `date` |
-| `ChoixUnique` | 377 | **0** | `single_choice`, `multi_choice` |
-| `SaisieTableau` | 495 | **0** | `table` |
-| 8 des 10 `onChangement` | 111 → 259 | **0** | tous sauf `scale_1_5` |
-
-Fichier : **40,85 % lignes · 31,81 % fonctions**. Voisins : `DialogueQuestionAdHoc.tsx`
-**14,28 % fonctions** · `PaletteRecherche.tsx` (hors-parcours) **53,27 % lignes** ·
-`EcranEntretien.tsx` **42,3 % fonctions** · **`AccesEntretien.tsx` 0 % lignes**, alors que c'est la
-porte d'entrée de tout l'incrément depuis l'accueil. Aucun e2e ne couvre l'écran d'entretien
-(`e2e/` = `polices`, `pwa-404`, `socle`).
-
-**Cinq des douze types de réponse ne sont rendus par aucun test.** Ce n'est pas une infraction à la
-DoD — son énumération est « sync, crypto locale, scoring, RBAC/propriété », et je n'exige pas ce
-qui n'est écrit nulle part. C'est un fait que la porte P-C doit voir **avant** la démo « 1 session
-de chaque type créée hors ligne ».
-
-## L.4 — DoD transverse : une ligne non tenue, une non vérifiable, une non allongée
-
-- **README de l'app à jour — NON TENUE.** `apps/field/README.md:11` : « ## État au lot **L5a** — le
-  SOCLE » ; `:15-16` : « **Aucun écran de collecte** : l'écran d'entretien est L5b (A22) ». Onze
-  composants d'écran et treize modules de session livrés ; la « Carte du socle » n'inscrit ni
-  `src/session/**` ni `src/ecrans/entretien/**`. Dernière modification : commit L5a `0d4daf4`.
-- **axe-core vert — NON VÉRIFIABLE.** Aucune occurrence d'`AxeBuilder` ni de `@axe-core/*` dans le
-  code du dépôt. `e2e/accessibilite-l5a.e2e.ts`, cité par `AMELIORATIONS.md:1611`, n'existe pas
-  dans ce worktree. Onze composants livrés, zéro balayage.
-- **`@filrouge` — VERT mais NON ALLONGÉ.** Vert sur FIL-TPE et FIL-GC
-  (`apps/api/tests/l1-filrouge.integration.test.ts`, 5 cas). 09 §4bis veut que chaque lot ALLONGE
-  le scénario du segment L5 ; L5b n'y a rien ajouté.
-
-## L.5 — L'écart RGPD est documenté en AMELIORATIONS, il ne l'est pas en DECISIONS
-
-`DECISIONS.md` du 2026-09-02 (Décideur : **Williams**) fixe un « Libellé retenu » promettant « le
-rapport ne vous attribue aucun propos **nominativement** » et le droit de « demander **l'arrêt de
-l'entretien** ». `DemarrageEntretien.tsx:19-23` est en production et annonce « elles sont
-**consignées sous votre nom et votre fonction** », sans le droit d'arrêt. Trois différences, pas
-une. La fiche `AMELIORATIONS.md:1557` nomme l'écart avec exactitude et le porte à Williams — mais
-**aucun amendement horodaté n'a été ajouté sous la décision du 2026-09-02**. 11 §9bis : « une
-décision non tracée dans ce format n'existe pas » ; 09 §5.2 : « tout écart à la spec est soit
-refusé, soit documenté comme amendement horodaté — jamais silencieux ». Une session neuve applique
-le protocole de reprise (11 §9ter) et lit la décision **avant** le code.
-
-## L.6 — Synthèse chiffrée, mesurée le 2026-09-03 sur `b3d8886`
-
-`pnpm lint` **RC=0** · `pnpm typecheck` **RC=0** · `npx vitest run --coverage` (3 projets)
-**78 fichiers, 1710/1710 verts, RC=0** · `.github/scripts/check-coverage.mjs` **RC=0**, « Tous les
-modules critiques atteignent 90 % — couverture MESURÉE » · `check:tracabilite` **RC=0** (535
-citations, 323 fichiers) · `check:decisions` **RC=0** (131 entrées au format) ·
-`check:no-skipped-tests` **RC=0** (81 fichiers) · `check:test-projects` **RC=0**
-(interface 29 · unit 32 · integration 17 · playwright 3) · `check:invariants` **RC=0**.
-Mesures prises sous **Node v24.19.0**, alors que 11 §1 épingle **Node 22 LTS** et que
-`package.json` déclare `>=22.11.0 <23` (avertissement « Unsupported engine » à chaque appel).
-Non rejoué : `schema:diff` (PostgreSQL injoignable, `ECONNREFUSED 127.0.0.1:5432`) — atténué, non
-remplacé, par le delta de schéma vide de L5b.
-
-**VERDICT A02 : ACCEPTÉ SOUS RÉSERVE.** Bloquantes pour le passage en porte P-C : **R1** (glose
-E30, L.2-a), **R2** (README, L.4), **R3** (amendement horodaté, L.5). Non bloquantes, à porter au
-dossier de porte : **R4** (cinq types de réponse jamais rendus, L.3), **R5** (axe-core absent),
-**R6** (fil rouge non allongé). Détail et conditions de levée :
-`docs/portes/CONTROLE_A02_L5b_2026-09-03.md`.
-
----
-
-# L.7 — REJEU DU CONTRÔLE A02 SUR `fcedce8` (2026-09-03) — condition de veto LEVÉE
-
-Quatre commits depuis `fedfcc3`, **aucune ligne exécutable modifiée** (diff filtré des commentaires
-et des lignes vides : sortie vide). Deux en-têtes, cinq documents.
-
-**R1 fermée.** `session/valeurs.ts` cite **E37** au lieu d'E30 — rattachement juste (03 §32.1 traite
-la fourchette et le non communiqué ; ses deux voisins du lot citaient déjà E37). **Cinquième glose
-fausse trouvée par l'auteur et RETIRÉE** : `session/peripherie-entretien.test.ts` citait « E43 (DoD) »,
-qui est l'exécutabilité autopilote — un fichier qui exerce les barèmes des onze types ne la réalise
-pas. Retrait correct. **Doctrine validée avec sa borne** : l'amendement R5 dit « aucun plancher
-au-delà de un » ; retirer est légitime **jusqu'à une** glose, jamais jusqu'à zéro — un fichier sans
-aucune citation devient invisible au garde (son angle mort n° 6) et tombe sous le refus du sens 2.
-Le fichier en garde quatre.
-
-**Pas de sixième.** Diff de toutes les lignes de traçabilité `fedfcc3..fcedce8` = **exactement deux
-changements** ; aucune glose juste retirée. Les 39 fichiers glosés repassés contre le fichier 08.
-Deux observations sans réserve : `packages/shared/src/banque-questions.ts` cite « E43 (conventions) »
-— même forme, mais **antérieure à L5b** (`git blame` : `8eead2f4`, 2026-08-29, lot L4) et défendable
-au titre de 11 §3 · `EcranEntretien.test.tsx` cite « E27 (design/WCAG) » — mince, mais le fichier
-atteste des noms accessibles et de la gestion du focus (WCAG AA, §19.2).
-
-**R2 fermée.** README réécrit ; chiffres **vérifiés** : 11 composants (mesuré 11), 13 modules de
-session pour L5b (mesuré 14 dont `machine.ts` correctement rangé au socle L5a), seuil 64rem,
-`AccesEntretien.tsx` 0 %, `EcranEntretien.tsx` 11/26 = 42,3 %. Section d'honnêteté exacte.
-
-**R3 fermée.** Amendement horodaté sous la décision Williams du 2026-09-02, **au format 11 §9bis**
-(`check:decisions` RC=0, 133 entrées) ; trois écarts tabulés dont le droit d'interrompre ; les deux
-textes intacts ; décision de fond réservée à Williams ; note d'exécution sur
-`VERSION_MENTION_INFORMATION` (invariant 7).
-
-**Le garde déclare ses propres trous — confirmé verbatim.** `--angles-morts` n° 1 (« ne distingue
-pas un rattachement JUSTE d'un rattachement FAUX »), n° 3 (« rapprochement LEXICAL, pas
-sémantique »), n° 5 (« il ne fait JAMAIS le chemin inverse »). Ce n'est pas un garde cassé, c'est un
-garde qui n'existe pas : Williams arbitre une construction, pas une réparation.
-
-**Le compteur de citations mesure autre chose que ce qu'on lui demande.** 535 → **539** pendant
-qu'une glose est retirée : `valeurs.ts` +3, `peripherie` +1, `README` 0 — total exact, parce que les
-notes de correction **re-citent les numéros en prose**. Ce compteur compte des occurrences de
-numéros dans du texte, **pas des rattachements**. Quatrième angle mort, à verser à la fiche.
-
-**Correction d'une affirmation de A02 (§L.3).** `ChoixUnique` ne sert **que** `single_choice`
-(l. 142) ; `multi_choice` est rendu **en ligne** (l. 152-186) et n'a **aucune fonction nommée**. Les
-cinq types non rendus sont confirmés (`lcov` : l. 141-149 et 153-185 toutes à 0 exécution), mais
-`multi_choice` **n'apparaît dans aucune liste `FNDA:0`** et manque donc à la consigne de recette de
-`LOT_L5.md` §4, qui nomme « money, date, single_choice, table ». **À ajouter avant P-C.**
-
-**Remesure sur `fcedce8`** : `npx vitest run --coverage` → **78 fichiers, 1710/1710, RC=0** ·
-`check-coverage.mjs` **RC=0** · `check:pack`, `check:prose`, `check:decisions` (133),
-`check:tracabilite` (539 citations, 323 fichiers), `check:no-skipped-tests` (81),
-`check:test-projects`, `check:invariants` → **tous RC=0**.
-
-**VERDICT DU REJEU : ACCEPTÉ.** R1, R2, R3 fermées, **condition de veto levée**. A01 peut signer le
-passage en porte. Restent ouvertes et non bloquantes pour P-C : **R4** (avec la correction
-`multi_choice`), **R5** (axe-core), **R6** (fil rouge non allongé) ; restent dues à la porte les
-migrations up/down sur staging et la rejouée du diff schéma-vs-04.
-
----
-
-# M. INCRÉMENT L5a — CONTRÔLE D'ACCEPTATION A02, 2026-09-03, SUR `aaafcc5`
-
-> **Ajout en APPEND. Aucune ligne datée antérieure de ce fichier n'a été modifiée.**
-> **Lettre : M.** `K` est le lot L3 (2026-09-02) ; `L` a été prise par l'incrément **L5b** le
-> 2026-09-03 après renumérotation, sur la branche `lot/l5b`. La lettre suivante libre est donc `M`,
-> et elle est prise ici pour que les deux sections coexistent à la fusion sans se recouvrir.
->
-> **Dossier complet et preuves détaillées :** `docs/portes/CONTROLE_A02_L5a_2026-09-03.md`.
-> Cette section en est le **report normé dans la matrice** ; elle ne le résume pas, elle en extrait
-> les deux sens et la DoD.
-
-## M.0 — Le commit contrôlé, et la base du diff
-
-| | |
-| --- | --- |
-| **Tête** | `aaafcc5269ac8440f3c78f75e2bea2fc198ce12d` (`lot/l5a`, poussée, PR #30 `CLEAN`) |
-| **Base** | `508ae159ab29a8111e073f0c96097ec31eb4dde0` = `origin/main` — `git merge-base origin/main aaafcc5` rend `508ae15`, donc `main` est **entièrement contenu** : le diff ne mesure que ce que L5a ajoute |
-| Volume | **71 fichiers**, +16 337 / −2 361 · hors `pnpm-lock.yaml` : 70, +11 651 / −398 · **code seul** (`apps/`, `packages/`, `e2e/`) : **60 fichiers, +11 090 / −319** |
-| Commits propres | 14 (`git log --oneline origin/main..aaafcc5`), dont 12 sans fusion. Premier commit de l'incrément : `0d4daf4`, parent `fa30be1` |
-| Serveur touché | **aucun** — `git diff --name-only 508ae15 aaafcc5 -- apps/api apps/hq apps/worker` rend le vide |
-| Schéma SQL touché | **aucun** — aucune migration, aucun `schema-manifest.json` |
-
-## M.1 — SENS 1 : les six items du 11 §6 confiés à L5a
-
-| Item 11 §6 | Verdict | Preuve courte |
-| --- | --- | --- |
-| shell PWA offline (Workbox) | ✅ | `sw/service-worker.ts:45,55-57` (`precacheAndRoute`, `denylist: [/^\/api\//]`) · 12 tests `@critique` de `pwa-servie.e2e.ts` verts sur deux piles Caddy |
-| Dexie, schéma local versionné | ✅ | `local/base.ts` (`SCHEMA_LOCAL`, `BaseTropRecenteError`, **aucun `delete()`**) · `base.test.ts` 11 · `migration.test.ts` 8 dont « une montée qui ÉCHOUE ne perd rien » |
-| DEK / KEK | ✅ | `local/coffre.ts`, `coffre-appareil.ts`, `enveloppe.ts`, `jetons.ts` · 62 tests · budget dérivation < 1 s **mesuré en CI** |
-| **verrouillage** | 🔴 **LIVRÉ, NON PROUVÉ** | `app/verrou.ts` (227 l., 15/60 min, Wake Lock) — **couverture v8 : 0,00 %**, aucun fichier de test, aucun e2e qui avance un minuteur → **B1** |
-| pull mission | 🟡 **DESCOPÉ, TRACÉ** | `DECISIONS.md` l. 7446, décideur A01, vers L6a. Refus testé (`EcranAccueil.test.tsx:224`, `@critique`) |
-| `storage.persist()` | ✅ | `local/stockage.ts` (96,92 %) · `local/embarquement.ts` (98,55 %) · `EcranStockage.tsx` (100 %) · 29 tests |
-
-Les **onze interfaces** publiées par `LOT_L5.md` §2 sont toutes livrées ; une seule (`app/verrou.ts`)
-l'est sans preuve d'exécution. `src/sync/port.ts` est livré sous `src/local/port-sync.ts`, motif écrit
-dans l'en-tête du fichier (l. 17-27, glob `src/sync/**` réservé à L6a) et compté au plafond étage 1.
-
-## M.2 — SENS 2 : le contrôle anti-orphelin
-
-Balayage exhaustif des **60 fichiers de code** du périmètre :
-
-```
-$ for f in $(git diff --name-only 508ae15 aaafcc5 -- apps packages e2e | grep -E '\.(ts|tsx|mjs|css)$');
-    do grep -q 'Traçabilité' "$f" || echo "SANS GLOSE: $f"; done
-SANS GLOSE: apps/field/src/app/coquille.css      -> rattaché E44 + invariant 4 (justification l. 4-6)
-SANS GLOSE: packages/shared/src/index.ts         -> baril, une ligne ajoutée, rattaché par E7
-```
-
-`node scripts/check-tracabilite-exigences.mjs` → **680 citations, 344 fichiers, aucune incohérence**,
-code 0.
-
-**Gloses rouvertes contre la section citée** (le garde n'est que lexical ; il le dit lui-même) :
-E26 sur `EcranAccueil.tsx:31` → **01 §20.4 ouvert**, « sync en échec ou muette » est bien l'un des 8
-types → **juste** · E13 sur `vues.ts:21` et `depots/reponses.ts:11` → **03 §17.4 ouvert**, la règle
-« rouvrir l'app = revenir à la question en cours » est servie par `meta.vueCourante` → **mince mais
-juste** (l'écran 3 zones est L5b ; c'est la moitié §17.4 d'E13 qui est servie) · E11 sur
-`depots/questions.ts:20` → moitié « figé par mission » d'E11 → **juste** · E32 + E9 sur `horloge.ts`,
-E24 sur `session/machine.ts`, E7 sur `contrat-sync.ts`, E33 sur les 15 modules `local/`, E17 sur le
-SW et `main.tsx`, E36 + E43 sur l'e2e d'accessibilité → **tous justes**.
-
-> **AUCUNE GLOSE FAUSSE SUR L5a.** C'est le défaut trouvé sur L5b (une citation d'E30 pour un module
-> relevant d'E37) : il ne se reproduit pas ici.
-
-**Artefacts sans glose `E<n>` mais rattachés** : `build-sw.mjs` (E6/E17) · `build-icones.mjs`
-(**fiche A-009** + E44) · `eslint.config.js` (interdits outillés de `LOT_L5.md` §4, réserve R-L5a-5)
-· `infra/caddy/fronts.static.caddy` (bloquant A29 B1, `DECISIONS.md` l. 7365) · `package.json`
-(`@axe-core/playwright`, `DECISIONS.md` l. 6706) · `public/.gitignore`, `sw/tsconfig.json` (artefacts
-de construction) · `scripts/modules-en-attente.md` (soupape du garde anti-orphelin).
-
-**Fichier supprimé** : `e2e/pwa-404.e2e.ts` → **remplacé** par `e2e/pwa-servie.e2e.ts` (2 blocs → 6,
-12 tests). La moitié de la garantie L0 est conservée : les 4 chemins non livrés rendent toujours 404
-sans HTML déguisé, et c'est testé. Arbitrage `DECISIONS.md` l. 7365.
-
-> ### VERDICT ANTI-ORPHELIN L5a : **AUCUN CODE ORPHELIN.**
-> Les 60 fichiers de code et les 11 fichiers de configuration et de gouvernance se rattachent tous à
-> une exigence E1-E47 ou à une fiche `AMELIORATIONS.md` nommée. **Aucun scope creep silencieux.**
-
-## M.3 — Les exigences E1-E47 servies par L5a, et leur état APRÈS cet incrément
-
-| Exigence | Ce que L5a lui apporte | État après L5a |
-| --- | --- | --- |
-| **E6** — Hors ligne total, ordinateur ET tablette (§9, §22.1) | shell PWA précaché, base Dexie versionnée, `/api` exclu de tout cache d'exécution, écriture locale d'abord, `storage.persist()` | 🟡 **avancée majeure, non couverte** — il manque les écrans de collecte (L5b/L5c) et le mode avion réel sur iPad (A27, P-C) |
-| **E7** — Remontée continue dès qu'il y a du réseau (§9.3) | `outbox` seule file, contrat d'op partagé (`packages/shared/src/sync.ts`, 5 résultats du §9.3), `ecrireLocal` ligne + op en **une** transaction | 🟡 **le socle est posé, le moteur est L6a** |
-| **E9** — Multi-consultants, sync sans conflit (§9.4) | `client_updated_at` produit par une horloge à décalage serveur — le juge du *last-write-wins* | 🟡 partielle |
-| **E11** — Questionnaire figé par mission (M2) | `depots/questions.ts` : lecture du `*_snapshot` figé, recherche hors-parcours §25.4 hors ligne | 🟡 côté terrain seulement (la génération est L3, couverte) |
-| **E12** — Entretiens par interlocuteur, à-revoir, notes (M3) | `depots/sessions.ts`, `depots/reponses.ts` (filtre `flagReview`), machine à états | 🟡 lectures et états ; les écrans sont L5b/L5c |
-| **E13** — Écran 3 zones, enregistrement continu (M3.1, §17.4) | **la moitié §17.4** : « rouvrir l'app = revenir à la question en cours », servie par `meta.vueCourante` (pas d'URL, pas de routeur) | 🟡 la moitié M3.1 est **due à L5b** |
-| **E17** — Stack imposée (React+Vite PWA, Dexie) | React 18 + Vite + Dexie 4 + Workbox 7 ; **aucun Next**, aucun routeur hors liste | ✅ tenue côté terrain |
-| **E23** — Hyper intuitif, zéro bouton sauvegarder | navigation sans routeur, geste retour système capté (`navigation.ts:83`), écrans à 4 états, verrou d'un geste | 🟡 le test novice < 30 min (A54) porte sur **le lot L5 complet** |
-| **E24** — Validation obligatoire de chaque étape (§19.1) | `session/machine.ts` : 4 états × 2 profils (guidé strict / expert), **terminer ≠ valider** — 55 tests, couverture 97,87 % | 🟡 la machine est prouvée ; son écran est L5c |
-| **E26** — Alertes actives sur les manques (§20.4) | l'alerte « sync en échec ou muette » (l'un des 8 types de 01 §20.4), **calculée localement** et testée `@critique` | 🟡 un type sur huit |
-| **E32** — Fuseaux horaires, interface 100 % français (§22.2) | UTC en base locale (`horloge.ts:86`, `toISOString()`), fuseau à l'affichage seul (`depots/sessions.ts:55`), `lang="fr"` | 🟡 tenue sur le périmètre livré |
-| **E33** — Sécurité / RGPD : chiffrement local (§10) | **le cœur de l'incrément** : DEK/KEK Argon2id, AES-GCM par enregistrement, en-tête d'index en clair à **liste fermée**, refresh token chiffré, verrou 15/60 | 🟡 **avancée majeure — mais sans verdict A51 (B2) et avec le verrou non prouvé (B1)** |
-| **E38** — Sauvegarde terrain : sync ≥ 1×/j + export de secours (§9.7, invariant 8) | l'alerte 24 h locale ; le port de sync **honnête** (`indisponible`, jamais une pastille verte) | 🟡 **l'export `.axionbackup` est L5c — cette moitié n'a pas encore d'objet** |
-| **E44** — UX/UI : tokens, police auto-hébergée, 4 états | zéro couleur et zéro taille en dur (grep + 2 e2e en navigateur), 4 états sur les 3 écrans, police auto-hébergée rendue en 8 tests e2e | 🟡 tenue sur les 3 écrans livrés |
-| **E36 / E43** — CI exécutable, exécutabilité autopilote | interdits **outillés** dans ESLint (horloge, écriture Dexie, UUID v7) ; 2 globs L5a ajoutés au seuil de couverture | ✅ renforcées |
-
-**Aucune exigence servie par L5a ne passe à « couverte »** : toutes restent partielles, ce qui est
-l'état normal d'un socle sans écran de collecte. **Rien n'a été oublié dans le sens 1** ; le seul
-manque est une **preuve**, pas un livrable (B1).
-
-## M.4 — La DoD transverse, cochée par exécution sur `aaafcc5`
-
-| Critère | Verdict | Mesure |
-| --- | --- | --- |
-| lint + typecheck stricts = 0 erreur | ✅ | jobs CI `1 · lint` et `2 · typecheck` **pass** · corroboré localement : `eslint . --max-warnings=0` code 0, `typecheck` 6 projets `Done` |
-| tous les tests verts, **aucun skippé** | ✅ | **1 997 tests** — unit **923** (39 f.) · interface **466** (29 f.) · integration **563** (23 f.) · e2e **45** (4 f.). `check-no-skipped-tests` : 95 fichiers, **liste d'exceptions vide**, code 0. Dont **276 tests L5a** exécutés par moi |
-| **couverture ≥ 90 % modules critiques, MESURÉE** | ✅ | `apps/field/src/local/**` **97,87 / 97,87 / 99,01 / 93,69** · `apps/field/src/session/**` **97,87 / 97,87 / 100,00 / 94,12** — job CI « couverture ≥ 90 % » vert, **et reproduit à la 2ᵉ décimale par une contre-mesure indépendante** |
-| migrations up/down sur staging | ⚪ **hors périmètre L5a** | aucune migration au diff. Ligne portée par **R-L3-2-bis rattachée à L0** (`DECISIONS.md` 2026-09-03, l. 7284). Job `6 · schema-diff` **pass** avec ses trois garde-fous de migration |
-| 4 états par écran (§33.2) | ✅ | les 3 écrans, chacun avec ses 4 états testés. `EcranDeverrouillage` n'a pas d'état vide **et écrit pourquoi** (l. 18-20 : « l'écran EST le contenu ») |
-| **axe-core vert** | ✅ **R-B8 et R-L5a-6 LEVÉES** | 4 balayages `AxeBuilder` sur les 3 écrans, **verts en CI** (`accessibilite-l5a.e2e.ts:158,164,173,184`), dans un moteur de rendu réel |
-| `@filrouge` vert sur FIL-TPE **ET** FIL-GC | ✅ | `l1-filrouge` 5 tests · `l3-filrouge` 11 tests **paramétrés sur les deux fixtures**, verts au job `4 · integration`. *Constat sans valeur de réserve : le fil rouge est serveur, il ne traverse pas `apps/field`* |
-| README de l'app à jour | 🟡 **NB3** | `apps/field/README.md` très complet (+65 l., carte des 13 modules), mais **l. 46 est fausse à la tête** : « il dépend de L3d […] **non livré** » — L3d est livré, tagué `v0.l3`, porte signée |
-| aucun TODO/FIXME sans entrée | ✅ | **zéro marqueur introduit par L5a** (grep sur les 60 fichiers). R-B9 (3 marqueurs hérités, adossés) inchangée |
-| diff schéma-vs-04 = zéro écart | ✅ | job `6 · schema-diff` **pass**, et **aucun fichier de schéma au périmètre** : l'écart ne peut être ni créé ni masqué ici |
-
-**8 cochées · 1 hors périmètre et tracée · 1 sous réserve non bloquante.**
-
-**Critères propres A02 :** matrice à jour dans les deux sens ✅ · aucune fiche d'étage 2 anticipée ✅
-(A-008 et A-009 **proposées**, non implémentées) · plafond étage 1 🟡 **invérifiable, aucune ligne
-L5a au compteur** (NB5) · verdict **A51 🔴 ABSENT** sur l'incrément de crypto (**B2**) · verdict A54
-⚪ sans objet (le test novice porte sur le lot L5 complet).
-
-## M.5 — Les 8 invariants, un par un
-
-| # | Invariant | Verdict | Preuve |
-| --- | --- | --- | --- |
-| **1** | Offline-first, **UUID v7 client**, push idempotent | ✅ | `uuidv7()` aux deux seuls sites de génération (`coffre-appareil.ts:93`, `ecriture.ts:177`) · aucun `crypto.randomUUID()` · l'interdit est **outillé** dans ESLint et **ré-étalé dans trois blocs disjoints**, parce qu'en configuration à plat le second bloc aurait effacé le premier **en silence** — piège mesuré sur un fichier sonde avant d'être refermé · `/api` exclu du cache SW (`service-worker.ts:57`) |
-| **2** | Aucune référence client dans le code | ✅ | grep vide hors tests. Seule occurrence : `'Mission fictive FIL-TPE'` dans `EcranAccueil.test.tsx:59` — **fixture 09 §4bis**, exception prévue |
-| **3** | RBAC serveur, financier admin, sync au propriétaire | ✅ **sans objet, sans entorse** | aucun fichier serveur au diff. Le contrat partagé prévoit `forbidden` (`sync.ts:156`) avec l'obligation « état *rejetée* VISIBLE, jamais rejouée silencieusement » ; règle jumelle côté descente tracée `DECISIONS.md` l. 7427 et **testée** |
-| **4** | **Aucune couleur ni taille en dur** | ✅ | `grep '#[0-9a-f]{3,8}'` et le grep des tailles littérales → **vides**. `coquille.css` : 118 lignes, **zéro littéral**. `theme-color` et icônes PWA **injectés à la construction** depuis `COULEURS_CHARTE`. **Prouvé en navigateur** : `socle.e2e.ts:51` et `:80`, verts |
-| **5** | Interface 100 % français, horodatages UTC | ✅ | `<html lang="fr">` + e2e « s'annonce en français » · `horloge.ts:86` → `toISOString()` · fuseau à l'affichage seul (`depots/sessions.ts:55`) |
-| **6** | Le terrain collecte, le siège produit | ✅ | l'appareil ne calcule que **ses propres lignes** (compteurs de session, à-revoir, alerte 24 h). Aucun scoring, aucune agrégation, aucun DOCX, aucun LLM. `apps/field` n'importe rien de `apps/api` |
-| **7** | Toute correction = révision tracée, rien d'écrasé | ✅ | **aucune ligne d'entité n'est jamais supprimée** — seuls `meta.delete(cle)` (non synchronisé) et un `Set.delete` JS existent. Suppression logique par `supprimeLe`. `base.ts` lève `BaseTropRecenteError` **plutôt que de repartir d'une base propre** (l. 19-25), et c'est testé |
-| **8** | Sauvegarde terrain : sync ≥ 1×/j + **export de secours testé** | 🟡 **partiellement sans objet, et c'est écrit** | **L'export `.axionbackup` est un livrable de L5c** (11 §6 ; `LOT_L5.md` §1, colonne « Ne livre PAS ») : cette moitié n'a **pas encore d'objet ici**, et je le dis plutôt que de la cocher à vide. Ce qui est livré et relève déjà de l'invariant : l'alerte 24 h calculée localement (`EcranAccueil.test.tsx:261`, `@critique`) et **le refus de mentir** — `portSyncInerte` rend `indisponible`, jamais une pastille verte, **testé** (`:241`) |
-
-**Interdictions 11 §2** : pas de fonction SQL v7 ✅ (et outillée) · pas de Next ✅ · pas de Prisma ✅ ·
-pas de CORS ✅ · MinIO jamais exposé ✅ (sans objet) · **aucune donnée personnelle dans les logs** ✅
-— le front ne journalise rien du tout (grep de `console.`, `logger.`, `pino` hors tests → vide), et
-l'index local est balayé par `etancheite.test.ts` (**29 tests**, dont un contrôle **positif** qui
-prouve que `personName`, `personEmail`, `value`, `note`, `participants` étaient bien chiffrés, et un
-test qui empêche le balayage de passer **par vacuité**) · aucun secret versionné ✅ (job `gitleaks`
-pass) · aucun test skippé ✅.
-
-## M.6 — RÉSERVES DU CONTRÔLE A02 SUR L5a
-
-### Bloquantes (2)
-
-| Réserve | Section engagée | Preuve | Ce qui la lève |
-| --- | --- | --- | --- |
-| **B1** — `apps/field/src/app/verrou.ts` : **227 lignes d'un livrable nommé au 11 §6, sans aucun test** | **11 §6** (« … + **verrouillage** + … ») · **05 §9.7** (15 min hors session / **60 min pendant une session `en_cours`**, Wake Lock, bouton manuel d'un geste) · `LOT_L5.md` §2 · **E33**, **E23** | couverture v8 **0,00 % de lignes** ; **aucun `verrou.test.ts`** ; unique appelant `app/contexte.tsx:220`, lui aussi à 0,00 % ; **aucun des 45 tests Playwright n'avance un minuteur de 15 ou 60 min**. Le seuil ne pouvait pas le voir : `apps/field/src/app/**` n'est ni dans `cheminsCritiques` ni dans `cheminsAttendus` | un test écrit par **un autre agent que A24** (09 §5.6) : les deux délais, la bascule de `sessionActive`, la remise à zéro sur toute interaction, `verrouillerMaintenant`, `wakeLock` indisponible. **Ou** l'inscription motivée du fichier dans `cheminsCritiques` — avec un chiffre > 90, jamais avec un glob élargi |
-| **B2** — **aucun verdict A51 sur l'incrément qui livre toute la crypto locale du produit** | 09 §1 (A51) · 06 §10.5 · 05 §9.7 · **11 §8-4** · gabarit A02 | recherche de `A51` dans `DECISIONS.md`, `docs/portes/` et `docs/ETAT.md` croisée avec `l5a` → **vide**. Quatre points attendent un regard qui n'est pas celui de leurs auteurs : ① paramètres Argon2id **choisis** par l'implémenteur ; ② **AES-GCM sans AAD** (fiche A-008) ; ③ refresh token 30 j dans Dexie ; ④ liste fermée **élargie deux fois en une journée**. A29 est la revue **de code**, pas la revue **de sécurité** — 09 §1 les distingue | `docs/portes/VERDICT_A51_L5a_<date>.md`, **ou** un report écrit d'A01 vers P-C avec ces quatre points en pièce jointe |
-
-### Non bloquantes (7)
-
-| # | Réserve | Preuve |
-| --- | --- | --- |
-| **NB1** | `LOT_L5.md` **§1 non amendé** pour le descope du premier pull : le tableau promet toujours « embarquement d'une mission (**premier pull, complet**) » | `docs/conception/LOT_L5.md` §1 vs `DECISIONS.md` l. 7446 ; le diff de la note ne touche que §3.2 |
-| **NB2** | La décision de descope déclare « **Impact spec : aucun sur `/docs`** » alors que **11 §6 est dans `/docs` et liste « pull mission »** pour L5a | `DECISIONS.md` l. 7446 vs `docs/11_CONTRAT_TECHNIQUE.md` §6 |
-| **NB3** | `apps/field/README.md:46` **faux à la tête** : « il dépend de L3d […] **non livré** ». L3d est livré (`apps/api/src/domaines/questionnaire/`, tag `v0.l3`, `PORTE_L3_2026-09-02.md` signée, glob au seuil à 100 %) | le motif exact est correctement écrit dans `DECISIONS.md` l. 7446 et `embarquement.ts:24-27` |
-| **NB4** | `local/contrat-sync.ts` : **commentaire faux et import qui le suit.** L. 4-10 affirme que `sync.ts` « n'est PAS encore ré-exporté par le baril » — or la recherche du texte de l'export dans l'historique du baril désigne **`0d4daf4`**, le premier commit de L5a lui-même. Conséquence : l. 29 et 41 importent la **source** par chemin relatif profond alors que `formes.ts:38` importe le **`dist`** par `@axion/shared` : deux résolutions du même paquet dans la même app. Sans effet aujourd'hui (`formes.ts` n'importe que des types), mais deux instances d'`ENTITES_SYNC` ne sont pas la même valeur | `contrat-sync.ts:4-10,29,41` · `packages/shared/src/index.ts:26` · `packages/shared/package.json` |
-| **NB5** | **Aucune ligne L5a au compteur du plafond étage 1** (`AMELIORATIONS.md` l. 23-31, qui s'arrête à L3b-d). Le plafond 0,5 j/lot est **invérifiable** : je ne peux ni le cocher ni le contester | le seul geste d'étage 1 identifiable de L5a est compté sur la ligne **L3b-d** |
-| **NB6** | Le budget A28 « **chiffrement < 50 ms/écriture** » (11 §4) n'est mesuré nulle part ; seule la dérivation < 1 s l'est. Il porte pourtant sur `ecrireLocal`, cœur de L5a | aucune assertion de ce budget dans `apps/field/src` ni dans `e2e/` |
-| **NB7** | Le contournement `ChampTexte` sans nature « secret » (`EcranDeverrouillage.tsx:12-16`) n'a **aucune fiche sur cette branche** : **A-011** vit sur `lot/l7a` (l. 1626). *Le trou A-010/A-011 n'est PAS une perte* — les deux numéros sont pris sur `lot/l7a`, vérifié | `AMELIORATIONS.md` : A-009 → A-012 |
-
-### Écarts non documentés — **AUCUN**
-
-Dix divergences relevées, **dix tracées** : premier pull descopé (l. 7446) · paramètres Argon2id
-(l. 6735 + 6848) · AES-GCM sans AAD (l. 6759 + fiche A-008) · état `validé` sans colonne au 04
-(l. 6780) · liste fermée élargie deux fois (l. 6801 + 7446, note §3.2 amendée et datée) · icône
-provisoire (l. 7388 + fiche A-009) · deux dépendances de test hors 11 §1 (l. 6706, amendement
-horodaté) · inversion du garde `pwa-404` (l. 7365) · port de sync hors du glob L6a (compteur étage 1
-+ `port-sync.ts:17-27`) · instabilité `l0-restauration` (fiche A-012).
-
-**Le droit de veto s'exerce sur l'écart NON documenté. Il n'y en a aucun. PAS DE VETO.**
-
-### Deux arbitrages de `LOT_L5.md` §5 exigés « avant la première ligne de code », sans trace
-
-**§5-1** (construction du SW : `vite-plugin-pwa` contre `workbox-build` en `injectManifest`) — aucune
-entrée ; la proposition a été implémentée, et je juge le **résultat conforme** (`workbox-build 7.4.1`
-appartient à la famille « Workbox 7 » du 11 §1, même version que `workbox-precaching` et
-`workbox-routing`). **§5-3** (qui écrit `packages/shared/src/sync.ts`) — aucune entrée, alors que
-`local/contrat-sync.ts:4` **affirme** « arbitrage A01 sur le point `LOT_L5.md` §5-3 ».
-`CLAUDE.md` §7 : « **Une décision non tracée dans ce format n'existe pas.** » Le code cite donc un
-arbitrage absent du registre. Résultat conforme au 11 §4, **trace manquante** → porté en doute de
-spécification, pas en réserve bloquante.
-
-## M.7 — Réponse à la question que `LOT_L5.md` §5-4 adressait nommément à A02
-
-> « A02 doit dire si le critère 07 *écran Aujourd'hui, sync par mission* est cochable dans cet état. »
-
-**NON — et pas parce que L5a a mal travaillé : parce que ce critère n'est pas le sien.** Le 07,
-ligne L5, colonne démo, demande « écran *Aujourd'hui* §34.2 (**agenda agrégé**, à-revoir, **sync par
-mission**) » : l'agenda est L5c, la sync est L6a/L6b. Le cocher à L5a serait le cocher à vide. **Ce
-que L5a livre est le bon comportement** — `portSyncInerte` rend `indisponible`, l'écran l'affiche tel
-quel, et il est **testé** que la pastille ne verdit pas (`EcranAccueil.test.tsx:241`) : c'est
-l'honnêteté que `LOT_L5.md` §3.6 réclamait, et **je la valide sans réserve**. Conséquence : le
-critère **ne peut pas être coché avant L6b**. Soit P-C se tient après L6b, soit il descend
-explicitement à la porte suivante — **choix de séquence produit, il appartient à Williams**.
-
-## M.8 — Ce que je n'ai pas pu vérifier
-
-1. **Mode avion RÉEL sur iPad** — non exécuté par moi, non exécutable en CI. Limite **déjà assumée au
-   11 §7** ; reste dû à A27 aux portes P-C et P-E.
-2. **Budgets sur matériel cible** — la dérivation < 1 s est mesurée sur un *runner* GitHub, pas sur un
-   iPad ; le fichier e2e le dit lui-même (l. 34-37). Le chiffrement < 50 ms/écriture n'est pas mesuré
-   du tout (NB6).
-3. **`pnpm verify` complet, `test:integration` et `test:e2e` : non exécutés par moi** (Docker,
-   Testcontainers, build complet). Je m'appuie sur les jobs CI verts sur la tête exacte, et je le dis
-   plutôt que de laisser croire que j'ai tout rejoué.
-4. **Mon environnement est hors contrat** : **Node v24.19.0** contre `>=22.11.0 <23` (11 §1). Tout
-   vert obtenu localement **répond à côté** ; la CI mesure sur **Node v22.23.2**. Mes exécutions sont
-   des **corroborations**. Que ma contre-mesure de couverture reproduise le chiffre CI **à la
-   deuxième décimale** est le meilleur argument que j'aie que les deux environnements disent la même
-   chose *sur ce point précis* — il ne s'étend pas au reste.
-5. **Ma part dans B1.** Le plan de tests de `LOT_L5.md` §4 ne listait aucun test de verrou, et **j'ai
-   co-validé cette note à l'étape 1bis**. B1 est autant un défaut de ma validation qu'un défaut
-   d'implémentation. Règle que j'en tire, pour les notes L5c et L6 : *un module nommé au 11 §6 doit
-   avoir une ligne dans le plan de tests de sa note.*
-6. **La chaîne de revue est intacte, et je l'ai vérifiée** : A29 a porté sur `1892df3` ; les commits
-   ultérieurs (`2c754b2`, `92944eb`, `d589b03`) ne touchent que du code de test, un commentaire de
-   `formes.ts` et le précache d'icône de `build-sw.mjs`, tous couverts par le rejeu tracé
-   `DECISIONS.md` l. 7467. Vérifié par `git show --stat`, pas supposé.
-
-## M.9 — VERDICT A02 SUR L'INCRÉMENT L5a
-
-> ### 🟡 **ACCEPTÉ SOUS RÉSERVE**
->
-> **Réserves bloquantes : 2** — **B1** (`app/verrou.ts`, 227 lignes d'un livrable du 11 §6, 0,00 % de
-> couverture, aucun test d'aucune sorte) · **B2** (aucun verdict A51 sur l'incrément de crypto).
-> **Réserves non bloquantes : 7** (NB1 → NB7).
-> **Code orphelin : AUCUN. Glose de traçabilité fausse : AUCUNE. Écart non documenté : AUCUN.
-> PAS DE VETO.**
-
-Les deux sens sont tenus. La DoD est cochée **par exécution** — 8 lignes vertes, 1 hors périmètre et
-tracée (migrations, R-L3-2-bis rattachée à L0), 1 sous réserve non bloquante (README). La fusion de
-`main` du matin n'a **rien perdu ni relâché** : baril additif (20 exports), 13 chemins critiques,
-seuil intact à 90, et **R-L5a-9 fermée par un recompte que j'ai refait moi-même** (6 + 5 = 11).
-
-Ce que cet incrément a de meilleur mérite d'être écrit dans la matrice, parce que c'est ce qui rend
-ses deux défauts visibles : il **refuse trois fois de mentir** là où mentir aurait été plus simple —
-le port de sync qui rend `indisponible` plutôt qu'un vert, l'embarquement qui distingue « le stockage
-est prêt » de « les données sont là », et le garde de mise à jour dont le défaut est `null` (« je ne
-sais pas ») et non `false` (« vas-y »). Et ses deux règles de socle — **une seule horloge, un seul
-port d'écriture** — ne sont pas des consignes : elles sont **outillées** dans ESLint, en trois blocs
-disjoints, parce que deux blocs se seraient effacés l'un l'autre en silence. Sur un incrément moins
-rigoureux, `verrou.ts` à 0 % serait passé inaperçu au milieu du bruit.
-
-**Prochaine action dans la chaîne de signature** : ① **A20** affecte **B1** à A26 ou A27 (jamais à
-A24 — 09 §5.6) ; ② **A01** tranche **B2** et pose les entrées `DECISIONS.md` manquantes (§5-1, §5-3,
-impact spec du descope, statut du glob `app/**`) ; ③ **A01** signe le passage en porte ;
-④ **Williams** tient **P-C** et arbitre A-008, A-009, A-012 ainsi que la séquence du critère
-« sync par mission ».
-
-_Passe effectuée le 2026-09-03 par A02, gardien de la spécification, sur `lot/l5a` @ `aaafcc5`,
-en lecture seule sur le code. Aucune ligne datée antérieure de ce fichier n'a été modifiée.
-Dossier complet : `docs/portes/CONTROLE_A02_L5a_2026-09-03.md`._
 # N. INCRÉMENT L7a — PASSE DU GARDIEN A02, 2026-09-03, SUR `lot/l7a` @ `ce1a80f`
 
 > **Lettre N**, à la suite de K/K bis. **L** est réservée à la passe L5b et **M** à la passe L5a, qui
@@ -3318,3 +2934,393 @@ désormais livrés.
 _Passe effectuée le 2026-09-03 par A02, gardien de la spécification, sur mandat **SANS Docker** (les
 lignes qui l'exigeaient sont marquées « non exécuté par moi » et adossées à la CI du commit exact).
 Aucune ligne datée antérieure n'a été modifiée._
+
+---
+
+# O. RATTRAPAGE DE SIX INCRÉMENTS — PASSE DU GARDIEN A02, 2026-09-08, SUR `origin/main` @ `8d9e531`
+
+> **Lettre O**, à la suite de N. **Cette passe ne juge aucun lot : elle remet l'instrument à niveau.**
+> Le 2026-09-07, dans `docs/portes/CONTROLE_A02_PC_2026-09-07.md` §9.2, j'ai ouvert contre moi-même la
+> réserve **NB-9-bis** : « la matrice de traçabilité est inutilisable en l'état — ≈460 lignes
+> dupliquées, dernier titre daté du 2026-09-03, aucune section L5c / L5 / L7b / L7c / L8 ». C'était
+> l'un des deux bloquants restants de **P-C**, et le seul dont j'étais moi-même le débiteur.
+> **Le présent §O l'exécute** : le doublon est établi par `git blame` avant d'être retiré, et les six
+> incréments entrés dans `main` depuis reçoivent leur bloc, **dans les deux sens**.
+>
+> **Gardien A02, lecture seule sur le code.** Aucun fichier de `apps/`, `packages/`, `infra/`, `e2e/`,
+> `scripts/` n'a été modifié par cette passe ; **le seul fichier écrit est celui-ci** — c'est le seul
+> que le gardien tienne (09 §1). Aucun commit, aucun `push` : le pilote transcrit.
+> **Ordre de lecture appliqué** (09 §5.8, rien de plus) : `11_CONTRAT_TECHNIQUE` → `CLAUDE.md` §4
+> (étape 6, « les DEUX sens ») et §5 (DoD) → `07` lignes L5, L7-min, L8 → `08_TRACABILITE` **en
+> entier** → `00_INDEX` (8 invariants, précédence) → `09` §3, §4, §4bis, §5.9 → les neuf fiches de
+> porte nommées au §O.0 → `DECISIONS.md` (entrées du 2026-09-04 au 2026-09-08) → `AMELIORATIONS.md`.
+
+## O.0 — Ce que cette passe mesure, et ce qu'elle ne refait pas
+
+**Périmètre : `f4e1c49..8d9e531`** — de la fusion de L7a (dernier lot inventorié, §N) à la tête de
+`origin/main`. **60 commits de première ligne**, dont **33 portent du code**, classés un par un par
+`git show --name-only <sha>` filtré hors `docs/`, `DECISIONS.md`, `AMELIORATIONS.md`, `ETAT.md`.
+
+**Ce que je ne refais pas, et je le dis pour qu'on ne le cherche pas ici.** Neuf dossiers ont déjà
+mesuré ces incréments ; les répéter serait produire un troisième chiffre là où deux suffisent, et
+c'est exactement la faute que ce fichier reproche aux autres. **Je cite, et je ne recompte que ce que
+personne n'avait compté** :
+
+| Incrément | Dossier qui fait foi | Verdict rendu |
+| --- | --- | --- |
+| **E18** (#34) | `docs/portes/REVUE_A17_E18_2026-09-05.md` + `…_REJEU_…` | REFUSÉ puis **1 bloquant résiduel**, fermé avant fusion |
+| **L7b** (#47) | `docs/portes/REVUE_A37_L7b_2026-09-05.md` | ACCEPTÉ SOUS RÉSERVE — 2 bloquants fermés avant fusion |
+| **L7c** (#58) | `docs/portes/REVUE_A37_L7c_2026-09-06.md` | **REFUSÉ** (B-1, donnée personnelle) — arbitré A01 le 2026-09-06, **corrigé dans le code fusionné** |
+| **L5a durci** (#59) | `docs/portes/REVUE_A29_L5a_securite_2026-09-05.md` | six réserves de sécurité fermées |
+| **L5c** (#52) | `docs/portes/REVUE_A29_L5c_2026-09-05.md` puis `CONTROLE_A02_L5_2026-09-06.md` | **VETO A02**, levé le 2026-09-07 |
+| **correctifs P-C** | `docs/portes/CONTROLE_A02_PC_2026-09-07.md` | CONFORME SOUS RÉSERVE, **P-C non franchissable** |
+| **L5b/R1** (#97) | `docs/portes/REVUE_A29_L5B_R1_2026-09-07.md` + `RECOCHE_A02_R1_2026-09-07.md` | **R1 coché sur preuve exécutée** |
+| **N1** (#101) | `docs/portes/REVUE_A29_N1_2026-09-08.md` | CONFORME SOUS RÉSERVE, R-1 fermée |
+| **critère n° 6** | `docs/portes/RECOCHE_A02_CRITERE6_2026-09-08.md` | **B3-bis CADUC** |
+| **L8** (#61, #65, #66) | **aucun** | ⚠️ voir §O.5 |
+
+**L8 n'a AUCUNE fiche de porte ni revue croisée déposée** — seul incrément de la période dans ce cas.
+Ce n'est pas un lot non tracé : `DECISIONS.md` porte **8 arbitrages [L8]** du 2026-09-06, tous au format,
+et l'un d'eux a fait naître la couche d'acceptation croisée de #65. **C'est l'étape 4 qui manque, pas la
+réflexion** — et un moteur de scoring dont aucun réviseur n'a relu le barème est exactement le genre de
+code qu'on découvre à la porte. Constat de gouvernance que je pose ici parce que personne d'autre ne l'a
+posé → **R-O-3**.
+
+**Instruments exécutés par moi sur `8d9e531`, tous RC=0** : `check:tracabilite` (**1 256 citations,
+552 fichiers, aucune incohérence**) · `check:no-skipped-tests` (**181 fichiers**) · `check:invariants`
+· `check:graphe-modules` (**237 modules, 17 points d'entrée, 0 import pendu**) · `check:decisions`
+(**342 entrées**, 1 avertissement — §O.10-3). **CI du commit contrôlé** : run `34280146797`,
+`conclusion: success`, **21 jobs sur 21**, aucun `skipped`.
+
+## O.1 — LE DOUBLON DE 460 LIGNES : origine établie, identité prouvée, ce qui a été retiré
+
+**Je n'ai supprimé aucune ligne avant d'avoir prouvé qu'elle existait deux fois à l'octet près.** Le
+mode d'emploi §1 dit « jamais purgé » ; une purge non prouvée serait une réécriture d'historique,
+c'est-à-dire exactement l'infraction que je reproche par ailleurs à `DECISIONS.md`.
+
+**① L'identité, mesurée.** Blocs `2272-2730` et `2733-3191` de la version d'avant correction :
+
+```
+sed -n '2272,2730p' … > b1 ; sed -n '2733,3191p' … > b2 ; diff b1 b2   → AUCUNE différence
+md5sum b1 b2 → 77f1e2779898260a3fad962f13b46ccd  (les DEUX)            459 lignes chacun
+```
+
+**② L'origine, établie par `git blame` puis par comptage sur chaque fusion** — ce n'est ni un rebase
+ni le pilote de service, c'est **la rencontre d'un squash et d'une branche longue** :
+
+| Commit | Date | Côté 1 (`lot/l5c`) | Côté 2 (`main`) | Résultat |
+| --- | --- | --- | --- | --- |
+| `f2f17a8` | 2026-09-05 | L=1 **M=1** | L=0 **M=1** | **M=2** — la section M, écrite sur `lot/l5a` et entrée dans `lot/l5c` par une fusion ordinaire, revient de `main` sous le **nouveau SHA du squash `ab6dcf5`** ; git ne peut pas savoir que c'est le même texte |
+| `117e58a` | 2026-09-05 | **L=1** M=2 | **L=1** M=1 | **L=2** — même mécanisme, avec le squash `da7e8c9` de L5b |
+| `1964482` | 2026-09-06 | — | — | le squash de **PR #52** porte le fichier doublé dans `main` : **un seul hunk, `@@ -2729,6 +2729,466 @@`, +461 / −1** |
+
+**Le fichier n'est PAS en `merge=union`** — `.gitattributes` ne l'y met pas (seuls `DECISIONS.md` et
+`AMELIORATIONS.md` y sont). Le doublon ne vient donc pas du pilote de fusion : il vient d'une
+résolution manuelle qui, voyant deux blocs « ajoutés en fin » de part et d'autre, **les a gardés tous
+les deux** — le comportement que l'union aurait eu, obtenu à la main. **C'est la parade au squash
+merge décrite en tête de `.gitattributes` qui manquait ici**, parce qu'elle ne couvre pas ce fichier.
+
+**③ Ce qui a été retiré** : la **seconde** copie, lignes `2731-3191`, **460 lignes** (2 lignes vides
+de raccord + 458 de contenu + la borne). La **première** est conservée, c'est-à-dire celle qu'un
+`git blame` attribue aux auteurs d'origine (`da7e8c9` pour L (L5b), `ab6dcf5` pour M (L5a)) et non au
+squash de L5c. **Aucune mesure, aucun verdict, aucune date n'a été touché** : le contenu conservé est
+bit pour bit celui qui était présent, et l'encadré « RENUMÉROTATION DU 2026-09-03 » reste en tête de
+la section L, à sa place. `3 320 → 2 860` lignes avant l'ajout du présent §O.
+
+**④ Ce que je vérifie APRÈS, parce qu'une déduplication qui casse autre chose est une régression** :
+`grep '^## ' | sort | uniq -d` → **VIDE** ; `grep '^# ' | sort | uniq -d` → **VIDE**. Plus aucun titre
+en double, à aucun niveau.
+
+**⑤ Ce qui rend cette suppression sûre, et qui n'est pas une opinion** : les deux copies étant
+identiques **aujourd'hui**, aucun amendement postérieur n'a pu toucher l'une sans l'autre. Il n'existe
+donc aucune version « la plus à jour » à choisir — le choix de garder la première est un choix
+d'**attribution**, pas de contenu.
+
+## O.2 — Sens 2 : **E18** (PR #34, `cf2f4ef`) — 10 artefacts, dont un qui touche le schéma
+
+| Artefact | Rattachement | Contrôle |
+| --- | --- | --- |
+| `apps/api/drizzle/0015_unicite_companies_external_ref.sql` | **E18** · E43 | juste — index UNIQUE **partiel** `WHERE external_ref IS NOT NULL`, symétrique de `uq_companies_siren` |
+| `apps/api/schema-manifest.json` | E43 | juste — le manifeste suit la migration, sinon `schema:diff` rougit |
+| `apps/api/src/domaines/companies/depot.ts`, `src/routes/companies.ts` | E18 · E31 | juste — 409 distinct du 409 de SIREN, `details` contractuel |
+| `packages/shared/src/{companies,errors}.ts` | E18 · E43 | juste — code d'erreur dans `ERROR_CODES`, **aucun littéral libre** (11 §3) |
+| `apps/api/tests/{l1-contraintes,l3a-companies}.integration.test.ts`, `tests/aide/base-l1.ts` | E18 · E36 | juste |
+| `apps/api/README.md` | E43 | juste |
+
+**Le point qui n'est pas mécanisable et que je vérifie à la main** : cet incrément **modifie le
+fichier 04** (§7.1). C'est l'un des sept actes que l'autopilote ne décide jamais seul (11 §8-2). La
+chaîne est complète et datée : escalade `DECISIONS.md` du **2026-08-31** (« aucune contrainte
+d'unicité »), **arbitrage du 2026-09-03**, migration `0015`, manifeste, et `docs/.pack-integrity.json`
+resellé dans le même commit. **Le sceau du pack a bougé avec le pack, pas derrière lui.**
+**Aucun orphelin.**
+
+## O.3 — Sens 2 : **L7b** (PR #47, `6fedb6b`) — 34 artefacts, 2 routes, 2 écrans
+
+| Groupe | Citation en tête | Rattachement — vérifié en ouvrant le 08 |
+| --- | --- | --- |
+| `api/src/domaines/pilotage/{couverture,valeur,depot,service}.ts` | `E25 · E4 · E14` | **juste** — « écran de couverture » est **littéralement** dans le libellé d'E25 (08 l. 37) |
+| `api/src/domaines/pilotage/agregation.ts` | `E14 · E12` | **juste** — M5, réponses côte à côte |
+| `api/src/routes/pilotage.ts` | `E25 · E14` | juste — 2 routes, **keyset composite**, jamais d'offset |
+| `packages/shared/src/{pilotage,agregation}.ts` | `E25 · E22` / `E14 · E12` | juste — schémas Zod partagés front/serveur |
+| `hq/src/ecrans/couverture/EcranCouverture.tsx` + test | `E25 · E22` | juste |
+| `hq/src/ecrans/agregation/EcranAgregation.tsx` + test | `E14 · E12` | juste |
+| `hq/src/app/CadreTableau.tsx`, `coquille.css`, `routeur.ts`, `BarreLaterale.tsx` | E22 · E27 | juste — desktop-first §22.3 |
+| `hq/src/api/requetes-pilotage.ts`, `contrats.ts`, `tests-aide/fixtures-pilotage.ts` | E22 · E43 | juste |
+| `e2e/accessibilite-l7b.e2e.ts` | E27 · E44 | juste — **la réserve R-L7a-3 (axe-core installé nulle part) tombe ici** |
+| `apps/api/tests/l7b-pilotage.integration.test.ts` | E25 · E14 | juste — 20 déclarations `it(`, **30 marques `@critique`** (les `it.each` en portent plusieurs) |
+
+**Les deux routes sont NEUVES** : `GET /v1/missions/:id/coverage` **n'est pas** au 05 §8 ;
+`GET /v1/missions/:id/aggregation` **y est** (l. 48). Le 11 §8-6 exige que la première soit
+documentée : elle l'est, `DECISIONS.md` du **2026-09-05**, au format, avec le motif du renommage
+`service` → `orgUnit`. **Compte de tests neufs : 66 unitaires + 20 déclarations d'intégration + 38 d'interface.**
+**Aucun orphelin.**
+
+## O.4 — Sens 2 : **L7c** (PR #58, `5f5f50d`) — 43 artefacts, 1 route, 1 écran, 1 garde
+
+| Groupe | Citation | Rattachement |
+| --- | --- | --- |
+| `api/src/domaines/export/{service,depot}.ts` | `E14 · E21 · E22 · E36 · E43` | **juste sauf E36** — voir §O.10-2 ; **E21 re-prouvée table par table** |
+| `api/src/domaines/export/{csv,fichiers,zip,horodatage}.ts` + 4 tests | `E14 · E32 · E36` | juste sauf E36 ; `zip.ts` s'écrit avec `node:zlib`, **aucune dépendance ajoutée** |
+| `api/src/routes/export.ts` | `E14 · E22 · E36` | juste sauf E36 — **route neuve documentée** `DECISIONS.md` 2026-09-05 (réponse non-JSON comprise) |
+| `packages/shared/src/export-mission.ts` | `E14 · E22` | juste |
+| `hq/src/ecrans/export/EcranExport.tsx` + test, `api/requetes-export.ts` | E22 | juste |
+| `apps/api/tests/l7c-export.integration.test.ts`, `tests/aide/archive-export.ts` | E47 attendu — **absent**, voir §O.10-2 | rattachement **par le code**, pas par la citation |
+| `scripts/check-fixtures-contrat.mjs` (**garde neuf**, câblé dans `verify:rapide` et la CI) | E36 · E43 | juste — un corps littéral servi par un test E2E n'était confronté à aucun contrat (`DECISIONS.md` 2026-09-06) |
+| `scripts/check-decisions.mjs`, `package.json`, `.github/workflows/ci.yml` | E36 · E43 | juste — **les 61 fichiers du projet `interface` n'étaient exécutés par AUCUN job de CI** ; tracé le 2026-09-06 |
+
+**Compte : 62 cas unitaires + 19 d'intégration + 10 d'interface.** **Aucun orphelin.**
+**Le bloquant B-1 d'A37 est fermé dans le code fusionné** : `export/depot.ts:354-355` —
+`fonctionPersonne: sousConsentement(interviews.personRole, avecNoms)` et
+`servicePersonne: sousConsentement(services.labelFr, avecNoms)`. **Vérifié par moi, ligne par ligne**,
+parce qu'un verdict « REFUSÉ » suivi d'une fusion est exactement le cas où l'on ne croit personne.
+
+## O.5 — Sens 2 : **L8** (PR #61, #65, #66) — 20 artefacts, aucune route, **aucune fiche de porte**
+
+| Groupe | Citation | Rattachement |
+| --- | --- | --- |
+| `api/src/scoring/bareme.ts` (+ `bareme.test.ts`, `bareme-formes.test.ts`) | `E14` | **juste, mais sous-cité** : le barème par type de réponse est **nommément E37** (08 l. 50). E14 n'est pas faux, il est plus large |
+| `api/src/scoring/agregation.ts` | `E14 · E15` | juste — agrégation pondérée, complétude |
+| `api/src/scoring/moteur.ts` (+ `moteur.test.ts`, `moteur-arbre.test.ts`) | `E14 · E15` | juste — drapeaux rouges, divergences |
+| `api/src/scoring/entree.ts`, `packages/shared/src/scoring.ts` | `E14` | juste |
+| `api/src/scoring/acceptation.test.ts` (#65, **auteur distinct**) | `E37` | juste — **la seule citation E37 de tout le module** |
+| `api/tests/aide/{etancheite-scoring,scoring-jeux-de-reference}.ts` | E37 · E21 | juste — étanchéité financière rejouée sur le scoring |
+| `.github/coverage-critical-paths.json` (#61 puis #66) | E36 | juste — **`apps/api/src/scoring/**` entre dans les 18 globs du seuil 90 %** |
+
+**173 cas, 49 `@critique`.** **Aucun orphelin de citation**, mais **un orphelin fonctionnel** :
+`scoring/moteur.ts` est nommé par `check:graphe-modules` parmi les 25 modules dont le seul
+consommateur est un test — **aucune route ne l'appelle, aucun écran ne l'affiche, `scores.csv` est
+absent du ZIP**. C'est l'état normal sous TDD (09 §3-2) **tant que L8 n'est pas clos** ; ce qui ne
+l'est pas, c'est que **L8 n'ait ni revue croisée ni contrôle d'acceptation déposé** alors que trois PR
+sont dans `main`. → réserve **R-O-3**.
+
+## O.6 — Sens 2 : **L5c** (PR #52, `1964482`) — 38 artefacts
+
+Les 25 artefacts de `apps/field/src` ont été rattachés un par un dans
+`docs/portes/CONTROLE_A02_L5_2026-09-06.md` §6.1 (« gloses fausses : AUCUNE ») ; **je ne les recopie
+pas, je les reporte** :
+
+| Groupe | Citation | Rattachement |
+| --- | --- | --- |
+| `agenda/{sessions,jour,validation,pilote,unites,ecriture-session}.ts` | E12 · E23 · E24 · E6 | juste — M3, §19.1, §25.2-3, §34.2 |
+| `ecrans/journee/Ecran{Aujourdhui,Agenda,FinDeJournee,FinDeSession,Pilote}.tsx` | E12 · E23 · E24 · E38 | juste |
+| `ecrans/journee/EcranRestauration.tsx` | E33 · E38 | juste |
+| `ecrans/journee/{BandeauMiseAJour,coquille-l5c,PastilleSyncCoquille,vue-initiale}` | E23 · E6 · E7 | juste |
+| `sauvegarde/{sauvegarde,format}.ts` | E33 · E38 | juste — 11 §4, invariant 8 |
+| `sauvegarde/photos.ts` | E6 · E7 | **orphelin fonctionnel DOCUMENTÉ** — voir §O.10-1 |
+| `ecrans/journee/journee.css` | *aucune citation `E`* | **rattaché par sa section** : l'en-tête cite 03 §22.1 (cibles ≥ 44 px) et l'invariant 4 → **E44 · E27**. Sous-citation, non bloquante, **identique au traitement d'`entretien.css` au §L.2** |
+| `.github/coverage-critical-paths.json` | E36 | juste — `sauvegarde.ts` et `format.ts` entrent au seuil |
+
+**Les trois répertoires que L5c ouvre comptent aujourd'hui 77 + 148 + 41 cas** — chiffre du RÉPERTOIRE, pas de l'incrément : les correctifs de P-C y ont ajouté 58 cas de plus (§O.7), et je ne les attribue pas deux fois. **Aucun orphelin non
+documenté.**
+
+## O.7 — Sens 2 : **les correctifs de P-C** (#64, #69, #70, #72, #75, #76, #79, #80, #81, #82)
+
+C'est le groupe le plus dense de la période, et **le mieux tenu** : chaque correctif arrive avec un
+test qui interdit son retour, et l'auteur du test n'est pas l'auteur du correctif (09 §5.6, déclaré
+dans les en-têtes — je l'ai vérifié sur `recette-b5` et `acceptation-b5`).
+
+| PR | Artefacts | Rattachement | Ce qu'il ferme |
+| --- | --- | --- | --- |
+| **#64** | `app/etat-sync-affiche.ts` (+ 15 fichiers de test `recette-*`/`acceptation-*`), `App.tsx`, `EcranAccueil`, `EcranDeverrouillage`, `navigation.ts`, `local/stockage.ts`, `tokens.css` | E23 · E44 · E6 · E38 | **les six bloquants A54** (B1 message faux, B2 cul-de-sac, B3 promesse photo retirée, B4 rituel à vide, B5 échec déguisé en vide, B6 deux pastilles) |
+| **#69** | `EcranRestauration.tsx`, `sauvegarde/depot.ts`, `photos.rendu.test.tsx`, `restauration.{acceptation-b4,recette-a24}` | E38 · E33 | l'écran de restauration passe de **11,11 % à 100 %** et **fige** sur une panne de stockage |
+| **#70** | `motifs.ts`, `terminer.recette-m2`, `boutonsGrises.recette-m1`, `refus.recette-d1`, `identifiantsUniques`, 7 écrans d'entretien | E13 · E24 · E12 | « Terminer » existe, les boutons grisés **disent pourquoi**, le refus de participation est **tracé** |
+| **#72** | `packages/ui/src/{composants/RappelHorsLigne.tsx,contraste-usages.test.ts,police-racine.test.tsx}`, `e2e/polices.e2e.ts` | E44 · E27 | §33.1 — la police de la **racine** est prouvée, contre-épreuve comprise |
+| **#75** | `e2e/hors-ligne-l5.e2e.ts`, `e2e/fixtures/appareil-terrain.ts` | **E6** · E44 | les **quatre critères hors ligne du 07** deviennent des scénarios `setOffline` sur PC **et** iPad émulé |
+| **#76** | `packages/ui/src/composants.css`, `contraste-usages.test.ts` | E27 | le badge « en cours » repasse **sous AA** |
+| **#79** | `EcranAgenda.test.tsx` | E36 | **cinq cas `@critique` dépendaient de l'heure de passage** — un test qui rougit la nuit n'est pas une garde |
+| **#80** | `siege/{connexion,EcranConnexion,coquille-siege}` + tests, `enregistrement.recette-a26` | E13 · E23 · E33 | l'identité d'auditeur reçoit un **chemin de production** ; « Enregistré » cesse de mentir |
+| **#81** | `app/capacites-hors-ligne.ts`, `app/hors-ligne.test.tsx`, 11 vues, `RappelHorsLigne` | **E44** · E6 | le **4ᵉ état sur 12 vues sur 12**, tenu par le type ; trois listes de capacités redeviennent une |
+| **#82** | `e2e/accessibilite-toutes-vues-l5.e2e.ts` | E44 · E27 | axe-core de **3 vues sur 11 à 12 sur 12**, et il **trouve** un défaut de niveau A |
+
+**21 fichiers `recette-*`/`acceptation-*`, 135 cas, 90 `@critique`.** **Aucun orphelin.**
+
+## O.8 — Sens 2 : **L5b/R1** (#97) et **N1** (#101)
+
+| PR | Artefacts | Rattachement | Preuve |
+| --- | --- | --- | --- |
+| **#97** | `packages/ui/src/composants/EchelleAncree.{tsx,test.tsx}`, `composants.css`, `e2e/{hors-ligne-l5,fixtures/appareil-terrain}` | **E40** (ancres §32.4) · E44 · E13 | 52 cas ; **A02 a exécuté l'E2E et l'a muté** : vert sur `ef2dea0`, **rouge** quand le dépliant se referme |
+| **#101** | `ecrans/entretien/ZoneQuestion.tsx`, `entretien.css`, `e2e/fixtures/champ-de-vision.ts`, `hors-ligne-l5.e2e.ts`, `hq/app/collision-classes.test.ts` | E13 · E44 · E40 | les ancres restent lisibles **sans perdre les pastilles de vue** ; **la garde regarde enfin le viewport** — A29 a reprouvé la morsure par mutation |
+
+**Aucun orphelin.** ⚠️ `collision-classes.test.ts` vit dans `apps/hq` et garde une règle de
+`apps/field` : c'est **volontaire** (le test de collision de classes CSS est commun aux deux fronts),
+mais c'est le seul endroit de la période où un test d'une application garde le code d'une autre. Je le
+signale sans le compter comme un défaut.
+
+## O.9 — Sens 2 : **les onze entrées de code que le mandat ne nommait pas**
+
+Le sens 2 ne se choisit pas un périmètre : **tout ce qui est entré doit être rattaché.** Onze PR de
+code de la période ne figuraient dans aucun des six incréments du mandat.
+
+| PR | Artefacts | Rattachement | Juste ? |
+| --- | --- | --- | --- |
+| **#56** | `scripts/check-octets-controle.mjs` + `garde-fous-octets-controle.test.ts` + 9 scripts assainis | E36 · E43 | oui — aucun octet de contrôle dans une source ; **le garde a sa suite d'injection** |
+| **#59** | `local/{coffre,coffre-appareil}.ts`, `app/{contexte,EcranDeverrouillage}`, `eslint.config.js`, `garde-fous-eslint-ecriture-dexie.test.ts` | **E33** · E6 | oui — les six réserves A29 ; le coffre passe à **100 %** |
+| **#57** | `l3a-companies.integration.test.ts`, `coverage-critical-paths.json` | E36 · E18 | oui — `domaines/companies/**` **entre au seuil** |
+| **#60** | `.husky/pre-push` | E43 | oui — le hook dit **lequel** des deux cas s'est produit |
+| **#73** | `.github/actions/construire-image/action.yml`, `scripts/check-etapes-jumelles.mjs` | E17 · E36 | oui — deux tentatives quand le registre hoquette, **et un garde qui interdit aux jumelles de diverger** |
+| **#84** | `.github/workflows/ops-poser-enveloppeurs.yml` | E35 · E43 | oui — l'accès root existait depuis huit jours ; poser les enveloppeurs **par la CI** |
+| **#86 / #91** | `infra/postgres/sauvegarde.sh`, `l0-sauvegarde.integration.test.ts`, `tests/aide/faux-date.sh`, `.env.example` | **E35** · E38 | oui — **R1 : le veto de semaine supprimait la dernière archive de son mois** ; l'étage mensuel lit enfin `semaines_prises` |
+| **#89** | `hq/src/ecrans/design/**` (8 fichiers), `packages/ui/src/inventaire.ts`, `e2e/accessibilite-design.e2e.ts`, `collision-classes.test.ts` | **E27 · E44 · E22** | oui — §33.5 ; **app hôte arbitrée par A01 le 2026-09-07** au motif de l'invariant 6 (le paquet terrain est précaché et sous quota) |
+| **#92** | `e2e/budget-chiffrement-l5.e2e.ts` | **E33** · E36 | oui — le budget 11 §4 « < 50 ms/écriture », **jamais mesuré jusque-là** |
+| **#93** | `.github/scripts/zap-verdict.{sh,test.sh}`, `zap-baseline.yml`, `workflows/README.md` | **E33** · E36 | oui — le scan voit enfin `/hq` et `/api`, **et sa garde d'agrégation mord** |
+| **#48 / #50** | `.gitattributes` | E43 · E47 | oui — fusion des registres append-only (fiche A-015 **absorbée**) ; ⚠️ **ce fichier-ci n'y est pas**, §O.13 |
+
+**Aucun orphelin. Aucun de ces onze artefacts ne réclame de fiche `AMELIORATIONS.md`** : chacun se
+rattache à une exigence par son objet, pas seulement par sa citation.
+
+## O.10 — Ce que le contrôle des DEUX SENS a trouvé, et que ni la CI ni les gardes ne voient
+
+**1. Un orphelin fonctionnel, documenté, et qui dure depuis quatre incréments.**
+`apps/field/src/sauvegarde/photos.ts` : `compresserPhoto` **n'a aucun consommateur de production**
+(`grep -rn "compresserPhoto" apps/ packages/ e2e/` → sa définition et ses tests). Arbitré
+`DECISIONS.md` 2026-09-05 (lot **L5d**, après P-C), **avec obligation de déclarer le manque à chaque
+contrôle** — fait au §6.1 du contrôle L5, au §6.1 du dossier P-C, et ici pour la troisième fois. **Le
+CONTENU du lot L5 (« compression photos R2 », fichier 07) reste donc incomplet.** Non bloquant, car
+la promesse faite à l'auditeur a été retirée (B3).
+
+**2. Une sur-citation à 14 fichiers, et une exigence que PERSONNE ne cite — le défaut du chiffre 36.**
+`E36` = « Exécutable par lots Claude Code avec critères d'acceptation » (08 l. 48). `E47` = « format
+de l'**export de mission** (ZIP + `reponses.csv`) » (08 l. 60). **Toute la chaîne d'export de L7c cite
+E36 ; aucune ne cite E47** — `grep -rn E47 apps/ packages/` rend **4 fichiers dans tout le dépôt**,
+aucun sous `export/`. La confusion est mécanique et lisible : le §36.3 gouverne l'export, **et 36 est
+devenu E36**. `check:tracabilite` est vert et **ne peut pas le voir** — son contrôle C2 confronte la
+glose au **libellé**, pas le fichier à l'exigence, et « exécutable par lots avec critères » est
+précisément la glose qu'il attend pour E36. **Même famille que les 25 fichiers qui citaient E5 pour du
+RBAC (2026-08-29) et que la sur-citation E25 de L7a (§N.2).** Ce n'est **pas un orphelin** — le
+rattachement E14/E22/E32 de ces fichiers est juste — c'est une **citation à corriger et une exigence à
+ajouter**. → réserve **R-O-1**, non bloquante, portée à A01 et A30.
+
+**3. `DECISIONS.md` : 21 entrées dupliquées, toujours là.** `grep -c '^## '` → **342** ;
+`sort -u` → **321**. `check:decisions` **avertit** (« la date de l'entrée … recule ») **et ne bloque
+pas**. 11 §9bis dit *append-only* : une insertion au milieu est une réécriture d'historique.
+**Même famille de défaut que le doublon de ce fichier, et probablement la même fusion.** NB-13 reste
+ouverte. → §O.13.
+
+**4. Les 20 composants de `packages/ui` listés « sans consommateur de production » ne le sont PAS.**
+Je l'ai vérifié plutôt que de le recopier : `hq/src/ecrans/design/fiches-socle.tsx:16` importe
+`Badge`, et la page `/design` consomme la galerie entière. Si `check:graphe-modules` les liste quand
+même, c'est que **l'import passe par le baril** `packages/ui/src/composants/index.ts` et que le script
+traite un `export … from` de baril comme un **transit**, pas comme une consommation (règle assumée,
+`check-graphe-modules.mjs:640`). **La liste est une information, pas un verdict** — le script le dit
+lui-même. Aucun orphelin de ce côté.
+
+**5. Trois modules livrés hors du seuil de couverture.** `apps/api/src/domaines/pilotage/**`,
+`apps/api/src/domaines/export/**` et `apps/field/src/ecrans/**` ne sont dans **aucun** des 18 globs
+critiques. Les deux premiers ne relèvent pas littéralement des quatre familles de la DoD (sync, crypto
+locale, scoring, RBAC/propriété) — **je ne les exige donc pas** : ce serait exiger ce qui n'est écrit
+nulle part. Le troisième est le doute **D-4**, ouvert depuis le 2026-09-03 **sans arbitrage**, et il a
+maintenant un chiffre : `EcranFinDeSession.tsx` à **66,05 %** de lignes, invisible au job vert.
+→ **R-O-2**, arbitrage dû par A01.
+
+## O.11 — Synthèse chiffrée au 2026-09-08
+
+| Mesure | Valeur | Source — **exécutée par moi** sauf mention |
+| --- | --- | --- |
+| CI du commit contrôlé | **21 jobs / 21 SUCCESS**, aucun `skipped` | run `34280146797`, `head_sha 8d9e531`, `gh api …/jobs`, lus un par un |
+| Fichiers de test | **181** analysés par le garde, **182** suivis par git (l'écart est `zap-verdict.test.sh`, hors portée du garde) | `check:no-skipped-tests` · `git ls-files` |
+| Tests désactivés, `.skip`, `.todo`, `xit` | **0** | `check:no-skipped-tests` RC=0 |
+| Marques `@critique` | **1 008** dans **123** fichiers | `grep -r` |
+| Marques `@filrouge` | **23 lignes, 4 fichiers** — dont **une seule en commentaire** dans `e2e/socle.e2e.ts` | `grep -rl` |
+| Cas de test **par répertoire livré** (déclarations, pas exécutions) | pilotage L7b **66** + intégration **20** + écrans console **38** · export L7c **62 + 19 + 10** · scoring L8 **173** · `agenda/**` **77** · `ecrans/journee/**` **148** · `sauvegarde/**` **41** | `grep -cE` par répertoire. ⚠️ **Les 135 cas des 21 fichiers `recette-*`/`acceptation-*` NE S'ADDITIONNENT PAS à ces chiffres** : **58** d'entre eux vivent dans `ecrans/journee/**` et **35** dans `ecrans/entretien/**`, donc déjà comptés. Un total unique n'aurait aucun sens ici, je ne l'écris donc pas |
+| Scénarios E2E | **44 cas, 9 fichiers** (dont `hors-ligne-l5` 8, `accessibilite-l7b` 7, `pwa-servie` 6) | `grep -cE "^\s*test\("` |
+| Citations de traçabilité | **1 256 citations, 552 fichiers, aucune incohérence** | `check:tracabilite` RC=0 |
+| Graphe des modules | **237 modules, 17 points d'entrée, 0 import pendu** | `check:graphe-modules` RC=0 |
+| Entrées `DECISIONS.md` | **342 titres / 321 uniques → 21 doublons** | `grep -c` + `sort -u` |
+| TODO / FIXME sans entrée | **0** | `grep -rn` sur `apps/*/src packages/*/src` |
+| Globs du seuil de couverture | **18**, seuil **90 %**, job **vert** | `.github/coverage-critical-paths.json` + CI |
+| Couverture mesurée hors seuil (rappel du 07) | `EcranFinDeSession` **66,05 l. / 30,00 f.** · `EcranRestauration` **100 / 100 / 100 / 100** | `CONTROLE_A02_PC_2026-09-07.md` §5 |
+| Code orphelin **non documenté** | **AUCUN** | §O.2 à §O.9 |
+| Journées de journal manquantes | **4** — `docs/journal/` s'arrête au **2026-09-03** | `ls docs/journal/` |
+| Fiches `AMELIORATIONS.md` | **49** en-têtes ; la dernière étage 2 (jour civil UTC) est **PROPOSÉE, non implémentée** | `grep -c '^## '` |
+
+## O.12 — Ce que je n'ai PAS vérifié, et qui doit être dit
+
+1. **Je n'ai pas rejoué la suite complète** (`pnpm verify`) : les chiffres de tests verts viennent de
+   la **CI du commit exact**, pas de ma machine, et mon Node local est **v24.19.0**, hors épingle.
+2. **Je n'ai relu ligne à ligne ni L7b, ni L7c, ni L8** : la revue croisée est l'étape 4 et elle
+   appartient à A37. J'ai vérifié les **rattachements**, les **routes**, les **citations** et les
+   **fermetures de bloquants** — pas la justesse fonctionnelle des barèmes.
+3. **Aucune mesure sur `axionia-web`** : `8 · deploy-staging` et `ZAP baseline` sont verts en CI ;
+   je ne les ai pas rejoués sur la machine.
+4. **La DoD transverse n'est pas recochée ici.** Elle l'a été le **2026-09-07** (7 lignes sur 10) et
+   la recoche du critère n° 6 date du **2026-09-08**. Le présent §O ne coche **que la ligne qui
+   m'appartient** — « matrice E1-E47 à jour dans les deux sens » — et deux lignes restent non tenues
+   par ailleurs : **migrations up/down sur staging** et **README de `apps/field` à jour**.
+
+## O.13 — La garde d'unicité (**D-7**) — proposition à A52, **NON implémentée**
+
+Deux fichiers *append-only* portent des doublons — **16 titres ici, 21 entrées dans `DECISIONS.md`** —
+et **aucun des 17 gardes `check:*` du dépôt ne mord**. Ce que devrait vérifier un `check:unicite`, en cinq
+lignes, pour que A52 l'écrive :
+
+1. **Unicité des titres `^## ` et `^# `** dans `DECISIONS.md`, `AMELIORATIONS.md` et
+   `docs/TRACABILITE_E1-E47.md` — comparaison sur le titre **normalisé** (espaces réduits, casse
+   conservée) ; toute répétition = **RC=1**, avec les deux numéros de ligne.
+2. **Non-décroissance des dates** dans les deux registres datés : la date d'un titre `## AAAA-MM-JJ`
+   ne doit jamais être **antérieure** à celle du titre précédent. `check:decisions` sait déjà le voir,
+   **il le dit en avertissement** : le passer en échec est un changement d'une ligne, et c'est une
+   décision de gouvernance, pas un correctif.
+3. **Contre-épreuve obligatoire** (leçon du 2026-08-28) : une suite d'injection qui duplique un titre
+   dans une **copie jetable** et exige RC=1 — sans quoi le garde rejoint la famille des verts qui ne
+   gardent rien.
+4. **Câblage dans `verify:rapide` ET dans la CI**, pas seulement l'un des deux (leçon F-1 du lot L1).
+5. **Et la vraie parade est en amont** : ajouter `docs/TRACABILITE_E1-E47.md` à `merge=union` serait
+   une **erreur** — l'union aurait produit exactement ce doublon. Ce qu'il faut est l'inverse : un
+   garde **post-fusion**, comme le bandeau de `.gitattributes` le prescrit déjà pour `check:decisions`
+   et `format:check`.
+
+**Je ne l'écris pas** : le gardien ne code pas (09 §1). **Proposition, pas prescription** — l'arbitrage
+appartient à A01, l'écriture à A52.
+
+## O.14 — Réserves de cette passe, et **statut de NB-9-bis**
+
+| Réf. | Objet | Bloquante ? |
+| --- | --- | --- |
+| **R-O-1** | 14 fichiers de la chaîne d'export citent **E36** au lieu d'**E47** ; E47 n'est cité par aucun d'eux | non — citation à corriger, **avant P-E** |
+| **R-O-2** | `apps/field/src/ecrans/**` hors des 18 globs critiques ; `EcranFinDeSession` à 66 % **invisible** au job vert. Doute **D-4** sans arbitrage depuis le 2026-09-03 | non — **arbitrage A01 dû** |
+| **R-O-3** | **L8 n'a ni revue croisée ni contrôle d'acceptation déposé**, alors que trois PR sont dans `main` et que le moteur n'a aucun consommateur de production | non pour `main` · **OUI avant la porte de L8** |
+| **NB-13** | `DECISIONS.md` : 21 entrées dupliquées, `check:decisions` avertit sans bloquer | non — gouvernance, §O.13 |
+| **NB-14** | `docs/journal/` s'arrête au 2026-09-03 : **4 journées manquantes** avant P-DESCOPE (15/09) | non — **due avant P-DESCOPE** |
+
+> ## **NB-9-bis : FERMÉE.**
+>
+> Les deux motifs qui la constituaient sont éteints, et chacun sur une preuve : ① **le doublon est
+> retiré**, après avoir été établi par `git blame` et prouvé identique par `md5sum` — `uniq -d` sur
+> les titres rend désormais **vide** ; ② **les six incréments ont leur bloc**, dans les deux sens —
+> sens 1 au §A.sexies (23 exigences amendées **en place**), sens 2 aux §O.2 à §O.9, **avec un
+> orphelin documenté nommé pour la troisième fois et aucun orphelin non documenté**.
+>
+> **Ce que sa fermeture ne fait PAS.** Elle ne franchit pas P-C : le second bloquant du dossier du
+> 2026-09-07, **NB-3-bis** (`ZAP_BLOQUANT` reste à `'false'`, arbitrage dû par **Williams**), est
+> **intact** — je n'en ai ni le pouvoir ni la matière. Elle ne coche pas non plus les deux lignes de
+> DoD non tenues (migrations sur staging, README de `apps/field`). **Elle rend seulement à la porte un
+> instrument qui mesure de nouveau** — et l'aveu qui va avec : c'est le gardien qui l'avait laissé
+> dériver de six incréments, et un instrument en retard ne se contente pas de ne rien dire, **il
+> rassure**.
+
+_Passe effectuée le **2026-09-08** (22 h 00 UTC — 2026-09-09, 00 h 00 à Paris ; l'horodatage UTC est
+l'invariant 5, appliqué au gardien comme au code) par A02, gardien de la spécification, en lecture
+seule sur `apps/`, `packages/`, `infra/`, `e2e/`, `scripts/`. **Seul `docs/TRACABILITE_E1-E47.md` a
+été écrit.** Aucun commit, aucun `push` : la transcription appartient au pilote. Aucune ligne datée
+antérieure n'a été modifiée — à la seule exception, déclarée et prouvée au §O.1, de la **seconde**
+copie des sections L et M, retirée parce qu'elle était identique à la première à l'octet près._
