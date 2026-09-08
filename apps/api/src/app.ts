@@ -79,9 +79,57 @@ export async function construireApp(): Promise<FastifyInstance> {
   });
 
   // --- En-têtes de sécurité (06 §10.2) --------------------------------------
-  // La CSP APPLICATIVE est portée par Caddy, qui sert les fronts
-  // (infra/caddy/Caddyfile). Helmet durcit ici les réponses de l'API elle-même,
-  // qui ne rend que du JSON : tout est donc verrouillé à `'none'`.
+  //
+  // CE QUE CE BLOC POSE, ET CE QUI ATTEINT RÉELLEMENT LE CLIENT — CE N'EST PAS
+  // LA MÊME CHOSE. Ce commentaire a longtemps affirmé « tout est verrouillé à
+  // `'none'` ». C'était faux, et mesuré comme tel par A51 le 2026-09-08
+  // (docs/securite/DOSSIER_ZAP_2026-09-08.md §4-A, `curl -D -` sur
+  // https://audit-staging.axion-ia.com/api/v1/health). Il a été réécrit SEUL,
+  // sans toucher au comportement (arbitrage A01 du 2026-09-08, DECISIONS.md) ;
+  // la correction de comportement est portée au lot L6c, avec le §9.6.
+  //
+  // ① Ce que helmet pose sur la réponse de l'API : la CSP ci-dessous
+  //    (`default-src 'none'; frame-ancestors 'none'`), HSTS, `nosniff`,
+  //    `Referrer-Policy: no-referrer`, `X-Frame-Options: SAMEORIGIN`,
+  //    `Cross-Origin-Opener-Policy: same-origin`, `Origin-Agent-Cluster: ?1`,
+  //    et le CORP `same-origin` déclaré plus bas.
+  //
+  // ② Ce que Caddy ÉCRASE en chemin : le snippet `(securite)` du
+  //    infra/caddy/Caddyfile (bloc `header`, :177-218) est importé AVANT
+  //    `handle_path /api/*` dans les deux blocs de site (:244 puis :247 en
+  //    prod, :282 puis :289 en staging). Une valeur nue dans `header` a la
+  //    sémantique `set` (remplacement, pas ajout) ; et parce que ce bloc
+  //    contient un retrait (`-Server`), Caddy DIFFÈRE toutes ses opérations à
+  //    l'écriture de la réponse — c'est-à-dire APRÈS que `reverse_proxy` a
+  //    recopié les en-têtes de l'API. Résultat : pour chaque nom présent des
+  //    deux côtés, c'est la valeur de Caddy qui gagne. Concrètement :
+  //      Content-Security-Policy → celle des FRONTS (`default-src 'self';
+  //        script-src 'self' 'wasm-unsafe-eval'; … style-src 'self'
+  //        'unsafe-inline'`), PAS `'none'` ;
+  //      Referrer-Policy         → `strict-origin-when-cross-origin`
+  //        (helmet disait `no-referrer`) ;
+  //      X-Frame-Options         → `DENY` (helmet disait `SAMEORIGIN`) ;
+  //      HSTS, nosniff           → mêmes valeurs des deux côtés, sans effet.
+  //
+  // ③ Ce que le client reçoit vraiment de CE bloc : uniquement les en-têtes
+  //    que Caddy ne pose PAS lui-même — `Cross-Origin-Opener-Policy`,
+  //    `Origin-Agent-Cluster`, `Cross-Origin-Resource-Policy`. Ce sont eux,
+  //    présents dans la mesure A51 alors que le Caddyfile ne les connaît pas,
+  //    qui prouvent que helmet tourne ; et `Referrer-Policy` + `X-Frame-Options`
+  //    aux valeurs de Caddy qui prouvent qu'il est écrasé. LA CSP `'none'`
+  //    CI-DESSOUS N'A JAMAIS ATTEINT UN NAVIGATEUR.
+  //
+  // POURQUOI C'EST UN PIÈGE, ET POUR QUI : aujourd'hui l'API ne rend que du
+  // JSON sous `nosniff`, l'écart est sans conséquence. Au lot L6c, le protocole
+  // de chunks §9.6 fait TÉLÉCHARGER les pièces jointes VIA L'API en streaming
+  // (MinIO n'est jamais exposé, 11 §2). Un fichier téléversé par un terrain sera
+  // alors servi sous la CSP des fronts — `script-src 'self'` — et non sous
+  // `'none'` : exactement la situation que ce bloc croyait avoir fermée. Piège
+  // armé, pas faille active. QUI OUVRE L6c DOIT TRANCHER AVANT LA PREMIÈRE
+  // ROUTE DE DOWNLOAD : soit helmet cède explicitement la CSP à Caddy, soit
+  // Caddy cesse d'écraser sur `/api/*` — et, dans les deux cas, un test qui
+  // assert l'en-tête SERVI (§4-C du même dossier : aucun ne le fait).
+  // NE PAS « CORRIGER » ICI EN PASSANT : c'est un choix d'architecture, tracé.
   await app.register(helmet, {
     contentSecurityPolicy: {
       directives: {
