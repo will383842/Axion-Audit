@@ -24,7 +24,7 @@
 // ── CE QUE CE GARDE REFUSE, ET CE QU'IL LAISSE PASSER ──────────────────────
 // REFUSÉ : un sélecteur qui est EXACTEMENT `.<classe-du-paquet>`, seul, dans une
 // feuille d'application. C'est une redéfinition GLOBALE et silencieuse.
-// AUTORISÉ : une surcharge CONTEXTUELLE (`.axn-question__actions .axn-bouton`,
+// AUTORISÉ : une surcharge CONTEXTUELLE (`.axn-question__navigation .axn-bouton`,
 // `apps/field`) — elle est bornée à un endroit, elle se lit, et un écran a le
 // droit d'ajuster un composant chez lui. Refuser les deux ferait crier le garde
 // sur du code sain, et un garde qui crie à tort finit ignoré.
@@ -111,7 +111,7 @@ describe('aucune application ne redéfinit globalement une classe de @axion/ui',
     // pendant deux jours avec `.axn-chiffres` : personne ne mesurait.
     const faute = selecteursSeuls('.axn-chiffres { display: grid; }');
     expect(faute).toEqual(['axn-chiffres']);
-    const bornee = selecteursSeuls('.axn-question__actions .axn-bouton { min-height: 0; }');
+    const bornee = selecteursSeuls('.axn-question__navigation .axn-bouton { min-height: 0; }');
     expect(bornee).toEqual([]);
   });
 });

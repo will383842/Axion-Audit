@@ -11383,3 +11383,130 @@ corrige que le remède.
 Décideur : **A01 | Williams** (correctif posé par le pilote le 2026-09-08).
 Impact spec : aucun. Ceci ne modifie pas l'entrée précédente — l'entrée précédente reste vraie sur
 le constat, et fausse sur ce qu'elle recommandait de faire en attendant.
+
+## 2026-09-08 — [L5b] Une ancre qu'il faut atteindre en défilant est-elle « visible » ?
+
+N1 de la recette A54 du 2026-09-07, qui refuse de le trancher seule. Mesuré sur l'écran d'entretien,
+iPad paysage (fenêtre 810 px, mode privé) : pastilles de cotation jusqu'à 562, ancres de 722 à
+1158 — 1 ancre sur 5 lisible sans défiler, le cran 5 commence 285 px sous le bord, et lire l'ancre 4
+fait sortir les pastilles du champ. Portrait : 5/5. « Ancres visibles » est un critère NOMMÉ de P-C
+(03 §33.7, 07:24).
+
+Options :
+a) Aucun défilement : les cinq ancres tiennent dans le viewport à l'ouverture, toute orientation.
+b) Co-visibilité : l'ancre lue et la bande des cinq pastilles restent ensemble dans le champ ; un
+défilement qui les garde ensemble est acceptable.
+c) Constat d'usage : §33.3 exige que les ancres s'affichent, pas qu'elles tiennent dans un
+viewport ; N1 sort de P-C et devient une fiche AMELIORATIONS (étage 2).
+
+Arbitrage : b) — et N1 est donc OPPOSABLE à P-C.
+Précédence §32-36 (00_INDEX) : §33.3 porte les deux moitiés de la règle, et c'est la subordonnée qui
+commande. « S'affichent SOUS le curseur » énonce une relation SPATIALE à la zone de cotation ; « la
+cotation homogène ne dépend pas de la mémoire du consultant » en donne le motif. Un auditeur qui
+descend lire l'ancre 4 puis remonte coter sans elle cote de mémoire — nommément ce que la clause
+interdit. c) tombe : elle garde la lettre en abandonnant la seule phrase qui dit pourquoi, et laisse
+à « ancres visibles » (§33.7) un contenu que `toBeVisible()` satisfait sur un écran où l'auditeur
+voit une ancre sur cinq. a) tombe aussi : nulle part le pack n'écrit une obligation de tenue dans le
+viewport, et la hauteur d'une ancre est une DONNÉE de banque (§32.4, longueur libre) — un critère de
+porte que le contenu d'une guidance peut casser à volonté n'est pas opposable, et l'imposer serait
+inventer de la spec (CLAUDE.md §3). §22.1 (« jamais de champ masqué par le clavier ») converge, mais
+ne fonde rien : bande inférieure.
+
+Critère opérationnel, à mesurer et non à apprécier : sur `scale_1_5`, pour CHAQUE cran de 1 à 5, il
+existe une position de défilement où l'ancre de ce cran ET la bande des cinq pastilles sont
+simultanément entières dans le viewport — vérifié sur la cible la plus dure (iPad, §22.1), portrait
+ET paysage, mode privé ET écran partagé. La garde N2 est DUE : sans elle ce critère de P-C n'est
+prouvé nulle part. C'est elle qui ferme N1, pas un avis.
+
+Bornes pour A21, qui conçoit : aucun des quatre arbitrages du 2026-09-07 n'est amendé — citation
+verbatim inchangée, cinq crans listés, dépliant ouvert, aucune ligne vide, aucune ancre conditionnée
+au survol. La co-visibilité n'exige PAS que les cinq ancres tiennent à l'écran : mise en page,
+ancrage de la zone de cotation, repli des crans non retenus restent ouverts. Si A21 établit que
+seule la citation peut céder, il revient ici : l'entrée « une doctrine se cite-t-elle » du
+2026-09-07 prévoit déjà la voie (citer + aide non attribuée, ou amendement Williams).
+
+Décideur : A01
+Impact spec : aucun — interprétation de 03 §33.3 et §33.7 ; aucun amendement, aucune spec nouvelle.
+
+## 2026-09-08 — [L5b] Une ancre recouverte par une barre opaque est-elle « dans le viewport » ?
+
+Garde N1 d'A26 (`b2c5eae`), quatre combinaisons mesurées. Géométrie seule : 4/4 vert (paysage privé,
+crans 3/4/5 dégagés à 392/520/592 px de défilement). Barres collantes comprises : paysage privé
+ROUGE, crans 3, 4 et 5 sans aucune position dégagée. Cause unique :
+`div.axn-question__actions { position: sticky; bottom: 0 }` (`entretien.css:163`), barre « Suivant »
+OPAQUE (`background: var(--couleur-surface-fond)`) — l'ancre est recouverte, jamais absente ;
+mutation `sticky → static` : 4/4 verts. A26 a écrit les deux assertions et refuse de choisir.
+
+Options :
+a) Lettre : mon critère du 2026-09-08 dit « entières dans le viewport » ; un nœud sous une barre y
+est entier. N1 est vert, se ferme par la mesure, aucun correctif.
+b) Esprit : un nœud recouvert n'est pas regardé ; la seconde assertion tient, N1 est rouge et le
+correctif est autorisé (09 §4bis).
+
+Arbitrage : b). N1 reste OPPOSABLE à P-C, et il est ROUGE.
+Précédence §32-36 : le motif de §33.3 (« ne dépend pas de la mémoire du consultant ») ne distingue
+pas un texte hors champ d'un texte sous une barre opaque — dans les deux cas l'auditeur remonte
+coter sans l'ancre. a) reproduit exactement le défaut pour lequel j'ai écarté c) dans l'entrée
+précédente : un prédicat vert sur un écran où l'ancre ne se lit pas. `toBeVisible()` ignorait le
+viewport, la géométrie seule ignore le recouvrement — même angle mort d'un cran plus haut, et le
+nommer deux fois sans le traiter, ce serait le choisir.
+Précédence entre BANDES, cette fois : §17.4 (bande §16-22) veut « Suivant, zone basse droite,
+atteignable au pouce » — il n'exige nulle part `position: sticky`, et il céderait de toute façon
+devant §33.3. La barre n'est pas protégée.
+
+Critère opérationnel complété : à celui du 2026-09-08 s'ajoute que l'ancre ne soit RECOUVERTE par
+aucun nœud opaque à la position retenue. Les deux assertions d'A26 restent, aucune ne tombe.
+La garde est un filet de non-régression en ÉMULATION, pas la preuve de P-C : l'émulation est
+optimiste (barre d'URL Safari, encoches, clavier) et les marges vertes en paysage partagé sont de 40
+et 64 px. Le critère se prouve sur l'iPad réel (§22.1, recette 07:24) — garde verte d'abord.
+
+Bornes pour A21 : le pack ne fixe AUCUNE largeur de colonne — M3.1 impose trois zones et leur
+CONTENU, §33.1 des tokens, §19.2 le tactile ≥ 44 px. Les 246 px de la colonne centrale en paysage
+privé (moins que le panneau gauche à 17 rem) sont donc un choix libre, et un levier au même titre
+que la barre collante. Les bornes du 2026-09-08 tiennent, inchangées.
+
+Décideur : A01
+Impact spec : aucun — précise le critère opérationnel du 2026-09-08 sans en amender le fondement.
+
+## 2026-09-08 — [L5b] §17.4 énumère-t-il UNE barre, ou les boutons qui doivent exister ?
+
+Mon entrée précédente a retiré à la barre collante sa protection ; A21 n'a pas retiré `sticky`, il a
+SCINDÉ la barre (`9a7aff7`) : cinq outils dans le flux, navigation seule collante, une rangée de
+81 px. Garde N1 4/4 (iPad paysage privé 169 px de marge au cran 5, PC 1280 × 720 : 79). La scission
+est une question NEUVE : elle change l'ordre DOM, pas seulement le positionnement.
+
+Options :
+a) Barre unique non collante : les sept boutons dans le flux, énumération littérale intacte.
+Mesuré : Suivant tombe ~500 px sous le bord après cotation.
+b) Scission : outils dans le flux, Précédent · Suivant seuls collants. Suivant reste au pouce
+(y = 742-798 sur 810) ; Précédent passe après Recherche à la tabulation.
+
+Arbitrage : b).
+Précédence entre BANDES : sans objet ici, et c'est le point. §33.3 (§32-36) est satisfait par a)
+COMME par b) — dans les deux cas plus rien d'opaque ne recouvre une ancre. La bande haute a fait son
+travail dans l'entrée précédente, où elle a désarmé `sticky` ; elle ne départage pas deux mises en
+page également conformes. Le conflit est INTERNE à §17.4 (bande §16-22) et se tranche sur son texte.
+Ce texte écrit UNE seule contrainte de place, et pour un seul bouton : « Suivant (zone basse droite,
+atteignable au pouce) ». Si l'ordre de l'énumération prescrivait déjà la géométrie, cette parenthèse
+serait redondante — elle est là parce que la liste, seule, ne dit pas où les boutons vont.
+« Toujours identiques et aux mêmes places » est alors ce qu'il dit : une règle de CONSTANCE d'une
+question à l'autre — rien qui bouge, rien qui apparaisse au hasard — et b) la tient, mesurée et non
+plaidée. a) fait l'échange à l'envers : elle sauve une contrainte INFÉRÉE de l'ordre d'une liste,
+en cassant la seule que la phrase ÉCRIVE.
+Et l'énumération littérale avait déjà cédé AVANT N1 : les cinq outils sont absents en écran partagé
+(§33.3), revue croisée passée. On ne la déclare pas inviolable le jour où elle gêne.
+
+Hors périmètre, et volontairement sans entrée : la largeur de colonne (`17rem … 20rem` →
+`1fr 2fr 1fr`) exécute le levier que l'entrée précédente a ouvert. Quatre grilles mesurées, aucune
+option de spec en face — la mesure a choisi, pas moi. Un vrai choix se trace ; une exécution, non.
+
+Bornes pour A21 : les sept boutons restent, aucun ne disparaît hors écran partagé, aucune place ne
+varie d'une question à l'autre. Cette constance est désormais une propriété à GARDER — rien ne la
+mesure aujourd'hui, aucun test n'ayant jamais porté l'énumération.
+Pour A29, à porter en revue et non par moi : l'ordre DOM suit l'ordre visuel et tout reste
+atteignable au clavier, donc §33.6 ne paraît pas entamé — mais c'est le réviseur qui le dit ; et
+`role="toolbar"` ne couvre plus que cinq boutons sur sept, sémantique qu'axe-core vert n'atteste
+pas.
+
+Décideur : A01
+Impact spec : aucun — interprétation de 03 §17.4 ; aucun amendement.

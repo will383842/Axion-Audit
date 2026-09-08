@@ -57,6 +57,16 @@ import {
   semerAppareil,
   URL_TERRAIN,
 } from './fixtures/appareil-terrain.js';
+// L'instrument de mesure du champ de vision (N1). Il vit dans `fixtures/` parce
+// qu'il ne porte AUCUNE assertion propre à cet écran : il répond à la question
+// « ce nœud est-il dans le champ de vision ? », que toute vue terrain se pose.
+import {
+  chercherCoVisibilite,
+  decrireCoVisibilite,
+  decrireMesure,
+  mesurerChampDeVision,
+  TOLERANCE_PX,
+} from './fixtures/champ-de-vision.js';
 // Le parseur du PACK, importé tel quel : c'est lui qui juge la guidance à
 // l'import comme à l'écran. Une seconde lecture écrite dans le test dirait un
 // jour autre chose que lui, et c'est le test qui aurait tort sans le savoir.
@@ -698,4 +708,571 @@ test('@critique cotation — les ancres se LISENT avant le premier tap (iPad ém
     .toBe(1);
 
   await contexte.close();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// N1 — « ANCRES DE COTATION VISIBLES » : CE QUE `toBeVisible()` NE VOIT PAS
+//
+// Écrit par A26, testeur E2E offline. Je n'ai écrit aucune ligne de
+// `packages/ui/src/composants/EchelleAncree.tsx`, aucune ligne de
+// `apps/field/src/`, et je n'en corrigerai aucune : un scénario rouge est un
+// rapport rendu au producteur, jamais un correctif de ma main (09 §5.6).
+//
+// ── LE CONSTAT, ET POURQUOI LA SUITE ÉTAIT VERTE ────────────────────────────
+// Recette A54 du 2026-09-07 (rejeu), §2.2 : sur iPad PAYSAGE, l'ancre du cran 5
+// commence 285 px sous le bord d'une fenêtre de 810 px, et l'auditeur qui
+// défile pour lire l'ancre 4 perd les pastilles de vue. La garde R1 ci-dessus
+// est restée VERTE, sincèrement : `toBeVisible()` ne regarde pas la fenêtre.
+// L'instrument qui manquait vit désormais dans `fixtures/champ-de-vision.ts`.
+//
+// ── LE CRITÈRE MESURÉ ICI — ARBITRAGE A01 DU 2026-09-08, OPTION B ───────────
+// « Visible » veut dire CO-VISIBLE avec la zone de cotation. Ce que §33.3
+// interdit n'est pas le défilement, c'est de perdre les pastilles de vue en
+// lisant l'ancre — la principale énonce déjà une relation spatiale (les ancres
+// « s'affichent SOUS le curseur ») et la subordonnée en donne le motif (« la
+// cotation homogène ne dépend pas de la mémoire du consultant »).
+//
+// Littéralement, et c'est ce que la garde exécute :
+//   pour CHAQUE cran de 1 à 5, il existe une position de défilement où l'ancre
+//   de ce cran ET la bande des cinq pastilles sont simultanément ENTIÈRES dans
+//   la fenêtre — sur la cible la plus dure (iPad, §22.1), PORTRAIT ET PAYSAGE,
+//   mode PRIVÉ ET ÉCRAN PARTAGÉ.
+//
+// Trois conséquences, écrites pour qu'on ne les redécouvre pas :
+//   ① « Entières » : un débordement même PARTIEL est un échec. L'état
+//      `partiellement_coupe` de l'instrument n'est pas une zone grise.
+//   ② « Il existe une position » : A01 a écarté « tout tient à l'ouverture »
+//      (option A) pour un motif à connaître — la hauteur d'une ancre est une
+//      donnée de banque (§32.4, longueur libre), donc un critère de tenue dans
+//      la fenêtre serait cassable par un rédacteur de guidance qui écrit trois
+//      lignes de plus, et le pack n'écrit nulle part une telle obligation. La
+//      garde DÉFILE donc pour chercher cette position, et n'échoue que si elle
+//      n'existe pour aucun cran.
+//   ③ N1 est OPPOSABLE à la porte P-C (critère nommé, 03 §33.7 et 07:24) :
+//      cette garde est `@critique`, donc jamais skippable (CLAUDE.md §2).
+//
+// ── LE POINT QUE LA GARDE TRANCHE, ET QUE L'ARITHMÉTIQUE NE TRANCHE PAS ─────
+// Sur les seuls chiffres de la recette, la co-visibilité pourrait passer par un
+// défilement modéré (l'ancre 5 finit à 1158 pour une fenêtre de 810). A54 a
+// pourtant OBSERVÉ que les pastilles sortent du champ. A01 a refusé de trancher
+// de tête et a écrit le critère « de façon à ce que la garde décide, et non
+// l'arithmétique ». La garde mesure donc DEUX choses à chaque position :
+//   · `positionGeometrique` — les deux nœuds entiers dans la fenêtre : la
+//     LETTRE du critère ;
+//   · `positionRegardable` — la même chose, plus aucune barre collante
+//     par-dessus. Trois barres `position: sticky` rognent la hauteur utile de
+//     cet écran (l'en-tête de la coquille, le bandeau d'écran partagé, la barre
+//     d'actions « Suivant ») ; un nœud caché dessous est dans la fenêtre et
+//     n'est pas regardé. C'est l'hypothèse qu'A01 me demande de vérifier, et
+//     les deux mesures sont rapportées séparément pour qu'un écart entre elles
+//     se voie au lieu de se moyenner.
+//
+// ── LA LIMITE, NOMMÉE PLUTÔT QUE CONTOURNÉE (11 §7) ─────────────────────────
+// C'est un iPad ÉMULÉ : taille, tactile, pointeur, agent utilisateur. Ni la
+// barre d'URL de Safari, ni le clavier logiciel, ni les encoches ne sont
+// modélisés, et tous RÉDUISENT la hauteur réelle — la mesure faite ici est donc
+// OPTIMISTE. Les service workers sous iOS ne sont couverts par aucun de ces
+// tests. Le mode avion réel et la mise en page réelle sur iPad se rejouent À LA
+// MAIN aux portes P-C et P-E (checklist 07 §15, A27 et A54).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Les quatre combinaisons dues par l'arbitrage A01 : deux orientations, deux modes. */
+const COMBINAISONS_IPAD = [
+  { orientation: 'portrait', mode: 'privé' },
+  { orientation: 'portrait', mode: 'écran partagé' },
+  { orientation: 'paysage', mode: 'privé' },
+  { orientation: 'paysage', mode: 'écran partagé' },
+] as const;
+
+/** Les cinq crans de l'échelle §32.4 — mesurés un par un, jamais en bloc. */
+const CRANS = [1, 2, 3, 4, 5] as const;
+
+/**
+ * Amène un appareil hors ligne jusqu'à la question à échelle, sans rien coter.
+ *
+ * C'est le parcours de la garde R1, refait à l'identique : appareil semé, mode
+ * avion, déverrouillage, planification, accord, démarrage, deux « Suivant ».
+ * Aucun geste sur l'échelle — la mesure porte sur ce que l'auditeur trouve en
+ * arrivant, avant d'avoir touché quoi que ce soit.
+ */
+async function ouvrirLaQuestionAEchelle(
+  contexte: BrowserContext,
+  page: Page,
+  heure: number,
+): Promise<void> {
+  await planterAppareil(page, await semerAppareil(MOT_DE_PASSE_APPAREIL));
+  await passerEnModeAvion(contexte, page);
+  await deverrouillerAppareil(page, MOT_DE_PASSE_APPAREIL);
+
+  await page.getByRole('button', { name: /l’agenda/ }).click();
+  await page.getByLabel('Type de session').selectOption({ label: 'Entretien' });
+  await page.getByLabel('Nom de l’interlocuteur').fill('Interlocuteur cotation');
+  await page.getByLabel('Fonction').fill('Chef d’atelier');
+  await page.getByLabel('Créneau').fill(creneauDuJour(heure));
+  await page.getByRole('button', { name: 'Planifier' }).click();
+  await expect(page.getByText('Session planifiée.')).toBeVisible();
+  await page.getByRole('button', { name: 'Retour' }).click();
+
+  await page.getByRole('button', { name: /Interlocuteur cotation/ }).click();
+  await page.getByLabel('Accord de participation recueilli').check();
+  await page.getByRole('button', { name: 'Démarrer l’entretien' }).click();
+  await expect(page.getByRole('heading', { name: PREMIERE_QUESTION })).toBeVisible();
+
+  await page.getByRole('button', { name: /^Suivant/ }).click();
+  await page.getByRole('button', { name: /^Suivant/ }).click();
+  await expect(page.getByRole('heading', { name: QUESTION_ECHELLE })).toBeVisible();
+}
+
+for (const [rang, combinaison] of COMBINAISONS_IPAD.entries()) {
+  test(`@critique cotation — ancre et pastilles co-visibles sur iPad ${combinaison.orientation}, mode ${combinaison.mode} (N1)`, async ({
+    browser,
+  }) => {
+    test.setTimeout(240_000);
+    const contexte = await browser.newContext({
+      ...OPTIONS_COMMUNES,
+      ...(combinaison.orientation === 'paysage'
+        ? devices['iPad (gen 7) landscape']
+        : devices['iPad (gen 7)']),
+    });
+    const page = await contexte.newPage();
+
+    try {
+      // L'heure du créneau varie d'une combinaison à l'autre : les quatre tests
+      // tournent en parallèle sur des profils distincts, et un libellé identique
+      // rendrait une trace d'échec impossible à rattacher à sa combinaison.
+      await ouvrirLaQuestionAEchelle(contexte, page, 9 + rang);
+
+      if (combinaison.mode === 'écran partagé') {
+        // §33.3 — la bascule œil. Le mode partagé fait disparaître les panneaux
+        // latéraux : la colonne s'élargit, les libellés dérivés tiennent sur
+        // moins de lignes, et la hauteur utile change. C'est un cas de mesure à
+        // part entière, pas une variante cosmétique.
+        await page.getByRole('button', { name: 'Passer en écran partagé' }).click();
+        await expect(page.getByRole('button', { name: 'Revenir en écran privé' })).toBeVisible();
+      }
+
+      const echelle = page.getByRole('group', { name: 'Votre cotation' });
+      await expect(echelle).toBeVisible();
+      // Rien n'est coté : la lecture des ancres ne doit avoir posé aucune note.
+      await expect(
+        echelle.locator('input[type="radio"]:checked'),
+        'aucune note n’a été posée à ce stade',
+      ).toHaveCount(0);
+
+      const pastilles = echelle.locator('.axn-choix__pistes');
+      // Le `dd` de la ligne, et NON le `.axn-choix__paire` qui l'englobe : cette
+      // paire porte `display: contents` (composants.css : « elle n'existe que pour
+      // la clé de rendu React »), donc elle n'a JAMAIS de boîte et ne peut pas se
+      // mesurer. Mesuré le 2026-09-08 : la première version de cette garde
+      // échouait sur ce point, et l'instrument nomme désormais ce piège.
+      const ancres = echelle.locator('.axn-choix__liste-ancres dd');
+      // Les cinq ancres existent AVANT qu'on mesure : sans ce contrôle, une
+      // liste vide passerait la co-visibilité haut la main — c'est exactement le
+      // faux témoin que la fixture portait avant le 2026-09-07.
+      await expect(ancres, 'les cinq crans doivent être rendus').toHaveCount(CRANS.length);
+
+      const releves: string[] = [];
+      const echecsGeometriques: string[] = [];
+      const echecsRegardables: string[] = [];
+
+      // ① CE QUE L'AUDITEUR VOIT EN ARRIVANT, sans aucun geste. Ce n'est PAS le
+      //    critère (A01 a écarté cette lecture), mais c'est le chiffre que la
+      //    recette A54 a relevé à la main : il est mesuré et rapporté pour que
+      //    la comparaison avec sa passe soit possible.
+      const sansGeste = await mesurerChampDeVision(page, pastilles, 'bande des cinq pastilles');
+      releves.push(`sans geste · ${decrireMesure(sansGeste)}`);
+      for (const cran of CRANS) {
+        const mesure = await mesurerChampDeVision(
+          page,
+          ancres.nth(cran - 1),
+          `ancre du cran ${String(cran)}`,
+        );
+        releves.push(`sans geste · ${decrireMesure(mesure)}`);
+      }
+
+      // ② LE CRITÈRE A01, cran par cran : on défile pour de bon et on cherche.
+      for (const cran of CRANS) {
+        const co = await chercherCoVisibilite(
+          page,
+          pastilles,
+          ancres.nth(cran - 1),
+          `cran ${String(cran)} — iPad ${combinaison.orientation}, mode ${combinaison.mode}`,
+          'bande des cinq pastilles',
+          `ancre du cran ${String(cran)}`,
+        );
+        releves.push(decrireCoVisibilite(co));
+        if (co.positionGeometrique === null) echecsGeometriques.push(decrireCoVisibilite(co));
+        if (co.positionRegardable === null) echecsRegardables.push(decrireCoVisibilite(co));
+      }
+
+      // Les chiffres sont portés par le rapport MÊME QUAND LA GARDE EST VERTE :
+      // c'est A01 qui les attend pour fermer N1 par la mesure, et une garde qui
+      // ne rend ses nombres qu'en échouant ne sert qu'une fois. Une annotation
+      // plutôt qu'un `console.log` — `no-console` vaut aussi pour les tests.
+      test.info().annotations.push({
+        type: `mesure N1 — iPad ${combinaison.orientation}, mode ${combinaison.mode}`,
+        description: releves.join('\n'),
+      });
+
+      // ③ LES DEUX VERDICTS, SÉPARÉS. La lettre du critère d'abord — c'est elle
+      //    qu'A01 a signée. Puis la même chose une fois les barres collantes
+      //    prises en compte : un nœud caché sous l'en-tête est dans la fenêtre
+      //    et n'est pas regardé, et c'est précisément l'hypothèse que la recette
+      //    A54 a formulée à l'œil.
+      expect(
+        echecsGeometriques,
+        `Critère A01 (2026-09-08) : pour chaque cran, il doit exister une position de ` +
+          `défilement où l’ancre ET la bande des cinq pastilles sont ENTIÈRES dans la fenêtre. ` +
+          `Crans en échec :\n${echecsGeometriques.join('\n')}`,
+      ).toEqual([]);
+
+      expect(
+        echecsRegardables,
+        `Même critère, barres collantes comprises : un nœud recouvert par une barre ` +
+          `« position: sticky » est dans la fenêtre et n’est PAS regardé. Crans en échec :\n` +
+          echecsRegardables.join('\n'),
+      ).toEqual([]);
+    } finally {
+      await contexte.close();
+    }
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// §17.4 — « BOUTONS TOUJOURS IDENTIQUES ET AUX MÊMES PLACES » : LA CONSTANCE
+// DES SEPT, MESURÉE D'UNE QUESTION À L'AUTRE
+//
+// Écrit par A26, testeur E2E offline, qui n'a produit aucune ligne de
+// `apps/field/src/ecrans/entretien/ZoneQuestion.tsx` ni d'`entretien.css` (09
+// §5.6). Demandé par la revue croisée A29 (R-7) sur l'instrument N1.
+//
+// ── POURQUOI CETTE GARDE, ET POURQUOI MAINTENANT ────────────────────────────
+// A01, 2026-09-08 (« §17.4 énumère-t-il UNE barre… ») : la scission de la barre
+// en deux groupes est conforme parce que §17.4 écrit une règle de CONSTANCE —
+// « rien qui bouge, rien qui apparaisse au hasard » d'une question à l'autre —
+// et une seule contrainte de place, pour Suivant. Puis : « les sept boutons
+// restent, aucun ne disparaît hors écran partagé, aucune place ne varie d'une
+// question à l'autre. Cette constance est désormais une propriété à GARDER —
+// rien ne la mesure aujourd'hui. » §17.4 est un critère de P-C ; une propriété
+// que l'arbitre déclare à garder et que rien ne mesure retombe au premier
+// refactor. D'où `@critique`.
+//
+// ── CE QUI EST MESURÉ, ET CE QUI NE L'EST PAS — SONDÉ AVANT D'ÊTRE ÉCRIT ────
+// Une sonde jetable (2026-09-08, iPad paysage, iPad portrait, PC ; questions
+// 1 → 2 → 3, privé et partagé) a établi ce qui est constant et ce qui ne l'est
+// pas. CONSTANT d'une question à l'autre, sur un même appareil et un même mode :
+// la présence des sept, leur ordre dans le DOM, l'abscisse, la largeur et la
+// hauteur de chacun, et le décalage vertical de chaque bouton par rapport au
+// premier de sa rangée. NON constant, et donc NON exigé : l'ordonnée absolue —
+// les outils vivent dans le flux sous un contenu de hauteur variable (l'ancre
+// est une donnée de banque, §32.4), et la navigation est collante, donc au bas
+// de la fenêtre sur une question longue et à sa place de flux sur une courte.
+// Exiger le même `y` serait inventer une contrainte que §17.4 n'écrit pas (la
+// seule contrainte de place est « Suivant, zone basse droite »).
+//
+// Sur la DERNIÈRE question, le septième bouton dit « Terminer l'entretien » et
+// non « Suivant » (M2, recette novice A54 du 2026-09-06) : un libellé qui dit
+// ce qu'il fait, à la place que §17.4 lui assigne. Pour CE bouton, la place
+// mesurée est le BORD DROIT — la seule contrainte que §17.4 écrit (« zone basse
+// droite ») — et non le bord gauche : un bouton dont le libellé change
+// légitimement peut changer de largeur, et un bord gauche qui recule de la
+// longueur du mot n'est pas un bouton qui a bougé. Sa largeur se compare à
+// l'identique à LIBELLÉ ÉGAL (question 1 contre question 2, toutes deux
+// « Suivant ») ; à libellé différent, elle ne peut que CROÎTRE — l'ancienne
+// boîte [673, 765] est incluse dans la nouvelle [580, 765], donc le pouce qui
+// vise « Suivant » atterrit sur « Terminer ». Lecture confirmée par A29 (R-7
+// requalifiée) comme application de l'entrée A01, sans entrée `DECISIONS.md`.
+//
+// ── CE QUE LA GARDE CIBLE, ET CE QU'ELLE NE CIBLE PAS ───────────────────────
+// Les boutons sont atteints par leur NOM ACCESSIBLE — les sept libellés que
+// §17.4 énumère — à l'intérieur du seul `<article>` de l'écran, la carte de la
+// question. C'est ce que l'auditeur lit, et c'est ce qui ne change pas. Les
+// deux groupes qui les portent sont fixés par UNE assertion (rôle `group` et
+// leurs deux noms, R-4 d'A21 atterri en `1d18947`) : sans elle, un retour à
+// `toolbar` — le contrat clavier que rien n'honore — ne ferait broncher aucune
+// garde. Aucune classe n'est ciblée.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Les deux rangées de §17.4 après la scission arbitrée par A01 (2026-09-08). */
+type Rangee = 'outils' | 'navigation';
+
+/**
+ * Les sept boutons de §17.4, dans l'ordre du DOM arbitré (A01, 2026-09-08,
+ * option b : les cinq outils, puis la navigation).
+ *
+ * Les motifs tolèrent le suffixe de raccourci affiché sur PC (« (R) », « (↵) »),
+ * l'`aria-label` complet de « Photo » (B3 : le bouton dit POURQUOI il est gris),
+ * et le geste de fin qui remplace « Suivant » sur la dernière question.
+ */
+const LES_SEPT_BOUTONS: readonly {
+  nom: string;
+  motif: RegExp;
+  rangee: Rangee;
+  /** Le bord que §17.4 fixe : gauche pour six boutons, DROIT pour l'action principale. */
+  bord: 'gauche' | 'droite';
+}[] = [
+  { nom: 'À revoir', motif: /^À revoir/, rangee: 'outils', bord: 'gauche' },
+  { nom: 'N/A', motif: /^N\/A/, rangee: 'outils', bord: 'gauche' },
+  { nom: 'Note', motif: /^Note$/, rangee: 'outils', bord: 'gauche' },
+  { nom: 'Photo', motif: /^Photo/, rangee: 'outils', bord: 'gauche' },
+  { nom: 'Recherche', motif: /^Recherche/, rangee: 'outils', bord: 'gauche' },
+  { nom: 'Précédent', motif: /^Précédent$/, rangee: 'navigation', bord: 'gauche' },
+  {
+    nom: 'Suivant',
+    motif: /^(Suivant|Terminer l’entretien|Fin de session)/,
+    rangee: 'navigation',
+    bord: 'droite',
+  },
+];
+
+/** La place d'un bouton, réduite à ce qui est constant d'une question à l'autre. */
+interface PlaceDeBouton {
+  readonly nom: string;
+  /** Le nom accessible RELEVÉ (« Suivant » ou « Terminer l’entretien ») : la largeur ne se compare qu'à libellé égal. */
+  readonly libelle: string;
+  readonly bord: 'gauche' | 'droite';
+  /** La coordonnée du bord fixé par §17.4 : `x` à gauche, `x + largeur` à droite. */
+  readonly bordFixe: number;
+  readonly largeur: number;
+  readonly hauteur: number;
+  /** Décalage vertical par rapport au PREMIER bouton de sa rangée : la forme de la rangée. */
+  readonly decalageDansLaRangee: number;
+}
+
+/**
+ * Relève les boutons attendus dans la carte : présence (un et un seul chacun),
+ * ordre dans le DOM parmi les sept, et place. Les boutons NON attendus doivent
+ * être absents — c'est ainsi que le mode partagé se mesure avec la même règle.
+ * Aucun verdict de constance ici : l'appelant compare deux relevés, et l'écart
+ * affiche les deux, chiffrés.
+ */
+async function releverLesBoutons(
+  page: Page,
+  attendus: readonly Rangee[],
+  etiquette: string,
+): Promise<{ ordre: string[]; places: PlaceDeBouton[] }> {
+  const carte = page.getByRole('article');
+  await expect(carte, 'la carte de la question est la seule <article> de l’écran').toHaveCount(1);
+
+  // L'ordre dans le DOM : tous les boutons de la carte, dans l'ordre du document,
+  // réduits à ceux des sept qu'ils sont. Le nom accessible est celui que porte
+  // `Bouton` : l'`aria-label` s'il existe, sinon le texte.
+  const nomsDansLeDom = await carte
+    .getByRole('button')
+    .evaluateAll((boutons) =>
+      boutons.map((bouton) => bouton.getAttribute('aria-label') ?? bouton.textContent.trim()),
+    );
+  const ordre: string[] = [];
+  for (const nomDansLeDom of nomsDansLeDom) {
+    const reconnu = LES_SEPT_BOUTONS.find((bouton) => bouton.motif.test(nomDansLeDom));
+    if (reconnu !== undefined) ordre.push(reconnu.nom);
+  }
+
+  const places: PlaceDeBouton[] = [];
+  const hautDeRangee = new Map<Rangee, number>();
+  for (const bouton of LES_SEPT_BOUTONS) {
+    const cible = carte.getByRole('button', { name: bouton.motif });
+    if (!attendus.includes(bouton.rangee)) {
+      await expect(
+        cible,
+        `${etiquette} : « ${bouton.nom} » est un geste interne, absent en écran partagé (§33.3)`,
+      ).toHaveCount(0);
+      continue;
+    }
+    await expect(cible, `${etiquette} : « ${bouton.nom} » est présent, une seule fois`).toHaveCount(
+      1,
+    );
+    await expect(cible).toBeVisible();
+    const boite = await cible.boundingBox();
+    if (boite === null) throw new Error(`${etiquette} : « ${bouton.nom} » n’a aucune boîte.`);
+    const haut = hautDeRangee.get(bouton.rangee) ?? boite.y;
+    hautDeRangee.set(bouton.rangee, haut);
+    const libelle = (await cible.getAttribute('aria-label')) ?? (await cible.innerText()).trim();
+    places.push({
+      nom: bouton.nom,
+      libelle,
+      bord: bouton.bord,
+      bordFixe: bouton.bord === 'gauche' ? boite.x : boite.x + boite.width,
+      largeur: boite.width,
+      hauteur: boite.height,
+      decalageDansLaRangee: boite.y - haut,
+    });
+  }
+  return { ordre, places };
+}
+
+/**
+ * Deux places sont les mêmes au pixel de tolérance près — jamais au demi-pixel.
+ *
+ * La largeur se compare à l'identique, sauf pour le SEUL bouton à libellé
+ * variable (celui du bord droit), et seulement quand son libellé a changé :
+ * là, l'exemption est BORNÉE à la non-rétraction — « Terminer l'entretien »
+ * peut être plus large que « Suivant », jamais plus étroit. C'est ce qui rend
+ * la lecture « bord droit » sûre : l'ancienne boîte reste incluse dans la
+ * nouvelle, et le pouce qui vise « Suivant » atterrit sur « Terminer » (revue
+ * croisée A29, R-7 requalifiée). Un « Terminer » de 40 px rougit.
+ */
+function memePlace(reference: PlaceDeBouton, releve: PlaceDeBouton): boolean {
+  const libelleVariable = reference.bord === 'droite' && reference.libelle !== releve.libelle;
+  const largeurTenue = libelleVariable
+    ? releve.largeur >= reference.largeur - TOLERANCE_PX
+    : Math.abs(reference.largeur - releve.largeur) <= TOLERANCE_PX;
+  return (
+    Math.abs(reference.bordFixe - releve.bordFixe) <= TOLERANCE_PX &&
+    largeurTenue &&
+    Math.abs(reference.hauteur - releve.hauteur) <= TOLERANCE_PX &&
+    Math.abs(reference.decalageDansLaRangee - releve.decalageDansLaRangee) <= TOLERANCE_PX
+  );
+}
+
+/** La phrase qu'un écart de place affiche : un relevé, chiffré. */
+function decrirePlace(place: PlaceDeBouton): string {
+  return (
+    `« ${place.libelle} » bord ${place.bord} ${String(Math.round(place.bordFixe))} px, ` +
+    `largeur ${String(Math.round(place.largeur))} px, hauteur ${String(Math.round(place.hauteur))} px, ` +
+    `décalage dans sa rangée ${String(Math.round(place.decalageDansLaRangee))} px`
+  );
+}
+
+/** Les écarts de place entre deux relevés, bouton par bouton — vide si tout tient. */
+function ecartsDePlace(
+  reference: { etiquette: string; places: PlaceDeBouton[] },
+  releve: { etiquette: string; places: PlaceDeBouton[] },
+): string[] {
+  const ecarts: string[] = [];
+  for (const [index, place] of releve.places.entries()) {
+    const attendue = reference.places[index];
+    if (attendue === undefined || !memePlace(attendue, place)) {
+      ecarts.push(
+        `${reference.etiquette} : ${attendue === undefined ? 'absent' : decrirePlace(attendue)} ; ` +
+          `${releve.etiquette} : ${decrirePlace(place)}`,
+      );
+    }
+  }
+  return ecarts;
+}
+
+test('@critique entretien — les sept boutons de §17.4 sont là et aux mêmes places d’une question à l’autre (iPad émulé, hors ligne)', async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const contexte = await browser.newContext({
+    ...OPTIONS_COMMUNES,
+    ...devices['iPad (gen 7) landscape'],
+  });
+  const page = await contexte.newPage();
+
+  try {
+    // Le parcours de R1 et de N1, jusqu'à la PREMIÈRE question cette fois : la
+    // mission FIL-TPE en compte trois, de trois types, et c'est leur diversité
+    // qui fait la mesure — une carte courte, une moyenne, une longue à échelle.
+    await planterAppareil(page, await semerAppareil(MOT_DE_PASSE_APPAREIL));
+    await passerEnModeAvion(contexte, page);
+    await deverrouillerAppareil(page, MOT_DE_PASSE_APPAREIL);
+
+    await page.getByRole('button', { name: /l’agenda/ }).click();
+    await page.getByLabel('Type de session').selectOption({ label: 'Entretien' });
+    await page.getByLabel('Nom de l’interlocuteur').fill('Interlocuteur constance');
+    await page.getByLabel('Fonction').fill('Chef d’atelier');
+    await page.getByLabel('Créneau').fill(creneauDuJour(14));
+    await page.getByRole('button', { name: 'Planifier' }).click();
+    await expect(page.getByText('Session planifiée.')).toBeVisible();
+    await page.getByRole('button', { name: 'Retour' }).click();
+
+    await page.getByRole('button', { name: /Interlocuteur constance/ }).click();
+    await page.getByLabel('Accord de participation recueilli').check();
+    await page.getByRole('button', { name: 'Démarrer l’entretien' }).click();
+    await expect(page.getByRole('heading', { name: PREMIERE_QUESTION })).toBeVisible();
+
+    const ORDRE_ATTENDU = LES_SEPT_BOUTONS.map((bouton) => bouton.nom);
+    const releves: string[] = [];
+
+    // Les deux groupes de §17.4, tels qu'A21 les a posés (R-4) : rôle `group`
+    // et leurs deux noms, en UNE assertion. Le `fieldset` « Votre cotation »
+    // est aussi un `group` de la carte ; le nom l'écarte.
+    await expect(
+      page
+        .getByRole('article')
+        .getByRole('group', { name: /^(Outils de la question|Navigation entre les questions)$/ }),
+      'les deux groupes de boutons sont des « group » nommés — jamais plus « toolbar » (R-4)',
+    ).toHaveCount(2);
+
+    // ① MODE PRIVÉ, question après question : les sept, dans l'ordre, à la même
+    //    place. La référence est la première question ; chaque suivante lui est
+    //    comparée bouton par bouton, et l'écart affiche les deux relevés.
+    const reference = {
+      etiquette: 'question 1',
+      ...(await releverLesBoutons(page, ['outils', 'navigation'], 'question 1')),
+    };
+    expect(reference.ordre, 'question 1 : les sept boutons, dans l’ordre du DOM').toEqual(
+      ORDRE_ATTENDU,
+    );
+    releves.push(`question 1 · ${reference.places.map(decrirePlace).join(' · ')}`);
+
+    for (const rang of [2, 3] as const) {
+      await page.getByRole('button', { name: /^Suivant/ }).click();
+      await expect(page.getByText(`Question ${String(rang)} / 3`)).toBeVisible();
+
+      const etiquette = `question ${String(rang)}`;
+      const releve = {
+        etiquette,
+        ...(await releverLesBoutons(page, ['outils', 'navigation'], etiquette)),
+      };
+      releves.push(`${etiquette} · ${releve.places.map(decrirePlace).join(' · ')}`);
+      expect(releve.ordre, `${etiquette} : les sept boutons, dans l’ordre du DOM`).toEqual(
+        ORDRE_ATTENDU,
+      );
+
+      const ecarts = ecartsDePlace(reference, releve);
+      expect(
+        ecarts,
+        `§17.4 : « boutons toujours identiques et aux mêmes places ». Un bouton a changé de ` +
+          `place entre la question 1 et la ${etiquette} :\n${ecarts.join('\n')}`,
+      ).toEqual([]);
+    }
+
+    // ② ÉCRAN PARTAGÉ (§33.3) : les cinq outils DISPARAISSENT — ce sont des
+    //    gestes internes —, la navigation RESTE, et elle reste à sa place d'une
+    //    question à l'autre dans ce mode aussi.
+    //    Mesurée sur la question 3 puis la 2, mais COMPARÉE dans le sens
+    //    2 → 3 : la référence est toujours une question à « Suivant », et la
+    //    dernière est celle dont le libellé change — le sens de la
+    //    non-rétraction en dépend.
+    await page.getByRole('button', { name: 'Passer en écran partagé' }).click();
+    await expect(page.getByRole('button', { name: 'Revenir en écran privé' })).toBeVisible();
+
+    const partage3 = {
+      etiquette: 'question 3, écran partagé',
+      ...(await releverLesBoutons(page, ['navigation'], 'question 3, écran partagé')),
+    };
+    expect(partage3.ordre, 'écran partagé : la navigation seule, dans l’ordre').toEqual([
+      'Précédent',
+      'Suivant',
+    ]);
+    releves.push(`${partage3.etiquette} · ${partage3.places.map(decrirePlace).join(' · ')}`);
+
+    await page.getByRole('button', { name: /^Précédent/ }).click();
+    await expect(page.getByText('Question 2 / 3')).toBeVisible();
+    const partage2 = {
+      etiquette: 'question 2, écran partagé',
+      ...(await releverLesBoutons(page, ['navigation'], 'question 2, écran partagé')),
+    };
+    releves.push(`${partage2.etiquette} · ${partage2.places.map(decrirePlace).join(' · ')}`);
+
+    const ecartsPartages = ecartsDePlace(partage2, partage3);
+    expect(
+      ecartsPartages,
+      `§17.4 en écran partagé : la navigation change de place d’une question à l’autre :\n` +
+        ecartsPartages.join('\n'),
+    ).toEqual([]);
+
+    // Les chiffres sont portés par le rapport même quand la garde est verte :
+    // c'est le relevé qu'un réviseur compare à sa propre passe.
+    test.info().annotations.push({
+      type: 'mesure §17.4 — sept boutons, iPad paysage',
+      description: releves.join('\n'),
+    });
+  } finally {
+    await contexte.close();
+  }
 });

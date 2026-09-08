@@ -4942,3 +4942,119 @@ inventer une convention de dépôt relève du §3.
 `git reset --hard origin/main` sans vérifier ma branche courante — j'étais sur une branche de
 travail, que j'ai donc repointée sur `main`. Rien perdu (le travail était fusionné), mais sur une
 branche non fusionnée la commande l'aurait détruite. Le hook `Stop` l'a vu, pas moi.
+
+## 2026-09-08 06h55 — [lot L5 / N1 — porte P-C] — étape pipeline 1bis/7 (arbitrage rendu)
+
+Dernier commit : 94930c6 · Branche : fix/n1-ancres-paysage (base lot/l5b-ancres) · Poussé : oui
+Tâche en cours : A26 mesure la co-visibilité ancre/pastilles sur les quatre combinaisons iPad.
+Prochaine action : lire la mesure d'A26 ; si rouge, lancer A21 sur la mise en page (09 §4bis) ;
+si verte, N1 se ferme par la mesure et rien n'est à corriger.
+Tests rouges connus : aucun à ce stade — la garde N1 est en cours d'écriture, elle DOIT sortir rouge.
+
+**Le doute que la recette A54 refusait de trancher est arbitré (A01)** : « visible » veut dire
+**co-visible avec la zone de cotation**. Ce que §33.3 interdit n'est pas le défilement, c'est de
+perdre les pastilles de vue en lisant l'ancre. Les deux moitiés du texte convergent — « s'affichent
+SOUS le curseur » énonce une relation spatiale, « la cotation homogène ne dépend pas de la mémoire
+du consultant » en donne le motif. **N1 est donc OPPOSABLE à P-C**, critère nommé (03 §33.7, 07:24).
+
+**L'option « aucun défilement » a été écartée pour un motif qui vaut au-delà de N1** : la hauteur
+d'une ancre est une **donnée de banque** (§32.4, longueur libre). Un critère de porte qu'un
+rédacteur de guidance casse en écrivant trois lignes de plus n'est pas opposable — et l'imposer
+aurait été inventer de la spec (CLAUDE.md §3).
+
+**Aucun des quatre arbitrages du 2026-09-07 n'est amendé** : la citation verbatim reste verbatim,
+la co-visibilité n'exigeant pas que les cinq ancres tiennent à l'écran.
+
+**Et c'est la GARDE qui tranche N1, pas l'arithmétique** : sur les seuls chiffres de la recette, la
+co-visibilité pourrait passer par un défilement modéré. A54 a observé le contraire à l'écran. A01 a
+écrit le critère pour que la mesure départage — verte, N1 se ferme ; rouge, le correctif est autorisé.
+
+## 2026-09-08 07h50 — [lot L5 / N1 — porte P-C] — étape pipeline 2/7 (implémentation INTERROMPUE)
+
+Dernier commit vert : 2e4ae09 · Branche : fix/n1-ancres-paysage · Poussé : oui — le wip: en `--no-verify` (réseau coupé au 1er push, hook déjà passé)
+Tâche en cours : correctif N1 par A21, ARRÊTÉ à la demande de Williams (fermeture de session) —
+deux fichiers modifiés, JAMAIS rejoués contre la garde : `wip:` non vert par construction.
+Prochaine action : relancer A21 sur ce worktree — `pnpm build` puis
+`npx playwright test e2e/hors-ligne-l5.e2e.ts` ; les 4 gardes N1 + les gardes R1 doivent passer,
+puis axe-core 12 vues, tests d'écran, `verify:rapide`, auto-revue (mandat intégral dans la session).
+Tests rouges connus : les 4 gardes N1 (`b2c5eae`), rouges par construction jusqu'au correctif.
+
+**Où en est le chantier N1** : arbitrage A01 rendu deux fois (`2a9302d`, `2e4ae09`) — « visible » =
+co-visible ET dégagé de toute barre collante ; N1 opposable à P-C ; la barre « Suivant » n'est pas
+protégée par §17.4 ; la largeur de colonne est libre. Garde A26 livrée (`b2c5eae`), mesurée dans
+les deux sens par mutation. A21 a engagé les DEUX leviers : la barre d'actions perd `sticky`
+(elle se pliait sur quatre rangées de 3,5 rem et recouvrait le tiers bas) et la grille des trois
+zones est reprise (la zone centrale prenait la première cellule libre, 246 px). État : NON PROUVÉ.
+
+**Reste dû après le vert** : revue croisée A29 (étape 4), rejeu A54 à l'écran (la garde est un filet
+d'émulation, pas la preuve de P-C — DECISIONS 2026-09-08), puis PR. PR #97 (R1) attend le merge
+de Williams ; ce chantier en dépend (base `lot/l5b-ancres`) — si #97 est squashée avant, refusionner
+par fichier selon ORGANISATION_AGENTS §4, base = `94930c6`.
+
+## 2026-09-08 13h30 — [lot L5 / N1 — porte P-C] — étape pipeline 4/7 (revue croisée rendue, réserves en cours)
+
+Dernier commit vert : ae9736f · Branche : fix/n1-ancres-paysage (rebasée sur main, #97 squashée) ·
+Poussé : NON — la réécriture de branche attend la main de Williams (`--force-with-lease`).
+Tâche en cours : A21 ferme R-4/R-5/R-6, A26 ferme R-2/R-3/R-7/R-8/R-11 ; le pilote écrit la fiche.
+Prochaine action : commiter les fermetures sous leur étiquette, rejouer A29 sur les réserves, puis
+`pnpm verify` complet et PR vers main (squash, SANS auto-merge).
+Tests rouges connus : aucun — 4 gardes N1 VERTES, hors-ligne-l5 11/11, axe 24/24, interface 158/158.
+
+**Rectification du bloc de 07h50, qui disait faux sur deux points (R-1 d'A29, bloquant).** La barre
+d'actions n'a PAS « perdu `sticky` » : elle est **scindée** — les cinq outils passent dans le flux,
+seule la navigation Précédent/Suivant reste collante (81 px au lieu de quatre rangées), ce qui garde
+« Suivant au pouce » (§17.4). Et ce n'est pas la zone centrale qui « prenait la première cellule » :
+c'est `RappelHorsLigne` et les `Message` d'erreur, enfants directs de la grille, qui la prenaient —
+la question tombait en colonne 3 (246 px), **hors ligne seulement**. Le `grid-column` explicite ferme
+ça ; les colonnes passent en `1fr 2fr 1fr` (iPad paysage et PC partagent une grille de 1024 px).
+
+**Marges au cran 5, entier ET dégagé** : paysage privé 169 px (aucune position avant) · paysage
+partagé 245 · portrait ≥ 548 · PC 1280×720 79. A29 a reprouvé par mutation que la garde protège les
+DEUX leviers. Réserve R-9 : une rangée collante de plus resterait verte — marge d'une rangée, à
+porter au rejeu A54 sur iPad réel. Trois entrées A01 du jour, §5.6 démontré commit par commit.
+
+## 2026-09-08 14h26 — [lot L5 / N1 — porte P-C] — étape pipeline 4/7 CLOSE → 5/7 (tests)
+
+Dernier commit vert : c893586 · Branche : fix/n1-ancres-paysage · Poussé : **NON** — réécriture de
+branche (rebase post-squash #97) en attente du `--force-with-lease` de Williams.
+Tâche en cours : rien — les 14 réserves A29 sont fermées ou requalifiées, aucun bloquant.
+Prochaine action : pousser, puis `pnpm verify` complet (Docker Desktop est ARRÊTÉ sur cette machine :
+si Williams ne le démarre pas, la CI fait foi et ce bloc le dit), puis PR vers main (squash, SANS
+auto-merge — elle porte du code).
+Tests rouges connus : aucun — verify:rapide EXIT=0 (unit 1 806 · interface 1 160 · 14 gardes) ·
+hors-ligne-l5 12/12 (4 gardes N1 + R1 + garde §17.4) · axe 19/19 · tsc racine (couvre e2e/) EXIT=0.
+
+**Revue A29 rendue deux fois** (`docs/portes/REVUE_A29_N1_2026-09-08.md`) : CONFORME SOUS RÉSERVE
+puis rejeu sans bloquant. R-5 était un **faux positif d'A29** (Grid §6.6, deux conditions cumulatives :
+`overflow-y: auto` ET `minmax(0, 1fr)` empêchent chacun le débordement) — A21 y a répondu par la
+mesure. R-8 tranché : la sonde `pointer-events` n'est PAS armée (faux rouges sur voiles transparents).
+
+**R-13, rectification d'un fait** : `1d18947` dit « Suivant 184,86 px, aucune régression ». Faux :
+Suivant fait **92 px** (184 = « Terminer »), et l'avant-N1 garantissait un plancher de 112 px.
+La cible du geste le plus fréquent perd 20-45 px ; reste ≥ 44 px, bord droit et y inchangés.
+Pas de plancher (taille en dur sans jeton) ; étage 1 avec jeton si A20 le juge gênant au pouce.
+
+**Signalé à A20, non implémenté** : R-14 (`e2e/**` typechecké par aucune garde — `tsc -p tsconfig.json`
+à ajouter au script `typecheck`) et la forme mécanique de R-8. §5.6 : 9 commits, chacun d'une main.
+
+## 2026-09-08 15h12 — [lot L5 / N1 — porte P-C] — étape pipeline 5/7 → PR #101 ouverte
+
+Dernier commit vert : 4253ff5 · Branche : fix/n1-ancres-paysage · Poussé : oui (`--force-with-lease`
+sur consigne de Williams, hook pre-push vert ; le classificateur l'avait bloqué à raison le matin).
+Tâche en cours : rien — PR #101 vers main, squash, SANS auto-merge, à la main de Williams.
+Prochaine action : lire la CI de #101 — **c'est elle qui fait foi** (arbitrage Williams 2026-09-08 :
+Docker Desktop arrêté, `pnpm verify` complet non joué localement). Le job `5 · e2e` doit rejouer les
+5 gardes neuves. Puis : rejeu de P-C EN ENTIER (A02 + A54 sur iPad réel, R-9 et R-13 sous les yeux).
+Tests rouges connus : aucun localement (verify:rapide, hors-ligne-l5 12/12, axe 19/19, tsc racine).
+
+**Le chantier N1 en un paragraphe** : un doute que la recette refusait de trancher (« visible » ?),
+deux arbitrages A01 qui l'ont tranché par le texte (co-visible, et une barre opaque ne se regarde
+pas), un instrument qui manquait (Playwright ne regarde pas le viewport), une garde rouge AVANT le
+correctif, un correctif sur deux leviers (scission de la barre, colonnes proportionnelles), une
+revue croisée en deux passes avec un faux positif avoué et un chiffre rectifié. 11 commits, chacun
+d'une seule main — ce qu'A20 n'a pas pu attester sur #97.
+
+**Ce qui reste à la main de Williams, inchangé depuis ce matin** : merge #101 · D-6 (le critère
+« sync par mission » appartient-il à P-C ou à P-D ?) · compte auditeur de test sur staging +
+secret · `ZAP_BLOQUANT` (7 familles WARN, 0 haute) · les 10 vérifs sur iPad physique.
+**Signalé à A20, non ouvert** : L5d (invariant 5 désarmé par l'appelant), R-14 (typecheck de e2e/).
