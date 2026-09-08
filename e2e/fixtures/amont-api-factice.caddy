@@ -1,0 +1,46 @@
+# =============================================================================
+# e2e/fixtures/amont-api-factice.caddy — L'AMONT `axion-api` QUE LE HARNAIS
+# `caddy-servi.ts` PLACE DERRIÈRE LE CADDY DU DÉPÔT.
+#
+# Ce n'est PAS l'API. C'est un répondeur qui rend `/v1/health` en 200 JSON avec
+# EXACTEMENT les en-têtes que `@fastify/helmet` pose dans apps/api/src/app.ts
+# (bloc « En-têtes de sécurité (06 §10.2) »), mesurés le 2026-09-08 par
+# `app.inject` sur la même configuration helmet :
+#
+#   contentSecurityPolicy: { directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] } }
+#   hsts: { maxAge: 31_536_000, includeSubDomains: true, preload: true }
+#   crossOriginResourcePolicy: { policy: 'same-origin' }
+#
+# POURQUOI REPRODUIRE LES EN-TÊTES DE L'AMONT : la garde `en-tetes-servis.e2e.ts`
+# éprouve ce que Caddy FAIT aux en-têtes qui lui arrivent (DOSSIER_ZAP §4-A : la
+# CSP de l'API est écrasée par celle des fronts). Un amont muet ne prouverait
+# pas l'écrasement ; un amont qui pose la vraie CSP de helmet le prouve.
+#
+# NOTE — la CSP ci-dessous n'est PAS « tout à 'none' » comme le dit le
+# commentaire d'app.ts : helmet fusionne ses directives PAR DÉFAUT
+# (`useDefaults: true`) avec celles fournies. C'est la valeur RÉELLEMENT émise,
+# copiée de la mesure, pas celle que le commentaire annonce. Constat rendu à
+# A11/A13, hors périmètre de ce harnais.
+#
+# Si app.ts change sa configuration helmet, ce fichier doit suivre : il est le
+# jumeau déclaré de ce bloc, et un jumeau qui dérive ne mesure plus rien.
+# =============================================================================
+:3000 {
+	header {
+		Content-Security-Policy "default-src 'none';base-uri 'self';font-src 'self' https: data:;form-action 'self';frame-ancestors 'none';img-src 'self' data:;object-src 'none';script-src 'self';script-src-attr 'none';style-src 'self' https: 'unsafe-inline';upgrade-insecure-requests"
+		Cross-Origin-Opener-Policy "same-origin"
+		Cross-Origin-Resource-Policy "same-origin"
+		Origin-Agent-Cluster "?1"
+		Referrer-Policy "no-referrer"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-DNS-Prefetch-Control "off"
+		X-Download-Options "noopen"
+		X-Frame-Options "SAMEORIGIN"
+		X-Permitted-Cross-Domain-Policies "none"
+		X-XSS-Protection "0"
+		Content-Type "application/json; charset=utf-8"
+	}
+	respond /v1/health `{"status":"ok"}` 200
+	respond `{"error":{"code":"NOT_FOUND","message":"amont factice : route inconnue"}}` 404
+}
