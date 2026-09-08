@@ -11797,3 +11797,46 @@ qui en est l'auteur.
 
 Décideur : A01
 Impact spec : aucun — le format 11 §4 n'est pas touché.
+
+## 2026-09-09 — [L6a] Le dernier succès de sync compte-t-il un pull, ou le push seul ?
+
+A29 (revue croisée L5e) mesure un contrat local orphelin. Le code livré crée
+`sync:dernier-succes:<missionId>` (`local/base.ts:155`), lue par `agenda/jour.ts:133` pour nourrir à
+la fois la carte du cockpit et `evaluerAlerteSauvegarde`. `docs/conception/LOT_L6.md:149` promet une
+autre clé, `sync:derniere-reussie:<missionId>`, « écrite après chaque push **ou pull** abouti ». Nom
+et sémantique divergent, et aucun test ne croise les deux artefacts : si L6a suit sa note, il écrit
+une clé que personne ne lit, la suite reste verte, et le cockpit dit « jamais synchronisée depuis cet
+appareil » pour toujours.
+
+Options :
+a) push ou pull (la note L6) — « dernière synchronisation » au sens courant : l'appareil a parlé au
+serveur.
+b) push seul (le code L5e) — le champ arme l'alerte de l'invariant 8, qui protège la SORTIE des
+données.
+
+Arbitrage : b), et le nom retenu est celui du code, `sync:dernier-succes:`.
+Règle de précédence : bande §32-36 et les invariants du 00_INDEX, au-dessus d'une note de conception,
+qui n'est pas le pack. L'invariant 8 ne parle pas de dialogue avec le serveur mais de localisation de
+la donnée : « aucune donnée ne vit sur un seul appareil > 24 h ouvrées ». Un pull fait DESCENDRE, il
+ne fait rien sortir. Sous a), un appareil qui pulle toutes les heures sans avoir jamais poussé une
+réponse affiche un succès frais et n'alerte jamais — l'alerte s'éteindrait exactement dans le cas
+qu'elle existe pour attraper. 03 §34.2 ne départage pas seul (« dernier succès », « sync muette
+
+> 24 h ») ; c'est l'invariant qui tranche, et D-6 (2026-09-07) avait déjà borné ce slot à la vérité
+> locale, « jamais » compris.
+> Le nom suit la même logique de fait : `sync:dernier-succes:` est livré, testé et épinglé par la garde
+> d'A27 ; `derniere-reussie` n'existe que dans une phrase. Renommer du code vert pour aligner une note
+> serait le geste à l'envers. Une clé `meta` locale n'est ni le 04, ni l'API, ni la crypto : 11 §8 ne
+> la réserve pas, elle se tranche ici.
+> a) n'est pas absurde, et c'est pourquoi l'entrée est due : elle porte le sens usuel du mot. Elle est
+> écartée parce que ce champ n'affiche pas un mot, il arme un garde-fou.
+
+Livrable obligatoire de l'entrée, sans quoi elle ne vaut rien : L6a écrit
+`cleDerniereSyncReussie(missionId)` après chaque push abouti et **jamais** dans `appliquerDescente`,
+et livre le test qui croise les deux artefacts — celui dont l'absence a rendu la divergence
+invisible. R2 (la double dérivation de l'alerte) est datée et assignée en `LOT_L6.md` §3bis : c'est
+une rectification assignée, pas un choix, sa place est la note de lot.
+
+Décideur : A01
+Impact spec : aucun — 03 §34.2 et le 04 sont intacts ; `docs/conception/LOT_L6.md` §3bis est amendé
+ce jour, avec renvoi à cette entrée.
