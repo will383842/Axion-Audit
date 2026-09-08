@@ -123,6 +123,17 @@
 
   .axn-entretien__zone--laterale {
     grid-column: 1;
+    /* Même protection que la zone centrale (revue croisée A29, R-5) : un item
+       de grille garde `min-width: auto`, et `minmax(0, 1fr)` sur la PISTE ne
+       l'empêche pas de déborder si son min-content dépasse la piste — 246 px
+       ici. Mesuré le 2026-09-08 sur iPad paysage, avec un libellé de bloc de
+       76 caractères SANS espace (min-content 662 px) : l'item reste à 246 px
+       avec `auto` comme avec `0`, parce que `overflow-y: auto` en fait un
+       conteneur de défilement, et le minimum automatique d'un tel item vaut
+       déjà zéro. La ligne rend cette protection EXPLICITE au lieu de la
+       laisser dépendre d'une propriété posée pour une autre raison : retirer
+       `overflow-y` demain ne rouvrirait pas le débordement. */
+    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: var(--espacement-4);
@@ -259,11 +270,12 @@
   min-height: var(--taille-controle-hauteur-large);
 }
 
-/* Suivant (ou Terminer) : à droite, et large — c'est le geste le plus fréquent
-   de l'entretien, et un bouton plus grand se rate moins au pouce. */
+/* Suivant (ou Terminer) : à droite — §17.4 « zone basse droite, atteignable au
+   pouce ». La marge automatique remplace le `grid-column: -2 / -1` de la barre
+   d'origine, et rien d'autre : sa largeur est celle du libellé, au-dessus des
+   44 px tactiles par `min-height` (revue croisée A29, R-6 — un élargissement de
+   confort n'est pas un correctif de porte échouée, 09 §4bis). */
 .axn-question__navigation--suivant {
-  flex: 1 1 auto;
-  max-width: var(--taille-largeur-contenu-etroit);
   margin-inline-start: auto;
 }
 

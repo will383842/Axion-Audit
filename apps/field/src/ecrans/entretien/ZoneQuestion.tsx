@@ -266,8 +266,18 @@ export function ZoneQuestion(proprietes: ProprietesZoneQuestion): ReactNode {
         </div>
       )}
 
+      {/* `role="group"`, PAS `toolbar` (revue croisée A29, R-4). Le motif APG
+          « toolbar » promet un contrat clavier — une seule tabulation pour le
+          groupe, puis les flèches d'un bouton à l'autre — que rien ici n'honore,
+          et que §33.3 interdit d'honorer : ↑↓ y naviguent entre les QUESTIONS
+          (`session/raccourcis.ts`), et §17.4 nomme Tab comme touche de
+          déplacement. Un lecteur d'écran annonçait « barre d'outils », et
+          l'utilisateur essayait des flèches inertes. « group » ne promet rien
+          d'autre qu'un nom — et c'est exactement ce que l'écran tient. Le nom
+          dit OUTILS, comme la classe et §17.4 : « Recherche » ouvre une autre
+          question, ce n'est pas une action SUR celle-ci. */}
       {!partage && (
-        <div className="axn-question__outils" role="toolbar" aria-label="Actions sur la question">
+        <div className="axn-question__outils" role="group" aria-label="Outils de la question">
           <Bouton
             variante={aRevoir ? 'secondaire' : 'discret'}
             aria-pressed={aRevoir}
