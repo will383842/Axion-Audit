@@ -1,7 +1,7 @@
 /* ============================================================================
  * ÉCRAN D'ENTRETIEN — 3 ZONES (03 M3.1) — L5b
  *
- * Structure uniquement : colonnes, empilements, barre d'actions collante.
+ * Structure uniquement : colonnes, empilements, bande de navigation collante.
  * Aucune valeur littérale de couleur ni de longueur absolue — tout vient des
  * jetons de `@axion/ui` (invariant 4). Les seuils de mise en page sont en `rem`
  * (les requêtes média ne lisent pas les variables CSS ; le `rem` reste relatif
@@ -80,7 +80,28 @@
     gap: var(--espacement-5);
   }
 
+  /* ── N1 (recette A54 du 2026-09-07, arbitrages A01 du 2026-09-08) ───────────
+   * Tout ce qui n'est PAS l'une des trois zones s'étend sur les trois colonnes,
+   * et chaque zone est placée EXPLICITEMENT dans la sienne.
+   *
+   * Avant : seuls l'en-tête et les accès latéraux portaient `grid-column: 1 / -1`.
+   * Le rappel hors ligne (§33.2) et les messages d'erreur, enfants directs de la
+   * grille, prenaient la PREMIÈRE cellule libre — la colonne des blocs. Les blocs
+   * glissaient alors dans la colonne centrale, et la question tombait dans la
+   * colonne des NOTES (20 rem) : 246 px utiles pour la zone qui doit se lire à un
+   * mètre, MOINS que le panneau de gauche. Mesuré sur iPad paysage, hors ligne —
+   * c'est-à-dire dans le mode NOMINAL de l'invariant 1 : en ligne, le rappel ne
+   * se rend pas et la grille tenait, ce qui a caché le défaut à toute revue faite
+   * réseau présent. Un message d'erreur d'enregistrement produisait le même
+   * glissement, réseau ou pas.
+   *
+   * Le placement ne dépend plus de ce qui précède les zones dans le DOM. */
+  .axn-entretien > :not(.axn-entretien__zone--laterale):not(.axn-entretien__zone--centre) {
+    grid-column: 1 / -1;
+  }
+
   .axn-entretien__zone--laterale {
+    grid-column: 1;
     display: flex;
     flex-direction: column;
     gap: var(--espacement-4);
@@ -90,6 +111,15 @@
     overflow-y: auto;
   }
 
+  .axn-entretien__zone--centre {
+    grid-column: 2;
+  }
+
+  /* La zone des notes SUIT la zone centrale dans le DOM (M3.1 : blocs · question · notes). */
+  .axn-entretien__zone--centre ~ .axn-entretien__zone--laterale {
+    grid-column: 3;
+  }
+
   .axn-entretien__acces-lateraux {
     display: none;
   }
@@ -97,6 +127,10 @@
   /* En écran partagé, la question occupe tout : rien d'interne à côté. */
   .axn-entretien--partage {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .axn-entretien--partage .axn-entretien__zone--centre {
+    grid-column: 1;
   }
 }
 
@@ -158,14 +192,41 @@
   gap: var(--espacement-2);
 }
 
-/* ── Barre d'actions : « boutons toujours identiques et aux mêmes places »
- *    (03 §17.4), Suivant en bas à droite, atteignable au pouce. ─────────────── */
-.axn-question__actions {
+/* ── Les boutons de la question : « toujours identiques et aux mêmes places »
+ *    (03 §17.4) — Précédent · À revoir · N/A · Note · Photo · Recherche · Suivant
+ *    (zone basse droite, atteignable au pouce).
+ *
+ * N1 (arbitrages A01 du 2026-09-08) : ces sept boutons formaient UNE barre
+ * `position: sticky; bottom: 0`, opaque. Dans une colonne de tablette elle se
+ * pliait sur quatre rangées de 3,5 rem et recouvrait le tiers bas de la fenêtre —
+ * exactement là où le dépliant des ancres (§33.3) demande à être lu en même
+ * temps que les pastilles. §17.4 n'exige `sticky` de rien ; il demande que
+ * SUIVANT soit « atteignable au pouce », et §33.3 (bande §32-36) prime.
+ *
+ * D'où deux groupes, aux mêmes places d'une question à l'autre :
+ *   · les OUTILS (À revoir · N/A · Note · Photo · Recherche) vivent dans le flux
+ *     de la carte, avec la question qu'ils qualifient ;
+ *   · la NAVIGATION (Précédent · Suivant) est la seule bande collante — UNE
+ *     rangée, jamais plus, Suivant à droite. C'est elle que le pouce atteint.
+ * Ce qui recouvre le bas de la fenêtre passe d'environ quatre rangées à une, sur
+ * toutes les largeurs, sans rien supposer de la longueur d'une ancre (§32.4,
+ * donnée de banque). ─────────────────────────────────────────────────────── */
+.axn-question__outils {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espacement-2);
+}
+
+.axn-question__outils .axn-bouton {
+  min-height: var(--taille-controle-hauteur-large);
+}
+
+.axn-question__navigation {
   position: sticky;
   bottom: 0;
   z-index: var(--taille-plan-bandeau);
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  display: flex;
+  justify-content: space-between;
   gap: var(--espacement-2);
   padding: var(--espacement-3) 0;
   padding-bottom: max(var(--espacement-3), env(safe-area-inset-bottom));
@@ -173,12 +234,16 @@
   border-top: var(--taille-bordure-epaisseur) solid var(--couleur-bordure-discrete);
 }
 
-.axn-question__actions .axn-bouton {
+.axn-question__navigation .axn-bouton {
   min-height: var(--taille-controle-hauteur-large);
 }
 
-.axn-question__actions--suivant {
-  grid-column: -2 / -1;
+/* Suivant (ou Terminer) : à droite, et large — c'est le geste le plus fréquent
+   de l'entretien, et un bouton plus grand se rate moins au pouce. */
+.axn-question__navigation--suivant {
+  flex: 1 1 auto;
+  max-width: var(--taille-largeur-contenu-etroit);
+  margin-inline-start: auto;
 }
 
 /* ── Zone gauche : blocs et progression ────────────────────────────────────── */

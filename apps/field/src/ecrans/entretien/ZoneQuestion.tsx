@@ -2,12 +2,24 @@
 // ZONE CENTRE — « UNE question à la fois, gros caractères, consigne consultant,
 // zone de saisie adaptée au type, boutons Précédent/Suivant » (03 M3.1)
 //
-// La barre d'actions est celle du 03 §17.4, dans cet ordre et à ces places :
+// Les boutons sont ceux du 03 §17.4, toujours identiques et aux mêmes places :
 // Précédent · À revoir · N/A · Note · Photo · Recherche · Suivant (en bas à
 // droite). « Non communiqué » (§27.4, sur TOUTE question) et « Fourchette »
 // (§27.4, où la question l'admet) sont sur la question elle-même, à côté des
 // états. Photo n'est pas livrée : le bouton garde sa place, désactivé, et il dit
 // POURQUOI — à l'œil, et pas seulement aux lecteurs d'écran.
+//
+// ── N1 (recette A54 du 2026-09-07, arbitrages A01 du 2026-09-08) ────────────
+// Les sept boutons formaient une seule barre collante, opaque, qui dans une
+// colonne de tablette se pliait sur quatre rangées et recouvrait le tiers bas de
+// la fenêtre — là où §33.3 exige que l'ancre d'un cran et les cinq pastilles se
+// lisent ENSEMBLE. Ils sont désormais en deux groupes, toujours aux mêmes places :
+//   · les OUTILS (À revoir · N/A · Note · Photo · Recherche) dans le flux de la
+//     carte, juste sous la saisie qu'ils qualifient — et absents en écran partagé,
+//     comme avant ;
+//   · la NAVIGATION (Précédent · Suivant), seule bande collante, une rangée :
+//     c'est ce que §17.4 veut « atteignable au pouce », et rien de plus.
+// Le détail de la mesure et le motif CSS sont dans `entretien.css`.
 //
 // ── B3 (recette novice A54, 2026-09-06) ─────────────────────────────────────
 // Le motif ne vivait que dans `libelleAccessible`, c'est-à-dire dans l'attribut
@@ -254,7 +266,53 @@ export function ZoneQuestion(proprietes: ProprietesZoneQuestion): ReactNode {
         </div>
       )}
 
-      <div className="axn-question__actions" role="toolbar" aria-label="Actions sur la question">
+      {!partage && (
+        <div className="axn-question__outils" role="toolbar" aria-label="Actions sur la question">
+          <Bouton
+            variante={aRevoir ? 'secondaire' : 'discret'}
+            aria-pressed={aRevoir}
+            disabled={desactive}
+            {...decritSiDesactive}
+            onClick={() => {
+              onDrapeau('a_revoir');
+            }}
+          >
+            À revoir{afficherRaccourcis ? ' (R)' : ''}
+          </Bouton>
+          <Bouton
+            variante={sansObjet ? 'secondaire' : 'discret'}
+            aria-pressed={sansObjet}
+            disabled={desactive}
+            {...decritSiDesactive}
+            onClick={() => {
+              onDrapeau('sans_objet');
+            }}
+          >
+            N/A{afficherRaccourcis ? ' (A)' : ''}
+          </Bouton>
+          <Bouton variante="discret" disabled={desactive} {...decritSiDesactive} onClick={onNote}>
+            Note
+          </Bouton>
+          <Bouton
+            variante="discret"
+            disabled
+            title={MOTIF_PHOTO_INDISPONIBLE}
+            libelleAccessible={`Photo — ${MOTIF_PHOTO_INDISPONIBLE}`}
+          >
+            Photo (bientôt)
+          </Bouton>
+          <Bouton variante="discret" onClick={onRecherche}>
+            Recherche{afficherRaccourcis ? ' (/)' : ''}
+          </Bouton>
+        </div>
+      )}
+
+      {/* La seule bande collante de la carte (N1) : une rangée, Suivant à droite. */}
+      <div
+        className="axn-question__navigation"
+        role="group"
+        aria-label="Navigation entre les questions"
+      >
         <Bouton
           variante="secondaire"
           disabled={!peutPrecedent}
@@ -263,46 +321,6 @@ export function ZoneQuestion(proprietes: ProprietesZoneQuestion): ReactNode {
         >
           Précédent
         </Bouton>
-        {!partage && (
-          <>
-            <Bouton
-              variante={aRevoir ? 'secondaire' : 'discret'}
-              aria-pressed={aRevoir}
-              disabled={desactive}
-              {...decritSiDesactive}
-              onClick={() => {
-                onDrapeau('a_revoir');
-              }}
-            >
-              À revoir{afficherRaccourcis ? ' (R)' : ''}
-            </Bouton>
-            <Bouton
-              variante={sansObjet ? 'secondaire' : 'discret'}
-              aria-pressed={sansObjet}
-              disabled={desactive}
-              {...decritSiDesactive}
-              onClick={() => {
-                onDrapeau('sans_objet');
-              }}
-            >
-              N/A{afficherRaccourcis ? ' (A)' : ''}
-            </Bouton>
-            <Bouton variante="discret" disabled={desactive} {...decritSiDesactive} onClick={onNote}>
-              Note
-            </Bouton>
-            <Bouton
-              variante="discret"
-              disabled
-              title={MOTIF_PHOTO_INDISPONIBLE}
-              libelleAccessible={`Photo — ${MOTIF_PHOTO_INDISPONIBLE}`}
-            >
-              Photo (bientôt)
-            </Bouton>
-            <Bouton variante="discret" onClick={onRecherche}>
-              Recherche{afficherRaccourcis ? ' (/)' : ''}
-            </Bouton>
-          </>
-        )}
         {/* ── M2 (recette novice A54, 2026-09-06) ──────────────────────────
             Sur la dernière question, ce bouton était GRISÉ, et le seul geste
             restant était « Quitter l'entretien » — un libellé qui dit
@@ -318,7 +336,7 @@ export function ZoneQuestion(proprietes: ProprietesZoneQuestion): ReactNode {
             d'audit, l'autre une navigation. */}
         {peutSuivant ? (
           <Bouton
-            className="axn-question__actions--suivant"
+            className="axn-question__navigation--suivant"
             variante="principal"
             onClick={onSuivant}
           >
@@ -326,7 +344,7 @@ export function ZoneQuestion(proprietes: ProprietesZoneQuestion): ReactNode {
           </Bouton>
         ) : (
           <Bouton
-            className="axn-question__actions--suivant"
+            className="axn-question__navigation--suivant"
             variante="principal"
             onClick={onTerminer}
           >

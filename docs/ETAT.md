@@ -4968,3 +4968,25 @@ la co-visibilité n'exigeant pas que les cinq ancres tiennent à l'écran.
 **Et c'est la GARDE qui tranche N1, pas l'arithmétique** : sur les seuls chiffres de la recette, la
 co-visibilité pourrait passer par un défilement modéré. A54 a observé le contraire à l'écran. A01 a
 écrit le critère pour que la mesure départage — verte, N1 se ferme ; rouge, le correctif est autorisé.
+
+## 2026-09-08 07h50 — [lot L5 / N1 — porte P-C] — étape pipeline 2/7 (implémentation INTERROMPUE)
+
+Dernier commit vert : 2e4ae09 · Branche : fix/n1-ancres-paysage · Poussé : oui — le wip: en `--no-verify` (réseau coupé au 1er push, hook déjà passé)
+Tâche en cours : correctif N1 par A21, ARRÊTÉ à la demande de Williams (fermeture de session) —
+deux fichiers modifiés, JAMAIS rejoués contre la garde : `wip:` non vert par construction.
+Prochaine action : relancer A21 sur ce worktree — `pnpm build` puis
+`npx playwright test e2e/hors-ligne-l5.e2e.ts` ; les 4 gardes N1 + les gardes R1 doivent passer,
+puis axe-core 12 vues, tests d'écran, `verify:rapide`, auto-revue (mandat intégral dans la session).
+Tests rouges connus : les 4 gardes N1 (`b2c5eae`), rouges par construction jusqu'au correctif.
+
+**Où en est le chantier N1** : arbitrage A01 rendu deux fois (`2a9302d`, `2e4ae09`) — « visible » =
+co-visible ET dégagé de toute barre collante ; N1 opposable à P-C ; la barre « Suivant » n'est pas
+protégée par §17.4 ; la largeur de colonne est libre. Garde A26 livrée (`b2c5eae`), mesurée dans
+les deux sens par mutation. A21 a engagé les DEUX leviers : la barre d'actions perd `sticky`
+(elle se pliait sur quatre rangées de 3,5 rem et recouvrait le tiers bas) et la grille des trois
+zones est reprise (la zone centrale prenait la première cellule libre, 246 px). État : NON PROUVÉ.
+
+**Reste dû après le vert** : revue croisée A29 (étape 4), rejeu A54 à l'écran (la garde est un filet
+d'émulation, pas la preuve de P-C — DECISIONS 2026-09-08), puis PR. PR #97 (R1) attend le merge
+de Williams ; ce chantier en dépend (base `lot/l5b-ancres`) — si #97 est squashée avant, refusionner
+par fichier selon ORGANISATION_AGENTS §4, base = `94930c6`.
