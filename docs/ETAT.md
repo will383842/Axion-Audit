@@ -5036,3 +5036,25 @@ Pas de plancher (taille en dur sans jeton) ; étage 1 avec jeton si A20 le juge 
 
 **Signalé à A20, non implémenté** : R-14 (`e2e/**` typechecké par aucune garde — `tsc -p tsconfig.json`
 à ajouter au script `typecheck`) et la forme mécanique de R-8. §5.6 : 9 commits, chacun d'une main.
+
+## 2026-09-08 15h12 — [lot L5 / N1 — porte P-C] — étape pipeline 5/7 → PR #101 ouverte
+
+Dernier commit vert : 4253ff5 · Branche : fix/n1-ancres-paysage · Poussé : oui (`--force-with-lease`
+sur consigne de Williams, hook pre-push vert ; le classificateur l'avait bloqué à raison le matin).
+Tâche en cours : rien — PR #101 vers main, squash, SANS auto-merge, à la main de Williams.
+Prochaine action : lire la CI de #101 — **c'est elle qui fait foi** (arbitrage Williams 2026-09-08 :
+Docker Desktop arrêté, `pnpm verify` complet non joué localement). Le job `5 · e2e` doit rejouer les
+5 gardes neuves. Puis : rejeu de P-C EN ENTIER (A02 + A54 sur iPad réel, R-9 et R-13 sous les yeux).
+Tests rouges connus : aucun localement (verify:rapide, hors-ligne-l5 12/12, axe 19/19, tsc racine).
+
+**Le chantier N1 en un paragraphe** : un doute que la recette refusait de trancher (« visible » ?),
+deux arbitrages A01 qui l'ont tranché par le texte (co-visible, et une barre opaque ne se regarde
+pas), un instrument qui manquait (Playwright ne regarde pas le viewport), une garde rouge AVANT le
+correctif, un correctif sur deux leviers (scission de la barre, colonnes proportionnelles), une
+revue croisée en deux passes avec un faux positif avoué et un chiffre rectifié. 11 commits, chacun
+d'une seule main — ce qu'A20 n'a pas pu attester sur #97.
+
+**Ce qui reste à la main de Williams, inchangé depuis ce matin** : merge #101 · D-6 (le critère
+« sync par mission » appartient-il à P-C ou à P-D ?) · compte auditeur de test sur staging +
+secret · `ZAP_BLOQUANT` (7 familles WARN, 0 haute) · les 10 vérifs sur iPad physique.
+**Signalé à A20, non ouvert** : L5d (invariant 5 désarmé par l'appelant), R-14 (typecheck de e2e/).
