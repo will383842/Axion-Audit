@@ -75,8 +75,29 @@
 }
 
 @media (min-width: 64rem) {
+  /* ── N1, second levier (arbitrage A01 du 2026-09-08) : la LARGEUR de la
+   * question. Le pack ne fixe aucune largeur de colonne — M3.1 impose trois
+   * zones et leur contenu, pas leurs proportions. Or la coquille plafonne le
+   * contenu à `--taille-largeur-contenu-large` (64 rem) : l'iPad paysage et le
+   * PC partagent donc UNE grille de 1024 px, et c'est elle qu'on proportionne.
+   *
+   * Avant : `17rem minmax(0, 1fr) 20rem`, soit 592 px pour les panneaux et 392
+   * pour la question — moins que les deux panneaux réunis, pour la zone que
+   * M3.1 nomme « cœur de l'outil » et veut lisible à un mètre. Mesuré sur la
+   * question à échelle : à 392 px, MÊME l'ancre de banque la plus courte se
+   * plie sur deux lignes (42 px), et le libellé dérivé (§32.4) sur quatre. Le
+   * dépliant (§33.3) coûte alors deux fois sa hauteur, et la marge de
+   * co-visibilité du cran 5 tombe à 5 px sur un PC 1280 × 720 — du pixel, là
+   * où l'émulation est déjà optimiste (barre d'URL, clavier, encoches).
+   *
+   * `1fr 2fr 1fr` : la question vaut les deux panneaux réunis. À 1024 px de
+   * contenu, 492 px pour la question ; les ancres courtes tiennent sur une
+   * ligne, le libellé dérivé sur trois, et la marge du cran 5 passe de 106 à
+   * 169 px sur iPad paysage privé (de 5 à 79 px sur PC 1280 × 720). Aucune
+   * hauteur d'ancre n'est supposée — seulement que plus large, on plie moins.
+   * Proportion et non rem : rien n'est deviné pour une taille d'écran donnée. */
   .axn-entretien {
-    grid-template-columns: 17rem minmax(0, 1fr) 20rem;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
     gap: var(--espacement-5);
   }
 
