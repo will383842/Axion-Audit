@@ -57,6 +57,15 @@ import {
   semerAppareil,
   URL_TERRAIN,
 } from './fixtures/appareil-terrain.js';
+// L'instrument de mesure du champ de vision (N1). Il vit dans `fixtures/` parce
+// qu'il ne porte AUCUNE assertion propre à cet écran : il répond à la question
+// « ce nœud est-il dans le champ de vision ? », que toute vue terrain se pose.
+import {
+  chercherCoVisibilite,
+  decrireCoVisibilite,
+  decrireMesure,
+  mesurerChampDeVision,
+} from './fixtures/champ-de-vision.js';
 // Le parseur du PACK, importé tel quel : c'est lui qui juge la guidance à
 // l'import comme à l'écran. Une seconde lecture écrite dans le test dirait un
 // jour autre chose que lui, et c'est le test qui aurait tort sans le savoir.
@@ -699,3 +708,231 @@ test('@critique cotation — les ancres se LISENT avant le premier tap (iPad ém
 
   await contexte.close();
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// N1 — « ANCRES DE COTATION VISIBLES » : CE QUE `toBeVisible()` NE VOIT PAS
+//
+// Écrit par A26, testeur E2E offline. Je n'ai écrit aucune ligne de
+// `packages/ui/src/composants/EchelleAncree.tsx`, aucune ligne de
+// `apps/field/src/`, et je n'en corrigerai aucune : un scénario rouge est un
+// rapport rendu au producteur, jamais un correctif de ma main (09 §5.6).
+//
+// ── LE CONSTAT, ET POURQUOI LA SUITE ÉTAIT VERTE ────────────────────────────
+// Recette A54 du 2026-09-07 (rejeu), §2.2 : sur iPad PAYSAGE, l'ancre du cran 5
+// commence 285 px sous le bord d'une fenêtre de 810 px, et l'auditeur qui
+// défile pour lire l'ancre 4 perd les pastilles de vue. La garde R1 ci-dessus
+// est restée VERTE, sincèrement : `toBeVisible()` ne regarde pas la fenêtre.
+// L'instrument qui manquait vit désormais dans `fixtures/champ-de-vision.ts`.
+//
+// ── LE CRITÈRE MESURÉ ICI — ARBITRAGE A01 DU 2026-09-08, OPTION B ───────────
+// « Visible » veut dire CO-VISIBLE avec la zone de cotation. Ce que §33.3
+// interdit n'est pas le défilement, c'est de perdre les pastilles de vue en
+// lisant l'ancre — la principale énonce déjà une relation spatiale (les ancres
+// « s'affichent SOUS le curseur ») et la subordonnée en donne le motif (« la
+// cotation homogène ne dépend pas de la mémoire du consultant »).
+//
+// Littéralement, et c'est ce que la garde exécute :
+//   pour CHAQUE cran de 1 à 5, il existe une position de défilement où l'ancre
+//   de ce cran ET la bande des cinq pastilles sont simultanément ENTIÈRES dans
+//   la fenêtre — sur la cible la plus dure (iPad, §22.1), PORTRAIT ET PAYSAGE,
+//   mode PRIVÉ ET ÉCRAN PARTAGÉ.
+//
+// Trois conséquences, écrites pour qu'on ne les redécouvre pas :
+//   ① « Entières » : un débordement même PARTIEL est un échec. L'état
+//      `partiellement_coupe` de l'instrument n'est pas une zone grise.
+//   ② « Il existe une position » : A01 a écarté « tout tient à l'ouverture »
+//      (option A) pour un motif à connaître — la hauteur d'une ancre est une
+//      donnée de banque (§32.4, longueur libre), donc un critère de tenue dans
+//      la fenêtre serait cassable par un rédacteur de guidance qui écrit trois
+//      lignes de plus, et le pack n'écrit nulle part une telle obligation. La
+//      garde DÉFILE donc pour chercher cette position, et n'échoue que si elle
+//      n'existe pour aucun cran.
+//   ③ N1 est OPPOSABLE à la porte P-C (critère nommé, 03 §33.7 et 07:24) :
+//      cette garde est `@critique`, donc jamais skippable (CLAUDE.md §2).
+//
+// ── LE POINT QUE LA GARDE TRANCHE, ET QUE L'ARITHMÉTIQUE NE TRANCHE PAS ─────
+// Sur les seuls chiffres de la recette, la co-visibilité pourrait passer par un
+// défilement modéré (l'ancre 5 finit à 1158 pour une fenêtre de 810). A54 a
+// pourtant OBSERVÉ que les pastilles sortent du champ. A01 a refusé de trancher
+// de tête et a écrit le critère « de façon à ce que la garde décide, et non
+// l'arithmétique ». La garde mesure donc DEUX choses à chaque position :
+//   · `positionGeometrique` — les deux nœuds entiers dans la fenêtre : la
+//     LETTRE du critère ;
+//   · `positionRegardable` — la même chose, plus aucune barre collante
+//     par-dessus. Trois barres `position: sticky` rognent la hauteur utile de
+//     cet écran (l'en-tête de la coquille, le bandeau d'écran partagé, la barre
+//     d'actions « Suivant ») ; un nœud caché dessous est dans la fenêtre et
+//     n'est pas regardé. C'est l'hypothèse qu'A01 me demande de vérifier, et
+//     les deux mesures sont rapportées séparément pour qu'un écart entre elles
+//     se voie au lieu de se moyenner.
+//
+// ── LA LIMITE, NOMMÉE PLUTÔT QUE CONTOURNÉE (11 §7) ─────────────────────────
+// C'est un iPad ÉMULÉ : taille, tactile, pointeur, agent utilisateur. Ni la
+// barre d'URL de Safari, ni le clavier logiciel, ni les encoches ne sont
+// modélisés, et tous RÉDUISENT la hauteur réelle — la mesure faite ici est donc
+// OPTIMISTE. Les service workers sous iOS ne sont couverts par aucun de ces
+// tests. Le mode avion réel et la mise en page réelle sur iPad se rejouent À LA
+// MAIN aux portes P-C et P-E (checklist 07 §15, A27 et A54).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Les quatre combinaisons dues par l'arbitrage A01 : deux orientations, deux modes. */
+const COMBINAISONS_IPAD = [
+  { orientation: 'portrait', mode: 'privé' },
+  { orientation: 'portrait', mode: 'écran partagé' },
+  { orientation: 'paysage', mode: 'privé' },
+  { orientation: 'paysage', mode: 'écran partagé' },
+] as const;
+
+/** Les cinq crans de l'échelle §32.4 — mesurés un par un, jamais en bloc. */
+const CRANS = [1, 2, 3, 4, 5] as const;
+
+/**
+ * Amène un appareil hors ligne jusqu'à la question à échelle, sans rien coter.
+ *
+ * C'est le parcours de la garde R1, refait à l'identique : appareil semé, mode
+ * avion, déverrouillage, planification, accord, démarrage, deux « Suivant ».
+ * Aucun geste sur l'échelle — la mesure porte sur ce que l'auditeur trouve en
+ * arrivant, avant d'avoir touché quoi que ce soit.
+ */
+async function ouvrirLaQuestionAEchelle(
+  contexte: BrowserContext,
+  page: Page,
+  heure: number,
+): Promise<void> {
+  await planterAppareil(page, await semerAppareil(MOT_DE_PASSE_APPAREIL));
+  await passerEnModeAvion(contexte, page);
+  await deverrouillerAppareil(page, MOT_DE_PASSE_APPAREIL);
+
+  await page.getByRole('button', { name: /l’agenda/ }).click();
+  await page.getByLabel('Type de session').selectOption({ label: 'Entretien' });
+  await page.getByLabel('Nom de l’interlocuteur').fill('Interlocuteur cotation');
+  await page.getByLabel('Fonction').fill('Chef d’atelier');
+  await page.getByLabel('Créneau').fill(creneauDuJour(heure));
+  await page.getByRole('button', { name: 'Planifier' }).click();
+  await expect(page.getByText('Session planifiée.')).toBeVisible();
+  await page.getByRole('button', { name: 'Retour' }).click();
+
+  await page.getByRole('button', { name: /Interlocuteur cotation/ }).click();
+  await page.getByLabel('Accord de participation recueilli').check();
+  await page.getByRole('button', { name: 'Démarrer l’entretien' }).click();
+  await expect(page.getByRole('heading', { name: PREMIERE_QUESTION })).toBeVisible();
+
+  await page.getByRole('button', { name: /^Suivant/ }).click();
+  await page.getByRole('button', { name: /^Suivant/ }).click();
+  await expect(page.getByRole('heading', { name: QUESTION_ECHELLE })).toBeVisible();
+}
+
+for (const [rang, combinaison] of COMBINAISONS_IPAD.entries()) {
+  test(`@critique cotation — ancre et pastilles co-visibles sur iPad ${combinaison.orientation}, mode ${combinaison.mode} (N1)`, async ({
+    browser,
+  }) => {
+    test.setTimeout(240_000);
+    const contexte = await browser.newContext({
+      ...OPTIONS_COMMUNES,
+      ...(combinaison.orientation === 'paysage'
+        ? devices['iPad (gen 7) landscape']
+        : devices['iPad (gen 7)']),
+    });
+    const page = await contexte.newPage();
+
+    try {
+      // L'heure du créneau varie d'une combinaison à l'autre : les quatre tests
+      // tournent en parallèle sur des profils distincts, et un libellé identique
+      // rendrait une trace d'échec impossible à rattacher à sa combinaison.
+      await ouvrirLaQuestionAEchelle(contexte, page, 9 + rang);
+
+      if (combinaison.mode === 'écran partagé') {
+        // §33.3 — la bascule œil. Le mode partagé fait disparaître les panneaux
+        // latéraux : la colonne s'élargit, les libellés dérivés tiennent sur
+        // moins de lignes, et la hauteur utile change. C'est un cas de mesure à
+        // part entière, pas une variante cosmétique.
+        await page.getByRole('button', { name: 'Passer en écran partagé' }).click();
+        await expect(page.getByRole('button', { name: 'Revenir en écran privé' })).toBeVisible();
+      }
+
+      const echelle = page.getByRole('group', { name: 'Votre cotation' });
+      await expect(echelle).toBeVisible();
+      // Rien n'est coté : la lecture des ancres ne doit avoir posé aucune note.
+      await expect(
+        echelle.locator('input[type="radio"]:checked'),
+        'aucune note n’a été posée à ce stade',
+      ).toHaveCount(0);
+
+      const pastilles = echelle.locator('.axn-choix__pistes');
+      // Le `dd` de la ligne, et NON le `.axn-choix__paire` qui l'englobe : cette
+      // paire porte `display: contents` (composants.css : « elle n'existe que pour
+      // la clé de rendu React »), donc elle n'a JAMAIS de boîte et ne peut pas se
+      // mesurer. Mesuré le 2026-09-08 : la première version de cette garde
+      // échouait sur ce point, et l'instrument nomme désormais ce piège.
+      const ancres = echelle.locator('.axn-choix__liste-ancres dd');
+      // Les cinq ancres existent AVANT qu'on mesure : sans ce contrôle, une
+      // liste vide passerait la co-visibilité haut la main — c'est exactement le
+      // faux témoin que la fixture portait avant le 2026-09-07.
+      await expect(ancres, 'les cinq crans doivent être rendus').toHaveCount(CRANS.length);
+
+      const releves: string[] = [];
+      const echecsGeometriques: string[] = [];
+      const echecsRegardables: string[] = [];
+
+      // ① CE QUE L'AUDITEUR VOIT EN ARRIVANT, sans aucun geste. Ce n'est PAS le
+      //    critère (A01 a écarté cette lecture), mais c'est le chiffre que la
+      //    recette A54 a relevé à la main : il est mesuré et rapporté pour que
+      //    la comparaison avec sa passe soit possible.
+      const sansGeste = await mesurerChampDeVision(page, pastilles, 'bande des cinq pastilles');
+      releves.push(`sans geste · ${decrireMesure(sansGeste)}`);
+      for (const cran of CRANS) {
+        const mesure = await mesurerChampDeVision(
+          page,
+          ancres.nth(cran - 1),
+          `ancre du cran ${String(cran)}`,
+        );
+        releves.push(`sans geste · ${decrireMesure(mesure)}`);
+      }
+
+      // ② LE CRITÈRE A01, cran par cran : on défile pour de bon et on cherche.
+      for (const cran of CRANS) {
+        const co = await chercherCoVisibilite(
+          page,
+          pastilles,
+          ancres.nth(cran - 1),
+          `cran ${String(cran)} — iPad ${combinaison.orientation}, mode ${combinaison.mode}`,
+          'bande des cinq pastilles',
+          `ancre du cran ${String(cran)}`,
+        );
+        releves.push(decrireCoVisibilite(co));
+        if (co.positionGeometrique === null) echecsGeometriques.push(decrireCoVisibilite(co));
+        if (co.positionRegardable === null) echecsRegardables.push(decrireCoVisibilite(co));
+      }
+
+      // Les chiffres sont portés par le rapport MÊME QUAND LA GARDE EST VERTE :
+      // c'est A01 qui les attend pour fermer N1 par la mesure, et une garde qui
+      // ne rend ses nombres qu'en échouant ne sert qu'une fois. Une annotation
+      // plutôt qu'un `console.log` — `no-console` vaut aussi pour les tests.
+      test.info().annotations.push({
+        type: `mesure N1 — iPad ${combinaison.orientation}, mode ${combinaison.mode}`,
+        description: releves.join('\n'),
+      });
+
+      // ③ LES DEUX VERDICTS, SÉPARÉS. La lettre du critère d'abord — c'est elle
+      //    qu'A01 a signée. Puis la même chose une fois les barres collantes
+      //    prises en compte : un nœud caché sous l'en-tête est dans la fenêtre
+      //    et n'est pas regardé, et c'est précisément l'hypothèse que la recette
+      //    A54 a formulée à l'œil.
+      expect(
+        echecsGeometriques,
+        `Critère A01 (2026-09-08) : pour chaque cran, il doit exister une position de ` +
+          `défilement où l’ancre ET la bande des cinq pastilles sont ENTIÈRES dans la fenêtre. ` +
+          `Crans en échec :\n${echecsGeometriques.join('\n')}`,
+      ).toEqual([]);
+
+      expect(
+        echecsRegardables,
+        `Même critère, barres collantes comprises : un nœud recouvert par une barre ` +
+          `« position: sticky » est dans la fenêtre et n’est PAS regardé. Crans en échec :\n` +
+          echecsRegardables.join('\n'),
+      ).toEqual([]);
+    } finally {
+      await contexte.close();
+    }
+  });
+}
