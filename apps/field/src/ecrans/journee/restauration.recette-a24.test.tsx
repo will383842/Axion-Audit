@@ -16,7 +16,9 @@
 //   A. le stockage qui LÈVE (A27-D1) nomme sa cause, et n'enferme plus ;
 //   B. D-A27-1 : passer outre restaure POUR DE VRAI, et l'écran alerte fort ;
 //   C. la reprise n'est pas offerte devant n'importe quel refus ;
-//   D. l'identité du fichier restauré (constat A27 : « le BON fichier ? ») ;
+//   D. l'identité du fichier restauré (constat A27 : « le BON fichier ? ») — la
+//      mission y est NOMMÉE, et non plus identifiée par son UUID : amendement
+//      de l'incrément L5d, motivé en tête de la section D ;
 //   E. le ré-export mis en avant — ce qui rend D-A27-1 tenable (invariant 8).
 //
 // Traçabilité : E38 (sauvegarde terrain), E6 (hors ligne total), E44 (4 états).
@@ -40,6 +42,12 @@ import { EcranRestauration } from './EcranRestauration.js';
 const MOT_DE_PASSE = 'correct-cheval-pile-agrafe-2026';
 const INSTANT = '2026-09-06T08:00:00.000Z';
 const MISSION_ID = '0191e2a0-0000-7000-8000-00000027a240';
+/**
+ * Le TITRE de la mission — ce que la carte d'identité montre depuis L5d.
+ * Il n'est pas décoratif : c'est lui qui distingue deux sauvegardes de la même
+ * clé USB (constat A27), ce que l'UUID ne faisait pas. Voir la section D.
+ */
+const TITRE_MISSION = 'Mission fictive de recette A24';
 const LIBELLE_ORIGINE = 'Tablette fictive n° 2 (recette A24)';
 
 /** Argon2id allégé — la robustesse du KDF est prouvée dans `coffre.test.ts`. */
@@ -160,6 +168,17 @@ function boutonQuandMeme(): HTMLButtonElement {
   return screen.getByRole<HTMLButtonElement>('button', { name: /restaurer quand même/i });
 }
 
+/**
+ * Le texte de la définition qui suit une étiquette de la carte d'identité.
+ *
+ * On vise le `<dd>` et non `document.body` : « la carte affiche une date »
+ * n'est vérifié que si l'on regarde LA ligne concernée — sur le corps entier,
+ * n'importe quelle autre date suffirait à contenter l'assertion.
+ */
+function definitionSuivant(etiquette: RegExp): string {
+  return screen.getByText(etiquette).nextElementSibling?.textContent ?? '';
+}
+
 /** Le scénario complet de D-A27-1 : refus lu, puis reprise assumée. */
 async function passerOutre(fichier: File): Promise<void> {
   restaurer(fichier, MOT_DE_PASSE);
@@ -184,7 +203,7 @@ beforeAll(async () => {
         table: 'missions',
         index: { id: MISSION_ID, status: 'collecte', clientUpdatedAt: INSTANT, supprimeLe: null },
         charge: {
-          titre: 'Mission fictive de recette A24',
+          titre: TITRE_MISSION,
           companyId: '0191e2a0-0000-7000-8000-00000027a241',
           timezone: 'Europe/Paris',
           auditLevel: 'diagnostic_cadrage',
@@ -361,9 +380,24 @@ describe('« quand même » ne s’offre que là où il répare quelque chose', 
 
 // ═════════════════════════════════════════════════════════════════════════════
 // D. L'IDENTITÉ DU FICHIER RESTAURÉ — « est-ce le BON fichier ? »
+//
+// ── AMENDEMENT DE L'INCRÉMENT L5d (2026-09-08, A24, auteur du fichier) ──────
+// Ce bloc exigeait `getByText(MISSION_ID)` : l'UUID de la mission AFFICHÉ à
+// l'auditeur. C'était un verrou posé sur un DÉFAUT — l'un des trois que L5d
+// corrige. Un identifiant de 36 caractères hexadécimaux n'est pas de
+// l'interface en français (invariant 5), et il ne renseigne personne sur ce qui
+// vient d'être restauré, ce qui est pourtant la raison d'être de cette carte
+// (constat A27 du 2026-09-06 : deux sauvegardes de la même clé USB ne se
+// distinguaient d'aucune façon). Le défaut a été débusqué par la contre-épreuve
+// d'A26 ; l'amendement revient à l'auteur du test (09 §5.6).
+//
+// L'amendement ne relâche rien : il déplace l'exigence de l'identifiant vers ce
+// que la carte existe pour DIRE. Un titre distingue deux fichiers, un UUID non.
+// Le titre est disponible sans réseau : `missions` est l'une des tables
+// sauvegardées, il voyage donc DANS le `.axionbackup`, pas dans une requête.
 // ═════════════════════════════════════════════════════════════════════════════
 describe('après un succès, l’écran dit D’OÙ vient ce qu’il vient d’écrire', () => {
-  it('@critique l’appareil d’origine, l’instant de la sauvegarde et la mission', async () => {
+  it('@critique l’appareil d’origine, l’instant de la sauvegarde et la mission NOMMÉE', async () => {
     const base = await appareilNeuf();
     terrain = terrainDeRestauration(base);
     render(<EcranRestauration />);
@@ -371,10 +405,25 @@ describe('après un succès, l’écran dit D’OÙ vient ce qu’il vient d’�
     await screen.findByText(/sauvegarde restaurée/i);
 
     expect(screen.getByText(LIBELLE_ORIGINE)).toBeInstanceOf(HTMLElement);
-    expect(screen.getByText(MISSION_ID)).toBeInstanceOf(HTMLElement);
+    expect(screen.getByText(TITRE_MISSION)).toBeInstanceOf(HTMLElement);
+
     // L'horodatage est FORMATÉ, pas recraché en ISO : l'auditeur compare deux
-    // fichiers de sa clé USB, il ne lit pas du 8601.
-    expect(document.body.textContent).toMatch(/\d{2}\/\d{2}\/\d{4}\s\d{2}:\d{2}/);
+    // fichiers de sa clé USB, il ne lit pas du 8601. Les deux assertions vont
+    // ensemble — la première interdit l'absence de forme, la seconde interdit
+    // que l'ISO se soit glissé À CÔTÉ d'une date formatée.
+    const produiteLe = definitionSuivant(/sauvegarde produite le/i);
+    expect(produiteLe).toMatch(/\d{2}\/\d{2}\/\d{4}\s\d{2}:\d{2}/);
+    expect(produiteLe).not.toContain(sauvegarde.enTete.creeLe);
+
+    // CE QUE CETTE LIGNE NE PROTÈGE PAS, ET QUI EST GARDÉ AILLEURS : le FUSEAU.
+    // La forme JJ/MM/AAAA HH:MM est la même au fuseau de la mission et à celui
+    // de l'appareil ; cette recette-ci les laisse confondus (fixture
+    // `Europe/Paris`), elle est donc structurellement aveugle à leur divergence.
+    // Que l'instant soit rendu au fuseau de la MISSION (03 §22.2, invariant 5)
+    // est gardé — délibérément une seule fois, une garde dupliquée dérivant
+    // toujours — par
+    // `apps/field/src/ecrans/journee/invariant5-fuseau.acceptation-l5d.test.tsx`,
+    // qui fait diverger les deux fuseaux d'un JOUR CIVIL entier.
   }, 30_000);
 });
 

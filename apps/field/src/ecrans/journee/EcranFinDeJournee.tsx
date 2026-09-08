@@ -66,6 +66,7 @@ import { deposerFichier } from '../../sauvegarde/depot.js';
 import { nomFichierSauvegarde } from '../../sauvegarde/format.js';
 import { exporterSauvegarde, MotDePasseExportInvalideError } from '../../sauvegarde/sauvegarde.js';
 import { PROFIL_PAR_DEFAUT } from '../../session/auditeur.js';
+import { formaterDateHeureMission } from '../../session/fuseau.js';
 import { useEnLigne } from '../../session/media.js';
 import './journee.css';
 
@@ -80,6 +81,22 @@ const MESSAGE_RITUEL_INCOMPLET =
   'Vos données de collecte n’ont quitté cet appareil d’aucune façon ce soir. ' +
   'Le rappel de fin de journée reste donc actif : ressaisissez votre mot de passe et relancez, ' +
   'ou faites-le au plus tôt demain matin — aucune donnée ne doit vivre sur un seul appareil plus de 24 h.';
+
+/**
+ * Le fuseau au titre duquel les instants de cet écran s'affichent (03 §22.2).
+ *
+ * Le rituel du soir est un geste d'APPAREIL, pas de mission : quand plusieurs
+ * missions sont embarquées, aucune ne peut prétendre seule au « site audité ».
+ * La règle est donc l'unanimité — un seul fuseau parmi les missions embarquées,
+ * et c'est lui ; des fuseaux qui divergent, et l'écran ne tranche pas à la place
+ * de l'auditeur : `formaterDateHeureMission` rend alors l'instant en UTC, nommé
+ * comme tel. Ce qui n'est rendu dans AUCUN des deux cas, c'est l'heure du
+ * portable de l'auditeur (invariant 5).
+ */
+function fuseauDesMissions(journee: JourneeTerrain | null | undefined): string | null {
+  const fuseaux = new Set((journee?.missions ?? []).map((etat) => etat.mission.timezone));
+  return fuseaux.size === 1 ? ([...fuseaux][0] ?? null) : null;
+}
 
 /** Ce que le rituel a fait pour UNE mission — 11 §4 : un fichier `.axionbackup` PAR mission. */
 interface ResultatMission {
@@ -330,7 +347,10 @@ export function EcranFinDeJournee(): ReactNode {
               </li>
             </ul>
             {typeof dernierRituel === 'string' && (
-              <p className="axn-coquille__mention">Dernier rituel : {dernierRituel}</p>
+              <p className="axn-coquille__mention">
+                Dernier rituel :{' '}
+                {formaterDateHeureMission(dernierRituel, fuseauDesMissions(journee))}
+              </p>
             )}
           </div>
 

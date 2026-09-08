@@ -96,12 +96,14 @@ function partTerminees(journee: JourneeTerrain | null | undefined): number {
   return total === 0 ? 0 : Math.round((nombreTerminees(journee) / total) * 100);
 }
 
-/** Le fuseau de la mission d'une session — « heure locale du site » (§34.2). */
-function fuseauDe(
-  journee: JourneeTerrain | null | undefined,
-  missionId: string,
-): string | undefined {
-  return journee?.missions.find((m) => m.mission.id === missionId)?.mission.timezone;
+/**
+ * Le fuseau de la mission d'une session — « heure locale du site » (§34.2).
+ * `null` si la mission n'est pas dans la journée lue : le fuseau est alors
+ * INCONNU et l'heure est rendue en UTC nommé, jamais au fuseau de l'appareil
+ * (arbitrage A01 du 2026-09-08).
+ */
+function fuseauDe(journee: JourneeTerrain | null | undefined, missionId: string): string | null {
+  return journee?.missions.find((m) => m.mission.id === missionId)?.mission.timezone ?? null;
 }
 
 /** Une ligne d'agenda : heure locale du site, personne, unité, type (§34.2). */
@@ -112,7 +114,7 @@ function LigneSession({
   onFinir,
 }: {
   readonly session: SessionLocale;
-  readonly fuseau: string | undefined;
+  readonly fuseau: string | null;
   readonly onOuvrir: (session: SessionLocale) => void;
   readonly onFinir: (session: SessionLocale) => void;
 }): ReactNode {

@@ -296,7 +296,12 @@ export function EcranEntretien(): ReactNode {
   })();
 
   // ── Enregistrement continu ─────────────────────────────────────────────────
-  const enregistrement = useEnregistrementContinu(mission?.timezone);
+  // `?? null` : la mission n'est pas encore lue (l'écran est alors en état de
+  // chargement, sans aucune heure à l'écran) ou n'existe plus sur l'appareil.
+  // Dans les deux cas le fuseau est INCONNU, jamais celui de la machine
+  // (arbitrage A01 du 2026-09-08) — `session/fuseau.ts` rend alors l'UTC nommé.
+  const fuseauMission = mission?.timezone ?? null;
+  const enregistrement = useEnregistrementContinu(fuseauMission);
   const { enregistrer, differer, purger } = enregistrement;
 
   // ── Interface ──────────────────────────────────────────────────────────────
@@ -569,17 +574,14 @@ export function EcranEntretien(): ReactNode {
   const refuserParticipation = useCallback(
     async (motif: string): Promise<void> => {
       if (session === null || session === undefined) return;
-      const ligne = construireNoteDeRefus(
-        motif,
-        formaterDateHeure(maintenant(), mission?.timezone),
-      );
+      const ligne = construireNoteDeRefus(motif, formaterDateHeure(maintenant(), fuseauMission));
       const existantes = session.generalNotes ?? '';
       await enregistrer(() =>
         ecrireNotesGenerales(session, existantes === '' ? ligne : `${existantes}\n${ligne}`),
       );
       fermerEntretien();
     },
-    [enregistrer, fermerEntretien, mission?.timezone, session],
+    [enregistrer, fermerEntretien, fuseauMission, session],
   );
 
   // ── Raccourcis et gestes ───────────────────────────────────────────────────
@@ -918,7 +920,7 @@ export function EcranEntretien(): ReactNode {
                 onSupprimer={(note) => {
                   void enregistrer(() => supprimerNoteVolante(note));
                 }}
-                fuseau={mission?.timezone}
+                fuseau={fuseauMission}
                 idNoteDeQuestion={ID_NOTE_QUESTION}
               />
             </aside>
@@ -969,7 +971,7 @@ export function EcranEntretien(): ReactNode {
               onSupprimer={(note) => {
                 void enregistrer(() => supprimerNoteVolante(note));
               }}
-              fuseau={mission?.timezone}
+              fuseau={fuseauMission}
             />
           </Panneau>
 

@@ -78,7 +78,7 @@ import {
   MotDePasseExportInvalideError,
   type RapportImport,
 } from '../../sauvegarde/sauvegarde.js';
-import { formaterDateHeure } from '../../session/fuseau.js';
+import { formaterDateHeureMission } from '../../session/fuseau.js';
 import { useEnLigne } from '../../session/media.js';
 import './journee.css';
 
@@ -348,8 +348,13 @@ export function EcranRestauration(): ReactNode {
               {/* Constat A27 (2026-09-06) : DE QUEL fichier vient ce qui vient
                   d'être écrit. Deux sauvegardes sur la même clé USB — mardi et
                   mercredi, ou deux missions — ne se distinguaient d'aucune façon
-                  avant de rouvrir la journée. Les deux valeurs sont dans l'en-tête
-                  EN CLAIR : les taire revenait à cacher une information acquise. */}
+                  avant de rouvrir la journée.
+                  L'appareil d'origine et l'instant sortent de l'en-tête EN CLAIR ;
+                  le titre et le fuseau, eux, sont lus dans la base après l'import
+                  (L5d) — un identifiant de 36 caractères n'apprend rien à personne
+                  et n'est pas de l'interface en français, et l'instant se lit au
+                  fuseau de la MISSION, jamais à celui du portable de l'auditeur
+                  (03 §22.2, invariant 5). */}
               <dl className="axn-journee__identite">
                 <div>
                   <dt>Appareil d’origine</dt>
@@ -357,11 +362,19 @@ export function EcranRestauration(): ReactNode {
                 </div>
                 <div>
                   <dt>Sauvegarde produite le</dt>
-                  <dd>{formaterDateHeure(phase.rapport.sauvegardeCreeeLe, undefined)}</dd>
+                  <dd>
+                    {formaterDateHeureMission(
+                      phase.rapport.sauvegardeCreeeLe,
+                      phase.rapport.fuseauMission,
+                    )}
+                  </dd>
                 </div>
                 <div>
                   <dt>Mission</dt>
-                  <dd>{phase.rapport.missionId}</dd>
+                  <dd>
+                    {phase.rapport.titreMission ??
+                      'Mission non nommée dans ce fichier — ouvrez votre journée pour la reconnaître'}
+                  </dd>
                 </div>
               </dl>
 
