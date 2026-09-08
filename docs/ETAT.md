@@ -5106,3 +5106,24 @@ run 0/0/0 · trois arbitrages produit (pastille, M8, fin de journée) + M10 (fic
 entamé** ; L8 2 j hors référence. P-DESCOPE dans 7 jours, D-1 inchangée depuis le 03.
 **Non fait, à dire** : `git log` non rejoué (session sans `Bash`) — jour exact d'entrée de L5b/L7b/E18/L8 borné par ETAT ;
 `prettier`, `check:prose`, `check:decisions` : joués par le pilote avant le commit, tous verts.
+
+## 2026-09-09 00h33 — [lot L5 / incrément L5d — invariant 5] — étape pipeline 4/7 CLOSE → PR
+
+Dernier commit vert : 0e9aca8 (rebasé sur main) · Branche : lot/l5d-invariant5 · Poussé : oui.
+Tâche en cours : rien — sept commits, chacun d'une seule main, rejeu A29 rendu : « prêt pour la PR ».
+Prochaine action : ouvrir la PR L5d vers main (squash, merge autorisé par Williams le 08 pour tout ce
+qui est du code), puis rejouer P-C dès que L5e est fusionné.
+Tests rouges connus : aucun — build vert, session/ 300/300, ecrans 251/251, apps/field 1242/1242,
+verify:rapide EXIT 0 (A29 l'a rejoué lui-même). `pnpm verify` complet NON joué : Docker arrêté,
+la CI fait foi (arbitrage Williams du 08).
+
+**Deux `--no-verify` à régulariser, comme A29 l'exige** : `7bfbfef` (A22, `format:check` rouge sur
+un artefact étranger d'A26, supprimé depuis) et `2cb7238` (A26, build rouge par construction — le
+test de signature avant la production). Ni l'un ni l'autre n'était un `wip:` ; les motifs sont dans
+les messages, et ils sont justes. C'est la ligne que §8 exige, elle est là.
+
+**Ce que le rejeu A29 a établi** : R1 fermée — et A26 avait raison contre A29 sur le chiffre, la
+branche du repli était COMPTÉE couverte à 90,9 % sans assertion ; R7 (le catch de R2 défaisable sans
+rouge) fermée par deux `it` sur les deux causes, mutation rouge en 300 ms ; la signature `string |
+null` REQUISE, et A29 retire son propre motif d'écran (« raison sur le type, pas sur l'écran »). Le
+croisement §5.6 tenu sur les sept commits — ce qu'A20 n'avait pas pu attester sur L5b.
