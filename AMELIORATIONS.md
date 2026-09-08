@@ -21,16 +21,28 @@
 
 ## Compteur du plafond étage 1
 
-| Lot   | Consommé | Plafond | Reste                                                                                                                                                     |
-| ----- | -------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| L0    | ~0,5 j   | 0,5 j   | 0 j (**plafond atteint**)                                                                                                                                 |
-| L1    | ~0,3 j   | 0,5 j   | ~0,2 j                                                                                                                                                    |
-| L0-b  | ~0,25 j  | 0,5 j   | ~0,25 j                                                                                                                                                   |
-| L2    | ~0,3 j   | 0,5 j   | ~0,2 j                                                                                                                                                    |
-| L3a   | ~0,1 j   | 0,5 j   | ~0,4 j                                                                                                                                                    |
-| L3b-d | ~0,15 j  | 0,5 j   | ~0,35 j — plafonds explicites (120 s) sur deux crochets de tests L2, port de sync L5a déplacé hors du glob réservé à L6a ; le reste est d'étage 2 (A-007) |
-| L5b   | ~0,12 j  | 0,5 j   | ~0,38 j — libellé du dépliant des ancres rendu vrai dans les deux états (A21, 2026-09-07)                                                                 |
-| L5c   | ~0,05 j  | 0,5 j   | ~0,45 j — identité de la sauvegarde restaurée (A27, 2026-09-06)                                                                                           |
+| Lot   | Consommé | Plafond | Reste                                                                                                                                                                                                                                                                                     |
+| ----- | -------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| L0    | ~0,5 j   | 0,5 j   | 0 j (**plafond atteint**)                                                                                                                                                                                                                                                                 |
+| L1    | ~0,3 j   | 0,5 j   | ~0,2 j                                                                                                                                                                                                                                                                                    |
+| L0-b  | ~0,25 j  | 0,5 j   | ~0,25 j                                                                                                                                                                                                                                                                                   |
+| L2    | ~0,3 j   | 0,5 j   | ~0,2 j                                                                                                                                                                                                                                                                                    |
+| L3a   | ~0,1 j   | 0,5 j   | ~0,4 j                                                                                                                                                                                                                                                                                    |
+| L3b-d | ~0,15 j  | 0,5 j   | ~0,35 j — plafonds explicites (120 s) sur deux crochets de tests L2, port de sync L5a déplacé hors du glob réservé à L6a ; le reste est d'étage 2 (A-007)                                                                                                                                 |
+| L5a   | ≤ 0,05 j | 0,5 j   | ≥ 0,45 j — **un seul geste d'étage 1 tracé** : `port-sync.ts` posé sous `src/local/` et non sous `src/sync/**`, glob réservé à L6a (A24, 2026-09-02, motif dans l'en-tête l. 17-28). Ligne posée le 2026-09-08 (NB5 du contrôle A02 L5a du 03, NB-8 du 08) — voir la note sous le tableau |
+| L5b   | ~0,12 j  | 0,5 j   | ~0,38 j — libellé du dépliant des ancres rendu vrai dans les deux états (A21, 2026-09-07)                                                                                                                                                                                                 |
+| L5c   | ~0,05 j  | 0,5 j   | ~0,45 j — identité de la sauvegarde restaurée (A27, 2026-09-06)                                                                                                                                                                                                                           |
+
+**Note sur la ligne L5a (A55, 2026-09-08).** Le compteur n'avait aucune ligne L5a ; le seul geste
+d'étage 1 de l'incrément était compté **sur la ligne L3b-d**. Le consommé est écrit « ≤ 0,05 j » et
+non « ~0,0x j » parce qu'**aucune source ne le chiffre** : ni l'en-tête du fichier, ni le contrôle
+A02 du 03 (§8.2, NB5), ni la revue A29 sécurité du 05 (« 0 fiche, 0 ligne ajoutée » sur les
+correctifs F-22/F-23/F-25). La borne vient de la taille du diff (un déplacement de fichier, douze
+lignes d'en-tête), pas d'une mesure de temps. La ligne L3b-d n'est **pas recalculée** : son
+« ~0,15 j » agrège deux gestes sans ventilation à sa date. **Signalé à A20, non qualifié ici** :
+la réserve **R8** de la revue A29 sécurité (`5c1da28`, règle ESLint « écriture Dexie » restreinte
+aux neuf tables nommées) n'a ni ligne ici ni entrée `DECISIONS.md` — étage 1 ou partie du correctif
+F-23, c'est à A20 de le dire ; A55 ne le compte pas.
 
 ---
 
@@ -2596,3 +2608,65 @@ sur trois fuseaux). **Impact schéma/API : aucun.**
 **Arbitrage attendu de Williams** : ABSORBÉE (incrément L5e) · PHASE 2 · REFUSÉE.
 **Recommandation d'A01** : correctif maintenant, incrément séparé — le rappel est **déjà en désaccord
 avec la `journee` qu'il reçoit**, elle-même calculée au fuseau de mission. Une exécution, pas un choix.
+
+## 2026-09-08 — [L5a/L5c] Étage 2, PROPOSÉE — **M10** : le verrou de 15 min tombe sur l'auditeur qui ATTEND son interlocuteur
+
+> **Quatrième demande, première fiche.** A54 l'a proposée le 2026-09-06 (`RECETTE_NOVICE_L5_2026-09-06.md`
+> §6 M10 et §7), le 2026-09-07 (`RECETTE_NOVICE_L5_2026-09-07.md` §3 : « aucune fiche n'a été
+> ouverte »), le 2026-09-07 au rejeu (`_REJEU.md` §9 : « troisième proposition, toujours pas de
+> fiche ») ; A02 la porte en **D-3** au contrôle P-C du 07 et la remesure le 08 (« 4ᵉ signalement,
+> `grep "M10\|verrou\|15 min" AMELIORATIONS.md` → aucune fiche »). Posée par **A55**, qui ne
+> l'arbitre pas et ne la préempte pas : rien n'est implémenté.
+
+**Constat terrain (A54, mesuré à l'écran les 06 et 07/09, et dans le code).** Le verrou 05 §9.7 est
+à deux temps : **15 min** d'inactivité hors session, **60 min** « pendant une session `en_cours` ».
+L'implémentation suit la lettre : `depotSessions.sessionEnCours()`
+(`apps/field/src/local/depots/sessions.ts:129-137`) ne compte que `status === 'en_cours'`, et
+c'est ce booléen seul qui fait passer `DELAI_INACTIVITE_MS` de 15 à 60 min (`app/verrou.ts:35-38,
+60-63`). Or le geste réel de l'auditeur est celui-ci : il ouvre depuis l'agenda la session planifiée
+de 09h30, l'écran « Avant la première question » est affiché, **l'interlocuteur arrive à 09h50**. La
+session est `non_demarre` (l'accord n'est pas encore coché — et il ne l'est pas, à raison : personne
+n'est là pour le donner). À 09h45, **l'appareil se verrouille** ; l'auditeur ressaisit son mot de
+passe devant la personne qui entre. Conforme à la lettre de 05 §9.7, contraire à l'intention de
+**03 §33.7** — « AUCUNE ressaisie de mot de passe pendant une session active de 45 min » — dont le
+mot « active » n'est défini par aucun des deux textes. **C'est le doute D-3 : le pack dit 15/60 d'un
+côté et « active » de l'autre, et le code a choisi pour lui.**
+
+**Valeur pour l'auditeur.** Le cas n'est pas rare, il est **le cas nominal** d'une journée
+d'entretiens : les interlocuteurs sont en retard, et l'auditeur prépare l'écran avant qu'ils
+n'arrivent. Une ressaisie à ce moment-là coûte plus que dix secondes : elle s'exécute sous le regard
+de la personne à qui l'on va lire un script de confidentialité (06 §10.4), sur un clavier virtuel,
+et le premier geste de la rencontre est un mot de passe. C'est précisément la scène que 05 §9.7
+voulait éviter (« ne déclenchent JAMAIS une ressaisie de mot de passe en pleine collecte »).
+
+**Ce qui est proposé — trois formes, aucune retenue.**
+① **Étendre le délai de 60 min à toute session du jour OUVERTE À L'ÉCRAN**, `non_demarre` compris
+(prédicat « session ouverte » à côté de « session en cours »). Le plus simple ; c'est ce qu'A54
+propose. **Élargit la fenêtre sans mot de passe d'un appareil posé** : un iPad laissé sur une table
+avec une session planifiée ouverte reste déverrouillé 60 min — c'est le modèle de menace 06 §10,
+et c'est pourquoi la fiche est d'étage 2, pas d'étage 1.
+② **Un troisième palier** (par exemple 30 min) réservé à « ouverte, non démarrée » : compromis
+entre 15 et 60, mais **un chiffre que le pack ne contient pas** — il s'écrirait dans le 05 §9.7 à
+P-D, jamais avant.
+③ **Ne rien changer au délai** : afficher un compte à rebours discret sur l'écran d'avant-démarrage
+et rappeler le verrouillage manuel d'un geste (déjà livré). Ne coûte rien à la sécurité ; ne
+supprime pas la ressaisie, il la rend prévisible.
+
+**Coût estimé.** ① ~0,25 j : un prédicat, sa consommation dans `contexte.tsx`, les cas ajoutés à
+`verrou.test.tsx` (42 tests, dont le scénario « 45 min de session active ne verrouille pas » et son
+anti-vacuité) et à `depots.test.ts` — écrits par un autre que l'auteur du prédicat (09 §5.6).
+② ~0,3 j + un amendement du pack à P-D. ③ ~0,1 j. Aucune forme ne touche le compteur d'étage 1.
+
+**Impact schéma : aucun** (le statut `non_demarre` existe). **Impact API : aucun.** **Impact
+crypto : aucun** — mais **impact sécurité : oui** pour ① et ②, la durée d'exposition d'un appareil
+déverrouillé change ; CLAUDE.md §3-4 (« toucher à la sécurité autrement que spécifié ») réserve
+la décision à un humain. **Impact périmètre fonctionnel : aucun** ; **impact spec : un amendement
+horodaté du 05 §9.7 si ① ou ② est retenue** (définir « session active »), ce qui est P-D.
+
+**Pourquoi ce n'est pas fait.** CLAUDE.md §6 : une fiche d'étage 2 se propose, ne s'anticipe pas ;
+et 09 §4bis gèle le périmètre tant que P-C est refusée. Le critère de porte « aucun verrou en
+session active de 45 min » (03 §33.7, ligne P-C du 09 §4) reste **NON JOUÉ** par A54 aux trois
+recettes — c'est une session de 45 min réelle qui le coche, pas cette fiche.
+
+**Arbitrage Williams :** ☐ ABSORBÉE (forme ① / ② / ③) ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-C, avec
+la réserve R4 d'A54 et le doute D-3 d'A02 sous les yeux._

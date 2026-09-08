@@ -9,85 +9,130 @@ Décision ferme du contrat 11 §2. Le SSR est inutile (outil interne authentifi�
 **nuisible** ici : l'app doit démarrer depuis le cache du service worker **sans serveur**. Ne jamais
 scaffolder Next dans ce dépôt, même « par habitude ».
 
-## État au lot L5b — le SOCLE **et** l'écran d'entretien
+## État au 2026-09-08 — mesuré sur `main` (`803f0b4`, PR #103), pas sur une branche
 
-**Mis à jour le 2026-09-03 (réserve R2 du contrôle A02).** Ce paragraphe annonçait encore
-« aucun écran de collecte : l'écran d'entretien est L5b (A22) » alors que L5b est livré. Un README
-qui présente comme à venir ce que le commit contient n'est pas incomplet, il est FAUX — et c'est le
-premier fichier que lit quelqu'un qui arrive.
+> **Règle de ce paragraphe** : il ne dit « livré » que de ce qui est **fusionné dans `main`**. Ce
+> qui vit sur une branche est « en branche », ce qui n'a pas de branche est « non ouvert ». C'est la
+> quatrième réécriture de cette section (réserve DoD ligne 8, contrôles A02 des 03, 06, 07 et 08/09) :
+> les trois précédentes annonçaient comme à venir ce que `main` contenait déjà, ou l'inverse.
 
-**Livré par L5a (socle)** : shell PWA + service worker Workbox, base locale Dexie **versionnée**,
-coffre **DEK/KEK**, port d'écriture, horloge à décalage serveur, verrou 15/60 min + Wake Lock,
-`storage.persist()`.
+### Livré dans `main`
 
-**Livré par L5b (collecte)** : l'écran d'entretien **3 zones** (03 M3.1) — blocs · question · notes —
-« Nouvel entretien » en trois champs, les **onze** `TYPES_DE_REPONSE`, le mode **fourchette** et
-« non communiqué » (§27.4), à-revoir / sans objet, les **trois** natures de note (note de question,
-bloc-notes de session, **note volante** à rattachement différé), la question **ad hoc**, le
-**hors-parcours** (§25.4), les raccourcis §33.3, le **mode écran partagé**, et l'indicateur
-« Enregistré » adossé à un enregistrement continu débouncé. **11 composants** sous
-`src/ecrans/entretien/`, **13 modules** sous `src/session/`.
+**L5a — le socle** (PR #30, 2026-09-05) : shell PWA + service worker Workbox, base locale Dexie
+**versionnée**, coffre **DEK/KEK** (Argon2id → KEK, DEK AES-256 non extractable), port d'écriture,
+horloge à décalage serveur, verrou 15/60 min + Wake Lock, `storage.persist()`. **Les six réserves
+de sécurité d'A51 (F-22 critique, F-23, F-25) sont dans `main`** — le veto V1 d'A02 est levé le
+2026-09-07 (7 symboles revenus, 82 → 121 cas de test).
 
-**PAS encore livré — c'est L5c (A23)** : l'agenda et le cockpit « Aujourd'hui » (§34.2), les cinq
-types de session autres qu'`entretien`, **terminer ≠ valider** côté écran (la machine à états, elle,
-est livrée et testée), les photos, et l'**export de secours** `.axionbackup`.
-**PAS encore livré — c'est L6** : toute synchronisation. `portSyncInerte` rend
-`{ statut: 'indisponible' }`.
+**L5b — la collecte** (PR #31, entrée dans `main` entre le 05 et le 06/09) : l'écran d'entretien
+**3 zones** (03 M3.1) — blocs · question · notes — « Nouvel entretien » en trois champs, les
+**onze** `TYPES_DE_REPONSE`, le mode **fourchette** et « non communiqué » (§27.4), à-revoir / sans
+objet, les **trois** natures de note (note de question, bloc-notes de session, **note volante**),
+la question **ad hoc**, le **hors-parcours** (§25.4), les raccourcis §33.3, le **mode écran
+partagé**, l'indicateur « Enregistré ». Puis, par les correctifs de la recette novice :
+« Terminer l'entretien » (#70), les boutons grisés qui disent pourquoi, le **refus de
+participation** tracé (note horodatée, session `non_demarre`), l'**identité de l'auditeur**
+(`src/siege/connexion.ts`, écran « Rattacher cet appareil », #80), et les **ancres de cotation
+lisibles avant le premier tap** — crans 2 et 4 dérivés de la doctrine §32.4 (#97, réserve R1 d'A54).
 
-### Ce que L5b ajoute à la carte des modules
+**L5c — la journée** (PR #52, 2026-09-06) : cockpit **« Aujourd'hui »** (§34.2), **agenda** (§25.2)
+et démarrage pré-rempli en un tap, les **six** `kind` de session dont l'atelier, proposition
+d'unité (§25.3), entretien complémentaire (§25.6), **terminer ≠ valider** (§19.1 : « Terminer »,
+« Rouvrir », « Valider », déverrouillage expert, validation groupée), « Où en est la mission »,
+**fin de journée en un geste**, l'**export de secours `.axionbackup`** (11 §4, par mission, mot de
+passe vérifié contre le coffre), l'**écran de restauration** (#69 : 11 % → 100 % de couverture,
+identité de la sauvegarde restaurée affichée), le bandeau de mise à jour (§31-1). **Douze vues**
+au registre `src/app/vues.ts`, chacune avec son état hors ligne (`RappelHorsLigne`, #81) et son
+balayage axe-core (#82).
 
-| Module                              | Ce qu'il porte                                                                            |
-| ----------------------------------- | ----------------------------------------------------------------------------------------- |
-| `src/ecrans/entretien/**`           | les 11 composants de l'écran 3 zones, `entretien.css` (le seuil des colonnes : **64rem**) |
-| `src/session/valeurs.ts`            | les **douze** formes de valeur (11 types + `range`) et la GARDE À L'ÉCRITURE              |
-| `src/session/ecriture-*.ts`         | création/démarrage d'entretien, écriture de réponse — refus si validé (§19.1 V2.10)       |
-| `src/session/notes-volantes.ts`     | capture immédiate, rattachement différé, suppression **logique** (invariant 7)            |
-| `src/session/questions-adhoc.ts`    | question ad hoc hors ligne, codes d'options garantis DISTINCTS                            |
-| `src/session/enregistrement.ts`     | l'enregistrement continu : file sérialisée, débounce, purge sur `pagehide`                |
-| `src/session/raccourcis.ts`         | la grille §33.3, INACTIVE dans un champ de saisie (règle V2.8)                            |
-| `src/session/media.ts`, `gestes.ts` | seuil des trois colonnes, pointeur fin, balayage horizontal iPad                          |
-| `src/session/fuseau.ts`             | affichage au fuseau de **mission** (03 §22.2) — jamais celui de l'appareil                |
+**N1 — co-visibilité des ancres** (PR #101, 2026-09-08) : sur iPad paysage, l'ancre lue et les
+pastilles de cotation restent dans le même champ de vision — barre d'actions scindée (seuls
+Précédent/Suivant restent collants), colonnes `1fr 2fr 1fr`. Instrument `e2e/fixtures/champ-de-vision.ts`,
+garde `hors-ligne-l5.e2e.ts:827` sur **quatre** combinaisons orientation × mode.
+
+### Ce qui n'est PAS dans `main` — et où c'est
+
+| Quoi                                                                                                                                                                                       | État                                                                                                                    | Où                                                                               |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| **Invariant 5** : `EcranFinDeJournee:333` rend l'ISO UTC brut, `EcranRestauration:360-364` une date au fuseau de l'**appareil** (`session/fuseau.ts` est conforme ; l'appelant le désarme) | **en branche**, revue A29 rendue, réserves en cours (bloc ETAT du 08/09 22h25)                                          | `lot/l5d-invariant5`                                                             |
+| **Dernier succès de sync** dans le cockpit : `port-sync.ts:164` rend `null` en dur, la prop `derniereSync` de `PastilleSync` n'est alimentée nulle part                                    | **non ouvert** — arbitré D-6 (#102) : afficher l'état local, « jamais » compris ; c'est ce qui tient le critère 07 n° 1 | à ouvrir (« L5e », A20)                                                          |
+| **Rappel de fin de journée au fuseau de mission** : `agenda/jour.ts:252-253` compare des jours civils en UTC (instrument de l'invariant 8)                                                 | **non ouvert** — classé « à corriger maintenant » par A01                                                               | à ouvrir avec le point précédent                                                 |
+| **La chaîne photo** : `sauvegarde/photos.ts` (`compresserPhoto`) est du **code sans appelant** — zéro `type="file"`, zéro `capture=`, zéro `kind:'photo'` (NB-4)                           | **non ouvert** — incrément propriétaire arbitré le 2026-09-05, à ouvrir **après P-C**                                   | `DECISIONS.md` 2026-09-05 « La chaîne PHOTO n'a de lot propriétaire nulle part » |
+| **Toute synchronisation** : `portSyncInerte` rend `{ statut: 'indisponible' }` ; le premier pull est descopé vers L6a                                                                      | **non ouvert** — L6 se développe **seul**, après P-C                                                                    | `docs/conception/LOT_L6.md`                                                      |
+| **`@filrouge` allongé du segment L5** : le scénario reste celui de L3, une ligne de commentaire dans `e2e/socle.e2e.ts:13`                                                                 | **non ouvert** — DoD ligne 7, cinquième incrément                                                                       | A20/A26                                                                          |
+
+### La porte P-C — refusée, en cours de rejeu
+
+P-C a été **refusée deux fois** le 2026-09-06 (veto A02 + NO-GO A54), puis **rejouée EN ENTIER** le
+2026-09-07 (09 §4bis) : A02 « conforme sous réserve, non franchissable », A54 « GO sous réserve ».
+Recoche du 2026-09-08 (`docs/portes/RECOCHE_A02_CRITERE6_2026-09-08.md`, portée par la PR #104) :
+critères du 07 —
+**1 ferme (une session de chaque type hors ligne) · 6 sous réserve matérielle · 1 non tenu**
+(le « dernier succès » ci-dessus) · DoD **7/10** · **deux réserves bloquantes** : NB-3-bis (ZAP :
+`ZAP_BLOQUANT` reste `'false'`, sept familles WARN à traiter avant la bascule) et NB-9-bis (matrice
+de traçabilité en retard de six incréments). **Ce qui ne se coche que sur une machine réelle est dû
+à Williams** : iPad physique en mode avion, coupure de courant, second appareil, session de 45 min,
+démo écran partagé, novice humain au chronomètre.
+
+**Aucun tag `v0.l5` n'existe** : il vient avec la porte, pas avant.
+
+### Carte des modules — ce que chaque incrément porte
+
+| Module                           | Ce qu'il porte                                                                                      |
+| -------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `src/local/base.ts`              | `BaseLocale` (Dexie 4), `SCHEMA_LOCAL` versionné, `VERSION_SCHEMA_LOCAL`, clés de `meta`            |
+| `src/local/formes.ts`            | l'en-tête d'index EN CLAIR (liste **fermée**) et les charges chiffrées, par table                   |
+| `src/local/coffre.ts`            | Argon2id (`hash-wasm`) → KEK, DEK AES-256 non extractable, `verrouiller()`, ré-enveloppement        |
+| `src/local/coffre-appareil.ts`   | sel + paramètres + DEK enveloppée dans `meta` ; planchers KDF, `CoffreInexploitableError`           |
+| `src/local/ecriture.ts`          | `ecrireLocal` (ligne + op d'outbox en UNE transaction) et `appliquerDescente` (jamais d'outbox)     |
+| `src/local/horloge.ts`           | **le seul `new Date()` de l'application** — décalage serveur 05 §9.2                                |
+| `src/local/stockage.ts`          | `storage.persist()`, quota, seuils d'alerte                                                         |
+| `src/local/depots/*.ts`          | lectures indexées : sessions du jour, réponses, recherche hors-parcours, outbox                     |
+| `src/local/port-sync.ts`         | `PortSync` **déclaré** ; implémentation **inerte** — L6a la REMPLACE, sous `src/sync/`              |
+| `src/app/**`                     | coquille, verrou, navigation sans routeur, registre `vues.ts` **append-only**, capacités hors ligne |
+| `src/session/machine.ts`         | les 4 états × 2 profils, **terminer ≠ valider** (03 §19.1 V2.10)                                    |
+| `src/session/valeurs.ts`         | les **douze** formes de valeur (11 types + `range`) et la GARDE À L'ÉCRITURE                        |
+| `src/session/ecriture-*.ts`      | création/démarrage d'entretien, écriture de réponse — refus si validé (§19.1 V2.10)                 |
+| `src/session/notes-volantes.ts`  | capture immédiate, rattachement différé, suppression **logique** (invariant 7)                      |
+| `src/session/questions-adhoc.ts` | question ad hoc hors ligne, codes d'options garantis DISTINCTS                                      |
+| `src/session/enregistrement.ts`  | l'enregistrement continu : file sérialisée, débounce, purge sur `pagehide`                          |
+| `src/session/raccourcis.ts`      | la grille §33.3, INACTIVE dans un champ de saisie (règle V2.8)                                      |
+| `src/session/fuseau.ts`          | affichage au fuseau de **mission** (03 §22.2) — voir la réserve invariant 5 ci-dessus               |
+| `src/ecrans/entretien/**`        | l'écran 3 zones et ses dialogues (`entretien.css` : seuil des colonnes **64rem**)                   |
+| `src/agenda/**`                  | le jour de mission, le pilote « Où en est la mission », la validation groupée, les unités           |
+| `src/ecrans/journee/**`          | cockpit, agenda, fin de session, fin de journée, restauration, bandeau de mise à jour               |
+| `src/sauvegarde/**`              | format `.axionbackup` (11 §4), dépôt, `compresserPhoto` (**sans appelant**, voir ci-dessus)         |
+| `src/siege/connexion.ts`         | `POST /v1/auth/login` (05 §8.1), rattachement d'un SEUL auditeur par appareil (invariant 7)         |
+| `sw/service-worker.ts`           | précache du shell, des polices et des icônes ; **aucun cache d'exécution de `/api`**                |
+| `scripts/build-icones.mjs`       | icônes PWA **provisoires**, générées depuis les jetons de la charte (voir ci-dessous)               |
 
 ### Ce que les tests couvrent, et ce qu'ils ne couvrent PAS
 
-Couverture **mesurée** sur les modules critiques de la DoD : `src/local/**` et `src/session/**`
-≥ 90 % sur les quatre métriques (`pnpm test:coverage` puis
-`node .github/scripts/check-coverage.mjs`).
+Couverture **mesurée** par la porte de CI (`pnpm test:coverage` puis
+`node .github/scripts/check-coverage.mjs`) sur les globs de `.github/coverage-critical-paths.json` :
+`src/local/**`, `src/session/**`, `src/app/verrou.ts`, `src/sauvegarde/sauvegarde.ts` et
+`src/sauvegarde/format.ts` (les deux fichiers qui SONT l'export — `photos.ts` n'y est pas, et c'est
+dit dans le fichier de globs) — tous ≥ 90 % sur les quatre métriques au 2026-09-08 (`coffre.ts`
+100 % ; `EcranRestauration.tsx` 100 % hors seuil, mesuré par #69).
 
-**Les COMPOSANTS d'écran ne sont pas dans ce périmètre, et le trou est nommé** : **cinq** types de
-réponse ne sont rendus par aucun test — `money` (`SaisieDevise`), `date` (`SaisieDate`),
-`single_choice` (`ChoixUnique`), `table` (`SaisieTableau`) et **`multi_choice`**. Ce dernier est
-rendu **en ligne** dans le `switch` : il n'a **aucune fonction nommée**, donc il n'apparaît dans
-aucune liste `FNDA:0` — ses lignes sont pourtant à zéro exécution dans `lcov`. **L'absence d'une
-entrée dans une liste `FNDA:0` ne prouve donc pas qu'un type est couvert** ; la première version de
-ce paragraphe annonçait cinq types et n'en nommait que quatre, pour cette raison exacte.
-`AccesEntretien.tsx` est à 0 % de lignes alors qu'il est la porte d'entrée de l'écran.
-Ce n'est pas une infraction à la DoD — elle énumère sync, crypto, scoring, RBAC — mais c'est ce que
-la recette P-C doit savoir avant de cocher « une session de chaque type ».
-Voir `docs/conception/LOT_L5.md` §4.
+**`src/ecrans/**` n'est PAS dans ce périmètre, et c'est un doute de spec ouvert** (D-4, transmis à
+A01 le 2026-09-03, sans arbitrage) : `EcranFinDeSession.tsx` est à **66,05 % de lignes / 30 % de
+fonctions**. Ce n'est pas une infraction à la DoD — elle énumère sync, crypto, scoring, RBAC — mais
+la recette P-C doit le savoir avant de cocher « terminer → note → valider groupé ».
 
-### Carte du socle
-
-| Module                         | Ce qu'il porte                                                                                  |
-| ------------------------------ | ----------------------------------------------------------------------------------------------- |
-| `src/local/base.ts`            | `BaseLocale` (Dexie 4), `SCHEMA_LOCAL` versionné, `VERSION_SCHEMA_LOCAL`, clés de `meta`        |
-| `src/local/formes.ts`          | l'en-tête d'index EN CLAIR (liste **fermée**) et les charges chiffrées, par table               |
-| `src/local/coffre.ts`          | Argon2id (`hash-wasm`) → KEK, DEK AES-256 non extractable, `verrouiller()`, ré-enveloppement    |
-| `src/local/coffre-appareil.ts` | sel + paramètres + DEK enveloppée dans `meta` ; changement de mot de passe et son avertissement |
-| `src/local/ecriture.ts`        | `ecrireLocal` (ligne + op d'outbox en UNE transaction) et `appliquerDescente` (jamais d'outbox) |
-| `src/local/horloge.ts`         | **le seul `new Date()` de l'application** — décalage serveur 05 §9.2                            |
-| `src/local/stockage.ts`        | `storage.persist()`, quota, seuils d'alerte                                                     |
-| `src/local/depots/*.ts`        | lectures indexées : sessions du jour, réponses, recherche hors-parcours, outbox                 |
-| `src/session/machine.ts`       | les 4 états × 2 profils, **terminer ≠ valider** (03 §19.1 V2.10)                                |
-| `src/local/port-sync.ts`       | `PortSync` **déclaré** ; implémentation **inerte** — L6a la REMPLACE, sous `src/sync/`          |
-| `src/app/**`                   | coquille, verrou, navigation sans routeur, registre `vues.ts` **append-only**                   |
-| `sw/service-worker.ts`         | précache du shell, des polices et des icônes ; **aucun cache d'exécution de `/api`**            |
-| `scripts/build-icones.mjs`     | icônes PWA **provisoires**, générées depuis les jetons de la charte (voir ci-dessous)           |
+**Ce que l'E2E prouve hors ligne** (`e2e/hors-ligne-l5.e2e.ts`, Chromium, `context.setOffline`) :
+mode avion sur deux appareils émulés (`:215`), une session de **chacun des six types** (`:289`),
+coupure brutale en pleine saisie (`:370`), export produit puis restauré sur un **second profil**
+(`:471`), ancres lisibles avant le premier tap (`:620`), co-visibilité N1 sur quatre combinaisons
+(`:827`), les sept boutons de §17.4 (`:1155`). Budgets 11 §4 : `e2e/budget-chiffrement-l5.e2e.ts`
+(chiffrement p95 0,6-1,8 ms, écriture complète 6-12 ms, budget 50 ms — mesuré sur poste, pas sur
+iPad). Accessibilité : `e2e/accessibilite-toutes-vues-l5.e2e.ts`, 12 vues sur 12.
 
 ### Trois règles de socle que tout écran doit respecter
 
 1. **Aucune écriture Dexie hors de `src/local/ecriture.ts`** (hors `meta`). C'est ce qui rend vraie,
-   par construction, la règle « chaque écriture pousse une op dans l'outbox » (05 §9.2-2).
+   par construction, la règle « chaque écriture pousse une op dans l'outbox » (05 §9.2-2). Une règle
+   ESLint dédiée la garde, sur les neuf tables nommées.
 2. **Aucun `new Date()` ni `Date.now()` hors de `src/local/horloge.ts`** — sinon l'appareil déréglé
    de +3 h du scénario 05 §9.8 gagne tous les arbitrages de conflit.
 3. **L'état hors ligne se rend avec `RappelHorsLigne`**, alimenté par
@@ -96,12 +141,11 @@ Voir `docs/conception/LOT_L5.md` §4.
    pas. Chaque ligne doit être une capacité que le produit tient **aujourd'hui** — trois promesses
    fausses ont été écrites puis retirées le 2026-09-06 (revue A29), dans le fichier même qui pose
    cette règle. **La pastille, elle, est celle de l'en-tête de la coquille** (décision A01 du
-   2026-09-05) : les écrans passent `avecPastille={PASTILLE_PORTEE_PAR_LA_COQUILLE}`.
-   Le compte des onze vues est tenu par `src/app/hors-ligne.test.tsx`, pas par la vigilance de
-   chacun — c'est ce qui avait manqué : 3 vues sur 11 le rendaient, de trois façons différentes.
+   2026-09-05) : les écrans passent `avecPastille={PASTILLE_PORTEE_PAR_LA_COQUILLE}`. Le compte des
+   douze vues est tenu par `src/app/hors-ligne.test.tsx`, pas par la vigilance de chacun.
 
    **Combien de pastilles au total, écran par écran** — mesuré sur le DOM, pas affirmé (le tableau
-   vit dans `hors-ligne.test.tsx`, bloc D). Dix vues sur onze : **une seule**, celle de l'en-tête.
+   vit dans `hors-ligne.test.tsx`, bloc D). Onze vues sur douze : **une seule**, celle de l'en-tête.
    `aujourdhui` en rend **une de plus par carte de mission**, contextualisée par la mission qu'elle
    décrit et traduite par le même `etat-sync-affiche.ts` — donc jamais en contradiction de mots.
    Toute autre pastille est un retour de **B6** : le 2026-09-06, l'écran d'entretien en rendait une
@@ -110,11 +154,17 @@ Voir `docs/conception/LOT_L5.md` §4.
 
 ### Ce que le socle refuse EXPLICITEMENT, et pourquoi
 
-- `embarquerMission()` prépare le stockage puis **refuse** le premier pull : il dépend de L3d
-  (figeage du questionnaire), non livré. Un embarquement qui « réussirait » sans données produirait
-  une mission vide, découverte chez le client.
+- `embarquerMission()` prépare le stockage puis **refuse** le premier pull
+  (`premier_pull_indisponible`) : le premier pull est **descopé vers L6a** (`DECISIONS.md`
+  2026-09-02, R-L5a-10). L3d est livré ; ce qui manque est l'endpoint serveur, que L6a livre et
+  consomme. Un embarquement qui « réussirait » sans données produirait une mission vide, découverte
+  chez le client. En attendant, une mission entre sur l'appareil par **restauration d'un
+  `.axionbackup`** ou par la fixture E2E.
 - `portSyncInerte` rend `{ statut: 'indisponible' }`. **Jamais une pastille verte** : une pastille
   qui verdit sans serveur annonce plus qu'elle ne fait, et le prix se paie en journée d'entretiens.
+- Un appareil ne se rattache qu'à **un seul auditeur** : rattacher un second est refusé
+  (invariant 7). Un appareil qui n'a **jamais** vu le réseau ne peut pas être rattaché : fiche
+  d'étage 2 dans `AMELIORATIONS.md` (2026-09-06), non arbitrée.
 
 ### Les icônes sont PROVISOIRES, et générées
 
@@ -128,7 +178,7 @@ installation « Sur l'écran d'accueil », pas de persistance durable d'IndexedD
 sans persistance, aucune mission n'est embarquable (05 §31-2). C'était le bloquant B2 de la revue
 croisée A29.
 
-**Le dessin reste celui de Williams** (`DECISIONS.md` 2026-09-02) : le manifeste porte
+**Le dessin reste celui de Williams** (`DECISIONS.md` 2026-09-02, fiche A-009) : le manifeste porte
 `"_provisoire": true`, et le remplacement sera une substitution de fichiers, sans une ligne de code
 à toucher.
 
@@ -147,21 +197,33 @@ n'est pas négociable.
 - **Règle des 4 états** (§33.2) : tout écran livré avec vide, chargement, erreur et nominal.
 - **Police auto-hébergée** (`@fontsource-variable/inter`) : un CDN de police casserait le mode avion.
   C'est un critère de la porte P-C, pas une préférence.
-- **Interface 100 % en français** ; horodatages au fuseau de **mission**, jamais celui de l'appareil.
+- **Interface 100 % en français** ; horodatages au fuseau de **mission**, jamais celui de l'appareil
+  — et c'est précisément l'écart ouvert de l'invariant 5 (voir le tableau ci-dessus).
 - **Zéro bouton « enregistrer »** (E23) : l'enregistrement est continu, l'indicateur « Enregistré »
   en atteste.
 
 ## Limite de test assumée
 
 `context.setOffline(true)` de Playwright couvre les scénarios réseau, mais **les service workers sous
-iOS ne sont pas couverts**. Le mode avion RÉEL sur iPad se rejoue **à la main** aux portes P-C et
-P-E (11 §7, checklist 07 §15). Documenté, pas contourné.
+iOS ne sont pas couverts** et `toBeVisible()` **ne regarde pas le viewport** (angle mort mesuré le
+2026-09-07, fermé pour les ancres par `e2e/fixtures/champ-de-vision.ts`). Le mode avion RÉEL sur iPad se
+rejoue **à la main** aux portes P-C et P-E (11 §7, checklist 07 §15). Documenté, pas contourné.
 
 ## Développement
 
 ```bash
-pnpm --filter @axion/field dev    # http://localhost:5173
+pnpm --filter @axion/field dev          # http://localhost:5173 (génère d'abord les icônes)
+pnpm --filter @axion/field typecheck    # app + service worker
+pnpm test:interface                     # les tests d'écran (.test.tsx), projet vitest `interface`
+pnpm test:unit                          # les modules (.test.ts), projet `unit`
+pnpm test:coverage && node .github/scripts/check-coverage.mjs   # la mesure que lit la porte de CI
+pnpm test:e2e                           # build + Playwright (hors ligne, axe, budgets)
 ```
 
-En production, Caddy sert cette app à la racine du domaine (`/`), la console sous `/hq` et l'API
-sous `/api` : même origine, donc **aucun CORS**.
+**Aucune variable d'environnement** : l'app ne lit aucun `import.meta.env.*`. En production, Caddy
+sert cette app à la racine du domaine (`/`), la console sous `/hq` et l'API sous `/api` : même
+origine, donc **aucun CORS**, et l'API se joint en chemin relatif.
+
+**Attention aux tests datés** : deux tests sensibles à l'heure ont été trouvés en douze heures
+(créneau `maintenant() + 4 h` franchissant minuit, semaine ISO du dernier jour du mois). Tout test qui
+touche à l'agenda s'éprouve sur les 24 heures et les 7 jours, jamais sur l'instant où on le lance.
