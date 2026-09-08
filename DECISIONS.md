@@ -11305,3 +11305,39 @@ amplitude.
 
 Décideur : A01
 Impact spec : aucun.
+
+## 2026-09-08 — [gouvernance] Supprimer la branche après le squash efface la seule preuve d'attribution — faut-il continuer ?
+
+Constat né d'une mesure, pas d'une intuition. Le 2026-09-08, A20 a pu **réfuter** le tableau
+d'attribution d'A02 sur l'incrément L5b — trois lignes sur cinq sur-déclaraient — **uniquement**
+parce que la branche `fix/n1-ancres-paysage` existait encore sur `origin` et portait les **18
+commits d'avant-squash**. A02 avait conclu « §5.6 indécidable depuis les artefacts » ; c'était faux,
+et le test qui le montre est `git diff <squash> <tête-de-branche>` **vide**.
+
+**Or CLAUDE.md §7 prescrit l'inverse** : « squash merge → **suppression de branche** ». Appliquée à
+la lettre, la règle aurait rendu l'attribution réellement indécidable, et le défaut de croisement
+serait resté invisible — un contrôle qui ne peut plus être contredit.
+
+Options :
+
+1. **Conserver la règle et assumer** : l'attribution se prouve dans le message de squash, que
+   l'auteur recopie. **Faiblesse mesurée aujourd'hui** : c'est exactement ce qui a échoué — le
+   tableau recopié était faux, et rien n'aurait permis de le voir.
+2. **Ne plus supprimer les branches d'incrément**, ou les archiver en `refs/archive/<code>`.
+   Coût : des références qui s'accumulent. Bénéfice : §5.6 reste **vérifiable après coup**, et
+   R-4 devient closable par la preuve plutôt que par la parole.
+3. **Exiger que le croisement soit prouvé AVANT le squash** — un contrôle qui lit les commits de la
+   branche et refuse un fichier de test et sa production dans un même commit. Le plus fort, et le
+   plus cher : c'est une garde à écrire.
+
+Arbitrage : **EN ATTENTE — A01 ou Williams.** Je ne le tranche pas : l'option 2 touche une
+convention de §7 (escalade 11 §8-2), et l'option 3 crée une garde bloquante, ce que le §3 réserve.
+En attendant, **ne supprimez pas les branches d'incrément récentes** — c'est réversible dans un
+sens seulement.
+
+Règle de précédence : **sans objet** — aucune divergence interne au pack. §7 (suppression) et
+09 §5.6 (croisement prouvé) ne se contredisent pas en droit ; c'est leur mise en œuvre conjointe
+qui rend l'un invérifiable. Le pack ne dit nulle part comment §5.6 se PROUVE après une fusion.
+Décideur : **A01 | Williams** (question posée par le pilote le 2026-09-08).
+Impact spec : aucun tant que l'arbitrage n'est pas rendu. Si l'option 2 ou 3 est retenue, CLAUDE.md
+§7 devra être amendé — c'est une convention, donc 11 §8-2.
