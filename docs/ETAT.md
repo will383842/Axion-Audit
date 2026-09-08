@@ -5012,3 +5012,27 @@ la question tombait en colonne 3 (246 px), **hors ligne seulement**. Le `grid-co
 partagé 245 · portrait ≥ 548 · PC 1280×720 79. A29 a reprouvé par mutation que la garde protège les
 DEUX leviers. Réserve R-9 : une rangée collante de plus resterait verte — marge d'une rangée, à
 porter au rejeu A54 sur iPad réel. Trois entrées A01 du jour, §5.6 démontré commit par commit.
+
+## 2026-09-08 14h26 — [lot L5 / N1 — porte P-C] — étape pipeline 4/7 CLOSE → 5/7 (tests)
+
+Dernier commit vert : c893586 · Branche : fix/n1-ancres-paysage · Poussé : **NON** — réécriture de
+branche (rebase post-squash #97) en attente du `--force-with-lease` de Williams.
+Tâche en cours : rien — les 14 réserves A29 sont fermées ou requalifiées, aucun bloquant.
+Prochaine action : pousser, puis `pnpm verify` complet (Docker Desktop est ARRÊTÉ sur cette machine :
+si Williams ne le démarre pas, la CI fait foi et ce bloc le dit), puis PR vers main (squash, SANS
+auto-merge — elle porte du code).
+Tests rouges connus : aucun — verify:rapide EXIT=0 (unit 1 806 · interface 1 160 · 14 gardes) ·
+hors-ligne-l5 12/12 (4 gardes N1 + R1 + garde §17.4) · axe 19/19 · tsc racine (couvre e2e/) EXIT=0.
+
+**Revue A29 rendue deux fois** (`docs/portes/REVUE_A29_N1_2026-09-08.md`) : CONFORME SOUS RÉSERVE
+puis rejeu sans bloquant. R-5 était un **faux positif d'A29** (Grid §6.6, deux conditions cumulatives :
+`overflow-y: auto` ET `minmax(0, 1fr)` empêchent chacun le débordement) — A21 y a répondu par la
+mesure. R-8 tranché : la sonde `pointer-events` n'est PAS armée (faux rouges sur voiles transparents).
+
+**R-13, rectification d'un fait** : `1d18947` dit « Suivant 184,86 px, aucune régression ». Faux :
+Suivant fait **92 px** (184 = « Terminer »), et l'avant-N1 garantissait un plancher de 112 px.
+La cible du geste le plus fréquent perd 20-45 px ; reste ≥ 44 px, bord droit et y inchangés.
+Pas de plancher (taille en dur sans jeton) ; étage 1 avec jeton si A20 le juge gênant au pouce.
+
+**Signalé à A20, non implémenté** : R-14 (`e2e/**` typechecké par aucune garde — `tsc -p tsconfig.json`
+à ajouter au script `typecheck`) et la forme mécanique de R-8. §5.6 : 9 commits, chacun d'une main.
