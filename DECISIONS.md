@@ -11427,3 +11427,43 @@ seule la citation peut céder, il revient ici : l'entrée « une doctrine se cit
 
 Décideur : A01
 Impact spec : aucun — interprétation de 03 §33.3 et §33.7 ; aucun amendement, aucune spec nouvelle.
+
+## 2026-09-08 — [L5b] Une ancre recouverte par une barre opaque est-elle « dans le viewport » ?
+
+Garde N1 d'A26 (`b2c5eae`), quatre combinaisons mesurées. Géométrie seule : 4/4 vert (paysage privé,
+crans 3/4/5 dégagés à 392/520/592 px de défilement). Barres collantes comprises : paysage privé
+ROUGE, crans 3, 4 et 5 sans aucune position dégagée. Cause unique :
+`div.axn-question__actions { position: sticky; bottom: 0 }` (`entretien.css:163`), barre « Suivant »
+OPAQUE (`background: var(--couleur-surface-fond)`) — l'ancre est recouverte, jamais absente ;
+mutation `sticky → static` : 4/4 verts. A26 a écrit les deux assertions et refuse de choisir.
+
+Options :
+a) Lettre : mon critère du 2026-09-08 dit « entières dans le viewport » ; un nœud sous une barre y
+est entier. N1 est vert, se ferme par la mesure, aucun correctif.
+b) Esprit : un nœud recouvert n'est pas regardé ; la seconde assertion tient, N1 est rouge et le
+correctif est autorisé (09 §4bis).
+
+Arbitrage : b). N1 reste OPPOSABLE à P-C, et il est ROUGE.
+Précédence §32-36 : le motif de §33.3 (« ne dépend pas de la mémoire du consultant ») ne distingue
+pas un texte hors champ d'un texte sous une barre opaque — dans les deux cas l'auditeur remonte
+coter sans l'ancre. a) reproduit exactement le défaut pour lequel j'ai écarté c) dans l'entrée
+précédente : un prédicat vert sur un écran où l'ancre ne se lit pas. `toBeVisible()` ignorait le
+viewport, la géométrie seule ignore le recouvrement — même angle mort d'un cran plus haut, et le
+nommer deux fois sans le traiter, ce serait le choisir.
+Précédence entre BANDES, cette fois : §17.4 (bande §16-22) veut « Suivant, zone basse droite,
+atteignable au pouce » — il n'exige nulle part `position: sticky`, et il céderait de toute façon
+devant §33.3. La barre n'est pas protégée.
+
+Critère opérationnel complété : à celui du 2026-09-08 s'ajoute que l'ancre ne soit RECOUVERTE par
+aucun nœud opaque à la position retenue. Les deux assertions d'A26 restent, aucune ne tombe.
+La garde est un filet de non-régression en ÉMULATION, pas la preuve de P-C : l'émulation est
+optimiste (barre d'URL Safari, encoches, clavier) et les marges vertes en paysage partagé sont de 40
+et 64 px. Le critère se prouve sur l'iPad réel (§22.1, recette 07:24) — garde verte d'abord.
+
+Bornes pour A21 : le pack ne fixe AUCUNE largeur de colonne — M3.1 impose trois zones et leur
+CONTENU, §33.1 des tokens, §19.2 le tactile ≥ 44 px. Les 246 px de la colonne centrale en paysage
+privé (moins que le panneau gauche à 17 rem) sont donc un choix libre, et un levier au même titre
+que la barre collante. Les bornes du 2026-09-08 tiennent, inchangées.
+
+Décideur : A01
+Impact spec : aucun — précise le critère opérationnel du 2026-09-08 sans en amender le fondement.
