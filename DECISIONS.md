@@ -11341,3 +11341,45 @@ qui rend l'un invérifiable. Le pack ne dit nulle part comment §5.6 se PROUVE a
 Décideur : **A01 | Williams** (question posée par le pilote le 2026-09-08).
 Impact spec : aucun tant que l'arbitrage n'est pas rendu. Si l'option 2 ou 3 est retenue, CLAUDE.md
 §7 devra être amendé — c'est une convention, donc 11 §8-2.
+
+## 2026-09-08 — [gouvernance] Correctif de l'entrée précédente : la suppression est AUTOMATIQUE, donc son remède n'était pas applicable
+
+L'entrée du même jour (« supprimer la branche après le squash efface la seule preuve d'attribution »)
+se terminait par : « **en attendant, ne supprimez pas les branches d'incrément récentes** ».
+**Ce conseil ne peut être suivi par personne.** Mesuré une commande plus tard :
+
+```
+GET /repos/will383842/Axion-Audit → delete_branch_on_merge : true
+```
+
+**Personne ne supprime ces branches — GitHub le fait, automatiquement, à l'instant de la fusion.**
+Je l'ai constaté sur mes propres PR #98 et #99 : leurs branches avaient disparu du dépôt distant
+sans que je les touche. J'ai écrit un remède sans vérifier qu'il était à la portée de son lecteur.
+C'est la faute de la journée, commise sur la ligne même qui la dénonce.
+
+**Conséquence datée, et c'est elle qui compte** : `fix/n1-ancres-paysage` est **la dernière copie**
+de l'historique d'avant-squash de L5b — les 18 commits sur lesquels A20 a fondé son refus
+d'attester, et donc toute la preuve du constat « §5.6 non tenu au sens probatoire ». **Elle sera
+détruite automatiquement à la fusion de cette branche.** Après quoi le constat ne sera plus
+re-vérifiable par personne : il faudra le croire sur parole, ce qui est exactement ce que R-4
+reproche.
+
+Options, qui remplacent celles de l'entrée précédente :
+
+1. **Désactiver `delete_branch_on_merge`** — un réglage de dépôt, donc hors de ce que le pack
+   décrit, et qui laisse s'accumuler toutes les branches sans distinction.
+2. **Archiver avant fusion** : `git push origin <branche>:refs/archive/<code>` — les refs
+   d'archive ne sont pas des branches, GitHub ne les supprime pas, et elles ne polluent pas la
+   liste. Geste d'une ligne, à faire **avant** que la PR ne fusionne, sinon il est trop tard.
+3. **Ne rien changer** et assumer que l'attribution n'est pas re-vérifiable après fusion.
+
+Arbitrage : **EN ATTENTE — A01 ou Williams**, comme l'entrée précédente. Mais **une chose est
+urgente et ne l'était pas quand j'ai écrit la première** : si l'option 2 ou 1 doit être retenue, il
+faut archiver `fix/n1-ancres-paysage` **avant** sa fusion. Je ne le fais pas moi-même — pousser une
+`refs/archive/*` crée une convention de dépôt que le §3 me réserve d'inventer.
+
+Règle de précédence : **sans objet** — même silence du pack que l'entrée précédente ; celle-ci n'en
+corrige que le remède.
+Décideur : **A01 | Williams** (correctif posé par le pilote le 2026-09-08).
+Impact spec : aucun. Ceci ne modifie pas l'entrée précédente — l'entrée précédente reste vraie sur
+le constat, et fausse sur ce qu'elle recommandait de faire en attendant.
