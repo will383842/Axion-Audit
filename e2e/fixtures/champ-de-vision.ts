@@ -59,11 +59,34 @@
 // ③ Il ne juge pas la TRANSPARENCE d'un recouvrement : une barre translucide
 //    est comptée comme un recouvrement. C'est le sens strict, et c'est le bon
 //    par défaut — un texte lu à travers une barre n'est pas un texte lu.
+// ④ Il NE VOIT PAS un recouvrement en `pointer-events: none` (revue croisée
+//    A29, R-8). `elementFromPoint` rend ce que le POINTEUR rencontrerait, pas
+//    ce que l'ŒIL rencontre : un nœud qui laisse passer les clics est ignoré
+//    par l'interrogation, même opaque et par-dessus. Un voile décoratif ainsi
+//    déclaré recouvrirait une ancre sans que l'instrument le dise — un faux
+//    VERT, la seule direction d'erreur qui compte ici. Mesuré le 2026-09-08 :
+//    `grep -rn "pointer-events" apps/field/src packages/ui/src` → 0 occurrence ;
+//    le trou est latent, pas ouvert. Le jour où cette propriété entre dans une
+//    feuille de style, il se ferme à peu de frais : poser
+//    `* { pointer-events: auto !important }` dans une `<style>` le temps de la
+//    mesure (cette propriété ne change ni la mise en page ni le rendu), puis la
+//    retirer — proposé à A29, PAS implémenté tant que rien ne le justifie.
+//
+// ── CE QU'IL N'OFFRE PAS, ET QU'IL NE FAUT PAS LUI RAJOUTER ─────────────────
+// Aucune assertion « ce nœud est entier dans la fenêtre SANS DÉFILER ». Une
+// première version en portait une (`exigerDansLeChampDeVision`, retirée à la
+// revue croisée A29, R-2) : c'est mot pour mot l'option a) qu'A01 a ÉCARTÉE le
+// 2026-09-08 (« nulle part le pack n'écrit une obligation de tenue dans le
+// viewport », et la hauteur d'une ancre est une donnée de banque, §32.4). Une
+// assertion prête à l'emploi qui rétablit un critère refusé est un piège pour
+// l'agent suivant. Le critère retenu est la co-visibilité EN DÉFILANT
+// (`chercherCoVisibilite`) ; `mesurerChampDeVision` ne sert qu'à RAPPORTER
+// l'état sans geste, pour comparer avec la passe A54 — jamais à le juger.
 //
 // Traçabilité : E23 (hyper intuitif, novice < 30 min), E6 (hors ligne total,
 // PC ET tablette), E27 (design moderne, charte, WCAG AA).
 // =============================================================================
-import { expect, type ElementHandle, type Locator, type Page } from '@playwright/test';
+import type { ElementHandle, Locator, Page } from '@playwright/test';
 
 /**
  * La tolérance sous laquelle un débordement n'en est pas un.
@@ -86,7 +109,7 @@ export const TOLERANCE_PX = 1;
 const PAS_DE_BALAYAGE_PX = 8;
 
 /** Ce que devient un nœud confronté aux bords de la fenêtre. */
-export type EtatDansLeChamp =
+type EtatDansLeChamp =
   /** Les quatre bords du nœud sont dans la fenêtre : le seul état lisible sans geste. */
   | 'entierement_visible'
   /** Une partie seulement est dans la fenêtre : il faut défiler pour lire le reste. */
@@ -95,7 +118,7 @@ export type EtatDansLeChamp =
   | 'hors_champ';
 
 /** La boîte d'un nœud, en pixels, relative à la fenêtre. */
-export interface BoiteMesuree {
+interface BoiteMesuree {
   readonly gauche: number;
   readonly haut: number;
   readonly droite: number;
@@ -111,7 +134,7 @@ export interface BoiteMesuree {
  * la distance à récupérer pour ramener ce bord dans la fenêtre — c'est le
  * chiffre qu'un correctif de mise en page doit viser.
  */
-export interface Debordement {
+interface Debordement {
   readonly haut: number;
   readonly bas: number;
   readonly gauche: number;
@@ -259,6 +282,15 @@ interface ResultatBalayage {
  * est de la DONNÉE BRUTE — des rectangles et des noms d'éléments. Aucun verdict
  * n'est prononcé ici : les trois états et les débordements se calculent côté
  * Node, par `evaluerBoite`, pour que la règle vive à un seul endroit.
+ *
+ * ── UN SEUL RELEVÉ DE RECOUVREMENT, POUR LES DEUX MESURES (A29, R-3) ────────
+ * La même contrainte de sérialisation avait produit un JUMEAU en ligne de
+ * `recouvrements` dans `mesurerChampDeVision`, et les deux avaient divergé : le
+ * jumeau ne voyait pas un recouvrement par un nœud NON collant. Un instrument
+ * dont les deux voies ne mesurent pas la même chose ment sur l'une des deux. La
+ * mesure isolée passe donc désormais par CETTE fonction, avec un pas de `0` :
+ * « ne défile pas, relève l'état courant » — c'est exactement `initiale`, que
+ * le balayage relevait déjà avant son premier geste.
  */
 const BALAYER_DANS_LE_NAVIGATEUR = ([premier, second, pas]: [
   HTMLElement | SVGElement,
@@ -352,14 +384,18 @@ const BALAYER_DANS_LE_NAVIGATEUR = ([premier, second, pas]: [
     second: mesurer(second),
   };
 
-  for (let y = 0; y <= maximum + pas; y += pas) {
-    conteneur.scrollTop = Math.min(y, maximum);
-    etapes.push({
-      defilement: conteneur.scrollTop,
-      premier: mesurer(premier),
-      second: mesurer(second),
-    });
-    if (conteneur.scrollTop >= maximum) break;
+  // Un pas nul est un ordre de NE PAS défiler : la boucle ne s'ouvre pas (elle
+  // ne terminerait d'ailleurs jamais avec un incrément de zéro).
+  if (pas > 0) {
+    for (let y = 0; y <= maximum + pas; y += pas) {
+      conteneur.scrollTop = Math.min(y, maximum);
+      etapes.push({
+        defilement: conteneur.scrollTop,
+        premier: mesurer(premier),
+        second: mesurer(second),
+      });
+      if (conteneur.scrollTop >= maximum) break;
+    }
   }
 
   // On repose l'écran là où on l'a trouvé : une garde qui déplace la page
@@ -388,8 +424,8 @@ export async function mesurerChampDeVision(
   nom: string,
 ): Promise<MesureChampDeVision> {
   const fenetre = await fenetreDe(page);
-  const brute = await cible.boundingBox();
-  if (brute === null) {
+
+  if ((await cible.boundingBox()) === null) {
     throw new Error(
       `Mesure du champ de vision impossible pour « ${nom} » : le nœud n’a aucune boîte. ` +
         'Trois causes, dans l’ordre où elles se rencontrent : (a) le nœud est absent du rendu ; ' +
@@ -399,46 +435,26 @@ export async function mesurerChampDeVision(
         'PEINT quelque chose, ici le `dd` de l’ancre.',
     );
   }
-  const recouvertPar = await cible.evaluate((element: Element) => {
-    const rect = element.getBoundingClientRect();
-    const marge = 2;
-    const points: [number, number][] = [
-      [rect.left + marge, rect.top + marge],
-      [rect.right - marge, rect.top + marge],
-      [rect.left + marge, rect.bottom - marge],
-      [rect.right - marge, rect.bottom - marge],
-      [rect.left + rect.width / 2, rect.top + rect.height / 2],
-    ];
-    const trouves = new Set<string>();
-    for (const [x, y] of points) {
-      if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) continue;
-      const dessus = document.elementFromPoint(x, y);
-      if (dessus === null) continue;
-      if (dessus === element || element.contains(dessus) || dessus.contains(element)) continue;
-      let noeud: Element | null = dessus;
-      while (noeud !== null) {
-        const position = getComputedStyle(noeud).position;
-        if (position === 'sticky' || position === 'fixed') {
-          const classes = noeud.className;
-          const suffixe =
-            typeof classes === 'string' && classes.trim() !== ''
-              ? `.${classes.trim().split(/\s+/).join('.')}`
-              : '';
-          trouves.add(`${noeud.tagName.toLowerCase()}${suffixe} (position: ${position})`);
-          break;
-        }
-        noeud = noeud.parentElement;
-      }
-    }
-    return [...trouves];
-  });
-
-  return evaluerBoite(
-    nom,
-    { x: brute.x, y: brute.y, largeur: brute.width, hauteur: brute.height },
-    fenetre,
-    recouvertPar,
-  );
+  // `boundingBox()` n’a servi qu’à REFUSER un nœud sans boîte, avec le message qui nomme
+  // les trois causes. La géométrie et le recouvrement viennent du MÊME relevé
+  // que le balayage (A29, R-3) : un pas de `0`, la position de défilement n'est
+  // pas touchée, et `initiale` est l'état courant. Le nœud est passé deux fois
+  // parce que le balayeur en attend deux ; il n'en mesure ici qu'un.
+  const poignee = await cible.elementHandle();
+  try {
+    const brut = await page.evaluate<
+      ResultatBalayage,
+      [ElementHandle<HTMLElement | SVGElement>, ElementHandle<HTMLElement | SVGElement>, number]
+    >(BALAYER_DANS_LE_NAVIGATEUR, [poignee, poignee, 0]);
+    return evaluerBoite(
+      nom,
+      brut.initiale.premier.rect,
+      fenetre,
+      brut.initiale.premier.recouvertPar,
+    );
+  } finally {
+    await poignee.dispose();
+  }
 }
 
 /** Arrondit à l'entier pour l'affichage : personne ne corrige un demi-pixel. */
@@ -473,29 +489,8 @@ export function decrireMesure(mesure: MesureChampDeVision): string {
   );
 }
 
-/**
- * Exige qu'un nœud soit ENTIÈREMENT dans le champ de vision, sans aucun geste.
- *
- * L'assertion porte sur l'ÉTAT, et le message porte les chiffres : `toBe`
- * affiche « attendu entierement_visible, reçu hors_champ » ET la description
- * complète. Un correcteur sait immédiatement combien de pixels récupérer.
- */
-export async function exigerDansLeChampDeVision(
-  page: Page,
-  cible: Locator,
-  nom: string,
-): Promise<MesureChampDeVision> {
-  const mesure = await mesurerChampDeVision(page, cible, nom);
-  expect(
-    mesure.etat,
-    `${nom} doit être lisible SANS défiler. Rappel : toBeVisible() ne regarde pas la ` +
-      `fenêtre (A54, 2026-09-07, §2.2). Mesure : ${decrireMesure(mesure)}`,
-  ).toBe('entierement_visible');
-  return mesure;
-}
-
 /** Une position de défilement, et ce qu'on y voit des deux nœuds. */
-export interface EtapeCoVisibilite {
+interface EtapeCoVisibilite {
   readonly defilement: number;
   readonly premier: MesureChampDeVision;
   readonly second: MesureChampDeVision;
