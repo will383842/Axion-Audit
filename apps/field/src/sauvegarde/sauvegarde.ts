@@ -374,6 +374,30 @@ function versEnregistrement(
   } as unknown as EnregistrementDescendant;
 }
 
+/**
+ * Le titre et le fuseau de la mission, LUS DANS LA BASE après l'import.
+ *
+ * Pourquoi la base et non l'en-tête du fichier : l'en-tête ne les porte pas, et
+ * l'y ajouter n'aurait rien dit des sauvegardes DÉJÀ produites — celles qui sont
+ * sur les clés USB des auditeurs aujourd'hui. La mission, elle, vient d'être
+ * écrite par `appliquerDescente` quelques lignes plus haut : la lire est exact
+ * pour un fichier d'hier comme pour un fichier de demain, et c'est la valeur
+ * COURANTE de l'appareil qui s'affiche — celle que l'auditeur a réellement sous
+ * la main, y compris quand la fusion a préféré une ligne locale plus récente.
+ *
+ * Les deux champs sont `null` quand le fichier ne contenait aucune ligne de
+ * mission : l'écran le dit alors, et n'invente rien.
+ */
+async function lireIdentiteMission(
+  missionId: string,
+): Promise<{ readonly titre: string | null; readonly fuseau: string | null }> {
+  const { base, coffre } = contexteLocal();
+  const ligne = await base.missions.get(missionId);
+  if (ligne === undefined) return { titre: null, fuseau: null };
+  const charge = await coffre.dechiffrer(ligne.charge, SCHEMA_CHARGE.missions);
+  return { titre: charge.titre, fuseau: charge.timezone };
+}
+
 export interface RapportImport {
   readonly missionId: string;
   /**
@@ -390,6 +414,20 @@ export interface RapportImport {
   readonly libelleAppareilSource: string;
   /** ISO 8601 UTC — l'instant où la sauvegarde a été produite (11 §4 `created_at`). */
   readonly sauvegardeCreeeLe: string;
+  /**
+   * Le titre de la mission restaurée — ce que l'auditeur RECONNAÎT.
+   *
+   * Un UUID sous l'étiquette « Mission » n'apprend rien à personne et n'est pas
+   * de l'interface en français (invariant 5). `null` si le fichier ne portait
+   * pas la ligne de sa propre mission.
+   */
+  readonly titreMission: string | null;
+  /**
+   * `missions.timezone` — le fuseau au titre duquel les instants de cet import
+   * s'affichent (03 §22.2, « heure locale du site »). `null` s'il est inconnu :
+   * l'écran l'avoue au lieu d'emprunter celui de l'appareil.
+   */
+  readonly fuseauMission: string | null;
   /** Lignes réellement écrites ou proposées à la fusion. */
   readonly lignesRestaurees: number;
   /**
@@ -506,9 +544,13 @@ export async function importerSauvegarde(
   // (L5a), écrite par la même porte `ecrireMeta`.
   await ecrireMeta(base, cleEmbarquement(contenu.data.missionId), maintenant());
 
+  const identite = await lireIdentiteMission(contenu.data.missionId);
+
   const operations = contenu.data.operations.length;
   return {
     missionId: contenu.data.missionId,
+    titreMission: identite.titre,
+    fuseauMission: identite.fuseau,
     libelleAppareilSource: valide.enTete.libelleAppareil,
     sauvegardeCreeeLe: valide.enTete.creeLe,
     lignesRestaurees: enregistrements.length,
