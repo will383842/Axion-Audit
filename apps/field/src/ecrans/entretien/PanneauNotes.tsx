@@ -72,7 +72,8 @@ export interface ProprietesPanneauNotes {
   readonly onRattacher: (note: NoteVolanteLocale) => void;
   readonly onDetacher: (note: NoteVolanteLocale) => void;
   readonly onSupprimer: (note: NoteVolanteLocale) => void;
-  readonly fuseau: string | undefined;
+  /** Fuseau de la mission ; `null` = inconnu, l'heure est alors rendue en UTC nommé. */
+  readonly fuseau: string | null;
   /** Identifiant DOM de la zone de note — le bouton « Note » de la barre y pose le focus. */
   readonly idNoteDeQuestion?: string;
 }

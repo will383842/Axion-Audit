@@ -53,7 +53,15 @@ const MESSAGE_ECHEC =
   'L’enregistrement sur cet appareil a échoué. Ce que vous voyez à l’écran n’est pas perdu : ' +
   'reprenez la saisie ou changez de question pour réessayer. Si cela persiste, verrouillez puis déverrouillez l’application.';
 
-export function useEnregistrementContinu(fuseau: string | undefined): EnregistrementContinu {
+/**
+ * @param fuseau Fuseau de la MISSION, pour l'heure de l'indicateur. `null` = inconnu :
+ *   l'heure est alors rendue en UTC nommé (`session/fuseau.ts`, arbitrage A01 du
+ *   2026-09-08), jamais au fuseau de l'appareil. `undefined` est ACCEPTÉ ET VAUT
+ *   `null` — il n'ouvre aucun chemin vers la machine. Le type ne se resserre pas
+ *   davantage sans amender `capteurs-gestes-enregistrement.test.tsx:471` (A26),
+ *   ce que l'auteur de la production ne fait pas (09 §5.6) : signalé, pas contourné.
+ */
+export function useEnregistrementContinu(fuseau: string | null | undefined): EnregistrementContinu {
   const [etat, setEtat] = useState<EtatEnregistrement>('inactif');
   const [horodatage, setHorodatage] = useState<string | undefined>(undefined);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -66,8 +74,8 @@ export function useEnregistrementContinu(fuseau: string | undefined): Enregistre
   );
   const file = useRef<Promise<void>>(Promise.resolve());
   const vivant = useRef(true);
-  const fuseauRef = useRef(fuseau);
-  fuseauRef.current = fuseau;
+  const fuseauRef = useRef<string | null>(fuseau ?? null);
+  fuseauRef.current = fuseau ?? null;
 
   const executer = useCallback((travail: () => Promise<unknown>): Promise<void> => {
     const tour = file.current.then(async () => {

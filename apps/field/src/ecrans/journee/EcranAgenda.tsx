@@ -321,7 +321,10 @@ export function EcranAgenda(): ReactNode {
                     <span className="axn-journee__heure">
                       {session.scheduledAt === null
                         ? '—:—'
-                        : formaterHeure(session.scheduledAt, missionCourante?.timezone)}
+                        : // `sessions` n'est rempli que par une mission lue ; si elle
+                          // disparaissait entre deux lectures, le fuseau serait INCONNU
+                          // et l'heure rendue en UTC nommé — jamais au fuseau de l'appareil.
+                          formaterHeure(session.scheduledAt, missionCourante?.timezone ?? null)}
                     </span>
                     <span className="axn-journee__details">
                       <span className="axn-journee__personne">
