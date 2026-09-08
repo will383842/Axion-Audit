@@ -5083,3 +5083,26 @@ A29 : c'est le mauvais critère, le défaut est l'ordre des effets. Levée : 2 l
 **R5 fermée par ce commit** : `AMELIORATIONS.md` déclare les trois choix d'étage 1 (~0,1 j ; compteur
 ~0,22 / 0,5) et ouvre une fiche étage 2 sur le jour civil des rituels calculé en UTC — invariant 8,
 pas 5. Les trois registres étaient muets sur L5d ; ils ne le sont plus.
+
+## 2026-09-08 23h30 — [autopilote / fin de session] — synthèse du jour, P-C à l'étape 6/7
+
+Dernier commit vert : 803f0b4 (main, #103, 21 jobs / 21) · Branche : docs/readme-journal-l5 · Poussé : non — commit et push à la main du pilote
+Tâche en cours : rien en vol sur cette branche — README `apps/field`, journal 04-08, fiche M10 + ligne L5a, ce bloc.
+Prochaine action : fusionner #104 (arbitrages, auto-merge armé), puis cette PR (docs seule) ; puis A26/A22 ferment R1-R4 d'A29 sur `lot/l5d-invariant5` et ouvrent la PR L5d.
+Tests rouges connus : aucun sur `main` ; aucune ligne de code sur cette branche.
+
+**Entré dans `main` ce jour** : #97 (R1 ancres) · #98, #99 (gouvernance : suppression de branche automatique) ·
+#101 (N1 co-visibilité, 4 combinaisons, CI verte) · #102 (D-6 : « sync par mission » = état local) ·
+#103 (décompte ZAP lu : FAIL-NEW 0 · WARN-NEW 7 · PASS 63). **#104 en cours** (7 arbitrages A01, bloc 22h25).
+**En branche** : `lot/l5d-invariant5` (3 commits, revue A29 rendue, R1 bloquante : repli UTC non gardé) ·
+L5e non ouvert (dernier succès de sync `port-sync.ts:164`, rappel au fuseau `agenda/jour.ts:252`) · cette branche.
+**P-C (recoche A02 du 08)** : 1 ferme · 6 sous réserve matérielle · 1 non tenu (n° 1, dernier succès) · DoD 7/10 ·
+invariants 7/8 + 1 écart documenté · **bloquantes 2** : NB-3-bis (ZAP : bascule = `main` rouge, D-8) et
+NB-9-bis (matrice E1-E47 : 16 doublons, 6 incréments de retard). Écarts non documentés : aucun.
+**À Williams (table §5-B)** : séance matérielle en une fois (7 critères sur 8) · novice au chronomètre (critère 6) ·
+compte auditeur de test sur staging + secret · migrations up/down sur staging · `ZAP_BLOQUANT='true'` après pile (a) et
+run 0/0/0 · trois arbitrages produit (pastille, M8, fin de journée) + M10 (fiche posée) + D-8.
+**Burn-down (journal du 08)** : ≈ 18,6 j / 26 sur `main` (72 %), à plat depuis le 06 ; reste ≈ 7,4 j dont **L6 4,3 non
+entamé** ; L8 2 j hors référence. P-DESCOPE dans 7 jours, D-1 inchangée depuis le 03.
+**Non fait, à dire** : `git log` non rejoué (session sans `Bash`) — jour exact d'entrée de L5b/L7b/E18/L8 borné par ETAT ;
+`prettier`, `check:prose`, `check:decisions` : joués par le pilote avant le commit, tous verts.
