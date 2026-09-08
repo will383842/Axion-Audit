@@ -29,7 +29,7 @@
 | L2    | ~0,3 j   | 0,5 j   | ~0,2 j                                                                                                                                                    |
 | L3a   | ~0,1 j   | 0,5 j   | ~0,4 j                                                                                                                                                    |
 | L3b-d | ~0,15 j  | 0,5 j   | ~0,35 j — plafonds explicites (120 s) sur deux crochets de tests L2, port de sync L5a déplacé hors du glob réservé à L6a ; le reste est d'étage 2 (A-007) |
-| L5b   | ~0,1 j   | 0,5 j   | ~0,4 j                                                                                                                                                    |
+| L5b   | ~0,12 j  | 0,5 j   | ~0,38 j — libellé du dépliant des ancres rendu vrai dans les deux états (A21, 2026-09-07)                                                                 |
 | L5c   | ~0,05 j  | 0,5 j   | ~0,45 j — identité de la sauvegarde restaurée (A27, 2026-09-06)                                                                                           |
 
 ---
@@ -2467,3 +2467,84 @@ illisible, série vide légitime). Impact schéma **aucun** · API **aucun** · 
 périmètre **aucun**.
 
 **Arbitrage Williams :** ☐ ABSORBÉE ☐ PHASE 2 ☐ REFUSÉE
+
+## 2026-09-07 — [L5b] Étage 1 — le dépliant des ancres disait « Voir » ce qui était déjà ouvert
+
+**Constat (A21, pendant le correctif R1).** L'arbitrage A01 du jour ouvre par défaut le dépliant des
+cinq ancres de cotation (`ancresDepliees`, défaut `true`, 03 §33.5 : « ancres DÉPLIÉES »). Son
+`<summary>` continuait d'annoncer « **Voir** toutes les ancres de cotation » — une invitation à
+ouvrir ce qui est ouvert. Intitulé rendu vrai dans les deux états : « Toutes les ancres de cotation ».
+
+**Pourquoi c'est de l'étage 1** : ni le schéma 04, ni l'API, ni la crypto, ni le périmètre
+fonctionnel. Un libellé, et il découle mécaniquement d'un correctif déjà arbitré.
+
+**Ce que ça a coûté, et il faut le dire** : une divergence de contrat entre A21 et A26, qui asserait
+l'ancien libellé — 1 cas rouge sur 36, rendu à A26 plutôt que corrigé par le pilote (09 §5.6). La
+leçon n'est pas le libellé, c'est que **deux agents en parallèle sur un même composant ont besoin
+que le contrat nomme aussi les chaînes d'interface**, pas seulement le comportement.
+
+Coût : négligeable (~0,02 j). **Compteur L5b : ~0,12 j consommé sur 0,5 j.**
+
+## 2026-09-07 — [L5b/R1] Étage 1 EN ATTENTE — la fiche `/design` démontre les crans dérivés sans les nommer
+
+**Constat (A21, relayé par A01).** `apps/hq/src/ecrans/design/fiches-metier.tsx` illustre déjà les
+crans dérivés — la fiche passe des ancres `[1, 3, 5]`, donc les crans 2 et 4 s'y rendent dérivés —
+mais son texte de propos ne les mentionne pas : un lecteur voit la marque « Ancre dérivée » sans
+savoir qu'elle est attendue.
+
+**NON EXÉCUTÉE, et le motif est de périmètre, pas de coût.** Nous sommes sous 09 §4bis (porte
+refusée : seuls les correctifs de ses critères sont autorisés), et `apps/hq/**` est le territoire du
+chantier C3. A01 : « la fiche `/design` est un catalogue : elle illustre, elle ne prouve pas ». La
+preuve de R1 pour la porte, ce sont le E2E sur émulation iPad avec la fixture corrigée, les tests
+d'interface et le rejeu d'A54 — pas cette phrase.
+
+À prendre par **A30** dans le flux normal de C3, **après** la porte. Coût : une phrase.
+
+## 2026-09-07 — [L5] DÉFAUT SUSPECTÉ, À MESURER — hors périmètre 09 §4bis, arbitrage à la porte
+
+**RECTIFIÉE le 2026-09-07 après vérification d'A01. La première rédaction de cette fiche — la
+mienne — affirmait trop.** Elle est conservée ici sous sa forme corrigée, et l'erreur est dite parce
+qu'elle est instructive.
+
+**Le constat d'origine (A21, en balayant au-delà de son périmètre avec la sonde d'A29).** Le défaut
+R-2 du correctif R1 — deux `<span>` frères séparés par un simple retour à la ligne, que JSX supprime,
+donc **collés dans le nom accessible** — semblait se répéter dans
+`apps/field/src/ecrans/journee/EcranAujourdhui.tsx:131-138` et `EcranAgenda.tsx` : « 09h30Marie
+DupontEntretien » à la synthèse vocale. A21 avait écrit « **vraisemblablement** » ; j'ai porté le
+constat en durcissant ce mot, et c'est ma faute.
+
+**Ce qu'A01 a vérifié, et que je n'avais pas regardé : le CSS.** `journee.css:78-92` —
+`.axn-journee__heure` porte `flex: 0 0 auto` (son parent est donc flex) et `.axn-journee__details`
+est `display: flex; flex-direction: column`. **Ces `<span>` sont des éléments flex, donc
+blockifiés**, et l'algorithme de nom accessible insère une séparation entre nœuds de niveau bloc. Le
+nom rendu est vraisemblablement `09h30 Marie Dupont Entretien · …`, **correct**. Le cas
+d'`EchelleAncree` était différent : ses spans étaient réellement **inline** dans un `<dd>`.
+
+**La leçon, et c'est celle du §5 de `REPRISE_AUTOPILOTE.md` resservie** : une affirmation vraie (« ce
+motif JSX colle les noms accessibles ») en a fait passer une fausse (« donc ces deux écrans sont
+atteints ») parce que personne n'a vérifié le pas entre les deux — ici, le `display` calculé. Et
+`jsdom` ne pouvait pas trancher : il ne calcule **ni la visibilité ni le nom accessible**, donc une
+sonde sur `textContent` voit « 09h30Marie Dupont » que le défaut existe ou non.
+
+**CE QUI RESTE DÛ POUR RENDRE CETTE FICHE ARBITRABLE** — sinon la porte statuerait sur un fantôme :
+
+1. **Une mesure, pas une prédiction** : `accessibleName()` sur le rôle `button` dans le Chromium réel
+   déjà employé par A26 et A54 — trois écrans, trois valeurs relevées.
+2. **Le périmètre réel de la famille** : rejouer la sonde d'A29 en distinguant les enfants
+   **blockifiés** (probablement sains) des enfants **restés inline** (seuls suspects). Ce tri donnera
+   le coût, peut-être très inférieur à ce que la sonde brute annonce.
+3. **Le remède, qui n'est PAS celui d'`EchelleAncree`** : sur un **contrôle**, le bon correctif est un
+   `aria-label` explicite en français composé côté écran — déterministe quel que soit le `display`
+   calculé. Le nœud de texte imposé dans la `<dd>` valait pour du **contenu**, pas pour un nom
+   accessible. Deux mécanismes, deux remèdes ; les confondre produirait une correction qui dépend
+   d'une ligne de CSS que le prochain refactor déplacera.
+4. **La leçon transverse, et c'est le vrai enjeu** : **`axe-core` est VERT** sur cette famille. Notre
+   DoD coche « axe-core vert » et nous avons lu cette case comme « le nom accessible est correct » —
+   **elle ne le dit pas**. Une garde de nom accessible en navigateur réel serait à instruire, et
+   c'est plus large que trois écrans. **À porter par A02 au contrôle de traçabilité.**
+
+**Classement, exact plutôt qu'ordonné** : ce n'est **pas** de l'étage 2 (aucune fonctionnalité ne
+manque), et son traitement d'étage 1 est **suspendu par 09 §4bis** (porte refusée, périmètre gelé).
+La mesure, elle, est autorisée sous périmètre gelé — elle ne modifie aucun fichier de production.
+L'écran « Aujourd'hui » étant le critère 07 n° 1, c'est à la porte d'arbitrer, **avec le relevé sous
+les yeux**.

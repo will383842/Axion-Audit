@@ -693,6 +693,23 @@
   color: var(--couleur-texte-secondaire);
 }
 
+/* Marque des crans DÉRIVÉS (2 et 4, quand la banque ne les documente pas). Elle
+   porte des MOTS — « Ancre dérivée » —, jamais une teinte seule : §33.6 interdit
+   qu'une information tienne à la couleur. Le cadre et la graisse ne font que la
+   détacher du texte qu'elle qualifie. */
+.axn-choix__derivee {
+  margin-inline-end: var(--espacement-2);
+  padding-inline: var(--espacement-2);
+  border: var(--taille-bordure-epaisseur) solid var(--couleur-bordure-nette);
+  border-radius: var(--taille-rayon-petit);
+  font-size: var(--typo-taille-xs);
+  font-weight: var(--typo-graisse-semi);
+  /* Secondaire et non tertiaire : à 0,75 rem, le tertiaire tombe à 4,49:1 sur la
+     surface enfoncée — sous le seuil AA d'un cheveu, et pour un mot qui qualifie
+     la phrase à côté de lui. */
+  color: var(--couleur-texte-secondaire);
+}
+
 .axn-choix__toutes-ancres {
   font-size: var(--typo-taille-sm);
   color: var(--couleur-texte-secondaire);

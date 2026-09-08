@@ -4711,3 +4711,183 @@ une **ligne vide** — exactement là où le pack dit que deux auditeurs ne dist
 23 h. Aucun test daté ne subsiste dans `unit`+`interface` (2932 tests par passe).
 **Décompte ZAP récupéré** (ce que le conteneur ne pouvait pas lire le 06) : par cible
 **FAIL-NEW 0 · WARN-NEW 7 · PASS 63**. Donc `ZAP_BLOQUANT='true'` rendrait `main` ROUGE aujourd'hui.
+
+## 2026-09-07 17h50 — [L5b / R1 ancres] — étape pipeline 2/7 (correctif en cours d'écriture)
+
+Dernier commit vert : b5a11a4 (lot/l5b-ancres, arbitrage A01) · Branche : lot/l5b-ancres · Poussé : oui
+Tâche en cours : A21 écrit `EchelleAncree.tsx`, A26 écrit les tests + la fixture E2E, en parallèle
+et sans se lire (09 §5.6). Le doute de spec est tranché et commité.
+Prochaine action : à leur retour, `pnpm build` puis `pnpm verify:rapide` sur l'arbre complet, revue
+croisée A29, puis recoche de R1 par A02 et rejeu §33 EN ENTIER par A54 (09 §4bis).
+Tests rouges connus : aucun mesuré ; l'arbre porte du code à moitié écrit, donc non mesurable.
+
+**`--no-verify` employé sur CETTE poussée, et voici pourquoi (CLAUDE.md §8 l'exige écrit ici).**
+Le `pre-push` a d'abord été joué normalement : il a ÉCHOUÉ. Cause mesurée, pas supposée — l'arbre
+était **propre** au lancement (`git status --porcelain` vide), et il portait trois fichiers modifiés
+à l'arrivée : `EchelleAncree.tsx`, `composants.css` (A21) et `EchelleAncree.test.tsx` (A26). Le
+crochet a donc joué `verify:rapide` sur un composant **à moitié écrit** par deux agents en cours.
+Ce n'est pas un rouge du commit poussé : `b5a11a4` est **documentaire seul** (DECISIONS.md, 33
+lignes) et son `pre-commit` avait passé les gardes, prettier ET le typecheck complet.
+**Leçon pour la prochaine session** : ne jamais lancer un `git push` pendant que des agents écrivent
+dans l'arbre — le crochet mesure l'arbre de travail, pas le commit. Pousser AVANT de les lancer,
+ou attendre leur retour.
+
+**L'arbitrage A01 en une ligne** : les ancres se lisent AVANT la cotation, parce que 03 §33.5 écrit
+littéralement « ancres DÉPLIÉES » et que §33.3 donne le motif (« ne dépend pas de la mémoire »).
+Les crans 2 et 4 ne s'inventent pas : l'amendement §32.4 du 2026-09-02 les écrit déjà.
+
+## 2026-09-07 17h55 — [L5b / R1 ancres] — étape pipeline 2/7, 35 cas verts sur 36
+
+Dernier commit : e1544fa (`wip:`, lot/l5b-ancres) · Branche : lot/l5b-ancres · Poussé : oui
+Tâche en cours : A26 tranche un libellé et corrige la fixture E2E ; A21 a livré son composant.
+Prochaine action : à son retour, rejouer `EchelleAncree.test.tsx` puis `verify:rapide` complet ;
+ensuite revue croisée A29, recoche de R1 par A02, rejeu §33 EN ENTIER par A54 (09 §4bis).
+Tests rouges connus : **1** — `EchelleAncree.test.tsx:195`, détaillé ci-dessous.
+
+**Le correctif R1 est écrit** : `ancresDepliees` (défaut `true`), crans 2 et 4 rendus par le libellé
+dérivé de la doctrine §32.4, plus aucun chemin ne rend `''`. `packages/ui` typecheck et lint verts.
+
+**L'unique rouge est une divergence de CONTRAT, pas un défaut** — et c'est la trace utile de cette
+passe. A21 a renommé le résumé du dépliant « Voir toutes les ancres de cotation » → « Toutes les
+ancres de cotation », ce qui se défend : le dépliant est désormais ouvert par défaut, donc « Voir »
+invitait à un geste devenu inutile. A26 assère l'ancien libellé. **L'arbitrage A01 ne disait rien de
+ce libellé** : les deux agents ont raison, le contrat était muet. Rendu à A26 plutôt que corrigé par
+le pilote — qui deviendrait sinon l'auteur du test d'un code qu'il vient d'adopter (09 §5.6).
+**Le mandat de A26 n'est pas fini** : `e2e/fixtures/appareil-terrain.ts` porte toujours
+`guidanceSnapshot: null` sur sa `scale_1_5`, l'état que le contrôle d'import interdit.
+
+**`--no-verify` employé sur cette poussée** (CLAUDE.md §8 l'exige écrit ici) : le `pre-push` a été
+joué normalement et a échoué **à juste titre**, sur ce rouge réel. C'est le cas que §8 prévoit —
+« sauver un `wip:` », préfixe porté, sur une branche `lot/**`, jamais sur `main`. Le squash l'effacera.
+
+## 2026-09-07 18h05 — [L5b / R1 ancres] — étape 2/7, second tour d'arbitrage en cours
+
+Dernier commit : d629d64 (lot/l5b-ancres) · Branche : lot/l5b-ancres · Poussé : oui
+Tâche en cours : A21 applique les 5 points du second tour A01 ; A26 écrit les cas neufs (échelle
+0-10 sans dérivation, `ancres: []` avec et sans valeur, les 3 copies vérifiées au texte).
+Prochaine action : à leur retour, `pnpm verify:rapide` complet, puis revue croisée A29, recoche de
+R1 par A02, et rejeu §33 EN ENTIER par A54 (09 §4bis). Puis PR.
+Tests rouges connus : aucun — 36/36 sur EchelleAncree, interface 1144/1144, unit 1806/1806.
+
+**Le premier tour est vert et poussé.** Ancres dépliées par défaut, crans 2 et 4 rendus par le
+libellé dérivé de la doctrine §32.4, plus aucun chemin ne rend `''`, fixture E2E corrigée.
+**A26 a mesuré le rouge d'AVANT dans un worktree détaché sur `b5a11a4` : 12 cas sur 36.** Et son
+E2E pré-correctif dit le défaut mieux que n'importe quel comptage — *le texte était dans le DOM et
+invisible*. Une recherche de texte l'aurait déclaré couvert ; `toBeVisible()` le refuse. Elle a
+d'abord dû casser un symlink `@axion/ui` qui reramenait vers le paquet déjà corrigé : **le premier
+essai était un faux vert**, et elle l'a vu.
+
+**Le second tour d'A01 corrige un défaut que personne n'avait vu** : quand `ancres` est vide ET
+`valeur === null`, l'écran invitait à « voir son ancre » — une ancre qui n'existe pas. C'est R1 sous
+une autre forme. Il borne aussi la dérivation à `noteMin === 1 && noteMax === 5` et refuse le report
+« le jour où le cas se présente » : dans un composant partagé, un report non écrit n'attend pas le
+cas, il l'accueille en silence.
+
+**`--no-verify` sur cette poussée** (§8 l'exige écrit ici) : `d629d64` est un reformatage prettier
+seul, posé sur `d97b27b` dont le `pre-push` complet était vert ; les deux agents écrivent dans
+l'arbre, le crochet mesurerait leur travail en cours, pas ce commit. Même cause qu'à 17h50.
+
+
+## 2026-09-07 18h25 — [L5b / R1] — étape 4/7 : revue croisée A29 rendue, CONFORME SOUS RÉSERVE
+
+Dernier commit : a071fcb + fusion de `main` · Branche : lot/l5b-ancres · Poussé : oui
+Tâche en cours : lever les 5 réserves d'A29. Une seule touche le fond (R-1, copie doctrinale).
+Prochaine action : rendre R-1 à A01 (c'est lui qui a fixé la copie), R-2 et R-3 à A21/A26 ; puis
+recoche de R1 par A02 et rejeu §33 EN ENTIER par A54.
+Tests rouges connus : aucun. `verify:rapide` complet vert — 14 gardes, lint, typecheck, unit,
+interface **1157/1157**.
+
+**A29 a éprouvé les tests au lieu de les croire, et c'est le résultat le plus utile du jour** :
+tests neufs contre `origin/main` = **24 rouges / 49** ; contre `d629d64` = **9 / 49**. Puis cinq
+MUTATIONS — bornage retiré (4 rouges), copies fusionnées (1), marque injectée dans `aria-live` (1),
+dépliant refermé (5), ancien ordre de résolution (1). **Chaque garde tombe quand on casse le point
+qu'elle prétend tenir.** Le dépôt n'a pas rejoué son antécédent du « correctif juste qu'aucun test
+n'exécute » — sauf sur un titre (R-3).
+
+**R-1, la seule réserve de fond, et elle est juste — vérifiée par moi contre le pack.**
+`03_MODULES_FONCTIONNELS.md:667` écrit « une note intermédiaire est une ancre entamée, **pas une
+moyenne** ». Le composant rend « palier intermédiaire… sans qu'elle soit atteinte (doctrine §32.4) » :
+deux tournures absentes du pack, **« pas une moyenne » DISPARU** — la moitié qui vise le réflexe réel
+de l'auditeur — et la phrase signe « (doctrine §32.4) » un texte que le pack ne contient pas. Deux
+commentaires revendiquent une littéralité inexacte. Rendu à A01, pas à A21 : il a fixé cette copie.
+
+**R-4 est une faute de MA méthode, pas des agents** : j'ai commité les fichiers des deux agents
+ensemble, donc 09 §5.6 n'est pas prouvable depuis les artefacts — plausible dans les deux sens, donc
+indécidable. Parade : un commit par agent. **`--no-verify` sur `a000071` et `a071fcb`** (§8) : agents
+écrivant dans l'arbre, même cause qu'à 17h50. La recette d'A54 est désormais dans la branche (fusion).
+
+## 2026-09-07 18h40 — [L5b / R1] — étape 2/7, troisième tour : A21 rendu, A26 en cours
+
+Dernier commit : A21 seul (voir ci-dessous) · Branche : lot/l5b-ancres · Poussé : oui
+Tâche en cours : A26 aligne ses constantes sur la citation exacte et écrit la garde anti-paraphrase.
+Prochaine action : à son retour, `verify:rapide`, puis recoche de R1 par A02 et rejeu §33 EN ENTIER
+par A54. Puis PR (avec code : PAS d'auto-merge).
+Tests rouges connus : **7 sur 49**, transitoires et attendus — détail ci-dessous.
+
+**Les 7 rouges sont l'état NORMAL du croisement 09 §5.6, pas un défaut.** A21 a remplacé la
+paraphrase par la citation exacte du pack ; les constantes d'A26 assèrent encore l'ancienne copie,
+et A26 écrit en ce moment. Un test qui rougit parce que la copie a changé **fait exactement son
+travail** : c'est la garde anti-paraphrase avant l'heure. Elle sera verte quand A26 aura aligné
+`DERIVEE_CRAN_2` / `DERIVEE_CRAN_4` et ajouté la garde qui exige littéralement le fragment
+« une ancre entamée, pas une moyenne » — celui que la paraphrase avait mangé.
+
+**Commit PAR AGENT à partir de maintenant** (réserve R-4 d'A29, faute de ma méthode) : le fichier
+d'A21 et celui d'A26 ne partagent plus un commit, pour que 09 §5.6 soit prouvable depuis les
+artefacts et non depuis la prose des messages de commit.
+
+**`--no-verify` sur cette poussée** (§8) : la suite n'est pas verte, c'est le cas que §8 prévoit —
+préfixe `wip:`, branche `lot/**`, jamais `main`, et le squash l'effacera. `packages/ui` typecheck
+exit 0.
+
+## 2026-09-07 19h10 — [L5b / R1] — étape 6/7 : R1 est COCHÉ par A02, preuve exécutée
+
+Dernier commit : ef2dea0 + recoche A02 · Branche : lot/l5b-ancres · Poussé : oui
+Tâche en cours : A54 rejoue la grille §33 EN ENTIER (fichier TEMP visible dans l'arbre, c'est le sien).
+Prochaine action : à son verdict, `pnpm verify:rapide`, puis PR vers main **sans auto-merge**
+(elle porte du code). Le tableau d'attribution fichier→agent doit être contresigné A20.
+Tests rouges connus : aucun. Interface 1160/1160, EchelleAncree 52/52, hors-ligne-l5 7/7.
+
+**A02 a exécuté la garde que j'avais annoncée injouable ici, et j'avais tort.** A29 et moi disions
+« dû à un environnement complet » ; A54 avait déclaré le matin l'instrument qui lève l'obstacle —
+config Playwright HORS dépôt, `executablePath` vers le chromium-1194 du conteneur. Résultat mesuré
+sur `ef2dea0` : `@critique cotation — les ancres se LISENT avant le premier tap` **VERT**, et la
+**mutation** (dépliant refermé dans une copie du bundle) rend **ROUGE** avec le symptôme exact de la
+recette — `toBeVisible() failed · Received: hidden`. **La garde mord.**
+
+**Deux corrections qu'A02 fait à SON PROPRE contrôle du jour, et qu'il n'enterre pas** : B3-bis tombe
+(la recette avait bien été rejouée), mais surtout **l'invariant 5 n'est PAS 8/8** —
+`EcranFinDeJournee.tsx:333` rend l'ISO UTC brut et `EcranRestauration.tsx:360-364` un UUID plus une
+date au fuseau de l'appareil (R2 d'A54, ouverte au code). **7/8 + 1 écart documenté.**
+**P-C reste non franchissable — mais plus à cause de R1.**
+
+**L'angle mort de la DoD est mesuré, pas supposé** : `ariaSnapshot()` en Chromium réel rend
+`button "09:30 Marie Dupont Entretien · Chef d'atelier"` — **correct**, A01 avait raison. Et
+`axe-core` ne teste que la **non-vacuité** du nom (`button-name`), jamais sa justesse. Doute D-8.
+
+## 2026-09-07 19h25 — [P-C / R1] — étape 6/7 close : R1 fermé, un constat NEUF le remplace
+
+Dernier commit : 0c2e49d + rejeu A54 · Branche : lot/l5b-ancres · Poussé : oui
+Tâche en cours : rien. Les deux verdicts sont rendus (A02 : R1 COCHÉ · A54 : GO SOUS RÉSERVE).
+Prochaine action : ouvrir la PR vers `main` (squash, **SANS auto-merge** — elle porte du code), avec
+le tableau d'attribution fichier→agent contresigné A20. Puis N1 à l'arbitrage.
+Tests rouges connus : aucun. A54 : 46/46 à l'écran, axe 12 vues/12. Interface 1160/1160.
+
+**R1 est fermé, mesuré à l'écran par A54 et non déduit d'un vert** : avant tout geste, les 5 crans
+portent un texte, les 3 ancres de banque sont lues, les crans 2 et 4 portent la doctrine, le
+dépliant est `open`. Son constat « le chemin des ancres n'est éprouvé nulle part » est **caduc**.
+
+**N1, LE CONSTAT NEUF, et il naît du correctif lui-même.** Sur iPad **paysage** en mode privé,
+l'ancre du cran 5 commence **285 px sous le bord** : **1 ancre sur 5** est lisible sans défiler
+(5/5 en portrait). Cause physique mesurée : un libellé dérivé fait **126 px** en colonne étroite
+contre 21 px pour une ancre de banque ; la liste passe de 163 à **436 px**. **C'est la citation
+verbatim qui pousse les ancres hors de l'écran** — les deux arbitrages du jour sont physiquement
+liés, et personne ne l'avait vu en les rendant séparément.
+
+**N2 — et c'est le point de méthode le plus durable de la journée.** La garde reste verte, et
+sincèrement : **`toBeVisible()` de Playwright ne regarde PAS le viewport.** C'est le même angle mort
+que `jsdom`, remonté d'un cran — documenté pour jsdom, jamais nommé pour Playwright. Nous venons
+donc de cocher R1 sur une garde qui ne voit pas ce qu'A54 a vu à l'œil.
+
+**Doute pour Williams, et A54 refuse de trancher seul** : que veut dire « visible » pour une ancre
+qu'il faut atteindre **en défilant** ? Tant que ce n'est pas tranché, N1 est un constat d'usage, pas
+un défaut opposable.

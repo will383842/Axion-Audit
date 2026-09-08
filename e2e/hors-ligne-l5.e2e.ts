@@ -41,7 +41,10 @@
 // =============================================================================
 import { devices, expect, test, type BrowserContext, type Page } from '@playwright/test';
 import {
+  ANCRES_ECHELLE_FIL_TPE,
+  CONSIGNE_ECHELLE_FIL_TPE,
   deverrouillerAppareil,
+  GUIDANCE_ECHELLE_FIL_TPE,
   lireTableLocale,
   MISSION_FIL_TPE,
   MOT_DE_PASSE_APPAREIL,
@@ -50,9 +53,17 @@ import {
   planterAppareil,
   preparerAppareilNeuf,
   PREMIERE_QUESTION,
+  QUESTION_ECHELLE,
   semerAppareil,
   URL_TERRAIN,
 } from './fixtures/appareil-terrain.js';
+// Le parseur du PACK, importé tel quel : c'est lui qui juge la guidance à
+// l'import comme à l'écran. Une seconde lecture écrite dans le test dirait un
+// jour autre chose que lui, et c'est le test qui aurait tort sans le savoir.
+// `@axion/shared` n'étant pas une dépendance de la racine (voir l'en-tête de
+// `scripts/check-fixtures-contrat.mjs`), on l'atteint par son chemin, comme la
+// fixture atteint déjà la crypto de `apps/field`.
+import { ANCRES_REQUISES, lireAncresDeCotation } from '../packages/shared/src/banque-questions.js';
 
 /**
  * Les options que `browser.newContext()` n'hérite PAS de `playwright.config.ts`.
@@ -542,4 +553,149 @@ test('@critique export de secours produit hors ligne, puis restauré sur un SECO
   expect(file.length, 'aucune opération réinjectée — l’écran l’annonce, le test le fige').toBe(0);
 
   await secours.close();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// R1 — « ANCRES DE COTATION VISIBLES », CRITÈRE NOMMÉ DE LA PORTE P-C
+//
+// Recette A54 du 2026-09-07, arbitrage A01 du même jour (DECISIONS.md, commit
+// b5a11a4). Deux tests, et ils ne mesurent pas la même chose :
+//   · le premier juge la FIXTURE — un faux témoin ne peut plus revenir ;
+//   · le second juge l'ÉCRAN, au doigt, sur une dalle d'iPad, réseau coupé.
+//
+// La copie exacte des libellés dérivés (crans 2 et 4) est figée par les tests
+// unitaires du composant (`packages/ui/src/composants/EchelleAncree.test.tsx`),
+// là où elle se compare au caractère près. Ici on éprouve ce que l'AUDITEUR
+// obtient : du texte, avant d'avoir touché quoi que ce soit.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('@critique fixture — la question à échelle porte des ancres que la banque ACCEPTERAIT', () => {
+  // ── CE QUE CE TEST EMPÊCHE DE REVENIR ──────────────────────────────────────
+  // La fixture portait `guidanceSnapshot: null` sur une `scale_1_5` : zéro
+  // ancre, état qu'un contrôle BLOQUANT de l'import refuse (§32.4,
+  // `ANCRES_ABSENTES`). Aucun appareil réel ne peut recevoir cette question.
+  // Le test d'écran passait donc au vert sur une donnée impossible, et le
+  // critère de porte n'était éprouvé nulle part.
+  //
+  // Il ne recopie AUCUN seuil : `ANCRES_REQUISES` est lu dans le pack. Le jour
+  // où Williams tranchera pour `[1, 2, 3, 4, 5]` (question escaladée par
+  // l'arbitrage), ce test deviendra rouge tout seul et la fixture suivra — ce
+  // qui est exactement ce qu'on attend d'une garde.
+  const lu = lireAncresDeCotation(GUIDANCE_ECHELLE_FIL_TPE);
+
+  const niveauxLus = lu.ancres.map((ancre) => ancre.niveau);
+  for (const requis of ANCRES_REQUISES) {
+    expect(niveauxLus, `l’ancre ${String(requis)} est exigée par le §32.4`).toContain(requis);
+  }
+
+  // Un niveau annoncé sans libellé n'est pas une ancre, c'est une promesse
+  // d'ancre : le parseur les compte à part, et l'import les refuse.
+  expect(lu.niveauxSansLibelle, 'aucune ancre sans définition').toEqual([]);
+  expect(lu.niveauxHorsEchelle, 'aucun niveau hors de l’échelle 1-5').toEqual([]);
+  for (const ancre of lu.ancres) {
+    expect(ancre.libelle.trim(), `le niveau ${String(ancre.niveau)} est défini`).not.toBe('');
+  }
+
+  // Les libellés relus sont EXACTEMENT ceux que la fixture déclare : c'est ce
+  // qui autorise le test d'écran à les chercher tels quels.
+  expect(lu.ancres).toEqual(
+    ANCRES_ECHELLE_FIL_TPE.map((ancre) => ({ niveau: ancre.niveau, libelle: ancre.libelle })),
+  );
+
+  // La consigne consultant survit à l'extraction des ancres (03 M3.1, §17.5) :
+  // sans elle, la moitié de la guidance ne serait rendue nulle part.
+  expect(lu.consigne).toBe(CONSIGNE_ECHELLE_FIL_TPE);
+});
+
+test('@critique cotation — les ancres se LISENT avant le premier tap (iPad émulé, hors ligne)', async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  const contexte = await browser.newContext({
+    ...OPTIONS_COMMUNES,
+    ...devices['iPad (gen 7) landscape'],
+  });
+  const page = await contexte.newPage();
+
+  await planterAppareil(page, await semerAppareil(MOT_DE_PASSE_APPAREIL));
+  await passerEnModeAvion(contexte, page);
+  await deverrouillerAppareil(page, MOT_DE_PASSE_APPAREIL);
+
+  await page.getByRole('button', { name: /l’agenda/ }).click();
+  await page.getByLabel('Type de session').selectOption({ label: 'Entretien' });
+  await page.getByLabel('Nom de l’interlocuteur').fill('Interlocuteur cotation');
+  await page.getByLabel('Fonction').fill('Chef d’atelier');
+  await page.getByLabel('Créneau').fill(creneauDuJour(11));
+  await page.getByRole('button', { name: 'Planifier' }).click();
+  await expect(page.getByText('Session planifiée.')).toBeVisible();
+  await page.getByRole('button', { name: 'Retour' }).click();
+
+  await page.getByRole('button', { name: /Interlocuteur cotation/ }).click();
+  await page.getByLabel('Accord de participation recueilli').check();
+  await page.getByRole('button', { name: 'Démarrer l’entretien' }).click();
+  await expect(page.getByRole('heading', { name: PREMIERE_QUESTION })).toBeVisible();
+
+  // Deux « Suivant » pour atteindre la question à échelle. Ce sont les SEULS
+  // gestes posés : rien n'a touché l'échelle, ni du doigt ni au clavier.
+  await page.getByRole('button', { name: /^Suivant/ }).click();
+  await page.getByRole('button', { name: /^Suivant/ }).click();
+  await expect(page.getByRole('heading', { name: QUESTION_ECHELLE })).toBeVisible();
+
+  const echelle = page.getByRole('group', { name: 'Votre cotation' });
+  await expect(echelle).toBeVisible();
+
+  // ① Rien n'est coté — la lecture des ancres ne doit RIEN avoir posé.
+  await expect(
+    echelle.locator('input[type="radio"]:checked'),
+    'aucune note n’a été posée à ce stade',
+  ).toHaveCount(0);
+
+  // ② Les trois ancres de banque sont LUES À L'ÉCRAN. `toBeVisible` est ici la
+  // seule assertion qui vaille : dans un `<details>` fermé, ces textes sont
+  // DANS le DOM et invisibles — c'est précisément le défaut R1, et une
+  // recherche de texte l'aurait déclaré couvert.
+  for (const ancre of ANCRES_ECHELLE_FIL_TPE) {
+    await expect(
+      echelle.getByText(ancre.libelle, { exact: false }),
+      `l’ancre ${String(ancre.niveau)} doit être lisible sans aucun geste`,
+    ).toBeVisible();
+  }
+
+  // ③ La consigne consultant est là, à sa place, au centre (03 M3.1).
+  await expect(page.getByText(CONSIGNE_ECHELLE_FIL_TPE)).toBeVisible();
+
+  // ④ La ligne d'ancre invite à coter — jamais une bande blanche.
+  const ligneAncre = echelle.locator('.axn-choix__ancre');
+  await expect(ligneAncre).toHaveText('Sélectionnez une note pour voir son ancre.');
+
+  // ── LE PREMIER TAP, ENFIN — sur le cran 2, celui que la banque n'ancre pas ──
+  // On tape le LIBELLÉ, pas l'input : le contrôle radio est masqué visuellement
+  // (technique de recouvrement accessible), et c'est bien la pastille que le
+  // doigt de l'auditeur atteint.
+  await echelle
+    .locator('.axn-choix__option')
+    .filter({ has: page.locator('input[value="2"]') })
+    .tap();
+
+  await expect(echelle.locator('input[value="2"]')).toBeChecked();
+  // Le cran 2 n'a pas d'ancre de banque (`ANCRES_REQUISES = [1, 3, 5]`) : c'est
+  // ici que l'écran rendait une ligne VIDE dans un bloc à hauteur réservée. Il
+  // doit maintenant dire comment coter. La phrase entière est figée par les
+  // tests unitaires du composant ; ce qui se mesure ici, c'est qu'elle arrive
+  // jusqu'à la dalle — et on y cherche le fragment qu'une paraphrase avait déjà
+  // mangé une fois (doctrine 3 du §32.4, 03:667), parce que c'est LUI qui
+  // corrige le geste de l'auditeur et non l'habillage autour.
+  await expect(ligneAncre).toContainText('une ancre entamée, pas une moyenne');
+  await expect(ligneAncre).not.toHaveText('');
+
+  // La cotation est ÉCRITE, pas seulement affichée : sans cette ligne, l'écran
+  // aurait pu montrer une ancre pour une note que personne n'a enregistrée.
+  await expect
+    .poll(async () => (await lireTableLocale(page, 'answers')).length, {
+      message: 'la cotation doit être une ligne locale',
+      timeout: 20_000,
+    })
+    .toBe(1);
+
+  await contexte.close();
 });

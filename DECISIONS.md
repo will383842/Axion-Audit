@@ -11185,3 +11185,123 @@ n'implémente pas encore.
 Décideur : **Williams** (question posée par **A51** le 2026-09-07).
 Impact spec : aucun. La condition d'A01 du 2026-09-05 n'est pas amendée — elle est **constatée
 ambiguë** sur son mécanisme, et la présente entrée porte la question et sa date.
+
+## 2026-09-07 — [L5b] Les ancres de cotation doivent-elles être lisibles AVANT toute interaction ?
+
+R1 de la recette A54 du jour. Sur `scale_1_5`, `EchelleAncree` n'affiche l'ancre qu'au survol, au
+focus ou après cotation (`affichee = survolee ?? valeur`, ligne 77) ; les cinq ancres dorment
+derrière un `<details>` sans `open` (ligne 135) ; les crans 2 et 4 rendent une chaîne vide dans un
+bloc à hauteur réservée, donc une ligne blanche (ligne 131). Au doigt il n'y a ni survol ni focus :
+l'auditeur cote d'abord et comprend ensuite. « Ancres visibles » est un critère NOMMÉ de P-C (07:24).
+
+Options :
+a) L'état actuel tient la lettre de §33.3 (« sous le curseur » = sous la valeur courante) : on
+documente l'écart et on coche le critère.
+b) Ancres rendues SANS interaction, dépliant ouvert par défaut ; les crans 2 et 4 portent le
+libellé dérivé de la doctrine 3 (§32.4) ; la ligne d'ancre n'est jamais vide.
+c) b) plus l'abandon du dépliant au profit d'un libellé sous chaque cran (refonte de mise en page).
+
+Arbitrage : b).
+Précédence §32-36 (00_INDEX) : deux textes de la bande haute concordent et priment. §33.3 donne le
+MOTIF — « la cotation homogène ne dépend pas de la mémoire du consultant » : une ancre qui
+n'apparaît qu'APRÈS la note ne soutient plus la décision, elle la commente. §33.5 est littéral :
+« ÉchelleAncrée (slider 1-5 + ancres DÉPLIÉES) » — un dépliant fermé contredit le mot. a) tombe.
+Pour les crans 2 et 4, on n'invente aucun texte : l'amendement §32.4 du 2026-09-02 (doctrine 3,
+Williams) dit « la note 2 (resp. 4) exige au moins un élément établi de l'ancre 3 (resp. 5) » et
+« prime sur toute lecture locale d'une guidance ». C'est cette phrase qui se rend, marquée comme
+DÉRIVÉE et non comme ancre de banque — jamais un blanc, jamais un « entre X et Y » qui situe sans
+dire comment coter. c) tombe : refonte hors du périmètre d'une porte refusée (09 §4bis).
+`ANCRES_REQUISES = [1, 3, 5]` n'est PAS touché — le rendu dérive, il n'exige rien de plus à
+l'import. La fixture `e2e/fixtures/appareil-terrain.ts:237` porte une `scale_1_5` avec
+`guidanceSnapshot: null`, état que le contrôle d'import INTERDIT : elle est corrigée dans le même
+correctif, sans quoi le critère de porte n'est éprouvé de bout en bout nulle part.
+
+Décideur : A01
+Impact spec : aucun — application de 03 §33.3, 03 §33.5 et de l'amendement §32.4 du 2026-09-02.
+
+## 2026-09-07 — [L5b] La dérivation des crans 2 et 4 vaut-elle sur toute amplitude, ou sur la seule échelle 1-5 ?
+
+Soulevé par A21 en implémentant R1 : `resoudreAncre` déclenche le libellé dérivé sur le NUMÉRO du
+cran (2 ou 4), sans exiger `noteMin === 1 && noteMax === 5`. C'est la lecture littérale de mon
+contrat, et le composant expose bien `noteMin`/`noteMax`.
+
+Options :
+a) Garder le déclenchement sur le numéro du cran, quelle que soit l'amplitude.
+b) Borner la dérivation à `noteMin === 1 && noteMax === 5` ; hors de là, texte de repli.
+c) Trancher « le jour où le cas se présente ».
+
+Arbitrage : b).
+Précédence §32-36 : l'amendement §32.4 du 2026-09-02 énonce « la note 2 (resp. 4) exige au moins un
+élément établi de l'ancre 3 (resp. 5) », et §33.3 ouvre par « sur TOUTE ÉCHELLE 1-5 ». La doctrine
+est écrite POUR cette amplitude et ne dit rien d'une autre : sur une échelle 0-10 ou 1-4, le libellé
+dérivé ferait affirmer au composant une règle de cotation que le pack n'a jamais écrite — c'est de
+l'invention de spec (CLAUDE.md §3), et elle serait invisible puisqu'elle se lirait comme une ancre.
+c) est écartée : un report implicite dans un composant partagé n'attend pas le cas, il l'accueille en
+silence — personne ne relira ce fil le jour où quelqu'un passera `noteMin`/`noteMax`.
+Hors 1-5 la ligne reste explicite (texte de repli) : ni mensonge, ni blanc.
+Si une échelle d'une autre amplitude devient nécessaire, c'est une question de SPEC pour Williams
+(les types de réponse sont figés en 04 et §32.4), jamais un choix de composant.
+
+Décideur : A01
+Impact spec : aucun — bornage à la lettre de §33.3 et de l'amendement §32.4 du 2026-09-02.
+
+## 2026-09-07 — [L5b] Une doctrine du pack se CITE-t-elle, ou se rend-elle en langue d'écran ?
+
+R-1 de la revue A29. La copie que J'AI imposée paraphrase la doctrine 3 du §32.4 (03:667) et
+s'attribue au pack : « palier intermédiaire » et « sans qu'elle soit atteinte » n'y figurent pas,
+« une ancre entamée, PAS UNE MOYENNE » en a disparu, et la ligne se clôt par « (doctrine §32.4) ».
+Deux commentaires (`EchelleAncree.tsx:72`, `.test.tsx:330`) revendiquent en outre un « mot pour mot »
+qui n'est pas vrai.
+
+Options :
+a) Acter la paraphrase : le pack écrit pour un rédacteur de banque, pas pour un auditeur en entretien.
+b) Aligner sur la lettre, et poser la règle générale pour tout rendu de doctrine à venir.
+
+Arbitrage : b), et la règle qui va avec.
+Précédence §32-36 : l'amendement §32.4 du 2026-09-02 dit lui-même que les doctrines « priment sur
+toute lecture locale d'une guidance » — une paraphrase EST une lecture locale. Celle-ci a coûté la
+moitié opérationnelle de la règle : « pas une moyenne » vise le réflexe réel de l'auditeur ; ce que
+j'avais gardé décrit l'état, ce que j'avais retiré corrige le geste. a) tombe aussi sur les faits :
+la langue du pack est ici PLUS courte que la mienne — l'argument d'ergonomie n'a rien à défendre.
+
+RÈGLE, opposable à tout écran qui rendra une doctrine : un texte qui S'ATTRIBUE au pack (« doctrine
+§32.4 », « §x ») est une CITATION VERBATIM. Seules adaptations permises, mécaniques et limitées à
+cette liste : résoudre un « (resp. X) », poser la majuscule initiale, la ponctuation d'insertion.
+Toute reformulation exige une entrée DECISIONS portant le mot PARAPHRASE et RETIRANT l'attribution.
+Si la langue du pack est jugée impraticable à l'écran, on ne la réécrit pas en douce : on cite, et
+on ajoute à côté une aide NON attribuée — ou on demande un amendement à Williams (11 §8 : seule la
+revue de spec de P-D amende).
+
+Copies alignées (le préfixe « 2 — » disparaît : le `dt` porte déjà le numéro, R-2) :
+« La note 2 exige au moins un élément établi de l'ancre 3 — une note intermédiaire est une ancre
+entamée, pas une moyenne (doctrine §32.4). » · idem cran 4, avec l'ancre 5.
+
+Décideur : A01
+Impact spec : aucun — retour à la lettre de l'amendement §32.4 du 2026-09-02.
+
+## 2026-09-07 — [L5b] Le dépliant liste-t-il les ancres REÇUES, ou les cinq crans de l'échelle ?
+
+Doute déclaré par A26 depuis deux tours : son test exige les crans 2 et 4 dans la `<dl>`. Le
+comportement est implémenté et pinné, mais ma consigne ne vivait que dans un message d'affectation —
+au sens du §7, elle n'existait donc pas.
+
+Options :
+a) Lister les seules ancres reçues (`ancres.map`) — le comportement d'AVANT R1, et la lecture
+littérale du `<summary>` : un cran sans ancre de banque n'a pas d'ancre à montrer.
+b) Lister les cinq crans de l'échelle (`notes.map`), ceux sans ancre de banque portant le libellé
+dérivé ou la copie de repli.
+
+Arbitrage : b).
+Précédence §32-36 : §33.3 veut que « la cotation homogène ne dépende pas de la mémoire du
+consultant » et §33.5 veut les ancres « dépliées ». Sous a), un cran absent de la banque DISPARAÎT
+de la liste : l'auditeur ne peut plus distinguer « pas d'ancre pour ce cran » de « ce cran n'existe
+pas » — c'est le blanc de R1 déplacé d'une ligne à l'autre, et cette fois sans même une ligne
+blanche pour le trahir. Sous a) encore, la troisième copie de repli n'aurait aucun endroit où
+s'afficher : A26 l'a déduit seule, et sa déduction est exacte. Le coût est d'une à deux lignes dans
+un dépliant déjà ouvert ; la lacune, elle, est invisible. b) l'emporte.
+Portée : l'échelle 1-5. Hors de cette amplitude la dérivation ne se déclenche pas (arbitrage du même
+jour) et la question du nombre de lignes ne se pose pas tant que Williams n'a ouvert aucune autre
+amplitude.
+
+Décideur : A01
+Impact spec : aucun.
