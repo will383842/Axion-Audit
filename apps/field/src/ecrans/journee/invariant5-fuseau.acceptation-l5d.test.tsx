@@ -69,14 +69,24 @@
 // =============================================================================
 import 'fake-indexeddb/auto';
 import Dexie from 'dexie';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ValeurTerrain } from '../../app/contexte.js';
 import { CLE_DERNIER_RITUEL } from '../../agenda/jour.js';
 import { BaseLocale, CLES_META, cleEmbarquement, ecrireMeta } from '../../local/base.js';
-import { creerDekEnveloppee, deriverKek, ouvrirCoffre } from '../../local/coffre.js';
-import { installerContexteLocal, retirerContexteLocal } from '../../local/contexte.js';
+import {
+  CoffreVerrouilleError,
+  creerDekEnveloppee,
+  deriverKek,
+  ouvrirCoffre,
+} from '../../local/coffre.js';
+import {
+  contexteLocal,
+  installerContexteLocal,
+  retirerContexteLocal,
+} from '../../local/contexte.js';
 import { appliquerDescente } from '../../local/ecriture.js';
+import type * as Ecriture from '../../local/ecriture.js';
 import { EXTENSION_SAUVEGARDE, type FichierSauvegarde } from '../../sauvegarde/format.js';
 import { exporterSauvegarde } from '../../sauvegarde/sauvegarde.js';
 import { EcranFinDeJournee } from './EcranFinDeJournee.js';
@@ -209,6 +219,31 @@ let compteur = 0;
 vi.mock('../../app/contexte.js', () => ({
   useTerrain: () => terrain,
 }));
+
+// -----------------------------------------------------------------------------
+// LE LEVIER DE LA RÉSERVE R7 — une panne qui n'arrive qu'APRÈS l'écriture commise.
+//
+// `appliquerDescente` est le VRAI, appelé tel quel ; la seule différence est
+// qu'une fois résolu — donc une fois les données ÉCRITES — il déclenche ce que le
+// test a armé. Rien n'est simulé de l'écriture elle-même : c'est ce qui permet
+// d'affirmer, à la fin, que la base contient bien la mission pendant que l'écran
+// se prononce. Une panne armée AVANT l'écriture aurait fait échouer l'import
+// entier, et « Rien n'a été modifié » aurait alors été VRAI : le test n'aurait
+// rien mesuré de R7. Désarmé (`null`), le levier est transparent, et les autres
+// sections de ce fichier le traversent sans le voir.
+// -----------------------------------------------------------------------------
+let apresEcritureCommise: (() => void) | null = null;
+
+vi.mock('../../local/ecriture.js', async (importerReel) => {
+  const reel = await importerReel<typeof Ecriture>();
+  return {
+    ...reel,
+    appliquerDescente: async (lot: Ecriture.LotDescendant): Promise<void> => {
+      await reel.appliquerDescente(lot);
+      apresEcritureCommise?.();
+    },
+  };
+});
 
 async function appareilNeuf(): Promise<BaseLocale> {
   compteur += 1;
@@ -437,6 +472,7 @@ beforeEach(() => {
 afterEach(async () => {
   cleanup();
   retirerFuseauDAppareil();
+  apresEcritureCommise = null;
   vi.restoreAllMocks();
   retirerContexteLocal();
   Reflect.deleteProperty(navigator, 'storage');
@@ -456,11 +492,18 @@ function verifierQueLesFuseauxDivergent(): void {
   expect(ATTENDU_MISSION).not.toBe(RENDU_UTC);
 }
 
-/** Le geste de l'auditeur sur l'appareil de remplacement, en un appel. */
-async function restaurerParLEcran(
-  base: BaseLocale,
-  fichier: FichierSauvegarde = sauvegarde,
-): Promise<void> {
+/** La phrase FAUSSE — la seule que l'écran de restauration puisse prononcer (R2). */
+const RIEN_MODIFIE = /rien n.a été modifié/i;
+/** La phrase attendue une fois les données écrites. */
+const SUCCES = /sauvegarde restaurée/i;
+
+/**
+ * Les gestes de l'auditeur sur l'appareil de remplacement — sans attendre le
+ * verdict. Séparés de l'attente pour que la section F puisse attendre l'UN OU
+ * L'AUTRE des deux verdicts : un test qui n'attendrait que le succès rougirait
+ * par expiration, et un échec qui expire ne dit pas ce qu'il a vu.
+ */
+function lancerRestaurationParLEcran(base: BaseLocale, fichier: FichierSauvegarde): void {
   terrain = terrainDe(base, 'restauration');
   render(<EcranRestauration />);
   fireEvent.change(screen.getByLabelText(/fichier de sauvegarde/i), {
@@ -476,7 +519,25 @@ async function restaurerParLEcran(
     target: { value: MOT_DE_PASSE },
   });
   fireEvent.click(screen.getByRole('button', { name: /restaurer sur cet appareil/i }));
-  await screen.findByText(/sauvegarde restaurée/i, undefined, { timeout: 20_000 });
+}
+
+/** Le geste de l'auditeur sur l'appareil de remplacement, en un appel. */
+async function restaurerParLEcran(
+  base: BaseLocale,
+  fichier: FichierSauvegarde = sauvegarde,
+): Promise<void> {
+  lancerRestaurationParLEcran(base, fichier);
+  await screen.findByText(SUCCES, undefined, { timeout: 20_000 });
+}
+
+/** Attend que l'écran se soit PRONONCÉ — succès ou échec — sans préjuger duquel. */
+async function attendreLeVerdict(): Promise<void> {
+  await waitFor(
+    () => {
+      expect(screen.queryByText(SUCCES) ?? screen.queryByText(RIEN_MODIFIE)).not.toBeNull();
+    },
+    { timeout: 20_000 },
+  );
 }
 
 /** Le texte de la définition qui suit une étiquette donnée, dans la carte `<dl>`. */
@@ -723,5 +784,125 @@ describe('EcranRestauration — invariant 5 : une sauvegarde dont la mission est
     expect(rendu).not.toMatch(UUID_CANONIQUE);
     expect(rendu.trim()).not.toBe('');
     expect(sansNomDeFichier(document.body.textContent)).not.toMatch(UUID_CANONIQUE);
+  }, 40_000);
+});
+
+// =============================================================================
+// F. UNE LECTURE DE CONFORT QUI LÈVE APRÈS L'ÉCRITURE — le compte rendu tient
+//
+// Réserve R7 (A29, rejeu final L5d, 2026-09-08). Le `catch` de
+// `lireIdentiteMission` (`sauvegarde/sauvegarde.ts:420`), écrit par A22 pour
+// fermer R2, n'était gardé par rien : sonde `throw` dedans → 1240/1240 verte ;
+// correctif R2 retiré en entier → 1240/1240 verte. La couverture le disait, elle
+// (« Uncovered Line #s : 421-422 »), mais une ligne non couverte sur le chemin du
+// SECOURS n'est pas une ligne qu'on laisse : la porte P-C prouve l'invariant 8.
+//
+// Ce que ces tests tiennent, et pourquoi c'est l'ORDRE DES EFFETS qui tranche :
+// `appliquerDescente` a résolu, la marque d'embarquement est écrite, les données
+// SONT sur l'appareil. Une lecture de confort — un déchiffrement, un `get` — qui
+// lève à cet instant ne doit pas pouvoir retirer le compte rendu d'une écriture
+// déjà commise, parce que la phrase de repli de l'écran (« Rien n'a été
+// modifié ») serait alors FAUSSE, et prononcée sur le chemin du secours à un
+// auditeur qui vient de perdre sa tablette. Le titre et le fuseau tombent à
+// `null`, et l'écran le MONTRE — la section E dit déjà ce que « montrer » veut
+// dire ; ici, seule la CAUSE du `null` change.
+//
+// Deux causes, un `it` chacune, parce qu'elles n'ont pas le même statut :
+//   · le coffre qui lève — le cas RÉEL que R2 visait (verrou tombé entre deux
+//     `await`, enveloppe corrompue) ;
+//   · une erreur de PROGRAMMATION dans le bloc — le `catch` l'avale aussi, et
+//     A29 l'a constaté : sa sonde sur `ligne === undefined` a été masquée.
+//     C'est le comportement voulu (après une écriture commise, plus rien n'en
+//     retire le compte rendu), mais un comportement voulu s'ASSERTE, il ne se
+//     subit pas. Son prix est nommé ici : un défaut de code dans ce bloc se
+//     manifestera par « identité inconnue », jamais par une panne — quiconque
+//     retouche ce bloc doit le savoir, et ce test le lui dit.
+//
+// Chaque `it` prouve d'abord que la panne a bien été RENCONTRÉE (compteur) : un
+// vert obtenu parce que la sonde n'a pas été atteinte serait le défaut même que
+// R7 dénonce.
+// =============================================================================
+describe('EcranRestauration — réserve R7 : une lecture qui lève APRÈS l’écriture commise', () => {
+  /** Ce que l'écran doit dire quand l'écriture est commise et l'identité illisible. */
+  function verifierSuccesAvecIdentiteInconnue(): void {
+    // ① Le succès est annoncé, et la seule phrase fausse n'est PAS prononcée.
+    expect(
+      screen.queryByText(RIEN_MODIFIE),
+      'L’écran dit « Rien n’a été modifié » alors que `appliquerDescente` a RÉSOLU :\n' +
+        'la lecture de confort qui suit l’écriture a été laissée remonter jusqu’au\n' +
+        '`.catch` terminal de l’écran, et le compte rendu d’une écriture commise a été retiré.',
+    ).toBeNull();
+    expect(screen.getByText(SUCCES)).toBeTruthy();
+
+    // ② Le titre est AVOUÉ manquant — ni le titre (illisible), ni un UUID.
+    const mission = definitionDe(/^mission/i);
+    expect(mission).not.toContain(TITRE_MISSION);
+    expect(mission).not.toMatch(UUID_CANONIQUE);
+    expect(mission.trim()).not.toBe('');
+
+    // ③ Le fuseau est inconnu → UTC NOMMÉ, jamais la mission (illisible) ni
+    //    l'appareil (divergent des deux).
+    const instant = definitionDe(/sauvegarde produite le/i);
+    expect(instant).toContain(RENDU_UTC);
+    expect(instant).toMatch(/UTC/);
+    expect(instant).not.toContain(ATTENDU_MISSION);
+    expect(instant).not.toContain(RENDU_APPAREIL);
+    expect(instant).not.toContain(INSTANT);
+  }
+
+  it('@critique le coffre lève après l’écriture : le succès est annoncé, l’identité avouée', async () => {
+    verifierQueLesFuseauxDivergent();
+    const base = await appareilNeuf();
+    const { coffre } = contexteLocal();
+    let pannesRencontrees = 0;
+
+    // Armé pour l'INSTANT où l'écriture est commise, pas avant : jusque-là, le
+    // vrai coffre chiffre les vraies lignes. Après, tout déchiffrement lève ce
+    // que lève un coffre dont le verrou est tombé entre deux `await`.
+    apresEcritureCommise = () => {
+      vi.spyOn(coffre, 'dechiffrer').mockImplementation(() => {
+        pannesRencontrees += 1;
+        return Promise.reject(new CoffreVerrouilleError());
+      });
+    };
+
+    lancerRestaurationParLEcran(base, sauvegarde);
+    await attendreLeVerdict();
+
+    // Le harnais doit pouvoir voir le défaut : si la panne n'a pas été
+    // rencontrée, le vert qui suit ne prouverait rien.
+    expect(pannesRencontrees).toBeGreaterThan(0);
+    verifierSuccesAvecIdentiteInconnue();
+
+    // Et l'écriture est bien COMMISE : la ligne de mission est dans la base
+    // pendant que l'écran se prononce. C'est ce qui rend « Rien n'a été
+    // modifié » faux, et c'est ce que ce test tient.
+    expect(await base.missions.get(MISSION_ID)).toBeDefined();
+  }, 40_000);
+
+  it('@critique une erreur de PROGRAMMATION dans la lecture d’identité ne retire pas le compte rendu', async () => {
+    verifierQueLesFuseauxDivergent();
+    const base = await appareilNeuf();
+    let pannesRencontrees = 0;
+
+    // Pas un rejet du domaine : un `TypeError` synchrone, la forme d'un défaut
+    // de code — exactement la sonde d'A29, celle que le `catch` a masquée.
+    apresEcritureCommise = () => {
+      vi.spyOn(base.missions, 'get').mockImplementation(() => {
+        pannesRencontrees += 1;
+        throw new TypeError('sonde A29 : erreur de programmation (fictive)');
+      });
+    };
+
+    lancerRestaurationParLEcran(base, sauvegarde);
+    await attendreLeVerdict();
+
+    expect(pannesRencontrees).toBeGreaterThan(0);
+    verifierSuccesAvecIdentiteInconnue();
+
+    // La sonde est retirée AVANT de relire la base : c'est la vraie table qui
+    // atteste que l'écriture était commise au moment du verdict.
+    vi.restoreAllMocks();
+    expect(await base.missions.get(MISSION_ID)).toBeDefined();
   }, 40_000);
 });

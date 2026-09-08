@@ -468,7 +468,12 @@ describe('useEnregistrementContinu (03 §17.4, §33.3) — la confiance se voit,
   });
 
   it('replie sur un message d’aide quand l’échec n’a rien à dire', async () => {
-    const { result } = renderHook(() => useEnregistrementContinu(undefined));
+    // `null` = fuseau inconnu, la seule valeur que le hook DOCUMENTE pour ce cas.
+    // Ce test passait `undefined`, et c'était la seule ligne du dépôt qui tenait
+    // la signature ouverte à `undefined` (A22, `enregistrement.ts:64`, signalé
+    // sans contourner — 09 §5.6). Amendé par A26 pour lever cette raison ; le
+    // resserrement de la signature elle-même reste à A22, si A01 le veut.
+    const { result } = renderHook(() => useEnregistrementContinu(null));
     await act(async () => {
       await result.current.enregistrer(() => Promise.reject(new Error('')));
     });
