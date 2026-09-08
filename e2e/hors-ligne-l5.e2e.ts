@@ -976,18 +976,21 @@ for (const [rang, combinaison] of COMBINAISONS_IPAD.entries()) {
 // mesurée est le BORD DROIT — la seule contrainte que §17.4 écrit (« zone basse
 // droite ») — et non le bord gauche : un bouton dont le libellé change
 // légitimement peut changer de largeur, et un bord gauche qui recule de la
-// longueur du mot n'est pas un bouton qui a bougé. Sa largeur n'est comparée
-// qu'à LIBELLÉ ÉGAL (question 1 contre question 2, toutes deux « Suivant ») :
-// là, un écart serait bien une place qui varie. Ce partage est une lecture de
-// §17.4, pas un arbitrage ; s'il doit être tranché autrement, c'est dans
-// `DECISIONS.md`, et la garde suivra.
+// longueur du mot n'est pas un bouton qui a bougé. Sa largeur se compare à
+// l'identique à LIBELLÉ ÉGAL (question 1 contre question 2, toutes deux
+// « Suivant ») ; à libellé différent, elle ne peut que CROÎTRE — l'ancienne
+// boîte [673, 765] est incluse dans la nouvelle [580, 765], donc le pouce qui
+// vise « Suivant » atterrit sur « Terminer ». Lecture confirmée par A29 (R-7
+// requalifiée) comme application de l'entrée A01, sans entrée `DECISIONS.md`.
 //
-// ── CE QUE LA GARDE NE CIBLE PAS, DÉLIBÉRÉMENT ──────────────────────────────
-// Ni le rôle des deux groupes, ni leur `aria-label`, ni leurs classes : A21 les
-// révise en parallèle (A29, R-4), et cette garde ne dépend pas de son résultat.
+// ── CE QUE LA GARDE CIBLE, ET CE QU'ELLE NE CIBLE PAS ───────────────────────
 // Les boutons sont atteints par leur NOM ACCESSIBLE — les sept libellés que
 // §17.4 énumère — à l'intérieur du seul `<article>` de l'écran, la carte de la
-// question. C'est ce que l'auditeur lit, et c'est ce qui ne change pas.
+// question. C'est ce que l'auditeur lit, et c'est ce qui ne change pas. Les
+// deux groupes qui les portent sont fixés par UNE assertion (rôle `group` et
+// leurs deux noms, R-4 d'A21 atterri en `1d18947`) : sans elle, un retour à
+// `toolbar` — le contrat clavier que rien n'honore — ne ferait broncher aucune
+// garde. Aucune classe n'est ciblée.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Les deux rangées de §17.4 après la scission arbitrée par A01 (2026-09-08). */
@@ -1016,7 +1019,7 @@ const LES_SEPT_BOUTONS: readonly {
   { nom: 'Précédent', motif: /^Précédent$/, rangee: 'navigation', bord: 'gauche' },
   {
     nom: 'Suivant',
-    motif: /^(Suivant|Terminer l’entretien)/,
+    motif: /^(Suivant|Terminer l’entretien|Fin de session)/,
     rangee: 'navigation',
     bord: 'droite',
   },
@@ -1101,16 +1104,24 @@ async function releverLesBoutons(
 /**
  * Deux places sont les mêmes au pixel de tolérance près — jamais au demi-pixel.
  *
- * La largeur n'entre dans la comparaison qu'à LIBELLÉ ÉGAL : « Terminer
- * l'entretien » est plus long que « Suivant », et c'est le bord droit qui fait
- * sa place (en-tête de cette section).
+ * La largeur se compare à l'identique, sauf pour le SEUL bouton à libellé
+ * variable (celui du bord droit), et seulement quand son libellé a changé :
+ * là, l'exemption est BORNÉE à la non-rétraction — « Terminer l'entretien »
+ * peut être plus large que « Suivant », jamais plus étroit. C'est ce qui rend
+ * la lecture « bord droit » sûre : l'ancienne boîte reste incluse dans la
+ * nouvelle, et le pouce qui vise « Suivant » atterrit sur « Terminer » (revue
+ * croisée A29, R-7 requalifiée). Un « Terminer » de 40 px rougit.
  */
-function memePlace(a: PlaceDeBouton, b: PlaceDeBouton): boolean {
+function memePlace(reference: PlaceDeBouton, releve: PlaceDeBouton): boolean {
+  const libelleVariable = reference.bord === 'droite' && reference.libelle !== releve.libelle;
+  const largeurTenue = libelleVariable
+    ? releve.largeur >= reference.largeur - TOLERANCE_PX
+    : Math.abs(reference.largeur - releve.largeur) <= TOLERANCE_PX;
   return (
-    Math.abs(a.bordFixe - b.bordFixe) <= TOLERANCE_PX &&
-    (a.libelle !== b.libelle || Math.abs(a.largeur - b.largeur) <= TOLERANCE_PX) &&
-    Math.abs(a.hauteur - b.hauteur) <= TOLERANCE_PX &&
-    Math.abs(a.decalageDansLaRangee - b.decalageDansLaRangee) <= TOLERANCE_PX
+    Math.abs(reference.bordFixe - releve.bordFixe) <= TOLERANCE_PX &&
+    largeurTenue &&
+    Math.abs(reference.hauteur - releve.hauteur) <= TOLERANCE_PX &&
+    Math.abs(reference.decalageDansLaRangee - releve.decalageDansLaRangee) <= TOLERANCE_PX
   );
 }
 
@@ -1131,7 +1142,7 @@ function ecartsDePlace(
   const ecarts: string[] = [];
   for (const [index, place] of releve.places.entries()) {
     const attendue = reference.places[index];
-    if (attendue === undefined || !memePlace(place, attendue)) {
+    if (attendue === undefined || !memePlace(attendue, place)) {
       ecarts.push(
         `${reference.etiquette} : ${attendue === undefined ? 'absent' : decrirePlace(attendue)} ; ` +
           `${releve.etiquette} : ${decrirePlace(place)}`,
@@ -1176,6 +1187,16 @@ test('@critique entretien — les sept boutons de §17.4 sont là et aux mêmes 
     const ORDRE_ATTENDU = LES_SEPT_BOUTONS.map((bouton) => bouton.nom);
     const releves: string[] = [];
 
+    // Les deux groupes de §17.4, tels qu'A21 les a posés (R-4) : rôle `group`
+    // et leurs deux noms, en UNE assertion. Le `fieldset` « Votre cotation »
+    // est aussi un `group` de la carte ; le nom l'écarte.
+    await expect(
+      page
+        .getByRole('article')
+        .getByRole('group', { name: /^(Outils de la question|Navigation entre les questions)$/ }),
+      'les deux groupes de boutons sont des « group » nommés — jamais plus « toolbar » (R-4)',
+    ).toHaveCount(2);
+
     // ① MODE PRIVÉ, question après question : les sept, dans l'ordre, à la même
     //    place. La référence est la première question ; chaque suivante lui est
     //    comparée bouton par bouton, et l'écart affiche les deux relevés.
@@ -1213,6 +1234,10 @@ test('@critique entretien — les sept boutons de §17.4 sont là et aux mêmes 
     // ② ÉCRAN PARTAGÉ (§33.3) : les cinq outils DISPARAISSENT — ce sont des
     //    gestes internes —, la navigation RESTE, et elle reste à sa place d'une
     //    question à l'autre dans ce mode aussi.
+    //    Mesurée sur la question 3 puis la 2, mais COMPARÉE dans le sens
+    //    2 → 3 : la référence est toujours une question à « Suivant », et la
+    //    dernière est celle dont le libellé change — le sens de la
+    //    non-rétraction en dépend.
     await page.getByRole('button', { name: 'Passer en écran partagé' }).click();
     await expect(page.getByRole('button', { name: 'Revenir en écran privé' })).toBeVisible();
 
@@ -1234,7 +1259,7 @@ test('@critique entretien — les sept boutons de §17.4 sont là et aux mêmes 
     };
     releves.push(`${partage2.etiquette} · ${partage2.places.map(decrirePlace).join(' · ')}`);
 
-    const ecartsPartages = ecartsDePlace(partage3, partage2);
+    const ecartsPartages = ecartsDePlace(partage2, partage3);
     expect(
       ecartsPartages,
       `§17.4 en écran partagé : la navigation change de place d’une question à l’autre :\n` +
