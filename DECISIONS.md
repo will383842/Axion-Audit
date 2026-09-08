@@ -11551,3 +11551,249 @@ NON TENU ce soir — pour une raison de L5, corrigeable sans L6.
 
 Décideur : A01
 Impact spec : aucun — interprétation de 03 §34.2 ; le critère n'est ni déplacé ni réécrit.
+
+## 2026-09-08 — [securite] La concession `style-src 'unsafe-inline'` se ferme-t-elle, ou se renouvelle-t-elle ?
+
+Le réexamen que mon entrée du 2026-08-27 imposait au L5c n'avait jamais été fait ; A51 l'a fait
+(`docs/securite/DOSSIER_ZAP_2026-09-08.md` §3) : 0 `style=` et 0 `<style>` dans le HTML servi, 0
+injection de feuille dans les bundles, Radix et shadcn absents des trois `package.json`, et les six
+`style={{ }}` en TSX passent par le CSSOM, que `style-src` ne régit pas. La concession n'a aucun
+consommateur. Elle en aura un : shadcn est imposé par 11 §1, et `react-remove-scroll` injecte un
+`<style>` calculé, non hachable de façon stable.
+
+Options :
+a) Maintenir la concession, requalifiée en risque accepté daté, jusqu'à l'arrivée de shadcn.
+b) Retirer `'unsafe-inline'` de `Caddyfile:217` maintenant, seul, sans garde.
+c) Retirer, dans le MÊME incrément qu'une garde e2e qui affirme la chaîne CSP servie.
+
+Arbitrage : c).
+Règle de précédence : sans objet — aucune divergence interne au pack. 06 §10.2 demande une « CSP
+stricte » et la concession était un écart consenti AVEC une date ; la date est échue et la mesure est
+rendue, c'est donc mon entrée du 2026-08-27 qui se referme, pas une spec qu'on amende.
+a) tombe sur son propre motif : ce qui la justifiait n'existe pas dans l'arbre, et reconduire une
+exception pour une dépendance non installée, c'est la garder par habitude — le jour où shadcn arrive,
+sa PR ramènera la ligne avec son comptage et sa date. b) tombe sur le §4-C du dossier : aucun test du
+dépôt n'assert un seul en-tête de sécurité, donc un `git revert` malheureux ou l'arrivée de Radix
+rouvrirait le trou EN SILENCE. Retirer sans garde échange une alerte visible contre une régression
+muette — le marché que F-31 nous a déjà coûté deux fois.
+
+Trois bornes pour qui exécute. (1) Le retrait n'est pas AFFIRMÉ conforme, il est PROUVÉ : la garde
+e2e et le parcours hors ligne complet tournent en navigateur AVANT le merge — A51 dit lui-même
+n'avoir mesuré que les sources et les bundles. Un rendu cassé fait revenir la ligne, et l'entrée le
+dira. (2) L'encadré `Caddyfile:203-215` ne disparaît PAS avec la directive : il est réécrit pour dire
+ce qui a été mesuré, quand, et à quelle condition la concession reviendrait. Effacer la trace d'une
+concession en même temps que la concession, c'est perdre la raison qui la rouvrirait — l'invariant 7
+vaut aussi pour les commentaires de configuration. (3) La garde couvre la chaîne ENTIÈRE servie, pas
+la seule directive retirée : c'est elle, et non le retrait, qui est le livrable durable.
+
+Décideur : A01
+Impact spec : aucun — l'entrée du 2026-08-27 est exécutée, pas amendée.
+
+## 2026-09-08 — [securite] 06 §10.2 énumère-t-il TROIS en-têtes, ou l'obligation d'en poser ?
+
+06 §10.2 écrit : « en-têtes de sécurité (Caddy : HSTS, CSP stricte, X-Content-Type-Options) ». A51
+propose d'ajouter COOP, CORP et COEP (famille 90004, trois lignes dans `Caddyfile:177-218`, cause
+unique pour les trois cibles) et, hors ZAP, `Cache-Control: no-store` sur les réponses JSON
+authentifiées (ASVS L2 V8.2.1 ; une seule ligne dans toute l'API, `routes/export.ts:111`). Aucun des
+quatre n'est nommé par le pack.
+
+Options :
+a) Liste close : tout en-tête non énuméré est un amendement de spec, donc Williams.
+b) Liste ouverte : la phrase porte l'obligation, la parenthèse en donne des exemples ; ajouter un
+en-tête qui ne retire aucune capacité est de l'exécution, donc A01.
+
+Arbitrage : b).
+Règle de précédence : sans objet entre bandes — le conflit est INTERNE à 06 §10.2 et se tranche sur
+son texte, comme §17.4 l'a été ce matin. Ce texte fait de « en-têtes de sécurité » le sujet et met
+trois noms entre parenthèses. Si la parenthèse était la règle, elle interdirait `Referrer-Policy` et
+`X-Frame-Options`, présents dans le `Caddyfile` depuis L0, passés en revue croisée, et que personne
+n'a jamais tenus pour un amendement. On ne déclare pas une énumération close le jour où elle gêne —
+raisonnement inverse de celui de ce matin sur §17.4, et exactement la même règle.
+La borne est nette : b) n'autorise que ce qui DURCIT sans rien retirer. Un en-tête qui relâcherait
+une garantie écrite resterait §3-4, donc Williams.
+
+Ce que cela autorise, et à quelle condition. COOP `same-origin` et CORP `same-origin` : posés
+maintenant, tout est same-origin par construction (11 §2 interdit CORS). COEP : NON acquis. C'est le
+seul des trois qui puisse casser (`blob:` des photos, `data:` des icônes, WASM Argon2id), et A51
+écrit lui-même « à prouver par e2e, pas à affirmer ». Entre `require-corp` et `credentialless`, c'est
+la MESURE qui choisira, pas moi : une exécution ne se trace pas. Mais si la mesure établit que la PWA
+ne tient avec aucun des deux, l'arbitrage change de nature — on échangerait une garantie de sécurité
+contre une capacité terrain, et cela remonte à Williams.
+Le calendrier de `no-store` n'est pas ici : voir l'entrée « 09 §4bis » du jour.
+
+Décideur : A01
+Impact spec : aucun — interprétation de 06 §10.2 ; aucun amendement.
+
+## 2026-09-08 — [securite] `.zap/rules.tsv` : l'exclusion que j'ai interdite, ou le périmètre que je n'ai pas nommé ?
+
+Mon arbitrage du 2026-09-05 écarte l'option 3 en toutes lettres — « un scan vert par exclusion est le
+contrôle-qui-ment de F-31 » — et le workflow le répète (`zap-baseline.yml:116-119`). Le dépouillement
+d'A51 corrige une PRÉMISSE de cet arbitrage : quatre des sept familles ne sont pas « gênantes », elles
+sont inguérissables par tout état du code — 90005 porte sur la requête du scanner, 10109 constate la
+SPA que 11 §2 impose, 10094 pointe une police empreintée par Vite et la table d'encodage de
+`hash-wasm` (11 §1), 10049 décrit la politique de cache que §31 prescrit.
+
+Options :
+a) Doctrine inchangée, aucun fichier de règles. Conséquence mesurée : `ZAP_BLOQUANT='true'` est
+INATTEIGNABLE, la bascule promise à P-C ne peut pas se cocher, et une garde inatteignable finit
+désarmée — F-31 une troisième fois.
+b) `.zap/rules.tsv` admissible, sous conditions de forme.
+
+Arbitrage : b), et mon entrée du 2026-09-05 est amendée sur ce seul point, pas renversée.
+Règle de précédence : sans objet — aucune divergence interne ; 07 §13 demande le scan et ne dit pas
+ce qu'il ignore. Ce que j'écartais le 05, et que je continue d'écarter, c'est d'exclure une règle POUR
+VERDIR UN JOB. Nommer par écrit ce qu'un instrument ne peut pas mesurer est le geste inverse : il
+rend la limite relisible, là où sept familles logées dans un `::warning` que personne n'est obligé de
+lire ne la rendent visible à personne.
+
+Quatre conditions cumulatives, faute desquelles la ligne est refusée en revue croisée : (1) une ligne
+= une règle, sa justification TECHNIQUE et une date de réexamen ; (2) aucune ligne pour une règle
+qu'un changement du produit fermerait — 10055 et 90004 n'y ont pas leur place ; (3) le fichier est du
+CODE : revue croisée, un ajout se voit en diff ; (4) il est créé et câblé pendant que `ZAP_BLOQUANT`
+vaut `'false'`, donc sans effet sur aucun verdict, précisément pour que le run à 0/0/0 soit une
+observation et non un pari.
+
+Ce que je ne tranche pas : la bascule, l'épinglage du digest et le sort de la sentinelle nocturne sur
+`:stable` restent à Williams — le workflow l'écrit déjà (`:137-142`), et rien ici ne l'entame.
+
+Décideur : A01
+Impact spec : aucun sur `/docs` ; amende l'entrée du 2026-09-05 sur l'option 3, motif à l'appui.
+
+## 2026-09-08 — [P-C] Trois écarts hors critères : lesquels se corrigent pendant une porte échouée ?
+
+09 §4bis : « SEULS les correctifs de ces critères sont autorisés, aucun périmètre ajouté ». Trois
+écarts arrivent le même jour et aucun n'est un critère de P-C. (a) `app.ts:82-84` affirme que la CSP
+de l'API est verrouillée à `'none'` ; mesuré, c'est celle de Caddy qui atteint le client. (b) Aucune
+route JSON authentifiée ne pose `Cache-Control: no-store` (ASVS L2 V8.2.1 ; tablette terrain
+partagée, `person_name` et `scoping_financials` en cache disque). (c) `agenda/jour.ts:252-253` compare
+des jours civils en UTC : à UTC+14, un rituel fait le matin est compté « la veille » et rallume le
+rappel.
+
+Options :
+a) Les trois attendent — la lettre du §4bis, aucun risque d'élargissement.
+b) Les trois maintenant — un défaut connu ne se garde pas.
+c) Un critère explicite, appliqué aux trois.
+
+Arbitrage : c). Se corrige MAINTENANT ce qui (i) dégrade un critère de la porte ou l'instrument d'un
+invariant que la porte prouve, ou (ii) est une contre-vérité ÉCRITE dont la rectification n'ajoute
+aucun comportement. Le reste est daté et assigné — pas oublié, pas fait.
+Règle de précédence : sans objet — aucune divergence de pack ; c'est le §4bis qu'on interprète, et son
+motif est « aucun périmètre ajouté », non « aucune vérité rétablie ».
+
+Application. (a) MAINTENANT, et le COMMENTAIRE SEUL : trois lignes de glose qui disent l'inverse de ce
+que `curl` mesure, dans un dépôt qui a nommé F-31, ne coûtent aucun comportement à rectifier. Le
+comportement, lui, ne bouge pas : la CSP de l'API ne devient réelle qu'au download §9.6, donc L6c.
+(b) APRÈS : elle touche toutes les routes d'une API que P-C ne possède pas, et le scan non
+authentifié ne la verra jamais. Assignée à A13, lot L6, porte P-D, avec la CSP réelle de (a) — §9.6
+est le moment où les deux cessent d'être théoriques. (c) MAINTENANT : le rappel de fin de journée est
+l'instrument de l'invariant 8, que P-C prouve (07:24), et il est déjà incohérent avec l'objet qu'il
+reçoit — `journee` est calculée au fuseau de MISSION (`local/depots/sessions.ts`, motif inscrit dans
+la garde C3 d'A26) tandis que lui compare des jours UTC. Le jour civil du rappel se calcule donc au
+fuseau de la mission concernée : ce n'est pas un choix entre deux options, c'est l'alignement sur la
+journée dont il parle.
+
+Décideur : A01
+Impact spec : aucun — interprétation de 09 §4bis ; aucun amendement.
+
+## 2026-09-08 — [securite] La matrice ASVS L2 : livrable de qui, sous quelle forme, pour quelle porte ?
+
+07 §13 exige une « revue OWASP ASVS niveau 2 avant la mission du client pilote ». A51 constate
+qu'aucun document du dépôt ne porte de matrice contrôle par contrôle ; échéance et format ne sont
+fixés nulle part. Les verdicts existants (2026-08-31, L3, L5a, dossier ZAP) sont des revues par sujet,
+pas une couverture.
+
+Options :
+a) Fiche AMELIORATIONS étage 2, arbitrée en Phase 2. Écartée : 07 §13 en fait une obligation datée,
+et une obligation du pack ne se propose pas, elle s'ordonnance.
+b) Livrable daté, format fixé, propriétaire nommé.
+c) Absorbée maintenant. Écartée : P-C est échouée, le §4bis l'interdit, et la matrice ne corrige aucun
+de ses critères.
+
+Arbitrage : b), avec une limite que je m'impose.
+Règle de précédence : §16-22 > §1-15 — 07 §13 porte l'obligation, 06 §10.2 n'en dit rien.
+Ce que je fixe, parce que c'est le CONTENU d'une exigence et que c'est mon office : un fichier unique
+`docs/securite/MATRICE_ASVS_L2.md`, une ligne par contrôle ASVS 4.0 de niveau 2 des chapitres
+applicables, chacune portant son verdict (tenu / non tenu / hors périmètre motivé) et sa PREUVE —
+fichier et ligne, test, ou commande. Une ligne sans preuve vaut « non tenu » : c'est déjà la règle des
+fichiers de porte, et une matrice qui s'auto-déclare conforme ne vaudrait pas mieux qu'un `::warning`
+que personne ne lit. Propriétaire : A51, relue par A50 ; A02 ne la coche pas à sa place. Elle est DUE
+avant P-E, GO/NO-GO de la collecte du client pilote (09 §4) — lecture littérale de « avant la mission
+du client pilote ».
+
+Ce que je ne tranche PAS, pour la raison même que j'ai donnée sur D-6 : A01 peut trancher ce qu'un
+critère veut dire ; il ne peut pas trancher où il se coche. Rattacher une case à P-DESCOPE ou à P-E
+change la liste d'une porte, donc revient à Williams. La présente entrée rend la matrice exigible et
+lui donne un auteur, un format et une échéance ; la case, il la pose.
+
+Décideur : A01 pour le format, l'auteur et l'échéance ; Williams pour la porte qui la coche.
+Impact spec : aucun — 07 §13 est exécuté, pas amendé.
+
+## 2026-09-08 — [L5d] `formaterHeure` / `formaterDateHeure` : le fuseau redevient-il obligatoire ?
+
+A26 qualifie `fuseau: string | undefined` de cause racine (`c324119`) : l'invariant 5 est optionnel au
+point d'appel, et le compilateur l'approuve. `apps/hq/src/format/dates.ts` a le paramètre REQUIS et
+n'a jamais eu le défaut. A22 refuse de changer la signature — non par désaccord, son avis motivé est
+« oui, requis » — parce que `peripherie-entretien.test.ts:634-638` encode le contrat ACTUEL comme un
+contrat VOULU (« accepte l'absence de fuseau sans lever — le fuseau de l'appareil sert alors ») et que
+le réécrire est interdit à qui écrit la production (09 §5.6). Cinq appelants passent encore
+`mission?.timezone`.
+
+Options :
+a) Signature inchangée ; la garde C1 d'A26 tient le désarmement. Écartée : C1 est TEXTUELLE et son
+propre en-tête dit qu'elle ne voit pas `mission?.timezone` valant `undefined` à l'exécution —
+c'est-à-dire exactement les cinq appelants réels.
+b) `fuseau: string | null`, requis, l'UTC nommé pour unique repli.
+
+Arbitrage : b).
+Règle de précédence : sans objet — aucune divergence interne ; l'invariant 5 (00_INDEX) et 03 §22.2
+disent la même chose, et c'est le TYPE qui les dément. La console a résolu par le type et gardé par le
+test ce que le terrain a laissé optionnel et non gardé : deux fronts du même dépôt ne tiennent pas le
+même invariant à deux niveaux de rigueur. Et un repli implicite sur l'appareil n'est pas un défaut de
+vigilance, c'est une capacité offerte par une signature — on ferme la capacité, pas ses usages.
+
+Qui amende le test : ni A22, qui produit le correctif (09 §5.6), ni moi. A26, qui n'a écrit aucune
+ligne de `session/fuseau.ts` ni d'aucun appelant et qui a déjà la garde en main. Le précédent du jour
+est dans la branche : A24 a amendé son propre test (`4b0737b`) parce qu'il en était l'auteur sans être
+l'auteur du correctif. La bascule des cinq appelants appartient à A22.
+
+Sans entrée propre, et délibérément : le repli « UTC nommé » n'est pas un choix entre deux options
+défendables, c'est ce que les invariants 5 et 7 laissent comme seule issue — taire l'heure viderait la
+carte de restauration de son objet, la rendre sans la nommer serait le mensonge qu'on corrige. Ce
+n'est pas non plus une amélioration d'étage 1 : c'est le correctif lui-même. Aucune ligne
+`AMELIORATIONS.md` n'est due, et le plafond de 0,5 j du lot n'est pas entamé.
+
+Décideur : A01
+Impact spec : aucun.
+
+## 2026-09-08 — [L5d] Un UUID dans un NOM DE FICHIER affiché est-il un UUID à l'écran ?
+
+`nomFichierSauvegarde()` produit `axion-<uuid>-<horodatage>.axionbackup`, et deux écrans affichent ce
+nom après un export (`EcranFinDeJournee.tsx:212` ; `EcranRestauration.tsx:275`, via `reexport.nom`).
+A24 et A22 l'ont jugé légitime et n'y ont pas touché. La garde B d'A26 interdit pourtant tout UUID
+canonique dans `document.body.textContent` de l'écran de restauration — elle est verte aujourd'hui
+parce que son chemin de test ne déclenche aucun ré-export.
+
+Options :
+a) Oui : c'est du texte à l'écran, il tombe sous l'invariant 5, et le format de nom change.
+b) Non : le nom désigne un objet du système de fichiers que l'auditeur doit retrouver sur sa clé.
+
+Arbitrage : b).
+Règle de précédence : sans objet — aucune divergence interne. L'invariant 5 dit « interface 100 % en
+français » ; une chaîne que l'utilisateur va chercher à l'identique dans son gestionnaire de fichiers
+n'est pas une phrase d'interface, c'est une CLÉ qu'il doit pouvoir recopier. La retirer de l'écran
+supprimerait le seul lien entre le message et le fichier déposé. Et l'invariant 2 est précisément la
+raison pour laquelle ce nom porte un UUID plutôt qu'un titre : a) ferait rentrer par la porte du
+français ce que l'invariant 2 a fait sortir par celle de la confidentialité.
+
+Si a) l'avait emporté, je ne l'aurais pas tranché seul : le nom de fichier de l'export de secours
+relève du format 11 §4 (07:24, « export de secours chiffré §9.7, format fichier 11 §4 »), donc du
+contrat d'ops, donc de Williams (11 §8.2). Le dire compte autant que la réponse.
+
+Conséquence obligatoire, et c'est le vrai livrable de l'entrée : la garde B doit NOMMER son exclusion.
+Verte par le chemin qu'elle emprunte et non par la règle qu'elle énonce, elle rougira le jour où
+quelqu'un l'étendra au ré-export — et il la croira cassée alors qu'elle sera mal écrite. Elle exclut
+explicitement le nom de fichier de sauvegarde, avec son motif ; elle ne l'évite pas. Amendement à A26,
+qui en est l'auteur.
+
+Décideur : A01
+Impact spec : aucun — le format 11 §4 n'est pas touché.

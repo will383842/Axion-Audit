@@ -2548,3 +2548,51 @@ manque), et son traitement d'étage 1 est **suspendu par 09 §4bis** (porte refu
 La mesure, elle, est autorisée sous périmètre gelé — elle ne modifie aucun fichier de production.
 L'écran « Aujourd'hui » étant le critère 07 n° 1, c'est à la porte d'arbitrer, **avec le relevé sous
 les yeux**.
+
+## 2026-09-08 — [L5d] Étage 1 — les trois choix de l'incrément invariant 5, déclarés
+
+**Constat A29 (R5)** : L5d livre trois choix d'étage 1 et **aucune ligne ne les déclarait** — donc le
+plafond de 0,5 j n'était pas « dépassé », il était **non mesurable, donc non attestable**. Ces trois
+choix ne touchent NI le schéma 04, NI l'API, NI la crypto, NI le périmètre fonctionnel : ce sont des
+libellés et une règle de repli, à l'intérieur du correctif d'un écart d'invariant déjà documenté.
+
+1. **Le repli « UTC nommé »** — fuseau de mission inconnu ⇒ l'instant est rendu en UTC **étiqueté comme
+   tel** (`06/09/2026 22:30 (heure UTC)`), jamais au fuseau de l'appareil. A29 a établi que ce n'est
+   **pas une invention** : `apps/hq/src/format/dates.ts:34-47` fait déjà exactement le même repli avec
+   la même mention. Entre taire l'instant, le rendre sans cadre et le rendre en nommant son cadre,
+   **seul le troisième ne ment pas**.
+2. **Le message de repli mission** — « Mission non nommée dans ce fichier — ouvrez votre journée pour la
+   reconnaître » : cause **et** action (03 §33.2), en français, sans réintroduire l'UUID.
+3. **La règle d'unanimité multi-mission** (`EcranFinDeJournee.tsx:97`) — un seul fuseau parmi les
+   missions embarquées ⇒ c'est lui ; sinon UTC nommé. Déclarée « raisonnée, pas éprouvée » par A22
+   lui-même ; **la garde est due** (R1/R6, A26).
+
+**Coût cumulé : ~0,1 j.** Compteur L5b/L5d : **~0,22 j sur 0,5 j** — plafond respecté, et désormais
+**contrôlable**.
+
+## 2026-09-08 — [L5] ÉTAGE 2 — PROPOSÉE, NON IMPLÉMENTÉE : le jour civil des rituels se calcule en UTC
+
+**Constat terrain (A26 hors garde, A22 hors périmètre, A29 en revue).**
+`apps/field/src/agenda/jour.ts:252-253` — `rappelFinDeJournee` compare deux `instantIso.slice(0, 10)`,
+c'est-à-dire deux **jours UTC**. Le rappel se réarme donc à minuit UTC, soit **14 h locale sur une
+mission à UTC+14** : un rituel fait le matin couvre la matinée du lendemain, et le rappel « rituel non
+fait » réapparaît alors qu'il l'a été — ou reste éteint alors qu'il devrait s'allumer.
+
+**Valeur pour l'auditeur** : le rappel de fin de journée est **l'instrument de l'invariant 8** (« aucune
+donnée ne vit sur un seul appareil > 24 h ouvrées ; alerte automatique au-delà »). Un instrument qui se
+trompe de jour ne protège pas de la perte qu'il est censé prévenir.
+
+**Incohérence interne relevée par A29** : `apps/field/src/local/depots/sessions.ts` **sait** faire ce
+calcul au fuseau de mission — c'est le motif même de son inscription dans `MODULES_AUTORISES`
+(`invariant5-appelants.test.ts:63-66`). **Le dépôt sait, et cet appelant-ci ne s'en sert pas.**
+
+**Ce n'est PAS l'invariant 5** (rien n'est affiché de travers) mais l'invariant 8 : d'où l'étage 2 et non
+un correctif L5d. A01 l'a rangé le 2026-09-08 en **correctif autorisé sous 09 §4bis** — le rappel est
+l'instrument d'un invariant que P-C prouve — mais **dans un incrément séparé**.
+
+**Coût estimé** : ~0,25 j (le calcul existe, il faut router le fuseau et éprouver le passage de minuit
+sur trois fuseaux). **Impact schéma/API : aucun.**
+
+**Arbitrage attendu de Williams** : ABSORBÉE (incrément L5e) · PHASE 2 · REFUSÉE.
+**Recommandation d'A01** : correctif maintenant, incrément séparé — le rappel est **déjà en désaccord
+avec la `journee` qu'il reçoit**, elle-même calculée au fuseau de mission. Une exécution, pas un choix.

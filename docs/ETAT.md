@@ -5058,3 +5058,28 @@ d'une seule main — ce qu'A20 n'a pas pu attester sur #97.
 « sync par mission » appartient-il à P-C ou à P-D ?) · compte auditeur de test sur staging +
 secret · `ZAP_BLOQUANT` (7 familles WARN, 0 haute) · les 10 vérifs sur iPad physique.
 **Signalé à A20, non ouvert** : L5d (invariant 5 désarmé par l'appelant), R-14 (typecheck de e2e/).
+
+## 2026-09-08 22h25 — [lot L5 / incrément L5d — invariant 5] — étape pipeline 4/7 (revue rendue, réserves en cours)
+
+Dernier commit vert : 874eefb (worktree _axl5d) · Branches : lot/l5d-invariant5 (3 commits) +
+gouvernance/arbitrages-a01 (PR #104, auto-merge armé) · Poussé : oui.
+Tâche en cours : A26 ferme R1 (bloquante) + R4 + l'amendement assigné par A01 ; A22 ferme R2 + R3.
+Prochaine action : commiter les fermetures sous leur étiquette, rejouer A29, puis PR L5d.
+Tests rouges connus : aucun — verify:rapide EXIT=0, interface 1167/1167, journee+entretien 247/247.
+
+**Trois défauts de l'invariant 5 fermés et PROUVÉS PAR MUTATION** (A20 les avait nommés, A02 avait
+corrigé son propre ✅ : 8/8 → 7/8). §5.6 tenu : trois commits, `[A26 seul]` tests, `[A24 seul]` test,
+`[A22 seul]` production — zéro mélange, ce qu'A20 n'avait pas pu attester sur L5b.
+
+**R1, bloquante, et le motif se répète dans l'incrément qui le corrige** : le repli « UTC nommé » —
+seul choix de conception du lot — n'est gardé par rien. Mutation A29 : la mention supprimée, **1 231
+tests restent verts**. `fuseau.ts` : 61,53 % de branches, sous le seuil DoD.
+
+**R2, plus grave que sa gravité** : L5d insère une lecture de confort APRÈS `appliquerDescente` et
+`ecrireMeta`. Si elle échoue, l'écran affiche « Rien n'a été modifié » sur un appareil où **tout est
+restauré** — l'auditeur qui vient de perdre sa tablette. A22 l'avait écartée sur l'atteignabilité ;
+A29 : c'est le mauvais critère, le défaut est l'ordre des effets. Levée : 2 lignes.
+
+**R5 fermée par ce commit** : `AMELIORATIONS.md` déclare les trois choix d'étage 1 (~0,1 j ; compteur
+~0,22 / 0,5) et ouvre une fiche étage 2 sur le jour civil des rituels calculé en UTC — invariant 8,
+pas 5. Les trois registres étaient muets sur L5d ; ils ne le sont plus.
