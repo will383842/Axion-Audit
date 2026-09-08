@@ -11467,3 +11467,46 @@ que la barre collante. Les bornes du 2026-09-08 tiennent, inchangées.
 
 Décideur : A01
 Impact spec : aucun — précise le critère opérationnel du 2026-09-08 sans en amender le fondement.
+
+## 2026-09-08 — [L5b] §17.4 énumère-t-il UNE barre, ou les boutons qui doivent exister ?
+
+Mon entrée précédente a retiré à la barre collante sa protection ; A21 n'a pas retiré `sticky`, il a
+SCINDÉ la barre (`9a7aff7`) : cinq outils dans le flux, navigation seule collante, une rangée de
+81 px. Garde N1 4/4 (iPad paysage privé 169 px de marge au cran 5, PC 1280 × 720 : 79). La scission
+est une question NEUVE : elle change l'ordre DOM, pas seulement le positionnement.
+
+Options :
+a) Barre unique non collante : les sept boutons dans le flux, énumération littérale intacte.
+Mesuré : Suivant tombe ~500 px sous le bord après cotation.
+b) Scission : outils dans le flux, Précédent · Suivant seuls collants. Suivant reste au pouce
+(y = 742-798 sur 810) ; Précédent passe après Recherche à la tabulation.
+
+Arbitrage : b).
+Précédence entre BANDES : sans objet ici, et c'est le point. §33.3 (§32-36) est satisfait par a)
+COMME par b) — dans les deux cas plus rien d'opaque ne recouvre une ancre. La bande haute a fait son
+travail dans l'entrée précédente, où elle a désarmé `sticky` ; elle ne départage pas deux mises en
+page également conformes. Le conflit est INTERNE à §17.4 (bande §16-22) et se tranche sur son texte.
+Ce texte écrit UNE seule contrainte de place, et pour un seul bouton : « Suivant (zone basse droite,
+atteignable au pouce) ». Si l'ordre de l'énumération prescrivait déjà la géométrie, cette parenthèse
+serait redondante — elle est là parce que la liste, seule, ne dit pas où les boutons vont.
+« Toujours identiques et aux mêmes places » est alors ce qu'il dit : une règle de CONSTANCE d'une
+question à l'autre — rien qui bouge, rien qui apparaisse au hasard — et b) la tient, mesurée et non
+plaidée. a) fait l'échange à l'envers : elle sauve une contrainte INFÉRÉE de l'ordre d'une liste,
+en cassant la seule que la phrase ÉCRIVE.
+Et l'énumération littérale avait déjà cédé AVANT N1 : les cinq outils sont absents en écran partagé
+(§33.3), revue croisée passée. On ne la déclare pas inviolable le jour où elle gêne.
+
+Hors périmètre, et volontairement sans entrée : la largeur de colonne (`17rem … 20rem` →
+`1fr 2fr 1fr`) exécute le levier que l'entrée précédente a ouvert. Quatre grilles mesurées, aucune
+option de spec en face — la mesure a choisi, pas moi. Un vrai choix se trace ; une exécution, non.
+
+Bornes pour A21 : les sept boutons restent, aucun ne disparaît hors écran partagé, aucune place ne
+varie d'une question à l'autre. Cette constance est désormais une propriété à GARDER — rien ne la
+mesure aujourd'hui, aucun test n'ayant jamais porté l'énumération.
+Pour A29, à porter en revue et non par moi : l'ordre DOM suit l'ordre visuel et tout reste
+atteignable au clavier, donc §33.6 ne paraît pas entamé — mais c'est le réviseur qui le dit ; et
+`role="toolbar"` ne couvre plus que cinq boutons sur sept, sémantique qu'axe-core vert n'atteste
+pas.
+
+Décideur : A01
+Impact spec : aucun — interprétation de 03 §17.4 ; aucun amendement.
