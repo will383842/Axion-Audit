@@ -12067,3 +12067,43 @@ Décideur : **A01** pour b) et pour la publication non bloquante. **Escalade Wil
 à P-E, avec le coût ci-dessus — étendre la liste des modules critiques modifie sa DoD, et rendrait la
 chaîne rouge le jour de l'ajout. Doute D-4 CLOS côté A01 ; seule l'extension reste ouverte.
 Impact spec : aucun.
+
+## 2026-09-09 — [securite] `z.config({ jitless: true })` : micro-amélioration, ou changement de comportement ?
+
+A26 mesure que Zod 4.4.3 émet une `securitypolicyviolation` (`script-src`, `eval`) à CHAQUE chargement
+des deux fronts : la sonde `allowsEval` appelle `new Function("")`. Présent sous la CSP actuelle — ce
+n'est pas le retrait de `'unsafe-inline'` qui le crée. Vérifié dans le paquet épinglé avant d'écrire :
+le drapeau ne pilote QUE cette sonde et le chemin compilé (`v4/core/util.js`, « skip the probe under
+`jitless` ») ; `config()` fait un `Object.assign`, donc il compose avec la locale française déjà
+posée ; `allowsEval` est `cached()`, donc l'appel doit précéder le premier `parse`.
+
+Options :
+a) Étage 1 : une ligne de configuration, posée d'office.
+b) Étage 2 ou Williams : c'est le validateur qu'on modifie, donc l'API (11 §3).
+c) Ne rien poser, la console crie.
+
+Arbitrage : **a)**, sous mesure. c) est la vraie faute, et A26 l'a nommée : une violation qui se
+déclenche à chaque chargement finit par être éteinte au mauvais endroit — quelqu'un ajoutera
+`'unsafe-eval'` pour faire taire la console. C'est, pour la troisième fois en deux jours, le principe
+du 2026-09-06 : un signal qui se déclenche toujours n'est plus un signal, il emporte les vrais avec
+lui. b) est écartée sur la lecture du paquet et non sur sa documentation : `jitless` ne change AUCUN
+résultat de validation, donc ne touche ni le schéma 04, ni le contrat d'API, ni la crypto, ni le
+périmètre fonctionnel — les quatre bornes de l'étage 1. Et il DURCIT sans rien retirer : la borne
+exacte posée hier sur 06 §10.2.
+La condition est parallèle à celle de COEP hier : ce qui est perdu, c'est le JIT, sur l'appareil le
+plus contraint. **A28 mesure contre le budget existant (p95 < 100 ms) AVANT signature.** Si le budget
+casse, l'arbitrage change de nature — on échangerait une capacité terrain contre une alerte de
+console — et cela remonte à Williams.
+La mise en œuvre n'est pas libre : `z.config` est GLOBAL au processus. Un appel posé dans
+`packages/shared` priverait de JIT l'API et le worker, qui n'ont ni navigateur ni CSP. Donc une
+seconde fonction NOMMÉE et idempotente à côté d'`appliquerLocaleFrancaiseZod`
+(`packages/shared/src/errors.ts`), appelée par `apps/field/src/main.tsx` et `apps/hq/src/main.tsx`
+avant tout parse : une règle, un endroit, deux appelants — et le test navigateur d'A26 rougit si un
+appelant manque. Ni A21 (`packages/ui` n'en est pas le propriétaire) ni l'incrément d'A11 (le
+`Caddyfile` est un autre fichier, 09 §5.3) : **commit séparé**, sinon un revert d'infra emporte du
+code applicatif.
+Règle de précédence : **sans objet** — aucune divergence de pack ; c'est le périmètre de l'étage 1
+(09 §5.9) qu'on qualifie, sur les faits du paquet épinglé.
+Décideur : **A01**. Escalade Williams : **non** aujourd'hui ; **oui** si la mesure d'A28 casse le budget.
+Impact spec : aucun. Aucune dépendance ajoutée (Zod 4.4.3 déjà épinglé, 11 §1) : l'escalade §8-1 ne
+s'applique pas.
