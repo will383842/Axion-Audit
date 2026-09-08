@@ -11510,3 +11510,44 @@ pas.
 
 Décideur : A01
 Impact spec : aucun — interprétation de 03 §17.4 ; aucun amendement.
+
+## 2026-09-08 — [L5/P-C] « Sync par mission » (critère 07 n° 1) : moteur L6, ou état local L5 ?
+
+A02 me nomme plutôt que de trancher seul (`CONTROLE_A02_PC_2026-09-07` §12, D-6). Le critère :
+« Démo : écran "Aujourd'hui" §34.2 (agenda agrégé, à-revoir, sync par mission) ».
+
+Options :
+a) Il reste à P-C au sens « moteur » — P-C ne se signe qu'après L6b.
+b) Il descend à P-D : le 07 l'aurait mal placé.
+c) Il reste à P-C au sens « état affiché », 100 % local — L6 apporte le fait de synchroniser,
+pas celui de dire où l'on en est.
+
+Arbitrage : c).
+Précédence : le critère n'est pas autonome, il RENVOIE à §34.2 — bande §32-36, la plus haute,
+au-dessus du fichier 11 (« puis le fichier 11 »). §34.2 tranche seul, et trois fois : son titre
+porte « données 100 % locales, absorbé L5 », son corps « le cockpit reste 100 % local », et sa
+troisième puce se nomme « l'ÉTAT de sync par mission (pastille + dernier succès + taille
+d'outbox) ». Le 07 a tronqué « l'état de » — tout le doute est là. Ses trois items recouvrent un à
+un les trois premières puces de §34.2 : c'est un sommaire, pas une exigence neuve. Le fichier 10
+(l. 111) écrit la même liste abrégée et sa définition d'un seul trait : « sync par mission,
+alertes — données locales, absorbé L5 (§34.2) ».
+Le 11 §6, invoqué par A02, ne dit pas l'inverse : il donne à L6 outbox, push, pull delta — le
+MOTEUR — puis conclut « Le critère d'acceptation du LOT reste celui du fichier 07 ». Il se
+subordonne. Et `LOT_L5.md` §3.6 n'interdit pas l'affichage, il le COMMANDE : le port rend
+`indisponible` « et l'écran l'affiche tel quel ».
+b) est irrecevable par sa procédure : déplacer un critère de porte amende le pack, et 09 §4 réserve
+à P-D « seule révision de spec autorisée ». a) ferait dépendre d'un serveur un cockpit que §34.2
+dit 100 % local (invariant 1) ; sa circularité (09 §4bis) la confirme, elle ne la fonde pas.
+
+c) ne coche pas le critère pour autant, et je ne l'ouvre pas pour l'y aider. Mesuré sur `9a65c25` :
+deux des trois données y sont, par mission et 100 % Dexie — pastille (`EcranAujourdhui.tsx:385`) et
+taille d'outbox vraie (`depotOutbox.compterParStatut(missionId)`, `agenda/jour.ts:196`). Le
+**dernier succès est absent** : `derniereSyncReussieLe` vaut `null` en dur, rien ne persiste
+d'horodatage, et la prop `derniereSync` de `PastilleSync` n'est alimentée nulle part dans
+`apps/field`. Trou L5, pas dépendance L6 : sans serveur la valeur locale existe et vaut « jamais
+synchronisée », statut déjà présent dans le port. Bornes pour A20 : alimenter ce slot avec la
+vérité locale, « jamais » compris ; jamais de pastille verte sans serveur (§3.6). Le critère reste
+NON TENU ce soir — pour une raison de L5, corrigeable sans L6.
+
+Décideur : A01
+Impact spec : aucun — interprétation de 03 §34.2 ; le critère n'est ni déplacé ni réécrit.
