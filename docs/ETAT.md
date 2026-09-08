@@ -4918,3 +4918,27 @@ Un module d'invariant contourné par son appelant est un défaut de lot.
 
 **La leçon, et elle est réutilisable** : `git diff <squash> <tête-de-branche>` **vide** est le test
 qui rouvre un historique qu'on croit effacé par le squash. Cinq secondes ; ici, trois lignes sur cinq.
+
+## 2026-09-08 10h00 — [gouvernance] — session close : 6 PR fusionnées, et un correctif sur ma propre entrée
+
+Dernier commit vert : d04f7e6 (main, #99) · Branche : docs/correctif-doute-branches · Poussé : oui
+Tâche en cours : rien. 0 PR ouverte avant celle-ci.
+Prochaine action : URGENT si l'arbitrage retient l'archivage — `git push origin fix/n1-ancres-paysage:refs/archive/l5b` AVANT que cette branche ne fusionne, sinon la preuve du constat §5.6 disparaît.
+Tests rouges connus : aucun.
+
+**`delete_branch_on_merge` vaut `true` sur ce dépôt.** La suppression n'est donc PAS un geste que
+quelqu'un choisit : GitHub l'exécute à l'instant de la fusion. Mon entrée d'il y a trente minutes
+conseillait « ne supprimez pas les branches d'incrément » — **un remède que personne ne peut
+appliquer**. Constaté sur mes propres #98 et #99, dont les branches avaient disparu du distant sans
+que je les touche. Corrigé par une entrée dédiée : le constat tenait, le remède non.
+
+**Ce qui est urgent et ne l'était pas ce matin** : `fix/n1-ancres-paysage` est la DERNIÈRE copie des
+18 commits d'avant-squash de L5b — toute la preuve du « §5.6 non tenu au sens probatoire ». Elle sera
+détruite AUTOMATIQUEMENT à sa fusion. Après quoi le constat devra être cru sur parole, ce que R-4
+reproche précisément. `refs/archive/*` survit à la suppression automatique ; je ne l'ai pas poussée,
+inventer une convention de dépôt relève du §3.
+
+**Et une bévue de manipulation, dite parce qu'elle aurait pu coûter cher** : j'ai lancé
+`git reset --hard origin/main` sans vérifier ma branche courante — j'étais sur une branche de
+travail, que j'ai donc repointée sur `main`. Rien perdu (le travail était fusionné), mais sur une
+branche non fusionnée la commande l'aurait détruite. Le hook `Stop` l'a vu, pas moi.
