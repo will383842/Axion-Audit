@@ -4891,3 +4891,30 @@ donc de cocher R1 sur une garde qui ne voit pas ce qu'A54 a vu à l'œil.
 **Doute pour Williams, et A54 refuse de trancher seul** : que veut dire « visible » pour une ancre
 qu'il faut atteindre **en défilant** ? Tant que ce n'est pas tranché, N1 est un constat d'usage, pas
 un défaut opposable.
+
+## 2026-09-08 09h15 — [P-C / L5b] — #97 fusionnée, et l'attestation A20 REFUSE le tableau d'A02
+
+Dernier commit vert : 912a9b4 (main, 21 jobs verts) · Branche : docs/attestation-a20-l5b · Poussé : oui
+Tâche en cours : rien. #95, #96, #97 sont dans `main` ; 0 PR ouverte.
+Prochaine action : N1/N2 et R2 à l'arbitrage — la branche `fix/n1-ancres-paysage` porte déjà `b2c5eae [A26 seul]`, NON fusionnée, tests seuls et rouge par construction. Ne pas la doubler.
+Tests rouges connus : aucun.
+
+**#97 fusionnée par cette session** : verte 40/40, propre, sans revue bloquante, immobile 4 h — « ce
+qui n'avance pas ». Vérifié avant fusion, sur le Chromium ÉPINGLÉ et non l'instrument hors dépôt
+qu'avaient employé A02 et A54 : les deux gardes neuves s'exécutent bien (**86 passed** contre 84).
+
+**MAIS LE TABLEAU §5.6 QUE J'AI RECOPIÉ DANS LE MESSAGE DE FUSION SUR-DÉCLARE.** A20 a refusé de
+l'attester, et j'ai remesuré ses quatre faits : `git diff 912a9b4 94930c6` **vide** (la frontière du
+squash est exacte) · **18 commits** d'avant-squash retrouvés sur `fix/n1-ancres-paysage`, donc
+l'attribution n'était PAS « indécidable » comme A02 l'écrivait · `a071fcb`, sujet « second tour
+**A21** applique », ajoute **303 lignes au fichier de TEST** · `d97b27b` ajoute 157 lignes d'e2e
+dans le MÊME commit que la production. **Trois des cinq lignes d'A02 étaient fausses, les trois dans
+le sens permissif.** §5.6 est **NON TENU AU SENS PROBATOIRE** sur L5b — non tenu ≠ violé : absence
+de preuve de conformité, pas preuve de faute. **R-4 d'A29 reste OUVERTE**, requalifiée.
+
+**R2 est pire qu'un écart** : `session/fuseau.ts` est CONFORME ; c'est l'appelant qui le désarme —
+`EcranRestauration.tsx:360` passe `undefined` et `Intl` retombe sur le fuseau de l'APPAREIL.
+Un module d'invariant contourné par son appelant est un défaut de lot.
+
+**La leçon, et elle est réutilisable** : `git diff <squash> <tête-de-branche>` **vide** est le test
+qui rouvre un historique qu'on croit effacé par le squash. Cinq secondes ; ici, trois lignes sur cinq.
