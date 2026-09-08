@@ -621,6 +621,43 @@ describe('codesDOptions — deux options distinctes ne deviennent JAMAIS le mêm
 // ═════════════════════════════════════════════════════════════════════════════
 // 4. LE FUSEAU DE MISSION — UTC en base, fuseau de mission à l'affichage
 // ═════════════════════════════════════════════════════════════════════════════
+/**
+ * Impose un fuseau d'APPAREIL, et rend de quoi le retirer.
+ *
+ * `Intl.DateTimeFormat` est enveloppé : les appels qui donnent un `timeZone`
+ * explicite traversent intacts, ceux qui n'en donnent pas en reçoivent un. Sans
+ * cela, « l'appareil ne sert plus de repli » ne se distinguerait pas d'« UTC »
+ * sur une machine réglée à UTC. La forme est celle, déjà éprouvée, de
+ * `packages/shared/src/temps.test.ts` et du test d'écran de L5d.
+ */
+function poserFuseauDAppareil(fuseau: string): () => void {
+  const reel = Intl.DateTimeFormat;
+  const enveloppe = function enveloppe(
+    locales?: Intl.LocalesArgument,
+    options?: Intl.DateTimeFormatOptions,
+  ): Intl.DateTimeFormat {
+    return new reel(
+      locales,
+      options?.timeZone === undefined ? { ...(options ?? {}), timeZone: fuseau } : options,
+    );
+  } as unknown as typeof Intl.DateTimeFormat;
+  Object.defineProperty(enveloppe, 'supportedLocalesOf', {
+    value: reel.supportedLocalesOf.bind(reel),
+  });
+  Object.defineProperty(Intl, 'DateTimeFormat', {
+    value: enveloppe,
+    configurable: true,
+    writable: true,
+  });
+  return () => {
+    Object.defineProperty(Intl, 'DateTimeFormat', {
+      value: reel,
+      configurable: true,
+      writable: true,
+    });
+  };
+}
+
 describe('formatage au fuseau de mission (03 §22.2, invariant 5)', () => {
   it('rend l’heure du fuseau demandé, pas celle de la machine', () => {
     // Le même instant UTC, lu à Paris (+2 en septembre) et à Singapour (+8).
@@ -632,9 +669,59 @@ describe('formatage au fuseau de mission (03 §22.2, invariant 5)', () => {
     expect(formaterDateHeure(HORODATAGE, 'Europe/Paris')).toBe('02/09/2026 10:00');
   });
 
-  it('accepte l’absence de fuseau sans lever — le fuseau de l’appareil sert alors', () => {
-    expect(formaterHeure(HORODATAGE, undefined)).toMatch(/^\d{2}:\d{2}$/);
-    expect(formaterDateHeure(HORODATAGE, undefined)).toMatch(/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/);
+  // ───────────────────────────────────────────────────────────────────────────
+  // AMENDÉ LE 2026-09-08, SUR ASSIGNATION NOMINATIVE D'A01 — ET ROUGE À DESSEIN.
+  //
+  // Ce test disait exactement l'inverse : « accepte l'absence de fuseau sans
+  // lever — le fuseau de l'appareil sert alors ». Il encodait le contrat ACTUEL
+  // comme un contrat VOULU, et c'est à ce titre qu'il BLOQUAIT le correctif :
+  // A22, qui écrit la production, ne pouvait pas le réécrire (09 §5.6), et A01 ne
+  // s'assigne pas ses propres tests. Entrée `DECISIONS.md` du 2026-09-08,
+  // « `formaterHeure` / `formaterDateHeure` : le fuseau redevient-il
+  // obligatoire ? », arbitrage b) : `fuseau: string | null`, REQUIS.
+  //
+  // IL EST ROUGE À SA LIVRAISON, ET C'EST SA FONCTION. La signature est encore
+  // `string | undefined` et les cinq appelants passent encore `mission?.timezone`
+  // — le commit `7bfbfef` d'A22 le dit sans détour : « les aînées gardent leur
+  // chemin `undefined` : c'est l'arbitrage de l'incrément suivant ». Le rouge
+  // n'est pas un défaut du test, c'est l'écart qui reste à combler, comme la
+  // garde C1 livrée rouge le même jour (`c324119`).
+  //
+  // CE QU'IL N'AFFIRME PAS, DÉLIBÉRÉMENT : la FORME du repli. A01 a tranché la
+  // signature et son unique issue (« l'UTC nommé ») ; il n'a pas dit où la
+  // mention se pose, et `formaterDateHeureMission` la porte aujourd'hui — rien
+  // n'oblige un `'HH:mm'` à l'accueillir. Ce test exige donc l'UTC, pas la
+  // mention : on n'écrit pas ce qu'on n'a pas vu, et une assertion de trop
+  // contraindrait une implémentation qu'A26 n'a pas à choisir.
+  // ───────────────────────────────────────────────────────────────────────────
+  it('refuse l’absence de fuseau — l’appareil n’est plus un repli offert', () => {
+    // @ts-expect-error — arbitrage A01 b) : `undefined` ne doit plus compiler. Ce
+    // n'est pas un usage qu'on corrige, c'est une CAPACITÉ qu'on ferme — un repli
+    // implicite sur l'appareil n'est pas un défaut de vigilance, il est offert
+    // par la signature. La console (`apps/hq/src/format/dates.ts`) a le paramètre
+    // requis depuis toujours et n'a jamais eu le défaut.
+    formaterHeure(HORODATAGE, undefined);
+    // @ts-expect-error — la seconde aînée, pour la même raison.
+    formaterDateHeure(HORODATAGE, undefined);
+
+    // `null` dit « ce fuseau est inconnu », jamais « prends celui de la
+    // machine » : l'instant reste EXACT, et il est rendu en UTC.
+    //
+    // La vérification est faite APPAREIL DIVERGENT, sinon elle ne prouverait rien
+    // sur une machine réglée à UTC — ce qu'est une CI par défaut, et c'est
+    // précisément la forme de faux vert que ce lot traque.
+    const restaurer = poserFuseauDAppareil('America/Los_Angeles');
+    try {
+      const rendu = formaterDateHeure(HORODATAGE, null);
+      // `toContain`, et non `toBe` : si l'implémentation retenue accole la
+      // mention ici plutôt que chez `formaterDateHeureMission`, les deux lectures
+      // de l'arbitrage restent valides. C'est l'ABSENCE du fuseau machine qui est
+      // exigée, pas une chaîne exacte.
+      expect(rendu).toContain(formaterDateHeure(HORODATAGE, 'UTC'));
+      expect(rendu).not.toContain(formaterDateHeure(HORODATAGE, 'America/Los_Angeles'));
+    } finally {
+      restaurer();
+    }
   });
 
   it('rend une chaîne vide sur un horodatage illisible, plutôt qu’« Invalid Date »', () => {

@@ -32,6 +32,21 @@
 //        depuis `agenda/jour.ts`). Un troisième module fait rougir : il devra
 //        être justifié en revue croisée, pas glissé.
 //
+// ── LE TROU QU'ELLE AVAIT, ET QUI EST FERMÉ (réserve R4, A29, 2026-09-08) ────
+// C1 s'appliquait LIGNE PAR LIGNE. A29 l'a mesuré : la même mutation, réécrite
+// sur quatre lignes par Prettier — qui scinde dès 100 caractères —, passait VERTE
+// alors que le désarmement était bien là. Or le code corrigé d'
+// `EcranRestauration.tsx` EST multi-ligne : la garde était aveugle à la forme
+// même qu'elle venait de faire écrire.
+// L'aggravant tenait à la section ci-dessous : elle nommait honnêtement deux
+// angles morts, et taisait celui-là. **Une garde qu'on croit plus large qu'elle
+// n'est vaut moins qu'une garde qu'on sait étroite.**
+// La recherche porte désormais sur le FICHIER ENTIER (voir `emplacements`) : le
+// motif tolérait déjà les retours à la ligne — `[^();]*` les accepte —, c'est la
+// boucle qui les lui retirait. Aucun faux positif ajouté : cette classe niée ne
+// franchit ni parenthèse ni point-virgule, donc jamais une frontière
+// d'instruction.
+//
 // ── CE QUE CETTE GARDE NE VOIT PAS, ET C'EST L'ESSENTIEL ─────────────────────
 // Elle est TEXTUELLE. Elle ne voit pas :
 //   · `formaterDateHeure(iso, mission?.timezone)` quand `mission` est `undefined`
@@ -43,6 +58,18 @@
 //     il explique pourquoi il a survécu à toutes les gardes du dépôt.
 // Ces deux-là ne se prennent qu'à l'écran, avec un fuseau d'appareil divergent.
 // Cette garde est un COMPLÉMENT des tests d'écran, jamais leur substitut.
+//
+// ── CE QU'ELLE ATTRAPE EN PLUS, ET QU'ON N'ENLÈVE PAS (remarque r4, A29) ─────
+// `FORMATAGE_DIRECT` cite `.toLocaleString(`, qui attrapera aussi un futur
+// `montant.toLocaleString('fr-FR')` — un NOMBRE, pas une date. Aucun usage
+// aujourd'hui : le faux positif est LATENT, et il est conservé délibérément.
+// Deux raisons. Aucun texte ne distingue un `Date` d'un `Number` au point
+// d'appel — le resserrer demanderait de lire les types, donc un autre outil. Et
+// un nombre rendu sans locale explicite casse le MÊME invariant 5 (« interface
+// 100 % en français ») qu'une date rendue sans fuseau : le jour où un module en
+// aura besoin, C3 rougira, et ce n'est pas un refus, c'est une justification à
+// écrire dans `MODULES_AUTORISES`. Les messages de C2 et C3 le disent, pour que
+// personne ne croie la garde cassée devant un rouge qu'elle a voulu.
 //
 // Traçabilité : E32 (fuseaux, devises, interface française) · E36 (exécutable par
 // lots avec critères).
@@ -76,8 +103,19 @@ const FORMATAGE_DIRECT =
  * Volontairement littéral : c'est la seule forme qui se voit dans un texte, et
  * c'est celle qu'A20 a trouvée. Une expression qui VAUT `undefined` à
  * l'exécution lui échappe — voir « ce que cette garde ne voit pas ».
+ *
+ * DEUX causes CUMULÉES rendaient l'appel multi-ligne invisible, et il fallait les
+ * deux (R4). A29 en a nommé une — la recherche ligne par ligne. La mesure en a
+ * révélé une SECONDE, tue jusque-là : Prettier ne se contente pas de scinder,
+ * **il ajoute une virgule finale**, et `,\s*undefined\s*\)` la refusait. La garde
+ * corrigée de la première moitié restait donc verte sur la forme exacte du code
+ * qu'elle prétend surveiller. D'où le `,?` — et d'où la règle : une garde ne se
+ * déclare fermée qu'après avoir vu rougir la forme RÉELLE, pas une forme plausible.
+ *
+ * `[^();]*` accepte les retours à la ligne ; il ne franchit en revanche ni
+ * parenthèse ni point-virgule, donc le motif reste borné à UN appel.
  */
-const FUSEAU_DESARME = /formater(?:Heure|DateHeure)\s*\([^();]*,\s*undefined\s*\)/g;
+const FUSEAU_DESARME = /formater(?:Heure|DateHeure)\s*\([^();]*,\s*undefined\s*,?\s*\)/g;
 
 interface Source {
   readonly chemin: string;
@@ -109,14 +147,28 @@ function sourcesTerrain(): readonly Source[] {
   return sources;
 }
 
-/** `fichier:ligne — texte de la ligne`, pour que l'échec nomme l'endroit. */
+/**
+ * `fichier:ligne — texte fautif`, pour que l'échec nomme l'endroit.
+ *
+ * LA RECHERCHE PORTE SUR LE FICHIER ENTIER, jamais ligne à ligne : voir « le trou
+ * qu'elle avait » en tête de fichier. Le rang est celui où le fautif COMMENCE ;
+ * quand il s'étale sur plusieurs lignes, c'est l'appel entier, aplati, qui est
+ * rendu — pointer `formaterDateHeure(` tout seul ne se corrigerait pas.
+ */
 function emplacements(source: Source, motif: RegExp): readonly string[] {
+  const balayage = new RegExp(
+    motif.source,
+    motif.flags.includes('g') ? motif.flags : `${motif.flags}g`,
+  );
+  const lignes = source.texte.split('\n');
   const trouves: string[] = [];
-  source.texte.split('\n').forEach((ligne, index) => {
-    const recherche = new RegExp(motif.source, motif.flags.replace('g', ''));
-    if (recherche.test(ligne))
-      trouves.push(`${source.chemin}:${String(index + 1)} — ${ligne.trim()}`);
-  });
+  for (const trouvaille of source.texte.matchAll(balayage)) {
+    const rang = source.texte.slice(0, trouvaille.index).split('\n').length;
+    const apercu = trouvaille[0].includes('\n')
+      ? trouvaille[0].replace(/\s+/g, ' ').trim()
+      : (lignes[rang - 1] ?? '').trim();
+    trouves.push(`${source.chemin}:${String(rang)} — ${apercu}`);
+  }
   return trouves;
 }
 
@@ -144,7 +196,7 @@ describe('invariant 5 — le fuseau de mission ne se rend pas facultatif au poin
     );
     expect(
       fautes,
-      'Un composant qui formate lui-même contourne `session/fuseau.ts` et donc l’invariant 5 : passer par `formaterHeure` / `formaterDateHeure` avec le fuseau de la mission.',
+      'Un composant qui formate lui-même contourne `session/fuseau.ts` et donc l’invariant 5 : passer par `formaterHeure` / `formaterDateHeure` avec le fuseau de la mission. Si le fautif formate un NOMBRE et non une date, la garde ne sait pas les distinguer : le rouge est voulu, il demande une justification en revue croisée, pas un contournement.',
     ).toEqual([]);
   });
 
@@ -154,7 +206,7 @@ describe('invariant 5 — le fuseau de mission ne se rend pas facultatif au poin
     );
     expect(
       [...formateurs].sort((a, b) => a.localeCompare(b)),
-      'Un module de plus construit un formateur de date. Ce n’est pas interdit, c’est à JUSTIFIER en revue croisée puis à inscrire dans MODULES_AUTORISES avec son motif.',
+      'Un module de plus construit un formateur de date — ou de NOMBRE, que ce motif textuel ne sait pas en distinguer (voir l’en-tête). Ce n’est pas interdit, c’est à JUSTIFIER en revue croisée puis à inscrire dans MODULES_AUTORISES avec son motif.',
     ).toEqual([...MODULES_AUTORISES.keys()].sort((a, b) => a.localeCompare(b)));
   });
 });
