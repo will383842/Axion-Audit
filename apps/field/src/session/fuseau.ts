@@ -11,12 +11,54 @@
 // rejeu A29 — même glose que son jumeau `local/horloge.ts`.
 // =============================================================================
 
+import { fuseauIanaSchema } from '@axion/shared';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UN IDENTIFIANT DE FUSEAU INCONNU NE DOIT PAS FAIRE TOMBER L’ÉCRAN — R3 (A29)
+//
+// `Intl.DateTimeFormat` LÈVE une `RangeError` sur un `timeZone` qu’il ne connaît
+// pas (« Europe/Pariss », « UTC+2 »). Or `missions.timezone` n’est contraint
+// qu’en FORME dans la base locale (`local/formes.ts` : `z.string()`, comme le
+// `timezone TEXT` du 04) et arrive d’un `.axionbackup` produit par un AUTRE
+// appareil : la valeur n’est pas de confiance à l’affichage. Une `RangeError`
+// pendant un rendu React détruit l’écran — y compris l’écran de RESTAURATION,
+// c’est-à-dire le chemin de secours lui-même (invariant 8).
+//
+// La console se protège déjà exactement ainsi (`apps/hq/src/format/dates.ts` :
+// `fuseauValide` + repli UTC). Le terrain — celui qui n’a ni réseau ni support —
+// n’avait pas cette garde : on ferme l’asymétrie, avec le validateur qui existe
+// déjà et qui MÉMOÏSE son verdict (`fuseauIanaSchema`, packages/shared).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Le fuseau est-il connu du moteur ? Chaîne vide et graphies inventées : non. */
+function fuseauConnu(fuseau: string): boolean {
+  return fuseauIanaSchema.safeParse(fuseau).success;
+}
+
+/**
+ * Le `timeZone` réellement passé à `Intl` par les deux fonctions ci-dessous.
+ *
+ * `undefined` reste `undefined` : c’est le sens DOCUMENTÉ de ces deux aînées
+ * (« aperçu neutre au fuseau de l’appareil »), et c’est précisément ce que
+ * l’incrément suivant retirera en routant leurs appelants vers
+ * `formaterDateHeureMission`. Le corriger ici anticiperait un arbitrage déjà pris
+ * ailleurs. Une graphie INCONNUE, elle, ne peut pas rester : entre lever et
+ * rendre l’instant en UTC, seul le second laisse l’écran debout. Ces deux-là
+ * n’ont pas de place pour la mention « (heure UTC) » — c’est `formaterDateHeureMission`
+ * qui la porte, et c’est la raison de plus de l’adopter partout.
+ */
+function fuseauApplicable(fuseau: string | undefined): string | undefined {
+  if (fuseau === undefined) return undefined;
+  return fuseauConnu(fuseau) ? fuseau : 'UTC';
+}
+
 /** Rend `'HH:mm'` dans le fuseau donné (celui de l'appareil si `undefined`). */
 export function formaterHeure(iso: string, fuseau: string | undefined): string {
   const epoque = Date.parse(iso);
   if (Number.isNaN(epoque)) return '';
+  const applicable = fuseauApplicable(fuseau);
   return new Intl.DateTimeFormat('fr-FR', {
-    ...(fuseau === undefined ? {} : { timeZone: fuseau }),
+    ...(applicable === undefined ? {} : { timeZone: applicable }),
     hour: '2-digit',
     minute: '2-digit',
   }).format(epoque);
@@ -26,8 +68,9 @@ export function formaterHeure(iso: string, fuseau: string | undefined): string {
 export function formaterDateHeure(iso: string, fuseau: string | undefined): string {
   const epoque = Date.parse(iso);
   if (Number.isNaN(epoque)) return '';
+  const applicable = fuseauApplicable(fuseau);
   return new Intl.DateTimeFormat('fr-FR', {
-    ...(fuseau === undefined ? {} : { timeZone: fuseau }),
+    ...(applicable === undefined ? {} : { timeZone: applicable }),
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -65,9 +108,16 @@ const MENTION_UTC = '(heure UTC)';
  * `null` signifie « cet appareil ne connaît pas le fuseau de cette mission » —
  * jamais « prends celui de la machine ». Chaîne vide sur un instant illisible,
  * comme ses deux aînées, plutôt qu'« Invalid Date ».
+ *
+ * UNE GRAPHIE QUE LE MOTEUR NE RECONNAÎT PAS VAUT `null` (R3, A29) : « UTC+2 » ou
+ * « Europe/Pariss » arrivent d’un `.axionbackup` écrit par un autre appareil, sur
+ * une colonne `timezone TEXT` (04) que rien ne contraint en IANA. Les traiter
+ * comme un fuseau ferait LEVER `Intl` au milieu d’un rendu — donc tomber l’écran
+ * de restauration. Les traiter comme un fuseau inconnu dit la vérité : l’instant
+ * est exact, son cadre n’est pas exploitable, et la mention le nomme.
  */
 export function formaterDateHeureMission(iso: string, fuseauMission: string | null): string {
-  if (fuseauMission !== null && fuseauMission !== '') {
+  if (fuseauMission !== null && fuseauConnu(fuseauMission)) {
     return formaterDateHeure(iso, fuseauMission);
   }
   const enUtc = formaterDateHeure(iso, 'UTC');

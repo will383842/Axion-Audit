@@ -374,6 +374,9 @@ function versEnregistrement(
   } as unknown as EnregistrementDescendant;
 }
 
+/** « Cet appareil ne sait pas nommer cette mission » — le seul repli de la lecture ci-dessous. */
+const IDENTITE_INCONNUE = { titre: null, fuseau: null } as const;
+
 /**
  * Le titre et le fuseau de la mission, LUS DANS LA BASE après l'import.
  *
@@ -387,15 +390,36 @@ function versEnregistrement(
  *
  * Les deux champs sont `null` quand le fichier ne contenait aucune ligne de
  * mission : l'écran le dit alors, et n'invente rien.
+ *
+ * ── POURQUOI TOUT ÉCHEC RETOMBE ICI, ET PAS SUR L’APPELANT (réserve R2) ─────
+ * Cet appel arrive APRÈS `appliquerDescente` et APRÈS la marque d’embarquement :
+ * à cet instant, les données SONT écrites. Une lecture de CONFORT — un `get`
+ * Dexie, un déchiffrement AES-GCM, un parse Zod — ne doit pas pouvoir annuler le
+ * compte rendu d’une écriture DÉJÀ COMMISE. Laissée à remonter, elle sortait par
+ * le `.catch` terminal de l’écran de restauration, qui affiche « Rien n’a été
+ * modifié » : la seule phrase FAUSSE que cet écran puisse prononcer, et il la
+ * prononcerait sur le chemin du SECOURS (invariants 7 et 8), à un auditeur qui
+ * vient de perdre sa tablette.
+ *
+ * C’est donc l’ORDRE DES EFFETS qui tranche, pas l’atteignabilité de la branche :
+ * après une écriture commise, plus rien n’a le droit d’en retirer le compte rendu.
+ * Le repli existait déjà pour la mission absente, et « cet appareil ne sait pas
+ * nommer cette mission » est le même énoncé, quelle qu’en soit la cause. Rien
+ * n’est avalé : le titre et le fuseau tombent à `null`, ce que l’écran MONTRE
+ * (« Mission restaurée » sans titre, instant en UTC nommé) au lieu de le taire.
  */
 async function lireIdentiteMission(
   missionId: string,
 ): Promise<{ readonly titre: string | null; readonly fuseau: string | null }> {
-  const { base, coffre } = contexteLocal();
-  const ligne = await base.missions.get(missionId);
-  if (ligne === undefined) return { titre: null, fuseau: null };
-  const charge = await coffre.dechiffrer(ligne.charge, SCHEMA_CHARGE.missions);
-  return { titre: charge.titre, fuseau: charge.timezone };
+  try {
+    const { base, coffre } = contexteLocal();
+    const ligne = await base.missions.get(missionId);
+    if (ligne === undefined) return IDENTITE_INCONNUE;
+    const charge = await coffre.dechiffrer(ligne.charge, SCHEMA_CHARGE.missions);
+    return { titre: charge.titre, fuseau: charge.timezone };
+  } catch {
+    return IDENTITE_INCONNUE;
+  }
 }
 
 export interface RapportImport {
