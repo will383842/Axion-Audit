@@ -126,7 +126,7 @@ artefact de CI conservé 30 jours. Le même compte débloque le **ZAP authentifi
 | --- | --- |
 | **URL de staging** | la racine `/` sert l'app terrain, `/hq` la console, `/api` l'API — même domaine (11 §2, pas de CORS) |
 | **Le commit joué** | le SHA **déployé sur staging** le jour de la séance, relevé au début et recopié dans le fichier de porte. Une séance jouée sur un autre binaire que celui de la porte ne prouve rien |
-| **L5d et L5e sont-ils fusionnés ?** | au 2026-09-09 04h51, les deux sont **en PR, non fusionnés** (`ETAT.md`). L5d ferme l'écart d'invariant 5 lu en V-7.6 ; L5e ferme le critère n° 1. **Le noter avant de commencer** : la lecture de deux lignes en dépend |
+| **L5d et L5e sont fusionnés** | **corrigé le 2026-09-09 par A01** : cette fiche disait « en PR, non fusionnés », sur la foi d'un bloc `ETAT.md` périmé. `git merge-base --is-ancestor` établit que `4f56e1f` (#108) et `59a3da2` (#109) sont **ancêtres de `ac365f3`**. Donc l'écart d'invariant 5 de V-7.6 **doit avoir disparu**, et le critère n° 1 **doit afficher une date**. Si l'un des deux ne tient pas, c'est une **régression**, pas un incrément en attente |
 | **Mot de passe d'appareil** | choisi sur place, noté sur papier, **jamais** dans un fichier |
 | **Mot de passe d'export** | idem — c'est lui qui déchiffre le `.axionbackup` sur le 2ᵉ appareil (11 §4) |
 
@@ -175,7 +175,7 @@ Légende des colonnes : **Le geste** est à l'impératif, une phrase, exécutabl
 
 | # | Le geste exact | Ce qu'on observe | Critère 07 / §33.7 fermé | Preuve à poser | ☐ |
 | --- | --- | --- | --- | --- | --- |
-| 0.1 | Relever le SHA déployé sur staging et l'écrire en tête du fichier de porte, avec l'état de L5d et L5e | le commit joué est celui de la porte, pas un autre | — (traçabilité 11 §9bis) | le SHA + « L5d fusionné oui/non », « L5e fusionné oui/non » | ☐ |
+| 0.1 | Relever le SHA déployé sur staging, l'écrire en tête du fichier de porte, puis **vérifier que `4f56e1f` et `59a3da2` y sont contenus** | le commit joué est celui de la porte, pas un autre — et il porte L5d et L5e, tous deux fusionnés dans `main` | — (traçabilité 11 §9bis) | le SHA + la confirmation que les deux correctifs sont dans le binaire joué | ☐ |
 | 0.2 | Ouvrir l'URL de staging dans Safari sur l'iPad | l'écran « Préparer cet appareil » s'affiche, deux champs, la politique de mot de passe annoncée **avant** d'être opposée | — (contexte A54 §3.1) | capture | ☐ |
 | 0.3 | Ajouter l'app à l'écran d'accueil, la fermer, la rouvrir **depuis l'icône** | elle s'ouvre en plein écran, **sans barre d'URL Safari** — c'est une PWA installée, pas un onglet | prérequis des critères 07 n° 2 et n° 8 | capture de l'icône + de l'app plein écran | ☐ |
 | 0.4 | Taper le bouton de préparation **à vide** | « Protection non créée — Saisissez un mot de passe pour protéger cet appareil. » ; le mot « incorrect » ne se prononce pas | bloquant A54 **B1**, sur matériel réel | capture | ☐ |
@@ -270,7 +270,7 @@ Légende des colonnes : **Le geste** est à l'impératif, une phrase, exécutabl
 | 7.3 | Transférer le fichier vers le 2ᵉ appareil **par clé USB ou AirDrop** — jamais par staging | le transfert se fait sans réseau : c'est ce qui protège l'invariant 8 | invariant 8 | photo | ☐ |
 | 7.4 | Sur le 2ᵉ appareil, écran « Restaurer » : choisir le fichier et saisir un **mot de passe faux** | le refus est **clair** et **ne détruit rien** — les données locales du 2ᵉ appareil restent intactes | invariant 7 | photo | ☐ |
 | 7.5 | Recommencer avec le bon mot de passe, **au clavier virtuel** | la restauration aboutit ; **les réponses cotées sur l'iPad sont là**, à l'identique | **07 n° 5 — restauré sur un 2ᵉ appareil** | photo côte à côte des deux appareils | ☐ |
-| 7.6 | Lire l'écran de restauration et le rappel de fin de journée en entier | **constat A54 R2** : UUID de mission brut et date au fuseau de l'**appareil** (invariant 5). **Le correctif est L5d** : s'il est fusionné (0.1), l'écart doit avoir **disparu** — l'observer, ne pas le supposer ; s'il ne l'est pas, le noter comme écart connu | invariant 5 | photo | ☐ |
+| 7.6 | Lire l'écran de restauration et le rappel de fin de journée en entier | **constat A54 R2** : UUID de mission brut et date au fuseau de l'**appareil** (invariant 5). **Le correctif L5d est fusionné** (`4f56e1f`) : l'écart doit avoir **disparu** — l'observer, ne pas le supposer. **S'il est encore là, c'est une régression**, à écrire comme telle | invariant 5 | photo | ☐ |
 
 ### V-8 — La session active de 45 minutes, sans ressaisie de mot de passe
 
@@ -327,7 +327,7 @@ et fait passer le n° 6 de GO SOUS RÉSERVE à GO. Restent, dus par d'autres :
 | **D-8 — l'échéance ou la séquence ?** | deux écrits se contredisent : l'arbitrage du 05 veut la bascule **à P-C** ; le dossier A51 du 08 démontre qu'elle suppose d'abord la pile (a), un fichier de règles et un run à 0/0/0. **A02 ne tranche pas un critère de porte** | A01 ou Williams |
 | **Migrations up/down sur staging** | ligne 4 de la DoD, **non tenue** : `deploy-staging.yml` n'appelle jamais `db:migrate` ; un `--down-to 0` est destructif (§5-B, 4) | Williams |
 | **A28 : p95 < 100 ms sur `jitless`, derrière Caddy** | exigé **avant signature** par A29 (revue sécurité, « ce qui reste dû à Williams », 1) — et à mesurer derrière Caddy, jamais sur `vite preview` | A28 |
-| **Critère 07 n° 1 (« sync par mission »)** | **plus un doute** : D-6 est tranché (#102) — afficher l'état, pas synchroniser. C'est un **trou de code**, fermé par **L5e** (`port-sync.ts:164`), en PR au 2026-09-09 | A20/A23, L5e |
+| **Critère 07 n° 1 (« sync par mission »)** | **plus un doute** : D-6 est tranché (#102) — afficher l'état, pas synchroniser. C'est un **trou de code**, fermé par **L5e** (`port-sync.ts:164`), **fusionné** (`59a3da2`) — donc la date doit s'afficher | A20/A23, L5e |
 | **Invariant 5 (dates ISO brutes, UUID, fuseau d'appareil)** | correctif **L5d**, en PR, non fusionné au 2026-09-09 04h51 | A22/A24/A26 |
 | **README de `apps/field`** | ligne 8 de la DoD, non tenue au **4ᵉ passage** | A20 — **et A55** |
 | **`@filrouge` allongé du segment L5** | **5ᵉ incrément** : les gestes existent en E2E, hors du parcours cumulatif | A20/A26 |
