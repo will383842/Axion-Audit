@@ -12355,3 +12355,39 @@ mapping Drizzle, `apps/api/schema-manifest.json`). **Puis** resceau de `docs/.pa
 **Fenêtre encore ouverte** : le §9 la dit rouvrable « tant que la migration n'a pas été jouée sur un
 environnement portant de la donnée ». A12 confirme : **conteneurs jetables, base vide, détruits après**.
 Elle se referme à la **première migration de staging portant du contenu réel** — qui la joue la ferme.
+## 2026-09-09 — [L5/gouvernance] « p95 des interactions < 100 ms » : p95 de QUOI, et à quelle porte ?
+
+A28 a mesuré les deux lectures plutôt que d'en choisir une (`docs/portes/MESURE_P95_A28_2026-09-09.md`) :
+groupé sur toutes les interactions **66,3 ms** (N = 2 688) ; geste par geste, 13 sur 14 tenus et un
+dépassement — « ouvrir sa session du jour », page froide, **p95 111,2 ms**, 18 échantillons sur 160
+≥ 100 ms, dans 3 courses sur 8. Recalculés depuis `releves-a28/*.jsonl` : les six chiffres publiés se
+reproduisent à la décimale.
+
+Options :
+
+- **(a) agrégat** — un p95 sur l'ensemble des interactions. 66,3 ms : tenu.
+- **(b) geste par geste** — chaque geste sous 100 ms. Un geste dépasse : non tenu.
+
+Arbitrage : **(b), premier geste d'une page froide COMPRIS.**
+Règle de précédence : sans objet entre §32-36 / §24-31 / §16-22 / §1-15 — aucune ne borne la latence
+d'interaction. Le contrat 11 gouverne donc (00_INDEX), et 11 §4 est le seul endroit du pack qui
+définisse un budget de performance AVEC son unité : « chiffrement < 50 ms/**écriture**, dérivation
+< 1 s ». Par opération, jamais par moyenne. La jurisprudence du dépôt le lit déjà ainsi (DECISIONS
+2026-09-07 : « écriture complète < 100 ms (09 §1) », qui borne UNE écriture). Et 09 §4 énumère les
+gestes — « **trouver sa session du jour** » — avant d'énoncer le seuil : c'est le geste nommé qui
+dépasse, et (a) le sauverait par la moyenne de gestes que personne ne redoutait.
+
+**Conséquence, et ce n'est pas celle qu'on attend : ce budget n'est pas un critère de P-C.** Le seuil
+ne figure qu'à deux endroits du pack — 09 §1 (charge permanente d'A28) et 09 §4 ligne **P-E**. La
+ligne P-C de 09 §4 ne le porte pas ; la ligne L5 du fichier 07, d'où le brief vient EXCLUSIVEMENT
+(09 §3), ne porte aucun critère de performance. Vérifié : zéro occurrence de « 100 ms » dans 03, 07, 11.
+
+Donc **budget NON TENU au sens (b), et dû à P-E, pas à P-C**. D-1 est un défaut daté avant P-E, rendu
+à l'équipe productrice (A20), pas à A28 (09 §5.6). La réserve d'A29 — « p95 sur `jitless`, derrière
+Caddy, avant signature » — portait sur le COÛT du drapeau : elle est **close**, le drapeau ne coûte
+rien de mesurable (4 courses sur 4). Le geste qui dépasse n'est pas causé par le durcissement.
+
+Décideur : A01
+Impact spec : aucun. Le renvoi « 03 §25 » du brief d'A28 était faux (03 §25 = recalage / agenda /
+hors-parcours) ; sa rectification vers 09 §1 et 09 §4 est vérifiée juste.
+
