@@ -18,7 +18,7 @@
 > | **A-1** | B1             | §5 PD4          | le résolveur de propriété distingue les trois entités et adopte **04 S-3**              |
 > | **A-2** | B2             | §1, §3          | le **transport authentifié du terrain entre à L6a** (porteur du scénario 8)             |
 > | **A-3** | B3             | §1, §3          | **L6a écrit `sync_log`** (push), L6b la ligne `pull`, + la clé locale de dernière sync  |
-> | **A-4** | B4             | §2              | séquence stricte **L5c → P-C → L5d → L6a → L6b → L6c**                                  |
+> | **A-4** | B4             | §2              | séquence stricte **L5c → P-C → L5f → L6a → L6b → L6c** (lot renommé par A-12)           |
 > | **A-5** | B5             | §3, §4          | **les routes de sync vivent sous `apps/api/src/sync/`** — décision d'arborescence        |
 > | **A-6** | R2, R3, R4, O4 | §1, §3, §4, §5  | `attachment_uploads`, citation de routes corrigée, archive S-4, MinIO                   |
 > | **A-7** | R1             | §5 PD6          | PD6 était **périmé** : le suivre serait une régression (R-L5a-3)                        |
@@ -26,6 +26,7 @@
 > | **A-9** | O1, O2, D4     | §8              | trois doutes de spec ajoutés, plus **D5**, trouvé en relisant la note au code             |
 > | **A-10** | R1 (A29)       | §3bis           | **2026-09-09** — la clé de dernière sync est LIVRÉE par L5e : nom et sémantique corrigés |
 > | **A-11** | calendrier P-DESCOPE | §3ter | **2026-09-09** — le découpage en incréments COMMITABLES : fichiers, porteurs, critères de fin, estimations |
+> | **A-12** | renommage A01 | §2, §3ter, §6bis, §8 | **2026-09-09** — la chaîne photo devient **L5f** ; « L5d » ne désigne plus, dans cette note, que l'incrément **fusionné** (invariant 5) |
 >
 > Toutes les affirmations de code ci-dessous ont été **re-mesurées le 2026-09-05 sur `origin/main`
 > (`da7e8c9`)**, qui contient L5a (#30), L7a (#32) et L5b (#31) — et non sur l'état du 2026-09-03.
@@ -54,7 +55,7 @@ désormais — aucune n'ajoute de fonctionnalité, chacune est la condition d'un
 (L8), aucune génération (invariant 6). Le serveur ne recalcule pas une valeur : il
 l'accepte, la refuse, ou l'arbitre.
 
-## 2. Séquencement — L6 SEUL, et après L5d
+## 2. Séquencement — L6 SEUL, et après L5f (chaîne photo)
 
 09 §6 : « P-C (fin L5) au plus tard le MARDI de la semaine 3 ; **ensuite** L6 se
 développe SEUL (§5.3) ; jamais L5 et L6 menés de front ». La fin de L5 est la porte
@@ -64,22 +65,52 @@ après L5a seul écraserait C2 en cours. Jalon de descope : 15/09.
 **AMENDEMENT A-4 (2026-09-05, B4).** Ce paragraphe concluait : « Ordre praticable et conforme :
 **L5a → L5b → L5c → (P-C) → L6 seul → (P-D)** ». Cette phrase est **périmée** : la chaîne photo a
 reçu son lot propriétaire le 2026-09-05 (`DECISIONS.md`, « La chaîne PHOTO n'a de lot propriétaire
-nulle part », PR #50) — un incrément **L5d** qui livre la table binaire locale, la capture, et
-**monte `VERSION_SCHEMA_LOCAL`**.
+nulle part », PR 50) — un incrément **L5f (chaîne photo)** qui livre **la table binaire locale, la
+capture depuis l'appareil et la compression** des images, et qui **monte `VERSION_SCHEMA_LOCAL`**.
+
+> ### AMENDEMENT A-12 DU 2026-09-09 — ce lot s'appelait « L5d », et il a changé de nom
+>
+> **Texte remplacé** : partout dans cette note, « L5d » désignait la chaîne photo. Deux incréments
+> portaient cette lettre : la chaîne photo, **jamais ouverte**, et « L5d — l'invariant 5 à l'écran »
+> (`4f56e1f`, PR 108), **fusionné dans `main`**. Lire « L5d livré » était donc vrai, et laissait
+> croire que la capture photo l'était.
+>
+> **Arbitrage A01 du 2026-09-09** (`DECISIONS.md`, « `L5d` nomme deux incréments : lequel change de
+> nom ? ») : **la chaîne photo devient `L5f` ; l'incrément fusionné garde `L5d`.** Le critère est
+> l'immuabilité de la preuve, pas l'antériorité de l'intention — branche `lot/l5d-invariant5`, sept
+> commits, revue A29 et nom du fichier de test sont immuables, et renommer le livré ferait dire aux
+> documents un nom que `git log` contredit. Règle qui en sort : **une lettre s'attribue à
+> l'OUVERTURE d'un incrément, jamais à sa planification.**
+>
+> **Convention dans toute la suite de cette note** : **`L5f` = chaîne photo — table binaire locale,
+> capture, compression — NON OUVERTE** au 2026-09-09 (`VERSION_SCHEMA_LOCAL` vaut 1, `SCHEMA_LOCAL`
+> ne porte aucune table binaire, `compresserPhoto` n'a aucun appelant de production) ·
+> **`L5d` = l'invariant 5 à l'écran, FUSIONNÉ**. Les documents antérieurs au 2026-09-09 gardent
+> l'ancien sens : ils ne se réécrivent pas, ils se lisent avec cette clé.
 
 **Séquence arbitrée par A01 le 2026-09-05, et elle est stricte :**
 
-**L5c → (P-C) → L5d → L6a → L6b → L6c → (P-D)**
+**L5c → (P-C) → L5f → L6a → L6b → L6c → (P-D)**
 
-**L5d passe AVANT L6, pas en parallèle.** Le motif n'est pas de confort : L5d touche
+> **Confrontation au réel, 2026-09-09, sur `origin/main` = `58c570f`.** Cette séquence n'est déjà
+> plus tout à fait celle qu'on a tenue en amont : **deux incréments qu'elle ne prévoyait pas** ont
+> été livrés et fusionnés entre L5c (PR 52) et P-C — **L5d (invariant 5)** `4f56e1f` et **L5e**
+> `59a3da2`. Le tenu est donc **L5c → L5d (invariant 5) → L5e → (P-C)**. Et **P-C n'est pas
+> signée** : le rejeu A02 du 2026-09-09 la donne à **1 critère ferme, 7 sous réserve matérielle ou
+> de démo, 0 non tenu**, en attente de la demi-journée matérielle de Williams
+> (`docs/portes/SEANCE_MATERIELLE_P-C.md`). L'aval — `L5f → L6a → L6b → L6c` — reste la séquence
+> en vigueur **tant que D10 n'est pas tranché par A01**, et **L5f n'est pas ouvert** : ni branche,
+> ni commit, ni ligne de production.
+
+**L5f passe AVANT L6, pas en parallèle.** Le motif n'est pas de confort : L5f touche
 `apps/field/src/local/base.ts` et monte `VERSION_SCHEMA_LOCAL`, c'est-à-dire **le schéma local même
 sur lequel le moteur de sync s'écrit**. Deux chantiers simultanés sur le schéma local sont
 exactement la collision que `CLAUDE.md` §4 interdit (« jamais deux lots en parallèle sur les mêmes
-fichiers »). **Le coût est assumé et il se dit : L5d retarde L6 d'environ une demi-journée** —
+fichiers »). **Le coût est assumé et il se dit : L5f retarde L6 d'environ une demi-journée** —
 moins cher qu'une migration locale réécrite au milieu de L6b.
 
 Conséquence sur « L6 seul » (09 §5.3) : la règle n'est **pas** affaiblie, elle est **décalée**. Une
-fois L5d fusionné, plus aucun chantier ne tourne sur `apps/field/**` ni `apps/api/**` jusqu'à P-D.
+fois L5f fusionné, plus aucun chantier ne tourne sur `apps/field/**` ni `apps/api/**` jusqu'à P-D.
 Les scénarios **6** et **7** du §9.8, qui exigent des photos réelles, deviennent atteignables.
 
 ## 3. Découpage en incréments (11 §6 — imposé, ≤ ~1 j chacun, commit + tests verts)
@@ -305,7 +336,8 @@ chemin applicatif.
 
 **Périmètre** : la photo monte en morceaux et reprend là où elle s'est arrêtée ; les huit scénarios
 deviennent des tests qui tournent à chaque commit.
-**Ce qu'il ne fait pas** : il **ne produit pas les octets** — la chaîne photo locale est **L5d**
+**Ce qu'il ne fait pas** : il **ne produit pas les octets** — la chaîne photo locale (table binaire
+dans `SCHEMA_LOCAL`, capture depuis l'appareil, compression) est **L5f**, qui **n'est pas ouvert**
 (voir D10, qui est aujourd'hui le vrai risque de ce lot).
 
 | Côté        | Fichiers TOUCHÉS                                                                                                                                                                                     |
@@ -323,7 +355,7 @@ Playwright et la reprise à 80 % · **A28** k6, a11y, budgets.
 
 **Scénarios §9.8** : il porte le MÉCANISME de **6** (5 000 réponses + 200 photos — l'envoi) et **7**
 (reprise à 80 %), et il **SCRIPTE LES HUIT** — 1 à 8, sans exception. Aucun orphelin : 1, 2, 3, 5 et
-8 viennent de L6a ; 4 de L6b ; 6 et 7 d'ici, sur des octets fournis par L5d.
+8 viennent de L6a ; 4 de L6b ; 6 et 7 d'ici, sur des octets fournis par **L5f** (chaîne photo).
 
 **Critère de fin d'incrément — mesurable** : **8/8 `@critique` verts**, rejoués à chaque commit ·
 reprise prouvée par bascule (on coupe à 80 %, `status` ne rend que les manquants, `complete` valide
@@ -337,11 +369,11 @@ de l'app à jour.
 un **restant annoncé de 4,3 j**. **Je ne fais pas tenir l'estimation** : l'écart est de **+0,5 j sur
 le budget du 07** et de **+0,7 j sur le restant**.
 
-Et il y a plus lourd, mesuré ce jour, et qui doit se dire : **L5d n'est pas livré.**
+Et il y a plus lourd, mesuré ce jour, et qui doit se dire : **L5f (chaîne photo) n'est pas ouvert.**
 `VERSION_SCHEMA_LOCAL` vaut **1**, `SCHEMA_LOCAL` ne porte **aucune table binaire**, `compresserPhoto`
 n'a **aucun appelant de production** (seul son propre test l'appelle), et le seul
 `<input type="file">` du dépôt est celui de la **restauration** (L5c). La séquence arbitrée par A01
-(A-4) étant **L5c → P-C → L5d → L6a → L6b → L6c**, il faut encore ajouter **≈ 0,5 j de L5d** avant la
+(A-4) étant **L5c → P-C → L5f → L6a → L6b → L6c**, il faut encore ajouter **≈ 0,5 j de L5f** avant la
 première ligne de L6a. **Total réel à placer : ≈ 5,5 j dans 4,3 j.**
 
 Ce que cela veut dire — sans le décider, le descope appartient à Williams, à P-DESCOPE du 15/09 :
@@ -352,14 +384,38 @@ Ce que cela veut dire — sans le décider, le descope appartient à Williams, �
 - **Ce qui peut se discuter, dans cet ordre** : ① la **charge k6** (C4, p95 < 500 ms) — un budget de
   performance, pas une garantie de non-perte ; il se rejoue après P-D sans rien invalider ;
   ② l'**affinage visuel** des surfaces de statut de L6b, ramené au strict nécessaire des 4 états ;
-  ③ **L5d** — et alors les scénarios **6** et **7** tombent avec lui, mais **7 est un critère
-  d'acceptation nommé du 07** : ce troisième cran est un **descope de porte**, pas un aménagement.
-- **Ce que je recommande** : ouvrir **L6a le jour même de P-C**, sans attendre L5d, **si et seulement
-  si** A01 accepte que L5d s'intercale entre L6b et L6c (option 3 de la décision du 2026-09-05, alors
-  écartée). Le motif du refus tenait au schéma local — L5d monte `VERSION_SCHEMA_LOCAL` — mais L6a et
-  L6b, **tels que découpés ci-dessus, ne touchent PAS `local/base.ts`** : la collision redoutée
-  n'existe plus dans ce découpage. C'est une **ré-ouverture de décision, pas une décision** : elle
-  appartient à A01, et elle s'écrit en D10.
+  ③ **L5f (chaîne photo)** — et alors les scénarios **6** et **7** tombent avec lui, mais **7 est un
+  critère d'acceptation nommé du 07** : ce troisième cran est un **descope de porte**, pas un
+  aménagement.
+- **Ce que je recommande** : ouvrir **L6a le jour même de P-C**, sans attendre L5f, **si et seulement
+  si** A01 accepte que L5f s'intercale entre L6b et L6c (option 3 de la décision du 2026-09-05, alors
+  écartée). Le motif du refus tenait au schéma local — L5f monte `VERSION_SCHEMA_LOCAL` — mais L6a et
+  L6b, **tels que découpés ci-dessus, ne touchent PAS `local/base.ts`** : la collision de fichiers
+  redoutée n'existe plus dans ce découpage. C'est une **ré-ouverture de décision, pas une décision** :
+  elle appartient à A01, et elle s'écrit en D10.
+
+> **Où ce §D se place par rapport à D-1 bis d'A01 (`PORTE_DESCOPE_2026-09-15.md`, 2026-09-09), et où
+> il en diverge.** A01 a repris les chiffres de ce §D **sans les modifier** — 5,0 j (L6) + 0,5 j
+> (L5f) = **≈ 5,5 j dans 4,3 j annoncés**, écart **≈ +1,2 j**, et **+0,5 j** sur le budget 07 de
+> 4,5 j. Aucun écart de mesure entre les deux documents. **Deux écarts de forme, que je dis au lieu
+> de les aligner en silence :**
+>
+> 1. **Ma liste ci-dessus n'est pas la liste d'options de la porte.** A01 en porte trois — **α**
+>    absorber les ≈ 1,2 j, **β** retirer la campagne k6 de L6c, **γ** reporter L5f en Phase 2 — et
+>    recommande **β puis α**, en **refusant de recommander γ** parce qu'elle fait tomber un critère
+>    d'acceptation nommé du 07 (scénario 7). Mon cran ① **est** son β, mon cran ③ **est** son γ, et
+>    nos deux refus coïncident. **Ce que ma liste omettait : l'absorption (α)** — je présentais trois
+>    crans à rogner sans jamais dire que ne rien rogner et laisser P-D glisser d'environ une journée
+>    et demie est une option, et la moins destructrice après β. C'est corrigé ici.
+> 2. **Mon cran ② n'existe pas chez A01, et je le maintiens en le bornant.** « Affinage visuel »
+>    ne veut pas dire moins que la DoD : **les 4 états, axe-core vert, les tokens et le p95 < 100 ms
+>    ne se négocient pas** (CLAUDE.md §5). Ce que ce cran recouvre est le **soin** au-delà de ce
+>    plancher, il vaut au plus ≈ 0,2 j, et il ne se chiffre pas comme une option de porte. **Si
+>    Williams lit une liste d'options, c'est celle d'A01 qui fait foi ; la mienne est le détail
+>    technique de ce qu'elles coûtent.**
+>
+> **Ce qui décide reste au-dessus de moi** : le descope appartient à Williams (CLAUDE.md §3), et
+> l'ordre des incréments à A01 (D10). Ce §D ne fait tenir aucun chiffre.
 
 ### E. Cinq doutes de spec — à ouvrir dans `DECISIONS.md`, jamais devinés
 
@@ -381,16 +437,62 @@ Ce que cela veut dire — sans le décider, le descope appartient à Williams, �
   (§9.3) et **aucune vue de destination n'est spécifiée**. Proposition : une liste minimale, en
   lecture seule, des lignes arbitrées de la mission — ou, si c'est un écran, une fiche
   `AMELIORATIONS.md` d'étage 2, jamais une invention en cours de lot.
-- **D10** _(gouvernance, ouvert par la mesure du jour)_ : **L5d n'est pas livré et le calendrier ne
-  le porte plus.** La séquence A-4 le place avant L6a ; le découpage ci-dessus montre que L6a et L6b
-  ne touchent pas `local/base.ts`. **A01 rouvre-t-il l'arbitrage du 2026-09-05 (option 3 : L5d entre
-  L6b et L6c) ?** À trancher **avant** P-C, pas le jour de P-C.
+- **D10** _(gouvernance, ouvert par la mesure du jour)_ : **L5f (chaîne photo) n'est pas ouvert et le
+  calendrier ne le porte plus.** La séquence A-4 le place avant L6a ; le découpage ci-dessus montre
+  que L6a et L6b ne touchent pas `local/base.ts`. **A01 rouvre-t-il l'arbitrage du 2026-09-05
+  (option 3 : L5f entre L6b et L6c) ?** À trancher **avant l'ouverture de L6a**.
+
+> **Avis motivé d'A20 sur D10 — 2026-09-09, à la demande d'A01 (renvoi « à la fusion de la PR 114,
+> avant l'ouverture de L6a » ; cette PR est fusionnée). Je ne tranche pas : l'ordre des incréments
+> est un arbitrage technique, donc celui d'A01. Je lui donne ce qui manquait à son refus de
+> trancher sur un `grep`.**
+>
+> **Je lui donne d'abord raison sur un point** : l'`outbox` en base locale v1 (`local/base.ts:220`)
+> ne répond **pas** au motif de 2026-09-05. Qu'une table existe déjà ne dit rien de ce qu'une montée
+> v1 → v2 fait à un appareil qui porte de la donnée. La prémisse que j'avais avancée prouve
+> l'absence de **collision de fichiers**, pas l'absence de **risque de migration**. Ce sont deux
+> questions, et j'avais répondu à la mauvaise.
+>
+> **Deux faits qui, eux, portent sur la bonne — et le premier renverse le sens du risque.**
+>
+> 1. **Avant L6a, aucun appareil n'a de route vers le siège.** Le seul filet d'un appareil qui porte
+>    de la donnée réelle est l'**export de secours chiffré manuel** de L5c. Une migration locale qui
+>    échoue à ce moment-là se répare à la main, appareil par appareil. **Après L6a + L6b, le même
+>    appareil se draine (push) AVANT de migrer**, et la donnée existe au siège. Si le critère est
+>    « protéger la donnée réelle sur des appareils réels », alors intercaler L5f **après** L6b est
+>    **plus sûr**, pas moins : le motif de 2026-09-05, examiné, pointe dans l'autre sens.
+> 2. **La migration de L5f est ADDITIVE par nature** : elle ajoute une table binaire à
+>    `SCHEMA_LOCAL` (une liste d'étapes, `base.ts:233`), elle ne transforme aucun magasin existant,
+>    ne relit ni ne réécrit une réponse. Ce n'est pas le même objet qu'une migration qui réécrirait
+>    `answers`. **Mais ce n'est vrai que si L5f est écrit ainsi** — ce n'est pas une constatation,
+>    c'est une contrainte à imposer.
+>
+> **Le contre-argument que je refuse de cacher, et qui est le plus fort contre D10 :** placer L5f en
+> dernier en fait la **variable d'ajustement de fait**. À 5,5 j dans 4,3, c'est le dernier incrément
+> avant P-D qui se fait comprimer — et alors **γ arriverait par dérive au lieu d'arriver par
+> arbitrage** : les scénarios 6 et 7 tomberaient sans que personne l'ait décidé, sur un critère
+> nommé du 07. La séquence du 2026-09-05, elle, rend ce glissement **impossible par construction**.
+>
+> **Ma recommandation, donc, est conditionnelle, et les conditions sont le prix du oui :**
+> ① L5f **strictement additif** — aucune transformation de magasin existant, avec un test qui ouvre
+> une base v1 **portant des données**, applique la montée et **relit les mêmes enregistrements** :
+> critère de fin d'incrément, pas une intention ; ② les **0,5 j de L5f datés et réservés au
+> calendrier au moment même de l'arbitrage**, avant l'ouverture de L6a — sans cela ma réponse est
+> **non**, parce que le §D montre qu'il n'y a pas de place pour un incrément « qu'on fera à la fin ».
+>
+> **Et une remarque d'honnêteté sur ce que D10 achète.** Il ne fait **gagner aucune journée** : 5,5 j
+> restent 5,5 j, il ne change que l'ordre. Son seul gain est de permettre d'ouvrir L6a le jour de
+> P-C, plus un bénéfice réel mais secondaire — L5f écrit après L6a connaîtrait la forme exacte de
+> l'op de pièce jointe qu'il doit mettre en file. Or **P-C n'est pas signée** et attend une
+> demi-journée matérielle : l'urgence qui motivait D10 est, aujourd'hui, moindre que le jour où je
+> l'ai écrit. **Si le descope retient α ou β, garder la séquence du 2026-09-05 est le choix le plus
+> sûr et il ne coûte presque rien. Décision : A01.**
 
 **Contrôle A02 du 2026-09-05 — état des cinq bloquants au 2026-09-09.** **B1** levé par A-1 (PD4,
 trois résolveurs, 04 S-3 cité) · **B2** levé par A-2 (le transport entre à L6a, §3bis, porteur A25) ·
 **B3** levé par A-3, **et sa preuve est nommée ici** — critère de fin de L6a : `sync_log` écrit par
 le chemin applicatif, pas par la fixture · **B4** levé par A-4 **sur le papier**, mais **sa prémisse
-a bougé** : L5d n'existe toujours pas (D10) · **B5** levé par A-5 (`apps/api/src/sync/`, un seul
+a bougé** : L5f n'est toujours pas ouvert (D10) · **B5** levé par A-5 (`apps/api/src/sync/`, un seul
 glob pour les deux moitiés). **5/5 levés dans la note ; un seul, B4, appelle une re-décision de
 séquencement.**
 
@@ -528,7 +630,7 @@ scénarios `@critique` n'étaient portés par aucun incrément. Aucune ligne ne 
 | Critère 07 (mot pour mot)                     | Mécanisme porté par                                                          | Test écrit par                |
 | --------------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------- |
 | **C2** — rejeu 3× du même lot = état identique | **L6a** — `processed_ops` + upsert par `entityId` (les deux ceintures, 11 §4) | A27 (intégration) + A26 (E2E) |
-| **C3** — reprise d'upload interrompu à 80 %    | **L6c** — chunks §9.6 + `attachment_uploads` ; octets fournis par **L5d**    | A26                           |
+| **C3** — reprise d'upload interrompu à 80 %    | **L6c** — chunks §9.6 + `attachment_uploads` ; octets fournis par **L5f**    | A26                           |
 | **C4** — 50 clients × 1 000 ops, p95 < 500 ms  | **L6c** — k6                                                                 | A28                           |
 
 | #   | Scénario §9.8                                        | Incrément porteur du MÉCANISME                                                                         | Test            |
@@ -538,12 +640,12 @@ scénarios `@critique` n'étaient portés par aucun incrément. Aucune ligne ne 
 | 3   | double envoi du même lot                             | **L6a** — `processed_ops` + upsert par `entityId`                                                       | L6c / A26       |
 | 4   | horloge locale +3 h                                  | **L6b** — `serverTime` → `reglerDecalage` (PD7)                                                         | L6c / A26       |
 | 5   | deux appareils sur la même mission                   | **L6a** — `superseded` + archive `answer_revisions` **sur les trois entités** (S-4)                     | L6c / A26 + A27 |
-| 6   | 5 000 réponses **+ 200 photos** en file              | **L5d** (chaîne photo locale) → **L6a** (lots de 100) → **L6c** (envoi)                                 | L6c / A26       |
-| 7   | reprise d'upload interrompu à 80 %                   | **L5d** (octets) → **L6c** (chunks §9.6 + `attachment_uploads`)                                         | L6c / A26       |
+| 6   | 5 000 réponses **+ 200 photos** en file              | **L5f** (chaîne photo locale) → **L6a** (lots de 100) → **L6c** (envoi)                                 | L6c / A26       |
+| 7   | reprise d'upload interrompu à 80 %                   | **L5f** (octets) → **L6c** (chunks §9.6 + `attachment_uploads`)                                         | L6c / A26       |
 | 8   | expiration du refresh token en mission longue (§31-3) | **L6a** — transport authentifié : refresh rotatif, 401 hors ligne, message §31-3, collecte qui continue | L6c / A26       |
 
-**8/8 portés.** Les scénarios 6 et 7 dépendent de **L5d**, ce qui est exactement pourquoi la
-séquence du §2 le place **avant** L6a.
+**8/8 portés.** Les scénarios 6 et 7 dépendent de **L5f** — la chaîne photo, **non ouverte** — ce
+qui est exactement pourquoi la séquence du §2 la place **avant** L6a, et ce que D10 rouvre.
 
 ## 7. Affectation croisée (09 §5.6 — le testeur n'est jamais l'auteur)
 
@@ -587,3 +689,9 @@ croisement, elle, est respectée sur **toutes** les lignes.
 
 **Signature :** A20 — conception L6, version d'origine 2026-09-03 ; **amendée le 2026-09-05** pour
 lever B1 à B5 du contrôle A02, sur arbitrages A01 du 2026-09-05. À contresigner A01 + A02.
+
+**Signature A-12 :** A20 — 2026-09-09, application du renommage arbitré par A01 (`L5d` chaîne photo
+→ **`L5f`** ; l'incrément fusionné garde `L5d`), **plus** trois choses qui ne sont pas du renommage
+et qui appellent une contresignature : la **confrontation de la séquence du §2 au réel** (L5d et L5e
+fusionnés avant P-C, P-C non signée), le **placement du §D par rapport à D-1 bis d'A01** (mon cran ②
+maintenu et borné, l'option α que j'avais omise), et mon **avis motivé sur D10**, qui reste à A01.
