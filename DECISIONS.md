@@ -12108,3 +12108,81 @@ Règle de précédence : **sans objet** — aucune divergence de pack ; c'est le
 Décideur : **A01**. Escalade Williams : **non** aujourd'hui ; **oui** si la mesure d'A28 casse le budget.
 Impact spec : aucun. Aucune dépendance ajoutée (Zod 4.4.3 déjà épinglé, 11 §1) : l'escalade §8-1 ne
 s'applique pas.
+
+## 2026-09-09 — [securite] `10049` dans `.zap/rules.tsv` : une exception peut-elle recouvrir une dette déjà datée ?
+
+A29 refuse la ligne sur ma condition (2) du 2026-09-08 — « aucune ligne pour une règle qu'un
+changement du produit fermerait » — et il l'a MESURÉE. `10049` absorbe 9 instances ; la justification
+n'en couvre que trois familles (`immutable` sur les assets empreintés, `no-store` sur SW et manifeste,
+`no-cache` sur l'HTML). **Cinq des neuf n'en relèvent d'aucune** : trois icônes non empreintées, que
+l'exclusion `not path /icones/*` du matcher `@html` sort du `no-cache` sans rien leur donner, et
+`/api/v1` + `/api/v1/health`, qui sont **exactement le §4-B** daté et assigné à A13, lot L6, porte
+P-D. Aucune des cinq n'a de `Cache-Control` : la règle y signale un ÉCART, pas la conformité que sa
+justification invoque.
+
+Options :
+a) Retirer `10049` ; la politique de cache se ferme par le PRODUIT — icônes maintenant, `/api/*` à L6c.
+b) Garder en bornant : nommer les cinq instances, écarter `/api/*` par la justification, réexamen L6c.
+
+Arbitrage : **a)**, et le doute de spec se tranche avec : **non, une ligne d'exception ne peut pas
+recouvrir un défaut déjà daté et assigné.** Une dette programmée est par construction fermable par le
+produit — c'est ce que « datée et assignée » veut dire — donc elle tombe sous la condition (2).
+b) est en outre mécaniquement impossible : ZAP n'a **pas de périmètre par ligne**, la borne ne serait
+qu'une phrase dans un TSV. À L6c, avec `ZAP_BLOQUANT='true'` et les routes JSON authentifiées,
+l'absence de `no-store` sur des réponses portant `person_name` et `scoping_financials` serait avalée
+par une ligne qui affirme en prose ne pas les concerner — verte par le chemin qu'elle emprunte et non
+par la règle qu'elle énonce. A29 le nomme mieux : le contrôle-qui-ment de F-31, à retardement,
+introduit par la PR qui prétend le fermer. Le réexamen daté n'y remédie pas, il aggrave — il échoit au
+moment précis où le risque se réalise et où la pression de garder la ligne est maximale.
+**Ma condition (2) se lit donc sur les instances qu'une ligne SILENCE, jamais sur l'étiquette de la
+famille** : une ligne qui en tait une seule fermable par le produit est refusée. C'est le cas qu'A29 a
+trouvé et que ma rédaction du 08 n'avait pas prévu.
+L'asymétrie décide du reste : me tromper en a) coûte un `WARN-NEW` que quelqu'un lit et trouve
+pénible — bruyant, réversible ; me tromper en b) coûte un trou muet, découvert par un incident.
+Ce que je n'achète pas : la bascule. `ZAP_BLOQUANT` reste à Williams, et un `no-store` posé sur
+`/api/v1/health` SEUL pour verdir un job serait l'option 3 du 2026-09-05, que je maintiens écartée.
+Le compteur attend le produit ; il ne l'achète pas.
+Règle de précédence : sans objet — aucune divergence de pack ; c'est ma propre condition (2) qu'on
+applique, sur une mesure qui en révèle la portée.
+Décideur : **A01**, sur mesure d'A29. Escalade Williams : **non** pour la ligne ; **oui** pour la
+bascule, qui était déjà la sienne.
+Impact spec : aucun. Amende la condition (2) du 2026-09-08 sur son critère de lecture, sans la renverser.
+
+## 2026-09-09 — [securite] `10049` est un CLASSIFICATEUR : une règle qu'aucun état du produit ne ferme
+
+Troisième mesure, et la première prise **après** un correctif : A11 a fermé les icônes, puis rejoué
+les trois scans. `10049 ×8` par cible, `IGNORE 3 · PASS 66`. Les icônes n'ont pas quitté la règle,
+elles ont changé de COLONNE : `10049` classe chaque réponse en Non-Storable / Storable & Cacheable /
+Storable but Non-Cacheable — jusqu'au 308. **Aucun état du produit ne rend zéro instance.** Ma
+prémisse du matin (« cinq instances fermables ») et celle d'A51 (« conformité voulue ») tombent
+ensemble.
+
+Options :
+a') Maintenir le retrait — `WARN-NEW 1` sur les trois cibles POUR TOUJOURS, bascule inatteignable.
+b') Ré-admettre sur une justification vraie, plus une garde du dépôt qui voit ce que ZAP ne voit pas.
+
+Arbitrage : **b')**, et le doute neuf se tranche avec : **un classificateur est structurel au sens
+fort** — aucun changement du produit ne le ferme, par construction. Il satisfait la condition (2)
+a fortiori, plus purement que 10109 ou 90005. a') est l'issue que mon entrée du 08 nommait elle-même
+« F-31 une troisième fois » : une garde inatteignable finit désarmée.
+Deux vérifications qui ne viennent pas d'A11 et qui retournent l'argument d'A29 : §4-B **n'est pas vu
+par 10049** — une réponse sans `Cache-Control` tombe en colonne 2 avec les assets `immutable`, et
+c'est **10015** qui l'en distingue, où A51 l'avait rangée dès le 08 (dossier, ligne 32) ; et le même
+dossier écrit ligne 236 que « le `no-store` des réponses authentifiées (§4-B) reste **hors de portée
+du scan** ». Les routes de L6c ne seront jamais explorées par une araignée non authentifiée : la ligne
+ne pouvait rien avaler, le scénario redouté n'existe pas.
+D'où la **condition (5)**, vrai acquis de ces trois passes : une ligne n'est admissible que si la
+classe de défaut qu'elle POURRAIT masquer reste détectée ailleurs — autre règle active, ou test du
+dépôt — et ce détecteur est NOMMÉ dans la justification. Ici 10015, qui reste active, et la garde
+d'A26. Puisque ZAP ne verra jamais les routes authentifiées, cette garde n'est pas un confort : c'est
+**le seul détecteur** de §4-B.
+Et la règle de méthode que nos trois erreurs ont en commun : **une ligne de `rules.tsv` ne s'admet ni
+ne se refuse sur un rapport antérieur au correctif qu'elle discute.** A51, A29 et moi avons tous
+raisonné sur des scans d'avant.
+L'entrée du retrait n'est pas retirée : elle était juste sur ses faits, et #111 la porte telle quelle —
+un registre append-only garde la marche, pas seulement l'arrivée.
+Règle de précédence : sans objet — aucune divergence de pack ; ce sont mes conditions (1) et (2) qu'on
+qualifie, sur une mesure post-correctif.
+Décideur : **A01**, sur mesure d'A11 et réfutation vérifiée d'A29. Escalade Williams : **non** pour la
+ligne ; la bascule `ZAP_BLOQUANT` reste la sienne, et b') la rend de nouveau atteignable.
+Impact spec : aucun. Amende l'entrée du retrait et complète les conditions du 2026-09-08.
