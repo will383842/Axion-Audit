@@ -12,7 +12,7 @@
 // Traçabilité : 06 §10.2 (« en-têtes de sécurité (Caddy : HSTS, CSP stricte,
 // X-Content-Type-Options) ») · E36 · E43 · 11 §2 (aucun CDN, pas de CORS) ·
 // 11 §4 (WASM Argon2id, PWA) · DOSSIER_ZAP_2026-09-08 §1 (10055, 90004), §3,
-// §4-A, §4-C · DECISIONS.md 2026-09-08 (A01, #104).
+// §4-A, §4-C · DECISIONS.md 2026-09-08 (A01, PR 104).
 //
 // ── LE FAIT QUI JUSTIFIE CE FICHIER (DOSSIER_ZAP §4-C) ─────────────────────
 // « Aucun test du dépôt n'assert un seul en-tête de sécurité. Un `git revert`
@@ -37,10 +37,10 @@
 // ── CE QUI EST ATTENDU EST LA CIBLE, PAS L'ÉTAT ─────────────────────────────
 // `CSP_CIBLE` ci-dessous est la CSP SANS `style-src 'unsafe-inline'` (A51 §3 :
 // zéro consommateur ; A01 : retrait dans le même incrément que cette garde).
-// COOP et CORP `same-origin` sont attendus sur les trois cibles. COEP n'est
-// attendu qu'en PRÉSENCE : sa valeur (`require-corp` ou `credentialless`) se
-// choisit par la mesure (A01), et cette garde la RELÈVE en annotation sans la
-// figer. Sur `6c3cf87`, ce fichier est rouge : c'est voulu, et c'est daté.
+// COOP et CORP `same-origin` sont attendus sur les trois cibles. COEP est
+// FIGÉ à `require-corp` depuis `c3745a8` : la mesure a eu lieu (A01 : « c'est
+// la MESURE qui choisira »), et c'est WebKit qui a tranché — voir `COEP_CIBLE`.
+// Sur `6c3cf87`, ce fichier est rouge : c'est voulu, et c'est daté.
 //
 // ── COMMENT VOIR CETTE GARDE ROUGIR ET VERDIR, LOCALEMENT ───────────────────
 //   AXION_CADDYFILE_EPROUVE=<copie mutée> pnpm exec playwright test en-tetes-servis
@@ -86,6 +86,27 @@ const CSP_AMONT_HELMET =
 
 /** 06 §10.2 : HSTS — un an au moins, sous-domaines inclus. */
 const HSTS_MAX_AGE_MINIMAL_S = 31_536_000;
+
+/**
+ * COEP — `require-corp`, FIGÉ. Choisi par la mesure (A11, `Caddyfile` snippet
+ * `(securite)`, `c3745a8`), pas par le catalogue : les deux valeurs tiennent sur
+ * la PWA (`crossOriginIsolated: true`, zéro ressource bloquée — le test
+ * navigateur ci-dessous), et trois motifs les départagent. Le décisif :
+ *
+ *   `credentialless` N'EST PAS PRIS EN CHARGE PAR WEBKIT. Sur Safari — donc sur
+ *   l'iPad terrain, l'appareil de référence — il vaut `unsafe-none`, c'est-à-dire
+ *   AUCUNE isolation d'origine là où elle compte le plus. `require-corp` est
+ *   compris des trois moteurs.
+ *
+ * Les deux autres : la CSP (`CSP_CIBLE`, tout à `'self'`) fait DÉJÀ payer la
+ * contrainte de `require-corp` ; et `credentialless` n'a d'objet que pour charger
+ * des ressources tierces sans cookies — un besoin que ce dépôt refuse (11 §1, §2).
+ *
+ * Passer à `credentialless` « parce que c'est plus souple » n'est donc pas un
+ * assouplissement : c'est retirer l'isolation à l'iPad. Ce n'est pas une valeur
+ * qu'on change dans ce test — c'est une décision humaine (11 §8, point 4).
+ */
+const COEP_CIBLE = 'require-corp';
 
 const CIBLES = [
   { chemin: '/', nom: 'terrain', genre: 'front' },
@@ -260,27 +281,29 @@ for (const pile of PILES_CADDY) {
           ).toBe('same-origin');
         });
 
-        // COEP : PRÉSENCE seulement. `require-corp` ou `credentialless` se
-        // choisit par la mesure (A01, 2026-09-08) — la valeur servie est
-        // relevée en annotation, jamais figée ici. Le jour où A11 a choisi, la
-        // valeur se fige DANS CE TEST, dans le même commit que le Caddyfile.
-        test(`@critique Cross-Origin-Embedder-Policy présent (valeur relevée, non figée)`, async ({
+        // COEP : la VALEUR, figée à `require-corp` (voir `COEP_CIBLE` : WebKit
+        // ne connaît pas `credentialless`, l'iPad terrain y perdrait toute
+        // isolation). Jusqu'à `645667e` ce test n'exigeait que la présence, la
+        // mesure n'étant pas faite ; elle l'est (`c3745a8`), la valeur se fige.
+        test(`@critique Cross-Origin-Embedder-Policy: require-corp (credentialless = unsafe-none sous WebKit)`, async ({
           request,
         }) => {
           const en = await enTetesDe(request, pile, cible);
           const coep = en['cross-origin-embedder-policy'];
-          test.info().annotations.push({
-            type: 'COEP servi',
-            description: `${cible.chemin} (${pile.nom}) : ${coep ?? '(absent)'}`,
-          });
           expect(
             coep,
-            `${cible.chemin} : Cross-Origin-Embedder-Policy absent (ZAP 90004). Sa valeur ` +
-              `n'est pas exigée ici — sa présence, si.`,
+            `${cible.chemin} : Cross-Origin-Embedder-Policy absent (ZAP 90004, 06 §10.2)`,
           ).toBeDefined();
-          expect(coep, `COEP « ${String(coep)} » n'est ni require-corp ni credentialless`).toMatch(
-            /^(require-corp|credentialless)$/,
-          );
+          expect(
+            coep,
+            `${cible.chemin} : COEP « ${String(coep)} » au lieu de ${COEP_CIBLE}. ` +
+              (coep === 'credentialless'
+                ? `credentialless n'est pas pris en charge par WebKit : sur l'iPad terrain il vaut ` +
+                  `unsafe-none, AUCUNE isolation. Ce n'est pas « plus souple », c'est absent. `
+                : '') +
+              `Voir COEP_CIBLE et le snippet (securite) du Caddyfile — les deux changent ensemble, ` +
+              `sur décision humaine (11 §8).`,
+          ).toBe(COEP_CIBLE);
         });
 
         // ---------------------------------------------------------------------
@@ -314,13 +337,20 @@ for (const pile of PILES_CADDY) {
                 `Servie  : ${String(csp)}\n` +
                 `Attendue: ${CSP_CIBLE}\n` +
                 `Si le diff est \`style-src 'self' 'unsafe-inline'\` → \`style-src 'self'\` : c'est ` +
-                `le retrait attendu (A51 §3 : zéro consommateur ; A01 #104). Si c'est autre chose : ` +
+                `le retrait attendu (A51 §3 : zéro consommateur ; A01 PR 104). Si c'est autre chose : ` +
                 `la constante CSP_CIBLE et le Caddyfile changent dans le MÊME commit, jamais l'un sans l'autre.`,
             ).toBe(CSP_CIBLE);
           });
         } else {
           // FAIT À CORRIGER À L6c — PAS UN ATTENDU DE SÉCURITÉ.
           // Ce test documente l'écrasement §4-A tel qu'il est servi aujourd'hui.
+          // L'arbitrage qui le date et l'assigne : DECISIONS.md, entrée
+          // « 2026-09-08 — [P-C] Trois écarts hors critères : lesquels se
+          // corrigent pendant une porte échouée ? », point (a) — le commentaire
+          // d'`app.ts` se rectifie MAINTENANT, le comportement (la CSP propre de
+          // l'API) ne devient réel qu'au download §9.6, donc L6c. Un test qui
+          // asserte un défaut connu cite l'entrée qui l'a décidé, pas un titre nu
+          // (A01, 2026-09-09).
           // Quand L6c fera porter à l'API sa propre CSP (download en streaming §9.6
           // sous `default-src 'none'`), ce test ROUGIT : c'est le signal de le
           // réécrire en attendu (`csp` = la CSP de l'API), dans le même commit.
@@ -335,6 +365,8 @@ for (const pile of PILES_CADDY) {
             test.info().annotations.push({
               type: 'fait à corriger — L6c',
               description:
+                `Arbitrage : DECISIONS.md « 2026-09-08 — [P-C] Trois écarts hors critères : ` +
+                `lesquels se corrigent pendant une porte échouée ? », point (a) (A01). ` +
                 `${cible.chemin} (${pile.nom}) sert la CSP : ${String(cspApi)} — ` +
                 `l'amont émettait : ${CSP_AMONT_HELMET}`,
             });
@@ -361,7 +393,7 @@ for (const pile of PILES_CADDY) {
 }
 
 // -----------------------------------------------------------------------------
-// PROUVÉ EN NAVIGATEUR (A01 #104) — la PWA terrain démarre sous les en-têtes
+// PROUVÉ EN NAVIGATEUR (A01 PR 104) — la PWA terrain démarre sous les en-têtes
 // servis : Argon2id (WASM, `'wasm-unsafe-eval'`), icônes `data:`, photos
 // `blob:`, service worker, police auto-hébergée — sans UNE violation de CSP ni
 // UNE ressource bloquée par COEP/CORP. C'est ce qui rend le retrait de
