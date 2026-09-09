@@ -34,6 +34,15 @@ import { z } from 'zod';
 // de bord d'import est vrai tant que personne ne réorganise les imports, un appel
 // nommé reste vrai après.
 //
+// LA FONCTION SŒUR, ET POURQUOI ELLE N'EST PAS ICI : `desactiverJitZod()`
+// (`./zod-sans-jit.ts`, exposé par `@axion/shared/zod-sans-jit`) pose
+// `z.config({ jitless: true })` pour les DEUX FRONTS seulement — l'API et le worker
+// n'ont ni navigateur ni CSP, et gardent leur JIT (arbitrage A01 du 2026-09-09).
+// Elle COMPOSE avec la locale (`config()` est un `Object.assign`). Elle ne peut pas
+// vivre dans ce fichier : la sonde `eval` de Zod part à la CONSTRUCTION du premier
+// `z.object()`, et `errorDetailSchema` ci-dessous en est un — importer ce module,
+// c'est déjà trop tard. Le sous-chemin d'export existe pour cette seule raison.
+//
 // CE QUI N'EST PAS TRADUIT, ET NE DOIT PAS L'ÊTRE : le CODE. `ERROR_CODES` est ce que
 // le front teste (11 §3 : « jamais de littéral libre ») ; seul le MESSAGE est localisé.
 // =============================================================================
