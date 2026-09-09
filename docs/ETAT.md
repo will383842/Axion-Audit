@@ -5173,3 +5173,28 @@ détecteur est NOMMÉ. Et 10015 ne porte pas §4-B non plus : la garde du dépô
 **`--no-verify` sur f457762, 5a372b5, 645667e** : A26 avait un diff en cours dans le même worktree à
 chaque fois ; les gardes ont été rejouées par chaque agent, la CI juge. `_axsec` n'a pas de `.env` :
 `test:integration` y rend 5 rouges/51 skippés — environnemental, 646/646 avec l'env (A29, O3).
+
+## 2026-09-09 06h30 — [lot L5 / porte P-C] — étape pipeline 6/7
+Dernier commit vert : 5ac6f95 (sécurité en-têtes servis, #112)   ·   Branche : plusieurs (voir infra)   ·   Poussé : oui
+Tâche en cours : fermer les derniers items d'A02 — NB-15 compteur cliquable (A22), matrice NB-9-ter
+et README field 5e passe (A55), p95 sous jitless derrière Caddy (A28).
+Prochaine action : recevoir A22/A55/A28, faire écrire les tests par A26 (jamais A22), revue A29, PR.
+Tests rouges connus : aucun sur 5ac6f95. Deux `@critique` rouges SUR WINDOWS SEULEMENT (coupure
+brutale, export restauré sur 2e profil) : le service worker n'atteint jamais `activated` en contexte
+persistant ; verts en CI en 3,2 s et 5,6 s — vérifié par A54, pas supposé.
+
+**P-C rejouée EN ENTIER (09 §4bis)** : A02 → plus aucun critère non tenu par le produit ; A54 → GO
+SOUS RÉSERVE au 3e rejeu intégral. PR #113 (dossier A02 + recette A54 + séance matérielle) et #114
+(découpage L6) ouvertes, auto-merge armé — documentation seule, décision du 2026-09-02.
+
+**Deux faits que le rejeu a corrigés dans mon suivi, et que je n'avais pas mesurés** : le run ZAP en
+TLS sur staging que j'annonçais « à lancer » tourne DÉJÀ à chaque merge et rend **2/2/2, pas 0/0/0** ;
+et A55 a refusé mon chiffre de « cinq des sept points bloqués sans le compte staging » — il n'y en a
+qu'**un** de jouable sans lui. Deux fois, un agent a mesuré ce que j'avais affirmé.
+
+**N3, constat neuf d'A54, étage 1** : « Votre mot de passe » sur Fin de journée se lit comme une
+création ; c'est celui **de l'appareil**, et aucun des deux écrans ne l'écrit. Conséquence : la
+journée se termine **sans sauvegarde** — ce que l'invariant 8 existe pour empêcher. A22 corrige.
+
+**Reste matériel, non délégable** : `docs/portes/SEANCE_MATERIELLE_P-C.md` — dix vérifications,
+67 cases, ≈4 h 30 non fractionnables. Aucune n'est un défaut du produit.
