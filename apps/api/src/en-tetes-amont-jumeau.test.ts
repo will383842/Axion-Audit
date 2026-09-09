@@ -47,6 +47,30 @@ describe('le jumeau des en-têtes de helmet (amont-api-factice.caddy)', () => {
   let app: FastifyInstance;
   let helmet: Map<string, string>;
 
+  // ── POURQUOI CE CROCHET PORTE UN DÉLAI EXPLICITE ────────────────────────────
+  // MESURÉ (2026-09-09, deux passages de `pnpm test:unit` complet) : ce crochet
+  // met 6,9 s à 10,1 s selon la charge, contre 4,5 s quand le fichier tourne
+  // seul. Au-delà du plafond PAR DÉFAUT des crochets (10 s), Vitest annule le
+  // fichier et compte ses cas en « skipped » — la sortie lue était
+  // « 2 tests | 2 skipped … Test Files 1 failed », et le `pre-push` rougissait
+  // un passage sur deux. C'est la famille de défauts que ce dépôt a déjà nommée
+  // (auth/socle.test.ts, auth/quota.test.ts, même signature ; ETAT.md,
+  // assignments/service.test.ts) et que playwright.config.ts résume : « un test
+  // qui échoue par intermittence est un test qui ment ».
+  //
+  // CE QUE CE CROCHET FAIT, ET POURQUOI ÇA COÛTE : il monte le socle Fastify
+  // RÉEL (`construireApp` — plugins, compilateurs Zod, politique d'accès,
+  // quota, helmet) pendant que 74 autres fichiers tournent en parallèle. Ce
+  // n'est pas un coût qu'on peut retirer : mesurer les en-têtes sur une app
+  // reconstruite à la main reviendrait à RECOPIER la configuration de helmet —
+  // exactement la dérive que ce fichier existe pour interdire (R5). Le prix de
+  // ne pas recopier les en-têtes, c'est de démarrer le vrai socle.
+  //
+  // 120 s n'est pas une tolérance à la lenteur, et le seuil du test lui-même ne
+  // bouge pas : les deux `it` ci-dessous restent sous le plafond ordinaire du
+  // projet `unit`, parce qu'ils ne font que comparer deux cartes déjà en
+  // mémoire. Si ce crochet met vraiment deux minutes, ce n'est plus une
+  // contention, c'est une panne — et il échouera.
   beforeAll(async () => {
     const { construireApp } = await import('./app.js');
     app = await construireApp();
@@ -58,11 +82,14 @@ describe('le jumeau des en-têtes de helmet (amont-api-factice.caddy)', () => {
         .filter(([nom]) => !HORS_HELMET.has(nom.toLowerCase()))
         .map(([nom, valeur]) => [nom.toLowerCase(), String(valeur)]),
     );
-  });
+  }, 120_000);
 
+  // Même plafond, même raison : la fermeture attend les crochets `onClose` du
+  // socle sous la même contention. Un `afterAll` qui expire fait échouer un
+  // fichier dont tous les cas sont passés — le rouge le plus trompeur qui soit.
   afterAll(async () => {
     await app.close();
-  });
+  }, 120_000);
 
   it('@critique chaque en-tête du .caddy est émis par helmet, à l’octet près', () => {
     const jumeau = enTetesAmontFactice();
