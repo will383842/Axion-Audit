@@ -805,19 +805,53 @@ describe('check-invariants.mjs — non-régression du témoin sain', () => {
     expect(code).toBe(0);
   });
 
-  it('@critique les migrations RÉELLEMENT versionnées du dépôt restent acceptées', () => {
-    // Le lot L1 a livré et fait signer ces douze fichiers. Si le nouveau contrôle en
-    // refuse un seul, ce n'est pas une découverte : c'est une régression.
-    const dossier = join(RACINE_DEPOT, 'apps', 'api', 'drizzle');
-    const migrations = readdirSync(dossier).filter((nom) => nom.endsWith('.sql'));
-    expect(migrations.length).toBeGreaterThan(0);
+  // POURQUOI CE CAS-CI PORTE UN PLAFOND EXPLICITE, ET PAS SES QUARANTE-HUIT VOISINS.
+  //
+  // Ici il n’y a AUCUN import à froid à déplacer : chacun des 49 cas de ce fichier
+  // `spawnSync` un vrai processus Node sur le vrai garde, et c’est précisément ce
+  // qu’on veut éprouver — le garde tel que la CI l’exécute, pas une réimplémentation.
+  // Le coût est donc légitime et irréductible depuis le test.
+  //
+  // MESURÉ (A16, 2026-09-09, Node 24, 8 cœurs) :
+  //
+  //   ce cas, fichier isolé ................................. 1 203 ms
+  //   ce cas, suite unitaire complète, machine au repos ..... 1 293 ms
+  //   ce cas, suite complète, 6 cœurs sur 8 occupés ......... 2 938 ms   (59 % du plafond)
+  //   ce cas, suite complète sous contention dégradée ....... 4 773 ms
+  //   observé par A28 le 2026-09-09 ......................... 5 683 ms → ÉCHEC
+  //   le reste du fichier, sous la même charge .............. p90 1 432 ms, médiane 1 137 ms
+  //
+  // Ce cas est le seul du fichier à dépasser 2,5 s, parce qu’il est le seul à
+  // soumettre au garde TOUTES les migrations réellement versionnées. Son travail
+  // propre est de 1,2 s ; tout le reste est la latence d’ordonnancement de la
+  // machine, qu’un test ne peut ni réduire ni promettre. Le plafond de 5 s du projet
+  // `unit` a été écrit pour de la logique pure (« un test unitaire lent est un test
+  // d’intégration qui s’ignore ») ; il ne mesure pas la même chose quand le cas
+  // fourche un processus.
+  //
+  // 30 s n’est pas une tolérance à la lenteur : c’est le refus de faire dépendre un
+  // `@critique` de la charge de la machine. Avec 1,2 s de travail réel, ce cas ne
+  // rougira plus que pour une VRAIE raison — un garde qui boucle, un `spawnSync`
+  // qui ne rend pas la main, une migration versionnée que le garde refuse. Ce
+  // dernier point reste sa mission, et il échoue toujours dessus en quelques
+  // secondes, par assertion et non par expiration.
+  it(
+    '@critique les migrations RÉELLEMENT versionnées du dépôt restent acceptées',
+    { timeout: 30_000 },
+    () => {
+      // Le lot L1 a livré et fait signer ces douze fichiers. Si le nouveau contrôle en
+      // refuse un seul, ce n'est pas une découverte : c'est une régression.
+      const dossier = join(RACINE_DEPOT, 'apps', 'api', 'drizzle');
+      const migrations = readdirSync(dossier).filter((nom) => nom.endsWith('.sql'));
+      expect(migrations.length).toBeGreaterThan(0);
 
-    const fichiers: Record<string, string> = {};
-    for (const nom of migrations) {
-      fichiers[`apps/api/drizzle/${nom}`] = readFileSync(join(dossier, nom), 'utf8');
-    }
-    const { code, sortie } = lancerInvariants(fichiers);
-    expect(sortie).toContain('aucune infraction mécanisable détectée');
-    expect(code).toBe(0);
-  });
+      const fichiers: Record<string, string> = {};
+      for (const nom of migrations) {
+        fichiers[`apps/api/drizzle/${nom}`] = readFileSync(join(dossier, nom), 'utf8');
+      }
+      const { code, sortie } = lancerInvariants(fichiers);
+      expect(sortie).toContain('aucune infraction mécanisable détectée');
+      expect(code).toBe(0);
+    },
+  );
 });

@@ -54,7 +54,27 @@ const TEMOIN_FAUTIF = [
 
 let eslint: ESLint;
 
-beforeAll(() => {
+// Le constructeur `ESLint` ne coûte RIEN : il est paresseux. Tout le prix —
+// charger `eslint.config.js`, donc typescript-eslint et le greffon de la règle —
+// est payé au PREMIER `lintText`, et se retrouvait donc sur le chronomètre du
+// premier cas, un `@critique`.
+//
+// MESURÉ (A16, 2026-09-09, Node 24, 8 cœurs) sur « @critique enAttente.current.clear() » :
+//
+//   fichier isolé, cache Vite FROID ........................ 5 057 ms → ÉCHEC
+//   suite unitaire complète, machine au repos .............. 4 105 ms  (82 % du plafond)
+//   suite unitaire complète, 6 cœurs sur 8 occupés ......... 3 023 ms
+//   fichier isolé, cache Vite chaud ........................   435 ms
+//   les DIX-HUIT autres cas du fichier ..................... médiane 19 – 175 ms
+//
+// Le `lintText` ajouté ici est un PRÉCHAUFFAGE, pas une mesure : il n’affirme
+// rien, il paie la configuration hors chronomètre pour que les dix-neuf cas
+// gardent leur budget de 5 s. L’anti-vacuité reste entière — chaque cas négatif
+// passe toujours par `verifierQueLaRegleMordIci`.
+//
+// Même motif et même plafond de crochet que `auth/socle.test.ts` (2026-09-01) :
+// un chargement de configuration n’a pas de budget de temps à tenir.
+beforeAll(async () => {
   eslint = new ESLint({
     cwd: RACINE_DEPOT,
     overrideConfigFile: resolve(RACINE_DEPOT, 'eslint.config.js'),
@@ -63,7 +83,10 @@ beforeAll(() => {
       { languageOptions: { parserOptions: { projectService: false, project: null } } },
     ],
   });
-});
+  await eslint.lintText(TEMOIN_FAUTIF, {
+    filePath: resolve(RACINE_DEPOT, 'apps/field/src/prechauffage.ts'),
+  });
+}, 120_000);
 
 interface Verdict {
   /** Les seuls messages qui nous intéressent : ceux de la règle éprouvée. */

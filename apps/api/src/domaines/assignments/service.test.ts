@@ -23,7 +23,7 @@
 // d'entretiens, transitions gardées) · E43 (exécutabilité autopilote — contrat
 // d'ops) · invariants 3 et 7.
 // =============================================================================
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { AppError, STATUTS_SESSION, estSessionConduite } from '@axion/shared';
 import { uuidv7 } from 'uuidv7';
 
@@ -36,6 +36,40 @@ process.env.JWT_ACCESS_SECRET ??= '11'.repeat(32);
 process.env.JWT_REFRESH_SECRET ??= '22'.repeat(32);
 process.env.LOG_LEVEL ??= 'fatal';
 process.env.APP_ENV ??= 'dev';
+
+// -----------------------------------------------------------------------------
+// PRÉCHAUFFAGE — le coût du PREMIER import, payé hors chronomètre.
+//
+// CE QUI SE PASSAIT, MESURÉ (A16, 2026-09-09, Node 24, 8 cœurs) : les cinq cas de
+// ce fichier sont de la logique pure et coûtent 1 à 12 ms — SAUF UN, toujours le
+// même, le premier à appeler `chargerGarde()`. Celui-là payait seul le chargement
+// à froid de `./service.js` et de son graphe (`db.js` → Drizzle et le pilote
+// postgres, `depot.js`, `journal/service.js`, `@axion/shared`) :
+//
+//   fichier isolé, cache Vite tiède ........................ 2 733 – 2 760 ms
+//   suite unitaire complète, machine au repos .............. 5 313 ms → ÉCHEC
+//   suite unitaire complète, 6 cœurs sur 8 occupés ......... 5 190 ms → ÉCHEC
+//   fichier isolé, cache Vite chaud ........................ 1 418 ms
+//
+// Les cas SUIVANTS, qui appellent le MÊME `chargerGarde()`, mettent 1 à 4 ms : le
+// module est alors dans le cache ESM. La preuve est là — ce n’était jamais
+// l’assertion qui coûtait, c’était l’import, facturé à qui le déclenche.
+//
+// Un plafond plus grand aurait rendu le cas vert sans le rendre rapide, et aurait
+// converti un signal en silence. Le coût est donc déplacé ici, où il n’est sur le
+// chronomètre d’AUCUN cas : les cinq gardent leur budget de 5 s intact et mesurent
+// enfin ce qu’ils prétendent mesurer — la garde, et non le temps que met cette
+// machine à résoudre des modules.
+//
+// MÊME MOTIF, MÊME REMÈDE que `auth/socle.test.ts` et `en-tetes-amont-jumeau.test.ts`
+// (2026-09-01), et le plafond du crochet est le leur, pour leur raison : un
+// chargement de module n’a pas de budget de temps à tenir. Si ce crochet met
+// vraiment deux minutes, ce n’est plus une contention, c’est une panne — et il
+// échouera.
+// -----------------------------------------------------------------------------
+beforeAll(async () => {
+  await import('./service.js');
+}, 120_000);
 
 async function chargerGarde() {
   const { exigerAuditeurSiSessionConduite } = await import('./service.js');

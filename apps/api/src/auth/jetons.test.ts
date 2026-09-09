@@ -17,7 +17,7 @@
 //
 // Traçabilité : E33 (sécurité), E43 (conventions API épinglées).
 // =============================================================================
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { createHmac } from 'node:crypto';
 import Fastify, { type FastifyInstance } from 'fastify';
 
@@ -105,6 +105,29 @@ async function refusDe(app: FastifyInstance, jeton: string, cas: string): Promis
 // =============================================================================
 // ALLER-RETOUR
 // =============================================================================
+// -----------------------------------------------------------------------------
+// PRÉCHAUFFAGE — même motif, même remède que `auth/socle.test.ts` (2026-09-01).
+//
+// Chaque cas charge `./jetons.js` dynamiquement (`config.ts` valide
+// `process.env` à l’import : les lignes ci-dessus doivent précéder). Le PREMIER à
+// le faire payait seul le chargement à froid du module et de son graphe.
+//
+// MESURÉ (A16, 2026-09-09, Node 24, 8 cœurs) — le déséquilibre est le diagnostic :
+//
+//   « un jeton frappé par l’application se relit »   max du fichier
+//     fichier isolé, cache Vite FROID .................... 5 815 ms → ÉCHEC
+//     fichier isolé, cache Vite chaud ................... 1 042 – 1 158 ms
+//     suite unitaire complète, machine au repos ......... 3 382 ms  (68 % du plafond)
+//   les cinq autres cas du fichier ...................... médiane 6 ms
+//
+// Un cas à 6 ms de travail réel ne doit pas porter le chargement du module pour
+// les cinq autres. Le coût part hors chronomètre ; les six gardent 5 s pleins.
+// -----------------------------------------------------------------------------
+beforeAll(async () => {
+  await import('./jetons.js');
+  await import('@axion/shared');
+}, 120_000);
+
 describe('aller-retour', () => {
   it('un jeton frappé par l’application se relit, et ne porte QUE l’identité', async () => {
     const { signerJetonAcces, verifierJetonAcces } = await import('./jetons.js');
