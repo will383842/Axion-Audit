@@ -5198,3 +5198,24 @@ journée se termine **sans sauvegarde** — ce que l'invariant 8 existe pour emp
 
 **Reste matériel, non délégable** : `docs/portes/SEANCE_MATERIELLE_P-C.md` — dix vérifications,
 67 cases, ≈4 h 30 non fractionnables. Aucune n'est un défaut du produit.
+## 2026-09-09 07h49 — [gouvernance / arbitrages P-C] — hors pipeline de lot (arbitrage A01)
+
+Dernier commit vert : `f2b2c87` (fiche d'étage 2 à ratifier) · Branche : `gouvernance/arbitrages-pc`
+(partie de `ac365f3`) · Poussé : **non** — 4 commits en attente.
+Tâche en cours : close. Trois doutes remontés par A55 tranchés, un quatrième renvoyé à Williams.
+
+**Tranché** — ① la chaîne photo devient **L5f**, l'incrément fusionné garde **L5d** (critère :
+immuabilité de la preuve, pas antériorité de l'intention) ; règle neuve : une lettre s'attribue à
+l'OUVERTURE. ② `TRACABILITE_E1-E47.md` n'appartient à personne : états et signature à A02, dépôt
+d'inventaire ouvert sous 4 conditions. ③ La fiche d'étage 2 du 08, que j'avais reclassée puis fait
+implémenter, reste ouverte → **RATIFIÉE / À DÉFAIRE** par Williams à P-C.
+**Non tranché, à Williams** : le dépassement L6 — **≈ 5,5 j à placer dans 4,3** (D-1 bis de
+`PORTE_DESCOPE_2026-09-15.md`). Recommandation : retirer k6 de L6c puis absorber.
+**Non tranché, à moi** : D10 de la note L6 (glisser L5f entre L6b et L6c) — à la fusion de #114.
+
+Prochaine action : **`pnpm install` dans `_axarb2`** (aucun `node_modules` : le hook `pre-push`
+rejouerait `verify:rapide` à vide), puis PR docs seule, auto-merge armé — **après #116**, qui touche
+le même fichier de traçabilité sur des hunks disjoints.
+Tests rouges connus : aucun. Gardes jouées ici : `check:octets-controle`, `check:pack`,
+`check:decisions`, `check:prose`, `check:tracabilite` → **RC=0**. `format:check` échoue faute de
+`node_modules` ; les 5 fichiers touchés passent `npx prettier --check` un par un.

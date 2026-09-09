@@ -176,6 +176,49 @@ et on lit sa sortie.
 > conception, jamais le **remplacer**. Une porte ne s'appuie que sur la seconde couche.
 > (`DECISIONS.md`, 2026-09-05, les deux entrées « [méthode] » et « [organisation] ».)
 
+> **AMENDEMENT DU 2026-09-09 — arbitré par A01, deux entrées « [gouvernance] » de `DECISIONS.md`.**
+> Deux règles d'écriture, dans le lettrage du §3.
+>
+> **c. UNE LETTRE D'INCRÉMENT S'ATTRIBUE À L'OUVERTURE, JAMAIS À LA PLANIFICATION.**
+> Une lettre ne se réserve pas : elle se prend au moment où l'incrément s'ouvre — première branche,
+> premier commit. **Un incrément seulement prévu se désigne par sa chose** (« la chaîne photo »),
+> jamais par une lettre. Une réservation n'engage personne, et elle n'a aucune antériorité sur un
+> incrément qui, lui, a livré.
+>
+> Cause racine mesurée : « L5d » a nommé **deux** incréments. La chaîne photo n'a reçu ce nom qu'en
+> planification (2026-09-05) et n'a jamais été ouverte — ni branche, ni commit, ni ligne de code ;
+> l'invariant 5 à l'écran a été ouvert, livré et fusionné dans `main` sous le même nom (`4f56e1f`,
+> PR #108, `lot/l5d-invariant5`). « L5d livré » était donc **vrai**, et laissait croire que la photo
+> l'était, alors que le bouton dit « Photo (bientôt) ».
+>
+> **Arbitrage** : la chaîne photo devient **« L5f — chaîne photo »** ; l'incrément fusionné **garde
+> `L5d`**. Le critère est **l'immuabilité de la preuve, pas l'antériorité de l'intention** — on
+> renomme ce dont aucun artefact ne porte encore le nom ; renommer le livré ferait dire aux documents
+> un nom que `git log` contredit.
+>
+> **Conséquence pratique, à appliquer dès la prochaine ligne écrite** : **première mention qualifiée
+> obligatoire dans tout document** — « L5d (invariant 5) », « L5f (chaîne photo) ». Les documents
+> antérieurs au 2026-09-09 gardent l'ancien sens et **ne sont pas réécrits** (invariant 7) : c'est la
+> qualification qui lève l'ambiguïté, pas une réécriture de l'historique.
+>
+> **d. ÉCRIRE DANS `docs/TRACABILITE_E1-E47.md` : CE QUI EST PERMIS, EN DIX SECONDES.**
+> Le fichier n'appartient à personne : 09 §1 attribue à A02 l'**acte** de « cocher la matrice » et à
+> A55 « README, runbook, changelog » — il ne donne le **fichier** à aucun agent. Le monopole strict a
+> été **écarté** parce qu'il est mesuré : sous ce régime la matrice a pris six incréments de retard,
+> puis trois de plus ; l'unique écrivain du fichier qui conditionne l'étape 6 en est le goulot.
+>
+> **① Déposer une section NOUVELLE, en annexe : OUI** — datée, signée de ton code d'agent.
+> **② Amender un état d'exigence EN PLACE : NON** — gardien A02 exclusivement.
+> **③ Poser un verdict dans ta section : NON** — et tu le déclares en tête.
+> **④ Cocher « matrice à jour dans les deux sens » : NON** — A02 seul.
+>
+> La table qui **fait foi** est le §A.sexies : elle est à A02 seul. Tout le reste du fichier accepte
+> l'**ajout** en annexe, jamais la retouche. Une section déposée est un **inventaire**, pas un
+> jugement : elle porte en tête, en clair, qu'elle ne conclut rien.
+>
+> **Cette règle est praticable, pas théorique** : la passe §P d'A55 (PR #116, **226 ajouts,
+> 0 suppression**) respectait déjà les quatre conditions avant qu'elles soient écrites.
+
 ---
 
 ## 4. LES INTERDITS GIT
@@ -402,4 +445,5 @@ mesure et ne produit rien.
 
 *Traçabilité : ce fichier outille `CLAUDE.md` §4, §5.6, §7 et §8. Il ne crée aucune convention
 nouvelle et n'amende aucune spécification. Arbitrage : `DECISIONS.md`, 2026-08-30 ; §9 :
-`DECISIONS.md`, 2026-09-02 (Williams).*
+`DECISIONS.md`, 2026-09-02 (Williams) ; §3 c et d : `DECISIONS.md`, 2026-09-09 (A01), deux entrées
+« [gouvernance] ».*
