@@ -2,7 +2,7 @@
 // MESURE A28 — CE QUE LE `jitless` DE ZOD COÛTE, EN MILLISECONDES.
 //
 // ── LA QUESTION, ET QUI L'A POSÉE ──────────────────────────────────────────
-// L'incrément sécurité #112 a désactivé la compilation à la volée de Zod
+// L'incrément sécurité de la PR 112 a désactivé la compilation à la volée de Zod
 // (`packages/shared/src/zod-sans-jit.ts`, appelée au PREMIER import de chaque
 // `main.tsx`) pour faire taire une `securitypolicyviolation` qui se déclenchait
 // à chaque chargement. Son en-tête revendique que ça ne coûte rien : « SOUS LA
@@ -141,7 +141,7 @@ async function neutraliserLeDrapeau(page: Page): Promise<void> {
  *
  * Le signal juste est l'événement `securitypolicyviolation`, qui est émis par le
  * document quand SON PROPRE code se fait refuser un `eval`. C'est très
- * exactement ce que la sonde de Zod déclenchait avant #112, et donc ce que le
+ * exactement ce que la sonde de Zod déclenchait avant la PR 112, et donc ce que le
  * drapeau `jitless` a fait taire.
  */
 async function ecouterLesViolations(page: Page): Promise<void> {
@@ -331,7 +331,7 @@ test.describe('A28 — ce que le `jitless` de Zod coûte, mesuré sur les quatre
         // le drapeau neutralisé fait rejouer la sonde `new Function` de Zod :
         // le document DOIT alors se rapporter une violation `eval`. Avec le
         // drapeau posé — la production — il ne doit y en avoir AUCUNE : c'est
-        // très exactement ce que l'incrément #112 promettait.
+        // très exactement ce que l'incrément de la PR 112 promettait.
         if (serveur.csp && drapeau.neutraliser) {
           expect(
             etat.violationsEval,
