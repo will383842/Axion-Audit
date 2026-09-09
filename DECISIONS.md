@@ -12279,3 +12279,35 @@ Décideur : **A01** — et **escalade Williams : OUI**, à P-C.
 Impact spec : aucun amendement. Application : `AMELIORATIONS.md`, fiche du 2026-09-08, ligne d'état
 ajoutée par A01. Le §A.sexies rectifié par A02 la donne « refermée », ce qui reste juste : un écart
 refermé dans le code et une fiche à ratifier par l'humain sont deux choses différentes.
+
+## 2026-09-09 — [L6 / L8] Le profil d'interlocuteur : attendre P-D, ou escalader avant que L6 fige son contrat ?
+
+Le 2026-09-05 [L7b], j'ai renvoyé `interviews.interlocutor_profile_id` à la revue de spec de P-D. Ce
+renvoi pesait la colonne contre un ÉCRAN (couverture §16.6). A30 apporte un fait que je ne pesais
+pas : la même colonne porte la divergence direction/terrain, l'un des six contrôles du §36.6 — « un
+rapport qui ne passe pas les 6 points ne part pas ». Et le §9.3 upsert la LIGNE `interviews` : le
+champ voyage dans le contrat d'op de L6, qui s'écrit AVANT P-D.
+
+Options :
+
+1. Maintenir le renvoi à P-D. Le contrat §9.3 se fige sans le champ, ses 8 scénarios §9.8
+   `@critique` se figent avec lui ; l'ajouter ensuite rouvre un contrat testé, pas une note.
+2. **Escalader à Williams maintenant**, avant l'ouverture de L6, proposition rédigée.
+3. Approximer par `services` ou `person_role`. **Écartée deux fois déjà**, et le §32.6-4 la ferme :
+   « portée par `interlocutor_profiles.group_code` — pas de liste de profils codée en dur ».
+
+Arbitrage : **option 2**. Ce que je tranche n'est PAS l'amendement (le 04 est une escalade,
+`CLAUDE.md` §3-2) mais son MOMENT, qui m'appartient au titre du séquencement des lots (09 §5.3). Le
+renvoi du 2026-09-05 n'est pas cassé : il est avancé, parce que sa fenêtre de coût se referme avant
+sa date. Fait décisif, absent des traces antérieures : la colonne est **rétro-incompatible avec la
+donnée déjà collectée** — un entretien conduit avant elle n'est jamais reclassable (`person_role`
+est du texte libre), donc l'échéance réelle n'est pas P-D, c'est le PREMIER entretien réel.
+Règle de précédence : **§32-36 > §24-31** — le §36.6, opposable, prime sur le calendrier de la revue
+de spec.
+Conséquence rendue d'office, SANS arbitrage séparé : si Williams approuve, `reponses.csv` porte
+`groupe_interlocuteur` ; le précédent L7c du 2026-09-05 l'a déjà tranché pour ce fichier (le §36.6-2
+veut tout chiffre du rapport retrouvable DANS `reponses.csv`, pas au bout d'une jointure que le
+lecteur invente). S'il refuse, il n'y a rien à porter.
+Décideur : **A01** pour le moment de l'escalade ; **Williams** pour l'amendement, proposition en
+`docs/portes/P-D_AMENDEMENT_04_interlocutor_profile.md`.
+Impact spec : aucun aujourd'hui ; amendement du 04 soumis, à trancher AVANT l'ouverture de L6.
