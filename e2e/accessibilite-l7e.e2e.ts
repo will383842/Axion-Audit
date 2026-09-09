@@ -39,8 +39,32 @@
 // de sa cause.
 //
 // Mission FICTIVE (invariant 2), libellés neutres.
-// Traçabilité : E22 (console de pilotage) · E23 (hyper intuitif) · E32
-// (interface française) · E36 (CI exécutable) · E44 (design system).
+//
+// ── LA CITATION QUE J'AVAIS ÉCRITE ÉTAIT FAUSSE, ET LA GARDE A EU RAISON ───
+// Ma première rédaction glosait E44 par les mots « design system ». Ils ne
+// figurent nulle part dans son libellé scellé — « UX/UI 2026-2027 : tokens
+// chiffrés, police auto-hébergée offline, règle des 4 états… » — et
+// `check:tracabilite` l'a refusée en C2. Elle avait raison DEUX FOIS : la glose
+// était inventée, et le numéro visait à côté. Un balayage axe-core ne mesure ici
+// ni les tokens ni la police ; il mesure la conformité WCAG AA. L'exigence qui
+// porte cela est E27, dont le libellé la nomme en toutes lettres — c'est
+// d'ailleurs le numéro que cite `accessibilite-design.e2e.ts`, le seul autre
+// fichier de ce dépôt qui balaie une surface de console pour WCAG.
+// E44 RESTE, mais pour ce que ce fichier fait réellement sous lui : chaque écran
+// est balayé DANS SES ÉTATS (nominal, vide, erreur), et c'est la « règle des
+// 4 états » du §33.2 — glosée avec les mots de la table, comme le fait déjà
+// `accessibilite-toutes-vues-l5.e2e.ts`.
+//
+// ⚠ ET LA CORRECTION S'EST HEURTÉE AU MÊME GARDE, POUR UNE BONNE RAISON :
+// citer la glose fautive pour l'expliquer la RECRÉE. Le contrôle est lexical, il
+// ne distingue pas une citation d'une CITATION DE CITATION — il l'écrit lui-même
+// dans ses limites (« le rapprochement est LEXICAL, pas sémantique »). D'où la
+// forme ci-dessus, qui nomme les mots fautifs sans reformer le motif.
+//
+// Traçabilité : E27 (design moderne : charte Axion-IA, WCAG AA) · E22 (console
+// de pilotage siège, 7 espaces) · E23 (hyper intuitif) · E32 (interface 100 %
+// français) · E36 (exécutable par lots avec critères d'acceptation) · E44
+// (UX/UI 2026-2027 : règle des 4 états).
 // =============================================================================
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page, type Route } from '@playwright/test';
