@@ -246,3 +246,118 @@ le pilote le commite. Les deux règles ont été payées par des incidents daté
    l'expliquer, et a produit un octet nul réel **dans ce fichier même**. Le garde
    `check:octets-controle` l'a attrapé au premier passage. **Ne cite jamais cette séquence
    littéralement, pas même pour en parler.**
+
+---
+
+## 7. ÉTAT MESURÉ AU 2026-09-09 — LA JOURNÉE DE FERMETURE DE P-C
+
+> Le §4 ci-dessus date du 2026-09-07 et **reste vrai sur ce qu'il décrit** ; cette section ne le
+> remplace pas, elle le prolonge. **La mesure prime sur les deux.**
+
+### 7.1 La référence de charge, telle que le pack la pose
+
+`00_INDEX`, « référence de charge unique » — **c'est elle qui fait foi**, tout autre chiffre du pack
+ou du CDC est historique :
+
+| | |
+| --- | --- |
+| **Noyau strict** | **26 j-h** — L0 à L7-min + marge de recette |
+| **Différable 2-4 semaines** | **~11 j-h** — L8 scoring/radar, heatmap, centre d'alertes, avance/retard, espaces console 3-7, simulateur |
+| **Phase 1 complète** | **~37 j-h** |
+
+**L8 est HORS des 26**, et c'est la structure du 07 qui le dit : l. 27 la ligne Marge, l. 29
+« Total noyau strict : 26 j-h » **seul sur sa ligne**, l. 31 une table séparée « Lot différable »,
+l. 33 son unique entrée. **Le total est posé avant que L8 n'apparaisse.**
+**Mais budget séparé n'est pas calendrier séparé** : la même l. 33 lui pose un **butoir dur — en
+production le dernier jour de collecte (§35.3)**.
+
+### 7.2 Où en est chaque lot du noyau
+
+| Lot | Budget | État mesuré |
+| --- | --- | --- |
+| L0 · L1 · L2 · L3 · L4 | 9,5 j | **signés** (portes A, B, L3) |
+| **L5 PWA terrain** | 8 j | L5a→L5e fusionnés · **L5f chaîne photo JAMAIS OUVERT** (~0,5 j) · **P-C non signée** |
+| **L6 sync** | 4,5 j | **zéro ligne** — aucun `apps/api/src/domaines/sync`. Chiffré **5,0 j** par A20 (`LOT_L6.md` §D) |
+| **L7-min console** | 2 j | écrans **livrés et fusionnés** · **2,0 j restants** (L7d/e/f) |
+| Marge recette | 2 j | exige L6 |
+
+**Pourcentages** : noyau **≈ 69 % écrit / 37 % accepté en porte** · Phase 1 complète **≈ 54 % / 26 %**
+· Phase 2 (L10-L13) **0 %, non ouverte**. L'écart entre « écrit » et « accepté » est L5 et L7.
+
+### 7.3 Ce qui bloque quoi — la seule chose qui compte pour planifier
+
+**Une demi-journée de Williams débloque ≈ 13 j de travail agent.** Le 09 §4bis interdit d'ouvrir L6
+tant que P-C n'est pas signée ; L6 se développe seul ; la marge de recette dépend de L6. Aucun
+nombre d'agents ne remplace ce geste.
+
+**Ce qui avance SANS lui** : L7d/e/f (2,0 j, chantier distinct autorisé par `ORGANISATION_AGENTS.md`
+§9), le branchement de L8 (≈ 1,3 à 1,5 j), les réserves. **Après ça, le parallélisme est épuisé.**
+
+**Prérequis de la séance** : **le compte de test staging**. Sans lui, **une seule** des dix
+vérifications est jouable (A55, mesuré — un chiffre plus optimiste du pilote a été refusé).
+
+### 7.4 Ce que la journée a fermé
+
+**NB-15** (le compteur « à revoir » mène à une liste consolidée, §34.2 + M3 + §17.2) · **N3** (dire
+*quel* mot de passe : un novice en créait un et **terminait sa journée sans sauvegarde**) · **R5**
+(un seul mot pour revenir) · **R7** (aide clavier, et la table des raccourcis devient source unique)
+· **la p95 mesurée derrière le vrai Caddy** · **la matrice E1-E47** reçoit L5d/L5e/sécurité ·
+**six `@critique` qui expiraient**, corrigés à la cause · **l'amendement du 04** approuvé et
+transcrit.
+
+### 7.5 Ce qui reste ouvert, et à qui
+
+| Objet | À qui |
+| --- | --- |
+| **La demi-journée matérielle** — 4 h 30, iPad, mode avion réel, novice au chronomètre | **Williams** |
+| **Le libellé de la pastille de sync** — décision produit dans la séance | **Williams** |
+| **D-2 à D-5 de P-DESCOPE** — seul D-1 a été arbitré | **Williams** |
+| **La fiche M10** (verrou de session) — proposée, **jamais soumise** | **Williams** |
+| **R3 / le cul-de-sac** — A20 a fermé un chemin, la ligne `EcranEntretien.tsx:547` reste due | **A22**, branche à part |
+| **L'assertion d'A27** (`vue-initiale-app.test.tsx`) — sa propriété tient, son assertion est plus large qu'elle | **A01** puis **A26** |
+| **`test:filrouge` joue 18 tests sur 21** et tait la moitié terrain | **A52** |
+| **`multi-appareils.test.tsx`** — liste écrite à la main ; trois écrans neufs y ont échappé. La fermer par `satisfies` forcerait chaque producteur dans un fichier de test | **A01** — les deux ne peuvent pas gagner |
+| **D-1 de `useLiveQuery`** — voir 7.6 | **A20 → A01**, **bloquant pour ouvrir L6b** |
+
+### 7.6 Deux faits techniques qu'une session neuve doit connaître AVANT de coder
+
+**(a) Dexie perd le suivi après tout `await` non-Dexie.** Règle mesurée par deux réductions
+indépendantes : **seule la table lue AVANT le premier `await` non-Dexie reste suivie ; tout ce qui
+est lu après est perdu.** Dans `construireJournee`, le déchiffrement WebCrypto précède la lecture
+d'`answers`, de l'outbox et du dernier succès de sync : **les trois données du cockpit §34.2 ne se
+rafraîchissent pas**, alors que `EcranAujourdhui.tsx:171-172` affirme le contraire. Pré-existant à
+L5c, invisible aujourd'hui, **visible dès le pull delta de L6b**.
+
+**(b) L8 est ÉCRIT et NON BRANCHÉ.** Le moteur de scoring est pur, déterministe, couvert à
+**99,88 %** — et **son unique consommateur est l'échafaudage qui le teste**. Aucun `domaines/scoring`,
+aucune route. Le code de production le dit lui-même dans le fichier livré au client
+(`export/service.ts:104`). **99,88 % établit que les formules sont cohérentes entre elles, pas
+qu'elles recevront un jour une ligne réelle.** Reste ≈ **1,3 à 1,5 j** (branchement + radar SVG).
+
+### 7.7 Trois pièges neufs, mesurés le 2026-09-09
+
+- **La garde INV-4b lit `#112` comme une couleur hexadécimale** à trois chiffres. Une citation de PR
+  s'écrit **`PR 112`, sans dièse** — la forme qu'`e2e/en-tetes-servis.e2e.ts` emploie déjà. La garde
+  a raison ; **ne l'assouplissez pas** : `#abc` serait une couleur valide écrite en croyant citer.
+- **Les `@critique` au plafond de 5 000 ms** : la cause n'était ni la lenteur ni la contention, mais
+  **le chargement à froid du graphe de modules, facturé au premier test qui le déclenche**. Importer
+  l'app API coûte **5 228 ms par worker** contre ~3 s le 2026-09-01 — **+74 % en huit jours**. Tout
+  test unitaire touchant l'app n'est viable que grâce à un `beforeAll` de préchauffage, **et rien de
+  mécanique ne l'impose**.
+- **Le rebase soude les entrées de `DECISIONS.md`.** La garde le refuse, avec son motif : *un fichier
+  append-only se lit dans l'ordre ; une insertion au milieu est une réécriture de l'historique, même
+  sans suppression.* Rétablir la ligne vide, ne jamais forcer.
+
+### 7.8 La méthode qui a produit tout ce qui précède
+
+**Cinq refus de push par le hook `pre-push` en une journée, cinq fois à raison.** Aucun faux positif.
+
+**Et le pilote a été corrigé cinq fois par ses propres agents** : des dépendances annoncées installées
+qui ne l'étaient pas (deux fois), une assignation tirée d'un rapport oral au lieu du registre, un
+défaut diagnostiqué « contention » que le dépôt avait déjà instruit et écrit dans son propre hook, et
+une contradiction laissée dans une fiche de porte après n'en avoir corrigé que quatre lignes.
+
+**La leçon opérationnelle, pour la prochaine session** : vérifier l'état d'un worktree avant de
+l'affirmer dans un brief · lire **le registre**, jamais le compte rendu · et **ne jamais propager la
+mesure d'un autre sans l'avoir rejouée**. Les meilleurs résultats de la journée viennent tous d'un
+agent qui a refusé de croire son brief.

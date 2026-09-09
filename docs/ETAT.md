@@ -5219,3 +5219,24 @@ le même fichier de traçabilité sur des hunks disjoints.
 Tests rouges connus : aucun. Gardes jouées ici : `check:octets-controle`, `check:pack`,
 `check:decisions`, `check:prose`, `check:tracabilite` → **RC=0**. `format:check` échoue faute de
 `node_modules` ; les 5 fichiers touchés passent `npx prettier --check` un par un.
+
+## 2026-09-09 18h00 — [lot L5 / porte P-C — étape 6/7] et [L7 ouvert en parallèle]
+Dernier commit vert : 621306a (clôture d'amendement, #126)   ·   Branche : plusieurs   ·   Poussé : oui
+Tâche en cours : A36 écrit la recette d'acceptation L7 (§36.3 × §20.3), jamais commandée jusqu'ici.
+Prochaine action : Williams joue la séance matérielle (4 h 30, iPad) — elle signe P-C et ouvre L6.
+Tests rouges connus : un seul, `vue-initiale-app.test.tsx` sur la branche R3 — assertion plus large
+que sa propriété, rendue à A01 puis A26 (A20 refuse de rendre vert son propre code).
+
+**Chiffres du jour** : noyau 26 j → **69 % écrit, 37 % accepté** · Phase 1 (37 j) → **54 % / 26 %**.
+**Une demi-journée de Williams débloque ≈ 13 j de travail agent** : le §4bis interdit d'ouvrir L6
+avant P-C, L6 se développe seul, la marge en dépend. Le parallélisme restant est L7 (2,0 j) et le
+branchement de L8 (1,3-1,5 j) ; après, il est épuisé.
+
+**Fermé aujourd'hui** : NB-15, N3, R5, R7, p95 mesurée derrière Caddy, matrice E1-E47, six
+`@critique` qui expiraient, et l'amendement du 04 approuvé par Williams puis transcrit (diff
+schéma-vs-04 à zéro écart, garde prouvée mordante).
+
+**Deux faits à connaître avant de coder** : Dexie perd le suivi de toute table lue APRÈS un `await`
+non-Dexie — les trois données du cockpit §34.2 ne se rafraîchissent pas, et ça deviendra visible au
+pull delta de L6b. Et **L8 est écrit et non branché** : 99,88 % de couverture, zéro appelant de
+production. Détail en `docs/REPRISE_AUTOPILOTE.md` §7.
