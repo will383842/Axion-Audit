@@ -1469,3 +1469,125 @@ describe('accès clavier à la colonne de notes (WCAG 2.1.1 / 2.1.3, niveau A)',
     expect(blocs.getAttribute('tabindex')).toBeNull();
   });
 });
+
+// =============================================================================
+// H. R7 — L'AIDE CLAVIER SUR L'ÉCRAN MONTÉ (2026-09-09, A26)
+//
+// Le panneau lui-même, sa fenêtre, sa source unique et la garde de focus sont
+// éprouvés dans `aideClavier.acceptation-r7.test.tsx`. Ce qui ne peut se jouer
+// QU'ICI, sur l'écran réel : « ? » l'ouvre, et l'ÉCRAN PARTAGÉ le refuse.
+//
+// Ce second point n'est pas cosmétique. L'aide liste des gestes internes —
+// à revoir, notes, recherche, écran partagé lui-même. §33.3 veut que RIEN
+// d'interne ne s'affiche quand l'interlocuteur voit la tablette ; une fenêtre
+// d'aide ouverte devant lui les lui montrerait tous, nommés.
+// =============================================================================
+describe('R7 — « ? » ouvre l’aide clavier sur l’écran d’entretien (03 §33.3, §17.5)', () => {
+  function panneauDAide(): HTMLElement | null {
+    return screen.queryByRole('dialog', { name: 'Raccourcis clavier' });
+  }
+
+  it('@critique « ? » ouvre la fenêtre, et elle liste les raccourcis du §33.3', async () => {
+    await monterEntretien(interviewId);
+    await waitFor(() => {
+      expect(questionAffichee(TEXTE_ECHELLE)).toBeTruthy();
+    });
+    // Anti-vacuité : rien n'est ouvert avant le geste.
+    expect(panneauDAide()).toBeNull();
+
+    touche('?', questionAffichee(TEXTE_ECHELLE));
+    const boite = await screen.findByRole('dialog', { name: 'Raccourcis clavier' });
+    // Elle dit quelque chose : les touches du pack y sont, en toutes lettres.
+    const touchesAffichees = [...boite.querySelectorAll('kbd')].map((k) => k.textContent);
+    for (const attendue of ['1', 'O', 'N', 'A', 'R', 'E', '/', '?', 'Échap']) {
+      expect(touchesAffichees, `touche « ${attendue} » absente de l’aide`).toContain(attendue);
+    }
+  });
+
+  it('@critique aucun `alert()` : l’aide est une fenêtre de l’application, pas une boîte native', async () => {
+    const boiteNative = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    await monterEntretien(interviewId);
+    await waitFor(() => {
+      expect(questionAffichee(TEXTE_ECHELLE)).toBeTruthy();
+    });
+    touche('?', questionAffichee(TEXTE_ECHELLE));
+    await screen.findByRole('dialog', { name: 'Raccourcis clavier' });
+    expect(boiteNative).not.toHaveBeenCalled();
+    boiteNative.mockRestore();
+  });
+
+  it('@critique Échap referme l’aide, et les raccourcis redeviennent actifs derrière', async () => {
+    await monterEntretien(interviewId);
+    await waitFor(() => {
+      expect(questionAffichee(TEXTE_ECHELLE)).toBeTruthy();
+    });
+    touche('?', questionAffichee(TEXTE_ECHELLE));
+    await screen.findByRole('dialog', { name: 'Raccourcis clavier' });
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => {
+      expect(panneauDAide()).toBeNull();
+    });
+
+    // La fenêtre comptait dans `fenetreOuverte` : les raccourcis se taisaient.
+    // Fermée, ils reprennent — et c'est une cotation qui le prouve, pas un état.
+    touche('5', questionAffichee(TEXTE_ECHELLE));
+    await waitFor(async () => {
+      expect((await depotReponses.parQuestion(interviewId, Q_ECHELLE))?.value).toEqual({
+        type: 'scale_1_5',
+        v: 5,
+      });
+    });
+  });
+
+  it('@critique en ÉCRAN PARTAGÉ, « ? » n’ouvre rien — l’aide nomme des gestes internes', async () => {
+    await monterEntretien(interviewPartageId);
+    await waitFor(() => {
+      expect(questionAffichee(TEXTE_ECHELLE)).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /passer en écran partagé/i }));
+    await screen.findByText(/écran partagé — les éléments internes sont masqués/i);
+
+    touche('?', questionAffichee(TEXTE_ECHELLE));
+    // Rien ne s'ouvre, et rien de la liste n'atteint le DOM : ni le mot
+    // « à revoir », ni « note », ni « recherche » par ce chemin-là.
+    await pause(120);
+    expect(panneauDAide()).toBeNull();
+    expect(document.querySelectorAll('.axn-raccourcis')).toHaveLength(0);
+
+    // Et de retour en écran privé, elle s'ouvre : le refus est bien porté par le
+    // MODE, pas par une aide cassée.
+    touche('e', questionAffichee(TEXTE_ECHELLE));
+    await screen.findByText(/écran privé — les éléments internes sont visibles/i);
+    touche('?', questionAffichee(TEXTE_ECHELLE));
+    await screen.findByRole('dialog', { name: 'Raccourcis clavier' });
+  });
+
+  it('@critique « ? » tapé DANS la zone de notes n’ouvre rien (règle V2.8)', async () => {
+    await monterEntretien(interviewId);
+    await waitFor(() => {
+      expect(questionAffichee(TEXTE_ECHELLE)).toBeTruthy();
+    });
+    const note = zoneDeNote();
+    note.focus();
+    fireEvent.keyDown(note, { key: '?', code: 'Slash' });
+    await pause(120);
+    expect(panneauDAide()).toBeNull();
+    expect(document.activeElement).toBe(note);
+  });
+
+  it('la MENTION qui annonce le raccourci est là où un clavier existe, et jamais en écran partagé', async () => {
+    await monterEntretien(interviewPartageId);
+    await waitFor(() => {
+      expect(questionAffichee(TEXTE_ECHELLE)).toBeTruthy();
+    });
+    // Le harnais simule un pointeur fin (voir `useRequeteMedia` plus haut) : la
+    // mention doit donc être rendue. Un accélérateur que rien n'annonce
+    // n'accélère personne — c'est tout le constat de R7.
+    expect(document.body.textContent).toMatch(/tapez « \? » pour la liste/i);
+
+    fireEvent.click(screen.getByRole('button', { name: /passer en écran partagé/i }));
+    await screen.findByText(/écran partagé — les éléments internes sont masqués/i);
+    expect(document.body.textContent).not.toMatch(/tapez « \? » pour la liste/i);
+  });
+});
