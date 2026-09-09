@@ -12469,3 +12469,47 @@ rejouable** contre **garantie de non-perte**. **P-D se tiendra sur un périmètr
 **remesurer le 15/09** : si la remesure bouge, il se rouvre. **D-2** (L5c), **D-3** (L7-min), **D-4**
 (marge de recette) et **D-5** (contenu) restent **entiers** — l'instruction ne portait que sur D-1.
 Application : cet arbitrage est reporté sous §D-1 bis par A01, sans effacer aucune option.
+
+## 2026-09-09 — [L5] R3 : deux écrans nommés « Aujourd'hui » — quelle décision d'intégration n'a jamais été prise ?
+
+Williams, ce jour : « **Fais tout selon tes recommandations** », dont « R3 ». Ma recommandation était
+double. **R3 n'est ni étage 1 ni étage 2, c'est un défaut** — précédent opposable **B2** (racine sans
+sortie, traitée en bloquant, `App.acceptation-b2.test.tsx` et sa contre-épreuve). Et le symptôme a une
+cause : `apps/field/src/app/vues.ts:50-54` renvoie le choix « à A20 à l'intégration ».
+**Deux faits rectifiés avant de tracer.** (a) Ce commentaire est **périmé** : le choix de
+`VUE_INITIALE` a bien été tranché, le 2026-09-05, et vit en règle dans `ecrans/journee/vue-initiale.ts`
+— ce qui n'a **jamais** été décidé, c'est le **titre** et la **sortie**. (b) **R3 n'est pas D-3** :
+D-3 est M10, le verrou de 15 min (`AMELIORATIONS.md`, fiche du 2026-09-08). Je ne les traite pas ensemble.
+**Le cul-de-sac, mesuré et non supposé** : `EcranEntretien.tsx:541` referme l'entretien par
+`{ type: 'racine', vue: 'accueil' }` → pile de 1, donc `peutRevenir()` faux (`navigation.ts:46`) ; et
+`accueil` n'offre que deux sorties, `stockage` (`EcranAccueil.tsx:234`) et `restauration`
+(`coquille-l5c.tsx:74`). **Aucun chemin vers le cockpit.** Second chemin, même impasse :
+`restaurerNavigation` repose toute vue mémorisée sur la **constante** `accueil` (`navigation.ts:117`),
+donc « Retour » depuis un entretien rouvert y échoue aussi. Seul un redémarrage rebondit.
+
+Options :
+
+1. **Fondre** les deux racines en un seul écran.
+2. **Les garder distinctes**, lever la collision de titre et rendre la sortie.
+
+Arbitrage : **option 2**, en trois points. ① Le cockpit `aujourdhui` **garde** « Aujourd'hui »
+(03 §34.2 le nomme ainsi) ; `accueil`, écran d'embarquement, prend **« Missions et stockage de
+l'appareil »** — le libellé exact du bouton qui y mène (`EcranAujourdhui.tsx:454`), ce qui ferme du
+même geste le troisième symptôme d'A54. ② **Pas de fusion** : `accueil` doit s'afficher quand **aucune**
+mission n'est embarquée et porte la restauration d'un appareil neuf ; fondre reviendrait à afficher la
+journée là où il n'y a pas de mission, et à réécrire un registre append-only. ③ **La racine de repos
+cesse d'être la constante `accueil` et devient la règle `vueInitiale`** : on retombe sur le cockpit
+quand une mission est embarquée, sur `accueil` sinon.
+Règle de précédence : **§32-36 > §24-31** — 03 §34.2 nomme « Aujourd'hui » le cockpit de la journée et
+03 §33.7 exige que le parcours ne s'interrompe jamais ; le registre `vues.ts` et sa règle append-only
+(`LOT_L5.md` §1) sont une convention de lot, qui cède devant elles.
+Décideur : **Williams** pour la classification en défaut et l'ouverture du correctif, par adoption ;
+**A01** pour la décision d'intégration elle-même, technique, que `vues.ts:50-54` laissait vacante.
+Impact spec : aucun amendement. **Conséquence non demandée par Williams** : le correctif touche trois
+incréments déjà fusionnés (L5a, L5b, L5c) et **n'est pas de l'étage 1** — il ne s'impute pas au plafond
+de 0,5 j, il se fait sous 09 §4bis comme réserve de P-C non signée. **≈ 0,2 j.**
+Application, périmètre **borné — ni écran neuf, ni routeur, aucun élargissement** : **A20** porte
+l'intégration (`vues.ts` : titre de `accueil` et commentaire :50-54 rectifié ; `navigation.ts` ;
+`coquille-l5c.tsx`) ; **A22** la seule ligne de `EcranEntretien.tsx:541`, sur une branche à part ;
+**A26** écrit les tests — jamais l'auteur du code (09 §5.6) — sur le modèle de B2, avec la
+contre-épreuve : depuis `accueil`, mission embarquée, **une sortie vers le cockpit existe**.
