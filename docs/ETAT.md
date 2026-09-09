@@ -5149,3 +5149,27 @@ existe pour attraper. Note L6 amendée ; le test qui croise les deux artefacts e
 
 **Invariant 8** : le rappel de fin de journée compte les jours civils au fuseau de CHAQUE mission,
 `every` et non `some` — prouvé par un test existant qui rougirait avec `some`.
+
+## 2026-09-09 04h51 — [incrément sécurité / en-têtes servis] — étape pipeline 4/7 (réserves A29 en fermeture)
+
+Dernier commit : f457762 · Branche : securite/en-tetes-servis · Poussé : oui jusqu'à 898e880, le reste
+après le commit d'A26 en cours.
+Tâche en cours : A26 écrit la garde « toute réponse servie porte un Cache-Control » — le SEUL
+détecteur de §4-B, puisque ZAP n'explorera jamais les routes authentifiées de L6c.
+Prochaine action : rejeu A29 sur les réserves (R1 b', R4-R7, R9, R10), puis PR, merge, puis P-C.
+Tests rouges connus : aucun — en-tetes-servis 71/71, e2e 152/152, intégration 646/646 (Docker
+tourne depuis cette nuit), verify:rapide EXIT 0, ZAP local 0/0/0 (IGNORE 4, PASS 66).
+
+**Neuf commits, quatre mains, aucun ne mêle test et production** : A26 (garde, retouches, hors ligne
+sous les en-têtes servis), A11 (Caddyfile, rules.tsv deux fois), A52 (workflow), A21 (jitless).
+
+**Ce que la boucle 10049 a appris, et qui vaut au-delà de ZAP** : A51, A29 et A01 ont tous raisonné
+sur des scans d'AVANT correctif. A01 avait demandé qu'on rejoue après ; A11 l'a fait : la règle est
+un CLASSIFICATEUR, aucun état du produit ne rend zéro. Retirée sur mesure (a), ré-admise sur mesure
+(b'), les deux entrées au registre — la marche gardée, pas seulement l'arrivée. Condition (5) neuve :
+une exception n'est admissible que si le défaut qu'elle pourrait masquer est détecté AILLEURS, et le
+détecteur est NOMMÉ. Et 10015 ne porte pas §4-B non plus : la garde du dépôt est le seul détecteur.
+
+**`--no-verify` sur f457762, 5a372b5, 645667e** : A26 avait un diff en cours dans le même worktree à
+chaque fois ; les gardes ont été rejouées par chaque agent, la CI juge. `_axsec` n'a pas de `.env` :
+`test:integration` y rend 5 rouges/51 skippés — environnemental, 646/646 avec l'env (A29, O3).
