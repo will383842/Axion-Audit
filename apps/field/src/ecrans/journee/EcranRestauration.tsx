@@ -559,7 +559,12 @@ export function EcranRestauration(): ReactNode {
                     naviguer({ type: 'retour' });
                   }}
                 >
-                  Revenir
+                  {/* R5 — « Revenir » nu portait le même nom que le bouton de la
+                      coquille : deux boutons identiques sur le même écran, pour
+                      un lecteur d'écran comme pour un test. Cet écran est
+                      atteint depuis l'embarquement (`AccesRestauration`) : sa
+                      destination se nomme. */}
+                  Revenir à l’accueil
                 </Bouton>
               </div>
             </div>

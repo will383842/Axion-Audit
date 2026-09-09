@@ -251,16 +251,16 @@ for (const appareil of APPAREILS) {
     // ouverte hors ligne, ce qu'aucun contrôle de titre ne prouverait.
     await expect(page.getByLabel('Unité')).toHaveText(new RegExp(MISSION_FIL_TPE.unite));
 
-    await page.getByRole('button', { name: 'Retour' }).click();
+    await page.getByRole('button', { name: 'Revenir' }).click();
     await page.getByRole('button', { name: 'Où en est cette mission ?' }).click();
     await expect(titreDeVue(page)).toHaveText('Où en est la mission');
 
-    await page.getByRole('button', { name: 'Retour' }).click();
+    await page.getByRole('button', { name: 'Revenir' }).click();
     await page.getByRole('button', { name: 'Fin de journée', exact: true }).click();
     await expect(titreDeVue(page)).toHaveText('Fin de journée');
     await expect(page.getByRole('heading', { name: 'Sauvegarde de secours' })).toBeVisible();
 
-    await page.getByRole('button', { name: 'Revenir' }).click();
+    await page.getByRole('button', { name: 'Revenir à ma journée' }).click();
     await page.getByRole('button', { name: 'Missions et stockage de l’appareil' }).click();
     await expect(titreDeVue(page)).toHaveText('Aujourd’hui');
     await expect(page.getByRole('button', { name: 'Nouvel entretien' })).toBeVisible();
@@ -391,7 +391,7 @@ test('@critique coupure brutale en pleine saisie — la réponse en cours survit
   await page.getByLabel('Créneau').fill(creneauDuJour(9));
   await page.getByRole('button', { name: 'Planifier' }).click();
   await expect(page.getByText('Session planifiée.')).toBeVisible();
-  await page.getByRole('button', { name: 'Retour' }).click();
+  await page.getByRole('button', { name: 'Revenir' }).click();
 
   // ── Démarrage : l'accord de participation est un préalable (03 M3.2) ────
   await expect(titreDeVue(page)).toHaveText('Aujourd’hui');
@@ -490,7 +490,7 @@ test('@critique export de secours produit hors ligne, puis restauré sur un SECO
   await pageOrigine.getByLabel('Créneau').fill(creneauDuJour(10));
   await pageOrigine.getByRole('button', { name: 'Planifier' }).click();
   await expect(pageOrigine.getByText('Session planifiée.')).toBeVisible();
-  await pageOrigine.getByRole('button', { name: 'Retour' }).click();
+  await pageOrigine.getByRole('button', { name: 'Revenir' }).click();
 
   // ── LE RITUEL DU SOIR — un geste, sans réseau (03 §34.2, invariant 8) ───
   await pageOrigine.getByRole('button', { name: 'Fin de journée', exact: true }).click();
@@ -638,7 +638,7 @@ test('@critique cotation — les ancres se LISENT avant le premier tap (iPad ém
   await page.getByLabel('Créneau').fill(creneauDuJour(11));
   await page.getByRole('button', { name: 'Planifier' }).click();
   await expect(page.getByText('Session planifiée.')).toBeVisible();
-  await page.getByRole('button', { name: 'Retour' }).click();
+  await page.getByRole('button', { name: 'Revenir' }).click();
 
   await page.getByRole('button', { name: /Interlocuteur cotation/ }).click();
   await page.getByLabel('Accord de participation recueilli').check();
@@ -811,7 +811,7 @@ async function ouvrirLaQuestionAEchelle(
   await page.getByLabel('Créneau').fill(creneauDuJour(heure));
   await page.getByRole('button', { name: 'Planifier' }).click();
   await expect(page.getByText('Session planifiée.')).toBeVisible();
-  await page.getByRole('button', { name: 'Retour' }).click();
+  await page.getByRole('button', { name: 'Revenir' }).click();
 
   await page.getByRole('button', { name: /Interlocuteur cotation/ }).click();
   await page.getByLabel('Accord de participation recueilli').check();
@@ -1177,7 +1177,7 @@ test('@critique entretien — les sept boutons de §17.4 sont là et aux mêmes 
     await page.getByLabel('Créneau').fill(creneauDuJour(14));
     await page.getByRole('button', { name: 'Planifier' }).click();
     await expect(page.getByText('Session planifiée.')).toBeVisible();
-    await page.getByRole('button', { name: 'Retour' }).click();
+    await page.getByRole('button', { name: 'Revenir' }).click();
 
     await page.getByRole('button', { name: /Interlocuteur constance/ }).click();
     await page.getByLabel('Accord de participation recueilli').check();

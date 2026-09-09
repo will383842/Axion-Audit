@@ -805,7 +805,7 @@ describe('EcranFinDeJournee — aucun verrou', () => {
     await monter(base);
     const bouton = screen.getByRole<HTMLButtonElement>('button', { name: /terminer la journée/i });
     expect(bouton.disabled).toBe(false);
-    fireEvent.click(screen.getByRole('button', { name: /^revenir$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^revenir à ma journée$/i }));
     expect(terrain.naviguer).toHaveBeenCalledWith({ type: 'retour' });
     expect(terrain.verrou.verrouillerMaintenant).not.toHaveBeenCalled();
     expect(terrain.fermer).not.toHaveBeenCalled();

@@ -451,7 +451,11 @@ export function EcranFinDeJournee(): ReactNode {
                 naviguer({ type: 'retour' });
               }}
             >
-              Revenir
+              {/* R5 — « Revenir » nu, à côté de « Terminer la journée », ne
+                  disait pas où il mène, et portait désormais le même nom que le
+                  bouton de la coquille : deux boutons identiques à un
+                  centimètre. Il nomme sa destination. */}
+              Revenir à ma journée
             </Bouton>
           </div>
 

@@ -441,7 +441,7 @@ describe('§33.2 — les quatre états, sur l’écran qui restaure', () => {
     terrain = terrainDeRestauration(base);
     render(<EcranRestauration />);
 
-    fireEvent.click(screen.getByRole('button', { name: /^revenir$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^revenir à l’accueil$/i }));
     expect(terrain.naviguer).toHaveBeenCalledWith({ type: 'retour' });
   });
 

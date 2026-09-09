@@ -311,7 +311,11 @@ export function EcranFinDeSession(): ReactNode {
                     naviguer({ type: 'retour' });
                   }}
                 >
-                  Revenir
+                  {/* R5 — le même libellé que la sortie des états vide et erreur
+                      de cet écran (`retourALaJournee`), et plus le nom du bouton
+                      de la coquille. Un seul mot pour revenir ; la destination se
+                      nomme quand elle n'est pas évidente. */}
+                  Revenir à ma journée
                 </Bouton>
               </div>
 

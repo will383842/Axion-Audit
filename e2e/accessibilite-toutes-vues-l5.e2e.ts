@@ -447,7 +447,7 @@ async function allerARevoir(page: Page): Promise<void> {
   await allerEntretienEnCours(page);
   await page.getByRole('button', { name: /^À revoir/ }).click();
   await page.getByRole('button', { name: 'Confirmer' }).click();
-  await page.getByRole('button', { name: 'Retour' }).click();
+  await page.getByRole('button', { name: 'Revenir' }).click();
   await expect(titreDEcran(page, 'Aujourd’hui')).toBeVisible();
   await page.getByRole('button', { name: /point\(s\) à revoir/ }).click();
   await expect(titreDEcran(page, 'Points à revoir')).toBeVisible();

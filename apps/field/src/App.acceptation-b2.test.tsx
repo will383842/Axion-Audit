@@ -20,7 +20,7 @@
 //
 // Ces tests parcourent donc la chaîne ENTIÈRE, dans l'ordre réel :
 //   valeur mémorisée dans `meta` → `restaurerNavigation` → action `restaurer` du
-//   réducteur → `App` rendue → bouton « Retour » → **le titre d'en-tête change**.
+//   réducteur → `App` rendue → bouton « Revenir » → **le titre d'en-tête change**.
 // Rien n'est simulé entre les deux bouts, et l'assertion finale porte sur ce que
 // l'auditeur VOIT, pas sur un appel de fonction : un `naviguer` espionné dirait
 // que le geste a été demandé, jamais qu'il a abouti.
@@ -183,7 +183,7 @@ describe('B2 — la reprise sur une vue mémorisée PROFONDE laisse une sortie',
     });
   }
 
-  it('@critique une vue RACINE mémorisée reste seule : un « Retour » qui ne mène nulle part serait un mensonge', () => {
+  it('@critique une vue RACINE mémorisée reste seule : un « Revenir » qui ne mène nulle part serait un mensonge', () => {
     for (const racine of ['accueil', 'aujourdhui'] as const) {
       const restauree = restaurerNavigation(racine);
       expect(restauree.pile).toEqual([racine]);
@@ -200,7 +200,7 @@ describe('B2 — la reprise sur une vue mémorisée PROFONDE laisse une sortie',
 
 // ─────────────────────────────────────────────────────────────────────────────
 describe('B2 — l’auditeur qui rouvre son iPad sur un écran profond en SORT', () => {
-  it('@critique de la valeur mémorisée au titre d’en-tête : « Retour » ramène réellement à la racine', async () => {
+  it('@critique de la valeur mémorisée au titre d’en-tête : « Revenir » ramène réellement à la racine', async () => {
     const base = await nouvelleBase();
     const bruit = silence();
     try {
@@ -220,14 +220,14 @@ describe('B2 — l’auditeur qui rouvre son iPad sur un écran profond en SORT'
       expect(titreEntete()).toBe(VUES.pilote.titre);
 
       // ③ et cette fois, il y a une sortie, écrite en toutes lettres.
-      const retour = screen.getByRole('button', { name: 'Retour' });
+      const retour = screen.getByRole('button', { name: 'Revenir' });
       fireEvent.click(retour);
 
       // ④ le geste ABOUTIT : le titre change, la sortie disparaît sur la racine.
       await waitFor(() => {
         expect(titreEntete()).toBe(VUES[VUE_INITIALE].titre);
       });
-      expect(screen.queryByRole('button', { name: 'Retour' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Revenir' })).toBeNull();
     } finally {
       bruit.restaurer();
     }
@@ -243,7 +243,7 @@ describe('B2 — l’auditeur qui rouvre son iPad sur un écran profond en SORT'
       const libelles = screen.getAllByRole('button').map((b) => b.textContent);
       // Anti-vacuité : l'écran EST bien rendu, avec le bouton qu'A54 a relevé.
       expect(libelles).toContain('Verrouiller');
-      expect(libelles).toContain('Retour');
+      expect(libelles).toContain('Revenir');
       expect(libelles.filter((libelle) => libelle === 'Verrouiller')).toHaveLength(1);
     } finally {
       bruit.restaurer();
@@ -256,7 +256,7 @@ describe('B2 — l’auditeur qui rouvre son iPad sur un écran profond en SORT'
     try {
       render(<CoquilleVivante base={base} depart={restaurerNavigation('accueil')} />);
       await screen.findByRole('button', { name: 'Verrouiller' });
-      expect(screen.queryByRole('button', { name: 'Retour' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Revenir' })).toBeNull();
     } finally {
       bruit.restaurer();
     }
