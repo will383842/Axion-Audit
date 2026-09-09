@@ -299,7 +299,8 @@ doit être écrite avant la porte P-C.*
 | # | Fait | Preuve exécutée |
 | --- | --- | --- |
 | M1 | **Un livrable nommé du 07 n'est pas livré** : « compression photos R2 ». La fonction existe (`sauvegarde/photos.ts:141`, 164 l., testée) ; elle n'a **aucun appelant de production** — 5ᵉ constat | `git grep compresserPhoto` : tests, README et registres seulement |
-| M2 | **Depuis la fusion du dernier incrément de périmètre (PR 52, `1964482`, le 2026-09-06), 18 PR ont touché `apps/field`, `e2e` ou `packages/ui` sur `main`. Aucune n'ajoute un livrable du 07** : réserves de recette, correctifs de porte, preuves, gardes | `git log origin/main --since=2026-09-05 -- apps/field e2e packages/ui` |
+| M2 | **Depuis la fusion du dernier incrément de périmètre (PR 52, `1964482`, le 2026-09-06), 22 PR ont touché `apps/field`, `e2e` ou `packages/ui` sur `main` ; DEUX seulement produisent du périmètre du 07** — PR 109 (L5e, le dernier succès de sync, qui rend le critère n° 1 cochable) et PR 58 (L7c, l'export §36.3, **hors L5**). Les vingt autres sont des réserves, des correctifs de porte, des preuves, des gardes. **Compte arrêté à ces trois chemins** : `apps/hq` et `apps/api` sont hors de mon lot — un décompte plus large en trouve 23 | `git log 1964482..origin/main -- apps/field e2e packages/ui` → **22** |
+| **M2 bis** | **L'acceptation ne fait pas que coûter du temps : elle GÉNÈRE du périmètre non budgété.** La seule des 22 qui produise du périmètre **L5** — PR 109 — **n'existe que parce que l'acceptation a révélé un trou** : le « dernier succès de sync » n'était alimenté nulle part, et c'est le contrôle A02 puis D-6 qui l'ont trouvé. **PR 121 (NB-15) est le même cas** : §34.2 exige un compteur d'à-revoir **cliquable**, et personne ne l'avait vu avant la recette | `port-sync.ts:164` rendait `null` en dur · `EcranAujourdhui.tsx:406` était du texte inerte |
 | M3 | **Le burn-down compte ce travail pour zéro** — « deux jours à plat : le chantier ne produit plus de périmètre, il produit des preuves ». Il mesure le **périmètre écrit**, pas l'**effort consommé** | `docs/journal/2026-09-08.md:49-57` |
 | M4 | **La boucle de preuve est RÉCURRENTE, pas résiduelle** : PR 116 rattache L5d, L5e et la sécurité à la matrice ; PR 121, fusionnée le même jour, n'y est pas. NB-9-ter se referme sur trois incréments et se rouvre sur un quatrième | `grep -c NB-15 docs/TRACABILITE_E1-E47.md` → **0** ; `grep -c L5f` → **0** |
 | M5 | **R3 est à un tiers fait** : ma part A20 est écrite et **non fusionnée** (`fix/r3-cul-de-sac`, 1 commit, 7 fichiers, +119/-19), **sans PR ouverte** ; la part A22 n'est pas commencée ; les tests A26 n'existent pas | `EcranEntretien.tsx` porte toujours `naviguer({ type: 'racine', vue: 'accueil' })` |
@@ -367,7 +368,7 @@ produit** rendus pendant la séance, plus **M10** · les **quatre questions ouve
    sans instruction.
 5. **Ce qui n'est pas L5** : L6 (5,0 j, arbitré, non rejoué ici), L7-min, L8.
 6. **Le temps déjà consommé.** Le dépôt ne garde aucune trace du temps ; je ne mesure que des
-   artefacts — 18 PR, 9 dossiers de preuve — et j'en tire un ordre de grandeur, jamais une durée.
+   artefacts — 22 PR, 9 dossiers de preuve — et j'en tire un ordre de grandeur, jamais une durée.
 7. **Ce que la séance découvrira au-delà de la provision de 0,6 j.**
 
 ## D.4 L'effet sur la référence de 26 j — et le seul fait qui compte le 15

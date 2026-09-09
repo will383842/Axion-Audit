@@ -195,12 +195,24 @@ retenir : **L5c ne se descope pas beaucoup** — l'essentiel de ses 3,4 j-h est 
 > toutes du périmètre.
 
 **Ce que j'ai mesuré, et qui fonde le reste** : depuis la fusion du dernier incrément de périmètre
-(PR 52, le 2026-09-06), **18 PR ont touché `apps/field`, `e2e` ou `packages/ui` sur `main`, et aucune
-n'ajoute un livrable du 07**. Le burn-down les compte pour zéro — « deux jours à plat : le chantier ne
-produit plus de périmètre, il produit des preuves » (journal du 08). **Il mesure le périmètre écrit,
-pas l'effort consommé.** Et la boucle est **récurrente, pas résiduelle** : PR 116 rattache trois
-incréments à la matrice, PR 121 fusionnée le même jour n'y est pas — chaque correctif rouvre la
-matrice, le README, la recette et le contrôle.
+(PR 52, le 2026-09-06), **22 PR ont touché `apps/field`, `e2e` ou `packages/ui` sur `main`, et DEUX
+seulement produisent du périmètre du 07** — PR 109 (L5e, le dernier succès de sync, qui rend le
+critère n° 1 cochable) et PR 58 (L7c, l'export §36.3, **hors L5**). _Compte arrêté à ces trois
+chemins : `apps/hq` et `apps/api` sont hors de mon lot, ce qui explique qu'un décompte plus large en
+trouve 23._ Le burn-down les compte toutes pour zéro — « deux jours à plat : le chantier ne produit
+plus de périmètre, il produit des preuves » (journal du 08). **Il mesure le périmètre écrit, pas
+l'effort consommé.**
+
+**Et il y a plus dur que cela, démontré par la seule exception qui soit dans L5** : PR 109 **n'existe
+que parce que l'acceptation a révélé un trou** — le « dernier succès de sync » n'était alimenté nulle
+part, et c'est le contrôle A02, puis D-6, qui l'ont trouvé. **PR 121 (NB-15) est le même cas** :
+§34.2 exige un compteur d'à-revoir **cliquable**, et personne ne l'avait vu avant la recette.
+
+> **L'acceptation ne fait pas que coûter du temps : elle GÉNÈRE du périmètre non budgété.**
+
+Enfin, la boucle est **récurrente, pas résiduelle** : PR 116 rattache trois incréments à la matrice,
+PR 121 fusionnée le même jour n'y est pas — chaque correctif rouvre la matrice, le README, la recette
+et le contrôle.
 
 **Le reste de L5, en trois natures qui ne se mélangent jamais :**
 
@@ -219,10 +231,35 @@ matrice, le README, la recette et le contrôle.
    recette de 2 j — **D-4 ci-dessous la réserve à l'audit à blanc de P-E**. C'est un poste de Williams
    qui n'existe dans aucune ligne du plan, et il ne s'échange contre aucun agent.
 2. **Fait nouveau sur L6, énoncé sans rechiffrer quoi que ce soit** (le chiffre est arbitré, D-1 ter) :
-   **les 5,0 j du §D de `LOT_L6.md` sont un chiffre d'ÉCRITURE.** Ils contiennent les huit scénarios
-   scriptés, mais **ni la recette d'acceptation de P-D, ni sa séance, ni la boucle correctif → matrice
-   → recette → contrôle** mesurée ci-dessus. **Si le biais vaut pour L6 comme il vaut pour L5 et
-   L7-min, P-D coûtera plus que 5,0 j.** C'est un fait sur la nature du chiffre, pas un chiffre neuf.
+   **les 5,0 j du §D de `LOT_L6.md` sont un chiffre d'ÉCRITURE.** Attention à ne pas en dire trop :
+   ils **contiennent déjà** les tests du lot — les huit scénarios `@critique`, la reprise à 80 %, k6,
+   le fil rouge, la couverture, que le §D nomme comme critère de fin d'incrément. **Ce qu'ils ne
+   contiennent pas, c'est l'ACCEPTATION** : le dossier A02, la fiche de porte, la revue de spec de
+   P-D, sa séance, et la boucle correctif → matrice → recette → contrôle mesurée ci-dessus. **Si le
+   biais vaut pour L6 comme il vaut pour L5 et L7-min, P-D coûtera plus que 5,0 j.**
+
+   > **ORDRE DE GRANDEUR — EXTRAPOLATION, PAS MESURE.** Il est écrit ici parce qu'un dossier de porte
+   > qui tait un ordre de grandeur connu fait arbitrer à l'aveugle. **Deux points d'observation ne
+   > font pas une loi**, et leurs taux divergent trop pour qu'on en tire un pourcentage : L7-min
+   > **+100 %**, L5 **+35 %**. **Mais en valeur absolue, ils convergent** — **2,0 j et 3,3 j.** Le
+   > surcoût d'acceptation se comporte comme un **coût à peu près FIXE PAR PORTE**, pas comme un
+   > pourcentage du budget, et c'est cohérent avec sa nature : une porte a un nombre de critères à
+   > prouver, pas un budget à dépasser. **C'est pourquoi je ne retiens pas « 5,0 × 1,35 ≈ 6,8 »** :
+   > appliquer le taux de L5 plutôt que celui de L7-min donnerait 6,8 contre 10,0, et l'écart entre
+   > les deux extrapolations serait plus grand que le dépassement lui-même.
+   >
+   > Appliqué en absolu, et **au seul poste que les 5,0 j ne couvrent pas** : **P-D appelle ≈ 1,5 à
+   > 3 j au-delà de ses 5,0 j d'écriture**, soit **6,5 à 8,0 j pour 4,3 disponibles — un dépassement
+   > de ≈ +2,2 à +3,7 j pour L6 SEUL**, là où la décomposition de D-1 bis en donne +0,7 (5,0 contre
+   > 4,3) avant d'y ajouter L5f pour arriver à +1,2. **Et L5f ne se compte pas deux fois** : il est
+   > déjà dans mon poste A ci-dessus, à 0,8 j et non 0,5. Deux facteurs jouent en sens contraire et
+   > sont dits plutôt que moyennés : **P-D est « LA GRANDE » porte** (revue de spec, crypto,
+   > propriété), ce qui pousse vers le haut ; mais **une partie de son acceptation est déjà payée**
+   > dans les 5,0, ce qui pousse vers le bas.
+   >
+   > **Ce n'est pas un chiffre de porte, et je ne le substitue à aucun** : le chiffre de L6 appartient
+   > à **A01** (D-1 ter), et sa remesure lui revient — **le 15/09, avec le reste du §2.** Ce que je
+   > fournis, c'est de quoi ne pas arbitrer sur un **+1,2 j dont je sais qu'il est optimiste.**
 3. **« 0,5 j est-il juste ? »** — **il l'est pour ce qu'il compte : L5f, et rien d'autre.** Il ne
    compte ni la séance, ni la recette, ni le rejeu du contrôle, ni la fiche de porte, ni R3, ni le
    défaut Dexie, ni les huit réserves ouvertes, ni la matrice que chaque correctif rouvre. **Ce n'est
