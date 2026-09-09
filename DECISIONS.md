@@ -12186,3 +12186,66 @@ qualifie, sur une mesure post-correctif.
 Décideur : **A01**, sur mesure d'A11 et réfutation vérifiée d'A29. Escalade Williams : **non** pour la
 ligne ; la bascule `ZAP_BLOQUANT` reste la sienne, et b') la rend de nouveau atteignable.
 Impact spec : aucun. Amende l'entrée du retrait et complète les conditions du 2026-09-08.
+
+## 2026-09-09 — [gouvernance] « L5d » nomme deux incréments : lequel change de nom ?
+
+Mesuré par moi sur `ac365f3` : `4f56e1f` (« L5d — l'invariant 5 à l'écran », #108) est **fusionné
+dans `main`**, tout comme L5e. La **chaîne photo**, nommée L5d par l'arbitrage du 2026-09-05, n'a
+**ni branche, ni commit, ni ligne de code** — `compresserPhoto` (`apps/field/src/sauvegarde/photos.ts:141`)
+n'a aucun appelant hors tests. « L5d livré » est donc vrai, et laisse croire que la photo l'est.
+
+Options :
+
+1. Renommer l'incrément **livré**. Écartée : la branche `lot/l5d-invariant5`, ses 7 commits, la revue
+   `REVUE_A29_L5D_2026-09-08.md` et le fichier `invariant5-fuseau.acceptation-l5d.test.tsx` sont
+   **immuables** ; les documents diraient alors un nom que `git log` contredit — la confusion est
+   déplacée, pas fermée.
+2. Renommer l'incrément **jamais ouvert**. Son nom ne vit que dans de la prose amendable : l'entrée
+   du 2026-09-05, `docs/conception/LOT_L6.md`, trois commentaires de code.
+
+Arbitrage : **option 2**. La chaîne photo devient **« L5f — chaîne photo »** ; l'incrément fusionné
+**garde `L5d`**. Le critère est l'immuabilité de la preuve, pas l'antériorité de l'intention : on
+renomme ce dont aucun artefact ne porte encore le nom. Première mention qualifiée obligatoire dans
+tout document — « L5f (chaîne photo) », « L5d (invariant 5) » — car les documents antérieurs au
+2026-09-09 gardent l'ancien sens. Et la cause racine se ferme par une règle : **une lettre
+d'incrément s'attribue à l'OUVERTURE, pas à la planification** ; un incrément seulement prévu se
+désigne par sa chose, une lettre réservée n'engage personne.
+Règle de précédence : sans objet — aucune divergence de pack ; c'est 11 §6 (découpage en incréments)
+qu'on complète d'une règle de nommage, et l'invariant 7 qui commande la forme : l'entrée du
+2026-09-05 n'est pas retirée, elle est **amendée par celle-ci**.
+Décideur : **A01**
+Impact spec : aucun amendement du pack. Application : `LOT_L6.md`, journal et fiches → **A55**, PR de
+documentation seule ; `ZoneQuestion.tsx:33`, `EcranAccueil.tsx:125`, `EcranRestauration.tsx:354` →
+**A22, sur une branche à part**, commentaires seuls, aucun comportement (mon critère du 2026-09-08 :
+une contre-vérité écrite se rectifie, elle n'ajoute pas de périmètre).
+
+## 2026-09-09 — [gouvernance] Qui écrit dans `TRACABILITE_E1-E47.md`, et qui signe ses états ?
+
+Le §O y écrit « c'est le seul [fichier] que le gardien tienne (09 §1) ». A55 vient d'y ajouter 226
+lignes (#116, §P) **à la demande d'A02**. Vérifié par moi dans le fichier 09 §1 : il attribue à A02
+l'acte de « **cocher** la matrice de traçabilité » et à A55 « README par app, runbook PRA,
+changelog » — il ne donne le **fichier** à personne. La règle n'existait pas ; elle se reposera à
+chaque passe. Le diff de #116 confirme le geste d'A55 : **226 ajouts, 0 suppression**.
+
+Options :
+
+1. **Monopole strict** : A02 seul écrit. Elle a un coût mesuré — la matrice a pris six incréments de
+   retard (NB-9-bis, bloquant de P-C), puis trois de plus (NB-9-ter) ; un unique écrivain est aussi
+   un unique goulot, sur le fichier qui conditionne l'étape 6.
+2. **Les états à A02, le dépôt d'inventaire ouvert** sous conditions strictes.
+
+Arbitrage : **option 2**, aux quatre conditions que la passe §P a d'elle-même respectées :
+① tout agent peut **déposer une section NOUVELLE**, datée, signée de son code, en annexe ;
+② **aucun état d'exigence n'est amendé en place hors du gardien** — la table qui fait foi (§A.sexies)
+est à A02 seul ; ③ la section déposée **ne porte aucun verdict** et le déclare en tête ;
+④ la ligne « matrice à jour dans les deux sens » ne se coche **que** par A02.
+Règle de précédence : **§24-31 > §16-22** — 09 §1 (chaîne de signature, V2.11) prime sur l'usage
+qu'un §O s'était donné à lui-même ; il fixe qui **signe**, jamais qui tient un fichier. Confirmé par
+CLAUDE.md §10, qui n'attribue que des signatures.
+Décideur : **A01**
+Impact spec : aucun amendement du pack. La règle s'écrit là où elle sera lue : en tête de
+`docs/TRACABILITE_E1-E47.md` (**A02**) et à `docs/ORGANISATION_AGENTS.md` §3 (**A55**).
+**Corollaire immédiat, qui n'appelle pas d'entrée propre** : la ligne E32 du §A.sexies (« étage 2,
+PROPOSÉE, non implémentée ») est périmée — L5e l'a implémentée sur mon autorisation nommée du
+2026-09-08, et je l'ai vérifié à `apps/field/src/agenda/jour.ts:314`. Ce n'est donc pas une fiche
+d'étage 2 anticipée. **A02** la rectifie, en la datant, sans effacer la mention d'origine.

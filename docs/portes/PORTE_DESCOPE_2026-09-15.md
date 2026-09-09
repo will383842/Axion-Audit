@@ -100,6 +100,56 @@ prévoit pas son glissement : « tout lot **différable** non entamé glisse » 
 > en est le **filet**, pas le substitut — il se déclenche à la main, quand l'invariant exige une
 > sync ≥ 1×/jour.
 
+### D-1 bis — AMENDEMENT DU 2026-09-09 (A01) : les 4,3 j-h de D-1 sont périmés, le reste réel est ≈ 5,5 j
+
+> **Ce bloc ne remplace pas D-1, il le corrige sur les chiffres.** Le tableau ci-dessus reste lisible
+> comme la photo du 2026-09-05 ; ses coûts, eux, ne le sont plus. **Aucune option n'est retenue ici :
+> le descope appartient à Williams** (CLAUDE.md §3). A01 formule, chiffre et recommande — il ne tranche pas.
+
+**Ce que j'ai vérifié moi-même sur `ac365f3` (= `origin/main`), le 2026-09-09 :**
+
+| Fait | Preuve exécutée |
+| --- | --- |
+| **La remesure de L6 a désormais une source écrite au dépôt** — `SEANCE_MATERIELLE_P-C.md` la disait « sans source, à confirmer avant de s'en servir » | **PR #114**, branche `docs/decoupage-l6`, `docs/conception/LOT_L6.md` §D : **L6a 2,0 + L6b 1,2 + L6c 1,8 = 5,0 j-h**, les 0,2 j du commit `L6a-0` compris. PR **ouverte, non fusionnée** |
+| **L5d (invariant 5) et L5e sont fusionnés dans `main`** — `SEANCE_MATERIELLE_P-C.md` les donne « en PR, non fusionnées » : périmé | `git merge-base --is-ancestor` sur `4f56e1f` (#108) et `59a3da2` (#109) → **les deux sont ancêtres de `ac365f3`** |
+| **La chaîne photo — désormais `L5f` (voir `DECISIONS.md`, 2026-09-09) — n'est pas ouverte** | `compresserPhoto` (`apps/field/src/sauvegarde/photos.ts:141`) n'a **aucun appelant de production** : seuls des tests le citent. Quatrième passe consécutive à le déclarer orphelin |
+| **L'outbox existe déjà en base locale v1** — L6a la draine, il ne la crée pas | `apps/field/src/local/base.ts:220` : la table `outbox` est une étape de `SCHEMA_LOCAL` |
+
+**Le chiffre à porter à la porte : ≈ 5,0 j (L6) + ≈ 0,5 j (L5f) = ≈ 5,5 j à placer dans 4,3 j
+annoncés — écart ≈ +1,2 j.** Le budget du fichier 07 pour L6 est de 4,5 j ; l'écart y est de +0,5 j.
+_Le restant global « ≈ 7,4 j sur 26 » date du 2026-09-08 et couvre d'autres lignes que je n'ai pas
+remesurées : il n'est pas cité ici comme une marge disponible._
+
+**Les options réelles, avec ce que chacune coûte** (les deux premières se cumulent, la troisième non) :
+
+| Option | Gain | Ce qu'elle casse |
+| --- | --- | --- |
+| **α. Absorber les ≈ 1,2 j** — P-D glisse d'environ une journée et demie | 0 j gagné | rien de fonctionnel ; la référence de 26 j-h est dépassée et cesse d'être la référence |
+| **β. Retirer la campagne de charge k6 de L6c** (C4, p95 < 500 ms) | ≈ 0,3 à 0,5 j | un **budget de performance**, pas une garantie de non-perte ; se rejoue après P-D sans rien invalider. Le moins cher des trois crans |
+| **γ. Reporter `L5f` (chaîne photo) en Phase 2** | ≈ 0,5 j | **descope de porte, pas aménagement** : les scénarios §9.8 **6 et 7** tombent, or **le 7 (reprise d'upload à 80 %) est un critère d'acceptation nommé du 07**. 03 §17.4 reste non tenu et §27.1 perd une source d'audit. Ne peut pas se décider par A01 |
+
+**Ce qui ne peut pas tomber**, et que je refuse de porter comme option : les huit scénarios
+`@critique` du §9.8, le contrat d'ops §9.3 complet, la propriété §9.9, `processed_ops`. Rogner l'un
+d'eux, c'est rogner « zéro donnée perdue » — l'objet même du lot.
+
+**Recommandation d'A01 : β puis α — retirer k6 de L6c, et absorber le reste (≈ 0,7 à 0,9 j).**
+Motif : c'est le seul cran qui ne retire **aucune garantie de non-perte** et qui se rattrape après
+P-D. γ est écartée de ma recommandation parce qu'elle fait tomber un critère d'acceptation nommé du
+fichier 07 : si Williams la retient, elle se retient **en connaissance de ce coût-là**, et P-D se
+tient alors sur un périmètre amendé, pas sur le périmètre du 07.
+
+**Un point qui n'est PAS de Williams et que je ne tranche pas encore** — D10 de la note L6 : A20
+demande de rouvrir la séquence du 2026-09-05 (`L5f` entre **L6b et L6c** au lieu d'avant L6a), ce qui
+permettrait d'ouvrir L6a le jour même de P-C. **C'est un arbitrage technique, donc le mien.** Sa
+prémisse est vérifiée — l'`outbox` est déjà en v1, L6a/L6b n'ont pas à toucher `SCHEMA_LOCAL`. Ce
+que je n'ai **pas** vérifié, et qui décide : une migration de schéma **local** qui atterrit sur des
+appareils portant déjà de la donnée réelle, **au milieu d'un moteur de sync à moitié construit**.
+C'était le motif du refus de 2026-09-05, et l'`outbox` n'y répond pas. **Décision d'A01 à la fusion
+de #114, avant l'ouverture de L6a — pas ici.** Elle ne change aucun des chiffres ci-dessus.
+
+_Amendement établi le 2026-09-09 par **A01**, en lecture seule sur le code, chaque fait ci-dessus
+exécuté et non repris d'un rapport. Il ne coche rien, ne signe rien et ne retient aucune option._
+
 ### D-2 — L5c : 3,4 j-h, et tout n'y a pas le même poids
 
 L5c est **entièrement à faire** et conditionne **P-C**. Ses dix livrables n'ont pas la même valeur
