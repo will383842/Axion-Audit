@@ -228,6 +228,12 @@ function terrainDeBase(base: BaseLocale): ValeurTerrain {
   };
 }
 
+/** Ce que le harnais exige d'avoir : lève avec un message clair plutôt qu'un `!`. */
+function requis<T>(valeur: T | null | undefined, libelle: string): T {
+  if (valeur === null || valeur === undefined) throw new Error(`harnais : ${libelle} manquant`);
+  return valeur;
+}
+
 function estOccupe(): boolean {
   return document.querySelector('[role="status"][aria-busy="true"]') !== null;
 }
@@ -388,15 +394,80 @@ describe('N3 — « Restaurer une sauvegarde » : le champ d’IMPORT désigne l
 // LA GARDE QUI COMPTE : LES DEUX PHRASES SONT DIFFÉRENTES, ET EXPRÈS
 // ─────────────────────────────────────────────────────────────────────────────
 describe('N3 — l’uniformisation est le défaut, pas la qualité', () => {
-  it('@critique les deux libellés diffèrent, et aucun n’est le préfixe trompeur de l’autre', () => {
-    // Écrit comme une assertion et non comme un commentaire : c'est la seule
-    // forme qui survit à quelqu'un qui « harmoniserait les libellés » un matin.
-    expect(LIBELLE_CET_APPAREIL).not.toBe(LIBELLE_APPAREIL_ORIGINE);
-    expect(LIBELLE_APPAREIL_ORIGINE.startsWith(LIBELLE_CET_APPAREIL)).toBe(false);
-    // Le mot qui porte la différence est là où il doit être.
-    expect(LIBELLE_CET_APPAREIL).toContain('cet appareil');
-    expect(LIBELLE_APPAREIL_ORIGINE).toContain('qui a produit la sauvegarde');
-    expect(LIBELLE_APPAREIL_ORIGINE).not.toContain('cet appareil');
+  /**
+   * Les noms accessibles des champs de mot de passe de l'écran RENDU.
+   *
+   * On récolte le `<label for>` de chaque `input[type="password"]` : c'est ce
+   * qu'un lecteur d'écran énonce, et c'est la seule chose que la production
+   * décide. Aucune constante de ce fichier n'entre dans la récolte — c'est ce
+   * qui rend la comparaison qui suit falsifiable.
+   */
+  function nomsDesChampsMotDePasse(): string[] {
+    return [...document.querySelectorAll<HTMLInputElement>('input[type="password"]')].map(
+      (champ) => document.querySelector(`label[for="${champ.id}"]`)?.textContent.trim() ?? '',
+    );
+  }
+
+  /**
+   * ── POURQUOI CE TEST A ÉTÉ RÉÉCRIT (revue croisée A29, réserve R3) ─────────
+   * Sa première version comparait `LIBELLE_CET_APPAREIL` à
+   * `LIBELLE_APPAREIL_ORIGINE` — deux constantes déclarées vingt lignes plus
+   * haut DANS CE FICHIER. Elle était donc TAUTOLOGIQUE : uniformiser les deux
+   * libellés en production ne l'aurait pas fait rougir d'un pouce, alors que son
+   * commentaire promettait exactement l'inverse (« la seule forme qui survit à
+   * quelqu'un qui harmoniserait les libellés un matin »).
+   *
+   * C'est la famille même que ce lot a passé la journée à démonter — un test qui
+   * rassure sans rien garder — et elle était de ma main. A29 a eu raison de me
+   * la rendre.
+   *
+   * La version ci-dessous MONTE LES DEUX ÉCRANS et compare ce qu'ils RENDENT.
+   * Falsification vérifiée avant de la livrer : en alignant le libellé d'import
+   * d'`EcranRestauration` sur celui de `EcranFinDeJournee`, ce test rougit —
+   * production restaurée aussitôt, aucune ligne livrée (09 §5.6).
+   */
+  it('@critique les deux écrans NOMMENT deux secrets différents — mesuré sur ce qu’ils rendent', async () => {
+    const un = await appareilNeuf(kekRemplacement);
+    await semerMission(un);
+    terrain = terrainDeBase(un);
+    const rendu = render(<EcranFinDeJournee />);
+    await attendreLecture();
+    const surFinDeJournee = nomsDesChampsMotDePasse();
+    rendu.unmount();
+
+    const deux = await appareilNeuf(kekRemplacement);
+    terrain = terrainDeBase(deux);
+    render(<EcranRestauration />);
+    const surRestauration = nomsDesChampsMotDePasse();
+
+    // Anti-vacuité : deux écrans muets se ressembleraient parfaitement, et la
+    // comparaison ci-dessous passerait sans avoir rien comparé.
+    expect(surFinDeJournee, 'Fin de journée doit porter UN champ de mot de passe').toHaveLength(1);
+    expect(surRestauration, 'Restauration doit porter UN champ de mot de passe').toHaveLength(1);
+    const nomFinDeJournee = requis(surFinDeJournee[0], 'nom du champ de Fin de journée');
+    const nomRestauration = requis(surRestauration[0], 'nom du champ de Restauration');
+    expect(nomFinDeJournee.length).toBeGreaterThan(10);
+    expect(nomRestauration.length).toBeGreaterThan(10);
+
+    // LA GARDE. Les deux écrans demandent deux secrets DIFFÉRENTS ; le jour où
+    // ils se mettent à les nommer pareil, la contre-vérité que N3 a retirée est
+    // de retour, et c'est ici qu'on l'apprend.
+    expect(
+      nomRestauration,
+      'les deux écrans nomment le même secret — la contre-vérité de N3 est revenue',
+    ).not.toBe(nomFinDeJournee);
+    // Ni l'un préfixe de l'autre : « Mot de passe de cet appareil » suivi de
+    // « …de cet appareil qui a produit » se lirait comme une précision, pas comme
+    // un autre secret.
+    expect(nomRestauration.startsWith(nomFinDeJournee)).toBe(false);
+
+    // Et chacun désigne le BON appareil — lu à l'écran, jamais dans ce fichier.
+    expect(nomFinDeJournee).toContain('cet appareil');
+    expect(nomRestauration).toContain('qui a produit la sauvegarde');
+    expect(
+      nomRestauration,
+      'le champ d’import prétend que la clé est celle d’ici — elle ne l’est pas (11 §4)',
+    ).not.toContain('cet appareil');
   });
 
   it('@critique sur les DEUX écrans montés, aucun champ ne s’appelle « Votre mot de passe »', async () => {
