@@ -24,6 +24,7 @@
 > | **A-7** | R1             | §5 PD6          | PD6 était **périmé** : le suivre serait une régression (R-L5a-3)                        |
 > | **A-8** | R5             | §6              | la partie **visible** de L6b reçoit son plan DoD (4 états, axe-core, tokens)             |
 > | **A-9** | O1, O2, D4     | §8              | trois doutes de spec ajoutés, plus **D5**, trouvé en relisant la note au code             |
+> | **A-10** | R1 (A29)       | §3bis           | **2026-09-09** — la clé de dernière sync est LIVRÉE par L5e : nom et sémantique corrigés |
 >
 > Toutes les affirmations de code ci-dessous ont été **re-mesurées le 2026-09-05 sur `origin/main`
 > (`da7e8c9`)**, qui contient L5a (#30), L7a (#32) et L5b (#31) — et non sur l'état du 2026-09-03.
@@ -146,10 +147,42 @@ connu est > 0 ; sans écrivain, ce garde-fou reste à jamais dans sa branche « 
 **Côté local, le symétrique manque aussi, et la note ne le disait pas.**
 `EtatSyncMission.derniereSyncReussieLe` est lu par `evaluerAlerteSauvegarde` (L5a), mais
 **`CLES_META` ne porte aucune clé pour l'écrire** : vérifié le 2026-09-05 dans
-`apps/field/src/local/base.ts`. L6a ajoute une clé `sync:derniere-reussie:<missionId>`, écrite après
-chaque push ou pull abouti. Ajout **append-only à `CLES_META`, sans montée de
-`VERSION_SCHEMA_LOCAL`** — `meta` est une table clé/valeur, son schéma ne bouge pas. Sans cette
+`apps/field/src/local/base.ts`. L6a ajoute la clé, en ajout **append-only à `CLES_META`, sans montée
+de `VERSION_SCHEMA_LOCAL`** — `meta` est une table clé/valeur, son schéma ne bouge pas. Sans cette
 clé, l'alerte de l'invariant 8 se déclencherait pour toujours.
+
+> ### AMENDEMENT A-10 DU 2026-09-09 — la clé n'est plus à créer, elle est LIVRÉE (R1 d'A29)
+>
+> **Texte remplacé** (rédigé le 2026-09-05, quand la clé n'existait pas) : « L6a ajoute une clé
+> `sync:derniere-reussie:<missionId>`, écrite après chaque push **ou pull** abouti. »
+>
+> **Ce texte est périmé sur les deux points, et le suivre serait une régression.** L5e l'a livrée le
+> 2026-09-08 (`b92cd23`) sous un AUTRE nom et une AUTRE sémantique :
+> **`sync:dernier-succes:<missionId>`** — `CLES_META.prefixeDerniereSyncReussie`, helper
+> `cleDerniereSyncReussie(missionId)` (`apps/field/src/local/base.ts:155`) — lue par
+> `agenda/jour.ts:133`, qui en nourrit **à la fois** la carte du cockpit et
+> `evaluerAlerteSauvegarde` (une source pour un fait, B6). Personne ne l'écrit en L5 : sa valeur
+> vaut « jamais synchronisée », conforme à la borne D-6.
+>
+> **L6a écrit donc `cleDerniereSyncReussie(missionId)` — ce nom-là — après chaque PUSH abouti, et
+> JAMAIS depuis `appliquerDescente`.** Un pull fait descendre ; il ne fait rien sortir, et c'est la
+> sortie que l'invariant 8 protège (`DECISIONS.md`, 2026-09-09, « Le dernier succès de sync
+> compte-t-il un pull, ou le push seul ? »). Le curseur de pull `sync:since:` reste distinct : il
+> s'écrit dès l'embarquement (`local/ecriture.ts:295`) et afficherait un faux succès au jour 0.
+>
+> **Avec son test, sinon l'amendement ne vaut rien.** Aucun test ne croisait les deux artefacts —
+> c'est ce qui a rendu la divergence invisible pendant trois jours, tout en vert. L6a livre la garde
+> qui affirme que la clé écrite par le moteur est **celle que `construireJournee` lit**, et qu'un
+> pull seul ne l'écrit pas. À A26, pas à l'auteur du moteur (09 §5.6).
+>
+> **R2 d'A29 — daté et assigné ici, correctif à L6a.** `apps/field/src/app/EcranAccueil.tsx:195-214`
+> dérive l'alerte de l'invariant 8 de `portSyncInerte.etat()`, qui passe `null` **en dur** à
+> `evaluerAlerteSauvegarde` (`local/port-sync.ts:167`), pendant que le cockpit la dérive de `meta`.
+> Invisible aujourd'hui — les deux sources disent « jamais » — **contradictoire dès le premier push
+> réussi de L6a** : deux écrans, deux réponses opposées sur le même fait, B6 réarmé. Aucun correctif
+> avant L6a (09 §4bis : L5e ne rouvre rien pour ça). **L6a le clôt en remplaçant le port**, comme il
+> remplace `portSyncInerte` : l'implémentation réelle lit `meta` et ne code plus `null`. La
+> non-régression attendue : les deux écrans rendent le MÊME verdict après un push réussi.
 
 ## 4. Interfaces — déjà gelées, L6 ne les redéfinit pas
 

@@ -5127,3 +5127,25 @@ branche du repli était COMPTÉE couverte à 90,9 % sans assertion ; R7 (le catc
 rouge) fermée par deux `it` sur les deux causes, mutation rouge en 300 ms ; la signature `string |
 null` REQUISE, et A29 retire son propre motif d'écran (« raison sur le type, pas sur l'écran »). Le
 croisement §5.6 tenu sur les sept commits — ce qu'A20 n'avait pas pu attester sur L5b.
+
+## 2026-09-09 00h46 — [lot L5 / incrément L5e — cockpit] — étape pipeline 4/7 CLOSE → PR
+
+Dernier commit vert : 0eb9afe · Branche : lot/l5e-cockpit · Poussé : après ce bloc.
+Tâche en cours : rien — deux gardes A27 (rouges avant), correctif A23, revue A29, R1 levée par A01.
+Prochaine action : PR L5e vers main ; puis rejouer P-C EN ENTIER (A02 + A54) sur main avec L5d et
+L5e fusionnés — le critère 07 n° 1 devient cochable (trois données §34.2 rendues, 100 % locales).
+Tests rouges connus : aucun — gardes 5/5 et 8/8, journee 161/161, agenda+local 367/367,
+verify:rapide exit 0. `pnpm verify` complet non joué (Docker arrêté), la CI fait foi.
+
+**Le critère 07 n° 1 avait un trou que D-6 a révélé** : le « dernier succès » de sync n'était alimenté
+nulle part. Il a sa vérité locale — une clé `meta` par mission, DISTINCTE du curseur de pull à
+dessein : un pull prouve la descente, pas la sortie, et c'est la sortie que l'invariant 8 protège.
+Une seule source nourrit l'écran ET l'alerte (B6), prouvé par mutation croisée.
+
+**Ce qu'A29 a bloqué, et qui n'était pas dans le code** : la note L6 promettait la clé sous un autre
+nom et « push OU pull ». Sans alignement, L6a aurait écrit une clé que personne ne lit, tout vert.
+A01 tranche : **push seul** — compter un pull éteindrait l'alerte exactement dans le cas qu'elle
+existe pour attraper. Note L6 amendée ; le test qui croise les deux artefacts est assigné à A26.
+
+**Invariant 8** : le rappel de fin de journée compte les jours civils au fuseau de CHAQUE mission,
+`every` et non `some` — prouvé par un test existant qui rougirait avec `some`.

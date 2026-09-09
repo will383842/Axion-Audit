@@ -44,8 +44,15 @@ export interface OptionsDuJour {
   readonly instantIso?: string;
 }
 
-/** La date civile (AAAA-MM-JJ) d'un instant UTC, dans un fuseau donné. */
-function jourCivil(instantIso: string, fuseau: string | undefined): string {
+/**
+ * La date civile (AAAA-MM-JJ) d'un instant UTC, dans un fuseau donné.
+ *
+ * Exportée pour `rappelFinDeJournee` (`agenda/jour.ts`), qui doit découper le
+ * jour du rituel EXACTEMENT comme ce dépôt découpe « les sessions du jour » : un
+ * rappel qui comparerait des jours UTC serait en désaccord avec la journée dont
+ * il parle (arbitrage A01, 2026-09-08). UNE définition, pas deux.
+ */
+export function jourCivil(instantIso: string, fuseau: string | undefined): string {
   const format = new Intl.DateTimeFormat('fr-CA', {
     timeZone: fuseau,
     year: 'numeric',

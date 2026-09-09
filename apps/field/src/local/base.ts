@@ -137,6 +137,22 @@ export const CLES_META = {
   sessionCourante: 'session:courante',
   /** Préfixe de la question courante, une entrée par session (03 §17.4). */
   prefixeQuestionCourante: 'session:question:',
+  // ── L5e (A23) — le dernier succès de sync, par mission (03 §34.2 ; D-6) ──
+  /**
+   * Préfixe du DERNIER SUCCÈS de synchronisation, une entrée par mission,
+   * valeur ISO 8601 UTC — la troisième donnée de « l'état de sync par mission
+   * (pastille + dernier succès + taille d'outbox) ».
+   *
+   * DISTINCT du curseur de pull `sync:since:`, à dessein : `appliquerDescente`
+   * l'écrit dès l'embarquement, donc un pull réussi prouve que des données sont
+   * DESCENDUES — pas que la collecte est SORTIE de l'appareil, et c'est la
+   * sortie que l'invariant 8 protège. Personne ne l'écrit en L5 (la valeur vaut
+   * donc « jamais synchronisée ») ; le moteur L6a l'écrira à chaque push réussi.
+   * `construireJournee` (`agenda/jour.ts`) la lit et en nourrit À LA FOIS
+   * l'alerte de l'invariant 8 et la carte de mission du cockpit — une source
+   * pour un fait (B6, A54 2026-09-06).
+   */
+  prefixeDerniereSyncReussie: 'sync:dernier-succes:',
 } as const;
 
 /** Clé du curseur de pull d'une mission donnée. */
@@ -152,6 +168,17 @@ export function cleEmbarquement(missionId: string): string {
 /** Clé de la persistance de stockage accordée pour une mission (05 §31-2). */
 export function clePersistance(missionId: string): string {
   return `${CLES_META.prefixePersistance}${missionId}`;
+}
+
+/**
+ * Clé du dernier succès de synchronisation d'une mission donnée (03 §34.2).
+ *
+ * Une base créée AVANT l'existence de cette clé ne la porte pas : sa lecture
+ * rend `undefined`, que le lecteur traduit en « jamais synchronisée » — ni panne
+ * ni migration, rien n'est réécrit pour l'obtenir (invariant 7).
+ */
+export function cleDerniereSyncReussie(missionId: string): string {
+  return `${CLES_META.prefixeDerniereSyncReussie}${missionId}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

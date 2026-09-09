@@ -60,7 +60,7 @@ import { maintenant } from '../../local/horloge.js';
 import type { SessionLocale } from '../../local/depots/sessions.js';
 import { portSyncInerte } from '../../local/port-sync.js';
 import { memoriserSessionCourante } from '../../session/position.js';
-import { formaterHeure } from '../../session/fuseau.js';
+import { formaterDateHeure, formaterHeure } from '../../session/fuseau.js';
 import { useEnLigne } from '../../session/media.js';
 import { BandeauMiseAJour } from './BandeauMiseAJour.js';
 import './journee.css';
@@ -391,9 +391,26 @@ export function EcranAujourdhui(): ReactNode {
                 : { enAttente: etatMission.sync.operationsEnAttente })}
             />
           </div>
+          {/* 03 §34.2, la troisième donnée de « l'état de sync par mission » :
+              le DERNIER SUCCÈS. Rendu ICI, dans la phrase qui dit déjà les deux
+              autres (file, disponibilité), et non dans la prop `derniereSync` de
+              la pastille — délibérément (A23, 2026-09-08) : la pastille est
+              l'ÉTAT, traduit par `etat-sync-affiche.ts` pour la coquille comme
+              pour ce cockpit (B6) ; un texte libre qui y entrerait n'aurait pas
+              d'équivalent dans l'en-tête, et « jamais synchronisée » dans une
+              pastille rendrait illisible la garde « aucune pastille verte »
+              (`/synchronis[ée]e?/`). L'instant est lu dans `meta` par
+              `construireJournee`, le même qui nourrit l'alerte de l'invariant 8,
+              et formaté AU FUSEAU DE LA MISSION (03 §22.2, invariant 5). */}
           <p>
             {etatMission.aRevoirOuverts} point(s) à revoir ·{' '}
-            {etatMission.sync.operationsEnAttente ?? 0} élément(s) à remonter
+            {etatMission.sync.operationsEnAttente ?? 0} élément(s) à remonter ·{' '}
+            {etatMission.sync.derniereSyncReussieLe === null
+              ? 'jamais synchronisée depuis cet appareil'
+              : `dernière synchronisation réussie le ${formaterDateHeure(
+                  etatMission.sync.derniereSyncReussieLe,
+                  etatMission.mission.timezone,
+                )}`}
             {etatMission.sync.statut === 'indisponible' &&
               ' · la synchronisation n’est pas encore disponible dans cette version'}
           </p>
