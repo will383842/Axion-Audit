@@ -279,3 +279,141 @@ attend **A01** — le motif « à extraire un jour » vaut pour le calendrier, p
 
 *Note rédigée le 2026-08-31 (UTC) — aucune ligne de code L5 n'accompagne ce document, et aucune ne
 doit être écrite avant la porte P-C.*
+
+---
+
+# §D — LA DoD RESTANTE DE L5, ÉNUMÉRÉE ET CHIFFRÉE (A20, 2026-09-09)
+
+> **Pourquoi cette section existe.** A30 a énuméré la DoD restante de **L7-min** : lot budgété 2 j,
+> déclaré livré et fusionné, à qui il manquait **≈ 2,0 j** — sa recette d'acceptation, axe-core sur
+> quatre écrans, le p95 de bout en bout. La question qui suit est juste : **L7-min est le seul lot dont
+> quelqu'un ait énuméré la DoD restante ; a-t-on des raisons de croire que L5 est mieux budgété ?**
+> Le suivi porte L5 à **≈ 7,5 j consommés sur 8, donc 0,5 j restants**, pendant que P-C est ouverte
+> depuis le 2026-09-06, **refusée trois fois**. Voici la réponse : mesurée d'abord, estimée ensuite.
+>
+> **Ce document ne décide rien** — le descope appartient à Williams (CLAUDE.md §3). Il ne rejoue pas
+> le chiffre de L6, arbitré à 5,0 j au §D de `LOT_L6.md`.
+
+## D.1 Ce que j'ai MESURÉ — vérifié sur `origin/main` = `a81fc2c`, jamais repris d'un rapport
+
+| # | Fait | Preuve exécutée |
+| --- | --- | --- |
+| M1 | **Un livrable nommé du 07 n'est pas livré** : « compression photos R2 ». La fonction existe (`sauvegarde/photos.ts:141`, 164 l., testée) ; elle n'a **aucun appelant de production** — 5ᵉ constat | `git grep compresserPhoto` : tests, README et registres seulement |
+| M2 | **Depuis la fusion du dernier incrément de périmètre (PR 52, `1964482`, le 2026-09-06), 18 PR ont touché `apps/field`, `e2e` ou `packages/ui` sur `main`. Aucune n'ajoute un livrable du 07** : réserves de recette, correctifs de porte, preuves, gardes | `git log origin/main --since=2026-09-05 -- apps/field e2e packages/ui` |
+| M3 | **Le burn-down compte ce travail pour zéro** — « deux jours à plat : le chantier ne produit plus de périmètre, il produit des preuves ». Il mesure le **périmètre écrit**, pas l'**effort consommé** | `docs/journal/2026-09-08.md:49-57` |
+| M4 | **La boucle de preuve est RÉCURRENTE, pas résiduelle** : PR 116 rattache L5d, L5e et la sécurité à la matrice ; PR 121, fusionnée le même jour, n'y est pas. NB-9-ter se referme sur trois incréments et se rouvre sur un quatrième | `grep -c NB-15 docs/TRACABILITE_E1-E47.md` → **0** ; `grep -c L5f` → **0** |
+| M5 | **R3 est à un tiers fait** : ma part A20 est écrite et **non fusionnée** (`fix/r3-cul-de-sac`, 1 commit, 7 fichiers, +119/-19), **sans PR ouverte** ; la part A22 n'est pas commencée ; les tests A26 n'existent pas | `EcranEntretien.tsx` porte toujours `naviguer({ type: 'racine', vue: 'accueil' })` |
+| M6 | **Le défaut Dexie est confirmé au code** : `agenda/jour.ts:108` lit `missions` (Dexie), `:112` déchiffre (WebCrypto), puis `:206` sessions, `:214` answers, `:217` outbox, `:227` meta — **les quatre lectures qui portent les trois données du cockpit §34.2 sont après le premier `await` non-Dexie**. `EcranAujourdhui.tsx:170-172` affirme le contraire en commentaire | lecture du fichier |
+| M7 | **`test:filrouge` ne joue pas le segment L5** : le script est `vitest run --project integration -t @filrouge` ; le segment vit dans `e2e/filrouge-l5.e2e.ts` (Playwright, 406 l., FIL-TPE **et** FIL-GC). La CI le joue par `test:e2e` ; **la commande que la DoD cite** ne le voit pas | `package.json:26` |
+| M8 | **Le README de `apps/field` dit encore le faux sur deux points** : « `@filrouge` allongé du segment L5 — **Non ouvert** » (le fichier est dans `main`) et « le nom L5d est déjà pris tant qu'A01 n'a pas renommé » (renommé le 09 en L5f) | `apps/field/README.md:99,112` |
+| M9 | **La couverture critique de L5 est tenue et MESURÉE** : `local/**`, `session/**`, `app/verrou.ts`, `sauvegarde/sauvegarde.ts`, `format.ts` sont dans la liste versionnée à 90 %, job `coverage` vert. Le moteur de sync est en `cheminsAttendus` — sans objet avant L6a | `.github/coverage-critical-paths.json` |
+| M10 | **NB-16 tient toujours** : R8, R10 et R11 ne sont dans aucun registre | `grep -c R11 DECISIONS.md AMELIORATIONS.md` → **0 et 0** |
+| M11 | **Le p95 est mesuré** (A28, 2 688 interactions, 8 courses, derrière le vrai Caddy) et **son travail n'est pas dans `main`** : PR 127, en CONFLIT | `gh pr list` |
+| **M12** | **Correction à ma propre note L6, et elle change le chiffre de L5f.** La table `attachments` **existe** en `SCHEMA_LOCAL` v1 — mais sa charge (`chargeAttachmentSchema`, `formes.ts:306`) ne porte que des **métadonnées** : `filename`, `mime`, `sizeBytes`, `storageKey`. **Il n'existe aucun endroit dans la base locale où stocker les octets d'une photo hors ligne.** L5f doit donc créer une table binaire et **monter `VERSION_SCHEMA_LOCAL` de 1 à 2**, sur des appareils portant de la donnée réelle | `base.ts:230`, `formes.ts:306-317` |
+| **M13** | **Le budget « chiffrement < 50 ms/écriture » (11 §4) n'a jamais été éprouvé sur du binaire.** Le coffre chiffre du **JSON** (`chiffrer(valeur: unknown)`, base64 dans l'enveloppe) ; le banc de PR 92 mesure « quelques centaines d'octets » et rend p95 0,60 à 1,80 ms. Une photo à 2048 px et qualité 0,85 est **trois ordres de grandeur au-dessus**, plus 33 % en base64 | `local/coffre.ts:576`, `e2e/budget-chiffrement-l5.e2e.ts` |
+| **M14** | **Le test « migration locale v1→v2 avec outbox non vide » que le §4 de cette note exige n'a jamais eu d'objet** — `SCHEMA_LOCAL` n'a qu'une version. **L5f serait la première migration locale réelle du produit** | `LOT_L5.md:111,162` · `base.ts:219-236` |
+
+## D.2 Le chiffre — trois natures, jamais mélangées
+
+### A. PRODUIT — du périmètre du 07 jamais écrit — **1,2 j**
+
+| Objet | Coût | Ce qui reste, précisément |
+| --- | --- | --- |
+| **L5f — chaîne photo** | **0,8 j** | table binaire locale et **migration v1→v2** (M12, M14) · capture (A22) · statut d'envoi local (A22) · 4 états et axe-core · tests croisés A26, dont la migration à outbox non vide. `compresserPhoto` est déjà écrite. **A55 chiffrait 0,5 j, jamais mesuré** ; je monte pour M12, M13 et M14 — fourchette **0,6 à 1,0** |
+| **R3 — cul-de-sac de navigation** | **0,1 j** | part A22 (une ligne de `EcranEntretien.tsx`) · tests A26 sur le modèle B2 avec contre-épreuve · PR et rejeu. A01 chiffrait 0,2 j pour le tout ; **un tiers est déjà écrit** (M5) |
+| **Le défaut Dexie** | **0,3 j** | réordonner `construireJournee` — toute lecture Dexie **avant** le premier `await` non-Dexie — ou la découper en observations distinctes · **plus un test qui prouve le rafraîchissement**, c'est-à-dire qui mute la base pendant l'observation. **Bloquant pour ouvrir L6b** |
+
+### B. PREUVE — recette, mesure, balayage — **≈ 2,1 j d'agent**
+
+| Objet | Coût |
+| --- | --- |
+| **Recette novice, 4ᵉ passe, sur l'arbre de la porte** (A54) — les deux GO SOUS RÉSERVE portent sur `ef2dea0`, antérieur à cinq incréments qui ont touché des écrans | 0,3 |
+| **Rejeu du contrôle A02** après ces correctifs, le cinquième | 0,2 |
+| **`docs/portes/PORTE_C_<date>.md`** — 8 critères copiés mot pour mot, cochés avec leur preuve, réserves reportées. **Jamais écrit**, et le merge de la porte y est conditionné (11 §9bis) | 0,15 |
+| **Matrice E1-E47** — NB-9-ter, plus PR 121, plus L5f et R3 quand ils arriveront (M4) | 0,2 |
+| **README `apps/field`** — 6ᵉ constat (M8) | 0,1 |
+| NB-16 (dater R8, R10, R11) 0,1 · NB-17 (`rules.tsv` et son entrée) 0,05 · NB-18 0,02 · `test:filrouge` qui ne voit pas L5 (M7) 0,05 · publication observée d'`ecrans/**` 0,1 · doublons de `DECISIONS.md` et garde D-7 0,1 | 0,42 |
+| **Migrations up/down sur staging** — ligne 4 de la DoD, non tenue : `deploy-staging.yml` n'appelle jamais `db:migrate` | 0,1 |
+| **Provision « ce que la séance matérielle va produire »** — le poste que personne n'a jamais compté. Base observée : **trois passes de recette simulée** ont produit N1, R1 à R8 et N1 à N3, dont une seule famille — les ancres — a coûté **deux PR entières**, 97 puis 101. La séance est la **première épreuve sur matériel réel**, avec deux risques nommés **que personne n'a jamais tournés** : `require-corp` sur WebKit et iPadOS, et la police au démarrage à froid sur iPadOS. Fourchette **0,3 à 1,2** | 0,6 |
+
+### C. PORTE — le geste humain, non délégable et non compressible — **0,6 j de Williams**
+
+**La séance matérielle : 4 h 30** (`SEANCE_MATERIELLE_P-C.md` §2 — dix vérifications, ≈ 4 h 10 de
+gestes). Elle ne s'échange contre aucun agent, et **elle n'est budgétée nulle part** : ni dans les 8 j
+de L5, ni dans la marge de recette de 2 j, que D-4 du dossier de descope réserve à l'audit à blanc de
+**P-E**. S'y ajoutent, à sa main : le **compte auditeur de test sur staging** (sans lui, **une**
+vérification sur dix est jouable) · **D-8**, la bascule `ZAP_BLOQUANT` · les **trois arbitrages
+produit** rendus pendant la séance, plus **M10** · les **quatre questions ouvertes** du §6 de la fiche,
+à trancher **avant** · le geste root des migrations · **la signature**.
+
+### Total
+
+> **≈ 3,3 j d'agent (A + B) et 0,6 j de Williams**, contre **0,5 j** au suivi.
+> **Écart sur le poste agent : plus 2,8 j.** L5 atterrit à **≈ 10,8 j pour un budget de 8 j — plus 35 %.**
+
+## D.3 Ce que ce chiffre N'INCLUT PAS — nommé, parce qu'une estimation qui tait ses termes ne s'utilise pas
+
+1. **Les deux défauts de p95** rendus à A20 par A28 — premier montage de l'écran de collecte, 111,2 ms
+   sur page froide : **≈ 0,2 j**. A01 les a datés de **P-E**, pas de P-C. Hors du chemin de la porte ;
+   à ajouter si Williams les veut avant.
+2. **Le rejeu de P-C EN ENTIER** si elle échoue (09 §4bis — jamais en correctifs partiels) :
+   **≈ 0,65 j d'agent et 0,6 j de Williams**, non additionnés. **P-C a déjà été refusée trois fois** ;
+   les trois refus portaient sur des critères depuis fermés, et le dossier du 09 est à
+   **1 ferme / 7 sous réserve matérielle / 0 non tenu**. C'est un risque réel, pas une prévision.
+3. **M10**, le verrou de 15 min, si Williams la déclare ABSORBÉE : **non chiffrée par personne**,
+   à vue 0,2 à 0,3 j. Une fiche d'étage 2 ne s'anticipe pas (CLAUDE.md §3-7).
+4. **NB-3-bis** : la bascule est un arbitrage, pas un coût d'agent — **sauf** si l'option qui change la
+   politique de cache est retenue, ce qui contredit 05 §31 et rouvre le service worker. Non chiffrable
+   sans instruction.
+5. **Ce qui n'est pas L5** : L6 (5,0 j, arbitré, non rejoué ici), L7-min, L8.
+6. **Le temps déjà consommé.** Le dépôt ne garde aucune trace du temps ; je ne mesure que des
+   artefacts — 18 PR, 9 dossiers de preuve — et j'en tire un ordre de grandeur, jamais une durée.
+7. **Ce que la séance découvrira au-delà de la provision de 0,6 j.**
+
+## D.4 L'effet sur la référence de 26 j — et le seul fait qui compte le 15
+
+**Trois lots ont maintenant vu leur DoD restante énumérée. Les trois donnent le même écart, et il est
+de même nature :** L7-min **plus 2,0 j** sur 2 (A30) · L5 **plus 2,8 j** sur 8 (ici) · L6 **plus 1,2 j**
+sur le restant annoncé (D-1 bis, arbitré). **Aucun des trois n'est du périmètre neuf : les trois sont
+de la DoD inachevée sur un lot déclaré livré.** Cumul ≈ **plus 6 j sur 26**, et le biais se manifeste
+exactement là où la porte n'a pas encore eu lieu — L0 à L4 sont signés, leur DoD est close par une porte.
+
+> **Ce n'est donc pas un accident de L7-min : les 26 j budgètent l'ÉCRITURE et pas l'ACCEPTATION.**
+> Conséquence pour le 15, et c'est tout ce que ce document sert à dire : **un descope calculé sur cette
+> référence retire du PÉRIMÈTRE, alors que le dépassement est dans la PREUVE — et la preuve ne se
+> descope pas.** 09 §4bis interdit de coter une porte en correctifs partiels, et le critère de
+> P-DESCOPE pose lui-même que « la collecte fiable prime ».
+
+**Fait nouveau que je signale sans le rechiffrer** — le brief me l'interdit, et il a raison : les
+**5,0 j du §D de `LOT_L6.md` sont un chiffre d'ÉCRITURE.** Ils contiennent les huit scénarios scriptés,
+mais **ni la recette d'acceptation de P-D, ni sa séance, ni la boucle correctif → matrice → recette →
+contrôle** que D.1 mesure sur L5. Si le biais vaut pour L6 comme il vaut pour L5 et L7-min, **P-D
+coûtera plus que 5,0 j.** Je ne touche pas au chiffre arbitré ; je dis que sa nature est connue.
+
+## D.5 Le démenti que je ne peux pas rendre, et pourquoi
+
+Le brief demandait de dire si **0,5 j est juste**. Il l'est **pour ce qu'il compte** : L5f, et rien
+d'autre. Il ne compte ni la séance, ni la recette, ni le rejeu du contrôle, ni la fiche de porte, ni
+R3, ni le défaut Dexie, ni les huit réserves ouvertes, ni la matrice que chaque correctif rouvre.
+**Ce n'est pas une erreur de calcul, c'est un choix d'unité** — et le journal du 08 l'écrit lui-même
+sans en tirer la conséquence : « le chantier ne produit plus de périmètre, il produit des preuves ».
+
+## D.6 Doutes que je refuse de deviner — pour `DECISIONS.md`, par A01
+
+1. **Le budget 11 §4 « chiffrement < 50 ms par écriture » s'applique-t-il à l'écriture d'une photo ?**
+   (M13.) Si oui, le chemin d'écriture du coffre est probablement à revoir pour du binaire, et L5f
+   coûte davantage que 0,8 j. Si non, il faut écrire à quoi il ne s'applique pas.
+2. **La ligne « compression photos R2 » du 07 est-elle tenue par une fonction sans appelant ?**
+   À la lettre, le 07 nomme la **compression**, qui est écrite ; 03 §17.4 exige le **bouton**. Une
+   lecture stricte cocherait la ligne, une lecture d'usage la refuse. **A01 tranche ce qu'un critère
+   veut dire** — je ne le fais pas à sa place.
+3. **D10 reste ouvert, et ma propre prémisse était fausse à moitié** : j'avais avancé que L6a et L6b ne
+   touchent pas `SCHEMA_LOCAL`, ce qui reste vrai — mais **L5f, lui, monte la version locale** (M12),
+   donc le motif du refus du 2026-09-05 — une migration locale au milieu d'un moteur de sync à moitié
+   construit — **tient toujours**. A01 décide ; je rectifie ce que j'avais écrit.
+
+---
+
+*Section établie le 2026-09-09 par **A20**, chef d'équipe front, en lecture seule sur le code : chaque
+fait de D.1 est exécuté, aucun repris d'un rapport. Elle ne coche rien, ne signe rien, ne retient
+aucune option, et ne modifie aucun chiffre arbitré ailleurs.*
