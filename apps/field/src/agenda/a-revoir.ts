@@ -72,6 +72,11 @@ function libelleSession(session: SessionLocale | null): string {
 /**
  * Les points à revoir d'une mission, ou de TOUTES si `missionId` est `null`.
  *
+ * **Seules les missions qui ONT au moins un point sont rendues** (voir le motif
+ * dans le corps) : une entrée à zéro n'est pas une réponse à la question que
+ * cette fonction pose. Un appelant qui voudrait le zéro le lit sur le cockpit,
+ * où `aRevoirOuverts` le compte déjà par mission (`agenda/jour.ts`).
+ *
  * L'ordre : par session, puis par ordre de pose. C'est celui du geste qui suit —
  * on rouvre UN entretien et on lève ses zones d'ombre les unes après les autres
  * (03 §25.6 N6 : l'entretien complémentaire lève un à-revoir).
@@ -115,7 +120,24 @@ export async function construireARevoir(
     points.sort(
       (a, b) => a.session.localeCompare(b.session, 'fr') || a.poseLe.localeCompare(b.poseLe) || 0,
     );
-    listes.push({ mission, points });
+    // ── UNE MISSION SANS POINT NE FIGURE PAS DANS LA LISTE ────────────────
+    // Constat d'A26 (2026-09-09), et c'est une incohérence avec mon propre
+    // arbitrage : sur le cockpit, le zéro n'est PAS écrit comme un nombre — il
+    // s'écrit « Aucun point à revoir », et un test le garde. Ici, la même
+    // mission rendait un badge « 0 point(s) à revoir » au-dessus d'une liste
+    // vide : le même fait, deux formulations, dont celle que j'avais jugée
+    // mauvaise.
+    //
+    // Le geste ne se contente pas de réécrire le badge. Un écran qui s'appelle
+    // « Points à revoir » répond à « qu'est-ce que je dois aller faire » ; une
+    // carte dont tout le contenu est une liste vide n'y répond pas, et son badge
+    // d'AVERTISSEMENT annonce un danger qui n'existe pas. Le fait « cette
+    // mission est propre » a déjà son lieu : la carte de mission du cockpit,
+    // où il se lit à côté de la sync et de l'agenda. Une source pour un fait.
+    //
+    // Aucun risque d'écran nu : si AUCUNE mission n'a de point, la liste est
+    // vide, et c'est l'état VIDE du §33.2 qui parle — avec ce qu'il faut faire.
+    if (points.length > 0) listes.push({ mission, points });
   }
 
   return listes;
