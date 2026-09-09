@@ -12355,6 +12355,7 @@ mapping Drizzle, `apps/api/schema-manifest.json`). **Puis** resceau de `docs/.pa
 **Fenêtre encore ouverte** : le §9 la dit rouvrable « tant que la migration n'a pas été jouée sur un
 environnement portant de la donnée ». A12 confirme : **conteneurs jetables, base vide, détruits après**.
 Elle se referme à la **première migration de staging portant du contenu réel** — qui la joue la ferme.
+
 ## 2026-09-09 — [L5/gouvernance] « p95 des interactions < 100 ms » : p95 de QUOI, et à quelle porte ?
 
 A28 a mesuré les deux lectures plutôt que d'en choisir une (`docs/portes/MESURE_P95_A28_2026-09-09.md`) :
