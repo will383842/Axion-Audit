@@ -37,6 +37,7 @@ import { VUES } from './app/vues.js';
 import { EcranEntretien } from './ecrans/entretien/EcranEntretien.js';
 import { EcranNouvelEntretien } from './ecrans/entretien/EcranNouvelEntretien.js';
 import { EcranAgenda } from './ecrans/journee/EcranAgenda.js';
+import { EcranARevoir } from './ecrans/journee/EcranARevoir.js';
 import { EcranAujourdhui } from './ecrans/journee/EcranAujourdhui.js';
 import { EcranFinDeJournee } from './ecrans/journee/EcranFinDeJournee.js';
 import { EcranFinDeSession } from './ecrans/journee/EcranFinDeSession.js';
@@ -90,6 +91,9 @@ function ContenuCourant(): ReactNode {
     // ── Rattachement de l'appareil à son auditeur (A23) ──
     case 'connexionSiege':
       return <EcranConnexion />;
+    // ── Le compteur « à revoir » du cockpit mène ici (03 §34.2, NB-15) ──
+    case 'aRevoir':
+      return <EcranARevoir />;
   }
 }
 

@@ -153,6 +153,18 @@ export const CLES_META = {
    * pour un fait (B6, A54 2026-09-06).
    */
   prefixeDerniereSyncReussie: 'sync:dernier-succes:',
+  // ── NB-15 (A22) — la mission dont on consulte les points à revoir (03 §34.2) ─
+  /**
+   * La mission dont le compteur « à revoir » vient d'être tapé.
+   *
+   * La navigation terrain n'a pas de paramètre (`app/navigation.ts` : un
+   * réducteur, pas un routeur), et « compteur cliquable PAR MISSION » exige
+   * pourtant de dire LAQUELLE. Le choix transite donc par `meta`, comme la
+   * session courante — un identifiant, en clair, qui ne dit rien de personne
+   * (`LOT_L5.md` §3.2). Absente, la liste porte toutes les missions embarquées :
+   * un défaut lisible, jamais un écran vide.
+   */
+  missionARevoir: 'a-revoir:mission',
 } as const;
 
 /** Clé du curseur de pull d'une mission donnée. */

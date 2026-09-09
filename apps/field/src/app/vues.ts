@@ -63,6 +63,9 @@ export const VUES = {
   // (`session/auditeur.ts`). Un écran de rattachement accessible coffre fermé
   // écrirait dans un coffre qui n'est pas encore ouvert.
   connexionSiege: { titre: 'Rattacher cet appareil', exigeCoffreOuvert: true },
+  // ── Le compteur « à revoir » du cockpit mène ICI (03 §34.2) — A22 ────────
+  // Ajouté À LA FIN, comme le régime append-only de ce fichier l'exige.
+  aRevoir: { titre: 'Points à revoir', exigeCoffreOuvert: true },
 } as const satisfies Record<string, DefinitionVue>;
 
 export type CodeVue = keyof typeof VUES;

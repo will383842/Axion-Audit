@@ -531,7 +531,9 @@ describe('EcranAujourdhui — cockpit §34.2', () => {
     const carteAlpha = carte(/Alpha — mission fictive/);
     const carteBravo = carte(/Bravo — mission fictive/);
     expect(carteAlpha.textContent).toMatch(/2 point\(s\) à revoir/);
-    expect(carteBravo.textContent).toMatch(/0 point\(s\) à revoir/);
+    // NB-15 : à zéro, le compteur n’est plus un bouton mais une phrase — un lien
+    // qui ouvre une liste vide fait faire un aller-retour pour rien.
+    expect(carteBravo.textContent).toMatch(/Aucun point à revoir/);
     // Et l'alerte personnelle correspondante est là, calculée localement.
     expect(document.body.textContent).toMatch(/2 point\(s\) à revoir attendent/);
   });

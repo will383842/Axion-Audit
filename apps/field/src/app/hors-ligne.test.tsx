@@ -58,6 +58,7 @@ import { EcranAccueil } from './EcranAccueil.js';
 import { EcranDeverrouillage } from './EcranDeverrouillage.js';
 import { EcranStockage } from './EcranStockage.js';
 import { EcranConnexion } from '../siege/EcranConnexion.js';
+import { EcranARevoir } from '../ecrans/journee/EcranARevoir.js';
 import { VUES, type CodeVue } from './vues.js';
 
 const RACINE_SRC = resolve(import.meta.dirname, '..');
@@ -96,6 +97,10 @@ const ECRANS = {
   // des pastilles plus bas. Le garde de type éprouvé en conditions réelles, sur
   // une vue qu'aucun des deux chantiers n'avait vue venir.
   connexionSiege: { Composant: EcranConnexion, source: 'siege/EcranConnexion.tsx' },
+  // LA TREIZIÈME VUE (NB-15, 2026-09-09) — la destination du compteur « à
+  // revoir » du cockpit (03 §34.2). Entrée ici par le même chemin que la
+  // douzième : `pnpm typecheck` a refusé la compilation tant qu'elle manquait.
+  aRevoir: { Composant: EcranARevoir, source: 'ecrans/journee/EcranARevoir.tsx' },
 } as const satisfies Record<CodeVue, Ecran>;
 
 const CODES = Object.keys(ECRANS) as readonly CodeVue[];
@@ -530,6 +535,9 @@ describe('B6 — combien de pastilles l’auditeur voit-il réellement, coquille
     // celle de l'en-tête. Le rappel livré par #80 en rendait une seconde — le
     // drapeau est baissé le 2026-09-06, et ce zéro est ce qui le tient.
     connexionSiege: 0,
+    // La treizième vue ne rend que le RAPPEL des capacités : sa pastille est
+    // celle de l'en-tête, comme partout depuis B6.
+    aRevoir: 0,
   } as const satisfies Record<CodeVue, number>;
 
   function pastilles(): readonly string[] {

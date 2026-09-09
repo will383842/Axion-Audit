@@ -46,6 +46,7 @@ import {
   CAPACITES_HORS_LIGNE,
   PASTILLE_PORTEE_PAR_LA_COQUILLE,
 } from '../../app/capacites-hors-ligne.js';
+import { memoriserMissionARevoir } from '../../agenda/a-revoir.js';
 import {
   CLE_DERNIER_RITUEL,
   construireJournee,
@@ -222,6 +223,24 @@ export function EcranAujourdhui(): ReactNode {
           maintenant(),
         );
 
+  /**
+   * NB-15 — « ses à-revoir en attente (**compteur cliquable par mission**) »
+   * (03 §34.2). Le compteur était un nombre mort : l'auditeur savait COMBIEN de
+   * zones d'ombre il laissait derrière lui, et devait les retrouver entretien
+   * par entretien. La mission tapée est mémorisée dans `meta` — la navigation
+   * n'a pas de paramètre (`app/navigation.ts`) — puis la liste consolidée
+   * s'ouvre (03 M3), d'où chaque point rouvre SA question (§17.2).
+   */
+  const ouvrirARevoir = useCallback(
+    (missionId: string): void => {
+      if (base === null) return;
+      void memoriserMissionARevoir(base, missionId).then(() => {
+        naviguer({ type: 'aller', vue: 'aRevoir' });
+      });
+    },
+    [base, naviguer],
+  );
+
   /** Ouvre l'écran de fin de session sur CETTE session (bloquant B1, A29). */
   const finir = useCallback(
     (session: SessionLocale): void => {
@@ -301,6 +320,19 @@ export function EcranAujourdhui(): ReactNode {
                 }}
               >
                 Reprendre
+              </Bouton>
+            ) : alerte.nature === 'a_revoir_en_attente' ? (
+              // NB-15 : l'alerte nommait le nombre et n'offrait aucun geste. Elle
+              // mène là où le compteur mène — une alerte qu'on ne peut pas
+              // traiter depuis l'endroit où on la lit se traite en la lisant deux
+              // fois.
+              <Bouton
+                variante="secondaire"
+                onClick={() => {
+                  ouvrirARevoir(alerte.missionId);
+                }}
+              >
+                Voir les points à revoir
               </Bouton>
             ) : undefined
           }
@@ -403,7 +435,6 @@ export function EcranAujourdhui(): ReactNode {
               `construireJournee`, le même qui nourrit l'alerte de l'invariant 8,
               et formaté AU FUSEAU DE LA MISSION (03 §22.2, invariant 5). */}
           <p>
-            {etatMission.aRevoirOuverts} point(s) à revoir ·{' '}
             {etatMission.sync.operationsEnAttente ?? 0} élément(s) à remonter ·{' '}
             {etatMission.sync.derniereSyncReussieLe === null
               ? 'jamais synchronisée depuis cet appareil'
@@ -414,7 +445,33 @@ export function EcranAujourdhui(): ReactNode {
             {etatMission.sync.statut === 'indisponible' &&
               ' · la synchronisation n’est pas encore disponible dans cette version'}
           </p>
+          {/*
+            NB-15 — LE COMPTEUR EST LE BOUTON, et il n'y a qu'un compteur.
+
+            03 §34.2 dit « compteur CLIQUABLE par mission » : le nombre a quitté
+            la phrase ci-dessus pour devenir ce bouton. Le laisser AUSSI dans la
+            phrase aurait donné deux fois le même fait sur la même carte —
+            exactement ce que B6 a coûté avec les deux pastilles de sync.
+
+            À ZÉRO, ce n'est plus un bouton mais une phrase. Un lien qui ouvre une
+            liste vide fait faire un aller-retour pour rien en pleine journée ;
+            et l'auditeur qui lit « aucun point à revoir » a déjà sa réponse. La
+            liste garde son état vide pour le cas où le dernier point est levé
+            alors qu'on y est (§33.2).
+          */}
           <div className="axn-journee__actions">
+            {etatMission.aRevoirOuverts > 0 ? (
+              <Bouton
+                variante="secondaire"
+                onClick={() => {
+                  ouvrirARevoir(etatMission.mission.id);
+                }}
+              >
+                {etatMission.aRevoirOuverts} point(s) à revoir
+              </Bouton>
+            ) : (
+              <p className="axn-coquille__mention">Aucun point à revoir</p>
+            )}
             <Bouton
               variante="secondaire"
               onClick={() => {

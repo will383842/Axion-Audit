@@ -430,13 +430,37 @@ async function allerConnexionSiege(page: Page): Promise<void> {
   await expect(page.getByLabel(/Mot de passe du compte/)).toBeVisible();
 }
 
+/**
+ * La liste des points à revoir, atteinte PAR LE COMPTEUR du cockpit (03 §34.2).
+ *
+ * Le parcours pose d'abord un point à revoir, et ce n'est pas un détour : à
+ * zéro, le compteur n'est pas un lien mais la phrase « Aucun point à revoir »
+ * (voir `EcranAujourdhui`, NB-15). L'écran ne s'atteint donc, par un geste de
+ * production, qu'après un drapeau posé — c'est le parcours réel de l'auditeur.
+ *
+ * La remontée passe par la sortie de la coquille : `Ouvrir l'entretien` REMPLACE
+ * la vue (`EcranNouvelEntretien`), la pile est donc [cockpit, entretien] et un
+ * seul retour ramène au cockpit, sans replanter l'appareil — replanter effacerait
+ * le drapeau qu'on vient de poser.
+ */
+async function allerARevoir(page: Page): Promise<void> {
+  await allerEntretienEnCours(page);
+  await page.getByRole('button', { name: /^À revoir/ }).click();
+  await page.getByRole('button', { name: 'Confirmer' }).click();
+  await page.getByRole('button', { name: 'Retour' }).click();
+  await expect(titreDEcran(page, 'Aujourd’hui')).toBeVisible();
+  await page.getByRole('button', { name: /point\(s\) à revoir/ }).click();
+  await expect(titreDEcran(page, 'Points à revoir')).toBeVisible();
+  await expect(page.getByRole('heading', { name: MISSION_FIL_TPE.titre })).toBeVisible();
+}
+
 /** L'écran de restauration, atteint depuis l'écran d'embarquement (03 §34.2). */
 async function allerRestauration(page: Page): Promise<void> {
   await allerAccueil(page);
   await page.getByRole('button', { name: 'Restaurer une sauvegarde de secours' }).click();
   await expect(titreDEcran(page, 'Restaurer une sauvegarde')).toBeVisible();
   await expect(page.getByLabel('Fichier de sauvegarde')).toBeVisible();
-  await expect(page.getByLabel('Votre mot de passe')).toBeVisible();
+  await expect(page.getByLabel(/appareil qui a produit la sauvegarde/)).toBeVisible();
 }
 
 /**
@@ -625,7 +649,7 @@ const PARCOURS = {
           await page.getByRole('button', { name: 'Fin de journée', exact: true }).click();
           await expect(titreDEcran(page, 'Fin de journée')).toBeVisible();
           await expect(page.getByRole('heading', { name: 'Sauvegarde de secours' })).toBeVisible();
-          await expect(page.getByLabel('Votre mot de passe')).toBeVisible();
+          await expect(page.getByLabel('Mot de passe de cet appareil')).toBeVisible();
         },
       },
     ],
@@ -675,6 +699,18 @@ const PARCOURS = {
     horsLigne: {
       depuis: allerConnexionSiege,
       marqueur: 'Ouvrir ce qui est déjà enregistré sur cet appareil',
+    },
+  },
+  // ── La TREIZIÈME vue, arrivée avec NB-15 le 2026-09-09 ──────────────────
+  // Même histoire que la douzième : le `satisfies` a refusé de compiler dès que
+  // `vues.ts` a reçu sa ligne. Le marqueur hors ligne est RECOPIÉ de
+  // `apps/field/src/app/capacites-hors-ligne.ts`, jamais reformulé.
+  aRevoir: {
+    delaiMs: 180_000,
+    etats: [{ libelle: 'un point à revoir, atteint par le compteur', atteindre: allerARevoir }],
+    horsLigne: {
+      depuis: allerARevoir,
+      marqueur: 'Relire les points à revoir de la mission, calculés sur cet appareil',
     },
   },
 } as const satisfies Record<CodeVue, Parcours>;
