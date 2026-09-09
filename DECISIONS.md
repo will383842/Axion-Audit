@@ -11840,6 +11840,7 @@ une rectification assignée, pas un choix, sa place est la note de lot.
 Décideur : A01
 Impact spec : aucun — 03 §34.2 et le 04 sont intacts ; `docs/conception/LOT_L6.md` §3bis est amendé
 ce jour, avec renvoi à cette entrée.
+
 ## 2026-09-09 — [L8] Une question jamais posée à une unité jamais visitée est-elle « posée » ?
 
 Réserve BLOQUANTE R1 d'A37. `moteur.ts:377-384` compte chaque question scorable comme « posée » pour
