@@ -45,6 +45,18 @@
 // ── COMMENT VOIR CETTE GARDE ROUGIR ET VERDIR, LOCALEMENT ───────────────────
 //   AXION_CADDYFILE_EPROUVE=<copie mutée> pnpm exec playwright test en-tetes-servis
 // Refusé en CI (voir la fixture). Une garde qu'on n'a jamais vue rouge n'en est pas une.
+//
+// ── CE QU'ELLE NE VOIT PAS (A29, rejeu final du 2026-09-09) ─────────────────
+// La garde couvre les familles CONNUES, elle ne découvre pas les nouvelles.
+// Ce qui est lu dans les builds (`dist/assets`, `dist/icones`) suit le build ;
+// ce qui est nommé ici (HTML, replis SPA, `/hq`, `/robots.txt`, `/sw.js`, le
+// manifeste, les chemins d'API) est une liste, et une liste a un bord. Une
+// exclusion NUE ajoutée à `@html` sur un chemin que ce fichier ne nomme pas
+// (`/favicon.ico`, un fichier statique neuf à la racine) sortirait de Caddy
+// sans aucun Cache-Control et cette garde resterait verte. Ce bord se tient
+// par la règle du Caddyfile (« jamais une simple exclusion : un matcher ET son
+// header ») et par la revue croisée d'un diff qui touche `@html` — pas par un
+// test qui prétendrait énumérer l'inconnu.
 // =============================================================================
 import { readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -194,8 +206,24 @@ async function enTetesDe(
  * la place. A01 (R1) : la garde asserte la PRÉSENCE de l'en-tête, et qu'il
  * n'est pas `immutable` — un nom stable dont le contenu change ne se croit pas
  * sur parole. La VALEUR exacte appartient à A11 : on ne la fige pas ici.
+ *
+ * LUES dans le build (`dist/icones/`), jamais nommées — la règle des assets,
+ * appliquée aux icônes après qu'A29 a montré qu'elle ne l'était pas : une
+ * liste de trois noms laissait `icone-maskable-512.png` (déclarée
+ * `purpose: "maskable"` dans le manifeste, précachée par `sw.js`) hors de la
+ * garde, et un `@icones` restreint aux trois noms testés la servait SANS
+ * Cache-Control, garde verte. Dossier vide = erreur.
  */
-const ICONES_PWA = ['/apple-touch-icon.png', '/icones/icone-192.png', '/icones/icone-512.png'];
+function iconesPwa(): string[] {
+  const dossier = join(RACINE_DEPOT, 'apps', 'field', 'dist', 'icones');
+  const fichiers = readdirSync(dossier);
+  if (fichiers.length === 0) {
+    throw new Error(`${dossier} est vide : aucune icône à éprouver — le build a-t-il eu lieu ?`);
+  }
+  return ['/apple-touch-icon.png', ...fichiers.map((f) => `/icones/${f}`)];
+}
+
+const ICONES_PWA: readonly string[] = iconesPwa();
 
 /**
  * TOUT CE QUE CADDY SERT, famille par famille — et PAS UNE LISTE BLANCHE.
