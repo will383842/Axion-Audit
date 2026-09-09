@@ -3324,3 +3324,229 @@ seule sur `apps/`, `packages/`, `infra/`, `e2e/`, `scripts/`. **Seul `docs/TRACA
 été écrit.** Aucun commit, aucun `push` : la transcription appartient au pilote. Aucune ligne datée
 antérieure n'a été modifiée — à la seule exception, déclarée et prouvée au §O.1, de la **seconde**
 copie des sections L et M, retirée parce qu'elle était identique à la première à l'octet près._
+
+---
+
+# P. LES TROIS INCRÉMENTS QUE §O NE POUVAIT PAS CONNAÎTRE — **L5d (invariant 5), L5e (cockpit) ET L'INCRÉMENT SÉCURITÉ** — PASSE DE DOCUMENTATION **A55**, 2026-09-09, sur `origin/main` @ `5ac6f95`
+
+> **Lettre P**, à la suite de O. **Cette section ne juge rien et ne signe rien** : elle inventorie, et
+> elle rattache. Elle est écrite par **A55 (documentation)**, pas par le gardien, sur demande explicite
+> du contrôle d'acceptation **A02 du 2026-09-09**, réserve **NB-9-ter** : « la matrice est incomplète —
+> il y manque **L5d, L5e et le volet sécurité** ». §O a fermé NB-9-bis le 2026-09-08 sur `8d9e531` ;
+> les trois incréments ci-dessous sont entrés **après**, et l'instrument était de nouveau en retard
+> avant même d'avoir servi.
+>
+> **Ce que cette passe N'EST PAS, et qu'il faut lire avant de s'en servir** : ni un contrôle
+> d'acceptation, ni une signature de traçabilité. **La ligne « matrice E1-E47 à jour dans les deux
+> sens » appartient à A02** (09 §1, CLAUDE.md §10) ; A55 lui remet un document à cocher, pas un verdict.
+> Aucun état d'exigence n'est modifié en place : **la table qui fait foi reste §A.sexies**, et son
+> amendement appartient au gardien. Le §P.5 dit ce que ces incréments déplacent ; il ne le déplace pas.
+>
+> **A55, en lecture seule sur le code** (09 §1) : aucun fichier de `apps/`, `packages/`, `infra/`,
+> `e2e/`, `scripts/` n'a été ouvert autrement que pour être lu ; le seul fichier écrit par cette passe
+> est celui-ci. **Ordre de lecture appliqué** (09 §5.8) : `11_CONTRAT_TECHNIQUE` §1, §7, §9bis, §9ter →
+> `CLAUDE.md` §4 (étape 6, « les DEUX sens ») et §5 (DoD) → `08_TRACABILITE` (les 47 libellés) →
+> `09` §3, §4, §5.4, §5.9 → les trois revues croisées nommées au §P.0 → `DECISIONS.md` (entrées des
+> 2026-09-08 et 2026-09-09 citées ici) → `docs/ETAT.md` (quatre derniers blocs).
+
+## P.0 — La méthode, et ses limites — dites AVANT les tableaux
+
+**Cette passe s'est déroulée dans une session SANS SHELL.** Elle ne peut donc ni exécuter `git diff`,
+ni rejouer un garde, ni lire une CI. Conséquences, énoncées plutôt que masquées :
+
+1. **L'inventaire n'est pas un diff.** Il est construit en **lisant l'arbre de travail** de `5ac6f95`
+   (fichier par fichier, `grep` et lecture) et en le recoupant avec les trois revues croisées et les
+   blocs `ETAT.md` de la période. Il nomme donc des **artefacts porteurs** de l'incrément, non « les
+   fichiers du diff ». Là où je n'ai pas ouvert le fichier, je l'écris.
+2. **Aucun contrôle anti-orphelin exécuté.** `check:graphe-modules` et `check:tracabilite` n'ont pas
+   tourné ici. Le rattachement ci-dessous est fait **par lecture** — il prépare le contrôle d'A02, il
+   ne le remplace pas. Le seul orphelin fonctionnel que j'affirme (§P.4) est établi par un `grep`
+   exhaustif sur `apps/`, `packages/`, `e2e/`, dont la sortie est citée.
+3. **Les numéros de PR viennent du mandat**, pas de l'arbre : `#111` et `#112` pour le volet sécurité.
+   Les deux incréments L5 sont désignés par leur **branche**, qui est vérifiable dans `ETAT.md` :
+   `lot/l5d-invariant5` et `lot/l5e-cockpit`.
+4. **`5ac6f95` est donné comme `origin/main` par le mandat** ; je ne l'ai pas vérifié par `git`.
+   Ce que j'ai vérifié, c'est que **le contenu attendu de ces trois incréments est présent dans
+   l'arbre** — chaque affirmation ci-dessous porte son fichier et sa ligne.
+
+**Les dossiers qui font foi sur ces trois incréments** (je cite, je ne recompte pas) :
+
+| Incrément | Dossier | Verdict rendu |
+| --- | --- | --- |
+| **L5d** — invariant 5 à l'écran | `docs/portes/REVUE_A29_L5D_2026-09-08.md` | CONFORME SOUS RÉSERVE → **R1 fermée au rejeu** (bloc `ETAT.md` 2026-09-09 00h33) |
+| **L5e** — cockpit, dernier succès de sync | `docs/portes/REVUE_A29_L5E_2026-09-09.md` | APPROUVÉ AVEC RÉSERVES → **R1 levée par A01 (`0eb9afe`)**, R2 datée sur L6a |
+| **Sécurité** — en-têtes servis | `docs/portes/REVUE_A29_SECURITE_2026-09-09.md` §9 | **APPROUVÉ, 0 bloquant** au rejeu final sur `c02cb51` |
+
+## P.0bis — ⚠️ UN NOM POUR DEUX CHOSES : « L5d » — à lire avant le §P.1
+
+**Le dépôt appelle « L5d » deux incréments différents**, et l'un des deux n'existe pas :
+
+- **« L5d » = la chaîne PHOTO**, dans `DECISIONS.md` du **2026-09-05** (« La chaîne PHOTO n'a de lot
+  propriétaire nulle part » → lot L5d, **après P-C**), repris **dans le code** :
+  `apps/field/src/ecrans/entretien/ZoneQuestion.tsx:33` — « elle est le lot L5d, après P-C ».
+  **Cet incrément-là n'a jamais été ouvert** (§P.4).
+- **« L5d » = l'invariant 5 à l'écran**, sur la branche `lot/l5d-invariant5`, relu par A29 le
+  2026-09-08 sous le titre « lot L5, incrément **L5d** (invariant 5) », fusionné. **C'est celui-ci
+  que le §P.1 inventorie.**
+
+**Je ne tranche pas ce nom** : renommer l'un des deux est un acte de gouvernance, pas de
+documentation. Le risque est concret et il est déjà réalisé — un lecteur qui croise « L5d livré »
+peut en conclure que la capture photo est livrée, alors que **le bouton dit lui-même « Photo
+(bientôt) »** (`ZoneQuestion.tsx:312`). **Doute porté à A01** ; d'ici là, tout document du dépôt
+devrait écrire **« L5d (invariant 5) »** ou **« l'incrément photo »**, jamais « L5d » nu.
+
+## P.1 — Sens 2 : **L5d — l'invariant 5 à l'écran** (branche `lot/l5d-invariant5`, 7 commits)
+
+**Objet de l'incrément** : fermer l'écart relevé par A20 et A02 — « un module d'invariant contourné
+par son appelant est un **défaut de lot**, pas une coquille ». Le fuseau de mission n'était pas
+_absent_ du code : il était **désarmé par ses appelants**, qui laissaient `undefined` retomber sur le
+fuseau de l'appareil.
+
+| Artefact (lu) | Citation en tête | Rattachement — contrôle |
+| --- | --- | --- |
+| `apps/field/src/session/fuseau.ts` | `E32` | **juste, et la citation a été CORRIGÉE dans l'incrément** : le fichier citait `E13` (écran 3 zones) au motif que l'indicateur « Enregistré à HH:mm » le consomme — « c'est le consommateur, pas l'exigence » (`:9-11`, réserve R5 du rejeu A29). E32 est bien le libellé du 08 (« fuseaux, devises, interface 100 % français ») |
+| — le **contrat** de ce fichier | — | `fuseau: string \| null`, **REQUIS** (`:71`, `:100`, `:105`, `:115`). Le chemin `undefined → fuseau de l'appareil` **n'existe plus, ni dans le type ni dans le code** (arbitrage A01 du 2026-09-08, option b). Repli unique : le même instant **en UTC, NOMMÉ** — `MENTION_UTC = '(heure UTC)'` (`:44`, `:81`) |
+| `apps/field/src/session/fuseau.test.ts` | E32 | juste — la garde du repli, écrite par **A26/A24**, jamais par A22 (09 §5.6). C'est la levée de la réserve **R1 d'A29**, qui mesurait que « la correction de L5d peut être défaite intégralement sans qu'un seul test rougisse » |
+| `apps/field/src/session/invariant5-appelants.test.ts` | E32 · E36 | juste — garde de forme sur les **appelants** : aucun composant ne formate lui-même, aucun `undefined` littéral en second argument (`:199` porte le message d'échec, qui refuse explicitement le contournement) |
+| `apps/field/src/ecrans/journee/invariant5-fuseau.acceptation-l5d.test.tsx` | `E32 · E38 · E44` | juste — acceptation d'écran, y compris les deux replis que la revue avait trouvés **traversés mais jamais assertés** (`:750`, `:794`, réserve R6) |
+| `apps/field/src/ecrans/journee/EcranFinDeJournee.tsx` | E38 · E24 · E6 | juste — `fuseauDesMissions()` (`:96`) et le rendu du dernier rituel par `formaterDateHeureMission` (`:352`) : la règle d'unanimité multi-mission, `null` dès que les missions du jour divergent |
+| `apps/field/src/ecrans/journee/EcranRestauration.tsx` | E38 · E6 · E33 | juste — l'identité de la sauvegarde restaurée est rendue **au fuseau de la mission**, plus à celui de l'appareil ; c'est l'écran de **secours**, donc celui où une `RangeError` de rendu coûtait le plus (réserve R3) |
+| `apps/field/src/sauvegarde/sauvegarde.ts` | E38 · E33 | juste — `lireIdentiteMission` (`:411`, appelée `:571`). **C'est le point que la revue a corrigé** : une lecture de confort placée APRÈS une écriture commise ne doit pas pouvoir faire dire « rien n'a été modifié » à un écran où tout est restauré (R2, invariant 7) |
+| `apps/field/src/session/peripherie-entretien.test.ts` | E32 | juste — amendé (`:705`, `:715-721`) : la signature refuse `undefined`, et le rendu de repli **contient** l'heure UTC et **ne contient pas** une heure locale de la machine |
+| `packages/shared/src/temps.ts` (`fuseauIanaSchema`) | — | **réutilisé, NON créé par cet incrément** (il vient de F-19, A51, et la console s'en servait déjà) : `fuseau.ts:59-61` l'appelle pour ne pas rendre `Intl` sur une graphie inventée. À ne pas compter comme un livrable de L5d |
+
+**Aucun artefact de cet incrément ne reste sans rattachement.** L'exigence servie est **E32**, et
+elle l'est **par l'objet** autant que par la citation : le libellé du 08 dit « fuseaux horaires […]
+interface 100 % français », c'est exactement ce que ce module fait et rien d'autre.
+
+## P.2 — Sens 2 : **L5e — le cockpit** (branche `lot/l5e-cockpit`, `c09fa70` gardes puis `b92cd23` production)
+
+**Objet** : le critère 07 n° 1 (« sync **par mission** ») demandait une troisième donnée au §34.2 —
+le **dernier succès** — que rien n'alimentait. D-6 (#102) a tranché que L5 doit **afficher** un état
+local, pas synchroniser. L5e livre cette vérité locale, et referme au passage le jour civil des
+rituels (invariant 8), autorisé par l'arbitrage A01 du 2026-09-08 (« Trois écarts hors critères »,
+option c, cas (c) : « MAINTENANT »).
+
+| Artefact (lu) | Citation | Rattachement — contrôle |
+| --- | --- | --- |
+| `apps/field/src/local/base.ts` | E6 · E38 | juste — `CLES_META.prefixeDerniereSyncReussie = 'sync:dernier-succes:'` (`:155`) et `cleDerniereSyncReussie()` (`:180`). **La clé est DISTINCTE du curseur de pull** (`sync:since:`), et le motif est écrit à sa définition : un pull prouve la descente, pas la sortie, et c'est la sortie que l'invariant 8 protège. Ajout **append-only** à `CLES_META` : une base ancienne ne la porte pas, sa lecture rend `undefined`, traduit « jamais synchronisée » — **rien n'est réécrit pour l'obtenir** (invariant 7, `:173-179`) |
+| `apps/field/src/agenda/jour.ts` | E12 · E23 · E24 · E6 (héritée de L5c) | juste — `lireDerniereSyncReussie` (`:133`), la donnée nourrit **À LA FOIS** la carte de mission et l'alerte de l'invariant 8 (`:227-235`) : **une source pour un fait**, qui est la leçon de B6 |
+| — le jour civil des rituels | — | `jourCivil` est **importé** de `local/depots/sessions.ts` (`:44`), pas recopié — une copie aurait reproduit le défaut à la lettre. Comparaison `every` et non `some` (`:314`) : le rappel s'éteint seulement si **toutes** les missions du jour ont eu leur rituel dans **leur** jour civil |
+| `apps/field/src/ecrans/journee/EcranAujourdhui.tsx` | E23 · E6 · E38 · E12 | **juste mais SOUS-CITÉ** — voir §P.6. Le rendu de la troisième donnée du §34.2 est `:405-415`, **formaté au fuseau de la mission** (`formaterDateHeure(…, etatMission.mission.timezone)`), avec « jamais synchronisée depuis cet appareil » quand la clé est absente |
+| `apps/field/src/ecrans/journee/derniereSync.acceptation-l5e.test.tsx` | `E38 · E32 · E23` | juste — acceptation écrite par A27, production par A23 : intersection vide (09 §5.6, vérifiée par A29 §2-H) |
+| `apps/field/src/agenda/rituel-jour-civil.acceptation-l5e.test.ts` | E38 | juste — l'invariant 8 éprouvé sur des fuseaux qui font diverger le jour civil (Paris / Hô Chi Minh) |
+| `apps/field/src/agenda/jour.test.ts`, `apps/field/src/local/port-sync.test.ts` | E6 · E38 | juste — amendés ; `port-sync.test.ts:122` **fige** que le port inerte rend `derniereSyncReussieLe: null` : le cockpit ne lit pas le port pour cette donnée |
+| `docs/conception/LOT_L6.md` §3bis | E43 · E47 | **documentaire, et c'était la réserve bloquante** : la note L6 promettait `sync:derniere-reussie:`, « après chaque push OU pull ». Deux artefacts, deux noms, aucun test qui les croise → L6a aurait écrit une clé que personne ne lit, **tout vert**. A01 tranche **push seul**, sous le nom livré (`DECISIONS.md` 2026-09-09) ; le test qui croise les deux artefacts est assigné à **A26** |
+
+**Aucun artefact sans rattachement.** ⚠️ **Un fait que le sens 2 doit porter au dossier** :
+`apps/field/src/local/port-sync.ts:164` rend toujours `derniereSyncReussieLe: null` et
+`statut: 'indisponible'` — **le port de sync reste inerte**, et `app/EcranAccueil.tsx` dérive encore
+l'alerte de l'invariant 8 **du port**, quand `agenda/jour.ts` la dérive de `meta` : **deux chemins
+pour le même fait**, invisibles aujourd'hui, contradictoires **dès le premier push réussi de L6a**.
+C'est la réserve **R2 d'A29**, datée et assignée à L6a — elle n'est pas fermée, elle est **placée**.
+
+## P.3 — Sens 2 : **l'incrément SÉCURITÉ — les en-têtes SERVIS** (PR #111 et #112, dix commits, quatre mains)
+
+**Objet** : jusqu'ici, la posture de sécurité du produit était **écrite** dans `infra/caddy/` et
+**crue**. Cet incrément la rend **mesurée en navigateur, sur la chaîne exacte servie**. C'est le
+premier incrément du dépôt qui touche la CSP servie.
+
+| Artefact (lu) | Citation en tête | Rattachement — contrôle |
+| --- | --- | --- |
+| `infra/caddy/Caddyfile`, snippet `(securite)` | *aucun numéro `E`* — l'en-tête cite `06 §10.2`, `11 §1`, `11 §2`, `02 §11.2-11.3`, `§31` | **rattaché par son objet : E33 · E17 · E43.** E33 est « sécurité/RGPD → §10 », dont §10.2 est la section des en-têtes ; E17 est la pile imposée (Caddy fait partie de l'infrastructure du §4.2). **Sous-citation, non bloquante**, même traitement que `journee.css` au §O.6 et `entretien.css` au §L.2 → §P.6 |
+| — `Content-Security-Policy` (`:305`) | — | **`style-src 'self'`, sans `'unsafe-inline'`** : la concession du 2026-08-27 est **fermée**, pas oubliée (arbitrage A01 du 2026-09-08, option c), sur le comptage qu'elle exigeait (A51, `DOSSIER_ZAP_2026-09-08` §3 : 0 `style=`, 0 `<style>`, 0 injection de feuille, Radix/shadcn absents). L'encadré `:280-303` dit **à quelle condition elle reviendrait**, et pourquoi un nonce ne la remplace pas (il serait **constant** dans le précache du service worker) |
+| — COOP / CORP / COEP (`:238-240`) | — | `same-origin`, `same-origin`, **`require-corp`** — donc `crossOriginIsolated === true`. `require-corp` **choisi par la mesure** : `credentialless` n'est pas pris en charge par WebKit, c'est-à-dire **aucune isolation sur l'iPad de référence** (`:220-237`) |
+| — mise en cache (`:308-383`) | — | **QUATRE familles, pas trois** : service worker et manifeste · assets empreintés · **icônes de PWA** · HTML. La quatrième est née de la revue : les icônes sortaient du `no-cache` de l'HTML **sans rien recevoir**. Borne A01 du 2026-09-09 : **jamais `immutable`** sur des icônes déclarées provisoires |
+| — `-Server` et `handle_errors` (`:198-208`, `:385-395`) | — | **la contre-vérité est retirée avec sa mesure** : `handle_errors` est une seconde surface **sans posture** (404 mesuré par A29 : `Server: Caddy`, aucun en-tête). Le commentaire refuse explicitement d'écrire « aucune fuite d'implémentation ». Poser les en-têtes sur les erreurs = **un lot à dater** (R10) |
+| `e2e/en-tetes-servis.e2e.ts` | `06 §10.2 · E36 · E43 · 11 §2 · 11 §4` | juste, **et sous-cité** : la garde vaut aussi **E33** (c'est elle qui prouve la posture) et **E6** — R9 fermée : la PWA est éprouvée **hors ligne SOUS les en-têtes réellement servis**, `fromServiceWorker() === true`, CSP identique à l'octet près, `crossOriginIsolated: true` dans les deux phases |
+| `e2e/fixtures/caddy-servi.ts` | `E36 · E43 · 06 §10.2 · 11 §7` | juste — le harnais lance **le Caddy du dépôt** sur les builds réels : la garde lit ce que Caddy sert, pas ce que le dépôt écrit |
+| `e2e/fixtures/amont-api-factice.ts` + `amont-api-factice.caddy` | `E36 · E43` | juste — le **jumeau déclaré** du bloc helmet d'`apps/api/src/app.ts`, qui permet de prouver l'écrasement §4-A |
+| `apps/api/src/en-tetes-amont-jumeau.test.ts` | `E36 · E43 · 06 §10.2` | juste — **c'est la réserve R5** : un jumeau maintenu à la main sans garde dérive, et le test §4-A passerait alors **à vide**. Deux sens, refus par défaut, quatre mutations rouges |
+| `packages/shared/src/zod-sans-jit.ts` + `packages/shared/package.json` (carte `exports`) | `E33` | juste — `z.config({ jitless: true })`. Le module **n'importe que `zod`** et n'est atteignable que par le sous-chemin `@axion/shared/zod-sans-jit` : passer par l'index construirait un schéma **avant** l'appel, et l'appel serait inopérant **en silence** |
+| `apps/field/src/app/zod-sans-jit.ts`, `apps/hq/src/app/zod-sans-jit.ts` | `E33` | juste — **premier import** de chaque `main.tsx` (`apps/field/src/main.tsx:18`, rang 0 documenté `:5-8`). Sans ce rang, la sonde `new Function` de Zod émet une `securitypolicyviolation` **à chaque chargement** : un signal qui se déclenche toujours finit par faire ajouter `'unsafe-eval'` |
+| `.zap/rules.tsv` | *aucun numéro `E`* (remarque O4 d'A29) | **rattaché par son objet : E33 · E36.** Quatre lignes, cinq conditions cumulatives, dont la **condition (5) née de cet incrément** : une ligne n'est admissible que si la classe de défaut qu'elle pourrait masquer **reste détectée ailleurs**, et ce détecteur est **NOMMÉ** |
+| `.github/workflows/zap-baseline.yml` | E33 · E36 | juste — `ZAP_BLOQUANT: 'false'` (`:258`) **inchangé** : rien ne bascule dans cet incrément, et le cliquet en trois étapes est écrit dans l'en-tête. La bascule reste due à **Williams** (§P.5) |
+| `docs/securite/DOSSIER_ZAP_2026-09-08.md` | — | documentaire (**E33 · E43**) : c'est la source des familles 10055 / 90004 / 10015 et du comptage §3 |
+
+**Aucun artefact sans rattachement.** Le volet sécurité se rattache à **E33** par son objet
+(06 §10.2 est nommément dans le périmètre d'E33), à **E36/E43** par ses gardes et son workflow, à
+**E17** pour le Caddyfile, et à **E6** pour la seule preuve neuve d'offline : la PWA démarre hors
+ligne **sous les en-têtes servis**, ce qu'aucun test ne montrait avant (le harnais `hors-ligne-l5`
+tourne contre `vite preview`, qui ne sert **aucun** en-tête — c'était le trou de preuve R9).
+
+## P.4 — Ce qui NE se rattache à rien : l'orphelin, nommé pour la QUATRIÈME fois
+
+**`apps/field/src/sauvegarde/photos.ts` — `compresserPhoto` n'a aucun consommateur de production.**
+Mesuré ici par lecture exhaustive : `grep -rn "compresserPhoto"` sur `apps/`, `packages/`, `e2e/`
+rend **deux fichiers** — `sauvegarde/photos.ts` (sa définition) et `sauvegarde/photos.rendu.test.tsx`
+(son test). Aucun `type="file"`, aucun `capture=`, aucun `kind:'photo'` ; le bouton de §17.4 existe,
+**désactivé**, et son libellé visible dit « **Photo (bientôt)** » (`ZoneQuestion.tsx:312`), avec le
+motif rendu à l'œil **et** au lecteur d'écran (`MOTIF_PHOTO_INDISPONIBLE`, `:66`).
+
+**Statut** : **orphelin fonctionnel DOCUMENTÉ**, arbitré `DECISIONS.md` du 2026-09-05 avec obligation
+de le déclarer à chaque contrôle — fait au §6.1 du contrôle L5, au §6.1 du dossier P-C du 07, au
+§O.10-1 du 08, **et ici pour la quatrième fois**. Ce que je dois ajouter, et que les trois passes
+précédentes ne pouvaient pas dire : **quatre passes plus tard, l'incrément propriétaire n'a toujours
+pas de branche**, et son nom est pris par un autre incrément (§P.0bis). **Le contenu du lot L5 au
+fichier 07 (« compression photos R2 ») reste incomplet** ; la promesse faite à l'auditeur, elle, n'est
+plus faite — c'est ce qui rend le manque non bloquant, pas le fait qu'il soit ancien.
+
+**Ce que je n'ai PAS pu établir, et que je refuse de combler par une supposition** : les 25 modules
+« dont le seul consommateur est un test » que `check:graphe-modules` nommait au §O.10 n'ont pas été
+recomptés (garde non exécutable ici). Si ces trois incréments en ont ajouté ou retiré, **je ne le
+sais pas**, et personne ne devrait lire l'absence de ligne ci-dessus comme un « aucun ».
+
+## P.5 — Sens 1 : ce que ces trois incréments DÉPLACENT — sans qu'aucune exigence ne passe à `couverte`
+
+**La table qui fait foi reste §A.sexies** : ce qui suit est ce qu'A02 aura à y reporter, pas un
+amendement. **Règle du mode d'emploi §2 appliquée sans exception** : P-C n'est pas franchie, donc rien
+ne passe à `couverte`.
+
+| # | Ce que ces trois incréments ajoutent | Ce qui manque encore |
+| --- | --- | --- |
+| **E32** | **APPORT L5d** : l'invariant 5 cesse d'être désarmé par ses appelants — `fuseau: string \| null` **requis**, repli unique « (heure UTC) », garde de forme sur les appelants. **APPORT L5e** : le **jour civil des rituels** se calcule au fuseau de **chaque** mission (`every`). ⚠️ **La ligne d'E32 au §A.sexies est PÉRIMÉE** : elle porte « écart NOMMÉ, non refermé — le jour civil des rituels se calcule en UTC, fiche étage 2 PROPOSÉE, non implémentée ». **Il est refermé**, et l'implémentation est régulière : A01 l'a autorisée nommément (2026-09-08, « Trois écarts hors critères », cas (c)) — ce n'est donc pas une fiche d'étage 2 anticipée (CLAUDE.md §3-7) | le fuseau **peint** sur un appareil réel ; les devises (L7/L11) |
+| **E38** | **APPORT L5e** : le « dernier succès de sync » a une **vérité locale**, distincte du curseur de pull, qui nourrit **à la fois** la carte de mission et l'alerte de l'invariant 8. **APPORT L5d** : l'écran de **restauration** — le chemin de secours — ne peut plus nier une écriture commise (R2) ni exploser sur un fuseau illisible (R3) | **la sync elle-même reste L6** ; la clé n'est écrite par personne en L5 (« jamais synchronisée » est l'état nominal) ; le second **appareil physique** |
+| **E45** | **APPORT L5e, et c'est l'exigence la plus directement servie** : le §34.2 demande « pastille + **dernier succès** + taille d'outbox » ; les trois données sont désormais rendues, **100 % locales**. ⚠️ **Aucun fichier de l'incrément ne cite E45** (§P.6) | la sync (**L6b**) ; le refus serveur d'affectation sans `habilitated_at`, **dû depuis L2** |
+| **E33** | **APPORT SÉCURITÉ** : la posture n'est plus écrite, elle est **servie et mesurée** — CSP sans `'unsafe-inline'`, isolation d'origine (`crossOriginIsolated`), quatre familles de cache, `jitless` qui éteint la seule violation CSP structurelle du produit. Quatre lignes `.zap/rules.tsv` **nommées, datées, avec détecteur** | **`ZAP_BLOQUANT` reste `'false'`** ; le run **TLS sur staging** ; **`require-corp` jamais joué sur l'iPad** ; les pages d'erreur sans posture (R10) ; §4-B (`no-store` sur le JSON d'API) daté à **L6c** |
+| **E6** | **APPORT SÉCURITÉ (R9)** : première preuve que la PWA démarre **hors ligne sous les en-têtes réellement servis** — Argon2id sans réseau, CSP identique à l'octet près, service worker actif. Avant, l'E2E hors ligne tournait contre `vite preview`, **qui ne sert aucun en-tête** | l'iPad **physique** (11 §7) |
+| **E36 · E43** | **APPORT SÉCURITÉ** : trois gardes neuves — les en-têtes servis (117 cas), le **jumeau amont** (qui garde la garde), la forme de `.zap/rules.tsv`. **APPORT L5d/L5e** : deux gardes d'acceptation écrites par un agent qui n'a produit aucune ligne de la production correspondante | **R8** : la garde de forme de `rules.tsv` ne tourne **ni sur `push` ni sur `pull_request`** — une ligne malformée **merge au vert** et ne rougit que la nightly (premier rouge attendu : **2026-10-09**) |
+| **E13 / §17.4** | **RIEN.** La chaîne photo n'est pas ouverte (§P.4) : le septième bouton de §17.4 est rendu **désactivé** | l'incrément photo, **sans branche et sans nom propre** |
+
+## P.6 — Citations à corriger — deux sous-citations, **aucun orphelin de citation**
+
+Même famille que **R-O-1** (14 fichiers d'export citant E36 au lieu d'E47) : le rattachement est
+**juste**, la citation est **plus étroite que l'objet**. Ce n'est pas un refus de code, c'est une
+ligne d'en-tête à amender par l'auteur du fichier — jamais par le documentaliste.
+
+1. **Le cockpit ne cite pas E45.** `EcranAujourdhui.tsx:30-31` cite `E23 · E6 · E38 · E12`. Or E45
+   est, mot pour mot, « **cockpit auditeur “Aujourd'hui”** » (08 l. 58, §34), et c'est ce fichier qui
+   le rend. Un lecteur qui cherche E45 par `grep` ne trouve pas l'écran qui la sert. → **R-P-1**,
+   non bloquante, à corriger **avant P-E**, par A23.
+2. **Deux artefacts de sécurité ne portent aucun numéro d'exigence** : `infra/caddy/Caddyfile` et
+   `.zap/rules.tsv` (A29 le note déjà, remarque O4). Ils se rattachent par leur objet à **E33** (et
+   `Caddyfile` à **E17 · E43**), comme `journee.css` au §O.6 et `entretien.css` au §L.2. → **R-P-2**,
+   non bloquante. **Le fichier `.tsv` a une contrainte de format à quatre colonnes** : la citation ne
+   peut y vivre que dans l'en-tête commenté, pas dans les lignes de règles.
+
+## P.7 — Ce que cette passe n'a PAS vérifié, et qui doit être dit
+
+1. **Aucune exécution.** Ni suite de tests, ni garde, ni CI, ni `git`. Tous les chiffres d'exécution
+   cités ici (117 cas d'en-têtes servis, e2e 208/208, `verify:rapide` vert, ZAP local 0/0/0) viennent
+   des **trois revues croisées** et des blocs `ETAT.md` nommés au §P.0 — **je les attribue, je ne les
+   reprends pas à mon compte**.
+2. **Je n'ai pas relu le code ligne à ligne.** La revue croisée est l'étape 4 et elle appartient à
+   A29, qui l'a rendue sur les trois incréments. J'ai vérifié des **rattachements**, des **contrats
+   de signature** et des **présences** (fichier, ligne), pas la justesse fonctionnelle.
+3. **Je n'ai pas ouvert `docs/portes/CONTROLE_A02_PC_2026-09-09.md`** : il vit sur la branche
+   `docs/seance-materielle-pc`, absente de ce worktree. **NB-9-ter est donc citée d'après le mandat**,
+   et cette section répond à son énoncé (« L5d, L5e et le volet sécurité manquent »), pas à son texte.
+   Si le contrôle du 09 nomme d'autres manques, **ils ne sont pas traités ici**.
+4. **Le décompte des modules sans consommateur de production n'a pas été refait** (§P.4).
+5. **Aucun état d'exigence n'a été modifié en place** : §A.sexies est inchangée, y compris sa ligne
+   E32 que le §P.5 signale comme périmée. **La corriger appartient à A02**, et la lui laisser est la
+   seule façon de ne pas transformer une passe de documentation en verdict de conformité.
+
+_Passe de documentation effectuée le **2026-09-09** par **A55**, sur l'arbre de travail de
+`5ac6f95`, **sans shell** et en lecture seule sur le code. Seul `docs/TRACABILITE_E1-E47.md` a été
+écrit, en **ajout** : aucune ligne datée antérieure n'a été modifiée, aucune supprimée. Ce document
+prépare le contrôle du gardien ; **il ne le signe pas**._
