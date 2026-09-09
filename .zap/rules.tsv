@@ -14,10 +14,35 @@
 #    n'ai pas nommé ? ») ─────────────────────────────────────────────────────
 # Il N'EXCLUT PAS une règle pour verdir un job — c'est l'option 3 que
 # zap-baseline.yml écarte, et qui reste écartée. Il NOMME, règle par règle, ce
-# qu'AUCUN état du code ne peut fermer : deux règles décrivent la méthode du
-# scanner, deux décrivent une conformité que le pack prescrit. Sans ce fichier,
-# ZAP_BLOQUANT='true' est inatteignable, et une garde inatteignable finit
-# désarmée (F-31, une troisième fois).
+# qu'AUCUN état du code ne peut fermer — TROIS familles : une règle décrit la
+# méthode du scanner (90005), deux décrivent une conformité que le pack prescrit
+# (10109, 10094). Sans ce fichier, ZAP_BLOQUANT='true' est inatteignable, et une
+# garde inatteignable finit désarmée (F-31, une troisième fois).
+#
+# ── `10049` (Storable and Cacheable Content) : EXAMINÉE LE 2026-09-09, REFUSÉE ──
+# Elle a porté une ligne ici, retirée le jour même (revue A29, R1 ; arbitrage
+# A01, option a, DECISIONS.md du 2026-09-09). Motif : 5 de ses 9 instances
+# étaient FERMABLES PAR LE PRODUIT — les icônes de PWA sortaient sans aucun
+# Cache-Control (fermé le même jour : Caddyfile « MISE EN CACHE », famille 3/4),
+# et `/api/*` rend des réponses JSON stockables (§4-B, à A13, lot L6, porte
+# P-D). Une règle qu'un changement du produit ferme, même en partie, viole la
+# condition 2 ci-dessous : sa place n'est pas ici. Le résidu structurel
+# (`immutable` sur les assets empreintés, conformité §31) est PORTÉ par le
+# compteur jusqu'à ce que le produit ferme le reste — « le compteur attend le
+# produit, il ne l'achète pas » (A01). Conséquence assumée : la bascule
+# `ZAP_BLOQUANT` attend L6c. NE PAS RÉ-AJOUTER cette ligne sans un nouvel
+# arbitrage tracé : une ligne retirée sans motif écrit se fait remettre par le
+# suivant (invariant 7 appliqué à un fichier de configuration).
+# MESURE REJOUÉE APRÈS LE CORRECTIF ICÔNES (A11, 2026-09-09, harnais local,
+# image ghcr.io/zaproxy/zaproxy@sha256:781a2bd…, trois cibles) : `10049`
+# reste à 8 instances PAR CIBLE, codes terrain=2 console=2 api=2. Les icônes
+# n'ont pas QUITTÉ la règle, elles ont CHANGÉ DE SOUS-ALERTE (« Storable and
+# Cacheable » → « Storable but Non-Cacheable ») : la règle range TOUTE réponse
+# dans l'une de ses trois sous-alertes (`no-store` · `max-age`/`immutable` ·
+# `no-cache` — jusqu'au 308 de `/hq`). Le même sort attend `/api/*` après §4-B.
+# Ce constat contredit la prémisse « fermable par le produit » : question
+# NEUVE, renvoyée à A01, non couverte par l'arbitrage ci-dessus. Cette ligne
+# reste RETIRÉE tant qu'il n'a pas tranché.
 #
 # QUATRE CONDITIONS CUMULATIVES, faute desquelles une ligne est REFUSÉE en
 # revue croisée :
@@ -36,10 +61,13 @@
 # « à ignorer explicitement »), §5 (cliquet, geste 2). Rapport dépouillé :
 # artefact rapport-zap-34125104959, identique sur les trois cibles.
 #
-# MESURÉ, PAS PRÉDIT (2026-09-09, A11) : avec ce fichier et le Caddyfile du même
-# incrément, `zap-baseline.py -a -c rules.tsv` rend terrain=0 console=0 api=0
-# (FAIL-NEW 0 · WARN-NEW 0 · IGNORE 4 · PASS 66) sur le harnais local de
-# e2e/fixtures/caddy-servi.ts (Caddy du dépôt, builds réels, amont factice).
+# MESURÉ, PAS PRÉDIT (2026-09-09, A11) : avec ce fichier À QUATRE LIGNES et le
+# Caddyfile du même incrément, `zap-baseline.py -a -c rules.tsv` rendait
+# terrain=0 console=0 api=0 (FAIL-NEW 0 · WARN-NEW 0 · IGNORE 4 · PASS 66) sur
+# le harnais local de e2e/fixtures/caddy-servi.ts (Caddy du dépôt, builds réels,
+# amont factice). Ce 0/0/0 est ANTÉRIEUR au retrait de `10049` : à trois
+# lignes, `10049` compte de nouveau — mesure rejouée le 2026-09-09 après le
+# retrait, composition du résidu dans DECISIONS.md et la fiche de porte.
 # C'est une mesure LOCALE en HTTP : le run de l'étape 3 du cliquet (§5) sur
 # STAGING, en TLS, reste dû AVANT la bascule — il peut différer (HSTS n'est
 # évalué qu'en HTTPS, la surface réelle inclut ce que le harnais n'a pas).
@@ -48,4 +76,3 @@
 90005	IGNORE	(Sec-Fetch-* Header is Missing)	Règle sur la REQUÊTE, pas sur la réponse : Sec-Fetch-Dest/Mode/Site/User sont posés par le NAVIGATEUR, et l'araignée ZAP ne les émet pas. Aucun code du produit n'y a prise — artefact de méthode, pas risque accepté. Réexamen 2027-03-08 (ou avant, si ZAP fait émettre ces en-têtes par son araignée)
 10109	IGNORE	(Modern Web Application)	La règle CONSTATE une application monopage (Vite + React) : c'est exactement ce que 11 §2 impose (Next.js interdit). Elle décrit une contrainte du pack, pas un écart. Réexamen 2027-03-08 (la ligne tombe le jour où 11 §2 change, ce qui est une décision humaine)
 10094	IGNORE	(Base64 Disclosure)	DEUX sources, toutes deux tracées (DOSSIER_ZAP §1 ; re-mesuré en local le 2026-09-09 avec ce fichier) : le NOM de la police empreinté par Vite (inter-latin-ext-wght-normal-<hachage>, @fontsource-variable/inter auto-hébergée, 11 §1) — dans le CSS de CHAQUE front, donc 2 ou 3 instances selon ce que l'araignée atteint — et la table d'encodage ABCDEFGHIJ… de hash-wasm (Argon2id, 11 §4) dans le bundle terrain. Zéro donnée encodée, zéro secret. SEULE ligne où un vrai secret pourrait un jour se cacher : à RÉEXAMINER dès qu'une instance apparaît qui n'est NI ce nom de police NI cette table. Réexamen 2026-10-08
-10049	IGNORE	(Storable and Cacheable Content / Non-Storable Content)	La règle signale la politique de cache VOULUE et écrite (05 §31 ; Caddyfile, section « MISE EN CACHE ») : `immutable` un an sur les assets empreintés (nom = hachage de contenu), `no-store` sur le service worker et le manifeste, `no-cache` sur l'HTML. Elle décrit la conformité, pas l'écart. Réexamen 2026-12-08
