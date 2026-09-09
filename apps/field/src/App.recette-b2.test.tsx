@@ -114,7 +114,7 @@ describe('B2 — l’en-tête de la coquille porte la sortie', () => {
       const silence = vi.spyOn(console, 'error').mockImplementation(() => undefined);
       try {
         render(<App />);
-        const retour = await screen.findByRole('button', { name: 'Retour' });
+        const retour = await screen.findByRole('button', { name: 'Revenir' });
         retour.click();
         await waitFor(() => {
           expect(terrain.naviguer).toHaveBeenCalledWith({ type: 'retour' });
@@ -125,14 +125,14 @@ describe('B2 — l’en-tête de la coquille porte la sortie', () => {
     });
   }
 
-  it('sur une racine, aucun « Retour » : un bouton qui ne mène nulle part serait un mensonge', async () => {
+  it('sur une racine, aucun « Revenir » : un bouton qui ne mène nulle part serait un mensonge', async () => {
     const base = await nouvelleBase();
     terrain = terrainSur(base, ['accueil']);
     const silence = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     try {
       render(<App />);
       await screen.findByRole('button', { name: 'Verrouiller' });
-      expect(screen.queryByRole('button', { name: 'Retour' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Revenir' })).toBeNull();
     } finally {
       silence.mockRestore();
     }

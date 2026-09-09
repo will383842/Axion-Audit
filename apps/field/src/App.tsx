@@ -37,6 +37,7 @@ import { VUES } from './app/vues.js';
 import { EcranEntretien } from './ecrans/entretien/EcranEntretien.js';
 import { EcranNouvelEntretien } from './ecrans/entretien/EcranNouvelEntretien.js';
 import { EcranAgenda } from './ecrans/journee/EcranAgenda.js';
+import { EcranARevoir } from './ecrans/journee/EcranARevoir.js';
 import { EcranAujourdhui } from './ecrans/journee/EcranAujourdhui.js';
 import { EcranFinDeJournee } from './ecrans/journee/EcranFinDeJournee.js';
 import { EcranFinDeSession } from './ecrans/journee/EcranFinDeSession.js';
@@ -90,6 +91,9 @@ function ContenuCourant(): ReactNode {
     // ── Rattachement de l'appareil à son auditeur (A23) ──
     case 'connexionSiege':
       return <EcranConnexion />;
+    // ── Le compteur « à revoir » du cockpit mène ici (03 §34.2, NB-15) ──
+    case 'aRevoir':
+      return <EcranARevoir />;
   }
 }
 
@@ -98,8 +102,17 @@ export function App(): ReactNode {
   useVueInitiale();
 
   // B2 — la sortie. Elle n'apparaît que s'il y a réellement où revenir : sur une
-  // racine, un bouton « Retour » qui ne fait rien serait le même mensonge que la
+  // racine, un bouton « Revenir » qui ne fait rien serait le même mensonge que la
   // pastille qui annonce plus qu'elle ne fait.
+  //
+  // ── R5 : UN SEUL MOT POUR REVENIR EN ARRIÈRE, ET C'EST UN VERBE ─────────
+  // « Retour » et « Revenir » cohabitaient — huit occurrences contre une. Trois
+  // raisons de garder le verbe : il domine, le design system l'emploie déjà
+  // (« Revenir en écran privé », `BandeauPartage`), et TOUS les autres boutons
+  // de l'application sont des verbes à l'infinitif (« Verrouiller »,
+  // « Planifier », « Terminer la journée »). Un nom au milieu de verbes est
+  // l'exception qu'on lit deux fois. La règle, désormais : on REVIENT, et quand
+  // la destination n'est pas évidente on la nomme (« Revenir à ma journée »).
   const retourPossible = peutRevenir(navigation);
   const revenir = useCallback((): void => {
     naviguer({ type: 'retour' });
@@ -149,7 +162,7 @@ export function App(): ReactNode {
             interdit qu'une information soit portée par une icône seule. */}
         {retourPossible && (
           <Bouton variante="discret" onClick={revenir}>
-            Retour
+            Revenir
           </Bouton>
         )}
         <h1 className="axn-coquille__titre">{VUES[vue].titre}</h1>
@@ -165,7 +178,7 @@ export function App(): ReactNode {
       <main className="axn-coquille__corps">
         {/* Un appareil sans identité d'auditeur ne peut ouvrir aucun entretien
             (05 §9.9). Le rappel et son geste sont posés dans la coquille, comme
-            le bouton Retour : depuis n'importe quel écran, et sans qu'aucun
+            le bouton Revenir : depuis n'importe quel écran, et sans qu'aucun
             écran ait à s'en souvenir. Il ne rend rien une fois l'appareil
             rattaché. */}
         <AccesRattachement />

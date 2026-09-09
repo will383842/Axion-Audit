@@ -251,7 +251,7 @@ describe('B4 — la date du rituel ne s’écrit que si la sauvegarde existe', (
   it('mot de passe donné : le fichier est produit ET la date est écrite', async () => {
     const base = await baseSemee();
     await monter(base);
-    fireEvent.change(screen.getByLabelText(/votre mot de passe/i), {
+    fireEvent.change(screen.getByLabelText(/mot de passe de cet appareil/i), {
       target: { value: MOT_DE_PASSE },
     });
     await terminerLaJournee();

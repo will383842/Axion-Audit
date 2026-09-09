@@ -309,7 +309,9 @@ function choisirLeFichier(fichier: File): void {
 }
 
 function saisirLeMotDePasse(valeur: string): void {
-  fireEvent.change(screen.getByLabelText(/votre mot de passe/i), { target: { value: valeur } });
+  fireEvent.change(screen.getByLabelText(/appareil qui a produit la sauvegarde/i), {
+    target: { value: valeur },
+  });
 }
 
 function boutonRestaurer(): HTMLButtonElement {
@@ -439,7 +441,7 @@ describe('§33.2 — les quatre états, sur l’écran qui restaure', () => {
     terrain = terrainDeRestauration(base);
     render(<EcranRestauration />);
 
-    fireEvent.click(screen.getByRole('button', { name: /^revenir$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^revenir à l’accueil$/i }));
     expect(terrain.naviguer).toHaveBeenCalledWith({ type: 'retour' });
   });
 
@@ -502,7 +504,7 @@ describe('un `.axionbackup` valide, restauré par l’ÉCRAN sur un appareil don
     );
 
     // Le formulaire a disparu : on ne restaure pas deux fois par distraction.
-    expect(screen.queryByLabelText(/votre mot de passe/i)).toBeNull();
+    expect(screen.queryByLabelText(/appareil qui a produit la sauvegarde/i)).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: /ouvrir ma journée/i }));
     expect(terrain.naviguer).toHaveBeenCalledWith({ type: 'racine', vue: 'aujourdhui' });

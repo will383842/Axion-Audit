@@ -96,6 +96,7 @@ import { DialogueDrapeau, type DecisionDrapeau, type NatureDrapeau } from './Dia
 import { DialogueQuestionAdHoc, type SaisieQuestionAdHoc } from './DialogueQuestionAdHoc.js';
 import { PaletteRecherche } from './PaletteRecherche.js';
 import { PanneauNotes } from './PanneauNotes.js';
+import { PanneauRaccourcis } from './PanneauRaccourcis.js';
 import type { Cadence } from './SaisieReponse.js';
 import { ZoneBlocs } from './ZoneBlocs.js';
 import { ZoneQuestion } from './ZoneQuestion.js';
@@ -310,6 +311,8 @@ export function EcranEntretien(): ReactNode {
   const [drapeau, setDrapeau] = useState<NatureDrapeau | null>(null);
   const [recherche, setRecherche] = useState(false);
   const [adHoc, setAdHoc] = useState(false);
+  /** R7 — l'aide clavier, ouverte par « ? ». Une fenêtre, jamais un `alert()`. */
+  const [aide, setAide] = useState(false);
   const [fourchette, setFourchette] = useState(false);
   const [cleNotes, setCleNotes] = useState(0);
   const [erreurAction, setErreurAction] = useState<string | null>(null);
@@ -534,6 +537,9 @@ export function EcranEntretien(): ReactNode {
   const fermerAdHoc = useCallback((): void => {
     setAdHoc(false);
   }, []);
+  const fermerAide = useCallback((): void => {
+    setAide(false);
+  }, []);
 
   const fermerEntretien = useCallback((): void => {
     void purger().then(async () => {
@@ -585,7 +591,7 @@ export function EcranEntretien(): ReactNode {
   );
 
   // ── Raccourcis et gestes ───────────────────────────────────────────────────
-  const fenetreOuverte = drapeau !== null || recherche || adHoc || panneau !== null;
+  const fenetreOuverte = drapeau !== null || recherche || adHoc || aide || panneau !== null;
   const actionsRaccourcis = useMemo<ActionsRaccourcis>(
     () => ({
       suivant,
@@ -611,6 +617,12 @@ export function EcranEntretien(): ReactNode {
       },
       partage: () => {
         setPartage((actif) => !actif);
+      },
+      // R7 — l'aide s'ouvre même en écran partagé ? Non : elle liste des gestes
+      // internes (à-revoir, notes, recherche), et §33.3 veut que rien d'interne
+      // ne s'affiche quand l'interlocuteur voit la tablette.
+      aide: () => {
+        if (!partage) setAide(true);
       },
     }),
     [ecrireValeur, ecritureRefusee, partage, precedent, question?.answerType, suivant],
@@ -1007,6 +1019,8 @@ export function EcranEntretien(): ReactNode {
           />
 
           <DialogueQuestionAdHoc ouvert={adHoc} onCreer={creerAdHoc} onFermer={fermerAdHoc} />
+
+          <PanneauRaccourcis ouvert={aide && !partage} onFermer={fermerAide} />
         </section>
       )}
     </ZoneEtat>

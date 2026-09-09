@@ -187,7 +187,12 @@ export function EcranConnexion(): ReactNode {
             naviguer({ type: 'retour' });
           }}
         >
-          Revenir
+          {/* R5 — cet écran est atteint depuis N'IMPORTE QUEL autre
+              (`AccesRattachement`, dans la coquille) : sa destination n'est pas
+              connue à l'avance. Ce qu'on retrouve en le quittant, si — et c'est
+              ce que le libellé nomme, plutôt que de porter le nom du bouton de
+              la coquille. */}
+          Revenir à la collecte
         </Bouton>
       </section>
     );

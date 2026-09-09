@@ -32,6 +32,7 @@ import { installerContexteLocal, retirerContexteLocal } from '../../local/contex
 import { appliquerDescente, ecrireLocal } from '../../local/ecriture.js';
 import { memoriserSessionCourante } from '../../session/position.js';
 import { EcranAgenda } from './EcranAgenda.js';
+import { EcranARevoir } from './EcranARevoir.js';
 import { EcranAujourdhui } from './EcranAujourdhui.js';
 import { EcranFinDeJournee } from './EcranFinDeJournee.js';
 import { EcranFinDeSession } from './EcranFinDeSession.js';
@@ -180,6 +181,8 @@ const INSTANT = '2026-09-05T12:00:00.000Z';
 const MISSION_ID = '0191e2a0-0000-7000-8000-00000000f5f1';
 const UNITE_ID = '0191e2a0-0000-7000-8000-00000000c5f1';
 const AUDITEUR_ID = '0191e2a0-0000-7000-8000-00000000e001';
+/** La question sur laquelle le point à revoir de la fixture est posé (A26, NB-15). */
+const QUESTION_ID = '0191e2a0-0000-7000-8000-00000000f591';
 const KDF_TEST = {
   algo: 'argon2id',
   memoireKio: 1024,
@@ -295,6 +298,37 @@ async function baseEmbarquee(options: { readonly sessionEnCours: boolean }): Pro
       },
     });
   }
+  // UN POINT À REVOIR — ajouté par A26 le 2026-09-09, avec la treizième vue.
+  // Sans lui, `EcranARevoir` rendrait son état VIDE, et la grille mesurerait
+  // deux boutons de sortie au lieu de la LIGNE de point : or c'est la ligne
+  // entière qui est la cible tactile de cet écran, et c'est elle qu'un auditeur
+  // tape au doigt pour rouvrir sa zone d'ombre. Mesurer un écran dans un état
+  // que personne ne rencontre, c'est y poser un vert vide.
+  await ecrireLocal({
+    entite: 'answer',
+    id: uuidv7(),
+    missionId: MISSION_ID,
+    action: 'upsert',
+    index: {
+      interviewId: derniereSession,
+      missionQuestionId: QUESTION_ID,
+      flagReview: 1,
+      notApplicable: 0,
+      withheld: 0,
+      horsParcours: 0,
+    },
+    charge: {
+      value: { type: 'scale_1_5', v: 2 },
+      note: null,
+      reviewReason: 'à confirmer avec le responsable',
+      naReason: null,
+      withheldReason: null,
+      source: 'entretien',
+      questionTextSnapshot: 'Question fictive à revoir',
+      revision: 1,
+      clientCreatedAt: INSTANT,
+    },
+  });
   await memoriserSessionCourante(base, derniereSession);
   return base;
 }
@@ -360,6 +394,16 @@ const ECRANS = [
   // au doigt, debout, à la fin d'un entretien. C'est la moitié automatisable du
   // point 14 de la recette matérielle ; le rendu peint sur iPad reste dû.
   { nom: 'EcranFinDeSession', Composant: EcranFinDeSession },
+  // AJOUTÉ par A26 le 2026-09-09 — la TREIZIÈME vue, arrivée avec NB-15, et pour
+  // la troisième fois la même raison : deux fois déjà (A27 sur `EcranRestauration`,
+  // A21 sur `EcranFinDeSession`), un écran neuf a échappé EN BLOC aux gardes de
+  // ce fichier parce que rien ne les COMPTE. Le compte est ailleurs — la table
+  // engendrée depuis `VUES` d'`accessibilite-toutes-vues-l5.e2e.ts` et celle
+  // d'`app/hors-ligne.test.tsx` — mais ce fichier-ci reste une LISTE À LA MAIN.
+  // C'est le trou de méthode que je remonte au rapport ; en attendant, la
+  // treizième vue y entre, et elle porte une cible tactile qui compte : la LIGNE
+  // du point, tapée au doigt pour rouvrir une zone d'ombre avant de partir.
+  { nom: 'EcranARevoir', Composant: EcranARevoir },
 ] as const;
 
 beforeAll(async () => {

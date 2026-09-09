@@ -79,7 +79,8 @@ import './journee.css';
  */
 const MESSAGE_RITUEL_INCOMPLET =
   'Vos données de collecte n’ont quitté cet appareil d’aucune façon ce soir. ' +
-  'Le rappel de fin de journée reste donc actif : ressaisissez votre mot de passe et relancez, ' +
+  'Le rappel de fin de journée reste donc actif : ressaisissez le mot de passe de cet appareil ' +
+  'et relancez, ' +
   'ou faites-le au plus tôt demain matin — aucune donnée ne doit vivre sur un seul appareil plus de 24 h.';
 
 /**
@@ -203,7 +204,7 @@ export function EcranFinDeJournee(): ReactNode {
         let fichierProduit = false;
         if (motDePasse.trim() === '') {
           sauvegarde =
-            'Sauvegarde NON produite : votre mot de passe est nécessaire pour la chiffrer (c’est lui, et lui seul, qui permettra de la rouvrir sur un autre appareil).';
+            'Sauvegarde NON produite : le mot de passe de cet appareil — celui qui déverrouille cette application — est nécessaire pour la chiffrer (c’est lui, et lui seul, qui permettra de la rouvrir sur un autre appareil).';
         } else {
           try {
             const produit = await exporterSauvegarde({ missionId, motDePasse });
@@ -405,7 +406,7 @@ export function EcranFinDeJournee(): ReactNode {
             */}
             <div className="axn-champ">
               <label className="axn-champ__libelle" htmlFor={`${identifiant}-mdp`}>
-                Votre mot de passe
+                Mot de passe de cet appareil
               </label>
               <input
                 id={`${identifiant}-mdp`}
@@ -419,9 +420,22 @@ export function EcranFinDeJournee(): ReactNode {
                   setMotDePasse(evenement.target.value);
                 }}
               />
+              {/*
+                N3 (recette A54, 2026-09-09) — LE LIBELLÉ DISAIT « VOTRE MOT DE
+                PASSE » SANS DIRE LEQUEL. Un novice y lit une CRÉATION : il en
+                invente un, et n'apprend qu'APRÈS la dérivation Argon2id que ce
+                n'est pas celui de cet appareil. La journée se termine alors sans
+                sauvegarde — précisément ce que l'invariant 8 existe pour
+                empêcher. Le mot de passe est vérifié par
+                `verifierMotDePasseAppareil` (`sauvegarde/sauvegarde.ts`) : c'est
+                CELUI DE CET APPAREIL, et rien d'autre. Le libellé le dit
+                maintenant AVANT la saisie, et l'aide dit qu'il n'y a rien à
+                créer.
+              */}
               <p id={`${identifiant}-aide`} className="axn-champ__aide">
-                Il chiffre le fichier de sauvegarde. C’est lui, et lui seul, qui permettra de le
-                rouvrir — y compris sur un autre appareil.
+                Le même que celui qui déverrouille cette application : il n’y en a pas d’autre à
+                créer. Il chiffre le fichier de sauvegarde, et c’est lui, et lui seul, qui permettra
+                de le rouvrir — y compris sur un autre appareil.
               </p>
             </div>
           </div>
@@ -437,7 +451,11 @@ export function EcranFinDeJournee(): ReactNode {
                 naviguer({ type: 'retour' });
               }}
             >
-              Revenir
+              {/* R5 — « Revenir » nu, à côté de « Terminer la journée », ne
+                  disait pas où il mène, et portait désormais le même nom que le
+                  bouton de la coquille : deux boutons identiques à un
+                  centimètre. Il nomme sa destination. */}
+              Revenir à ma journée
             </Bouton>
           </div>
 

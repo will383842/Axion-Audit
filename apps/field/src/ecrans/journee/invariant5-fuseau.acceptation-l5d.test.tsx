@@ -515,7 +515,7 @@ function lancerRestaurationParLEcran(base: BaseLocale, fichier: FichierSauvegard
       ],
     },
   });
-  fireEvent.change(screen.getByLabelText(/votre mot de passe/i), {
+  fireEvent.change(screen.getByLabelText(/appareil qui a produit la sauvegarde/i), {
     target: { value: MOT_DE_PASSE },
   });
   fireEvent.click(screen.getByRole('button', { name: /restaurer sur cet appareil/i }));

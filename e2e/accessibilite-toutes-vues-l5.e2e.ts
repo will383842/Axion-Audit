@@ -430,13 +430,96 @@ async function allerConnexionSiege(page: Page): Promise<void> {
   await expect(page.getByLabel(/Mot de passe du compte/)).toBeVisible();
 }
 
+/**
+ * L'aide clavier de l'entretien, ouverte par « ? » (R7, 03 §17.5 et §33.3).
+ *
+ * Ouverte AU CLAVIER, comme un auditeur le fait : il n'existe pas de bouton, et
+ * c'est délibéré (les sept outils du §17.4 sont une liste fermée). L'anti-vacuité
+ * porte sur le contenu de la fenêtre, pas sur sa présence : un panneau vide
+ * passerait un balayage axe sans rien mesurer.
+ */
+async function allerAideClavier(page: Page): Promise<void> {
+  await allerEntretienEnCours(page);
+  // Ce qui ANNONCE le raccourci doit être là : un accélérateur que rien ne
+  // signale n'accélère personne, et c'est tout le constat de R7.
+  await expect(page.getByText('Raccourcis clavier : tapez « ? » pour la liste.')).toBeVisible();
+  await page.keyboard.press('?');
+  const fenetre = page.getByRole('dialog', { name: 'Raccourcis clavier' });
+  await expect(fenetre).toBeVisible();
+  await expect(fenetre.locator('kbd')).not.toHaveCount(0);
+  await expect(fenetre.getByText('Afficher cette aide')).toBeVisible();
+}
+
+/**
+ * La liste des points à revoir, atteinte PAR LE COMPTEUR du cockpit (03 §34.2).
+ *
+ * Le parcours pose d'abord un point à revoir, et ce n'est pas un détour : à
+ * zéro, le compteur n'est pas un lien mais la phrase « Aucun point à revoir »
+ * (voir `EcranAujourdhui`, NB-15). L'écran ne s'atteint donc, par un geste de
+ * production, qu'après un drapeau posé — c'est le parcours réel de l'auditeur.
+ *
+ * La remontée passe par la sortie de la coquille : `Ouvrir l'entretien` REMPLACE
+ * la vue (`EcranNouvelEntretien`), la pile est donc [cockpit, entretien] et un
+ * seul retour ramène au cockpit, sans replanter l'appareil — replanter effacerait
+ * le drapeau qu'on vient de poser.
+ *
+ * ── RELU ET REPRIS PAR A26 LE 2026-09-09 (09 §5.6) ─────────────────────────
+ * A22 a dû écrire ce parcours pour que `pnpm lint` compile (le `satisfies` de la
+ * table refuse une vue sans parcours) et l'a signalé de lui-même. Relu comme si
+ * je l'écrivais, trois choses manquaient, et deux d'entre elles auraient produit
+ * un échec qui n'aurait PAS désigné sa cause :
+ *
+ *   ① AUCUNE ATTENTE ENTRE « Confirmer » ET « Revenir ». L'écriture du drapeau
+ *      est locale et ASYNCHRONE (`enregistrer` → transaction Dexie) ; Playwright
+ *      n'attend que l'actionnabilité du bouton suivant, jamais la fin d'une
+ *      écriture. Le geste suivant pouvait donc partir avant que la ligne soit
+ *      posée. Et si elle ne l'était pas, l'échec tombait DEUX gestes plus loin,
+ *      sur « bouton compteur introuvable » — à l'endroit où l'on chercherait un
+ *      défaut du cockpit alors que la cause serait dans l'entretien. On attend
+ *      donc le BADGE « À revoir », qui n'est rendu que si la ligne relue porte
+ *      `flagReview === 1` : c'est l'aller-retour complet écriture → lecture.
+ *   ② LA PILE ÉTAIT UNE HYPOTHÈSE, JAMAIS UNE MESURE. « un seul retour ramène au
+ *      cockpit » suppose que `Ouvrir l'entretien` REMPLACE. Le cockpit est une
+ *      racine (`app/navigation.ts`, `VUES_RACINE`) : sur une racine, la coquille
+ *      ne rend PAS de bouton « Revenir ». Son absence est donc la preuve directe
+ *      que la pile est bien retombée à un élément — deux lignes, et l'hypothèse
+ *      devient un fait.
+ *   ③ « BOUTON COMPTEUR UNIQUE » N'ÉTAIT PAS VÉRIFIÉ. `/point\(s\) à revoir/`
+ *      ne heurte pas « Voir les points à revoir » (l'alerte) par la seule grâce
+ *      des parenthèses de « point(s) ». C'est trop fin pour être laissé
+ *      implicite : le motif est ancré sur le nombre, et l'unicité est exigée.
+ */
+async function allerARevoir(page: Page): Promise<void> {
+  await allerEntretienEnCours(page);
+  await page.getByRole('button', { name: /^À revoir/ }).click();
+  await page.getByRole('button', { name: 'Confirmer' }).click();
+
+  // ① l'écriture a abouti ET a été relue : le badge d'état vient de la ligne.
+  await expect(
+    page.getByLabel('États de la réponse').getByText('À revoir', { exact: true }),
+  ).toBeVisible();
+
+  await page.getByRole('button', { name: 'Revenir' }).click();
+  await expect(titreDEcran(page, 'Aujourd’hui')).toBeVisible();
+  // ② on est bien à la RACINE : plus de sortie dans la coquille.
+  await expect(page.getByRole('button', { name: 'Revenir' })).toHaveCount(0);
+
+  // ③ un seul compteur, ancré sur son nombre.
+  const compteur = page.getByRole('button', { name: /^\d+ point\(s\) à revoir$/ });
+  await expect(compteur).toHaveCount(1);
+  await compteur.click();
+
+  await expect(titreDEcran(page, 'Points à revoir')).toBeVisible();
+  await expect(page.getByRole('heading', { name: MISSION_FIL_TPE.titre })).toBeVisible();
+}
+
 /** L'écran de restauration, atteint depuis l'écran d'embarquement (03 §34.2). */
 async function allerRestauration(page: Page): Promise<void> {
   await allerAccueil(page);
   await page.getByRole('button', { name: 'Restaurer une sauvegarde de secours' }).click();
   await expect(titreDEcran(page, 'Restaurer une sauvegarde')).toBeVisible();
   await expect(page.getByLabel('Fichier de sauvegarde')).toBeVisible();
-  await expect(page.getByLabel('Votre mot de passe')).toBeVisible();
+  await expect(page.getByLabel(/appareil qui a produit la sauvegarde/)).toBeVisible();
 }
 
 /**
@@ -564,6 +647,15 @@ const PARCOURS = {
       { libelle: 'avant la première question', atteindre: allerEntretienAvantDemarrage },
       { libelle: 'collecte en cours, trois zones', atteindre: allerEntretienEnCours },
       { libelle: 'dernière question, geste de fin actif', atteindre: allerDerniereQuestion },
+      // AJOUTÉ par A26 le 2026-09-09 avec R7. L'aide clavier est une FENÊTRE
+      // MODALE, et une fenêtre modale est un état d'écran à part entière : elle
+      // change le nom accessible de la page, piège le focus et rend une liste de
+      // définitions. Rien de tout cela n'est balayé par les trois états
+      // ci-dessus, où elle est fermée. Ses comportements (Échap, piège, focus
+      // rendu) sont éprouvés en jsdom ; le CONTRASTE, lui, ne se mesure qu'ici —
+      // `color-contrast` ne tourne pas sans mise en page, et `<kbd>` reçoit une
+      // police et un fond qui lui sont propres (`entretien.css`).
+      { libelle: 'aide clavier ouverte par « ? »', atteindre: allerAideClavier },
     ],
     // On coupe depuis la COLLECTE EN COURS, et non depuis l'état d'avant la
     // première question : celui-ci porte déjà le défaut A28-2, et deux rouges
@@ -625,7 +717,7 @@ const PARCOURS = {
           await page.getByRole('button', { name: 'Fin de journée', exact: true }).click();
           await expect(titreDEcran(page, 'Fin de journée')).toBeVisible();
           await expect(page.getByRole('heading', { name: 'Sauvegarde de secours' })).toBeVisible();
-          await expect(page.getByLabel('Votre mot de passe')).toBeVisible();
+          await expect(page.getByLabel('Mot de passe de cet appareil')).toBeVisible();
         },
       },
     ],
@@ -677,6 +769,18 @@ const PARCOURS = {
       marqueur: 'Ouvrir ce qui est déjà enregistré sur cet appareil',
     },
   },
+  // ── La TREIZIÈME vue, arrivée avec NB-15 le 2026-09-09 ──────────────────
+  // Même histoire que la douzième : le `satisfies` a refusé de compiler dès que
+  // `vues.ts` a reçu sa ligne. Le marqueur hors ligne est RECOPIÉ de
+  // `apps/field/src/app/capacites-hors-ligne.ts`, jamais reformulé.
+  aRevoir: {
+    delaiMs: 180_000,
+    etats: [{ libelle: 'un point à revoir, atteint par le compteur', atteindre: allerARevoir }],
+    horsLigne: {
+      depuis: allerARevoir,
+      marqueur: 'Relire les points à revoir de la mission, calculés sur cet appareil',
+    },
+  },
 } as const satisfies Record<CodeVue, Parcours>;
 
 /** Les codes viennent de la TABLE, dont le type vient du REGISTRE. */
@@ -704,7 +808,16 @@ test('contrôle d’anti-vacuité : toutes les vues du registre ont un parcours 
   // Le nombre EN CLAIR : le jour où il change, ce test le dit avant la porte.
   // Il est passé de 11 à 12 le 2026-09-06 (PR #80, `connexionSiege`) — et c'est
   // le `satisfies` qui l'a dit le premier, à la compilation.
-  expect(registre.length, 'le registre a changé de taille — le rapport A28 aussi').toBe(12);
+  //
+  // Puis de 12 à 13 le 2026-09-09 (`aRevoir`, NB-15), et CETTE fois le
+  // `satisfies` n'a rien dit : il exige un PARCOURS par vue, pas un compte. Le
+  // parcours a été ajouté, ce recensement non — la suite E2E est donc restée
+  // ROUGE sur cette ligne, invisible parce que le port 4173 était occupé par le
+  // banc de mesure d'un autre chantier et que le fichier n'a pas pu tourner.
+  // C'est le recensement qui a fait son travail : il dit à la porte ce que la
+  // compilation ne pouvait pas dire. Constat rendu à A22 (09 §5.6) ; le chiffre
+  // est une DONNÉE de registre, et c'est à ce titre qu'A26 le repose.
+  expect(registre.length, 'le registre a changé de taille — le rapport A28 aussi').toBe(13);
   for (const code of CODES) {
     expect(parcoursDe(code).etats.length, `${code} : aucun état à balayer`).toBeGreaterThan(0);
   }

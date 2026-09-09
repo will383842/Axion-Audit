@@ -317,6 +317,17 @@ export function ZoneQuestion(proprietes: ProprietesZoneQuestion): ReactNode {
         </div>
       )}
 
+      {/* R7 — CE QUI ANNONCE LES RACCOURCIS.
+          Ils fonctionnaient tous et le mot « raccourci » n'apparaissait nulle
+          part : un accélérateur que personne ne découvre n'accélère personne.
+          La mention n'est rendue que là où un clavier existe (`afficherRaccourcis`
+          suit `pointer: fine`) et jamais en écran partagé, comme le reste de ce
+          qui est interne (§33.3). Ce n'est pas un bouton : les sept boutons du
+          §17.4 sont une liste fermée, et « ? » n'ouvre pas un geste d'audit. */}
+      {!partage && afficherRaccourcis && (
+        <p className="axn-coquille__mention">Raccourcis clavier : tapez « ? » pour la liste.</p>
+      )}
+
       {/* La seule bande collante de la carte (N1) : une rangée, Suivant à droite. */}
       <div
         className="axn-question__navigation"

@@ -506,8 +506,18 @@ export function EcranRestauration(): ReactNode {
               </div>
 
               <div className="axn-champ">
+                {/*
+                  N3 (recette A54, 2026-09-09) — « Votre mot de passe » était ici
+                  DOUBLEMENT trompeur : ce n'est ni un mot de passe à créer, ni
+                  celui de cet appareil-ci. Une sauvegarde se restaure sur un
+                  appareil de REMPLACEMENT, qui a son propre coffre et son propre
+                  mot de passe ; la seule clé du fichier est celui de l'appareil
+                  qui l'a produit (11 §4). Écrire « de cet appareil » ici aurait
+                  été une contre-vérité — le champ du RÉ-EXPORT, plus haut, porte
+                  ce libellé-là, et il est juste pour lui.
+                */}
                 <label className="axn-champ__libelle" htmlFor={`${identifiant}-mdp`}>
-                  Votre mot de passe
+                  Mot de passe de l’appareil qui a produit la sauvegarde
                 </label>
                 <input
                   id={`${identifiant}-mdp`}
@@ -522,8 +532,8 @@ export function EcranRestauration(): ReactNode {
                   }}
                 />
                 <p id={`${identifiant}-mdp-aide`} className="axn-champ__aide">
-                  Celui avec lequel la sauvegarde a été produite. Il est la seule clé du fichier —
-                  cet appareil n’a jamais vu ces données.
+                  Ce n’est pas celui de cet appareil-ci, ni un mot de passe à créer : c’est la seule
+                  clé du fichier, et cet appareil n’a jamais vu ces données.
                 </p>
               </div>
 
@@ -549,7 +559,12 @@ export function EcranRestauration(): ReactNode {
                     naviguer({ type: 'retour' });
                   }}
                 >
-                  Revenir
+                  {/* R5 — « Revenir » nu portait le même nom que le bouton de la
+                      coquille : deux boutons identiques sur le même écran, pour
+                      un lecteur d'écran comme pour un test. Cet écran est
+                      atteint depuis l'embarquement (`AccesRestauration`) : sa
+                      destination se nomme. */}
+                  Revenir à l’accueil
                 </Bouton>
               </div>
             </div>

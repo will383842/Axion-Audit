@@ -175,4 +175,13 @@ export const CAPACITES_HORS_LIGNE = {
     'Restaurer une sauvegarde de secours chiffrée',
     'Collecter, dès que cet appareil sera rattaché',
   ],
+
+  // ── Les points à revoir (NB-15) ──────────────────────────────────────────
+  // La liste se calcule sur les lignes de cet appareil : elle est aussi
+  // disponible dans un sous-sol d'usine que le reste de la collecte.
+  aRevoir: [
+    'Relire les points à revoir de la mission, calculés sur cet appareil',
+    'Rouvrir l’entretien directement sur la question à éclaircir',
+    'Lever un point à revoir et enregistrer la correction',
+  ],
 } as const satisfies Record<CodeVue, ListeNonVide<string>>;
