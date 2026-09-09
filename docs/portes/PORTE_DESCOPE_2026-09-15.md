@@ -197,6 +197,65 @@ par deux coteurs isolés (22 écarts, 5 défauts de doctrine, 11 ancres réécri
 arbitrées, kit coteur prêt. **Reste la passe humaine du 15/09 — deux coteurs indépendants.** C'est
 la seule pièce manquante, et elle est au calendrier de Williams, pas à celui de l'autopilote.
 
+### D-6 — L8 : **ÉCRIT ET NON BRANCHÉ** (A30, 2026-09-09) — la ligne « écrit 0 » du §2 est périmée
+
+> **Ce bloc n'efface rien.** Il ajoute un fait que le §2 ne pouvait pas connaître le 2026-09-03, et
+> qui change la forme de l'arbitrage sans en changer le décideur. A30 mesure, il ne tranche pas.
+
+**Le §2 range L8 en « écrit 0 · entamé NON ». C'est faux depuis PR 61, PR 65 et PR 66.** Et le §3
+ligne 1 en tire « L8 glisse, il est à zéro » : la conclusion tient, la prémisse non.
+
+**Mesuré sur `dc0fe3d` (= `origin/main`) le 2026-09-09, chaque ligne exécutée :**
+
+| Fait | Preuve |
+| --- | --- |
+| **Le moteur est écrit** : 1 881 lignes (`bareme.ts`, `moteur.ts`, `agregation.ts`, `entree.ts`) + 3 194 de tests, 211 tests verts | `wc -l apps/api/src/scoring/*.ts` · `vitest run apps/api/src/scoring` |
+| **Couverture 99,88 st · 96,95 br · 100 fn** — le chiffre est vrai | `--coverage.include='apps/api/src/scoring/**'`, remesuré ce jour |
+| **Rien ne l'appelle.** Seul importateur de `src/scoring/entree.js` hors du dossier : `apps/api/tests/aide/scoring-jeux-de-reference.ts` — un **aide de test**. Aucun `domaines/scoring`, aucune route de scoring parmi les **onze** de `src/routes/` | `grep -rn "scoring/"` sur `apps`, `packages`, `e2e`, `scripts` |
+| **La route existe en spec et pas en code** : `POST /v1/missions/:id/compute-scores` | `docs/05_API_ET_SYNC.md` §8.5 l. 47 · absente de `src/routes/` |
+| **`block_scores` et `unit_scores` sont créées depuis L1 et écrites par personne** ; `scores.csv` absent du ZIP ; `score_unitaire` absent des en-têtes de `reponses.csv` | `drizzle/0005_inventaires_analyse.sql` l. 71-98 · `domaines/export/fichiers.ts` l. 319-320 |
+| **Le radar SVG, nommé dans la même ligne du 07, n'est pas écrit non plus** | `apps/hq/src` (46 fichiers) : « radar » n'y apparaît qu'en en-tête de traçabilité |
+| **Le code de production le dit déjà lui-même**, dans `mission.json` livré au client | `domaines/export/service.ts` l. 104 : « livré depuis le lot L8, mais il n'est encore relié à aucune route ni à aucun dépôt » |
+
+**Ce que ce vert prouve, et ce qu'il ne prouve pas.** Il établit que les formules du §32.1 sont
+cohérentes **entre elles** — le moteur est pur, déterministe, et sa structure anti-masquage tient.
+Il n'établit pas qu'elles recevront un jour une ligne réelle : `entree.ts` est mesuré à **0 %** parce
+qu'il ne contient que des interfaces, et c'est exactement la frontière que rien ne traverse.
+
+**Une lecture du §32.6-4 est aujourd'hui inatteignable faute de colonne** — et ce n'est pas un test
+qui mentirait sur une forme impossible. `groupeInterlocuteur` est déclaré **facultatif**
+(`scoring/entree.ts` l. 82-84) : sans lui la divergence numérique (écart-type et contradiction
+oui/non) se calcule quand même, seule la lecture direction/terrain manque. C'est une **dégradation
+documentée**. L'amendement du 04 approuvé par Williams le 2026-09-09
+(`interviews.interlocutor_profile_id`) **est** ce chemin de données manquant : il ne branche pas un
+confort, il rend vivante une lecture aujourd'hui structurellement morte.
+
+**Le chiffrage du branchement — 1,0 j (A30), et ce qu'il couvre.**
+
+| Dans les 1,0 j | Hors des 1,0 j |
+| --- | --- |
+| dépôt de lecture du snapshot §32.1 · service · route `compute-scores` (**déjà spécifiée** au 05 §8.5 — aucune route à inventer, donc aucune escalade 11 §8-6) · **RBAC par rôle testé** · persistance `block_scores`/`unit_scores` · `scores.csv` + bascule du champ `scores` de `mission.json` · colonne `score_unitaire` · rejeu des jeux de référence figés **sur la vraie base** | le **radar SVG** (~0,3 à 0,5 j : axes, tokens invariant 4, 4 états, axe-core) et l'écran console qui affiche les scores |
+
+Les quatre frottements « où un moteur pur rencontre la vraie base » sont **dedans** : RBAC,
+`NUMERIC` en chaîne de bout en bout, `headcount` NULL réel, unités hors périmètre. Aucun n'a jamais
+été exécuté, et le plus exposé est le **sens écriture** du `NUMERIC` : le moteur rend un `number`
+JavaScript, `block_scores.score` est un `NUMERIC`. **Reste réel sur L8 : ≈ 1,3 à 1,5 j.**
+
+**Budget séparé, calendrier partagé — les deux phrases vont ensemble.** L8 est **hors** de la
+référence de 26 j-h : le 07 pose « Total noyau strict : 26 j-h » à la l. 29, **avant** que L8
+n'apparaisse, puis ouvre l. 31 une table distincte « Lot différable » dont L8 est l'unique ligne
+(l. 33). **Le branchement ne s'ajoute donc pas au dépassement du noyau, qui reste ≈ 5,5 face à 4,3,
+soit +1,2 j (D-1 bis).** Mais la même l. 33 pose le **butoir dur** — « en production le dernier jour
+de collecte (§35.3) » : les ≈ 1,3 à 1,5 j tirent sur le **même calendrier** que les +1,2 j.
+Les additionner serait faux ; les présenter sans dire qu'ils partagent le calendrier le serait aussi.
+
+**Ce que ça change le 15** : l'arbitrage n'est plus « faire les 2 j de L8 ou les reporter ». C'est
+« brancher ≈ 1,0 j de plomberie sur un moteur déjà payé, ou laisser 5 075 lignes vertes que rien
+n'appelle jusqu'à la fin de la collecte ». Aujourd'hui, « L8 dans `main` » se lit comme du livré.
+
+_Établi le 2026-09-09 par **A30**, en lecture seule sur le code. Aucune option retenue, aucun
+chiffre du §2 réécrit : le §2 se remesure le 15/09, comme son propre en-tête l'exige._
+
 ---
 
 ## 5. Les trois verrous qui ne dépendent d'aucun agent — état au 2026-09-03
