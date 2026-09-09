@@ -11840,3 +11840,271 @@ une rectification assignée, pas un choix, sa place est la note de lot.
 Décideur : A01
 Impact spec : aucun — 03 §34.2 et le 04 sont intacts ; `docs/conception/LOT_L6.md` §3bis est amendé
 ce jour, avec renvoi à cette entrée.
+
+## 2026-09-09 — [L8] Une question jamais posée à une unité jamais visitée est-elle « posée » ?
+
+Réserve BLOQUANTE R1 d'A37. `moteur.ts:377-384` compte chaque question scorable comme « posée » pour
+CHAQUE unité, visitée ou non. Mesuré : FIL-GC, 40 services interrogés sur 120 — échantillonnage
+conforme au 03 §32.4 — donne `ratio = 0,267` et `indicatif = true` sur la mission entière, scores
+exacts par ailleurs. Le seuil 0,60 du §32.1-3 est un voyant allumé en permanence.
+
+Options :
+a) `posees` restreint aux unités portant au moins une session de collecte.
+b) Restreint aux unités du plan (`work_assignments`, §18.1) — impose un champ à `EntreeScoring`.
+c) Statu quo, conséquence écrite au brief du consommateur.
+
+Arbitrage : **a)**. Le §32.1-3 laisse « posées » indéfini, mais le §32.4 dit où va le signal « unité
+non visitée » : « le consultant peut dévier (le plan est un guide) ; **l'écart est visible dans la
+couverture** » — la couverture par unité et par source, c'est le §27.1, écran de L7, pas la
+complétude. Et le pack a un SECOND instrument pour la minceur de la preuve : `answers_count` et
+`seuil_fiabilite_answers` (§16.4, 04 l. 266-268), qui « évite d'afficher un score sur 1 réponse ».
+c) fait donc porter à la complétude le travail de deux autres instruments, et le fait mal : un audit
+échantillonné selon les règles de la profession n'est pas un audit « indicatif ». b) est écartée pour
+trois raisons : elle couple une fonction pure à la planification, elle rend la complétude améliorable
+en RÉDUISANT le plan, et elle vaut `null` quand `work_assignments` est vide — l'état normal des
+premières missions. a) est enfin ce que le module dit déjà de lui-même (`agregation.ts:111-112` : « un
+périmètre sans question posée n'est pas un périmètre mal couvert, il est VIDE ») : une branche écrite,
+jamais atteinte.
+Règle de précédence : **§32-36 > §24-31** — §32.1 et §32.4 sont dans la même tranche ; le silence de
+§32.1-3 se comble par la phrase de §32.4, seule à nommer le destinataire du signal.
+Décideur : **A01**. Mise en œuvre A15 ; tests par le testeur croisé (09 §5.6), jamais par A15.
+Escalade Williams : **non** pour la lecture — c'est l'interprétation d'un mot du pack, tranchée par
+précédence, et le butoir §35.3 interdit de l'ajourner. **Oui** pour l'amendement du texte, à P-D.
+Conséquence assumée : les jeux de référence figés changent de COMPLÉTUDE (FIL-GC 0,80 → 1,00) sans
+changer un seul SCORE. Ils se re-figent par les deux transcriptions indépendantes déjà en place, et
+le jeu gagne une unité visitée à réponse manquante — sans quoi le ratio ne serait plus éprouvé.
+Impact spec : aucun au calcul. Amendement candidat de 03 §32.1-3 porté à la revue de spec de P-D :
+« cotées / (posées − sans objet), posées = questions des unités où une session a eu lieu ».
+
+## 2026-09-09 — [L8] `answers_count` et `seuil_fiabilite_answers` : L8 les produit, ou le lot de persistance ?
+
+Réserve BLOQUANTE R2 d'A37. Le 04 (l. 266-268, 337) et le 11 §5 nomment TROIS clés de scoring ;
+`CLES_PARAMETRES_SCORING` n'en nomme que deux, et le moteur ne produit aucun compte de réponses par
+(unité × bloc). Conséquence mesurée : `unit_scores` du 04 ne peut pas être écrite depuis la sortie de
+L8 — une colonne normée qu'aucun producteur ne sait remplir.
+
+Options :
+a) Tout dans L8 : le moteur compte ET applique le seuil de fiabilité.
+b) Rien dans L8 : tracé comme relevant du lot de persistance et de la console.
+c) Le moteur COMPTE, le consommateur applique le seuil.
+
+Arbitrage : **c)**, et le partage n'est pas un compromis, il est écrit : le 04 l. 266-268 qualifie le
+seuil de « fiabilité **d'affichage** ». Un seuil d'affichage appartient à qui affiche. Le COMPTE, lui,
+n'appartient qu'au moteur : lui seul sait ce qu'est une réponse retenue (révision courante, non
+`withheld`, non N/A, unité dans le périmètre). b) obligerait le lot suivant à réécrire cette doctrine
+de validité — un second juge de « ce qui compte comme réponse », exactement la divergence refusée le
+2026-09-06 sur `memeValeur` (« deux règles de comparaison pour une même valeur, dans le même fichier,
+est un piège qui se paie un jour où personne ne regarde »). a) ferait du moteur pur un décideur
+d'affichage. Le moteur gagne donc `reponsesRetenues` par unité × bloc ; `CLES_PARAMETRES_SCORING`
+reste à deux clés et DIT pourquoi la troisième n'y est pas. Même doctrine que l'arbitrage du
+2026-09-06 sur la mission non commencée : le moteur dit tout, le consommateur filtre. Avec l'entrée
+R1 ci-dessus, cela ferme la confusion de fond : deux instruments distincts du pack — la complétude
+(§32.1-3) et la fiabilité (§16.4) — étaient portés par un seul champ, en permanence saturé.
+Règle de précédence : **§16-22 > §1-15** — le §16.4 institue le seuil de fiabilité et le qualifie
+d'affichage ; le §32.1 est muet. Aucune divergence avec la tranche §32-36.
+Décideur : **A01**. Mise en œuvre A15 ; tests par le testeur croisé.
+Escalade Williams : **non** — aucune colonne du 04 n'est modifiée ; l'arbitrage RESTITUE la capacité
+d'écrire une colonne existante, et le champ ajouté l'est au contrat de sortie de L8.
+Impact spec : aucun. Contrainte à porter au brief du lot qui exposera le scoring : appliquer
+`seuil_fiabilite_answers` à l'AFFICHAGE de la heatmap (§16.4), jamais au calcul.
+
+## 2026-09-09 — [L8] Le moteur doit-il refuser une forme de barème que le contrôle d'import L4 refuse déjà ?
+
+C1 et C2 d'A37, mesurés. `red_flag {values, below}` : `lireDrapeau` (`bareme.ts`) teste `values`
+d'abord et ignore `below` en silence — zéro drapeau sur un score 1 contre un seuil 2. Bandes non
+ordonnées : `coterParBandes` retient la première bande couvrante et rend 5 au lieu de 1, drapeau
+perdu. Cinquième et sixième façons de masquer un drapeau, après les quatre fermées par #66. Or le
+contrat partagé dit « jamais les deux » (`banque-questions.ts:244-250`) et le fichier annonce
+l'inverse de ce qu'il fait : « un `red_flag` malformé ne s'IGNORE pas … il invalide le barème »
+(`bareme.ts:155-161`).
+
+Options :
+a) Non : L4 valide déjà (bornes strictement croissantes, dernière bande ouverte, union stricte du
+`red_flag`) ; on l'écrit, et le moteur ne double rien.
+b) Oui, mais bornée aux deux formes que la doctrine du fichier prétend déjà refuser.
+c) Le moteur rejoue tout le contrôle L4, sensible au `answer_type`.
+
+Arbitrage : **b)**. a) est défendable et je l'ai vérifiée avant de l'écarter : elle est vraie
+AUJOURD'HUI, et par accident. Le seul chemin d'écriture de `questions.scoring` est le script
+`apps/api/scripts/import-banque-questions.mjs` ; le back-office M1 n'existe pas encore ; le figeage
+recopie un JSONB opaque (`questionnaire.ts:128`, `valeurJsonbSchema`) sans revalider ; aucune
+contrainte SQL ne couvre la colonne. Fonder le seul mécanisme qui remonte un point critique sur « la
+seule route qui écrit est propre », c'est le fonder sur du code qui n'est pas encore écrit. c) est
+refusée : deux validateurs complets finissent par diverger. b) ne crée aucune doctrine nouvelle — les
+deux règles sont RECOPIÉES du contrat partagé — et elle s'accompagne d'une obligation : un test
+différentiel prouve que les deux lectures rendent le même verdict sur les mêmes entrées. Sans lui, on
+aurait remplacé un trou par une divergence.
+Règle de précédence : **sans objet** — cohérence interne d'un module avec le contrat de
+`packages/shared` et avec son propre en-tête ; aucune divergence de pack.
+Décideur : **A01**, sur réserve d'A37. Mise en œuvre A15 ; tests par le testeur croisé, jamais A15.
+Escalade Williams : **non** — aucun test désactivé, aucune route, aucun schéma, aucune dépendance.
+Impact spec : aucun. Amendement candidat de 03 §32.1-6 déjà ouvert le 2026-09-06.
+
+## 2026-09-09 — [L8] Deux couches de tests : ce que L8 fait jurisprudence, et ce qu'il n'en fait pas
+
+A37 mesure 166 des 211 tests du scoring écrits par A15, auteur du moteur (j'ai recompté 135 sur 180
+`it(` dans `apps/api/src/scoring` : même ordre de grandeur, périmètre de comptage différent). 09 §5.6
+dit « JAMAIS » ; CLAUDE.md §4-2 dit « TDD sur les parties critiques : tests écrits AVANT ». Les deux
+règles se rencontrent ici. Couverture de la couche croisée seule : 94,95 st / **79,72 br** — sous 90,
+écart assumé en tête de fichier, jamais tracé.
+
+Options :
+a) Rework : la couche croisée porte seule les 90 % de branches.
+b) L8 accepté, et la lecture « deux couches » devient la règle des lots suivants.
+c) L8 accepté sur ses faits, la règle 09 §5.6 inchangée, sa condition de satisfaction ÉCRITE.
+
+Arbitrage : **c)**. La DoD transverse du 09 écrit « couverture ≥ 90 % sur les modules critiques —
+mesurée » : c'est une propriété du MODULE, pas d'un auteur, et le module est à 99,88 st / 96,95 br.
+Le 79,72 br de la couche croisée seule n'est le seuil de rien — mais c'est une mesure utile, et elle
+est désormais au registre plutôt que dans un en-tête que personne ne relit. a) coûterait le rework
+d'un lot déjà livré à ~⅔ de sa ligne 07 sous le butoir dur §35.3, pour un gain de preuve nul : ce que
+§5.6 protège, c'est que le CRITÈRE D'ACCEPTATION du lot soit prouvé par quelqu'un qui n'a rien
+produit — et `acceptation.test.ts` (45 tests, `@critique`, attendus retranscrits indépendamment) le
+fait. b) est refusée : je n'amende pas le plan d'exécution de Williams par un arbitrage de lot.
+Condition écrite, opposable au lot suivant : un producteur peut écrire ses tests de conception SI le
+critère du fichier 07 est porté par une couche croisée écrite par un agent qui n'a produit aucun
+code. Sinon, 09 §5.6 s'applique à la lettre.
+Règle de précédence : **sans objet** — 09 §5.6 et CLAUDE.md §4-2 ne divergent pas sur une spec, ils
+se partagent un objet ; le fichier 11 ne tranche pas, la DoD du 09 le fait.
+Décideur : **A01** pour L8. **Escalade Williams : OUI**, en information à la porte suivante — A37 a
+raison que cela fera jurisprudence, et la lecture générale de 09 §5.6 appartient à l'auteur du plan.
+Impact spec : aucun. Limite mesurée à retenir (M4 d'A37) : git n'atteste aucune attribution, tous les
+commits portant le même auteur — le croisement n'est attestable que par l'en-tête des fichiers.
+
+## 2026-09-09 — [L8] Ce que le moteur PUBLIE et ce que le seuil ALERTE : deux doutes, une doctrine
+
+Deux doutes de spec d'A37, qui se tranchent ensemble. (1) C4 : la lecture direction/terrain — « l'or
+du rapport » (M5.1) — n'est calculée que DANS l'objet `Divergence` (`moteur.ts`, `moyennesParGroupe`),
+donc publiée seulement si l'écart-type franchit 1,5 ; mesuré, un écart de 2,25 points entre direction
+et terrain ne produit AUCUNE publication. (2) Un drapeau rouge dans une unité hors périmètre (§25.1)
+a-t-il sa place au rapport ?
+
+Options :
+a) Le seuil gouverne le calcul : pas de divergence, pas de moyennes de groupe ; hors périmètre, pas
+de drapeau.
+b) Le moteur publie la mesure, le seuil gouverne l'ALERTE, l'humain décide de la publication.
+
+Arbitrage : **b)** sur les deux. (1) Le §32.1-5 fixe un seuil pour la DIVERGENCE, puis décrit ce que
+la lecture direction/terrain COMPARE ; il ne lui donne aucun déclencheur. Le §16.4 la veut
+« calculable par unité » et M5.1 en fait l'or du rapport : un écart de 2,25 points rendu invisible
+parce qu'un AUTRE indicateur n'a pas sonné, c'est le contraire de ce que ces deux textes demandent.
+Les moyennes par `group_code` sont donc publiées dès deux réponses cotées ; le drapeau de divergence,
+lui, garde son seuil. (2) Le §25.1 exclut l'unité hors périmètre du SCORING et de la COUVERTURE — un
+drapeau rouge n'est ni l'un ni l'autre : c'est un `finding` §16.5, auto-proposé en BROUILLON, à
+validation humaine obligatoire. Il est donc émis, MARQUÉ hors périmètre, jamais compté dans un score
+ni dans une couverture ; l'auditeur décide s'il entre au rapport. a) ferait disparaître une donnée
+collectée, ce que l'invariant 7 refuse.
+C'est la doctrine déjà tenue trois fois dans ce lot — mission non commencée, drapeau `below` sur choix
+multiple, proposition portant son score élémentaire : le moteur dit tout, le seuil alerte, le
+consommateur et l'humain filtrent.
+Règle de précédence : **§32-36 > §16-22 > §1-15** — §32.1-5 est muet sur le déclencheur de la lecture,
+§16.4 puis M5.1 comblent ce silence sans le contredire ; §25.1 nomme deux exclusions, pas trois.
+Décideur : **A01**. Escalade Williams : **non** — aucun champ du 04, aucune route, aucun seuil déplacé.
+Impact spec : aucun. Contrainte au brief du consommateur : un drapeau hors périmètre s'affiche AVEC sa
+marque, jamais nu.
+
+## 2026-09-09 — [L5a/L5c] D-3 verrou : « session active » au sens du verrouillage de la PWA
+
+Quatrième signalement (A54 trois fois, A02 quatre fois) ; fiche M10 posée le 08. 05 §9.7 nomme deux
+délais : 15 min hors session, 60 min « pendant une session `en_cours` ». 03 §33.7 exige « AUCUNE
+ressaisie de mot de passe pendant une session active de 45 min » sans définir « active ». Le code suit
+la lettre du 05 : `verrou.ts:36-39` et `sessions.ts:129-137` ne passent à 60 min que sur
+`status === 'en_cours'`. Cas nominal : la session de 09h30 est ouverte, l'interlocuteur arrive à
+09h50, l'appareil se verrouille à 09h45 — la ressaisie a lieu devant lui.
+
+Options : ① 60 min dès qu'une session du jour est ouverte à l'écran · ② un troisième palier (30 min)
+· ③ compte à rebours visible sur l'écran d'avant-démarrage, délai inchangé · ④ statu quo muet.
+
+Arbitrage, en trois parts :
+
+1. **Le code est CONFORME** : `verrou.ts` transcrit 05 §9.7 mot pour mot, et 60 > 45 satisfait le
+   §33.7 dès lors que « active » vaut `en_cours`. Ce n'est pas un défaut, c'est une définition
+   manquante — il n'y a aucun correctif à écrire. Le critère de porte reste **NON JOUÉ**, et cela ne
+   se ferme pas par du code mais par une session de 45 min réellement rejouée par A54.
+2. **① et ② sont à Williams**, et je ne les tranche pas : elles allongent la fenêtre d'exposition d'un
+   appareil déverrouillé posé sur une table (modèle de menace 06 §10, CLAUDE.md §3-4), et ② introduit
+   un chiffre absent du pack. Arbitrage à P-D, avec amendement horodaté de 05 §9.7 définissant
+   « session active ». M10 reste ÉTAGE 2 : rien n'est implémenté d'ici là.
+3. **③ ne fait pas partie de la fiche** : elle ne change aucun délai, aucune exposition, aucun schéma,
+   aucune API — c'est un état d'écran manquant, donc étage 1 éligible (~0,1 j). Mais **pas
+   maintenant** : l'étape 6 de L5 est refusée (B3-bis, recette non rejouée) et on n'ouvre pas de code
+   neuf sur un lot dont la porte n'est pas jouée. À la réouverture de L5, si le plafond de 0,5 j tient.
+
+Règle de précédence : **§32-36 > §24-31** — 03 §33.7 est dans la tranche haute et porte l'INTENTION,
+05 §9.7 porte le mécanisme. La tranche haute ne renverse pas le mécanisme car elle ne définit pas le
+mot dont tout dépend : c'est un silence, et un silence qui touche la sécurité remonte.
+Note de registre : ce « D-3 » est homonyme du D-3 de L0 (2026-08-28, passphrase du coffre) ; il se
+cite désormais « D-3 verrou ».
+Décideur : **A01** pour les parts 1 et 3 ; **Williams** pour la part 2 — escalade **OUI**, sécurité.
+Impact spec : aucun aujourd'hui ; amendement horodaté de 05 §9.7 si ① ou ② est retenue à P-D.
+
+## 2026-09-09 — [L5/gouvernance] D-4 : `apps/field/src/ecrans/**` entre-t-il au seuil de couverture de 90 % ?
+
+Chiffré trois fois par A02, jamais tranché. Mesuré à nouveau ce jour, seuil désarmé, 240 tests verts :
+le dossier est à **84,30 st · 85,38 br · 62,79 fn · 84,30 li** ; **7 fichiers sur 22 sous 90 % en
+lignes, 15 sur 22 en branches** ; `EcranFinDeSession.tsx` à **66,05 % l. / 30,00 % f.**, chiffres
+d'A02 confirmés à l'identique. Le glob de `vitest.config.ts` le MESURE ; le garde bloquant
+(`.github/coverage-critical-paths.json`, 15 entrées, 4 métriques, seuil 90) ne le NOMME pas.
+
+Options :
+a) Ajouter `apps/field/src/ecrans/**` aux chemins critiques.
+b) Le laisser dehors, et le dire.
+
+Arbitrage : **b)**, et ce n'est pas une tolérance, c'est une lecture. La DoD transverse du 09 énumère
+les modules critiques — « moteur de sync, crypto locale, scoring, RBAC/propriété » — et les écrans n'y
+sont pas ; la MÊME phrase leur donne leurs propres critères : « tout écran livré avec ses 4 états
+(§33.2) · axe-core vert », plus la recette novice. La DoD ne se tait donc pas sur les écrans, elle les
+soumet à autre chose. a) reviendrait à ajouter une cinquième famille au plan d'exécution.
+Coût mesuré de a), pour que le choix soit fait en connaissance : la métrique contraignante est
+`functions`, à 62,79 % — il faut couvrir 47 fonctions de plus sur 172, soit de l'ordre de 1 à 1,5 j-h
+de tests écrits par un non-auteur (09 §5.6), et le garde passerait au ROUGE le jour de l'ajout.
+Ce que je tranche en revanche, parce que c'est le vrai grief d'A02 : **le vert ne doit plus être vert
+par omission.** La mesure existe déjà dans `coverage-summary.json` ; la CI publie `ecrans/**` comme
+module OBSERVÉ, non bloquant, avec ses quatre nombres. Personne ne lira plus le vert comme « les
+écrans sont couverts », et A02 cesse de le remesurer à la main. Étage 1, ~0,1 j, aucun seuil touché.
+Règle de précédence : **sans objet** — transcription littérale de la DoD du 09, qui énumère les deux
+régimes ; aucune divergence entre sections du pack.
+Décideur : **A01** pour b) et pour la publication non bloquante. **Escalade Williams : OUI** pour a),
+à P-E, avec le coût ci-dessus — étendre la liste des modules critiques modifie sa DoD, et rendrait la
+chaîne rouge le jour de l'ajout. Doute D-4 CLOS côté A01 ; seule l'extension reste ouverte.
+Impact spec : aucun.
+
+## 2026-09-09 — [securite] `z.config({ jitless: true })` : micro-amélioration, ou changement de comportement ?
+
+A26 mesure que Zod 4.4.3 émet une `securitypolicyviolation` (`script-src`, `eval`) à CHAQUE chargement
+des deux fronts : la sonde `allowsEval` appelle `new Function("")`. Présent sous la CSP actuelle — ce
+n'est pas le retrait de `'unsafe-inline'` qui le crée. Vérifié dans le paquet épinglé avant d'écrire :
+le drapeau ne pilote QUE cette sonde et le chemin compilé (`v4/core/util.js`, « skip the probe under
+`jitless` ») ; `config()` fait un `Object.assign`, donc il compose avec la locale française déjà
+posée ; `allowsEval` est `cached()`, donc l'appel doit précéder le premier `parse`.
+
+Options :
+a) Étage 1 : une ligne de configuration, posée d'office.
+b) Étage 2 ou Williams : c'est le validateur qu'on modifie, donc l'API (11 §3).
+c) Ne rien poser, la console crie.
+
+Arbitrage : **a)**, sous mesure. c) est la vraie faute, et A26 l'a nommée : une violation qui se
+déclenche à chaque chargement finit par être éteinte au mauvais endroit — quelqu'un ajoutera
+`'unsafe-eval'` pour faire taire la console. C'est, pour la troisième fois en deux jours, le principe
+du 2026-09-06 : un signal qui se déclenche toujours n'est plus un signal, il emporte les vrais avec
+lui. b) est écartée sur la lecture du paquet et non sur sa documentation : `jitless` ne change AUCUN
+résultat de validation, donc ne touche ni le schéma 04, ni le contrat d'API, ni la crypto, ni le
+périmètre fonctionnel — les quatre bornes de l'étage 1. Et il DURCIT sans rien retirer : la borne
+exacte posée hier sur 06 §10.2.
+La condition est parallèle à celle de COEP hier : ce qui est perdu, c'est le JIT, sur l'appareil le
+plus contraint. **A28 mesure contre le budget existant (p95 < 100 ms) AVANT signature.** Si le budget
+casse, l'arbitrage change de nature — on échangerait une capacité terrain contre une alerte de
+console — et cela remonte à Williams.
+La mise en œuvre n'est pas libre : `z.config` est GLOBAL au processus. Un appel posé dans
+`packages/shared` priverait de JIT l'API et le worker, qui n'ont ni navigateur ni CSP. Donc une
+seconde fonction NOMMÉE et idempotente à côté d'`appliquerLocaleFrancaiseZod`
+(`packages/shared/src/errors.ts`), appelée par `apps/field/src/main.tsx` et `apps/hq/src/main.tsx`
+avant tout parse : une règle, un endroit, deux appelants — et le test navigateur d'A26 rougit si un
+appelant manque. Ni A21 (`packages/ui` n'en est pas le propriétaire) ni l'incrément d'A11 (le
+`Caddyfile` est un autre fichier, 09 §5.3) : **commit séparé**, sinon un revert d'infra emporte du
+code applicatif.
+Règle de précédence : **sans objet** — aucune divergence de pack ; c'est le périmètre de l'étage 1
+(09 §5.9) qu'on qualifie, sur les faits du paquet épinglé.
+Décideur : **A01**. Escalade Williams : **non** aujourd'hui ; **oui** si la mesure d'A28 casse le budget.
+Impact spec : aucun. Aucune dépendance ajoutée (Zod 4.4.3 déjà épinglé, 11 §1) : l'escalade §8-1 ne
+s'applique pas.
