@@ -129,6 +129,49 @@ interviews(id,                                   -- UUID v7 CÔTÉ CLIENT
            person_name NULL, person_role NULL, person_service_id FK services NULL, person_email NULL,
                                                  -- P2-1 : person_service_id = fonction de la PERSONNE ; l'unité d'audit est TOUJOURS org_unit_id
                                                  -- §27.1 : champs personne optionnels si kind ≠ entretien
+           interlocutor_profile_id FK interlocutor_profiles NULL,
+           -- ═══ AMENDEMENT (2026-09-09, DECISIONS.md — tranché par Williams) — LE PROFIL DE L'INTERLOCUTEUR ═══
+           -- Cette table ne portait AUCUN lien vers `interlocutor_profiles`. `person_role` est du
+           -- TEXTE LIBRE, et `person_service_id` pointe `services` — le référentiel des 11 FONCTIONS
+           -- métier, pas celui des 9 PROFILS. `group_code` ('direction' / 'encadrement' / 'terrain'),
+           -- que le §32.1 pose comme « base du calcul de divergence direction/terrain », n'était donc
+           -- atteignable depuis AUCUNE réponse : les deux référentiels sont distincts et seedés
+           -- séparément (11 §5), et présenter l'un sous le nom de l'autre serait un mensonge
+           -- d'étiquette — le 03 §32.6-4 l'interdit d'ailleurs en toutes lettres.
+           --
+           -- CE QUE L'ABSENCE FAISAIT TOMBER : la rubrique « divergences direction/terrain » du
+           -- 01 §20.3 · la lecture par groupe du 03 §32.1-5 · « l'or du rapport » de M5.1 · et le
+           -- QUATRIÈME des SIX contrôles du §36.6, dont la conclusion est « un rapport qui ne passe
+           -- pas les 6 points ne part pas ». Le plan d'entretiens §32.4 était DÉJÀ livré dégradé :
+           -- il LISTE les profils à couvrir sans jamais les chiffrer, faute d'une colonne où le
+           -- compte pourrait atterrir. La colonne manquante avait donc déjà coûté une fonctionnalité.
+           --
+           -- POURQUOI MAINTENANT, ET PAS À LA REVUE DE SPEC P-D : elle est RÉTRO-INCOMPATIBLE AVEC
+           -- LA DONNÉE COLLECTÉE. Un entretien conduit AVANT elle n'est jamais reclassable — son
+           -- profil n'a été capté nulle part, et `person_role` est du texte libre. La divergence se
+           -- calculerait alors sur une population partielle, ce qui est PIRE qu'une divergence
+           -- absente : un chiffre faux, présenté comme vrai, au client, dans le livrable.
+           --
+           -- NULLABLE, ET C'EST UN CHOIX. Les quatre colonnes `person_*` ci-dessus sont déjà
+           -- nullables À DESSEIN (§27.1) ; celle-ci rejoint ce groupe et ne peut pas être plus
+           -- stricte que lui. Trois cas de NULL légitime : une session PLANIFIÉE par le §32.4, née
+           -- sans personne désignée (même motif qui a rendu `conducted_by` nullable le 2026-09-02) ;
+           -- un `kind` ≠ 'entretien' (observation, analyse_documentaire, releve_donnees), qui n'a
+           -- pas d'interlocuteur ; et l'ATELIER (§28.1), où ce n'est pas l'absence de profil mais
+           -- leur PLURALITÉ — `participants` est un tableau — qu'une FK simple ne peut pas porter.
+           --
+           -- RÈGLE MÉTIER PORTÉE PAR LE SERVICE, PAS PAR UNE CONTRAINTE CHECK — exactement la forme
+           -- retenue pour `conducted_by` le 2026-09-02 : une session `kind='entretien'` qui passe à
+           -- 'termine' DOIT porter un profil ; partout ailleurs, NULL est légitime. Et un NULL ne se
+           -- lit JAMAIS « tous les groupes » côté scoring, pas plus qu'un propriétaire inconnu ne se
+           -- lit « tout le monde ».
+           --
+           -- NE REMPLACE RIEN : `person_service_id` (la FONCTION de la personne) et `person_role`
+           -- (le libellé saisi) sont CONSERVÉS. Fonctions et profils sont deux AXES DISTINCTS.
+           -- AUCUN INDEX : le §7.1 n'en demande pas, l'accès se fait par `mission_id` puis jointure,
+           -- et `interlocutor_profiles` compte NEUF lignes. La FK reste donc nue, comme
+           -- `person_service_id` et pour le même motif — inscrit au manifeste (`fkNonIndexees`),
+           -- jamais laissé au silence.
            participants JSONB NULL,              -- §28.1 atelier : [{nom, fonction}]
            org_unit_id FK org_units,
            document_request_id FK document_requests NULL,   -- §27.1 analyse_documentaire
