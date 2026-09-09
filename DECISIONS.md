@@ -12430,3 +12430,42 @@ entretien **croit** être sur son cockpit, puisque l'écran s'appelle « Aujourd
 
 Décideur : A01 (D-3) · Williams (R3)
 Impact spec : aucun.
+## 2026-09-09 — [L6] Descope de la sync : quel cran pour placer ≈ 5,5 j dans 4,3 j ?
+
+Williams, ce jour, sur le récapitulatif qui lui portait trois points : « **Fais tout selon tes
+recommandations** », dont « Trois arbitrages — descope L6, R3, la fiche d'étage 2 ». Il adopte donc la
+recommandation d'A01 de `PORTE_DESCOPE_2026-09-15.md` §D-1 bis. Cette entrée l'enregistre.
+**Chiffres revérifiés avant recopie**, `docs/conception/LOT_L6.md:368` : 2,0 + 1,2 + 1,8 = **5,0 j**
+(L6), plus **≈ 0,5 j** de L5f non ouvert = **≈ 5,5 j dans 4,3 j**, écart **≈ +1,2 j** ; **+0,5 j** sur
+le budget 07 de 4,5 j. **Les deux versions concordent** — A20 l'écrit lui-même (PR 119, `LOT_L6.md`
+§D) : « aucun écart de mesure entre les deux documents », et il y ajoute l'option **α** que sa propre
+liste omettait. Reste une divergence de forme : son cran ② (soin visuel de L6b, ≤ 0,2 j), qu'il borne
+à la DoD et ne porte pas en option de porte. **Périmé dans §D-1 bis** : **PR 114** y est dite
+« ouverte, non fusionnée » — elle est fusionnée (`0b0edfb`).
+
+Options :
+
+- **α** absorber les ≈ 1,2 j : rien de fonctionnel ne tombe, la référence de 26 j-h cesse d'en être une.
+- **β** retirer la campagne de charge k6 de L6c (≈ 0,3 à 0,5 j) : rejouable après P-D.
+- **γ** reporter L5f (chaîne photo) en Phase 2 (≈ 0,5 j) : les scénarios §9.8 **6 et 7** tombent avec lui.
+
+Arbitrage : **β puis α** ; **γ écartée**. β ne retire **aucune garantie de non-perte** ; γ fait tomber
+le scénario 7 — « reprise d'upload interrompu à 80 % », **critère d'acceptation nommé du fichier 07**,
+ligne L6. Restent intouchables : les huit scénarios §9.8, le contrat §9.3, la propriété §9.9,
+`processed_ops`.
+Règle de précédence : aucune divergence de pack à trancher — le critère P-DESCOPE ne fait glisser que
+le lot **différable** non entamé, et L6 est **noyau** : c'est une lacune, pas une contradiction. Elle
+se comble par l'ordre écrit d'avance au **07 §14, « la collecte fiable prime »**, et par `CLAUDE.md`
+§3-5 et §3-7, qui réservent à Williams le retrait d'un test ou d'un périmètre.
+Décideur : **Williams**, par adoption nommée de la recommandation d'A01 du 2026-09-09.
+Impact spec : aucun amendement du pack. **Trois conséquences écrites pour qu'il puisse y revenir.**
+① **β retire aussi un critère nommé du 07** : « charge 50 clients × 1 000 ops : p95 < 500 ms » est dans
+la **même cellule de critères** que la reprise à 80 %. Ma recommandation opposait β et γ sur « critère
+nommé ou non » : c'est inexact, et je le rectifie — la vraie différence est **mesure de performance
+rejouable** contre **garantie de non-perte**. **P-D se tiendra sur un périmètre amendé, même sans γ.**
+② **P-D glisse d'≈ 0,7 à 0,9 j après β**, non d'≈ 1,5 j : les 1,5 j de α décrivent l'absorption
+**seule**. Le glissement pousse L7-min, P-E et L8 (à zéro) dans la semaine 4 du 09 §6.
+③ **L'arbitrage est pris six jours avant P-DESCOPE**, sur des chiffres que le dossier impose de
+**remesurer le 15/09** : si la remesure bouge, il se rouvre. **D-2** (L5c), **D-3** (L7-min), **D-4**
+(marge de recette) et **D-5** (contenu) restent **entiers** — l'instruction ne portait que sur D-1.
+Application : cet arbitrage est reporté sous §D-1 bis par A01, sans effacer aucune option.
