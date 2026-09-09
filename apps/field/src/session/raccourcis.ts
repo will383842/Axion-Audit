@@ -1,9 +1,12 @@
 // =============================================================================
 // RACCOURCIS CLAVIER DE L'ENTRETIEN — 03 §33.3 (PC)
 //
-//   1-5  cote une échelle        O / N  oui-non        A  sans objet (N/A)
-//   R    à revoir                E      écran partagé  /  recherche (hors-parcours)
-//   ↵    question suivante       ↑ ↓    navigation     Échap  rend le focus
+// LA LISTE DES RACCOURCIS N'EST PAS DANS CE COMMENTAIRE : elle est plus bas,
+// dans `RACCOURCIS_ENTRETIEN`, et c'est la MÊME table qui dispatche les touches
+// et qui nourrit l'aide affichée par « ? » (`PanneauRaccourcis`). R7 (constat du
+// 2026-09-09) : les raccourcis marchaient, rien ne les annonçait. Une liste
+// d'aide recopiée à côté du gestionnaire aurait divergé du jour où une touche
+// change — on ne recopie pas, on lit la table.
 //
 // ── LA RÈGLE V2.8, TENUE PAR CONSTRUCTION ───────────────────────────────────
 // « Les raccourcis à une touche (O/N/A/R/E, 1-5, /) ne sont actifs que HORS
@@ -35,7 +38,109 @@ export interface ActionsRaccourcis {
   readonly aRevoir: () => void;
   readonly recherche: () => void;
   readonly partage: () => void;
+  /** R7 — ouvre l'aide clavier. Une fenêtre, jamais un `alert()`. */
+  readonly aide: () => void;
 }
+
+/**
+ * UN raccourci, tel qu'il est TRAITÉ et tel qu'il est AFFICHÉ.
+ *
+ * Les deux usages lisent le même objet : le gestionnaire de touches y trouve son
+ * `executer`, l'aide y trouve ses `touches` et son `libelle`. C'est la condition
+ * pour que l'aide ne mente jamais — une aide qui se recopie se périme.
+ */
+export interface Raccourci {
+  /** Les touches TELLES QU'ELLES S'ÉCRIVENT à l'écran (« Entrée », « ↑ », « / »). */
+  readonly touches: readonly string[];
+  /** Ce que la touche fait, en français, à l'infinitif. */
+  readonly libelle: string;
+  /**
+   * L'action, quand la touche est dispatchée par la table.
+   *
+   * `null` pour les trois touches qui ont leur propre branche juste au-dessus
+   * (Entrée, ↑↓, Échap) : elles portent des NUANCES — Entrée n'a pas le même
+   * effet dans une zone de notes, les flèches appartiennent au navigateur dans un
+   * groupe radio — qu'une entrée de table ne saurait décrire. Elles restent
+   * DÉCLARÉES ici pour que l'aide les liste, et le gestionnaire les ignore.
+   */
+  readonly executer: ((actions: ActionsRaccourcis, touche: string) => void) | null;
+}
+
+/**
+ * LA table des raccourcis de l'entretien — 03 §33.3, mot pour mot :
+ * « 1-5 échelles · O/N oui-non · A = N/A · R = à revoir · ↵ suivant · ↑↓
+ * navigation · / = recherche de question ». Le « E » de l'écran partagé vient du
+ * même §33.3 ; le « ? » de l'aide est ajouté par R7 et ne fait rien d'autre
+ * qu'ouvrir la liste ci-dessous.
+ *
+ * L'ordre est celui de l'affichage : d'abord ce qui RÉPOND, puis ce qui
+ * QUALIFIE, puis ce qui NAVIGUE.
+ */
+export const RACCOURCIS_ENTRETIEN: readonly Raccourci[] = [
+  {
+    touches: ['1', '2', '3', '4', '5'],
+    libelle: 'Coter de 1 à 5 sur une échelle',
+    executer: (actions, touche) => {
+      actions.coter(Number(touche));
+    },
+  },
+  {
+    touches: ['O'],
+    libelle: 'Répondre « oui »',
+    executer: (actions) => {
+      actions.ouiNon('oui');
+    },
+  },
+  {
+    touches: ['N'],
+    libelle: 'Répondre « non »',
+    executer: (actions) => {
+      actions.ouiNon('non');
+    },
+  },
+  {
+    touches: ['A'],
+    libelle: 'Marquer la question « sans objet » (N/A)',
+    executer: (actions) => {
+      actions.sansObjet();
+    },
+  },
+  {
+    touches: ['R'],
+    libelle: 'Marquer la question « à revoir »',
+    executer: (actions) => {
+      actions.aRevoir();
+    },
+  },
+  {
+    touches: ['E'],
+    libelle: 'Passer en écran partagé, et en revenir',
+    executer: (actions) => {
+      actions.partage();
+    },
+  },
+  {
+    touches: ['/'],
+    libelle: 'Chercher une question, y compris hors parcours',
+    executer: (actions) => {
+      actions.recherche();
+    },
+  },
+  {
+    touches: ['?'],
+    libelle: 'Afficher cette aide',
+    executer: (actions) => {
+      actions.aide();
+    },
+  },
+  { touches: ['Entrée'], libelle: 'Question suivante', executer: null },
+  { touches: ['↑', '↓'], libelle: 'Question précédente, question suivante', executer: null },
+  {
+    touches: ['Échap'],
+    libelle: 'Sortir d’un champ de saisie, ou fermer une fenêtre',
+    executer: null,
+  },
+];
 
 export interface OptionsRaccourcis {
   /** `false` pendant qu'une fenêtre (motif, ad hoc, recherche) a le focus. */
@@ -125,42 +230,18 @@ export function useRaccourcisEntretien(
         return;
       }
 
+      // Le dispatch LIT la table — il ne la répète pas. C'est ce qui garantit que
+      // l'aide de « ? » (`PanneauRaccourcis`) et le comportement réel ne peuvent
+      // pas diverger : ajouter une touche ici, c'est l'ajouter dans l'aide.
       const touche = evenement.key.length === 1 ? evenement.key.toLowerCase() : evenement.key;
-      switch (touche) {
-        case '1':
-        case '2':
-        case '3':
-        case '4':
-        case '5':
-          evenement.preventDefault();
-          actions.coter(Number(touche));
-          return;
-        case 'o':
-          evenement.preventDefault();
-          actions.ouiNon('oui');
-          return;
-        case 'n':
-          evenement.preventDefault();
-          actions.ouiNon('non');
-          return;
-        case 'a':
-          evenement.preventDefault();
-          actions.sansObjet();
-          return;
-        case 'r':
-          evenement.preventDefault();
-          actions.aRevoir();
-          return;
-        case 'e':
-          evenement.preventDefault();
-          actions.partage();
-          return;
-        case '/':
-          evenement.preventDefault();
-          actions.recherche();
-          return;
-        default:
-          return;
+      const executer = RACCOURCIS_ENTRETIEN.find(
+        (raccourci) =>
+          raccourci.executer !== null &&
+          raccourci.touches.some((declaree) => declaree.toLowerCase() === touche),
+      )?.executer;
+      if (executer !== undefined && executer !== null) {
+        evenement.preventDefault();
+        executer(actions, touche);
       }
     };
 

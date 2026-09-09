@@ -514,3 +514,48 @@
   max-width: var(--taille-largeur-contenu-etroit);
   margin: 0 auto;
 }
+
+/* ── Aide clavier (R7) ─────────────────────────────────────────────────────
+   Structure seulement, et aucune valeur littérale : les tailles, couleurs,
+   espacements et rayons viennent tous des jetons de `packages/ui`
+   (invariant 4). La touche est rendue par `<kbd>`, dont l'apparence par défaut
+   des navigateurs est une police à chasse fixe qu'on remplace ici par celle du
+   design system — une police système imposée est aussi une valeur en dur. */
+.axn-raccourcis {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espacement-2);
+  margin: 0;
+}
+
+.axn-raccourcis__ligne {
+  display: flex;
+  align-items: baseline;
+  gap: var(--espacement-3);
+  flex-wrap: wrap;
+}
+
+.axn-raccourcis__touches {
+  display: flex;
+  gap: var(--espacement-1);
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.axn-raccourcis__touche {
+  display: inline-block;
+  padding: var(--espacement-1) var(--espacement-2);
+  border: var(--taille-bordure-epaisseur) solid var(--couleur-bordure-discrete);
+  border-radius: var(--taille-rayon-petit);
+  background: var(--couleur-surface-carte);
+  color: var(--couleur-texte-principal);
+  font-family: inherit;
+  font-size: var(--typo-taille-sm);
+  font-weight: var(--typo-graisse-semi);
+  text-align: center;
+}
+
+.axn-raccourcis__libelle {
+  margin: 0;
+  color: var(--couleur-texte-secondaire);
+}

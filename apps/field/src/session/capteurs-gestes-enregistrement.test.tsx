@@ -250,6 +250,7 @@ function actionsFactices(): {
   aRevoir: ReturnType<typeof vi.fn<() => void>>;
   recherche: ReturnType<typeof vi.fn<() => void>>;
   partage: ReturnType<typeof vi.fn<() => void>>;
+  aide: ReturnType<typeof vi.fn<() => void>>;
 } {
   return {
     suivant: vi.fn<() => void>(),
@@ -260,6 +261,7 @@ function actionsFactices(): {
     aRevoir: vi.fn<() => void>(),
     recherche: vi.fn<() => void>(),
     partage: vi.fn<() => void>(),
+    aide: vi.fn<() => void>(),
   };
 }
 
