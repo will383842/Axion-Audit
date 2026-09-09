@@ -46,6 +46,9 @@
 //   AXION_CADDYFILE_EPROUVE=<copie mutée> pnpm exec playwright test en-tetes-servis
 // Refusé en CI (voir la fixture). Une garde qu'on n'a jamais vue rouge n'en est pas une.
 // =============================================================================
+import { readdirSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   expect,
   test,
@@ -122,6 +125,8 @@ const HSTS_MAX_AGE_MINIMAL_S = 31_536_000;
  */
 const COEP_CIBLE = 'require-corp';
 
+const RACINE_DEPOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
 const CIBLES = [
   { chemin: '/', nom: 'terrain', genre: 'front' },
   { chemin: '/hq/', nom: 'console', genre: 'front' },
@@ -191,6 +196,68 @@ async function enTetesDe(
  * sur parole. La VALEUR exacte appartient à A11 : on ne la fige pas ici.
  */
 const ICONES_PWA = ['/apple-touch-icon.png', '/icones/icone-192.png', '/icones/icone-512.png'];
+
+/**
+ * TOUT CE QUE CADDY SERT, famille par famille — et PAS UNE LISTE BLANCHE.
+ *
+ * A11 a rejoué ZAP après le correctif icônes : `10049` est un CLASSIFICATEUR —
+ * une instance par réponse, quelle que soit sa politique, 308 compris. Une
+ * réponse SANS `Cache-Control` y tombe dans la même colonne que les assets
+ * `immutable` : le scan ne distingue pas l'absence de politique. Et il est non
+ * authentifié : il ne verra jamais les routes JSON de L6c (§4-B, `person_name`,
+ * `scoping_financials`). A01 : « la garde du dépôt est le seul détecteur de
+ * §4-B — ce n'est pas un confort, c'est le contrôle ». C'est cette garde.
+ *
+ * Les assets sont LUS dans les builds réels (`dist/assets`), jamais nommés :
+ * leurs noms sont empreintés et changent à chaque build. Une liste écrite à la
+ * main serait verte par omission dès le build suivant.
+ */
+interface CheminServi {
+  chemin: string;
+  famille: string;
+  /** Statuts admis — 200 partout, sauf la redirection `/hq` → `/hq/` (308). */
+  statuts: readonly number[];
+}
+
+function assetsDe(app: 'field' | 'hq', prefixe: string): CheminServi[] {
+  const dossier = join(RACINE_DEPOT, 'apps', app, 'dist', 'assets');
+  const fichiers = readdirSync(dossier);
+  if (fichiers.length === 0) {
+    throw new Error(`${dossier} est vide : aucun asset à éprouver — le build a-t-il eu lieu ?`);
+  }
+  return fichiers.map((f) => ({
+    chemin: `${prefixe}/assets/${f}`,
+    famille: 'asset empreinté',
+    statuts: [200],
+  }));
+}
+
+const CHEMINS_SERVIS: readonly CheminServi[] = [
+  { chemin: '/', famille: 'HTML', statuts: [200] },
+  { chemin: '/index.html', famille: 'HTML', statuts: [200] },
+  { chemin: '/session/fil-tpe', famille: 'HTML (repli SPA)', statuts: [200] },
+  { chemin: '/hq/', famille: 'HTML', statuts: [200] },
+  { chemin: '/hq/index.html', famille: 'HTML', statuts: [200] },
+  { chemin: '/hq/missions', famille: 'HTML (repli SPA)', statuts: [200] },
+  { chemin: '/hq', famille: 'redirection 308', statuts: [308] },
+  { chemin: '/robots.txt', famille: 'fichier absent → repli SPA (HTML)', statuts: [200] },
+  ...ICONES_PWA.map((chemin) => ({ chemin, famille: 'icône de PWA', statuts: [200] })),
+  { chemin: '/sw.js', famille: 'service worker', statuts: [200] },
+  { chemin: '/manifest.webmanifest', famille: 'manifeste', statuts: [200] },
+  ...assetsDe('field', ''),
+  ...assetsDe('hq', '/hq'),
+];
+
+/**
+ * Les chemins d'API d'aujourd'hui. `/api/v1/health` rend 200 ; `/api/v1` n'a
+ * pas de route et rend le 404 JSON de l'amont — RELAYÉ (ses en-têtes sont ceux
+ * de helmet, pas d'une page d'erreur de Caddy : `Origin-Agent-Cluster` en est
+ * la signature, Caddy ne le pose jamais).
+ */
+const CHEMINS_API = [
+  { chemin: '/api/v1/health', statut: 200 },
+  { chemin: '/api/v1', statut: 404 },
+] as const;
 
 /** `max-age=31536000; includeSubDomains; preload` → 31536000 ; absent → -1. */
 function maxAgeDe(hsts: string): number {
@@ -478,6 +545,75 @@ for (const pile of PILES_CADDY) {
         await contexte.close();
       });
     }
+
+    // -------------------------------------------------------------------------
+    // TOUTE RÉPONSE SERVIE PORTE UN Cache-Control — le détecteur de §4-B.
+    // Sans liste blanche : chaque famille, chaque chemin, chaque pile rend son
+    // verdict. « Interdit : une garde verte par omission » (A01).
+    // -------------------------------------------------------------------------
+    test.describe('toute réponse servie porte un Cache-Control (ZAP 10049 ne le voit pas)', () => {
+      for (const { chemin, famille, statuts } of CHEMINS_SERVIS) {
+        test(`@critique ${chemin} (${famille}) : Cache-Control présent`, async ({ request }) => {
+          const reponse = await request.get(harnais.urlDe(pile, chemin), { maxRedirects: 0 });
+          expect(
+            statuts,
+            `${chemin} (pile ${pile.nom}) rend ${String(reponse.status())} — attendu ` +
+              `${statuts.join(' ou ')} ; on ne juge la politique de cache que d'une réponse ` +
+              `du produit, pas d'une page d'erreur. Journal Caddy :\n${harnais.journal()}`,
+          ).toContain(reponse.status());
+          const cc = reponse.headers()['cache-control'];
+          expect(
+            cc,
+            `${chemin} (${famille}, pile ${pile.nom}) sort de Caddy SANS Cache-Control. Le bloc ` +
+              `« MISE EN CACHE » du Caddyfile pose une politique EXPLICITE par famille ; un chemin ` +
+              `qui n'entre dans aucun matcher est un trou — et ZAP 10049, classificateur, le range ` +
+              `dans la même colonne que les assets immutable : il ne le verra jamais.`,
+          ).toBeDefined();
+          test.info().annotations.push({ type: `Cache-Control ${chemin}`, description: cc ?? '' });
+        });
+      }
+
+      // FAIT À CORRIGER À L6c — PAS UN ATTENDU DE SÉCURITÉ. Même motif que le
+      // test §4-A ci-dessus : le titre dit « défaut », l'annotation cite
+      // l'arbitrage, et le test ROUGIT le jour où L6c corrige — signal de
+      // l'inverser (exiger `no-store`) dans le même commit.
+      for (const { chemin, statut } of CHEMINS_API) {
+        test(`@critique FAIT À CORRIGER À L6c (§4-B) : ${chemin} sort SANS Cache-Control — la réponse JSON de l'API est stockable`, async ({
+          request,
+        }) => {
+          const reponse = await request.get(harnais.urlDe(pile, chemin), { maxRedirects: 0 });
+          expect(
+            reponse.status(),
+            `${chemin} (pile ${pile.nom}) : statut ${String(reponse.status())}, attendu ${String(statut)}`,
+          ).toBe(statut);
+          const en = reponse.headers();
+          expect(
+            en['origin-agent-cluster'],
+            `${chemin} (pile ${pile.nom}) ne porte pas Origin-Agent-Cluster : la réponse n'est pas ` +
+              `celle de l'amont (helmet) relayée par Caddy — page d'erreur de Caddy ? Journal :\n` +
+              harnais.journal(),
+          ).toBe('?1');
+
+          test.info().annotations.push({
+            type: 'fait à corriger — L6c',
+            description:
+              `Arbitrage : DECISIONS.md « 2026-09-08 — [P-C] Trois écarts hors critères : ` +
+              `lesquels se corrigent pendant une porte échouée ? », point (b) (A01) — ` +
+              `Cache-Control: no-store sur les réponses authentifiées (ASVS L2 V8.2.1), assigné ` +
+              `à A13, lot L6, porte P-D. Le scan ZAP, non authentifié, ne verra jamais ces routes : ` +
+              `ce test est le seul détecteur. ${chemin} (${pile.nom}) sert Cache-Control : ` +
+              (en['cache-control'] ?? '(absent)'),
+          });
+
+          expect(
+            en['cache-control'],
+            `${chemin} (pile ${pile.nom}) porte désormais « ${String(en['cache-control'])} » : ` +
+              `c'est la correction attendue à L6c (§4-B). Réécrire ce test en attendu — exiger ` +
+              `no-store sur les réponses de l'API — dans le MÊME commit.`,
+          ).toBeUndefined();
+        });
+      }
+    });
   });
 }
 
