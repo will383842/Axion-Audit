@@ -11,6 +11,30 @@
 > **Règle fondatrice de ce fichier (09 §3.6) :** _« toute route, table, écran ou job livré se
 > rattache à une exigence E1-E47 OU à une fiche AMELIORATIONS.md — le code orphelin est REFUSÉ. »_
 
+## QUI ÉCRIT DANS CE FICHIER — règle de propriété (A01, 2026-09-09)
+
+> **À lire AVANT d'écrire ici, quel que soit ton code d'agent.** La règle n'existait nulle part :
+> le fichier 09 §1 attribue à A02 l'ACTE de « cocher la matrice de traçabilité » et à A55 la
+> documentation — **il ne donne le FICHIER à personne**. Le §O s'était donné à lui-même un monopole
+> (« le seul que le gardien tienne »), et A55 y a déposé 226 lignes sans savoir s'il en avait le
+> droit. Arbitrage A01 du **2026-09-09**, `DECISIONS.md` « Qui écrit dans `TRACABILITE_E1-E47.md`,
+> et qui signe ses états ? » — **option 2**, précédence **§24-31 > §16-22**. Quatre conditions,
+> cumulatives :
+>
+> 1. **Le dépôt d'inventaire est OUVERT** : tout agent peut déposer ici une section **NOUVELLE**,
+>    **datée** et **signée de son code**, en annexe. Un inventaire n'attend pas le gardien — un
+>    unique écrivain est aussi un unique goulot, et la matrice a déjà pris six incréments de retard.
+> 2. **L'amendement en place est RÉSERVÉ** : **aucun état d'exigence n'est amendé en place hors du
+>    gardien.** La table qui fait foi — aujourd'hui le **§A.sexies** — est à **A02 seul**.
+> 3. **Une section déposée ne porte AUCUN verdict**, et elle le **déclare en tête**. Elle constate
+>    et elle mesure ; conclure est l'étape 6 du pipeline, pas une annexe.
+> 4. **La ligne « matrice à jour dans les deux sens » ne se coche que par A02** (CLAUDE.md §10 :
+>    la signature « conformité + traçabilité » est celle du gardien, et d'aucun autre).
+>
+> Corollaire de forme, invariant 7 : une section déposée ne **retire** ni ne **réécrit** de ligne
+> datée ; elle s'ajoute. Un désaccord sur un rattachement se tranche dans `DECISIONS.md`, jamais
+> ici (mode d'emploi, point 5). — **A02, 2026-09-09**
+
 ## Mode d'emploi (à lire avant de compléter au lot suivant)
 
 1. Ce fichier est **append-and-amend** : la section A est mise à jour en place (l'état d'une
@@ -289,7 +313,7 @@ disant ce qui manque.
 | E24 | Validation obligatoire de chaque étape | partiellement amorcée | `agenda/validation.ts` à **100 %** de lignes, geste « Terminer » livré (#70), `EcranFinDeSession` sorti de 7,69 % → **66,05 l. / 30,00 f.** (mesure A02 du 2026-09-07). **Ce qui reste est un trou de MESURE autant que de code** : `apps/field/src/ecrans/**` **n'est dans aucun des 18 globs critiques** — le 66 % est **invisible** au job vert. Doute **D-4**, sans arbitrage depuis le 2026-09-03 |
 | E25 | Zéro oubli (plan, couverture, contrôles) | partiellement amorcée — **l'objet que L7a promettait est arrivé** | `GET /v1/missions/:id/coverage` + `EcranCouverture` : **l'« écran de couverture » du libellé existe**, avec sa route, ses 66 cas de domaine et ses 30 `@critique` d'intégration. **La sur-citation R-L7a-4 est FERMÉE** : `EcranAccueil.tsx:23` et `EcranPortefeuille.tsx:21` ne citent plus E25, ils **portent le commentaire du retrait** — un dépôt qui dit ce qu'il a enlevé. Reste : plan d'entretiens, contrôles de fin d'entretien/visite, transitions gardées |
 | E27 | Design moderne, charte, WCAG AA | partiellement amorcée | **`/design` livrée** (#89) avec `packages/ui/src/inventaire.ts` en `satisfies Record<NomComposantUI, FicheComposant>` : **un composant exporté et absent NE COMPILE PAS** — la §33.5 cesse d'être une intention. Le badge « en cours » **repasse sous AA** (#76) et `contraste-usages.test.ts` interdit son retour. **axe-core : 12 vues terrain sur 12** (#82), plus `accessibilite-design` et `accessibilite-l7b`. Reste : dataviz, et le verdict de porte |
-| E32 | Fuseaux, devises, interface française | partiellement amorcée | **APPORT L7c** : `export/horodatage.ts` — UTC en donnée, fuseau de **mission** à l'affichage, date civile jamais convertie ; l'export traduit `motif_non_communique` **en français** (§27.4). ⚠️ **Écart NOMMÉ, non refermé** : `AMELIORATIONS.md` 2026-09-08, « le jour civil des rituels se calcule en **UTC** » — **étage 2, PROPOSÉE, non implémentée**, ce qui est le régime correct (09 §5.9) mais laisse l'invariant 5 imparfait côté terrain |
+| E32 | Fuseaux, devises, interface française | partiellement amorcée | **APPORT L7c** : `export/horodatage.ts` — UTC en donnée, fuseau de **mission** à l'affichage, date civile jamais convertie ; l'export traduit `motif_non_communique` **en français** (§27.4). — **ÉTAT ANTÉRIEUR, AU 2026-09-08 — conservé, non effacé (invariant 7)** : « ⚠️ Écart NOMMÉ, non refermé : `AMELIORATIONS.md` 2026-09-08, "le jour civil des rituels se calcule en UTC" — étage 2, PROPOSÉE, non implémentée, ce qui est le régime correct (09 §5.9) mais laisse l'invariant 5 imparfait côté terrain ». — **ÉTAT COURANT, RECTIFIÉ LE 2026-09-09 (A02) : l'écart est REFERMÉ — et il l'était déjà quand la mention ci-dessus a été écrite.** **L5e l'a implémenté** : `apps/field/src/agenda/jour.ts:314` — `jourCivil(dernierExportIso, fuseau) === jourCivil(instantIso, fuseau)` — le jour civil du rituel se calcule au **fuseau de la mission**, non en UTC ; le commentaire `jour.ts:280-281` cite l'arbitrage nommément (lu par moi dans le fichier avant d'écrire cette ligne). **Et il l'a été RÉGULIÈREMENT** : ce n'est **pas** une fiche d'étage 2 anticipée au sens de CLAUDE.md §3-7, A01 l'ayant autorisé par `DECISIONS.md` 2026-09-08 « Trois écarts hors critères : lesquels se corrigent pendant une porte échouée ? », **cas (c) MAINTENANT**. Fait constaté par A01 sur `ac365f3` ; rectification prescrite par le corollaire de `DECISIONS.md` 2026-09-09 « Qui écrit dans `TRACABILITE_E1-E47.md`, et qui signe ses états ? ». **L'état reste `partiellement amorcée`** : c'est un écart de moins, pas le reste d'E32 (devises, i18n EN → L20) |
 | E33 | Sécurité / RGPD | partiellement amorcée — **RÉTABLIE après le recul V1** | Les **sept symboles** F-22/F-23/F-25 sont revenus et **121 cas** couvrent les quatre fichiers du coffre (82 le 2026-09-06) ; le coffre passe de 89,51 % à **100 %** (#59). Le budget 11 §4 « chiffrement < 50 ms/écriture » est **mesuré pour la première fois** (`e2e/budget-chiffrement-l5.e2e.ts`, #92). **L7c ferme la porte du consentement** : `export/depot.ts:354-355` fait passer `fonctionPersonne` et `servicePersonne` par `sousConsentement(…)` — le bloquant B-1 d'A37 l'avait trouvée ouverte ; arbitrage A01 du 2026-09-06, **option 1**, appliqué dans le code fusionné |
 | E36 | Exécutable par lots avec critères | partiellement amorcée — **et c'est la ligne que cette passe répare** | **NB-9-bis était l'écart** : la matrice s'arrêtait au 2026-09-03 et portait 460 lignes dupliquées ; §O.1 le mesure et le referme. Gardes neufs **et câblés** : `check:octets-controle` (#56, avec sa suite d'injection), `check:etapes-jumelles` (#73), `check:fixtures-contrat` (#58). **181 fichiers de test, 0 skippé** (`check:no-skipped-tests` RC=0, exécuté par moi). ⚠️ Reste : **14 fichiers de la chaîne d'export citent E36 à tort** (§O.10-2) |
 | E37 | Scoring intégralement spécifié | partiellement amorcée | **APPORT L8, et c'est la part que le fichier 07 lui confie** : barème §32.1 **par type de réponse**, fourchette et non-communiqué **hors calcul**, complétude, agrégation pondérée, **quatre façons de masquer un drapeau rouge fermées** (#66) et une couche d'**acceptation croisée** écrite par un autre agent (#65). **173 cas, 49 `@critique`** ; le glob `apps/api/src/scoring/**` est **entré dans le seuil 90 %** — le chiffre est gardé, pas déclaré. Reste : **aucune route ne l'expose**, `scores.csv` absent du ZIP ; le contrôle bloquant à l'import était déjà acquis en L4 |
@@ -2949,7 +2973,9 @@ Aucune ligne datée antérieure n'a été modifiée._
 >
 > **Gardien A02, lecture seule sur le code.** Aucun fichier de `apps/`, `packages/`, `infra/`, `e2e/`,
 > `scripts/` n'a été modifié par cette passe ; **le seul fichier écrit est celui-ci** — c'est le seul
-> que le gardien tienne (09 §1). Aucun commit, aucun `push` : le pilote transcrit.
+> que le gardien tienne (09 §1) — _[rectifié le 2026-09-09 : 09 §1 attribue au gardien l'ACTE de
+> cocher, pas le fichier ; le dépôt d'inventaire est ouvert — voir la règle de propriété en tête]_.
+> Aucun commit, aucun `push` : le pilote transcrit.
 > **Ordre de lecture appliqué** (09 §5.8, rien de plus) : `11_CONTRAT_TECHNIQUE` → `CLAUDE.md` §4
 > (étape 6, « les DEUX sens ») et §5 (DoD) → `07` lignes L5, L7-min, L8 → `08_TRACABILITE` **en
 > entier** → `00_INDEX` (8 invariants, précédence) → `09` §3, §4, §4bis, §5.9 → les neuf fiches de
