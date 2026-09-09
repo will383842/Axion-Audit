@@ -781,6 +781,99 @@ describe('@filrouge l’export §36.3 sur les DEUX missions canoniques (09 §4bi
 });
 
 // =============================================================================
+// ⑥ bis. LE FIL ROUGE EST COUPÉ EN DEUX, ET VOICI OÙ
+// =============================================================================
+describe('@filrouge @critique ce qu’une mission construite PAR LES SEULES ROUTES peut exporter', () => {
+  // ═══════════════════════════════════════════════════════════════════════════
+  // POURQUOI CE CAS EXISTE, ET CE QU'IL DIT QUE RIEN D'AUTRE NE DIT
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Les archives ci-dessus sont riches — 8 100 réponses — parce que les FIXTURES
+  // canoniques écrivent `interviews` et `answers` en SQL direct. C'est légitime :
+  // c'est ainsi qu'on éprouve le FORMAT à l'échelle. Mais lu vite, ce vert dit
+  // quelque chose de faux.
+  //
+  // Ici, la mission est créée par les ROUTES DE PRODUCTION et par elles seules.
+  // Ce qu'elle exporte est donc EXACTEMENT ce que le produit sait produire
+  // aujourd'hui, sans aucune main de test dans la base. Le résultat est le fait
+  // qui décide du critère L7-min, et il n'apparaît nulle part ailleurs :
+  //
+  //   le fil rouge est COUPÉ EN DEUX. Le segment amont (L3, par l'API) va de
+  //   l'entreprise au questionnaire figé ; le segment aval (L7, ici) part de
+  //   données collectées. ENTRE LES DEUX, il n'y a rien : aucune route n'écrit
+  //   une session ni une réponse — c'est L6 (sync), et c'est là que la couture
+  //   se fera.
+  //
+  // Ce test est VERT tant que la coupure existe, et il rougit le jour où elle se
+  // referme — même cliquet que le reste de ce fichier. Il ne dénonce pas un
+  // défaut : il empêche qu'on oublie où passe la ligne.
+  it('@filrouge @critique une mission créée par les seules routes exporte une archive SANS aucune réponse', async () => {
+    const jeton = await creerAdmin();
+
+    const entreprise = await api().inject({
+      method: 'POST',
+      url: '/v1/companies',
+      headers: { 'x-forwarded-for': ipUnique(), authorization: `Bearer ${jeton}` },
+      payload: {
+        name: 'Entreprise fictive du parcours par routes',
+        headcount: 8,
+        sitesCount: 1,
+        countries: ['FR'],
+      },
+    });
+    expect(entreprise.statusCode, entreprise.body).toBe(201);
+    const companyId = (JSON.parse(entreprise.body) as { company: { id: string } }).company.id;
+
+    const creation = await api().inject({
+      method: 'POST',
+      url: '/v1/missions',
+      headers: { 'x-forwarded-for': ipUnique(), authorization: `Bearer ${jeton}` },
+      payload: {
+        companyId,
+        title: 'Mission fictive du parcours par routes',
+        geoScope: 'france',
+        activeSectors: [],
+        activeBlocks: [],
+        auditLevel: 'diagnostic_cadrage',
+      },
+    });
+    expect(creation.statusCode, creation.body).toBe(201);
+    const missionId = (JSON.parse(creation.body) as { mission: { id: string } }).mission.id;
+
+    const archive = await exporter(
+      {
+        nom: 'PARCOURS-ROUTES',
+        missionId,
+        entrepriseId: companyId,
+        unites: 1,
+        entretiens: 0,
+        reponses: 0,
+      },
+      jeton,
+    );
+
+    // CONTRÔLE DE VACUITÉ : l'archive n'est pas vide — la mission et sa racine
+    // d'office (§16.2) SONT là. Sans cela, « zéro réponse » pourrait n'être que
+    // le symptôme d'un export en panne.
+    expect(valeurMeta(archive, 'mission.id')).toBe(missionId);
+    expect(nombreDeLignes(archive, 'arbre.csv'), 'la racine d’office est absente').toBe(1);
+
+    // ET VOICI LE FAIT : ce que le produit sait collecter tout seul.
+    expect(
+      nombreDeLignes(archive, 'sessions.csv'),
+      'une route écrit désormais des sessions : la coupure du fil rouge se referme, ' +
+        're-noter la rubrique 3 de la grille',
+    ).toBe(0);
+    expect(
+      nombreDeLignes(archive, 'reponses.csv'),
+      'une route écrit désormais des réponses : la coupure du fil rouge se referme, ' +
+        're-noter les rubriques 4, 11 et 12 de la grille',
+    ).toBe(0);
+    expect(valeurMeta(archive, 'completudeGlobale.reponsesCollectees')).toBe(0);
+    expect(valeurMeta(archive, 'completudeGlobale.sessionsRealisees')).toBe(0);
+  }, 120_000);
+});
+
+// =============================================================================
 // ⑦ L'ÉCHELLE FIL-GC — ce que la DoD d'A36 demande de MESURER
 // =============================================================================
 describe('l’échelle FIL-GC : l’export d’un grand compte reste utilisable', () => {
