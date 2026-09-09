@@ -5240,3 +5240,28 @@ schéma-vs-04 à zéro écart, garde prouvée mordante).
 non-Dexie — les trois données du cockpit §34.2 ne se rafraîchissent pas, et ça deviendra visible au
 pull delta de L6b. Et **L8 est écrit et non branché** : 99,88 % de couverture, zéro appelant de
 production. Détail en `docs/REPRISE_AUTOPILOTE.md` §7.
+## 2026-09-09 18h20 — [lot L7 / incrément L7e — recette] — étape pipeline 5/7
+Dernier commit vert : 533f4df (le fil rouge est coupé en deux, et ce cas dit où) · Branche :
+lot/l7e-recette · Poussé : non (consigne du pilote).
+Tâche en cours : recette d'acceptation §36.3 × §20.3 par A36 — LIVRÉE. 4 fichiers de test, 0 ligne
+de production touchée (09 §5.6).
+Verdict du critère L7-min « le rapport §20.3 se rédige EN ENTIER depuis le ZIP » : **NON TENU** —
+**1 rubrique sur 12** rédigeable (la 1, page de garde). Bloquées par le FORMAT : 4, 5, 9, 10, 11 ·
+par le BRANCHEMENT (L8) : 2 · par l'ALIMENTATION (L6 / Phase 2) : 3, 6, 7, 8, 12. Le verdict est
+lui-même sous test : recalculé depuis la grille, comparé au verdict déclaré et daté.
+Forme retenue : **cliquet bidirectionnel**. Chaque manque est déclaré avec sa nature et sa source
+d'arbitrage ; la recette rougit si une rubrique perd sa source ET si un trou se referme sans être
+re-noté. Trois mutations jouées puis révoquées prouvent qu'elle mord dans les trois cas.
+Fait nouveau, non relevé jusqu'ici : la colonne `groupe_interlocuteur` (amendement 04 approuvé par
+Williams le 2026-09-09) ferme **deux** rubriques, la 4 ET la 11 (plan de formation par population,
+§20.6 + §32.6-4) — l'escalade n'en nommait qu'une.
+Mesures : axe-core **6/6 écrans** (était 2/6), 12 cas, aucune règle désactivée, preuve par bascule ·
+étanchéité par rôle **6/6** (était 5/6 — l'export n'en avait aucune) · 4 états de l'écran d'export
+livrés (il n'en avait aucun) · `@filrouge` atteint l'export sur FIL-TPE **et** FIL-GC · export
+FIL-GC (150 unités, 8 100 réponses) en **~1,5 s**.
+Prochaine action : **rendre les 3 défauts constatés à A32/A30 via A30** — dont
+`EcranExport.tsx:177`, qui dit à l'auditeur que la divergence direction/terrain « se lit sur
+l'unité », alors que le §32.1-5 la fait lire par `interlocutor_profiles.group_code`.
+Tests rouges connus : aucun de mon périmètre. unit+interface 3 104 vertes · integration 714 vertes ·
+e2e 229/230 — l'échec est `hors-ligne-l5.e2e.ts:370` (CDP `Page.crash`), **vert en isolation**,
+fichier non touché par moi : intermittence sous 4 workers, à rendre à A2x.
