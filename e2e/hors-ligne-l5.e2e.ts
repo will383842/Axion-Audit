@@ -495,7 +495,7 @@ test('@critique export de secours produit hors ligne, puis restauré sur un SECO
   // ── LE RITUEL DU SOIR — un geste, sans réseau (03 §34.2, invariant 8) ───
   await pageOrigine.getByRole('button', { name: 'Fin de journée', exact: true }).click();
   await expect(titreDeVue(pageOrigine)).toHaveText('Fin de journée');
-  await pageOrigine.getByLabel('Votre mot de passe').fill(MOT_DE_PASSE_APPAREIL);
+  await pageOrigine.getByLabel('Mot de passe de cet appareil').fill(MOT_DE_PASSE_APPAREIL);
 
   const attenteFichier = pageOrigine.waitForEvent('download');
   await pageOrigine.getByRole('button', { name: 'Terminer la journée' }).click();
@@ -536,7 +536,7 @@ test('@critique export de secours produit hors ligne, puis restauré sur un SECO
   await pageSecours.getByLabel('Fichier de sauvegarde').setInputFiles(chemin);
   // Le mot de passe de l'appareil D'ORIGINE : c'est lui, et lui seul, la clé du
   // fichier. Celui de cet appareil-ci n'ouvrirait rien.
-  await pageSecours.getByLabel('Votre mot de passe').fill(MOT_DE_PASSE_APPAREIL);
+  await pageSecours.getByLabel(/appareil qui a produit la sauvegarde/).fill(MOT_DE_PASSE_APPAREIL);
   await pageSecours.getByRole('button', { name: 'Restaurer sur cet appareil' }).click();
 
   await expect(pageSecours.getByText(/élément\(s\) de mission restauré/)).toBeVisible({

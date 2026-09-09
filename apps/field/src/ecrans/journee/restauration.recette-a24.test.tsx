@@ -158,7 +158,7 @@ function restaurer(fichier: File, motDePasse: string): void {
   fireEvent.change(screen.getByLabelText(/fichier de sauvegarde/i), {
     target: { files: [fichier] },
   });
-  fireEvent.change(screen.getByLabelText(/votre mot de passe/i), {
+  fireEvent.change(screen.getByLabelText(/appareil qui a produit la sauvegarde/i), {
     target: { value: motDePasse },
   });
   fireEvent.click(screen.getByRole('button', { name: /restaurer sur cet appareil/i }));
@@ -446,7 +446,7 @@ describe('le ré-export depuis l’appareil qui vient de restaurer', () => {
     // Le mot de passe est REDEMANDÉ — celui de la restauration a été effacé au
     // succès. Le libellé est distinct : ce n'est plus la clé du fichier reçu.
     const champ = screen.getByLabelText(/mot de passe de cet appareil/i);
-    expect(screen.queryByLabelText(/votre mot de passe/i)).toBeNull();
+    expect(screen.queryByLabelText(/appareil qui a produit la sauvegarde/i)).toBeNull();
     fireEvent.change(champ, { target: { value: MOT_DE_PASSE } });
     fireEvent.click(screen.getByRole('button', { name: /produire le fichier de sauvegarde/i }));
 

@@ -369,7 +369,9 @@ afterEach(async () => {
 });
 
 function saisirMotDePasse(valeur = MOT_DE_PASSE): void {
-  fireEvent.change(screen.getByLabelText(/votre mot de passe/i), { target: { value: valeur } });
+  fireEvent.change(screen.getByLabelText(/mot de passe de cet appareil/i), {
+    target: { value: valeur },
+  });
 }
 
 async function terminerLaJournee(): Promise<void> {
