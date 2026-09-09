@@ -1,0 +1,92 @@
+# =============================================================================
+# .zap/rules.tsv — CE QUE LE SCAN PASSIF ZAP NE PEUT PAS MESURER, NOMMÉ PAR ÉCRIT
+# =============================================================================
+# Lu par `zap-baseline.py -c rules.tsv` (le chemin est joint à /zap/wrk/, le
+# dossier monté par .github/workflows/zap-baseline.yml). Format imposé par
+# zap_common.py::load_config — QUATRE colonnes séparées par UNE tabulation,
+# aucune tabulation dans la dernière :
+#   <id de règle>  <IGNORE|INFO|WARN|FAIL>  (<nom de la règle>)  <justification technique — réexamen AAAA-MM-JJ>
+# La quatrième colonne est reprise TELLE QUELLE dans le rapport, à côté de la
+# règle ignorée : c'est là qu'un relecteur de porte lit POURQUOI.
+#
+# ── CE QUE CE FICHIER EST, ET N'EST PAS (arbitrage A01, 2026-09-08, DECISIONS.md
+#    « .zap/rules.tsv : l'exclusion que j'ai interdite, ou le périmètre que je
+#    n'ai pas nommé ? ») ─────────────────────────────────────────────────────
+# Il N'EXCLUT PAS une règle pour verdir un job — c'est l'option 3 que
+# zap-baseline.yml écarte, et qui reste écartée. Il NOMME, règle par règle, ce
+# qu'AUCUN état du code ne peut fermer — QUATRE familles : une règle décrit la
+# méthode du scanner (90005), deux décrivent une conformité que le pack prescrit
+# (10109, 10094), une est un CLASSIFICATEUR qui range chaque réponse dans une
+# colonne (10049). Sans ce fichier, ZAP_BLOQUANT='true' est inatteignable, et
+# une garde inatteignable finit désarmée (F-31, une troisième fois).
+#
+# ── `10049` : LA MARCHE DU 2026-09-09, GARDÉE PAR ÉCRIT (rien effacé en silence) ──
+# Examinée le 2026-09-09 (revue A29, R1). REFUSÉE d'abord (A01, option a) sur un
+# scan D'AVANT correctif : 5 instances sans `Cache-Control` — les icônes de PWA,
+# exclues du `no-cache` de l'HTML sans rien recevoir (fermé le jour même,
+# Caddyfile « MISE EN CACHE », famille 3/4) — lues comme « fermables par le
+# produit ». Puis RÉ-ADMISE (A01, option b') sur le scan D'APRÈS correctif,
+# rejoué par A11 (harnais local, trois cibles, image
+# ghcr.io/zaproxy/zaproxy@sha256:781a2bd…) : `10049` restait à 8 instances par
+# cible, codes 2/2/2 — les icônes avaient CHANGÉ DE COLONNE, pas quitté la
+# règle. Un classificateur est structurel au sens FORT : il satisfait la
+# condition 2 a fortiori, aucun état du produit ne rend zéro. Deux corroborations
+# lues dans le dossier d'A51 : §4-B (JSON de l'API stockable) y est rangé sous
+# 10015, pas 10049 ; et une araignée non authentifiée n'explorera jamais les
+# routes de L6c. Voir les DEUX entrées DECISIONS.md du 2026-09-09.
+#
+# CINQ CONDITIONS CUMULATIVES, faute desquelles une ligne est REFUSÉE en
+# revue croisée :
+#   1. une ligne = UNE règle, sa justification TECHNIQUE et une DATE de réexamen ;
+#   2. AUCUNE ligne pour une règle qu'un changement du produit fermerait —
+#      10055 (style-src 'unsafe-inline') et 90004 (COOP/COEP/CORP) n'ont pas leur
+#      place ici : elles sont FERMÉES dans infra/caddy/Caddyfile, et 10015
+#      (Cache-Control) l'est par `no-cache` sur l'HTML, pas par une ligne ;
+#   3. ce fichier est du CODE : revue croisée, et un ajout de ligne se voit en diff ;
+#   4. créé et câblé pendant que ZAP_BLOQUANT vaut 'false' — sans effet sur
+#      aucun verdict — pour que le run à 0/0/0 soit une OBSERVATION, pas un pari ;
+#   5. (A01, 2026-09-09, b') une ligne n'est admissible que si la CLASSE DE
+#      DÉFAUT qu'elle pourrait masquer reste DÉTECTÉE AILLEURS — et ce détecteur
+#      est NOMMÉ dans la ligne. Ignorer une règle sans nommer qui voit encore ce
+#      qu'elle voyait, c'est l'option 3 sous un autre nom.
+#
+# `10015` (Re-examine Cache-control Directives) N'EST PAS IGNORÉE, et ne doit
+# pas l'être — c'est elle qui voyait l'HTML sans Cache-Control (A51 §2-a) et
+# que `no-cache` sur `index.html` a fait taire. MAIS ELLE NE PORTE PAS §4-B, et
+# c'est MESURÉ (A11, 2026-09-09, fichier à quatre lignes) : sur la cible api,
+# `/api/v1` et `/api/v1/health` sortent en application/json SANS Cache-Control,
+# et 10015 est PASS — elle n'examine pas ce JSON à son seuil par défaut ; seul
+# le classificateur 10049 les voit (colonne « Storable and Cacheable »). Les
+# trois cibles rendent 0/0/0 (IGNORE 4 · PASS 66), et ce 0 NE DIT RIEN DE §4-B :
+# A51 §6 l'écrivait déjà (« hors de portée du scan »). Le détecteur NOMMÉ de
+# la classe « JSON d'API stockable » n'est donc pas un compteur ZAP mais la
+# garde e2e/en-tetes-servis.e2e.ts (A26, c02cb51) : les deux chemins d'API y
+# sont portés « fait à corriger à L6c » et rougiront quand le `no-store`
+# arrivera (A13, lot L6, porte P-D), pour être inversés dans le même commit.
+# « Le compteur attend le produit, il ne l'achète pas » (A01) :
+# la bascule `ZAP_BLOQUANT` attend L6c pour CETTE raison — un vert qui ne
+# couvre pas §4-B ne doit pas être présenté comme le couvrant.
+#
+# UNE DATE DE RÉEXAMEN ÉCHUE sans ligne renouvelée = ligne à retirer ou à
+# re-dater EN REVUE, jamais à laisser courir. Le retrait se fait ligne par ligne.
+# Sources : docs/securite/DOSSIER_ZAP_2026-09-08.md §1 (familles), §2-b (pile
+# « à ignorer explicitement »), §5 (cliquet, geste 2). Rapport dépouillé :
+# artefact rapport-zap-34125104959, identique sur les trois cibles.
+#
+# MESURÉ, PAS PRÉDIT (2026-09-09, A11) : avec ce fichier À QUATRE LIGNES et le
+# Caddyfile du même incrément, `zap-baseline.py -a -c rules.tsv` rendait
+# terrain=0 console=0 api=0 (FAIL-NEW 0 · WARN-NEW 0 · IGNORE 4 · PASS 66) sur
+# le harnais local de e2e/fixtures/caddy-servi.ts (Caddy du dépôt, builds réels,
+# amont factice). Puis, à TROIS lignes (retrait de `10049`, même jour) : 2/2/2,
+# WARN-NEW 1 (`10049` × 8 par cible), IGNORE 3. Puis, à QUATRE lignes de
+# nouveau (ré-admission b') : 0/0/0, FAIL-NEW 0 · WARN-NEW 0 · IGNORE 4 ·
+# PASS 66 sur les trois cibles — `10015` comprise dans les PASS, voir ci-dessus.
+# C'est une mesure LOCALE en HTTP : le run de l'étape 3 du cliquet (§5) sur
+# STAGING, en TLS, reste dû AVANT la bascule — il peut différer (HSTS n'est
+# évalué qu'en HTTPS, la surface réelle inclut ce que le harnais n'a pas).
+# =============================================================================
+
+90005	IGNORE	(Sec-Fetch-* Header is Missing)	Règle sur la REQUÊTE, pas sur la réponse : Sec-Fetch-Dest/Mode/Site/User sont posés par le NAVIGATEUR, et l'araignée ZAP ne les émet pas. Aucun code du produit n'y a prise — artefact de méthode, pas risque accepté. Réexamen 2027-03-08 (ou avant, si ZAP fait émettre ces en-têtes par son araignée)
+10109	IGNORE	(Modern Web Application)	La règle CONSTATE une application monopage (Vite + React) : c'est exactement ce que 11 §2 impose (Next.js interdit). Elle décrit une contrainte du pack, pas un écart. Réexamen 2027-03-08 (la ligne tombe le jour où 11 §2 change, ce qui est une décision humaine)
+10094	IGNORE	(Base64 Disclosure)	DEUX sources, toutes deux tracées (DOSSIER_ZAP §1 ; re-mesuré en local le 2026-09-09 avec ce fichier) : le NOM de la police empreinté par Vite (inter-latin-ext-wght-normal-<hachage>, @fontsource-variable/inter auto-hébergée, 11 §1) — dans le CSS de CHAQUE front, donc 2 ou 3 instances selon ce que l'araignée atteint — et la table d'encodage ABCDEFGHIJ… de hash-wasm (Argon2id, 11 §4) dans le bundle terrain. Zéro donnée encodée, zéro secret. SEULE ligne où un vrai secret pourrait un jour se cacher : à RÉEXAMINER dès qu'une instance apparaît qui n'est NI ce nom de police NI cette table. Réexamen 2026-10-08
+10049	IGNORE	(Storable and Cacheable Content / Storable but Non-Cacheable Content / Non-Storable Content)	CLASSIFICATEUR, pas détecteur : la règle range CHAQUE réponse dans l'une de ses trois sous-alertes selon sa politique — `no-store` (Non-Storable), `max-age`/`immutable` OU aucun Cache-Control (Storable and Cacheable), `no-cache` (Storable but Non-Cacheable) — UNE instance par réponse quelle que soit la politique, 308 compris. Mesuré par A11 le 2026-09-09, harnais local, trois cibles, AVANT et APRÈS le correctif des icônes : 8 instances par cible dans les deux cas, les icônes ont changé de colonne sans quitter la règle. AUCUN état du produit ne rend zéro. Ce qu'elle POURRAIT masquer (condition 5) — une réponse SANS Cache-Control tombe en colonne 2 avec les assets `immutable` — reste détecté par DEUX gardes NOMMÉES : 10015 (Re-examine Cache-control Directives), ACTIVE, jamais ignorée, qui distingue l'absent du voulu sur l'HTML et le texte — mais PAS sur le JSON de l'API (mesurée PASS le 2026-09-09 alors que /api/v1/health sort sans Cache-Control) ; et e2e/en-tetes-servis.e2e.ts (A26, c02cb51), qui assert sur les DEUX piles que TOUTE réponse servie porte un Cache-Control — HTML, repli SPA, 308, fichier absent, icônes de PWA (jamais `immutable`), service worker, manifeste, chaque asset lu dans dist/ — et porte les deux chemins d'API (/api/v1/health, /api/v1) comme « FAIT À CORRIGER À L6c » : ils sortent SANS Cache-Control, et le test ROUGIT le jour où le no-store arrive (A13, lot L6), signal de l'inverser dans le même commit. C'est le seul détecteur de §4-B sur la surface explorée. Réexamen 2026-12-08 (ou avant, si ZAP fait de 10049 autre chose qu'un classificateur)

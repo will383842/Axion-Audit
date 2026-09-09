@@ -174,6 +174,15 @@ import {$CADDY_FRONT_CONFIG}
 	# -------------------------------------------------------------------------
 	# EN-TÊTES DE SÉCURITÉ (06 §10.2) — une ligne de commentaire par directive.
 	# -------------------------------------------------------------------------
+	# CE BLOC ATTEINT LES TROIS CIBLES, L'API COMPRISE — et c'est mesuré, pas
+	# déduit (DOSSIER_ZAP_2026-09-08 §4-A). Parce qu'il contient `-Server`, Caddy
+	# DIFFÈRE toutes ses opérations à l'écriture de la réponse, en `set` : il
+	# ÉCRASE alors ce que l'amont a posé — la CSP de helmet sur `/api/*` n'atteint
+	# jamais le client. Fait connu, asserté tel quel par e2e/en-tetes-servis.e2e.ts,
+	# à traiter à L6c avec le download en streaming §9.6 (arbitrage A01, 2026-09-08,
+	# « Trois écarts hors critères »). Conséquence pour qui ajoute une ligne ici :
+	# elle s'applique aussi au JSON de l'API, sans matcher ni ordre à changer.
+	# -------------------------------------------------------------------------
 	header {
 		# Force HTTPS pendant 1 an, sous-domaines inclus (sans effet en local sur :8080).
 		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
@@ -186,12 +195,58 @@ import {$CADDY_FRONT_CONFIG}
 		# Capteurs : caméra/micro/géoloc autorisés à l'app elle-même (photos, audios
 		# d'entretien, géoloc de site) ; tout le reste refusé.
 		Permissions-Policy "camera=(self), microphone=(self), geolocation=(self), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=(), interest-cohort=()"
-		# Masque la version du serveur.
+		# Retire `Server: Caddy` — SUR LES RÉPONSES QUI PASSENT PAR CE BLOC, ET
+		# ELLES SEULES : tout ce que rendent les `handle` des fronts et de l'API.
+		# PAS les pages d'erreur. `handle_errors` (fin du snippet) est une SECONDE
+		# SURFACE, SANS POSTURE : Caddy l'exécute dans une chaîne distincte où ce
+		# `header` n'a jamais tourné. Mesuré par A29 le 2026-09-09 :
+		# `GET /icones/inexistante.png` → 404, `Server: Caddy`, et AUCUN des
+		# en-têtes de ce bloc (ni HSTS, ni CSP, ni nosniff, ni COOP/COEP/CORP).
+		# Sa fermeture AJOUTE un comportement (la posture sur les erreurs) : c'est
+		# un lot à dater (09 §4bis), pas un correctif de la PR qui écrit ceci.
+		# D'ici là, ne pas lire cette ligne comme « le serveur ne se nomme jamais ».
 		-Server
+
+		# --- ISOLATION D'ORIGINE (ZAP 90004 ; 06 §10.2 lu comme une liste OUVERTE
+		#     d'en-têtes qui DURCISSENT sans rien retirer — arbitrage A01 du 2026-09-08,
+		#     « 06 §10.2 énumère-t-il TROIS en-têtes, ou l'obligation d'en poser ? ») ---
+		# Tout est same-origin PAR CONSTRUCTION : un seul domaine et pas de CORS (11 §2),
+		# aucun CDN (11 §1). Ces trois en-têtes ne font qu'écrire cette propriété.
+		# COOP same-origin : la fenêtre ne partage son contexte de navigation avec
+		#   aucun opener/openee d'une autre origine (XS-Leaks par fenêtre liée) ; avec
+		#   COEP, l'origine est ISOLÉE (`crossOriginIsolated` = true).
+		# CORP same-origin : aucune ressource de ce domaine n'est embarquable par un
+		#   autre (Spectre : rien de nôtre ne finit dans le processus d'un tiers).
+		# COEP require-corp — CHOISI PAR LA MESURE, pas par le catalogue (A01 :
+		#   « c'est la MESURE qui choisira »). A26 a mesuré le 2026-09-08 que
+		#   `require-corp` ET `credentialless` tiennent tous deux sur la PWA (Argon2id
+		#   WASM, icônes data:, photos blob:, service worker, police auto-hébergée,
+		#   zéro ressource bloquée) — attendu, il n'existe aucune ressource cross-origin.
+		#   Départagés ensuite sur trois motifs, dans cet ordre :
+		#   1. la CSP ci-dessous interdit DÉJÀ toute ressource cross-origin (tout est
+		#      'self') : l'exigence de `require-corp` — un CORP explicite sur toute
+		#      ressource tierce — est une contrainte que la CSP fait DÉJÀ payer. Le jour
+		#      où un tiers arriverait (décision humaine, 11 §8), c'est cette CSP qu'on
+		#      ouvrirait d'abord, ICI, et COEP se relit dans le même diff ;
+		#   2. `credentialless` n'est pas pris en charge par WebKit (Safari, donc
+		#      l'iPad terrain) : il y vaut `unsafe-none`, c'est-à-dire AUCUNE isolation
+		#      sur l'appareil de référence. `require-corp` est compris des trois moteurs ;
+		#   3. `credentialless` n'a d'objet QUE pour charger des ressources tierces sans
+		#      cookies — un besoin que ce dépôt n'a pas et refuse (11 §1, 11 §2).
+		#   La garde e2e relève la valeur servie sans la figer ; la figer dans le test
+		#   revient à son auteur (A26), jamais à l'agent qui a écrit cette ligne (09 §5.6).
+		Cross-Origin-Opener-Policy "same-origin"
+		Cross-Origin-Resource-Policy "same-origin"
+		Cross-Origin-Embedder-Policy "require-corp"
 
 		# --- CSP STRICTE (point délicat : PWA + WebAssembly, 11 §4) ------------
 		# Tout est same-origin par défaut : AUCUN CDN nulle part (11 §1).
 		# script-src : 'wasm-unsafe-eval' est requis par hash-wasm (Argon2id navigateur, 11 §4).
+		#              PAS d''unsafe-eval' : Zod 4 compile ses schémas par `new Function`
+		#              par défaut — violation `script-src` MESURÉE en navigateur par A26
+		#              le 2026-09-08, sur chaque chargement. Le remède est APPLICATIF
+		#              (`z.config({ jitless: true })` dans apps/field et apps/hq, A21 sur
+		#              arbitrage A01), jamais un relâchement ici.
 		# worker-src : le service worker Workbox (offline-first, invariant 1) est same-origin.
 		# img-src    : data: (icônes inline) et blob: (photos terrain avant upload).
 		# media-src  : blob: pour la relecture des audios d'entretien hors ligne.
@@ -200,36 +255,141 @@ import {$CADDY_FRONT_CONFIG}
 		# manifest-src / frame-ancestors / object-src / base-uri / form-action : verrouillage PWA.
 		#
 		# ┌─────────────────────────────────────────────────────────────────────┐
-		# │ `style-src 'unsafe-inline'` — CONCESSION DÉLIBÉRÉE, PAS UN OUBLI.   │
-		# │ Validée par A01 pour la PHASE 1 : DECISIONS.md, 2026-08-27,         │
-		# │ « CSP : la concession style-src 'unsafe-inline' ».                  │
-		# │ Motif : les attributs `style` posés à l'exécution par Radix/shadcn  │
-		# │ (positionnement des popovers, mesures) — imposés par 11 §1. Un      │
-		# │ nonce par requête est incompatible avec un démarrage HORS LIGNE     │
-		# │ depuis le cache du service worker (invariant 1) : sans requête, pas │
-		# │ de nonce. `script-src` reste, lui, sans 'unsafe-inline' ni 'unsafe-eval'. │
-		# │ RÉEXAMEN IMPOSÉ AU LOT L5c (livraison du service worker), à porter  │
-		# │ au dossier de la PORTE P-C : compter les styles inline subsistants  │
-		# │ et basculer sur des HACHAGES STATIQUES (compatibles hors ligne,     │
-		# │ contrairement aux nonces) si le compte est faible.                  │
-		# │ NE PAS SUPPRIMER CETTE LIGNE SANS AVOIR FAIT CE COMPTAGE.           │
+		# │ `style-src 'self'` — SANS 'unsafe-inline' DEPUIS LE 2026-09-08.     │
+		# │ Ce n'est pas un oubli de la concession du 2026-08-27 (DECISIONS.md, │
+		# │ « CSP : la concession style-src 'unsafe-inline' », A01) : c'est sa  │
+		# │ FERMETURE, arbitrée par A01 le 2026-09-08 (« La concession se       │
+		# │ ferme-t-elle, ou se renouvelle-t-elle ? », option c), sur le        │
+		# │ comptage qu'elle exigeait au L5c — fait par A51, dossier             │
+		# │ docs/securite/DOSSIER_ZAP_2026-09-08.md §3 :                        │
+		# │   · `style=` dans le HTML servi (/, /hq/) ................. 0       │
+		# │   · `<style>` dans le HTML servi ......................... 0       │
+		# │   · injection de feuille dans les bundles (createElement   │
+		# │     ("style"), cssText, insertRule, adoptedStyleSheets) ... 0       │
+		# │   · Radix / shadcn/ui dans les trois package.json ..... ABSENTS    │
+		# │   · `style={{ }}` en TSX : 6 — appliqués par React via le CSSOM,    │
+		# │     que `style-src` NE RÉGIT PAS.                                   │
+		# │ La concession n'avait AUCUN consommateur : son motif (« attributs   │
+		# │ style posés par Radix/shadcn ») décrivait des dépendances NON       │
+		# │ INSTALLÉES et un mécanisme NON SOUMIS à la directive.               │
+		# │ PROUVÉ EN NAVIGATEUR, pas seulement sur les sources et les bundles :│
+		# │ e2e/en-tetes-servis.e2e.ts (chaîne EXACTE servie, trois cibles,     │
+		# │ deux piles, PWA démarrée sous ces en-têtes). Un rendu cassé ferait  │
+		# │ revenir la ligne, et DECISIONS.md le dirait (borne 1 de A01).       │
+		# │                                                                     │
+		# │ À QUELLE CONDITION LA CONCESSION REVIENDRAIT — À LIRE AVANT DE      │
+		# │ REMETTRE 'unsafe-inline' : shadcn/ui est imposé par 11 §1 et        │
+		# │ arrivera. Une Dialog/Popover Radix amène `react-remove-scroll`, qui │
+		# │ INJECTE un <style> calculé à l'exécution, NON HACHABLE de façon     │
+		# │ stable ; et un nonce par requête est EXCLU, pour un motif plus fort │
+		# │ que « hors ligne, pas de requête, donc pas de nonce » — qui est     │
+		# │ FAUX (revue A29, 2026-09-09) : hors ligne, la Cache Storage du      │
+		# │ service worker rejoue la Response ENTIÈRE, en-têtes compris, CSP    │
+		# │ incluse. Un nonce précaché EXISTE donc, et CORRESPOND encore au     │
+		# │ `<style nonce>` du document caché : la page ne casserait pas. Le    │
+		# │ vrai motif : ce nonce serait CONSTANT — précaché une fois, rejoué   │
+		# │ tel quel jusqu'à la révision suivante du service worker. Un nonce   │
+		# │ figé est 'unsafe-inline' avec des étapes en plus : quiconque        │
+		# │ injecte du balisage le lit dans le document et le recopie. Qui      │
+		# │ constate qu'un nonce survit dans le cache du SW ne tient donc pas   │
+		# │ un contre-exemple à cet encadré : il tient ce qui l'exclut.         │
+		# │ Ce jour-là la garde e2e ROUGIT (violation `style-src` en            │
+		# │ navigateur) : c'est le signal ATTENDU, pas un défaut de la garde.   │
+		# │ La PR qui installe Radix porte alors, dans le MÊME commit : le      │
+		# │ nouveau comptage, la directive (hachages statiques si le compte est │
+		# │ faible et stable, sinon la concession DATÉE avec sa date de         │
+		# │ réexamen), la constante CSP_CIBLE du test (par son auteur), et une  │
+		# │ entrée DECISIONS.md. JAMAIS la directive seule.                     │
+		# │ `script-src` reste, lui, sans 'unsafe-inline' ni 'unsafe-eval'.    │
 		# └─────────────────────────────────────────────────────────────────────┘
-		Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 	}
 
 	# -------------------------------------------------------------------------
-	# MISE EN CACHE (§31 — mise à jour applicative)
+	# MISE EN CACHE (§31 — mise à jour applicative) — QUATRE FAMILLES, PAS TROIS.
 	# -------------------------------------------------------------------------
-	# Le service worker et le manifeste ne sont JAMAIS mis en cache par le proxy :
-	# sans cela une version de l'app resterait figée sur les tablettes terrain.
+	# §31 en énonce trois : service worker et manifeste · assets empreintés ·
+	# HTML. Les icônes de PWA en sont une QUATRIÈME (revue A29, 2026-09-09) :
+	# jusqu'à ce jour elles étaient retirées du `no-cache` de l'HTML SANS RIEN
+	# RECEVOIR à la place — mesuré : `/apple-touch-icon.png`, `/icones/*.png` →
+	# AUCUN Cache-Control. Règle de ce bloc : toute réponse porte une politique
+	# EXPLICITE. Un chemin qui sort d'un matcher sans entrer dans un autre est un
+	# trou, pas une famille.
+	#
+	# 1/4 — Le service worker et le manifeste ne sont JAMAIS mis en cache par le
+	# proxy : sans cela une version de l'app resterait figée sur les tablettes.
 	@sw path /sw.js /service-worker.js /manifest.webmanifest /hq/sw.js /hq/manifest.webmanifest
 	header @sw Cache-Control "no-cache, no-store, must-revalidate"
 
-	# Les assets fingerprintés (nom = hash de contenu) sont immuables : cache agressif.
+	# 2/4 — Les assets fingerprintés (nom = hash de contenu) sont immuables : cache agressif.
 	@fingerprinted path /assets/* /hq/assets/*
 	header @fingerprinted Cache-Control "public, max-age=31536000, immutable"
 
-	# Page d'erreur neutre : aucune fuite d'implémentation.
+	# 3/4 — Icônes de PWA : `no-cache`, la MÊME politique que l'HTML (4/4), pour
+	# la même raison — leurs noms NE SONT PAS EMPREINTÉS (`/icones/icone-192.png`,
+	# régénérées depuis les jetons par apps/field/scripts/build-icones.mjs, et
+	# nommées telles quelles par index.html et le manifeste). Un nom stable dont
+	# le contenu peut changer doit être REVALIDÉ, jamais cru sur parole : une
+	# icône rebâtie doit pouvoir atteindre l'écran d'accueil et l'onglet sans
+	# attendre l'expiration d'un cache. Coût : une requête conditionnelle → 304
+	# sur l'ETag de `file_server`, rien ne transite.
+	# Pourquoi PAS une `max-age` courte avec `must-revalidate` : elle
+	# n'économiserait qu'un 304 par appareil et par fenêtre, et ouvrirait cette
+	# fenêtre où une icône rebâtie coexiste avec un HTML déjà revalidé — deux
+	# horloges à raisonner au lieu d'une, pour un gain que rien ne mesure.
+	# Hors ligne, c'est le précache du service worker qui les sert (listées dans
+	# apps/field/scripts/build-sw.mjs), pas ce cache : la directive ne le
+	# concerne pas, et Workbox revalide ses entrées par révision, sans dépendre
+	# du cache HTTP.
+	# Matcher DISTINCT plutôt que retrait de l'exclusion dans `@html` : ces
+	# fichiers ne sont pas de l'HTML, et le jour où ils mériteraient une autre
+	# politique, c'est CETTE ligne qui change, jamais celle de l'HTML.
+	# BORNE POSÉE PAR A01 (2026-09-09, arbitrage R1) : JAMAIS `immutable` sur ces
+	# trois fichiers. apps/field/index.html les déclare PROVISOIRES (DECISIONS.md
+	# 2026-09-02) : le contenu changera SOUS LE MÊME NOM, et un `immutable` d'un
+	# an figerait l'icône provisoire sur chaque écran d'accueil jusqu'en 2027.
+	# Tout ce qui revalide convient ; rien de ce qui promet ne convient.
+	@icones path /apple-touch-icon.png /icones/*
+	header @icones Cache-Control "no-cache"
+
+	# 4/4 — L'HTML est REVALIDÉ à chaque chargement (§31, règle 1 ; A51, DOSSIER_ZAP
+	# 2026-09-08 §2-a, famille 10015). `index.html` est la seule page qui NOMME
+	# les assets empreintés : servie depuis un cache HTTP périmé, elle référence
+	# des fichiers qui n'existent plus et la mise à jour applicative que le
+	# service worker a téléchargée n'est jamais appliquée. `no-cache` (et non
+	# `no-store`) : le navigateur peut la garder, mais doit la REVALIDER — avec
+	# l'ETag de `file_server`, c'est un 304 et rien ne transite. Hors ligne, c'est
+	# le service worker qui sert, pas ce cache : la directive ne le concerne pas.
+	#
+	# POURQUOI UN MATCHER NÉGATIF : `header` s'évalue AVANT `try_files` (ordre des
+	# directives Caddy), donc AVANT le repli SPA qui réécrit `/`, `/hq/` et tout
+	# chemin profond vers `/index.html`. Un `path /index.html` ne verrait aucune
+	# de ces requêtes. On nomme donc ce qui N'EST PAS de l'HTML — l'API, les assets
+	# empreintés, les fichiers de PWA, les icônes — et tout le reste l'est, y
+	# compris `/robots.txt` ou `/favicon.ico`, que le repli SPA rend en HTML.
+	# Un fichier statique NOUVEAU à la racine hérite de `no-cache` : c'est le côté
+	# SÛR de l'erreur (revalidé, jamais périmé). S'il mérite une autre politique,
+	# lui donner SA famille — un matcher ET son `header` — jamais une simple
+	# exclusion : exclu de `@html` sans matcher propre, il sortirait SANS AUCUN
+	# Cache-Control. C'est exactement le trou des icônes, fermé le 2026-09-09.
+	# Les chemins de `@sw`, `@fingerprinted` et `@icones` sont exclus pour que
+	# leur politique ne dépende pas de l'ordre d'écriture des directives `header`.
+	@html {
+		not path /api/*
+		not path /assets/* /hq/assets/*
+		not path /sw.js /service-worker.js /manifest.webmanifest /hq/sw.js /hq/manifest.webmanifest
+		not path /apple-touch-icon.png /icones/*
+	}
+	header @html Cache-Control "no-cache"
+
+	# Page d'erreur en texte brut : le CORPS ne dit que le code. MAIS LES EN-TÊTES
+	# DE CE BLOC NE SONT PAS CEUX DU `header` CI-DESSUS — `handle_errors` est une
+	# chaîne distincte, exécutée sans lui : `Server: Caddy` y est servi et aucun
+	# en-tête de sécurité n'y est posé. Mesuré par A29 le 2026-09-09 sur un 404
+	# (`GET /icones/inexistante.png`). C'est la seconde surface, sans posture,
+	# décrite au commentaire de `-Server` ; sa fermeture est un lot à dater
+	# (09 §4bis). Ne pas écrire ici « aucune fuite d'implémentation » : c'est
+	# faux tant que ce lot n'est pas livré.
 	handle_errors {
 		respond "Erreur {err.status_code}" {err.status_code}
 	}

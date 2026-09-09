@@ -1,7 +1,11 @@
 // =============================================================================
 // Amorçage de la PWA terrain — lot L5a.
 //
-// Trois choses, dans cet ordre, et l'ordre compte :
+// Quatre choses, dans cet ordre, et l'ordre compte :
+//   0. `app/zod-sans-jit` — AVANT tout autre import, parce que c'est le seul
+//      rang où il agit : Zod sonde `eval` à la construction de son premier
+//      schéma, et `@axion/shared` en construit dès son chargement ; sous la CSP
+//      servie, cette sonde est une violation à chaque démarrage (A01, 2026-09-09) ;
 //   1. les feuilles du design system — `tokens.css` pose les variables (dont la
 //      police Inter AUTO-HÉBERGÉE, 11 §1 : « jamais de CDN de police ») et
 //      `composants.css` ne fait que les consommer ;
@@ -11,6 +15,7 @@
 // Traçabilité : E17 (stack imposée : Hetzner, Docker, PG, Fastify, Vite/React),
 // E6 (hors ligne total, PC ET tablette).
 // =============================================================================
+import './app/zod-sans-jit.js';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import '@axion/ui/tokens.css';

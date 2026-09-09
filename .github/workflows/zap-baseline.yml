@@ -113,10 +113,47 @@
 #
 # EFFET ATTENDU SUR LE DÉCOMPTE : plus de surface = PLUS d'alertes que les 12
 # de la mesure du 2026-09-05. C'est le RÉSULTAT RECHERCHÉ, pas une régression.
-# AUCUNE règle n'est exclue, AUCUN seuil n'est baissé, `-I` n'est pas remis :
-# l'option 3 (« rendre bloquant en excluant les règles gênantes ») a été écartée
-# en toutes lettres — un scan vert par exclusion est le contrôle-qui-ment de
-# F-31.
+# AUCUN seuil n'est baissé, `-I` n'est pas remis.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# `.zap/rules.tsv` — CE QUI EST EXCLU, CE QUI EST NOMMÉ, ET LA DIFFÉRENCE
+# ─────────────────────────────────────────────────────────────────────────────
+# Ce bandeau disait, jusqu'au 2026-09-09 : « AUCUNE règle n'est exclue —
+# l'option 3 (rendre bloquant en excluant les règles gênantes) a été écartée en
+# toutes lettres ». Cette doctrine du 2026-09-05 TIENT TOUJOURS, et elle est
+# AMENDÉE sur un seul point (A01, DECISIONS.md 2026-09-08, « .zap/rules.tsv :
+# l'exclusion que j'ai interdite, ou le périmètre que je n'ai pas nommé ? »).
+# Le dépouillement d'A51 (docs/securite/DOSSIER_ZAP_2026-09-08.md §1, §5) a
+# corrigé une PRÉMISSE : quatre des sept familles n'étaient pas « gênantes »,
+# elles sont INGUÉRISSABLES PAR TOUT ÉTAT DU CODE — 90005 juge la REQUÊTE du
+# scanner, 10109 constate la SPA que 11 §2 impose, 10094 pointe la police
+# empreintée par Vite et la table d'encodage de hash-wasm (11 §1), 10049
+# décrit la politique de cache que 05 §31 prescrit. Sans les nommer, la
+# bascule promise à P-C est INATTEIGNABLE, et une garde inatteignable finit
+# désarmée : F-31, une troisième fois.
+#
+# LA LIGNE DE PARTAGE, telle qu'A01 l'a tracée :
+#   · EXCLURE UNE RÈGLE POUR VERDIR UN JOB — toujours interdit. C'est l'option 3,
+#     et elle reste écartée. Un scan vert par exclusion est le contrôle-qui-ment.
+#   · NOMMER, RÈGLE PAR RÈGLE, AVEC JUSTIFICATION TECHNIQUE ET DATE DE RÉEXAMEN,
+#     ce que ce scanner NE PEUT PAS MESURER — c'est le geste INVERSE : il rend
+#     la limite relisible, là où sept familles logées dans un `::warning` que
+#     personne n'est obligé de lire ne la rendaient visible à personne.
+# Le scan passe donc `-c rules.tsv` (`.zap/rules.tsv`, monté en LECTURE SEULE).
+# Les quatre conditions cumulatives d'A01, faute desquelles une ligne est
+# REFUSÉE en revue croisée : (1) une ligne = une règle, sa justification
+# TECHNIQUE et une date de réexamen ; (2) AUCUNE ligne pour une règle qu'un
+# changement du produit fermerait — 10055 et 90004 n'y ont pas leur place,
+# elles sont fermées dans infra/caddy/Caddyfile ; (3) le fichier est du CODE :
+# revue croisée, un ajout se voit en diff ; (4) créé et câblé pendant que
+# ZAP_BLOQUANT vaut 'false', sans effet sur aucun verdict, pour que le run à
+# 0/0/0 soit une OBSERVATION et non un pari.
+# L'étape « Contrôler la forme de .zap/rules.tsv » fait de la condition (1) une
+# GARDE MÉCANIQUE (forme, justification non vide, date de réexamen présente ET
+# NON ÉCHUE) : sans elle, la condition ne tenait que par la revue.
+# Les alertes ignorées RESTENT dans le JSON du rapport (mesuré par A11 en le
+# dépouillant) : le décompte du résumé les montre encore, ÉTIQUETÉES, jamais
+# retirées. Le retrait d'une ligne se fait ligne par ligne, à sa date.
 #
 # ─────────────────────────────────────────────────────────────────────────────
 # STATUT BLOQUANT — CE QUI EST DÉCIDÉ, CE QUI NE L'EST PAS
@@ -131,15 +168,37 @@
 # jour, et c'est un ARBITRAGE RENDU, borné et daté : DECISIONS.md, 2026-09-05,
 # « ZAP : l'arbitrage EN ATTENTE de l'entrée précédente est rendu » — option 2,
 # **échéance porte P-C**, bascule conditionnée à la couverture étendue de `/hq`
-# et `/api`. AUCUN seuil n'a été baissé et AUCUNE règle n'a été exclue pour
-# obtenir un vert — la doctrine du dépôt l'interdit explicitement, et elle vaut
-# ici comme pour la couverture.
-# ⚠️ AU DOSSIER DE PORTE P-C, DANS CET ORDRE : (1) constater la couverture
-# étendue sur un run réel — trois cibles, trois rapports, trois codes ; (2) SEULEMENT
-# ENSUITE passer `ZAP_BLOQUANT` à 'true' ET épingler `ZAP_IMAGE` sur le digest
-# relevé par l'étape « Identifier l'image ZAP ». Une porte bloquante doit être
-# reproductible. La bascule n'est PAS un geste d'outillage : elle se coche à la
-# porte, par Williams.
+# et `/api`. AUCUN seuil n'a été baissé, et AUCUNE règle n'est exclue pour
+# obtenir un vert : les quatre lignes de `.zap/rules.tsv` nomment ce que le
+# scanner ne peut pas mesurer (bloc précédent, A01 2026-09-08), elles ne
+# ferment rien qu'un changement du produit fermerait.
+#
+# CE QUI EST MESURÉ À CE JOUR — ET CE QUI NE L'EST PAS ENCORE (2026-09-09) :
+#   · MESURÉ, EN LOCAL, EN HTTP (A11, harnais e2e/fixtures/caddy-servi.ts,
+#     image :stable) : `zap-baseline.py -a -c rules.tsv` rend terrain=0
+#     console=0 api=0 — FAIL-NEW 0 · WARN-NEW 0 · IGNORE 4 · PASS 66.
+#   · PAS ENCORE MESURÉ : le même run sur STAGING, EN TLS, par ce workflow
+#     (`workflow_dispatch`). Il PEUT différer : HSTS (10035) n'est évalué qu'en
+#     HTTPS, la surface réelle porte ce que le harnais n'a pas (certificat,
+#     redirections, en-têtes posés par l'hébergeur), et `:stable` a pu bouger.
+#     Tant que ce run n'a pas rendu 0/0/0 avec `ZAP_BLOQUANT` ENCORE à 'false',
+#     la bascule serait un PARI. C'est l'étape 3 du cliquet (DOSSIER_ZAP §5).
+#
+# ⚠️ AU DOSSIER DE PORTE P-C, DANS CET ORDRE, ET RIEN N'EST SAUTÉ :
+#   (1) constater la couverture étendue sur un run réel — trois cibles, trois
+#       rapports, trois codes ;
+#   (2) constater, sur un `workflow_dispatch` contre STAGING EN TLS, avec ce
+#       fichier de règles et `ZAP_BLOQUANT: 'false'` : codes `terrain=0
+#       console=0 api=0`, résumé « ignorées par .zap/rules.tsv » = 4 sur chaque
+#       cible et AUCUNE autre alerte de niveau WARN, l'étape « Contrôler la
+#       forme de .zap/rules.tsv » verte, et le digest relevé par « Identifier
+#       l'image ZAP » ;
+#   (3) SEULEMENT ENSUITE, DANS LE MÊME COMMIT : passer `ZAP_BLOQUANT` à 'true'
+#       ET épingler `ZAP_IMAGE` sur le digest de CE run (2). Une porte bloquante
+#       doit être reproductible, et un digest relevé sur un autre run que celui
+#       qui a rendu 0/0/0 ne prouve rien.
+# La bascule n'est PAS un geste d'outillage : elle se coche à la porte, par
+# Williams. Ce fichier ne la fait pas — il rend l'observation (2) lisible.
 #
 # La garde elle-même vit dans `.github/scripts/zap-verdict.sh` et sa table de
 # vérité est REJOUÉE À CHAQUE RUN (`zap-verdict.test.sh`, **27 cas** depuis
@@ -191,8 +250,11 @@ concurrency:
 
 env:
   # Voir le bandeau : 'false' est un ARBITRAGE EN ATTENTE, tracé et daté dans
-  # DECISIONS.md (2026-09-05). Les codes 1 et 3 restent bloquants quoi qu'il
-  # arrive — ce drapeau ne gouverne QUE le code 2.
+  # DECISIONS.md (2026-09-05, amendé le 2026-09-08 sur le seul point du fichier
+  # de règles). Les codes 1 et 3 restent bloquants quoi qu'il arrive — ce
+  # drapeau ne gouverne QUE le code 2. Il reste à 'false' TANT QUE le run sur
+  # staging en TLS (bandeau, « ce qui n'est pas encore mesuré ») n'a pas rendu
+  # 0/0/0 ; la bascule et l'épinglage du digest vont dans le même commit.
   ZAP_BLOQUANT: 'false'
   # ---------------------------------------------------------------------------
   # IMAGE ZAP — `:stable` EST UN TAG MOBILE. Ce n'est PAS un épinglage.
@@ -264,6 +326,51 @@ jobs:
       # -----------------------------------------------------------------------
       - name: Éprouver la garde (table de vérité du verdict)
         run: bash .github/scripts/zap-verdict.test.sh
+
+      # -----------------------------------------------------------------------
+      # LE FICHIER DE RÈGLES A-T-IL LA FORME QU'A01 EXIGE ? Vérifié AVANT le scan.
+      # -----------------------------------------------------------------------
+      # Condition (1) d'A01 (DECISIONS.md 2026-09-08) : « une ligne = une règle,
+      # sa justification TECHNIQUE et une date de réexamen ». Une condition qui
+      # ne tient que par la revue croisée est une condition qui ne tient qu'une
+      # fois ; celle-ci est rejouée à CHAQUE run. Ce qu'elle vérifie, par ligne
+      # agissante (ni vide, ni `#`) : QUATRE colonnes tabulées (le format de
+      # zap_common.py::load_config — une cinquième tabulation ferait passer un
+      # bout de justification pour une colonne inconnue) ; un identifiant
+      # numérique ; un niveau parmi IGNORE|INFO|WARN|FAIL ; un nom entre
+      # parenthèses ; une justification d'au moins 40 caractères (un « ok » ne
+      # justifie rien) ; une mention « Réexamen AAAA-MM-JJ » ; et cette date NON
+      # ÉCHUE — l'en-tête du fichier dit « jamais à laisser courir », donc une
+      # date dépassée ROUGIT ici, avec le numéro de la règle, au lieu de courir
+      # en silence. Le fichier absent rougit ici aussi : `-c rules.tsv` sans
+      # fichier ferait rendre 3 à ZAP vingt minutes plus tard, sans dire pourquoi.
+      # BLOQUANT quel que soit ZAP_BLOQUANT : c'est la forme du fichier qui est
+      # jugée, pas le résultat du scan — condition (4), le verdict n'est pas
+      # touché.
+      # -----------------------------------------------------------------------
+      - name: Contrôler la forme de .zap/rules.tsv
+        run: |
+          set -euo pipefail
+          f='.zap/rules.tsv'
+          [ -s "${f}" ] || { echo "::error title=.zap/rules.tsv absent::Le scan passe « -c rules.tsv » : sans le fichier, ZAP rendrait 3 vingt minutes plus tard sans dire pourquoi. BLOQUANT."; exit 1; }
+          aujourdhui="$(date -u +%F)"; n=0; defauts=0
+          while IFS= read -r ligne || [ -n "${ligne}" ]; do
+            case "${ligne}" in ''|'#'*) continue ;; esac
+            n=$((n + 1)); motif=''
+            IFS=$'\t' read -r id niveau nom justif <<< "${ligne}"
+            [ "$(printf '%s' "${ligne}" | tr -cd '\t' | wc -c)" -eq 3 ] || motif='quatre colonnes séparées par UNE tabulation attendues'
+            printf '%s' "${id:-}" | grep -Eq '^[0-9]+$' || motif="${motif:-identifiant de règle non numérique}"
+            case "${niveau:-}" in IGNORE|INFO|WARN|FAIL) ;; *) motif="${motif:-niveau « ${niveau:-} » hors IGNORE|INFO|WARN|FAIL}" ;; esac
+            case "${nom:-}" in '('*')') ;; *) motif="${motif:-nom de règle non parenthésé}" ;; esac
+            [ "${#justif}" -ge 40 ] || motif="${motif:-justification vide ou trop courte (moins de 40 caractères)}"
+            reexamen="$(printf '%s' "${justif:-}" | grep -Eo 'Réexamen [0-9]{4}-[0-9]{2}-[0-9]{2}' | head -1 | cut -d' ' -f2 || true)"
+            [ -n "${reexamen}" ] || motif="${motif:-aucune mention « Réexamen AAAA-MM-JJ »}"
+            if [ -n "${reexamen}" ] && [ "${reexamen}" \< "${aujourdhui}" ]; then motif="${motif:-date de réexamen ÉCHUE (${reexamen}) : ligne à retirer ou à re-dater EN REVUE, jamais à laisser courir}"; fi
+            if [ -n "${motif}" ]; then echo "::error file=${f},title=.zap/rules.tsv — ligne refusée::règle ${id:-?} : ${motif}. Condition A01 (1), DECISIONS.md 2026-09-08."; defauts=$((defauts + 1)); fi
+          done < "${f}"
+          [ "${n}" -gt 0 ] || { echo "::error title=.zap/rules.tsv sans ligne agissante::Le fichier n'a que des commentaires. Soit il n'a pas lieu d'être passé par -c, soit une ligne a été perdue : dans les deux cas on ne scanne pas sur un doute."; exit 1; }
+          [ "${defauts}" -eq 0 ] || { echo "::error title=.zap/rules.tsv non conforme::${defauts} ligne(s) refusée(s) sur ${n}. Le scan ne part pas sur un fichier de règles dont la forme n'est pas celle qu'A01 a posée."; exit 1; }
+          echo "${n} ligne(s) agissante(s), toutes conformes (quatre colonnes, justification, réexamen daté et non échu au ${aujourdhui})."
 
       # -----------------------------------------------------------------------
       # LES CIBLES — une base, N points d'entrée, et RIEN n'est deviné.
@@ -399,16 +506,29 @@ jobs:
             echo "::group::ZAP baseline — ${etiquette} → ${url}"
             # PAS de `-I` : ce drapeau supprimait le code 2 et rendait toute
             # bascule bloquante inopérante (voir bandeau, cause 2). `-a` conserve
-            # les règles passives alpha. AUCUN `-c … IGNORE`, AUCUN seuil
-            # abaissé : la couverture s'étend, la sévérité ne bouge pas.
+            # les règles passives alpha. AUCUN seuil abaissé.
+            # `-c rules.tsv` : ce commentaire disait « AUCUN `-c … IGNORE` »
+            # jusqu'au 2026-09-09. Il est AMENDÉ, pas effacé : ce que la doctrine
+            # du 2026-09-05 interdit — exclure une règle pour verdir un job —
+            # reste interdit. Ce que `.zap/rules.tsv` fait est le geste inverse
+            # (A01, DECISIONS.md 2026-09-08 ; bandeau, « ce qui est exclu, ce
+            # qui est nommé ») : nommer, règle par règle, avec justification et
+            # date de réexamen, les quatre familles qu'aucun état du code ne
+            # peut fermer. Le chemin est joint à /zap/wrk/ par zap-baseline.py
+            # (zap_common.py::load_config, vérifié par A11) ; le fichier est
+            # monté en LECTURE SEULE par-dessus le dossier de rapport, et sa
+            # forme a été contrôlée deux étapes plus haut. Les alertes ignorées
+            # RESTENT dans le JSON : le résumé les étiquette, il ne les retire pas.
             docker run --rm \
               -v "${GITHUB_WORKSPACE}/rapport-zap/${etiquette}:/zap/wrk:rw" \
+              -v "${GITHUB_WORKSPACE}/.zap/rules.tsv:/zap/wrk/rules.tsv:ro" \
               "${ZAP_IMAGE}" \
               zap-baseline.py \
                 -t "${url}" \
                 -r rapport-zap.html \
                 -J rapport-zap.json \
-                -a
+                -a \
+                -c rules.tsv
             # Relevé IMMÉDIATEMENT : la moindre commande intercalée (un `echo`
             # d'endgroup, par exemple) écraserait `$?` par SON propre statut.
             code=$?
@@ -478,11 +598,23 @@ jobs:
           CODES: ${{ steps.scan.outputs.codes }}
         run: |
           set -euo pipefail
+          # LES ALERTES IGNORÉES PAR `.zap/rules.tsv` RESTENT DANS LE JSON (mesuré
+          # par A11 en dépouillant le rapport) : `-c` change le CODE DE RETOUR,
+          # pas le rapport. Le décompte les montre donc encore — et c'est voulu.
+          # On les ÉTIQUETTE, on ne les retire pas : un relecteur de porte doit
+          # voir les quatre familles nommées ET vérifier qu'aucune cinquième ne
+          # s'est glissée sous le même chiffre. La liste des identifiants vient
+          # du fichier lui-même, jamais d'une constante recopiée ici. Le `|| true`
+          # ne masque rien : cette étape tourne `if: always()`, donc AUSSI quand
+          # la garde de forme a déjà rougi sur un fichier absent ou vide — le
+          # résumé doit alors se publier avec une liste vide, pas rougir deux fois.
+          ignorees="$({ grep -v '^#' .zap/rules.tsv 2>/dev/null || true; } | awk -F'\t' '$2 == "IGNORE" { print $1 }' | jq -R . | jq -sc .)"
           {
             echo "### Scan ZAP baseline — couverture étendue (terrain · console · API)"
             echo ""
             echo "- Image : \`${DIGEST:-?}\` (tag \`${ZAP_IMAGE}\` — **mobile**, pas un épinglage)"
             echo "- Codes de retour : \`${CODES:-aucun}\` · mode bloquant sur avertissements : \`${ZAP_BLOQUANT}\`"
+            echo "- Règles nommées IGNORE par \`.zap/rules.tsv\` : \`$(jq -r 'join(" ")' <<< "${ignorees}")\` — justifiées et datées (A01, DECISIONS.md 2026-09-08). Elles apparaissent CI-DESSOUS, étiquetées ; elles ne pèsent pas dans le code de retour."
             echo "- Scan **passif** et **non authentifié** : il analyse des en-têtes de réponse."
             echo "  Il ne teste NI le RBAC, NI la propriété des écritures, NI les cookies de session."
             echo "  Voir le bandeau du workflow, section « ce qu'il ne couvre pas »."
@@ -491,9 +623,11 @@ jobs:
 
           # Vue d'ensemble D'ABORD : une ligne par cible, lisible d'un coup d'œil
           # dans le résumé de job, sans dépliage et sans artefact à télécharger.
+          # Les quatre colonnes de sévérité COMPTENT les alertes ignorées ; la
+          # dernière colonne dit combien, et « restantes » ce qui pèse vraiment.
           {
-            echo "| Cible | URL | Code | High | Medium | Low | Info |"
-            echo "| --- | --- | --- | --- | --- | --- | --- |"
+            echo "| Cible | URL | Code | High | Medium | Low | Info | dont ignorées (rules.tsv) | restantes |"
+            echo "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"
           } >> "$GITHUB_STEP_SUMMARY"
           for entree in ${CIBLES:-}; do
             etiquette="${entree%%=*}"
@@ -518,14 +652,16 @@ jobs:
               if [ "${paire%%=*}" = "${etiquette}" ]; then code="${paire#*=}"; fi
             done
             if [ -s "${fichier}" ]; then
-              compte="$(jq -r '
+              compte="$(jq -r --argjson ign "${ignorees}" '
                 [ .site[]?.alerts[]? ] as $a
-                | ["High","Medium","Low","Informational"]
-                | map(. as $n | [ $a[] | select(.riskdesc | startswith($n)) ] | length | tostring)
+                | ( ["High","Medium","Low","Informational"]
+                    | map(. as $n | [ $a[] | select(.riskdesc | startswith($n)) ] | length | tostring) )
+                  + [ ([ $a[] | select(.pluginid as $p | $ign | index($p)) ] | length | tostring),
+                      ([ $a[] | select(.pluginid as $p | $ign | index($p) | not) ] | length | tostring) ]
                 | join(" | ")
               ' "${fichier}")"
             else
-              compte="? | ? | ? | ?"
+              compte="? | ? | ? | ? | ? | ?"
             fi
             echo "| \`${etiquette}\` | ${url} | ${code} | ${compte} |" >> "$GITHUB_STEP_SUMMARY"
           done
@@ -549,11 +685,21 @@ jobs:
                   | "| \($n) | \([ $a[] | select(.riskdesc | startswith($n)) ] | length) |"
                 ' "${fichier}"
                 echo ""
+                jq -r --argjson ign "${ignorees}" '
+                  [ .site[]?.alerts[]? ] as $a
+                  | ([ $a[] | select(.pluginid as $p | $ign | index($p)) ] | length) as $ni
+                  | "\($ni) alerte(s) ignorée(s) par `.zap/rules.tsv`, justifiée(s) — comptée(s) ci-dessus, sans poids dans le code de retour · \(($a | length) - $ni) restante(s)."
+                ' "${fichier}"
+                echo ""
                 echo "<details><summary>Détail des alertes — ${etiquette}</summary>"
                 echo ""
-                jq -r '
+                # L'étiquette « ignorée » est calculée ici, à partir des identifiants
+                # lus dans `.zap/rules.tsv` : elle dit ce que le fichier de règles
+                # a réellement absorbé sur CE rapport, pas ce qu'on croit qu'il absorbe.
+                jq -r --argjson ign "${ignorees}" '
                   .site[]?.alerts[]?
                   | "- **\(.riskdesc)** · [\(.pluginid)] \(.alert) — \(.instances | length) occurrence(s)"
+                    + (if (.pluginid as $p | $ign | index($p)) then " — _ignorée par `.zap/rules.tsv` (justifiée, datée)_" else "" end)
                 ' "${fichier}"
                 echo ""
                 echo "</details>"
