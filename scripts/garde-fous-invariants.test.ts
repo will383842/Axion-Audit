@@ -481,6 +481,124 @@ describe('check-no-skipped-tests.mjs', () => {
 });
 
 // =============================================================================
+// ANTI-SKIP — LE PÉRIMÈTRE LUI-MÊME NE DOIT PAS POUVOIR SE RÉTRÉCIR
+// -----------------------------------------------------------------------------
+// LE TROU. Les cas ci-dessus éprouvent ce que le garde-fou SAIT RECONNAÎTRE, tous
+// depuis une fixture `*.test.ts`. Aucun n'éprouve CE QU'IL REGARDE. Sa liste
+// d'extensions a déjà été trouvée incomplète une fois : les bancs de `tests/perf/`
+// portent délibérément une extension hors des projets vitest et échappaient donc
+// entièrement au contrôle, y compris sur des cas marqués @critique (constat A28,
+// arbitrage A01 du 2026-09-09, PR 112). La correction a fermé ce cas-là ; rien
+// n'empêchait qu'on le rouvre en retirant une entrée de la liste. Un périmètre qui
+// se rétrécit ne fait rougir personne : le garde-fou reste VERT, avec seulement
+// moins de fichiers analysés — la forme la plus discrète d'une régression.
+//
+// 09 §5.6 — ces cas sont écrits par A16, qui n'a écrit NI le garde-fou NI les
+// bancs de `tests/perf/`. L'auteur de l'extension a signalé lui-même qu'il ne
+// pouvait pas écrire le test de son propre code.
+//
+// CE QU'ON ASSERTIT, ET POURQUOI PAS L'AUTRE. Deux familles se défendaient :
+//
+//   (a) assertir la LISTE — « la constante du script vaut exactement ces six
+//       entrées ». Écrit vite, mais c'est un test qui RECOPIE la donnée qu'il
+//       garde : il rougit à chaque ajout LÉGITIME, il se répare en recopiant la
+//       nouvelle valeur, et ce geste-là se fait sans réfléchir. Un test qu'on met
+//       à jour par réflexe a cessé d'être une preuve. Il mesure en outre
+//       l'implémentation et non l'exigence : remplacer `git ls-files` par un
+//       parcours de répertoire le casserait sans qu'aucune propriété n'ait bougé.
+//
+//   (b) assertir le COMPORTEMENT — « une désactivation posée dans un fichier de
+//       CETTE extension est vue ». Plus coûteux, mais il tombe pour la bonne
+//       raison et survit à une refonte de l'implémentation.
+//
+// C'est (b), généralisé aux SIX extensions et formulé en BORNE INFÉRIEURE : on
+// exige que chacune soit couverte, jamais que la liste s'arrête là. L'asymétrie
+// est tout l'intérêt — ajouter une extension ne fait rien rougir (rien à
+// « remettre à jour », donc aucun réflexe à prendre), en retirer une fait rougir
+// immédiatement. C'est exactement, et seulement, la régression qu'on interdit.
+//
+// LE PIÈGE, qui rend inopérante la moitié des rédactions naïves : le garde-fou
+// rend DÉJÀ 1 quand il n'a aucun fichier à analyser (cas ci-dessus). Une fixture
+// ne contenant QUE le fichier fautif sortirait donc en 1 même après retrait de son
+// extension — le test resterait vert sur la mutation qu'il prétend attraper.
+// Chaque cas embarque donc un TÉMOIN SAIN dans une AUTRE extension, et assertit
+// non pas le code seul mais le CHEMIN FAUTIF DANS LE RAPPORT : hors périmètre, le
+// garde-fou sort 0 en annonçant « aucun test désactivé » sur le seul témoin, et
+// les trois assertions tombent ensemble. Éprouvé par mutation le 2026-09-09.
+// =============================================================================
+
+/**
+ * Les extensions dont ce dépôt EXIGE la couverture — pas une copie de la liste du
+ * script, mais l'inventaire des formes de fichiers de test qui existent ici,
+ * dérivé du CLAUDE.md §2 : « tests désactivés/skippés = build rouge », énoncé
+ * SANS aucune restriction d'extension.
+ */
+const PERIMETRE_EXIGE = [
+  { extension: '*.test.ts', chemin: 'apps/api/tests/portee.test.ts' },
+  { extension: '*.test.tsx', chemin: 'apps/hq/src/ecrans/portee.test.tsx' },
+  { extension: '*.spec.ts', chemin: 'packages/shared/src/portee.spec.ts' },
+  { extension: '*.spec.tsx', chemin: 'apps/field/src/ecrans/portee.spec.tsx' },
+  { extension: '*.e2e.ts', chemin: 'tests/e2e/portee.e2e.ts' },
+  { extension: '*.perf.ts', chemin: 'tests/perf/portee.perf.ts' },
+] as const;
+
+const SUITE_SAINE =
+  "import { describe, expect, it } from 'vitest';\n" +
+  "describe('témoin', () => {\n  it('reste vert', () => { expect(1).toBe(1); });\n});\n";
+
+/** Deux témoins d'extensions différentes ; le cas mesuré retire le sien. */
+const TEMOINS_SAINS: Readonly<Record<string, string>> = {
+  'apps/api/tests/temoin-de-portee.test.ts': SUITE_SAINE,
+  'apps/hq/src/ecrans/temoin-de-portee.test.tsx': SUITE_SAINE,
+};
+
+/** Une suite dont un cas @critique est éteint — le mot n'est jamais écrit d'un tenant. */
+const suiteEteinte = (): string =>
+  "import { describe, expect, it } from 'vitest';\n" +
+  `describe('portée @critique', () => {\n  ${appel('it', MOT_SKIP)}'éteint', () => { expect(1).toBe(1); });\n});\n`;
+
+/**
+ * Les extensions CITÉES dans une sortie. On collecte des jetons entiers plutôt que
+ * de chercher chaque extension par sous-chaîne : `*.test.ts` est un PRÉFIXE de
+ * `*.test.tsx`, si bien qu'un message ne citant que la seconde ferait passer la
+ * première pour couverte. La dernière est suivie d'un point de phrase, que le
+ * groupe optionnel ne capture pas.
+ */
+const RE_EXTENSION_CITEE = /\*\.[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*/g;
+
+describe('check-no-skipped-tests.mjs — périmètre des extensions analysées', () => {
+  for (const { extension, chemin } of PERIMETRE_EXIGE) {
+    it(`voit une désactivation posée dans un fichier ${extension}`, () => {
+      const suffixe = extension.slice(1);
+      const temoins = Object.fromEntries(
+        Object.entries(TEMOINS_SAINS).filter(([f]) => !f.endsWith(suffixe)),
+      );
+      expect(Object.keys(temoins).length).toBeGreaterThan(0);
+
+      const { code, sortie } = lancerAntiSkip({ ...temoins, [chemin]: suiteEteinte() });
+
+      // Les trois ensemble, jamais le code seul : hors périmètre le garde-fou sort
+      // 0 sur le seul témoin, et c'est CE glissement-là qu'on attrape.
+      expect(sortie).toContain('build rouge');
+      expect(sortie).toContain(chemin);
+      expect(code).toBe(1);
+    });
+  }
+
+  it('ANNONCE tout son périmètre quand il n’a rien trouvé à analyser', () => {
+    // L'autre moitié du défaut d'origine : la liste vivait à DEUX endroits, et la
+    // prose affichée n'en citait que trois sur cinq. Un rapport qui sous-déclare
+    // ce qu'il a couvert trompe précisément celui qui le lit pour le savoir.
+    const { code, sortie } = lancerAntiSkip({ 'README.md': '# dépôt sans fichier de test\n' });
+    const citees = sortie.match(RE_EXTENSION_CITEE) ?? [];
+    expect(code).toBe(1);
+    for (const { extension } of PERIMETRE_EXIGE) {
+      expect(citees).toContain(extension);
+    }
+  });
+});
+
+// =============================================================================
 // PAGINATION KEYSET DANS LES `.sql` VERSIONNÉS — LE TROU QU'ESLINT NE VOIT PAS
 // -----------------------------------------------------------------------------
 // `CLAUDE.md` §9 : « Pagination : keyset partout (`?limit=50&after=<curseur>`),
