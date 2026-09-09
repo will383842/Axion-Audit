@@ -12108,3 +12108,42 @@ Règle de précédence : **sans objet** — aucune divergence de pack ; c'est le
 Décideur : **A01**. Escalade Williams : **non** aujourd'hui ; **oui** si la mesure d'A28 casse le budget.
 Impact spec : aucun. Aucune dépendance ajoutée (Zod 4.4.3 déjà épinglé, 11 §1) : l'escalade §8-1 ne
 s'applique pas.
+
+## 2026-09-09 — [securite] `10049` dans `.zap/rules.tsv` : une exception peut-elle recouvrir une dette déjà datée ?
+
+A29 refuse la ligne sur ma condition (2) du 2026-09-08 — « aucune ligne pour une règle qu'un
+changement du produit fermerait » — et il l'a MESURÉE. `10049` absorbe 9 instances ; la justification
+n'en couvre que trois familles (`immutable` sur les assets empreintés, `no-store` sur SW et manifeste,
+`no-cache` sur l'HTML). **Cinq des neuf n'en relèvent d'aucune** : trois icônes non empreintées, que
+l'exclusion `not path /icones/*` du matcher `@html` sort du `no-cache` sans rien leur donner, et
+`/api/v1` + `/api/v1/health`, qui sont **exactement le §4-B** daté et assigné à A13, lot L6, porte
+P-D. Aucune des cinq n'a de `Cache-Control` : la règle y signale un ÉCART, pas la conformité que sa
+justification invoque.
+
+Options :
+a) Retirer `10049` ; la politique de cache se ferme par le PRODUIT — icônes maintenant, `/api/*` à L6c.
+b) Garder en bornant : nommer les cinq instances, écarter `/api/*` par la justification, réexamen L6c.
+
+Arbitrage : **a)**, et le doute de spec se tranche avec : **non, une ligne d'exception ne peut pas
+recouvrir un défaut déjà daté et assigné.** Une dette programmée est par construction fermable par le
+produit — c'est ce que « datée et assignée » veut dire — donc elle tombe sous la condition (2).
+b) est en outre mécaniquement impossible : ZAP n'a **pas de périmètre par ligne**, la borne ne serait
+qu'une phrase dans un TSV. À L6c, avec `ZAP_BLOQUANT='true'` et les routes JSON authentifiées,
+l'absence de `no-store` sur des réponses portant `person_name` et `scoping_financials` serait avalée
+par une ligne qui affirme en prose ne pas les concerner — verte par le chemin qu'elle emprunte et non
+par la règle qu'elle énonce. A29 le nomme mieux : le contrôle-qui-ment de F-31, à retardement,
+introduit par la PR qui prétend le fermer. Le réexamen daté n'y remédie pas, il aggrave — il échoit au
+moment précis où le risque se réalise et où la pression de garder la ligne est maximale.
+**Ma condition (2) se lit donc sur les instances qu'une ligne SILENCE, jamais sur l'étiquette de la
+famille** : une ligne qui en tait une seule fermable par le produit est refusée. C'est le cas qu'A29 a
+trouvé et que ma rédaction du 08 n'avait pas prévu.
+L'asymétrie décide du reste : me tromper en a) coûte un `WARN-NEW` que quelqu'un lit et trouve
+pénible — bruyant, réversible ; me tromper en b) coûte un trou muet, découvert par un incident.
+Ce que je n'achète pas : la bascule. `ZAP_BLOQUANT` reste à Williams, et un `no-store` posé sur
+`/api/v1/health` SEUL pour verdir un job serait l'option 3 du 2026-09-05, que je maintiens écartée.
+Le compteur attend le produit ; il ne l'achète pas.
+Règle de précédence : sans objet — aucune divergence de pack ; c'est ma propre condition (2) qu'on
+applique, sur une mesure qui en révèle la portée.
+Décideur : **A01**, sur mesure d'A29. Escalade Williams : **non** pour la ligne ; **oui** pour la
+bascule, qui était déjà la sienne.
+Impact spec : aucun. Amende la condition (2) du 2026-09-08 sur son critère de lecture, sans la renverser.
