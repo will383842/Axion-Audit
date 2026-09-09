@@ -65,9 +65,43 @@ process.env.APP_ENV ??= 'dev';
 // 120 s n'est pas une tolérance à la lenteur : c'est l'aveu qu'un chargement de
 // module n'a pas de budget de temps à tenir. Si ce crochet met vraiment deux
 // minutes, ce n'est plus une contention, c'est une panne — et il échouera.
+//
+// COMPLÉTÉ le 2026-09-09 (A16), APRÈS un échec réel : « Test timed out in 5000ms »
+// sur « route déclarée à la racine SANS `config.acces` », le premier cas du fichier,
+// pendant qu'une seconde suite complète tournait dans un autre worktree.
+//
+// CE QUE CET ÉCHEC APPREND, ET IL VAUT LA PEINE D'ÊTRE ÉCRIT : ce fichier était cité
+// comme LE précédent du préchauffage, et il a rougi quand même. Le modèle « c'est
+// l'import à froid » était donc juste mais INCOMPLET. L'import n'est pas le seul coût
+// qui n'arrive qu'une fois.
+//
+// DÉCOMPOSÉ À LA SONDE (A16, 2026-09-09, Node 24, 8 cœurs) :
+//
+//   import de `../app.js`, par processus ................ 5 228 ms  ← déjà couvert ici
+//   1er `construireApp()` + `ready()` .................... 667 ms   ← ne l'était PAS
+//   2e, 3e, 4e `construireApp()` + `ready()` ......... 57, 73, 34 ms
+//
+// Deux remarques que la mesure impose. D'abord, l'import coûte aujourd'hui 5 228 ms
+// alors que le commentaire ci-dessus disait « ~3 s » le 2026-09-01 : le graphe de
+// `app.ts` a grossi avec les lots, et il dépasse désormais À LUI SEUL le plafond de
+// 5 s du projet `unit`. Ensuite, la construction du socle est elle aussi un coût
+// unique : 667 ms la première fois, 34 à 73 ms ensuite.
+//
+// CONTRÔLE CROISÉ, et il est exhaustif : quatre fichiers du projet `unit` chargent
+// l'app API. `crochets.test.ts` et `en-tetes-amont-jumeau.test.ts` CONSTRUISENT une
+// app dans leur crochet — aucun des deux n'a jamais rougi. `quota.test.ts` et
+// celui-ci ne le faisaient pas — ce sont exactement les deux qui viennent de rougir.
+// Quatre sur quatre : ce n'est plus une corrélation, c'est la règle du fichier.
+//
+// L'app de préchauffage est construite puis fermée ; elle ne déclare aucune route et
+// n'en sert aucune, donc elle ne peut rien apprendre ni rien polluer aux méta-tests
+// ci-dessous, qui construisent chacun la leur.
 beforeAll(async () => {
-  await import('../app.js');
+  const { construireApp } = await import('../app.js');
   await import('./politique.js');
+  const prechauffage = await construireApp();
+  await prechauffage.ready();
+  await prechauffage.close();
 }, 120_000);
 
 /** Le message d'une valeur levée, quelle que soit sa nature. */
