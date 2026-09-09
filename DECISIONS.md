@@ -12311,3 +12311,47 @@ lecteur invente). S'il refuse, il n'y a rien à porter.
 Décideur : **A01** pour le moment de l'escalade ; **Williams** pour l'amendement, proposition en
 `docs/portes/P-D_AMENDEMENT_04_interlocutor_profile.md`.
 Impact spec : aucun aujourd'hui ; amendement du 04 soumis, à trancher AVANT l'ouverture de L6.
+
+## 2026-09-09 — [L6 / L8] Amendement horodaté à la décision de ce jour : le verdict est rendu, et deux des trois raisons du NULL n'en faisaient qu'une
+
+L'entrée ci-dessus se ferme sur « **Impact spec : aucun aujourd'hui** ». Vrai à l'écriture.
+**Williams a rendu son verdict depuis — APPROUVÉ** (`P-D_AMENDEMENT_04_interlocutor_profile.md` §9,
+PR 124, `origin/main` = `acdb0f0`), et A12 a transcrit. Tant que cette ligne n'est pas amendée, le
+**resceau reposerait sur un registre qui nie l'amendement qu'il scelle**. **Ceci est un amendement,
+pas une décision neuve** : l'arbitrage approuver/refuser était à Williams, rendu et signé au §9 ; le
+rejouer en « Options 1/2 » serait une entrée sans vrai choix. Le choix réel est celui qu'A12 a levé.
+
+Options :
+
+1. **Transcrire tel qu'approuvé**, justification du §5 inchangée — Williams a approuvé **ce texte-là**.
+2. **Rectifier la justification — jamais l'objet — avant que le sceau se referme dessus.**
+
+Arbitrage : **option 2**. L'objet est **inchangé et ne m'appartient pas** (`CLAUDE.md` §3-2) : colonne,
+nullabilité, absence de CHECK, transport §9.3, colonne d'export. Ce qui change est le **pourquoi**,
+parce qu'un sceau rend un raisonnement opposable et qu'un argument faux scellé piège qui rouvrira.
+Trois rectifications d'A12, revérifiées par moi au 04 — et elles vivent **ici** parce que le §5 est
+**sous signature depuis le §9** : un fichier de porte signé ne se réécrit pas (invariant 7).
+**(a) Les « trois raisons cumulatives » sont deux.** `atelier` est **une valeur du CHECK `kind`**
+(04:126), donc un sous-cas de `kind ≠ entretien`. La raison est **gardée, reformulée** : pour un
+atelier ce n'est pas l'**absence** de profil mais sa **pluralité** (`participants JSONB`, 04:132)
+qu'une FK simple ne peut porter — un mode de défaillance distinct, pas un compte de plus.
+**(b) Le fondement du NULL était une analogie ; la preuve directe est meilleure.** Le 04:129-131 marque
+**déjà** `person_name`, `person_role`, `person_service_id`, `person_email` en NULL, sous « §27.1 :
+champs personne optionnels si kind ≠ entretien ». La colonne rejoint un groupe **déjà nullable** et
+**ne peut pas être plus stricte que ses quatre voisines**. L'analogie avec `conducted_by` reste vraie,
+elle n'est simplement plus le fondement.
+**(c) La vraie raison pour laquelle un CHECK serait faux**, absente de ma fiche : il **échouerait à la
+validation sur toute session déjà terminée**, rendant la migration **injouable** sur une base ayant
+collecté quoi que ce soit. Argument de **jouabilité**, quand le mien n'était que de style.
+Règle de précédence : **`CLAUDE.md` §3-2** — le 04 est la signature de Williams ; je rectifie un motif,
+jamais l'objet. **Invariant 7** pour la forme. Règle de précédence du pack **sans objet** : le 04 était
+silencieux sur cette colonne, il ne se contredisait pas.
+Décideur : **Williams** pour l'amendement (2026-09-09, §9, par adoption) ; **A01** pour la clôture et les motifs.
+Impact spec : **AMENDEMENT HORODATÉ DU FICHIER 04, 2026-09-09** — `interviews.interlocutor_profile_id
+UUID NULL REFERENCES interlocutor_profiles(id)`, transcrit par **A12** (04, migration `up`/`down`,
+mapping Drizzle, `apps/api/schema-manifest.json`). **Puis** resceau de `docs/.pack-integrity.json` —
+**jamais le sceau seul** (précédents des 2026-08-31 et 2026-09-03). Cette ligne **remplace** le
+« aucun aujourd'hui » ci-dessus, qui n'est pas effacé.
+**Fenêtre encore ouverte** : le §9 la dit rouvrable « tant que la migration n'a pas été jouée sur un
+environnement portant de la donnée ». A12 confirme : **conteneurs jetables, base vide, détruits après**.
+Elle se referme à la **première migration de staging portant du contenu réel** — qui la joue la ferme.
