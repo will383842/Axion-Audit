@@ -1,0 +1,51 @@
+# =============================================================================
+# .zap/rules.tsv — CE QUE LE SCAN PASSIF ZAP NE PEUT PAS MESURER, NOMMÉ PAR ÉCRIT
+# =============================================================================
+# Lu par `zap-baseline.py -c rules.tsv` (le chemin est joint à /zap/wrk/, le
+# dossier monté par .github/workflows/zap-baseline.yml). Format imposé par
+# zap_common.py::load_config — QUATRE colonnes séparées par UNE tabulation,
+# aucune tabulation dans la dernière :
+#   <id de règle>  <IGNORE|INFO|WARN|FAIL>  (<nom de la règle>)  <justification technique — réexamen AAAA-MM-JJ>
+# La quatrième colonne est reprise TELLE QUELLE dans le rapport, à côté de la
+# règle ignorée : c'est là qu'un relecteur de porte lit POURQUOI.
+#
+# ── CE QUE CE FICHIER EST, ET N'EST PAS (arbitrage A01, 2026-09-08, DECISIONS.md
+#    « .zap/rules.tsv : l'exclusion que j'ai interdite, ou le périmètre que je
+#    n'ai pas nommé ? ») ─────────────────────────────────────────────────────
+# Il N'EXCLUT PAS une règle pour verdir un job — c'est l'option 3 que
+# zap-baseline.yml écarte, et qui reste écartée. Il NOMME, règle par règle, ce
+# qu'AUCUN état du code ne peut fermer : deux règles décrivent la méthode du
+# scanner, deux décrivent une conformité que le pack prescrit. Sans ce fichier,
+# ZAP_BLOQUANT='true' est inatteignable, et une garde inatteignable finit
+# désarmée (F-31, une troisième fois).
+#
+# QUATRE CONDITIONS CUMULATIVES, faute desquelles une ligne est REFUSÉE en
+# revue croisée :
+#   1. une ligne = UNE règle, sa justification TECHNIQUE et une DATE de réexamen ;
+#   2. AUCUNE ligne pour une règle qu'un changement du produit fermerait —
+#      10055 (style-src 'unsafe-inline') et 90004 (COOP/COEP/CORP) n'ont pas leur
+#      place ici : elles sont FERMÉES dans infra/caddy/Caddyfile, et 10015
+#      (Cache-Control) l'est par `no-cache` sur l'HTML, pas par une ligne ;
+#   3. ce fichier est du CODE : revue croisée, et un ajout de ligne se voit en diff ;
+#   4. créé et câblé pendant que ZAP_BLOQUANT vaut 'false' — sans effet sur
+#      aucun verdict — pour que le run à 0/0/0 soit une OBSERVATION, pas un pari.
+#
+# UNE DATE DE RÉEXAMEN ÉCHUE sans ligne renouvelée = ligne à retirer ou à
+# re-dater EN REVUE, jamais à laisser courir. Le retrait se fait ligne par ligne.
+# Sources : docs/securite/DOSSIER_ZAP_2026-09-08.md §1 (familles), §2-b (pile
+# « à ignorer explicitement »), §5 (cliquet, geste 2). Rapport dépouillé :
+# artefact rapport-zap-34125104959, identique sur les trois cibles.
+#
+# MESURÉ, PAS PRÉDIT (2026-09-09, A11) : avec ce fichier et le Caddyfile du même
+# incrément, `zap-baseline.py -a -c rules.tsv` rend terrain=0 console=0 api=0
+# (FAIL-NEW 0 · WARN-NEW 0 · IGNORE 4 · PASS 66) sur le harnais local de
+# e2e/fixtures/caddy-servi.ts (Caddy du dépôt, builds réels, amont factice).
+# C'est une mesure LOCALE en HTTP : le run de l'étape 3 du cliquet (§5) sur
+# STAGING, en TLS, reste dû AVANT la bascule — il peut différer (HSTS n'est
+# évalué qu'en HTTPS, la surface réelle inclut ce que le harnais n'a pas).
+# =============================================================================
+
+90005	IGNORE	(Sec-Fetch-* Header is Missing)	Règle sur la REQUÊTE, pas sur la réponse : Sec-Fetch-Dest/Mode/Site/User sont posés par le NAVIGATEUR, et l'araignée ZAP ne les émet pas. Aucun code du produit n'y a prise — artefact de méthode, pas risque accepté. Réexamen 2027-03-08 (ou avant, si ZAP fait émettre ces en-têtes par son araignée)
+10109	IGNORE	(Modern Web Application)	La règle CONSTATE une application monopage (Vite + React) : c'est exactement ce que 11 §2 impose (Next.js interdit). Elle décrit une contrainte du pack, pas un écart. Réexamen 2027-03-08 (la ligne tombe le jour où 11 §2 change, ce qui est une décision humaine)
+10094	IGNORE	(Base64 Disclosure)	DEUX sources, toutes deux tracées (DOSSIER_ZAP §1 ; re-mesuré en local le 2026-09-09 avec ce fichier) : le NOM de la police empreinté par Vite (inter-latin-ext-wght-normal-<hachage>, @fontsource-variable/inter auto-hébergée, 11 §1) — dans le CSS de CHAQUE front, donc 2 ou 3 instances selon ce que l'araignée atteint — et la table d'encodage ABCDEFGHIJ… de hash-wasm (Argon2id, 11 §4) dans le bundle terrain. Zéro donnée encodée, zéro secret. SEULE ligne où un vrai secret pourrait un jour se cacher : à RÉEXAMINER dès qu'une instance apparaît qui n'est NI ce nom de police NI cette table. Réexamen 2026-10-08
+10049	IGNORE	(Storable and Cacheable Content / Non-Storable Content)	La règle signale la politique de cache VOULUE et écrite (05 §31 ; Caddyfile, section « MISE EN CACHE ») : `immutable` un an sur les assets empreintés (nom = hachage de contenu), `no-store` sur le service worker et le manifeste, `no-cache` sur l'HTML. Elle décrit la conformité, pas l'écart. Réexamen 2026-12-08
