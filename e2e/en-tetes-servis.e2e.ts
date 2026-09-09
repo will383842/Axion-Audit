@@ -46,8 +46,19 @@
 //   AXION_CADDYFILE_EPROUVE=<copie mutée> pnpm exec playwright test en-tetes-servis
 // Refusé en CI (voir la fixture). Une garde qu'on n'a jamais vue rouge n'en est pas une.
 // =============================================================================
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { MOT_DE_PASSE_APPAREIL, preparerAppareilNeuf } from './fixtures/appareil-terrain.js';
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type BrowserContext,
+  type Page,
+} from '@playwright/test';
+import { cspAmontFactice } from './fixtures/amont-api-factice.js';
+import {
+  deverrouillerAppareil,
+  MOT_DE_PASSE_APPAREIL,
+  preparerAppareilNeuf,
+} from './fixtures/appareil-terrain.js';
 import {
   demarrerCaddyServi,
   PILES_CADDY,
@@ -75,14 +86,17 @@ const CSP_CIBLE =
   "form-action 'self'; frame-ancestors 'none'";
 
 /**
- * La CSP que l'AMONT émet (helmet, apps/api/src/app.ts — mesurée, voir
- * fixtures/amont-api-factice.caddy). Si le client la recevait, Caddy ne
- * l'écraserait plus. C'est la valeur que le test §4-A vérifie NE PAS voir.
+ * La CSP que l'AMONT émet (helmet, apps/api/src/app.ts). Si le client la
+ * recevait, Caddy ne l'écraserait plus. C'est la valeur que le test §4-A
+ * vérifie NE PAS voir.
+ *
+ * LUE dans fixtures/amont-api-factice.caddy, jamais recopiée ici : ce fichier
+ * est le jumeau de helmet, et `apps/api/src/en-tetes-amont-jumeau.test.ts` le
+ * garde égal à ce que helmet émet (revue A29, R5). Une troisième copie ici
+ * aurait pu dériver des deux autres sans qu'aucune garde ne le voie — et le
+ * test §4-A se serait comparé à une chaîne périmée, vert à vide.
  */
-const CSP_AMONT_HELMET =
-  "default-src 'none';base-uri 'self';font-src 'self' https: data:;form-action 'self';" +
-  "frame-ancestors 'none';img-src 'self' data:;object-src 'none';script-src 'self';" +
-  "script-src-attr 'none';style-src 'self' https: 'unsafe-inline';upgrade-insecure-requests";
+const CSP_AMONT_HELMET = cspAmontFactice();
 
 /** 06 §10.2 : HSTS — un an au moins, sous-domaines inclus. */
 const HSTS_MAX_AGE_MINIMAL_S = 31_536_000;
@@ -146,19 +160,37 @@ test.beforeEach(() => {
 
 type EnTetes = Record<string, string>;
 
+async function enTetesDuChemin(
+  request: APIRequestContext,
+  pile: PileCaddy,
+  chemin: string,
+): Promise<EnTetes> {
+  const reponse = await request.get(harnais.urlDe(pile, chemin), { maxRedirects: 0 });
+  expect(
+    reponse.status(),
+    `${chemin} (pile ${pile.nom}) doit rendre 200 pour que ses en-têtes soient ceux ` +
+      `d'une réponse normale, pas d'une page d'erreur. Journal Caddy :\n${harnais.journal()}`,
+  ).toBe(200);
+  return reponse.headers();
+}
+
 async function enTetesDe(
   request: APIRequestContext,
   pile: PileCaddy,
   cible: Cible,
 ): Promise<EnTetes> {
-  const reponse = await request.get(harnais.urlDe(pile, cible.chemin), { maxRedirects: 0 });
-  expect(
-    reponse.status(),
-    `${cible.chemin} (pile ${pile.nom}) doit rendre 200 pour que ses en-têtes soient ceux ` +
-      `d'une réponse normale, pas d'une page d'erreur. Journal Caddy :\n${harnais.journal()}`,
-  ).toBe(200);
-  return reponse.headers();
+  return enTetesDuChemin(request, pile, cible.chemin);
 }
+
+/**
+ * Les icônes de PWA — noms NON empreintés, contenu provisoire (régénérées
+ * depuis les jetons). Mesuré par A29 (R6) : elles sortaient de Caddy SANS
+ * AUCUN Cache-Control — exclues du `no-cache` de l'HTML sans rien recevoir à
+ * la place. A01 (R1) : la garde asserte la PRÉSENCE de l'en-tête, et qu'il
+ * n'est pas `immutable` — un nom stable dont le contenu change ne se croit pas
+ * sur parole. La VALEUR exacte appartient à A11 : on ne la fige pas ici.
+ */
+const ICONES_PWA = ['/apple-touch-icon.png', '/icones/icone-192.png', '/icones/icone-512.png'];
 
 /** `max-age=31536000; includeSubDomains; preload` → 31536000 ; absent → -1. */
 function maxAgeDe(hsts: string): number {
@@ -389,6 +421,63 @@ for (const pile of PILES_CADDY) {
         }
       });
     }
+
+    // -------------------------------------------------------------------------
+    // ICÔNES DE PWA — une politique de cache EXPLICITE, jamais `immutable`.
+    // Rouge tant que le Caddyfile ne pose rien sur ces chemins (A29 R6) ; vert
+    // quand A11 livre le matcher qui les couvre. La valeur reste la sienne.
+    // -------------------------------------------------------------------------
+    test.describe('icônes de PWA — Cache-Control', () => {
+      for (const chemin of ICONES_PWA) {
+        test(`@critique ${chemin} : Cache-Control présent, jamais immutable`, async ({
+          request,
+        }) => {
+          const en = await enTetesDuChemin(request, pile, chemin);
+          const cc = en['cache-control'];
+          expect(
+            cc,
+            `${chemin} (pile ${pile.nom}) sort de Caddy SANS Cache-Control : exclu du ` +
+              `no-cache de l'HTML sans rien recevoir à la place (A29 R6). Toute réponse porte ` +
+              `une politique explicite — un chemin qui sort d'un matcher sans entrer dans un ` +
+              `autre est un trou, pas une famille.`,
+          ).toBeDefined();
+          expect(
+            cc,
+            `${chemin} (pile ${pile.nom}) : Cache-Control « ${String(cc)} » est immutable. ` +
+              `Le nom n'est PAS empreinté et le contenu est provisoire (icônes régénérées ` +
+              `depuis les jetons) : une icône rebâtie ne doit jamais attendre l'expiration ` +
+              `d'un cache d'un an (A01, R1).`,
+          ).not.toMatch(/immutable/i);
+          test.info().annotations.push({ type: `Cache-Control ${chemin}`, description: cc ?? '' });
+        });
+      }
+    });
+
+    // -------------------------------------------------------------------------
+    // `crossOriginIsolated` — ASSERTÉ, pas seulement relevé (A29 R7). C'est la
+    // propriété que COOP + COEP existent pour produire ; l'encadré du Caddyfile
+    // l'affirme comme un fait mesuré, et rien ne rougissait le jour où elle
+    // retomberait à `false`. Sur les DEUX fronts, sur les DEUX piles.
+    // -------------------------------------------------------------------------
+    for (const front of CIBLES.filter((c) => c.genre === 'front')) {
+      test(`@critique ${front.nom} — ${front.chemin} : window.crossOriginIsolated === true`, async ({
+        browser,
+      }) => {
+        const contexte = await browser.newContext();
+        const page = await contexte.newPage();
+        const reponse = await page.goto(harnais.urlDe(pile, front.chemin));
+        expect(reponse?.status(), `${front.chemin} doit rendre 200 à travers Caddy`).toBe(200);
+        expect(
+          await page.evaluate(() => window.crossOriginIsolated),
+          `${front.chemin} (pile ${pile.nom}) : window.crossOriginIsolated vaut false — COOP ` +
+            `« ${reponse?.headers()['cross-origin-opener-policy'] ?? '(absent)'} », COEP ` +
+            `« ${reponse?.headers()['cross-origin-embedder-policy'] ?? '(absent)'} ». L'isolation ` +
+            `d'origine que le snippet (securite) promet n'est pas celle que le navigateur ` +
+            `applique (ZAP 90004, 06 §10.2).`,
+        ).toBe(true);
+        await contexte.close();
+      });
+    }
   });
 }
 
@@ -489,11 +578,149 @@ async function sonder(page: Page): Promise<SondesNavigateur> {
   });
 }
 
+/** Ce que le navigateur signale comme bloqué ou violé — vidé entre deux phases. */
+interface Collecte {
+  bloquees: string[];
+  consoleSecurite: string[];
+  vider(): void;
+}
+
+function ecouterBlocages(page: Page): Collecte {
+  const collecte: Collecte = {
+    bloquees: [],
+    consoleSecurite: [],
+    vider() {
+      this.bloquees.length = 0;
+      this.consoleSecurite.length = 0;
+    },
+  };
+  page.on('requestfailed', (requete) => {
+    const motif = requete.failure()?.errorText ?? '';
+    // ERR_BLOCKED_BY_RESPONSE = COEP/CORP ; ERR_BLOCKED_BY_CSP = CSP. Le reste
+    // (un abandon, une coupure — et HORS LIGNE, toute requête réseau) n'est pas
+    // le sujet de cette garde.
+    if (/BLOCKED_BY_RESPONSE|BLOCKED_BY_CSP/.test(motif)) {
+      collecte.bloquees.push(`${requete.url()} — ${motif}`);
+    }
+  });
+  page.on('console', (message) => {
+    const texte = message.text();
+    if (
+      /Content Security Policy|Cross-Origin-Embedder-Policy|Cross-Origin-Resource-Policy|ERR_BLOCKED_BY/i.test(
+        texte,
+      )
+    ) {
+      collecte.consoleSecurite.push(texte);
+    }
+  });
+  return collecte;
+}
+
+/**
+ * Les verdicts d'une phase — en ligne ou hors ligne — sous `expect.soft` : un
+ * seul rouge ne doit pas cacher les autres. Le test échoue quand même ; il dit
+ * seulement TOUT ce qu'il a vu, et sous quel en-tête.
+ */
+async function verdicts(page: Page, phase: string, collecte: Collecte): Promise<void> {
+  const sondes = await sonder(page);
+  test.info().annotations.push({
+    type: `sondes navigateur — ${phase}`,
+    description: JSON.stringify(sondes),
+  });
+  const violations = await page.evaluate(() => window.__violationsCsp ?? []);
+  expect
+    .soft(
+      violations,
+      `[${phase}] violations de CSP dans le navigateur sous la CSP servie : ${JSON.stringify(violations, null, 1)}`,
+    )
+    .toEqual([]);
+  expect
+    .soft(
+      collecte.bloquees,
+      `[${phase}] ressources bloquées par COEP/CORP/CSP :\n${collecte.bloquees.join('\n')}`,
+    )
+    .toEqual([]);
+  expect
+    .soft(
+      collecte.consoleSecurite,
+      `[${phase}] messages de sécurité en console :\n${collecte.consoleSecurite.join('\n')}`,
+    )
+    .toEqual([]);
+  const { crossOriginIsolated, ...verbales } = sondes;
+  for (const [sonde, verdict] of Object.entries(verbales)) {
+    expect.soft(verdict, `[${phase}] sonde « ${sonde} » sous les en-têtes servis`).toBe('ok');
+  }
+  // ASSERTÉ, pas relevé (A29 R7) : c'est la propriété que COOP + COEP servent à
+  // produire. Hors ligne, c'est le document servi PAR LE SERVICE WORKER qui la
+  // porte — ou non : le Cache Storage conserve les en-têtes de réponse, et un
+  // précache qui les perdrait ferait retomber l'isolation à `false` sans réseau.
+  expect
+    .soft(
+      crossOriginIsolated,
+      `[${phase}] window.crossOriginIsolated vaut false : COOP/COEP ne produisent pas ` +
+        `l'isolation d'origine annoncée (ZAP 90004, 06 §10.2).`,
+    )
+    .toBe(true);
+}
+
+/**
+ * Le même passage en mode avion que hors-ligne-l5.e2e.ts (`passerEnModeAvion`),
+ * avec ses deux pièges déjà mesurés : attendre l'ACTIVATION du worker par
+ * `expect.poll` (jamais `serviceWorker.ready` sans limite, jamais un
+ * `waitForFunction` asynchrone qui rend vrai d'emblée) ; et réappliquer la
+ * coupure après le rechargement, parce que `navigator.onLine` repasse à `true`
+ * dans le document neuf alors que le réseau reste coupé.
+ */
+async function couperLeReseau(contexte: BrowserContext, page: Page): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () => {
+          const inscriptions = await navigator.serviceWorker.getRegistrations();
+          return inscriptions.some((i) => i.active?.state === 'activated');
+        }),
+      {
+        message: 'le service worker doit être ACTIVÉ avant qu’on coupe le réseau',
+        timeout: 60_000,
+      },
+    )
+    .toBe(true);
+  await page.reload();
+  await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
+    timeout: 60_000,
+  });
+  await contexte.setOffline(true);
+  await page.reload();
+  await contexte.setOffline(false);
+  await contexte.setOffline(true);
+  expect(
+    await page.evaluate(async () => {
+      try {
+        await fetch(`/sonde-hors-ligne-${String(Date.now())}`, { cache: 'no-store' });
+        return 'le réseau répond encore';
+      } catch {
+        return 'coupé';
+      }
+    }),
+    'une requête réelle doit échouer : le drapeau seul ne prouve rien',
+  ).toBe('coupé');
+}
+
 test.describe('prouvé en navigateur — la PWA terrain démarre sous les en-têtes servis', () => {
-  test(`@critique aucune violation CSP, aucune ressource bloquée : Argon2id, data:, blob:, service worker, police`, async ({
+  // ── EN LIGNE, PUIS HORS LIGNE — DANS LE MÊME TEST, ET POURQUOI (A29 R9) ───
+  // `hors-ligne-l5.e2e.ts` prouve le mode avion contre `vite preview`, qui ne
+  // sert AUCUN en-tête. Ce fichier prouvait les en-têtes derrière Caddy, sans
+  // jamais passer hors ligne. Entre les deux, PERSONNE ne prouvait que la PWA
+  // démarre HORS LIGNE sous la CSP/COEP réellement servies — la thèse même du
+  // §4-C, appliquée au seul invariant que P-C prouve (invariant 1).
+  // Hors ligne, le document vient du Cache Storage du service worker, AVEC les
+  // en-têtes que Caddy avait posés : la CSP est rejouée, `crossOriginIsolated`
+  // doit tenir, Argon2id (WASM) doit se dériver, la police doit se charger —
+  // sans une requête réseau. C'est ce que la seconde phase mesure.
+  test(`@critique aucune violation CSP, aucune ressource bloquée : Argon2id, data:, blob:, service worker, police — EN LIGNE puis HORS LIGNE`, async ({
     browser,
   }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(240_000);
     const pile = PILES_CADDY[0];
     const contexte = await browser.newContext({ serviceWorkers: 'allow' });
     const page = await contexte.newPage();
@@ -509,33 +736,13 @@ test.describe('prouvé en navigateur — la PWA terrain démarre sous les en-tê
         });
       });
     });
-
-    const bloquees: string[] = [];
-    page.on('requestfailed', (requete) => {
-      const motif = requete.failure()?.errorText ?? '';
-      // ERR_BLOCKED_BY_RESPONSE = COEP/CORP ; ERR_BLOCKED_BY_CSP = CSP. Le reste
-      // (un abandon, une coupure) n'est pas le sujet de cette garde.
-      if (/BLOCKED_BY_RESPONSE|BLOCKED_BY_CSP/.test(motif)) {
-        bloquees.push(`${requete.url()} — ${motif}`);
-      }
-    });
-    const consoleSecurite: string[] = [];
-    page.on('console', (message) => {
-      const texte = message.text();
-      if (
-        /Content Security Policy|Cross-Origin-Embedder-Policy|Cross-Origin-Resource-Policy|ERR_BLOCKED_BY/i.test(
-          texte,
-        )
-      ) {
-        consoleSecurite.push(texte);
-      }
-    });
+    const collecte = ecouterBlocages(page);
 
     const reponse = await page.goto(harnais.urlDe(pile, '/'));
     expect(reponse?.status(), 'la racine du terrain doit rendre 200 à travers Caddy').toBe(200);
     const enTetes = reponse?.headers() ?? {};
     test.info().annotations.push({
-      type: 'en-têtes vus par le navigateur',
+      type: 'en-têtes vus par le navigateur — en ligne',
       description:
         `CSP: ${enTetes['content-security-policy'] ?? '(absent)'} · ` +
         `COEP: ${enTetes['cross-origin-embedder-policy'] ?? '(absent)'} · ` +
@@ -546,33 +753,47 @@ test.describe('prouvé en navigateur — la PWA terrain démarre sous les en-tê
     // Le chemin de production intégral : Argon2id dans le navigateur (hash-wasm,
     // `'wasm-unsafe-eval'`), enveloppe WebCrypto, écran suivant rendu.
     await preparerAppareilNeuf(page, MOT_DE_PASSE_APPAREIL);
+    await verdicts(page, 'en ligne', collecte);
 
-    const sondes = await sonder(page);
+    // ── HORS LIGNE : démarrage à froid, servi par le précache, sous les MÊMES
+    // en-têtes — ceux que le service worker a mis en cache avec le document.
+    await couperLeReseau(contexte, page);
+    collecte.vider();
+    const rechargee = await page.reload();
+    expect(
+      rechargee?.fromServiceWorker(),
+      'hors ligne, le document doit venir du service worker — sinon rien ne prouve un démarrage sans réseau',
+    ).toBe(true);
+    const enTetesHorsLigne = rechargee?.headers() ?? {};
     test.info().annotations.push({
-      type: 'sondes navigateur',
-      description: JSON.stringify(sondes),
+      type: 'en-têtes vus par le navigateur — hors ligne (service worker)',
+      description:
+        `CSP: ${enTetesHorsLigne['content-security-policy'] ?? '(absent)'} · ` +
+        `COEP: ${enTetesHorsLigne['cross-origin-embedder-policy'] ?? '(absent)'} · ` +
+        `COOP: ${enTetesHorsLigne['cross-origin-opener-policy'] ?? '(absent)'} · ` +
+        `CORP: ${enTetesHorsLigne['cross-origin-resource-policy'] ?? '(absent)'}`,
     });
-
-    const violations = await page.evaluate(() => window.__violationsCsp ?? []);
-    // `expect.soft` sur les quatre verdicts : un seul rouge ne doit pas cacher les
-    // trois autres. Le test échoue quand même — il dit seulement TOUT ce qu'il a vu.
-    expect
-      .soft(
-        violations,
-        `violations de CSP dans le navigateur sous la CSP servie : ${JSON.stringify(violations, null, 1)}`,
-      )
-      .toEqual([]);
-    expect
-      .soft(bloquees, `ressources bloquées par COEP/CORP/CSP :\n${bloquees.join('\n')}`)
-      .toEqual([]);
-    expect
-      .soft(consoleSecurite, `messages de sécurité en console :\n${consoleSecurite.join('\n')}`)
-      .toEqual([]);
-    for (const [sonde, verdict] of Object.entries(sondes)) {
-      if (sonde === 'crossOriginIsolated') continue;
-      expect.soft(verdict, `sonde « ${sonde} » sous les en-têtes servis`).toBe('ok');
+    for (const nom of [
+      'content-security-policy',
+      'cross-origin-embedder-policy',
+      'cross-origin-opener-policy',
+    ]) {
+      expect
+        .soft(
+          enTetesHorsLigne[nom],
+          `hors ligne, ${nom} n'est pas celui que Caddy avait servi : le précache ne rejoue ` +
+            `pas les en-têtes de sécurité, et l'app démarre sans réseau sous une AUTRE politique.\n` +
+            `Hors ligne : ${enTetesHorsLigne[nom] ?? '(absent)'}\nEn ligne  : ${enTetes[nom] ?? '(absent)'}`,
+        )
+        .toBe(enTetes[nom]);
     }
 
+    // Le coffre existe : l'écran est « Déverrouiller » — et la dérivation
+    // Argon2id se rejoue, hors ligne, sous la CSP rejouée par le worker.
+    await deverrouillerAppareil(page, MOT_DE_PASSE_APPAREIL);
+    await verdicts(page, 'hors ligne', collecte);
+
+    await contexte.setOffline(false);
     await contexte.close();
   });
 });
