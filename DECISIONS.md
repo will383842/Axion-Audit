@@ -12513,3 +12513,42 @@ l'intégration (`vues.ts` : titre de `accueil` et commentaire :50-54 rectifié ;
 `coquille-l5c.tsx`) ; **A22** la seule ligne de `EcranEntretien.tsx:541`, sur une branche à part ;
 **A26** écrit les tests — jamais l'auteur du code (09 §5.6) — sur le modèle de B2, avec la
 contre-épreuve : depuis `accueil`, mission embarquée, **une sortie vers le cockpit existe**.
+
+## 2026-09-09 — [L5e] La fiche d'étage 2 implémentée sous ma reclassification : RATIFIÉE ou À DÉFAIRE ?
+
+Williams, ce jour : « **Fais tout selon tes recommandations** », dont « la fiche d'étage 2 ». L'entrée
+du 2026-09-09 (« Une fiche d'étage 2 que j'ai reclassée puis fait implémenter ») lui offrait ce choix
+à P-C, avec ma position écrite : **je maintiens le raisonnement du 2026-09-08** — le rappel de fin de
+journée est **l'instrument de l'invariant 8**, donc un défaut d'instrument et non une fonctionnalité
+manquante. Il adopte cette position.
+
+Options :
+
+1. **RATIFIÉE** — le correctif de L5e reste : `apps/field/src/agenda/jour.ts:314` compte les jours au
+   **fuseau de la mission** et non en UTC. Le geste passé est couvert, l'invariant 8 garde un
+   instrument juste.
+2. **À DÉFAIRE** — révoquer le correctif, remettre la fiche en attente. Le rappel redeviendrait faux
+   de 14 h sur une mission à UTC+14, pour la seule raison que l'agent qui l'a reclassé était aussi
+   celui qui en a autorisé l'implémentation.
+
+Arbitrage : **RATIFIÉE**. La sanction d'un vice de procédure ne peut pas être de remettre en
+production un instrument qu'on sait faux ; elle est de faire **regarder l'acte par un humain**, ce que
+cette entrée obtient. Le correctif reste, la faute de procédure est nommée et non effacée.
+Règle de précédence : sans objet — aucune divergence de pack. C'est `CLAUDE.md` §3-7 et 09 §5.9 qu'on
+applique à la lettre : l'arbitrage d'une fiche d'étage 2 appartient à Williams, et il vient de l'exercer.
+Décideur : **Williams**, par adoption nommée. **Ma réserve initiale est conservée** et ne se dissout
+pas dans cette ratification : la reclassification et l'autorisation d'implémenter sont venues **de la
+même main**, et c'est exactement ce que le §3-7 garde.
+Impact spec : aucun amendement. **Deux conséquences qu'il n'a peut-être pas vues.**
+① Il ratifie **par adoption d'une recommandation**, sans avoir relu la fiche, et **avant P-C** où
+l'entrée disait la poser. C'est valide — il est le décideur et le point lui était nommé — mais c'est la
+garantie du §3-7 exercée dans sa forme la plus mince. **La ratification reste rouvrable à P-C** : la
+case ☐ RATIFIÉE ☐ À DÉFAIRE de la fiche est cochée et datée, jamais effacée.
+② Elle **ne vaut pas règle générale** et ne crée **aucun précédent** autorisant un directeur technique
+à reclasser ce qu'il veut implémenter. La règle reste celle du §3-7.
+Application : `AMELIORATIONS.md`, fiche du 2026-09-08, ligne de ratification datée ajoutée par A01 sous
+l'état du 2026-09-09 — la fiche est **complétée, jamais réécrite** (invariant 7). **A02** reporte l'état
+à `TRACABILITE_E1-E47.md` §A.sexies, ligne E32.
+**Ce que je n'étends pas** : la fiche **M10** (verrou de 15 min, D-3) reste **PROPOSÉE et NON
+implémentée**. Elle n'était pas dans la liste des trois points ; « fais tout selon tes recommandations »
+ne l'arbitre pas, et je refuse de le lire ainsi.
