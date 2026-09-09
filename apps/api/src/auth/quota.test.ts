@@ -103,9 +103,38 @@ describe('quota global — la clé est le SUJET DU JETON, l’IP en repli', () =
   // lenteur : c'est l'aveu qu'un chargement de module n'a pas de budget de temps
   // à tenir. S'il met vraiment deux minutes, ce n'est plus une contention, c'est
   // une panne — et il échouera.
+  //
+  // COMPLÉTÉ le 2026-09-09 (A16), APRÈS un échec réel : « Test timed out in 5000ms »
+  // sur le premier cas, pendant qu'une seconde suite complète tournait dans un autre
+  // worktree. Le crochet ci-dessus préchauffait l'IMPORT — et cela seul ne suffit
+  // pas, parce que ce n'est pas le seul coût qui n'arrive qu'UNE fois.
+  //
+  // DÉCOMPOSÉ À LA SONDE (A16, 2026-09-09, Node 24, 8 cœurs) :
+  //
+  //   import de `../app.js`, par processus ................ 5 228 ms  ← déjà couvert
+  //   1er `construireApp()` + `ready()` .................... 667 ms   ← NE L'ÉTAIT PAS
+  //   2e, 3e, 4e `construireApp()` + `ready()` ......... 57, 73, 34 ms
+  //   les 301 `inject` de la rafale ......................... 268 ms
+  //
+  // Le résultat qui tranche : la rafale de 301 requêtes, qu'on soupçonnerait
+  // volontiers, ne coûte que 268 ms. Le travail réel de ce fichier est BON MARCHÉ.
+  // Ce qui coûtait, c'était la PREMIÈRE construction du socle Fastify — plugins,
+  // compilateurs Zod, helmet — payée en entier par le premier cas, et 10 à 20 fois
+  // moins cher pour les suivants. D'où l'écart constant, mesuré sur sept exécutions :
+  // premier cas 1 822 à 4 335 ms, ses quatre frères 905 à 2 428 ms pour la MÊME
+  // rafale de 301 requêtes.
+  //
+  // On construit donc une app ici, et on la ferme : aucune requête n'est émise, donc
+  // aucun compteur de quota n'est touché et les cinq cas restent indépendants. C'est
+  // ce que `crochets.test.ts` et `en-tetes-amont-jumeau.test.ts` font depuis toujours
+  // — et ce sont précisément les deux fichiers de cette famille qui n'ont jamais
+  // rougi.
   beforeAll(async () => {
-    await import('../app.js');
+    const { construireApp } = await import('../app.js');
     await import('./jetons.js');
+    const prechauffage = await construireApp();
+    await prechauffage.ready();
+    await prechauffage.close();
   }, 120_000);
 
   it('301 requêtes · 2 jetons · 1 SEULE IP → AUCUN refus', async () => {

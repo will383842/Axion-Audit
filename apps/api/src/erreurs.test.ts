@@ -22,7 +22,7 @@
 //
 // Traçabilité : E43 (conventions d'API), E33.
 // =============================================================================
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
@@ -59,6 +59,30 @@ interface Banc {
  * une contrainte réelle du gestionnaire d'erreurs, pas un artefact de test — voir le
  * rapport A16, défaut D8.
  */
+// -----------------------------------------------------------------------------
+// PRÉCHAUFFAGE — même motif, même remède que `auth/socle.test.ts` (2026-09-01).
+//
+// `banc()` charge `pino` et `./erreurs.js` à la demande. Le PREMIER cas qui
+// l’appelle payait donc, seul, le chargement à froid des deux — et les huit cas
+// suivants, qui appellent le MÊME `banc()`, mettent 12 à 40 ms.
+//
+// MESURÉ (A16, 2026-09-09, Node 24, 8 cœurs) sur « chaque statut levé par un
+// greffon » :
+//
+//   fichier isolé, cache Vite chaud ........................ 1 174 – 1 777 ms
+//   suite unitaire complète, machine au repos .............. 3 936 ms  (79 % du plafond)
+//   suite unitaire complète, 6 cœurs sur 8 occupés ......... 2 163 ms
+//
+// Il n’a pas encore rougi, et c’est exactement pourquoi on le traite maintenant :
+// à 79 % d’un plafond de 5 s, sa marge n’est plus une propriété du test mais de la
+// charge de la machine. Le coût part donc hors chronomètre ; le budget des neuf
+// cas reste 5 s, et il redevient une mesure de ce qu’ils testent.
+// -----------------------------------------------------------------------------
+beforeAll(async () => {
+  await import('pino');
+  await import('./erreurs.js');
+}, 120_000);
+
 async function banc(): Promise<Banc> {
   const { default: pino } = await import('pino');
   const { enregistrerGestionErreurs } = await import('./erreurs.js');
