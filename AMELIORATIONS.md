@@ -2611,6 +2611,19 @@ sur trois fuseaux). **Impact schéma/API : aucun.**
 **Recommandation d'A01** : correctif maintenant, incrément séparé — le rappel est **déjà en désaccord
 avec la `journee` qu'il reçoit**, elle-même calculée au fuseau de mission. Une exécution, pas un choix.
 
+**ÉTAT AJOUTÉ LE 2026-09-09 (A01) — la fiche n'est pas réécrite, elle est complétée (invariant 7).**
+**IMPLÉMENTÉE le 2026-09-08**, dans l'incrément **L5e** : `apps/field/src/agenda/jour.ts:314` —
+`jourCivil(dernierExportIso, fuseau) === jourCivil(instantIso, fuseau)`. Elle l'a été **sous ma
+reclassification** du même jour (`DECISIONS.md`, « Trois écarts hors critères », cas (c) MAINTENANT),
+qui l'a sortie de l'étage 2 pour la ranger en correctif autorisé sous 09 §4bis — donc **avant** tout
+arbitrage humain. Le titre ci-dessus (« PROPOSÉE, NON IMPLÉMENTÉE ») est conservé tel qu'il a été
+écrit ; il ne décrit plus l'état du code depuis le 2026-09-08.
+**Ce que Williams arbitre désormais n'est plus ABSORBÉE / PHASE 2 / REFUSÉE, mais ☐ RATIFIÉE
+☐ À DÉFAIRE**, à P-C. Motif de ce maintien (`DECISIONS.md`, 2026-09-09) : la reclassification et
+l'autorisation d'implémenter sont venues de la même main, et CLAUDE.md §3-7 garde exactement cela.
+Je maintiens le raisonnement du 08 — c'est un défaut d'instrument de l'invariant 8, non une
+fonctionnalité manquante — et je le soumets plutôt que de le tenir pour acquis.
+
 ## 2026-09-08 — [L5a/L5c] Étage 2, PROPOSÉE — **M10** : le verrou de 15 min tombe sur l'auditeur qui ATTEND son interlocuteur
 
 > **Quatrième demande, première fiche.** A54 l'a proposée le 2026-09-06 (`RECETTE_NOVICE_L5_2026-09-06.md`

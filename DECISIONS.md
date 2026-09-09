@@ -12249,3 +12249,33 @@ Impact spec : aucun amendement du pack. La règle s'écrit là où elle sera lue
 PROPOSÉE, non implémentée ») est périmée — L5e l'a implémentée sur mon autorisation nommée du
 2026-09-08, et je l'ai vérifié à `apps/field/src/agenda/jour.ts:314`. Ce n'est donc pas une fiche
 d'étage 2 anticipée. **A02** la rectifie, en la datant, sans effacer la mention d'origine.
+
+## 2026-09-09 — [L5e] Une fiche d'étage 2 que j'ai reclassée puis fait implémenter : caduque, ou à ratifier ?
+
+Constat né du corollaire E32. La fiche `AMELIORATIONS.md` du 2026-09-08 (« le jour civil des rituels
+se calcule en UTC ») porte encore en titre **« ÉTAGE 2 — PROPOSÉE, NON IMPLÉMENTÉE »** et, en pied,
+« Arbitrage attendu de Williams : ABSORBÉE · PHASE 2 · REFUSÉE ». Or je l'ai reclassée le même jour
+en correctif autorisé sous 09 §4bis, et **L5e l'a implémentée** — `apps/field/src/agenda/jour.ts:314`,
+vérifié par moi sur `ac365f3`. CLAUDE.md §3-7 réserve à Williams l'implémentation d'une fiche
+d'étage 2 : j'ai reclassé, puis autorisé le travail que ma reclassification rendait possible.
+
+Options :
+
+1. **Arbitrage caduc** : la fiche n'était pas de l'étage 2 — aucune fonctionnalité ne manquait, c'est
+   un défaut de l'instrument de l'invariant 8. Défendable, et c'est exactement le raisonnement que
+   j'ai tenu le 2026-09-08.
+2. **Arbitrage maintenu, converti en ratification** à la porte.
+
+Arbitrage : **option 2**. Non parce que le raisonnement du 08 serait faux — je le maintiens — mais
+parce que la reclassification et l'autorisation d'implémenter sont venues **de la même main**, et que
+c'est précisément ce que le §3-7 garde. Trois agents (A26, A22, A29) avaient classé la fiche en
+étage 2 ; un seul l'en a sortie, et c'est celui qui a ensuite ouvert le travail. La fiche reste donc
+ouverte : son état est **complété** d'une ligne datée — jamais réécrit — et le choix offert à Williams
+devient **RATIFIÉE / À DÉFAIRE**, à P-C. Le coût pour lui est de trente secondes ; le coût de l'usage
+inverse, s'il s'installe, est qu'un directeur technique reclasse tout ce qu'il veut implémenter.
+Règle de précédence : sans objet — aucune divergence de pack ; c'est CLAUDE.md §3-7 et 09 §5.9 qu'on
+applique à la lettre, contre ma propre interprétation du 2026-09-08, qui n'est pas retirée pour autant.
+Décideur : **A01** — et **escalade Williams : OUI**, à P-C.
+Impact spec : aucun amendement. Application : `AMELIORATIONS.md`, fiche du 2026-09-08, ligne d'état
+ajoutée par A01. Le §A.sexies rectifié par A02 la donne « refermée », ce qui reste juste : un écart
+refermé dans le code et une fiche à ratifier par l'humain sont deux choses différentes.
