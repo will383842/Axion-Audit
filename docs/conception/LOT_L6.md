@@ -25,6 +25,7 @@
 > | **A-8** | R5             | §6              | la partie **visible** de L6b reçoit son plan DoD (4 états, axe-core, tokens)             |
 > | **A-9** | O1, O2, D4     | §8              | trois doutes de spec ajoutés, plus **D5**, trouvé en relisant la note au code             |
 > | **A-10** | R1 (A29)       | §3bis           | **2026-09-09** — la clé de dernière sync est LIVRÉE par L5e : nom et sémantique corrigés |
+> | **A-11** | calendrier P-DESCOPE | §3ter | **2026-09-09** — le découpage en incréments COMMITABLES : fichiers, porteurs, critères de fin, estimations |
 >
 > Toutes les affirmations de code ci-dessous ont été **re-mesurées le 2026-09-05 sur `origin/main`
 > (`da7e8c9`)**, qui contient L5a (#30), L7a (#32) et L5b (#31) — et non sur l'état du 2026-09-03.
@@ -183,6 +184,218 @@ clé, l'alerte de l'invariant 8 se déclencherait pour toujours.
 > avant L6a (09 §4bis : L5e ne rouvre rien pour ça). **L6a le clôt en remplaçant le port**, comme il
 > remplace `portSyncInerte` : l'implémentation réelle lit `meta` et ne code plus `null`. La
 > non-régression attendue : les deux écrans rendent le MÊME verdict après un push réussi.
+
+## 3ter. Découpage en incréments commitables — AMENDEMENT A-11 DU 2026-09-09
+
+> **Rien n'est remplacé.** La table du §3 reste le sommaire du lot ; §3ter en est la version
+> **exécutable** — celle qu'une session ouvre à la minute où P-C tombe, pour n'avoir plus rien à
+> concevoir ce jour-là. Toutes les mesures ci-dessous datent du **2026-09-09 sur `origin/main`
+> (`5ac6f95`)**, et non de l'état du 2026-09-05.
+
+### A. Ce qui est DÉJÀ LÀ — L6 le consomme, il ne le réécrit pas
+
+| Acquis (mesuré le 2026-09-09)                                                                                                                                                                                                                              | Ce que L6 en fait                                                                                                                                                    |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Le contrat d'ops** — `packages/shared/src/sync.ts` : `operationSchema`, `lotPushSchema`, `reponsePushSchema`, `reponsePullSchema`, `RESULTATS_OP` (5), `ENTITES_SYNC` (5), `ENTITES_DESCENDANTES`, `TAILLE_LOT_PUSH_MAX = 100`, `ECHECS_AVANT_EXAMEN = 10` | **Il l'implémente.** Le modifier est une escalade 11 §8-2 — pas une correction de parcours                                                                            |
+| **Le port inerte** — `local/port-sync.ts` : `PortSync` (`synchroniserMaintenant`, `etat`), `EtatSyncMission`, `ResultatSync`, `evaluerAlerteSauvegarde`, `DELAI_ALERTE_SANS_SYNC_MS`                                                                        | **L6a REMPLACE l'implémentation**, ne redéfinit ni l'interface ni la fonction pure d'alerte                                                                           |
+| **La lecture de l'outbox** — `local/depots/outbox.ts` : `operationsEnAttente`, `compterParStatut`, `prochainLot`, `aTraiterParUnHumain` ; index `[statut+opId]` posé en `SCHEMA_LOCAL` v1                                                                   | **L6a draine par `prochainLot`.** L'écriture de la file appartient à `ecriture.ts` (L5a) et n'est pas rouverte                                                        |
+| **Les trois tables serveur** — `db/schema.ts` : `attachment_uploads` (l. 663), `processed_ops` (l. 1009), `sync_log` (l. 1016) ; migrations `0007_transverse.sql`, `0013_sync_colonnes_manquantes.sql`                                                      | **L6 n'écrit AUCUNE migration.** Il leur donne leur premier écrivain applicatif — toucher au 04 serait une escalade 11 §8-2                                           |
+| **La clé de dernier succès** — `CLES_META.prefixeDerniereSyncReussie = 'sync:dernier-succes:'`, `cleDerniereSyncReussie()` (`local/base.ts:155,180`), lue par `agenda/jour.ts:133`, livrée par L5e                                                          | **L6a l'ÉCRIT** (A-10). Elle existe, elle est lue, personne ne l'écrit : c'est un manque d'écrivain, jamais un manque de clé                                          |
+| **La descente et l'horloge** — `appliquerDescente` (`local/ecriture.ts`, seul point d'entrée, n'écrit jamais l'outbox), `reglerDecalage` (`local/horloge.ts:45`)                                                                                            | L6b **traduit avant d'appeler** ; il ne fait pas de `ecriture.ts` un client HTTP (PD6 : rien à réparer)                                                               |
+
+**Corollaire de placement, tranché ici.** `DECISIONS.md` du 2026-09-09 (D-4) laisse
+`apps/field/src/ecrans/**` **hors** du seuil bloquant de 90 % (module observé, non bloquant), alors
+que `apps/field/src/sync/**` y entre. **Toute décision — backoff, comptage, verdict d'alerte,
+traduction de résultat — vit donc sous `apps/field/src/sync/**` ; `ecrans/sync/**` ne fait que
+rendre.** Un verdict calculé dans un composant sortirait du seuil sans qu'aucune garde ne le dise.
+
+### B. Ce que L6a doit livrer EN PREMIER GESTE — commit « L6a-0 », ~0,2 j
+
+Trois gestes qui ne dépendent d'aucune ligne de moteur, et que d'autres attendent déjà :
+
+1. **L'écrivain de `cleDerniereSyncReussie(missionId)`** (A-10) — après chaque **push abouti**,
+   **jamais depuis `appliquerDescente`**. Le cockpit affiche « jamais synchronisée » aujourd'hui, et
+   continuera tant que personne n'écrit. Avec, dans le même commit, **la garde d'A26** qui croise les
+   deux artefacts : la clé écrite par le moteur est celle que `construireJournee` lit, et un pull
+   seul ne l'écrit pas.
+2. **R2 d'A29 (`REVUE_A29_L5E_2026-09-09.md`), datée et assignée à L6a.**
+   `app/EcranAccueil.tsx:195-214` dérive l'alerte de l'invariant 8 de `portSyncInerte.etat()`, qui
+   passe **`null` en dur** à `evaluerAlerteSauvegarde` (`local/port-sync.ts:167`), pendant que le
+   cockpit la dérive de `meta`. Invisible aujourd'hui, **contradictoire dès le premier push réussi**.
+   L6a le clôt **en remplaçant le port** : l'implémentation réelle lit `meta` et ne code plus `null`.
+   Non-régression exigée, écrite par A26 : **les deux écrans rendent le MÊME verdict** après un push.
+3. **Les deux globs de `.github/coverage-critical-paths.json`** passent de `cheminsAttendus`
+   (« non livre ») à `cheminsCritiques` — **dans le commit qui crée le premier fichier de
+   `apps/field/src/sync/` ou `apps/api/src/sync/`**, jamais après. Un seuil armé après le code est un
+   seuil qu'on ajuste au code.
+
+Ces trois gestes se signent ensemble. Tant qu'ils ne sont pas verts, **aucune ligne de push n'est
+écrite** : ce sont eux qui rendent le reste mesurable.
+
+### C. Les trois incréments
+
+#### C.1 — L6a « la montée » — 2,0 j
+
+**Périmètre, en une phrase** : l'appareil parle au siège pour la première fois du projet, et ce qu'il
+envoie est appliqué une fois, une seule, et seulement par son propriétaire.
+**Ce qu'il ne fait pas** : aucune descente (L6b), aucun octet de pièce jointe (L6c), aucune surface
+d'écran nouvelle — il ne fait que corriger l'existante (R2).
+
+| Côté        | Fichiers TOUCHÉS (**N** nouveau · **M** modifié)                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Client**  | **N** `field/src/sync/transport.ts` (Bearer, refresh rotatif, 401, §31-3) · **N** `sync/moteur.ts` (déclencheurs, drainage, lots de 100) · **N** `sync/montee.ts` (déchiffrement d'op + mapping PD2) · **N** `sync/port.ts` (l'implémentation de `PortSync`) · **M** `app/EcranAccueil.tsx` (R2 : injection du port réel) · **M** `local/contrat-sync.ts` (import par le baril, étage 1) · **M** `.github/coverage-critical-paths.json` · **M** `AMELIORATIONS.md`               |
+| **Serveur** | **N** `api/src/sync/routes.ts` (`POST /v1/sync/push`) · **N** `sync/service.ts` (contrat §9.3) · **N** `sync/depot.ts` (`processed_ops`, `answer_revisions`, `sync_log`) · **N** `sync/proprietaire.ts` (les trois résolveurs PD4) · **M** `api/src/app.ts` (enregistrement sous `/v1`)                                                                                                                                                                                          |
+
+**Fichiers qu'il NE touche PAS — c'est ce qui autorise ou interdit de paralléliser** :
+`packages/shared/src/sync.ts` (gelé) · `apps/api/src/db/schema.ts` et `apps/api/drizzle/**` (les
+trois tables existent → **zéro migration en L6a**) · `apps/field/src/local/base.ts` (`CLES_META` est
+déjà pourvue par L5e → **aucune montée de `VERSION_SCHEMA_LOCAL`**) · `local/ecriture.ts` ·
+`local/coffre*.ts` et `local/enveloppe.ts` (crypto locale — 11 §8-4) · `session/**` ·
+`ecrans/entretien/**` · `sauvegarde/**` · `apps/hq/**`.
+
+**Porteurs** : **A25** transport + moteur terrain · **A23** réception serveur (`processed_ops`,
+§9.9, `sync_log`). **Tests (09 §5.6 — jamais l'auteur)** : **A26** unitaires terrain, garde
+cockpit ↔ moteur (A-10), non-régression R2 · **A27** intégration serveur, propriété §9.9 exhaustive
+**dont la note volante non rattachée, qui doit finir `applied`** (PD4, 04 S-3).
+
+**Scénarios §9.8 dont il porte le MÉCANISME** : **1** (coupure en pleine saisie — drainage et
+backoff), **2** (kill pendant un push — statut d'op persistant, reprise de file), **3** (double envoi
+— `processed_ops` + upsert par `entityId`), **5** (deux appareils — `superseded` + archive
+`answer_revisions` **sur les trois entités**, S-4), **8** (refresh expiré — §31-3, la collecte
+continue). Scriptés Playwright en L6c ; **le mécanisme se prouve ici, en intégration.**
+
+**Critère de fin d'incrément — mesurable** : `pnpm verify` vert · couverture **≥ 90 % sur les QUATRE
+métriques** des deux globs (`functions` surveillée nommément) · un test d'intégration qui **rejoue
+3× le même lot** et compare l'état ligne à ligne (**C2 du 07**) · un test qui prouve `sync_log`
+écrit **par le chemin applicatif** avec `outbox_remaining` — et non par la fixture de L2, verte par
+construction (B3) · la garde A26 sur la clé de dernier succès · **les deux écrans, même verdict**
+après un push réussi (R2).
+
+#### C.2 — L6b « la descente, et ce qui se voit » — 1,2 j
+
+**Périmètre** : le siège redescend son delta, l'appareil s'y réaligne, et l'auditeur voit sans mentir
+où en est sa file.
+**Ce qu'il ne fait pas** : aucune pièce jointe, aucune règle de propriété nouvelle (elle est serveur,
+elle est à L6a), et **il ne répare rien dans `ecriture.ts`** — PD6 est périmé (A-7).
+
+| Côté        | Fichiers TOUCHÉS                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Client**  | **N** `field/src/sync/descente.ts` (serveur → formes locales, puis `appliquerDescente`) · **N** `sync/backoff.ts` (exponentiel **borné à 60 s**, 10e échec → « à examiner ») · **N** `ecrans/sync/**` (file en attente, « à examiner », ops rejetées, « n réponse(s) arbitrée(s) » cliquable) · **M** `sync/moteur.ts`, `sync/port.ts` · **M** `app/EcranAccueil.tsx` et `ecrans/journee/EcranAujourdhui.tsx` (pastille — raccordement, pas de calcul) |
+| **Serveur** | **M** `api/src/sync/routes.ts` (`GET /v1/sync/pull`), `sync/service.ts`, `sync/depot.ts` (curseur, `serverTime`, ligne `sync_log` `pull`)                                                                                                                                                                                                                                                                                                            |
+
+**Fichiers qu'il NE touche PAS** : `local/ecriture.ts` (PD6) · `local/base.ts` · `packages/shared/**`
+· `db/schema.ts` et `drizzle/**` · `session/**` · `apps/hq/**`.
+
+**Porteurs** : **A25** descente et backoff · **A22** surfaces visibles · **A23** route de pull.
+**Tests** : **A26** descente, backoff, horloge · **A27** pull delta en intégration · **A28**
+axe-core, 4 états, budget p95.
+
+**Scénario §9.8 dont il porte le MÉCANISME** : **4** (horloge locale +3 h — `serverTime` →
+`reglerDecalage`, PD7 ; le `client_updated_at` reste posé au seul port d'écriture).
+
+**Critère de fin d'incrément — mesurable** : deux pulls consécutifs sans changement serveur = **zéro
+écriture locale**, curseur stable · backoff **borné à 60 s**, prouvé sur horloge simulée · 10e échec
+→ « à examiner » **visible** · **4 états** (03 §33.2) sur chaque surface de statut · axe-core vert,
+**au plus UN `role="alert"` par écran**, le reste en `role="status"` et visible · **aucune couleur ni
+taille en dur**, l'alerte au rouge distinct du terracotta · **p95 des interactions < 100 ms** (le
+statut lit le local, jamais le réseau) · une ligne `sync_log` `direction = 'pull'` écrite par le
+chemin applicatif.
+
+#### C.3 — L6c « les octets, et la preuve » — 1,8 j
+
+**Périmètre** : la photo monte en morceaux et reprend là où elle s'est arrêtée ; les huit scénarios
+deviennent des tests qui tournent à chaque commit.
+**Ce qu'il ne fait pas** : il **ne produit pas les octets** — la chaîne photo locale est **L5d**
+(voir D10, qui est aujourd'hui le vrai risque de ce lot).
+
+| Côté        | Fichiers TOUCHÉS                                                                                                                                                                                     |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Client**  | **N** `field/src/sync/chunks.ts` (découpe 5 Mo, `status` → n'émettre que les manquants, `complete {sha256}`) · **M** `sync/moteur.ts` (les pièces jointes APRÈS les données, §9.6)                     |
+| **Serveur** | **N** `api/src/sync/chunks.ts` (idempotence par couple `id+index`, assemblage, vérification sha256, **409 + liste des chunks à réémettre**) · **M** `api/src/sync/routes.ts` (les trois routes §9.6)  |
+| **Tests**   | **N** `e2e/sync-l6.e2e.ts` (les **huit** scénarios, `@critique`) · **M** le fil rouge existant sous `e2e/` (allongé : sync + rejeu idempotent) · **N** le script k6                                    |
+
+**Fichiers qu'il NE touche PAS** : tout `apps/field/src/local/**` · `packages/shared/**` ·
+`db/schema.ts` et `drizzle/**` (`attachment_uploads` existe) · et **MinIO n'est jamais exposé**
+(PD8) : aucun code d'URL présignée, tout passe par l'API.
+
+**Porteurs** : **A25** chunks client · **A23** chunks serveur. **Tests** : **A26** les huit scénarios
+Playwright et la reprise à 80 % · **A28** k6, a11y, budgets.
+
+**Scénarios §9.8** : il porte le MÉCANISME de **6** (5 000 réponses + 200 photos — l'envoi) et **7**
+(reprise à 80 %), et il **SCRIPTE LES HUIT** — 1 à 8, sans exception. Aucun orphelin : 1, 2, 3, 5 et
+8 viennent de L6a ; 4 de L6b ; 6 et 7 d'ici, sur des octets fournis par L5d.
+
+**Critère de fin d'incrément — mesurable** : **8/8 `@critique` verts**, rejoués à chaque commit ·
+reprise prouvée par bascule (on coupe à 80 %, `status` ne rend que les manquants, `complete` valide
+le sha256, un sha256 faux rend **409 + la liste**) · **k6 50 clients × 1 000 ops, p95 < 500 ms** ·
+**`@filrouge` vert sur FIL-TPE ET FIL-GC** · couverture ≥ 90 % maintenue sur les deux globs · README
+de l'app à jour.
+
+### D. La somme ne tient PAS dans le reste — et c'est le fait à porter à P-DESCOPE
+
+**2,0 + 1,2 + 1,8 = 5,0 j-h** (les 0,2 j du commit L6a-0 compris), pour un budget 07 de **4,5 j** et
+un **restant annoncé de 4,3 j**. **Je ne fais pas tenir l'estimation** : l'écart est de **+0,5 j sur
+le budget du 07** et de **+0,7 j sur le restant**.
+
+Et il y a plus lourd, mesuré ce jour, et qui doit se dire : **L5d n'est pas livré.**
+`VERSION_SCHEMA_LOCAL` vaut **1**, `SCHEMA_LOCAL` ne porte **aucune table binaire**, `compresserPhoto`
+n'a **aucun appelant de production** (seul son propre test l'appelle), et le seul
+`<input type="file">` du dépôt est celui de la **restauration** (L5c). La séquence arbitrée par A01
+(A-4) étant **L5c → P-C → L5d → L6a → L6b → L6c**, il faut encore ajouter **≈ 0,5 j de L5d** avant la
+première ligne de L6a. **Total réel à placer : ≈ 5,5 j dans 4,3 j.**
+
+Ce que cela veut dire — sans le décider, le descope appartient à Williams, à P-DESCOPE du 15/09 :
+
+- **Ce qui ne peut pas tomber** : les huit scénarios `@critique` (07, jamais skippables), la reprise
+  à 80 % (critère nommé C3), le contrat §9.3 complet, la propriété §9.9, `processed_ops`. Rogner
+  l'un d'eux, c'est rogner « zéro donnée perdue » — l'objet même du lot.
+- **Ce qui peut se discuter, dans cet ordre** : ① la **charge k6** (C4, p95 < 500 ms) — un budget de
+  performance, pas une garantie de non-perte ; il se rejoue après P-D sans rien invalider ;
+  ② l'**affinage visuel** des surfaces de statut de L6b, ramené au strict nécessaire des 4 états ;
+  ③ **L5d** — et alors les scénarios **6** et **7** tombent avec lui, mais **7 est un critère
+  d'acceptation nommé du 07** : ce troisième cran est un **descope de porte**, pas un aménagement.
+- **Ce que je recommande** : ouvrir **L6a le jour même de P-C**, sans attendre L5d, **si et seulement
+  si** A01 accepte que L5d s'intercale entre L6b et L6c (option 3 de la décision du 2026-09-05, alors
+  écartée). Le motif du refus tenait au schéma local — L5d monte `VERSION_SCHEMA_LOCAL` — mais L6a et
+  L6b, **tels que découpés ci-dessus, ne touchent PAS `local/base.ts`** : la collision redoutée
+  n'existe plus dans ce découpage. C'est une **ré-ouverture de décision, pas une décision** : elle
+  appartient à A01, et elle s'écrit en D10.
+
+### E. Cinq doutes de spec — à ouvrir dans `DECISIONS.md`, jamais devinés
+
+- **D6** _(entrée de L6a)_ : **§9.3 ne dit pas ce que fait le client d'un lot PARTIELLEMENT en
+  échec** — une réponse qui mêle `applied` et `error`. Passe-t-il au lot suivant, ou s'arrête-t-il ?
+  « Dans l'ordre de la file » est une garantie qu'on brise en sautant une op. Proposition : la file
+  avance, les `error` restent et repartent après backoff, **l'ordre relatif des ops portant sur la
+  MÊME `entityId` étant préservé** — sans quoi une correction peut doubler sa création.
+- **D7** _(entrée de L6b)_ : **le pull delta n'est pas paginé.** §9.5 ne connaît que `?since=`, quand
+  11 §3 impose la **pagination keyset PARTOUT** : deux conventions du pack se contredisent sur une
+  seule route, et le scénario 6 (5 000 réponses) la traverse — une réponse unique de cette taille est
+  un risque mémoire sur iPad. Proposition : keyset **en plus** du curseur (`?since=&limit=&after=`),
+  le curseur n'avançant qu'à la **dernière** page — sinon une coupure en milieu de descente ferait
+  sauter le reste du delta pour toujours.
+- **D8** _(entrée de L6c)_ : **aucune règle de rétention n'est écrite pour `attachment_uploads`.**
+  Un upload jamais complété (appareil perdu, mission close) laisse ses chunks dans MinIO
+  indéfiniment. Proposition : purge des uploads incomplets au-delà de 7 jours, journalisée.
+- **D9** _(entrée de L6b)_ : **la notification « n réponse(s) arbitrée(s) » est dite CLIQUABLE**
+  (§9.3) et **aucune vue de destination n'est spécifiée**. Proposition : une liste minimale, en
+  lecture seule, des lignes arbitrées de la mission — ou, si c'est un écran, une fiche
+  `AMELIORATIONS.md` d'étage 2, jamais une invention en cours de lot.
+- **D10** _(gouvernance, ouvert par la mesure du jour)_ : **L5d n'est pas livré et le calendrier ne
+  le porte plus.** La séquence A-4 le place avant L6a ; le découpage ci-dessus montre que L6a et L6b
+  ne touchent pas `local/base.ts`. **A01 rouvre-t-il l'arbitrage du 2026-09-05 (option 3 : L5d entre
+  L6b et L6c) ?** À trancher **avant** P-C, pas le jour de P-C.
+
+**Contrôle A02 du 2026-09-05 — état des cinq bloquants au 2026-09-09.** **B1** levé par A-1 (PD4,
+trois résolveurs, 04 S-3 cité) · **B2** levé par A-2 (le transport entre à L6a, §3bis, porteur A25) ·
+**B3** levé par A-3, **et sa preuve est nommée ici** — critère de fin de L6a : `sync_log` écrit par
+le chemin applicatif, pas par la fixture · **B4** levé par A-4 **sur le papier**, mais **sa prémisse
+a bougé** : L5d n'existe toujours pas (D10) · **B5** levé par A-5 (`apps/api/src/sync/`, un seul
+glob pour les deux moitiés). **5/5 levés dans la note ; un seul, B4, appelle une re-décision de
+séquencement.**
+
+**Signature A-11 :** A20 — découpage de L6 en incréments commitables, 2026-09-09, **avant P-C et
+avant toute ligne de code L6**. À contresigner A01 (D10 et le dépassement du §D) + A02.
 
 ## 4. Interfaces — déjà gelées, L6 ne les redéfinit pas
 
