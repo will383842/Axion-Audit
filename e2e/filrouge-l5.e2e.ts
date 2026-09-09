@@ -299,9 +299,9 @@ for (const echelle of ECHELLES) {
       await page.getByRole('button', { name: 'Confirmer' }).click();
       // L'écriture a abouti ET a été relue : le badge vient de la ligne stockée,
       // et il porte le MOTIF — donc le motif aussi a fait l'aller-retour.
-      await expect(
-        page.getByLabel('États de la réponse').getByText(/^À revoir — /),
-      ).toContainText('à confirmer avec le responsable des accès');
+      await expect(page.getByLabel('États de la réponse').getByText(/^À revoir — /)).toContainText(
+        'à confirmer avec le responsable des accès',
+      );
 
       // ── ÉTAPE 7 — LE COMPTEUR MÈNE À LA LISTE, ET LA LISTE À LA QUESTION ──
       await page.getByRole('button', { name: 'Revenir' }).click();

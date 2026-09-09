@@ -218,7 +218,10 @@ export const MISSION_FIL_GC = {
   unite: PREMIERE_FEUILLE?.nom ?? '',
 } as const;
 
-async function chiffrerIdentite(coffre: Coffre, id: string): Promise<ReturnType<Coffre['chiffrer']>> {
+async function chiffrerIdentite(
+  coffre: Coffre,
+  id: string,
+): Promise<ReturnType<Coffre['chiffrer']>> {
   return coffre.chiffrer({ id, profil: 'guide_strict' });
 }
 

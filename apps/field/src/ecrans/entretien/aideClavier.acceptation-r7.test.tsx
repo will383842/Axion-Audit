@@ -35,7 +35,7 @@
 // `EcranEntretien.test.tsx`, avec le reste des raccourcis.
 //
 // Traçabilité : E13 · E23 (novice < 30 min) · E44 (grille §33, raccourcis
-// complets) · E33 (écran partagé — rien d'interne devant l'interviewé).
+// complets) · E33 (sécurité / RGPD : rien d'interne devant l'interviewé, écran partagé).
 // =============================================================================
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
