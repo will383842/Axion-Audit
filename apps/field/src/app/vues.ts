@@ -42,16 +42,26 @@ export const VUES = {
   // ── L5a (socle) ────────────────────────────────────────────────────────────
   deverrouillage: { titre: 'Déverrouiller', exigeCoffreOuvert: false },
   stockage: { titre: 'Stockage de l’appareil', exigeCoffreOuvert: false },
-  accueil: { titre: 'Aujourd’hui', exigeCoffreOuvert: true },
+  accueil: { titre: 'Missions et stockage de l’appareil', exigeCoffreOuvert: true },
   // ── L5b (écran d'entretien) — A22 ─────────────────────────────────────────
   nouvelEntretien: { titre: 'Nouvel entretien', exigeCoffreOuvert: true },
   entretien: { titre: 'Entretien', exigeCoffreOuvert: true },
   // ── L5c (journée, agenda, sauvegarde) — A23 ──────────────────────────────
   // `aujourdhui` est le COCKPIT du 03 §34.2. Il ne remplace pas `accueil`, qui
-  // est l'écran d'embarquement du socle L5a : les deux coexistent, et le choix
-  // de celui qui porte `VUE_INITIALE` appartient à A20 à l'intégration — le
-  // trancher ici reviendrait à retirer de la route l'écran d'un autre incrément
-  // depuis un fichier déclaré append-only. Point remonté au rapport d'A23.
+  // est l'écran d'embarquement du socle L5a : les deux coexistent, chacun dans
+  // son état.
+  //
+  // ── CE CHOIX EST FAIT ; CE COMMENTAIRE DISAIT LE CONTRAIRE ────────────────
+  // Il annonçait que « le choix de celui qui porte `VUE_INITIALE` appartient à
+  // A20 à l'intégration ». C'était vrai le 2026-09-04 ; ça ne l'est plus. Le
+  // choix a été tranché par A01 le 2026-09-05, et il est matérialisé dans
+  // `ecrans/journee/vue-initiale.ts` : **la vue initiale est une RÈGLE, pas une
+  // constante** — le cockpit quand une mission est embarquée, `accueil` quand
+  // aucune ne l'est. `VUE_INITIALE`, plus bas, n'est plus que l'atterrissage
+  // par défaut SUR LEQUEL cette règle s'applique ensuite.
+  //
+  // Une contre-vérité écrite se rectifie là où elle se lit : laissée en place,
+  // celle-ci faisait rouvrir à chaque passe une décision vieille de quatre jours.
   aujourdhui: { titre: 'Aujourd’hui', exigeCoffreOuvert: true },
   agenda: { titre: 'Agenda', exigeCoffreOuvert: true },
   pilote: { titre: 'Où en est la mission', exigeCoffreOuvert: true },

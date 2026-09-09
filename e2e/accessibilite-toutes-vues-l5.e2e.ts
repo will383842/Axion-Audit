@@ -337,10 +337,14 @@ async function allerAujourdhui(page: Page): Promise<void> {
 async function allerAccueil(page: Page): Promise<void> {
   await allerAujourdhui(page);
   await page.getByRole('button', { name: 'Missions et stockage de l’appareil' }).click();
-  await expect(titreDEcran(page, 'Aujourd’hui')).toBeVisible();
-  // L'ancre PROPRE À L'ÉCRAN (constat A28-1 : `accueil` et `aujourdhui` portent
-  // le même titre, donc le titre ne suffit pas). Elle tient parce qu'elle dépend
-  // de `mission.embarquee`, l'état que ce parcours pose — et de rien d'autre.
+  // Le titre RECOPIE désormais le bouton qui mène ici (R3/M8, 2026-09-09) : le
+  // geste et son résultat portent le même mot, ce qui est la seule forme qui se
+  // vérifie à l'œil. Avant, `accueil` et `aujourdhui` s'appelaient tous deux
+  // « Aujourd’hui » (constat A28-1), et ce titre-ci ne prouvait rien.
+  await expect(titreDEcran(page, 'Missions et stockage de l’appareil')).toBeVisible();
+  // L'ancre PROPRE À L'ÉCRAN reste, et pour une raison qui n'a pas changé : elle
+  // dépend de `mission.embarquee`, l'état que ce parcours pose — et de rien
+  // d'autre. Un titre juste dit QUEL écran ; il ne dit pas DANS QUEL état.
   //
   // Ce qui NE peut pas servir d'ancre ici : le titre du rappel hors ligne.
   // `RappelHorsLigne` rend `null` quand `enLigne` vaut vrai (son garde, ligne 93)
@@ -620,7 +624,7 @@ const PARCOURS = {
           await deverrouillerAppareil(page, MOT_DE_PASSE_APPAREIL);
           // Aucune mission embarquée : la règle d'atterrissage laisse sur
           // `accueil` (arbitrage A01, 2026-09-05), d'où part le geste.
-          await expect(titreDEcran(page, 'Aujourd’hui')).toBeVisible();
+          await expect(titreDEcran(page, 'Missions et stockage de l’appareil')).toBeVisible();
           await page.getByRole('button', { name: 'Préparer cet appareil' }).click();
           // Chromium n'accorde `persist()` qu'à une application installée : le
           // refus est le comportement NOMINAL d'un navigateur de test, et c'est

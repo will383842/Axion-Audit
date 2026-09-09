@@ -109,12 +109,47 @@ export function reducteurNavigation(
  * La vue mémorisée est donc reposée SUR sa racine. Le sommet de la pile ne
  * change pas — l'auditeur revient exactement où il était, ce que 03 §17.4
  * exige — mais il y a désormais un dessous, et donc une sortie.
+ *
+ * ── R3 : CE DESSOUS EST PROVISOIRE, ET C'EST VOULU ──────────────────────────
+ * La racine posée ici est la CONSTANTE `VUE_INITIALE`. Elle ne peut pas être
+ * autre chose : cette fonction est appelée à l'amorçage (`contexte.tsx`), coffre
+ * encore FERMÉ, quand personne ne sait encore si une mission est embarquée sur
+ * l'appareil — et c'est cette question, et elle seule, qui décide de la racine
+ * de repos (`ecrans/journee/vue-initiale.ts`, arbitrage A01 du 2026-09-05).
+ *
+ * La correction vient donc APRÈS, à l'ouverture du coffre, par
+ * `reposerSurRacine`. Ne pas la faire coûtait la seconde moitié de R3 : un
+ * entretien rouvert redescendait sur `accueil`, écran d'embarquement d'où
+ * aucun chemin ne remonte au cockpit.
  */
 export function restaurerNavigation(valeurMemorisee: unknown): EtatNavigation {
   if (!estCodeVue(valeurMemorisee)) return ETAT_NAVIGATION_INITIAL;
   return estVueRacine(valeurMemorisee)
     ? { pile: [valeurMemorisee] }
     : { pile: [VUE_INITIALE, valeurMemorisee] };
+}
+
+/**
+ * Repose une pile RESTAURÉE sur la racine que la règle d'atterrissage désigne.
+ *
+ * ── R3 (recette novice A54 · obstacle de mesure A28, 2026-09-08) ────────────
+ * `restaurerNavigation` pose la constante faute de savoir mieux (voir plus
+ * haut). Une fois le coffre ouvert, on sait : si une mission est embarquée, la
+ * racine de repos est le cockpit, pas l'écran d'embarquement. Sans ce
+ * redressement, « Revenir » depuis un entretien rouvert menait à `accueil`,
+ * dont les deux seules sorties sont `stockage` et `restauration` — un
+ * cul-de-sac dont seul un redémarrage de l'application sortait.
+ *
+ * ── CE QU'ELLE NE FAIT PAS, DÉLIBÉRÉMENT ───────────────────────────────────
+ * Elle ne touche QUE le fond de pile, et jamais quand la pile n'a qu'un
+ * élément : ce cas-là relève de la règle d'atterrissage elle-même, qui navigue,
+ * et deux mécanismes qui décident du même écran finiraient par se contredire.
+ * Le SOMMET n'est jamais modifié — la reprise instantanée du 03 §17.4 reste
+ * exactement ce qu'elle était.
+ */
+export function reposerSurRacine(etat: EtatNavigation, racine: CodeVue): EtatNavigation {
+  if (etat.pile.length < 2 || etat.pile[0] === racine) return etat;
+  return { pile: [racine, ...etat.pile.slice(1)] };
 }
 
 /**

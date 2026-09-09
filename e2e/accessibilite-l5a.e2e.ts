@@ -112,7 +112,9 @@ async function creerCoffreEtMesurer(page: Page): Promise<number> {
   await page.getByLabel(/Confirmer le mot de passe/).fill(MOT_DE_PASSE);
   const depart = Date.now();
   await page.getByRole('button', { name: 'Créer la protection de cet appareil' }).click();
-  await expect(titreDEcran(page, 'Aujourd’hui')).toBeVisible({ timeout: 15_000 });
+  await expect(titreDEcran(page, 'Missions et stockage de l’appareil')).toBeVisible({
+    timeout: 15_000,
+  });
   return Date.now() - depart;
 }
 
@@ -180,7 +182,7 @@ test.describe('L5a — accessibilité des trois écrans du socle', () => {
     await balayer(page, 'deverrouillage (coffre existant)');
   });
 
-  test('écran Aujourd’hui : état vide, aucune violation axe', async ({ page }) => {
+  test('écran Missions et stockage : état vide, aucune violation axe', async ({ page }) => {
     await page.goto(TERRAIN);
     await creerCoffreEtMesurer(page);
     // Aucune mission n'est descendue (le premier pull est descopé vers L6a) :
@@ -212,7 +214,7 @@ test.describe('L5a — budget de dérivation de clé (11 §4 : < 1 s)', () => {
     const creation = await creerCoffreEtMesurer(page);
     await page.getByRole('button', { name: 'Verrouiller' }).click();
     await expect(titreDEcran(page, 'Déverrouiller la collecte')).toBeVisible();
-    const reouverture = await deverrouillerEtMesurer(page, 'Aujourd’hui');
+    const reouverture = await deverrouillerEtMesurer(page, 'Missions et stockage de l’appareil');
 
     // Le chiffre est LU par A20 et recopié dans le rapport de fin d'incrément :
     // un budget « vert » sans son chiffre n'est pas une mesure, c'est une opinion.

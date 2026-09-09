@@ -282,7 +282,21 @@ export function EcranAccueil(): ReactNode {
 
   return (
     <section className="axn-pile">
-      <h1>Aujourd’hui</h1>
+      {/*
+        R3/M8 — CE TITRE EST CELUI DU BOUTON QUI MÈNE ICI.
+
+        Il disait « Aujourd’hui », mot pour mot comme le cockpit du 03 §34.2 :
+        deux écrans, un seul nom, et un bouton (« Missions et stockage de
+        l’appareil », `EcranAujourdhui.tsx`) qui promettait autre chose que ce
+        qu'il ouvrait. La recette novice A54 l'a relevé (M8), et un auditeur
+        égaré ne sait pas dire lequel des deux écrans il regarde.
+
+        Le libellé est RECOPIÉ du bouton, à la lettre : c'est la seule forme qui
+        se vérifie à l'œil. Il vit aussi dans `app/vues.ts` (l'en-tête de la
+        coquille) — les deux doivent bouger ensemble, sinon l'en-tête et le corps
+        de la même page se contredisent.
+      */}
+      <h1>Missions et stockage de l’appareil</h1>
 
       {/* B6 (recette novice A54, 2026-09-06) : la pastille de CET écran est
           RETIRÉE. Elle déduisait son état du nombre d'opérations en file — donc

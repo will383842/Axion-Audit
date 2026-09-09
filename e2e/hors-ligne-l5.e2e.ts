@@ -262,7 +262,7 @@ for (const appareil of APPAREILS) {
 
     await page.getByRole('button', { name: 'Revenir à ma journée' }).click();
     await page.getByRole('button', { name: 'Missions et stockage de l’appareil' }).click();
-    await expect(titreDeVue(page)).toHaveText('Aujourd’hui');
+    await expect(titreDeVue(page)).toHaveText('Missions et stockage de l’appareil');
     await expect(page.getByRole('button', { name: 'Nouvel entretien' })).toBeVisible();
 
     await page.getByRole('button', { name: 'Restaurer une sauvegarde de secours' }).click();
@@ -527,7 +527,7 @@ test('@critique export de secours produit hors ligne, puis restauré sur un SECO
   await passerEnModeAvion(secours, pageSecours);
   await deverrouillerAppareil(pageSecours, MOT_DE_PASSE_SECOND_APPAREIL);
 
-  await expect(titreDeVue(pageSecours)).toHaveText('Aujourd’hui');
+  await expect(titreDeVue(pageSecours)).toHaveText('Missions et stockage de l’appareil');
   // L'état VIDE du 03 §33.2 : cet appareil ne connaît rien de la mission. C'est
   // la ligne de départ que la restauration doit franchir.
   await expect(pageSecours.getByText('Aucune mission sur cet appareil')).toBeVisible();
