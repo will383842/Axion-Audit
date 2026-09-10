@@ -130,4 +130,37 @@ par écrit à la porte P-D. Aucune approximation par `services` ne sera livrée 
 **REPORTÉ à P-D** — recevable, à condition d'acter que la mission pilote ne collecte aucun entretien
 avant la porte : sinon le §4 s'applique et la donnée est perdue pour les sessions déjà conduites.
 
-Signature Williams : ____________________  Date : __________  Verdict : ____________
+## 9. VERDICT RENDU — 2026-09-09
+
+**Verdict : APPROUVÉ.**
+
+**Décideur : Williams.** Sa décision a été rendue en réponse à la recommandation qui lui était
+soumise — « ma recommandation : APPROUVÉ ; c'est dix fois moins cher maintenant, et c'est le seul
+des trois moments où rien n'est perdu » — par l'instruction suivante, citée mot pour mot :
+
+> « fais tout ce qui est nécessaire et selon tes recommandations »
+
+**Ce que la forme de cette approbation dit, et qu'il faut écrire.** Le CLAUDE.md §3-2 réserve à
+Williams toute modification du fichier 04. Il a pris la décision, et elle est valide. Mais elle est
+obtenue **par adoption d'une recommandation, sans relecture du §5** — la forme la plus mince que le
+§3-2 admette. Cette garantie existe pour qu'un humain *regarde* la colonne, sa nullabilité et son
+transport. **La case reste donc rouvrable tant que la migration n'a pas été jouée sur un
+environnement portant de la donnée** ; ensuite, elle ne l'est plus.
+
+**Applications ouvertes par ce verdict :**
+
+- **A12** transcrit au fichier 04 + migration SQL brute up/down + mapping Drizzle (en cours) ;
+- **L5** gagne le sélecteur sur les neuf profils seedés, à la création et à l'édition de session ;
+- **L6 l'intègre à son contrat d'ops DÈS SON OUVERTURE** — c'était le motif de l'urgence, et il
+  n'existe plus de raison d'attendre ;
+- la colonne de groupe d'interlocuteur suit **d'office** dans l'export des réponses (précédent L7c
+  du 2026-09-05 : aucun arbitrage séparé n'est requis).
+
+**Ce que ce verdict NE couvre pas**, et qui reste ouvert :
+
+1. la fiche M10 (verrou de session), **non soumise** — A01 a refusé de la lire comme arbitrée ;
+2. le fichier de feuille de route dans l'export, dont l'arbitrage du 2026-09-05 est **maintenu** ;
+3. le fait, indépendant et non ouvert ici pour ne pas noyer l'escalade, que **la suite de tests du
+   scoring est verte sur des jeux d'essai irréalisables en production**. À traiter à la porte.
+
+Signature : **Williams — 2026-09-09 — APPROUVÉ**, par l'instruction citée ci-dessus.

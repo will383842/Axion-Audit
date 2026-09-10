@@ -328,7 +328,7 @@ et fait passer le n° 6 de GO SOUS RÉSERVE à GO. Restent, dus par d'autres :
 | **Migrations up/down sur staging** | ligne 4 de la DoD, **non tenue** : `deploy-staging.yml` n'appelle jamais `db:migrate` ; un `--down-to 0` est destructif (§5-B, 4) | Williams |
 | **A28 : p95 < 100 ms sur `jitless`, derrière Caddy** | exigé **avant signature** par A29 (revue sécurité, « ce qui reste dû à Williams », 1) — et à mesurer derrière Caddy, jamais sur `vite preview` | A28 |
 | **Critère 07 n° 1 (« sync par mission »)** | **plus un doute** : D-6 est tranché (#102) — afficher l'état, pas synchroniser. C'est un **trou de code**, fermé par **L5e** (`port-sync.ts:164`), **fusionné** (`59a3da2`) — donc la date doit s'afficher | A20/A23, L5e |
-| **Invariant 5 (dates ISO brutes, UUID, fuseau d'appareil)** | correctif **L5d**, en PR, non fusionné au 2026-09-09 04h51 | A22/A24/A26 |
+| **Invariant 5 (dates ISO brutes, UUID, fuseau d'appareil)** | correctif **L5d** — **FUSIONNÉ** (`4f56e1f`, PR 108) ; l'écart doit avoir **disparu** en V-7.6, et s'il est là c'est une **régression** | A22/A24/A26 |
 | **README de `apps/field`** | ligne 8 de la DoD, non tenue au **4ᵉ passage** | A20 — **et A55** |
 | **`@filrouge` allongé du segment L5** | **5ᵉ incrément** : les gestes existent en E2E, hors du parcours cumulatif | A20/A26 |
 | **`TRACABILITE_E1-E47.md` et `DECISIONS.md`** | **NB-9-bis, toujours bloquante et aggravée** : 16 titres dupliqués, dernier titre du 2026-09-03, **six incréments de retard** ; 21 doublons dans `DECISIONS.md`. A02 ne signe pas « traçabilité à jour » | A01/A02 |
@@ -339,9 +339,13 @@ et fait passer le n° 6 de GO SOUS RÉSERVE à GO. Restent, dus par d'autres :
 - **L6 n'est pas entamé**, et c'est le **seul lot noyau** dans ce cas. Burn-down du 2026-09-08 :
   **≈ 7,4 j restants sur les 26**, dont **L6 ≈ 4,3 j**. « Deux jours à plat : le chantier ne produit
   plus de périmètre, il produit des preuves pour une porte qu'aucun agent ne peut signer. »
-- **A20 remesure L6 à ≈ 5,0 j le 2026-09-09** (rapporté par le pilote ; **aucune fiche au dépôt à
-  cette heure** — à confirmer avant de s'en servir). **5,0 demandés pour 4,3 disponibles.**
-- **L5d et L5e ne sont pas livrés** : deux PR ouvertes, non fusionnées.
+- **A20 remesure L6 à 5,0 j** — **la source existe désormais** : `docs/conception/LOT_L6.md` §D
+  (PR 114, fusionnée), `2,0 + 1,2 + 1,8 = 5,0 j`. **Le chiffre qui fait foi est cependant ≈ 5,5 j**,
+  parce qu'il faut y ajouter **L5f — la chaîne photo, jamais ouverte** (≈ 0,5 j). Donc **≈ 5,5 j
+  demandés pour 4,3 disponibles**, écart ≈ +1,2 j. Identique au §D-1 bis du dossier de descope,
+  revérifié à la source par A01 le 2026-09-09.
+- **L5d et L5e SONT fusionnés** (`4f56e1f` et `59a3da2`, ancêtres de `main`) — voir §1.4, qui en
+  tire la conséquence opératoire : ce qui n'a pas disparu est une **régression**, pas une attente.
 - **Conséquence à tenir en main pendant la séance** : elle débloque **P-C**, elle ne règle **pas**
   la charge. D-1 de `PORTE_DESCOPE_2026-09-15.md` — « que fait-on des 4,3 j-h de sync ? » — reste
   entier, et P-DESCOPE est **dans six jours**.
@@ -414,9 +418,9 @@ fiche les compte **par ce qu'on exécute**. Le point 1 groupe huit gestes qui ne
 moment ni avec les mêmes yeux — d'où **dix vérifications (V-1 à V-10)** et un bloc de prérequis (V-0),
 soit **67 lignes cochables**. **Aucun critère n'est ajouté, aucun n'est retiré.**
 
-**Ce qui reste sans source écrite après recoupement** : la remesure de **L6 à ≈ 5,0 j** (A20,
-2026-09-09), rapportée par le pilote et sans fiche au dépôt à l'heure où cette fiche est écrite —
-**à confirmer avant de la citer dans le dossier de porte**. Tout le reste de ce document est adossé à
+**Ce qui restait sans source écrite, et qui en a une depuis** : la remesure de **L6** (A20,
+2026-09-09) est adossée à `docs/conception/LOT_L6.md` §D, fusionné en PR 114. Le chiffre à citer
+dans le dossier de porte est **≈ 5,5 j face à 4,3** (5,0 de L6 + 0,5 de L5f non ouvert), et non 5,0. Tout le reste de ce document est adossé à
 un fichier du dépôt, nommé à la ligne où il sert.
 
 ---

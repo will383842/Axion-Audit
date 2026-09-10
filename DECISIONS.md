@@ -12311,3 +12311,122 @@ lecteur invente). S'il refuse, il n'y a rien à porter.
 Décideur : **A01** pour le moment de l'escalade ; **Williams** pour l'amendement, proposition en
 `docs/portes/P-D_AMENDEMENT_04_interlocutor_profile.md`.
 Impact spec : aucun aujourd'hui ; amendement du 04 soumis, à trancher AVANT l'ouverture de L6.
+
+## 2026-09-09 — [L6 / L8] Amendement horodaté à la décision de ce jour : le verdict est rendu, et deux des trois raisons du NULL n'en faisaient qu'une
+
+L'entrée ci-dessus se ferme sur « **Impact spec : aucun aujourd'hui** ». Vrai à l'écriture.
+**Williams a rendu son verdict depuis — APPROUVÉ** (`P-D_AMENDEMENT_04_interlocutor_profile.md` §9,
+PR 124, `origin/main` = `acdb0f0`), et A12 a transcrit. Tant que cette ligne n'est pas amendée, le
+**resceau reposerait sur un registre qui nie l'amendement qu'il scelle**. **Ceci est un amendement,
+pas une décision neuve** : l'arbitrage approuver/refuser était à Williams, rendu et signé au §9 ; le
+rejouer en « Options 1/2 » serait une entrée sans vrai choix. Le choix réel est celui qu'A12 a levé.
+
+Options :
+
+1. **Transcrire tel qu'approuvé**, justification du §5 inchangée — Williams a approuvé **ce texte-là**.
+2. **Rectifier la justification — jamais l'objet — avant que le sceau se referme dessus.**
+
+Arbitrage : **option 2**. L'objet est **inchangé et ne m'appartient pas** (`CLAUDE.md` §3-2) : colonne,
+nullabilité, absence de CHECK, transport §9.3, colonne d'export. Ce qui change est le **pourquoi**,
+parce qu'un sceau rend un raisonnement opposable et qu'un argument faux scellé piège qui rouvrira.
+Trois rectifications d'A12, revérifiées par moi au 04 — et elles vivent **ici** parce que le §5 est
+**sous signature depuis le §9** : un fichier de porte signé ne se réécrit pas (invariant 7).
+**(a) Les « trois raisons cumulatives » sont deux.** `atelier` est **une valeur du CHECK `kind`**
+(04:126), donc un sous-cas de `kind ≠ entretien`. La raison est **gardée, reformulée** : pour un
+atelier ce n'est pas l'**absence** de profil mais sa **pluralité** (`participants JSONB`, 04:132)
+qu'une FK simple ne peut porter — un mode de défaillance distinct, pas un compte de plus.
+**(b) Le fondement du NULL était une analogie ; la preuve directe est meilleure.** Le 04:129-131 marque
+**déjà** `person_name`, `person_role`, `person_service_id`, `person_email` en NULL, sous « §27.1 :
+champs personne optionnels si kind ≠ entretien ». La colonne rejoint un groupe **déjà nullable** et
+**ne peut pas être plus stricte que ses quatre voisines**. L'analogie avec `conducted_by` reste vraie,
+elle n'est simplement plus le fondement.
+**(c) La vraie raison pour laquelle un CHECK serait faux**, absente de ma fiche : il **échouerait à la
+validation sur toute session déjà terminée**, rendant la migration **injouable** sur une base ayant
+collecté quoi que ce soit. Argument de **jouabilité**, quand le mien n'était que de style.
+Règle de précédence : **`CLAUDE.md` §3-2** — le 04 est la signature de Williams ; je rectifie un motif,
+jamais l'objet. **Invariant 7** pour la forme. Règle de précédence du pack **sans objet** : le 04 était
+silencieux sur cette colonne, il ne se contredisait pas.
+Décideur : **Williams** pour l'amendement (2026-09-09, §9, par adoption) ; **A01** pour la clôture et les motifs.
+Impact spec : **AMENDEMENT HORODATÉ DU FICHIER 04, 2026-09-09** — `interviews.interlocutor_profile_id
+UUID NULL REFERENCES interlocutor_profiles(id)`, transcrit par **A12** (04, migration `up`/`down`,
+mapping Drizzle, `apps/api/schema-manifest.json`). **Puis** resceau de `docs/.pack-integrity.json` —
+**jamais le sceau seul** (précédents des 2026-08-31 et 2026-09-03). Cette ligne **remplace** le
+« aucun aujourd'hui » ci-dessus, qui n'est pas effacé.
+**Fenêtre encore ouverte** : le §9 la dit rouvrable « tant que la migration n'a pas été jouée sur un
+environnement portant de la donnée ». A12 confirme : **conteneurs jetables, base vide, détruits après**.
+Elle se referme à la **première migration de staging portant du contenu réel** — qui la joue la ferme.
+
+## 2026-09-09 — [L5/gouvernance] « p95 des interactions < 100 ms » : p95 de QUOI, et à quelle porte ?
+
+A28 a mesuré les deux lectures plutôt que d'en choisir une (`docs/portes/MESURE_P95_A28_2026-09-09.md`) :
+groupé sur toutes les interactions **66,3 ms** (N = 2 688) ; geste par geste, 13 sur 14 tenus et un
+dépassement — « ouvrir sa session du jour », page froide, **p95 111,2 ms**, 18 échantillons sur 160
+≥ 100 ms, dans 3 courses sur 8. Recalculés depuis `releves-a28/*.jsonl` : les six chiffres publiés se
+reproduisent à la décimale.
+
+Options :
+
+- **(a) agrégat** — un p95 sur l'ensemble des interactions. 66,3 ms : tenu.
+- **(b) geste par geste** — chaque geste sous 100 ms. Un geste dépasse : non tenu.
+
+Arbitrage : **(b), premier geste d'une page froide COMPRIS.**
+Règle de précédence : sans objet entre §32-36 / §24-31 / §16-22 / §1-15 — aucune ne borne la latence
+d'interaction. Le contrat 11 gouverne donc (00_INDEX), et 11 §4 est le seul endroit du pack qui
+définisse un budget de performance AVEC son unité : « chiffrement < 50 ms/**écriture**, dérivation
+< 1 s ». Par opération, jamais par moyenne. La jurisprudence du dépôt le lit déjà ainsi (DECISIONS
+2026-09-07 : « écriture complète < 100 ms (09 §1) », qui borne UNE écriture). Et 09 §4 énumère les
+gestes — « **trouver sa session du jour** » — avant d'énoncer le seuil : c'est le geste nommé qui
+dépasse, et (a) le sauverait par la moyenne de gestes que personne ne redoutait.
+
+**Conséquence, et ce n'est pas celle qu'on attend : ce budget n'est pas un critère de P-C.** Le seuil
+ne figure qu'à deux endroits du pack — 09 §1 (charge permanente d'A28) et 09 §4 ligne **P-E**. La
+ligne P-C de 09 §4 ne le porte pas ; la ligne L5 du fichier 07, d'où le brief vient EXCLUSIVEMENT
+(09 §3), ne porte aucun critère de performance. Vérifié : zéro occurrence de « 100 ms » dans 03, 07, 11.
+
+Donc **budget NON TENU au sens (b), et dû à P-E, pas à P-C**. D-1 est un défaut daté avant P-E, rendu
+à l'équipe productrice (A20), pas à A28 (09 §5.6). La réserve d'A29 — « p95 sur `jitless`, derrière
+Caddy, avant signature » — portait sur le COÛT du drapeau : elle est **close**, le drapeau ne coûte
+rien de mesurable (4 courses sur 4). Le geste qui dépasse n'est pas causé par le durcissement.
+
+Décideur : A01
+Impact spec : aucun. Le renvoi « 03 §25 » du brief d'A28 était faux (03 §25 = recalage / agenda /
+hors-parcours) ; sa rectification vers 09 §1 et 09 §4 est vérifiée juste.
+
+## 2026-09-09 — [L5c] R3 et D-3 : un défaut ou deux, et à quel étage ?
+
+Vérifié dans le code, pas sur parole. `app/vues.ts:45` et `:55` : `accueil` et `aujourdhui` portent
+tous deux `titre: 'Aujourd'hui'`. `app/navigation.ts:67` : les deux sont RACINE, donc sans bouton
+retour. `ecrans/entretien/EcranEntretien.tsx:541` : « Quitter » fait `naviguer({type:'racine',
+vue:'accueil'})`. `App.tsx:60` n'offre depuis `accueil` que `EcranAccueil` + `ComplementAccueil`, et
+seuls `EcranFinDeSession:181` et `EcranRestauration:416` naviguent vers `aujourdhui`, hors de portée.
+**Le cockpit n'est plus atteignable sans redémarrer l'application.** A54 l'a lu (sa réserve R3),
+A28 l'a heurté en mesurant (son D-3) : deux méthodes indépendantes, un même code.
+
+Options :
+
+- **(a) un seul défaut à deux symptômes**, tout étage 2 → Williams (lecture d'A54).
+- **(b) une cause, deux sorties de nature différente.**
+
+Arbitrage : **(b).** La cause est unique et elle est écrite dans le code : `vues.ts:50-54` dit que le
+choix entre les deux racines « appartient à A20 à l'intégration » et qu'il a été « remonté au rapport
+d'A23 ». **Cette décision d'intégration n'a jamais été prise** ; R3 et D-3 en sont les deux symptômes.
+Mais elles ne se traitent pas au même endroit :
+
+Règle de précédence : **sans objet** (aucune divergence interne du pack — aucune section ne
+nomme ces deux vues). Le partage entre défaut et fiche vient de CLAUDE.md §6 et du précédent B2.
+
+1. **D-3, le chemin de retour : ni étage 1 ni étage 2 — c'est un DÉFAUT.** Le registre AMELIORATIONS
+   borne ce qui va AU-DELÀ de la spec (CLAUDE.md §6) ; il ne sert pas à ranger un trou dedans.
+   Précédent opposable du dépôt : **B2 « cul-de-sac »** a été traité en BLOQUANT et corrigé
+   (`docs/TRACABILITE_E1-E47.md` #64), jamais porté en fiche. D-3 est le résidu de ce correctif :
+   B2 a raisonné « l'oubli produit un bouton en trop, jamais un cul-de-sac », et une racine sur
+   laquelle on ATTERRIT depuis un écran profond est exactement le cas qu'il n'a pas couvert. Il ne
+   consomme donc pas le plafond de 0,5 j et n'attend pas la porte. Rendu à A20 (producteur, 09 §5.6).
+2. **R3, le nom : étage 2, → Williams.** Quel écran s'appelle « Aujourd'hui », et faut-il fondre les
+   deux racines : A54 a eu raison, c'est du périmètre fonctionnel, pas du confort.
+
+Ce que le titre partagé ajoute au défaut, et qui interdit d'attendre : l'auditeur qui quitte un
+entretien **croit** être sur son cockpit, puisque l'écran s'appelle « Aujourd'hui ».
+
+Décideur : A01 (D-3) · Williams (R3)
+Impact spec : aucun.

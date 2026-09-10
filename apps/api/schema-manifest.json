@@ -693,7 +693,7 @@
       "checks": []
     },
     "interviews": {
-      "section": "COLLECTE — SESSIONS (§27.1, §25.2, §25.6, §28.1) — conducted_by NULLABLE depuis l'amendement du 04 du 2026-09-02 (DECISIONS.md, tranché par Williams ; migration 0014) : une session PLANIFIÉE par le plan §32.4 n'a pas encore d'auditeur ; la règle « conduite ⇒ auditeur » est portée par le service, pas par une CHECK",
+      "section": "COLLECTE — SESSIONS (§27.1, §25.2, §25.6, §28.1) — interlocutor_profile_id AJOUTÉE par l'amendement du 04 du 2026-09-09 (tranché par Williams ; migration 0016) : l'axe des 9 PROFILS (group_code direction/encadrement/terrain, 03 §32.1), distinct des 11 FONCTIONS que porte person_service_id ; NULLABLE et SANS INDEX, la règle « entretien terminé ⇒ profil » étant portée par le service. — conducted_by NULLABLE depuis l'amendement du 04 du 2026-09-02 (DECISIONS.md, tranché par Williams ; migration 0014) : une session PLANIFIÉE par le plan §32.4 n'a pas encore d'auditeur ; la règle « conduite ⇒ auditeur » est portée par le service, pas par une CHECK",
       "columns": {
         "id": "uuid NOT NULL",
         "mission_id": "uuid NOT NULL",
@@ -705,6 +705,7 @@
         "person_role": "text",
         "person_service_id": "uuid",
         "person_email": "text",
+        "interlocutor_profile_id": "uuid",
         "participants": "jsonb",
         "org_unit_id": "uuid NOT NULL",
         "document_request_id": "uuid",
@@ -753,6 +754,14 @@
           "columns": ["person_service_id"],
           "references": {
             "table": "services",
+            "columns": ["id"]
+          }
+        },
+        {
+          "name": "interviews_interlocutor_profile_id_fkey",
+          "columns": ["interlocutor_profile_id"],
+          "references": {
+            "table": "interlocutor_profiles",
             "columns": ["id"]
           }
         },
@@ -2732,6 +2741,7 @@
           "companies.sector_id",
           "naf_sector_map.sector_id",
           "interviews.person_service_id",
+          "interviews.interlocutor_profile_id",
           "questions.origin_mission_id",
           "document_requests.attachment_id",
           "tools_inventory.source_session_id",

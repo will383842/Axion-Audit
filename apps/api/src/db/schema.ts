@@ -546,6 +546,23 @@ export const interviews = pgTable('interviews', {
   /** P2-1 — fonction de la PERSONNE ; l'unité d'audit est TOUJOURS orgUnitId. */
   personServiceId: uuid('person_service_id'),
   personEmail: text('person_email'),
+  /**
+   * PROFIL de l'interlocuteur — les 9 profils seedés (11 §5), et l'axe qui porte
+   * `group_code` ('direction' | 'encadrement' | 'terrain', 03 §32.1). Amendement
+   * du 04 du 2026-09-09, tranché par Williams (migration 0016).
+   *
+   * À NE PAS CONFONDRE AVEC `personServiceId`, qui est juste au-dessus et qui
+   * porte la FONCTION métier (les 11 fonctions de `services`). Deux référentiels
+   * distincts, seedés séparément : ce champ-ci ne remplace pas l'autre, il ajoute
+   * l'axe sans lequel la comparaison direction/terrain n'est atteignable depuis
+   * aucune réponse.
+   *
+   * NULL légitime : session planifiée sans personne désignée (§32.4), `kind`
+   * autre que 'entretien', atelier à participants multiples (§28.1). La règle
+   * « entretien terminé ⇒ profil » vit dans le service, pas ici — même forme que
+   * `conductedBy`. Et un NULL ne se lit JAMAIS « tous les groupes » côté scoring.
+   */
+  interlocutorProfileId: uuid('interlocutor_profile_id'),
   participants: jsonb('participants'),
   orgUnitId: uuid('org_unit_id').notNull(),
   documentRequestId: uuid('document_request_id'),
