@@ -38,6 +38,23 @@
 // Traçabilité : E6 (hors ligne total) · E38 (export de secours chiffré, création
 // et restauration testées) · E31 (généricité absolue, aucune référence client) ·
 // E44 (ancres de cotation visibles, mode écran partagé) · E33 (sécurité / RGPD).
+//
+// ── LE FICHIER DÉJÀ LIVRÉ EST ANTÉRIEUR À CE CORRECTIF, ET ON NE LE REFAIT PAS ─
+// Le `.axionbackup` de `docs/portes/preuves/P-C/`, produit et éprouvé le
+// 2026-09-09, a été fabriqué AVANT la correction du 2026-09-10 sur la question 12
+// (voir plus bas). Il contient donc encore cette question dans l'état impossible :
+// `scale_1_5` + `guidance: null` + `addedAdHoc: false`.
+//
+// Il n'est PAS refabriqué. Son SHA-256 `e6267aab…2bf3dcde` est consigné dans
+// `docs/ETAT.md` et dans `DECISIONS.md` ; le refabriquer changerait l'empreinte et
+// invaliderait une preuve déjà tracée, sans rien gagner pour la séance — V-5.5 a
+// été amendée le 2026-09-10 et se joue désormais par le CHEMIN AD HOC, créé à
+// l'écran sur l'iPad.
+//
+// QUICONQUE REFABRIQUE OBTIENDRA UN FICHIER DIFFÉRENT DE CELUI DU 2026-09-09, ET
+// C'EST NORMAL : l'empreinte consignée vaut pour le fichier livré, pas pour la
+// sortie de cet outil à une date ultérieure (le sel, le nonce et les instants sont
+// neufs à chaque exécution — deux fabrications n'ont jamais la même empreinte).
 // =============================================================================
 import {
   deriverKek,
@@ -242,6 +259,15 @@ interface QuestionSeance {
   readonly criticite: IndexMissionQuestion['criticality'];
   readonly bloc: string;
   readonly guidance: string | null;
+  /**
+   * Question créée AU TERRAIN (03 §25.3) plutôt que tirée de la banque.
+   *
+   * Champ OBLIGATOIRE et non optionnel, et c'est délibéré : le compilateur force
+   * ainsi chaque question future à répondre, et la garde de
+   * `mission-seance.test.ts` vérifie que la réponse est compatible avec
+   * l'absence d'ancre. Un défaut par omission n'est plus possible.
+   */
+  readonly addedAdHoc: boolean;
 }
 
 /**
@@ -252,16 +278,45 @@ interface QuestionSeance {
  * autres. Un questionnaire mono-bloc y afficherait une colonne à une ligne, donc
  * ne montrerait pas ce que la ligne 1 de `LOT_L5.md` §4 fait vérifier.
  *
- * ── LA QUESTION 12 EST UN CAS LIMITE, ET IL EST ASSUMÉ ──────────────────────
- * V-5.5 exige d'afficher « une question à échelle SANS ancre de banque » pour
- * lire le repli « Aucune ancre de cotation n'est fournie pour cette question. »
- * Or une telle question ne peut PAS entrer en banque : `ANCRES_ABSENTES`
- * (`packages/shared/src/banque-questions.ts`) est un contrôle BLOQUANT du §32.4.
- * L'état est donc inatteignable par le chemin nominal — et pourtant la fiche de
- * porte demande de l'observer, et l'écran a un état vide écrit pour lui.
- * Le point est porté au rapport comme un doute de spec ; la question est incluse
- * parce que sans elle V-5.5 n'est pas jouable du tout, et qu'une ligne de fiche
- * qu'on ne peut pas jouer coûte plus cher qu'un cas limite qu'on nomme.
+ * ── LA QUESTION 12 EST UNE QUESTION AD HOC DU TERRAIN, ET ELLE DOIT L'ÊTRE ──
+ * V-5.5 demande de lire le repli « Aucune ancre de cotation n'est fournie pour
+ * cette question. » Il faut donc une `scale_1_5` SANS ancre — et la première
+ * version de cette fixture en fabriquait une en la posant dans le questionnaire
+ * figé, drapeau `addedAdHoc` à `false`.
+ *
+ * C'ÉTAIT UN FAUX TÉMOIN, et la qualification d'A30 du 2026-09-10 l'a établi :
+ * `ANCRES_ABSENTES` (`packages/shared/src/banque-questions.ts`) est un contrôle
+ * BLOQUANT d'admission sur toute `scale_1_5` sans ancre (§32.4). Une question de
+ * BANQUE dans cet état ne peut donc JAMAIS atteindre un appareil réel : l'écran
+ * serait passé au vert sur une donnée que la production refuse. C'est exactement
+ * le défaut qu'`e2e/hors-ligne-l5.e2e.ts` avait corrigé de son côté — même angle
+ * mort, n'avoir regardé que le chemin banque.
+ *
+ * LE REPLI N'EST PAS DU CODE MORT POUR AUTANT, et c'est le second acquis d'A30 :
+ * il s'atteint par la QUESTION AD HOC du terrain — `DialogueQuestionAdHoc.tsx`
+ * propose `scale_1_5`, le champ « Consigne (facultative) » peut rester vide, et
+ * `questions-adhoc.ts` écrit alors `guidanceSnapshot: null` avec `addedAdHoc`
+ * à `true`. La fixture atteignait le bon état par un chemin faux.
+ *
+ * La question 12 est donc CONSERVÉE, mais comme ce qu'elle est réellement : une
+ * question ad hoc créée lors d'une session antérieure de la mission, restituée
+ * par la sauvegarde. Elle porte pour cela TOUT ce que `creerQuestionAdHoc` écrit,
+ * et pas seulement le drapeau — `criticality: 'informatif'`, `weightSnapshot: 0`,
+ * et un `questionId` PROPRE (une question ad hoc ne cite aucune entrée de
+ * banque). Un drapeau vrai posé sur une charge de banque aurait seulement déplacé
+ * l'état impossible d'un champ à l'autre.
+ *
+ * ELLE NE PORTE PLUS V-5.5 À ELLE SEULE : la ligne a été amendée le 2026-09-10
+ * pour passer par le chemin ad hoc, créé à l'écran pendant la séance. Elle reste
+ * ici pour deux raisons — c'est la seule ligne du fichier qui fasse traverser une
+ * charge ad hoc à `appliquerDescente`, et elle laisse le repli observable même si
+ * la création en direct achoppe, ce que la séance doit pouvoir distinguer d'un
+ * défaut d'affichage.
+ *
+ * L'INVARIANT EST GARDÉ, ET AILLEURS : `e2e/outils/mission-seance.test.ts` refuse
+ * toute `scale_1_5` sans ancre qui ne serait pas ad hoc. Il tourne dans le projet
+ * vitest `unit`, donc dans `pnpm verify:rapide` et au `pre-push`, sans réseau ni
+ * staging. Sans cette garde, le défaut reviendrait à la prochaine question ajoutée.
  */
 const QUESTIONS: readonly QuestionSeance[] = [
   {
@@ -270,6 +325,7 @@ const QUESTIONS: readonly QuestionSeance[] = [
     type: 'free_text',
     criticite: 'important',
     bloc: 'B1',
+    addedAdHoc: false,
     guidance: null,
   },
   {
@@ -278,6 +334,7 @@ const QUESTIONS: readonly QuestionSeance[] = [
     type: 'yes_no',
     criticite: 'important',
     bloc: 'B1',
+    addedAdHoc: false,
     guidance: null,
   },
   {
@@ -286,6 +343,7 @@ const QUESTIONS: readonly QuestionSeance[] = [
     type: 'scale_1_5',
     criticite: 'bloquant',
     bloc: 'B1',
+    addedAdHoc: false,
     guidance: guidance(ANCRES_QUESTION_OUTIL),
   },
   {
@@ -294,6 +352,7 @@ const QUESTIONS: readonly QuestionSeance[] = [
     type: 'free_text',
     criticite: 'important',
     bloc: 'B1',
+    addedAdHoc: false,
     guidance: null,
   },
   {
@@ -302,6 +361,7 @@ const QUESTIONS: readonly QuestionSeance[] = [
     type: 'scale_1_5',
     criticite: 'important',
     bloc: 'B2',
+    addedAdHoc: false,
     guidance: guidance(ANCRES_PASSATION),
   },
   {
@@ -310,6 +370,7 @@ const QUESTIONS: readonly QuestionSeance[] = [
     type: 'yes_no',
     criticite: 'informatif',
     bloc: 'B2',
+    addedAdHoc: false,
     guidance: null,
   },
   {
@@ -318,6 +379,7 @@ const QUESTIONS: readonly QuestionSeance[] = [
     type: 'number',
     criticite: 'informatif',
     bloc: 'B2',
+    addedAdHoc: false,
     guidance: null,
   },
   {
@@ -326,6 +388,7 @@ const QUESTIONS: readonly QuestionSeance[] = [
     type: 'free_text',
     criticite: 'bloquant',
     bloc: 'B2',
+    addedAdHoc: false,
     guidance: null,
   },
   {
@@ -334,6 +397,7 @@ const QUESTIONS: readonly QuestionSeance[] = [
     type: 'scale_1_5',
     criticite: 'bloquant',
     bloc: 'B3',
+    addedAdHoc: false,
     guidance: guidance(ANCRES_SAUVEGARDE),
   },
   {
@@ -342,6 +406,7 @@ const QUESTIONS: readonly QuestionSeance[] = [
     type: 'percent',
     criticite: 'important',
     bloc: 'B3',
+    addedAdHoc: false,
     guidance: null,
   },
   {
@@ -350,15 +415,26 @@ const QUESTIONS: readonly QuestionSeance[] = [
     type: 'yes_no',
     criticite: 'informatif',
     bloc: 'B3',
+    addedAdHoc: false,
     guidance: null,
   },
   {
     id: identifiant(9, 12),
     texte: 'À quel point les habilitations d’accès sont-elles tenues à jour ?',
     type: 'scale_1_5',
-    criticite: 'important',
+    // 'informatif' et non 'important' : `creerQuestionAdHoc` ne propose pas la
+    // criticité et l'écrit en dur. Une ad hoc « importante » serait un second
+    // état que le terrain ne sait pas produire.
+    criticite: 'informatif',
     bloc: 'B3',
-    /** Volontairement SANS ancre — le seul support de V-5.5. Voir l'en-tête. */
+    // LE SEUL `true` du fichier, et ce qui rend cette ligne possible sur un
+    // appareil réel — voir l'en-tête du tableau.
+    addedAdHoc: true,
+    /**
+     * Volontairement SANS ancre : c'est ce que le terrain obtient en laissant
+     * vide « Consigne (facultative) » du dialogue de question ad hoc. Interdit à
+     * une question de banque (`ANCRES_ABSENTES`), atteignable par ce chemin-là.
+     */
     guidance: null,
   },
 ];
@@ -828,15 +904,27 @@ export function contenuSeance(): ContenuSauvegarde {
       clientUpdatedAt: instant,
       supprimeLe: null,
     };
+    // ── LES TROIS CHAMPS QUI SUIVENT LE DRAPEAU, ET POURQUOI ILS LE SUIVENT ──
+    // `addedAdHoc` était posé ICI, en dur à `false` pour les douze questions :
+    // c'est le défaut du 2026-09-10. Il est désormais DÉCLARÉ par question, et
+    // ce qui en dépend en découle plutôt que d'être répété — une charge ad hoc
+    // se reconnaît à trois marques que `creerQuestionAdHoc` écrit ensemble, et
+    // les dissocier recréerait un état que le terrain ne produit pas.
     const charge: ChargeMissionQuestion = {
-      questionId: QUESTION_BANQUE_ID,
+      // Une question ad hoc ne cite AUCUNE entrée de banque : le terrain lui
+      // frappe un identifiant neuf. Le réutiliser depuis `QUESTION_BANQUE_ID`
+      // ferait pointer douze questions vers la même entrée, dont une qui n'en a
+      // pas.
+      questionId: question.addedAdHoc ? identifiant(10, rang + 1) : QUESTION_BANQUE_ID,
       questionVersion: 1,
       guidanceSnapshot: question.guidance,
       optionsSnapshot: null,
       scoringSnapshot: null,
-      weightSnapshot: null,
+      // `0` pour une ad hoc : elle ne pèse pas dans le score tant que le siège ne
+      // l'a pas reprise (03 §25.3), et c'est ce que le terrain écrit.
+      weightSnapshot: question.addedAdHoc ? 0 : null,
       allowRangeSnapshot: false,
-      addedAdHoc: false,
+      addedAdHoc: question.addedAdHoc,
       blockCode: question.bloc,
     };
     return ligne(index, charge);
