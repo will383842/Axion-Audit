@@ -61,10 +61,20 @@ export default defineConfig({
           // 09 §5.6 exige qu'ils soient testés par quelqu'un d'autre que leur auteur.
           // Sans ce motif, leurs tests seraient ORPHELINS — verts en permanence sans
           // jamais s'exécuter, ce que `check:test-projects` refuse à juste titre.
+          // `e2e/` : les FIXTURES de la campagne E2E sont du code comme un autre, et
+          // certaines de leurs gardes ne demandent ni navigateur, ni conteneur, ni
+          // staging — seulement de relire ce que la fixture produit. Motif ajouté le
+          // 2026-09-10 après un défaut de fixture (une `scale_1_5` sans ancre
+          // présentée comme venant de la banque, état qu'un contrôle BLOQUANT
+          // d'admission rend impossible sur un appareil réel). Sa garde
+          // (`e2e/outils/mission-seance.test.ts`) doit tourner à CHAQUE push, pas
+          // seulement quand la suite Playwright complète est jouée : `.e2e.ts` reste
+          // à Playwright, `.test.ts` vient ici.
           include: [
             'packages/*/src/**/*.test.ts',
             'apps/*/src/**/*.test.ts',
             'scripts/**/*.test.ts',
+            'e2e/**/*.test.ts',
           ],
           exclude: ['**/node_modules/**', '**/dist/**', '**/*.integration.test.ts'],
           environment: 'node',
