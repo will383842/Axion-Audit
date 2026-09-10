@@ -2730,3 +2730,75 @@ _duplication du niveau 1_ ne l'est pas. Corriger l'une ne préjuge pas de l'autr
 raisons pour lesquelles aucune garde ne l'a vu, le coût (3 h, dont 1 h de collatérale de test et
 0,5 h de garde manquante écrite par A28 et non par A22, 09 §5.6), et **la seule question qui reste
 à Williams** : corriger avant de jouer V-10, ou après la signature de P-C.
+
+## 2026-09-10 — [L5] Étage 2 — cinq angles morts de la garde de titres, nommés par A29 et NON traités
+
+**Pourquoi une fiche et pas un silence.** Le défaut des `<h1>` a survécu six jours et **quatre
+constats** parce qu'il vivait dans des rapports d'agents et une ligne étage 1 sous-chiffrée, jamais
+dans un endroit qu'on relit. Les réserves non bloquantes d'A29 sont du même matériau. Elles sont
+donc écrites ici, avec leur coût, plutôt que laissées dans un compte rendu.
+
+**R3 — `EcranConnexion.tsx:179` (« Appareil rattaché ») reste hors d'atteinte de tout.** Le parcours
+`allerConnexionSiege` sème **sans identité**, donc n'atteint que la branche formulaire ; et la garde
+ne joue que sur `parcours.etats[0]` — un test par vue, pas un par état, choix assumé. Un futur
+`h2 → h1` à cette ligne **ne rougirait nulle part**. Fermer le trou suppose de jouer la garde sur
+**tous** les états déclarés. _≈ 0,3 j._
+
+**R4 — `heading-order` ne tourne sur aucun balayage.** Dans axe-core 4.13.0, `heading-order` et
+`page-has-heading-one` sont taguées `best-practice`, hors du jeu `wcag2a/2aa/21a/21aa` sélectionné.
+**Le 40/40 ne dit rien de la hiérarchie** — A29 l'a vérifiée à la main, elle est propre, mais elle
+n'est pas gardée. L'ajouter coûte ce qu'A29 nomme : **l'incomparabilité terrain/console**, qui
+n'auraient plus le même étalon. _≈ 0,2 j + l'arbitrage du jeu de règles._
+
+**R5 — la phase `erreur` de la coquille rend un document à ZÉRO `<h1>`.** `EtatErreur` n'émet aucun
+titre (`packages/ui/src/composants/EtatErreur.tsx:47`, un `div role="alert"`). Ce n'est pas une vue
+du registre, donc la garde **ne peut structurellement pas la voir** : la propriété qu'on prétend
+tenir ne couvre pas les états de coquille hors registre. _≈ 0,2 j, dont la question de savoir si un
+état d'erreur mérite un titre de page._
+
+**R7 — `VUES.deverrouillage.titre = 'Déverrouiller'` n'est peint NULLE PART.** `App.tsx:195` est
+l'unique site de rendu, et la branche `verrouille` sort avant (`:150`). C'est de la **donnée morte
+déguisée en donnée vivante** : le test engendré s'intitule « Déverrouiller » quand le DOM dit
+« Déverrouiller la collecte » — exactement la divergence nom/assertion que le chantier de ce jour
+existait pour tuer, et **le second volet de la fiche du 03/09 survit sur cette vue**. _≈ 0,1 j._
+
+**R8 — R1 elle-même n'est gardée qu'indirectement.** `unSeulTitreDePage` compte `page.locator('h1')`
+**à l'échelle du document**, sans repère : un `h1` **remis dans le banner** garderait le compte à 1.
+A29 l'a mesuré — la régression rougit bien, mais via `titreDeCoquille` dans les helpers de
+navigation, avec pour message `expect(locator).toBeVisible() failed`, **qui ne nomme pas la cause**.
+Ça mord fort ; ça explique mal. _≈ 0,2 j pour une assertion qui dise « le titre a quitté `main` »._
+
+**Valeur pour l'auditeur.** Aucune des cinq ne se voit à l'usage aujourd'hui. Leur valeur est
+entièrement préventive : ce sont les endroits par où la structure de titres se défera **sans qu'aucun
+rouge n'apparaisse** — et on vient de payer six jours pour apprendre ce que coûte un défaut que rien
+ne détecte.
+
+**Arbitrage attendu à la porte suivante** : ABSORBÉE (les cinq font ≈ 1,0 j) / PHASE 2 / REFUSÉE.
+**Ne rien implémenter avant** (09 §5.9).
+
+## 2026-09-10 — [L5] Étage 2 — le titre de vue a quitté le bandeau collant, à juger sur du verre
+
+**Constat.** En fermant la réserve R1 d'A29, le `<h1>` de la coquille est passé du `<header>` collant
+au `<main>`. **Le titre de l'écran défile désormais avec le contenu.** Le bandeau garde Revenir, la
+pastille de synchronisation et Verrouiller — du contenu réellement répété, donc légitime en `banner`.
+
+**Ce qui n'est PAS en cause.** La géométrie est conservée au jeton près : le titre portait
+`flex: 1 1 auto` et servait d'entretoise, A22 a réuni le groupe de droite dans
+`.axn-coquille__actions` (`margin-inline-start: auto`, même `gap`) — A29 a vérifié la parité exacte.
+Aucune couleur ni taille en dur (invariant 4).
+
+**Trois faits mesurés par A29, qui bornent le risque.** ① **V-6 n'est pas concerné** : le « bandeau
+fin permanent » de l'écran partagé est `BandeauPartage`, rendu dans `EcranEntretien.tsx:749`, donc
+dans `<main>` — le déplacement ne le touche pas. ② **Hauteur utile en paysage : neutre à gagnante** —
+la hauteur du bandeau est fixée par ses contrôles à ≥ 44 px, pas par le titre ; le retirer ne peut
+pas l'augmenter. ③ Ce que 05 §9.7 exige d'atteignable d'un geste sur toutes les vues — **Verrouiller
+— reste collant**. Le seul coût réel : sur un questionnaire long, l'auditeur descendu perd le nom de
+la vue ; la navigation de question et la zone latérale restent collantes et portent le contexte.
+
+**Pourquoi ce n'est pas arbitré ici.** C'est du périmètre perceptible, donc étage 2 — et l'arbitrer
+maintenant se ferait **à l'aveugle**. Williams aura cet écran sous les yeux, sur un iPad physique, en
+paysage, pendant **V-4.2 et V-5** de la séance P-C. _≈ 0,2 j pour rendre le titre collant dans
+`<main>`._ **Impact schéma/API : aucun.**
+
+**Si l'observation de séance ne relève rien, cette fiche est REFUSÉE et disparaît** — c'est le
+résultat attendu, et le moins cher.
