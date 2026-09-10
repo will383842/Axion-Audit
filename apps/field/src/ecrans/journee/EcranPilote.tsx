@@ -125,8 +125,6 @@ export function EcranPilote(): ReactNode {
 
   return (
     <section className="axn-pile">
-      <h1>Où en est la mission</h1>
-
       <ZoneEtat etat={etat}>
         <>
           {(vues ?? []).map((vue) => (

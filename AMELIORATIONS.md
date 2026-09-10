@@ -1864,6 +1864,13 @@ corrige l'interface qu'il mesure ne mesure plus que son propre correctif.
 **Coût estimé.** ~0,05 j les deux. **Impact schéma : aucun. Impact API : aucun. Impact crypto :
 aucun. Impact périmètre fonctionnel : aucun. Étage 1**, autorisé d'office.
 
+**FERMÉE le 2026-09-10 par A22**, sur la règle tranchée par A01 et décidée par Williams : le `<h1>`
+canonique est celui de la coquille, alimenté par `app/vues.ts`. Point 1 — les douze titres rendus
+sous `<main>` sont retirés (onze doublons) ou rétrogradés en `<h2>` (un seul, « Appareil
+rattaché », qui dit autre chose que sa vue). Point 2 — le meilleur des deux libellés remonte au
+registre : **« Stockage de cet appareil »**. La garde qui tient la règle est d'A28
+(`unSeulTitreDePage`), écrite et mesurée rouge avant le correctif.
+
 ---
 
 ## 2026-09-03 — [transverse] Étage 2 — `pnpm verify` n'exécutait JAMAIS le projet `interface` : DÉFAUT RÉEL, **DÉJÀ CORRIGÉ** sur `lot/l3-suite`

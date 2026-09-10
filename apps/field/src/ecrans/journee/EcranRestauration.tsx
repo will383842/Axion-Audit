@@ -329,7 +329,6 @@ export function EcranRestauration(): ReactNode {
 
   return (
     <section className="axn-pile axn-pile--large">
-      <h1>Restaurer une sauvegarde</h1>
       <p>
         Pour reprendre une mission sur un appareil neuf ou de remplacement, à partir d’un fichier
         {` ${EXTENSION_SAUVEGARDE} `}produit en fin de journée. Tout se fait sur cet appareil, sans

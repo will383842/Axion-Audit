@@ -282,8 +282,6 @@ export function EcranAccueil(): ReactNode {
 
   return (
     <section className="axn-pile">
-      <h1>Aujourd’hui</h1>
-
       {/* B6 (recette novice A54, 2026-09-06) : la pastille de CET écran est
           RETIRÉE. Elle déduisait son état du nombre d'opérations en file — donc
           « Hors ligne » dès que l'outbox est vide, quel que soit le réseau —
