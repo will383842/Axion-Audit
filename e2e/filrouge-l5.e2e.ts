@@ -123,18 +123,16 @@ const ECHELLES: readonly EchelleFilRouge[] = [
 // ─────────────────────────────────────────────────────────────────────────────
 // Outillage — aucun raccourci d'application, que des gestes d'auditeur
 // ─────────────────────────────────────────────────────────────────────────────
-/** Le titre porté par la coquille — une seule occurrence, hors du `<main>`. */
-function titreDeVue(page: Page): Locator {
-  return page.locator('.axn-coquille__titre');
-}
 
 /**
- * Le titre de la VUE, cherché dans l'EN-TÊTE de coquille — et LU DANS LE REGISTRE.
+ * Le titre de la VUE, cherché dans le `<main>` — et LU DANS LE REGISTRE.
  *
  * ── DEUX CORRECTIONS, ET LA SECONDE EST LA VRAIE ───────────────────────────
  * ① 2026-09-10, matin : ce helper cherchait un `<h1>` dans `<main>`, c'est-à-dire
- *    le titre propre de l'écran — le SECOND des deux titres de niveau 1 que la
- *    page portait (constat A28-1). Le `h1` canonique est celui de la COQUILLE
+ *    le titre propre de l'ÉCRAN — le SECOND des deux titres de niveau 1 que la
+ *    page portait (constat A28-1). Le repère est le même qu'aujourd'hui, mais
+ *    l'élément visé est un AUTRE : le titre de l'écran, pas celui de la vue, et
+ *    c'est le premier qui a disparu. Le `h1` canonique est celui de la COQUILLE
  *    (règle A01), alimenté par `app/vues.ts` ; les écrans sous `<main>` n'en
  *    portent plus. Le helper vise donc l'élément qui a SURVÉCU au correctif d'A22.
  * ② 2026-09-10, après-coup : il prenait encore une CHAÎNE recopiée à la main. Le
@@ -148,12 +146,27 @@ function titreDeVue(page: Page): Locator {
  *    un code inconnu, et le libellé ne peut plus être périmé puisqu'il n'est plus
  *    recopié.
  *
+ * ── ③ 2026-09-10, RÉSERVE R1 D'A29 : DU BANNER AU `<main>` ─────────────────
+ * Le titre a quitté le `<header>` de la coquille pour devenir le premier enfant
+ * du `<main>` (A22, `App.tsx`). Deux raisons, et le helper les suit :
+ * · `role="banner"` désigne PAR SPÉCIFICATION du contenu répété de page en page ;
+ *   un titre qui change à chaque vue y était un contresens sémantique ;
+ * · le `<main>` n'avait AUCUN nom accessible — qui saute au repère principal, le
+ *   geste le plus courant au lecteur d'écran, n'entendait jamais le titre de la
+ *   vue. Il tombe désormais dessus, puisque le titre l'ouvre.
+ * LE PRINCIPE NE BOUGE PAS : la source reste le registre, unique. Seul
+ * l'emplacement change — et c'est aussi ce qui met la coquille d'accord avec
+ * `EcranDeverrouillage`, qui plaçait déjà son `h1` dans le `<main>`.
+ *
  * Ce que l'assertion dit exactement : « la coquille affiche le titre de CETTE
- * vue-là, en `h1`, dans son en-tête ». Le LIBELLÉ, lui, est une donnée du
- * registre — il s'y lit, il ne se redouble pas ici.
+ * vue-là, en `h1` de niveau 1, au premier rang du repère `main`, sous son nom
+ * EXACT ». Le LIBELLÉ, lui, est une donnée du registre — il s'y lit, il ne se
+ * redouble pas ici.
  */
 function titreDeCoquille(page: Page, code: CodeVue): Locator {
-  return page.getByRole('banner').getByRole('heading', { name: VUES[code].titre, level: 1 });
+  return page
+    .getByRole('main')
+    .getByRole('heading', { name: VUES[code].titre, level: 1, exact: true });
 }
 
 /** Un créneau d'aujourd'hui, au format `datetime-local` du fuseau du navigateur. */
@@ -224,14 +237,14 @@ for (const echelle of ECHELLES) {
       await couperLeReseau(contexte, page);
       await deverrouillerAppareil(page, MOT_DE_PASSE_APPAREIL);
 
-      await expect(titreDeVue(page)).toHaveText(VUES.aujourdhui.titre);
+      await expect(titreDeCoquille(page, 'aujourdhui')).toBeVisible();
       // Le titre de mission vit dans une charge CHIFFRÉE : le lire prouve que le
       // coffre s'est ouvert, ce qu'aucun contrôle de titre d'écran ne prouverait.
       await expect(page.getByRole('heading', { name: echelle.titre })).toBeVisible();
 
       // ── ÉTAPE 2 — l'agenda : une session planifiée, à l'échelle de la mission
       await page.getByRole('button', { name: /l’agenda/ }).click();
-      await expect(titreDeVue(page)).toHaveText(VUES.agenda.titre);
+      await expect(titreDeCoquille(page, 'agenda')).toBeVisible();
 
       const unites = page.getByLabel('Unité').locator('option');
       // LA PREUVE D'ÉCHELLE : l'arbre entier est descendu et lisible au doigt.
@@ -248,9 +261,9 @@ for (const echelle of ECHELLES) {
 
       // ── ÉTAPE 3 — UN TAP démarre la session pré-remplie (03 §34.2 V2.10) ──
       await page.getByRole('button', { name: 'Revenir' }).click();
-      await expect(titreDeVue(page)).toHaveText(VUES.aujourdhui.titre);
+      await expect(titreDeCoquille(page, 'aujourdhui')).toBeVisible();
       await page.getByRole('button', { name: /Interlocuteur fil rouge/ }).click();
-      await expect(titreDeVue(page)).toHaveText(VUES.entretien.titre);
+      await expect(titreDeCoquille(page, 'entretien')).toBeVisible();
       // Zéro champ à ressaisir : seul l'accord de participation reste (03 M3.2).
       await page.getByLabel('Accord de participation recueilli').check();
       await page.getByRole('button', { name: 'Démarrer l’entretien' }).click();
@@ -343,7 +356,7 @@ for (const echelle of ECHELLES) {
 
       // 03 §17.2 : « cliquer sur un item amène directement à l'écran qui le résout ».
       await ligne.click();
-      await expect(titreDeVue(page)).toHaveText(VUES.entretien.titre);
+      await expect(titreDeCoquille(page, 'entretien')).toBeVisible();
       await expect(page.getByRole('heading', { name: echelle.questionEchelle })).toBeVisible();
 
       // ── ÉTAPE 8 — LA ZONE D'OMBRE EST LEVÉE, ET LA LISTE SE VIDE ─────────
@@ -372,7 +385,7 @@ for (const echelle of ECHELLES) {
       // Invariant 8 : « aucune donnée ne vit sur un seul appareil > 24 h ». Le
       // rituel est un BOUTON, pas une discipline de mémoire (03 §34.2 V2.10).
       await page.getByRole('button', { name: 'Fin de journée', exact: true }).click();
-      await expect(titreDeVue(page)).toHaveText(VUES.finDeJournee.titre);
+      await expect(titreDeCoquille(page, 'finDeJournee')).toBeVisible();
       await page.getByLabel('Mot de passe de cet appareil').fill(MOT_DE_PASSE_APPAREIL);
 
       const attenteFichier = page.waitForEvent('download');

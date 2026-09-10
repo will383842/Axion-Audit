@@ -316,18 +316,16 @@ async function balayer(page: Page, ecran: string): Promise<readonly Grief[]> {
 // ─────────────────────────────────────────────────────────────────────────────
 // LES GESTES DE PRODUCTION QUI MÈNENT À CHAQUE ÉCRAN
 // ─────────────────────────────────────────────────────────────────────────────
-/** Le titre porté par la coquille — une seule occurrence, hors du `<main>`. */
-function titreDeVue(page: Page): Locator {
-  return page.locator('.axn-coquille__titre');
-}
 
 /**
- * Le titre de la VUE, cherché dans l'EN-TÊTE de coquille — et LU DANS LE REGISTRE.
+ * Le titre de la VUE, cherché dans le `<main>` — et LU DANS LE REGISTRE.
  *
  * ── DEUX CORRECTIONS, ET LA SECONDE EST LA VRAIE ───────────────────────────
  * ① 2026-09-10, matin : ce helper cherchait un `<h1>` dans `<main>`, c'est-à-dire
- *    le titre propre de l'écran — le SECOND des deux titres de niveau 1 que la
- *    page portait (constat A28-1). Le `h1` canonique est celui de la COQUILLE
+ *    le titre propre de l'ÉCRAN — le SECOND des deux titres de niveau 1 que la
+ *    page portait (constat A28-1). Le repère est le même qu'aujourd'hui, mais
+ *    l'élément visé est un AUTRE : le titre de l'écran, pas celui de la vue, et
+ *    c'est le premier qui a disparu. Le `h1` canonique est celui de la COQUILLE
  *    (règle A01), alimenté par `app/vues.ts` ; les écrans sous `<main>` n'en
  *    portent plus. Le helper vise donc l'élément qui a SURVÉCU au correctif d'A22.
  * ② 2026-09-10, après-coup : il prenait encore une CHAÎNE recopiée à la main. Le
@@ -341,12 +339,27 @@ function titreDeVue(page: Page): Locator {
  *    un code inconnu, et le libellé ne peut plus être périmé puisqu'il n'est plus
  *    recopié.
  *
+ * ── ③ 2026-09-10, RÉSERVE R1 D'A29 : DU BANNER AU `<main>` ─────────────────
+ * Le titre a quitté le `<header>` de la coquille pour devenir le premier enfant
+ * du `<main>` (A22, `App.tsx`). Deux raisons, et le helper les suit :
+ * · `role="banner"` désigne PAR SPÉCIFICATION du contenu répété de page en page ;
+ *   un titre qui change à chaque vue y était un contresens sémantique ;
+ * · le `<main>` n'avait AUCUN nom accessible — qui saute au repère principal, le
+ *   geste le plus courant au lecteur d'écran, n'entendait jamais le titre de la
+ *   vue. Il tombe désormais dessus, puisque le titre l'ouvre.
+ * LE PRINCIPE NE BOUGE PAS : la source reste le registre, unique. Seul
+ * l'emplacement change — et c'est aussi ce qui met la coquille d'accord avec
+ * `EcranDeverrouillage`, qui plaçait déjà son `h1` dans le `<main>`.
+ *
  * Ce que l'assertion dit exactement : « la coquille affiche le titre de CETTE
- * vue-là, en `h1`, dans son en-tête ». Le LIBELLÉ, lui, est une donnée du
- * registre — il s'y lit, il ne se redouble pas ici.
+ * vue-là, en `h1` de niveau 1, au premier rang du repère `main`, sous son nom
+ * EXACT ». Le LIBELLÉ, lui, est une donnée du registre — il s'y lit, il ne se
+ * redouble pas ici.
  */
 function titreDeCoquille(page: Page, code: CodeVue): Locator {
-  return page.getByRole('banner').getByRole('heading', { name: VUES[code].titre, level: 1 });
+  return page
+    .getByRole('main')
+    .getByRole('heading', { name: VUES[code].titre, level: 1, exact: true });
 }
 
 /**
@@ -360,6 +373,16 @@ function titreDeCoquille(page: Page, code: CodeVue): Locator {
  * une information distincte, ou disparaît s'il duplique le titre de vue. Les
  * écrans rendus HORS coquille — `deverrouillage`, et les retours anticipés
  * d'`App.tsx` — gardent le leur : ils n'en ont aucun autre.
+ *
+ * ── LE CAS `deverrouillage`, VÉRIFIÉ ET NON SUPPOSÉ (R1, 2026-09-10) ───────
+ * Depuis R1 le titre de vue vit dans le `<main>`, là où `EcranDeverrouillage`
+ * met déjà le sien : on pouvait craindre que les deux s'y rencontrent. Ils ne
+ * s'y rencontrent pas, et la raison est structurelle — coffre fermé, `App.tsx`
+ * sort AVANT de peindre la coquille : ni en-tête, ni titre de vue, l'écran est
+ * seul dans son `<main>`. MESURÉ le 2026-09-10 : un `h1`, « Déverrouiller la
+ * collecte ». C'est le titre de l'ÉCRAN, non celui du registre (« Déverrouiller »),
+ * qui n'est jamais peint sur cette vue. La garde compte donc juste, et pour cette
+ * vue-là seule elle éprouve « un `h1` », non « le `h1` du registre ».
  *
  * Ce qui est éprouvé ici n'est donc pas « le DOM d'aujourd'hui compte un `h1` »,
  * c'est une PROPRIÉTÉ DU REGISTRE : le titre vient d'un endroit unique, donc une
@@ -414,7 +437,7 @@ async function unSeulTitreDePage(page: Page, ecran: string): Promise<void> {
 async function appareilOuvert(page: Page): Promise<void> {
   await planterAppareil(page, await graines());
   await deverrouillerAppareil(page, MOT_DE_PASSE_APPAREIL);
-  await expect(titreDeVue(page)).toHaveText(VUES.aujourdhui.titre);
+  await expect(titreDeCoquille(page, 'aujourdhui')).toBeVisible();
 }
 
 /** Le cockpit, avec son anti-vacuité : mission lue, journée vide affichée. */
@@ -462,7 +485,7 @@ async function allerEntretienAvantDemarrage(page: Page): Promise<void> {
   await page.getByLabel('Fonction').fill(FONCTION);
   await page.getByLabel('Unité').selectOption({ label: MISSION_FIL_TPE.unite });
   await page.getByRole('button', { name: 'Ouvrir l’entretien' }).click();
-  await expect(titreDeVue(page)).toHaveText(VUES.entretien.titre);
+  await expect(titreDeCoquille(page, 'entretien')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Avant la première question' })).toBeVisible();
   await expect(page.getByLabel('Accord de participation recueilli')).toBeVisible();
 }

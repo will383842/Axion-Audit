@@ -59,12 +59,14 @@ const NORMES = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] as const;
 const MOT_DE_PASSE = 'AuditTerrain2026!';
 
 /**
- * Le titre de la VUE, cherché dans l'EN-TÊTE de coquille — et LU DANS LE REGISTRE.
+ * Le titre de la VUE, cherché dans le `<main>` — et LU DANS LE REGISTRE.
  *
  * ── DEUX CORRECTIONS, ET LA SECONDE EST LA VRAIE ───────────────────────────
  * ① 2026-09-10, matin : ce helper cherchait un `<h1>` dans `<main>`, c'est-à-dire
- *    le titre propre de l'écran — le SECOND des deux titres de niveau 1 que la
- *    page portait (constat A28-1). Le `h1` canonique est celui de la COQUILLE
+ *    le titre propre de l'ÉCRAN — le SECOND des deux titres de niveau 1 que la
+ *    page portait (constat A28-1). Le repère est le même qu'aujourd'hui, mais
+ *    l'élément visé est un AUTRE : le titre de l'écran, pas celui de la vue, et
+ *    c'est le premier qui a disparu. Le `h1` canonique est celui de la COQUILLE
  *    (règle A01), alimenté par `app/vues.ts` ; les écrans sous `<main>` n'en
  *    portent plus. Le helper vise donc l'élément qui a SURVÉCU au correctif d'A22.
  * ② 2026-09-10, après-coup : il prenait encore une CHAÎNE recopiée à la main. Le
@@ -78,21 +80,42 @@ const MOT_DE_PASSE = 'AuditTerrain2026!';
  *    un code inconnu, et le libellé ne peut plus être périmé puisqu'il n'est plus
  *    recopié.
  *
+ * ── ③ 2026-09-10, RÉSERVE R1 D'A29 : DU BANNER AU `<main>` ─────────────────
+ * Le titre a quitté le `<header>` de la coquille pour devenir le premier enfant
+ * du `<main>` (A22, `App.tsx`). Deux raisons, et le helper les suit :
+ * · `role="banner"` désigne PAR SPÉCIFICATION du contenu répété de page en page ;
+ *   un titre qui change à chaque vue y était un contresens sémantique ;
+ * · le `<main>` n'avait AUCUN nom accessible — qui saute au repère principal, le
+ *   geste le plus courant au lecteur d'écran, n'entendait jamais le titre de la
+ *   vue. Il tombe désormais dessus, puisque le titre l'ouvre.
+ * LE PRINCIPE NE BOUGE PAS : la source reste le registre, unique. Seul
+ * l'emplacement change — et c'est aussi ce qui met la coquille d'accord avec
+ * `EcranDeverrouillage`, qui plaçait déjà son `h1` dans le `<main>`.
+ *
  * Ce que l'assertion dit exactement : « la coquille affiche le titre de CETTE
- * vue-là, en `h1`, dans son en-tête ». Le LIBELLÉ, lui, est une donnée du
- * registre — il s'y lit, il ne se redouble pas ici.
+ * vue-là, en `h1` de niveau 1, au premier rang du repère `main`, sous son nom
+ * EXACT ». Le LIBELLÉ, lui, est une donnée du registre — il s'y lit, il ne se
+ * redouble pas ici.
  */
 function titreDeCoquille(page: Page, code: CodeVue): ReturnType<Page['getByRole']> {
-  return page.getByRole('banner').getByRole('heading', { name: VUES[code].titre, level: 1 });
+  return page
+    .getByRole('main')
+    .getByRole('heading', { name: VUES[code].titre, level: 1, exact: true });
 }
 
 /**
  * Le titre d'un écran rendu HORS coquille — et ils gardent leur `<h1>`.
  *
  * `deverrouillage` (premier usage comme coffre existant) est rendu par le retour
- * anticipé d'`App.tsx` : pas d'en-tête, donc pas de titre de vue, donc aucun
- * doublon à fermer. La règle du 2026-09-10 le dit en toutes lettres, et c'est
- * pour cela que ces trois appels-ci ne changent PAS de cible.
+ * anticipé d'`App.tsx` : la coquille ne peint alors NI en-tête NI titre de vue,
+ * l'écran est seul dans son `<main>`, et son `h1` est donc le seul de la page —
+ * aucun doublon à fermer. La règle du 2026-09-10 le dit en toutes lettres.
+ *
+ * Depuis la réserve R1 (le titre de vue passé dans le `<main>`), ce helper et
+ * `titreDeCoquille` visent le même REPÈRE. Ils ne se confondent pas pour autant,
+ * et c'est la SOURCE DU NOM qui les sépare : là, un libellé d'écran, qui n'est
+ * pas une donnée du registre et n'a pas à y entrer ; ici, `VUES[code].titre`.
+ * Les fusionner obligerait à inscrire au registre des vues qui n'en sont pas.
  */
 function titreHorsCoquille(page: Page, texte: string): ReturnType<Page['getByRole']> {
   return page.getByRole('main').getByRole('heading', { name: texte, level: 1 });
