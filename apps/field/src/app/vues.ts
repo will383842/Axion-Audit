@@ -24,7 +24,17 @@
 
 /** Ce qu'une vue déclare d'elle-même. Aucune vue n'est déclarée ailleurs. */
 export interface DefinitionVue {
-  /** Titre affiché — français, vocabulaire métier, jamais de jargon (03 §17.4). */
+  /**
+   * Titre affiché — français, vocabulaire métier, jamais de jargon (03 §17.4).
+   *
+   * C'est LE titre de niveau 1 de la vue. La coquille le peint (`App.tsx`), et
+   * un écran rendu sous son `<main>` n'en peint aucun autre : son titre propre
+   * est un `<h2>` s'il ajoute une information, ou rien s'il redit celui-ci
+   * (arbitrage A01 appliqué le 2026-09-10 sur décision de Williams). Le titre
+   * vient donc d'un endroit unique — c'est ce qui fait qu'une vue nouvelle ne
+   * peut pas être livrée sans exactement un `h1`, propriété gardée par
+   * `e2e/accessibilite-toutes-vues-l5.e2e.ts` (`unSeulTitreDePage`, A28).
+   */
   readonly titre: string;
   /**
    * La vue exige-t-elle un coffre OUVERT ?
@@ -41,7 +51,13 @@ export interface DefinitionVue {
 export const VUES = {
   // ── L5a (socle) ────────────────────────────────────────────────────────────
   deverrouillage: { titre: 'Déverrouiller', exigeCoffreOuvert: false },
-  stockage: { titre: 'Stockage de l’appareil', exigeCoffreOuvert: false },
+  // Libellé rectifié le 2026-09-10 : « de CET appareil ». L'écran et le
+  // registre en portaient deux différents (second volet du constat A28-1,
+  // point 2 de la fiche AMELIORATIONS du 2026-09-03) ; le meilleur des deux
+  // remonte ici, puisque c'est désormais d'ici que le titre est peint. Ce
+  // n'est ni un renommage de clé ni un réordonnancement : le régime
+  // append-only du fichier porte sur les LIGNES, pas sur le texte affiché.
+  stockage: { titre: 'Stockage de cet appareil', exigeCoffreOuvert: false },
   accueil: { titre: 'Aujourd’hui', exigeCoffreOuvert: true },
   // ── L5b (écran d'entretien) — A22 ─────────────────────────────────────────
   nouvelEntretien: { titre: 'Nouvel entretien', exigeCoffreOuvert: true },

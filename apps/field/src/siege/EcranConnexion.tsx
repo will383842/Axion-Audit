@@ -171,7 +171,12 @@ export function EcranConnexion(): ReactNode {
   if (identite !== null) {
     return (
       <section className="axn-pile axn-pile--large" aria-labelledby={`${identifiant}-titre`}>
-        <h1 id={`${identifiant}-titre`}>Appareil rattaché</h1>
+        {/* `h2` et non `h1` : la coquille porte le titre de la vue (règle A01
+            du 2026-09-10). Celui-ci n'est pas un doublon — la vue s'appelle
+            « Rattacher cet appareil », cet état-là dit que c'est FAIT — donc il
+            reste, un cran plus bas, et il GARDE son `id` : la section qui le
+            désigne conserve son nom accessible, au mot près. */}
+        <h2 id={`${identifiant}-titre`}>Appareil rattaché</h2>
         <Message ton="succes" titre="Cet appareil est rattaché à votre compte">
           <p>
             Les entretiens ouverts ici vous appartiennent, et cela suffit à collecter hors ligne.
@@ -199,9 +204,9 @@ export function EcranConnexion(): ReactNode {
   }
 
   return (
-    <section className="axn-pile axn-pile--large" aria-labelledby={`${identifiant}-titre`}>
-      <h1 id={`${identifiant}-titre`}>Rattacher cet appareil</h1>
-
+    // Ici, au contraire, le titre redisait celui de la vue : il part, et son
+    // `aria-labelledby` avec lui, pour ne pas laisser la région sans nom.
+    <section className="axn-pile axn-pile--large">
       <Message ton="info" titre="Pourquoi cette étape">
         Un entretien a toujours un propriétaire, et l’application ne l’invente pas. Rattachez cet
         appareil à votre compte une fois, en ligne : ensuite, toute la collecte se fait sans réseau.

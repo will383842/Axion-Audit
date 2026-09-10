@@ -127,6 +127,7 @@
 import { appendFileSync } from 'node:fs';
 
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { VUES, type CodeVue } from '../apps/field/src/app/vues.js';
 import {
   deverrouillerAppareil,
   lireTableLocale,
@@ -344,8 +345,49 @@ function graines(): Promise<GrainesAppareil> {
   return semis;
 }
 
-function titreDEcran(page: Page, texte: string): Locator {
-  return page.getByRole('main').getByRole('heading', { name: texte, level: 1 });
+/**
+ * Le titre de la VUE, cherché dans le `<main>` — et LU DANS LE REGISTRE.
+ *
+ * ── DEUX CORRECTIONS, ET LA SECONDE EST LA VRAIE ───────────────────────────
+ * ① 2026-09-10, matin : ce helper cherchait un `<h1>` dans `<main>`, c'est-à-dire
+ *    le titre propre de l'ÉCRAN — le SECOND des deux titres de niveau 1 que la
+ *    page portait (constat A28-1). Le repère est le même qu'aujourd'hui, mais
+ *    l'élément visé est un AUTRE : le titre de l'écran, pas celui de la vue, et
+ *    c'est le premier qui a disparu. Le `h1` canonique est celui de la COQUILLE
+ *    (règle A01), alimenté par `app/vues.ts` ; les écrans sous `<main>` n'en
+ *    portent plus. Le helper vise donc l'élément qui a SURVÉCU au correctif d'A22.
+ * ② 2026-09-10, après-coup : il prenait encore une CHAÎNE recopiée à la main. Le
+ *    registre a changé le libellé de `stockage` le matin même, et trois tests
+ *    sont tombés — sur leur `atteindre`, pas sur une assertion de titre. Le NOM
+ *    du test, lui, était engendré depuis `VUES[code].titre` : le nom et
+ *    l'assertion ne parlaient donc plus du même écran.
+ *    C'est mot pour mot la famille de défaut que le chapeau de ce fichier
+ *    dénonce — « une liste écrite à la main se désynchronise du registre en
+ *    silence ». Le helper prend désormais un CODE DE VUE : le compilateur refuse
+ *    un code inconnu, et le libellé ne peut plus être périmé puisqu'il n'est plus
+ *    recopié.
+ *
+ * ── ③ 2026-09-10, RÉSERVE R1 D'A29 : DU BANNER AU `<main>` ─────────────────
+ * Le titre a quitté le `<header>` de la coquille pour devenir le premier enfant
+ * du `<main>` (A22, `App.tsx`). Deux raisons, et le helper les suit :
+ * · `role="banner"` désigne PAR SPÉCIFICATION du contenu répété de page en page ;
+ *   un titre qui change à chaque vue y était un contresens sémantique ;
+ * · le `<main>` n'avait AUCUN nom accessible — qui saute au repère principal, le
+ *   geste le plus courant au lecteur d'écran, n'entendait jamais le titre de la
+ *   vue. Il tombe désormais dessus, puisque le titre l'ouvre.
+ * LE PRINCIPE NE BOUGE PAS : la source reste le registre, unique. Seul
+ * l'emplacement change — et c'est aussi ce qui met la coquille d'accord avec
+ * `EcranDeverrouillage`, qui plaçait déjà son `h1` dans le `<main>`.
+ *
+ * Ce que l'assertion dit exactement : « la coquille affiche le titre de CETTE
+ * vue-là, en `h1` de niveau 1, au premier rang du repère `main`, sous son nom
+ * EXACT ». Le LIBELLÉ, lui, est une donnée du registre — il s'y lit, il ne se
+ * redouble pas ici.
+ */
+function titreDeCoquille(page: Page, code: CodeVue): Locator {
+  return page
+    .getByRole('main')
+    .getByRole('heading', { name: VUES[code].titre, level: 1, exact: true });
 }
 
 /**
@@ -372,11 +414,11 @@ function etiquetteDe(radio: Locator): Locator {
 async function allerQuestionAChoix(page: Page): Promise<void> {
   await planterAppareil(page, await graines());
   await deverrouillerAppareil(page, MOT_DE_PASSE_APPAREIL);
-  await expect(titreDEcran(page, 'Aujourd’hui')).toBeVisible();
+  await expect(titreDeCoquille(page, 'aujourdhui')).toBeVisible();
   await expect(page.getByRole('heading', { name: MISSION_FIL_TPE.titre })).toBeVisible();
 
   await page.getByRole('button', { name: 'Nouvel entretien' }).click();
-  await expect(titreDEcran(page, 'Nouvel entretien')).toBeVisible();
+  await expect(titreDeCoquille(page, 'nouvelEntretien')).toBeVisible();
   await page.getByLabel('Nom de l’interlocuteur').fill(INTERLOCUTEUR);
   await page.getByLabel('Fonction').fill(FONCTION);
   await page.getByLabel('Unité').selectOption({ label: MISSION_FIL_TPE.unite });

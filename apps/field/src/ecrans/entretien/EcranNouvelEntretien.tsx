@@ -152,8 +152,12 @@ export function EcranNouvelEntretien(): ReactNode {
             : { nature: 'nominal' };
 
   return (
-    <section className="axn-pile axn-nouvel-entretien" aria-labelledby="axn-nouvel-entretien-titre">
-      <h1 id="axn-nouvel-entretien-titre">Nouvel entretien</h1>
+    // Le titre de la vue est peint UNE FOIS, par la coquille, depuis le
+    // registre `app/vues.ts` (règle A01 du 2026-09-10). Celui-ci le redisait
+    // mot pour mot : il part. Son `aria-labelledby` part AVEC lui — une
+    // référence orpheline aurait laissé cette région sans nom accessible,
+    // c'est-à-dire annoncée « région » et rien d'autre.
+    <section className="axn-pile axn-nouvel-entretien">
       {/* B2 (recette novice A54, 2026-09-06) : cette promesse était rendue AVANT
           la zone d'état. L'écran annonçait « Trois champs » et n'en affichait
           aucun quand l'identité d'auditeur manquait — le titre promettait, le

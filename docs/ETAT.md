@@ -5292,3 +5292,28 @@ Octets livrés : 55 310, SHA-256 `e6267aab…2bf3dcde`. Le fichier reste **hors 
 
 **Deux défauts rendus, aucun corrigé** : deux `<h1>` sur l'écran de restauration (A20/A22) ·
 V-5.5 inatteignable en banque, `ANCRES_ABSENTES` bloquant §32.4 (A30/A34).
+
+## 2026-09-10 09h40 — [L5 / correctif de titres, hors lot] — étape pipeline 4/7 CLOSE → PR
+
+Dernier commit vert : `9bf0c9e` · Branche : `fix/h1-canonique-coquille` · Poussé : après ce bloc.
+Tâche en cours : rien — A28 (garde), A22 (production), A29 (revue croisée, R1 et R6 fermées).
+Prochaine action : ouvrir la PR **sans auto-merge** (§7 : de la production, elle revient à Williams).
+Puis la séance P-C. **Aucun lot n'est rouvert** (09 §4bis).
+Tests rouges connus : aucun — balayage a11y **40/40**, unit 1835/1835, interface 1279/1279,
+`verify:rapide` EXIT 0, rejoué par A29 lui-même.
+
+**La nuit a fermé cinq PR** : #122 (arbitrages Williams), #125 (L8 écrit non branché), #131 (D-2 bis),
+#132 (l'outil de séance), #133 (la reprise), #134 (le double comptage L7-min, commit orphelin
+récupéré par le hook `Stop` — il avait raison).
+
+**Le défaut des `<h1>`, quatre fois constaté, est fermé** : ce n'était pas l'écran de restauration
+mais **la coquille, 11 vues sur 13** (le registre en compte treize depuis `aRevoir`, pas douze).
+Règle : le `<h1>` canonique vient du registre et se peint **dans `<main>`** — A29 a corrigé mon
+premier arbitrage, qui le laissait dans le `banner` (`role=banner` = contenu répété ; et `<main>`
+n'avait aucun nom accessible). Garde **engendrée par le registre**, éprouvée par trois mutations.
+A28 a trouvé au passage **43 littéraux de titre recopiés** dans cinq fichiers e2e, dont cinq qui
+disaient « Aujourd'hui » pour deux vues différentes.
+
+**Deux choses attendent Williams, aucune ne bloque le code** : le **report de V-10** (elle est
+bloquée par l'absence du premier pull, comme V-0.7 — trouvé en relisant la fiche) ; et le **titre
+qui défile** au lieu de rester collant, à juger à l'œil en V-4.2. Cinq réserves d'A29 sont en fiches.

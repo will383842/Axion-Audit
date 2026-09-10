@@ -40,6 +40,7 @@
 // novice < 30 min).
 // =============================================================================
 import { devices, expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { VUES, type CodeVue } from '../apps/field/src/app/vues.js';
 import {
   ANCRES_ECHELLE_FIL_TPE,
   CONSIGNE_ECHELLE_FIL_TPE,
@@ -112,9 +113,24 @@ const SIX_TYPES = [
   'Atelier collectif',
 ] as const;
 
-/** Le titre de la vue courante, porté par la coquille — une seule occurrence. */
-function titreDeVue(page: Page) {
-  return page.locator('.axn-coquille__titre');
+/**
+ * Le titre de la VUE, cherché dans le `<main>` — et LU DANS LE REGISTRE.
+ *
+ * ── POURQUOI CE HELPER A REMPLACÉ `titreDeVue` (réserve R6 d'A29) ──────────
+ * `titreDeVue` visait la CLASSE CSS `.axn-coquille__titre` et comparait son
+ * texte. Il ne disait donc rien du NIVEAU : une régression `h1 → h2` dans la
+ * coquille l'aurait laissé VERT, au moment précis où tout ce chantier consiste à
+ * garantir qu'il y a un `h1` et un seul. Les deux helpers visaient le même
+ * élément par deux chemins de force inégale ; ils convergent sur le plus fort.
+ *
+ * Ce qui est asséré : rôle `heading`, NIVEAU 1, nom accessible EXACTEMENT égal
+ * au titre du registre, dans le repère `main`. Le libellé n'est plus recopié —
+ * il se lit dans `app/vues.ts`, qui en est la source unique.
+ */
+function titreDeCoquille(page: Page, code: CodeVue) {
+  return page
+    .getByRole('main')
+    .getByRole('heading', { name: VUES[code].titre, level: 1, exact: true });
 }
 
 /**
@@ -238,12 +254,12 @@ for (const appareil of APPAREILS) {
 
     // La règle de vue initiale fait atterrir sur le cockpit quand une mission
     // est présente sur l'appareil (arbitrage A01, 2026-09-05).
-    await expect(titreDeVue(page)).toHaveText('Aujourd’hui');
+    await expect(titreDeCoquille(page, 'aujourdhui')).toBeVisible();
     await expect(page.getByRole('heading', { name: MISSION_FIL_TPE.titre })).toBeVisible();
 
     // ── Tous les écrans de la journée, atteints au doigt, réseau coupé ─────
     await page.getByRole('button', { name: /l’agenda/ }).click();
-    await expect(titreDeVue(page)).toHaveText('Agenda');
+    await expect(titreDeCoquille(page, 'agenda')).toBeVisible();
     await expect(
       page.getByRole('heading', { name: 'Planifier une session de collecte' }),
     ).toBeVisible();
@@ -253,20 +269,20 @@ for (const appareil of APPAREILS) {
 
     await page.getByRole('button', { name: 'Revenir' }).click();
     await page.getByRole('button', { name: 'Où en est cette mission ?' }).click();
-    await expect(titreDeVue(page)).toHaveText('Où en est la mission');
+    await expect(titreDeCoquille(page, 'pilote')).toBeVisible();
 
     await page.getByRole('button', { name: 'Revenir' }).click();
     await page.getByRole('button', { name: 'Fin de journée', exact: true }).click();
-    await expect(titreDeVue(page)).toHaveText('Fin de journée');
+    await expect(titreDeCoquille(page, 'finDeJournee')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Sauvegarde de secours' })).toBeVisible();
 
     await page.getByRole('button', { name: 'Revenir à ma journée' }).click();
     await page.getByRole('button', { name: 'Missions et stockage de l’appareil' }).click();
-    await expect(titreDeVue(page)).toHaveText('Aujourd’hui');
+    await expect(titreDeCoquille(page, 'accueil')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Nouvel entretien' })).toBeVisible();
 
     await page.getByRole('button', { name: 'Restaurer une sauvegarde de secours' }).click();
-    await expect(titreDeVue(page)).toHaveText('Restaurer une sauvegarde');
+    await expect(titreDeCoquille(page, 'restauration')).toBeVisible();
     // 03 §33.2 : le hors ligne est un ÉTAT d'écran, et il est NOMINAL — il se dit
     // comme une capacité, jamais comme une panne.
     await expect(
@@ -301,7 +317,7 @@ test('@critique hors ligne — une session de CHACUN des six types se crée sans
   await deverrouillerAppareil(page, MOT_DE_PASSE_APPAREIL);
 
   await page.getByRole('button', { name: /l’agenda/ }).click();
-  await expect(titreDeVue(page)).toHaveText('Agenda');
+  await expect(titreDeCoquille(page, 'agenda')).toBeVisible();
 
   for (const [rang, type] of SIX_TYPES.entries()) {
     await page.getByLabel('Type de session').selectOption({ label: type });
@@ -394,9 +410,9 @@ test('@critique coupure brutale en pleine saisie — la réponse en cours survit
   await page.getByRole('button', { name: 'Revenir' }).click();
 
   // ── Démarrage : l'accord de participation est un préalable (03 M3.2) ────
-  await expect(titreDeVue(page)).toHaveText('Aujourd’hui');
+  await expect(titreDeCoquille(page, 'aujourdhui')).toBeVisible();
   await page.getByRole('button', { name: /Interlocuteur brutal/ }).click();
-  await expect(titreDeVue(page)).toHaveText('Entretien');
+  await expect(titreDeCoquille(page, 'entretien')).toBeVisible();
   await page.getByLabel('Accord de participation recueilli').check();
   await page.getByRole('button', { name: 'Démarrer l’entretien' }).click();
   await expect(page.getByRole('heading', { name: PREMIERE_QUESTION })).toBeVisible();
@@ -450,7 +466,7 @@ test('@critique coupure brutale en pleine saisie — la réponse en cours survit
   // Servie par la PERSISTANCE (`meta.vueCourante`), jamais par une URL — donc
   // elle doit survivre à une mort brutale, sinon elle ne sert à rien le seul
   // jour où on en a besoin.
-  await expect(titreDeVue(page)).toHaveText('Entretien');
+  await expect(titreDeCoquille(page, 'entretien')).toBeVisible();
   await expect(page.getByRole('heading', { name: PREMIERE_QUESTION })).toBeVisible();
 
   // Zéro perte, et la preuve est la valeur RELUE À L'ÉCRAN : une ligne présente
@@ -494,7 +510,7 @@ test('@critique export de secours produit hors ligne, puis restauré sur un SECO
 
   // ── LE RITUEL DU SOIR — un geste, sans réseau (03 §34.2, invariant 8) ───
   await pageOrigine.getByRole('button', { name: 'Fin de journée', exact: true }).click();
-  await expect(titreDeVue(pageOrigine)).toHaveText('Fin de journée');
+  await expect(titreDeCoquille(pageOrigine, 'finDeJournee')).toBeVisible();
   await pageOrigine.getByLabel('Mot de passe de cet appareil').fill(MOT_DE_PASSE_APPAREIL);
 
   const attenteFichier = pageOrigine.waitForEvent('download');
@@ -527,7 +543,7 @@ test('@critique export de secours produit hors ligne, puis restauré sur un SECO
   await passerEnModeAvion(secours, pageSecours);
   await deverrouillerAppareil(pageSecours, MOT_DE_PASSE_SECOND_APPAREIL);
 
-  await expect(titreDeVue(pageSecours)).toHaveText('Aujourd’hui');
+  await expect(titreDeCoquille(pageSecours, 'accueil')).toBeVisible();
   // L'état VIDE du 03 §33.2 : cet appareil ne connaît rien de la mission. C'est
   // la ligne de départ que la restauration doit franchir.
   await expect(pageSecours.getByText('Aucune mission sur cet appareil')).toBeVisible();
@@ -544,7 +560,7 @@ test('@critique export de secours produit hors ligne, puis restauré sur un SECO
   });
 
   await pageSecours.getByRole('button', { name: 'Ouvrir ma journée' }).click();
-  await expect(titreDeVue(pageSecours)).toHaveText('Aujourd’hui');
+  await expect(titreDeCoquille(pageSecours, 'aujourdhui')).toBeVisible();
 
   // Les DONNÉES sont là, et déchiffrables sous une DEK qui n'a jamais servi à
   // les écrire : le titre de mission et le nom de l'unité vivent tous deux dans

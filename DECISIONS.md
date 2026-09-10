@@ -12592,3 +12592,44 @@ l'empreinte et non le blob ; `.gitignore:51` est **maintenu tel quel**, son moti
 
 Décideur : A01
 Impact spec : aucun.
+
+## 2026-09-10 — [L5] Où vit le `<h1>` d'une vue, et fallait-il le corriger avant de jouer V-10 ?
+
+Le défaut « deux `<h1>` de texte identique par vue » a été constaté **quatre fois sans jamais être
+fermé** (A28-1 le 03/09 · fiche `AMELIORATIONS` du même jour, étage 1, 0,05 j · A54 majeur **M8**
+rejoué les 06, 07 et 09/09 · A26 le 09/09 en navigateur réel). A20 le mesure : ce n'est pas l'écran
+de restauration, c'est **la coquille** ; A28 corrige le dénominateur en jouant la garde, **11 vues
+sur 13**. Le chiffrage qui faisait tenir la fiche sous le plafond de 0,5 j était faux d'un facteur
+cinq.
+
+Options :
+
+- **(a) le `<h1>` canonique est celui de chaque ÉCRAN** : la collatérale de test scopée `main` tient,
+  mais `entretien` n'a pas de titre propre et une vue neuve peut naître sans `h1` — c'est ainsi
+  qu'on en est arrivé là.
+- **(b) celui de la COQUILLE, peint depuis le registre `app/vues.ts`**, dans le `<header>`.
+- **(c) (b), mais rendu dans `<main>`** — proposée par A29 en revue croisée, absente de mon arbitrage.
+
+Arbitrage : **(c).** J'avais tranché (b) ; A29 a eu raison contre moi. Le principe de (b) est bon —
+la source unique est ce qui empêche la récidive — mais pas son emplacement, pour trois motifs
+qu'aucun test n'aurait signalés. ① Le `<header>` est `role=banner`, or un banner désigne **par
+spécification** du contenu _répété de page en page_ : un banner dont le contenu change à chaque vue
+est un contresens. ② `<main>` n'avait **aucun nom accessible** — qui saute au repère principal, le
+geste le plus courant au lecteur d'écran, n'entendait jamais le titre. ③ L'app se contredisait,
+`EcranDeverrouillage` plaçant déjà le sien dans `<main>`. (c) conserve (b) au mot près et coûtait
+**une ligne** tant que la PR n'était pas fusionnée.
+
+Règle de précédence : **sans objet** — aucune divergence interne du pack ; 03 §22.1 et §33 imposent
+une structure correcte sans nommer l'emplacement. Le partage défaut/fiche vient du précédent
+**B2/R3** : « le registre AMELIORATIONS borne ce qui va AU-DELÀ de la spec ; il ne sert pas à ranger
+un trou dedans ». La fiche du 03/09 est donc **RECLASSÉE étage 1 → DÉFAUT**, hors plafond.
+
+Décideur : **Williams** (corriger avant V-10) · **A01** (la règle, rectifiée sur R1 d'A29).
+Impact spec : aucun amendement. **Deux conséquences écrites.**
+① **Effet perceptible non arbitré ici** : le titre n'est plus dans le bandeau collant, il défile avec
+le contenu. Williams le jugera à l'œil en V-4/V-5, sur du verre — la séance est le bon instrument,
+un arbitrage à l'aveugle ne l'était pas. Fiche étage 2 ouverte, REFUSÉE par défaut si rien ne se voit.
+② **L'urgence invoquée était fausse, la décision reste juste.** J'avais recommandé « avant V-10 »
+parce que V-10 coûte 60 min d'un novice réel ; en relisant la fiche j'ai constaté que **V-10 est
+elle-même bloquée** par l'absence du premier pull (L6), comme V-0.7. Le défaut se corrigeait de toute
+façon ; seul son motif d'urgence tombe, et je le trace plutôt que de le laisser croire.

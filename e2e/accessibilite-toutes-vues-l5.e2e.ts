@@ -127,6 +127,16 @@
 //   corrigé ici** (09 §5.6 : A28 ne touche pas au code qu'il mesure) —
 //   **et fermé par A22 le jour même**, voir plus haut.
 //
+// ── ④ UN SEUL `<h1>` PAR VUE — LA GARDE AJOUTÉE LE 2026-09-10 ─────────────
+// Le balayage axe était vert sur un défaut qu'aucune règle WCAG ne décrit : la
+// coquille et l'écran affichaient CHACUN un titre de niveau 1, parfois le même
+// mot (constat A28-1, majeur M8 de la recette novice A54). Williams a tranché le
+// 2026-09-10 : le défaut se ferme AVANT V-10. La garde vit dans son propre test,
+// est jouée sur TOUTES les vues du registre, et son commentaire dit règle par
+// règle pourquoi axe ne pouvait pas la remplacer (voir `unSeulTitreDePage`).
+// Elle a été MESURÉE ROUGE avant tout correctif : c'est ce qui prouve qu'elle
+// mord. Le correctif de production appartient à A22 (09 §5.6).
+//
 // ── CE QUE CE FICHIER NE MESURE PAS, ET NE PRÉTEND PAS MESURER ─────────────
 // Ni p95 d'interaction, ni listes longues de FIL-GC, ni chiffrement par
 // écriture, ni cibles tactiles sur tablette réelle. Chromium sur un poste n'est
@@ -306,27 +316,134 @@ async function balayer(page: Page, ecran: string): Promise<readonly Grief[]> {
 // ─────────────────────────────────────────────────────────────────────────────
 // LES GESTES DE PRODUCTION QUI MÈNENT À CHAQUE ÉCRAN
 // ─────────────────────────────────────────────────────────────────────────────
-/** Le titre porté par la coquille — une seule occurrence, hors du `<main>`. */
-function titreDeVue(page: Page): Locator {
-  return page.locator('.axn-coquille__titre');
+
+/**
+ * Le titre de la VUE, cherché dans le `<main>` — et LU DANS LE REGISTRE.
+ *
+ * ── DEUX CORRECTIONS, ET LA SECONDE EST LA VRAIE ───────────────────────────
+ * ① 2026-09-10, matin : ce helper cherchait un `<h1>` dans `<main>`, c'est-à-dire
+ *    le titre propre de l'ÉCRAN — le SECOND des deux titres de niveau 1 que la
+ *    page portait (constat A28-1). Le repère est le même qu'aujourd'hui, mais
+ *    l'élément visé est un AUTRE : le titre de l'écran, pas celui de la vue, et
+ *    c'est le premier qui a disparu. Le `h1` canonique est celui de la COQUILLE
+ *    (règle A01), alimenté par `app/vues.ts` ; les écrans sous `<main>` n'en
+ *    portent plus. Le helper vise donc l'élément qui a SURVÉCU au correctif d'A22.
+ * ② 2026-09-10, après-coup : il prenait encore une CHAÎNE recopiée à la main. Le
+ *    registre a changé le libellé de `stockage` le matin même, et trois tests
+ *    sont tombés — sur leur `atteindre`, pas sur une assertion de titre. Le NOM
+ *    du test, lui, était engendré depuis `VUES[code].titre` : le nom et
+ *    l'assertion ne parlaient donc plus du même écran.
+ *    C'est mot pour mot la famille de défaut que le chapeau de ce fichier
+ *    dénonce — « une liste écrite à la main se désynchronise du registre en
+ *    silence ». Le helper prend désormais un CODE DE VUE : le compilateur refuse
+ *    un code inconnu, et le libellé ne peut plus être périmé puisqu'il n'est plus
+ *    recopié.
+ *
+ * ── ③ 2026-09-10, RÉSERVE R1 D'A29 : DU BANNER AU `<main>` ─────────────────
+ * Le titre a quitté le `<header>` de la coquille pour devenir le premier enfant
+ * du `<main>` (A22, `App.tsx`). Deux raisons, et le helper les suit :
+ * · `role="banner"` désigne PAR SPÉCIFICATION du contenu répété de page en page ;
+ *   un titre qui change à chaque vue y était un contresens sémantique ;
+ * · le `<main>` n'avait AUCUN nom accessible — qui saute au repère principal, le
+ *   geste le plus courant au lecteur d'écran, n'entendait jamais le titre de la
+ *   vue. Il tombe désormais dessus, puisque le titre l'ouvre.
+ * LE PRINCIPE NE BOUGE PAS : la source reste le registre, unique. Seul
+ * l'emplacement change — et c'est aussi ce qui met la coquille d'accord avec
+ * `EcranDeverrouillage`, qui plaçait déjà son `h1` dans le `<main>`.
+ *
+ * Ce que l'assertion dit exactement : « la coquille affiche le titre de CETTE
+ * vue-là, en `h1` de niveau 1, au premier rang du repère `main`, sous son nom
+ * EXACT ». Le LIBELLÉ, lui, est une donnée du registre — il s'y lit, il ne se
+ * redouble pas ici.
+ */
+function titreDeCoquille(page: Page, code: CodeVue): Locator {
+  return page
+    .getByRole('main')
+    .getByRole('heading', { name: VUES[code].titre, level: 1, exact: true });
 }
 
-/** Le titre de l'ÉCRAN lui-même, cherché dans `<main>` (voir constat A28-1). */
-function titreDEcran(page: Page, texte: string): Locator {
-  return page.getByRole('main').getByRole('heading', { name: texte, level: 1 });
+/**
+ * EXACTEMENT UN `<h1>` DANS LE DOCUMENT — la garde qui manquait (2026-09-10).
+ *
+ * ── LA RÈGLE PROTÉGÉE, ET CE N'EST PAS L'ÉTAT DU DOM ───────────────────────
+ * Le `<h1>` canonique est celui de la COQUILLE (`apps/field/src/App.tsx`),
+ * alimenté par le registre `apps/field/src/app/vues.ts` (arbitrage A01, appliqué
+ * sur décision de Williams du 2026-09-10). Un écran rendu dans `<main>` SOUS la
+ * coquille ne porte plus de `<h1>` : son titre propre devient `<h2>` s'il apporte
+ * une information distincte, ou disparaît s'il duplique le titre de vue. Les
+ * écrans rendus HORS coquille — `deverrouillage`, et les retours anticipés
+ * d'`App.tsx` — gardent le leur : ils n'en ont aucun autre.
+ *
+ * ── LE CAS `deverrouillage`, VÉRIFIÉ ET NON SUPPOSÉ (R1, 2026-09-10) ───────
+ * Depuis R1 le titre de vue vit dans le `<main>`, là où `EcranDeverrouillage`
+ * met déjà le sien : on pouvait craindre que les deux s'y rencontrent. Ils ne
+ * s'y rencontrent pas, et la raison est structurelle — coffre fermé, `App.tsx`
+ * sort AVANT de peindre la coquille : ni en-tête, ni titre de vue, l'écran est
+ * seul dans son `<main>`. MESURÉ le 2026-09-10 : un `h1`, « Déverrouiller la
+ * collecte ». C'est le titre de l'ÉCRAN, non celui du registre (« Déverrouiller »),
+ * qui n'est jamais peint sur cette vue. La garde compte donc juste, et pour cette
+ * vue-là seule elle éprouve « un `h1` », non « le `h1` du registre ».
+ *
+ * Ce qui est éprouvé ici n'est donc pas « le DOM d'aujourd'hui compte un `h1` »,
+ * c'est une PROPRIÉTÉ DU REGISTRE : le titre vient d'un endroit unique, donc une
+ * vue nouvelle ne PEUT PAS être livrée sans exactement un `h1`. La garde est
+ * engendrée par la boucle sur les codes du registre, comme le balayage axe — la
+ * quatorzième vue naîtra avec son contrôle de titre ou ne naîtra pas.
+ *
+ * ── POURQUOI AXE-CORE NE PEUT PAS LA REMPLACER, RÈGLE PAR RÈGLE ────────────
+ * ① AUCUNE règle WCAG n'interdit plusieurs `<h1>` — ni en 2.0 ni en 2.1, ni au
+ *    niveau A ni au niveau AA. Deux titres de niveau 1 sont un défaut de lecture
+ *    d'écran, pas une non-conformité : axe, qui ne rend que ce que la norme dit,
+ *    se tait, et il s'est tu sur les dix-huit états balayés le 2026-09-06.
+ * ② `page-has-heading-one` est étiquetée **`best-practice`**. Elle est donc HORS
+ *    du jeu `wcag2a / wcag2aa / wcag21a / wcag21aa` sélectionné par `NORMES`
+ *    (voir plus haut) et ne tourne pas ici. L'activer ne remplacerait rien : elle
+ *    teste une PRÉSENCE (« au moins un »), jamais une unicité — une page à trois
+ *    `h1` la passe. Et l'ajouter reviendrait à mélanger un jeu de règles
+ *    normatif avec une bonne pratique, ce qui rendrait les balayages du terrain
+ *    et de la console incomparables (l'un des deux intérêts d'un budget).
+ * ③ `heading-order` ne signale qu'un SAUT de niveau (h2 → h4). `h1` suivi de
+ *    `h1` n'est pas un saut : elle est VERTE sur le défaut qu'on traque.
+ * Un balayage axe vert ne dit donc rien de cette règle. Il fallait l'écrire.
+ *
+ * ── ET POURQUOI ELLE VIT DANS SON PROPRE TEST ──────────────────────────────
+ * Glissée dans le balayage, elle aurait interrompu `balayer()` avant l'analyse :
+ * un `h1` en trop aurait masqué les violations axe de l'écran, et on ne saurait
+ * plus lequel des deux défauts on lit. Une assertion à part entière, un verdict
+ * à part entière.
+ */
+async function unSeulTitreDePage(page: Page, ecran: string): Promise<void> {
+  const titres = page.locator('h1');
+  const textes = (await titres.allInnerTexts()).map((texte) => texte.trim());
+  // Le chiffre est LU par A20 et recopié dans le rapport : la garde doit dire ce
+  // qu'elle a trouvé, pas seulement qu'elle a échoué.
+  test.info().annotations.push({
+    type: 'mesure A28',
+    description:
+      `h1 — ${ecran} : ${String(textes.length)} titre(s) de niveau 1 — ` +
+      (textes.length === 0 ? '(aucun)' : textes.join(' | ')),
+  });
+  await expect(
+    titres,
+    `« ${ecran} » : ${String(textes.length)} <h1> dans le document [${textes.join(' | ')}]. ` +
+      'Le titre canonique est celui de la COQUILLE, alimenté par le registre ' +
+      '`app/vues.ts` ; un écran rendu sous `<main>` n’en porte pas, et un écran ' +
+      'rendu hors coquille n’en porte qu’un (règle A01 du 2026-09-10). ' +
+      'Défaut rendu à son producteur, jamais corrigé ici (09 §5.6).',
+  ).toHaveCount(1);
 }
 
 /** Repose l'appareil équipé, puis l'ouvre : on atterrit sur le cockpit. */
 async function appareilOuvert(page: Page): Promise<void> {
   await planterAppareil(page, await graines());
   await deverrouillerAppareil(page, MOT_DE_PASSE_APPAREIL);
-  await expect(titreDeVue(page)).toHaveText('Aujourd’hui');
+  await expect(titreDeCoquille(page, 'aujourdhui')).toBeVisible();
 }
 
 /** Le cockpit, avec son anti-vacuité : mission lue, journée vide affichée. */
 async function allerAujourdhui(page: Page): Promise<void> {
   await appareilOuvert(page);
-  await expect(titreDEcran(page, 'Aujourd’hui')).toBeVisible();
+  await expect(titreDeCoquille(page, 'aujourdhui')).toBeVisible();
   // Le titre de mission vit dans une charge CHIFFRÉE : le lire prouve que le
   // coffre s'est ouvert, ce qu'aucun contrôle de titre d'écran ne prouverait.
   await expect(page.getByRole('heading', { name: MISSION_FIL_TPE.titre })).toBeVisible();
@@ -337,7 +454,7 @@ async function allerAujourdhui(page: Page): Promise<void> {
 async function allerAccueil(page: Page): Promise<void> {
   await allerAujourdhui(page);
   await page.getByRole('button', { name: 'Missions et stockage de l’appareil' }).click();
-  await expect(titreDEcran(page, 'Aujourd’hui')).toBeVisible();
+  await expect(titreDeCoquille(page, 'accueil')).toBeVisible();
   // L'ancre PROPRE À L'ÉCRAN (constat A28-1 : `accueil` et `aujourdhui` portent
   // le même titre, donc le titre ne suffit pas). Elle tient parce qu'elle dépend
   // de `mission.embarquee`, l'état que ce parcours pose — et de rien d'autre.
@@ -356,7 +473,7 @@ async function allerAccueil(page: Page): Promise<void> {
 async function allerNouvelEntretien(page: Page): Promise<void> {
   await allerAujourdhui(page);
   await page.getByRole('button', { name: 'Nouvel entretien' }).click();
-  await expect(titreDEcran(page, 'Nouvel entretien')).toBeVisible();
+  await expect(titreDeCoquille(page, 'nouvelEntretien')).toBeVisible();
   await expect(page.getByText('Trois champs.')).toBeVisible();
   await expect(page.getByLabel('Nom de l’interlocuteur')).toBeVisible();
 }
@@ -368,7 +485,7 @@ async function allerEntretienAvantDemarrage(page: Page): Promise<void> {
   await page.getByLabel('Fonction').fill(FONCTION);
   await page.getByLabel('Unité').selectOption({ label: MISSION_FIL_TPE.unite });
   await page.getByRole('button', { name: 'Ouvrir l’entretien' }).click();
-  await expect(titreDeVue(page)).toHaveText('Entretien');
+  await expect(titreDeCoquille(page, 'entretien')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Avant la première question' })).toBeVisible();
   await expect(page.getByLabel('Accord de participation recueilli')).toBeVisible();
 }
@@ -424,7 +541,7 @@ async function allerConnexionSiege(page: Page): Promise<void> {
   await deverrouillerAppareil(page, MOT_DE_PASSE_APPAREIL);
   await expect(page.getByText('Cet appareil n’est rattaché à aucun auditeur')).toBeVisible();
   await page.getByRole('button', { name: 'Rattacher cet appareil' }).click();
-  await expect(titreDEcran(page, 'Rattacher cet appareil')).toBeVisible();
+  await expect(titreDeCoquille(page, 'connexionSiege')).toBeVisible();
   await expect(page.getByText('Pourquoi cette étape')).toBeVisible();
   await expect(page.getByLabel(/Adresse de votre compte/)).toBeVisible();
   await expect(page.getByLabel(/Mot de passe du compte/)).toBeVisible();
@@ -500,7 +617,7 @@ async function allerARevoir(page: Page): Promise<void> {
   ).toBeVisible();
 
   await page.getByRole('button', { name: 'Revenir' }).click();
-  await expect(titreDEcran(page, 'Aujourd’hui')).toBeVisible();
+  await expect(titreDeCoquille(page, 'aujourdhui')).toBeVisible();
   // ② on est bien à la RACINE : plus de sortie dans la coquille.
   await expect(page.getByRole('button', { name: 'Revenir' })).toHaveCount(0);
 
@@ -509,7 +626,7 @@ async function allerARevoir(page: Page): Promise<void> {
   await expect(compteur).toHaveCount(1);
   await compteur.click();
 
-  await expect(titreDEcran(page, 'Points à revoir')).toBeVisible();
+  await expect(titreDeCoquille(page, 'aRevoir')).toBeVisible();
   await expect(page.getByRole('heading', { name: MISSION_FIL_TPE.titre })).toBeVisible();
 }
 
@@ -517,7 +634,7 @@ async function allerARevoir(page: Page): Promise<void> {
 async function allerRestauration(page: Page): Promise<void> {
   await allerAccueil(page);
   await page.getByRole('button', { name: 'Restaurer une sauvegarde de secours' }).click();
-  await expect(titreDEcran(page, 'Restaurer une sauvegarde')).toBeVisible();
+  await expect(titreDeCoquille(page, 'restauration')).toBeVisible();
   await expect(page.getByLabel('Fichier de sauvegarde')).toBeVisible();
   await expect(page.getByLabel(/appareil qui a produit la sauvegarde/)).toBeVisible();
 }
@@ -620,12 +737,12 @@ const PARCOURS = {
           await deverrouillerAppareil(page, MOT_DE_PASSE_APPAREIL);
           // Aucune mission embarquée : la règle d'atterrissage laisse sur
           // `accueil` (arbitrage A01, 2026-09-05), d'où part le geste.
-          await expect(titreDEcran(page, 'Aujourd’hui')).toBeVisible();
+          await expect(titreDeCoquille(page, 'accueil')).toBeVisible();
           await page.getByRole('button', { name: 'Préparer cet appareil' }).click();
           // Chromium n'accorde `persist()` qu'à une application installée : le
           // refus est le comportement NOMINAL d'un navigateur de test, et c'est
           // lui qui conduit à l'écran de guidage (B3, recette novice A54).
-          await expect(titreDEcran(page, 'Stockage de cet appareil')).toBeVisible();
+          await expect(titreDeCoquille(page, 'stockage')).toBeVisible();
           await expect(
             page.getByText('La conservation des données n’est pas garantie'),
           ).toBeVisible();
@@ -681,7 +798,7 @@ const PARCOURS = {
         atteindre: async (page: Page): Promise<void> => {
           await allerAujourdhui(page);
           await page.getByRole('button', { name: /l’agenda/ }).click();
-          await expect(titreDEcran(page, 'Agenda')).toBeVisible();
+          await expect(titreDeCoquille(page, 'agenda')).toBeVisible();
           await expect(
             page.getByRole('heading', { name: 'Planifier une session de collecte' }),
           ).toBeVisible();
@@ -700,7 +817,7 @@ const PARCOURS = {
         atteindre: async (page: Page): Promise<void> => {
           await allerAujourdhui(page);
           await page.getByRole('button', { name: 'Où en est cette mission ?' }).click();
-          await expect(titreDEcran(page, 'Où en est la mission')).toBeVisible();
+          await expect(titreDeCoquille(page, 'pilote')).toBeVisible();
           await expect(page.getByRole('heading', { name: MISSION_FIL_TPE.titre })).toBeVisible();
           await expect(page.locator('li.axn-journee__etape').first()).toBeVisible();
         },
@@ -715,7 +832,7 @@ const PARCOURS = {
         atteindre: async (page: Page): Promise<void> => {
           await allerAujourdhui(page);
           await page.getByRole('button', { name: 'Fin de journée', exact: true }).click();
-          await expect(titreDEcran(page, 'Fin de journée')).toBeVisible();
+          await expect(titreDeCoquille(page, 'finDeJournee')).toBeVisible();
           await expect(page.getByRole('heading', { name: 'Sauvegarde de secours' })).toBeVisible();
           await expect(page.getByLabel('Mot de passe de cet appareil')).toBeVisible();
         },
@@ -740,7 +857,7 @@ const PARCOURS = {
         atteindre: async (page: Page): Promise<void> => {
           await allerDerniereQuestion(page);
           await page.getByRole('button', { name: 'Terminer l’entretien' }).click();
-          await expect(titreDEcran(page, 'Fin de session')).toBeVisible();
+          await expect(titreDeCoquille(page, 'finDeSession')).toBeVisible();
           await expect(page.getByText(INTERLOCUTEUR).first()).toBeVisible();
         },
       },
@@ -837,7 +954,35 @@ test('contrôle d’anti-vacuité : toutes les vues du registre ont un parcours 
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// B. LE BALAYAGE — un test par ÉTAT d'écran, engendré depuis la table
+// B. LE TITRE DE PAGE — exactement un `<h1>` par vue, sur TOUTES les vues
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// UN TEST PAR VUE, et non par état : le nombre de `h1` est une propriété de la
+// COMPOSITION (coquille + écran), pas du moment de l'écran. Le premier état
+// déclaré la rend entièrement, et treize contextes de navigateur supplémentaires
+// se paient déjà en minutes de CI.
+//
+// MESURÉ ROUGE AVANT TOUT CORRECTIF, le 2026-09-10 — c'est l'étalon sans lequel
+// on ne saurait pas que la garde mord. Le relevé est au rapport A28 du jour.
+// ─────────────────────────────────────────────────────────────────────────────
+for (const code of CODES) {
+  const parcours = parcoursDe(code);
+  const [premier] = parcours.etats;
+  if (premier === undefined) {
+    throw new Error(`${code} : aucun état déclaré — voir le recensement ci-dessus`);
+  }
+
+  test(`@critique ${code} — « ${VUES[code].titre} » : exactement un <h1> dans le document`, async ({
+    page,
+  }) => {
+    test.setTimeout(parcours.delaiMs);
+    await premier.atteindre(page);
+    await unSeulTitreDePage(page, `${code} — ${premier.libelle}`);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// C. LE BALAYAGE — un test par ÉTAT d'écran, engendré depuis la table
 // ─────────────────────────────────────────────────────────────────────────────
 //
 // UN TEST PAR ÉTAT, et non un test par vue qui les enchaînerait. Deux raisons,
