@@ -96,7 +96,9 @@ paru apporter 291 lignes dont **zéro n'était absente** de l'autre.
 ## 4. ÉTAT MESURÉ AU 2026-09-07 04h05 UTC — À VÉRIFIER, PAS À CROIRE
 
 **`main` porte huit lots sur neuf** : L0, L1, L2, L3, L4, L5 (a+b+c), L7-min (a+b+c) et L8.
-**21,5 jours-homme livrés sur les 26 du plan** (table du fichier 07).
+**21,5 jours-homme livrés sur les 26 du plan** (table du fichier 07). **Ce chiffre compte L5 et
+L7-min à leur BUDGET PLEIN** : il mesure l'ÉCRITURE, pas l'ACCEPTATION, et il **ne s'additionne pas**
+avec les restants du §7.2. Le journal du 2026-09-07 l'écrit lui-même (l. 52). Voir l'encadré du §7.2.
 **`main` est VERT, `8 · deploy-staging` inclus** — c'est neuf, voir le §5.
 
 > **CE PARAGRAPHE EST CLOS — ne le rejoue pas (mesuré le 2026-09-07 à 16h20).** Il ordonnait de
@@ -278,11 +280,27 @@ production le dernier jour de collecte (§35.3)**.
 | L0 · L1 · L2 · L3 · L4 | 9,5 j | **signés** (portes A, B, L3) |
 | **L5 PWA terrain** | 8 j | L5a→L5e fusionnés · **L5f chaîne photo JAMAIS OUVERT** (~0,5 j) · **P-C non signée** |
 | **L6 sync** | 4,5 j | **zéro ligne** — aucun `apps/api/src/domaines/sync`. Chiffré **5,0 j** par A20 (`LOT_L6.md` §D) |
-| **L7-min console** | 2 j | écrans **livrés et fusionnés** · **2,0 j restants** (L7d/e/f) |
+| **L7-min console** | 2 j | écrans L7a-c **livrés et fusionnés** · **DoD d'acceptation NON CLOSE** : **≈ 2,0 j** (A30, 2026-09-09 — L7d/e/f) · **le critère décisif est NON TENU** — la recette L7e (PR 130) mesure **1 rubrique sur 12** rédigeable depuis le ZIP · **atterrissage ≈ 4 j pour 2 budgétés** |
 | Marge recette | 2 j | exige L6 |
 
 **Pourcentages** : noyau **≈ 69 % écrit / 37 % accepté en porte** · Phase 1 complète **≈ 54 % / 26 %**
 · Phase 2 (L10-L13) **0 %, non ouverte**. L'écart entre « écrit » et « accepté » est L5 et L7.
+
+> **CES 2,0 j NE SONT PAS DU BUDGET RESTANT** — et c'est la ligne de ce tableau qu'on lit de travers.
+> Le §4 compte L7-min **à son budget plein** dans ses « 21,5 j sur 26 » (`docs/journal/2026-09-07.md`
+> l. 52), et le burn-down du même journal donne **zéro restant sur L7**. Poser les deux lectures côte
+> à côte donne **4,0 j sur un budget de 2,0** : le lot compté consommé en entier ET 2,0 j encore dus.
+> **Aucune des deux n'est fausse — elles ne mesurent pas la même chose.** Ce qui reste n'est pas du
+> périmètre à écrire : c'est de la **DoD inachevée sur un lot déclaré livré** (recette d'acceptation,
+> axe-core, p95 de bout en bout).
+>
+> **Les 26 j budgètent l'ÉCRITURE, pas l'ACCEPTATION.** Trois lots ont vu leur DoD restante énumérée
+> et donnent le même écart, de même nature : L7-min **+2,0 j sur 2** (A30) · L5 **+2,8 j sur 8** (A20)
+> · L6 **+1,2 j** sur le restant annoncé. Le biais apparaît **exactement là où la porte n'a pas eu
+> lieu** : L0 à L4 sont signés, leur DoD est close, et ils ne le montrent pas.
+> Développement : dossier de P-DESCOPE du 15/09 et `docs/conception/LOT_L5.md` §D (PR 131).
+>
+> **Pratique : ne dérive aucun « reste à faire » du seul §4, et aucun descope du seul budget.**
 
 ### 7.3 Ce qui bloque quoi — la seule chose qui compte pour planifier
 
