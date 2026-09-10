@@ -58,17 +58,34 @@ const NORMES = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] as const;
 const MOT_DE_PASSE = 'AuditTerrain2026!';
 
 /**
- * Le titre de l'ÉCRAN, cherché dans `<main>` et nulle part ailleurs.
+ * Le titre de la VUE, cherché dans l'EN-TÊTE de coquille et nulle part ailleurs.
  *
- * CE QUE CE SCOPE A RÉVÉLÉ, et qui n'est pas un détail de test : la coquille
- * (`App.tsx`) affiche `VUES[vue].titre` dans un `<h1>` d'en-tête, et chaque écran
- * affiche SON propre `<h1>` dans `<main>`. Sur « Aujourd’hui » les deux textes
- * sont IDENTIQUES : un lecteur d'écran annonce deux titres de niveau 1 portant le
- * même libellé sur une page qui n'a qu'un seul sujet. Le constat est remonté à
- * A29/A01 (constat A28-1) plutôt que corrigé ici — un test d'accessibilité ne
- * modifie pas l'interface qu'il mesure, sinon il mesure la sienne.
+ * ── CE QUE LE SCOPE `<main>` AVAIT RÉVÉLÉ, ET COMMENT ÇA S'EST TERMINÉ ─────
+ * La coquille (`App.tsx`) affiche `VUES[vue].titre` dans un `<h1>` d'en-tête, et
+ * chaque écran affichait SON propre `<h1>` dans `<main>`. Sur « Aujourd’hui »
+ * les deux textes sont IDENTIQUES : un lecteur d'écran annonce deux titres de
+ * niveau 1 portant le même libellé sur une page qui n'a qu'un seul sujet
+ * (constat A28-1, majeur M8 de la recette novice A54).
+ *
+ * Williams a tranché le 2026-09-10 : le défaut se ferme AVANT V-10 de la séance
+ * P-C, et le `h1` canonique est celui de la COQUILLE, alimenté par le registre
+ * `app/vues.ts`. Ce helper vise donc l'élément qui SURVIVRA au correctif d'A22 :
+ * vert aujourd'hui, vert après. Le libellé attendu est celui du REGISTRE, jamais
+ * celui que l'écran peignait pour lui-même.
  */
-function titreDEcran(page: Page, texte: string): ReturnType<Page['getByRole']> {
+function titreDeCoquille(page: Page, texte: string): ReturnType<Page['getByRole']> {
+  return page.getByRole('banner').getByRole('heading', { name: texte, level: 1 });
+}
+
+/**
+ * Le titre d'un écran rendu HORS coquille — et ils gardent leur `<h1>`.
+ *
+ * `deverrouillage` (premier usage comme coffre existant) est rendu par le retour
+ * anticipé d'`App.tsx` : pas d'en-tête, donc pas de titre de vue, donc aucun
+ * doublon à fermer. La règle du 2026-09-10 le dit en toutes lettres, et c'est
+ * pour cela que ces trois appels-ci ne changent PAS de cible.
+ */
+function titreHorsCoquille(page: Page, texte: string): ReturnType<Page['getByRole']> {
   return page.getByRole('main').getByRole('heading', { name: texte, level: 1 });
 }
 
@@ -112,7 +129,7 @@ async function creerCoffreEtMesurer(page: Page): Promise<number> {
   await page.getByLabel(/Confirmer le mot de passe/).fill(MOT_DE_PASSE);
   const depart = Date.now();
   await page.getByRole('button', { name: 'Créer la protection de cet appareil' }).click();
-  await expect(titreDEcran(page, 'Aujourd’hui')).toBeVisible({ timeout: 15_000 });
+  await expect(titreDeCoquille(page, 'Aujourd’hui')).toBeVisible({ timeout: 15_000 });
   return Date.now() - depart;
 }
 
@@ -121,7 +138,7 @@ async function deverrouillerEtMesurer(page: Page, titreAttendu: string): Promise
   await page.getByLabel(/Mot de passe/).fill(MOT_DE_PASSE);
   const depart = Date.now();
   await page.getByRole('button', { name: 'Déverrouiller', exact: true }).click();
-  await expect(titreDEcran(page, titreAttendu)).toBeVisible({ timeout: 15_000 });
+  await expect(titreDeCoquille(page, titreAttendu)).toBeVisible({ timeout: 15_000 });
   return Date.now() - depart;
 }
 
@@ -167,7 +184,7 @@ async function memoriserVue(page: Page, vue: string): Promise<void> {
 test.describe('L5a — accessibilité des trois écrans du socle', () => {
   test('écran de déverrouillage : premier usage, aucune violation axe', async ({ page }) => {
     await page.goto(TERRAIN);
-    await expect(titreDEcran(page, 'Préparer cet appareil')).toBeVisible();
+    await expect(titreHorsCoquille(page, 'Préparer cet appareil')).toBeVisible();
     await balayer(page, 'deverrouillage (premier usage)');
   });
 
@@ -176,7 +193,7 @@ test.describe('L5a — accessibilité des trois écrans du socle', () => {
     await creerCoffreEtMesurer(page);
     // Le verrou manuel du 05 §9.7 : c'est l'auditeur qui repose sa tablette.
     await page.getByRole('button', { name: 'Verrouiller' }).click();
-    await expect(titreDEcran(page, 'Déverrouiller la collecte')).toBeVisible();
+    await expect(titreHorsCoquille(page, 'Déverrouiller la collecte')).toBeVisible();
     await balayer(page, 'deverrouillage (coffre existant)');
   });
 
@@ -196,11 +213,12 @@ test.describe('L5a — accessibilité des trois écrans du socle', () => {
     await creerCoffreEtMesurer(page);
     await memoriserVue(page, 'stockage');
     await page.reload();
-    // Le titre attendu est celui de l'ÉCRAN (`EcranStockage`), et il diffère de
-    // celui du registre `VUES` affiché par l'en-tête (« Stockage de l’appareil »
-    // contre « Stockage de cet appareil »). Deux libellés pour un même écran :
-    // second volet du constat A28-1, remonté à A29 et non corrigé ici.
-    await deverrouillerEtMesurer(page, 'Stockage de cet appareil');
+    // Le titre attendu est celui du REGISTRE, porté par l'en-tête de coquille.
+    // L'écran peignait le sien, différent d'un mot (« Stockage de cet appareil »
+    // contre « Stockage de l’appareil ») : second volet du constat A28-1, fermé
+    // par la règle du 2026-09-10 — un seul `h1`, celui du registre. Ce qui reste
+    // propre à l'écran est éprouvé plus bas, par son contenu et non par son titre.
+    await deverrouillerEtMesurer(page, 'Stockage de l’appareil');
     await balayer(page, 'stockage');
   });
 });
@@ -211,7 +229,7 @@ test.describe('L5a — budget de dérivation de clé (11 §4 : < 1 s)', () => {
 
     const creation = await creerCoffreEtMesurer(page);
     await page.getByRole('button', { name: 'Verrouiller' }).click();
-    await expect(titreDEcran(page, 'Déverrouiller la collecte')).toBeVisible();
+    await expect(titreHorsCoquille(page, 'Déverrouiller la collecte')).toBeVisible();
     const reouverture = await deverrouillerEtMesurer(page, 'Aujourd’hui');
 
     // Le chiffre est LU par A20 et recopié dans le rapport de fin d'incrément :

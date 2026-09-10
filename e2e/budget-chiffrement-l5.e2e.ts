@@ -344,8 +344,19 @@ function graines(): Promise<GrainesAppareil> {
   return semis;
 }
 
-function titreDEcran(page: Page, texte: string): Locator {
-  return page.getByRole('main').getByRole('heading', { name: texte, level: 1 });
+/**
+ * Le titre de la VUE, cherché dans l'EN-TÊTE de coquille et nulle part ailleurs.
+ *
+ * ── POURQUOI CE HELPER A CHANGÉ DE CIBLE LE 2026-09-10 ─────────────────────
+ * Il cherchait un `<h1>` dans `<main>` — le titre propre de l'écran, c'est-à-dire
+ * le SECOND des deux titres de niveau 1 que la page portait (constat A28-1).
+ * Williams a tranché : le `h1` canonique est celui de la COQUILLE, alimenté par
+ * le registre `app/vues.ts`, et les écrans rendus sous `<main>` n'en portent
+ * plus. Le helper vise donc l'élément qui SURVIVRA au correctif d'A22 — vert
+ * aujourd'hui, vert après. Le libellé attendu est celui du REGISTRE.
+ */
+function titreDeCoquille(page: Page, texte: string): Locator {
+  return page.getByRole('banner').getByRole('heading', { name: texte, level: 1 });
 }
 
 /**
@@ -372,11 +383,11 @@ function etiquetteDe(radio: Locator): Locator {
 async function allerQuestionAChoix(page: Page): Promise<void> {
   await planterAppareil(page, await graines());
   await deverrouillerAppareil(page, MOT_DE_PASSE_APPAREIL);
-  await expect(titreDEcran(page, 'Aujourd’hui')).toBeVisible();
+  await expect(titreDeCoquille(page, 'Aujourd’hui')).toBeVisible();
   await expect(page.getByRole('heading', { name: MISSION_FIL_TPE.titre })).toBeVisible();
 
   await page.getByRole('button', { name: 'Nouvel entretien' }).click();
-  await expect(titreDEcran(page, 'Nouvel entretien')).toBeVisible();
+  await expect(titreDeCoquille(page, 'Nouvel entretien')).toBeVisible();
   await page.getByLabel('Nom de l’interlocuteur').fill(INTERLOCUTEUR);
   await page.getByLabel('Fonction').fill(FONCTION);
   await page.getByLabel('Unité').selectOption({ label: MISSION_FIL_TPE.unite });

@@ -127,9 +127,19 @@ function titreDeVue(page: Page): Locator {
   return page.locator('.axn-coquille__titre');
 }
 
-/** Le titre de l'ÉCRAN, cherché dans `<main>` : la coquille porte le même mot. */
-function titreDEcran(page: Page, texte: string): Locator {
-  return page.getByRole('main').getByRole('heading', { name: texte, level: 1 });
+/**
+ * Le titre de la VUE, cherché dans l'EN-TÊTE de coquille et nulle part ailleurs.
+ *
+ * ── POURQUOI CE HELPER A CHANGÉ DE CIBLE LE 2026-09-10 ─────────────────────
+ * Il cherchait un `<h1>` dans `<main>` — le titre propre de l'écran, c'est-à-dire
+ * le SECOND des deux titres de niveau 1 que la page portait (constat A28-1).
+ * Williams a tranché : le `h1` canonique est celui de la COQUILLE, alimenté par
+ * le registre `app/vues.ts`, et les écrans rendus sous `<main>` n'en portent
+ * plus. Le helper vise donc l'élément qui SURVIVRA au correctif d'A22 — vert
+ * aujourd'hui, vert après. Le libellé attendu est celui du REGISTRE.
+ */
+function titreDeCoquille(page: Page, texte: string): Locator {
+  return page.getByRole('banner').getByRole('heading', { name: texte, level: 1 });
 }
 
 /** Un créneau d'aujourd'hui, au format `datetime-local` du fuseau du navigateur. */
@@ -305,12 +315,12 @@ for (const echelle of ECHELLES) {
 
       // ── ÉTAPE 7 — LE COMPTEUR MÈNE À LA LISTE, ET LA LISTE À LA QUESTION ──
       await page.getByRole('button', { name: 'Revenir' }).click();
-      await expect(titreDEcran(page, 'Aujourd’hui')).toBeVisible();
+      await expect(titreDeCoquille(page, 'Aujourd’hui')).toBeVisible();
       const compteur = page.getByRole('button', { name: /^\d+ point\(s\) à revoir$/ });
       await expect(compteur).toHaveCount(1);
       await compteur.click();
 
-      await expect(titreDEcran(page, 'Points à revoir')).toBeVisible();
+      await expect(titreDeCoquille(page, 'Points à revoir')).toBeVisible();
       const ligne = page.locator('button.axn-journee__session');
       await expect(ligne).toHaveCount(1);
       // La ligne porte de quoi DÉCIDER : la question figée et son motif.
@@ -334,12 +344,12 @@ for (const echelle of ECHELLES) {
       // le compteur à zéro n'étant pas un lien (NB-15, décision d'A22). Sans ce
       // pas-là, cet état vide ne serait joué par personne.
       await page.getByRole('button', { name: 'Revenir' }).click();
-      await expect(titreDEcran(page, 'Points à revoir')).toBeVisible();
+      await expect(titreDeCoquille(page, 'Points à revoir')).toBeVisible();
       await expect(page.locator('button.axn-journee__session')).toHaveCount(0);
       await expect(page.getByText('Aucun point à revoir')).toBeVisible();
 
       await page.getByRole('button', { name: 'Revenir à ma journée' }).click();
-      await expect(titreDEcran(page, 'Aujourd’hui')).toBeVisible();
+      await expect(titreDeCoquille(page, 'Aujourd’hui')).toBeVisible();
       // Le compteur a disparu et la phrase a pris sa place (NB-15, décision A22).
       await expect(page.getByRole('button', { name: /point\(s\) à revoir$/ })).toHaveCount(0);
       await expect(page.getByText('Aucun point à revoir')).toBeVisible();
