@@ -322,28 +322,31 @@ function titreDeVue(page: Page): Locator {
 }
 
 /**
- * Le titre de la VUE, cherché dans l'EN-TÊTE de coquille et nulle part ailleurs.
+ * Le titre de la VUE, cherché dans l'EN-TÊTE de coquille — et LU DANS LE REGISTRE.
  *
- * ── POURQUOI CE HELPER A CHANGÉ DE CIBLE LE 2026-09-10 ─────────────────────
- * Il cherchait un `<h1>` DANS `<main>`, c'est-à-dire le titre propre de l'écran
- * — le second des deux `h1` du constat A28-1. Williams a tranché : le défaut se
- * ferme AVANT V-10, et la règle d'A01 est que le `h1` canonique est celui de la
- * COQUILLE, alimenté par le registre `app/vues.ts`. Les écrans rendus sous
- * `<main>` n'en porteront plus.
+ * ── DEUX CORRECTIONS, ET LA SECONDE EST LA VRAIE ───────────────────────────
+ * ① 2026-09-10, matin : ce helper cherchait un `<h1>` dans `<main>`, c'est-à-dire
+ *    le titre propre de l'écran — le SECOND des deux titres de niveau 1 que la
+ *    page portait (constat A28-1). Le `h1` canonique est celui de la COQUILLE
+ *    (règle A01), alimenté par `app/vues.ts` ; les écrans sous `<main>` n'en
+ *    portent plus. Le helper vise donc l'élément qui a SURVÉCU au correctif d'A22.
+ * ② 2026-09-10, après-coup : il prenait encore une CHAÎNE recopiée à la main. Le
+ *    registre a changé le libellé de `stockage` le matin même, et trois tests
+ *    sont tombés — sur leur `atteindre`, pas sur une assertion de titre. Le NOM
+ *    du test, lui, était engendré depuis `VUES[code].titre` : le nom et
+ *    l'assertion ne parlaient donc plus du même écran.
+ *    C'est mot pour mot la famille de défaut que le chapeau de ce fichier
+ *    dénonce — « une liste écrite à la main se désynchronise du registre en
+ *    silence ». Le helper prend désormais un CODE DE VUE : le compilateur refuse
+ *    un code inconnu, et le libellé ne peut plus être périmé puisqu'il n'est plus
+ *    recopié.
  *
- * Le helper vise donc désormais l'élément qui SURVIVRA au correctif d'A22 : il
- * est vert aujourd'hui (l'en-tête existe déjà) et le restera après. C'est cette
- * double propriété qui prouve qu'on a visé le bon élément — un helper qu'il
- * faudrait rouvrir après le correctif aurait simplement contourné le sujet.
- *
- * Conséquence sur les libellés attendus : c'est le titre du REGISTRE qui est
- * cherché, jamais celui que l'écran peignait pour lui-même. Là où les deux
- * divergeaient (`stockage` : « Stockage de l'appareil » au registre contre
- * « Stockage de cet appareil » à l'écran — second volet du constat A28-1), c'est
- * le registre qui fait foi ici.
+ * Ce que l'assertion dit exactement : « la coquille affiche le titre de CETTE
+ * vue-là, en `h1`, dans son en-tête ». Le LIBELLÉ, lui, est une donnée du
+ * registre — il s'y lit, il ne se redouble pas ici.
  */
-function titreDeCoquille(page: Page, texte: string): Locator {
-  return page.getByRole('banner').getByRole('heading', { name: texte, level: 1 });
+function titreDeCoquille(page: Page, code: CodeVue): Locator {
+  return page.getByRole('banner').getByRole('heading', { name: VUES[code].titre, level: 1 });
 }
 
 /**
@@ -411,13 +414,13 @@ async function unSeulTitreDePage(page: Page, ecran: string): Promise<void> {
 async function appareilOuvert(page: Page): Promise<void> {
   await planterAppareil(page, await graines());
   await deverrouillerAppareil(page, MOT_DE_PASSE_APPAREIL);
-  await expect(titreDeVue(page)).toHaveText('Aujourd’hui');
+  await expect(titreDeVue(page)).toHaveText(VUES.aujourdhui.titre);
 }
 
 /** Le cockpit, avec son anti-vacuité : mission lue, journée vide affichée. */
 async function allerAujourdhui(page: Page): Promise<void> {
   await appareilOuvert(page);
-  await expect(titreDeCoquille(page, 'Aujourd’hui')).toBeVisible();
+  await expect(titreDeCoquille(page, 'aujourdhui')).toBeVisible();
   // Le titre de mission vit dans une charge CHIFFRÉE : le lire prouve que le
   // coffre s'est ouvert, ce qu'aucun contrôle de titre d'écran ne prouverait.
   await expect(page.getByRole('heading', { name: MISSION_FIL_TPE.titre })).toBeVisible();
@@ -428,7 +431,7 @@ async function allerAujourdhui(page: Page): Promise<void> {
 async function allerAccueil(page: Page): Promise<void> {
   await allerAujourdhui(page);
   await page.getByRole('button', { name: 'Missions et stockage de l’appareil' }).click();
-  await expect(titreDeCoquille(page, 'Aujourd’hui')).toBeVisible();
+  await expect(titreDeCoquille(page, 'accueil')).toBeVisible();
   // L'ancre PROPRE À L'ÉCRAN (constat A28-1 : `accueil` et `aujourdhui` portent
   // le même titre, donc le titre ne suffit pas). Elle tient parce qu'elle dépend
   // de `mission.embarquee`, l'état que ce parcours pose — et de rien d'autre.
@@ -447,7 +450,7 @@ async function allerAccueil(page: Page): Promise<void> {
 async function allerNouvelEntretien(page: Page): Promise<void> {
   await allerAujourdhui(page);
   await page.getByRole('button', { name: 'Nouvel entretien' }).click();
-  await expect(titreDeCoquille(page, 'Nouvel entretien')).toBeVisible();
+  await expect(titreDeCoquille(page, 'nouvelEntretien')).toBeVisible();
   await expect(page.getByText('Trois champs.')).toBeVisible();
   await expect(page.getByLabel('Nom de l’interlocuteur')).toBeVisible();
 }
@@ -459,7 +462,7 @@ async function allerEntretienAvantDemarrage(page: Page): Promise<void> {
   await page.getByLabel('Fonction').fill(FONCTION);
   await page.getByLabel('Unité').selectOption({ label: MISSION_FIL_TPE.unite });
   await page.getByRole('button', { name: 'Ouvrir l’entretien' }).click();
-  await expect(titreDeVue(page)).toHaveText('Entretien');
+  await expect(titreDeVue(page)).toHaveText(VUES.entretien.titre);
   await expect(page.getByRole('heading', { name: 'Avant la première question' })).toBeVisible();
   await expect(page.getByLabel('Accord de participation recueilli')).toBeVisible();
 }
@@ -515,7 +518,7 @@ async function allerConnexionSiege(page: Page): Promise<void> {
   await deverrouillerAppareil(page, MOT_DE_PASSE_APPAREIL);
   await expect(page.getByText('Cet appareil n’est rattaché à aucun auditeur')).toBeVisible();
   await page.getByRole('button', { name: 'Rattacher cet appareil' }).click();
-  await expect(titreDeCoquille(page, 'Rattacher cet appareil')).toBeVisible();
+  await expect(titreDeCoquille(page, 'connexionSiege')).toBeVisible();
   await expect(page.getByText('Pourquoi cette étape')).toBeVisible();
   await expect(page.getByLabel(/Adresse de votre compte/)).toBeVisible();
   await expect(page.getByLabel(/Mot de passe du compte/)).toBeVisible();
@@ -591,7 +594,7 @@ async function allerARevoir(page: Page): Promise<void> {
   ).toBeVisible();
 
   await page.getByRole('button', { name: 'Revenir' }).click();
-  await expect(titreDeCoquille(page, 'Aujourd’hui')).toBeVisible();
+  await expect(titreDeCoquille(page, 'aujourdhui')).toBeVisible();
   // ② on est bien à la RACINE : plus de sortie dans la coquille.
   await expect(page.getByRole('button', { name: 'Revenir' })).toHaveCount(0);
 
@@ -600,7 +603,7 @@ async function allerARevoir(page: Page): Promise<void> {
   await expect(compteur).toHaveCount(1);
   await compteur.click();
 
-  await expect(titreDeCoquille(page, 'Points à revoir')).toBeVisible();
+  await expect(titreDeCoquille(page, 'aRevoir')).toBeVisible();
   await expect(page.getByRole('heading', { name: MISSION_FIL_TPE.titre })).toBeVisible();
 }
 
@@ -608,7 +611,7 @@ async function allerARevoir(page: Page): Promise<void> {
 async function allerRestauration(page: Page): Promise<void> {
   await allerAccueil(page);
   await page.getByRole('button', { name: 'Restaurer une sauvegarde de secours' }).click();
-  await expect(titreDeCoquille(page, 'Restaurer une sauvegarde')).toBeVisible();
+  await expect(titreDeCoquille(page, 'restauration')).toBeVisible();
   await expect(page.getByLabel('Fichier de sauvegarde')).toBeVisible();
   await expect(page.getByLabel(/appareil qui a produit la sauvegarde/)).toBeVisible();
 }
@@ -711,12 +714,12 @@ const PARCOURS = {
           await deverrouillerAppareil(page, MOT_DE_PASSE_APPAREIL);
           // Aucune mission embarquée : la règle d'atterrissage laisse sur
           // `accueil` (arbitrage A01, 2026-09-05), d'où part le geste.
-          await expect(titreDeCoquille(page, 'Aujourd’hui')).toBeVisible();
+          await expect(titreDeCoquille(page, 'accueil')).toBeVisible();
           await page.getByRole('button', { name: 'Préparer cet appareil' }).click();
           // Chromium n'accorde `persist()` qu'à une application installée : le
           // refus est le comportement NOMINAL d'un navigateur de test, et c'est
           // lui qui conduit à l'écran de guidage (B3, recette novice A54).
-          await expect(titreDeCoquille(page, 'Stockage de l’appareil')).toBeVisible();
+          await expect(titreDeCoquille(page, 'stockage')).toBeVisible();
           await expect(
             page.getByText('La conservation des données n’est pas garantie'),
           ).toBeVisible();
@@ -772,7 +775,7 @@ const PARCOURS = {
         atteindre: async (page: Page): Promise<void> => {
           await allerAujourdhui(page);
           await page.getByRole('button', { name: /l’agenda/ }).click();
-          await expect(titreDeCoquille(page, 'Agenda')).toBeVisible();
+          await expect(titreDeCoquille(page, 'agenda')).toBeVisible();
           await expect(
             page.getByRole('heading', { name: 'Planifier une session de collecte' }),
           ).toBeVisible();
@@ -791,7 +794,7 @@ const PARCOURS = {
         atteindre: async (page: Page): Promise<void> => {
           await allerAujourdhui(page);
           await page.getByRole('button', { name: 'Où en est cette mission ?' }).click();
-          await expect(titreDeCoquille(page, 'Où en est la mission')).toBeVisible();
+          await expect(titreDeCoquille(page, 'pilote')).toBeVisible();
           await expect(page.getByRole('heading', { name: MISSION_FIL_TPE.titre })).toBeVisible();
           await expect(page.locator('li.axn-journee__etape').first()).toBeVisible();
         },
@@ -806,7 +809,7 @@ const PARCOURS = {
         atteindre: async (page: Page): Promise<void> => {
           await allerAujourdhui(page);
           await page.getByRole('button', { name: 'Fin de journée', exact: true }).click();
-          await expect(titreDeCoquille(page, 'Fin de journée')).toBeVisible();
+          await expect(titreDeCoquille(page, 'finDeJournee')).toBeVisible();
           await expect(page.getByRole('heading', { name: 'Sauvegarde de secours' })).toBeVisible();
           await expect(page.getByLabel('Mot de passe de cet appareil')).toBeVisible();
         },
@@ -831,7 +834,7 @@ const PARCOURS = {
         atteindre: async (page: Page): Promise<void> => {
           await allerDerniereQuestion(page);
           await page.getByRole('button', { name: 'Terminer l’entretien' }).click();
-          await expect(titreDeCoquille(page, 'Fin de session')).toBeVisible();
+          await expect(titreDeCoquille(page, 'finDeSession')).toBeVisible();
           await expect(page.getByText(INTERLOCUTEUR).first()).toBeVisible();
         },
       },

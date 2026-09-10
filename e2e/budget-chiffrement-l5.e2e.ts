@@ -127,6 +127,7 @@
 import { appendFileSync } from 'node:fs';
 
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { VUES, type CodeVue } from '../apps/field/src/app/vues.js';
 import {
   deverrouillerAppareil,
   lireTableLocale,
@@ -345,18 +346,31 @@ function graines(): Promise<GrainesAppareil> {
 }
 
 /**
- * Le titre de la VUE, cherché dans l'EN-TÊTE de coquille et nulle part ailleurs.
+ * Le titre de la VUE, cherché dans l'EN-TÊTE de coquille — et LU DANS LE REGISTRE.
  *
- * ── POURQUOI CE HELPER A CHANGÉ DE CIBLE LE 2026-09-10 ─────────────────────
- * Il cherchait un `<h1>` dans `<main>` — le titre propre de l'écran, c'est-à-dire
- * le SECOND des deux titres de niveau 1 que la page portait (constat A28-1).
- * Williams a tranché : le `h1` canonique est celui de la COQUILLE, alimenté par
- * le registre `app/vues.ts`, et les écrans rendus sous `<main>` n'en portent
- * plus. Le helper vise donc l'élément qui SURVIVRA au correctif d'A22 — vert
- * aujourd'hui, vert après. Le libellé attendu est celui du REGISTRE.
+ * ── DEUX CORRECTIONS, ET LA SECONDE EST LA VRAIE ───────────────────────────
+ * ① 2026-09-10, matin : ce helper cherchait un `<h1>` dans `<main>`, c'est-à-dire
+ *    le titre propre de l'écran — le SECOND des deux titres de niveau 1 que la
+ *    page portait (constat A28-1). Le `h1` canonique est celui de la COQUILLE
+ *    (règle A01), alimenté par `app/vues.ts` ; les écrans sous `<main>` n'en
+ *    portent plus. Le helper vise donc l'élément qui a SURVÉCU au correctif d'A22.
+ * ② 2026-09-10, après-coup : il prenait encore une CHAÎNE recopiée à la main. Le
+ *    registre a changé le libellé de `stockage` le matin même, et trois tests
+ *    sont tombés — sur leur `atteindre`, pas sur une assertion de titre. Le NOM
+ *    du test, lui, était engendré depuis `VUES[code].titre` : le nom et
+ *    l'assertion ne parlaient donc plus du même écran.
+ *    C'est mot pour mot la famille de défaut que le chapeau de ce fichier
+ *    dénonce — « une liste écrite à la main se désynchronise du registre en
+ *    silence ». Le helper prend désormais un CODE DE VUE : le compilateur refuse
+ *    un code inconnu, et le libellé ne peut plus être périmé puisqu'il n'est plus
+ *    recopié.
+ *
+ * Ce que l'assertion dit exactement : « la coquille affiche le titre de CETTE
+ * vue-là, en `h1`, dans son en-tête ». Le LIBELLÉ, lui, est une donnée du
+ * registre — il s'y lit, il ne se redouble pas ici.
  */
-function titreDeCoquille(page: Page, texte: string): Locator {
-  return page.getByRole('banner').getByRole('heading', { name: texte, level: 1 });
+function titreDeCoquille(page: Page, code: CodeVue): Locator {
+  return page.getByRole('banner').getByRole('heading', { name: VUES[code].titre, level: 1 });
 }
 
 /**
@@ -383,11 +397,11 @@ function etiquetteDe(radio: Locator): Locator {
 async function allerQuestionAChoix(page: Page): Promise<void> {
   await planterAppareil(page, await graines());
   await deverrouillerAppareil(page, MOT_DE_PASSE_APPAREIL);
-  await expect(titreDeCoquille(page, 'Aujourd’hui')).toBeVisible();
+  await expect(titreDeCoquille(page, 'aujourdhui')).toBeVisible();
   await expect(page.getByRole('heading', { name: MISSION_FIL_TPE.titre })).toBeVisible();
 
   await page.getByRole('button', { name: 'Nouvel entretien' }).click();
-  await expect(titreDeCoquille(page, 'Nouvel entretien')).toBeVisible();
+  await expect(titreDeCoquille(page, 'nouvelEntretien')).toBeVisible();
   await page.getByLabel('Nom de l’interlocuteur').fill(INTERLOCUTEUR);
   await page.getByLabel('Fonction').fill(FONCTION);
   await page.getByLabel('Unité').selectOption({ label: MISSION_FIL_TPE.unite });

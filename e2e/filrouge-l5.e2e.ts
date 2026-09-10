@@ -51,6 +51,7 @@
 // Traçabilité : E6 · E12 · E13 · E23 · E38 · E44.
 // =============================================================================
 import { expect, test, type BrowserContext, type Locator, type Page } from '@playwright/test';
+import { VUES, type CodeVue } from '../apps/field/src/app/vues.js';
 import {
   ANCRES_ECHELLE_FIL_TPE,
   deverrouillerAppareil,
@@ -128,18 +129,31 @@ function titreDeVue(page: Page): Locator {
 }
 
 /**
- * Le titre de la VUE, cherché dans l'EN-TÊTE de coquille et nulle part ailleurs.
+ * Le titre de la VUE, cherché dans l'EN-TÊTE de coquille — et LU DANS LE REGISTRE.
  *
- * ── POURQUOI CE HELPER A CHANGÉ DE CIBLE LE 2026-09-10 ─────────────────────
- * Il cherchait un `<h1>` dans `<main>` — le titre propre de l'écran, c'est-à-dire
- * le SECOND des deux titres de niveau 1 que la page portait (constat A28-1).
- * Williams a tranché : le `h1` canonique est celui de la COQUILLE, alimenté par
- * le registre `app/vues.ts`, et les écrans rendus sous `<main>` n'en portent
- * plus. Le helper vise donc l'élément qui SURVIVRA au correctif d'A22 — vert
- * aujourd'hui, vert après. Le libellé attendu est celui du REGISTRE.
+ * ── DEUX CORRECTIONS, ET LA SECONDE EST LA VRAIE ───────────────────────────
+ * ① 2026-09-10, matin : ce helper cherchait un `<h1>` dans `<main>`, c'est-à-dire
+ *    le titre propre de l'écran — le SECOND des deux titres de niveau 1 que la
+ *    page portait (constat A28-1). Le `h1` canonique est celui de la COQUILLE
+ *    (règle A01), alimenté par `app/vues.ts` ; les écrans sous `<main>` n'en
+ *    portent plus. Le helper vise donc l'élément qui a SURVÉCU au correctif d'A22.
+ * ② 2026-09-10, après-coup : il prenait encore une CHAÎNE recopiée à la main. Le
+ *    registre a changé le libellé de `stockage` le matin même, et trois tests
+ *    sont tombés — sur leur `atteindre`, pas sur une assertion de titre. Le NOM
+ *    du test, lui, était engendré depuis `VUES[code].titre` : le nom et
+ *    l'assertion ne parlaient donc plus du même écran.
+ *    C'est mot pour mot la famille de défaut que le chapeau de ce fichier
+ *    dénonce — « une liste écrite à la main se désynchronise du registre en
+ *    silence ». Le helper prend désormais un CODE DE VUE : le compilateur refuse
+ *    un code inconnu, et le libellé ne peut plus être périmé puisqu'il n'est plus
+ *    recopié.
+ *
+ * Ce que l'assertion dit exactement : « la coquille affiche le titre de CETTE
+ * vue-là, en `h1`, dans son en-tête ». Le LIBELLÉ, lui, est une donnée du
+ * registre — il s'y lit, il ne se redouble pas ici.
  */
-function titreDeCoquille(page: Page, texte: string): Locator {
-  return page.getByRole('banner').getByRole('heading', { name: texte, level: 1 });
+function titreDeCoquille(page: Page, code: CodeVue): Locator {
+  return page.getByRole('banner').getByRole('heading', { name: VUES[code].titre, level: 1 });
 }
 
 /** Un créneau d'aujourd'hui, au format `datetime-local` du fuseau du navigateur. */
@@ -210,14 +224,14 @@ for (const echelle of ECHELLES) {
       await couperLeReseau(contexte, page);
       await deverrouillerAppareil(page, MOT_DE_PASSE_APPAREIL);
 
-      await expect(titreDeVue(page)).toHaveText('Aujourd’hui');
+      await expect(titreDeVue(page)).toHaveText(VUES.aujourdhui.titre);
       // Le titre de mission vit dans une charge CHIFFRÉE : le lire prouve que le
       // coffre s'est ouvert, ce qu'aucun contrôle de titre d'écran ne prouverait.
       await expect(page.getByRole('heading', { name: echelle.titre })).toBeVisible();
 
       // ── ÉTAPE 2 — l'agenda : une session planifiée, à l'échelle de la mission
       await page.getByRole('button', { name: /l’agenda/ }).click();
-      await expect(titreDeVue(page)).toHaveText('Agenda');
+      await expect(titreDeVue(page)).toHaveText(VUES.agenda.titre);
 
       const unites = page.getByLabel('Unité').locator('option');
       // LA PREUVE D'ÉCHELLE : l'arbre entier est descendu et lisible au doigt.
@@ -234,9 +248,9 @@ for (const echelle of ECHELLES) {
 
       // ── ÉTAPE 3 — UN TAP démarre la session pré-remplie (03 §34.2 V2.10) ──
       await page.getByRole('button', { name: 'Revenir' }).click();
-      await expect(titreDeVue(page)).toHaveText('Aujourd’hui');
+      await expect(titreDeVue(page)).toHaveText(VUES.aujourdhui.titre);
       await page.getByRole('button', { name: /Interlocuteur fil rouge/ }).click();
-      await expect(titreDeVue(page)).toHaveText('Entretien');
+      await expect(titreDeVue(page)).toHaveText(VUES.entretien.titre);
       // Zéro champ à ressaisir : seul l'accord de participation reste (03 M3.2).
       await page.getByLabel('Accord de participation recueilli').check();
       await page.getByRole('button', { name: 'Démarrer l’entretien' }).click();
@@ -315,12 +329,12 @@ for (const echelle of ECHELLES) {
 
       // ── ÉTAPE 7 — LE COMPTEUR MÈNE À LA LISTE, ET LA LISTE À LA QUESTION ──
       await page.getByRole('button', { name: 'Revenir' }).click();
-      await expect(titreDeCoquille(page, 'Aujourd’hui')).toBeVisible();
+      await expect(titreDeCoquille(page, 'aujourdhui')).toBeVisible();
       const compteur = page.getByRole('button', { name: /^\d+ point\(s\) à revoir$/ });
       await expect(compteur).toHaveCount(1);
       await compteur.click();
 
-      await expect(titreDeCoquille(page, 'Points à revoir')).toBeVisible();
+      await expect(titreDeCoquille(page, 'aRevoir')).toBeVisible();
       const ligne = page.locator('button.axn-journee__session');
       await expect(ligne).toHaveCount(1);
       // La ligne porte de quoi DÉCIDER : la question figée et son motif.
@@ -329,7 +343,7 @@ for (const echelle of ECHELLES) {
 
       // 03 §17.2 : « cliquer sur un item amène directement à l'écran qui le résout ».
       await ligne.click();
-      await expect(titreDeVue(page)).toHaveText('Entretien');
+      await expect(titreDeVue(page)).toHaveText(VUES.entretien.titre);
       await expect(page.getByRole('heading', { name: echelle.questionEchelle })).toBeVisible();
 
       // ── ÉTAPE 8 — LA ZONE D'OMBRE EST LEVÉE, ET LA LISTE SE VIDE ─────────
@@ -344,12 +358,12 @@ for (const echelle of ECHELLES) {
       // le compteur à zéro n'étant pas un lien (NB-15, décision d'A22). Sans ce
       // pas-là, cet état vide ne serait joué par personne.
       await page.getByRole('button', { name: 'Revenir' }).click();
-      await expect(titreDeCoquille(page, 'Points à revoir')).toBeVisible();
+      await expect(titreDeCoquille(page, 'aRevoir')).toBeVisible();
       await expect(page.locator('button.axn-journee__session')).toHaveCount(0);
       await expect(page.getByText('Aucun point à revoir')).toBeVisible();
 
       await page.getByRole('button', { name: 'Revenir à ma journée' }).click();
-      await expect(titreDeCoquille(page, 'Aujourd’hui')).toBeVisible();
+      await expect(titreDeCoquille(page, 'aujourdhui')).toBeVisible();
       // Le compteur a disparu et la phrase a pris sa place (NB-15, décision A22).
       await expect(page.getByRole('button', { name: /point\(s\) à revoir$/ })).toHaveCount(0);
       await expect(page.getByText('Aucun point à revoir')).toBeVisible();
@@ -358,7 +372,7 @@ for (const echelle of ECHELLES) {
       // Invariant 8 : « aucune donnée ne vit sur un seul appareil > 24 h ». Le
       // rituel est un BOUTON, pas une discipline de mémoire (03 §34.2 V2.10).
       await page.getByRole('button', { name: 'Fin de journée', exact: true }).click();
-      await expect(titreDeVue(page)).toHaveText('Fin de journée');
+      await expect(titreDeVue(page)).toHaveText(VUES.finDeJournee.titre);
       await page.getByLabel('Mot de passe de cet appareil').fill(MOT_DE_PASSE_APPAREIL);
 
       const attenteFichier = page.waitForEvent('download');
