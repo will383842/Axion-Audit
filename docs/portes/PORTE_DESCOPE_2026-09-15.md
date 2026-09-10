@@ -198,6 +198,129 @@ pour une collecte fiable. Proposition de partition, **à arbitrer** :
 **Économie maximale de la colonne « arbitrable » : ~1,0 j-h.** C'est peu, et c'est le point à
 retenir : **L5c ne se descope pas beaucoup** — l'essentiel de ses 3,4 j-h est intouchable ou fort.
 
+### D-2 bis — AMENDEMENT DU 2026-09-09 (A20) : les 0,5 j de restant sur L5 comptent L5f et rien d'autre ; le reste réel est ≈ 3,3 j d'agent + 4 h 30 de Williams
+
+> **Ce bloc ne remplace pas D-2, il ajoute ce que D-2 ne pouvait pas voir le 2026-09-03 : la DoD
+> restante d'un lot qu'on croyait fini.** D-2 traite du périmètre L5c encore à écrire ; ici, L5a à
+> L5e sont fusionnés et le sujet est autre. **Aucune option n'est retenue** : le descope appartient à
+> Williams (CLAUDE.md §3). A20 mesure, chiffre, nomme ses termes — il ne tranche pas.
+> Développement intégral : `docs/conception/LOT_L5.md` §D (quatorze faits exécutés sur `a81fc2c`).
+
+**À LIRE AVANT LES TABLEAUX — c'est cette phrase qui décide, pas le chiffre de L5 :**
+
+> **Trois lots ont maintenant vu leur DoD restante énumérée, et les trois donnent le même écart, de
+> même nature** — L7-min **+2,0 j** sur 2 (A30) · **L5 +2,8 j** sur 8 (ici) · L6 **+1,2 j** sur le
+> restant annoncé (D-1 bis, arbitré). **Aucun des trois n'est du périmètre neuf : les trois sont de la
+> DoD inachevée sur un lot déclaré livré.** Et le biais apparaît **exactement là où la porte n'a pas
+> eu lieu** : L0 à L4 sont signés, leur DoD est close, et ils ne le montrent pas.
+>
+> **Les 26 j budgètent l'ÉCRITURE, pas l'ACCEPTATION.** Conséquence directe pour cette porte : **un
+> descope calculé sur cette référence retire du PÉRIMÈTRE, alors que le dépassement est dans la
+> PREUVE — et la preuve ne se descope pas.** 09 §4bis interdit de coter une porte en correctifs
+> partiels, et le critère de P-DESCOPE pose lui-même que « la collecte fiable prime ». **C'est la
+> raison pour laquelle les options de D-1 à D-3 ne mordent pas sur le vrai écart** : elles retirent
+> toutes du périmètre.
+
+**Ce que j'ai mesuré, et qui fonde le reste** : depuis la fusion du dernier incrément de périmètre
+(PR 52, le 2026-09-06), **22 PR ont touché `apps/field`, `e2e` ou `packages/ui` sur `main`, et DEUX
+seulement produisent du périmètre du 07** — PR 109 (L5e, le dernier succès de sync, qui rend le
+critère n° 1 cochable) et PR 58 (L7c, l'export §36.3, **hors L5**). _Compte arrêté à ces trois
+chemins : `apps/hq` et `apps/api` sont hors de mon lot, ce qui explique qu'un décompte plus large en
+trouve 23._ Le burn-down les compte toutes pour zéro — « deux jours à plat : le chantier ne produit
+plus de périmètre, il produit des preuves » (journal du 08). **Il mesure le périmètre écrit, pas
+l'effort consommé.**
+
+**Et il y a plus dur que cela, démontré par la seule exception qui soit dans L5** : PR 109 **n'existe
+que parce que l'acceptation a révélé un trou** — le « dernier succès de sync » n'était alimenté nulle
+part, et c'est le contrôle A02, puis D-6, qui l'ont trouvé. **PR 121 (NB-15) est le même cas** :
+§34.2 exige un compteur d'à-revoir **cliquable**, et personne ne l'avait vu avant la recette.
+
+> **L'acceptation ne fait pas que coûter du temps : elle GÉNÈRE du périmètre non budgété.**
+
+Enfin, la boucle est **récurrente, pas résiduelle** : PR 116 rattache trois incréments à la matrice,
+PR 121 fusionnée le même jour n'y est pas — chaque correctif rouvre la matrice, le README, la recette
+et le contrôle.
+
+**Le reste de L5, en trois natures qui ne se mélangent jamais :**
+
+| Nature | Coût | Contenu |
+| --- | --- | --- |
+| **A. PRODUIT** — périmètre du 07 jamais écrit | **1,2 j** | **L5f chaîne photo 0,8** (A55 disait 0,5, jamais mesuré) · **R3** cul-de-sac 0,1 (un tiers déjà écrit, non fusionné) · **le défaut Dexie 0,3** — les trois données du cockpit §34.2 ne se rafraîchissent pas, **bloquant pour ouvrir L6b** |
+| **B. PREUVE** — recette, mesure, balayage | **≈ 2,1 j** | 4ᵉ recette novice sur l'arbre de la porte 0,3 · 5ᵉ rejeu du contrôle A02 0,2 · **`PORTE_C_<date>.md`, jamais écrite, et le merge y est conditionné** 0,15 · matrice 0,2 · README 0,1 · six réserves de registre 0,42 · migrations up/down 0,1 · **provision 0,6 pour ce que la séance produira** (fourchette 0,3 à 1,2) |
+| **C. PORTE** — Williams, non délégable | **0,6 j** | **la séance matérielle de 4 h 30**, plus le compte auditeur de staging, D-8, les trois arbitrages produit, M10, les quatre questions ouvertes à trancher avant, le geste root des migrations, la signature |
+
+> **Total : ≈ 3,3 j d'agent (A + B) et 0,6 j de Williams, contre 0,5 j au suivi.
+> L5 atterrit à ≈ 10,8 j pour un budget de 8 j — plus 35 %.**
+
+**Trois faits à ne pas perdre, et le premier est celui qu'on découvre le jour où on le fait :**
+
+1. **La séance de 4 h 30 n'est budgétée nulle part.** Ni dans les 8 j de L5, ni dans la marge de
+   recette de 2 j — **D-4 ci-dessous la réserve à l'audit à blanc de P-E**. C'est un poste de Williams
+   qui n'existe dans aucune ligne du plan, et il ne s'échange contre aucun agent.
+2. **Fait nouveau sur L6, énoncé sans rechiffrer quoi que ce soit** (le chiffre est arbitré, D-1 ter) :
+   **les 5,0 j du §D de `LOT_L6.md` sont un chiffre d'ÉCRITURE.** Attention à ne pas en dire trop :
+   ils **contiennent déjà** les tests du lot — les huit scénarios `@critique`, la reprise à 80 %, k6,
+   le fil rouge, la couverture, que le §D nomme comme critère de fin d'incrément. **Ce qu'ils ne
+   contiennent pas, c'est l'ACCEPTATION** : le dossier A02, la fiche de porte, la revue de spec de
+   P-D, sa séance, et la boucle correctif → matrice → recette → contrôle mesurée ci-dessus. **Si le
+   biais vaut pour L6 comme il vaut pour L5 et L7-min, P-D coûtera plus que 5,0 j.**
+
+   > **ORDRE DE GRANDEUR — EXTRAPOLATION, PAS MESURE.** Il est écrit ici parce qu'un dossier de porte
+   > qui tait un ordre de grandeur connu fait arbitrer à l'aveugle. **Deux points d'observation ne
+   > font pas une loi**, et leurs taux divergent trop pour qu'on en tire un pourcentage : L7-min
+   > **+100 %**, L5 **+35 %**. **Mais en valeur absolue, ils convergent** — **2,0 j et 3,3 j.** Le
+   > surcoût d'acceptation se comporte comme un **coût à peu près FIXE PAR PORTE**, pas comme un
+   > pourcentage du budget, et c'est cohérent avec sa nature : une porte a un nombre de critères à
+   > prouver, pas un budget à dépasser. **C'est pourquoi je ne retiens pas « 5,0 × 1,35 ≈ 6,8 »** :
+   > appliquer le taux de L5 plutôt que celui de L7-min donnerait 6,8 contre 10,0, et l'écart entre
+   > les deux extrapolations serait plus grand que le dépassement lui-même.
+   >
+   > Appliqué en absolu, et **au seul poste que les 5,0 j ne couvrent pas** : **P-D appelle ≈ 1,5 à
+   > 3 j au-delà de ses 5,0 j d'écriture**, soit **6,5 à 8,0 j pour 4,3 disponibles — un dépassement
+   > de ≈ +2,2 à +3,7 j pour L6 SEUL**, là où la décomposition de D-1 bis en donne +0,7 (5,0 contre
+   > 4,3) avant d'y ajouter L5f pour arriver à +1,2. **Et L5f ne se compte pas deux fois** : il est
+   > déjà dans mon poste A ci-dessus, à 0,8 j et non 0,5. Deux facteurs jouent en sens contraire et
+   > sont dits plutôt que moyennés : **P-D est « LA GRANDE » porte** (revue de spec, crypto,
+   > propriété), ce qui pousse vers le haut ; mais **une partie de son acceptation est déjà payée**
+   > dans les 5,0, ce qui pousse vers le bas.
+   >
+   > **Ce n'est pas un chiffre de porte, et je ne le substitue à aucun** : le chiffre de L6 appartient
+   > à **A01** (D-1 ter), et sa remesure lui revient — **le 15/09, avec le reste du §2.** Ce que je
+   > fournis, c'est de quoi ne pas arbitrer sur un **+1,2 j dont je sais qu'il est optimiste.**
+3. **« 0,5 j est-il juste ? »** — **il l'est pour ce qu'il compte : L5f, et rien d'autre.** Il ne
+   compte ni la séance, ni la recette, ni le rejeu du contrôle, ni la fiche de porte, ni R3, ni le
+   défaut Dexie, ni les huit réserves ouvertes, ni la matrice que chaque correctif rouvre. **Ce n'est
+   pas une erreur de calcul, c'est un choix d'unité** — et il n'y a donc pas de coupable à chercher,
+   seulement une convention qui n'avait jamais été dite.
+
+**Ce que ce chiffre N'INCLUT PAS** — nommé, parce qu'une estimation qui tait ses termes ne s'utilise
+pas :
+
+- **le rejeu de P-C EN ENTIER** si elle échoue (09 §4bis, jamais en correctifs partiels) : **≈ 0,65 j
+  d'agent et 0,6 j de Williams, NON additionnés**. P-C a déjà été refusée **trois fois** ; les trois
+  refus portaient sur des critères depuis fermés, et le dossier du 09 est à **1 ferme / 7 sous réserve
+  matérielle / 0 non tenu**. C'est un risque réel, pas une prévision ;
+- **M10** (verrou de 15 min) si Williams la déclare ABSORBÉE : **non chiffrée par personne**, à vue
+  0,2 à 0,3 j — une fiche d'étage 2 ne s'anticipe pas (CLAUDE.md §3-7) ;
+- **les deux défauts de p95** rendus à A20 par A28 (premier montage de l'écran de collecte, 111,2 ms
+  sur page froide) : **≈ 0,2 j, datés de P-E par A01**, donc hors du chemin de P-C ;
+- **NB-3-bis** : la bascule est un arbitrage, pas un coût d'agent — sauf si l'option qui change la
+  politique de cache est retenue, ce qui contredit 05 §31 ; non chiffrable sans instruction ;
+- **le temps déjà consommé** : le dépôt n'en garde aucune trace. Je ne mesure que des artefacts — 18
+  PR, 9 dossiers de preuve — et j'en tire un ordre de grandeur, **jamais une durée** ;
+- ce que la séance découvrira **au-delà** de la provision de 0,6 j.
+
+**Ce que ce bloc ne fait pas** : il ne retient aucune option, ne modifie aucun chiffre arbitré
+ailleurs — **D-1 ter (L6, 5,0 j) et le +1,2 j du noyau restent tels quels** — et ne coche rien. Il
+ajoute une ligne au tableau du §2 qui n'y était pas : **L5 n'est pas à 0,5 j de restant.**
+
+_Amendement établi le 2026-09-09 par **A20**, chef d'équipe front, en lecture seule sur le code :
+chaque fait est exécuté sur `a81fc2c`, aucun repris d'un rapport. Détail et preuves :
+`docs/conception/LOT_L5.md` §D.1 à §D.6, dont trois doutes de spec rendus à A01 — dont une
+**rectification de ma propre prémisse de D10** : `attachments` existe en v1 mais ne porte que des
+métadonnées, **il n'existe aucun endroit dans la base locale où stocker les octets d'une photo hors
+ligne**, donc L5f monte bien le schéma local de 1 à 2 et le motif du refus du 2026-09-05 tient._
+
 ### D-3 — L7-min : 1,3 j-h, et un critère qui ne se négocie pas
 
 | Option                                | Coût      | Effet                                                                                                                                                                                                                                          |
