@@ -150,6 +150,33 @@ de #114, avant l'ouverture de L6a — pas ici.** Elle ne change aucun des chiffr
 _Amendement établi le 2026-09-09 par **A01**, en lecture seule sur le code, chaque fait ci-dessus
 exécuté et non repris d'un rapport. Il ne coche rien, ne signe rien et ne retient aucune option._
 
+### D-1 ter — ARBITRÉ PAR WILLIAMS LE 2026-09-09, six jours avant cette porte
+
+> **Ce bloc n'efface ni D-1 ni D-1 bis** : il enregistre un verdict pris en amont, pour que le 15/09
+> ce dossier ne présente pas comme ouverte une question qui ne l'est plus.
+
+**Instruction de Williams, 2026-09-09** : « Fais tout selon tes recommandations », sur une liste de
+trois points dont « Trois arbitrages — descope L6, R3, la fiche d'étage 2 ». **Verdict sur D-1 :
+β puis α — retirer la campagne de charge k6 de L6c, absorber le reste (≈ 0,7 à 0,9 j). γ écartée.**
+Tracé au format 11 §9bis dans `DECISIONS.md`, 2026-09-09, « Descope de la sync ».
+
+**Trois réserves, portées au verdict et non tues :**
+
+1. **β retire aussi un critère nommé du fichier 07** — « charge 50 clients × 1 000 ops : p95 < 500 ms »
+   est dans la **même cellule de critères** que la reprise à 80 %. La recommandation d'A01 opposait β
+   et γ sur « critère nommé ou non » : **inexact, rectifié**. La vraie différence est _mesure de
+   performance rejouable_ contre _garantie de non-perte_. **P-D se tiendra sur un périmètre amendé,
+   même sans γ.**
+2. **Les chiffres restent à remesurer le 15/09**, comme l'exigent les §2 et §6 de ce dossier. Si la
+   remesure bouge, **l'arbitrage se rouvre**.
+3. **D-2, D-3, D-4 et D-5 restent entiers** — l'instruction ne portait que sur D-1.
+
+**Fait périmé du §D-1 bis, rectifié sans être effacé** : la **PR 114** y est dite « ouverte, non
+fusionnée ». Elle est **fusionnée** (`0b0edfb`, `docs/conception/LOT_L6.md` sur `main`). Les chiffres
+qu'elle porte — 2,0 + 1,2 + 1,8 = 5,0 j — sont inchangés et confirmés à `LOT_L6.md:368`.
+
+_Enregistré le 2026-09-09 par **A01**. A01 n'a pas décidé ce verdict : il le consigne._
+
 ### D-2 — L5c : 3,4 j-h, et tout n'y a pas le même poids
 
 L5c est **entièrement à faire** et conditionne **P-C**. Ses dix livrables n'ont pas la même valeur
