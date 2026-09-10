@@ -12430,6 +12430,7 @@ entretien **croit** être sur son cockpit, puisque l'écran s'appelle « Aujourd
 
 Décideur : A01 (D-3) · Williams (R3)
 Impact spec : aucun.
+
 ## 2026-09-09 — [L6] Descope de la sync : quel cran pour placer ≈ 5,5 j dans 4,3 j ?
 
 Williams, ce jour, sur le récapitulatif qui lui portait trois points : « **Fais tout selon tes
