@@ -12592,3 +12592,78 @@ l'empreinte et non le blob ; `.gitignore:51` est **maintenu tel quel**, son moti
 
 Décideur : A01
 Impact spec : aucun.
+
+## 2026-09-10 — [P-C] Comment une mission arrive sur l'iPad quand le premier pull est du L6 ? (arbitrage rendu le 2026-09-09 à 21h32, tracé ici)
+
+Entrée écrite **après coup** : l'arbitrage a été rendu par Williams le 2026-09-09 à 21h32 et n'a
+vécu jusqu'ici que dans `docs/ETAT.md`. A55 l'a relevé le 2026-09-10 en préparant le fichier de
+porte — un arbitrage qui n'est pas au registre n'existe pas, même quand tout le monde s'en souvient.
+
+**Le blocage, mesuré en navigateur sur staging le 2026-09-09** : V-0.7 de la fiche de séance demande
+de tirer FIL-TPE au **premier pull**. Le premier pull est du **L6**, et L6 ne s'ouvre pas avant que
+P-C soit signée (09 §4bis). L'écran dit « Aucune mission sur cet appareil » et « Le téléchargement
+d'une mission arrive AVEC LA SYNCHRONISATION ». Sans mission sur l'appareil, **V-2 à V-10 tombent
+toutes** : pas de session, donc ni ancres, ni colonnes, ni export qui contienne quelque chose.
+
+Options :
+
+- **(A) La mission entre par l'EXPORT DE SECOURS** (11 §4, E38) : un `.axionbackup` fabriqué hors
+  séance et restauré sur l'iPad. Casse la boucle par une porte qui existe déjà et qui est testée.
+- **(B) Ouvrir L6a en avance** pour disposer du pull. Contredit 09 §4bis frontalement.
+- **(C) Reporter la séance** jusqu'à P-D. Fait glisser tout le calendrier de la semaine 3.
+
+Arbitrage : **(A).** `importerSauvegarde` écrit les **sept tables miroirs** par `appliquerDescente`
+et pose la marque d'embarquement : la restauration crée une mission **utilisable**, pas seulement
+des données de collecte — et `appliquerDescente` **re-chiffre chaque ligne sous la DEK de l'appareil
+qui restaure**, donc le fichier est portable par construction. Ce n'est pas un contournement : c'est
+le chemin que l'invariant 8 exige de toute façon, et V-7 le rejouera dans l'autre sens.
+
+Règle de précédence : **sans objet** — aucune divergence de pack. (B) est écartée par CLAUDE.md §3
+et 09 §4bis, qui réservent à Williams l'ouverture d'un lot avant signature ; (C) par 09 §6, qui place
+P-C au plus tard le mardi de la semaine 3.
+
+Décideur : **Williams**, 2026-09-09 à 21h32.
+Impact spec : aucun amendement. **Deux conséquences.**
+① **V-0.7 ne se coche pas** : elle est **NON TENUE, SUBSTITUÉE**, et l'écart s'inscrit au fichier de
+porte. Ce que la séance ne prouvera pas, c'est le premier pull — il reste dû à P-D.
+② **Le fichier livré est daté et empreint** : 55 310 octets, SHA-256 `e6267aab…2bf3dcde`. C'est
+l'empreinte, et non le blob, qui fait la preuve de §7 — voir l'entrée du 2026-09-10 sur son sort.
+
+## 2026-09-10 — [P-C] V-10, la recette novice : jouable par restauration, ou reportée jusqu'à L6a ?
+
+Constat fait le 2026-09-10 en relisant la fiche ligne à ligne. **V-10 est bloquée par le même trou
+que V-0.7, et personne ne l'avait vu** — y compris moi quand j'ai recommandé de corriger le défaut
+des `<h1>` « avant V-10 ».
+
+`V-10.1` **efface l'appareil** — c'est le principe : « le novice voit ce que verrait un consultant
+recruté demain ». Puis `V-10.6` lui fait jouer _préparer l'appareil → rattacher l'auditeur →
+**trouver sa session du jour** → mener l'entretien_. Après l'effacement, la mission est partie avec
+le reste, et le seul chemin nominal pour qu'elle revienne est le **premier pull**. Le novice
+préparerait donc l'appareil, rattacherait l'auditeur, et **ne trouverait aucune session** — le
+cul-de-sac que `V-10.6` interdit en toutes lettres.
+
+Options :
+
+- **(a) Injecter la mission par restauration** avant de tendre l'iPad au novice. Immédiat.
+- **(b) Reporter V-10** jusqu'à ce que L6a existe.
+
+Arbitrage : **(b).** (a) mesurerait un novice sur un parcours qu'**aucun consultant ne suivra
+jamais**, en lui retirant deux des étapes chronométrées — le chiffre obtenu ne serait pas celui du
+critère. Le critère 07 n° 6 reste **GO SOUS RÉSERVE**, statut qu'il a déjà : deux rejeux intégraux
+sont au dossier et 09 §4bis est « satisfait deux fois » (RECOCHE A02 §1). Ce qui manque est le
+**novice humain au chronomètre**, et il vaut mieux l'attendre que le gâcher.
+
+Règle de précédence : **sans objet**. 07 ligne L5 exige « test novice < 30 min » sans dire par quel
+chemin d'embarquement — mais 09 §4bis interdit d'ouvrir L6, et la fiche de séance §1.3 pose
+elle-même que « sur du vrai matériel, il n'y a qu'un chemin pour qu'une mission arrive ».
+
+Décideur : **Williams**, 2026-09-10 (« oui selon tes recommandations »).
+Impact spec : aucun amendement. **Trois conséquences opératoires.**
+① La séance passe de ≈ 4 h 10 à **≈ 3 h 10 de gestes** ; aucun novice n'est convoqué.
+② **L'appareil n'est PAS réinitialisé** en fin de séance — `V-10.1` était la seule ligne qui le
+demandait, et elle détruisait tout ce qui précède. Les preuves restent donc consultables si un
+critère est contesté après coup. C'est un gain, pas un effet de bord.
+③ **Mon motif d'urgence sur le défaut des `<h1>` était faux** et je le rectifie ici : j'avais
+recommandé de corriger « avant V-10 » parce que V-10 coûte 60 minutes d'un novice réel. V-10 ne se
+jouant pas, ce motif tombe. Le correctif restait dû — c'est un défaut, quatre fois constaté — mais
+il n'était pas urgent pour la raison que j'ai donnée.
