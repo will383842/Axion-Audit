@@ -12355,3 +12355,78 @@ mapping Drizzle, `apps/api/schema-manifest.json`). **Puis** resceau de `docs/.pa
 **Fenêtre encore ouverte** : le §9 la dit rouvrable « tant que la migration n'a pas été jouée sur un
 environnement portant de la donnée ». A12 confirme : **conteneurs jetables, base vide, détruits après**.
 Elle se referme à la **première migration de staging portant du contenu réel** — qui la joue la ferme.
+
+## 2026-09-09 — [L5/gouvernance] « p95 des interactions < 100 ms » : p95 de QUOI, et à quelle porte ?
+
+A28 a mesuré les deux lectures plutôt que d'en choisir une (`docs/portes/MESURE_P95_A28_2026-09-09.md`) :
+groupé sur toutes les interactions **66,3 ms** (N = 2 688) ; geste par geste, 13 sur 14 tenus et un
+dépassement — « ouvrir sa session du jour », page froide, **p95 111,2 ms**, 18 échantillons sur 160
+≥ 100 ms, dans 3 courses sur 8. Recalculés depuis `releves-a28/*.jsonl` : les six chiffres publiés se
+reproduisent à la décimale.
+
+Options :
+
+- **(a) agrégat** — un p95 sur l'ensemble des interactions. 66,3 ms : tenu.
+- **(b) geste par geste** — chaque geste sous 100 ms. Un geste dépasse : non tenu.
+
+Arbitrage : **(b), premier geste d'une page froide COMPRIS.**
+Règle de précédence : sans objet entre §32-36 / §24-31 / §16-22 / §1-15 — aucune ne borne la latence
+d'interaction. Le contrat 11 gouverne donc (00_INDEX), et 11 §4 est le seul endroit du pack qui
+définisse un budget de performance AVEC son unité : « chiffrement < 50 ms/**écriture**, dérivation
+< 1 s ». Par opération, jamais par moyenne. La jurisprudence du dépôt le lit déjà ainsi (DECISIONS
+2026-09-07 : « écriture complète < 100 ms (09 §1) », qui borne UNE écriture). Et 09 §4 énumère les
+gestes — « **trouver sa session du jour** » — avant d'énoncer le seuil : c'est le geste nommé qui
+dépasse, et (a) le sauverait par la moyenne de gestes que personne ne redoutait.
+
+**Conséquence, et ce n'est pas celle qu'on attend : ce budget n'est pas un critère de P-C.** Le seuil
+ne figure qu'à deux endroits du pack — 09 §1 (charge permanente d'A28) et 09 §4 ligne **P-E**. La
+ligne P-C de 09 §4 ne le porte pas ; la ligne L5 du fichier 07, d'où le brief vient EXCLUSIVEMENT
+(09 §3), ne porte aucun critère de performance. Vérifié : zéro occurrence de « 100 ms » dans 03, 07, 11.
+
+Donc **budget NON TENU au sens (b), et dû à P-E, pas à P-C**. D-1 est un défaut daté avant P-E, rendu
+à l'équipe productrice (A20), pas à A28 (09 §5.6). La réserve d'A29 — « p95 sur `jitless`, derrière
+Caddy, avant signature » — portait sur le COÛT du drapeau : elle est **close**, le drapeau ne coûte
+rien de mesurable (4 courses sur 4). Le geste qui dépasse n'est pas causé par le durcissement.
+
+Décideur : A01
+Impact spec : aucun. Le renvoi « 03 §25 » du brief d'A28 était faux (03 §25 = recalage / agenda /
+hors-parcours) ; sa rectification vers 09 §1 et 09 §4 est vérifiée juste.
+
+## 2026-09-09 — [L5c] R3 et D-3 : un défaut ou deux, et à quel étage ?
+
+Vérifié dans le code, pas sur parole. `app/vues.ts:45` et `:55` : `accueil` et `aujourdhui` portent
+tous deux `titre: 'Aujourd'hui'`. `app/navigation.ts:67` : les deux sont RACINE, donc sans bouton
+retour. `ecrans/entretien/EcranEntretien.tsx:541` : « Quitter » fait `naviguer({type:'racine',
+vue:'accueil'})`. `App.tsx:60` n'offre depuis `accueil` que `EcranAccueil` + `ComplementAccueil`, et
+seuls `EcranFinDeSession:181` et `EcranRestauration:416` naviguent vers `aujourdhui`, hors de portée.
+**Le cockpit n'est plus atteignable sans redémarrer l'application.** A54 l'a lu (sa réserve R3),
+A28 l'a heurté en mesurant (son D-3) : deux méthodes indépendantes, un même code.
+
+Options :
+
+- **(a) un seul défaut à deux symptômes**, tout étage 2 → Williams (lecture d'A54).
+- **(b) une cause, deux sorties de nature différente.**
+
+Arbitrage : **(b).** La cause est unique et elle est écrite dans le code : `vues.ts:50-54` dit que le
+choix entre les deux racines « appartient à A20 à l'intégration » et qu'il a été « remonté au rapport
+d'A23 ». **Cette décision d'intégration n'a jamais été prise** ; R3 et D-3 en sont les deux symptômes.
+Mais elles ne se traitent pas au même endroit :
+
+Règle de précédence : **sans objet** (aucune divergence interne du pack — aucune section ne
+nomme ces deux vues). Le partage entre défaut et fiche vient de CLAUDE.md §6 et du précédent B2.
+
+1. **D-3, le chemin de retour : ni étage 1 ni étage 2 — c'est un DÉFAUT.** Le registre AMELIORATIONS
+   borne ce qui va AU-DELÀ de la spec (CLAUDE.md §6) ; il ne sert pas à ranger un trou dedans.
+   Précédent opposable du dépôt : **B2 « cul-de-sac »** a été traité en BLOQUANT et corrigé
+   (`docs/TRACABILITE_E1-E47.md` #64), jamais porté en fiche. D-3 est le résidu de ce correctif :
+   B2 a raisonné « l'oubli produit un bouton en trop, jamais un cul-de-sac », et une racine sur
+   laquelle on ATTERRIT depuis un écran profond est exactement le cas qu'il n'a pas couvert. Il ne
+   consomme donc pas le plafond de 0,5 j et n'attend pas la porte. Rendu à A20 (producteur, 09 §5.6).
+2. **R3, le nom : étage 2, → Williams.** Quel écran s'appelle « Aujourd'hui », et faut-il fondre les
+   deux racines : A54 a eu raison, c'est du périmètre fonctionnel, pas du confort.
+
+Ce que le titre partagé ajoute au défaut, et qui interdit d'attendre : l'auditeur qui quitte un
+entretien **croit** être sur son cockpit, puisque l'écran s'appelle « Aujourd'hui ».
+
+Décideur : A01 (D-3) · Williams (R3)
+Impact spec : aucun.

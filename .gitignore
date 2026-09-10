@@ -72,3 +72,7 @@ docs/archive/
 
 # Liste RÉELLE des clients surveillés — jamais dans un dépôt public.
 docs/.clients-surveilles.txt
+
+# Rapports du harnais de mesure A28 (playwright.perf.config.ts) — les CHIFFRES,
+# eux, sont versionnes dans releves-a28/.
+playwright-report-perf/

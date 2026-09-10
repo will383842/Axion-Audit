@@ -143,13 +143,48 @@ const REGLES = [
  */
 const EXCEPTIONS = [];
 
+/**
+ * EXTENSIONS ANALYSÉES — l'UNIQUE endroit de ce script où elles s'écrivent.
+ *
+ * Elles vivaient à DEUX endroits : l'argument de `git ls-files` et la prose du
+ * message d'erreur plus bas, qui n'en citait déjà que trois sur cinq. Une liste
+ * recopiée dérive, et c'est la copie AFFICHÉE qui finit par mentir à celui qui la
+ * lit pour savoir ce que le contrôle a couvert.
+ *
+ * `*.perf.ts` ajouté le 2026-09-09 (arbitrage A01 du même jour dans DECISIONS.md,
+ * sur constat d'A28, qui a signalé l'effet de bord de son propre choix). Les bancs
+ * de `tests/perf/` portent délibérément une extension hors des projets vitest,
+ * pour ne pas allonger la CI d'un montage Docker : ils échappaient donc à CE
+ * contrôle-ci, et un `.skip` posé dans un banc ne faisait rougir personne. Le
+ * CLAUDE.md §2 énonce « tests désactivés/skippés = build rouge » SANS restreindre
+ * aucune extension — la garde était incomplète au regard de la règle qu'elle
+ * prétend tenir. Ce n'était pas un doute de spec, c'était un défaut de garde.
+ *
+ * CETTE LISTE N'EST DÉLIBÉRÉMENT PAS PARTAGÉE avec celle de
+ * `check-test-projects.mjs`, qui tient la sienne. Les deux scripts posent des
+ * questions différentes : « ce test est-il éteint ? » a un sens pour n'importe
+ * quel coureur, alors que « ce fichier est-il capté par un projet vitest ? » n'en
+ * a aucun pour un banc Playwright — l'y étendre exigerait de déclarer un projet
+ * vitest pour des fichiers que vitest n'exécute pas : un déplacement du problème,
+ * pas une garde. Or factoriser les deux listes dans un module commun étendrait
+ * mécaniquement l'AUTRE contrôle à chaque ajout fait ici. La duplication entre les
+ * deux scripts est le moindre mal, elle est assumée, et c'est ce commentaire qui
+ * la tient.
+ */
+const EXTENSIONS_DE_TEST = [
+  '*.test.ts',
+  '*.test.tsx',
+  '*.spec.ts',
+  '*.spec.tsx',
+  '*.e2e.ts',
+  '*.perf.ts',
+];
+
 /** Fichiers de test suivis par git (on n'analyse jamais node_modules ni dist). */
 function fichiersDeTest() {
-  const sortie = execFileSync(
-    'git',
-    ['ls-files', '*.test.ts', '*.test.tsx', '*.spec.ts', '*.spec.tsx', '*.e2e.ts'],
-    { encoding: 'utf8' },
-  );
+  const sortie = execFileSync('git', ['ls-files', ...EXTENSIONS_DE_TEST], {
+    encoding: 'utf8',
+  });
   return sortie.split('\n').filter((f) => f.trim() !== '' && !EXCEPTIONS.includes(f));
 }
 
@@ -164,7 +199,9 @@ const fichiers = fichiersDeTest();
 if (fichiers.length === 0) {
   console.error(`\n${ROUGE}✗ GARDE-FOU ANTI-SKIP : aucun fichier de test trouvé.${RAZ}`);
   console.error(
-    '  `git ls-files` ne rend aucun `*.test.ts` / `*.spec.ts` / `*.e2e.ts`. Ce contrôle\n' +
+    '  `git ls-files` ne rend aucun ' +
+      EXTENSIONS_DE_TEST.join(' / ') +
+      '. Ce contrôle\n' +
       "  n'a donc RIEN vérifié — et un contrôle qui ne vérifie rien ne rend pas EXIT=0.\n",
   );
   process.exit(1);
