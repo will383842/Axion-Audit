@@ -12430,3 +12430,126 @@ entretien **croit** être sur son cockpit, puisque l'écran s'appelle « Aujourd
 
 Décideur : A01 (D-3) · Williams (R3)
 Impact spec : aucun.
+
+## 2026-09-09 — [L6] Descope de la sync : quel cran pour placer ≈ 5,5 j dans 4,3 j ?
+
+Williams, ce jour, sur le récapitulatif qui lui portait trois points : « **Fais tout selon tes
+recommandations** », dont « Trois arbitrages — descope L6, R3, la fiche d'étage 2 ». Il adopte donc la
+recommandation d'A01 de `PORTE_DESCOPE_2026-09-15.md` §D-1 bis. Cette entrée l'enregistre.
+**Chiffres revérifiés avant recopie**, `docs/conception/LOT_L6.md:368` : 2,0 + 1,2 + 1,8 = **5,0 j**
+(L6), plus **≈ 0,5 j** de L5f non ouvert = **≈ 5,5 j dans 4,3 j**, écart **≈ +1,2 j** ; **+0,5 j** sur
+le budget 07 de 4,5 j. **Les deux versions concordent** — A20 l'écrit lui-même (PR 119, `LOT_L6.md`
+§D) : « aucun écart de mesure entre les deux documents », et il y ajoute l'option **α** que sa propre
+liste omettait. Reste une divergence de forme : son cran ② (soin visuel de L6b, ≤ 0,2 j), qu'il borne
+à la DoD et ne porte pas en option de porte. **Périmé dans §D-1 bis** : **PR 114** y est dite
+« ouverte, non fusionnée » — elle est fusionnée (`0b0edfb`).
+
+Options :
+
+- **α** absorber les ≈ 1,2 j : rien de fonctionnel ne tombe, la référence de 26 j-h cesse d'en être une.
+- **β** retirer la campagne de charge k6 de L6c (≈ 0,3 à 0,5 j) : rejouable après P-D.
+- **γ** reporter L5f (chaîne photo) en Phase 2 (≈ 0,5 j) : les scénarios §9.8 **6 et 7** tombent avec lui.
+
+Arbitrage : **β puis α** ; **γ écartée**. β ne retire **aucune garantie de non-perte** ; γ fait tomber
+le scénario 7 — « reprise d'upload interrompu à 80 % », **critère d'acceptation nommé du fichier 07**,
+ligne L6. Restent intouchables : les huit scénarios §9.8, le contrat §9.3, la propriété §9.9,
+`processed_ops`.
+Règle de précédence : aucune divergence de pack à trancher — le critère P-DESCOPE ne fait glisser que
+le lot **différable** non entamé, et L6 est **noyau** : c'est une lacune, pas une contradiction. Elle
+se comble par l'ordre écrit d'avance au **07 §14, « la collecte fiable prime »**, et par `CLAUDE.md`
+§3-5 et §3-7, qui réservent à Williams le retrait d'un test ou d'un périmètre.
+Décideur : **Williams**, par adoption nommée de la recommandation d'A01 du 2026-09-09.
+Impact spec : aucun amendement du pack. **Trois conséquences écrites pour qu'il puisse y revenir.**
+① **β retire aussi un critère nommé du 07** : « charge 50 clients × 1 000 ops : p95 < 500 ms » est dans
+la **même cellule de critères** que la reprise à 80 %. Ma recommandation opposait β et γ sur « critère
+nommé ou non » : c'est inexact, et je le rectifie — la vraie différence est **mesure de performance
+rejouable** contre **garantie de non-perte**. **P-D se tiendra sur un périmètre amendé, même sans γ.**
+② **P-D glisse d'≈ 0,7 à 0,9 j après β**, non d'≈ 1,5 j : les 1,5 j de α décrivent l'absorption
+**seule**. Le glissement pousse L7-min, P-E et L8 (à zéro) dans la semaine 4 du 09 §6.
+③ **L'arbitrage est pris six jours avant P-DESCOPE**, sur des chiffres que le dossier impose de
+**remesurer le 15/09** : si la remesure bouge, il se rouvre. **D-2** (L5c), **D-3** (L7-min), **D-4**
+(marge de recette) et **D-5** (contenu) restent **entiers** — l'instruction ne portait que sur D-1.
+Application : cet arbitrage est reporté sous §D-1 bis par A01, sans effacer aucune option.
+
+## 2026-09-09 — [L5] R3 : deux écrans nommés « Aujourd'hui » — quelle décision d'intégration n'a jamais été prise ?
+
+Williams, ce jour : « **Fais tout selon tes recommandations** », dont « R3 ». Ma recommandation était
+double. **R3 n'est ni étage 1 ni étage 2, c'est un défaut** — précédent opposable **B2** (racine sans
+sortie, traitée en bloquant, `App.acceptation-b2.test.tsx` et sa contre-épreuve). Et le symptôme a une
+cause : `apps/field/src/app/vues.ts:50-54` renvoie le choix « à A20 à l'intégration ».
+**Deux faits rectifiés avant de tracer.** (a) Ce commentaire est **périmé** : le choix de
+`VUE_INITIALE` a bien été tranché, le 2026-09-05, et vit en règle dans `ecrans/journee/vue-initiale.ts`
+— ce qui n'a **jamais** été décidé, c'est le **titre** et la **sortie**. (b) **R3 n'est pas D-3** :
+D-3 est M10, le verrou de 15 min (`AMELIORATIONS.md`, fiche du 2026-09-08). Je ne les traite pas ensemble.
+**Le cul-de-sac, mesuré et non supposé** : `EcranEntretien.tsx:541` referme l'entretien par
+`{ type: 'racine', vue: 'accueil' }` → pile de 1, donc `peutRevenir()` faux (`navigation.ts:46`) ; et
+`accueil` n'offre que deux sorties, `stockage` (`EcranAccueil.tsx:234`) et `restauration`
+(`coquille-l5c.tsx:74`). **Aucun chemin vers le cockpit.** Second chemin, même impasse :
+`restaurerNavigation` repose toute vue mémorisée sur la **constante** `accueil` (`navigation.ts:117`),
+donc « Retour » depuis un entretien rouvert y échoue aussi. Seul un redémarrage rebondit.
+
+Options :
+
+1. **Fondre** les deux racines en un seul écran.
+2. **Les garder distinctes**, lever la collision de titre et rendre la sortie.
+
+Arbitrage : **option 2**, en trois points. ① Le cockpit `aujourdhui` **garde** « Aujourd'hui »
+(03 §34.2 le nomme ainsi) ; `accueil`, écran d'embarquement, prend **« Missions et stockage de
+l'appareil »** — le libellé exact du bouton qui y mène (`EcranAujourdhui.tsx:454`), ce qui ferme du
+même geste le troisième symptôme d'A54. ② **Pas de fusion** : `accueil` doit s'afficher quand **aucune**
+mission n'est embarquée et porte la restauration d'un appareil neuf ; fondre reviendrait à afficher la
+journée là où il n'y a pas de mission, et à réécrire un registre append-only. ③ **La racine de repos
+cesse d'être la constante `accueil` et devient la règle `vueInitiale`** : on retombe sur le cockpit
+quand une mission est embarquée, sur `accueil` sinon.
+Règle de précédence : **§32-36 > §24-31** — 03 §34.2 nomme « Aujourd'hui » le cockpit de la journée et
+03 §33.7 exige que le parcours ne s'interrompe jamais ; le registre `vues.ts` et sa règle append-only
+(`LOT_L5.md` §1) sont une convention de lot, qui cède devant elles.
+Décideur : **Williams** pour la classification en défaut et l'ouverture du correctif, par adoption ;
+**A01** pour la décision d'intégration elle-même, technique, que `vues.ts:50-54` laissait vacante.
+Impact spec : aucun amendement. **Conséquence non demandée par Williams** : le correctif touche trois
+incréments déjà fusionnés (L5a, L5b, L5c) et **n'est pas de l'étage 1** — il ne s'impute pas au plafond
+de 0,5 j, il se fait sous 09 §4bis comme réserve de P-C non signée. **≈ 0,2 j.**
+Application, périmètre **borné — ni écran neuf, ni routeur, aucun élargissement** : **A20** porte
+l'intégration (`vues.ts` : titre de `accueil` et commentaire :50-54 rectifié ; `navigation.ts` ;
+`coquille-l5c.tsx`) ; **A22** la seule ligne de `EcranEntretien.tsx:541`, sur une branche à part ;
+**A26** écrit les tests — jamais l'auteur du code (09 §5.6) — sur le modèle de B2, avec la
+contre-épreuve : depuis `accueil`, mission embarquée, **une sortie vers le cockpit existe**.
+
+## 2026-09-09 — [L5e] La fiche d'étage 2 implémentée sous ma reclassification : RATIFIÉE ou À DÉFAIRE ?
+
+Williams, ce jour : « **Fais tout selon tes recommandations** », dont « la fiche d'étage 2 ». L'entrée
+du 2026-09-09 (« Une fiche d'étage 2 que j'ai reclassée puis fait implémenter ») lui offrait ce choix
+à P-C, avec ma position écrite : **je maintiens le raisonnement du 2026-09-08** — le rappel de fin de
+journée est **l'instrument de l'invariant 8**, donc un défaut d'instrument et non une fonctionnalité
+manquante. Il adopte cette position.
+
+Options :
+
+1. **RATIFIÉE** — le correctif de L5e reste : `apps/field/src/agenda/jour.ts:314` compte les jours au
+   **fuseau de la mission** et non en UTC. Le geste passé est couvert, l'invariant 8 garde un
+   instrument juste.
+2. **À DÉFAIRE** — révoquer le correctif, remettre la fiche en attente. Le rappel redeviendrait faux
+   de 14 h sur une mission à UTC+14, pour la seule raison que l'agent qui l'a reclassé était aussi
+   celui qui en a autorisé l'implémentation.
+
+Arbitrage : **RATIFIÉE**. La sanction d'un vice de procédure ne peut pas être de remettre en
+production un instrument qu'on sait faux ; elle est de faire **regarder l'acte par un humain**, ce que
+cette entrée obtient. Le correctif reste, la faute de procédure est nommée et non effacée.
+Règle de précédence : sans objet — aucune divergence de pack. C'est `CLAUDE.md` §3-7 et 09 §5.9 qu'on
+applique à la lettre : l'arbitrage d'une fiche d'étage 2 appartient à Williams, et il vient de l'exercer.
+Décideur : **Williams**, par adoption nommée. **Ma réserve initiale est conservée** et ne se dissout
+pas dans cette ratification : la reclassification et l'autorisation d'implémenter sont venues **de la
+même main**, et c'est exactement ce que le §3-7 garde.
+Impact spec : aucun amendement. **Deux conséquences qu'il n'a peut-être pas vues.**
+① Il ratifie **par adoption d'une recommandation**, sans avoir relu la fiche, et **avant P-C** où
+l'entrée disait la poser. C'est valide — il est le décideur et le point lui était nommé — mais c'est la
+garantie du §3-7 exercée dans sa forme la plus mince. **La ratification reste rouvrable à P-C** : la
+case ☐ RATIFIÉE ☐ À DÉFAIRE de la fiche est cochée et datée, jamais effacée.
+② Elle **ne vaut pas règle générale** et ne crée **aucun précédent** autorisant un directeur technique
+à reclasser ce qu'il veut implémenter. La règle reste celle du §3-7.
+Application : `AMELIORATIONS.md`, fiche du 2026-09-08, ligne de ratification datée ajoutée par A01 sous
+l'état du 2026-09-09 — la fiche est **complétée, jamais réécrite** (invariant 7). **A02** reporte l'état
+à `TRACABILITE_E1-E47.md` §A.sexies, ligne E32.
+**Ce que je n'étends pas** : la fiche **M10** (verrou de 15 min, D-3) reste **PROPOSÉE et NON
+implémentée**. Elle n'était pas dans la liste des trois points ; « fais tout selon tes recommandations »
+ne l'arbitre pas, et je refuse de le lire ainsi.

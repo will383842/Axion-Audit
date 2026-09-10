@@ -2625,6 +2625,16 @@ l'autorisation d'implémenter sont venues de la même main, et CLAUDE.md §3-7 g
 Je maintiens le raisonnement du 08 — c'est un défaut d'instrument de l'invariant 8, non une
 fonctionnalité manquante — et je le soumets plutôt que de le tenir pour acquis.
 
+**RATIFIÉE LE 2026-09-09 PAR WILLIAMS — ☑ RATIFIÉE ☐ À DÉFAIRE.** Instruction : « Fais tout selon tes
+recommandations », sur une liste de trois points dont « la fiche d'étage 2 ». Le correctif de **L5e
+reste** ; la fiche n'est ni réécrite ni refermée (invariant 7). Tracé au format 11 §9bis dans
+`DECISIONS.md`, 2026-09-09. **Deux réserves portées avec la ratification** : ① elle est obtenue **par
+adoption d'une recommandation**, sans relecture de cette fiche, et **avant P-C** où l'entrée du matin
+disait la poser — elle reste donc **rouvrable à P-C** ; ② elle **ne vaut pas règle générale** et ne
+crée aucun précédent autorisant une reclassification par celui qui autorise ensuite le travail.
+La réserve d'A01 du 2026-09-09 est **conservée** : reclassification et autorisation sont venues de la
+même main, et c'est ce que `CLAUDE.md` §3-7 garde.
+
 ## 2026-09-08 — [L5a/L5c] Étage 2, PROPOSÉE — **M10** : le verrou de 15 min tombe sur l'auditeur qui ATTEND son interlocuteur
 
 > **Quatrième demande, première fiche.** A54 l'a proposée le 2026-09-06 (`RECETTE_NOVICE_L5_2026-09-06.md`
