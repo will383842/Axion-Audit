@@ -2696,3 +2696,30 @@ recettes — c'est une session de 45 min réelle qui le coche, pas cette fiche.
 
 **Arbitrage Williams :** ☐ ABSORBÉE (forme ① / ② / ③) ☐ PHASE 2 ☐ REFUSÉE — _à la porte P-C, avec
 la réserve R4 d'A54 et le doute D-3 d'A02 sous les yeux._
+
+## 2026-09-10 — [L5] RECLASSEMENT A01 : la fiche « deux `<h1>` » du 2026-09-03 sort du registre — c'est un DÉFAUT
+
+**Ce qui change.** La fiche du 2026-09-03, classée **étage 1 à 0,05 j**, est **retirée du canal
+d'amélioration** et reclassée **défaut**. Elle ne consomme plus le plafond de 0,5 j du lot L5.
+
+**Pourquoi, et c'est la mesure qui l'impose, pas un avis.** Son périmètre annoncé était de deux
+écrans. A20 l'a mesuré le 2026-09-10 : **onze vues sur douze** portent la paire, dix à texte
+strictement identique. Le chiffrage qui la faisait tenir sous le plafond était donc faux d'un
+facteur cinq. Et la voie étage 1 a échoué à l'épreuve du temps : ouverte le 03/09, elle est
+toujours ouverte six jours et **trois constats indépendants** plus tard (A28-1, A54 majeur M8
+rejoué les 06, 07 et 09/09, A26 le 09/09 en navigateur réel).
+
+**La règle appliquée.** Précédent opposable **B2/R3** (`DECISIONS.md`, 2026-09-09) : « le registre
+AMELIORATIONS borne ce qui va AU-DELÀ de la spec ; il ne sert pas à ranger un trou dedans ». Une
+structure de titres fausse sur onze vues est un trou dans 03 §22.1 (WCAG AA) et §33 — pas du
+confort. Le second point de la fiche du 03/09 (« Stockage de l'appareil » vs « Stockage de cet
+appareil », deux libellés **différents** pour un même écran) suit le même sort, même cause.
+
+**Ce qui n'est PAS reclassé** : R3 — quel écran s'appelle « Aujourd'hui », faut-il fondre les deux
+racines — reste **étage 2 → Williams**. La question du _nom_ est du périmètre fonctionnel ; la
+_duplication du niveau 1_ ne l'est pas. Corriger l'une ne préjuge pas de l'autre.
+
+**Où il vit désormais** : `docs/portes/DEFAUTS_RENDUS_A26_2026-09-10.md` §D-A — avec les cinq
+raisons pour lesquelles aucune garde ne l'a vu, le coût (3 h, dont 1 h de collatérale de test et
+0,5 h de garde manquante écrite par A28 et non par A22, 09 §5.6), et **la seule question qui reste
+à Williams** : corriger avant de jouer V-10, ou après la signature de P-C.
