@@ -12553,6 +12553,7 @@ l'état du 2026-09-09 — la fiche est **complétée, jamais réécrite** (invar
 **Ce que je n'étends pas** : la fiche **M10** (verrou de 15 min, D-3) reste **PROPOSÉE et NON
 implémentée**. Elle n'était pas dans la liste des trois points ; « fais tout selon tes recommandations »
 ne l'arbitre pas, et je refuse de le lire ainsi.
+
 ## 2026-09-10 — [P-C] Le `.axionbackup` de séance : versionné comme preuve de porte, ou hors dépôt ?
 
 L'outil d'A26 (PR #132) dépose `docs/portes/preuves/P-C/axion-…-20260909T220211Z.axionbackup`,
