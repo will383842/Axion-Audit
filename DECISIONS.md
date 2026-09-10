@@ -12553,3 +12553,42 @@ l'état du 2026-09-09 — la fiche est **complétée, jamais réécrite** (invar
 **Ce que je n'étends pas** : la fiche **M10** (verrou de 15 min, D-3) reste **PROPOSÉE et NON
 implémentée**. Elle n'était pas dans la liste des trois points ; « fais tout selon tes recommandations »
 ne l'arbitre pas, et je refuse de le lire ainsi.
+
+## 2026-09-10 — [P-C] Le `.axionbackup` de séance : versionné comme preuve de porte, ou hors dépôt ?
+
+L'outil d'A26 (PR #132) dépose `docs/portes/preuves/P-C/axion-…-20260909T220211Z.axionbackup`,
+55 310 octets. §7 exige que chaque critère de porte soit coché **avec sa preuve** ; `.gitignore:51`
+interdit `*.axionbackup` au motif « il contient des données de mission réelles ». Ici la mission est
+**inventée** (invariant 2) : le motif écrit ne mord pas, et la question se pose vraiment.
+
+Options :
+
+- **(a) versionner le fichier** dans `docs/portes/preuves/P-C/` — la preuve voyage avec la fiche,
+  et n'importe qui rejoue la restauration sans refabriquer.
+- **(b) le laisser hors dépôt** et faire porter la preuve par l'outil + son journal + l'empreinte.
+
+Arbitrage : **(b).** Trois raisons, dont une seule suffirait :
+
+1. **Le versionner utilement obligerait à versionner le secret.** Le payload est chiffré sous la clé
+   du MOT DE PASSE, pas sous la DEK appareil (11 §4). Un blob dont le mot de passe n'est pas au
+   dépôt ne prouve rien ; un blob dont le mot de passe est au dépôt viole §2 (« aucune valeur de
+   secret dans un fichier versionné »). C'est cette raison-là qui tranche : elle tient même sur une
+   mission entièrement inventée, alors que le motif de `.gitignore:51` ne tient pas.
+2. **Il n'est pas reproductible octet à octet** — sel et IV aléatoires. Deux fabrications de la même
+   mission donnent deux binaires différents : un diff de 55 Ko qui change à chaque exécution n'est
+   pas une preuve, c'est du bruit dans l'historique.
+3. **Un binaire ne se relit pas en revue croisée** (§4 étape 4). Ce qui se relit, c'est l'outil.
+
+Ce que devient la preuve de §7, donc, et c'est la contrepartie exigible : **l'outil, son journal
+d'exécution, et le SHA-256 des octets LIVRÉS** — `e6267aab93caf97e2747c74fe174724d8b4b4b5563fbdbb42fd4426d2bf3dcde` —
+consignés dans `PORTE_C_<date>.md`. L'empreinte rattache le fichier joué sur l'iPad à la séance ; et
+`AXION_SAUVEGARDE=<chemin>` rejoue l'épreuve sur ces octets-là, ce qu'un fichier versionné mais
+jamais rouvert ne ferait pas. La preuve gagne à être la marche, pas l'arrivée — même raisonnement
+que la condition (5) du 2026-09-09 sur les exceptions ZAP.
+
+Règle de précédence : **sans objet** — aucune divergence interne du pack. §7 (« coché avec la
+preuve ») et §2 (« aucun secret versionné ») ne se contredisent pas dès lors que la preuve est
+l'empreinte et non le blob ; `.gitignore:51` est **maintenu tel quel**, son motif complété ici.
+
+Décideur : A01
+Impact spec : aucun.

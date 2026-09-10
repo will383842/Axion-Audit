@@ -5265,3 +5265,30 @@ l'unité », alors que le §32.1-5 la fait lire par `interlocutor_profiles.group
 Tests rouges connus : aucun de mon périmètre. unit+interface 3 104 vertes · integration 714 vertes ·
 e2e 229/230 — l'échec est `hors-ligne-l5.e2e.ts:370` (CDP `Page.crash`), **vert en isolation**,
 fichier non touché par moi : intermittence sous 4 workers, à rendre à A2x.
+
+## 2026-09-09 23h55 — [lot L5 / porte P-C — séance matérielle] — étape pipeline 6/7
+
+Dernier commit vert : `ad7d88d` · Branche : `outil/mission-de-seance` (PR #132) · Poussé : oui.
+Tâche en cours : la séance P-C est PRÉPARÉE, pas jouée sur verre — l'iPad reste entier à faire.
+Prochaine action : transférer le `.axionbackup` sur l'iPad, restaurer, dérouler V-1 à V-10.
+Aucun lot ne se rouvre avant la signature de P-C (09 §4bis).
+Tests rouges connus : aucun — `verify:rapide` EXIT 0 dans `_axfixture` (14 gardes, 1 279 interface).
+
+**Segment amont V-0 joué en navigateur RÉEL contre staging**, pas en émulation : **V-0.2, V-0.4,
+V-0.5, V-0.6 cochées** — écran « Préparer cet appareil », refus à vide sans prononcer « incorrect »
+(B1), protection créée, auditeur rattaché contre l'API réelle. V-0.1 et V-0.3 restent dues au
+matériel.
+
+**V-0.7 est BLOQUÉE, et le blocage est structurel** : « tirer FIL-TPE au premier pull » est du L6,
+et L6 ne s'ouvre pas avant P-C. Mesuré à l'écran : « Aucune mission sur cet appareil » et « Le
+téléchargement d'une mission arrive AVEC LA SYNCHRONISATION ». La boucle se casse par la porte qui
+existe déjà — **option A, validée par Williams à 21h32** : la mission entre par l'**export de
+secours** (11 §4, E38), jamais par la sync.
+
+**A26 a rendu à 00h37** : `e2e/outils/` — 3 fichiers, 1 425 lignes, **aucune ligne de production**
+(09 §5.6). L'outil fabrique le `.axionbackup` ET le restaure pour de vrai avant de l'écrire.
+Octets livrés : 55 310, SHA-256 `e6267aab…2bf3dcde`. Le fichier reste **hors dépôt**
+(`.gitignore:51`, arbitrage du 2026-09-10).
+
+**Deux défauts rendus, aucun corrigé** : deux `<h1>` sur l'écran de restauration (A20/A22) ·
+V-5.5 inatteignable en banque, `ANCRES_ABSENTES` bloquant §32.4 (A30/A34).
