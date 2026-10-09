@@ -26,6 +26,9 @@ import { contexteLocal } from '../../local/contexte.js';
 import { useEnLigne } from '../../session/media.js';
 import { lireFileSync, type FileSync, type OpBloquee } from '../../sync/file-locale.js';
 
+const MESSAGE_ECHEC_REMISE =
+  'La remise en file n’a pas pu se faire : l’opération reste à examiner, rien n’a été retiré de cet appareil. Réessayez ; si le problème persiste, exportez une sauvegarde de secours.';
+
 function pluriel(n: number, singulier: string, plurielForme: string): string {
   return `${String(n)} ${n > 1 ? plurielForme : singulier}`;
 }
@@ -45,6 +48,7 @@ export function EcranSynchronisation(): ReactNode {
   const enLigne = useEnLigne();
   const [detailArbitrages, setDetailArbitrages] = useState(false);
   const [enCours, setEnCours] = useState<ReadonlySet<string>>(new Set());
+  const [echecRemise, setEchecRemise] = useState<string | null>(null);
 
   // `undefined` = lecture en cours ; `null` = la lecture locale a ÉCHOUÉ.
   const file = useLiveQuery(
@@ -66,9 +70,17 @@ export function EcranSynchronisation(): ReactNode {
     (op: OpBloquee): void => {
       if (base === null) return;
       setEnCours((avant) => new Set(avant).add(op.opId));
+      setEchecRemise(null);
       void portSyncDeLaBase(base)
         .remettreEnFile(op.missionId, [op.opId])
-        .catch(() => undefined)
+        .then(
+          () => undefined,
+          () => {
+            // L'échec est DIT (statut, pas alerte) ; l'op reste à examiner et le
+            // geste reste offert. Aucune trace technique affichée (11 §2).
+            setEchecRemise(MESSAGE_ECHEC_REMISE);
+          },
+        )
         .finally(() => {
           setEnCours((avant) => {
             const apres = new Set(avant);
@@ -84,7 +96,8 @@ export function EcranSynchronisation(): ReactNode {
     file?.enAttente === 0 &&
     file.aExaminer.length === 0 &&
     file.rejetees.length === 0 &&
-    file.arbitrees === 0;
+    file.arbitrees === 0 &&
+    file.illisibles === 0;
 
   const etat: EtatZone =
     file === undefined
@@ -111,6 +124,18 @@ export function EcranSynchronisation(): ReactNode {
       <ZoneEtat etat={etat}>
         {file != null && (
           <>
+            {echecRemise !== null && (
+              <Message ton="avertissement" titre="Remise en file impossible">
+                {echecRemise}
+              </Message>
+            )}
+
+            {file.illisibles > 0 && (
+              <Message ton="avertissement">
+                {`${pluriel(file.illisibles, 'ligne du siège est illisible', 'lignes du siège sont illisibles')} sur cet appareil : elles n’ont pas été appliquées, rien n’a été inventé. Mettez l’application à jour, puis synchronisez à nouveau.`}
+              </Message>
+            )}
+
             <Message ton="info" titre="File de cet appareil">
               {file.enAttente === 0
                 ? 'Aucune opération en attente d’envoi.'

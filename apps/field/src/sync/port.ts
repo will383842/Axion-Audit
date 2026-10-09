@@ -44,12 +44,8 @@ export const MESSAGE_AUCUNE_MISSION = 'Aucune mission à synchroniser sur cet ap
 export interface DependancesPort {
   readonly base: BaseLocale;
   readonly coffre: Coffre;
-  /**
-   * `tirer` est facultatif au TYPE seulement : un port sans descente est celui
-   * de L6a (montée seule), que ses tests d'origine construisent encore. En
-   * production (`app/port-sync-terrain.ts`) le transport réel porte les deux.
-   */
-  readonly transport: Pick<TransportSync, 'pousser'> & Partial<Pick<TransportSync, 'tirer'>>;
+  /** Montée ET descente : un port sans descente n'existe plus (revue A29, L6b). */
+  readonly transport: Pick<TransportSync, 'pousser' | 'tirer'>;
 }
 
 export interface PortSyncReel extends PortSync {
@@ -132,10 +128,10 @@ const ECHEC_DESCENTE: Record<Exclude<BilanPull['statut'], 'succes'>, EchecRetenu
  */
 function resultatDuPassage(
   montee: ResultatSync,
-  descente: BilanPull | null,
+  descente: BilanPull,
 ): { readonly resultat: ResultatSync; readonly retenu: EchecRetenu | null } {
-  if (descente === null || descente.statut === 'succes') {
-    const illisibles = descente?.enregistrementsIllisibles ?? 0;
+  if (descente.statut === 'succes') {
+    const illisibles = descente.enregistrementsIllisibles;
     const message =
       illisibles === 0
         ? montee.message
@@ -189,23 +185,15 @@ function etatNonLu(missionId: string): EtatSyncMission {
   };
 }
 
-function porteLaDescente(
-  transport: DependancesPort['transport'],
-): transport is Pick<TransportSync, 'pousser' | 'tirer'> {
-  return typeof transport.tirer === 'function';
-}
-
 export function creerPortSync(deps: DependancesPort): PortSyncAffichable {
   const moteur = creerMoteurSync(deps);
-  const descente = porteLaDescente(deps.transport)
-    ? creerDescente({
-        base: deps.base,
-        get coffre(): Coffre {
-          return deps.coffre;
-        },
-        transport: deps.transport,
-      })
-    : null;
+  const descente = creerDescente({
+    base: deps.base,
+    get coffre(): Coffre {
+      return deps.coffre;
+    },
+    transport: deps.transport,
+  });
   const instantanes = new Map<string, EtatSyncMission>();
   const echecs = new Map<string, EchecRetenu>();
 
@@ -255,7 +243,7 @@ export function creerPortSync(deps: DependancesPort): PortSyncAffichable {
         retenu = ECHEC_RETENU[bilan.statut];
         // Montée PUIS descente, au même geste. Pas de descente si le siège est
         // injoignable ou l'authentification à refaire : elle échouerait de même.
-        if (descente !== null && (bilan.statut === 'succes' || bilan.statut === 'refus')) {
+        if (bilan.statut === 'succes' || bilan.statut === 'refus') {
           const tiree = await descente.tirer(missionId);
           if (retenu === null) {
             ({ resultat, retenu } = resultatDuPassage(resultat, tiree));

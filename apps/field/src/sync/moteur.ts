@@ -56,6 +56,7 @@ import { DonneeLocaleCorrompueError, type Coffre } from '../local/coffre.js';
 import { ErreurEnveloppe } from '../local/enveloppe.js';
 import { maintenant as horlogeMaintenant } from '../local/horloge.js';
 import { MonteeImpossibleError, operationDeLigne } from './montee.js';
+import { remapperALaSortie } from './remappage.js';
 import type { TransportSync } from './transport.js';
 
 export interface DependancesMoteur {
@@ -126,6 +127,8 @@ interface Compteurs {
   arbitrees: number;
   rejetees: number;
   enErreur: number;
+  /** Les réponses dont l'op est sortie `superseded` : à réaligner en fin de passage (A29-2). */
+  reponsesArbitrees: string[];
 }
 
 async function prochainLot(
@@ -167,7 +170,10 @@ async function appliquerReponse(
         case 'duplicate':
           // Une op arbitrée est acquittée comme les deux autres ; elle est en plus
           // comptée, pour « n réponse(s) arbitrée(s) » (05 §9.3).
-          if (resultat.result === 'superseded') compteurs.arbitrees += 1;
+          if (resultat.result === 'superseded') {
+            compteurs.arbitrees += 1;
+            if (ligne.entite === 'answer') compteurs.reponsesArbitrees.push(ligne.entiteId);
+          }
           compteurs.acquittees += 1;
           await base.outbox.delete(ligne.opId);
           break;
@@ -278,7 +284,13 @@ async function passage(deps: DependancesMoteur, missionId: string): Promise<Bila
     );
   }
 
-  const compteurs: Compteurs = { acquittees: 0, arbitrees: 0, rejetees: 0, enErreur: 0 };
+  const compteurs: Compteurs = {
+    acquittees: 0,
+    arbitrees: 0,
+    rejetees: 0,
+    enErreur: 0,
+    reponsesArbitrees: [],
+  };
   const dejaEnvoyees = new Set<string>();
   let statut: BilanPush['statut'] = 'succes';
   let message: string | null = null;
@@ -327,6 +339,11 @@ async function passage(deps: DependancesMoteur, missionId: string): Promise<Bila
       (deps.maintenant ?? horlogeMaintenant)(),
     );
   }
+
+  // A29-2 : une réponse arbitrée `superseded` a pu être absorbée par une ligne
+  // déjà descendue. Réalignée APRÈS le passage et après le dernier succès : les
+  // ops relancées partent au passage suivant, elles ne comptent pas comme montées.
+  await remapperALaSortie({ base, coffre }, missionId, compteurs.reponsesArbitrees);
 
   return {
     statut,

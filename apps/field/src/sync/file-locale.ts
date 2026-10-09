@@ -16,6 +16,7 @@ import type { BaseLocale } from '../local/base.js';
 import type { Coffre } from '../local/coffre.js';
 import type { EntiteSync } from '../local/contrat-sync.js';
 import { chargeMissionSchema } from '../local/formes.js';
+import { PREFIXE_LIGNES_ILLISIBLES } from './descente.js';
 import { PREFIXE_REPONSES_ARBITREES } from './moteur.js';
 
 /** Une op bloquée, telle que l'écran la montre. */
@@ -34,6 +35,8 @@ export interface FileSync {
   readonly rejetees: readonly OpBloquee[];
   /** Compte CUMULÉ des réponses arbitrées, toutes missions (`meta`). */
   readonly arbitrees: number;
+  /** Compte CUMULÉ des lignes du siège illisibles sur cet appareil, toutes missions. */
+  readonly illisibles: number;
 }
 
 /** Le résumé que portent l'accueil et « Aujourd'hui » : des comptes, sans déchiffrer. */
@@ -47,11 +50,12 @@ export interface ResumeFileSync {
 const MISSION_ABSENTE = 'Mission absente de cet appareil';
 const MOTIF_INCONNU = 'Aucun motif n’a été enregistré pour cette opération.';
 
-async function compterArbitrages(base: BaseLocale): Promise<number> {
+/** La somme des comptes `meta` d'un préfixe (une entrée par mission). */
+async function sommeDesComptes(base: BaseLocale, prefixe: string): Promise<number> {
   let total = 0;
   await base.meta
     .where('cle')
-    .startsWith(PREFIXE_REPONSES_ARBITREES)
+    .startsWith(prefixe)
     .each((ligne) => {
       if (typeof ligne.valeur === 'number' && Number.isFinite(ligne.valeur)) total += ligne.valeur;
     });
@@ -68,7 +72,12 @@ export async function lireResumeFileSync(base: BaseLocale): Promise<ResumeFileSy
     else if (op.statut === 'a_examiner') aExaminer += 1;
     else rejetees += 1;
   });
-  return { enAttente, aExaminer, rejetees, arbitrees: await compterArbitrages(base) };
+  return {
+    enAttente,
+    aExaminer,
+    rejetees,
+    arbitrees: await sommeDesComptes(base, PREFIXE_REPONSES_ARBITREES),
+  };
 }
 
 /** La file détaillée : ops bloquées avec leur motif et le titre de leur mission. */
@@ -79,7 +88,8 @@ export async function lireFileSync(base: BaseLocale, coffre: Coffre): Promise<Fi
   const missions = await base.missions.toArray();
   // Ordre de la file (`opId` v7) : l'auditeur lit ses ops dans l'ordre de saisie.
   const ops = await base.outbox.orderBy('opId').toArray();
-  const arbitrees = await compterArbitrages(base);
+  const arbitrees = await sommeDesComptes(base, PREFIXE_REPONSES_ARBITREES);
+  const illisibles = await sommeDesComptes(base, PREFIXE_LIGNES_ILLISIBLES);
 
   const titres = new Map<string, string>();
   for (const mission of missions) {
@@ -105,5 +115,5 @@ export async function lireFileSync(base: BaseLocale, coffre: Coffre): Promise<Fi
     if (op.statut === 'a_examiner') aExaminer.push(vue);
     else rejetees.push(vue);
   }
-  return { enAttente, aExaminer, rejetees, arbitrees };
+  return { enAttente, aExaminer, rejetees, arbitrees, illisibles };
 }

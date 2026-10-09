@@ -54,16 +54,19 @@ interface Absorption {
   readonly cible: string;
 }
 
+/** Ce qu'une absorption réécrit ; chaque écriture nomme la ou les absorbées qu'elle sert. */
 interface Plan {
-  readonly absorbees: string[];
-  readonly pieces: { readonly id: string; readonly cible: string }[];
+  readonly absorbees: ReadonlyMap<string, string>;
+  readonly pieces: { readonly id: string; readonly absorbee: string; readonly cible: string }[];
   readonly sessions: {
     readonly id: string;
+    readonly absorbee: string;
     readonly avant: Enveloppe;
     readonly apres: Enveloppe;
   }[];
   readonly ops: {
     readonly opId: string;
+    readonly absorbees: readonly string[];
     readonly avant: Enveloppe;
     readonly apres: Enveloppe;
     readonly relancer: boolean;
@@ -74,7 +77,7 @@ const memeEnveloppe = (a: Enveloppe, b: Enveloppe): boolean =>
   JSON.stringify(a) === JSON.stringify(b);
 
 /** Les réponses locales absorbées par les réponses descendues de cette page. */
-async function absorptions(
+async function absorptionsDeLaPage(
   base: BaseLocale,
   enregistrements: readonly EnregistrementDescendant[],
 ): Promise<Absorption[]> {
@@ -95,55 +98,157 @@ async function absorptions(
   return trouvees;
 }
 
+/**
+ * A29-2 : les absorptions révélées par une sortie `superseded`. Y a pu descendre
+ * AVANT que le siège ne tranche (l'op de X était encore en file : rien n'était
+ * absorbé alors). Au `superseded` de X, on cherche au couple (session, question)
+ * de X la ligne locale retenue par le siège : visible, et sans op en file (une
+ * ligne qui attend encore son envoi n'est pas une version du siège). Une seule
+ * candidate, sinon rien : on n'arbitre pas à l'aveugle (invariant 7).
+ */
+async function absorptionsALaSortie(
+  base: BaseLocale,
+  reponsesArbitrees: readonly string[],
+): Promise<Absorption[]> {
+  const enFile = new Set((await base.outbox.toArray()).map((op) => op.entiteId));
+  const trouvees: Absorption[] = [];
+  for (const x of new Set(reponsesArbitrees)) {
+    const ligneX = await base.answers.get(x);
+    if (ligneX?.supprimeLe !== null || enFile.has(x)) continue;
+    const candidates = (
+      await base.answers
+        .where('[interviewId+missionQuestionId]')
+        .equals([ligneX.interviewId, ligneX.missionQuestionId])
+        .toArray()
+    ).filter((r) => r.id !== x && r.supprimeLe === null && !enFile.has(r.id));
+    const [cible] = candidates;
+    if (candidates.length === 1 && cible !== undefined) {
+      trouvees.push({ absorbee: x, cible: cible.id });
+    }
+  }
+  return trouvees;
+}
+
 async function planifier(
   { base, coffre }: DependancesRemappage,
   missionId: string,
   liste: readonly Absorption[],
 ): Promise<Plan> {
   const cibles = new Map(liste.map((a) => [a.absorbee, a.cible]));
-  const plan: Plan = { absorbees: [...cibles.keys()], pieces: [], sessions: [], ops: [] };
+  const plan: Plan = { absorbees: cibles, pieces: [], sessions: [], ops: [] };
 
   for (const [absorbee, cible] of cibles) {
     for (const piece of await base.attachments.where('answerId').equals(absorbee).toArray()) {
-      plan.pieces.push({ id: piece.id, cible });
+      plan.pieces.push({ id: piece.id, absorbee, cible });
     }
   }
 
-  for (const session of await base.interviews.where('missionId').equals(missionId).toArray()) {
+  // Toutes les lectures Dexie AVANT le premier chiffrement.
+  const sessions = await base.interviews.where('missionId').equals(missionId).toArray();
+  const ops: LigneOutbox[] = await base.outbox.where('missionId').equals(missionId).toArray();
+
+  for (const session of sessions) {
     const charge = await coffre.dechiffrer(session.charge, chargeInterviewSchema);
-    const cible =
-      charge.linkedReviewAnswerId === null ? undefined : cibles.get(charge.linkedReviewAnswerId);
-    if (cible === undefined) continue;
+    const absorbee = charge.linkedReviewAnswerId;
+    const cible = absorbee === null ? undefined : cibles.get(absorbee);
+    if (absorbee === null || cible === undefined) continue;
     plan.sessions.push({
       id: session.id,
+      absorbee,
       avant: session.charge,
       apres: await coffre.chiffrer({ ...charge, linkedReviewAnswerId: cible }),
     });
   }
 
-  const ops: LigneOutbox[] = await base.outbox.where('missionId').equals(missionId).toArray();
   for (const op of ops) {
     if (op.statut === 'rejetee') continue;
     const charge = await coffre.dechiffrer(op.charge, chargeOpSchema);
-    let modifiee = false;
+    const servies: string[] = [];
     const realignee: Record<string, unknown> = { ...charge };
     for (const cle of CLES_REFERENCE_REPONSE) {
       const valeur = charge[cle];
       const cible = typeof valeur === 'string' ? cibles.get(valeur) : undefined;
-      if (cible !== undefined) {
+      if (typeof valeur === 'string' && cible !== undefined) {
         realignee[cle] = cible;
-        modifiee = true;
+        servies.push(valeur);
       }
     }
-    if (!modifiee) continue;
+    if (servies.length === 0) continue;
     plan.ops.push({
       opId: op.opId,
+      absorbees: servies,
       avant: op.charge,
       apres: await coffre.chiffrer(realignee),
       relancer: op.statut === 'a_examiner',
     });
   }
   return plan;
+}
+
+/**
+ * Exécute un plan dans UNE transaction. A29-1 : la file est RELUE ici, à
+ * l'intérieur : une absorbée qui a reçu une op entre la préparation et
+ * l'écriture (l'auditeur l'a re-saisie) n'est PAS absorbée, et rien de ce qui la
+ * concerne n'est réécrit — ni ligne, ni op : jamais un remappage à moitié.
+ */
+async function executer(base: BaseLocale, plan: Plan): Promise<number> {
+  const horodatage = maintenant();
+  let remappees = 0;
+  await base.transaction(
+    'rw',
+    [base.answers, base.attachments, base.interviews, base.outbox],
+    async () => {
+      const retenues = new Set<string>();
+      for (const absorbee of plan.absorbees.keys()) {
+        const enFile = await base.outbox.where('entiteId').equals(absorbee).count();
+        const ligne = await base.answers.get(absorbee);
+        if (enFile === 0 && ligne?.supprimeLe === null) retenues.add(absorbee);
+      }
+      if (retenues.size === 0) return;
+
+      for (const op of plan.ops) {
+        if (!op.absorbees.every((a) => retenues.has(a))) continue;
+        const actuelle = await base.outbox.get(op.opId);
+        // Disparue, rejetée ou réécrite entre-temps : on ne l'écrase pas.
+        if (actuelle === undefined || actuelle.statut === 'rejetee') continue;
+        if (!memeEnveloppe(actuelle.charge, op.avant)) continue;
+        await base.outbox.update(
+          op.opId,
+          op.relancer
+            ? { charge: op.apres, statut: 'en_attente', tentatives: 0, derniereErreur: null }
+            : { charge: op.apres },
+        );
+        remappees += 1;
+      }
+      for (const session of plan.sessions) {
+        if (!retenues.has(session.absorbee)) continue;
+        const actuelle = await base.interviews.get(session.id);
+        if (actuelle === undefined || !memeEnveloppe(actuelle.charge, session.avant)) continue;
+        await base.interviews.update(session.id, { charge: session.apres });
+        remappees += 1;
+      }
+      for (const piece of plan.pieces) {
+        if (!retenues.has(piece.absorbee)) continue;
+        const actuelle = await base.attachments.get(piece.id);
+        if (actuelle?.answerId !== piece.absorbee) continue;
+        await base.attachments.update(piece.id, { answerId: piece.cible });
+        remappees += 1;
+      }
+      for (const absorbee of retenues) {
+        await base.answers.update(absorbee, { supprimeLe: horodatage });
+      }
+    },
+  );
+  return remappees;
+}
+
+async function remapper(
+  deps: DependancesRemappage,
+  missionId: string,
+  liste: readonly Absorption[],
+): Promise<number> {
+  if (liste.length === 0) return 0;
+  return executer(deps.base, await planifier(deps, missionId, liste));
 }
 
 /**
@@ -155,44 +260,19 @@ export async function remapperAbsorptions(
   missionId: string,
   enregistrements: readonly EnregistrementDescendant[],
 ): Promise<number> {
-  const { base } = deps;
-  const liste = await absorptions(base, enregistrements);
-  if (liste.length === 0) return 0;
-  const plan = await planifier(deps, missionId, liste);
-  const horodatage = maintenant();
-  let remappees = 0;
+  return remapper(deps, missionId, await absorptionsDeLaPage(deps.base, enregistrements));
+}
 
-  await base.transaction(
-    'rw',
-    [base.answers, base.attachments, base.interviews, base.outbox],
-    async () => {
-      for (const op of plan.ops) {
-        const actuelle = await base.outbox.get(op.opId);
-        // Disparue, rejetée ou réécrite entre-temps : on ne l'écrase pas.
-        if (actuelle?.statut === undefined || actuelle.statut === 'rejetee') continue;
-        if (!memeEnveloppe(actuelle.charge, op.avant)) continue;
-        await base.outbox.update(
-          op.opId,
-          op.relancer
-            ? { charge: op.apres, statut: 'en_attente', tentatives: 0, derniereErreur: null }
-            : { charge: op.apres },
-        );
-        remappees += 1;
-      }
-      for (const session of plan.sessions) {
-        const actuelle = await base.interviews.get(session.id);
-        if (actuelle === undefined || !memeEnveloppe(actuelle.charge, session.avant)) continue;
-        await base.interviews.update(session.id, { charge: session.apres });
-        remappees += 1;
-      }
-      for (const piece of plan.pieces) {
-        await base.attachments.update(piece.id, { answerId: piece.cible });
-        remappees += 1;
-      }
-      for (const absorbee of plan.absorbees) {
-        await base.answers.update(absorbee, { supprimeLe: horodatage });
-      }
-    },
-  );
-  return remappees;
+/**
+ * Réaligne à la sortie `superseded` (A29-2) : `reponsesArbitrees` sont les ids
+ * des réponses dont l'op vient d'être tranchée par le siège. Appelé par le
+ * moteur APRÈS son passage, pour que les ops relancées partent au suivant.
+ */
+export async function remapperALaSortie(
+  deps: DependancesRemappage,
+  missionId: string,
+  reponsesArbitrees: readonly string[],
+): Promise<number> {
+  if (reponsesArbitrees.length === 0) return 0;
+  return remapper(deps, missionId, await absorptionsALaSortie(deps.base, reponsesArbitrees));
 }

@@ -27,7 +27,7 @@
 // =============================================================================
 import { CRITICITES, TYPES_DE_REPONSE } from '@axion/shared';
 import { z } from 'zod';
-import { cleCurseurPull, lireMeta, type BaseLocale } from '../local/base.js';
+import { cleCurseurPull, ecrireMeta, lireMeta, type BaseLocale } from '../local/base.js';
 import type { Coffre } from '../local/coffre.js';
 import type { ReponsePull } from '../local/contrat-sync.js';
 import { appliquerDescente, type EnregistrementDescendant } from '../local/ecriture.js';
@@ -80,6 +80,26 @@ export interface Descente {
  * le dernier-écrit-gagne contre une ligne locale, elle ne fait que la créer.
  */
 const INSTANT_REFERENTIEL = '1970-01-01T00:00:00.000Z';
+
+/**
+ * Les rôles d'un utilisateur sur une mission — SOURCE : `mission_users.role_on_mission`,
+ * CHECK fermé du fichier 04 (lead, consultant, analyste, lecteur), transcrit côté
+ * serveur dans `apps/api/src/db/schema.ts` (`ROLES_SUR_MISSION`). `packages/shared`
+ * ne la porte pas : la liste est recopiée ici, et un test de raccord d'A26 la
+ * compare à la source serveur. Une valeur hors liste = ligne illisible, comptée.
+ */
+export const ROLES_SUR_MISSION = ['lead', 'consultant', 'analyste', 'lecteur'] as const;
+
+/** Clé `meta` du compte CUMULÉ des lignes descendues illisibles d'une mission. */
+export function cleLignesIllisibles(missionId: string): string {
+  return `${PREFIXE_LIGNES_ILLISIBLES}${missionId}`;
+}
+
+/** Le préfixe commun des comptes d'illisibles, pour les lire toutes missions confondues. */
+export const PREFIXE_LIGNES_ILLISIBLES = 'descente:illisibles:';
+
+/** Rôle absent ou vide au siège : la valeur locale sera reprise (`completerDepuisLocal`). */
+const ROLE_A_REPRENDRE = '';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TRADUCTION — ligne serveur → forme locale (fonctions PURES)
@@ -361,6 +381,10 @@ function traduireMission(missionId: string, brute: unknown): EnregistrementDesce
   const l = ligneMission.safeParse(brute);
   if (!l.success || l.data.id !== missionId) return null;
   const m = l.data;
+  // Le siège prime, rétrogradation comprise ; absent ou vide : la valeur locale.
+  const role = m.roleOnMission ?? m.roleSurMission ?? ROLE_A_REPRENDRE;
+  const roles: readonly string[] = ROLES_SUR_MISSION;
+  if (role !== ROLE_A_REPRENDRE && !roles.includes(role)) return null;
   const charge = chargeMissionSchema.safeParse({
     titre: m.title,
     companyId: m.companyId,
@@ -370,9 +394,7 @@ function traduireMission(missionId: string, brute: unknown): EnregistrementDesce
     countryCode: m.countryCode ?? null,
     startPlanned: m.startPlanned ?? null,
     endPlanned: m.endPlanned ?? null,
-    // Le rôle vit dans `mission_users`, pas dans la ligne : « inconnu » (chaîne
-    // vide) plutôt qu'inventé ; une valeur locale connue est reprise.
-    roleSurMission: m.roleSurMission ?? m.roleOnMission ?? '',
+    roleSurMission: role,
   });
   if (!charge.success) return null;
   return {
@@ -529,8 +551,9 @@ async function completerDepuisLocal(
   base: BaseLocale,
   coffre: Coffre,
   enregistrements: readonly EnregistrementDescendant[],
-): Promise<EnregistrementDescendant[]> {
+): Promise<Traduction> {
   const complets: EnregistrementDescendant[] = [];
+  let illisibles = 0;
   for (const enr of enregistrements) {
     if (enr.table === 'interviews') {
       const locale = await base.interviews.get(enr.index.id);
@@ -539,17 +562,31 @@ async function completerDepuisLocal(
         complets.push({ ...enr, charge: { ...enr.charge, valideeLe: charge.valideeLe } });
         continue;
       }
-    } else if (enr.table === 'missions' && enr.charge.roleSurMission === '') {
+    } else if (enr.table === 'missions' && enr.charge.roleSurMission === ROLE_A_REPRENDRE) {
       const locale = await base.missions.get(enr.index.id);
-      if (locale !== undefined) {
-        const charge = await coffre.dechiffrer(locale.charge, chargeMissionSchema);
-        complets.push({ ...enr, charge: { ...enr.charge, roleSurMission: charge.roleSurMission } });
+      if (locale === undefined) {
+        // Ni le siège ni l'appareil ne disent le rôle : rien d'inventé, la ligne
+        // est comptée illisible et le prochain pull complet la reprendra.
+        illisibles += 1;
         continue;
       }
+      const charge = await coffre.dechiffrer(locale.charge, chargeMissionSchema);
+      complets.push({ ...enr, charge: { ...enr.charge, roleSurMission: charge.roleSurMission } });
+      continue;
     }
     complets.push(enr);
   }
-  return complets;
+  return { enregistrements: complets, illisibles };
+}
+
+/** Ajoute `n` au compte d'illisibles de la mission ; jamais remis à zéro. */
+async function cumulerIllisibles(base: BaseLocale, missionId: string, n: number): Promise<void> {
+  if (n <= 0) return;
+  const cle = cleLignesIllisibles(missionId);
+  await base.transaction('rw', base.meta, async () => {
+    const connu = await lireMeta(base, cle);
+    await ecrireMeta(base, cle, (typeof connu === 'number' ? connu : 0) + n);
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -594,8 +631,14 @@ async function passage(deps: DependancesDescente, missionId: string): Promise<Bi
     pages += 1;
     const { serverTime, changes, nextSince } = resultat.donnees;
     const traduction = traduire(missionId, changes);
+    const completee = await completerDepuisLocal(
+      deps.base,
+      deps.coffre,
+      traduction.enregistrements,
+    );
     recus += traduction.enregistrements.length;
-    illisibles += traduction.illisibles;
+    const illisiblesDeLaPage = traduction.illisibles + completee.illisibles;
+    illisibles += illisiblesDeLaPage;
 
     // Un `nextSince` nul n'efface jamais un curseur connu.
     const curseur = nextSince ?? since;
@@ -603,13 +646,10 @@ async function passage(deps: DependancesDescente, missionId: string): Promise<Bi
       missionId,
       serverTime,
       prochainSince: curseur,
-      enregistrements: await completerDepuisLocal(
-        deps.base,
-        deps.coffre,
-        traduction.enregistrements,
-      ),
+      enregistrements: completee.enregistrements,
     });
-    remappees += await remapperAbsorptions(deps, missionId, traduction.enregistrements);
+    await cumulerIllisibles(deps.base, missionId, illisiblesDeLaPage);
+    remappees += await remapperAbsorptions(deps, missionId, completee.enregistrements);
 
     // Fin du delta, ou curseur qui n'avance pas : la boucle s'arrête.
     if (nextSince === null || nextSince === since) break;
