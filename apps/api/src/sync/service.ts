@@ -36,6 +36,7 @@ import {
   AppError,
   type LotPush,
   type Operation,
+  type EntiteDescendante,
   type ReponsePull,
   type ReponsePush,
   type ResultatOp,
@@ -44,6 +45,7 @@ import { db } from '../db.js';
 import { type RoleSurMission, type StatutSession } from '../db/schema.js';
 import {
   archiver,
+  bornerLaTransaction,
   consignerOp,
   insererPiece,
   insererQuestion,
@@ -55,6 +57,8 @@ import {
   journaliserPush,
   lireBlocParCode,
   lireCurseursCandidats,
+  lireHorlogeDuLot,
+  lirePlafond,
   lireLignesHorodatees,
   lireMissionDeDemande,
   lireMissionDeReponse,
@@ -125,6 +129,7 @@ const MESSAGES = {
   suppression: "La suppression n'est pas prise en charge par la synchronisation.",
   cycle: "L'unité proposée ne peut pas être rattachée à elle-même.",
   echec: "L'opération n'a pas pu être enregistrée : elle sera retentée.",
+  delai: "La synchronisation a pris trop de temps : rien n'a été enregistré, elle sera retentée.",
 } as const;
 
 // =============================================================================
@@ -156,6 +161,37 @@ class Annulation extends Error {
     super('annulation');
   }
 }
+
+// =============================================================================
+// DÉLAIS DE SYNC — revue A17 : aucune ligne validée en retard sous un curseur
+// =============================================================================
+// Le push horodate ses lignes à `now()` de la BASE (début de sa transaction), et
+// un lot ne vit pas plus de `dureeMaxPushMs` ; le pull ne rend rien de plus récent
+// que `now() - margePullMs`. La marge excédant la durée, une ligne validée après
+// un pull est forcément au-dessus du plafond qu'il a rendu : elle redescend.
+export interface DelaisSync {
+  readonly margePullMs: number;
+  readonly dureeMaxPushMs: number;
+}
+
+export const DELAIS_SYNC_DEFAUT: DelaisSync = { margePullMs: 60_000, dureeMaxPushMs: 30_000 };
+
+let delais: DelaisSync = { ...DELAIS_SYNC_DEFAUT };
+
+/** Réglage des délais (tests, et seul point d'injection). Les clés absentes restent. */
+export function reglerDelaisSync(nouveaux: Partial<DelaisSync>): void {
+  delais = { ...delais, ...nouveaux };
+}
+
+/** Durée maximale du lot dépassée, mesurée juste avant le commit. */
+class DelaiDepasse extends Error {
+  constructor() {
+    super('delai');
+  }
+}
+
+/** SQLSTATE `57014` (statement_timeout) et `55P03` (lock_timeout). */
+const CODES_DELAI_DEPASSE: ReadonlySet<string> = new Set(['57014', '55P03']);
 
 /** Un verdict de propriété qui n'autorise pas → l'issue correspondante. */
 function issueDeRefus(propriete: Exclude<Propriete, 'proprietaire'>, inconnu: string): Issue {
@@ -851,12 +887,12 @@ async function traiterUneOp(
   op: Operation,
   emetteur: Emetteur,
   lotId: string,
+  maintenant: Date,
   journal: FastifyBaseLogger,
 ): Promise<Issue> {
   if (await opDejaTraitee(tx, op.opId)) return { resultat: 'duplicate' };
   try {
     return await tx.transaction(async (pointDeSauvegarde) => {
-      const maintenant = new Date();
       const issue = await appliquer({
         ex: pointDeSauvegarde,
         op,
@@ -872,6 +908,9 @@ async function traiterUneOp(
     });
   } catch (erreur) {
     if (erreur instanceof Annulation) return erreur.issue;
+    // Délai du lot dépassé : ce n'est pas l'échec d'UNE op, c'est le lot entier
+    // qui doit tomber — la transaction est de toute façon inutilisable.
+    if (CODES_DELAI_DEPASSE.has(codeSql(erreur))) throw erreur;
     // 11 §2 : ni la charge ni le message PostgreSQL (qui recopie des valeurs).
     journal.warn(
       { entite: op.entity, code: codeSql(erreur) },
@@ -901,36 +940,67 @@ export async function pousserLot(
   const debut = new Date();
   const emetteur: Emetteur = { utilisateurId, missionId: lot.missionId };
   const lotId = uuidv7();
+  const dureeMax = delais.dureeMaxPushMs;
+  const chrono = performance.now();
 
-  return db.transaction(async (tx) => {
-    const role = await lireRoleSurMission(tx, lot.missionId, utilisateurId);
-    if (role === null) throw new AppError('NOT_FOUND', MESSAGE_MISSION_INTROUVABLE);
-    if (!ROLES_COLLECTEURS.includes(role)) throw new AppError('FORBIDDEN', MESSAGE_DROITS);
-
-    const results: ReponsePush['results'] = [];
-    let conflits = 0;
-    for (const op of lot.operations) {
-      const issue = await traiterUneOp(tx, op, emetteur, lotId, journal);
-      if (issue.resultat !== 'applied' && issue.resultat !== 'duplicate') conflits += 1;
-      results.push({
-        opId: op.opId,
-        result: issue.resultat,
-        ...(issue.message === undefined ? {} : { message: issue.message }),
+  try {
+    return await db.transaction(async (tx) => {
+      await bornerLaTransaction(tx, dureeMax);
+      const maintenant = await lireHorlogeDuLot(tx);
+      return await appliquerLot(tx, lot, emetteur, lotId, maintenant, debut, journal, () => {
+        // Mesuré AVANT le commit : un lot trop long ne valide rien.
+        if (performance.now() - chrono > dureeMax) throw new DelaiDepasse();
       });
-    }
-
-    const fin = new Date();
-    await journaliserPush(tx, {
-      utilisateurId,
-      appareilId: lot.deviceId,
-      nombreOps: lot.operations.length,
-      nombreConflits: conflits,
-      resteOutbox: lot.outboxRemaining,
-      debut,
-      fin,
     });
-    return { serverTime: fin.toISOString(), results };
+  } catch (erreur) {
+    if (erreur instanceof DelaiDepasse || CODES_DELAI_DEPASSE.has(codeSql(erreur))) {
+      journal.warn({ lot: 'push' }, 'Lot de sync annulé : durée maximale dépassée');
+      throw new AppError('SERVICE_UNAVAILABLE', MESSAGES.delai);
+    }
+    throw erreur;
+  }
+}
+
+/** Le corps du lot, DANS sa transaction. `verifierDelai` est appelé juste avant le commit. */
+async function appliquerLot(
+  tx: ExecuteurSql,
+  lot: LotPush,
+  emetteur: Emetteur,
+  lotId: string,
+  maintenant: Date,
+  debut: Date,
+  journal: FastifyBaseLogger,
+  verifierDelai: () => void,
+): Promise<ReponsePush> {
+  const utilisateurId = emetteur.utilisateurId;
+  const role = await lireRoleSurMission(tx, lot.missionId, utilisateurId);
+  if (role === null) throw new AppError('NOT_FOUND', MESSAGE_MISSION_INTROUVABLE);
+  if (!ROLES_COLLECTEURS.includes(role)) throw new AppError('FORBIDDEN', MESSAGE_DROITS);
+
+  const results: ReponsePush['results'] = [];
+  let conflits = 0;
+  for (const op of lot.operations) {
+    const issue = await traiterUneOp(tx, op, emetteur, lotId, maintenant, journal);
+    if (issue.resultat !== 'applied' && issue.resultat !== 'duplicate') conflits += 1;
+    results.push({
+      opId: op.opId,
+      result: issue.resultat,
+      ...(issue.message === undefined ? {} : { message: issue.message }),
+    });
+  }
+
+  const fin = new Date();
+  await journaliserPush(tx, {
+    utilisateurId,
+    appareilId: lot.deviceId,
+    nombreOps: lot.operations.length,
+    nombreConflits: conflits,
+    resteOutbox: lot.outboxRemaining,
+    debut,
+    fin,
   });
+  verifierDelai();
+  return { serverTime: fin.toISOString(), results };
 }
 
 // =============================================================================
@@ -956,9 +1026,12 @@ export interface DemandePull {
  * d'une mission), sans ligne `sync_log`.
  *
  * Pagination keyset sur `updated_at` : la borne haute de la page est le `limit`-ième
- * plus petit curseur au-delà de `since`, et elle est INCLUSIVE — un groupe
+ * plus petit curseur au-delà de `since` et SOUS le plafond `now() - margePullMs`
+ * (base), et elle est INCLUSIVE — un groupe
  * d'horodatage égal n'est jamais coupé (la page peut dépasser `limit`). `nextSince`
- * = cette borne, à la microseconde ; `null` seulement si rien n'est au-delà de
+ * = cette borne, à la microseconde ; `null` seulement si rien n'est entre `since` et le
+ * plafond (au premier pull d'une mission toute neuve, le questionnaire peut descendre
+ * avec un `null` : le pull suivant repart de zéro, sans perte). Sinon : rien au-delà de
  * `since`. Au premier pull (sans `since`), le questionnaire figé et les
  * affectations descendent en plus, et jamais ensuite.
  *
@@ -979,22 +1052,22 @@ export async function tirerDelta(
   // Un instantané cohérent : la borne et les lignes sont lues dans la même vue.
   const { changes, nombre, borne } = await db.transaction(
     async (tx) => {
-      const candidats = (await lireCurseursCandidats(tx, demande.missionId, depuis, limite)).sort();
+      const plafond = await lirePlafond(tx, delais.margePullMs);
+      const candidats = (
+        await lireCurseursCandidats(tx, demande.missionId, depuis, plafond, limite)
+      ).sort();
       const borneHaute = candidats[Math.min(limite, candidats.length) - 1] ?? null;
-      // Le schéma partagé type un enregistrement EXHAUSTIF aux valeurs optionnelles :
-      // une entité sans changement reste `undefined`, absente du JSON rendu.
-      const page: ReponsePull['changes'] = {
-        mission: undefined,
-        mission_question: undefined,
-        org_unit: undefined,
-        work_assignment: undefined,
-        interview: undefined,
-        answer: undefined,
-        attachment_meta: undefined,
-      };
+      // Une entité sans changement est ABSENTE de `changes` (jamais une liste vide).
+      const page: Partial<Record<EntiteDescendante, unknown[]>> = {};
       let total = 0;
       if (borneHaute !== null) {
-        const lignes = await lireLignesHorodatees(tx, demande.missionId, depuis, borneHaute);
+        const lignes = await lireLignesHorodatees(
+          tx,
+          demande.missionId,
+          utilisateurId,
+          depuis,
+          borneHaute,
+        );
         for (const [entite, liste] of Object.entries(lignes) as [
           keyof typeof lignes,
           unknown[],
@@ -1016,7 +1089,9 @@ export async function tirerDelta(
           total += referentiels.work_assignment.length;
         }
       }
-      return { changes: page, nombre: total, borne: borneHaute };
+      // `fromEntries` perd les clés : l'assertion les rend, les entrées viennent du dépôt.
+      const changes = Object.fromEntries(Object.entries(page)) as ReponsePull['changes'];
+      return { changes, nombre: total, borne: borneHaute };
     },
     { isolationLevel: 'repeatable read', accessMode: 'read only' },
   );

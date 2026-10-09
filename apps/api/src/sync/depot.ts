@@ -13,7 +13,7 @@
 // Traçabilité : E7, E9 · invariants 1, 3 et 7 · 11 §4 · 04 (processed_ops,
 // sync_log, answer_revisions S-4, attachments S-3).
 // =============================================================================
-import { and, asc, eq, getTableColumns, isNull, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { uuidv7 } from 'uuidv7';
@@ -389,33 +389,53 @@ function fenetre(colonne: AnyPgColumn, depuis: string | null, jusqua: string | n
 }
 
 /**
- * Les `limite` plus petits curseurs de CHAQUE entité horodatée de la mission,
- * strictement après `depuis`. Leur fusion donne la borne haute de la page.
+ * Le PLAFOND de la page : `now() - marge`, lu à l'horloge de la base (dans la
+ * transaction du pull, `now()` est son début). Une ligne plus récente ne descend
+ * pas encore : une transaction de push encore ouverte peut valider une ligne
+ * horodatée SOUS elle, et le curseur l'aurait déjà dépassée (revue A17). La marge
+ * excède la durée maximale d'un lot de push, d'où la garantie.
+ */
+export async function lirePlafond(ex: ExecuteurSql, margeMs: number): Promise<string> {
+  const resultat = await ex.execute<{ plafond: string }>(
+    sql`SELECT to_char((now() - ${margeMs} * interval '1 millisecond') AT TIME ZONE 'UTC',
+                       'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS plafond`,
+  );
+  const [ligne] = resultat.rows;
+  if (ligne === undefined) throw new Error('horloge de la base illisible');
+  return ligne.plafond;
+}
+
+/**
+ * Les `limite` plus petits curseurs de CHAQUE entité horodatée de la mission, dans
+ * `]depuis, plafond]`. Leur fusion donne la borne haute de la page.
  */
 export async function lireCurseursCandidats(
   ex: ExecuteurSql,
   missionId: string,
   depuis: string | null,
+  plafond: string,
   limite: number,
 ): Promise<string[]> {
   const lots = [
     await ex
       .select({ c: curseurDe(missions.updatedAt) })
       .from(missions)
-      .where(and(eq(missions.id, missionId), ...fenetre(missions.updatedAt, depuis, null)))
+      .where(and(eq(missions.id, missionId), ...fenetre(missions.updatedAt, depuis, plafond)))
       .orderBy(asc(missions.updatedAt))
       .limit(limite),
     await ex
       .select({ c: curseurDe(orgUnits.updatedAt) })
       .from(orgUnits)
-      .where(and(eq(orgUnits.missionId, missionId), ...fenetre(orgUnits.updatedAt, depuis, null)))
+      .where(
+        and(eq(orgUnits.missionId, missionId), ...fenetre(orgUnits.updatedAt, depuis, plafond)),
+      )
       .orderBy(asc(orgUnits.updatedAt))
       .limit(limite),
     await ex
       .select({ c: curseurDe(interviews.updatedAt) })
       .from(interviews)
       .where(
-        and(eq(interviews.missionId, missionId), ...fenetre(interviews.updatedAt, depuis, null)),
+        and(eq(interviews.missionId, missionId), ...fenetre(interviews.updatedAt, depuis, plafond)),
       )
       .orderBy(asc(interviews.updatedAt))
       .limit(limite),
@@ -423,14 +443,19 @@ export async function lireCurseursCandidats(
       .select({ c: curseurDe(answers.updatedAt) })
       .from(answers)
       .innerJoin(interviews, eq(interviews.id, answers.interviewId))
-      .where(and(eq(interviews.missionId, missionId), ...fenetre(answers.updatedAt, depuis, null)))
+      .where(
+        and(eq(interviews.missionId, missionId), ...fenetre(answers.updatedAt, depuis, plafond)),
+      )
       .orderBy(asc(answers.updatedAt))
       .limit(limite),
     await ex
       .select({ c: curseurDe(attachments.updatedAt) })
       .from(attachments)
       .where(
-        and(eq(attachments.missionId, missionId), ...fenetre(attachments.updatedAt, depuis, null)),
+        and(
+          eq(attachments.missionId, missionId),
+          ...fenetre(attachments.updatedAt, depuis, plafond),
+        ),
       )
       .orderBy(asc(attachments.updatedAt))
       .limit(limite),
@@ -438,44 +463,198 @@ export async function lireCurseursCandidats(
   return lots.flatMap((lot) => lot.map((l) => l.c));
 }
 
+// -----------------------------------------------------------------------------
+// PROJECTIONS FERMÉES — revue A17. Chaque entité descend selon une liste
+// EXPLICITE de colonnes : une colonne ajoutée demain au 04 ne descend pas sans
+// décision. `storageKey` ne descend jamais (MinIO n'est jamais exposé, 11 §2) ;
+// `personEmail` d'une session ne descend qu'à son propriétaire (minimisation, 06).
+// -----------------------------------------------------------------------------
+
+/** `missions` : ce que le terrain affiche et range, rien du commercial ni du siège. */
+const COLONNES_MISSION = {
+  id: missions.id,
+  companyId: missions.companyId,
+  title: missions.title,
+  timezone: missions.timezone,
+  auditLevel: missions.auditLevel,
+  geoScope: missions.geoScope,
+  countryCode: missions.countryCode,
+  startPlanned: missions.startPlanned,
+  endPlanned: missions.endPlanned,
+  status: missions.status,
+  updatedAt: missions.updatedAt,
+  deletedAt: missions.deletedAt,
+};
+
+const COLONNES_UNITE = {
+  id: orgUnits.id,
+  missionId: orgUnits.missionId,
+  parentId: orgUnits.parentId,
+  kind: orgUnits.kind,
+  name: orgUnits.name,
+  countryCode: orgUnits.countryCode,
+  timezone: orgUnits.timezone,
+  headcount: orgUnits.headcount,
+  serviceRefId: orgUnits.serviceRefId,
+  sectorId: orgUnits.sectorId,
+  inScope: orgUnits.inScope,
+  status: orgUnits.status,
+  proposedBy: orgUnits.proposedBy,
+  mergedIntoId: orgUnits.mergedIntoId,
+  position: orgUnits.position,
+  createdAt: orgUnits.createdAt,
+  updatedAt: orgUnits.updatedAt,
+};
+
+/** `personEmail` est calculé par ligne : NULL dès que l'émetteur n'est pas le propriétaire. */
+function colonnesSession(emetteurId: string) {
+  return {
+    id: interviews.id,
+    missionId: interviews.missionId,
+    conductedBy: interviews.conductedBy,
+    kind: interviews.kind,
+    mode: interviews.mode,
+    linkedReviewAnswerId: interviews.linkedReviewAnswerId,
+    personName: interviews.personName,
+    personRole: interviews.personRole,
+    personServiceId: interviews.personServiceId,
+    personEmail: sql<string | null>`CASE WHEN ${interviews.conductedBy} = ${emetteurId}::uuid
+                                         THEN ${interviews.personEmail} ELSE NULL END`,
+    interlocutorProfileId: interviews.interlocutorProfileId,
+    participants: interviews.participants,
+    orgUnitId: interviews.orgUnitId,
+    documentRequestId: interviews.documentRequestId,
+    consentGiven: interviews.consentGiven,
+    consentAudio: interviews.consentAudio,
+    consentedAt: interviews.consentedAt,
+    informationNoticeVersion: interviews.informationNoticeVersion,
+    noticeShownAt: interviews.noticeShownAt,
+    scheduledAt: interviews.scheduledAt,
+    scheduledDurationMin: interviews.scheduledDurationMin,
+    scheduleStatus: interviews.scheduleStatus,
+    status: interviews.status,
+    startedAt: interviews.startedAt,
+    endedAt: interviews.endedAt,
+    generalNotes: interviews.generalNotes,
+    clientCreatedAt: interviews.clientCreatedAt,
+    clientUpdatedAt: interviews.clientUpdatedAt,
+    syncedAt: interviews.syncedAt,
+    createdAt: interviews.createdAt,
+    updatedAt: interviews.updatedAt,
+  };
+}
+
+const COLONNES_REPONSE = {
+  id: answers.id,
+  interviewId: answers.interviewId,
+  missionQuestionId: answers.missionQuestionId,
+  value: answers.value,
+  source: answers.source,
+  withheld: answers.withheld,
+  withheldReason: answers.withheldReason,
+  horsParcours: answers.horsParcours,
+  note: answers.note,
+  flagReview: answers.flagReview,
+  reviewReason: answers.reviewReason,
+  notApplicable: answers.notApplicable,
+  naReason: answers.naReason,
+  questionTextSnapshot: answers.questionTextSnapshot,
+  revision: answers.revision,
+  clientCreatedAt: answers.clientCreatedAt,
+  clientUpdatedAt: answers.clientUpdatedAt,
+  syncedAt: answers.syncedAt,
+  createdAt: answers.createdAt,
+  updatedAt: answers.updatedAt,
+};
+
+/** Les métadonnées d'une pièce, SANS `storageKey` : les octets passent par l'API (L6c). */
+const COLONNES_PIECE = {
+  id: attachments.id,
+  interviewId: attachments.interviewId,
+  answerId: attachments.answerId,
+  missionId: attachments.missionId,
+  kind: attachments.kind,
+  content: attachments.content,
+  filename: attachments.filename,
+  mime: attachments.mime,
+  sizeBytes: attachments.sizeBytes,
+  transcription: attachments.transcription,
+  purgeAfter: attachments.purgeAfter,
+  clientCreatedAt: attachments.clientCreatedAt,
+  clientUpdatedAt: attachments.clientUpdatedAt,
+  createdBy: attachments.createdBy,
+  syncedAt: attachments.syncedAt,
+  createdAt: attachments.createdAt,
+  updatedAt: attachments.updatedAt,
+};
+
+const COLONNES_QUESTION_DE_MISSION = {
+  id: missionQuestions.id,
+  missionId: missionQuestions.missionId,
+  questionId: missionQuestions.questionId,
+  questionVersion: missionQuestions.questionVersion,
+  textSnapshot: missionQuestions.textSnapshot,
+  optionsSnapshot: missionQuestions.optionsSnapshot,
+  weightSnapshot: missionQuestions.weightSnapshot,
+  scoringSnapshot: missionQuestions.scoringSnapshot,
+  guidanceSnapshot: missionQuestions.guidanceSnapshot,
+  answerTypeSnapshot: missionQuestions.answerTypeSnapshot,
+  criticalitySnapshot: missionQuestions.criticalitySnapshot,
+  allowRangeSnapshot: missionQuestions.allowRangeSnapshot,
+  position: missionQuestions.position,
+  addedAdHoc: missionQuestions.addedAdHoc,
+};
+
+const COLONNES_AFFECTATION = {
+  id: workAssignments.id,
+  missionId: workAssignments.missionId,
+  userId: workAssignments.userId,
+  orgUnitId: workAssignments.orgUnitId,
+  plannedInterviews: workAssignments.plannedInterviews,
+  plannedDays: workAssignments.plannedDays,
+  dateFrom: workAssignments.dateFrom,
+  dateTo: workAssignments.dateTo,
+};
+
 export interface LignesDescendantes {
-  readonly mission: (typeof missions.$inferSelect)[];
-  readonly org_unit: (typeof orgUnits.$inferSelect)[];
-  readonly interview: (typeof interviews.$inferSelect)[];
-  readonly answer: (typeof answers.$inferSelect)[];
-  readonly attachment_meta: (typeof attachments.$inferSelect)[];
+  readonly mission: unknown[];
+  readonly org_unit: unknown[];
+  readonly interview: unknown[];
+  readonly answer: unknown[];
+  readonly attachment_meta: unknown[];
 }
 
 /**
  * Les lignes horodatées de la mission dans `]depuis, jusqua]`, triées par
- * `updated_at` puis `id`. La borne haute est INCLUSIVE : un groupe d'horodatage
- * égal n'est jamais coupé entre deux pages.
+ * `updated_at` puis `id`, chacune réduite à sa projection fermée. La borne haute
+ * est INCLUSIVE : un groupe d'horodatage égal n'est jamais coupé entre deux pages.
  */
 export async function lireLignesHorodatees(
   ex: ExecuteurSql,
   missionId: string,
+  emetteurId: string,
   depuis: string | null,
   jusqua: string,
 ): Promise<LignesDescendantes> {
   const [mission, org_unit, interview, answer, attachment_meta] = [
     await ex
-      .select()
+      .select(COLONNES_MISSION)
       .from(missions)
       .where(and(eq(missions.id, missionId), ...fenetre(missions.updatedAt, depuis, jusqua))),
     await ex
-      .select()
+      .select(COLONNES_UNITE)
       .from(orgUnits)
       .where(and(eq(orgUnits.missionId, missionId), ...fenetre(orgUnits.updatedAt, depuis, jusqua)))
       .orderBy(asc(orgUnits.updatedAt), asc(orgUnits.id)),
     await ex
-      .select()
+      .select(colonnesSession(emetteurId))
       .from(interviews)
       .where(
         and(eq(interviews.missionId, missionId), ...fenetre(interviews.updatedAt, depuis, jusqua)),
       )
       .orderBy(asc(interviews.updatedAt), asc(interviews.id)),
     await ex
-      .select(getTableColumns(answers))
+      .select(COLONNES_REPONSE)
       .from(answers)
       .innerJoin(interviews, eq(interviews.id, answers.interviewId))
       .where(
@@ -483,7 +662,7 @@ export async function lireLignesHorodatees(
       )
       .orderBy(asc(answers.updatedAt), asc(answers.id)),
     await ex
-      .select()
+      .select(COLONNES_PIECE)
       .from(attachments)
       .where(
         and(
@@ -504,17 +683,17 @@ export async function lireReferentielsDeMission(
   ex: ExecuteurSql,
   missionId: string,
 ): Promise<{
-  readonly mission_question: LigneQuestionDeMission[];
-  readonly work_assignment: (typeof workAssignments.$inferSelect)[];
+  readonly mission_question: unknown[];
+  readonly work_assignment: unknown[];
 }> {
   const [mission_question, work_assignment] = [
     await ex
-      .select()
+      .select(COLONNES_QUESTION_DE_MISSION)
       .from(missionQuestions)
       .where(eq(missionQuestions.missionId, missionId))
       .orderBy(asc(missionQuestions.position), asc(missionQuestions.id)),
     await ex
-      .select()
+      .select(COLONNES_AFFECTATION)
       .from(workAssignments)
       .where(eq(workAssignments.missionId, missionId))
       .orderBy(asc(workAssignments.id)),
@@ -548,4 +727,32 @@ export async function journaliserPull(ex: ExecuteurSql, ligne: LigneJournalPull)
     status: 'abouti',
     error: null,
   });
+}
+
+// -----------------------------------------------------------------------------
+// L'HORLOGE ET LES DÉLAIS DU LOT DE PUSH — revue A17
+// -----------------------------------------------------------------------------
+
+/**
+ * L'heure de la BASE au début de la transaction du lot (`now()`) : tous les
+ * `updated_at` du lot la partagent. C'est elle, et non l'heure de l'application,
+ * que le plafond du pull compare — une seule horloge pour écrire et pour lire.
+ */
+export async function lireHorlogeDuLot(ex: ExecuteurSql): Promise<Date> {
+  const resultat = await ex.execute<{ maintenant: Date | string }>(sql`SELECT now() AS maintenant`);
+  const [ligne] = resultat.rows;
+  if (ligne === undefined) throw new Error('horloge de la base illisible');
+  return new Date(ligne.maintenant);
+}
+
+/**
+ * Borne chaque instruction ET chaque attente de verrou du lot à `dureeMs`, pour la
+ * seule transaction en cours (`set_config(…, true)` = `SET LOCAL`, paramétré).
+ */
+export async function bornerLaTransaction(ex: ExecuteurSql, dureeMs: number): Promise<void> {
+  const valeur = `${String(Math.max(1, Math.floor(dureeMs)))}ms`;
+  await ex.execute(
+    sql`SELECT set_config('statement_timeout', ${valeur}, true),
+               set_config('lock_timeout', ${valeur}, true)`,
+  );
 }
