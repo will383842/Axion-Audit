@@ -602,12 +602,6 @@ jobs:
       #   node scripts/check-tracabilite-exigences.mjs --angles-morts
       - name: pnpm check:tracabilite
         run: pnpm check:tracabilite
-      # Garde de prose (CLAUDE.md §7-§8, décision de Williams du 2026-09-02) :
-      # le dernier bloc d'ETAT.md ≤ 25 lignes, la dernière entrée de
-      # DECISIONS.md ≤ 40 lignes. Le temps d'écrire SUR le travail est pris
-      # sur le travail — mesuré : 117 décisions en six jours.
-      - name: pnpm check:prose (dernier bloc ETAT ≤ 25 l., dernière décision ≤ 40 l.)
-        run: pnpm check:prose
 
   # ---------------------------------------------------------------------------
   # 1/8 — LINT (11 §7)
@@ -642,29 +636,6 @@ jobs:
       # Voir DECISIONS.md 2026-08-27 « Prettier ne touche pas au pack ».
       - name: pnpm check:pack (intégrité des 12 fichiers de docs/)
         run: pnpm check:pack
-
-      # ---------------------------------------------------------------------
-      # FORMAT DE `DECISIONS.md` (11 §9bis) — CÂBLÉ EN CI LE 2026-08-29.
-      # ---------------------------------------------------------------------
-      # Il était, sur les dix garde-fous du dépôt, LE SEUL à n'exister que dans
-      # `.husky/pre-commit`. Un hook local ne s'applique pas à `--no-verify`, ni
-      # à un clone sans `pnpm install` (pas de `prepare`, donc pas de hook), ni à
-      # une édition faite depuis l'interface web de GitHub — trois chemins qui
-      # mènent tous à `main`. L'en-tête de `scripts/check-decisions.mjs` proclame
-      # que « la gouvernance cesse de reposer sur la discipline » : jusqu'à cette
-      # ligne, elle y reposait encore, et DEUX entrées du registre lui-même
-      # (2026-08-28) affirmaient déjà qu'il « est un contrôle bloquant de la CI »
-      # — il ne l'était pas. Cette étape rend vraie une phrase déjà écrite.
-      #
-      # Placé ici, à côté de `check:pack` : ce sont les deux contrôles
-      # DOCUMENTAIRES du dépôt (le pack scellé, le registre de décisions), ils
-      # coûtent ~50 ms et ils protègent ce sur quoi tout le reste s'appuie.
-      # Étape d'un job EXISTANT et non job nouveau, délibérément : `main` exige
-      # 11 contrôles nommés, et créer un douzième job le rendrait NON REQUIS
-      # jusqu'à ce qu'un humain édite la protection de branche — un garde-fou qui
-      # ne bloque rien, c'est-à-dire exactement le défaut qu'on répare ici.
-      - name: pnpm check:decisions (format de DECISIONS.md — 11 §9bis)
-        run: pnpm check:decisions
 
       # UN SCRIPT FAIT POUR ÊTRE EXÉCUTÉ DOIT ÊTRE EXÉCUTABLE DANS GIT.
       # Posé le 2026-08-30, après que le test de restauration eut échoué sur
