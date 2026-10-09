@@ -40,7 +40,6 @@ import { installerContexteLocal } from '../local/contexte.js';
 import { appliquerDescente, ecrireLocal } from '../local/ecriture.js';
 import { chargeMissionSchema } from '../local/formes.js';
 import { reinitialiserHorloge } from '../local/horloge.js';
-import { ROLES_SUR_MISSION as ROLES_SERVEUR } from '../../../api/src/db/schema.js';
 import { ROLES_SUR_MISSION, cleLignesIllisibles, creerDescente } from './descente.js';
 import { operationDeLigne } from './montee.js';
 import { creerPortSync } from './port.js';
@@ -422,8 +421,8 @@ describe('A29-3 — lignes illisibles comptées par mission, cumulées', () => {
 // =============================================================================
 /**
  * Un rôle de l'énumération TERRAIN, par rang (lead, consultant, analyste,
- * lecteur au 04) — jamais une valeur écrite en dur ; le raccord ci-dessous
- * garantit que la liste terrain EST celle du serveur, dans le même ordre.
+ * lecteur au 04) — jamais une valeur écrite en dur ; le raccord de
+ * `tests/raccords/sync-terrain-serveur.test.ts` garantit que la liste terrain EST celle du serveur, dans le même ordre.
  */
 function role(rang: number): string {
   const valeur = (ROLES_SUR_MISSION as readonly string[] | undefined)?.[rang];
@@ -431,14 +430,6 @@ function role(rang: number): string {
     throw new Error(`ROLES_SUR_MISSION absent ou sans rang ${String(rang)}`);
   return valeur;
 }
-
-describe('A29-6 — raccord de l’énumération des rôles à la SOURCE serveur', () => {
-  it('@critique ROLES_SUR_MISSION (terrain) = l’énumération de role_on_mission du schéma serveur', () => {
-    expect(ROLES_SUR_MISSION).toEqual(ROLES_SERVEUR);
-    // Anti-vacuité : la source serveur n'est pas vide.
-    expect(ROLES_SERVEUR.length).toBeGreaterThan(1);
-  });
-});
 
 describe('A29-6 — le rôle sur la mission, tel que le siège le dit', () => {
   it('@critique le siège prime, rétrogradation comprise : lead → lecteur', async () => {

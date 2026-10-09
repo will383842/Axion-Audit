@@ -75,6 +75,9 @@ export default defineConfig({
             'apps/*/src/**/*.test.ts',
             'scripts/**/*.test.ts',
             'e2e/**/*.test.ts',
+            // Raccords entre espaces de travail (terrain ↔ serveur) : à la racine,
+            // car chaque image Docker ne voit que son propre espace de travail.
+            'tests/raccords/**/*.test.ts',
           ],
           exclude: ['**/node_modules/**', '**/dist/**', '**/*.integration.test.ts'],
           environment: 'node',
