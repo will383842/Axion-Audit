@@ -140,3 +140,27 @@ describe('creerPhotoLocale — compresser, puis écrire ligne + octets + op', ()
     expect(await base.outbox.count()).toBe(0);
   });
 });
+
+// `DECISIONS.md` [L6c] (2026-10-09) : « le champ photo d'une question sans
+// réponse reste actif, la pièce est rattachée à la session seule ».
+describe('creerPhotoLocale — question sans réponse : rattachée à la session seule', () => {
+  it('@critique sans réponse : interviewId posé, answerId NUL, sur la ligne ET dans l’op', async () => {
+    const fichier = new File([octetsVaries(4000, 9)], 'poste.jpg', { type: 'image/jpeg' });
+    const id = await creerPhotoLocale({ ...demande(fichier), answerId: null }, renduFictif());
+    const ligne = await base.attachments.get(id);
+    expect(ligne?.interviewId).toBe(SESSION);
+    expect(ligne?.answerId).toBeNull();
+    const [op] = await base.outbox.toArray();
+    if (op === undefined) throw new Error('op absente');
+    const charge = await coffre.dechiffrer(op.charge, chargeAttachmentSchema.loose());
+    expect((charge as Record<string, unknown>).interviewId).toBe(SESSION);
+    expect((charge as Record<string, unknown>).answerId).toBeNull();
+  });
+
+  it('avec une réponse : la pièce porte son answerId (le rattachement n’est pas perdu)', async () => {
+    const REPONSE = '0191e2a0-0000-7000-8000-00000000b0a1';
+    const fichier = new File([octetsVaries(4000, 8)], 'poste.jpg', { type: 'image/jpeg' });
+    const id = await creerPhotoLocale({ ...demande(fichier), answerId: REPONSE }, renduFictif());
+    expect((await base.attachments.get(id))?.answerId).toBe(REPONSE);
+  });
+});
