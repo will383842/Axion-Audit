@@ -78,6 +78,11 @@ import {
   supprimerBaseEphemere,
   uuidv7,
 } from './aide/base-l1.js';
+import {
+  detecterSentinelles,
+  NOMS_FINANCIERS_INTERDITS,
+  semerVoletFinancierSentinelle,
+} from './aide/sentinelle-financiere.js';
 
 // -----------------------------------------------------------------------------
 // Secrets FACTICES (11 §2).
@@ -473,9 +478,6 @@ async function semerAffectation(
   return id;
 }
 
-/** Valeurs SENTINELLES improbables : leur présence dans un corps est une fuite. */
-const SENTINELLES_FINANCIERES = ['918273.645', '7364519.28', 'SENTINELLE-FIN-L6B'] as const;
-
 async function semerChiffrage(missionId: string, entreprise: string, admin: string): Promise<void> {
   const estimation = uuidv7();
   await bd().query(
@@ -483,12 +485,9 @@ async function semerChiffrage(missionId: string, entreprise: string, admin: stri
      VALUES ($1, $2, $3, 'signe', $4, now(), now())`,
     [estimation, entreprise, missionId, admin],
   );
-  await bd().query(
-    `INSERT INTO scoping_financials (scoping_estimate_id, daily_rates, travel_costs, total_amount,
-                                     currency, updated_by, updated_at)
-     VALUES ($1, $2::jsonb, 918273.645, 7364519.28, 'EUR', $3, now())`,
-    [estimation, JSON.stringify({ libelle: 'SENTINELLE-FIN-L6B', taux: 918273.645 }), admin],
-  );
+  // Volet financier par L'UNIQUE porte de test (ceinture 3 : ce fichier ne nomme
+  // ni la table ni ses colonnes) ; les montants posés sont les sentinelles L2.
+  await semerVoletFinancierSentinelle(bd(), estimation, admin);
 }
 
 /**
@@ -946,10 +945,11 @@ describe('L6b · GET /v1/sync/pull — étanchéité financière (04, E21) @crit
       const d = await descendre(m[qui].jeton, m.missionId);
       const corps = [premier.corps, ...d.pages.map((p) => JSON.stringify(p))];
       for (const texte of corps) {
-        for (const sentinelle of SENTINELLES_FINANCIERES) expect(texte).not.toContain(sentinelle);
-        expect(texte).not.toMatch(
-          /daily_rates|dailyRates|total_amount|totalAmount|travel_costs|travelCosts/,
-        );
+        expect(detecterSentinelles(texte), 'montant financier sentinelle dans le pull').toEqual([]);
+        expect(
+          NOMS_FINANCIERS_INTERDITS.filter((nom) => texte.includes(nom)),
+          'nom financier dans le pull',
+        ).toEqual([]);
       }
       // Les seules clés admises sont celles du contrat (le schéma l'impose aussi).
       for (const page of d.pages) {
@@ -997,19 +997,22 @@ describe('L6b · GET /v1/sync/pull — delta et curseur (05 §9.5, 11 §3) @crit
     const m = await semerMonde();
     const d = await descendre(m.A.jeton, m.missionId);
     const curseur = d.curseur ?? '';
-    const t0 = await horlogeBase();
     const notes: string[] = [];
     for (let i = 0; i < 10; i += 1) notes.push(await semerNote(m.missionId, m.A.id, null));
     const unites: string[] = [];
     for (let i = 0; i < 3; i += 1) unites.push(await semerUnite(m.missionId, m.racine));
-    // Horodatages DISTINCTS et entrelacés entre entités.
+    // Horodatages DISTINCTS et entrelacés entre entités, tous dans le PASSÉ de la
+    // base (t0 lu APRÈS les écritures) : une ligne datée dans le futur serait, à
+    // raison, retenue par le plafond `now() - marge` et ne descendrait qu'au pull
+    // suivant — ce qu'un runner rapide transformait en « ligne manquée ».
+    const t0 = await horlogeBase();
     const tous = [...notes, ...unites];
     for (let i = 0; i < tous.length; i += 1) {
       const id = tous[i] ?? '';
       await horodater(
         i < notes.length ? 'attachments' : 'org_units',
         [id],
-        decaler(t0, 1000 * (i + 1)),
+        decaler(t0, i - tous.length),
       );
     }
     let tardive = '';
@@ -1020,7 +1023,11 @@ describe('L6b · GET /v1/sync/pull — delta et curseur (05 §9.5, 11 §3) @crit
       async (indice) => {
         if (indice === 0) {
           tardive = await semerNote(m.missionId, m.A.id, null);
-          await horodater('attachments', [tardive], decaler(t0, 1000 * 100));
+          // Écriture ENTRE deux pages, datée par l'horloge de la base au moment où elle
+          // est faite : postérieure au curseur rendu, elle DOIT descendre.
+          await bd().query('UPDATE attachments SET updated_at = clock_timestamp() WHERE id = $1', [
+            tardive,
+          ]);
         }
       },
     );
@@ -1035,11 +1042,13 @@ describe('L6b · GET /v1/sync/pull — delta et curseur (05 §9.5, 11 §3) @crit
     const m = await semerMonde();
     const d = await descendre(m.A.jeton, m.missionId);
     const curseur = d.curseur ?? '';
-    const t = decaler(await horlogeBase(), 1000);
     const notes: string[] = [];
     for (let i = 0; i < 4; i += 1) notes.push(await semerNote(m.missionId, m.A.id, null));
     const unites: string[] = [];
     for (let i = 0; i < 4; i += 1) unites.push(await semerUnite(m.missionId, m.racine));
+    // Horodatage commun dans le PASSÉ de la base (lu après les écritures), pour que
+    // le plafond `now() - marge` ne retienne aucune ligne du groupe.
+    const t = decaler(await horlogeBase(), -10);
     await horodater('attachments', notes, t);
     await horodater('org_units', unites, t);
     await horodater('answers', [m.reponseA, m.reponseB], t);
