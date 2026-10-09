@@ -49,7 +49,14 @@ import { ligneStockeeSchema } from '../local/formes.js';
  * stable pendant que le schéma évolue, et l'inverse. Les confondre reviendrait à
  * refuser un fichier parfaitement lisible parce qu'une table a gagné un index.
  */
-export const VERSION_FORMAT_SAUVEGARDE = 1;
+export const VERSION_FORMAT_SAUVEGARDE = 2;
+
+/**
+ * Les formats que cette version sait RESTAURER. Le v1 (avant L6c-1, sans octets)
+ * reste lisible : la sauvegarde d'hier peut être la seule copie d'une journée de
+ * collecte (DECISIONS [L6c], 2026-10-09).
+ */
+export const VERSIONS_FORMAT_LISIBLES: readonly number[] = [1, 2];
 
 /** L'extension du fichier déposé sur l'appareil ou la clé USB (05 §9.7). */
 export const EXTENSION_SAUVEGARDE = '.axionbackup';
@@ -153,10 +160,25 @@ export const TABLES_SAUVEGARDEES = [
 export type TableSauvegardee = (typeof TABLES_SAUVEGARDEES)[number];
 
 /** Le contenu DÉCHIFFRÉ : « données de mission locales + outbox » (11 §4). */
+/**
+ * Format v2 (L6c-1) — les octets d'une photo. Ils voyagent DANS le contenu
+ * chiffré du fichier (en base64 sous l'AES-GCM du fichier), jamais à côté :
+ * une photo d'atelier, de tableau blanc ou de badge est une donnée sensible.
+ */
+export const octetsSauvegardesSchema = z.object({
+  id: z.uuid(),
+  missionId: z.uuid(),
+  statutEnvoi: z.enum(['a_envoyer', 'envoyee', 'en_echec']),
+  donnees: z.string(),
+});
+export type OctetsSauvegardes = z.infer<typeof octetsSauvegardesSchema>;
+
 export const contenuSauvegardeSchema = z.object({
   missionId: z.uuid(),
   lignes: z.record(z.enum(TABLES_SAUVEGARDEES), z.array(ligneSauvegardeeSchema)),
   operations: z.array(operationSauvegardeeSchema),
+  /** Absent d'un fichier v1. */
+  octets: z.array(octetsSauvegardesSchema).optional(),
 });
 export type ContenuSauvegarde = z.infer<typeof contenuSauvegardeSchema>;
 

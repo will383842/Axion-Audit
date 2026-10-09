@@ -57,6 +57,22 @@ export type StatutOpLocale = (typeof STATUTS_OP_LOCALE)[number];
  * qui n'ont pas encore été synchronisées, c'est-à-dire exactement les plus
  * exposées.
  */
+/** Statuts d'envoi d'une pièce (05 §9.6) — la liste ordonnée vit dans `octets.ts`. */
+export type StatutEnvoiLocal = 'a_envoyer' | 'envoyee' | 'en_echec';
+
+/**
+ * Les octets d'une pièce (L6c-1). `octets` est une ENVELOPPE du coffre : jamais
+ * un binaire ni un base64 en clair dans IndexedDB (05 §9.7). Envoyée ou non, la
+ * ligne reste : la purge locale est « décharger la mission », jamais un effet de
+ * bord de l'envoi (invariant 7).
+ */
+export interface LigneOctetsPiece {
+  readonly id: string;
+  readonly missionId: string;
+  readonly statutEnvoi: StatutEnvoiLocal;
+  readonly octets: Enveloppe;
+}
+
 export interface LigneOutbox {
   readonly opId: string;
   readonly missionId: string;
@@ -233,6 +249,18 @@ export const SCHEMA_LOCAL: readonly EtapeSchemaLocal[] = [
       meta: 'cle',
     },
   },
+  {
+    // L6c-1 (ex-L5f) — les OCTETS des pièces, chiffrés par le coffre. Une table
+    // AJOUTÉE, rien d'autre : Dexie hérite des neuf tables de la v1, aucune n'est
+    // redéclarée ni retirée, donc aucune ligne ni aucune op ne bouge à la montée.
+    // Index : la mission (envoi par mission) et le statut d'envoi (05 §9.6 :
+    // « l'attachement porte son propre statut ») — ni l'un ni l'autre ne dit rien
+    // de personne ; les octets, eux, sont dans l'enveloppe.
+    version: 2,
+    tables: {
+      octetsPieces: 'id, missionId, statutEnvoi',
+    },
+  },
 ];
 
 /**
@@ -270,6 +298,7 @@ export class BaseLocale extends Dexie {
   declare workAssignments: Table<LigneLocale<'workAssignments'>, string>;
   declare outbox: Table<LigneOutbox, string>;
   declare meta: Table<LigneMeta, string>;
+  declare octetsPieces: Table<LigneOctetsPiece, string>;
 
   constructor(nom: string = NOM_BASE_LOCALE) {
     super(nom);

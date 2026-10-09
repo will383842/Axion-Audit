@@ -58,11 +58,17 @@ import { maintenant as horlogeMaintenant } from '../local/horloge.js';
 import { MonteeImpossibleError, operationDeLigne } from './montee.js';
 import { remapperALaSortie } from './remappage.js';
 import type { TransportSync } from './transport.js';
+import { envoyerPiecesEnAttente, type BilanEnvoiPieces, type TransportPieces } from './chunks.js';
 
 export interface DependancesMoteur {
   readonly base: BaseLocale;
   readonly coffre: Coffre;
-  readonly transport: Pick<TransportSync, 'pousser'>;
+  /**
+   * Le push, et — s'il les porte — les trois routes de pièces (L6c-1) : les
+   * pièces partent APRÈS la montée JSON (05 §9.6). Un transport sans elles
+   * (tests de L6a/L6b) ne monte que le JSON.
+   */
+  readonly transport: Pick<TransportSync, 'pousser'> & Partial<TransportPieces>;
   /** ISO UTC ; défaut : `maintenant()` de `local/horloge` (horloge corrigée). */
   readonly maintenant?: () => string;
 }
@@ -81,6 +87,8 @@ export interface BilanPush {
   readonly operationsRestantes: number;
   /** Message du transport quand le passage n'a pas abouti ; `null` sinon. */
   readonly message: string | null;
+  /** L6c-1 — l'envoi des pièces de ce passage ; absent si aucun n'a été tenté. */
+  readonly pieces?: BilanEnvoiPieces;
 }
 
 /**
@@ -345,7 +353,10 @@ async function passage(deps: DependancesMoteur, missionId: string): Promise<Bila
   // ops relancées partent au passage suivant, elles ne comptent pas comme montées.
   await remapperALaSortie({ base, coffre }, missionId, compteurs.reponsesArbitrees);
 
+  const pieces = statut === 'succes' ? await envoyerPieces(deps, missionId) : null;
+
   return {
+    ...(pieces === null ? {} : { pieces }),
     statut,
     operationsAcquittees: compteurs.acquittees,
     arbitrees: compteurs.arbitrees,
@@ -354,6 +365,38 @@ async function passage(deps: DependancesMoteur, missionId: string): Promise<Bila
     operationsRestantes: await compterEnAttente(base, missionId),
     message,
   };
+}
+
+/**
+ * L6c-1 — les pièces de la mission, APRÈS la montée JSON (05 §9.6). Une pièce
+ * ne part que si AUCUNE op de sa ligne ne reste en file (en attente, rejetée ou
+ * à examiner) : sinon le siège ne la connaît pas encore, ou l'a refusée. Un échec
+ * d'envoi de pièce ne compte jamais comme un échec d'op JSON — l'attachement
+ * porte son propre statut.
+ */
+async function envoyerPieces(
+  deps: DependancesMoteur,
+  missionId: string,
+): Promise<BilanEnvoiPieces | null> {
+  const { statutPiece, envoyerMorceau, terminerPiece } = deps.transport;
+  if (statutPiece === undefined || envoyerMorceau === undefined || terminerPiece === undefined) {
+    return null;
+  }
+  const t = deps.transport;
+  const transport: TransportPieces = {
+    statutPiece: (id) => statutPiece.call(t, id),
+    envoyerMorceau: (id, index, octets) => envoyerMorceau.call(t, id, index, octets),
+    terminerPiece: (id, corps) => terminerPiece.call(t, id, corps),
+  };
+  const enFile = new Set(
+    (await deps.base.outbox.where('missionId').equals(missionId).toArray()).map(
+      (op) => op.entiteId,
+    ),
+  );
+  return envoyerPiecesEnAttente(
+    { base: deps.base, coffre: deps.coffre, transport, admise: (id) => !enFile.has(id) },
+    missionId,
+  );
 }
 
 export function creerMoteurSync(deps: DependancesMoteur): MoteurSync {

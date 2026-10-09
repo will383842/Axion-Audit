@@ -76,10 +76,19 @@ import {
 import { SCHEMA_CHARGE, ligneStockeeSchema } from '../local/formes.js';
 import { maintenant } from '../local/horloge.js';
 import {
+  chiffrerOctets,
+  lignesOctetsDeMission,
+  lireOctetsPiece,
+  lireStatutEnvoi,
+  rangerOctets,
+} from '../local/octets.js';
+import {
   contenuSauvegardeSchema,
   fichierSauvegardeSchema,
   TABLES_SAUVEGARDEES,
   VERSION_FORMAT_SAUVEGARDE,
+  VERSIONS_FORMAT_LISIBLES,
+  type OctetsSauvegardes,
   type ContenuSauvegarde,
   type FichierSauvegarde,
   type LigneSauvegardee,
@@ -297,10 +306,25 @@ export async function exporterSauvegarde(demande: DemandeExport): Promise<Fichie
     });
   }
 
+  // L6c-1 — les octets des photos de la mission, déchiffrés ici pour être
+  // rechiffrés AVEC le contenu, sous la clé du fichier (invariant 8).
+  const octets: OctetsSauvegardes[] = [];
+  for (const ligne of await lignesOctetsDeMission(base, demande.missionId)) {
+    const clair = await lireOctetsPiece(base, coffre, ligne.id);
+    if (clair === null) continue;
+    octets.push({
+      id: ligne.id,
+      missionId: ligne.missionId,
+      statutEnvoi: ligne.statutEnvoi,
+      donnees: versBase64(clair),
+    });
+  }
+
   const contenu: ContenuSauvegarde = contenuSauvegardeSchema.parse({
     missionId: demande.missionId,
     lignes,
     operations,
+    octets,
   });
 
   // ── Le chiffrement du payload, sous la clé du MOT DE PASSE ──────────────
@@ -482,9 +506,9 @@ export async function importerSauvegarde(
   }
   const valide: FichierSauvegarde = analyse.data;
 
-  if (valide.enTete.versionFormat !== VERSION_FORMAT_SAUVEGARDE) {
+  if (!VERSIONS_FORMAT_LISIBLES.includes(valide.enTete.versionFormat)) {
     throw new SauvegardeIllisibleError(
-      `il a été produit au format ${String(valide.enTete.versionFormat)}, cette version de l’application lit le format ${String(VERSION_FORMAT_SAUVEGARDE)}`,
+      `il a été produit au format ${String(valide.enTete.versionFormat)}, cette version de l’application lit jusqu’au format ${String(VERSION_FORMAT_SAUVEGARDE)}`,
     );
   }
 
@@ -558,6 +582,21 @@ export async function importerSauvegarde(
     enregistrements,
   };
   await appliquerDescente(lot);
+
+  // L6c-1 — les octets, rechiffrés par le coffre de CET appareil. Un fichier v1
+  // n'en porte aucun. Une pièce qui a déjà ses octets ici n'est pas écrasée
+  // (invariant 7 : la copie locale peut être plus récente que la sauvegarde).
+  const { coffre: coffreCible } = contexteLocal();
+  for (const entree of contenu.data.octets ?? []) {
+    if (entree.missionId !== contenu.data.missionId) continue;
+    if ((await lireStatutEnvoi(base, entree.id)) !== null) continue;
+    await rangerOctets(base, {
+      id: entree.id,
+      missionId: entree.missionId,
+      statutEnvoi: entree.statutEnvoi,
+      octets: await chiffrerOctets(coffreCible, depuisBase64(entree.donnees)),
+    });
+  }
 
   // ── La mission restaurée est EMBARQUÉE ────────────────────────────────────
   // DECISIONS.md 2026-09-02 : « mission embarquée signifie DONNÉES PRÉSENTES,

@@ -54,17 +54,7 @@ import {
 } from './motifs.js';
 import { SaisieReponse, type Cadence } from './SaisieReponse.js';
 import { libelleDeBloc } from './ZoneBlocs.js';
-
-/**
- * Pourquoi le bouton « Photo » est désactivé — dit à l'œil ET au lecteur d'écran.
- *
- * Exporté : c'est la phrase que les tests d'acceptation d'A27 iront chercher, et
- * une phrase que deux fichiers récrivent différemment est une phrase qui finira
- * par dire deux choses (c'est le défaut de la liste de capacités, corrigé au même
- * commit).
- */
-export const MOTIF_PHOTO_INDISPONIBLE =
-  'la capture photo n’est pas disponible dans cette version ; décrivez l’élément dans une note plutôt que de le photographier avec un appareil personnel';
+import { ChampPhoto } from './ChampPhoto.js';
 
 export interface ProprietesZoneQuestion {
   readonly question: QuestionLocale;
@@ -98,6 +88,11 @@ export interface ProprietesZoneQuestion {
   readonly peutPrecedent: boolean;
   readonly peutSuivant: boolean;
   readonly afficherRaccourcis: boolean;
+  /**
+   * L6c-1 — « Ajouter une photo ». `true` SI ET SEULEMENT SI la pièce est
+   * persistée (même contrat que `onCapturerNoteVolante`, bloquant B1).
+   */
+  readonly onAjouterPhoto?: (fichier: File) => Promise<boolean>;
 }
 
 export function ZoneQuestion(proprietes: ProprietesZoneQuestion): ReactNode {
@@ -123,6 +118,7 @@ export function ZoneQuestion(proprietes: ProprietesZoneQuestion): ReactNode {
     peutPrecedent,
     peutSuivant,
     afficherRaccourcis,
+    onAjouterPhoto,
   } = proprietes;
 
   const valeur = lireValeurTypee(reponse?.value);
@@ -303,14 +299,17 @@ export function ZoneQuestion(proprietes: ProprietesZoneQuestion): ReactNode {
           <Bouton variante="discret" disabled={desactive} {...decritSiDesactive} onClick={onNote}>
             Note
           </Bouton>
-          <Bouton
-            variante="discret"
-            disabled
-            title={MOTIF_PHOTO_INDISPONIBLE}
-            libelleAccessible={`Photo — ${MOTIF_PHOTO_INDISPONIBLE}`}
-          >
-            Photo (bientôt)
-          </Bouton>
+          {/* L6c-1 : la capture est réelle (B3 révisé). La photo est rattachée à
+              la réponse courante, ou à la session seule si la question n'a pas
+              encore de réponse (DECISIONS [L6c]) — le geste reste donc actif. */}
+          {onAjouterPhoto !== undefined && (
+            <ChampPhoto
+              libelle="Ajouter une photo"
+              desactive={desactive}
+              idMotif={desactive ? ID_MOTIF_LECTURE_SEULE : null}
+              onCapturer={onAjouterPhoto}
+            />
+          )}
           <Bouton variante="discret" onClick={onRecherche}>
             Recherche{afficherRaccourcis ? ' (/)' : ''}
           </Bouton>

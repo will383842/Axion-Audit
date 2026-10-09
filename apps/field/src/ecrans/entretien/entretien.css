@@ -559,3 +559,30 @@
   margin: 0;
   color: var(--couleur-texte-secondaire);
 }
+
+/* ----------------------------------------------------------------------------
+ * « Ajouter une photo » (L6c-1) — le champ fichier est visuellement masqué, son
+ * étiquette porte l'apparence d'un bouton discret. L'anneau de focus suit le
+ * champ (clavier), l'état désactivé reprend les jetons du bouton désactivé.
+ * -------------------------------------------------------------------------- */
+.axn-photo {
+  display: inline-flex;
+  flex-direction: column;
+  gap: var(--espacement-1);
+}
+
+.axn-photo__declencheur {
+  position: relative;
+}
+
+.axn-photo__declencheur:has(:focus-visible) {
+  outline: var(--taille-focus-epaisseur) solid var(--couleur-focus-anneau);
+  outline-offset: var(--taille-focus-decalage);
+}
+
+.axn-photo__declencheur--desactive {
+  background: var(--couleur-surface-enfoncee);
+  border-color: var(--couleur-bordure-discrete);
+  color: var(--couleur-texte-tertiaire);
+  cursor: not-allowed;
+}

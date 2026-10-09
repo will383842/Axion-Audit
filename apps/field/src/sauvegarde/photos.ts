@@ -89,6 +89,36 @@ export function dimensionsCibles(
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// LE PORT DE RENDU (L6c-1)
+//
+// Décoder et encoder une image exigent `createImageBitmap` et un canvas, que ni
+// node ni jsdom ne fournissent : derrière un PORT, la règle R2 (dimensions,
+// type, qualité, fermeture de l'image) devient testable, et le navigateur
+// garde son implémentation réelle (`renduNavigateur`).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Une image décodée, prête à être redessinée. `fermer()` libère sa mémoire graphique. */
+export interface ImageDecodee {
+  readonly largeur: number;
+  readonly hauteur: number;
+  fermer(): void;
+}
+
+export interface RenduImage {
+  decoder(fichier: Blob): Promise<ImageDecodee>;
+  encoder(
+    image: ImageDecodee,
+    largeur: number,
+    hauteur: number,
+    type: string,
+    qualite: number,
+  ): Promise<Blob>;
+}
+
+/** Le bitmap réel derrière chaque image décodée par le navigateur. */
+const bitmaps = new WeakMap<ImageDecodee, ImageBitmap>();
+
 /**
  * Le rendu, sur `OffscreenCanvas` quand il existe, sur un `<canvas>` sinon.
  *
@@ -97,7 +127,13 @@ export function dimensionsCibles(
  * doit pas échouer en silence — 03 §22.1 fait de l'iPad une cible de PREMIER
  * rang, pas un cas dégradé.
  */
-async function versBlob(source: ImageBitmap, largeur: number, hauteur: number): Promise<Blob> {
+async function versBlob(
+  source: ImageBitmap,
+  largeur: number,
+  hauteur: number,
+  type: string,
+  qualite: number,
+): Promise<Blob> {
   if (typeof OffscreenCanvas !== 'undefined') {
     const toile = new OffscreenCanvas(largeur, hauteur);
     const contexte = toile.getContext('2d');
@@ -105,7 +141,7 @@ async function versBlob(source: ImageBitmap, largeur: number, hauteur: number): 
       throw new Error('Le rendu graphique de cet appareil est indisponible.');
     }
     contexte.drawImage(source, 0, 0, largeur, hauteur);
-    return toile.convertToBlob({ type: TYPE_SORTIE, quality: QUALITE_JPEG });
+    return toile.convertToBlob({ type, quality: qualite });
   }
 
   const toile = document.createElement('canvas');
@@ -125,11 +161,35 @@ async function versBlob(source: ImageBitmap, largeur: number, hauteur: number): 
         }
         resoudre(blob);
       },
-      TYPE_SORTIE,
-      QUALITE_JPEG,
+      type,
+      qualite,
     );
   });
 }
+
+/** Le rendu réel du navigateur : `createImageBitmap` + canvas. */
+export const renduNavigateur: RenduImage = {
+  async decoder(fichier: Blob): Promise<ImageDecodee> {
+    // L'erreur du décodeur remonte telle quelle : l'appelant la traduit pour l'écran.
+    const bitmap = await createImageBitmap(fichier);
+    const image: ImageDecodee = {
+      largeur: bitmap.width,
+      hauteur: bitmap.height,
+      fermer: () => {
+        bitmap.close();
+      },
+    };
+    bitmaps.set(image, bitmap);
+    return image;
+  },
+  encoder(image, largeur, hauteur, type, qualite): Promise<Blob> {
+    const bitmap = bitmaps.get(image);
+    if (bitmap === undefined) {
+      return Promise.reject(new Error('L’image n’a pas pu être encodée sur cet appareil.'));
+    }
+    return versBlob(bitmap, largeur, hauteur, type, qualite);
+  },
+};
 
 /**
  * Compresse une photo AVANT stockage local (R2).
@@ -141,11 +201,18 @@ async function versBlob(source: ImageBitmap, largeur: number, hauteur: number): 
 export async function compresserPhoto(
   fichier: Blob,
   coteMaximal: number = COTE_MAXIMAL_PX,
+  rendu: RenduImage = renduNavigateur,
 ): Promise<PhotoCompressee> {
-  const image = await createImageBitmap(fichier);
+  const image = await rendu.decoder(fichier);
   try {
-    const cible = dimensionsCibles(image.width, image.height, coteMaximal);
-    const donnees = await versBlob(image, cible.largeur, cible.hauteur);
+    const cible = dimensionsCibles(image.largeur, image.hauteur, coteMaximal);
+    const donnees = await rendu.encoder(
+      image,
+      cible.largeur,
+      cible.hauteur,
+      TYPE_SORTIE,
+      QUALITE_JPEG,
+    );
     return {
       donnees,
       largeur: cible.largeur,
@@ -155,10 +222,10 @@ export async function compresserPhoto(
       dejaSousLaBorne: !cible.redimensionnee,
     };
   } finally {
-    // Une `ImageBitmap` non fermée retient sa mémoire graphique jusqu'au ramasse-
+    // Une image non fermée retient sa mémoire graphique jusqu'au ramasse-
     // miettes. Sur une journée d'observation d'atelier — plusieurs dizaines de
     // photos — c'est la différence entre une tablette qui tient et une tablette
     // qui tue l'onglet en pleine collecte.
-    image.close();
+    image.fermer();
   }
 }
