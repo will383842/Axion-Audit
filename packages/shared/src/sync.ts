@@ -211,7 +211,7 @@ export type EntiteDescendante = (typeof ENTITES_DESCENDANTES)[number];
  */
 export const reponsePullSchema = z.object({
   serverTime: isoUtcSchema,
-  changes: z.record(z.enum(ENTITES_DESCENDANTES), z.array(z.unknown()).optional()),
+  changes: z.partialRecord(z.enum(ENTITES_DESCENDANTES), z.array(z.unknown()).optional()),
   nextSince: isoUtcSchema.nullable(),
 });
 
