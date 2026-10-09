@@ -260,6 +260,18 @@ export const ERROR_CODES = {
    */
   IMPORT_REJECTED: 'IMPORT_REJECTED',
 
+  /**
+   * Protocole de chunks (05 §9.6, lot L6c — DECISIONS [L6c] « Chunks : 409 ») :
+   * `complete` trouve des morceaux MANQUANTS. `details` = tableau d'index triés,
+   * exactement ceux à envoyer (et non des objets `{path, message}`).
+   */
+  UPLOAD_CHUNKS_MISSING: 'UPLOAD_CHUNKS_MISSING',
+  /**
+   * Protocole de chunks (05 §9.6) : l'assemblage ne donne pas le sha256 annoncé.
+   * Le serveur ne sait pas quel morceau est faux : `details` = TOUS les index.
+   */
+  UPLOAD_CHECKSUM_MISMATCH: 'UPLOAD_CHECKSUM_MISMATCH',
+
   // --- 413 / 415 / 429 -------------------------------------------------------
   PAYLOAD_TOO_LARGE: 'PAYLOAD_TOO_LARGE',
   UNSUPPORTED_MEDIA_TYPE: 'UNSUPPORTED_MEDIA_TYPE',
@@ -364,13 +376,22 @@ export const errorDetailSchema = z.object({
   code: z.string().optional(),
 });
 
+/**
+ * Un élément de `details` : l'objet `{path, message, code?}` partout, SAUF les
+ * deux 409 du protocole de chunks (05 §9.6), dont `details` est la liste des
+ * index de morceaux à réémettre — un entier positif ou nul par morceau
+ * (DECISIONS 2026-10-09 [L6c] « Chunks : 409 … `details` = tableau d'index »).
+ */
+export const detailErreurSchema = z.union([errorDetailSchema, z.number().int().min(0)]);
+export type DetailErreur = z.infer<typeof detailErreurSchema>;
+
 /** L'enveloppe d'erreur, identique sur TOUTES les routes. */
 export const apiErrorSchema = z.object({
   error: z.object({
     code: z.enum(Object.values(ERROR_CODES) as [ErrorCode, ...ErrorCode[]]),
     /** Message en français, destiné à être affiché tel quel (invariant 5). */
     message: z.string(),
-    details: z.array(errorDetailSchema).optional(),
+    details: z.array(detailErreurSchema).optional(),
   }),
 });
 
@@ -395,6 +416,8 @@ export const HTTP_STATUS_BY_ERROR_CODE: Record<ErrorCode, number> = {
   COMPANY_EXTERNAL_REF_DUPLICATE: 409,
   QUESTIONNAIRE_ALREADY_FROZEN: 409,
   IMPORT_REJECTED: 422,
+  UPLOAD_CHUNKS_MISSING: 409,
+  UPLOAD_CHECKSUM_MISMATCH: 409,
   PAYLOAD_TOO_LARGE: 413,
   UNSUPPORTED_MEDIA_TYPE: 415,
   RATE_LIMITED: 429,
@@ -431,5 +454,30 @@ export class AppError extends Error {
         ...(this.details ? { details: [...this.details] } : {}),
       },
     };
+  }
+}
+
+/**
+ * Le 409 du protocole de chunks (05 §9.6) : `details` est la liste TRIÉE des
+ * index de morceaux à réémettre, et non des objets `{path, message}`
+ * (DECISIONS [L6c]). Une sous-classe plutôt qu'un élargissement de
+ * `AppError.details` : les autres routes gardent un `details` d'objets, typé
+ * comme tel pour tous leurs appelants.
+ */
+export class AppErrorIndex extends AppError {
+  readonly index: readonly number[];
+
+  constructor(
+    code: 'UPLOAD_CHUNKS_MISSING' | 'UPLOAD_CHECKSUM_MISMATCH',
+    message: string,
+    index: readonly number[],
+  ) {
+    super(code, message);
+    this.name = 'AppErrorIndex';
+    this.index = [...index].sort((a, b) => a - b);
+  }
+
+  override toResponse(): ApiError {
+    return { error: { code: this.code, message: this.message, details: [...this.index] } };
   }
 }
