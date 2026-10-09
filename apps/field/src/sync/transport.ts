@@ -18,7 +18,14 @@
 // Traçabilité : E7, E38 ; 11 §3 ; 05 §31-3.
 // =============================================================================
 import { apiErrorSchema, authSessionSchema } from '@axion/shared';
-import { reponsePushSchema, type LotPush, type ReponsePush } from '../local/contrat-sync.js';
+import { z } from 'zod';
+import {
+  reponsePullSchema,
+  reponsePushSchema,
+  type LotPush,
+  type ReponsePull,
+  type ReponsePush,
+} from '../local/contrat-sync.js';
 import type { BaseLocale } from '../local/base.js';
 import type { Coffre } from '../local/coffre.js';
 import { maintenant } from '../local/horloge.js';
@@ -30,6 +37,8 @@ import {
 
 /** Caddy sert l'API sous `/api` et retire le préfixe (CLAUDE.md : même domaine, pas de CORS). */
 export const CHEMIN_PUSH = '/api/v1/sync/push';
+/** 11 §4 : `GET /v1/sync/pull?mission_id=&since=` — la descente (L6b). */
+export const CHEMIN_PULL = '/api/v1/sync/pull';
 export const CHEMIN_REFRESH = '/api/v1/auth/refresh';
 
 /** 05 §31-3 — texte EXACT arbitré par A01 (2026-10-09) : seule la sync attend. */
@@ -59,9 +68,20 @@ export interface TransportSync {
   /** Le jeton d'accès : MÉMOIRE seulement (11 §3). `null` l'oublie. */
   definirJetonAcces(jeton: string | null): void;
   pousser(lot: LotPush): Promise<ResultatTransport<ReponsePush>>;
+  /**
+   * UNE page de descente (11 §4). `since` nul = premier pull, mission complète :
+   * le paramètre est alors ABSENT de la requête.
+   */
+  tirer(missionId: string, since: string | null): Promise<ResultatTransport<ReponsePull>>;
 }
 
 type EchecRefresh = 'hors_ligne' | 'reconnexion_requise' | 'refus';
+
+/** Une requête de sync : `GET` (pull) ou `POST` avec corps JSON (push). */
+interface Requete {
+  readonly method: 'GET' | 'POST';
+  readonly body?: string;
+}
 
 /** Une rotation réussie rend le nouvel accès ; il ne quitte jamais ce module. */
 type IssueRefresh = { readonly acces: string } | EchecRefresh;
@@ -105,9 +125,18 @@ async function corpsJson(reponse: Response): Promise<unknown> {
   }
 }
 
+/**
+ * L'enveloppe 11 §3 lue pour son MESSAGE seulement. Un code que cette version
+ * du terrain ne connaît pas encore (siège plus récent) ne doit pas faire perdre
+ * la phrase française que le siège a écrite pour l'auditeur.
+ */
+const enveloppeTolerante = apiErrorSchema.extend({
+  error: apiErrorSchema.shape.error.extend({ code: z.string() }),
+});
+
 /** Le message d'un refus, lu dans l'enveloppe 11 §3 ; une phrase neutre sinon. */
 function messageDuRefus(corps: unknown): string {
-  const enveloppe = apiErrorSchema.safeParse(corps);
+  const enveloppe = enveloppeTolerante.safeParse(corps);
   return enveloppe.success ? enveloppe.data.error.message : MESSAGE_REFUS_SANS_RAISON;
 }
 
@@ -183,16 +212,63 @@ export function creerTransport(deps: DependancesTransport): TransportSync {
     return { type: 'refus', statut: 401, message: MESSAGE_REFUS_SANS_RAISON };
   }
 
-  async function envoyer(lot: LotPush, jeton: string): Promise<Response | null> {
+  /** Une requête authentifiée ; `null` = le réseau n'a pas répondu. */
+  async function envoyer(
+    chemin: string,
+    requete: Requete,
+    jeton: string,
+  ): Promise<Response | null> {
+    const headers: Record<string, string> = { authorization: `Bearer ${jeton}` };
+    if (requete.body !== undefined) headers['content-type'] = 'application/json';
     try {
-      return await deps.fetch(CHEMIN_PUSH, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${jeton}` },
-        body: JSON.stringify(lot),
-      });
+      return await deps.fetch(chemin, { ...requete, headers });
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Le protocole COMMUN au push et au pull : l'accès en mémoire, sinon UN
+   * refresh ; 401 → UN refresh → UNE reprise ; indisponibilité = `hors_ligne` ;
+   * réponse validée par `schema` — illisible = `refus` en français, jamais une
+   * exception.
+   */
+  async function appeler<S extends z.ZodType>(
+    chemin: string,
+    requete: Requete,
+    schema: S,
+  ): Promise<ResultatTransport<z.infer<S>>> {
+    let dejaRafraichi = false;
+    let acces = auth.acces;
+    if (acces === null) {
+      const issue = await rafraichir(null);
+      if (typeof issue === 'string') return traduireIssue(issue);
+      acces = issue.acces;
+      dejaRafraichi = true;
+    }
+
+    let reponse = await envoyer(chemin, requete, acces);
+    if (reponse === null) return { type: 'hors_ligne' };
+
+    if (reponse.status === 401 && !dejaRafraichi) {
+      const issue = await rafraichir(acces);
+      if (typeof issue === 'string') return traduireIssue(issue);
+      reponse = await envoyer(chemin, requete, issue.acces);
+      if (reponse === null) return { type: 'hors_ligne' };
+    }
+
+    if (STATUTS_INDISPONIBLES.has(reponse.status)) return { type: 'hors_ligne' };
+    const corps = await corpsJson(reponse);
+    if (!reponse.ok) {
+      // Un second 401 arrête ici : aucune boucle de refresh, aucun jeton effacé.
+      return { type: 'refus', statut: reponse.status, message: messageDuRefus(corps) };
+    }
+
+    const analyse = schema.safeParse(corps);
+    if (!analyse.success) {
+      return { type: 'refus', statut: reponse.status, message: MESSAGE_REPONSE_ILLISIBLE };
+    }
+    return { type: 'ok', donnees: analyse.data };
   }
 
   return {
@@ -200,38 +276,19 @@ export function creerTransport(deps: DependancesTransport): TransportSync {
       auth.acces = jeton;
     },
 
-    async pousser(lot: LotPush): Promise<ResultatTransport<ReponsePush>> {
-      let dejaRafraichi = false;
-      let acces = auth.acces;
-      if (acces === null) {
-        const issue = await rafraichir(null);
-        if (typeof issue === 'string') return traduireIssue(issue);
-        acces = issue.acces;
-        dejaRafraichi = true;
-      }
+    pousser(lot: LotPush): Promise<ResultatTransport<ReponsePush>> {
+      return appeler(CHEMIN_PUSH, { method: 'POST', body: JSON.stringify(lot) }, reponsePushSchema);
+    },
 
-      let reponse = await envoyer(lot, acces);
-      if (reponse === null) return { type: 'hors_ligne' };
-
-      if (reponse.status === 401 && !dejaRafraichi) {
-        const issue = await rafraichir(acces);
-        if (typeof issue === 'string') return traduireIssue(issue);
-        reponse = await envoyer(lot, issue.acces);
-        if (reponse === null) return { type: 'hors_ligne' };
-      }
-
-      if (STATUTS_INDISPONIBLES.has(reponse.status)) return { type: 'hors_ligne' };
-      const corps = await corpsJson(reponse);
-      if (!reponse.ok) {
-        // Un second 401 arrête ici : aucune boucle de refresh, aucun jeton effacé.
-        return { type: 'refus', statut: reponse.status, message: messageDuRefus(corps) };
-      }
-
-      const analyse = reponsePushSchema.safeParse(corps);
-      if (!analyse.success) {
-        return { type: 'refus', statut: reponse.status, message: MESSAGE_REPONSE_ILLISIBLE };
-      }
-      return { type: 'ok', donnees: analyse.data };
+    tirer(missionId: string, since: string | null): Promise<ResultatTransport<ReponsePull>> {
+      // Paramètres en snake_case (11 §4) ; `since` ABSENT au premier pull.
+      const parametres = new URLSearchParams({ mission_id: missionId });
+      if (since !== null) parametres.set('since', since);
+      return appeler(
+        `${CHEMIN_PULL}?${parametres.toString()}`,
+        { method: 'GET' },
+        reponsePullSchema,
+      );
     },
   };
 }

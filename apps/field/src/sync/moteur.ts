@@ -82,6 +82,29 @@ export interface BilanPush {
   readonly message: string | null;
 }
 
+/**
+ * Clé `meta` du compte CUMULÉ des réponses arbitrées (`superseded`) d'une
+ * mission (05 §9.3, « n réponse(s) arbitrée(s) », cliquable). Le moteur y AJOUTE
+ * les arbitrages de chaque lot ; rien ne le remet à zéro : l'écran lit le local,
+ * pas un bilan éphémère.
+ */
+export function cleReponsesArbitrees(missionId: string): string {
+  return `${PREFIXE_REPONSES_ARBITREES}${missionId}`;
+}
+
+/** Le préfixe commun des comptes d'arbitrages, pour les lire toutes missions confondues. */
+export const PREFIXE_REPONSES_ARBITREES = 'arbitrages:reponses:';
+
+/** Ajoute `n` au compte d'arbitrages de la mission (lecture + écriture atomiques). */
+async function cumulerArbitrages(base: BaseLocale, missionId: string, n: number): Promise<void> {
+  if (n <= 0) return;
+  const cle = cleReponsesArbitrees(missionId);
+  await base.transaction('rw', base.meta, async () => {
+    const connu = await lireMeta(base, cle);
+    await ecrireMeta(base, cle, (typeof connu === 'number' ? connu : 0) + n);
+  });
+}
+
 export interface MoteurSync {
   pousser(missionId: string): Promise<BilanPush>;
 }
@@ -288,7 +311,9 @@ async function passage(deps: DependancesMoteur, missionId: string): Promise<Bila
       }
       break;
     }
+    const arbitreesAvant = compteurs.arbitrees;
     await appliquerReponse(base, lignes, resultat.donnees, compteurs, dejaEnvoyees);
+    await cumulerArbitrages(base, missionId, compteurs.arbitrees - arbitreesAvant);
   }
 
   if (
@@ -335,4 +360,28 @@ export function creerMoteurSync(deps: DependancesMoteur): MoteurSync {
       return suivant;
     },
   };
+}
+
+/**
+ * Le geste « Remettre en file » (05 §9.3, invariant 7) : les ops `a_examiner`
+ * désignées de la mission repassent `en_attente`, `tentatives` à 0. Ni la
+ * charge, ni l'`opId` (donc le rang dans la file), ni `clientUpdatedAt` ne
+ * changent. Une op `rejetee` (05 §9.9 : jamais rejouée), d'une autre mission ou
+ * inconnue est ignorée. Rend le nombre d'ops remises.
+ */
+export async function remettreOpsEnFile(
+  base: BaseLocale,
+  missionId: string,
+  opIds: readonly string[],
+): Promise<number> {
+  let remises = 0;
+  await base.transaction('rw', base.outbox, async () => {
+    for (const opId of new Set(opIds)) {
+      const op = await base.outbox.get(opId);
+      if (op?.missionId !== missionId || op.statut !== 'a_examiner') continue;
+      await base.outbox.update(opId, { statut: 'en_attente', tentatives: 0, derniereErreur: null });
+      remises += 1;
+    }
+  });
+  return remises;
 }

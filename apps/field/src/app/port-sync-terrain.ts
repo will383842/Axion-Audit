@@ -16,7 +16,7 @@
 import type { BaseLocale } from '../local/base.js';
 import type { Coffre } from '../local/coffre.js';
 import { contexteLocal, contexteLocalInstalle } from '../local/contexte.js';
-import { ecouterRetourReseau } from '../sync/declencheurs.js';
+import { demarrerMinuterie, ecouterRetourReseau } from '../sync/declencheurs.js';
 import { creerPortSync, type PortSyncAffichable } from '../sync/port.js';
 import { creerTransport } from '../sync/transport.js';
 
@@ -55,6 +55,24 @@ export function brancherRetourReseau(base: BaseLocale, cible: EventTarget): () =
     port: portSyncDeLaBase(base),
     missions: async () =>
       contexteLocalInstalle() ? (await base.missions.toArray()).map((mission) => mission.id) : [],
+  });
+}
+
+/** Les missions présentes, ou aucune tant que le coffre est fermé. */
+async function missionsSynchronisables(base: BaseLocale): Promise<readonly string[]> {
+  return contexteLocalInstalle()
+    ? (await base.missions.toArray()).map((mission) => mission.id)
+    : [];
+}
+
+/**
+ * Démarre la minuterie de 30 s (05 §9.3, L6b) pour cette base, backoff borné à
+ * 60 s compris. Comme le retour du réseau : rien ne part coffre fermé.
+ */
+export function brancherMinuterie(base: BaseLocale): () => void {
+  return demarrerMinuterie({
+    port: portSyncDeLaBase(base),
+    missions: () => missionsSynchronisables(base),
   });
 }
 

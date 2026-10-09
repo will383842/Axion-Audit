@@ -59,7 +59,7 @@ import {
   type EtatNavigation,
 } from './navigation.js';
 import { declarerSourceSessionEnCours } from './service-worker-client.js';
-import { brancherRetourReseau } from './port-sync-terrain.js';
+import { brancherMinuterie, brancherRetourReseau } from './port-sync-terrain.js';
 import { useVerrou, type EtatVerrou } from './verrou.js';
 import type { CodeVue } from './vues.js';
 
@@ -316,6 +316,12 @@ export function FournisseurTerrain({ children }: { readonly children: ReactNode 
   useEffect(() => {
     if (base === null) return undefined;
     return brancherRetourReseau(base, window);
+  }, [base]);
+
+  // ── Minuterie de 30 s, backoff borné à 60 s (05 §9.3, L6b) ──────────────────
+  useEffect(() => {
+    if (base === null) return undefined;
+    return brancherMinuterie(base);
   }, [base]);
 
   // ── Le geste retour du système ne quitte jamais l'app en pleine collecte ───
