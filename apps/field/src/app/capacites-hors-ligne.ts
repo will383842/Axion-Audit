@@ -184,4 +184,13 @@ export const CAPACITES_HORS_LIGNE = {
     'Rouvrir l’entretien directement sur la question à éclaircir',
     'Lever un point à revoir et enregistrer la correction',
   ],
+
+  // ── La file de synchronisation (L6b) ─────────────────────────────────────
+  // Elle se lit sur cet appareil : ce qui attend, ce qui est à examiner, ce que
+  // le siège a rejeté. La remise en file est locale ; l'envoi attend le réseau.
+  synchronisation: [
+    'Consulter les opérations en attente, à examiner ou rejetées de cet appareil',
+    'Remettre en file une opération à examiner',
+    'Relire le compte des réponses arbitrées par le siège',
+  ],
 } as const satisfies Record<CodeVue, ListeNonVide<string>>;

@@ -43,6 +43,7 @@ import { useEnLigne } from '../session/media.js';
 import { CAPACITES_HORS_LIGNE, PASTILLE_PORTEE_PAR_LA_COQUILLE } from './capacites-hors-ligne.js';
 import { useTerrain } from './contexte.js';
 import { AccesEntretien } from '../ecrans/entretien/AccesEntretien.js'; // raccordement L5b (A22)
+import { RaccordFileSync } from '../ecrans/sync/RaccordFileSync.js'; // raccordement L6b
 
 /** Une mission présente localement, avec les deux états que B4 sépare. */
 interface MissionLocale {
@@ -379,6 +380,9 @@ export function EcranAccueil(): ReactNode {
         rouvrirait exactement le trou qui a fait sortir une pièce d'audit vers un
         téléphone personnel. Deux blocs, donc, et deux durées de vie.
       */}
+      {/* L6b — la file de synchronisation est à un geste (raccordement seul). */}
+      <RaccordFileSync />
+
       <RappelHorsLigne
         enLigne={enLigne}
         capacites={CAPACITES_HORS_LIGNE.accueil}

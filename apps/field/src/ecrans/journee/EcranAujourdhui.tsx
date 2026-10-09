@@ -61,6 +61,7 @@ import { lireMeta } from '../../local/base.js';
 import { maintenant } from '../../local/horloge.js';
 import type { SessionLocale } from '../../local/depots/sessions.js';
 import { portSyncDeLaBase } from '../../app/port-sync-terrain.js';
+import { RaccordFileSync } from '../sync/RaccordFileSync.js';
 import { memoriserSessionCourante } from '../../session/position.js';
 import { formaterDateHeure, formaterHeure } from '../../session/fuseau.js';
 import { useEnLigne } from '../../session/media.js';
@@ -486,6 +487,10 @@ export function EcranAujourdhui(): ReactNode {
           </div>
         </div>
       ))}
+
+      {/* L6b — ops « à examiner », réponses arbitrées et file : RACCORDEMENT,
+          les comptes sont lus par `RaccordFileSync`, jamais calculés ici. */}
+      <RaccordFileSync afficherComptes />
 
       {/* ── ⑤ Le rituel de fin de journée ──────────────────────────────────── */}
       {rappel !== null && (

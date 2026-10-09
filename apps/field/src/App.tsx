@@ -49,6 +49,7 @@ import {
   useVueInitiale,
 } from './ecrans/journee/coquille-l5c.js';
 import { EcranConnexion } from './siege/EcranConnexion.js';
+import { EcranSynchronisation } from './ecrans/sync/EcranSynchronisation.js';
 import { AccesRattachement } from './siege/coquille-siege.js';
 
 function ContenuCourant(): ReactNode {
@@ -94,6 +95,9 @@ function ContenuCourant(): ReactNode {
     // ── Le compteur « à revoir » du cockpit mène ici (03 §34.2, NB-15) ──
     case 'aRevoir':
       return <EcranARevoir />;
+    // ── La file de synchronisation (05 §9.3, L6b) ──
+    case 'synchronisation':
+      return <EcranSynchronisation />;
   }
 }
 
