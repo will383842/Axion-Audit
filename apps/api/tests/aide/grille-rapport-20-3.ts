@@ -137,7 +137,7 @@ export interface RubriqueRapport {
 /**
  * La liste DÉCLARÉE des tables sans écrivain de production, au 2026-10-09.
  *
- * Re-notée le 2026-10-09 (L6a, PR #140) : `interviews`, `answers` et
+ * Re-notée le 2026-10-09 (L6a, PR 140) : `interviews`, `answers` et
  * `attachments` ont gagné leur écrivain de production — `POST /v1/sync/push`
  * (`apps/api/src/sync/depot.ts`). Leurs éléments passent d'ALIMENTATION_ABSENTE à
  * PORTE ; les éléments FORMAT_ABSENT qui les citent (groupe d'interlocuteur) ne
