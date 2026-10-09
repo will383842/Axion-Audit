@@ -471,20 +471,27 @@ export async function lireCurseursCandidats(
 // -----------------------------------------------------------------------------
 
 /** `missions` : ce que le terrain affiche et range, rien du commercial ni du siège. */
-const COLONNES_MISSION = {
-  id: missions.id,
-  companyId: missions.companyId,
-  title: missions.title,
-  timezone: missions.timezone,
-  auditLevel: missions.auditLevel,
-  geoScope: missions.geoScope,
-  countryCode: missions.countryCode,
-  startPlanned: missions.startPlanned,
-  endPlanned: missions.endPlanned,
-  status: missions.status,
-  updatedAt: missions.updatedAt,
-  deletedAt: missions.deletedAt,
-};
+function colonnesMission(emetteurId: string) {
+  return {
+    id: missions.id,
+    companyId: missions.companyId,
+    title: missions.title,
+    timezone: missions.timezone,
+    auditLevel: missions.auditLevel,
+    geoScope: missions.geoScope,
+    countryCode: missions.countryCode,
+    startPlanned: missions.startPlanned,
+    endPlanned: missions.endPlanned,
+    status: missions.status,
+    updatedAt: missions.updatedAt,
+    deletedAt: missions.deletedAt,
+    /** Le rôle de l'ÉMETTEUR sur la mission, et le sien seul (jamais celui d'un autre). */
+    roleSurMission: sql<RoleSurMission | null>`(
+      SELECT ${missionUsers.roleOnMission} FROM ${missionUsers}
+       WHERE ${missionUsers.missionId} = ${missions.id}
+         AND ${missionUsers.userId} = ${emetteurId}::uuid)`,
+  };
+}
 
 const COLONNES_UNITE = {
   id: orgUnits.id,
@@ -603,6 +610,8 @@ const COLONNES_QUESTION_DE_MISSION = {
   allowRangeSnapshot: missionQuestions.allowRangeSnapshot,
   position: missionQuestions.position,
   addedAdHoc: missionQuestions.addedAdHoc,
+  /** Le CODE du bloc (le terrain ne connaît que lui), par question → bloc. */
+  blockCode: blocks.code,
 };
 
 const COLONNES_AFFECTATION = {
@@ -638,7 +647,7 @@ export async function lireLignesHorodatees(
 ): Promise<LignesDescendantes> {
   const [mission, org_unit, interview, answer, attachment_meta] = [
     await ex
-      .select(COLONNES_MISSION)
+      .select(colonnesMission(emetteurId))
       .from(missions)
       .where(and(eq(missions.id, missionId), ...fenetre(missions.updatedAt, depuis, jusqua))),
     await ex
@@ -690,6 +699,8 @@ export async function lireReferentielsDeMission(
     await ex
       .select(COLONNES_QUESTION_DE_MISSION)
       .from(missionQuestions)
+      .leftJoin(questions, eq(questions.id, missionQuestions.questionId))
+      .leftJoin(blocks, eq(blocks.id, questions.blockId))
       .where(eq(missionQuestions.missionId, missionId))
       .orderBy(asc(missionQuestions.position), asc(missionQuestions.id)),
     await ex
