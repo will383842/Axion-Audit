@@ -337,6 +337,7 @@ const TABLES_DE_COLLECTE = [
   { nom: 'attachments', cle: 'id' },
   { nom: 'workAssignments', cle: 'id' },
   { nom: 'outbox', cle: 'opId' },
+  { nom: 'octetsPieces', cle: 'id' },
 ] as const;
 
 /** La ligne `meta.coffre` telle qu'elle est RANGÉE — l'octet à octet du test. */

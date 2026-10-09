@@ -24,7 +24,7 @@ export const HORODATAGE_PIECES = '2026-10-09T08:15:00.000Z';
 /** Des octets reconnaissables : un marqueur en clair répété, pour traquer une fuite. */
 export const MARQUEUR_EN_CLAIR = 'OCTETS-EN-CLAIR-FIL-TPE';
 
-export function octetsMarques(taille: number): Uint8Array {
+export function octetsMarques(taille: number): Uint8Array<ArrayBuffer> {
   const motif = new TextEncoder().encode(MARQUEUR_EN_CLAIR);
   const octets = new Uint8Array(taille);
   for (let i = 0; i < taille; i += 1) octets[i] = motif[i % motif.length] ?? 0;
@@ -32,7 +32,7 @@ export function octetsMarques(taille: number): Uint8Array {
 }
 
 /** Des octets pseudo-aléatoires déterministes (aucun motif répété). */
-export function octetsVaries(taille: number, graine = 7): Uint8Array {
+export function octetsVaries(taille: number, graine = 7): Uint8Array<ArrayBuffer> {
   const octets = new Uint8Array(taille);
   let x = graine;
   for (let i = 0; i < taille; i += 1) {
@@ -217,7 +217,7 @@ export function creerSiegePiecesFictif(reglages: ReglagesSiegePieces = {}) {
     indexEmis: (id: string): number[] =>
       appels.filter((a) => a.route === 'chunk' && a.id === id).map((a) => a.index ?? -1),
     retablirReseau(): void {
-      reglages.coupureApresMorceaux = undefined;
+      delete reglages.coupureApresMorceaux;
       reglages.horsLigne = false;
     },
     couperReseau(): void {
