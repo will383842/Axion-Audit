@@ -40,7 +40,8 @@ import { installerContexteLocal } from '../local/contexte.js';
 import { appliquerDescente, ecrireLocal } from '../local/ecriture.js';
 import { chargeMissionSchema } from '../local/formes.js';
 import { reinitialiserHorloge } from '../local/horloge.js';
-import { cleLignesIllisibles, creerDescente } from './descente.js';
+import { ROLES_SUR_MISSION as ROLES_SERVEUR } from '../../../api/src/db/schema.js';
+import { ROLES_SUR_MISSION, cleLignesIllisibles, creerDescente } from './descente.js';
 import { operationDeLigne } from './montee.js';
 import { creerPortSync } from './port.js';
 import type { ResultatTransport } from './transport.js';
@@ -419,26 +420,44 @@ describe('A29-3 — lignes illisibles comptées par mission, cumulées', () => {
 // =============================================================================
 // 6. `roleSurMission` descendant (04 : lead, consultant, analyste, lecteur)
 // =============================================================================
+/**
+ * Un rôle de l'énumération TERRAIN, par rang (lead, consultant, analyste,
+ * lecteur au 04) — jamais une valeur écrite en dur ; le raccord ci-dessous
+ * garantit que la liste terrain EST celle du serveur, dans le même ordre.
+ */
+function role(rang: number): string {
+  const valeur = (ROLES_SUR_MISSION as readonly string[] | undefined)?.[rang];
+  if (valeur === undefined)
+    throw new Error(`ROLES_SUR_MISSION absent ou sans rang ${String(rang)}`);
+  return valeur;
+}
+
+describe('A29-6 — raccord de l’énumération des rôles à la SOURCE serveur', () => {
+  it('@critique ROLES_SUR_MISSION (terrain) = l’énumération de role_on_mission du schéma serveur', () => {
+    expect(ROLES_SUR_MISSION).toEqual(ROLES_SERVEUR);
+    // Anti-vacuité : la source serveur n'est pas vide.
+    expect(ROLES_SERVEUR.length).toBeGreaterThan(1);
+  });
+});
+
 describe('A29-6 — le rôle sur la mission, tel que le siège le dit', () => {
   it('@critique le siège prime, rétrogradation comprise : lead → lecteur', async () => {
-    await semerMissionLocale('lead');
+    await semerMissionLocale(role(0));
     await creerDescente({
       base,
       coffre,
-      transport: transportPull([page({ mission: [missionServeur({ roleOnMission: 'lecteur' })] })]),
+      transport: transportPull([page({ mission: [missionServeur({ roleOnMission: role(3) })] })]),
     }).tirer(MISSION_A);
-    expect(await roleLocal()).toBe('lecteur');
+    expect(await roleLocal()).toBe(role(3));
   });
 
   it('premier pull : la valeur du siège est prise', async () => {
     await creerDescente({
       base,
       coffre,
-      transport: transportPull([
-        page({ mission: [missionServeur({ roleOnMission: 'consultant' })] }),
-      ]),
+      transport: transportPull([page({ mission: [missionServeur({ roleOnMission: role(1) })] })]),
     }).tirer(MISSION_A);
-    expect(await roleLocal()).toBe('consultant');
+    expect(await roleLocal()).toBe(role(1));
   });
 
   for (const [libelle, surcharge] of [
@@ -447,19 +466,19 @@ describe('A29-6 — le rôle sur la mission, tel que le siège le dit', () => {
     ['nulle', { roleOnMission: null }],
   ] as const) {
     it(`valeur ${libelle} : la valeur locale est gardée, le reste de la ligne est appliqué`, async () => {
-      await semerMissionLocale('analyste');
+      await semerMissionLocale(role(2));
       await creerDescente({
         base,
         coffre,
         transport: transportPull([page({ mission: [missionServeur(surcharge)] })]),
       }).tirer(MISSION_A);
-      expect(await roleLocal()).toBe('analyste');
+      expect(await roleLocal()).toBe(role(2));
       expect(await titreLocal()).toBe('Mission fictive FIL-TPE (siège)');
     });
   }
 
   it('@critique valeur hors énumération : ligne illisible, comptée, rien d’inventé ni d’appliqué', async () => {
-    await semerMissionLocale('lead');
+    await semerMissionLocale(role(0));
     const bilan = await creerDescente({
       base,
       coffre,
@@ -469,7 +488,7 @@ describe('A29-6 — le rôle sur la mission, tel que le siège le dit', () => {
     }).tirer(MISSION_A);
     expect(bilan.enregistrementsIllisibles).toBe(1);
     expect(await lireMeta(base, cleLignesIllisibles(MISSION_A))).toBe(1);
-    expect(await roleLocal()).toBe('lead');
+    expect(await roleLocal()).toBe(role(0));
     expect(await titreLocal()).toBe('Mission fictive FIL-TPE (locale)');
   });
 });
