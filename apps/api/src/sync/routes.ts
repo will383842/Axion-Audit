@@ -2,6 +2,7 @@
 // ROUTES DE SYNCHRONISATION — lot L6, incrément L6a « la montée ».
 //
 //   POST /v1/sync/push   05 §8 / §9.3 — route LISTÉE, aucune entrée de création.
+//   GET  /v1/sync/pull   11 §4 / 05 §9.5 — incrément L6b « la descente ».
 //
 // ── LA POLITIQUE EST EN TROIS COUCHES, ET C'EST ASSUMÉ ──────────────────────
 //   ① ROUTE : `roles: ['admin','consultant']` — qui ENTRE. `lecteur` et `analyste`
@@ -21,11 +22,30 @@
 // Traçabilité : E7, E9 · invariant 3 · 05 §9.3, §9.9 · 11 §3, §4.
 // =============================================================================
 import type { FastifyPluginAsync } from 'fastify';
-import { AppError, lotPushSchema, reponsePushSchema } from '@axion/shared';
+import { z } from 'zod';
+import {
+  AppError,
+  isoUtcSchema,
+  lotPushSchema,
+  reponsePullSchema,
+  reponsePushSchema,
+} from '@axion/shared';
 import type { FournisseurZod } from '../http/zod.js';
-import { pousserLot } from './service.js';
+import { LIMITE_PULL_MAX, pousserLot, tirerDelta } from './service.js';
 
 const CONFIG_PUSH = { acces: { type: 'roles', roles: ['admin', 'consultant'] } } as const;
+/** Le pull lit : mêmes rôles globaux que le push, l'appartenance est vérifiée au service. */
+const CONFIG_PULL = CONFIG_PUSH;
+
+/**
+ * Paramètres du pull, en camelCase comme tout le contrat partagé (transcription du
+ * 11 §4, hypothèse P1 tracée). `since` est EXCLUSIF et doit être en UTC (`Z`).
+ */
+const requetePullSchema = z.object({
+  missionId: z.uuid(),
+  since: isoUtcSchema.optional(),
+  limit: z.coerce.number().int().min(1).max(LIMITE_PULL_MAX).optional(),
+});
 
 export const routesSync: FastifyPluginAsync = async (app) => {
   const instance = app.withTypeProvider<FournisseurZod>();
@@ -51,5 +71,25 @@ export const routesSync: FastifyPluginAsync = async (app) => {
     },
   );
 
+  /**
+   * `GET /v1/sync/pull?missionId=&since=&limit=` (11 §4, 05 §9.5) — même porte
+   * d'entrée que le push (① : `lecteur` et `analyste` globaux → 403), puis
+   * l'appartenance à la mission, quel que soit le rôle sur elle (05 §9.9 : les
+   * autres membres lisent). Paramètre illisible → 400 `VALIDATION_FAILED`.
+   */
+  instance.get(
+    '/sync/pull',
+    {
+      config: CONFIG_PULL,
+      schema: { querystring: requetePullSchema, response: { 200: reponsePullSchema } },
+    },
+    async (requete) => {
+      const utilisateur = requete.utilisateur;
+      if (utilisateur === null) {
+        throw new AppError('INTERNAL_ERROR', 'Une erreur interne est survenue.');
+      }
+      return tirerDelta(utilisateur.id, requete.query);
+    },
+  );
   await Promise.resolve();
 };

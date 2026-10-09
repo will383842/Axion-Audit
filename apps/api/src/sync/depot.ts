@@ -13,7 +13,8 @@
 // Traçabilité : E7, E9 · invariants 1, 3 et 7 · 11 §4 · 04 (processed_ops,
 // sync_log, answer_revisions S-4, attachments S-3).
 // =============================================================================
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, getTableColumns, isNull, sql, type SQL } from 'drizzle-orm';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { uuidv7 } from 'uuidv7';
 import type { ResultatOp } from '@axion/shared';
@@ -31,6 +32,7 @@ import {
   processedOps,
   questions,
   syncLog,
+  workAssignments,
   type OrigineRevision,
   type RoleSurMission,
 } from '../db/schema.js';
@@ -348,6 +350,199 @@ export async function journaliserPush(ex: ExecuteurSql, ligne: LigneJournalPush)
     itemsCount: ligne.nombreOps,
     conflictsCount: ligne.nombreConflits,
     outboxRemaining: ligne.resteOutbox,
+    startedAt: ligne.debut,
+    endedAt: ligne.fin,
+    status: 'abouti',
+    error: null,
+  });
+}
+
+// =============================================================================
+// LA DESCENTE — lot L6, incrément L6b (`GET /v1/sync/pull`, 05 §9.5, 11 §4)
+// =============================================================================
+//
+// LE CURSEUR NE PASSE JAMAIS PAR UNE `Date` JS : `updated_at` porte la
+// microseconde (`now()`), une `Date` la tronque à la milliseconde, et un curseur
+// tronqué redescendrait à l'infini les lignes de sa dernière milliseconde. Il est
+// donc lu en TEXTE, formé par PostgreSQL, et rendu tel quel au terrain ; il revient
+// en paramètre lié et repasse en `timestamptz` côté base. Ce format fixe se trie
+// comme l'instant qu'il représente.
+//
+// Toutes les lectures sont cadrées par la mission EN BASE (jamais par la charge) ;
+// `scoping_financials` n'est lu nulle part ici (invariant 3). Les lectures sont
+// SÉQUENTIELLES : le client d'une transaction n'admet qu'une requête à la fois.
+
+/** Les entités horodatées : elles portent le curseur et se paginent. */
+export type EntiteHorodatee = 'mission' | 'org_unit' | 'interview' | 'answer' | 'attachment_meta';
+
+/** L'`updated_at` en ISO UTC à la microseconde, formé par PostgreSQL. */
+function curseurDe(colonne: AnyPgColumn): SQL<string> {
+  return sql<string>`to_char(${colonne} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
+}
+
+/** Le cadrage temporel d'une entité : `since < updated_at <= jusqua` (bornes omises si nulles). */
+function fenetre(colonne: AnyPgColumn, depuis: string | null, jusqua: string | null): SQL[] {
+  const bornes: SQL[] = [];
+  if (depuis !== null) bornes.push(sql`${colonne} > ${depuis}::timestamptz`);
+  if (jusqua !== null) bornes.push(sql`${colonne} <= ${jusqua}::timestamptz`);
+  return bornes;
+}
+
+/**
+ * Les `limite` plus petits curseurs de CHAQUE entité horodatée de la mission,
+ * strictement après `depuis`. Leur fusion donne la borne haute de la page.
+ */
+export async function lireCurseursCandidats(
+  ex: ExecuteurSql,
+  missionId: string,
+  depuis: string | null,
+  limite: number,
+): Promise<string[]> {
+  const lots = [
+    await ex
+      .select({ c: curseurDe(missions.updatedAt) })
+      .from(missions)
+      .where(and(eq(missions.id, missionId), ...fenetre(missions.updatedAt, depuis, null)))
+      .orderBy(asc(missions.updatedAt))
+      .limit(limite),
+    await ex
+      .select({ c: curseurDe(orgUnits.updatedAt) })
+      .from(orgUnits)
+      .where(and(eq(orgUnits.missionId, missionId), ...fenetre(orgUnits.updatedAt, depuis, null)))
+      .orderBy(asc(orgUnits.updatedAt))
+      .limit(limite),
+    await ex
+      .select({ c: curseurDe(interviews.updatedAt) })
+      .from(interviews)
+      .where(
+        and(eq(interviews.missionId, missionId), ...fenetre(interviews.updatedAt, depuis, null)),
+      )
+      .orderBy(asc(interviews.updatedAt))
+      .limit(limite),
+    await ex
+      .select({ c: curseurDe(answers.updatedAt) })
+      .from(answers)
+      .innerJoin(interviews, eq(interviews.id, answers.interviewId))
+      .where(and(eq(interviews.missionId, missionId), ...fenetre(answers.updatedAt, depuis, null)))
+      .orderBy(asc(answers.updatedAt))
+      .limit(limite),
+    await ex
+      .select({ c: curseurDe(attachments.updatedAt) })
+      .from(attachments)
+      .where(
+        and(eq(attachments.missionId, missionId), ...fenetre(attachments.updatedAt, depuis, null)),
+      )
+      .orderBy(asc(attachments.updatedAt))
+      .limit(limite),
+  ];
+  return lots.flatMap((lot) => lot.map((l) => l.c));
+}
+
+export interface LignesDescendantes {
+  readonly mission: (typeof missions.$inferSelect)[];
+  readonly org_unit: (typeof orgUnits.$inferSelect)[];
+  readonly interview: (typeof interviews.$inferSelect)[];
+  readonly answer: (typeof answers.$inferSelect)[];
+  readonly attachment_meta: (typeof attachments.$inferSelect)[];
+}
+
+/**
+ * Les lignes horodatées de la mission dans `]depuis, jusqua]`, triées par
+ * `updated_at` puis `id`. La borne haute est INCLUSIVE : un groupe d'horodatage
+ * égal n'est jamais coupé entre deux pages.
+ */
+export async function lireLignesHorodatees(
+  ex: ExecuteurSql,
+  missionId: string,
+  depuis: string | null,
+  jusqua: string,
+): Promise<LignesDescendantes> {
+  const [mission, org_unit, interview, answer, attachment_meta] = [
+    await ex
+      .select()
+      .from(missions)
+      .where(and(eq(missions.id, missionId), ...fenetre(missions.updatedAt, depuis, jusqua))),
+    await ex
+      .select()
+      .from(orgUnits)
+      .where(and(eq(orgUnits.missionId, missionId), ...fenetre(orgUnits.updatedAt, depuis, jusqua)))
+      .orderBy(asc(orgUnits.updatedAt), asc(orgUnits.id)),
+    await ex
+      .select()
+      .from(interviews)
+      .where(
+        and(eq(interviews.missionId, missionId), ...fenetre(interviews.updatedAt, depuis, jusqua)),
+      )
+      .orderBy(asc(interviews.updatedAt), asc(interviews.id)),
+    await ex
+      .select(getTableColumns(answers))
+      .from(answers)
+      .innerJoin(interviews, eq(interviews.id, answers.interviewId))
+      .where(
+        and(eq(interviews.missionId, missionId), ...fenetre(answers.updatedAt, depuis, jusqua)),
+      )
+      .orderBy(asc(answers.updatedAt), asc(answers.id)),
+    await ex
+      .select()
+      .from(attachments)
+      .where(
+        and(
+          eq(attachments.missionId, missionId),
+          ...fenetre(attachments.updatedAt, depuis, jusqua),
+        ),
+      )
+      .orderBy(asc(attachments.updatedAt), asc(attachments.id)),
+  ];
+  return { mission, org_unit, interview, answer, attachment_meta };
+}
+
+/**
+ * Le questionnaire figé et les affectations de la mission : sans `updated_at` au
+ * 04, ils ne descendent qu'au PREMIER pull (05 §9.5, M2.4).
+ */
+export async function lireReferentielsDeMission(
+  ex: ExecuteurSql,
+  missionId: string,
+): Promise<{
+  readonly mission_question: LigneQuestionDeMission[];
+  readonly work_assignment: (typeof workAssignments.$inferSelect)[];
+}> {
+  const [mission_question, work_assignment] = [
+    await ex
+      .select()
+      .from(missionQuestions)
+      .where(eq(missionQuestions.missionId, missionId))
+      .orderBy(asc(missionQuestions.position), asc(missionQuestions.id)),
+    await ex
+      .select()
+      .from(workAssignments)
+      .where(eq(workAssignments.missionId, missionId))
+      .orderBy(asc(workAssignments.id)),
+  ];
+  return { mission_question, work_assignment };
+}
+
+export interface LigneJournalPull {
+  readonly utilisateurId: string;
+  readonly nombreElements: number;
+  readonly debut: Date;
+  readonly fin: Date;
+}
+
+/**
+ * Une ligne `pull` par appel ABOUTI. `outbox_remaining` reste NULL : un pull ne
+ * connaît pas l'outbox, et un 0 posé ici éteindrait à tort le garde-fou de reset
+ * (05 §9.7), qui lit la dernière valeur NON NULLE.
+ */
+export async function journaliserPull(ex: ExecuteurSql, ligne: LigneJournalPull): Promise<void> {
+  await ex.insert(syncLog).values({
+    id: uuidv7(),
+    userId: ligne.utilisateurId,
+    deviceId: null,
+    direction: 'pull',
+    itemsCount: ligne.nombreElements,
+    conflictsCount: 0,
+    outboxRemaining: null,
     startedAt: ligne.debut,
     endedAt: ligne.fin,
     status: 'abouti',

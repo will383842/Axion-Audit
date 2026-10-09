@@ -38,6 +38,7 @@ import {
   valeurReponseSchema,
   type LotPush,
   type Operation,
+  type ReponsePull,
   type ReponsePush,
   type ResultatOp,
 } from '@axion/shared';
@@ -65,8 +66,11 @@ import {
   insererReponse,
   insererSession,
   insererUnite,
+  journaliserPull,
   journaliserPush,
   lireBlocParCode,
+  lireCurseursCandidats,
+  lireLignesHorodatees,
   lireMissionDeDemande,
   lireMissionDeReponse,
   lirePiece,
@@ -74,6 +78,7 @@ import {
   lireQuestionDeMission,
   lireReponse,
   lireReponseParCle,
+  lireReferentielsDeMission,
   lireRoleSurMission,
   lireSession,
   lireUnite,
@@ -1034,4 +1039,97 @@ export async function pousserLot(
     });
     return { serverTime: fin.toISOString(), results };
   });
+}
+
+// =============================================================================
+// LA DESCENTE — `GET /v1/sync/pull`, lot L6, incrément L6b (05 §9.5, 11 §4)
+// =============================================================================
+/** Page par défaut quand le terrain ne précise pas `limit`. */
+export const LIMITE_PULL_DEFAUT = 500;
+/** Plafond d'une page demandée : au-delà, 400 (la page peut le dépasser pour finir un groupe). */
+export const LIMITE_PULL_MAX = 1000;
+
+export interface DemandePull {
+  readonly missionId: string;
+  readonly since?: string | undefined;
+  readonly limit?: number | undefined;
+}
+
+/**
+ * Rend le delta de la mission pour l'utilisateur AUTHENTIFIÉ `utilisateurId`.
+ *
+ * Accès : membre de la mission, QUEL QUE SOIT son rôle sur elle — les autres
+ * membres consultent en lecture (05 §9.9). Le rôle GLOBAL est filtré par la route.
+ * Non-membre, mission inconnue ou supprimée → 404 (on ne révèle pas l'existence
+ * d'une mission), sans ligne `sync_log`.
+ *
+ * Pagination keyset sur `updated_at` : la borne haute de la page est le `limit`-ième
+ * plus petit curseur au-delà de `since`, et elle est INCLUSIVE — un groupe
+ * d'horodatage égal n'est jamais coupé (la page peut dépasser `limit`). `nextSince`
+ * = cette borne, à la microseconde ; `null` seulement si rien n'est au-delà de
+ * `since`. Au premier pull (sans `since`), le questionnaire figé et les
+ * affectations descendent en plus, et jamais ensuite.
+ *
+ * Une réponse absorbée par L6a n'a qu'UNE ligne, sous l'UUID serveur : la lecture
+ * ne connaît aucun autre identifiant, le remappage est acquis par construction.
+ */
+export async function tirerDelta(
+  utilisateurId: string,
+  demande: DemandePull,
+): Promise<ReponsePull> {
+  const debut = new Date();
+  const depuis = demande.since ?? null;
+  const limite = demande.limit ?? LIMITE_PULL_DEFAUT;
+
+  const role = await lireRoleSurMission(db, demande.missionId, utilisateurId);
+  if (role === null) throw new AppError('NOT_FOUND', MESSAGE_MISSION_INTROUVABLE);
+
+  // Un instantané cohérent : la borne et les lignes sont lues dans la même vue.
+  const { changes, nombre, borne } = await db.transaction(
+    async (tx) => {
+      const candidats = (await lireCurseursCandidats(tx, demande.missionId, depuis, limite)).sort();
+      const borneHaute = candidats[Math.min(limite, candidats.length) - 1] ?? null;
+      // Le schéma partagé type un enregistrement EXHAUSTIF aux valeurs optionnelles :
+      // une entité sans changement reste `undefined`, absente du JSON rendu.
+      const page: ReponsePull['changes'] = {
+        mission: undefined,
+        mission_question: undefined,
+        org_unit: undefined,
+        work_assignment: undefined,
+        interview: undefined,
+        answer: undefined,
+        attachment_meta: undefined,
+      };
+      let total = 0;
+      if (borneHaute !== null) {
+        const lignes = await lireLignesHorodatees(tx, demande.missionId, depuis, borneHaute);
+        for (const [entite, liste] of Object.entries(lignes) as [
+          keyof typeof lignes,
+          unknown[],
+        ][]) {
+          if (liste.length > 0) {
+            page[entite] = liste;
+            total += liste.length;
+          }
+        }
+      }
+      if (depuis === null) {
+        const referentiels = await lireReferentielsDeMission(tx, demande.missionId);
+        if (referentiels.mission_question.length > 0) {
+          page.mission_question = referentiels.mission_question;
+          total += referentiels.mission_question.length;
+        }
+        if (referentiels.work_assignment.length > 0) {
+          page.work_assignment = referentiels.work_assignment;
+          total += referentiels.work_assignment.length;
+        }
+      }
+      return { changes: page, nombre: total, borne: borneHaute };
+    },
+    { isolationLevel: 'repeatable read', accessMode: 'read only' },
+  );
+
+  const fin = new Date();
+  await journaliserPull(db, { utilisateurId, nombreElements: nombre, debut, fin });
+  return { serverTime: fin.toISOString(), changes, nextSince: borne };
 }
