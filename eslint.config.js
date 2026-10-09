@@ -408,6 +408,7 @@ export default tseslint.config(
       'apps/field/src/local/ecriture.ts',
       'apps/field/src/local/base.ts',
       'apps/field/src/sync/moteur.ts',
+      'apps/field/src/sync/remappage.ts',
       '**/*.{test,spec}.{ts,tsx}',
     ],
     rules: {
@@ -465,6 +466,29 @@ export default tseslint.config(
         ...PAGINATION_SANS_DECALAGE,
         ...HORLOGE_DE_L_APPAREIL,
         ...ECRITURE_DEXIE_HORS_OUTBOX,
+      ],
+    },
+  },
+  {
+    // Le remappage d'une réponse absorbée (`sync/remappage.ts`, L6b — A25,
+    // 2026-10-09 ; DECISIONS [L6a], re-revue A17). Il réaligne sur la réponse
+    // retenue par le siège les lignes et les ops EXISTANTES qui désignaient la
+    // réponse absorbée — sans créer d'op (`ecrireLocal` en créerait une) et en
+    // touchant la file (`appliquerDescente` ne le peut pas). Quatre tables
+    // seulement : `answers`, `attachments`, `interviews`, `outbox` ; les
+    // autres, et toute écriture en chaîne (②), restent interdites ici.
+    files: ['apps/field/src/sync/remappage.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...UUID_APPLICATIF,
+        ...PAGINATION_SANS_DECALAGE,
+        ...HORLOGE_DE_L_APPAREIL,
+        ...ecritureDexieSur(
+          LISTE_TABLES_LOCALES.filter(
+            (table) => !['answers', 'attachments', 'interviews', 'outbox'].includes(table),
+          ).join('|'),
+        ),
       ],
     },
   },

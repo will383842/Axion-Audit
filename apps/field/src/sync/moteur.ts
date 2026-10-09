@@ -56,6 +56,7 @@ import { DonneeLocaleCorrompueError, type Coffre } from '../local/coffre.js';
 import { ErreurEnveloppe } from '../local/enveloppe.js';
 import { maintenant as horlogeMaintenant } from '../local/horloge.js';
 import { MonteeImpossibleError, operationDeLigne } from './montee.js';
+import { remapperALaSortie } from './remappage.js';
 import type { TransportSync } from './transport.js';
 
 export interface DependancesMoteur {
@@ -82,6 +83,29 @@ export interface BilanPush {
   readonly message: string | null;
 }
 
+/**
+ * Clé `meta` du compte CUMULÉ des réponses arbitrées (`superseded`) d'une
+ * mission (05 §9.3, « n réponse(s) arbitrée(s) », cliquable). Le moteur y AJOUTE
+ * les arbitrages de chaque lot ; rien ne le remet à zéro : l'écran lit le local,
+ * pas un bilan éphémère.
+ */
+export function cleReponsesArbitrees(missionId: string): string {
+  return `${PREFIXE_REPONSES_ARBITREES}${missionId}`;
+}
+
+/** Le préfixe commun des comptes d'arbitrages, pour les lire toutes missions confondues. */
+export const PREFIXE_REPONSES_ARBITREES = 'arbitrages:reponses:';
+
+/** Ajoute `n` au compte d'arbitrages de la mission (lecture + écriture atomiques). */
+async function cumulerArbitrages(base: BaseLocale, missionId: string, n: number): Promise<void> {
+  if (n <= 0) return;
+  const cle = cleReponsesArbitrees(missionId);
+  await base.transaction('rw', base.meta, async () => {
+    const connu = await lireMeta(base, cle);
+    await ecrireMeta(base, cle, (typeof connu === 'number' ? connu : 0) + n);
+  });
+}
+
 export interface MoteurSync {
   pousser(missionId: string): Promise<BilanPush>;
 }
@@ -103,6 +127,8 @@ interface Compteurs {
   arbitrees: number;
   rejetees: number;
   enErreur: number;
+  /** Les réponses dont l'op est sortie `superseded` : à réaligner en fin de passage (A29-2). */
+  reponsesArbitrees: string[];
 }
 
 async function prochainLot(
@@ -144,7 +170,10 @@ async function appliquerReponse(
         case 'duplicate':
           // Une op arbitrée est acquittée comme les deux autres ; elle est en plus
           // comptée, pour « n réponse(s) arbitrée(s) » (05 §9.3).
-          if (resultat.result === 'superseded') compteurs.arbitrees += 1;
+          if (resultat.result === 'superseded') {
+            compteurs.arbitrees += 1;
+            if (ligne.entite === 'answer') compteurs.reponsesArbitrees.push(ligne.entiteId);
+          }
           compteurs.acquittees += 1;
           await base.outbox.delete(ligne.opId);
           break;
@@ -255,7 +284,13 @@ async function passage(deps: DependancesMoteur, missionId: string): Promise<Bila
     );
   }
 
-  const compteurs: Compteurs = { acquittees: 0, arbitrees: 0, rejetees: 0, enErreur: 0 };
+  const compteurs: Compteurs = {
+    acquittees: 0,
+    arbitrees: 0,
+    rejetees: 0,
+    enErreur: 0,
+    reponsesArbitrees: [],
+  };
   const dejaEnvoyees = new Set<string>();
   let statut: BilanPush['statut'] = 'succes';
   let message: string | null = null;
@@ -288,7 +323,9 @@ async function passage(deps: DependancesMoteur, missionId: string): Promise<Bila
       }
       break;
     }
+    const arbitreesAvant = compteurs.arbitrees;
     await appliquerReponse(base, lignes, resultat.donnees, compteurs, dejaEnvoyees);
+    await cumulerArbitrages(base, missionId, compteurs.arbitrees - arbitreesAvant);
   }
 
   if (
@@ -302,6 +339,11 @@ async function passage(deps: DependancesMoteur, missionId: string): Promise<Bila
       (deps.maintenant ?? horlogeMaintenant)(),
     );
   }
+
+  // A29-2 : une réponse arbitrée `superseded` a pu être absorbée par une ligne
+  // déjà descendue. Réalignée APRÈS le passage et après le dernier succès : les
+  // ops relancées partent au passage suivant, elles ne comptent pas comme montées.
+  await remapperALaSortie({ base, coffre }, missionId, compteurs.reponsesArbitrees);
 
   return {
     statut,
@@ -335,4 +377,28 @@ export function creerMoteurSync(deps: DependancesMoteur): MoteurSync {
       return suivant;
     },
   };
+}
+
+/**
+ * Le geste « Remettre en file » (05 §9.3, invariant 7) : les ops `a_examiner`
+ * désignées de la mission repassent `en_attente`, `tentatives` à 0. Ni la
+ * charge, ni l'`opId` (donc le rang dans la file), ni `clientUpdatedAt` ne
+ * changent. Une op `rejetee` (05 §9.9 : jamais rejouée), d'une autre mission ou
+ * inconnue est ignorée. Rend le nombre d'ops remises.
+ */
+export async function remettreOpsEnFile(
+  base: BaseLocale,
+  missionId: string,
+  opIds: readonly string[],
+): Promise<number> {
+  let remises = 0;
+  await base.transaction('rw', base.outbox, async () => {
+    for (const opId of new Set(opIds)) {
+      const op = await base.outbox.get(opId);
+      if (op?.missionId !== missionId || op.statut !== 'a_examiner') continue;
+      await base.outbox.update(opId, { statut: 'en_attente', tentatives: 0, derniereErreur: null });
+      remises += 1;
+    }
+  });
+  return remises;
 }

@@ -82,6 +82,9 @@ export const VUES = {
   // ── Le compteur « à revoir » du cockpit mène ICI (03 §34.2) — A22 ────────
   // Ajouté À LA FIN, comme le régime append-only de ce fichier l'exige.
   aRevoir: { titre: 'Points à revoir', exigeCoffreOuvert: true },
+  // ── La file de synchronisation de l'appareil (05 §9.3, L6b) — A25 ────────
+  // « à examiner », « rejetées », « n réponse(s) arbitrée(s) » : lus dans le local.
+  synchronisation: { titre: 'Synchronisation', exigeCoffreOuvert: true },
 } as const satisfies Record<string, DefinitionVue>;
 
 export type CodeVue = keyof typeof VUES;

@@ -68,7 +68,9 @@ vi.mock('../../app/port-sync-terrain.js', async (importOriginal) => {
   const { contexteLocal } = await import('../../local/contexte.js');
   const ports = new WeakMap<BaseLocale, PortSyncReel>();
   // Le transport pilotable : c'est le SEUL élément simulé de la chaîne de sync.
+  const { tirerSansChangement } = await import('../../sync/fixtures/descente-vide.js');
   const transport = {
+    tirer: tirerSansChangement,
     pousser: () =>
       Promise.resolve(
         porte.comportement === 'echec'

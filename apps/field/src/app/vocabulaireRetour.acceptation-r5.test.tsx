@@ -69,6 +69,7 @@ import { EcranDeverrouillage } from './EcranDeverrouillage.js';
 import { EcranStockage } from './EcranStockage.js';
 import { EcranAgenda } from '../ecrans/journee/EcranAgenda.js';
 import { EcranARevoir } from '../ecrans/journee/EcranARevoir.js';
+import { EcranSynchronisation } from '../ecrans/sync/EcranSynchronisation.js';
 import { EcranAujourdhui } from '../ecrans/journee/EcranAujourdhui.js';
 import { EcranFinDeJournee } from '../ecrans/journee/EcranFinDeJournee.js';
 import { EcranFinDeSession } from '../ecrans/journee/EcranFinDeSession.js';
@@ -102,6 +103,7 @@ const VUES_MONTEES = {
   finDeSession: { Composant: EcranFinDeSession },
   connexionSiege: { Composant: EcranConnexion },
   aRevoir: { Composant: EcranARevoir },
+  synchronisation: { Composant: EcranSynchronisation },
 } as const satisfies Record<CodeVue, VueMontable>;
 
 const CODES = Object.keys(VUES_MONTEES) as readonly CodeVue[];

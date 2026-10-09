@@ -29,35 +29,23 @@
 //
 // Traçabilité : E7, E9 · invariants 1, 3 et 7 · 05 §9.3, §9.4, §9.9 · 11 §4.
 // =============================================================================
-import { z } from 'zod';
+import type { z } from 'zod';
 import { uuidv7 } from 'uuidv7';
 import type { FastifyBaseLogger } from 'fastify';
 import {
   AppError,
-  isoUtcSchema,
-  valeurReponseSchema,
   type LotPush,
   type Operation,
+  type EntiteDescendante,
+  type ReponsePull,
   type ReponsePush,
   type ResultatOp,
 } from '@axion/shared';
 import { db } from '../db.js';
-import {
-  CRITICITES,
-  MODES_ENTRETIEN,
-  MOTIFS_NON_COMMUNIQUE,
-  SOURCES_DONNEE,
-  STATUTS_PLANIFICATION,
-  STATUTS_SESSION,
-  TYPES_PIECE_JOINTE,
-  TYPES_REPONSE,
-  TYPES_SESSION,
-  TYPES_UNITE,
-  type RoleSurMission,
-  type StatutSession,
-} from '../db/schema.js';
+import { type RoleSurMission, type StatutSession } from '../db/schema.js';
 import {
   archiver,
+  bornerLaTransaction,
   consignerOp,
   insererPiece,
   insererQuestion,
@@ -65,8 +53,13 @@ import {
   insererReponse,
   insererSession,
   insererUnite,
+  journaliserPull,
   journaliserPush,
   lireBlocParCode,
+  lireCurseursCandidats,
+  lireHorlogeDuLot,
+  lirePlafond,
+  lireLignesHorodatees,
   lireMissionDeDemande,
   lireMissionDeReponse,
   lirePiece,
@@ -74,6 +67,7 @@ import {
   lireQuestionDeMission,
   lireReponse,
   lireReponseParCle,
+  lireReferentielsDeMission,
   lireRoleSurMission,
   lireSession,
   lireUnite,
@@ -99,6 +93,13 @@ import {
   type Emetteur,
   type Propriete,
 } from './proprietaire.js';
+import {
+  chargePieceSchema,
+  chargePropositionSchema,
+  chargeQuestionAdhocSchema,
+  chargeReponseSchema,
+  chargeSessionSchema,
+} from './charges.js';
 
 // =============================================================================
 // QUI ÉCRIT PAR LE PUSH
@@ -128,112 +129,13 @@ const MESSAGES = {
   suppression: "La suppression n'est pas prise en charge par la synchronisation.",
   cycle: "L'unité proposée ne peut pas être rattachée à elle-même.",
   echec: "L'opération n'a pas pu être enregistrée : elle sera retentée.",
+  delai: "La synchronisation a pris trop de temps : rien n'a été enregistré, elle sera retentée.",
 } as const;
 
 // =============================================================================
-// FORMES DES CHARGES — validées par le schéma de LEUR table (04), camelCase
+// FORMES DES CHARGES — listes fermées par entité, dans le module pur charges.ts
+// (le raccord du terrain les importe depuis leur source).
 // =============================================================================
-// Les colonnes serveur (`synced_at`, `created_at`, `updated_at`, `revision`) ne
-// sont PAS lues dans la charge. Les auteurs (`conductedBy`, `createdBy`,
-// `proposedBy`) sont lus POUR ÊTRE REFUSÉS s'ils désignent quelqu'un d'autre.
-// CHARGE FERMÉE (arbitrage de la coordination, 2026-10-09, H1) : chaque entité
-// n'accepte QUE les clés ci-dessous (`z.strictObject`). Une clé inconnue — y
-// compris une colonne serveur comme `revision` — rend l'op illisible (`error`),
-// rien n'est écrit. Ces schémas sont SERVEUR : le contrat partagé `sync.ts` est
-// gelé et laisse `payload` en `unknown` délibérément.
-const horodatage = isoUtcSchema.nullable().optional();
-const texte = z.string().nullable().optional();
-const uuidFacultatif = z.uuid().nullable().optional();
-const auteurDeclare = z.string().nullable().optional();
-
-const chargeSessionSchema = z.strictObject({
-  missionId: z.uuid(),
-  orgUnitId: z.uuid(),
-  conductedBy: auteurDeclare,
-  kind: z.enum(TYPES_SESSION).optional(),
-  mode: z.enum(MODES_ENTRETIEN).nullable().optional(),
-  linkedReviewAnswerId: uuidFacultatif,
-  personName: texte,
-  personRole: texte,
-  personServiceId: uuidFacultatif,
-  personEmail: texte,
-  interlocutorProfileId: uuidFacultatif,
-  participants: z.unknown().optional(),
-  documentRequestId: uuidFacultatif,
-  consentGiven: z.boolean().nullable().optional(),
-  consentAudio: z.boolean().nullable().optional(),
-  consentedAt: horodatage,
-  informationNoticeVersion: texte,
-  noticeShownAt: horodatage,
-  scheduledAt: horodatage,
-  scheduledDurationMin: z.number().int().min(0).nullable().optional(),
-  scheduleStatus: z.enum(STATUTS_PLANIFICATION).optional(),
-  status: z.enum(STATUTS_SESSION).optional(),
-  startedAt: horodatage,
-  endedAt: horodatage,
-  generalNotes: texte,
-  clientCreatedAt: horodatage,
-});
-
-const chargeReponseSchema = z.strictObject({
-  interviewId: z.uuid(),
-  missionQuestionId: z.uuid(),
-  value: valeurReponseSchema.nullable().optional(),
-  source: z.enum(SOURCES_DONNEE).optional(),
-  withheld: z.boolean().optional(),
-  withheldReason: z.enum(MOTIFS_NON_COMMUNIQUE).nullable().optional(),
-  horsParcours: z.boolean().optional(),
-  note: texte,
-  flagReview: z.boolean().optional(),
-  reviewReason: texte,
-  notApplicable: z.boolean().optional(),
-  naReason: texte,
-  clientCreatedAt: horodatage,
-});
-
-const chargePieceSchema = z.strictObject({
-  missionId: z.uuid(),
-  interviewId: uuidFacultatif,
-  answerId: uuidFacultatif,
-  kind: z.enum(TYPES_PIECE_JOINTE),
-  content: texte,
-  filename: texte,
-  mime: texte,
-  sizeBytes: z.number().int().min(0).nullable().optional(),
-  createdBy: auteurDeclare,
-  clientCreatedAt: horodatage,
-});
-
-const chargePropositionSchema = z.strictObject({
-  missionId: z.uuid(),
-  parentId: z.uuid().nullable(),
-  kind: z.enum(TYPES_UNITE),
-  name: z.string().trim().min(1),
-  headcount: z.number().int().min(0).nullable().optional(),
-  countryCode: texte,
-  timezone: texte,
-  proposedBy: auteurDeclare,
-});
-
-/** 11 §4 (V2.9) : `{question: {…§36.4}, mission_question: {id, position}}`, en camelCase. */
-const chargeQuestionAdhocSchema = z.strictObject({
-  question: z.strictObject({
-    textFr: z.string().trim().min(1),
-    guidanceFr: texte,
-    answerType: z.enum(TYPES_REPONSE),
-    criticality: z.enum(CRITICITES).optional(),
-    /** H2 (arbitrée 2026-10-09) : le terrain ne connaît que le CODE du bloc. */
-    blockCode: z.string().min(1),
-    options: z.unknown().optional(),
-    allowRange: z.boolean().optional(),
-    expectedSource: z.enum(SOURCES_DONNEE).nullable().optional(),
-    createdBy: auteurDeclare,
-  }),
-  missionQuestion: z.strictObject({
-    id: z.uuid(),
-    position: z.number().int().nullable().optional(),
-  }),
-});
 
 // =============================================================================
 // OUTILS
@@ -259,6 +161,37 @@ class Annulation extends Error {
     super('annulation');
   }
 }
+
+// =============================================================================
+// DÉLAIS DE SYNC — revue A17 : aucune ligne validée en retard sous un curseur
+// =============================================================================
+// Le push horodate ses lignes à `now()` de la BASE (début de sa transaction), et
+// un lot ne vit pas plus de `dureeMaxPushMs` ; le pull ne rend rien de plus récent
+// que `now() - margePullMs`. La marge excédant la durée, une ligne validée après
+// un pull est forcément au-dessus du plafond qu'il a rendu : elle redescend.
+export interface DelaisSync {
+  readonly margePullMs: number;
+  readonly dureeMaxPushMs: number;
+}
+
+export const DELAIS_SYNC_DEFAUT: DelaisSync = { margePullMs: 60_000, dureeMaxPushMs: 30_000 };
+
+let delais: DelaisSync = { ...DELAIS_SYNC_DEFAUT };
+
+/** Réglage des délais (tests, et seul point d'injection). Les clés absentes restent. */
+export function reglerDelaisSync(nouveaux: Partial<DelaisSync>): void {
+  delais = { ...delais, ...nouveaux };
+}
+
+/** Durée maximale du lot dépassée, mesurée juste avant le commit. */
+class DelaiDepasse extends Error {
+  constructor() {
+    super('delai');
+  }
+}
+
+/** SQLSTATE `57014` (statement_timeout) et `55P03` (lock_timeout). */
+const CODES_DELAI_DEPASSE: ReadonlySet<string> = new Set(['57014', '55P03']);
 
 /** Un verdict de propriété qui n'autorise pas → l'issue correspondante. */
 function issueDeRefus(propriete: Exclude<Propriete, 'proprietaire'>, inconnu: string): Issue {
@@ -954,12 +887,12 @@ async function traiterUneOp(
   op: Operation,
   emetteur: Emetteur,
   lotId: string,
+  maintenant: Date,
   journal: FastifyBaseLogger,
 ): Promise<Issue> {
   if (await opDejaTraitee(tx, op.opId)) return { resultat: 'duplicate' };
   try {
     return await tx.transaction(async (pointDeSauvegarde) => {
-      const maintenant = new Date();
       const issue = await appliquer({
         ex: pointDeSauvegarde,
         op,
@@ -975,6 +908,9 @@ async function traiterUneOp(
     });
   } catch (erreur) {
     if (erreur instanceof Annulation) return erreur.issue;
+    // Délai du lot dépassé : ce n'est pas l'échec d'UNE op, c'est le lot entier
+    // qui doit tomber — la transaction est de toute façon inutilisable.
+    if (CODES_DELAI_DEPASSE.has(codeSql(erreur))) throw erreur;
     // 11 §2 : ni la charge ni le message PostgreSQL (qui recopie des valeurs).
     journal.warn(
       { entite: op.entity, code: codeSql(erreur) },
@@ -1004,34 +940,163 @@ export async function pousserLot(
   const debut = new Date();
   const emetteur: Emetteur = { utilisateurId, missionId: lot.missionId };
   const lotId = uuidv7();
+  const dureeMax = delais.dureeMaxPushMs;
+  const chrono = performance.now();
 
-  return db.transaction(async (tx) => {
-    const role = await lireRoleSurMission(tx, lot.missionId, utilisateurId);
-    if (role === null) throw new AppError('NOT_FOUND', MESSAGE_MISSION_INTROUVABLE);
-    if (!ROLES_COLLECTEURS.includes(role)) throw new AppError('FORBIDDEN', MESSAGE_DROITS);
-
-    const results: ReponsePush['results'] = [];
-    let conflits = 0;
-    for (const op of lot.operations) {
-      const issue = await traiterUneOp(tx, op, emetteur, lotId, journal);
-      if (issue.resultat !== 'applied' && issue.resultat !== 'duplicate') conflits += 1;
-      results.push({
-        opId: op.opId,
-        result: issue.resultat,
-        ...(issue.message === undefined ? {} : { message: issue.message }),
+  try {
+    return await db.transaction(async (tx) => {
+      await bornerLaTransaction(tx, dureeMax);
+      const maintenant = await lireHorlogeDuLot(tx);
+      return await appliquerLot(tx, lot, emetteur, lotId, maintenant, debut, journal, () => {
+        // Mesuré AVANT le commit : un lot trop long ne valide rien.
+        if (performance.now() - chrono > dureeMax) throw new DelaiDepasse();
       });
-    }
-
-    const fin = new Date();
-    await journaliserPush(tx, {
-      utilisateurId,
-      appareilId: lot.deviceId,
-      nombreOps: lot.operations.length,
-      nombreConflits: conflits,
-      resteOutbox: lot.outboxRemaining,
-      debut,
-      fin,
     });
-    return { serverTime: fin.toISOString(), results };
+  } catch (erreur) {
+    if (erreur instanceof DelaiDepasse || CODES_DELAI_DEPASSE.has(codeSql(erreur))) {
+      journal.warn({ lot: 'push' }, 'Lot de sync annulé : durée maximale dépassée');
+      throw new AppError('SERVICE_UNAVAILABLE', MESSAGES.delai);
+    }
+    throw erreur;
+  }
+}
+
+/** Le corps du lot, DANS sa transaction. `verifierDelai` est appelé juste avant le commit. */
+async function appliquerLot(
+  tx: ExecuteurSql,
+  lot: LotPush,
+  emetteur: Emetteur,
+  lotId: string,
+  maintenant: Date,
+  debut: Date,
+  journal: FastifyBaseLogger,
+  verifierDelai: () => void,
+): Promise<ReponsePush> {
+  const utilisateurId = emetteur.utilisateurId;
+  const role = await lireRoleSurMission(tx, lot.missionId, utilisateurId);
+  if (role === null) throw new AppError('NOT_FOUND', MESSAGE_MISSION_INTROUVABLE);
+  if (!ROLES_COLLECTEURS.includes(role)) throw new AppError('FORBIDDEN', MESSAGE_DROITS);
+
+  const results: ReponsePush['results'] = [];
+  let conflits = 0;
+  for (const op of lot.operations) {
+    const issue = await traiterUneOp(tx, op, emetteur, lotId, maintenant, journal);
+    if (issue.resultat !== 'applied' && issue.resultat !== 'duplicate') conflits += 1;
+    results.push({
+      opId: op.opId,
+      result: issue.resultat,
+      ...(issue.message === undefined ? {} : { message: issue.message }),
+    });
+  }
+
+  const fin = new Date();
+  await journaliserPush(tx, {
+    utilisateurId,
+    appareilId: lot.deviceId,
+    nombreOps: lot.operations.length,
+    nombreConflits: conflits,
+    resteOutbox: lot.outboxRemaining,
+    debut,
+    fin,
   });
+  verifierDelai();
+  return { serverTime: fin.toISOString(), results };
+}
+
+// =============================================================================
+// LA DESCENTE — `GET /v1/sync/pull`, lot L6, incrément L6b (05 §9.5, 11 §4)
+// =============================================================================
+/** Page par défaut quand le terrain ne précise pas `limit`. */
+export const LIMITE_PULL_DEFAUT = 500;
+/** Plafond d'une page demandée : au-delà, 400 (la page peut le dépasser pour finir un groupe). */
+export const LIMITE_PULL_MAX = 1000;
+
+export interface DemandePull {
+  readonly missionId: string;
+  readonly since?: string | undefined;
+  readonly limit?: number | undefined;
+}
+
+/**
+ * Rend le delta de la mission pour l'utilisateur AUTHENTIFIÉ `utilisateurId`.
+ *
+ * Accès : membre de la mission, QUEL QUE SOIT son rôle sur elle — les autres
+ * membres consultent en lecture (05 §9.9). Le rôle GLOBAL est filtré par la route.
+ * Non-membre, mission inconnue ou supprimée → 404 (on ne révèle pas l'existence
+ * d'une mission), sans ligne `sync_log`.
+ *
+ * Pagination keyset sur `updated_at` : la borne haute de la page est le `limit`-ième
+ * plus petit curseur au-delà de `since` et SOUS le plafond `now() - margePullMs`
+ * (base), et elle est INCLUSIVE — un groupe
+ * d'horodatage égal n'est jamais coupé (la page peut dépasser `limit`). `nextSince`
+ * = cette borne, à la microseconde ; `null` seulement si rien n'est entre `since` et le
+ * plafond (au premier pull d'une mission toute neuve, le questionnaire peut descendre
+ * avec un `null` : le pull suivant repart de zéro, sans perte). Sinon : rien au-delà de
+ * `since`. Au premier pull (sans `since`), le questionnaire figé et les
+ * affectations descendent en plus, et jamais ensuite.
+ *
+ * Une réponse absorbée par L6a n'a qu'UNE ligne, sous l'UUID serveur : la lecture
+ * ne connaît aucun autre identifiant, le remappage est acquis par construction.
+ */
+export async function tirerDelta(
+  utilisateurId: string,
+  demande: DemandePull,
+): Promise<ReponsePull> {
+  const debut = new Date();
+  const depuis = demande.since ?? null;
+  const limite = demande.limit ?? LIMITE_PULL_DEFAUT;
+
+  const role = await lireRoleSurMission(db, demande.missionId, utilisateurId);
+  if (role === null) throw new AppError('NOT_FOUND', MESSAGE_MISSION_INTROUVABLE);
+
+  // Un instantané cohérent : la borne et les lignes sont lues dans la même vue.
+  const { changes, nombre, borne } = await db.transaction(
+    async (tx) => {
+      const plafond = await lirePlafond(tx, delais.margePullMs);
+      const candidats = (
+        await lireCurseursCandidats(tx, demande.missionId, depuis, plafond, limite)
+      ).sort();
+      const borneHaute = candidats[Math.min(limite, candidats.length) - 1] ?? null;
+      // Une entité sans changement est ABSENTE de `changes` (jamais une liste vide).
+      const page: Partial<Record<EntiteDescendante, unknown[]>> = {};
+      let total = 0;
+      if (borneHaute !== null) {
+        const lignes = await lireLignesHorodatees(
+          tx,
+          demande.missionId,
+          utilisateurId,
+          depuis,
+          borneHaute,
+        );
+        for (const [entite, liste] of Object.entries(lignes) as [
+          keyof typeof lignes,
+          unknown[],
+        ][]) {
+          if (liste.length > 0) {
+            page[entite] = liste;
+            total += liste.length;
+          }
+        }
+      }
+      if (depuis === null) {
+        const referentiels = await lireReferentielsDeMission(tx, demande.missionId);
+        if (referentiels.mission_question.length > 0) {
+          page.mission_question = referentiels.mission_question;
+          total += referentiels.mission_question.length;
+        }
+        if (referentiels.work_assignment.length > 0) {
+          page.work_assignment = referentiels.work_assignment;
+          total += referentiels.work_assignment.length;
+        }
+      }
+      // `fromEntries` perd les clés : l'assertion les rend, les entrées viennent du dépôt.
+      const changes = Object.fromEntries(Object.entries(page)) as ReponsePull['changes'];
+      return { changes, nombre: total, borne: borneHaute };
+    },
+    { isolationLevel: 'repeatable read', accessMode: 'read only' },
+  );
+
+  const fin = new Date();
+  await journaliserPull(db, { utilisateurId, nombreElements: nombre, debut, fin });
+  return { serverTime: fin.toISOString(), changes, nextSince: borne };
 }

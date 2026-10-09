@@ -47,6 +47,7 @@ import { portSyncInerte } from '../local/port-sync.js';
 import { creerMoteurSync } from './moteur.js';
 import { creerPortSync } from './port.js';
 import type { ResultatTransport, TransportSync } from './transport.js';
+import { tirerSansChangement } from './fixtures/descente-vide.js';
 
 const MISSION = '0191e2a0-0000-7000-8000-00000000f1de';
 const ORG_UNIT = '0191e2a0-0000-7000-8000-00000000c001';
@@ -151,7 +152,8 @@ async function ecrireSession(): Promise<void> {
 }
 
 /** Siège fictif : tout est `applied`, `serverTime` = l'instant courant (horloge figée). */
-const siegeQuiApplique: Pick<TransportSync, 'pousser'> = {
+const siegeQuiApplique: Pick<TransportSync, 'pousser' | 'tirer'> = {
+  tirer: tirerSansChangement,
   // eslint-disable-next-line @typescript-eslint/require-await -- signature asynchrone du transport.
   async pousser(lot: LotPush): Promise<ResultatTransport<ReponsePush>> {
     return {
@@ -164,7 +166,8 @@ const siegeQuiApplique: Pick<TransportSync, 'pousser'> = {
   },
 };
 
-const siegeInjoignable: Pick<TransportSync, 'pousser'> = {
+const siegeInjoignable: Pick<TransportSync, 'pousser' | 'tirer'> = {
+  tirer: tirerSansChangement,
   // eslint-disable-next-line @typescript-eslint/require-await -- signature asynchrone du transport.
   async pousser(): Promise<ResultatTransport<ReponsePush>> {
     return { type: 'hors_ligne' };
@@ -294,7 +297,8 @@ describe('L6a-0 (2) — non-régression R2 : accueil (port) et cockpit rendent l
 // (3) B2 (arbitrage 2026-10-09) — l'alerte compte TOUT ce qui ne vit que sur l'appareil
 // =============================================================================
 /** Siège fictif qui refuse chaque op (`forbidden`) : elles restent « rejetee » sur l'appareil. */
-const siegeQuiRejette: Pick<TransportSync, 'pousser'> = {
+const siegeQuiRejette: Pick<TransportSync, 'pousser' | 'tirer'> = {
+  tirer: tirerSansChangement,
   // eslint-disable-next-line @typescript-eslint/require-await -- signature asynchrone du transport.
   async pousser(lot: LotPush): Promise<ResultatTransport<ReponsePush>> {
     return {
