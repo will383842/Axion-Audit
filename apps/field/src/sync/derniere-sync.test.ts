@@ -289,3 +289,71 @@ describe('L6a-0 (2) — non-régression R2 : accueil (port) et cockpit rendent l
     expect(source).not.toMatch(/evaluerAlerteSauvegarde\(\s*null/);
   });
 });
+
+// =============================================================================
+// (3) B2 (arbitrage 2026-10-09) — l'alerte compte TOUT ce qui ne vit que sur l'appareil
+// =============================================================================
+/** Siège fictif qui refuse chaque op (`forbidden`) : elles restent « rejetee » sur l'appareil. */
+const siegeQuiRejette: Pick<TransportSync, 'pousser'> = {
+  // eslint-disable-next-line @typescript-eslint/require-await -- signature asynchrone du transport.
+  async pousser(lot: LotPush): Promise<ResultatTransport<ReponsePush>> {
+    return {
+      type: 'ok',
+      donnees: {
+        serverTime: new Date(Date.now()).toISOString(),
+        results: lot.operations.map((op) => ({
+          opId: op.opId,
+          result: 'forbidden' as const,
+          message: 'Refus fictif.',
+        })),
+      },
+    };
+  },
+};
+
+describe('L6a-0 (3) — B2 : en_attente + rejetee + a_examiner, même verdict accueil et cockpit', () => {
+  it('jamais synchronisée, une seule op REJETÉE (0 en attente) : les deux alertent, à l’identique', async () => {
+    await ecrireSession();
+    const port = creerPortSync({ base, coffre, transport: siegeQuiRejette });
+    await port.synchroniserMaintenant(MISSION);
+
+    const accueil = await port.actualiser(MISSION);
+    const cockpit = await etatCockpit();
+
+    expect(accueil.operationsEnAttente).toBe(0);
+    expect(accueil.operationsBloquees).toBe(1);
+    expect(cockpit.alerte.declenchee).toBe(true);
+    expect(accueil.alerte).toEqual(cockpit.alerte);
+  });
+
+  it('dernier succès il y a 25 h, une op « a_examiner » seulement : les deux alertent, à l’identique', async () => {
+    await ecrireSession();
+    const port = creerPortSync({ base, coffre, transport: siegeQuiApplique });
+    await port.synchroniserMaintenant(MISSION);
+    await ecrireSession();
+    const [op] = await base.outbox.toArray();
+    if (op === undefined) throw new Error('banc : op attendue');
+    await base.outbox.update(op.opId, { statut: 'a_examiner', tentatives: 10 });
+    vi.setSystemTime(T0 + 25 * UNE_HEURE_MS);
+
+    const accueil = await port.actualiser(MISSION);
+    const cockpit = await etatCockpit();
+
+    expect(cockpit.operationsEnAttente).toBe(0);
+    expect(cockpit.alerte.declenchee).toBe(true);
+    expect(accueil.alerte).toEqual(cockpit.alerte);
+  });
+
+  it('tout est monté (rien en file, aucune op bloquée) : aucun des deux n’alerte', async () => {
+    await ecrireSession();
+    const port = creerPortSync({ base, coffre, transport: siegeQuiApplique });
+    await port.synchroniserMaintenant(MISSION);
+    vi.setSystemTime(T0 + 25 * UNE_HEURE_MS);
+
+    const accueil = await port.actualiser(MISSION);
+    const cockpit = await etatCockpit();
+
+    expect(cockpit.alerte.declenchee).toBe(false);
+    expect(accueil.alerte).toEqual(cockpit.alerte);
+  });
+});

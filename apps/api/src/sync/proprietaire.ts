@@ -46,7 +46,9 @@ export async function proprieteDeSession(
   sessionId: string,
   emetteur: Emetteur,
 ): Promise<Propriete> {
-  const session = await lireSession(ex, sessionId);
+  // FOR SHARE : la propriété fonde la décision et doit tenir jusqu'au commit —
+  // une réaffectation concurrente (§34.4) attend la fin du lot.
+  const session = await lireSession(ex, sessionId, 'share');
   if (session === null) return 'inconnu';
   if (session.missionId !== emetteur.missionId) return 'autrui';
   return session.conductedBy === emetteur.utilisateurId ? 'proprietaire' : 'autrui';

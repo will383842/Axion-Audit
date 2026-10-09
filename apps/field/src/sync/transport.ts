@@ -66,6 +66,36 @@ type EchecRefresh = 'hors_ligne' | 'reconnexion_requise' | 'refus';
 /** Une rotation réussie rend le nouvel accès ; il ne quitte jamais ce module. */
 type IssueRefresh = { readonly acces: string } | EchecRefresh;
 
+/**
+ * A1 (2026-10-09) : le siège est SATURÉ ou sa passerelle muette — 429, 502, 503,
+ * 504. Ce n'est pas un refus de l'op : on traite comme une coupure (rien n'est
+ * compté, le jeton est intact, on réessaiera).
+ */
+const STATUTS_INDISPONIBLES: ReadonlySet<number> = new Set([429, 502, 503, 504]);
+
+/**
+ * A3 (2026-10-09) : l'authentification est un fait de la BASE (un appareil, un
+ * auditeur), pas d'un transport. Le refresh TOURNE : deux refresh concurrents
+ * présenteraient deux fois le même jeton, et le second serait un REJEU — qui
+ * révoque toute la famille côté serveur (11 §3). Un seul vol par base, partagé
+ * par tous les transports qui la servent, et l'accès obtenu profite à tous.
+ */
+interface EtatAuthentification {
+  acces: string | null;
+  enVol: Promise<IssueRefresh> | null;
+}
+
+const authentificationParBase = new WeakMap<BaseLocale, EtatAuthentification>();
+
+function authentificationDe(base: BaseLocale): EtatAuthentification {
+  let etat = authentificationParBase.get(base);
+  if (etat === undefined) {
+    etat = { acces: null, enVol: null };
+    authentificationParBase.set(base, etat);
+  }
+  return etat;
+}
+
 /** Lit le corps JSON sans jamais lever : un corps illisible vaut `null`. */
 async function corpsJson(reponse: Response): Promise<unknown> {
   try {
@@ -82,13 +112,32 @@ function messageDuRefus(corps: unknown): string {
 }
 
 export function creerTransport(deps: DependancesTransport): TransportSync {
-  let jetonAcces: string | null = null;
+  const auth = authentificationDe(deps.base);
 
   /**
-   * Une rotation. Fonction PRIVÉE : l'accès qu'elle rend ne sort jamais de cette
-   * fermeture, c'est ce qui garantit qu'il ne peut fuir par un résultat.
+   * Un accès neuf pour remplacer `echoue` : celui qu'un autre vient d'obtenir,
+   * sinon le vol en cours, sinon un nouveau vol — jamais deux à la fois.
    */
-  async function rafraichir(): Promise<IssueRefresh> {
+  function rafraichir(echoue: string | null): Promise<IssueRefresh> {
+    if (auth.acces !== null && auth.acces !== echoue) {
+      return Promise.resolve({ acces: auth.acces });
+    }
+    if (auth.enVol === null) {
+      const vol = tourner();
+      auth.enVol = vol;
+      const atterrir = (): void => {
+        if (auth.enVol === vol) auth.enVol = null;
+      };
+      vol.then(atterrir, atterrir);
+    }
+    return auth.enVol;
+  }
+
+  /**
+   * Une rotation. Fonction PRIVÉE : l'accès qu'elle rend ne sort jamais de ce
+   * module, c'est ce qui garantit qu'il ne peut fuir par un résultat.
+   */
+  async function tourner(): Promise<IssueRefresh> {
     const stocke = await lireJetonRafraichissement(deps.base, deps.coffre);
     if (stocke === null) return 'reconnexion_requise';
 
@@ -107,9 +156,10 @@ export function creerTransport(deps: DependancesTransport): TransportSync {
     if (reponse.status === 401 || reponse.status === 403) {
       // Refus EXPLICITE : le jeton est mort, le garder ferait marteler `/auth/*`.
       await effacerJetonRafraichissement(deps.base);
-      jetonAcces = null;
+      auth.acces = null;
       return 'reconnexion_requise';
     }
+    if (STATUTS_INDISPONIBLES.has(reponse.status)) return 'hors_ligne';
     if (!reponse.ok) return 'refus';
 
     const session = authSessionSchema.safeParse(await corpsJson(reponse));
@@ -121,7 +171,7 @@ export function creerTransport(deps: DependancesTransport): TransportSync {
       expireLe: session.data.refreshExpiresAt,
       enregistreLe: maintenant(),
     });
-    jetonAcces = session.data.accessToken;
+    auth.acces = session.data.accessToken;
     return { acces: session.data.accessToken };
   }
 
@@ -147,14 +197,14 @@ export function creerTransport(deps: DependancesTransport): TransportSync {
 
   return {
     definirJetonAcces(jeton: string | null): void {
-      jetonAcces = jeton;
+      auth.acces = jeton;
     },
 
     async pousser(lot: LotPush): Promise<ResultatTransport<ReponsePush>> {
       let dejaRafraichi = false;
-      let acces = jetonAcces;
+      let acces = auth.acces;
       if (acces === null) {
-        const issue = await rafraichir();
+        const issue = await rafraichir(null);
         if (typeof issue === 'string') return traduireIssue(issue);
         acces = issue.acces;
         dejaRafraichi = true;
@@ -164,12 +214,13 @@ export function creerTransport(deps: DependancesTransport): TransportSync {
       if (reponse === null) return { type: 'hors_ligne' };
 
       if (reponse.status === 401 && !dejaRafraichi) {
-        const issue = await rafraichir();
+        const issue = await rafraichir(acces);
         if (typeof issue === 'string') return traduireIssue(issue);
         reponse = await envoyer(lot, issue.acces);
         if (reponse === null) return { type: 'hors_ligne' };
       }
 
+      if (STATUTS_INDISPONIBLES.has(reponse.status)) return { type: 'hors_ligne' };
       const corps = await corpsJson(reponse);
       if (!reponse.ok) {
         // Un second 401 arrête ici : aucune boucle de refresh, aucun jeton effacé.

@@ -54,6 +54,7 @@ import {
   TYPES_SESSION,
   TYPES_UNITE,
   type RoleSurMission,
+  type StatutSession,
 } from '../db/schema.js';
 import {
   archiver,
@@ -66,6 +67,8 @@ import {
   insererUnite,
   journaliserPush,
   lireBlocParCode,
+  lireMissionDeDemande,
+  lireMissionDeReponse,
   lirePiece,
   lireQuestion,
   lireQuestionDeMission,
@@ -75,7 +78,6 @@ import {
   lireSession,
   lireUnite,
   majPiece,
-  majQuestion,
   majReponse,
   majSession,
   majUnite,
@@ -87,6 +89,7 @@ import {
   type InsertionReponse,
   type InsertionSession,
   type InsertionUnite,
+  type LigneReponse,
 } from './depot.js';
 import {
   auteurDeclareAdmis,
@@ -120,8 +123,8 @@ const MESSAGES = {
   chargeInvalide: 'Opération illisible : son contenu ne respecte pas le format attendu.',
   sessionInconnue: "La session de rattachement n'est pas encore connue du siège.",
   referenceInconnue: "Un élément de rattachement n'est pas encore connu du siège.",
-  doublonReponse:
-    'Une autre réponse existe déjà pour cette question dans cette session : à examiner.',
+  recul: "Écriture refusée : le statut d'une session ne revient jamais en arrière.",
+  retouche: 'Écriture refusée : une question ad hoc créée ne se modifie pas depuis le terrain.',
   suppression: "La suppression n'est pas prise en charge par la synchronisation.",
   cycle: "L'unité proposée ne peut pas être rattachée à elle-même.",
   echec: "L'opération n'a pas pu être enregistrée : elle sera retentée.",
@@ -338,6 +341,35 @@ interface Contexte {
 // =============================================================================
 // ENTITÉ `interview` — propriétaire : `conducted_by` de la ligne serveur
 // =============================================================================
+/** L'ordre du cycle de vie d'une session (04 : `interviews.status`). */
+const RANG_STATUT: Readonly<Record<StatutSession, number>> = {
+  non_demarre: 0,
+  en_cours: 1,
+  termine: 2,
+};
+
+/**
+ * `linkedReviewAnswerId` (réponse → sa session → sa mission) et
+ * `documentRequestId` (`document_requests.mission_id`) : autre mission →
+ * `forbidden`, inconnue → `error` (PD4). Rend `null` quand tout est en règle.
+ */
+async function referencesDeSession(
+  ex: ExecuteurSql,
+  charge: z.infer<typeof chargeSessionSchema>,
+  emetteur: Emetteur,
+): Promise<Issue | null> {
+  const missions: (string | null)[] = [];
+  if (charge.linkedReviewAnswerId !== undefined && charge.linkedReviewAnswerId !== null) {
+    missions.push(await lireMissionDeReponse(ex, charge.linkedReviewAnswerId));
+  }
+  if (charge.documentRequestId !== undefined && charge.documentRequestId !== null) {
+    missions.push(await lireMissionDeDemande(ex, charge.documentRequestId));
+  }
+  if (missions.some((m) => m !== null && m !== emetteur.missionId)) return interdite();
+  if (missions.includes(null)) return enEchec(MESSAGES.referenceInconnue);
+  return null;
+}
+
 async function traiterSession(c: Contexte): Promise<Issue> {
   const lecture = chargeSessionSchema.safeParse(c.op.payload);
   if (!lecture.success) return enEchec(MESSAGES.chargeInvalide);
@@ -348,6 +380,10 @@ async function traiterSession(c: Contexte): Promise<Issue> {
   const unite = await lireUnite(c.ex, charge.orgUnitId);
   if (unite === null) return enEchec(MESSAGES.referenceInconnue);
   if (unite.missionId !== c.emetteur.missionId) return interdite();
+  // Réserve 1 d'A17 (BLOQUANT) : toute référence portée par la session doit vivre
+  // DANS la mission du lot — sinon une session relierait la donnée d'autrui.
+  const references = await referencesDeSession(c.ex, charge, c.emetteur);
+  if (references !== null) return references;
 
   const colonnes = sansIndefinis<InsertionSession>({
     orgUnitId: charge.orgUnitId,
@@ -375,7 +411,7 @@ async function traiterSession(c: Contexte): Promise<Issue> {
     generalNotes: charge.generalNotes,
   });
 
-  const existante = await lireSession(c.ex, c.op.entityId, true);
+  const existante = await lireSession(c.ex, c.op.entityId, 'update');
   if (existante === null) {
     const kind = charge.kind ?? 'entretien';
     await insererSession(c.ex, {
@@ -416,18 +452,29 @@ async function traiterSession(c: Contexte): Promise<Issue> {
     return ARBITREE;
   }
   if (sens === 'egal') return APPLIQUEE;
-  if (modifies.length > 0) {
+  // Arbitrage A01 (R1 de la re-revue A17, 2026-10-09) : le statut d'une session ne
+  // RECULE jamais par le push (non_demarre → en_cours → termine). Une écriture plus
+  // récente qui recule le statut garde le statut SERVEUR et applique le reste ;
+  // elle n'est refusée que si ce recul est sa SEULE différence avec la ligne.
+  const recul =
+    charge.status !== undefined && RANG_STATUT[charge.status] < RANG_STATUT[existante.status];
+  const appliquees: Partial<InsertionSession> = recul
+    ? Object.fromEntries(Object.entries(colonnes).filter(([cle]) => cle !== 'status'))
+    : colonnes;
+  const modifiees = recul ? modifies.filter((cle) => cle !== 'status') : modifies;
+  if (recul && modifiees.length === 0) return interdite(MESSAGES.recul);
+  if (modifiees.length > 0) {
     await archiver(c.ex, {
       entite: 'interview',
       entiteId: existante.id,
-      valeur: { ...extraire(existante, modifies), clientUpdatedAt: existante.clientUpdatedAt },
+      valeur: { ...extraire(existante, modifiees), clientUpdatedAt: existante.clientUpdatedAt },
       origine: 'terrain',
       auteur: c.emetteur.utilisateurId,
       le: c.maintenant,
     });
   }
   await majSession(c.ex, existante.id, {
-    ...colonnes,
+    ...appliquees,
     clientUpdatedAt: c.entrant,
     syncedAt: c.maintenant,
     updatedAt: c.maintenant,
@@ -438,12 +485,101 @@ async function traiterSession(c: Contexte): Promise<Issue> {
 // =============================================================================
 // ENTITÉ `answer` — propriétaire : la session de la réponse
 // =============================================================================
+/**
+ * H7 (réserve 2 d'A17) — la VERSION ENTIÈRE d'une réponse, telle qu'archivée dans
+ * `answer_revisions.previous_value` : objet camelCase, `clientUpdatedAt` compris.
+ */
+function versionReponse(ligne: {
+  readonly value: unknown;
+  readonly note: string | null;
+  readonly withheld: boolean;
+  readonly withheldReason: string | null;
+  readonly notApplicable: boolean;
+  readonly naReason: string | null;
+  readonly flagReview: boolean;
+  readonly reviewReason: string | null;
+  readonly source: string;
+  readonly horsParcours: boolean;
+  readonly clientUpdatedAt: Date | null;
+}): Record<string, unknown> {
+  return {
+    value: ligne.value,
+    note: ligne.note,
+    withheld: ligne.withheld,
+    withheldReason: ligne.withheldReason,
+    notApplicable: ligne.notApplicable,
+    naReason: ligne.naReason,
+    flagReview: ligne.flagReview,
+    reviewReason: ligne.reviewReason,
+    source: ligne.source,
+    horsParcours: ligne.horsParcours,
+    clientUpdatedAt: ligne.clientUpdatedAt,
+  };
+}
+
 async function traiterReponse(c: Contexte): Promise<Issue> {
   const lecture = chargeReponseSchema.safeParse(c.op.payload);
   if (!lecture.success) return enEchec(MESSAGES.chargeInvalide);
   const charge = lecture.data;
 
-  const colonnes = sansIndefinis<InsertionReponse>({
+  const parId = await lireReponse(c.ex, c.op.entityId, 'update');
+  if (parId !== null) {
+    const propriete = await proprieteDeSession(c.ex, parId.interviewId, c.emetteur);
+    if (propriete !== 'proprietaire') return issueDeRefus(propriete, MESSAGES.sessionInconnue);
+    // Une réponse ne change ni de session ni de question par le push.
+    if (
+      charge.interviewId !== parId.interviewId ||
+      charge.missionQuestionId !== parId.missionQuestionId
+    ) {
+      return interdite();
+    }
+    return arbitrerReponse(c, parId, charge, 'terrain');
+  }
+
+  // PD4 : session inconnue → `error` (rejouable), jamais `forbidden`.
+  const propriete = await proprieteDeSession(c.ex, charge.interviewId, c.emetteur);
+  if (propriete !== 'proprietaire') return issueDeRefus(propriete, MESSAGES.sessionInconnue);
+  const question = await lireQuestionDeMission(c.ex, charge.missionQuestionId);
+  if (question === null) return enEchec(MESSAGES.referenceInconnue);
+  if (question.missionId !== c.emetteur.missionId) return interdite();
+
+  // Arbitrage A01 (2026-10-09) — un SECOND id pour le même (session, question),
+  // même auditeur sur deux appareils (scénario 5) : dernier-écrit-gagne SUR LA LIGNE
+  // EXISTANTE, jamais de seconde ligne ; la version perdante est archivée en
+  // `sync_arbitrage`, qu'elle soit l'ancienne ligne ou l'entrante.
+  const parCle = await lireReponseParCle(c.ex, charge.interviewId, charge.missionQuestionId);
+  if (parCle !== null) {
+    const existante = await lireReponse(c.ex, parCle.id, 'update');
+    if (existante === null) return enEchec(MESSAGES.echec);
+    return arbitrerReponse(c, existante, charge, 'sync_arbitrage');
+  }
+
+  await insererReponse(c.ex, {
+    source: 'entretien',
+    withheld: false,
+    horsParcours: false,
+    flagReview: false,
+    notApplicable: false,
+    ...colonnesReponse(charge),
+    id: c.op.entityId,
+    interviewId: charge.interviewId,
+    missionQuestionId: charge.missionQuestionId,
+    value: charge.value ?? null,
+    questionTextSnapshot: question.textSnapshot,
+    revision: 1,
+    clientCreatedAt: date(charge.clientCreatedAt) ?? c.entrant,
+    clientUpdatedAt: c.entrant,
+    syncedAt: c.maintenant,
+    createdAt: c.maintenant,
+    updatedAt: c.maintenant,
+  });
+  return APPLIQUEE;
+}
+
+type ChargeReponse = z.infer<typeof chargeReponseSchema>;
+
+function colonnesReponse(charge: ChargeReponse): Partial<InsertionReponse> {
+  return sansIndefinis<InsertionReponse>({
     source: charge.source,
     withheld: charge.withheld,
     withheldReason: charge.withheldReason,
@@ -454,80 +590,64 @@ async function traiterReponse(c: Contexte): Promise<Issue> {
     notApplicable: charge.notApplicable,
     naReason: charge.naReason,
   });
+}
 
-  const existante = await lireReponse(c.ex, c.op.entityId, true);
-  if (existante === null) {
-    // PD4 : session inconnue → `error` (rejouable), jamais `forbidden`.
-    const propriete = await proprieteDeSession(c.ex, charge.interviewId, c.emetteur);
-    if (propriete !== 'proprietaire') return issueDeRefus(propriete, MESSAGES.sessionInconnue);
-    const question = await lireQuestionDeMission(c.ex, charge.missionQuestionId);
-    if (question === null) return enEchec(MESSAGES.referenceInconnue);
-    if (question.missionId !== c.emetteur.missionId) return interdite();
-    // UNIQUE (interview_id, mission_question_id) : une seconde identité pour la
-    // même question n'écrase rien en silence — refus visible, à examiner.
-    if ((await lireReponseParCle(c.ex, charge.interviewId, charge.missionQuestionId)) !== null) {
-      return enEchec(MESSAGES.doublonReponse);
-    }
-    await insererReponse(c.ex, {
-      source: 'entretien',
-      withheld: false,
-      horsParcours: false,
-      flagReview: false,
-      notApplicable: false,
-      ...colonnes,
-      id: c.op.entityId,
-      interviewId: charge.interviewId,
-      missionQuestionId: charge.missionQuestionId,
-      value: charge.value ?? null,
-      questionTextSnapshot: question.textSnapshot,
-      revision: 1,
-      clientCreatedAt: date(charge.clientCreatedAt) ?? c.entrant,
-      clientUpdatedAt: c.entrant,
-      syncedAt: c.maintenant,
-      createdAt: c.maintenant,
-      updatedAt: c.maintenant,
-    });
-    return APPLIQUEE;
-  }
-
-  const propriete = await proprieteDeSession(c.ex, existante.interviewId, c.emetteur);
-  if (propriete !== 'proprietaire') return issueDeRefus(propriete, MESSAGES.sessionInconnue);
-  // Une réponse ne change ni de session ni de question par le push.
-  if (
-    charge.interviewId !== existante.interviewId ||
-    charge.missionQuestionId !== existante.missionQuestionId
-  ) {
-    return interdite();
-  }
-
+/**
+ * Dernier-écrit-gagne sur une réponse EXISTANTE (§9.4), propriété déjà prouvée.
+ * Invariant 7 (arbitrage A01, qui prime sur la lecture étroite de PD3) : toute
+ * colonne écrasée est archivée, `value` ou non. Le compteur client n'est jamais le
+ * déclencheur : c'est la comparaison des colonnes qui décide.
+ * `origineEcrasement` : `terrain` quand la même identité se réécrit,
+ * `sync_arbitrage` quand une seconde identité l'emporte sur la ligne existante.
+ */
+async function arbitrerReponse(
+  c: Contexte,
+  existante: LigneReponse,
+  charge: ChargeReponse,
+  origineEcrasement: 'terrain' | 'sync_arbitrage',
+): Promise<Issue> {
+  const colonnes = colonnesReponse(charge);
   const valeurEntrante = charge.value === undefined ? existante.value : charge.value;
   const valeurChange = canonique(valeurEntrante) !== canonique(existante.value);
-  const modifies = champsModifies(existante, colonnes);
+  const change = valeurChange || champsModifies(existante, colonnes).length > 0;
   const sens = ordre(existante.clientUpdatedAt, c.entrant);
-  if (sens === 'plus_ancien' || (sens === 'egal' && (valeurChange || modifies.length > 0))) {
+
+  if (sens === 'plus_ancien' || (sens === 'egal' && change)) {
     await archiver(c.ex, {
       entite: 'answer',
       entiteId: existante.id,
-      valeur: valeurEntrante,
+      // La version PERDANTE entière : la charge, complétée par la ligne pour les
+      // champs qu'elle ne porte pas.
+      valeur: versionReponse(
+        Object.assign({}, existante, colonnes, {
+          value: valeurEntrante,
+          clientUpdatedAt: c.entrant,
+        }),
+      ),
       origine: 'sync_arbitrage',
       auteur: c.emetteur.utilisateurId,
       le: c.maintenant,
     });
     return ARBITREE;
   }
-  if (sens === 'egal') return APPLIQUEE;
-  // PD3 / 05 §9.3 (V2.9) : le SERVEUR matérialise la révision `terrain` quand
-  // `value` change — et seulement alors. Le compteur client n'est pas le déclencheur.
-  if (valeurChange) {
-    await archiver(c.ex, {
-      entite: 'answer',
-      entiteId: existante.id,
-      valeur: existante.value,
-      origine: 'terrain',
-      auteur: c.emetteur.utilisateurId,
-      le: c.maintenant,
-    });
+  if (sens === 'egal' || !change) {
+    if (sens !== 'egal') {
+      await majReponse(c.ex, existante.id, {
+        clientUpdatedAt: c.entrant,
+        syncedAt: c.maintenant,
+        updatedAt: c.maintenant,
+      });
+    }
+    return APPLIQUEE;
   }
+  await archiver(c.ex, {
+    entite: 'answer',
+    entiteId: existante.id,
+    valeur: versionReponse(existante),
+    origine: origineEcrasement,
+    auteur: c.emetteur.utilisateurId,
+    le: c.maintenant,
+  });
   await majReponse(c.ex, existante.id, {
     ...colonnes,
     value: valeurEntrante,
@@ -559,7 +679,7 @@ async function traiterPiece(c: Contexte): Promise<Issue> {
     sizeBytes: charge.sizeBytes,
   });
 
-  const existante = await lirePiece(c.ex, c.op.entityId, true);
+  const existante = await lirePiece(c.ex, c.op.entityId, 'update');
   if (existante === null) {
     const propriete = await proprieteDePiece(
       c.ex,
@@ -677,7 +797,7 @@ async function traiterProposition(c: Contexte): Promise<Issue> {
     timezone: charge.timezone,
   });
 
-  const existante = await lireUnite(c.ex, c.op.entityId, true);
+  const existante = await lireUnite(c.ex, c.op.entityId, 'update');
   if (existante === null) {
     await insererUnite(c.ex, {
       ...colonnes,
@@ -738,8 +858,8 @@ async function traiterQuestionAdhoc(c: Contexte): Promise<Issue> {
     position: mq.position,
   });
 
-  const existante = await lireQuestion(c.ex, c.op.entityId, true);
-  const ligneMq = await lireQuestionDeMission(c.ex, mq.id, true);
+  const existante = await lireQuestion(c.ex, c.op.entityId, 'update');
+  const ligneMq = await lireQuestionDeMission(c.ex, mq.id, 'update');
   if (ligneMq !== null) {
     // L'id client de la ligne de questionnaire doit désigner CETTE question, dans
     // CETTE mission : sinon il viserait le questionnaire d'autrui.
@@ -777,8 +897,15 @@ async function traiterQuestionAdhoc(c: Contexte): Promise<Issue> {
     if (existante.origin !== 'ad_hoc') return interdite(MESSAGES.siege);
     if (existante.originMissionId !== c.emetteur.missionId) return interdite();
     if (existante.createdBy !== c.emetteur.utilisateurId) return interdite();
-    if (champsModifies(existante, colonnesQuestion).length > 0) {
-      await majQuestion(c.ex, existante.id, { ...colonnesQuestion, updatedAt: c.maintenant });
+    // Arbitrage A01 (2026-10-09) : une question ad hoc créée ne se RETOUCHE pas par
+    // le push — ni la question, ni sa ligne de questionnaire. Seule une recréation
+    // strictement identique (rejeu sous un nouvel opId) passe, sans effet.
+    if (
+      ligneMq === null ||
+      champsModifies(existante, { ...colonnesQuestion, blockId }).length > 0 ||
+      champsModifies(ligneMq, instantane).length > 0
+    ) {
+      return interdite(MESSAGES.retouche);
     }
   }
 

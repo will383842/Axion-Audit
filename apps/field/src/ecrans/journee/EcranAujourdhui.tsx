@@ -59,7 +59,7 @@ import { versEtatPastille } from '../../app/etat-sync-affiche.js';
 import { lireMeta } from '../../local/base.js';
 import { maintenant } from '../../local/horloge.js';
 import type { SessionLocale } from '../../local/depots/sessions.js';
-import { portSyncInerte } from '../../local/port-sync.js';
+import { portSyncDeLaBase } from '../../app/port-sync-terrain.js';
 import { memoriserSessionCourante } from '../../session/position.js';
 import { formaterDateHeure, formaterHeure } from '../../session/fuseau.js';
 import { useEnLigne } from '../../session/media.js';
@@ -175,7 +175,7 @@ export function EcranAujourdhui(): ReactNode {
     async (): Promise<JourneeTerrain | null | undefined> => {
       if (base === null) return undefined;
       try {
-        return await construireJournee(portSyncInerte);
+        return await construireJournee(portSyncDeLaBase(base));
       } catch {
         // La cause exacte n'est pas remontée à l'écran : elle contiendrait des
         // détails techniques, et 11 §2 proscrit les journaux bavards côté client.

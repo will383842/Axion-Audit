@@ -61,7 +61,7 @@ import {
 import { useTerrain } from '../../app/contexte.js';
 import { ecrireMeta, lireMeta } from '../../local/base.js';
 import { maintenant } from '../../local/horloge.js';
-import { portSyncInerte } from '../../local/port-sync.js';
+import { portSyncDeLaBase } from '../../app/port-sync-terrain.js';
 import { deposerFichier } from '../../sauvegarde/depot.js';
 import { nomFichierSauvegarde } from '../../sauvegarde/format.js';
 import { exporterSauvegarde, MotDePasseExportInvalideError } from '../../sauvegarde/sauvegarde.js';
@@ -131,7 +131,7 @@ export function EcranFinDeJournee(): ReactNode {
     async (): Promise<JourneeTerrain | null | undefined> => {
       if (base === null) return undefined;
       try {
-        return await construireJournee(portSyncInerte);
+        return await construireJournee(portSyncDeLaBase(base));
       } catch {
         return null;
       }
@@ -193,7 +193,7 @@ export function EcranFinDeJournee(): ReactNode {
         //    sauvegarde compte. Ce garde manquait, et A27 l'a mesuré.
         let sync: string;
         try {
-          sync = (await portSyncInerte.synchroniserMaintenant(missionId)).message;
+          sync = (await portSyncDeLaBase(base).synchroniserMaintenant(missionId)).message;
         } catch {
           sync =
             'La synchronisation a échoué sur cet appareil. Vos données restent intactes ; la sauvegarde de secours ci-dessous est votre filet.';

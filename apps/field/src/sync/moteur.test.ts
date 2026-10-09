@@ -522,6 +522,7 @@ describe('moteur — scénario §9.8 n°2 : kill de l’app pendant un push', ()
 describe('moteur — scénario §9.8 n°3 : double envoi du même lot', () => {
   it('deux passages concurrents : chaque op est appliquée une seule fois, aucune ne finit en échec', async () => {
     await ecrireSessions(4);
+    const attendus = (await file()).map((o) => o.opId);
     const siege = siegeFictif();
     const moteur = creerMoteurSync({ base, coffre, transport: siege.transport });
 
@@ -529,9 +530,11 @@ describe('moteur — scénario §9.8 n°3 : double envoi du même lot', () => {
 
     expect(await base.outbox.count()).toBe(0);
     expect(bilans.reduce((n, b) => n + b.enErreur + b.rejetees, 0)).toBe(0);
-    const recues = new Set(siege.lots.flatMap((l) => l.operations.map((o) => o.opId)));
-    expect(recues.size).toBe(4);
-    for (const opId of recues) expect(siege.appliquees(opId)).toBe(1);
+    // A5 : compte BRUT de ce que le siège a reçu — aucun opId n'arrive deux fois.
+    const recues = siege.lots.flatMap((l) => l.operations.map((o) => o.opId));
+    expect(recues).toHaveLength(attendus.length);
+    expect([...recues].sort()).toEqual(attendus);
+    for (const opId of attendus) expect(siege.envoisDe(opId)).toBe(1);
   });
 
   it('un lot dont toutes les ops reviennent « duplicate » vide la file sans erreur', async () => {
@@ -681,5 +684,123 @@ describe('moteur — refus d’authentification : aucune tentative comptée (arb
     const restantes = await file();
     expect(restantes).toHaveLength(2);
     expect(restantes.every((o) => o.statut === 'en_attente' && o.tentatives === 0)).toBe(true);
+  });
+});
+
+// =============================================================================
+// E. Arbitrages A2 et B1 (2026-10-09) : une op illisible ou incomplète est ISOLÉE
+// =============================================================================
+async function ecrireQuestionAdHoc(blockCode: string | null): Promise<string> {
+  const id = uuidv7();
+  await ecrireLocal({
+    entite: 'question_adhoc',
+    id,
+    missionId: MISSION_A,
+    action: 'upsert',
+    index: {
+      position: 3,
+      texteSnapshot: 'Question ad hoc fictive ?',
+      motsCles: ['question', 'fictive'],
+      answerType: 'free_text',
+      criticality: 'informatif',
+    },
+    charge: {
+      questionId: uuidv7(),
+      questionVersion: 1,
+      guidanceSnapshot: null,
+      optionsSnapshot: null,
+      scoringSnapshot: null,
+      weightSnapshot: 0,
+      allowRangeSnapshot: false,
+      addedAdHoc: true,
+      blockCode,
+    },
+  });
+  return id;
+}
+
+async function ligneDe(entiteId: string): Promise<LigneOutbox> {
+  const ligne = (await file()).find((o) => o.entiteId === entiteId);
+  if (ligne === undefined) throw new Error('banc : ligne attendue');
+  return ligne;
+}
+
+describe('moteur — op illisible ou incomplète : isolée « à examiner », les autres partent', () => {
+  it('B1 : une question ad hoc SANS bloc ne part jamais — « a_examiner » + motif français, le reste monte', async () => {
+    const sansBloc = await ecrireQuestionAdHoc(null);
+    await ecrireSessions(2);
+    const siege = siegeFictif();
+
+    const bilan = await creerMoteurSync({ base, coffre, transport: siege.transport }).pousser(
+      MISSION_A,
+    );
+
+    const envoyees = siege.lots.flatMap((l) => l.operations);
+    expect(envoyees.filter((o) => o.entity === 'question_adhoc')).toHaveLength(0);
+    expect(envoyees).toHaveLength(2);
+    const isolee = await ligneDe(sansBloc);
+    expect(isolee.statut).toBe('a_examiner');
+    expect(isolee.derniereErreur).toMatch(/bloc/i);
+    expect(await base.outbox.count()).toBe(1);
+    expect(bilan.operationsAcquittees).toBe(2);
+  });
+
+  it('B1 : une question ad hoc AVEC bloc part, et son blockCode est une chaîne non vide', async () => {
+    await ecrireQuestionAdHoc('BLOC-FICTIF');
+    const siege = siegeFictif();
+
+    await creerMoteurSync({ base, coffre, transport: siege.transport }).pousser(MISSION_A);
+
+    const [op] = siege.lots.flatMap((l) => l.operations);
+    expect((op?.payload as { question: { blockCode: unknown } }).question.blockCode).toBe(
+      'BLOC-FICTIF',
+    );
+  });
+
+  it('A2 : une charge qui ne se DÉCHIFFRE pas est isolée « a_examiner » avec motif ; les autres partent', async () => {
+    const kekEtrangere = await deriverKek(
+      'autre-cheval-pile-agrafe-2026',
+      new Uint8Array(16).fill(53),
+    );
+    const coffreEtranger = await ouvrirCoffre(kekEtrangere, await creerDekEnveloppee(kekEtrangere));
+    const corrompue = await ecrireSession();
+    await ecrireSessions(2);
+    const ligne = await ligneDe(corrompue);
+    await base.outbox.update(ligne.opId, { charge: await coffreEtranger.chiffrer({ x: 1 }) });
+    const siege = siegeFictif();
+
+    await creerMoteurSync({ base, coffre, transport: siege.transport }).pousser(MISSION_A);
+
+    expect(siege.lots.flatMap((l) => l.operations)).toHaveLength(2);
+    const isolee = await ligneDe(corrompue);
+    expect(isolee.statut).toBe('a_examiner');
+    expect(isolee.derniereErreur).toMatch(/[a-zé]{3,}/i);
+    expect(isolee.derniereErreur).not.toMatch(/OperationError|stack|undefined/);
+    expect(await base.outbox.count()).toBe(1);
+  }, 15_000);
+
+  it('A2 : une charge déchiffrée mais NON VALIDE localement est isolée de même', async () => {
+    const invalide = await ecrireSession();
+    await ecrireSessions(1);
+    const ligne = await ligneDe(invalide);
+    await base.outbox.update(ligne.opId, { charge: await coffre.chiffrer('pas un objet') });
+    const siege = siegeFictif();
+
+    await creerMoteurSync({ base, coffre, transport: siege.transport }).pousser(MISSION_A);
+
+    expect(siege.lots.flatMap((l) => l.operations)).toHaveLength(1);
+    expect((await ligneDe(invalide)).statut).toBe('a_examiner');
+    expect((await ligneDe(invalide)).derniereErreur).not.toBeNull();
+  });
+
+  it('A1 : 429 / 502-504 arrivent au moteur en « hors_ligne » et ne comptent aucune tentative', async () => {
+    await ecrireSessions(2);
+    const transport: Pick<TransportSync, 'pousser'> = {
+      pousser: () => Promise.resolve({ type: 'hors_ligne' }),
+    };
+
+    await creerMoteurSync({ base, coffre, transport }).pousser(MISSION_A);
+
+    expect((await file()).every((o) => o.tentatives === 0)).toBe(true);
   });
 });

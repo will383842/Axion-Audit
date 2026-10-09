@@ -171,7 +171,7 @@ const VERBES_ECRITURE_DEXIE =
  * demande. **Toute table ajoutée à `SCHEMA_LOCAL` s’ajoute ICI dans le même
  * geste**, sinon la garde cesse de mordre sur elle — en silence.
  */
-const TABLES_LOCALES = [
+const LISTE_TABLES_LOCALES = [
   'missions',
   'missionQuestions',
   'orgUnits',
@@ -181,9 +181,11 @@ const TABLES_LOCALES = [
   'workAssignments',
   'outbox',
   'meta',
-].join('|');
+];
+const TABLES_LOCALES = LISTE_TABLES_LOCALES.join('|');
 
-const ECRITURE_DEXIE = [
+/** Les deux sélecteurs ① et ② de l'écriture Dexie, sur un jeu de tables NOMMÉES. */
+const ecritureDexieSur = (tables) => [
   {
     // ① L’écriture sur une TABLE NOMMÉE : `base.answers.put(…)`, `base.meta.delete(…)`.
     //
@@ -194,7 +196,7 @@ const ECRITURE_DEXIE = [
     // lint, alors que la glose promettait le contraire. Nommer les tables ferme le
     // faux positif SANS relâcher la garde : `current` n’est pas une table, et
     // aucune des neuf n’a échappé au sélecteur.
-    selector: `CallExpression[callee.object.type='MemberExpression'][callee.object.property.name=/^(${TABLES_LOCALES})$/][callee.property.name=/^(${VERBES_ECRITURE_DEXIE})$/]`,
+    selector: `CallExpression[callee.object.type='MemberExpression'][callee.object.property.name=/^(${tables})$/][callee.property.name=/^(${VERBES_ECRITURE_DEXIE})$/]`,
     message: MESSAGE_ECRITURE_DEXIE,
   },
   {
@@ -218,6 +220,17 @@ const ECRITURE_DEXIE = [
     message: MESSAGE_ECRITURE_DEXIE,
   },
 ];
+
+const ECRITURE_DEXIE = ecritureDexieSur(TABLES_LOCALES);
+
+/**
+ * La même règle, `outbox` exceptée — et elle SEULE (A4 de la revue A29 de L6a).
+ * Pour `sync/moteur.ts`, qui applique les réponses serveur à la file ; les huit
+ * autres tables, et le sélecteur ② des chaînes, continuent de mordre sur lui.
+ */
+const ECRITURE_DEXIE_HORS_OUTBOX = ecritureDexieSur(
+  LISTE_TABLES_LOCALES.filter((table) => table !== 'outbox').join('|'),
+);
 
 export default tseslint.config(
   {
@@ -427,24 +440,31 @@ export default tseslint.config(
     // dans Dexie. `base.ts` porte `meta`, qui ne se synchronise pas et n’a donc pas
     // d’op ; `ecriture.ts` porte tout le reste, ligne + op dans UNE transaction.
     // ① continue de s’appliquer à eux.
-    //
-    // TROISIÈME ET DERNIER, ajouté par L6a (A25, 2026-10-09) : le moteur de montée
-    // (`sync/moteur.ts`). Il n’écrit QUE l’outbox, et seulement pour y appliquer
-    // une réponse serveur (sortie sur `applied`/`duplicate`/`superseded`, statut
-    // `rejetee`/`a_examiner`, `tentatives`) — la « sortie de file sur réponse
-    // serveur » que `local/depots/outbox.ts` et `LOT_L5.md` §3.3-① réservent à
-    // L6a. Il ne crée aucune ligne de donnée, donc aucune donnée sans op.
-    files: [
-      'apps/field/src/local/ecriture.ts',
-      'apps/field/src/local/base.ts',
-      'apps/field/src/sync/moteur.ts',
-    ],
+    files: ['apps/field/src/local/ecriture.ts', 'apps/field/src/local/base.ts'],
     rules: {
       'no-restricted-syntax': [
         'error',
         ...UUID_APPLICATIF,
         ...PAGINATION_SANS_DECALAGE,
         ...HORLOGE_DE_L_APPAREIL,
+      ],
+    },
+  },
+  {
+    // Le moteur de montée (`sync/moteur.ts`, L6a — A25, 2026-10-09) : il écrit
+    // l’OUTBOX, et elle seule, pour y appliquer une réponse serveur (sortie sur
+    // `applied`/`duplicate`/`superseded`, statut `rejetee`/`a_examiner`,
+    // `tentatives`) — la « sortie de file sur réponse serveur » que
+    // `local/depots/outbox.ts` et `LOT_L5.md` §3.3-① réservent à L6a. Toute
+    // autre table, et toute écriture en chaîne (②), reste interdite ici (A4).
+    files: ['apps/field/src/sync/moteur.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...UUID_APPLICATIF,
+        ...PAGINATION_SANS_DECALAGE,
+        ...HORLOGE_DE_L_APPAREIL,
+        ...ECRITURE_DEXIE_HORS_OUTBOX,
       ],
     },
   },

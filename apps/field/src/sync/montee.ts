@@ -27,6 +27,18 @@ import type { EntiteSync, Operation } from '../local/contrat-sync.js';
 import type { LigneOutbox } from '../local/base.js';
 import type { Coffre } from '../local/coffre.js';
 
+/**
+ * Une op qui ne PEUT pas monter telle quelle. Son message est en français et sans
+ * donnée personnelle : le moteur le range dans `derniereErreur` (« à examiner »).
+ */
+export class MonteeImpossibleError extends Error {
+  override readonly name = 'MonteeImpossibleError';
+}
+
+/** B1 : `questions.block_id` est NOT NULL au 04 — sans bloc, le siège ne peut rien créer. */
+export const MOTIF_QUESTION_SANS_BLOC =
+  'Question ajoutée sans bloc : le siège ne peut pas la ranger. Elle reste sur cet appareil, à examiner.';
+
 /** Une charge d'op déchiffrée : l'en-tête d'index et la charge, à plat (`ecrireLocal`). */
 const chargeOpSchema = z.record(z.string(), z.unknown());
 
@@ -135,7 +147,7 @@ const questionAdhocLocaleSchema = z.object({
   guidanceSnapshot: z.string().nullable(),
   optionsSnapshot: z.unknown(),
   allowRangeSnapshot: z.boolean(),
-  blockCode: z.string().nullable(),
+  blockCode: z.string().trim().min(1),
 });
 
 /**
@@ -147,6 +159,11 @@ function questionAdhocVersFil(charge: ChargeOp): {
   readonly entityId: string;
   readonly payload: Record<string, unknown>;
 } {
+  const bloc = charge.blockCode;
+  if (typeof bloc !== 'string' || bloc.trim() === '') {
+    throw new MonteeImpossibleError(MOTIF_QUESTION_SANS_BLOC);
+  }
+  // Toute autre forme invalide lève ici ; le moteur l'isole « à examiner » (A2).
   const locale = questionAdhocLocaleSchema.parse(charge);
   return {
     entityId: locale.questionId,

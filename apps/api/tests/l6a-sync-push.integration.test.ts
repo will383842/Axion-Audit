@@ -107,6 +107,7 @@ const ROUTE_PUSH = '/v1/sync/push';
 // ÉTAT DE LA SUITE
 // =============================================================================
 let nomBase = '';
+let urlBase = '';
 let client: Client | undefined;
 let app: FastifyInstance | undefined;
 let blocId = '';
@@ -699,6 +700,7 @@ beforeAll(async () => {
   if (!migrationsLivrees()) throw new Error(MESSAGE_L1_ABSENT);
   const base = await creerBaseEphemere('l6a_push');
   nomBase = base.nom;
+  urlBase = base.url;
   await appliquerMontee(base.url);
   process.env.SEED_ADMIN_EMAIL ??= COURRIEL_FONDATEUR_FACTICE;
   process.env.SEED_ADMIN_PASSWORD ??= MOT_DE_PASSE_FONDATEUR_FACTICE;
@@ -991,21 +993,57 @@ describe('L6a · idempotence (11 §4, 07 C2, scénario 3 §9.8) @critique', () =
     });
   });
 
-  it('unicité answers(interview_id, mission_question_id) : un second UUID pour la même question ne crée pas de seconde ligne, ni de 5xx, ni de perte silencieuse @critique', async () => {
+  // ARBITRAGE A01 (2026-10-09) — remplace l'option `error` : un second UUID pour le
+  // même couple (session, question), même auditeur sur deux appareils (scénario 5),
+  // s'arbitre au dernier-écrit-gagne SUR LA LIGNE EXISTANTE ; jamais de seconde
+  // ligne ; la perdante est archivée en `sync_arbitrage`. Comparaisons
+  // STRUCTURELLES : PostgreSQL réordonne les clés d'un jsonb.
+  it('unicité answers : second UUID, même (session, question), PLUS RÉCENT → applied sur la ligne existante, l’ancienne version archivée @critique', async () => {
     const m = await semerMonde();
     const doublon = op('answer', uuidv7(), chargeReponse(m.entretienA, m.mq1, true));
-    const r = await pousser(m.A.jeton, m.missionId, [doublon]);
-    // Option de l'auteur, inscrite en DECISIONS par la coordination : `error`
-    // (« à examiner »), rien d'écrasé. Comparaison STRUCTURELLE : PostgreSQL
-    // réordonne les clés d'un jsonb ({"v":…,"type":…}), un JSON.stringify ment.
-    expect(resultatsDe(r, [doublon])).toEqual(['error']);
-    const lignesQuestion = await lignes(
-      'SELECT id, value FROM answers WHERE interview_id = $1 AND mission_question_id = $2',
-      [m.entretienA, m.mq1],
+    expect(resultatsDe(await pousser(m.A.jeton, m.missionId, [doublon]), [doublon])).toEqual([
+      'applied',
+    ]);
+    expect(
+      await lignes(
+        'SELECT id, value FROM answers WHERE interview_id = $1 AND mission_question_id = $2',
+        [m.entretienA, m.mq1],
+      ),
+    ).toEqual([{ id: m.reponseA, value: { type: 'yes_no', v: true } }]);
+    expect(
+      await valeur('SELECT count(*)::int AS n FROM answers WHERE id = $1', doublon.entityId),
+    ).toBe(0);
+    const arbitrees = (await revisionsDe(m.reponseA)).filter(
+      (a) => a.change_origin === 'sync_arbitrage',
     );
-    expect(lignesQuestion).toEqual([{ id: m.reponseA, value: { type: 'yes_no', v: false } }]);
-    expect(await revisionsDe(m.reponseA)).toEqual([]);
-    expect(await opsTraitees([doublon.opId])).toEqual([]);
+    expect(arbitrees).toHaveLength(1);
+    expect(arbitrees[0]?.previous_value).toMatchObject({
+      value: { type: 'yes_no', v: false },
+      clientUpdatedAt: T_SEMIS,
+    });
+  });
+
+  it('unicité answers : second UUID, même (session, question), PLUS ANCIEN → superseded, ligne existante intacte, l’entrante archivée @critique', async () => {
+    const m = await semerMonde();
+    const ancien = '2026-09-29T08:00:00.000Z';
+    const doublon = op('answer', uuidv7(), chargeReponse(m.entretienA, m.mq1, true), ancien);
+    expect(resultatsDe(await pousser(m.A.jeton, m.missionId, [doublon]), [doublon])).toEqual([
+      'superseded',
+    ]);
+    expect(
+      await lignes(
+        'SELECT id, value FROM answers WHERE interview_id = $1 AND mission_question_id = $2',
+        [m.entretienA, m.mq1],
+      ),
+    ).toEqual([{ id: m.reponseA, value: { type: 'yes_no', v: false } }]);
+    const arbitrees = (await revisionsDe(m.reponseA)).filter(
+      (a) => a.change_origin === 'sync_arbitrage',
+    );
+    expect(arbitrees).toHaveLength(1);
+    expect(arbitrees[0]?.previous_value).toMatchObject({
+      value: { type: 'yes_no', v: true },
+      clientUpdatedAt: ancien,
+    });
   });
 });
 
@@ -1019,6 +1057,11 @@ interface CasEntite {
   readonly modification: (m: Monde) => Op;
   readonly lecture: (m: Monde) => Promise<unknown>;
   readonly attendu: unknown;
+  /**
+   * Arbitrage A01 (2026-10-09) : une question ad hoc déjà créée ne se RETOUCHE pas
+   * par le push, même par son auteur — `forbidden`, aucune mutation sans trace.
+   */
+  readonly retoucheInterdite?: true;
 }
 
 const CAS_PROPRIETE: readonly CasEntite[] = [
@@ -1082,14 +1125,23 @@ const CAS_PROPRIETE: readonly CasEntite[] = [
       ),
     lecture: (m) => valeur('SELECT text_fr FROM questions WHERE id = $1', m.adhocA.questionId),
     attendu: 'Texte ad hoc modifié ?',
+    retoucheInterdite: true,
   },
 ];
 
 describe('L6a · propriété §9.9 — chaque entité × chaque émetteur @critique', () => {
   for (const cas of CAS_PROPRIETE) {
     describe(cas.nom, () => {
-      it(`propriétaire (A) → applied, la ligne change @critique`, async () => {
+      it(`propriétaire (A) → ${cas.retoucheInterdite === true ? 'forbidden (retouche, A01)' : 'applied, la ligne change'} @critique`, async () => {
         const m = await semerMonde();
+        if (cas.retoucheInterdite === true) {
+          const avant = await etatMetier(m.missionId);
+          expect(await resultatUnique(m.A.jeton, m.missionId, cas.modification(m))).toBe(
+            'forbidden',
+          );
+          expect(await etatMetier(m.missionId)).toBe(avant);
+          return;
+        }
         expect(await resultatUnique(m.A.jeton, m.missionId, cas.modification(m))).toBe('applied');
         expect(await cas.lecture(m)).toEqual(cas.attendu);
       });
@@ -1424,7 +1476,10 @@ describe('L6a · scénario 5 (§9.8) — deux appareils du MÊME auditeur, rien 
       expect(archive.changed_by).toBe(m.A.id);
       // la valeur PERDANTE — et non la gagnante — est celle qu'on archive
       if (cas.entityType === 'answer') {
-        expect(archive.previous_value).toEqual({ type: 'yes_no', v: cas.perdante });
+        expect(archive.previous_value).toMatchObject({
+          value: { type: 'yes_no', v: cas.perdante },
+          clientUpdatedAt: tAncien,
+        });
       } else {
         expect(JSON.stringify(archive.previous_value)).toContain(String(cas.perdante));
       }
@@ -1440,24 +1495,51 @@ describe('L6a · scénario 5 (§9.8) — deux appareils du MÊME auditeur, rien 
       v: true,
     });
     const archives = await revisionsDe(m.reponseA);
-    expect(archives.map((a) => a.previous_value)).toContainEqual({ type: 'yes_no', v: false });
+    expect(archives.map((a) => a.previous_value)).toContainEqual(
+      expect.objectContaining({ value: { type: 'yes_no', v: false } }),
+    );
     for (const a of archives) {
       expect(['terrain', 'sync_arbitrage']).toContain(a.change_origin);
       expect(a.entity_type).toBe('answer');
     }
   });
 
-  it('answer : une écriture qui ne change PAS value (note seule) ne crée aucune révision (PD3 : le compteur client n’est pas le déclencheur)', async () => {
-    // `revision` n'est PAS une clé de charge (H1 : colonne serveur) — le compteur
-    // local ne monte pas au siège ; seule la variation de `value` archive.
+  // ARBITRAGE A01 (2026-10-09) — l'invariant 7 prime sur la lecture étroite de PD3 :
+  // toute colonne écrasée d'une réponse est archivée, même quand `value` ne bouge
+  // pas. (PD3 reste vrai sur un point : le compteur client n'est pas le déclencheur
+  // — c'est la comparaison des colonnes qui décide.)
+  it('answer : note / withheld / notApplicable écrasés sans changement de value → applied ET version précédente archivée (terrain) @critique', async () => {
     const m = await semerMonde();
     const o = op(
       'answer',
       m.reponseA,
-      chargeReponse(m.entretienA, m.mq1, false, { note: 'note seule' }),
+      chargeReponse(m.entretienA, m.mq1, false, {
+        note: 'note seule',
+        withheld: true,
+        withheldReason: 'confidentiel',
+        notApplicable: true,
+        naReason: 'hors sujet',
+      }),
     );
     expect(await resultatUnique(m.A.jeton, m.missionId, o)).toBe('applied');
-    expect(await valeur('SELECT note FROM answers WHERE id = $1', m.reponseA)).toBe('note seule');
+    expect(
+      await lignes('SELECT note, withheld, not_applicable FROM answers WHERE id = $1', [
+        m.reponseA,
+      ]),
+    ).toEqual([{ note: 'note seule', withheld: true, not_applicable: true }]);
+    const archives = await revisionsDe(m.reponseA);
+    expect(archives.map((a) => a.change_origin)).toEqual(['terrain']);
+    expect(archives[0]?.previous_value).toMatchObject({
+      note: null,
+      withheld: false,
+      notApplicable: false,
+    });
+  });
+
+  it('answer : réécriture strictement identique (horodatage plus récent) → applied, aucune archive', async () => {
+    const m = await semerMonde();
+    const o = op('answer', m.reponseA, chargeReponse(m.entretienA, m.mq1, false));
+    expect(await resultatUnique(m.A.jeton, m.missionId, o)).toBe('applied');
     expect(await revisionsDe(m.reponseA)).toEqual([]);
   });
 });
@@ -2102,7 +2184,10 @@ describe('L6a · même horodatage, deux contenus (option : superseded + archive 
       expect(nouvelles.map((a) => a.change_origin)).toEqual(['sync_arbitrage']);
       const [archive] = nouvelles;
       if (cas.entityType === 'answer') {
-        expect(archive?.previous_value).toEqual({ type: 'yes_no', v: cas.perdante });
+        expect(archive?.previous_value).toMatchObject({
+          value: { type: 'yes_no', v: cas.perdante },
+          clientUpdatedAt: t,
+        });
       } else {
         expect(JSON.stringify(archive?.previous_value)).toContain(String(cas.perdante));
       }
@@ -2453,6 +2538,460 @@ describe('L6a · question_adhoc : le bloc arrive par son CODE (H2 arbitrée) @cr
       m,
       op('question_adhoc', uuidv7(), { ...charge, question: { ...question, blockId: blocId } }),
       'error',
+    );
+  });
+});
+
+// =============================================================================
+// 9. RÉSERVES DE LA REVUE CROISÉE A17 ET ARBITRAGES A01 (2026-10-09)
+// =============================================================================
+// H7 (forme de l'archive d'une RÉPONSE, posée par la réserve 2) : `previous_value`
+// est un objet camelCase portant la version perdante ENTIÈRE — `value`, `note`,
+// `withheld`, `withheldReason`, `notApplicable`, `naReason`, `flagReview`,
+// `reviewReason`, `clientUpdatedAt`. Aucun autre lecteur de `previous_value`
+// n'existe dans le dépôt au 2026-10-09 (grep `apps/*/src`, `packages/shared`).
+
+describe('L6a · réserve 1 — références secondaires d’une session (BLOQUANT A17) @critique', () => {
+  async function semerDemandeDocument(missionId: string): Promise<string> {
+    const id = uuidv7();
+    await bd().query(
+      `INSERT INTO document_requests (id, mission_id, label, status) VALUES ($1, $2, 'Demande fictive', 'demande')`,
+      [id, missionId],
+    );
+    return id;
+  }
+
+  it('linkedReviewAnswerId visant une réponse d’une AUTRE mission → forbidden, rien d’écrit @critique', async () => {
+    const m = await semerMonde();
+    const autre = await semerAutreMissionDeA(m);
+    const reponseAutre = await semerReponse(autre.entretien, autre.mq);
+    for (const id of [uuidv7(), m.entretienA]) {
+      await exigerRefusSansTrace(
+        m.A.jeton,
+        m,
+        op(
+          'interview',
+          id,
+          chargeEntretien(m.missionId, m.racine, { linkedReviewAnswerId: reponseAutre }),
+        ),
+        'forbidden',
+      );
+    }
+  });
+
+  it('linkedReviewAnswerId inconnu → error, rien d’écrit @critique', async () => {
+    const m = await semerMonde();
+    await exigerRefusSansTrace(
+      m.A.jeton,
+      m,
+      op(
+        'interview',
+        uuidv7(),
+        chargeEntretien(m.missionId, m.racine, { linkedReviewAnswerId: uuidv7() }),
+      ),
+      'error',
+    );
+  });
+
+  it('documentRequestId d’une AUTRE mission → forbidden ; inconnu → error @critique', async () => {
+    const m = await semerMonde();
+    const autre = await semerAutreMissionDeA(m);
+    const demandeAutre = await semerDemandeDocument(autre.missionId);
+    for (const id of [uuidv7(), m.entretienA]) {
+      await exigerRefusSansTrace(
+        m.A.jeton,
+        m,
+        op(
+          'interview',
+          id,
+          chargeEntretien(m.missionId, m.racine, { documentRequestId: demandeAutre }),
+        ),
+        'forbidden',
+      );
+    }
+    await exigerRefusSansTrace(
+      m.A.jeton,
+      m,
+      op(
+        'interview',
+        uuidv7(),
+        chargeEntretien(m.missionId, m.racine, { documentRequestId: uuidv7() }),
+      ),
+      'error',
+    );
+  });
+
+  it('références de la MÊME mission → applied (témoin de non-sur-refus)', async () => {
+    const m = await semerMonde();
+    const demande = await semerDemandeDocument(m.missionId);
+    const o = op(
+      'interview',
+      uuidv7(),
+      chargeEntretien(m.missionId, m.racine, {
+        linkedReviewAnswerId: m.reponseA,
+        documentRequestId: demande,
+      }),
+    );
+    expect(await resultatUnique(m.A.jeton, m.missionId, o)).toBe('applied');
+  });
+});
+
+describe('L6a · réserve 2 — superseded d’une réponse : la version perdante ENTIÈRE est archivée @critique', () => {
+  it('tous les champs de la perdante (et son clientUpdatedAt) sont dans l’archive sync_arbitrage @critique', async () => {
+    const m = await semerMonde();
+    const tRecent = instant();
+    const tAncien = new Date(Date.parse(tRecent) - 600_000).toISOString();
+    const gagnante = op(
+      'answer',
+      m.reponseA,
+      chargeReponse(m.entretienA, m.mq1, true, {
+        note: 'note gagnante',
+        withheld: false,
+        withheldReason: null,
+        notApplicable: false,
+        naReason: null,
+        flagReview: true,
+        reviewReason: 'revue gagnante',
+      }),
+      tRecent,
+    );
+    expect(await resultatUnique(m.A.jeton, m.missionId, gagnante)).toBe('applied');
+    const avant = (await revisionsDe(m.reponseA)).length;
+    const perdante = op(
+      'answer',
+      m.reponseA,
+      chargeReponse(m.entretienA, m.mq1, false, {
+        note: 'note perdante',
+        withheld: true,
+        withheldReason: 'confidentiel',
+        notApplicable: true,
+        naReason: 'hors sujet perdant',
+        flagReview: false,
+        reviewReason: null,
+      }),
+      tAncien,
+    );
+    expect(await resultatUnique(m.A.jeton, m.missionId, perdante)).toBe('superseded');
+    const nouvelles = (await revisionsDe(m.reponseA)).slice(avant);
+    expect(nouvelles.map((a) => a.change_origin)).toEqual(['sync_arbitrage']);
+    expect(nouvelles[0]?.previous_value).toMatchObject({
+      value: { type: 'yes_no', v: false },
+      note: 'note perdante',
+      withheld: true,
+      withheldReason: 'confidentiel',
+      notApplicable: true,
+      naReason: 'hors sujet perdant',
+      flagReview: false,
+      reviewReason: null,
+      clientUpdatedAt: tAncien,
+    });
+    // et la ligne garde la gagnante, champ par champ
+    expect(
+      await lignes(
+        'SELECT note, withheld, not_applicable, flag_review, review_reason FROM answers WHERE id = $1',
+        [m.reponseA],
+      ),
+    ).toEqual([
+      {
+        note: 'note gagnante',
+        withheld: false,
+        not_applicable: false,
+        flag_review: true,
+        review_reason: 'revue gagnante',
+      },
+    ]);
+  });
+});
+
+describe('L6a · arbitrage A01 — le statut d’une session ne recule jamais par le push @critique', () => {
+  // Arbitrage de la coordination sur la réserve R1 d'A17 (2026-10-09) :
+  //   · charge dont la SEULE différence avec la ligne serveur est un recul de
+  //     statut → `forbidden`, rien d'écrit ;
+  //   · charge plus récente qui recule le statut ET change autre chose → `applied` :
+  //     le statut serveur est CONSERVÉ, le reste est appliqué, la version écrasée
+  //     est archivée (`terrain`).
+  // La charge « recul seul » recopie la ligne semée (`notes semées`, `sur_site`,
+  // `realise`) : sans cela, `chargeEntretien` porterait d'autres notes et le cas
+  // ne serait plus « seul ».
+  const RECULS: readonly [string, string][] = [
+    ['termine', 'non_demarre'],
+    ['termine', 'en_cours'],
+    ['en_cours', 'non_demarre'],
+  ];
+  for (const [depuis, vers] of RECULS) {
+    it(`${depuis} → ${vers}, rien d’autre ne change : forbidden, rien d’écrit @critique`, async () => {
+      const m = await semerMonde();
+      await bd().query('UPDATE interviews SET status = $2 WHERE id = $1', [m.entretienA, depuis]);
+      await exigerRefusSansTrace(
+        m.A.jeton,
+        m,
+        op(
+          'interview',
+          m.entretienA,
+          chargeEntretien(m.missionId, m.racine, { status: vers, generalNotes: 'notes semées' }),
+        ),
+        'forbidden',
+      );
+      expect(await valeur('SELECT status FROM interviews WHERE id = $1', m.entretienA)).toBe(
+        depuis,
+      );
+    });
+  }
+
+  it('scénario 5 : appareil 2 plus récent, statut en recul + notes modifiées → applied, statut serveur conservé, notes appliquées, version écrasée archivée @critique', async () => {
+    const m = await semerMonde();
+    // appareil 1 termine la session
+    const fin = op(
+      'interview',
+      m.entretienA,
+      chargeEntretien(m.missionId, m.racine, { status: 'termine', generalNotes: 'notes semées' }),
+    );
+    expect(
+      resultatsDe(await pousser(m.A.jeton, m.missionId, [fin], { deviceId: 'appareil-1' }), [fin]),
+    ).toEqual(['applied']);
+    const archivesAvant = (await revisionsDe(m.entretienA)).length;
+    // appareil 2, resté sur `en_cours`, complète les notes PLUS TARD
+    const complement = op(
+      'interview',
+      m.entretienA,
+      chargeEntretien(m.missionId, m.racine, {
+        status: 'en_cours',
+        generalNotes: 'notes complétées sur appareil 2',
+      }),
+    );
+    expect(
+      resultatsDe(await pousser(m.A.jeton, m.missionId, [complement], { deviceId: 'appareil-2' }), [
+        complement,
+      ]),
+    ).toEqual(['applied']);
+    expect(
+      await lignes('SELECT status, general_notes FROM interviews WHERE id = $1', [m.entretienA]),
+    ).toEqual([{ status: 'termine', general_notes: 'notes complétées sur appareil 2' }]);
+    const nouvelles = (await revisionsDe(m.entretienA)).slice(archivesAvant);
+    expect(nouvelles.length).toBeGreaterThanOrEqual(1);
+    expect(nouvelles.map((a) => a.change_origin)).toContain('terrain');
+    expect(JSON.stringify(nouvelles.map((a) => a.previous_value))).toContain('notes semées');
+  });
+
+  it('statut dans une écriture PLUS ANCIENNE → superseded, ligne intacte, l’entrante archivée (sync_arbitrage) @critique', async () => {
+    const m = await semerMonde();
+    const tRecent = instant();
+    const tAncien = new Date(Date.parse(tRecent) - 300_000).toISOString();
+    const recente = op(
+      'interview',
+      m.entretienA,
+      chargeEntretien(m.missionId, m.racine, { status: 'termine', generalNotes: 'notes finales' }),
+      tRecent,
+    );
+    expect(await resultatUnique(m.A.jeton, m.missionId, recente)).toBe('applied');
+    const archivesAvant = (await revisionsDe(m.entretienA)).length;
+    const ancienne = op(
+      'interview',
+      m.entretienA,
+      chargeEntretien(m.missionId, m.racine, {
+        status: 'en_cours',
+        generalNotes: 'notes anciennes',
+      }),
+      tAncien,
+    );
+    expect(await resultatUnique(m.A.jeton, m.missionId, ancienne)).toBe('superseded');
+    expect(
+      await lignes('SELECT status, general_notes FROM interviews WHERE id = $1', [m.entretienA]),
+    ).toEqual([{ status: 'termine', general_notes: 'notes finales' }]);
+    const nouvelles = (await revisionsDe(m.entretienA)).slice(archivesAvant);
+    expect(nouvelles.map((a) => a.change_origin)).toEqual(['sync_arbitrage']);
+    expect(nouvelles[0]?.previous_value).toMatchObject({
+      status: 'en_cours',
+      generalNotes: 'notes anciennes',
+    });
+  });
+
+  it('avancer (en_cours → termine) reste permis ; rester au même statut aussi', async () => {
+    const m = await semerMonde();
+    const avance = op(
+      'interview',
+      m.entretienA,
+      chargeEntretien(m.missionId, m.racine, { status: 'termine' }),
+    );
+    expect(await resultatUnique(m.A.jeton, m.missionId, avance)).toBe('applied');
+    expect(await valeur('SELECT status FROM interviews WHERE id = $1', m.entretienA)).toBe(
+      'termine',
+    );
+    const meme = op(
+      'interview',
+      m.entretienA,
+      chargeEntretien(m.missionId, m.racine, { status: 'termine', generalNotes: 'complément' }),
+    );
+    expect(await resultatUnique(m.A.jeton, m.missionId, meme)).toBe('applied');
+  });
+});
+
+describe('L6a · concurrence RÉELLEMENT chevauchante — verrou tenu par le test @critique', () => {
+  // Le test tient lui-même un verrou de ligne (`SELECT … FOR UPDATE` dans une
+  // transaction ouverte sur une connexion à part), lance les DEUX envois, attend
+  // de VOIR dans `pg_stat_activity` que les deux transactions du serveur sont
+  // bloquées sur ce verrou, puis le relâche. Les deux lots sont donc en vol en
+  // même temps, preuve à l'appui — et non « probablement » comme avec un simple
+  // Promise.all. Le pool de l'API compte 10 connexions : deux attentes sont
+  // possibles.
+  async function attendreBloques(base: Client, nombre: number): Promise<void> {
+    const limite = Date.now() + 15_000;
+    for (;;) {
+      const { rows } = await base.query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM pg_stat_activity
+          WHERE datname = current_database() AND wait_event_type = 'Lock'`,
+      );
+      if ((rows[0]?.n ?? 0) >= nombre) return;
+      if (Date.now() > limite) {
+        const etat = await base.query(
+          `SELECT pid, state, wait_event_type, wait_event, left(query, 120) AS requete
+             FROM pg_stat_activity WHERE backend_type = 'client backend'`,
+        );
+        throw new Error(
+          `${JSON.stringify(etat.rows)}\n` +
+            `les ${String(nombre)} envois ne se sont jamais bloqués sur le verrou du test : ` +
+            'le serveur ne verrouille pas la ligne lue (FOR UPDATE), le chevauchement est invérifiable',
+        );
+      }
+      await new Promise((resoudre) => setTimeout(resoudre, 50));
+    }
+  }
+
+  it('même réponse, deux appareils, deux lots en vol en même temps → la plus récente gagne, la perdante archivée, une seule ligne @critique', async () => {
+    const m = await semerMonde();
+    const verrou = await connecter(urlBase);
+    try {
+      await verrou.query('BEGIN');
+      await verrou.query('SELECT id FROM answers WHERE id = $1 FOR UPDATE', [m.reponseA]);
+
+      const tRecent = instant();
+      const tAncien = new Date(Date.parse(tRecent) - 60_000).toISOString();
+      const recente = op('answer', m.reponseA, chargeReponse(m.entretienA, m.mq1, true), tRecent);
+      const ancienne = op(
+        'answer',
+        m.reponseA,
+        chargeReponse(m.entretienA, m.mq1, false, { note: 'appareil lent' }),
+        tAncien,
+      );
+      const envoiAncien = pousser(m.A.jeton, m.missionId, [ancienne], {
+        deviceId: 'appareil-lent',
+      });
+      const envoiRecent = pousser(m.A.jeton, m.missionId, [recente], {
+        deviceId: 'appareil-rapide',
+      });
+      // Sondé depuis une AUTRE connexion que celle du verrou : dans une transaction,
+      // PostgreSQL fige pg_stat_activity à son premier accès — la sonde y serait aveugle.
+      await attendreBloques(bd(), 2);
+      await verrou.query('COMMIT');
+
+      const [r1, r2] = await Promise.all([envoiAncien, envoiRecent]);
+      const resultats = [...resultatsDe(r1, [ancienne]), ...resultatsDe(r2, [recente])];
+      expect(resultats).not.toContain('error');
+      expect(
+        await lignes(
+          'SELECT id, value, note FROM answers WHERE interview_id = $1 AND mission_question_id = $2',
+          [m.entretienA, m.mq1],
+        ),
+      ).toEqual([{ id: m.reponseA, value: { type: 'yes_no', v: true }, note: null }]);
+      const archives = await revisionsDe(m.reponseA);
+      expect(archives.map((a) => a.previous_value)).toContainEqual(
+        expect.objectContaining({ note: 'appareil lent' }),
+      );
+      expect(await opsTraitees([ancienne.opId, recente.opId])).toHaveLength(2);
+    } finally {
+      await verrou.query('ROLLBACK').catch(() => undefined);
+      await verrou.end();
+    }
+  });
+});
+
+describe('L6a · arbitrage A01 — une question ad hoc créée ne se retouche pas par le push @critique', () => {
+  it('même entityId, contenu différent → forbidden, questions et mission_questions inchangées @critique', async () => {
+    const m = await semerMonde();
+    const mq = uuidv7();
+    const creation = op('question_adhoc', uuidv7(), chargeQuestionAdhoc(mq, 'Version 1 ?', 4));
+    expect(await resultatUnique(m.A.jeton, m.missionId, creation)).toBe('applied');
+    await exigerRefusSansTrace(
+      m.A.jeton,
+      m,
+      op('question_adhoc', creation.entityId, chargeQuestionAdhoc(mq, 'Version 2 ?', 4)),
+      'forbidden',
+    );
+    await exigerRefusSansTrace(
+      m.A.jeton,
+      m,
+      op('question_adhoc', creation.entityId, chargeQuestionAdhoc(mq, 'Version 1 ?', 9)),
+      'forbidden',
+    );
+    expect(await valeur('SELECT text_fr FROM questions WHERE id = $1', creation.entityId)).toBe(
+      'Version 1 ?',
+    );
+  });
+
+  it('recréation identique (nouvel opId) → applied ou duplicate, sans effet', async () => {
+    const m = await semerMonde();
+    const o = op('question_adhoc', uuidv7(), chargeQuestionAdhoc(uuidv7(), 'Identique ?', 2));
+    expect(await resultatUnique(m.A.jeton, m.missionId, o)).toBe('applied');
+    const avant = await etatMetier(m.missionId);
+    expect(['applied', 'duplicate']).toContain(
+      await resultatUnique(m.A.jeton, m.missionId, { ...o, opId: uuidv7() }),
+    );
+    expect(await etatMetier(m.missionId)).toBe(avant);
+  });
+});
+
+describe('L6a · concurrence — deux lots simultanés @critique', () => {
+  it('le MÊME opId dans deux lots simultanés → une seule application ; l’autre error ou duplicate, puis duplicate au rejeu @critique', async () => {
+    const m = await semerMonde();
+    const o = op('answer', uuidv7(), chargeReponse(m.entretienA, m.mq2, true));
+    const [r1, r2] = await Promise.all([
+      pousser(m.A.jeton, m.missionId, [o], { deviceId: 'appareil-1' }),
+      pousser(m.A.jeton, m.missionId, [o], { deviceId: 'appareil-2' }),
+    ]);
+    const resultats = [...resultatsDe(r1, [o]), ...resultatsDe(r2, [o])].sort();
+    expect(resultats.filter((x) => x === 'applied')).toHaveLength(1);
+    expect(['error', 'duplicate']).toContain(resultats.find((x) => x !== 'applied'));
+    expect(await valeur('SELECT count(*)::int AS n FROM answers WHERE id = $1', o.entityId)).toBe(
+      1,
+    );
+    expect(await opsTraitees([o.opId])).toHaveLength(1);
+    expect(await resultatUnique(m.A.jeton, m.missionId, o)).toBe('duplicate');
+  });
+
+  it('la MÊME entité dans deux lots simultanés → la plus récente gagne, la perdante est archivée, aucune seconde ligne @critique', async () => {
+    const m = await semerMonde();
+    const tRecent = instant();
+    const tAncien = new Date(Date.parse(tRecent) - 60_000).toISOString();
+    const recente = op('answer', m.reponseA, chargeReponse(m.entretienA, m.mq1, true), tRecent);
+    const ancienne = op(
+      'answer',
+      m.reponseA,
+      chargeReponse(m.entretienA, m.mq1, false, { note: 'appareil lent' }),
+      tAncien,
+    );
+    const [r1, r2] = await Promise.all([
+      pousser(m.A.jeton, m.missionId, [ancienne], { deviceId: 'appareil-lent' }),
+      pousser(m.A.jeton, m.missionId, [recente], { deviceId: 'appareil-rapide' }),
+    ]);
+    const [resAncienne] = resultatsDe(r1, [ancienne]);
+    const [resRecente] = resultatsDe(r2, [recente]);
+    // un `error` (conflit de verrou) est admis : l'op est rejouable ; on la rejoue.
+    if (resAncienne === 'error') {
+      expect(await resultatUnique(m.A.jeton, m.missionId, ancienne)).not.toBe('error');
+    }
+    if (resRecente === 'error') {
+      expect(await resultatUnique(m.A.jeton, m.missionId, recente)).toBe('applied');
+    }
+    expect(
+      await lignes(
+        'SELECT value, note FROM answers WHERE interview_id = $1 AND mission_question_id = $2',
+        [m.entretienA, m.mq1],
+      ),
+    ).toEqual([{ value: { type: 'yes_no', v: true }, note: null }]);
+    // Quel que soit l'ordre d'arrivée, la version de l'appareil lent existe en archive.
+    const archives = await revisionsDe(m.reponseA);
+    expect(archives.map((a) => a.previous_value)).toContainEqual(
+      expect.objectContaining({ note: 'appareil lent' }),
     );
   });
 });

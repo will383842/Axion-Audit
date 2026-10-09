@@ -42,7 +42,7 @@ import {
   statutSyncAppareil,
   versEtatPastille,
 } from '../../app/etat-sync-affiche.js';
-import { portSyncInerte } from '../../local/port-sync.js';
+import { portSyncActualise } from '../../app/port-sync-terrain.js';
 
 export function PastilleSyncCoquille(): ReactNode {
   const { base } = useTerrain();
@@ -53,10 +53,9 @@ export function PastilleSyncCoquille(): ReactNode {
     async () => {
       if (base === null) return null;
       const missions = await base.missions.toArray();
+      const port = await portSyncActualise(base);
       return {
-        statut: statutSyncAppareil(
-          missions.map((mission) => portSyncInerte.etat(mission.id).statut),
-        ),
+        statut: statutSyncAppareil(missions.map((mission) => port.etat(mission.id).statut)),
         enAttente: await base.outbox.where('statut').equals('en_attente').count(),
       };
     },

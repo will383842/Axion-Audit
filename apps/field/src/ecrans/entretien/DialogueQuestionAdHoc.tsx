@@ -17,10 +17,26 @@ export interface SaisieQuestionAdHoc {
   readonly answerType: TypeDeReponse;
   readonly guidance: string | null;
   readonly options: readonly string[];
+  /** Le CODE du bloc où la question se range — jamais vide (B1, 2026-10-09). */
+  readonly blockCode: string;
+}
+
+/** Un bloc du questionnaire, proposé au choix quand aucun n'est déduit. */
+export interface BlocChoisissable {
+  readonly code: string;
+  readonly libelle: string;
 }
 
 export interface ProprietesDialogueQuestionAdHoc {
   readonly ouvert: boolean;
+  /**
+   * Le bloc déduit (`blocPourQuestionAdHoc` : la courante, sinon la question de
+   * banque la plus proche). `null` ou absent : le dialogue DEMANDE le bloc — le
+   * défaut sûr, qui ne crée jamais une question sans bloc.
+   */
+  readonly blocPropose?: string | null;
+  /** Les blocs du questionnaire, pour le choix quand rien n'est proposé. */
+  readonly blocs?: readonly BlocChoisissable[];
   readonly onCreer: (saisie: SaisieQuestionAdHoc) => Promise<void>;
   readonly onFermer: () => void;
 }
@@ -35,7 +51,8 @@ function estTypeDeReponse(valeur: string): valeur is TypeDeReponse {
 }
 
 export function DialogueQuestionAdHoc(proprietes: ProprietesDialogueQuestionAdHoc): ReactNode {
-  const { ouvert, onCreer, onFermer } = proprietes;
+  const { ouvert, blocPropose = null, blocs = [], onCreer, onFermer } = proprietes;
+  const [blocChoisi, setBlocChoisi] = useState('');
   const [texte, setTexte] = useState('');
   const [type, setType] = useState<TypeDeReponse>('free_text');
   const [guidance, setGuidance] = useState('');
@@ -46,10 +63,18 @@ export function DialogueQuestionAdHoc(proprietes: ProprietesDialogueQuestionAdHo
   const aDesOptions = type === 'single_choice' || type === 'multi_choice';
   const texteManquant = texte.trim() === '';
   /** M1 (recette A54) : le bouton grisé dit ce qui manque, à l'œil. */
-  const idTexteManquant = `${useId()}-texte-manquant`;
+  const idBase = useId();
+  const idTexteManquant = `${idBase}-texte-manquant`;
+  const idBlocManquant = `${idBase}-bloc-manquant`;
+  const blockCode = blocPropose ?? blocChoisi;
+  const blocManquant = blockCode.trim() === '';
+  const motifs = [
+    ...(texteManquant ? [idTexteManquant] : []),
+    ...(blocManquant ? [idBlocManquant] : []),
+  ];
 
   const creer = (): void => {
-    if (enCours) return;
+    if (enCours || texteManquant || blocManquant) return;
     setEnCours(true);
     setErreur(null);
     void onCreer({
@@ -57,12 +82,14 @@ export function DialogueQuestionAdHoc(proprietes: ProprietesDialogueQuestionAdHo
       answerType: type,
       guidance: guidance.trim() === '' ? null : guidance,
       options: options.split(/\r?\n/),
+      blockCode,
     })
       .then(() => {
         setTexte('');
         setGuidance('');
         setOptions('');
         setType('free_text');
+        setBlocChoisi('');
       })
       .catch((cause: unknown) => {
         setErreur(cause instanceof Error ? cause.message : 'La question n’a pas pu être créée.');
@@ -86,8 +113,8 @@ export function DialogueQuestionAdHoc(proprietes: ProprietesDialogueQuestionAdHo
           <Bouton
             variante="principal"
             chargement={enCours}
-            disabled={texteManquant}
-            {...(texteManquant ? { 'aria-describedby': idTexteManquant } : {})}
+            disabled={motifs.length > 0}
+            {...(motifs.length > 0 ? { 'aria-describedby': motifs.join(' ') } : {})}
             onClick={creer}
           >
             Créer et y répondre
@@ -115,6 +142,27 @@ export function DialogueQuestionAdHoc(proprietes: ProprietesDialogueQuestionAdHo
           Écrivez la question posée : « Créer et y répondre » s’active dès que ce champ n’est plus
           vide.
         </p>
+      )}
+      {blocPropose === null && (
+        <>
+          <Selection
+            libelle="Bloc"
+            options={[
+              { valeur: '', libelle: 'Choisir un bloc' },
+              ...blocs.map((bloc) => ({ valeur: bloc.code, libelle: bloc.libelle })),
+            ]}
+            value={blocChoisi}
+            onChange={(evenement) => {
+              setBlocChoisi(evenement.target.value);
+            }}
+          />
+          {blocManquant && (
+            <p id={idBlocManquant} className="axn-champ__aide">
+              Choisissez le bloc où ranger cette question : le siège ne peut pas l’accueillir sans
+              lui.
+            </p>
+          )}
+        </>
       )}
       <Selection
         libelle="Type de réponse"

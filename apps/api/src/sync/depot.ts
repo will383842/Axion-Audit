@@ -22,6 +22,7 @@ import {
   answers,
   attachments,
   blocks,
+  documentRequests,
   interviews,
   missionQuestions,
   missionUsers,
@@ -78,7 +79,10 @@ export async function lireRoleSurMission(
         isNull(missions.deletedAt),
       ),
     )
-    .limit(1);
+    .limit(1)
+    // L'appartenance fonde tout le lot : elle tient jusqu'à la fin de la
+    // transaction (un retrait de `mission_users` concurrent attend).
+    .for('share', { of: missionUsers });
   return lignes[0]?.role ?? null;
 }
 
@@ -137,27 +141,55 @@ export async function archiver(ex: ExecuteurSql, archive: Archive): Promise<void
 // -----------------------------------------------------------------------------
 // LECTURES DE LIGNES — verrouillées quand le service va peut-être écrire
 // -----------------------------------------------------------------------------
+/**
+ * `update` : la ligne va peut-être être écrite. `share` : elle fonde une DÉCISION
+ * (propriété, appartenance) qui doit tenir jusqu'à la fin de la transaction — une
+ * réaffectation ou un retrait concurrent attend.
+ */
+export type Verrou = 'update' | 'share';
+
 // `FOR UPDATE` sérialise deux pushes concurrents sur la même ligne : sans lui, le
 // dernier-écrit-gagne comparerait `client_updated_at` à une valeur déjà périmée.
 
 export async function lireSession(
   ex: ExecuteurSql,
   id: string,
-  verrou = false,
+  verrou?: Verrou,
 ): Promise<LigneSession | null> {
   const requete = ex.select().from(interviews).where(eq(interviews.id, id)).limit(1);
-  const lignes = verrou ? await requete.for('update') : await requete;
+  const lignes = verrou === undefined ? await requete : await requete.for(verrou);
   return lignes[0] ?? null;
 }
 
 export async function lireReponse(
   ex: ExecuteurSql,
   id: string,
-  verrou = false,
+  verrou?: Verrou,
 ): Promise<LigneReponse | null> {
   const requete = ex.select().from(answers).where(eq(answers.id, id)).limit(1);
-  const lignes = verrou ? await requete.for('update') : await requete;
+  const lignes = verrou === undefined ? await requete : await requete.for(verrou);
   return lignes[0] ?? null;
+}
+
+/** La mission d'une réponse, par sa session — `null` si la réponse est inconnue. */
+export async function lireMissionDeReponse(ex: ExecuteurSql, id: string): Promise<string | null> {
+  const lignes = await ex
+    .select({ missionId: interviews.missionId })
+    .from(answers)
+    .innerJoin(interviews, eq(interviews.id, answers.interviewId))
+    .where(eq(answers.id, id))
+    .limit(1);
+  return lignes[0]?.missionId ?? null;
+}
+
+/** La mission d'une demande de document — `null` si elle est inconnue. */
+export async function lireMissionDeDemande(ex: ExecuteurSql, id: string): Promise<string | null> {
+  const lignes = await ex
+    .select({ missionId: documentRequests.missionId })
+    .from(documentRequests)
+    .where(eq(documentRequests.id, id))
+    .limit(1);
+  return lignes[0]?.missionId ?? null;
 }
 
 /** La réponse déjà posée pour (session, question) — l'UNIQUE du 04. */
@@ -179,40 +211,40 @@ export async function lireReponseParCle(
 export async function lirePiece(
   ex: ExecuteurSql,
   id: string,
-  verrou = false,
+  verrou?: Verrou,
 ): Promise<LignePiece | null> {
   const requete = ex.select().from(attachments).where(eq(attachments.id, id)).limit(1);
-  const lignes = verrou ? await requete.for('update') : await requete;
+  const lignes = verrou === undefined ? await requete : await requete.for(verrou);
   return lignes[0] ?? null;
 }
 
 export async function lireUnite(
   ex: ExecuteurSql,
   id: string,
-  verrou = false,
+  verrou?: Verrou,
 ): Promise<LigneUnite | null> {
   const requete = ex.select().from(orgUnits).where(eq(orgUnits.id, id)).limit(1);
-  const lignes = verrou ? await requete.for('update') : await requete;
+  const lignes = verrou === undefined ? await requete : await requete.for(verrou);
   return lignes[0] ?? null;
 }
 
 export async function lireQuestion(
   ex: ExecuteurSql,
   id: string,
-  verrou = false,
+  verrou?: Verrou,
 ): Promise<LigneQuestion | null> {
   const requete = ex.select().from(questions).where(eq(questions.id, id)).limit(1);
-  const lignes = verrou ? await requete.for('update') : await requete;
+  const lignes = verrou === undefined ? await requete : await requete.for(verrou);
   return lignes[0] ?? null;
 }
 
 export async function lireQuestionDeMission(
   ex: ExecuteurSql,
   id: string,
-  verrou = false,
+  verrou?: Verrou,
 ): Promise<LigneQuestionDeMission | null> {
   const requete = ex.select().from(missionQuestions).where(eq(missionQuestions.id, id)).limit(1);
-  const lignes = verrou ? await requete.for('update') : await requete;
+  const lignes = verrou === undefined ? await requete : await requete.for(verrou);
   return lignes[0] ?? null;
 }
 
@@ -280,14 +312,6 @@ export async function majUnite(
 
 export async function insererQuestion(ex: ExecuteurSql, valeurs: InsertionQuestion): Promise<void> {
   await ex.insert(questions).values(valeurs);
-}
-
-export async function majQuestion(
-  ex: ExecuteurSql,
-  id: string,
-  valeurs: Partial<InsertionQuestion>,
-): Promise<void> {
-  await ex.update(questions).set(valeurs).where(eq(questions.id, id));
 }
 
 export async function insererQuestionDeMission(

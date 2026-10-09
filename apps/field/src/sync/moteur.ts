@@ -37,6 +37,7 @@
 // Traçabilité : E7, E38 ; invariants 1, 7 et 8.
 // =============================================================================
 import {
+  type Operation,
   ECHECS_AVANT_EXAMEN,
   TAILLE_LOT_PUSH_MAX,
   lotPushSchema,
@@ -52,7 +53,7 @@ import {
 } from '../local/base.js';
 import type { Coffre } from '../local/coffre.js';
 import { maintenant as horlogeMaintenant } from '../local/horloge.js';
-import { operationDeLigne } from './montee.js';
+import { MonteeImpossibleError, operationDeLigne } from './montee.js';
 import type { TransportSync } from './transport.js';
 
 export interface DependancesMoteur {
@@ -186,6 +187,34 @@ async function compterEchecDuLot(
   });
 }
 
+const MOTIF_ILLISIBLE =
+  'Cette opération ne se lit plus sur cet appareil : elle n’est pas envoyée et reste à examiner. Rien n’a été supprimé.';
+
+/**
+ * A2 et B1 (2026-10-09) : une op qui ne se déchiffre pas, ou ne peut pas monter
+ * telle quelle, est ISOLÉE « à examiner » avec son motif — jamais envoyée, jamais
+ * supprimée —, et ne bloque pas les autres. Le motif ne porte aucune trace
+ * technique (11 §2) : celui de `MonteeImpossibleError` est écrit pour l'auditeur.
+ */
+async function preparer(
+  base: BaseLocale,
+  coffre: Coffre,
+  lues: readonly LigneOutbox[],
+): Promise<{ readonly ligne: LigneOutbox; readonly operation: Operation }[]> {
+  const preparees: { readonly ligne: LigneOutbox; readonly operation: Operation }[] = [];
+  for (const ligne of lues) {
+    try {
+      preparees.push({ ligne, operation: await operationDeLigne(ligne, coffre) });
+    } catch (cause) {
+      await base.outbox.update(ligne.opId, {
+        statut: 'a_examiner',
+        derniereErreur: cause instanceof MonteeImpossibleError ? cause.message : MOTIF_ILLISIBLE,
+      });
+    }
+  }
+  return preparees;
+}
+
 async function compterEnAttente(base: BaseLocale, missionId: string): Promise<number> {
   return base.outbox
     .where('statut')
@@ -215,10 +244,13 @@ async function passage(deps: DependancesMoteur, missionId: string): Promise<Bila
   let message: string | null = null;
 
   for (;;) {
-    const lignes = await prochainLot(base, missionId, dejaEnvoyees);
-    if (lignes.length === 0) break;
+    const lues = await prochainLot(base, missionId, dejaEnvoyees);
+    if (lues.length === 0) break;
 
-    const operations = await Promise.all(lignes.map((ligne) => operationDeLigne(ligne, coffre)));
+    const preparees = await preparer(base, coffre, lues);
+    if (preparees.length === 0) continue;
+    const lignes = preparees.map((p) => p.ligne);
+    const operations = preparees.map((p) => p.operation);
     const lot = lotPushSchema.parse({
       missionId,
       deviceId,

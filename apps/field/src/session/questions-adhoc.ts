@@ -19,7 +19,52 @@
 import { uuidv7 } from 'uuidv7';
 import type { TypeDeReponse } from '@axion/shared';
 import { ecrireLocal } from '../local/ecriture.js';
+import type { QuestionLocale } from '../local/depots/questions.js';
 import { jetonsDeRecherche } from '../local/formes.js';
+
+/** Un repère de bloc : ce que la proposition de bloc lit d'une question du parcours. */
+export type RepereDeBloc = Pick<QuestionLocale, 'position' | 'blockCode' | 'addedAdHoc'>;
+
+/** Message du refus — le mot « bloc » y figure : c'est lui qui guide l'auditeur. */
+export const MESSAGE_BLOC_MANQUANT =
+  'Choisissez le bloc de cette question : le siège ne peut pas la ranger sans lui.';
+
+function blocRenseigne(code: string | null): code is string {
+  return code !== null && code.trim() !== '';
+}
+
+/**
+ * Le bloc où ranger une question ad hoc (arbitrage B1 du 2026-10-09) :
+ *   ① celui de la question COURANTE ;
+ *   ② sinon celui de la question de BANQUE la plus proche en position — à égalité,
+ *      celle qui PRÉCÈDE ; sans courante, celle de plus grande position (l'ad hoc
+ *      se pose alors en fin de parcours) ;
+ *   ③ sinon `null` : le dialogue DEMANDE. Une ad hoc voisine n'est jamais un repère.
+ */
+export function blocPourQuestionAdHoc(
+  courante: Pick<QuestionLocale, 'position' | 'blockCode'> | undefined,
+  parcours: readonly RepereDeBloc[],
+): string | null {
+  if (courante !== undefined && blocRenseigne(courante.blockCode)) return courante.blockCode;
+  let meilleur: {
+    readonly code: string;
+    readonly distance: number;
+    readonly avant: boolean;
+  } | null = null;
+  for (const repere of parcours) {
+    if (repere.addedAdHoc || !blocRenseigne(repere.blockCode)) continue;
+    // Sans courante, la « distance » est la position renversée : la plus grande gagne.
+    const distance =
+      courante === undefined ? -repere.position : Math.abs(courante.position - repere.position);
+    const avant = courante === undefined || repere.position <= courante.position;
+    const plusProche =
+      meilleur === null ||
+      distance < meilleur.distance ||
+      (distance === meilleur.distance && avant && !meilleur.avant);
+    if (plusProche) meilleur = { code: repere.blockCode, distance, avant };
+  }
+  return meilleur?.code ?? null;
+}
 
 export interface DemandeQuestionAdHoc {
   readonly missionId: string;
@@ -93,6 +138,10 @@ export function codesDOptions(libelles: readonly string[]): string[] {
 export async function creerQuestionAdHoc(demande: DemandeQuestionAdHoc): Promise<string> {
   const texte = demande.texte.trim();
   if (texte === '') throw new Error('Le texte de la question est nécessaire.');
+  // B1 : `questions.block_id` est NOT NULL au 04 — une question sans bloc ne
+  // monterait jamais. Elle ne naît donc pas.
+  if (!blocRenseigne(demande.blockCode)) throw new Error(MESSAGE_BLOC_MANQUANT);
+  const blockCode = demande.blockCode.trim();
   const guidance = demande.guidance?.trim() ?? '';
 
   const aDesOptions =
@@ -133,7 +182,7 @@ export async function creerQuestionAdHoc(demande: DemandeQuestionAdHoc): Promise
       weightSnapshot: 0,
       allowRangeSnapshot: false,
       addedAdHoc: true,
-      blockCode: demande.blockCode,
+      blockCode,
     },
   });
   return id;

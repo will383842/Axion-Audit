@@ -143,7 +143,9 @@ export function creerPortSync(deps: DependancesPort): PortSyncReel {
       derniereSyncReussieLe,
       operationsEnAttente: enAttente,
       operationsBloquees: bloquees,
-      alerte: evaluerAlerteSauvegarde(derniereSyncReussieLe, enAttente, instantMs()),
+      // B2 (2026-10-09) : ce qui ne vit QUE sur l'appareil = en attente + rejeté +
+      // à examiner. Même somme que le cockpit (`agenda/jour.ts`), même verdict.
+      alerte: evaluerAlerteSauvegarde(derniereSyncReussieLe, enAttente + bloquees, instantMs()),
     };
     instantanes.set(missionId, etat);
     return etat;

@@ -28,6 +28,7 @@
 import 'fake-indexeddb/auto';
 import Dexie from 'dexie';
 import { uuidv7 } from 'uuidv7';
+import { z } from 'zod';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { operationSchema } from '../local/contrat-sync.js';
 import { BaseLocale, type LigneOutbox } from '../local/base.js';
@@ -374,5 +375,265 @@ describe('montée — la charge de chaque entité est la forme EXACTE du 04 (PD2
     expect(op.action).toBe('delete_soft');
     expect(op.clientUpdatedAt).toBe(ligne.clientUpdatedAt);
     sansCleLocale(op.payload);
+  });
+});
+
+// =============================================================================
+// RACCORD — chaque charge produite passe la liste du serveur (B1, 2026-10-09)
+// =============================================================================
+// La liste FERMÉE du testeur serveur, transcrite telle quelle : une clé hors liste
+// = op refusée par le siège. Toutes facultatives ici (une clé sans source locale
+// est omise) ; `blockCode` est une chaîne NON VIDE, jamais null.
+const facultatif = z.unknown().optional();
+function listeServeur(cles: readonly string[]) {
+  return z.strictObject(Object.fromEntries(cles.map((c) => [c, facultatif])));
+}
+const RACCORD = {
+  interview: listeServeur([
+    'missionId',
+    'orgUnitId',
+    'conductedBy',
+    'kind',
+    'mode',
+    'linkedReviewAnswerId',
+    'personName',
+    'personRole',
+    'personServiceId',
+    'personEmail',
+    'interlocutorProfileId',
+    'participants',
+    'documentRequestId',
+    'consentGiven',
+    'consentAudio',
+    'consentedAt',
+    'informationNoticeVersion',
+    'noticeShownAt',
+    'scheduledAt',
+    'scheduledDurationMin',
+    'scheduleStatus',
+    'status',
+    'startedAt',
+    'endedAt',
+    'generalNotes',
+    'clientCreatedAt',
+  ]),
+  answer: listeServeur([
+    'interviewId',
+    'missionQuestionId',
+    'value',
+    'source',
+    'withheld',
+    'withheldReason',
+    'horsParcours',
+    'note',
+    'flagReview',
+    'reviewReason',
+    'notApplicable',
+    'naReason',
+    'clientCreatedAt',
+  ]),
+  attachment_meta: listeServeur([
+    'missionId',
+    'interviewId',
+    'answerId',
+    'kind',
+    'content',
+    'filename',
+    'mime',
+    'sizeBytes',
+    'createdBy',
+    'clientCreatedAt',
+  ]),
+  org_unit_proposal: listeServeur([
+    'missionId',
+    'parentId',
+    'kind',
+    'name',
+    'headcount',
+    'countryCode',
+    'timezone',
+    'proposedBy',
+  ]),
+  question_adhoc: z.strictObject({
+    question: z.strictObject({
+      textFr: facultatif,
+      guidanceFr: facultatif,
+      answerType: facultatif,
+      criticality: facultatif,
+      blockCode: z.string().min(1),
+      options: facultatif,
+      allowRange: facultatif,
+      expectedSource: facultatif,
+      createdBy: facultatif,
+    }),
+    missionQuestion: z.strictObject({ id: z.uuid(), position: z.number().int() }),
+  }),
+} as const;
+
+describe('montée — raccord : chaque charge produite est acceptée par la liste du serveur', () => {
+  it('les cinq entités, écrites par le port d’écriture, passent la liste fermée', async () => {
+    await ecrireLocal({
+      entite: 'interview',
+      id: uuidv7(),
+      missionId: MISSION,
+      action: 'upsert',
+      index: {
+        orgUnitId: ORG_UNIT,
+        kind: 'entretien',
+        status: 'en_cours',
+        scheduleStatus: 'planifie',
+        scheduledAt: null,
+      },
+      charge: {
+        conductedBy: AUDITEUR,
+        mode: 'sur_site',
+        personName: 'Interlocuteur fictif',
+        personRole: null,
+        personServiceId: null,
+        personEmail: null,
+        participants: null,
+        generalNotes: null,
+        linkedReviewAnswerId: null,
+        documentRequestId: null,
+        consentGiven: true,
+        consentAudio: false,
+        consentedAt: null,
+        informationNoticeVersion: null,
+        noticeShownAt: null,
+        scheduledDurationMin: null,
+        startedAt: null,
+        endedAt: null,
+        valideeLe: CREE_LE,
+        clientCreatedAt: CREE_LE,
+      },
+    });
+    await ecrireLocal({
+      entite: 'answer',
+      id: uuidv7(),
+      missionId: MISSION,
+      action: 'upsert',
+      index: {
+        interviewId: uuidv7(),
+        missionQuestionId: uuidv7(),
+        flagReview: 0,
+        notApplicable: 1,
+        withheld: 0,
+        horsParcours: 1,
+      },
+      charge: {
+        value: null,
+        note: null,
+        reviewReason: null,
+        naReason: 'Sans objet (fictif).',
+        withheldReason: null,
+        source: 'observation',
+        questionTextSnapshot: 'Question fictive ?',
+        revision: 2,
+        clientCreatedAt: CREE_LE,
+      },
+    });
+    await ecrireLocal({
+      entite: 'attachment_meta',
+      id: uuidv7(),
+      missionId: MISSION,
+      action: 'upsert',
+      index: { interviewId: uuidv7(), answerId: null, kind: 'photo' },
+      charge: {
+        content: null,
+        filename: 'photo-fictive.jpg',
+        mime: 'image/jpeg',
+        sizeBytes: 1024,
+        storageKey: 'local/fictif',
+        purgeAfter: null,
+        createdBy: AUDITEUR,
+        clientCreatedAt: CREE_LE,
+      },
+    });
+    await ecrireLocal({
+      entite: 'org_unit_proposal',
+      id: uuidv7(),
+      missionId: MISSION,
+      action: 'upsert',
+      index: { parentId: ORG_UNIT, kind: 'equipe', status: 'proposee', position: 2 },
+      charge: {
+        name: 'Équipe fictive',
+        countryCode: null,
+        timezone: null,
+        headcount: null,
+        serviceRefId: null,
+        sectorId: null,
+        inScope: true,
+        proposedBy: AUDITEUR,
+        mergedIntoId: null,
+        clientCreatedAt: CREE_LE,
+      },
+    });
+    await ecrireLocal({
+      entite: 'question_adhoc',
+      id: uuidv7(),
+      missionId: MISSION,
+      action: 'upsert',
+      index: {
+        position: 5,
+        texteSnapshot: 'Question à choix fictive ?',
+        motsCles: [],
+        answerType: 'single_choice',
+        criticality: 'informatif',
+      },
+      charge: {
+        questionId: uuidv7(),
+        questionVersion: 1,
+        guidanceSnapshot: 'Consigne fictive.',
+        optionsSnapshot: [
+          { code: 'oui', label: 'Oui', score: null },
+          { code: 'non', label: 'Non', score: null },
+        ],
+        scoringSnapshot: null,
+        weightSnapshot: 0,
+        allowRangeSnapshot: false,
+        addedAdHoc: true,
+        blockCode: 'BLOC-FICTIF',
+      },
+    });
+
+    const lignes = await base.outbox.toArray();
+    expect(lignes).toHaveLength(5);
+    for (const ligne of lignes) {
+      const op = await operationDeLigne(ligne, coffre);
+      const verdict = RACCORD[op.entity].safeParse(op.payload);
+      expect(verdict.success, `${op.entity} : ${JSON.stringify(verdict.error?.issues ?? [])}`).toBe(
+        true,
+      );
+    }
+  });
+
+  it('B1 : une question ad hoc sans bloc ne produit JAMAIS de charge (blockCode null refusé)', async () => {
+    await ecrireLocal({
+      entite: 'question_adhoc',
+      id: uuidv7(),
+      missionId: MISSION,
+      action: 'upsert',
+      index: {
+        position: 5,
+        texteSnapshot: 'Question sans bloc ?',
+        motsCles: [],
+        answerType: 'free_text',
+        criticality: 'informatif',
+      },
+      charge: {
+        questionId: uuidv7(),
+        questionVersion: 1,
+        guidanceSnapshot: null,
+        optionsSnapshot: null,
+        scoringSnapshot: null,
+        weightSnapshot: 0,
+        allowRangeSnapshot: false,
+        addedAdHoc: true,
+        blockCode: null,
+      },
+    });
+    const ligne = await seuleLigne();
+
+    await expect(operationDeLigne(ligne, coffre)).rejects.toThrow(/bloc/i);
   });
 });

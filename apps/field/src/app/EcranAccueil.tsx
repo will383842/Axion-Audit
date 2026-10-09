@@ -36,12 +36,9 @@ import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Bouton, Message, RappelHorsLigne, ZoneEtat, type EtatZone } from '@axion/ui';
 import { cleEmbarquement, clePersistance, type BaseLocale } from '../local/base.js';
-import type { Coffre } from '../local/coffre.js';
-import { contexteLocal } from '../local/contexte.js';
 import { embarquerMission, type ResultatEmbarquement } from '../local/embarquement.js';
 import type { EtatSyncMission } from '../local/port-sync.js';
-import { creerPortSync, type PortSyncReel } from '../sync/port.js';
-import { creerTransport } from '../sync/transport.js';
+import { portSyncDeLaBase } from './port-sync-terrain.js';
 import { useEnLigne } from '../session/media.js';
 import { CAPACITES_HORS_LIGNE, PASTILLE_PORTEE_PAR_LA_COQUILLE } from './capacites-hors-ligne.js';
 import { useTerrain } from './contexte.js';
@@ -73,35 +70,6 @@ type LectureSocle =
       readonly etatsSync: readonly EtatSyncMission[];
     }
   | { readonly ok: false };
-
-/**
- * Le port de sync RÉEL de cette base (R2 d'A29). Le coffre est lu À L'APPEL, dans
- * le contexte local : il n'existe que déverrouillé, et l'accueil lit l'état de
- * sync (`actualiser`) sans jamais avoir besoin de lui. `fetch` est résolu à
- * l'appel, comme `siege/connexion.ts`.
- */
-function portDeLaBase(base: BaseLocale): PortSyncReel {
-  const coffreDuContexte = {
-    base,
-    get coffre(): Coffre {
-      return contexteLocal().coffre;
-    },
-  };
-  const transport = creerTransport({
-    base,
-    get coffre(): Coffre {
-      return coffreDuContexte.coffre;
-    },
-    fetch: (entree, init) => globalThis.fetch(entree, init),
-  });
-  return creerPortSync({
-    base,
-    get coffre(): Coffre {
-      return coffreDuContexte.coffre;
-    },
-    transport,
-  });
-}
 
 /**
  * Lecture d'INDEX uniquement : identifiants, marques et compteurs. Aucun
@@ -208,7 +176,7 @@ export function EcranAccueil(): ReactNode {
   // Sans troisième argument, `useLiveQuery` rend `undefined` tant que la requête
   // n'a pas répondu — c'est exactement l'état « chargement » du 03 §33.2, et il
   // n'a pas besoin d'une valeur par défaut qui le déguiserait en résultat vide.
-  const port = useMemo(() => (base === null ? null : portDeLaBase(base)), [base]);
+  const port = useMemo(() => (base === null ? null : portSyncDeLaBase(base)), [base]);
   const lecture: LectureSocle | undefined = useLiveQuery(async (): Promise<
     LectureSocle | undefined
   > => {

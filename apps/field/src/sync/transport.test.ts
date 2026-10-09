@@ -407,8 +407,8 @@ describe('transport — refresh en panne côté siège, corps illisible', () => 
     expect((await lireJetonRafraichissement(base, coffre))?.valeur).toBe(REFRESH_ANCIEN);
   });
 
-  it('erreur 502 au corps non JSON (proxy) : refus avec un message en français, jamais une trace brute', async () => {
-    const banc = fetchScripte([() => new Response('<html>Bad Gateway</html>', { status: 502 })]);
+  it('erreur 500 au corps non JSON : refus avec un message en français, jamais une trace brute', async () => {
+    const banc = fetchScripte([() => new Response('<html>Internal Error</html>', { status: 500 })]);
     const transport = creerTransport({ fetch: banc.fetch, base, coffre });
     transport.definirJetonAcces(ACCES_ANCIEN);
 
@@ -416,8 +416,90 @@ describe('transport — refresh en panne côté siège, corps illisible', () => 
 
     expect(resultat.type).toBe('refus');
     if (resultat.type !== 'refus') return;
-    expect(resultat.statut).toBe(502);
+    expect(resultat.statut).toBe(500);
     expect(resultat.message).toMatch(/siège/i);
-    expect(resultat.message).not.toMatch(/html|Gateway/i);
+    expect(resultat.message).not.toMatch(/html|Internal/i);
+  });
+});
+
+// =============================================================================
+// F. Arbitrage A1 (2026-10-09) : indisponibilité passagère ≠ refus
+// =============================================================================
+describe('transport — 429 et 502/503/504 = hors ligne ; 400, 403, 500 et autres 5xx = refus', () => {
+  for (const statut of [429, 502, 503, 504]) {
+    it(`${String(statut)} : « hors_ligne » (aucune tentative ne sera comptée), jeton intact`, async () => {
+      const banc = fetchScripte([() => new Response('indisponible', { status: statut })]);
+      const transport = creerTransport({ fetch: banc.fetch, base, coffre });
+      transport.definirJetonAcces(ACCES_ANCIEN);
+
+      const resultat = await transport.pousser(lot());
+
+      expect(resultat).toEqual({ type: 'hors_ligne' });
+      expect(banc.refreshs()).toHaveLength(0);
+      expect((await lireJetonRafraichissement(base, coffre))?.valeur).toBe(REFRESH_ANCIEN);
+    });
+  }
+
+  for (const statut of [400, 403, 500, 501, 507]) {
+    it(`${String(statut)} : « refus » portant le statut`, async () => {
+      const banc = fetchScripte([
+        () => json({ error: { code: 'REFUS_FICTIF', message: 'Refus fictif.' } }, statut),
+      ]);
+      const transport = creerTransport({ fetch: banc.fetch, base, coffre });
+      transport.definirJetonAcces(ACCES_ANCIEN);
+
+      const resultat = await transport.pousser(lot());
+
+      expect(resultat).toMatchObject({ type: 'refus', statut });
+      if (resultat.type === 'refus') expect(resultat.message.length).toBeGreaterThan(0);
+    });
+  }
+});
+
+// =============================================================================
+// G. Arbitrage A3 (2026-10-09) : refresh à vol unique PAR BASE
+// =============================================================================
+describe('transport — refresh à vol unique par base (le jeton tourne : un second refresh serait un rejeu)', () => {
+  function bancDeuxMissions() {
+    const pousse: Repondeur = (a) =>
+      a.autorisation === `Bearer ${ACCES_NEUF}`
+        ? json(reponsePush(a.corps as LotPush))
+        : json(erreur401, 401);
+    return fetchScripte(
+      [pousse, pousse, pousse, pousse],
+      [
+        async () => {
+          await new Promise((r) => setTimeout(r, 20));
+          return json(sessionNeuve);
+        },
+      ],
+    );
+  }
+
+  it('deux 401 simultanés sur le même transport : UN refresh, les deux pushs reprennent et aboutissent', async () => {
+    const banc = bancDeuxMissions();
+    const transport = creerTransport({ fetch: banc.fetch, base, coffre });
+    transport.definirJetonAcces(ACCES_ANCIEN);
+
+    const [a, b] = await Promise.all([transport.pousser(lot()), transport.pousser(lot())]);
+
+    expect(a.type).toBe('ok');
+    expect(b.type).toBe('ok');
+    expect(banc.refreshs()).toHaveLength(1);
+    expect((await lireJetonRafraichissement(base, coffre))?.valeur).toBe(REFRESH_NEUF);
+  });
+
+  it('deux transports sur la MÊME base (deux missions) : toujours un seul refresh', async () => {
+    const banc = bancDeuxMissions();
+    const t1 = creerTransport({ fetch: banc.fetch, base, coffre });
+    const t2 = creerTransport({ fetch: banc.fetch, base, coffre });
+    t1.definirJetonAcces(ACCES_ANCIEN);
+    t2.definirJetonAcces(ACCES_ANCIEN);
+
+    const [a, b] = await Promise.all([t1.pousser(lot()), t2.pousser(lot())]);
+
+    expect(a.type).toBe('ok');
+    expect(b.type).toBe('ok');
+    expect(banc.refreshs()).toHaveLength(1);
   });
 });

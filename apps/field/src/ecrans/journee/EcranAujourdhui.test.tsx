@@ -34,13 +34,15 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { uuidv7 } from 'uuidv7';
 import type { ValeurTerrain } from '../../app/contexte.js';
-import { BaseLocale, cleEmbarquement, ecrireMeta } from '../../local/base.js';
+import { portSyncDeLaBase } from '../../app/port-sync-terrain.js';
+import { BaseLocale, CLES_META, cleEmbarquement, ecrireMeta } from '../../local/base.js';
 import { creerDekEnveloppee, deriverKek, ouvrirCoffre, type Coffre } from '../../local/coffre.js';
 import { installerContexteLocal, retirerContexteLocal } from '../../local/contexte.js';
 import { appliquerDescente, ecrireLocal } from '../../local/ecriture.js';
 import type { TypeDeSession } from '../../local/formes.js';
 import { lireSessionCourante } from '../../session/position.js';
 import { EcranAujourdhui } from './EcranAujourdhui.js';
+import { PastilleSyncCoquille } from './PastilleSyncCoquille.js';
 
 // -----------------------------------------------------------------------------
 // Fixture — fictive (invariant 2). Deux missions pour éprouver l'agrégation.
@@ -556,7 +558,12 @@ describe('EcranAujourdhui — cockpit §34.2', () => {
     }
     const carteAlpha = carte(/Alpha — mission fictive/);
     expect(carteAlpha.textContent).toMatch(/3 élément\(s\) à remonter/);
-    expect(carteAlpha.textContent).toMatch(/n’est pas encore disponible/);
+    // Port RÉEL (L6a) sans serveur : la carte dit la vérité locale — jamais
+    // synchronisée, la file comptée par la pastille — et ne prétend plus que la
+    // sync « n'existe pas dans cette version » (B3, revue A29 du 2026-10-09).
+    expect(carteAlpha.textContent).toMatch(/jamais synchronisée depuis cet appareil/);
+    expect(carteAlpha.textContent).toMatch(/3 en attente/);
+    expect(carteAlpha.textContent).not.toMatch(/pas encore disponible/);
     // Et l'alerte de l'invariant 8 (jamais synchronisé + file non vide) interrompt.
     const alertes = screen.getAllByRole('alert');
     expect(alertes.map((a) => a.textContent).join(' ')).toMatch(/aucune synchronisation connue/i);
@@ -762,5 +769,66 @@ describe('EcranAujourdhui — rappel discret tant que le rituel du jour n’est 
     await attendreLecture();
 
     expect(document.body.textContent).toMatch(/rituel de fin de journée n’a pas encore été fait/i);
+  });
+});
+
+// =============================================================================
+// 05 §31-3 — REFRESH REFUSÉ : « reconnexion requise », la collecte continue.
+// Défaut constaté par A26 le 2026-10-09 (rendu à A25, non corrigé ici) : le statut
+// `indisponible` du port RÉEL veut dire « reconnexion requise », et deux surfaces
+// disaient encore « pas encore disponible dans cette version » — une phrase fausse
+// depuis L6a, qui enverrait l'auditeur attendre une mise à jour au lieu de se
+// reconnecter.
+// =============================================================================
+describe('EcranAujourdhui — §31-3 : refresh refusé, reconnexion requise, la collecte continue', () => {
+  /** Un port réel dont la sync vient de rendre « reconnexion requise » (aucun jeton rangé). */
+  async function apresRefreshRefuse(): Promise<BaseLocale> {
+    const base = await nouvelleBase();
+    await embarquerDeuxMissions(base);
+    await ecrireMeta(base, CLES_META.appareil, '0191e2a0-0000-7000-8000-00000000d5a1');
+    await semerSession({ missionId: MISSION_ALPHA, orgUnitId: UNITE_ALPHA });
+    // Aucun appel réseau n'est attendu : sans refresh rangé, le transport conclut
+    // seul à la reconnexion. Un appel qui partirait recevrait un 401.
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: 'NON_AUTHENTIFIE', message: 'Session expirée.' } }), {
+        status: 401,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    const resultat = await portSyncDeLaBase(base).synchroniserMaintenant(MISSION_ALPHA);
+    expect(resultat.statut).toBe('indisponible');
+    return base;
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('@critique la carte de la mission dit la reconnexion requise et que la collecte continue — jamais « pas encore disponible »', async () => {
+    const base = await apresRefreshRefuse();
+    terrain = terrainDeBase(base);
+    render(<EcranAujourdhui />);
+    await attendreLecture();
+
+    const texte = carte(/Alpha — mission fictive/).textContent;
+    expect(texte).toMatch(/reconnexion requise pour synchroniser/i);
+    expect(texte).toMatch(/en sécurité sur l.appareil/i);
+    expect(texte).toMatch(/collecte/i);
+    expect(texte).not.toMatch(/pas encore disponible/i);
+    expect(document.body.textContent).not.toMatch(/pas encore disponible dans cette version/i);
+  });
+
+  it('@critique la pastille de la coquille porte la même vérité dans son motif — jamais « pas encore disponible »', async () => {
+    const base = await apresRefreshRefuse();
+    terrain = terrainDeBase(base);
+    render(<PastilleSyncCoquille />);
+
+    await waitFor(() => {
+      const porteuse = document.querySelector('[title]');
+      expect(porteuse?.getAttribute('title') ?? '').toMatch(/reconnexion requise/i);
+    });
+    const motif = document.querySelector('[title]')?.getAttribute('title') ?? '';
+    expect(motif).toMatch(/en sécurité sur l.appareil/i);
+    expect(motif).not.toMatch(/pas encore disponible/i);
   });
 });

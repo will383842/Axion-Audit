@@ -12,7 +12,7 @@
 // L'ordre est sync → export → validation, et **un échec n'annule pas les
 // suivants**. C'est le filet de l'invariant 8 : c'est quand la sync a échoué
 // que la sauvegarde compte. Chaque combinaison d'échec a donc SON test :
-//   · sync « indisponible » (port inerte)      → export ✓, validation ✓
+//   · sync hors ligne (siège injoignable)     → export ✓, validation ✓
 //   · sync « echec » (résolu)                  → export ✓, validation ✓
 //   · sync qui LÈVE (rejet)                    → export ✓, validation ✓
 //   · export qui LÈVE                          → sync dite, validation ✓
@@ -20,9 +20,11 @@
 //   · validation qui LÈVE                      → le fichier est DÉJÀ déposé
 //
 // ── LE HARNAIS ───────────────────────────────────────────────────────────────
-// Base Dexie réelle, coffre réel, `useTerrain` simulé. Le PORT DE SYNC est
-// remplacé par une porte pilotable (`vi.hoisted`) qui, par défaut, délègue au
-// port inerte réel. Le dépôt de fichier (`URL.createObjectURL` + `<a download>`)
+// Base Dexie réelle, coffre réel, `useTerrain` simulé. Le PORT DE SYNC est le
+// port RÉEL (`sync/port.ts`, L6a) — seul son TRANSPORT est pilotable
+// (`vi.hoisted`) : par défaut le siège est injoignable (aucun réseau en jsdom).
+// La porte enveloppe le port pour journaliser l'ordre des gestes, et pour
+// injecter le seul cas que le port réel ne produit jamais : une sync qui LÈVE. Le dépôt de fichier (`URL.createObjectURL` + `<a download>`)
 // n'existe pas dans jsdom : il est capté, et c'est ce qui permet de RELIRE le
 // fichier produit — puis de le restaurer sur un SECOND appareil (base neuve,
 // DEK neuve) dans ce même test. L'ORDRE des trois gestes est mesuré par un
@@ -38,12 +40,13 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { uuidv7 } from 'uuidv7';
 import type { ValeurTerrain } from '../../app/contexte.js';
-import { BaseLocale, cleEmbarquement, ecrireMeta, lireMeta } from '../../local/base.js';
+import { BaseLocale, CLES_META, cleEmbarquement, ecrireMeta, lireMeta } from '../../local/base.js';
 import { creerDekEnveloppee, deriverKek, ouvrirCoffre, type Coffre } from '../../local/coffre.js';
 import { installerContexteLocal, retirerContexteLocal } from '../../local/contexte.js';
 import { depotSessions } from '../../local/depots/sessions.js';
 import { appliquerDescente, ecrireLocal } from '../../local/ecriture.js';
-import type * as ModulePortSync from '../../local/port-sync.js';
+import type * as ModulePortTerrain from '../../app/port-sync-terrain.js';
+import type { PortSyncReel } from '../../sync/port.js';
 import { fichierSauvegardeSchema } from '../../sauvegarde/format.js';
 import { importerSauvegarde } from '../../sauvegarde/sauvegarde.js';
 import { terminerSession } from '../../agenda/validation.js';
@@ -55,32 +58,54 @@ import { EcranFinDeJournee } from './EcranFinDeJournee.js';
 // -----------------------------------------------------------------------------
 
 const porte = vi.hoisted(() => ({
-  comportement: 'inerte',
+  comportement: 'sans_reseau',
   journal: [] as string[],
 }));
 
-vi.mock('../../local/port-sync.js', async (importOriginal) => {
-  const original = await importOriginal<typeof ModulePortSync>();
-  const inerte = original.portSyncInerte;
-  const pilote: ModulePortSync.PortSync = {
-    etat: (missionId) => inerte.etat(missionId),
-    synchroniserMaintenant: async (missionId) => {
-      porte.journal.push('sync');
-      if (porte.comportement === 'leve') {
-        throw new Error('panne réseau injectée — non attrapée par le port');
-      }
-      if (porte.comportement === 'echec') {
-        return {
-          statut: 'echec',
-          message: 'La synchronisation a échoué : le siège est injoignable.',
-          operationsMontees: 0,
-          operationsRestantes: null,
-        };
-      }
-      return inerte.synchroniserMaintenant(missionId);
-    },
+vi.mock('../../app/port-sync-terrain.js', async (importOriginal) => {
+  const original = await importOriginal<typeof ModulePortTerrain>();
+  const { creerPortSync } = await import('../../sync/port.js');
+  const { contexteLocal } = await import('../../local/contexte.js');
+  const ports = new WeakMap<BaseLocale, PortSyncReel>();
+  // Le transport pilotable : c'est le SEUL élément simulé de la chaîne de sync.
+  const transport = {
+    pousser: () =>
+      Promise.resolve(
+        porte.comportement === 'echec'
+          ? {
+              type: 'refus' as const,
+              statut: 400,
+              message: 'La synchronisation a échoué : le siège a refusé le lot (motif fictif).',
+            }
+          : { type: 'hors_ligne' as const },
+      ),
   };
-  return { ...original, portSyncInerte: pilote };
+  function portSyncDeLaBase(base: BaseLocale): PortSyncReel {
+    let reel = ports.get(base);
+    if (reel === undefined) {
+      reel = creerPortSync({
+        base,
+        get coffre() {
+          return contexteLocal().coffre;
+        },
+        transport,
+      });
+      ports.set(base, reel);
+    }
+    const port = reel;
+    return {
+      etat: (missionId) => port.etat(missionId),
+      actualiser: (missionId) => port.actualiser(missionId),
+      synchroniserMaintenant: async (missionId) => {
+        porte.journal.push('sync');
+        if (porte.comportement === 'leve') {
+          throw new Error('panne réseau injectée — non attrapée par le port');
+        }
+        return port.synchroniserMaintenant(missionId);
+      },
+    };
+  }
+  return { ...original, portSyncDeLaBase };
 });
 
 vi.mock('../../app/contexte.js', () => ({
@@ -97,6 +122,7 @@ const MISSION_BIS_ID = '0191e2a0-0000-7000-8000-00000000f5d2';
 const UNITE_ID = '0191e2a0-0000-7000-8000-00000000c5d1';
 const UNITE_BIS_ID = '0191e2a0-0000-7000-8000-00000000c5d2';
 const AUDITEUR_ID = '0191e2a0-0000-7000-8000-00000000e001';
+const APPAREIL_ID = '0191e2a0-0000-7000-8000-00000000d5d1';
 const NOTE_DE_COULOIR = 'Note de couloir fictive, dix minutes après';
 
 const KDF_TEST = {
@@ -214,6 +240,8 @@ function uniteDescendue(id: string, missionId: string) {
 
 async function embarquer(base: BaseLocale, missions: readonly (readonly [string, string])[]) {
   await installer(base);
+  // Un appareil embarqué a son identifiant (exigé par `lotPushSchema`).
+  await ecrireMeta(base, CLES_META.appareil, APPAREIL_ID);
   await appliquerDescente({
     missionId: missions[0]?.[0] ?? MISSION_ID,
     serverTime: INSTANT,
@@ -352,7 +380,7 @@ beforeAll(async () => {
 }, 20_000);
 
 beforeEach(() => {
-  porte.comportement = 'inerte';
+  porte.comportement = 'sans_reseau';
   porte.journal.length = 0;
   fichiersDeposes.length = 0;
 });
@@ -451,7 +479,7 @@ describe('EcranFinDeJournee — état ERREUR', () => {
 });
 
 describe('EcranFinDeJournee — HORS LIGNE : le rituel ENTIER se joue sans réseau (invariant 1, 11 §4)', () => {
-  it('@critique sans réseau : la sync se dit indisponible, la sauvegarde est PRODUITE, les entretiens sont validés', async () => {
+  it('@critique sans réseau : la sync dit le siège injoignable et les données gardées, la sauvegarde est PRODUITE, les entretiens sont validés', async () => {
     const base = await nouvelleBase();
     await embarquer(base, [[MISSION_ID, UNITE_ID]]);
     await semerSession({ status: 'termine', personName: 'Terminée Hors Ligne' });
@@ -460,7 +488,8 @@ describe('EcranFinDeJournee — HORS LIGNE : le rituel ENTIER se joue sans rése
       await monter(base);
       saisirMotDePasse();
       await terminerLaJournee();
-      expect(resultat(/synchronisation/i)).toMatch(/pas encore disponible/i);
+      expect(resultat(/synchronisation/i)).toMatch(/injoignable/i);
+      expect(resultat(/synchronisation/i)).toMatch(/enregistrées sur cet appareil/i);
       expect(resultat(/sauvegarde de secours/i)).toMatch(/sauvegarde chiffrée produite/i);
       expect(fichiersDeposes.length).toBe(1);
       expect(await sessionsValidees()).toBe(1);
@@ -609,7 +638,7 @@ describe('EcranFinDeJournee — un échec n’annule pas les suivants', () => {
     expect(await sessionsValidees()).toBe(1);
   }, 40_000);
 
-  // Le port de L6a rendra `echec` plutôt que de lever ; mais une panne réseau qui
+  // Le port de L6a rend `echec` plutôt que de lever ; mais une panne réseau qui
   // ÉCHAPPE au port ne doit pas priver l'auditeur du filet de l'invariant 8 —
   // « c'est quand la sync est indisponible que la sauvegarde compte » (en-tête
   // de l'écran). Si ce test rougit, c'est que l'appel du port n'est pas gardé :
@@ -651,7 +680,7 @@ describe('EcranFinDeJournee — un échec n’annule pas les suivants', () => {
     await monter(base);
     saisirMotDePasse();
     await terminerLaJournee();
-    expect(resultat(/synchronisation/i)).toMatch(/pas encore disponible/i);
+    expect(resultat(/synchronisation/i)).toMatch(/injoignable/i);
     expect(resultat(/sauvegarde de secours/i)).toMatch(/n’a pas pu être produite/i);
     expect(resultat(/sauvegarde de secours/i)).toMatch(/données restent intactes/i);
     expect(fichiersDeposes.length).toBe(0);
