@@ -28,9 +28,9 @@
 import 'fake-indexeddb/auto';
 import Dexie from 'dexie';
 import { uuidv7 } from 'uuidv7';
-import { z } from 'zod';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { operationSchema } from '../local/contrat-sync.js';
+import { ENTITES_SYNC, operationSchema } from '../local/contrat-sync.js';
+import { SCHEMAS_CHARGE_SYNC } from '../../../api/src/sync/charges.js';
 import { BaseLocale, type LigneOutbox } from '../local/base.js';
 import { creerDekEnveloppee, deriverKek, ouvrirCoffre, type Coffre } from '../local/coffre.js';
 import { installerContexteLocal } from '../local/contexte.js';
@@ -381,94 +381,19 @@ describe('montée — la charge de chaque entité est la forme EXACTE du 04 (PD2
 // =============================================================================
 // RACCORD — chaque charge produite passe la liste du serveur (B1, 2026-10-09)
 // =============================================================================
-// La liste FERMÉE du testeur serveur, transcrite telle quelle : une clé hors liste
-// = op refusée par le siège. Toutes facultatives ici (une clé sans source locale
-// est omise) ; `blockCode` est une chaîne NON VIDE, jamais null.
-const facultatif = z.unknown().optional();
-function listeServeur(cles: readonly string[]) {
-  return z.strictObject(Object.fromEntries(cles.map((c) => [c, facultatif])));
-}
-const RACCORD = {
-  interview: listeServeur([
-    'missionId',
-    'orgUnitId',
-    'conductedBy',
-    'kind',
-    'mode',
-    'linkedReviewAnswerId',
-    'personName',
-    'personRole',
-    'personServiceId',
-    'personEmail',
-    'interlocutorProfileId',
-    'participants',
-    'documentRequestId',
-    'consentGiven',
-    'consentAudio',
-    'consentedAt',
-    'informationNoticeVersion',
-    'noticeShownAt',
-    'scheduledAt',
-    'scheduledDurationMin',
-    'scheduleStatus',
-    'status',
-    'startedAt',
-    'endedAt',
-    'generalNotes',
-    'clientCreatedAt',
-  ]),
-  answer: listeServeur([
-    'interviewId',
-    'missionQuestionId',
-    'value',
-    'source',
-    'withheld',
-    'withheldReason',
-    'horsParcours',
-    'note',
-    'flagReview',
-    'reviewReason',
-    'notApplicable',
-    'naReason',
-    'clientCreatedAt',
-  ]),
-  attachment_meta: listeServeur([
-    'missionId',
-    'interviewId',
-    'answerId',
-    'kind',
-    'content',
-    'filename',
-    'mime',
-    'sizeBytes',
-    'createdBy',
-    'clientCreatedAt',
-  ]),
-  org_unit_proposal: listeServeur([
-    'missionId',
-    'parentId',
-    'kind',
-    'name',
-    'headcount',
-    'countryCode',
-    'timezone',
-    'proposedBy',
-  ]),
-  question_adhoc: z.strictObject({
-    question: z.strictObject({
-      textFr: facultatif,
-      guidanceFr: facultatif,
-      answerType: facultatif,
-      criticality: facultatif,
-      blockCode: z.string().min(1),
-      options: facultatif,
-      allowRange: facultatif,
-      expectedSource: facultatif,
-      createdBy: facultatif,
-    }),
-    missionQuestion: z.strictObject({ id: z.uuid(), position: z.number().int() }),
-  }),
-} as const;
+// A26, L6b (2026-10-09) : la liste n’est plus RECOPIÉE ici. Une copie dérive en
+// silence — le serveur ajoute ou retire une clé, la copie reste verte, et le
+// premier envoi réel finit en `error`. Le raccord compare désormais chaque charge
+// produite aux schémas de charge que le SERVEUR applique lui-même
+// (`z.strictObject` par entité), importés depuis leur source. Ils doivent vivre
+// dans un module PUR (zod + `@axion/shared`, sans base ni Fastify) pour être
+// importables ici : `apps/api/src/sync/charges.ts`, consommé par `service.ts`.
+//   export const SCHEMAS_CHARGE_SYNC: { readonly [E in EntiteSync]: z.ZodType };
+const RACCORD = SCHEMAS_CHARGE_SYNC;
+
+it('raccord : la source serveur couvre EXACTEMENT les cinq entités montantes', () => {
+  expect(Object.keys(RACCORD).sort()).toEqual([...ENTITES_SYNC].sort());
+});
 
 describe('montée — raccord : chaque charge produite est acceptée par la liste du serveur', () => {
   it('les cinq entités, écrites par le port d’écriture, passent la liste fermée', async () => {
