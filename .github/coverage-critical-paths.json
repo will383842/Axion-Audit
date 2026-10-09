@@ -422,6 +422,20 @@
         "Mesure a la pose : 100 / 100 / 100."
       ],
       "$motif": "Pose le 2026-09-05 par A23, en meme temps que sauvegarde.ts."
+    },
+    {
+      "lot": "L6a",
+      "module": "Moteur de sync — outbox et push idempotent (cote terrain)",
+      "glob": "apps/field/src/sync/**",
+      "reference": "07 §12 lot L6 · 05 §9 · 09 §3 (« moteur de sync ») · LOT_L6.md §3ter B-3",
+      "$motif": "Deplace de cheminsAttendus le 2026-10-09 par A25 (L6a), dans la livraison qui cree le premier fichier de apps/field/src/sync/ (B-3 : un seuil arme apres le code est un seuil qu on ajuste au code)."
+    },
+    {
+      "lot": "L6a",
+      "module": "Moteur de sync — reception serveur, processed_ops, propriete §9.9",
+      "glob": "apps/api/src/sync/**",
+      "reference": "07 §12 lot L6 · 11 §4 · 05 §9.3 et §9.9",
+      "$motif": "Deplace de cheminsAttendus le 2026-10-09 par A14 (L6a, cote serveur), dans la livraison qui cree apps/api/src/sync/."
     }
   ],
   "_cheminsAttendus_mode_emploi": [
@@ -432,20 +446,5 @@
     "glob attendu existe alors que `cheminsCritiques` est encore vide.",
     "Les globs sont au format `git ls-files` (pathspec)."
   ],
-  "cheminsAttendus": [
-    {
-      "lot": "L6a",
-      "module": "Moteur de sync — outbox et push idempotent (cote terrain)",
-      "glob": "apps/field/src/sync/**",
-      "reference": "07 §12 lot L6 · 05 §9 · 09 §3 (« moteur de sync »)",
-      "statut": "non livre"
-    },
-    {
-      "lot": "L6a",
-      "module": "Moteur de sync — reception serveur, processed_ops, propriete §9.9",
-      "glob": "apps/api/src/sync/**",
-      "reference": "07 §12 lot L6 · 11 §4 · 05 §9.3 et §9.9",
-      "statut": "non livre"
-    }
-  ]
+  "cheminsAttendus": []
 }

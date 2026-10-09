@@ -128,7 +128,10 @@ describe('B6 — un fait, une pastille', () => {
       render(<App />);
       const mot = await screen.findByText(MOTS_DE_PASTILLE);
       const pastille = mot.parentElement;
-      expect(pastille?.getAttribute('title') ?? '').toMatch(/n’est pas encore disponible/i);
+      // Le motif existe en toutes lettres ; depuis L6a il ne dit plus « absente de
+      // cette version » (05 §31-3 : indisponible = reconnexion requise).
+      expect(pastille?.getAttribute('title') ?? '').not.toBe('');
+      expect(pastille?.getAttribute('title') ?? '').not.toMatch(/pas encore disponible/i);
     } finally {
       silence.mockRestore();
     }

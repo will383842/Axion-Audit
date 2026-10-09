@@ -51,6 +51,7 @@ import {
   CLE_DERNIER_RITUEL,
   construireJournee,
   rappelFinDeJournee,
+  type EtatMissionDuJour,
   type JourneeTerrain,
 } from '../../agenda/jour.js';
 import { LIBELLE_TYPE_SESSION } from '../../agenda/sessions.js';
@@ -59,7 +60,7 @@ import { versEtatPastille } from '../../app/etat-sync-affiche.js';
 import { lireMeta } from '../../local/base.js';
 import { maintenant } from '../../local/horloge.js';
 import type { SessionLocale } from '../../local/depots/sessions.js';
-import { portSyncInerte } from '../../local/port-sync.js';
+import { portSyncDeLaBase } from '../../app/port-sync-terrain.js';
 import { memoriserSessionCourante } from '../../session/position.js';
 import { formaterDateHeure, formaterHeure } from '../../session/fuseau.js';
 import { useEnLigne } from '../../session/media.js';
@@ -166,6 +167,11 @@ function LigneSession({
 
 export function EcranAujourdhui(): ReactNode {
   const { base, naviguer } = useTerrain();
+  // Le texte d'un « indisponible » est celui du port (arbitrage A01) — jamais recomposé ici.
+  const messageDeSync = (etatMission: EtatMissionDuJour): string | null =>
+    base === null || etatMission.sync.statut !== 'indisponible'
+      ? null
+      : portSyncDeLaBase(base).messageAffiche(etatMission.mission.id);
   const enLigne = useEnLigne();
 
   // `useLiveQuery` : le cockpit se rafraîchit quand la base bouge, sans qu'aucun
@@ -175,7 +181,7 @@ export function EcranAujourdhui(): ReactNode {
     async (): Promise<JourneeTerrain | null | undefined> => {
       if (base === null) return undefined;
       try {
-        return await construireJournee(portSyncInerte);
+        return await construireJournee(portSyncDeLaBase(base));
       } catch {
         // La cause exacte n'est pas remontée à l'écran : elle contiendrait des
         // détails techniques, et 11 §2 proscrit les journaux bavards côté client.
@@ -440,8 +446,7 @@ export function EcranAujourdhui(): ReactNode {
                   etatMission.sync.derniereSyncReussieLe,
                   etatMission.mission.timezone,
                 )}`}
-            {etatMission.sync.statut === 'indisponible' &&
-              ' · la synchronisation n’est pas encore disponible dans cette version'}
+            {(messageDeSync(etatMission) ?? '') !== '' && ` · ${messageDeSync(etatMission) ?? ''}`}
           </p>
           {/*
             NB-15 — LE COMPTEUR EST LE BOUTON, et il n'y a qu'un compteur.

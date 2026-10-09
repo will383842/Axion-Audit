@@ -71,7 +71,8 @@ describe('B6 — l’appareil affiche le statut le plus DÉFAVORABLE de ses miss
 
 describe('B6 — la mention dit ce que la pastille ne peut pas tenir en deux mots', () => {
   it('elle nomme l’indisponibilité ET le geste qui protège la journée', () => {
-    expect(MENTION_SYNC_INDISPONIBLE).toMatch(/n’est pas encore disponible/i);
+    // Depuis L6a, « indisponible » n'est plus « absente de cette version » (05 §31-3).
+    expect(MENTION_SYNC_INDISPONIBLE).not.toMatch(/pas encore disponible dans cette version/i);
     expect(MENTION_SYNC_INDISPONIBLE).toMatch(/sauvegarde de secours/i);
   });
 });

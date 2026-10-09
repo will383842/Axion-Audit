@@ -77,8 +77,9 @@ export function versEtatPastille(statut: StatutSync): EtatSync {
 const ORDRE_DEFAVORABLE: readonly StatutSync[] = [
   'echec',
   'en_attente',
-  'jamais_synchronisee',
+  // Avant « jamais » : une reconnexion requise vaut pour tout l'appareil (A01).
   'indisponible',
+  'jamais_synchronisee',
   'a_jour',
 ];
 
@@ -98,4 +99,4 @@ export function statutSyncAppareil(statuts: readonly StatutSync[]): StatutSync {
  * façons — le défaut que B6 a coûté.
  */
 export const MENTION_SYNC_INDISPONIBLE =
-  'La synchronisation n’est pas encore disponible dans cette version. Vos données sont enregistrées sur cet appareil ; exportez une sauvegarde de secours en fin de journée.';
+  'La synchronisation attend : vos saisies restent en sécurité sur cet appareil. Exportez une sauvegarde de secours en fin de journée.';

@@ -86,7 +86,7 @@ import {
   memoriserQuestionCourante,
   memoriserSessionCourante,
 } from '../../session/position.js';
-import { creerQuestionAdHoc } from '../../session/questions-adhoc.js';
+import { blocPourQuestionAdHoc, creerQuestionAdHoc } from '../../session/questions-adhoc.js';
 import { useRaccourcisEntretien, type ActionsRaccourcis } from '../../session/raccourcis.js';
 import type { ValeurTypee } from '../../session/valeurs.js';
 import { formaterDateHeure } from '../../session/fuseau.js';
@@ -98,7 +98,7 @@ import { PaletteRecherche } from './PaletteRecherche.js';
 import { PanneauNotes } from './PanneauNotes.js';
 import { PanneauRaccourcis } from './PanneauRaccourcis.js';
 import type { Cadence } from './SaisieReponse.js';
-import { ZoneBlocs } from './ZoneBlocs.js';
+import { ZoneBlocs, regrouperParBloc } from './ZoneBlocs.js';
 import { ZoneQuestion } from './ZoneQuestion.js';
 import './entretien.css';
 
@@ -254,6 +254,21 @@ export function EcranEntretien(): ReactNode {
         : (listeQuestions[0]?.id ?? null);
   const rang = listeQuestions.findIndex((question) => question.id === questionId);
   const question = rang >= 0 ? listeQuestions[rang] : undefined;
+  // B1 (2026-10-09) : une question ad hoc ne naît jamais sans bloc. Le bloc est
+  // DÉDUIT (courante, sinon banque la plus proche) ; à défaut, le dialogue demande.
+  const blocPropose = useMemo(
+    () => blocPourQuestionAdHoc(question, listeQuestions),
+    [question, listeQuestions],
+  );
+  const blocsChoisissables = useMemo(
+    () =>
+      regrouperParBloc(listeQuestions).flatMap((bloc) =>
+        bloc.code === null || bloc.code.trim() === ''
+          ? []
+          : [{ code: bloc.code, libelle: bloc.libelle }],
+      ),
+    [listeQuestions],
+  );
 
   // ── La réponse courante — deux lectures, et pourquoi ──────────────────────
   // La lecture VIVANTE (`useLiveQuery`) garde sa valeur précédente pendant
@@ -491,7 +506,7 @@ export function EcranEntretien(): ReactNode {
           texte: saisie.texte,
           answerType: saisie.answerType,
           guidance: saisie.guidance,
-          blockCode: question?.blockCode ?? null,
+          blockCode: saisie.blockCode,
           position,
           options: saisie.options,
         });
@@ -1018,7 +1033,13 @@ export function EcranEntretien(): ReactNode {
             onFermer={fermerRecherche}
           />
 
-          <DialogueQuestionAdHoc ouvert={adHoc} onCreer={creerAdHoc} onFermer={fermerAdHoc} />
+          <DialogueQuestionAdHoc
+            ouvert={adHoc}
+            blocPropose={blocPropose}
+            blocs={blocsChoisissables}
+            onCreer={creerAdHoc}
+            onFermer={fermerAdHoc}
+          />
 
           <PanneauRaccourcis ouvert={aide && !partage} onFermer={fermerAide} />
         </section>

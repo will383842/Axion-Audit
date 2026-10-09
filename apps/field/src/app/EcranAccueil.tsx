@@ -16,7 +16,8 @@
 //
 // ── UNE SEULE SOURCE POUR L'INVARIANT 8 ─────────────────────────────────────
 // L'alerte « aucune sync depuis 24 h » n'est plus calculée ici : elle vient de
-// `portSyncInerte.etat(missionId)` (réserve R-L5a-8). Deux endroits qui calculent
+// port de sync réel, `actualiser(missionId)` (réserve R-L5a-8, puis R2 d'A29 : L6a
+// remplace le port inerte, qui passait `null` en dur). Deux endroits qui calculent
 // la même alerte finissent par en afficher deux différentes, et c'est justement
 // l'alerte qui dit à l'auditeur que sa journée ne vit que sur sa tablette.
 // `LOT_L5.md` §3.6 : la pastille ne verdit pas tant que L6a n'a pas livré — une
@@ -36,7 +37,8 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { Bouton, Message, RappelHorsLigne, ZoneEtat, type EtatZone } from '@axion/ui';
 import { cleEmbarquement, clePersistance, type BaseLocale } from '../local/base.js';
 import { embarquerMission, type ResultatEmbarquement } from '../local/embarquement.js';
-import { portSyncInerte, type EtatSyncMission } from '../local/port-sync.js';
+import type { EtatSyncMission } from '../local/port-sync.js';
+import { portSyncDeLaBase } from './port-sync-terrain.js';
 import { useEnLigne } from '../session/media.js';
 import { CAPACITES_HORS_LIGNE, PASTILLE_PORTEE_PAR_LA_COQUILLE } from './capacites-hors-ligne.js';
 import { useTerrain } from './contexte.js';
@@ -61,7 +63,13 @@ interface ResumeSocle {
   readonly sessionsEnCours: number;
 }
 
-type LectureSocle = { readonly ok: true; readonly resume: ResumeSocle } | { readonly ok: false };
+type LectureSocle =
+  | {
+      readonly ok: true;
+      readonly resume: ResumeSocle;
+      readonly etatsSync: readonly EtatSyncMission[];
+    }
+  | { readonly ok: false };
 
 /**
  * Lecture d'INDEX uniquement : identifiants, marques et compteurs. Aucun
@@ -168,42 +176,30 @@ export function EcranAccueil(): ReactNode {
   // Sans troisième argument, `useLiveQuery` rend `undefined` tant que la requête
   // n'a pas répondu — c'est exactement l'état « chargement » du 03 §33.2, et il
   // n'a pas besoin d'une valeur par défaut qui le déguiserait en résultat vide.
+  const port = useMemo(() => (base === null ? null : portSyncDeLaBase(base)), [base]);
   const lecture: LectureSocle | undefined = useLiveQuery(async (): Promise<
     LectureSocle | undefined
   > => {
-    if (base === null) return undefined;
+    if (base === null || port === null) return undefined;
     try {
-      return { ok: true, resume: await lireResume(base) };
+      const resumeLu = await lireResume(base);
+      // R2 : l'état de sync et l'alerte de l'invariant 8 sont LUS par le port
+      // (meta + file réelle), dans la même requête vivante : ils apparaissent au
+      // même rendu que le résumé, et se relisent quand un push écrit `meta`.
+      const etatsSync = await Promise.all(
+        resumeLu.missions.map((mission) => port.actualiser(mission.id)),
+      );
+      return { ok: true, resume: resumeLu, etatsSync };
     } catch {
       return { ok: false };
     }
-  }, [base]);
+  }, [base, port]);
 
   const resume = lecture?.ok === true ? lecture.resume : null;
 
   // R-L5a-8 : le port est LA source de l'état de sync et de l'alerte de
-  // l'invariant 8. On lui donne les comptes réels, il rend le verdict.
-  //
-  // Calculé en `useMemo` et non dans un `useEffect` (B6, 2026-09-06) : l'effet
-  // imposait un SECOND cycle de rendu avant que l'alerte « aucune sync connue »
-  // n'apparaisse. Tant qu'une pastille s'affichait dès le premier cycle, le
-  // décalage passait inaperçu ; il devenait une course dès qu'elle a été retirée.
-  // Une alerte de l'invariant 8 qui apparaît « un rendu plus tard » est une
-  // alerte qu'un auditeur pressé ne voit pas. `rafraichirEtat` est une écriture
-  // de cache idempotente, entièrement dérivée de `resume` : la rejouer donne le
-  // même résultat, et rien d'autre n'en dépend.
-  const etatsSync: readonly EtatSyncMission[] = useMemo(
-    () =>
-      (resume?.missions ?? []).map((mission) => {
-        portSyncInerte.rafraichirEtat(
-          mission.id,
-          mission.operationsEnAttente,
-          mission.operationsBloquees,
-        );
-        return portSyncInerte.etat(mission.id);
-      }),
-    [resume],
-  );
+  // l'invariant 8 — il lit `meta` et la file, l'écran ne fait que rendre.
+  const etatsSync: readonly EtatSyncMission[] = lecture?.ok === true ? lecture.etatsSync : [];
 
   const alertes = [
     ...new Set(

@@ -193,7 +193,10 @@ function alertesDe(etat: {
  * lit la file réelle.
  */
 export async function construireJournee(
-  port: PortSync,
+  port: PortSync & {
+    /** Le port réel (L6a) relit son état avant de le rendre ; l'inerte n'en a pas. */
+    readonly actualiser?: (missionId: string) => Promise<EtatSyncMission>;
+  },
   instantIso?: string,
 ): Promise<JourneeTerrain> {
   const { base } = contexteLocal();
@@ -226,13 +229,17 @@ export async function construireJournee(
     // « jamais de pastille verte sans serveur » (LOT_L5.md §3.6, borne A01).
     const derniereSyncReussieLe = await lireDerniereSyncReussie(base, mission.id);
 
-    const etatPort = port.etat(mission.id);
+    const etatPort =
+      port.actualiser === undefined ? port.etat(mission.id) : await port.actualiser(mission.id);
     const sync: EtatSyncMission = {
       ...etatPort,
       derniereSyncReussieLe,
       operationsEnAttente: comptes.en_attente,
       operationsBloquees: bloquees,
-      alerte: evaluerAlerteSauvegarde(derniereSyncReussieLe, comptes.en_attente),
+      // B2 (2026-10-09) : une op rejetée ou à examiner ne vit, elle aussi, que sur
+      // cet appareil — l'alerte de l'invariant 8 la compte. Même somme que le port
+      // réel (`sync/port.ts`), donc le même verdict sur l'accueil et le cockpit.
+      alerte: evaluerAlerteSauvegarde(derniereSyncReussieLe, comptes.en_attente + bloquees),
     };
 
     const etat = { mission, sessions, aRevoirOuverts, sync };

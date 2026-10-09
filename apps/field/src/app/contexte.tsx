@@ -59,6 +59,7 @@ import {
   type EtatNavigation,
 } from './navigation.js';
 import { declarerSourceSessionEnCours } from './service-worker-client.js';
+import { brancherRetourReseau } from './port-sync-terrain.js';
 import { useVerrou, type EtatVerrou } from './verrou.js';
 import type { CodeVue } from './vues.js';
 
@@ -308,6 +309,14 @@ export function FournisseurTerrain({ children }: { readonly children: ReactNode 
     if (base === null || phase !== 'ouvert') return;
     void ecrireMeta(base, CLES_META.vueCourante, vue);
   }, [base, phase, vue]);
+
+  // ── Retour du réseau → synchronisation (05 §9.3, B3 de la revue A29 de L6a) ──
+  // Branché ici, au montage de l'application, une fois par base ouverte. Rien ne
+  // part tant que le coffre est fermé (`brancherRetourReseau`).
+  useEffect(() => {
+    if (base === null) return undefined;
+    return brancherRetourReseau(base, window);
+  }, [base]);
 
   // ── Le geste retour du système ne quitte jamais l'app en pleine collecte ───
   const retour = useCallback((): boolean => {
