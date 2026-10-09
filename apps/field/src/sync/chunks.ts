@@ -25,6 +25,7 @@
 //
 // Traçabilité : E7, E38 · invariants 1, 7 et 8 · 05 §9.6, §9.8-6 et -7.
 // =============================================================================
+import type { ERROR_CODES } from '@axion/shared';
 import type { BaseLocale } from '../local/base.js';
 import type { Coffre } from '../local/coffre.js';
 import {
@@ -42,7 +43,8 @@ export const TAILLE_MORCEAU_OCTETS = 5 * 1024 * 1024;
 export const REEMISSIONS_MAX = 3;
 
 /** Les deux codes du 409 de `complete` (DECISIONS [L6c], 2026-10-09). */
-export type CodeReemission = 'UPLOAD_CHUNKS_MISSING' | 'UPLOAD_CHECKSUM_MISMATCH';
+export type CodeReemission =
+  (typeof ERROR_CODES)['UPLOAD_CHUNKS_MISSING'] | (typeof ERROR_CODES)['UPLOAD_CHECKSUM_MISMATCH'];
 
 export interface ReponseStatutPieceLocale {
   readonly statut: string;
@@ -127,10 +129,12 @@ export async function envoyerPiece(
 
   const statut = await transport.statutPiece(id);
   if (statut.type !== 'ok') return bilanDeTransport(statut);
-  if (statut.donnees.statut === 'assemble') return { statut: 'envoyee', message: null };
-
+  // `assemble` : aucun morceau ne repart, mais `complete` est TOUJOURS appelé
+  // avec l'empreinte locale (DECISIONS [L6c]) — 200 si les octets du siège sont
+  // les nôtres, 409 `UPLOAD_ALREADY_ASSEMBLED` (terminal → « en_echec ») sinon.
+  const assemblee = statut.donnees.statut === 'assemble';
   const recus = new Set(statut.donnees.statut === 'echec' ? [] : statut.donnees.chunksRecus);
-  let aEmettre = morceaux.map((_, i) => i).filter((i) => !recus.has(i));
+  let aEmettre = assemblee ? [] : morceaux.map((_, i) => i).filter((i) => !recus.has(i));
   const empreinte = await sha256Hex(octets);
 
   for (let reemissions = 0; ; reemissions += 1) {

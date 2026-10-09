@@ -7,7 +7,8 @@
 // (rattachée à la session). Ce qu'il garantit :
 //   · un vrai `<input type="file" accept="image/*" capture="environment">`,
 //     ÉTIQUETÉ en français (le libellé visible EST l'étiquette) ;
-//   · ses quatre états : prêt · enregistrement (`role="status"`) · échec
+//   · ses états : prêt · enregistrement puis confirmation (`role="status"`, zone
+//     présente dès le premier rendu) · échec
 //     (`role="alert"`, jamais avalé) · désactivé avec son motif désigné
 //     (`aria-describedby`, 03 §19.1 : jamais un cadenas muet) ;
 //   · `onCapturer` rend `true` SI ET SEULEMENT SI la pièce est persistée — même
@@ -21,6 +22,7 @@ import { useId, useState, type ChangeEvent, type ReactNode } from 'react';
 import { Message } from '@axion/ui';
 
 const MESSAGE_ENREGISTREMENT = 'Enregistrement de la photo sur cet appareil…';
+const MESSAGE_SUCCES = 'Photo enregistrée sur cet appareil.';
 const MESSAGE_ECHEC =
   'La photo n’a pas pu être enregistrée sur cet appareil. Réessayez ; si le problème persiste, décrivez l’élément dans une note.';
 
@@ -34,7 +36,7 @@ export interface ProprietesChampPhoto {
   readonly onCapturer: (fichier: File) => Promise<boolean>;
 }
 
-type Etat = 'pret' | 'enregistrement' | 'echec';
+type Etat = 'pret' | 'enregistrement' | 'enregistree' | 'echec';
 
 export function ChampPhoto(proprietes: ProprietesChampPhoto): ReactNode {
   const { libelle, desactive, idMotif, onCapturer } = proprietes;
@@ -51,7 +53,7 @@ export function ChampPhoto(proprietes: ProprietesChampPhoto): ReactNode {
     setEtat('enregistrement');
     onCapturer(fichier).then(
       (persistee) => {
-        setEtat(persistee ? 'pret' : 'echec');
+        setEtat(persistee ? 'enregistree' : 'echec');
       },
       () => {
         setEtat('echec');
@@ -79,11 +81,16 @@ export function ChampPhoto(proprietes: ProprietesChampPhoto): ReactNode {
           onChange={choisir}
         />
       </label>
-      {etat === 'enregistrement' && (
-        <p role="status" className="axn-champ__aide">
-          {MESSAGE_ENREGISTREMENT}
-        </p>
-      )}
+      {/* Revue A29 : la zone de statut EXISTE dès le premier rendu (vide) — une
+          zone vivante insérée au moment du message n'est pas annoncée par tous
+          les lecteurs d'écran (VoiceOver sur iPad). Seul son TEXTE change. */}
+      <p role="status" className="axn-champ__aide">
+        {etat === 'enregistrement'
+          ? MESSAGE_ENREGISTREMENT
+          : etat === 'enregistree'
+            ? MESSAGE_SUCCES
+            : ''}
+      </p>
       {etat === 'echec' && (
         <Message ton="alerte" titre="Photo non enregistrée">
           {MESSAGE_ECHEC}
