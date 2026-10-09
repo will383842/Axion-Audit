@@ -112,14 +112,14 @@ minio_roundtrip() {
   printf 'axion-smoke-%s' "$WITNESS" >"/tmp/$WITNESS.txt"
   docker run --rm --network "$network" --env MC_HOST_axion \
     -v "/tmp/$WITNESS.txt:/tmp/$WITNESS.txt:ro" \
-    "${MC_IMAGE:-minio/mc:RELEASE.2025-04-16T18-13-26Z}" \
+    "${MC_IMAGE:-pgsty/mc:RELEASE.2026-08-04T00-00-00Z}" \
     cp "/tmp/$WITNESS.txt" "axion/$MINIO_BUCKET_TEMPLATES/_smoke/$WITNESS.txt"
   local readback
   readback="$(docker run --rm --network "$network" --env MC_HOST_axion \
-    "${MC_IMAGE:-minio/mc:RELEASE.2025-04-16T18-13-26Z}" \
+    "${MC_IMAGE:-pgsty/mc:RELEASE.2026-08-04T00-00-00Z}" \
     cat "axion/$MINIO_BUCKET_TEMPLATES/_smoke/$WITNESS.txt")"
   docker run --rm --network "$network" --env MC_HOST_axion \
-    "${MC_IMAGE:-minio/mc:RELEASE.2025-04-16T18-13-26Z}" \
+    "${MC_IMAGE:-pgsty/mc:RELEASE.2026-08-04T00-00-00Z}" \
     rm "axion/$MINIO_BUCKET_TEMPLATES/_smoke/$WITNESS.txt"
   rm -f "/tmp/$WITNESS.txt"
   [[ "$readback" == "axion-smoke-$WITNESS" ]]

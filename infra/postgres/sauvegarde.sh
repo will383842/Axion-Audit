@@ -1810,7 +1810,7 @@ faire_tourner_minio() {
 #     version non épinglée, donc une dépendance qui change sans qu'on le sache.
 #
 # CE QUI EST RETENU : `mc`, le client MinIO, COPIÉ À LA CONSTRUCTION depuis
-# l'image `minio/mc:RELEASE.2025-04-16T18-13-26Z` — celle que le service
+# l'image `pgsty/mc:RELEASE.2026-08-04T00-00-00Z` — celle que le service
 # `createbuckets` de CE MÊME compose utilise déjà. Donc :
 #   · AUCUNE dépendance nouvelle : ni un outil de plus dans 11 §1, ni un tag de
 #     plus à suivre. C'est le binaire que la pile embarque déjà, au même tag ;

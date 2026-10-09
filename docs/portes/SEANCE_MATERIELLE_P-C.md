@@ -146,12 +146,13 @@ artefact de CI conservé 30 jours. Le même compte débloque le **ZAP authentifi
 | D | **V-7** — export créé, restauré sur le 2ᵉ appareil | 30 min |
 | D | **V-8** — session active de 45 min sans ressaisie | 45 min d'horloge, **recouverts par V-7** → +15 min nets |
 | D | **V-9** — coupure de **courant** en pleine saisie | 15 min |
-| E | **V-10** — recette novice rejouée en entier, au chronomètre | 60 min |
+| E | **V-10** — recette novice rejouée en entier, au chronomètre | ~~60 min~~ — **REPORTÉE** (voir l'encadré en tête de V-10) |
 
-**Total : ≈ 4 h 10 de gestes**, à prévoir **4 h 30** avec les aléas. **Une demi-journée d'affilée, non
+**Total : ≈ 3 h 10 de gestes** depuis le report de V-10 (Williams, 2026-09-10) — **≈ 4 h 10** le jour
+où V-10 se rejoue. À prévoir **3 h 30** avec les aléas. **Une demi-journée d'affilée, non
 fractionnable** : V-8 exige 45 minutes continues sans toucher l'appareil, et V-9 doit suivre une
-saisie réelle. Le bloc A est le seul qui se joue **réseau actif** ; V-10 rouvre le réseau le temps du
-rattachement du novice.
+saisie réelle. Le bloc A est le seul qui se joue **réseau actif** ; V-10, quand elle se jouera,
+rouvrira le réseau le temps du rattachement du novice.
 
 **Ordre non permutable, et pourquoi** : on installe avant de couper le réseau (A) ; on observe la
 mise en page et les ancres tant que la session est fraîche (C) ; on produit l'export **avant**
@@ -297,6 +298,36 @@ Légende des colonnes : **Le geste** est à l'impératif, une phrase, exécutabl
 | 9.5 | Écrire dans le fichier de porte **quelle** coupure a été jouée | un redémarrage forcé d'iPad n'est **pas** une coupure d'alimentation. **Question ouverte** — le pack ne dit pas si l'un vaut l'autre : si les deux sont jouables, jouer les deux et le dire ; sinon, le déclarer comme une approximation | — | la mention écrite | ☐ |
 
 ### V-10 — La recette novice n° 1, rejouée EN ENTIER, avec un vrai novice
+
+> ## ⛔ V-10 EST **REPORTÉE** — décision de **Williams**, **2026-09-10**
+>
+> **Elle ne se joue pas à la séance du 2026-09-10. Aucune de ses lignes n'est supprimée** : elles
+> servent telles quelles le jour où elle se joue, **après L6a**.
+>
+> **Le motif** : V-10 est bloquée par **la même absence de premier pull** que V-0.7 — « tirer FIL-TPE
+> au premier pull » est **du L6**, et L6 ne s'ouvre pas avant P-C (09 §4bis). `V-10.1` **efface
+> l'appareil** ; `V-10.6` demande ensuite au novice de « **trouver sa session du jour** », ce
+> qu'**aucun chemin nominal ne permet sans L6**.
+>
+> **Les deux options qui se défendaient** :
+>
+> 1. **Injecter la mission par restauration d'un export de secours** — la voie retenue pour V-0.7
+>    (option A du 2026-09-09). Elle rendrait V-10 jouable, mais **elle mesurerait un parcours
+>    qu'aucun consultant ne suivra**, et **retirerait deux étapes chronométrées** du parcours de
+>    10.6 (préparer l'appareil → rattacher l'auditeur → trouver sa session). Un chronomètre lancé sur
+>    un parcours substitué ne mesure pas le critère « test novice < 30 min ».
+> 2. **Reporter** — jouer V-10 en entier, sur le chemin nominal, une fois L6a livré.
+>
+> **Arbitrage : reporter.** **Le critère 07 n° 6 reste GO SOUS RÉSERVE**, statut qu'il **a déjà** :
+> deux rejeux intégraux sont au dossier, **09 §4bis est satisfait deux fois** (`RECOCHE_A02_CRITERE6_2026-09-08.md`
+> §1, bloquant **B3-bis levé**). **Ce qui manque est le novice humain au chronomètre**, et le report
+> ne le maquille pas — A54 : « mon chronomètre ne vaut rien sur ce critère-là ».
+>
+> **Conséquences opératoires du report, pour la séance du 2026-09-10** :
+> · **10.1 ne se joue pas** — l'appareil **n'est pas réinitialisé**, donc les preuves de V-0 à V-9
+> survivent à la séance ; · aucun novice n'est à convoquer (§1.2) ; · le total de gestes passe de
+> ≈ 4 h 10 à **≈ 3 h 10** (§2) ; · le report **et** le maintien du critère 6 en GO SOUS RÉSERVE sont
+> inscrits d'avance au fichier de porte, `docs/portes/PORTE_C_2026-09-10.md` §4-B.
 
 *A02 §10-D point 17 · critère 07 n° 6 · **table §5-B, point 2**. **Le bloquant B3-bis est LEVÉ** : deux rejeux intégraux existent au dossier (`RECETTE_NOVICE_L5_2026-09-07.md` et son `_REJEU`), tous deux **GO SOUS RÉSERVE**, et 09 §4bis est « satisfait deux fois » (RECOCHE A02 §1). **Ce qui reste dû est un seul geste** : « le novice humain au chronomètre » — le seul des quatre points matériels d'A54 qui conditionne le critère 6, les trois autres se comptant ailleurs (RECOCHE §1.3). A54 : « mon chronomètre ne vaut rien sur ce critère-là, et je refuse de le maquiller ». **À jouer en dernier : la réinitialisation détruit tout ce qui précède.***
 

@@ -95,131 +95,73 @@ date-fns · `@fontsource-variable/inter` (**police AUTO-HÉBERGÉE — jamais de
 
 ---
 
-## 4. LE PIPELINE — 7 ÉTAPES PAR LOT, AUCUN RACCOURCI (09 §3)
+## 4. RÉGIME RAPIDE — 3 ÉTAPES PAR LOT (Williams, 2026-10-09 — prime sur 09 §3)
 
-1. **Brief** — ordre de lecture du lot + contenu/critères du fichier 07 ; le gardien confirme le périmètre.
-   1bis. **Conception** — **lots à risque UNIQUEMENT (L2, L3, L5, L6)** : note `docs/conception/LOT_<X>.md`
-   ≤ 1 page (découpage, interfaces, points durs, plan de tests), validée par A01 + gardien **AVANT
-   la première ligne de code**. L0, L1, L4, L7 sautent cette étape.
-2. **Implémentation** — TDD sur les parties critiques (sync, RBAC, scoring, machine à états :
-   **tests écrits AVANT**).
-3. **Auto-revue** — l'agent qui a codé relit son diff contre les invariants.
-4. **Revue croisée** — le réviseur de l'équipe (qui n'a rien produit) relit TOUT ;
-   désaccord → arbitrage A01, tracé dans `DECISIONS.md`.
-5. **Tests automatisés** — unitaires + intégration + E2E du lot + **non-régression de tous les lots
-   précédents** (la suite complète tourne à chaque fois).
-6. **Contrôle d'acceptation** — le gardien A02 coche les critères du lot ET la matrice de traçabilité
-   E1-E47 **dans les DEUX sens** : exigences → code (rien d'oublié) ET **code → exigences
-   (tout code livré se rattache à E1-E47 ou à une fiche AMELIORATIONS — le code orphelin est REFUSÉ)** ;
-   la **DoD transverse** (§5) est cochée intégralement.
-7. **Porte humaine** — démo à Williams (staging), checklist signée, merge, tag, changelog.
+**But unique de la Phase 1 :** un consultant mène un audit sur tablette → les données remontent au
+siège → un rapport en sort. Tout ce qui ne sert pas ce parcours attend.
 
-**Règle de croisement (09 §5.6) : le code de test n'est JAMAIS écrit par l'agent qui a écrit le code testé.**
-**Budget d'itération (09 §5.5) : un bug qui résiste à 3 tentatives = arrêt et escalade humaine.**
-**Jamais deux lots en parallèle sur les mêmes fichiers ; L6 (sync) se développe SEUL.**
-**Comment paralléliser sans collision : `docs/ORGANISATION_AGENTS.md`** — trois contraintes distinctes
-(collision de fichiers, mémoire, attention du pilote), un worktree par chantier, les interdits git.
-**À lire AVANT d'ouvrir une seconde session — ce renvoi ne répète AUCUN chiffre, délibérément : un
-plafond recopié à deux endroits dérive, et c'est le renvoi qu'une session lit en premier.**
-**Trois chantiers disjoints, en parallèle, chacun dans son worktree avec son chef** (Williams,
-2026-09-02, `docs/ORGANISATION_AGENTS.md` §9) : **L3 backend / A10 · L5 terrain / A20 · L7 console /
-A30**. Ils ne partagent aucun fichier. L6 reste seul. Une session à part vérifie et ne produit rien.
+**Ordre de travail :** (1) séance P-C sur iPad (corriger d'abord le double `<h1>`) →
+(2) ancres de cotation de la banque (`ANCRES_ABSENTES`) → (3) **L6 sync COMPLÈTE**, seule →
+(4) scoring branché (route + `scores.csv`) → (5) profil d'interlocuteur saisi en entretien →
+(6) rapport DOCX v1 → (7) audit fictif de bout en bout ; ce qui bloque devient la liste suivante.
+Après : radar, finitions, charge 50 clients, perf détaillée, multi-auditeurs avancé.
+
+1. **Brief** — critères du lot dans le fichier 07 + ordre de lecture §0. Pas de note de conception,
+   SAUF L6 (une page).
+2. **Code + tests** — **tests écrits AVANT** sur sync, RBAC/propriété, chiffrement local, scoring,
+   machine à états. Sur ces zones, **le test n'est jamais écrit par l'agent qui a écrit le code**.
+3. **Revue + CI verte → PR** — une revue séparée (sous-agent qui n'a rien produit) **seulement**
+   pour sync, RBAC, chiffrement local, étanchéité financière ; ailleurs, l'auto-revue suffit.
+   La suite complète tourne en CI.
+
+**Quatre rôles suffisent :** auteur · testeur distinct · relecteur des zones critiques · gardien
+des critères (A02, à la porte seulement). Les autres gabarits de `.claude/agents/` ne s'invoquent
+que pour leur spécialité, jamais par principe.
+**Budget d'itération : un bug qui résiste à 3 tentatives = arrêt et question à Williams.**
+**L6 se développe SEULE. Une branche à la fois par fichier.** Paralléliser : `docs/ORGANISATION_AGENTS.md`.
 
 ---
 
-## 5. DEFINITION OF DONE TRANSVERSE (cochée par le gardien à l'étape 6)
+## 5. DEFINITION OF DONE (à la porte)
 
-- [ ] lint + typecheck stricts = **0 erreur**
-- [ ] tous les tests verts, **AUCUN test skippé**
-- [ ] **couverture ≥ 90 %** sur les modules critiques (sync, crypto locale, scoring, RBAC/propriété) — **mesurée**
-- [ ] migrations up/down exécutées sur staging
-- [ ] tout écran livré avec ses **4 états** (§33.2)
-- [ ] axe-core vert
-- [ ] scénario fil rouge **`@filrouge` vert sur FIL-TPE ET FIL-GC**
-- [ ] README de l'app à jour
-- [ ] aucun TODO/FIXME sans entrée `DECISIONS.md` ou `AMELIORATIONS.md`
-- [ ] **diff schéma-vs-04 = zéro écart**
+- [ ] lint + typecheck = **0 erreur** ; tous les tests verts, **AUCUN test skippé**
+- [ ] couverture ≥ 90 % **mesurée** sur sync, crypto locale, scoring, RBAC/propriété
+- [ ] `@filrouge` vert ; écrans livrés avec leurs **4 états** ; axe-core vert
+- [ ] migrations up/down sur staging ; **diff schéma-vs-04 = zéro écart**
+
+Plus de matrice de traçabilité à cocher dans les deux sens : `check:tracabilite` reste en CI.
 
 ---
 
-## 6. CANAL D'AMÉLIORATION (09 §5.9) — a un registre, un plafond et un arbitre
+## 6. AMÉLIORATIONS
 
-- **Étage 1 — micro-améliorations, autorisées D'OFFICE** : confort et robustesse évidents (libellé
-  plus clair, état vide manquant, tri par défaut, message d'erreur, raccourci, focus) qui ne touchent
-  **NI le schéma 04, NI l'API, NI la crypto, NI le périmètre fonctionnel**.
-  **Plafond : 0,5 j cumulé par lot** ; chaque ajout = une ligne dans `AMELIORATIONS.md` ;
-  relu par le réviseur croisé comme le reste du code.
-- **Étage 2 — fonctionnalités manquantes : PROPOSÉES, jamais implémentées avant arbitrage.**
-  Fiche `AMELIORATIONS.md` (constat terrain, valeur pour l'auditeur, coût estimé, impact schéma/API).
-  Arbitrage par Williams **à la porte suivante** : ABSORBÉE (2 j max en Phase 1) / PHASE 2 (le défaut) / REFUSÉE.
+Étage 1 (confort évident, sans toucher schéma/API/crypto/périmètre) : autorisé, une ligne dans
+`AMELIORATIONS.md`. Étage 2 (fonction manquante) : une fiche, **jamais codée avant le oui de Williams**.
 
 ---
 
-## 7. GIT & GOUVERNANCE (11 §9bis)
+## 7. GIT
 
-- **Branches** : `lot/<code>` (ex. `lot/l5a`), une branche par incrément → PR vers `main` →
-  **squash merge** → suppression de branche. **Jamais de commit direct sur `main`.**
-  Tag `v0.<lot>` à chaque porte franchie.
-- **Commits conventionnels** : `feat(l5a): …`, `fix(l6b): …`, `chore(l0): …`.
-  Les commits intermédiaires non verts sont autorisés **sur la branche du lot** avec le préfixe
-  `wip:` (jamais sur `main` ; le squash les efface).
-- **`DECISIONS.md`** (append-only) — format d'entrée obligatoire :
-  ```
-  ## AAAA-MM-JJ — [lot] Question
-  Options :
-  Arbitrage : (avec la règle de précédence citée)
-  Décideur : A01 | Williams
-  Impact spec : aucun | amendement horodaté
-  ```
-  **Une décision non tracée dans ce format n'existe pas.**
-  **Et une entrée sans vrai choix n'en est pas une** (Williams, 2026-09-02) : on trace quand deux
-  options se défendaient, pas pour raconter le travail. **≤ 40 lignes** (garde `check:prose`).
-  Un constat, une mesure, une rectification vont dans le commit, le test ou le fichier de porte.
-- **PR de documentation seule** (`docs/`, `DECISIONS.md`, `AMELIORATIONS.md`, `ETAT.md`, journal,
-  fiche de porte déjà signée) : la session qui l'ouvre **arme l'auto-merge** (`gh pr merge --auto
---squash`) dès la CI verte, sans attendre Williams (décision du 2026-09-02). Le code, les portes
-  non signées et tout ce que le §3 réserve restent à lui.
-- **Portes** : chaque porte produit `docs/portes/PORTE_<X>_<date>.md` — critères du fichier 07 copiés,
-  cochés un à un **avec la preuve** (lien CI, capture, commande), verdict, signature humaine.
-  **Le merge de la porte est conditionné à ce fichier commité.**
-- **Porte échouée** (09 §4bis) : verdict ÉCHEC tracé → SEULS les correctifs de ces critères sont
-  autorisés (aucun lot suivant ne s'ouvre) → la porte se rejoue **EN ENTIER** → deux échecs
-  consécutifs = arbitrage Williams type P-DESCOPE.
+- `main` protégé : une branche par incrément → PR → **squash merge**. Jamais de commit direct.
+- Commits conventionnels **d'une ligne** (`feat(l6a): …`) ; `wip:` autorisé sur la branche.
+- **`DECISIONS.md` : une ligne par vrai arbitrage** (`date · [lot] · décision · décideur`).
+  Les constats et récits vont dans le commit, pas dans un registre.
+- **Pas de PR de documentation seule** : la doc voyage dans la PR de code du lot.
+- **Porte** = une fiche `docs/portes/PORTE_<X>_<date>.md` : critères du 07, preuve (lien CI ou
+  capture), signature de Williams. Rien d'autre (pas de pré-revue, pas de contre-revue).
 
 ---
 
-## 8. SAUVEGARDE CONTINUE ET REPRISE (11 §9ter) — une coupure ne coûte jamais plus de 2 h
+## 8. REPRISE ET DURABILITÉ
 
-- **`docs/ETAT.md`** (append-only par blocs, **le dernier bloc fait foi**) mis à jour à **CHAQUE
-  changement d'étape** du pipeline et au minimum toutes les ~2 h. Format normé :
-  ```
-  ## AAAA-MM-JJ HHhMM — [lot Lx / incrément Lxy] — étape pipeline N/7
-  Dernier commit vert : <sha> (<message>)   ·   Branche : lot/<code>   ·   Poussé : oui/non
-  Tâche en cours : <une phrase>
-  Prochaine action : <une phrase impérative — celle qu'une session neuve exécuterait>
-  Tests rouges connus : <liste ou « aucun »>
-  ```
-  **Un bloc = ≤ 25 lignes** (garde `check:prose`, Williams 2026-09-02) : faits, chiffres, prochaine
-  action. Le récit va dans le commit ou la fiche de porte. Un bloc long est un bloc qu'on ne lit pas.
-- **Commit + push toutes les ~2 h ou à chaque sous-tâche terminée.**
-  **La durabilité vit sur `origin`, pas sur la machine : un commit non poussé n'existe pas.**
-- **Zéro push rouge évitable** (Williams, 2026-09-02) : le hook `pre-push` rejoue `pnpm verify:rapide`
-  (les 14 gardes, lint, typecheck, unitaires — tout ce que la CI vérifie sans conteneur).
-  **`pnpm verify` complet (intégration + e2e) est obligatoire AVANT d'ouvrir une PR.**
-  `--no-verify` : uniquement pour sauver un `wip:` avant une coupure, et ça s'écrit dans ETAT.md.
-- **Aucun arrêt silencieux** (régime du 2026-08-31, point 2) : une session ne rend pas la main avec
-  du travail non commité ou non poussé. Le hook `Stop` (`scripts/hook-stop-durabilite.mjs`) le
-  refuse mécaniquement. Bloquée > 15 min : elle écrit à Williams, question ET recommandation.
-- **Fin de session PROPRE** (préférée à la limite de contexte) : ETAT.md à jour + commit + push +
-  une ligne de journal. **C'est un geste NORMAL, pas un échec.**
-- **Protocole de REPRISE** (toute session) : ETAT.md (dernier bloc) → `git log -5` + `git status` →
-  `DECISIONS.md` (10 dernières) + `AMELIORATIONS.md` + journal du lot →
-  **rejouer la suite de tests complète : LA VÉRITÉ TERRAIN, ce sont les tests, jamais un souvenir
-  ni même ETAT.md** → si divergence : entrée `DECISIONS.md` + reconstruction depuis git et tests →
-  reprendre à la « Prochaine action ».
-
-**Fin de journée d'autopilote (09 §5.4)** : commit + push + ETAT.md + état des tests + résumé de
-10 lignes au journal + **une ligne de burn-down (consommé / restant par lot vs la référence 26 j-h)**.
+- **`docs/ETAT.md` = UN seul bloc de ≤ 8 lignes, réécrit** (git garde l'historique) : date, branche,
+  dernier commit vert, tâche en cours, prochaine action, tests rouges connus.
+- **Commit + push à chaque sous-tâche terminée.** Un commit non poussé n'existe pas.
+- `pre-push` rejoue `pnpm verify:rapide` ; `pnpm verify` complet avant d'ouvrir une PR.
+- **Reprise** : ETAT.md → `git log -5` + `git status` → rejouer les tests (la vérité, ce sont
+  les tests) → « Prochaine action ».
+- **Williams : une séance de 30 min par semaine**, sur une liste préparée d'avance (oui / non).
+  Aucun dossier à lire.
 
 ---
 
@@ -239,17 +181,6 @@ A30**. Ils ne partagent aucun fichier. L6 reste seul. Une session à part vérif
 
 ---
 
-## 10. CHAÎNE DE SIGNATURE (09 §1 — une seule ligne, aucune diagonale)
+## 10. SIGNATURE
 
-agent de lot → chef d'équipe (A10/A20/A30/A40/A50) → **A01** directeur technique → **Williams**.
-
-| Étape                        | Signataire         |
-| ---------------------------- | ------------------ |
-| Auto-revue (3)               | l'agent qui a codé |
-| Revue croisée (4)            | le réviseur croisé |
-| Fin d'incrément (11 §6)      | le chef d'équipe   |
-| Conformité + traçabilité (6) | le gardien **A02** |
-| Passage en porte             | **A01**            |
-| **La porte**                 | **Williams**       |
-
-Toute signature est une ligne dans le fichier de porte ou dans `DECISIONS.md`.
+Auteur → relecteur (zones critiques) → gardien A02 (à la porte) → **Williams** (la porte, le merge).
