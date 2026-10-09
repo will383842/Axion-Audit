@@ -21,8 +21,8 @@
 //     (contrat GELÉ, importé tel quel ; L6b ne touche pas `packages/shared`).
 //
 // ── HYPOTHÈSES D'INTERFACE (le pack est muet — TRACÉES, à confirmer) ─────────
-//   P1. Paramètres de requête en camelCase, transcription du 11 §4 comme le fait
-//       tout `packages/shared` : `?missionId=<uuid>&since=<ISO UTC>&limit=<n>`.
+//   P1. Paramètres de requête NOMMÉS COMME AU 11 §4, en toutes lettres (correction de
+//       la coordination) : `?mission_id=<uuid>&since=<ISO UTC>&limit=<n>`.
 //       `since` absent = premier pull = mission complète. Aucun autre paramètre
 //       n'est envoyé par ce fichier.
 //   P2. `since` est EXCLUSIF (`updated_at > since`) et `nextSince` est un
@@ -158,7 +158,7 @@ async function tirerBrut(
   const autorisation =
     options.autorisation ?? (options.jeton === undefined ? undefined : `Bearer ${options.jeton}`);
   const requete = new URLSearchParams();
-  if (parametres.missionId !== undefined) requete.set('missionId', parametres.missionId);
+  if (parametres.missionId !== undefined) requete.set('mission_id', parametres.missionId);
   if (parametres.since !== undefined) requete.set('since', parametres.since);
   if (parametres.limit !== undefined) requete.set('limit', parametres.limit);
   const chaine = requete.toString();
@@ -733,12 +733,20 @@ describe('L6b · GET /v1/sync/pull — paramètres invalides (11 §3)', () => {
     readonly nom: string;
     readonly parametres: (m: Monde) => ParametresPull;
     readonly codes: readonly string[];
+    /** Le paramètre que l'erreur doit nommer (message ou détails). */
+    readonly champ?: string;
   }[] = [
-    { nom: 'missionId absent', parametres: () => ({}), codes: [ERROR_CODES.VALIDATION_FAILED] },
     {
-      nom: 'missionId non UUID',
+      nom: 'mission_id absent',
+      parametres: () => ({}),
+      codes: [ERROR_CODES.VALIDATION_FAILED],
+      champ: 'mission_id',
+    },
+    {
+      nom: 'mission_id non UUID',
       parametres: () => ({ missionId: 'pas-un-uuid' }),
       codes: [ERROR_CODES.VALIDATION_FAILED],
+      champ: 'mission_id',
     },
     {
       nom: 'since illisible',
@@ -775,6 +783,9 @@ describe('L6b · GET /v1/sync/pull — paramètres invalides (11 §3)', () => {
       expect(r.statut, r.corps.slice(0, 400)).toBe(400);
       expect(cas.codes).toContain(r.code);
       expect(r.message).toBeTruthy();
+      if (cas.champ !== undefined) {
+        expect(r.corps, 'l’erreur doit nommer le paramètre fautif').toContain(cas.champ);
+      }
       expect(await journalPull(m.A.id)).toHaveLength(avant.length);
     });
   }
