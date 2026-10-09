@@ -31,7 +31,13 @@ import { BaseLocale, CLES_META, ecrireMeta } from '../local/base.js';
 import { creerDekEnveloppee, deriverKek, ouvrirCoffre, type Coffre } from '../local/coffre.js';
 import { installerContexteLocal } from '../local/contexte.js';
 import { ecrireLocal } from '../local/ecriture.js';
-import { ecrirePieceAvecOctets, lireOctetsPiece, lireStatutEnvoi } from '../local/octets.js';
+import {
+  ecrirePieceAvecOctets,
+  lireOctetsPiece,
+  lireStatutEnvoi,
+  marquerStatutEnvoi,
+} from '../local/octets.js';
+import { REEMISSIONS_MAX } from './chunks.js';
 import { creerMoteurSync } from './moteur.js';
 import type { ResultatTransport } from './transport.js';
 import {
@@ -40,6 +46,7 @@ import {
   HORODATAGE_PIECES,
   MISSION_PIECES,
   creerSiegePiecesFictif,
+  type ReglagesSiegePieces,
   demandePhoto,
   octetsVaries,
 } from './fixtures/pieces.js';
@@ -130,10 +137,14 @@ function siegeComplet(
     regle?: (entiteId: string) => ResultatOp;
     pushHorsLigne?: boolean;
     piecesHorsLigne?: boolean;
+    reglagesPieces?: ReglagesSiegePieces;
   } = {},
 ) {
   const journal: Entree[] = [];
-  const pieces = creerSiegePiecesFictif({ horsLigne: options.piecesHorsLigne === true });
+  const pieces = creerSiegePiecesFictif({
+    ...options.reglagesPieces,
+    horsLigne: options.piecesHorsLigne === true,
+  });
   const transport = {
     // eslint-disable-next-line @typescript-eslint/require-await -- signature asynchrone du transport.
     async pousser(lot: LotPush): Promise<ResultatTransport<ReponsePush>> {
@@ -277,5 +288,52 @@ describe('moteur — une réponse avant sa photo ; hors ligne, rien ne part ni n
     const siege = siegeComplet();
     await moteur(siege).pousser(MISSION_PIECES);
     expect(siege.touchees(autre)).toBe(false);
+  });
+});
+
+// =============================================================================
+// Compléments du 2026-10-09 (`DECISIONS.md` [L6c] : « une pièce `en_echec` est
+// retentée au passage suivant »).
+// =============================================================================
+describe('moteur — une pièce « en_echec » est retentée au passage SUIVANT, jamais en boucle', () => {
+  // IMPLÉMENTATION FAUSSE ATTRAPÉE (1) : ne reprendre que les « a_envoyer » — une
+  // pièce passée « en_echec » un jour de réseau capricieux ne remonte JAMAIS, et
+  // vit seule sur l'appareil au-delà de 24 h (invariant 8).
+  it('@critique échec au passage 1, siège rétabli : le passage 2 l’envoie', async () => {
+    const photo = await ecrirePhoto(1500);
+    const capricieux = siegeComplet({ reglagesPieces: { indexPerdusToujours: [0] } });
+    await moteur(capricieux).pousser(MISSION_PIECES);
+    expect(await lireStatutEnvoi(base, photo)).toBe('en_echec');
+
+    const sain = siegeComplet();
+    await moteur(sain).pousser(MISSION_PIECES);
+    expect(await lireStatutEnvoi(base, photo)).toBe('envoyee');
+    expect(sain.pieces.assemble(photo)).toBeDefined();
+  });
+
+  // IMPLÉMENTATION FAUSSE ATTRAPÉE (2) : reprendre les « en_echec » DANS le même
+  // passage (`while (await restePieces())`) — un siège qui refuse toujours fige
+  // la synchronisation et vide la batterie.
+  it('@critique dans UN passage, une pièce en échec n’est tentée qu’UNE fois (un seul `status`)', async () => {
+    const photo = await ecrirePhoto(1500);
+    const siege = siegeComplet({ reglagesPieces: { indexPerdusToujours: [0] } });
+    await moteur(siege).pousser(MISSION_PIECES);
+    const status = siege.pieces.appels.filter((a) => a.route === 'status' && a.id === photo);
+    expect(status).toHaveLength(1);
+    expect(
+      siege.pieces.appels.filter((a) => a.route === 'complete' && a.id === photo).length,
+    ).toBeLessThanOrEqual(REEMISSIONS_MAX + 1);
+  });
+
+  it('une pièce déjà « en_echec » AVANT le passage est tentée une fois, pas davantage', async () => {
+    const photo = await ecrirePhoto(1500);
+    await marquerStatutEnvoi(base, photo, 'en_echec');
+    await base.outbox.clear(); // sa ligne a été acquittée à un passage antérieur
+    const siege = siegeComplet({ reglagesPieces: { indexPerdusToujours: [0] } });
+    await moteur(siege).pousser(MISSION_PIECES);
+    expect(siege.pieces.appels.filter((a) => a.route === 'status' && a.id === photo)).toHaveLength(
+      1,
+    );
+    expect(await lireStatutEnvoi(base, photo)).toBe('en_echec');
   });
 });

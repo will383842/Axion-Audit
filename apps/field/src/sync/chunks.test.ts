@@ -15,7 +15,7 @@
 //     statutPiece(id): Promise<ResultatTransport<{ statut: string; chunksRecus: readonly number[] }>>;
 //     envoyerMorceau(id, index, octets: Uint8Array): Promise<ResultatTransport<unknown>>;
 //     terminerPiece(id, corps: { sha256: string; chunks: number }):
-//       Promise<ResultatTransport<{ statut: 'assemble' }> | { type: 'a_reemettre'; index: readonly number[] }>;
+//       Promise<ResultatTransport<{ statut: 'assemble' }> | { type: 'a_reemettre'; code; index: readonly number[] }>;
 //   }
 //   export interface BilanEnvoiPiece {
 //     statut: 'envoyee' | 'hors_ligne' | 'reconnexion_requise' | 'en_echec';
@@ -389,6 +389,28 @@ describe('envoyerPiecesEnAttente — statut local, persistant au redémarrage', 
     expect(bilan.enEchec).toBe(1);
     expect(await lireStatutEnvoi(base, id)).toBe('en_echec');
     expect(await lireOctetsPiece(base, coffre, id)).not.toBeNull();
+  });
+
+  // `DECISIONS.md` [L6c] (2026-10-09) : une pièce `en_echec` est retentée au
+  // passage suivant — une fois par appel, jamais en boucle dans le même.
+  it('@critique une pièce « en_echec » est reprise à l’appel suivant, une seule fois par appel', async () => {
+    const id = await photo(2 * PETIT);
+    const capricieux = creerSiegePiecesFictif({ indexPerdusToujours: [0] });
+    const deps = { base, coffre, transport: capricieux.transport, tailleMorceau: PETIT };
+    await envoyerPiecesEnAttente(deps, MISSION_PIECES);
+    expect(await lireStatutEnvoi(base, id)).toBe('en_echec');
+
+    capricieux.appels.length = 0;
+    await envoyerPiecesEnAttente(deps, MISSION_PIECES);
+    expect(capricieux.appels.filter((a) => a.route === 'status' && a.id === id)).toHaveLength(1);
+
+    const sain = creerSiegePiecesFictif();
+    const bilan = await envoyerPiecesEnAttente(
+      { base, coffre, transport: sain.transport, tailleMorceau: PETIT },
+      MISSION_PIECES,
+    );
+    expect(bilan.envoyees).toBe(1);
+    expect(await lireStatutEnvoi(base, id)).toBe('envoyee');
   });
 
   it('une pièce déjà « envoyee » ne repart pas', async () => {

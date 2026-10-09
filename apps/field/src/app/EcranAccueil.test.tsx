@@ -318,22 +318,23 @@ describe('EcranAccueil — état hors ligne (§33.2) et mention photo (B3)', () 
     Reflect.deleteProperty(navigator, 'onLine');
   });
 
-  it('@critique EN LIGNE : la mention photo reste affichée, et les capacités disparaissent', async () => {
+  it('@critique EN LIGNE : aucun démenti photo (la capture est réelle), et les capacités disparaissent', async () => {
     reglerEnLigne(true);
     terrain = terrainDeBase(await nouvelleBase());
     render(<EcranAccueil />);
     await waitFor(() => {
       expect(estOccupe()).toBe(false);
     });
-    // B3 — le démenti ne dépend pas du réseau. C'est LE point de ce test.
-    expect(document.body.textContent).toMatch(/capture photo n’est pas disponible/i);
-    expect(document.body.textContent).toMatch(/appareil personnel/i);
+    // B3 révisé par A26 (2026-10-09, `DECISIONS.md` [L6c]) : la capture est
+    // réelle, le démenti serait désormais FAUX — il disparaît, en ligne comme
+    // hors ligne. C'est LE point de ce test.
+    expect(document.body.textContent).not.toMatch(/capture photo n’est pas disponible/i);
     // Et le rappel des capacités, lui, se tait.
     expect(document.querySelector('.axn-rappel-hors-ligne')).toBeNull();
     expect(document.body.textContent).not.toContain(CAPACITES_HORS_LIGNE.accueil[0]);
   });
 
-  it('@critique HORS LIGNE : les capacités apparaissent, et la mention photo est TOUJOURS là', async () => {
+  it('@critique HORS LIGNE : les capacités apparaissent, et aucun démenti photo', async () => {
     reglerEnLigne(false);
     terrain = terrainDeBase(await nouvelleBase());
     render(<EcranAccueil />);
@@ -345,7 +346,7 @@ describe('EcranAccueil — état hors ligne (§33.2) et mention photo (B3)', () 
     expect([...(rappel?.querySelectorAll('li') ?? [])].map((li) => li.textContent)).toEqual([
       ...CAPACITES_HORS_LIGNE.accueil,
     ]);
-    expect(document.body.textContent).toMatch(/capture photo n’est pas disponible/i);
+    expect(document.body.textContent).not.toMatch(/capture photo n’est pas disponible/i);
     // La pastille reste celle de l'en-tête (B6) : le rappel n'en ouvre aucune.
     expect(rappel?.querySelector('[role="status"]')).toBeNull();
   });

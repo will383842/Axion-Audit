@@ -25,7 +25,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { MOTIF_PHOTO_INDISPONIBLE } from './ZoneQuestion.js';
+import * as moduleZoneQuestion from './ZoneQuestion.js';
 
 const RACINE_SOURCES = fileURLToPath(new URL('../..', import.meta.url));
 
@@ -106,16 +106,20 @@ describe('B3 — aucune source ne promet la capture photo', () => {
   });
 });
 
-describe('B3 — le motif du bouton est lisible à l’œil', () => {
-  it('la phrase existe, elle est en français, et elle dit quoi faire à la place', () => {
-    expect(MOTIF_PHOTO_INDISPONIBLE).toMatch(/n’est pas disponible/);
-    expect(MOTIF_PHOTO_INDISPONIBLE).toMatch(/note/);
-    expect(MOTIF_PHOTO_INDISPONIBLE).toMatch(/appareil personnel/);
+// ── RÉVISION A26 du 2026-10-09 (L6c-1, `DECISIONS.md` [L6c]) ────────────────
+// La capture est réelle : le motif « indisponible » et le bouton « Photo
+// (bientôt) » deviennent à leur tour une promesse NON TENUE, dans l'autre sens.
+// La preuve au nœud (champ actif, geste fonctionnel) vit dans
+// `boutonPhoto.acceptation-b3.test.tsx` ; ici, la trace dans le source.
+describe('B3 révisé — la zone question offre la capture, plus le motif d’absence', () => {
+  it('`MOTIF_PHOTO_INDISPONIBLE` n’est plus exporté par `ZoneQuestion`', () => {
+    expect('MOTIF_PHOTO_INDISPONIBLE' in moduleZoneQuestion).toBe(false);
   });
 
-  it('le bouton porte son motif dans le libellé VISIBLE, pas seulement dans `aria-label`', () => {
+  it('le source de `ZoneQuestion` ne porte plus « Photo (bientôt) » et porte « Ajouter une photo »', () => {
     const source = readFileSync(join(RACINE_SOURCES, 'ecrans/entretien/ZoneQuestion.tsx'), 'utf8');
-    expect(source).toContain('Photo (bientôt)');
-    expect(source).toContain('title={MOTIF_PHOTO_INDISPONIBLE}');
+    expect(source).not.toContain('Photo (bientôt)');
+    expect(source).not.toContain('MOTIF_PHOTO_INDISPONIBLE');
+    expect(source).toContain('Ajouter une photo');
   });
 });
