@@ -76,8 +76,6 @@ export function EcranStockage(): ReactNode {
 
   return (
     <section className="axn-pile axn-pile--large">
-      <h1>Stockage de cet appareil</h1>
-
       {/*
         R-L5a-7 : `persistant === null` veut dire « on ne sait pas encore » — le
         chargement, ou un navigateur sans l'API. L'afficher en ERREUR faisait

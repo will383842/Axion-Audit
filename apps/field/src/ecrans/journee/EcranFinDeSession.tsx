@@ -230,8 +230,6 @@ export function EcranFinDeSession(): ReactNode {
 
   return (
     <section className="axn-pile">
-      <h1>Fin de session</h1>
-
       <ZoneEtat etat={etat}>
         <>
           {session !== null && vue !== null && (

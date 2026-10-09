@@ -303,8 +303,6 @@ export function EcranAgenda(): ReactNode {
 
   return (
     <section className="axn-pile">
-      <h1>Agenda</h1>
-
       <ZoneEtat etat={etat}>
         <>
           {/* ── La journée déjà planifiée ─────────────────────────────────── */}

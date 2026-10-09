@@ -156,8 +156,13 @@ export function App(): ReactNode {
 
   return (
     <div className="axn-coquille">
+      {/* Ce bandeau ne porte QUE des gestes permanents — revenir, l'état de
+          sync, verrouiller. Le titre de la vue n'y est plus : `role="banner"`
+          désigne, par spécification, du contenu RÉPÉTÉ de page en page, et un
+          titre qui change à chaque vue y était un contresens (réserve R1 d'A29,
+          2026-09-10). Ce qui reste ici est bien répété partout. */}
       <header className="axn-coquille__entete">
-        {/* Avant le titre : l'ordre de lecture d'un en-tête, et l'ordre de
+        {/* En premier : l'ordre de lecture d'un en-tête, et l'ordre de
             tabulation. Le libellé est écrit, pas seulement une flèche — §33.6
             interdit qu'une information soit portée par une icône seule. */}
         {retourPossible && (
@@ -165,17 +170,29 @@ export function App(): ReactNode {
             Revenir
           </Bouton>
         )}
-        <h1 className="axn-coquille__titre">{VUES[vue].titre}</h1>
-        {/* Décision A01 (2026-09-05) : l'état de synchronisation est visible sur
-            TOUS les écrans. « Hors ligne = nominal » veut dire pas une erreur,
-            pas invisible. Posée dans la coquille — le fichier partagé — plutôt
-            que répétée dans chaque écran. */}
-        <IndicateursCoquille />
-        <Bouton variante="discret" onClick={fermer}>
-          Verrouiller
-        </Bouton>
+        {/* Le groupe de droite. Il était poussé par le `flex` du titre ; le
+            titre parti, c'est ce conteneur qui le fait, à géométrie inchangée —
+            « Revenir » à gauche, la pastille et « Verrouiller » à droite. */}
+        <div className="axn-coquille__actions">
+          {/* Décision A01 (2026-09-05) : l'état de synchronisation est visible
+              sur TOUS les écrans. « Hors ligne = nominal » veut dire pas une
+              erreur, pas invisible. Posée dans la coquille — le fichier
+              partagé — plutôt que répétée dans chaque écran. */}
+          <IndicateursCoquille />
+          <Bouton variante="discret" onClick={fermer}>
+            Verrouiller
+          </Bouton>
+        </div>
       </header>
       <main className="axn-coquille__corps">
+        {/* LE titre de la vue, et le seul `<h1>` du document. Sa SOURCE est
+            inchangée — le registre `app/vues.ts`, un endroit unique — seul son
+            emplacement bouge : PREMIER enfant de `<main>`, pour que le saut au
+            repère principal, le geste le plus courant au lecteur d'écran, tombe
+            immédiatement sur le sujet de la page. C'est aussi ce qui met la
+            coquille d'accord avec elle-même : coffre fermé, le `h1` d'
+            `EcranDeverrouillage` est déjà dans ce `<main>` (plus haut). */}
+        <h1 className="axn-coquille__titre">{VUES[vue].titre}</h1>
         {/* Un appareil sans identité d'auditeur ne peut ouvrir aucun entretien
             (05 §9.9). Le rappel et son geste sont posés dans la coquille, comme
             le bouton Revenir : depuis n'importe quel écran, et sans qu'aucun

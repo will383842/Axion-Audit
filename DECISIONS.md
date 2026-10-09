@@ -6,3 +6,4 @@ Registre précédent (366 entrées, 27/08 → 10/09) : `docs/archive/DECISIONS_2
 
 - 2026-10-09 · [gouvernance] · Régime rapide : gardes de prose et de format des décisions retirées ; ETAT et DECISIONS archivés et réduits ; pipeline ramené à 3 étapes (revue séparée seulement sync, RBAC, chiffrement local) ; L6 reste complète (8 scénarios §9.8) ; ordre : P-C → ancres → L6 → scoring → profil interlocuteur → DOCX → audit fictif · Williams
 - 2026-10-09 · [L0] · Image MinIO retirée de Docker Hub : `pgsty/minio` + `pgsty/mc` épinglés `RELEASE.2026-08-04T00-00-00Z` (préférés à `coollabsio/minio`, sans `mc`, et à un changement de stockage S3) ; la restauration nocturne sert de garde (#138) · Williams
+- 2026-09-10 · [L5] · Titre de vue : un seul `<h1>`, peint par la coquille depuis le registre `app/vues.ts` et rendu dans `<main>` (préféré au `<h1>` de chaque écran et au `<h1>` dans le `banner`) ; garde engendrée par le registre (#135) · A01, corrigé par A29

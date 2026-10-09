@@ -42,6 +42,7 @@
 // =============================================================================
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
+import { VUES, type CodeVue } from '../apps/field/src/app/vues.js';
 
 const TERRAIN = 'http://127.0.0.1:4173/';
 
@@ -58,17 +59,65 @@ const NORMES = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] as const;
 const MOT_DE_PASSE = 'AuditTerrain2026!';
 
 /**
- * Le titre de l'ÉCRAN, cherché dans `<main>` et nulle part ailleurs.
+ * Le titre de la VUE, cherché dans le `<main>` — et LU DANS LE REGISTRE.
  *
- * CE QUE CE SCOPE A RÉVÉLÉ, et qui n'est pas un détail de test : la coquille
- * (`App.tsx`) affiche `VUES[vue].titre` dans un `<h1>` d'en-tête, et chaque écran
- * affiche SON propre `<h1>` dans `<main>`. Sur « Aujourd’hui » les deux textes
- * sont IDENTIQUES : un lecteur d'écran annonce deux titres de niveau 1 portant le
- * même libellé sur une page qui n'a qu'un seul sujet. Le constat est remonté à
- * A29/A01 (constat A28-1) plutôt que corrigé ici — un test d'accessibilité ne
- * modifie pas l'interface qu'il mesure, sinon il mesure la sienne.
+ * ── DEUX CORRECTIONS, ET LA SECONDE EST LA VRAIE ───────────────────────────
+ * ① 2026-09-10, matin : ce helper cherchait un `<h1>` dans `<main>`, c'est-à-dire
+ *    le titre propre de l'ÉCRAN — le SECOND des deux titres de niveau 1 que la
+ *    page portait (constat A28-1). Le repère est le même qu'aujourd'hui, mais
+ *    l'élément visé est un AUTRE : le titre de l'écran, pas celui de la vue, et
+ *    c'est le premier qui a disparu. Le `h1` canonique est celui de la COQUILLE
+ *    (règle A01), alimenté par `app/vues.ts` ; les écrans sous `<main>` n'en
+ *    portent plus. Le helper vise donc l'élément qui a SURVÉCU au correctif d'A22.
+ * ② 2026-09-10, après-coup : il prenait encore une CHAÎNE recopiée à la main. Le
+ *    registre a changé le libellé de `stockage` le matin même, et trois tests
+ *    sont tombés — sur leur `atteindre`, pas sur une assertion de titre. Le NOM
+ *    du test, lui, était engendré depuis `VUES[code].titre` : le nom et
+ *    l'assertion ne parlaient donc plus du même écran.
+ *    C'est mot pour mot la famille de défaut que le chapeau de ce fichier
+ *    dénonce — « une liste écrite à la main se désynchronise du registre en
+ *    silence ». Le helper prend désormais un CODE DE VUE : le compilateur refuse
+ *    un code inconnu, et le libellé ne peut plus être périmé puisqu'il n'est plus
+ *    recopié.
+ *
+ * ── ③ 2026-09-10, RÉSERVE R1 D'A29 : DU BANNER AU `<main>` ─────────────────
+ * Le titre a quitté le `<header>` de la coquille pour devenir le premier enfant
+ * du `<main>` (A22, `App.tsx`). Deux raisons, et le helper les suit :
+ * · `role="banner"` désigne PAR SPÉCIFICATION du contenu répété de page en page ;
+ *   un titre qui change à chaque vue y était un contresens sémantique ;
+ * · le `<main>` n'avait AUCUN nom accessible — qui saute au repère principal, le
+ *   geste le plus courant au lecteur d'écran, n'entendait jamais le titre de la
+ *   vue. Il tombe désormais dessus, puisque le titre l'ouvre.
+ * LE PRINCIPE NE BOUGE PAS : la source reste le registre, unique. Seul
+ * l'emplacement change — et c'est aussi ce qui met la coquille d'accord avec
+ * `EcranDeverrouillage`, qui plaçait déjà son `h1` dans le `<main>`.
+ *
+ * Ce que l'assertion dit exactement : « la coquille affiche le titre de CETTE
+ * vue-là, en `h1` de niveau 1, au premier rang du repère `main`, sous son nom
+ * EXACT ». Le LIBELLÉ, lui, est une donnée du registre — il s'y lit, il ne se
+ * redouble pas ici.
  */
-function titreDEcran(page: Page, texte: string): ReturnType<Page['getByRole']> {
+function titreDeCoquille(page: Page, code: CodeVue): ReturnType<Page['getByRole']> {
+  return page
+    .getByRole('main')
+    .getByRole('heading', { name: VUES[code].titre, level: 1, exact: true });
+}
+
+/**
+ * Le titre d'un écran rendu HORS coquille — et ils gardent leur `<h1>`.
+ *
+ * `deverrouillage` (premier usage comme coffre existant) est rendu par le retour
+ * anticipé d'`App.tsx` : la coquille ne peint alors NI en-tête NI titre de vue,
+ * l'écran est seul dans son `<main>`, et son `h1` est donc le seul de la page —
+ * aucun doublon à fermer. La règle du 2026-09-10 le dit en toutes lettres.
+ *
+ * Depuis la réserve R1 (le titre de vue passé dans le `<main>`), ce helper et
+ * `titreDeCoquille` visent le même REPÈRE. Ils ne se confondent pas pour autant,
+ * et c'est la SOURCE DU NOM qui les sépare : là, un libellé d'écran, qui n'est
+ * pas une donnée du registre et n'a pas à y entrer ; ici, `VUES[code].titre`.
+ * Les fusionner obligerait à inscrire au registre des vues qui n'en sont pas.
+ */
+function titreHorsCoquille(page: Page, texte: string): ReturnType<Page['getByRole']> {
   return page.getByRole('main').getByRole('heading', { name: texte, level: 1 });
 }
 
@@ -112,16 +161,22 @@ async function creerCoffreEtMesurer(page: Page): Promise<number> {
   await page.getByLabel(/Confirmer le mot de passe/).fill(MOT_DE_PASSE);
   const depart = Date.now();
   await page.getByRole('button', { name: 'Créer la protection de cet appareil' }).click();
-  await expect(titreDEcran(page, 'Aujourd’hui')).toBeVisible({ timeout: 15_000 });
+  await expect(titreDeCoquille(page, 'accueil')).toBeVisible({ timeout: 15_000 });
   return Date.now() - depart;
 }
 
-/** Rouvre un coffre EXISTANT et rend la durée de bout en bout, en millisecondes. */
-async function deverrouillerEtMesurer(page: Page, titreAttendu: string): Promise<number> {
+/**
+ * Rouvre un coffre EXISTANT et rend la durée de bout en bout, en millisecondes.
+ *
+ * La vue attendue est désignée par son CODE, jamais par son libellé : c'est le
+ * registre qui dit comment un écran s'appelle, et un libellé recopié ici serait
+ * périmé le jour où il change — ce qui est arrivé à `stockage` le 2026-09-10.
+ */
+async function deverrouillerEtMesurer(page: Page, vueAttendue: CodeVue): Promise<number> {
   await page.getByLabel(/Mot de passe/).fill(MOT_DE_PASSE);
   const depart = Date.now();
   await page.getByRole('button', { name: 'Déverrouiller', exact: true }).click();
-  await expect(titreDEcran(page, titreAttendu)).toBeVisible({ timeout: 15_000 });
+  await expect(titreDeCoquille(page, vueAttendue)).toBeVisible({ timeout: 15_000 });
   return Date.now() - depart;
 }
 
@@ -167,7 +222,7 @@ async function memoriserVue(page: Page, vue: string): Promise<void> {
 test.describe('L5a — accessibilité des trois écrans du socle', () => {
   test('écran de déverrouillage : premier usage, aucune violation axe', async ({ page }) => {
     await page.goto(TERRAIN);
-    await expect(titreDEcran(page, 'Préparer cet appareil')).toBeVisible();
+    await expect(titreHorsCoquille(page, 'Préparer cet appareil')).toBeVisible();
     await balayer(page, 'deverrouillage (premier usage)');
   });
 
@@ -176,7 +231,7 @@ test.describe('L5a — accessibilité des trois écrans du socle', () => {
     await creerCoffreEtMesurer(page);
     // Le verrou manuel du 05 §9.7 : c'est l'auditeur qui repose sa tablette.
     await page.getByRole('button', { name: 'Verrouiller' }).click();
-    await expect(titreDEcran(page, 'Déverrouiller la collecte')).toBeVisible();
+    await expect(titreHorsCoquille(page, 'Déverrouiller la collecte')).toBeVisible();
     await balayer(page, 'deverrouillage (coffre existant)');
   });
 
@@ -191,16 +246,19 @@ test.describe('L5a — accessibilité des trois écrans du socle', () => {
     await balayer(page, 'accueil (état vide)');
   });
 
-  test('écran Stockage de l’appareil : aucune violation axe', async ({ page }) => {
+  // Le NOM du test vient du registre, comme son assertion : les deux se
+  // désignaient déjà différemment le 2026-09-10 au matin, et c'est ce désaccord
+  // qui a fait tomber trois tests le jour où le libellé a bougé.
+  test(`écran ${VUES.stockage.titre} : aucune violation axe`, async ({ page }) => {
     await page.goto(TERRAIN);
     await creerCoffreEtMesurer(page);
     await memoriserVue(page, 'stockage');
     await page.reload();
-    // Le titre attendu est celui de l'ÉCRAN (`EcranStockage`), et il diffère de
-    // celui du registre `VUES` affiché par l'en-tête (« Stockage de l’appareil »
-    // contre « Stockage de cet appareil »). Deux libellés pour un même écran :
-    // second volet du constat A28-1, remonté à A29 et non corrigé ici.
-    await deverrouillerEtMesurer(page, 'Stockage de cet appareil');
+    // Le titre affiché est celui du REGISTRE, porté par l'en-tête de coquille :
+    // l'écran peignait autrefois le sien, différent d'un mot (second volet du
+    // constat A28-1), et la règle du 2026-09-10 l'a fermé — un seul `h1`, celui
+    // du registre. Ce qui reste propre à l'écran est éprouvé par son CONTENU.
+    await deverrouillerEtMesurer(page, 'stockage');
     await balayer(page, 'stockage');
   });
 });
@@ -211,8 +269,8 @@ test.describe('L5a — budget de dérivation de clé (11 §4 : < 1 s)', () => {
 
     const creation = await creerCoffreEtMesurer(page);
     await page.getByRole('button', { name: 'Verrouiller' }).click();
-    await expect(titreDEcran(page, 'Déverrouiller la collecte')).toBeVisible();
-    const reouverture = await deverrouillerEtMesurer(page, 'Aujourd’hui');
+    await expect(titreHorsCoquille(page, 'Déverrouiller la collecte')).toBeVisible();
+    const reouverture = await deverrouillerEtMesurer(page, 'accueil');
 
     // Le chiffre est LU par A20 et recopié dans le rapport de fin d'incrément :
     // un budget « vert » sans son chiffre n'est pas une mesure, c'est une opinion.

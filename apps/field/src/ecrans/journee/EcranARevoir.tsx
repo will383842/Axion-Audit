@@ -182,8 +182,6 @@ export function EcranARevoir(): ReactNode {
 
   return (
     <section className="axn-pile">
-      <h1>Points à revoir</h1>
-
       <ZoneEtat etat={etat}>
         <>
           {(listes ?? []).map((liste) => (

@@ -294,8 +294,6 @@ export function EcranAujourdhui(): ReactNode {
   return (
     <section className="axn-pile">
       <BandeauMiseAJour />
-      <h1>Aujourd’hui</h1>
-
       {/* ── ① Ce qui menace la donnée ─────────────────────────────────────── */}
       {(journee?.alertes ?? []).map((alerte) => (
         <Message

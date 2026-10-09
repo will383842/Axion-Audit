@@ -313,7 +313,6 @@ export function EcranFinDeJournee(): ReactNode {
 
   return (
     <section className="axn-pile">
-      <h1>Fin de journée</h1>
       <p>
         Un seul geste : synchroniser, produire une sauvegarde de secours chiffrée, et valider les
         entretiens terminés du jour.

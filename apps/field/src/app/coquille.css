@@ -37,9 +37,25 @@
   border-bottom: var(--taille-bordure-epaisseur) solid var(--couleur-bordure-discrete);
 }
 
+/* Le groupe de droite du bandeau. Il remplace, à géométrie identique, la
+   poussée qu'exerçait le `flex: 1 1 auto` du titre tant que le titre vivait
+   ici. Même `gap` que l'en-tête : l'espacement entre la pastille et
+   « Verrouiller » ne bouge pas d'un pixel. */
+.axn-coquille__actions {
+  margin-inline-start: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--espacement-3);
+}
+
+/* Le titre de la vue, désormais rendu comme PREMIER enfant du `<main>`
+   (réserve R1 d'A29). La typographie est celle qu'il avait au bandeau, au
+   jeton près : ce correctif déplace un élément, il n'en redessine aucun. Le
+   `flex` qui le faisait pousser ses voisins est retiré — il n'a plus de
+   voisins en ligne — et remplacé par l'espacement qui le sépare du contenu de
+   l'écran, celui-là même qu'une `.axn-pile` met entre ses enfants. */
 .axn-coquille__titre {
-  flex: 1 1 auto;
-  margin: 0;
+  margin: 0 0 var(--espacement-4);
   font-size: var(--typo-taille-lg);
   font-weight: var(--typo-graisse-semi);
   line-height: var(--typo-interligne-serre);

@@ -210,13 +210,33 @@ describe('B2 — l’auditeur qui rouvre son iPad sur un écran profond en SORT'
 
       // ② il retrouve EXACTEMENT son écran — la reprise instantanée est intacte.
       //
-      // Le PREMIER titre de niveau 1 est celui de l'en-tête de coquille : il est
-      // rendu avant le contenu. Il y en a DEUX sur la page, l'écran portant le
-      // sien — c'est le bégaiement visuel relevé par A54 (majeur M8), constaté
-      // ici et remonté, non corrigé (09 §5.6).
+      // ── CE TEST TOLÉRAIT DEUX TITRES ; IL N'EN TOLÈRE PLUS QU'UN ──────────
+      // Il lisait le PREMIER titre de niveau 1 (`getAllByRole(...)[0]`, celui de
+      // l'en-tête, rendu avant le contenu) parce qu'il y en avait DEUX sur la
+      // page, l'écran portant le sien : le bégaiement visuel relevé par A54
+      // (majeur M8, constat A28-1), constaté ici et remonté sans être corrigé.
+      //
+      // Le défaut est FERMÉ le 2026-09-10, sur décision de Williams et par la
+      // règle d'A01 : le `<h1>` canonique est celui de la COQUILLE, alimenté par
+      // le registre `app/vues.ts` ; un écran rendu sous `<main>` ne porte plus de
+      // `h1` (son titre devient `h2` ou disparaît s'il duplique le titre de vue),
+      // et seuls les écrans rendus HORS coquille gardent le leur. La tolérance
+      // n'a donc plus d'objet : on exige EXACTEMENT un titre de niveau 1, et
+      // `titreEntete` cesse de choisir entre deux — il n'y a plus de choix.
+      //
+      // Écrit par A28 AVANT le correctif de production, qui appartient à A22
+      // (09 §5.6) : cette assertion est donc ROUGE à la minute où elle est
+      // commitée, et c'est voulu — une garde qu'on n'a jamais vue rougir ne
+      // prouve pas qu'elle mord.
       await screen.findByRole('button', { name: 'Verrouiller' });
-      const titreEntete = (): string | null =>
-        screen.getAllByRole('heading', { level: 1 })[0]?.textContent ?? null;
+      const titreEntete = (): string | null => {
+        const titres = screen.getAllByRole('heading', { level: 1 });
+        expect(
+          titres.map((titre) => titre.textContent),
+          'un seul <h1> par vue : celui de la coquille (registre `app/vues.ts`)',
+        ).toHaveLength(1);
+        return titres[0]?.textContent ?? null;
+      };
       expect(titreEntete()).toBe(VUES.pilote.titre);
 
       // ③ et cette fois, il y a une sortie, écrite en toutes lettres.
