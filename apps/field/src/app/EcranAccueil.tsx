@@ -139,12 +139,11 @@ async function lireResume(base: BaseLocale): Promise<ResumeSocle> {
 // telle quelle. La raison est celle du paragraphe ci-dessus : « réparé à un
 // endroit sur deux » n'était pas une négligence, c'était la conséquence d'avoir
 // trois listes dans trois fichiers qu'aucune relecture ne rapproche.
-
-/** Ce que l'auditeur doit faire d'une pièce qu'il aurait photographiée. */
-const MENTION_PHOTO =
-  'La capture photo n’est pas disponible dans cette version. Décrivez l’élément dans une note ' +
-  'plutôt que de le photographier avec un appareil personnel : une photo prise hors de l’application ' +
-  'sort du coffre chiffré et de la sauvegarde de secours.';
+//
+// ── LA MENTION « CAPTURE INDISPONIBLE » A ÉTÉ RETIRÉE (L6c-1, 2026-10-09) ────
+// Elle tenait le bloquant B3 tant que la capture n'existait pas. La capture est
+// désormais réelle (« Ajouter une photo », dans l'entretien) : le démenti serait
+// à son tour une phrase fausse (DECISIONS [L6c], acceptations B3 révisées).
 
 /** 05 §31-3, presque mot pour mot : rassurer AVANT de demander quoi que ce soit. */
 const MESSAGE_RECONNEXION =
@@ -374,11 +373,8 @@ export function EcranAccueil(): ReactNode {
         l'auditeur qui vient de le perdre qui a besoin de la lire, pas celui qui
         l'a.
 
-        La MENTION PHOTO, elle, reste permanente, et c'est le point : elle
-        répond à un geste que l'auditeur cherche en ligne comme hors ligne
-        (bloquant B3 du 2026-09-06). La faire disparaître au retour du réseau
-        rouvrirait exactement le trou qui a fait sortir une pièce d'audit vers un
-        téléphone personnel. Deux blocs, donc, et deux durées de vie.
+        La mention de B3 qui suivait a été retirée au lot L6c-1 : la capture
+        existe désormais dans l'entretien, et la démentir serait faux.
       */}
       {/* L6b — la file de synchronisation est à un geste (raccordement seul). */}
       <RaccordFileSync />
@@ -388,10 +384,6 @@ export function EcranAccueil(): ReactNode {
         capacites={CAPACITES_HORS_LIGNE.accueil}
         avecPastille={PASTILLE_PORTEE_PAR_LA_COQUILLE}
       />
-
-      <Message ton="info" titre="La capture photo n’est pas disponible">
-        <p>{MENTION_PHOTO}</p>
-      </Message>
     </section>
   );
 }

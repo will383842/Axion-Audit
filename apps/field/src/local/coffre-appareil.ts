@@ -155,6 +155,8 @@ async function compterDonneesLocales(base: BaseLocale): Promise<number> {
     base.attachments.count(),
     base.workAssignments.count(),
     base.outbox.count(),
+    // L6c-1 : des octets de photo sans coffre sont, eux aussi, une collecte à protéger.
+    base.octetsPieces.count(),
   ]);
   return comptes.reduce((total, compte) => total + compte, 0);
 }

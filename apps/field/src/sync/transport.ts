@@ -27,6 +27,12 @@ import {
   type ReponsePush,
 } from '../local/contrat-sync.js';
 import type { BaseLocale } from '../local/base.js';
+import type {
+  CodeReemission,
+  ReponseStatutPieceLocale,
+  ResultatTerminerPiece,
+  TransportPieces,
+} from './chunks.js';
 import type { Coffre } from '../local/coffre.js';
 import { maintenant } from '../local/horloge.js';
 import {
@@ -64,7 +70,7 @@ export interface DependancesTransport {
   readonly coffre: Coffre;
 }
 
-export interface TransportSync {
+export interface TransportSync extends TransportPieces {
   /** Le jeton d'accès : MÉMOIRE seulement (11 §3). `null` l'oublie. */
   definirJetonAcces(jeton: string | null): void;
   pousser(lot: LotPush): Promise<ResultatTransport<ReponsePush>>;
@@ -80,7 +86,8 @@ type EchecRefresh = 'hors_ligne' | 'reconnexion_requise' | 'refus';
 /** Une requête de sync : `GET` (pull) ou `POST` avec corps JSON (push). */
 interface Requete {
   readonly method: 'GET' | 'POST';
-  readonly body?: string;
+  /** JSON (chaîne) ou octets bruts d'un morceau de pièce (L6c, jamais en base64). */
+  readonly body?: string | Uint8Array<ArrayBuffer>;
 }
 
 /** Une rotation réussie rend le nouvel accès ; il ne quitte jamais ce module. */
@@ -219,7 +226,8 @@ export function creerTransport(deps: DependancesTransport): TransportSync {
     jeton: string,
   ): Promise<Response | null> {
     const headers: Record<string, string> = { authorization: `Bearer ${jeton}` };
-    if (requete.body !== undefined) headers['content-type'] = 'application/json';
+    if (typeof requete.body === 'string') headers['content-type'] = 'application/json';
+    else if (requete.body !== undefined) headers['content-type'] = 'application/octet-stream';
     try {
       return await deps.fetch(chemin, { ...requete, headers });
     } catch {
@@ -233,11 +241,13 @@ export function creerTransport(deps: DependancesTransport): TransportSync {
    * réponse validée par `schema` — illisible = `refus` en français, jamais une
    * exception.
    */
-  async function appeler<S extends z.ZodType>(
+  async function appeler<S extends z.ZodType, R = never>(
     chemin: string,
     requete: Requete,
     schema: S,
-  ): Promise<ResultatTransport<z.infer<S>>> {
+    /** Lecture d'un refus PARTICULIER (L6c : le 409 de `complete`) ; `null` = refus ordinaire. */
+    surRefus?: (statut: number, corps: unknown) => R | null,
+  ): Promise<ResultatTransport<z.infer<S>> | R> {
     let dejaRafraichi = false;
     let acces = auth.acces;
     if (acces === null) {
@@ -260,6 +270,8 @@ export function creerTransport(deps: DependancesTransport): TransportSync {
     if (STATUTS_INDISPONIBLES.has(reponse.status)) return { type: 'hors_ligne' };
     const corps = await corpsJson(reponse);
     if (!reponse.ok) {
+      const particulier = surRefus?.(reponse.status, corps) ?? null;
+      if (particulier !== null) return particulier;
       // Un second 401 arrête ici : aucune boucle de refresh, aucun jeton effacé.
       return { type: 'refus', statut: reponse.status, message: messageDuRefus(corps) };
     }
@@ -290,5 +302,71 @@ export function creerTransport(deps: DependancesTransport): TransportSync {
         reponsePullSchema,
       );
     },
+
+    // ── L6c-1 — les trois routes de chunks (05 §9.6), même authentification ──
+    statutPiece(id: string): Promise<ResultatTransport<ReponseStatutPieceLocale>> {
+      return appeler(`${CHEMIN_PIECES}/${id}/status`, { method: 'GET' }, statutPieceSchema);
+    },
+
+    envoyerMorceau(
+      id: string,
+      index: number,
+      octets: Uint8Array,
+    ): Promise<ResultatTransport<unknown>> {
+      return appeler(
+        `${CHEMIN_PIECES}/${id}/chunks/${String(index)}`,
+        // Copie : le corps doit être un tampon à lui, jamais une vue sur la pièce entière.
+        { method: 'POST', body: new Uint8Array(octets) },
+        z.unknown(),
+      );
+    },
+
+    terminerPiece(
+      id: string,
+      corps: { readonly sha256: string; readonly chunks: number },
+    ): Promise<ResultatTerminerPiece> {
+      return appeler(
+        `${CHEMIN_PIECES}/${id}/complete`,
+        { method: 'POST', body: JSON.stringify({ sha256: corps.sha256, chunks: corps.chunks }) },
+        terminerPieceSchema,
+        lireReemission,
+      );
+    },
   };
+}
+
+/** Racine des routes de pièces (05 §9.6). */
+export const CHEMIN_PIECES = '/api/v1/sync/attachments';
+
+const statutPieceSchema = z.object({
+  statut: z.string(),
+  chunksRecus: z.array(z.number().int().min(0)),
+});
+
+const terminerPieceSchema = z.object({ statut: z.literal('assemble') });
+
+/**
+ * Le 409 de `complete` (DECISIONS [L6c]) : SEULS les deux codes du protocole,
+ * avec une liste d'entiers NON VIDE, deviennent une réémission. Tout autre 409
+ * reste un refus — jamais une réémission inventée.
+ */
+const reemissionSchema = z.object({
+  error: z.object({
+    code: z.enum(['UPLOAD_CHUNKS_MISSING', 'UPLOAD_CHECKSUM_MISMATCH']),
+    details: z.array(z.number().int().min(0)).min(1),
+  }),
+});
+
+function lireReemission(
+  statut: number,
+  corps: unknown,
+): {
+  readonly type: 'a_reemettre';
+  readonly code: CodeReemission;
+  readonly index: number[];
+} | null {
+  if (statut !== 409) return null;
+  const lu = reemissionSchema.safeParse(corps);
+  if (!lu.success) return null;
+  return { type: 'a_reemettre', code: lu.data.error.code, index: lu.data.error.details };
 }

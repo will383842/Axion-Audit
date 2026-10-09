@@ -38,6 +38,7 @@ import {
   MOTIF_NOTES_VERROUILLEES_DEFAUT,
   MOTIF_RIEN_A_RATTACHER,
 } from './motifs.js';
+import { ChampPhoto } from './ChampPhoto.js';
 
 export interface ProprietesPanneauNotes {
   /** Change quand la question change (ou qu'une décision a réécrit la note) : remonte le brouillon. */
@@ -67,6 +68,11 @@ export interface ProprietesPanneauNotes {
    * sans avoir été enregistré (invariant 7, 03 §17.4).
    */
   readonly onCapturerNoteVolante: (texte: string) => Promise<boolean>;
+  /**
+   * L6c-1 — « Ajouter une photo à l’entretien », rattachée à la session.
+   * `true` SI ET SEULEMENT SI la pièce est persistée (même contrat que la note).
+   */
+  readonly onCapturerPhoto?: (fichier: File) => Promise<boolean>;
   /** `null` = la question courante n'a pas encore de réponse : rien à rattacher. */
   readonly reponseCouranteId: string | null;
   readonly onRattacher: (note: NoteVolanteLocale) => void;
@@ -90,6 +96,7 @@ export function PanneauNotes(proprietes: ProprietesPanneauNotes): ReactNode {
     onNotesGenerales,
     notesVolantes,
     onCapturerNoteVolante,
+    onCapturerPhoto,
     reponseCouranteId,
     onRattacher,
     onDetacher,
@@ -163,6 +170,14 @@ export function PanneauNotes(proprietes: ProprietesPanneauNotes): ReactNode {
           idMotifVerrou={ecriturePossible ? null : idVerrou}
           onCapturer={onCapturerNoteVolante}
         />
+        {onCapturerPhoto !== undefined && (
+          <ChampPhoto
+            libelle="Ajouter une photo à l’entretien"
+            desactive={!ecriturePossible}
+            idMotif={ecriturePossible ? null : idVerrou}
+            onCapturer={onCapturerPhoto}
+          />
+        )}
 
         {notesVolantes.length === 0 ? (
           <p className="axn-champ__aide">Aucune note volante dans cet entretien.</p>

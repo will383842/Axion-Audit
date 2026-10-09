@@ -80,6 +80,7 @@ import {
   rattacherNoteVolante,
   supprimerNoteVolante,
 } from '../../session/notes-volantes.js';
+import { creerPhotoLocale } from '../../session/photos-locales.js';
 import {
   lireQuestionCourante,
   lireSessionCourante,
@@ -489,6 +490,41 @@ export function EcranEntretien(): ReactNode {
     [enregistrer, identite, session],
   );
 
+  /**
+   * L6c-1 — ajoute une photo et dit SI ELLE A ÉTÉ ÉCRITE (même contrat que la
+   * note volante, bloquant B1). `answerId` : la réponse courante, ou `null`
+   * — la photo est alors rattachée à la session seule (DECISIONS [L6c]).
+   */
+  const capturerPhoto = useCallback(
+    async (fichier: File, answerId: string | null): Promise<boolean> => {
+      if (session === null || session === undefined) {
+        setErreurAction(
+          'Aucun entretien n’est ouvert sur cet appareil : la photo n’a pas été enregistrée.',
+        );
+        return false;
+      }
+      if (identite === null || identite === undefined) {
+        setErreurAction(
+          'L’identité de l’auditeur est inconnue sur cet appareil : connectez-vous une fois au siège avant d’ajouter une photo.',
+        );
+        return false;
+      }
+      let ecrite = false;
+      await enregistrer(async () => {
+        await creerPhotoLocale({
+          missionId: session.missionId,
+          interviewId: session.id,
+          answerId,
+          createdBy: identite.id,
+          fichier,
+        });
+        ecrite = true;
+      });
+      return ecrite;
+    },
+    [enregistrer, identite, session],
+  );
+
   const creerAdHoc = useCallback(
     async (saisie: SaisieQuestionAdHoc): Promise<void> => {
       if (session === null || session === undefined) return;
@@ -887,6 +923,7 @@ export function EcranEntretien(): ReactNode {
                 peutPrecedent={peutPrecedent}
                 peutSuivant={peutSuivant}
                 afficherRaccourcis={pointeurFin}
+                onAjouterPhoto={(fichier) => capturerPhoto(fichier, reponse?.id ?? null)}
               />
             )}
           </div>
@@ -935,6 +972,7 @@ export function EcranEntretien(): ReactNode {
                 onNotesGenerales={ecrireBlocNotes}
                 notesVolantes={notesVolantes ?? []}
                 onCapturerNoteVolante={capturerNoteVolante}
+                onCapturerPhoto={(fichier) => capturerPhoto(fichier, null)}
                 reponseCouranteId={reponse?.id ?? null}
                 onRattacher={(note) => {
                   if (reponse !== null && reponse !== undefined) {
@@ -986,6 +1024,7 @@ export function EcranEntretien(): ReactNode {
               onNotesGenerales={ecrireBlocNotes}
               notesVolantes={notesVolantes ?? []}
               onCapturerNoteVolante={capturerNoteVolante}
+              onCapturerPhoto={(fichier) => capturerPhoto(fichier, null)}
               reponseCouranteId={reponse?.id ?? null}
               onRattacher={(note) => {
                 if (reponse !== null && reponse !== undefined) {

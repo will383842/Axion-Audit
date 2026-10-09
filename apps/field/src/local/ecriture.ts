@@ -37,7 +37,9 @@ import {
   cleCurseurPull,
   CLES_META,
   type BaseLocale,
+  type LigneOctetsPiece,
   type LigneOutbox,
+  type StatutEnvoiLocal,
   type StatutOpLocale,
 } from './base.js';
 import { contexteLocal } from './contexte.js';
@@ -153,6 +155,28 @@ export interface DemandeEcriture<E extends EntiteSync> {
 export async function ecrireLocal<E extends EntiteSync>(
   demande: DemandeEcriture<E>,
 ): Promise<void> {
+  await ecrireLocalAvecAnnexe(demande, null);
+}
+
+/**
+ * Une écriture JOINTE à celle du port, dans LA MÊME transaction (L6c-1 : les
+ * octets d'une photo). Le contenu est déjà chiffré par l'appelant ; seule la
+ * table et la ligne transitent ici.
+ */
+export interface AnnexeEcriture {
+  readonly table: Table<Record<string, unknown> & { id: string }, string>;
+  readonly ligne: Record<string, unknown> & { id: string };
+}
+
+/**
+ * Le port d'écriture, plus une ligne annexe écrite DANS la transaction : ligne
+ * miroir + op d'outbox + annexe, ou rien (05 §9.2). Réservé aux modules du socle
+ * local (`octets.ts`) ; les écrans passent par `ecrireLocal`.
+ */
+export async function ecrireLocalAvecAnnexe<E extends EntiteSync>(
+  demande: DemandeEcriture<E>,
+  annexe: AnnexeEcriture | null,
+): Promise<void> {
   const { base, coffre } = contexteLocal();
   const nom: TableMiroir = TABLE_PAR_ENTITE[demande.entite];
   const horodatage = maintenant();
@@ -187,10 +211,39 @@ export async function ecrireLocal<E extends EntiteSync>(
     charge: chargeOp,
   };
 
-  await base.transaction('rw', tableDe(base, nom), base.outbox, async () => {
+  const tables =
+    annexe === null
+      ? [tableDe(base, nom), base.outbox]
+      : [tableDe(base, nom), base.outbox, annexe.table];
+  await base.transaction('rw', tables, async () => {
     await tableDe(base, nom).put({ ...enTete, charge: chargeLigne });
     await base.outbox.add(op);
+    if (annexe !== null) await annexe.table.put(annexe.ligne);
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OCTETS DES PIÈCES (L6c-1) — deux écritures SANS op d'outbox, et c'est voulu :
+// le statut d'envoi est un état LOCAL de l'appareil (le siège tient le sien,
+// `attachment_uploads`), et la restauration d'une sauvegarde range des octets
+// dont la ligne et l'op arrivent par `appliquerDescente`. Elles vivent ici parce
+// que ce module est le seul autorisé à écrire dans Dexie (05 §9.2-2).
+// ─────────────────────────────────────────────────────────────────────────────
+export async function ecrireStatutEnvoiPiece(
+  base: BaseLocale,
+  table: string,
+  id: string,
+  statut: StatutEnvoiLocal,
+): Promise<void> {
+  await base.table<LigneOctetsPiece, string>(table).update(id, { statutEnvoi: statut });
+}
+
+export async function rangerLigneOctetsPiece(
+  base: BaseLocale,
+  table: string,
+  ligne: LigneOctetsPiece,
+): Promise<void> {
+  await base.table<LigneOctetsPiece, string>(table).put(ligne);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
