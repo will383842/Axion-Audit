@@ -23,7 +23,7 @@
 //     actualiser(missionId: string): Promise<EtatSyncMission>; }
 //
 // Rouge attendu tant que `moteur.ts` et `port.ts` n'existent pas — pour cette seule raison.
-// Traçabilité : E38 (invariant 8), B6 (une source pour un fait).
+// Traçabilité : E38 (sauvegarde terrain, invariant 8), B6 (une source pour un fait).
 // =============================================================================
 import 'fake-indexeddb/auto';
 import { readFileSync } from 'node:fs';
