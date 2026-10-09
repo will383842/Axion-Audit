@@ -38,11 +38,11 @@ const CONFIG_PUSH = { acces: { type: 'roles', roles: ['admin', 'consultant'] } }
 const CONFIG_PULL = CONFIG_PUSH;
 
 /**
- * Paramètres du pull, en camelCase comme tout le contrat partagé (transcription du
- * 11 §4, hypothèse P1 tracée). `since` est EXCLUSIF et doit être en UTC (`Z`).
+ * Paramètres du pull, nommés comme au 11 §4 (`mission_id`, `since`, `limit`) ; le
+ * service les reçoit en camelCase. `since` est EXCLUSIF et doit être en UTC (`Z`).
  */
 const requetePullSchema = z.object({
-  missionId: z.uuid(),
+  mission_id: z.uuid(),
   since: isoUtcSchema.optional(),
   limit: z.coerce.number().int().min(1).max(LIMITE_PULL_MAX).optional(),
 });
@@ -72,7 +72,7 @@ export const routesSync: FastifyPluginAsync = async (app) => {
   );
 
   /**
-   * `GET /v1/sync/pull?missionId=&since=&limit=` (11 §4, 05 §9.5) — même porte
+   * `GET /v1/sync/pull?mission_id=&since=&limit=` (11 §4, 05 §9.5) — même porte
    * d'entrée que le push (① : `lecteur` et `analyste` globaux → 403), puis
    * l'appartenance à la mission, quel que soit le rôle sur elle (05 §9.9 : les
    * autres membres lisent). Paramètre illisible → 400 `VALIDATION_FAILED`.
@@ -88,7 +88,8 @@ export const routesSync: FastifyPluginAsync = async (app) => {
       if (utilisateur === null) {
         throw new AppError('INTERNAL_ERROR', 'Une erreur interne est survenue.');
       }
-      return tirerDelta(utilisateur.id, requete.query);
+      const { mission_id: missionId, since, limit } = requete.query;
+      return tirerDelta(utilisateur.id, { missionId, since, limit });
     },
   );
   await Promise.resolve();
