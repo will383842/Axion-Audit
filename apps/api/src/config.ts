@@ -49,3 +49,28 @@ const minioAnalyse = envMinioSchema.safeParse(process.env);
 
 /** Coordonnées MinIO si elles sont configurées ET valides, `null` sinon. */
 export const configMinio: ConfigMinio | null = minioAnalyse.success ? minioAnalyse.data : null;
+
+// -----------------------------------------------------------------------------
+// STOCKAGE DES PIÈCES JOINTES — lot L6c, protocole de chunks (05 §9.6).
+//
+// Les clés applicatives et le bucket ne sont lus QUE pour les routes de pièces.
+// Même doctrine que `configMinio` ci-dessus : absentes, ces routes répondent
+// « service indisponible » (503) au lieu d'empêcher toute l'API de démarrer —
+// la sonde, le push et le pull n'en ont aucun besoin. Validées par Zod, jamais
+// lues brutes ; leurs VALEURS ne sont jamais journalisées (11 §2).
+// MinIO reste interne (PD8) : aucune URL présignée n'est jamais fabriquée.
+// -----------------------------------------------------------------------------
+const envStockageSchema = envMinioSchema.extend({
+  MINIO_ACCESS_KEY: z.string().min(1),
+  MINIO_SECRET_KEY: z.string().min(1),
+  MINIO_BUCKET_ATTACHMENTS: z.string().min(3),
+});
+
+export type ConfigStockage = z.infer<typeof envStockageSchema>;
+
+const stockageAnalyse = envStockageSchema.safeParse(process.env);
+
+/** Coordonnées complètes du stockage des pièces, ou `null` si incomplètes. */
+export const configStockage: ConfigStockage | null = stockageAnalyse.success
+  ? stockageAnalyse.data
+  : null;

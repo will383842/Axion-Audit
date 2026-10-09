@@ -151,7 +151,12 @@ async function lireErreur(reponse: Response): Promise<ErreurApi> {
   const enveloppe = apiErrorSchema.safeParse(corps);
   if (enveloppe.success) {
     const { code, message, details } = enveloppe.data.error;
-    return new ErreurApi(code, message, reponse.status, details ?? []);
+    // Les index de morceaux (409 du protocole de chunks, 05 §9.6) ne concernent
+    // que le terrain : la console ne garde que les détails `{path, message}`.
+    const lisibles = (details ?? []).filter(
+      (d): d is Exclude<typeof d, number> => typeof d !== 'number',
+    );
+    return new ErreurApi(code, message, reponse.status, lisibles);
   }
   // Réponse hors enveloppe (proxy, panne) : on garde le statut, on ne devine
   // pas de code métier. `SERVICE_UNAVAILABLE` est le seul code honnête ici.
