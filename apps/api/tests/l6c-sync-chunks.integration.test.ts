@@ -32,8 +32,8 @@
 //       était dans un morceau. L'idempotence « renvoyer ne change rien » vaut pour
 //       un envoi EN COURS ; ce test ne fige pas le cas d'un contenu différent au
 //       même index pendant l'envoi (doute rapporté).
-//   H4. L'admin NON membre : 403 ou 404 tolérés (§9.9 : l'admin corrige par l'API
-//       siège, jamais par la sync ; le contrat ne tranche pas sa visibilité).
+//   H4. (ARBITRÉ, revue A17 du 2026-10-09) L'admin NON membre : STRICTEMENT 404,
+//       comme tout non-membre (§9.9 : l'admin corrige par l'API siège).
 //   H5. « Second appareil » : le serveur ne connaît aucun identifiant d'appareil
 //       sur ces routes ; un second jeton du même utilisateur en tient lieu.
 //
@@ -603,7 +603,7 @@ describe('L6c · chunks — authentification et propriété §9.9 @critique', ()
       { nom: 'LE (lecteur membre)', compte: m.LE, statuts: [403] },
       { nom: 'AN (analyste membre)', compte: m.AN, statuts: [403] },
       { nom: 'ADM (admin membre lead)', compte: m.ADM, statuts: [403] },
-      { nom: 'AD (admin non membre)', compte: m.AD, statuts: [403, 404] },
+      { nom: 'AD (admin non membre)', compte: m.AD, statuts: [404] },
       { nom: 'X (consultant non membre)', compte: m.X, statuts: [404] },
     ];
     const avant = await empreinte(m.photoA);
@@ -916,6 +916,164 @@ describe('L6c · chunks — idempotence, statut, assemblage @critique', () => {
     expect(e2).toBeGreaterThan(e1);
     expect(e2).toBeGreaterThanOrEqual(t2 + SEPT_JOURS_MS - 2_000);
     expect(e2).toBeLessThanOrEqual(t3 + SEPT_JOURS_MS + 2_000);
+  });
+});
+
+// =============================================================================
+// 3bis. ARBITRAGES DE LA REVUE A17 (DECISIONS 2026-10-09 [L6c] « Revue A17 »)
+//   · verrous dans un ordre unique, interblocage → 503 réessayable, jamais 500 ;
+//   · pièce `note` → 400 ;
+//   · pièce assemblée qui reçoit une AUTRE empreinte → 409 UPLOAD_ALREADY_ASSEMBLED
+//     terminal, `details` vide, rien de modifié.
+// =============================================================================
+async function semerNote(missionId: string, creePar: string): Promise<string> {
+  const id = uuidv7();
+  await bd().query(
+    `INSERT INTO attachments (id, interview_id, answer_id, mission_id, kind, content, created_by,
+                              client_created_at, client_updated_at, created_at, updated_at)
+     VALUES ($1, NULL, NULL, $2, 'note', 'note fictive', $3, $4, $4, now(), now())`,
+    [id, missionId, creePar, T_SEMIS],
+  );
+  return id;
+}
+
+/**
+ * Issue admise d'un appel concurrent : 200, ou 503 SERVICE_UNAVAILABLE réessayable
+ * que le rejeu (séquentiel) transforme en 200. Jamais 500, jamais autre chose.
+ */
+async function exigerIssueConcurrente(
+  r: ReponseHttp,
+  rejouer: () => Promise<ReponseHttp>,
+  libelle: string,
+): Promise<void> {
+  expect([200, 503], `${libelle} : ${String(r.statut)} ${r.corps}`).toContain(r.statut);
+  if (r.statut === 503) {
+    expect(r.code, libelle).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
+    const rejeu = await rejouer();
+    expect(rejeu.statut, `${libelle}, rejeu : ${rejeu.corps}`).toBe(200);
+  }
+}
+
+/** Nombre d'objets que laisse dans le bucket UN envoi séquentiel de référence. */
+async function objetsLaissesParUnEnvoi(m: Monde, morceaux: readonly Buffer[]): Promise<number> {
+  const avant = (await stock().objets()).length;
+  const fin = await envoyerTout(m.A.jeton, m.photoAParB, morceaux);
+  expect(fin.statut, fin.corps).toBe(200);
+  return (await stock().objets()).length - avant;
+}
+
+const TOURS_CONCURRENTS = 5;
+
+describe('L6c · concurrence (revue A17) @critique', () => {
+  it('deux `complete` simultanés : jamais 500, 200 ou 503 puis 200, pièce assemblée UNE fois avec le bon sha256 @critique', async () => {
+    for (let tour = 0; tour < TOURS_CONCURRENTS; tour += 1) {
+      const m = await semerMonde();
+      const { tout, morceaux } = fichier(3 * 600 + 11, 600);
+      const reference = await objetsLaissesParUnEnvoi(m, morceaux);
+      const avant = (await stock().objets()).length;
+
+      for (let i = 0; i < morceaux.length; i += 1) {
+        recus(await envoyerMorceau(m.A.jeton, m.photoA, i, morceau(morceaux, i)));
+      }
+      const corps = { sha256: sha256(tout), chunks: morceaux.length };
+      const [r1, r2] = await Promise.all([
+        terminer(m.A.jeton, m.photoA, corps),
+        terminer(m.A.jeton, m.photoA, corps),
+      ]);
+      const rejouer = (): Promise<ReponseHttp> => terminer(m.A.jeton, m.photoA, corps);
+      await exigerIssueConcurrente(r1, rejouer, `tour ${String(tour)}, complete 1`);
+      await exigerIssueConcurrente(r2, rejouer, `tour ${String(tour)}, complete 2`);
+
+      const cle = await cleDeStockage(m.photoA);
+      expect(cle).not.toBeNull();
+      expect(sha256(await stock().lireObjet(cle ?? ''))).toBe(sha256(tout));
+      expect((await envoi(m.photoA))?.statut).toBe('assemble');
+      // Assemblée UNE seule fois : pas plus d'objets laissés qu'un envoi séquentiel.
+      const apres = (await stock().objets()).length;
+      expect(apres - avant, 'objets en trop : assemblage double').toBe(reference);
+    }
+  });
+
+  it('un `complete` simultané à un morceau RENVOYÉ : jamais 500, issue 200 (ou 503 puis 200), bon sha256 @critique', async () => {
+    for (let tour = 0; tour < TOURS_CONCURRENTS; tour += 1) {
+      const m = await semerMonde();
+      const { tout, morceaux } = fichier(4 * 500 + 7, 500);
+      for (let i = 0; i < morceaux.length; i += 1) {
+        recus(await envoyerMorceau(m.A.jeton, m.photoA, i, morceau(morceaux, i)));
+      }
+      const corps = { sha256: sha256(tout), chunks: morceaux.length };
+      const [fin, renvoi] = await Promise.all([
+        terminer(m.A.jeton, m.photoA, corps),
+        envoyerMorceau(m.A.jeton, m.photoA, 2, morceau(morceaux, 2)),
+      ]);
+      await exigerIssueConcurrente(
+        fin,
+        () => terminer(m.A.jeton, m.photoA, corps),
+        `tour ${String(tour)}, complete`,
+      );
+      await exigerIssueConcurrente(
+        renvoi,
+        () => envoyerMorceau(m.A.jeton, m.photoA, 2, morceau(morceaux, 2)),
+        `tour ${String(tour)}, morceau renvoyé`,
+      );
+      // Le `complete` final (rejoué si besoin) a rendu 200 : la pièce est assemblée,
+      // et un `complete` de plus reste idempotent.
+      const rejeu = await terminer(m.A.jeton, m.photoA, corps);
+      expect(rejeu.statut, rejeu.corps).toBe(200);
+      const cle = await cleDeStockage(m.photoA);
+      expect(cle).not.toBeNull();
+      expect(sha256(await stock().lireObjet(cle ?? ''))).toBe(sha256(tout));
+      expect((await envoi(m.photoA))?.statut).toBe('assemble');
+    }
+  });
+});
+
+describe('L6c · pièce `note` et pièce déjà assemblée (revue A17)', () => {
+  it('pièce `kind = note` → 400 sur les trois routes, aucun `storage_key`, rien n’est écrit @critique', async () => {
+    const m = await semerMonde();
+    await exigerRouteVivante(m.A, m.volanteA);
+    const note = await semerNote(m.missionId, m.A.id);
+    const avant = await empreinte(note);
+    const octets = Buffer.from('octets refusés');
+    const reponses = [
+      ['chunk', await envoyerMorceau(m.A.jeton, note, 0, octets)],
+      ['status', await lireStatut(m.A.jeton, note)],
+      ['complete', await terminer(m.A.jeton, note, { sha256: sha256(octets), chunks: 1 })],
+    ] as const;
+    for (const [route, r] of reponses) {
+      expect(r.statut, `${route} : ${r.corps}`).toBe(400);
+      // Code non arbitré (« → 400 ») : l'un des deux codes 400 du contrat.
+      expect([ERROR_CODES.VALIDATION_FAILED, ERROR_CODES.INVALID_PAYLOAD], route).toContain(r.code);
+    }
+    expect(await cleDeStockage(note)).toBeNull();
+    expect(await envoi(note)).toBeUndefined();
+    expect(await empreinte(note)).toBe(avant);
+  });
+
+  it('pièce assemblée + `complete` d’une AUTRE empreinte → 409 UPLOAD_ALREADY_ASSEMBLED, details vide, rien de modifié @critique', async () => {
+    const m = await semerMonde();
+    const { tout, morceaux } = fichier(2 * 800 + 5, 800);
+    const fin = await envoyerTout(m.A.jeton, m.photoA, morceaux);
+    expect(fin.statut, fin.corps).toBe(200);
+    const cle = await cleDeStockage(m.photoA);
+    const avant = await empreinte(m.photoA);
+
+    for (const chunks of [morceaux.length, morceaux.length + 1]) {
+      const r = await terminer(m.A.jeton, m.photoA, { sha256: 'a'.repeat(64), chunks });
+      expect(r.statut, r.corps).toBe(409);
+      expect(r.code).toBe(codePropose('UPLOAD_ALREADY_ASSEMBLED'));
+      expect(r.details ?? []).toEqual([]);
+    }
+    expect(await empreinte(m.photoA)).toBe(avant);
+    expect(await cleDeStockage(m.photoA)).toBe(cle);
+    expect(sha256(await stock().lireObjet(cle ?? ''))).toBe(sha256(tout));
+    expect(statutDe(await lireStatut(m.A.jeton, m.photoA)).statut).toBe('assemble');
+  });
+
+  it('UPLOAD_ALREADY_ASSEMBLED est déclaré, en 409', () => {
+    const code = codePropose('UPLOAD_ALREADY_ASSEMBLED');
+    expect(code).toBe('UPLOAD_ALREADY_ASSEMBLED');
+    expect((HTTP_STATUS_BY_ERROR_CODE as Readonly<Record<string, number>>)[code]).toBe(409);
   });
 });
 
