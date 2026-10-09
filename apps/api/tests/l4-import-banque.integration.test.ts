@@ -54,7 +54,7 @@
 // l'import), E47 (format d'import §36.4) · critère L4 du fichier 07.
 // =============================================================================
 import { execFile } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -1293,5 +1293,41 @@ describe('format JSON (03 M1.1 : « import/export de la banque en CSV/JSON »)',
     ).toEqual(['commerce', 'industrie']);
     expect(question?.profiles).toEqual(['dirigeant', 'dsi']);
     expect(Number(question?.weight)).toBe(2);
+  });
+});
+
+// =============================================================================
+// ⑦ LA BANQUE DU DÉPÔT S'IMPORTE — telle qu'elle est rédigée, pas une fixture
+// =============================================================================
+// Les fichiers `docs/banque-questions/socle*.csv` sont la banque réelle. Rien ne
+// les faisait passer par l'import : deux consignes (« … du bloc 6 : une
+// entreprise… ») se lisaient comme une ancre de niveau 6 et avalaient l'ancre 1
+// qui suivait — refus ANCRES_INCOMPLETES que personne n'avait vu. Les fichiers
+// sont concaténés en UN import réel : l'unicité des codes est contrôlée d'un
+// bloc à l'autre, et l'écriture en base va jusqu'au bout.
+describe('la banque rédigée du dépôt passe l’import (§32.4, §36.4)', () => {
+  it('@critique les fichiers socle*.csv s’importent sans aucune erreur', async () => {
+    const racineBanque = resolve(RACINE_DEPOT, 'docs', 'banque-questions');
+    const fichiers = readdirSync(racineBanque)
+      .filter((nom) => /^socle.*\.csv$/.test(nom))
+      .sort();
+    expect(fichiers.length, 'aucun fichier socle*.csv trouvé').toBeGreaterThan(0);
+
+    let entete = '';
+    const lignes: string[] = [];
+    for (const nom of fichiers) {
+      const texte = readFileSync(join(racineBanque, nom), 'utf8').replace(BOM_UTF8, '');
+      const fin = texte.indexOf('\n');
+      const premiere = texte.slice(0, fin).replace(/\r$/, '');
+      if (entete === '') entete = premiere;
+      expect(premiere, `${nom} : en-tête différent des autres fichiers`).toBe(entete);
+      lignes.push(texte.slice(fin + 1).replace(/\s+$/, ''));
+    }
+    const fichier = ecrire('banque-du-depot.csv', `${entete}\n${lignes.join('\n')}\n`);
+
+    const resultat = await lancerImport(fichier);
+    expect(resultat.code, `sortie du script :\n${sansCouleurs(resultat.sortie)}`).toBe(0);
+    expect(await questionsDuCode('Q-B7-005')).toHaveLength(1);
+    expect(await questionsDuCode('Q-B8-008')).toHaveLength(1);
   });
 });

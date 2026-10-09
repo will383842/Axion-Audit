@@ -30,6 +30,10 @@ n'apparaîtrait qu'au moment de comparer deux audits.
 Les ancres s'affichent **sous le curseur** de l'auditeur pendant la saisie (03 §33) : elles ne sont
 pas de la documentation, elles sont l'outil de travail.
 
+**Piège : dans la consigne, jamais un chiffre suivi de `:` ou de `=`.** « … relevé au bloc 4 : ici… »
+se lit comme une ancre de niveau 4 et avale l'ancre qui suit : la question est refusée. Écrire
+« … relevé au bloc 4. Ici… ».
+
 ---
 
 ## 2. LES COLONNES, DANS L'ORDRE DU FICHIER
