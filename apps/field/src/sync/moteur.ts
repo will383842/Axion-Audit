@@ -51,7 +51,9 @@ import {
   type BaseLocale,
   type LigneOutbox,
 } from '../local/base.js';
-import type { Coffre } from '../local/coffre.js';
+import { ZodError } from 'zod';
+import { DonneeLocaleCorrompueError, type Coffre } from '../local/coffre.js';
+import { ErreurEnveloppe } from '../local/enveloppe.js';
 import { maintenant as horlogeMaintenant } from '../local/horloge.js';
 import { MonteeImpossibleError, operationDeLigne } from './montee.js';
 import type { TransportSync } from './transport.js';
@@ -196,6 +198,16 @@ const MOTIF_ILLISIBLE =
  * supprimée —, et ne bloque pas les autres. Le motif ne porte aucune trace
  * technique (11 §2) : celui de `MonteeImpossibleError` est écrit pour l'auditeur.
  */
+/** L'erreur tient-elle à CETTE op (sa charge, sa forme) et non à l'appareil ? */
+function estPropreALOp(cause: unknown): boolean {
+  return (
+    cause instanceof MonteeImpossibleError ||
+    cause instanceof DonneeLocaleCorrompueError ||
+    cause instanceof ErreurEnveloppe ||
+    cause instanceof ZodError
+  );
+}
+
 async function preparer(
   base: BaseLocale,
   coffre: Coffre,
@@ -206,6 +218,11 @@ async function preparer(
     try {
       preparees.push({ ligne, operation: await operationDeLigne(ligne, coffre) });
     } catch (cause) {
+      // Seules les erreurs PROPRES À L'OP l'isolent. Un coffre verrouillé en plein
+      // passage (verrou d'inactivité, 05 §9.7) ou toute autre panne de l'appareil
+      // est RELANCÉE : elle finit en panne locale, sans toucher la file ni les
+      // compteurs — sinon toute la mission passerait « à examiner » pour toujours.
+      if (!estPropreALOp(cause)) throw cause;
       await base.outbox.update(ligne.opId, {
         statut: 'a_examiner',
         derniereErreur: cause instanceof MonteeImpossibleError ? cause.message : MOTIF_ILLISIBLE,

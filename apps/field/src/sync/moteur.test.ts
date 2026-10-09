@@ -51,8 +51,21 @@ import {
   type ReponsePush,
   type ResultatOp,
 } from '../local/contrat-sync.js';
-import { BaseLocale, CLES_META, ecrireMeta, type LigneOutbox } from '../local/base.js';
-import { creerDekEnveloppee, deriverKek, ouvrirCoffre, type Coffre } from '../local/coffre.js';
+import {
+  BaseLocale,
+  CLES_META,
+  cleDerniereSyncReussie,
+  ecrireMeta,
+  lireMeta,
+  type LigneOutbox,
+} from '../local/base.js';
+import {
+  CoffreVerrouilleError,
+  creerDekEnveloppee,
+  deriverKek,
+  ouvrirCoffre,
+  type Coffre,
+} from '../local/coffre.js';
 import { installerContexteLocal } from '../local/contexte.js';
 import { ecrireLocal } from '../local/ecriture.js';
 import { estEnveloppe } from '../local/enveloppe.js';
@@ -810,5 +823,128 @@ describe('moteur — op illisible ou incomplète : isolée « à examiner », le
     await creerMoteurSync({ base, coffre, transport }).pousser(MISSION_A);
 
     expect((await file()).every((o) => o.tentatives === 0)).toBe(true);
+  });
+});
+
+// =============================================================================
+// F. Re-revue A29 (2026-10-09) — un coffre VERROUILLÉ n'est pas une op corrompue
+// =============================================================================
+// Le verrouillage (inactivité, geste manuel — 05 §9.7) peut tomber ENTRE deux lots.
+// `CoffreVerrouilleError` dit « l'appareil est fermé », pas « cette op est
+// illisible » : isoler la file en « à examiner » sur ce motif enverrait au rebut
+// toute la collecte non encore montée, au premier verrou. Le passage s'arrête en
+// panne locale ; aucune op ne change ; le passage suivant, déverrouillé, envoie tout.
+// (Les VRAIES corruptions — MonteeImpossibleError, DonneeLocaleCorrompueError,
+// ZodError — restent isolées : tests « A2 » et « B1 » de la section E.)
+
+/** Un coffre qui délègue au vrai, et se « verrouille » après `apres` déchiffrements. */
+function coffreQuiSeVerrouille(vrai: Coffre, apres: number) {
+  let dechiffrements = 0;
+  let verrouille = false;
+  const coffreTest: Coffre = {
+    get ouvert() {
+      return !verrouille;
+    },
+    chiffrer: (valeur) => vrai.chiffrer(valeur),
+    dechiffrer: (enveloppe, schema) => {
+      if (verrouille || dechiffrements >= apres) {
+        verrouille = true;
+        return Promise.reject(new CoffreVerrouilleError());
+      }
+      dechiffrements += 1;
+      return vrai.dechiffrer(enveloppe, schema);
+    },
+    verrouiller: () => {
+      verrouille = true;
+    },
+  };
+  return {
+    coffre: coffreTest,
+    deverrouiller: () => {
+      verrouille = false;
+      dechiffrements = Number.NEGATIVE_INFINITY;
+    },
+  };
+}
+
+/** Le passage échoue en panne locale : il LÈVE, ou rend un statut qui n'est pas un succès. */
+async function passageEnPanne(promesse: Promise<{ statut: string }>): Promise<void> {
+  let statut: string | null = null;
+  try {
+    statut = (await promesse).statut;
+  } catch (cause) {
+    expect(cause).toBeInstanceOf(CoffreVerrouilleError);
+    return;
+  }
+  expect(statut).not.toBe('succes');
+}
+
+describe('moteur — coffre verrouillé en plein passage : panne locale, file intacte', () => {
+  it('verrou ENTRE deux lots : le 1er lot monte, aucune op restante ne change (ni statut, ni tentative), le suivant envoie tout', async () => {
+    await ecrireSessions(150);
+    const siege = siegeFictif();
+    const verrou = coffreQuiSeVerrouille(coffre, TAILLE_LOT_PUSH_MAX);
+    const moteur = creerMoteurSync({ base, coffre: verrou.coffre, transport: siege.transport });
+
+    await passageEnPanne(moteur.pousser(MISSION_A));
+
+    expect(siege.lots).toHaveLength(1);
+    const restantes = await file();
+    expect(restantes).toHaveLength(50);
+    for (const op of restantes) {
+      expect(op.statut).toBe('en_attente');
+      expect(op.tentatives).toBe(0);
+      expect(op.derniereErreur).toBeNull();
+    }
+    // Un passage en panne n'est pas un push abouti (A-10).
+    expect(await lireMeta(base, cleDerniereSyncReussie(MISSION_A))).toBeUndefined();
+
+    verrou.deverrouiller();
+    const reprise = await moteur.pousser(MISSION_A);
+
+    expect(reprise.statut).toBe('succes');
+    expect(await base.outbox.count()).toBe(0);
+    const recues = siege.lots.flatMap((l) => l.operations.map((o) => o.opId));
+    expect(recues).toHaveLength(150);
+    expect(new Set(recues).size).toBe(150);
+  }, 30_000);
+
+  it('verrou dès le premier déchiffrement : rien n’est envoyé, rien n’est isolé', async () => {
+    await ecrireSessions(3);
+    const avant = await file();
+    const siege = siegeFictif();
+    const verrou = coffreQuiSeVerrouille(coffre, 0);
+
+    await passageEnPanne(
+      creerMoteurSync({ base, coffre: verrou.coffre, transport: siege.transport }).pousser(
+        MISSION_A,
+      ),
+    );
+
+    expect(siege.lots).toHaveLength(0);
+    expect(await file()).toEqual(avant);
+  });
+
+  it('verrou au MILIEU d’un lot : aucune op restante ne change d’état, rien n’est perdu', async () => {
+    await ecrireSessions(5);
+    const avant = await file();
+    const siege = siegeFictif();
+    const verrou = coffreQuiSeVerrouille(coffre, 2);
+
+    await passageEnPanne(
+      creerMoteurSync({ base, coffre: verrou.coffre, transport: siege.transport }).pousser(
+        MISSION_A,
+      ),
+    );
+
+    // Quoi qu'il soit parti, rien de ce qui reste n'a changé d'état.
+    const envoyees = new Set(siege.lots.flatMap((l) => l.operations.map((o) => o.opId)));
+    const restantes = await file();
+    expect(restantes.length + envoyees.size).toBe(avant.length);
+    for (const op of restantes) {
+      expect(op.statut).toBe('en_attente');
+      expect(op.tentatives).toBe(0);
+      expect(op.derniereErreur).toBeNull();
+    }
   });
 });
