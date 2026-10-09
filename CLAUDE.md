@@ -69,7 +69,7 @@ Interdiction de charger le pack entier dans un sous-agent (09 §5.8).
 
 ## 2bis. VERSIONS ÉPINGLÉES (11 §1 — `save-exact`, aucune montée majeure sans décision humaine)
 
-Node 22 LTS · pnpm 9 · TypeScript 5 (`strict`) · Fastify 5 (+ `@fastify/cookie`, ajouté le
+Node 22 LTS · pnpm 9 · TypeScript 5 (`strict`) · `minio` 8.0.7 (client d'objet de l'API, ajouté le 2026-10-09 sur décision de Williams) · Fastify 5 (+ `@fastify/cookie`, ajouté le
 2026-08-31 sur décision de Williams — voir `DECISIONS.md`) · PostgreSQL 16 · Redis 7 · MinIO ·
 **Drizzle ORM** + migrations **SQL brut versionné** · Zod 4 (`packages/shared`) · React 18 + Vite +
 Tailwind + shadcn/ui · Dexie 4 · Workbox 7 · TanStack Query 5 (console uniquement) · BullMQ 5 ·
