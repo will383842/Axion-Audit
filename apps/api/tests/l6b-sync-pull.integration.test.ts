@@ -56,7 +56,7 @@
 // Secrets factices (11 §2).
 // Traçabilité : E7, E9 · invariants 1, 3 et 7 · 05 §9.5, §9.9 · 11 §3, §4.
 // =============================================================================
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Client } from 'pg';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -64,6 +64,7 @@ import {
   ENTITES_DESCENDANTES,
   ERROR_CODES,
   reponsePullSchema,
+  reponsePushSchema,
   type EntiteDescendante,
   type ReponsePull,
 } from '@axion/shared';
@@ -93,6 +94,7 @@ const ROUTE_PUSH = '/v1/sync/push';
 // ÉTAT DE LA SUITE
 // =============================================================================
 let nomBase = '';
+let urlBase = '';
 let client: Client | undefined;
 let app: FastifyInstance | undefined;
 let blocId = '';
@@ -392,6 +394,20 @@ async function semerQuestionDeMission(missionId: string): Promise<string> {
 
 const T_SEMIS = '2026-09-30T08:00:00.000Z';
 
+/** Données personnelles FICTIVES, reconnaissables : leur présence dans un corps se mesure. */
+function nomInterlocuteur(entretienId: string): string {
+  return `Interlocuteur fictif ${entretienId.slice(-8)}`;
+}
+
+function courrielInterlocuteur(entretienId: string): string {
+  return `interlocuteur.${entretienId.slice(-8)}@exemple.test`;
+}
+
+/** Clé MinIO SENTINELLE : MinIO n'est jamais exposé, sa clé ne descend jamais. */
+function cleDeStockage(pieceId: string): string {
+  return `missions/sentinelle-cle-stockage-${pieceId.slice(-8)}`;
+}
+
 async function semerEntretien(
   missionId: string,
   orgUnitId: string,
@@ -400,11 +416,19 @@ async function semerEntretien(
   const id = uuidv7();
   await bd().query(
     `INSERT INTO interviews (id, mission_id, conducted_by, kind, mode, org_unit_id, schedule_status,
-                             status, general_notes, client_created_at, client_updated_at,
-                             created_at, updated_at)
+                             status, general_notes, person_name, person_email, client_created_at,
+                             client_updated_at, created_at, updated_at)
      VALUES ($1, $2, $3, 'entretien', 'sur_site', $4, 'realise', 'en_cours', 'notes semées',
-             $5, $5, now(), now())`,
-    [id, missionId, conduitPar, orgUnitId, T_SEMIS],
+             $6, $7, $5, $5, now(), now())`,
+    [
+      id,
+      missionId,
+      conduitPar,
+      orgUnitId,
+      T_SEMIS,
+      nomInterlocuteur(id),
+      courrielInterlocuteur(id),
+    ],
   );
   return id;
 }
@@ -428,9 +452,9 @@ async function semerNote(
   const id = uuidv7();
   await bd().query(
     `INSERT INTO attachments (id, interview_id, answer_id, mission_id, kind, content, created_by,
-                              client_created_at, client_updated_at, created_at, updated_at)
-     VALUES ($1, $2, NULL, $3, 'note', 'note semée', $4, $5, $5, now(), now())`,
-    [id, interviewId, missionId, creePar, T_SEMIS],
+                              client_created_at, client_updated_at, created_at, updated_at, storage_key)
+     VALUES ($1, $2, NULL, $3, 'note', 'note semée', $4, $5, $5, now(), now(), $6)`,
+    [id, interviewId, missionId, creePar, T_SEMIS, cleDeStockage(id)],
   );
   return id;
 }
@@ -618,6 +642,7 @@ beforeAll(async () => {
   if (!migrationsLivrees()) throw new Error(MESSAGE_L1_ABSENT);
   const base = await creerBaseEphemere('l6b_pull');
   nomBase = base.nom;
+  urlBase = base.url;
   await appliquerMontee(base.url);
   process.env.SEED_ADMIN_EMAIL ??= COURRIEL_FONDATEUR_FACTICE;
   process.env.SEED_ADMIN_PASSWORD ??= MOT_DE_PASSE_FONDATEUR_FACTICE;
@@ -651,6 +676,56 @@ afterAll(async () => {
   await fermerBase();
   if (client !== undefined) await client.end();
   if (nomBase !== '') await supprimerBaseEphemere(nomBase);
+});
+
+// =============================================================================
+// DÉLAIS DE SYNC INJECTABLES — revue A17 (corrections décidées le 2026-10-09)
+// =============================================================================
+// Forme attendue de l'auteur, exportée par `apps/api/src/sync/service.ts`, sans
+// toucher au schéma :
+//   export const DELAIS_SYNC_DEFAUT = { margePullMs: 60_000, dureeMaxPushMs: 30_000 };
+//   export function reglerDelaisSync(delais: Partial<DelaisSync>): void;
+//   · `margePullMs`    : la borne haute d'une page de pull est plafonnée à
+//                        `now() - margePullMs`, lue EN BASE dans la transaction du pull ;
+//   · `dureeMaxPushMs` : un lot de push dont la transaction dépasse cette durée est
+//                        annulé en entier (503 SERVICE_UNAVAILABLE), rien n'est écrit.
+// La marge DOIT rester supérieure à la durée maximale d'un lot : c'est ce qui
+// garantit qu'aucune transaction ne valide une ligne sous un curseur déjà rendu.
+interface DelaisSync {
+  readonly margePullMs: number;
+  readonly dureeMaxPushMs: number;
+}
+
+const DELAIS_DECIDES: DelaisSync = { margePullMs: 60_000, dureeMaxPushMs: 30_000 };
+
+type Regleur = (delais: Partial<DelaisSync>) => void;
+
+async function moduleService(): Promise<Record<string, unknown>> {
+  return await import('../src/sync/service.js');
+}
+
+async function regleur(): Promise<Regleur | undefined> {
+  const f = (await moduleService()).reglerDelaisSync;
+  return typeof f === 'function' ? (f as Regleur) : undefined;
+}
+
+/**
+ * Règle les délais SI le réglage existe. Son absence est dénoncée par un test
+ * dédié (section 8) ; ici, elle laisse chaque épreuve échouer sur SON défaut
+ * propre (ligne perdue, horloge applicative, lot sans limite) plutôt que sur un
+ * « fonction absente » qui masquerait tout.
+ */
+async function reglerDelais(delais: Partial<DelaisSync>): Promise<void> {
+  (await regleur())?.(delais);
+}
+
+// Les épreuves 1 à 7 écrivent puis tirent AUSSITÔT : elles portent sur l'accès,
+// le contrat, le keyset, le journal — pas sur le plafond, qui a ses propres
+// épreuves (section 8). Marge à zéro pour elles ; la durée de lot reste celle
+// décidée. Aucune n'en est affaiblie : sans plafond, leurs assertions sont
+// exactement celles d'avant la revue.
+beforeEach(async () => {
+  await reglerDelais({ margePullMs: 0, dureeMaxPushMs: DELAIS_DECIDES.dureeMaxPushMs });
 });
 
 // =============================================================================
@@ -1101,5 +1176,549 @@ describe('L6b · GET /v1/sync/pull — sync_log direction pull (A-3) @critique',
     const apres = await journalPull(m.A.id);
     expect(apres).toHaveLength(avant.length + 1);
     expect(apres[apres.length - 1]?.items_count).toBe(0);
+  });
+});
+
+// =============================================================================
+// AIDES DES SECTIONS 8 ET 9 (revue A17)
+// =============================================================================
+function pause(ms: number): Promise<void> {
+  return new Promise((resoudre) => {
+    setTimeout(resoudre, ms);
+  });
+}
+
+/**
+ * Recule de `secondes` tous les `updated_at` de la mission : simule des données
+ * écrites il y a longtemps, sous n'importe quel plafond de pull.
+ */
+async function vieillir(missionId: string, secondes: number): Promise<void> {
+  const decalage = `${String(secondes)} seconds`;
+  await bd().query(`UPDATE missions SET updated_at = now() - $2::interval WHERE id = $1`, [
+    missionId,
+    decalage,
+  ]);
+  for (const table of ['org_units', 'interviews', 'attachments']) {
+    await bd().query(
+      `UPDATE ${table} SET updated_at = now() - $2::interval WHERE mission_id = $1`,
+      [missionId, decalage],
+    );
+  }
+  await bd().query(
+    `UPDATE answers SET updated_at = now() - $2::interval
+      WHERE interview_id IN (SELECT id FROM interviews WHERE mission_id = $1)`,
+    [missionId, decalage],
+  );
+}
+
+/** `updated_at` d'une ligne, au microseconde, en ISO UTC. */
+async function horodatageDe(table: string, id: string): Promise<string> {
+  const [ligne] = await lignes(
+    `SELECT to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS t
+       FROM ${table} WHERE id = $1`,
+    [id],
+  );
+  return String(ligne?.t);
+}
+
+function sousLePlafond(nextSince: string | null, horlogeBaseIso: string, margeMs: number): void {
+  if (nextSince === null) return;
+  expect(
+    microsecondes(nextSince) <= microsecondes(horlogeBaseIso) - BigInt(margeMs) * 1000n,
+    `nextSince ${nextSince} dépasse le plafond now() - ${String(margeMs)} ms (${horlogeBaseIso})`,
+  ).toBe(true);
+}
+
+interface OpPush {
+  readonly opId: string;
+  readonly entity: 'answer' | 'attachment_meta';
+  readonly entityId: string;
+  readonly action: 'upsert';
+  readonly payload: Readonly<Record<string, unknown>>;
+  readonly clientUpdatedAt: string;
+}
+
+function opReponse(m: Monde, valeur: boolean, clientUpdatedAt: string): OpPush {
+  return {
+    opId: uuidv7(),
+    entity: 'answer',
+    entityId: m.reponseA,
+    action: 'upsert',
+    clientUpdatedAt,
+    payload: {
+      interviewId: m.entretienA,
+      missionQuestionId: m.mq1,
+      value: { type: 'yes_no', v: valeur },
+      source: 'entretien',
+      withheld: false,
+      horsParcours: false,
+      flagReview: false,
+      notApplicable: false,
+      note: null,
+      clientCreatedAt: T_SEMIS,
+    },
+  };
+}
+
+function opNoteVolante(m: Monde, clientUpdatedAt: string): OpPush {
+  return {
+    opId: uuidv7(),
+    entity: 'attachment_meta',
+    entityId: uuidv7(),
+    action: 'upsert',
+    clientUpdatedAt,
+    payload: {
+      missionId: m.missionId,
+      interviewId: null,
+      answerId: null,
+      kind: 'note',
+      content: 'note poussée L6b',
+      clientCreatedAt: clientUpdatedAt,
+    },
+  };
+}
+
+async function pousserOps(
+  jeton: string,
+  missionId: string,
+  operations: readonly OpPush[],
+): Promise<ReponseHttp> {
+  const reponse = await api().inject({
+    method: 'POST',
+    url: ROUTE_PUSH,
+    headers: {
+      'x-forwarded-for': ipUnique(),
+      'content-type': 'application/json',
+      authorization: `Bearer ${jeton}`,
+    },
+    payload: JSON.stringify({
+      missionId,
+      deviceId: 'appareil-fictif-l6b',
+      outboxRemaining: 0,
+      operations,
+    }),
+  });
+  return { statut: reponse.statusCode, corps: reponse.body, ...lireErreur(reponse.body) };
+}
+
+function resultatsPush(r: ReponseHttp): string[] {
+  expect(r.statut, `push attendu 200, reçu ${String(r.statut)} :\n${r.corps.slice(0, 400)}`).toBe(
+    200,
+  );
+  return reponsePushSchema.parse(JSON.parse(r.corps)).results.map((x) => x.result);
+}
+
+// =============================================================================
+// 8. LE CURSEUR NE PERD AUCUNE LIGNE — revue A17, défaut BLOQUANT
+// =============================================================================
+// Le défaut : le push horodatait chaque op à l'heure de l'APPLICATION, mais ne
+// validait qu'en fin de lot. Un lot A ouvert, un lot B validé, un pull qui rend B
+// et avance le curseur au-delà de A, puis A qui valide SOUS le curseur : A ne
+// redescendait jamais. Corrections décidées : (a) borne haute plafonnée à
+// `now() - 60 s` lue en base ; (b) `updated_at` du push à l'horloge PostgreSQL ;
+// (c) lot de plus de 30 s annulé en entier (503, compte 0 vers « à examiner »).
+describe('L6b · le curseur ne perd aucune ligne (revue A17) @critique', () => {
+  it('les délais sont injectables et valent par défaut 60 s (marge du pull) et 30 s (durée max d’un lot), la marge au-dessus de la durée @critique', async () => {
+    const service = await moduleService();
+    expect(
+      typeof service.reglerDelaisSync,
+      'option injectable absente : `reglerDelaisSync` (apps/api/src/sync/service.ts)',
+    ).toBe('function');
+    expect(service.DELAIS_SYNC_DEFAUT).toEqual(DELAIS_DECIDES);
+    expect(DELAIS_DECIDES.margePullMs).toBeGreaterThan(DELAIS_DECIDES.dureeMaxPushMs);
+  });
+
+  it('(a) plafond par défaut : une ligne plus récente que now() - 60 s ne descend pas encore, puis descend une fois le plafond franchi ; nextSince ne dépasse jamais le plafond @critique', async () => {
+    await reglerDelais(DELAIS_DECIDES);
+    const m = await semerMonde();
+    await vieillir(m.missionId, 600);
+    const d = await descendre(m.A.jeton, m.missionId);
+    expect(d.recus.get('interview') ?? []).toEqual(
+      expect.arrayContaining([m.entretienA, m.entretienB]),
+    );
+    const horloge1 = await horlogeBase();
+    for (const page of d.pages) sousLePlafond(page.nextSince, horloge1, DELAIS_DECIDES.margePullMs);
+    const curseur = d.curseur ?? '';
+
+    const recente = await semerNote(m.missionId, m.A.id, null);
+    const p1 = await tirer(m.A.jeton, m.missionId, { since: curseur });
+    sousLePlafond(p1.nextSince, await horlogeBase(), DELAIS_DECIDES.margePullMs);
+    expect(idsDe(p1, 'attachment_meta'), 'ligne plus récente que le plafond rendue').not.toContain(
+      recente,
+    );
+
+    // Le temps passe : la ligne franchit le plafond.
+    await bd().query(
+      `UPDATE attachments SET updated_at = now() - interval '61 seconds' WHERE id = $1`,
+      [recente],
+    );
+    const d2 = await descendre(m.A.jeton, m.missionId, { since: p1.nextSince ?? curseur });
+    expect(tousLesIds(d2)).toContain(recente);
+    const horloge2 = await horlogeBase();
+    for (const page of d2.pages)
+      sousLePlafond(page.nextSince, horloge2, DELAIS_DECIDES.margePullMs);
+  });
+
+  it('(a) scénario du lot ouvert : lot A ouvert, lot B validé, pull, lot A validé → la ligne de A redescend au pull suivant @critique', async () => {
+    const marge = 3_000;
+    await reglerDelais({ margePullMs: marge, dureeMaxPushMs: 1_000 });
+    const m = await semerMonde();
+    await vieillir(m.missionId, 600);
+    const d = await descendre(m.A.jeton, m.missionId);
+    const curseur = d.curseur ?? '';
+
+    const lotA = await connecter(urlBase);
+    const ligneA = uuidv7();
+    let ouvert = false;
+    try {
+      // Lot A : transaction OUVERTE, horodatée à son début par l'horloge de la base.
+      await lotA.query('BEGIN');
+      ouvert = true;
+      await lotA.query(
+        `INSERT INTO attachments (id, interview_id, answer_id, mission_id, kind, content, created_by,
+                                  client_created_at, client_updated_at, created_at, updated_at)
+         VALUES ($1, NULL, NULL, $2, 'note', 'note du lot A', $3, $4, $4, now(), now())`,
+        [ligneA, m.missionId, m.A.id, T_SEMIS],
+      );
+      // Lot B : validé APRÈS l'ouverture de A, donc horodaté plus tard.
+      const ligneB = await semerNote(m.missionId, m.B.id, null);
+
+      const p1 = await tirer(m.A.jeton, m.missionId, { since: curseur });
+      const curseur1 = p1.nextSince ?? curseur;
+
+      await lotA.query('COMMIT');
+      ouvert = false;
+      await pause(marge + 500);
+
+      const d2 = await descendre(m.A.jeton, m.missionId, { since: curseur1 });
+      const recus = [...idsDe(p1, 'attachment_meta'), ...(d2.recus.get('attachment_meta') ?? [])];
+      expect(recus, 'la ligne du lot A, validée sous le curseur, est perdue').toContain(ligneA);
+      expect(recus).toContain(ligneB);
+      expect(doublons(recus)).toEqual([]);
+    } finally {
+      if (ouvert) await lotA.query('ROLLBACK');
+      await lotA.end();
+    }
+  });
+
+  it('(b) le push horodate updated_at à l’horloge de PostgreSQL, pas à celle de l’application @critique', async () => {
+    const m = await semerMonde();
+    const reponse = opReponse(m, true, '2026-10-05T09:00:00.000Z');
+    const note = opNoteVolante(m, '2026-10-05T09:00:00.000Z');
+    // L'horloge de l'APPLICATION avance de deux heures ; celle de la base, non.
+    const maintenantReel = Date.now();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    let r: ReponseHttp;
+    try {
+      vi.setSystemTime(new Date(maintenantReel + 2 * 3_600_000));
+      const jeton = api().jwt.sign({ sub: m.A.id });
+      r = await pousserOps(jeton, m.missionId, [reponse, note]);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(resultatsPush(r)).toEqual(['applied', 'applied']);
+    const horloge = microsecondes(await horlogeBase());
+    for (const [table, id] of [
+      ['answers', m.reponseA],
+      ['attachments', note.entityId],
+    ] as const) {
+      const ecart = horloge - microsecondes(await horodatageDe(table, id));
+      expect(
+        ecart >= 0n && ecart < 60_000_000n,
+        `${table}.updated_at pris à l'horloge applicative (écart ${String(ecart)} µs)`,
+      ).toBe(true);
+    }
+  });
+
+  it('(c) un lot dont la transaction dépasse la durée max est annulé EN ENTIER : 503 SERVICE_UNAVAILABLE, rien d’écrit ; le rejeu est idempotent @critique', async () => {
+    await reglerDelais({ margePullMs: 0, dureeMaxPushMs: 500 });
+    const m = await semerMonde();
+    const note = opNoteVolante(m, '2026-10-05T10:00:00.000Z');
+    const reponse = opReponse(m, true, '2026-10-05T10:00:00.000Z');
+    const lot = [note, reponse];
+
+    const verrou = await connecter(urlBase);
+    let r: ReponseHttp;
+    let duree = 0;
+    let lache: ReturnType<typeof setTimeout> | undefined;
+    try {
+      // Un verrou tenu sur la réponse fait durer la transaction du lot.
+      await verrou.query('BEGIN');
+      await verrou.query('SELECT 1 FROM answers WHERE id = $1 FOR UPDATE', [m.reponseA]);
+      // Garde anti-blocage : SANS durée max, le push attendrait le verrou sans fin.
+      lache = setTimeout(() => {
+        void verrou.query('ROLLBACK');
+      }, 5_000);
+      const debut = Date.now();
+      r = await pousserOps(m.A.jeton, m.missionId, lot);
+      duree = Date.now() - debut;
+    } finally {
+      if (lache !== undefined) clearTimeout(lache);
+      await verrou.query('ROLLBACK');
+      await verrou.end();
+    }
+    expect(
+      r.statut,
+      `lot trop long attendu 503, reçu ${String(r.statut)} : ${r.corps.slice(0, 300)}`,
+    ).toBe(503);
+    expect(r.code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
+    expect(r.message).toBeTruthy();
+    expect(
+      duree,
+      'le lot doit être coupé à sa durée max, pas au relâchement du verrou',
+    ).toBeLessThan(4_000);
+
+    // Rien n'est écrit : ni la note (op qui ne bloquait pas), ni la réponse, ni le journal.
+    expect(await lignes('SELECT id FROM attachments WHERE id = $1', [note.entityId])).toHaveLength(
+      0,
+    );
+    expect(await lignes(`SELECT value FROM answers WHERE id = $1`, [m.reponseA])).toEqual([
+      { value: { type: 'yes_no', v: false } },
+    ]);
+    expect(
+      await lignes('SELECT op_id FROM processed_ops WHERE op_id = ANY($1::uuid[])', [
+        lot.map((o) => o.opId),
+      ]),
+    ).toHaveLength(0);
+    expect(
+      await lignes(`SELECT 1 FROM sync_log WHERE user_id = $1 AND direction = 'push'`, [m.A.id]),
+    ).toHaveLength(0);
+    expect(
+      await lignes('SELECT 1 FROM answer_revisions WHERE entity_id = $1', [m.reponseA]),
+    ).toHaveLength(0);
+
+    // Le terrain réessaie le MÊME lot : appliqué une fois, puis dédupliqué.
+    await reglerDelais({ dureeMaxPushMs: DELAIS_DECIDES.dureeMaxPushMs });
+    expect(resultatsPush(await pousserOps(m.A.jeton, m.missionId, lot))).toEqual([
+      'applied',
+      'applied',
+    ]);
+    expect(resultatsPush(await pousserOps(m.A.jeton, m.missionId, lot))).toEqual([
+      'duplicate',
+      'duplicate',
+    ]);
+    expect(await lignes(`SELECT value FROM answers WHERE id = $1`, [m.reponseA])).toEqual([
+      { value: { type: 'yes_no', v: true } },
+    ]);
+  });
+});
+
+// =============================================================================
+// 9. COLONNES FERMÉES EN SORTIE — revue A17
+// =============================================================================
+// Chaque entité descend selon une projection EXPLICITE. Une colonne ajoutée demain
+// au 04 fait échouer « aucune colonne hors liste » au lieu de fuiter vers l'iPad.
+//   · `storageKey` ne descend JAMAIS (MinIO n'est jamais exposé, 11 §2) ;
+//   · `personEmail` d'une session ne descend qu'à son PROPRIÉTAIRE (minimisation, 06) ;
+//   · `personName` descend à tous les membres (05 §9.9, lecture par le pull) ;
+//   · `missions` : ce que le terrain affiche et range (miroir `apps/field/src/local/
+//     formes.ts`), rien du commercial (`commercialOffer`), de la confidentialité
+//     (`ndaRef`, `ndaSignedAt`) ni du paramétrage siège (`llmProvider`, `sizeTierId`…).
+const COLONNES_ADMISES: Readonly<Record<EntiteDescendante, readonly string[]>> = {
+  mission: [
+    'id',
+    'companyId',
+    'title',
+    'timezone',
+    'auditLevel',
+    'geoScope',
+    'countryCode',
+    'startPlanned',
+    'endPlanned',
+    'status',
+    'updatedAt',
+    'deletedAt',
+  ],
+  mission_question: [
+    'id',
+    'missionId',
+    'questionId',
+    'questionVersion',
+    'textSnapshot',
+    'optionsSnapshot',
+    'weightSnapshot',
+    'scoringSnapshot',
+    'guidanceSnapshot',
+    'answerTypeSnapshot',
+    'criticalitySnapshot',
+    'allowRangeSnapshot',
+    'position',
+    'addedAdHoc',
+    'blockCode',
+  ],
+  org_unit: [
+    'id',
+    'missionId',
+    'parentId',
+    'kind',
+    'name',
+    'countryCode',
+    'timezone',
+    'headcount',
+    'serviceRefId',
+    'sectorId',
+    'inScope',
+    'status',
+    'proposedBy',
+    'mergedIntoId',
+    'position',
+    'createdAt',
+    'updatedAt',
+  ],
+  work_assignment: [
+    'id',
+    'missionId',
+    'userId',
+    'orgUnitId',
+    'plannedInterviews',
+    'plannedDays',
+    'dateFrom',
+    'dateTo',
+  ],
+  interview: [
+    'id',
+    'missionId',
+    'conductedBy',
+    'kind',
+    'mode',
+    'linkedReviewAnswerId',
+    'personName',
+    'personRole',
+    'personServiceId',
+    'personEmail',
+    'interlocutorProfileId',
+    'participants',
+    'orgUnitId',
+    'documentRequestId',
+    'consentGiven',
+    'consentAudio',
+    'consentedAt',
+    'informationNoticeVersion',
+    'noticeShownAt',
+    'scheduledAt',
+    'scheduledDurationMin',
+    'scheduleStatus',
+    'status',
+    'startedAt',
+    'endedAt',
+    'generalNotes',
+    'clientCreatedAt',
+    'clientUpdatedAt',
+    'syncedAt',
+    'createdAt',
+    'updatedAt',
+  ],
+  answer: [
+    'id',
+    'missionId',
+    'interviewId',
+    'missionQuestionId',
+    'value',
+    'source',
+    'withheld',
+    'withheldReason',
+    'horsParcours',
+    'note',
+    'flagReview',
+    'reviewReason',
+    'notApplicable',
+    'naReason',
+    'questionTextSnapshot',
+    'revision',
+    'clientCreatedAt',
+    'clientUpdatedAt',
+    'syncedAt',
+    'createdAt',
+    'updatedAt',
+  ],
+  attachment_meta: [
+    'id',
+    'interviewId',
+    'answerId',
+    'missionId',
+    'kind',
+    'content',
+    'filename',
+    'mime',
+    'sizeBytes',
+    'transcription',
+    'purgeAfter',
+    'clientCreatedAt',
+    'clientUpdatedAt',
+    'createdBy',
+    'syncedAt',
+    'createdAt',
+    'updatedAt',
+  ],
+};
+
+function elementsDeLaDescente(d: Descente, entite: EntiteDescendante): Record<string, unknown>[] {
+  return d.pages.flatMap((p) => elementsDe(p, entite));
+}
+
+describe('L6b · GET /v1/sync/pull — colonnes fermées en sortie (revue A17) @critique', () => {
+  for (const entite of ENTITES_DESCENDANTES) {
+    it(`${entite} : aucune colonne hors de la liste fermée, pour un membre comme pour le propriétaire @critique`, async () => {
+      const m = await semerMonde();
+      for (const compte of [m.A, m.B, m.ADM]) {
+        const elements = elementsDeLaDescente(await descendre(compte.jeton, m.missionId), entite);
+        expect(
+          elements.length,
+          `aucun élément « ${entite} » : l'épreuve serait vide`,
+        ).toBeGreaterThan(0);
+        for (const element of elements) {
+          const horsListe = Object.keys(element).filter(
+            (cle) => !COLONNES_ADMISES[entite].includes(cle),
+          );
+          expect(horsListe, `colonnes hors liste pour « ${entite} »`).toEqual([]);
+        }
+      }
+    });
+  }
+
+  it('storageKey ne descend JAMAIS, à personne, propriétaire et admin compris @critique', async () => {
+    const m = await semerMonde();
+    for (const compte of [m.A, m.B, m.ADM]) {
+      const d = await descendre(compte.jeton, m.missionId);
+      for (const element of elementsDeLaDescente(d, 'attachment_meta')) {
+        expect(Object.keys(element)).not.toContain('storageKey');
+      }
+      for (const page of d.pages) {
+        const texte = JSON.stringify(page);
+        expect(texte).not.toContain('sentinelle-cle-stockage');
+        expect(texte).not.toMatch(/storage_?key/i);
+      }
+    }
+  });
+
+  it('personEmail d’une session ne descend qu’à son propriétaire ; personName descend à tous les membres @critique', async () => {
+    const m = await semerMonde();
+    const courrielA = courrielInterlocuteur(m.entretienA);
+    const courrielB = courrielInterlocuteur(m.entretienB);
+
+    // B, propriétaire de entretienB : il reçoit SON courriel, jamais celui de A.
+    const dB = await descendre(m.B.jeton, m.missionId);
+    const sessionsB = elementsDeLaDescente(dB, 'interview');
+    expect(sessionsB.find((s) => s.id === m.entretienB)?.personEmail).toBe(courrielB);
+    const sessionAVueParB = sessionsB.find((s) => s.id === m.entretienA);
+    expect(sessionAVueParB, 'la session de A doit descendre chez B (lecture)').toBeDefined();
+    expect(sessionAVueParB?.personEmail ?? null).toBeNull();
+    expect(sessionAVueParB?.personName).toBe(nomInterlocuteur(m.entretienA));
+    for (const page of dB.pages) expect(JSON.stringify(page)).not.toContain(courrielA);
+
+    // Un membre lead, un admin membre, un lecteur de mission : aucun courriel d'autrui.
+    for (const compte of [m.LD, m.ADM, m.LM]) {
+      const d = await descendre(compte.jeton, m.missionId);
+      const sessions = elementsDeLaDescente(d, 'interview');
+      for (const id of [m.entretienA, m.entretienB]) {
+        const session = sessions.find((s) => s.id === id);
+        expect(session?.personEmail ?? null).toBeNull();
+        expect(session?.personName).toBe(nomInterlocuteur(id));
+      }
+      for (const page of d.pages) {
+        expect(JSON.stringify(page)).not.toContain(courrielA);
+        expect(JSON.stringify(page)).not.toContain(courrielB);
+      }
+    }
   });
 });
