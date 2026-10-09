@@ -23,6 +23,9 @@
 import 'fake-indexeddb/auto';
 import Dexie from 'dexie';
 import { uuidv7 } from 'uuidv7';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { ERROR_CODES } from '@axion/shared';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BaseLocale } from '../local/base.js';
 import { creerDekEnveloppee, deriverKek, ouvrirCoffre, type Coffre } from '../local/coffre.js';
@@ -211,5 +214,56 @@ describe('transport — POST …/attachments/:id/complete', () => {
     );
     const resultat = await transport.terminerPiece(PIECE, { sha256: SHA, chunks: 1 });
     expect(resultat).toEqual({ type: 'refus', statut: 404, message: 'Pièce introuvable.' });
+  });
+});
+
+// =============================================================================
+// Compléments revue A17 / A29 (`DECISIONS.md` [L6c], 2026-10-09).
+// =============================================================================
+describe('transport — 409 UPLOAD_ALREADY_ASSEMBLED est terminal', () => {
+  it('@critique même avec une liste d’index, ce n’est JAMAIS une réémission', async () => {
+    const { transport } = transportAvec(() =>
+      json(
+        {
+          error: {
+            code: 'UPLOAD_ALREADY_ASSEMBLED',
+            message: 'Cette pièce est déjà assemblée au siège avec un autre contenu.',
+            details: [0, 1],
+          },
+        },
+        409,
+      ),
+    );
+    const resultat = await transport.terminerPiece(PIECE, { sha256: SHA, chunks: 2 });
+    expect(resultat.type).not.toBe('a_reemettre');
+    expect(resultat.type).toBe('refus');
+  });
+});
+
+describe('transport — les codes UPLOAD_* viennent de `ERROR_CODES` (packages/shared)', () => {
+  const codes = ERROR_CODES as Readonly<Record<string, string>>;
+
+  it('@critique les trois codes existent dans `ERROR_CODES`, valeur = nom', () => {
+    for (const nom of [
+      'UPLOAD_CHUNKS_MISSING',
+      'UPLOAD_CHECKSUM_MISMATCH',
+      'UPLOAD_ALREADY_ASSEMBLED',
+    ]) {
+      expect(codes[nom]).toBe(nom);
+    }
+  });
+
+  // IMPLÉMENTATION FAUSSE ATTRAPÉE : `z.enum(['UPLOAD_CHUNKS_MISSING', …])` recopié
+  // à la main — le jour où le siège renomme un code, le terrain transforme une
+  // réémission en refus et la photo reste sur l'appareil.
+  it('@critique `transport.ts` n’écrit aucun code UPLOAD_* en littéral et importe ERROR_CODES', () => {
+    const source = readFileSync(fileURLToPath(new URL('./transport.ts', import.meta.url)), 'utf8');
+    const code = source
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .split(/\r?\n/)
+      .map((ligne) => ligne.replace(/(^|\s)\/\/.*$/, '$1'))
+      .join('\n');
+    expect(code).not.toMatch(/['"`]UPLOAD_[A-Z_]+['"`]/);
+    expect(code).toMatch(/ERROR_CODES/);
   });
 });

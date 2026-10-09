@@ -413,6 +413,32 @@ describe('envoyerPiecesEnAttente — statut local, persistant au redémarrage', 
     expect(await lireStatutEnvoi(base, id)).toBe('envoyee');
   });
 
+  // `DECISIONS.md` [L6c] « Revue A17 » : une pièce assemblée qui reçoit une autre
+  // empreinte → 409 `UPLOAD_ALREADY_ASSEMBLED`, TERMINAL : le terrain la passe
+  // `en_echec` sans réémettre un seul morceau.
+  it('@critique 409 UPLOAD_ALREADY_ASSEMBLED : « en_echec », AUCUNE réémission', async () => {
+    const id = await photo(3 * PETIT);
+    const siege = creerSiegePiecesFictif();
+    const transport = {
+      ...siege.transport,
+      terminerPiece: () =>
+        Promise.resolve({
+          type: 'refus' as const,
+          statut: 409,
+          message: 'Cette pièce est déjà assemblée au siège avec un autre contenu.',
+        }),
+    };
+    const bilan = await envoyerPiecesEnAttente(
+      { base, coffre, transport, tailleMorceau: PETIT },
+      MISSION_PIECES,
+    );
+    expect(bilan.enEchec).toBe(1);
+    expect(await lireStatutEnvoi(base, id)).toBe('en_echec');
+    // Les trois morceaux de l'envoi initial, et pas un de plus.
+    expect(siege.indexEmis(id)).toEqual([0, 1, 2]);
+    expect(await lireOctetsPiece(base, coffre, id)).not.toBeNull();
+  });
+
   it('une pièce déjà « envoyee » ne repart pas', async () => {
     const siege = creerSiegePiecesFictif();
     const id = await photo(PETIT);

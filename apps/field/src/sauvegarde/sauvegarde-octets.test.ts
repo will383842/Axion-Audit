@@ -9,7 +9,7 @@
 // secours ».
 //
 // ── CE QUE CES TESTS FIGENT ─────────────────────────────────────────────────
-//   · `exporterSauvegarde` emporte les octets des pièces de la mission ;
+//   · l'export (par segments, `ecrireSauvegarde` — revue A29) emporte les octets ;
 //   · dans le fichier `.axionbackup`, ils restent CHIFFRÉS : ni le binaire ni
 //     son base64 n'apparaissent dans le fichier sérialisé ;
 //   · `importerSauvegarde`, sur un AUTRE appareil (autre DEK), rend des octets
@@ -39,7 +39,8 @@ import {
   octetsMarques,
   octetsVaries,
 } from '../sync/fixtures/pieces.js';
-import { exporterSauvegarde, importerSauvegarde } from './sauvegarde.js';
+import { importerSauvegarde } from './sauvegarde.js';
+import { exporterParSegments } from './fixtures/ecrivain.js';
 
 const MOT_DE_PASSE = 'correct-cheval-pile-agrafe-2026';
 
@@ -91,7 +92,7 @@ describe('export de secours — les octets des photos voyagent, chiffrés (invar
     await appareil(21);
     const octets = octetsVaries(300_000, 5);
     const id = await photo(octets);
-    const fichier = await exporterSauvegarde({
+    const fichier = await exporterParSegments({
       missionId: MISSION_PIECES,
       motDePasse: MOT_DE_PASSE,
       parametresKdf: KDF_TEST,
@@ -118,7 +119,7 @@ describe('export de secours — les octets des photos voyagent, chiffrés (invar
     await appareil(23);
     const octets = octetsMarques(8192);
     await photo(octets);
-    const fichier = await exporterSauvegarde({
+    const fichier = await exporterParSegments({
       missionId: MISSION_PIECES,
       motDePasse: MOT_DE_PASSE,
       parametresKdf: KDF_TEST,
@@ -134,7 +135,7 @@ describe('export de secours — les octets des photos voyagent, chiffrés (invar
     const b = octetsVaries(7000, 2);
     const idA = await photo(a);
     const idB = await photo(b);
-    const fichier = await exporterSauvegarde({
+    const fichier = await exporterParSegments({
       missionId: MISSION_PIECES,
       motDePasse: MOT_DE_PASSE,
       parametresKdf: KDF_TEST,
@@ -154,7 +155,7 @@ describe('export de secours — les octets des photos voyagent, chiffrés (invar
     await appareil(27);
     const autre = await photo(octetsVaries(1000, 3), AUTRE_MISSION_PIECES);
     await photo(octetsVaries(1000, 4));
-    const fichier = await exporterSauvegarde({
+    const fichier = await exporterParSegments({
       missionId: MISSION_PIECES,
       motDePasse: MOT_DE_PASSE,
       parametresKdf: KDF_TEST,
