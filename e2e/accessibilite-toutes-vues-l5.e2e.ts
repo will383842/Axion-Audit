@@ -630,6 +630,25 @@ async function allerARevoir(page: Page): Promise<void> {
   await expect(page.getByRole('heading', { name: MISSION_FIL_TPE.titre })).toBeVisible();
 }
 
+/**
+ * La file de synchronisation (L6b), atteinte depuis l'accueil par le bouton
+ * « Voir la file de synchronisation » — le raccord de la pastille.
+ *
+ * L'ancre propre à l'écran : sa section « À examiner » (un <h2>, toujours
+ * rendue) et le compte des opérations en attente, LU SUR L'APPAREIL — qu'il
+ * vaille zéro (« Aucune opération en attente ») ou non, la phrase porte
+ * « en attente ». Aucune op « à examiner » n'est fabriquée ici : il faudrait
+ * écrire dans IndexedDB par-dessous l'application, ce que ce fichier s'interdit
+ * (seuls les gestes de production) ; le geste « Remettre en file » est éprouvé
+ * en composant (`ecrans/sync/EcranSynchronisation.test.tsx`).
+ */
+async function allerSynchronisation(page: Page): Promise<void> {
+  await allerAccueil(page);
+  await page.getByRole('button', { name: 'Voir la file de synchronisation' }).click();
+  await expect(titreDeCoquille(page, 'synchronisation')).toBeVisible();
+  await expect(page.getByText(/opérations? en attente/i).first()).toBeVisible();
+}
+
 /** L'écran de restauration, atteint depuis l'écran d'embarquement (03 §34.2). */
 async function allerRestauration(page: Page): Promise<void> {
   await allerAccueil(page);
@@ -898,6 +917,24 @@ const PARCOURS = {
       marqueur: 'Relire les points à revoir de la mission, calculés sur cet appareil',
     },
   },
+  // ── La QUATORZIÈME vue, arrivée avec L6b le 2026-10-09 ────────────────────
+  // Le `satisfies` a refusé de compiler (lint rouge en CI, PR 141) dès que
+  // `vues.ts` a reçu sa ligne. Le marqueur hors ligne est RECOPIÉ de
+  // `apps/field/src/app/capacites-hors-ligne.ts`, jamais reformulé : la file se
+  // lit sur l'appareil, réseau coupé comme en ligne.
+  synchronisation: {
+    delaiMs: 180_000,
+    etats: [
+      {
+        libelle: 'file lue sur cet appareil, atteinte depuis l’accueil',
+        atteindre: allerSynchronisation,
+      },
+    ],
+    horsLigne: {
+      depuis: allerSynchronisation,
+      marqueur: 'Consulter les opérations en attente, à examiner ou rejetées de cet appareil',
+    },
+  },
 } as const satisfies Record<CodeVue, Parcours>;
 
 /** Les codes viennent de la TABLE, dont le type vient du REGISTRE. */
@@ -934,7 +971,9 @@ test('contrôle d’anti-vacuité : toutes les vues du registre ont un parcours 
   // C'est le recensement qui a fait son travail : il dit à la porte ce que la
   // compilation ne pouvait pas dire. Constat rendu à A22 (09 §5.6) ; le chiffre
   // est une DONNÉE de registre, et c'est à ce titre qu'A26 le repose.
-  expect(registre.length, 'le registre a changé de taille — le rapport A28 aussi').toBe(13);
+  // Puis de 13 à 14 le 2026-10-09 (`synchronisation`, L6b) : vue, parcours et
+  // recensement dans le même commit.
+  expect(registre.length, 'le registre a changé de taille — le rapport A28 aussi').toBe(14);
   for (const code of CODES) {
     expect(parcoursDe(code).etats.length, `${code} : aucun état à balayer`).toBeGreaterThan(0);
   }
