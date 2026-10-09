@@ -13,7 +13,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SCRIPT_DIR/lib/common.sh"
 
 # Image `mc` FIGÉE (11 §1) — identique à celle de docker-compose.yml.
-MC_IMAGE="${MC_IMAGE:-minio/mc:RELEASE.2025-04-16T18-13-26Z}"
+MC_IMAGE="${MC_IMAGE:-pgsty/mc:RELEASE.2026-08-04T00-00-00Z}"
 # Miroir local (2e support de la règle 3-2-1) et archives chiffrées.
 MIRROR_DIR="${MIRROR_DIR:-/var/backups/axion/minio/mirror}"
 ARCHIVE_DIR="${ARCHIVE_DIR:-/var/backups/axion/minio/archives}"

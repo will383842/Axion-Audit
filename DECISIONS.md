@@ -12667,3 +12667,10 @@ critère est contesté après coup. C'est un gain, pas un effet de bord.
 recommandé de corriger « avant V-10 » parce que V-10 coûte 60 minutes d'un novice réel. V-10 ne se
 jouant pas, ce motif tombe. Le correctif restait dû — c'est un défaut, quatre fois constaté — mais
 il n'était pas urgent pour la raison que j'ai donnée.
+
+## 2026-10-09 — [L0] Image MinIO retirée de Docker Hub
+
+Options : pgsty/minio + pgsty/mc (deux images, maintenues) · coollabsio/minio (sans mc) · changer de stockage S3
+Arbitrage : pgsty, épinglé RELEASE.2026-08-04T00-00-00Z ; restauration nocturne comme garde ; règle de précédence sans objet (aucune divergence interne)
+Décideur : Williams
+Impact spec : aucun
