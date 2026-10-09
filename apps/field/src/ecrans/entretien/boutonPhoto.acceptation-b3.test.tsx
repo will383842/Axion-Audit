@@ -118,6 +118,19 @@ async function choisir(champ: HTMLInputElement, fichiers: File[]): Promise<void>
 }
 
 describe('B3 révisé — « Ajouter une photo » est ACTIF, et ce que l’œil voit est vrai', () => {
+  // `DECISIONS.md` [L6c] (2026-10-09) : une question SANS réponse garde le champ
+  // actif ; la pièce sera rattachée à la session seule (testé dans
+  // `session/photos-locales.test.ts`). Un « répondez d'abord » ferait perdre la
+  // photo d'un poste qu'on observe avant d'avoir coté.
+  it('@critique question SANS réponse : le champ est actif et le geste aboutit', async () => {
+    const onAjouterPhoto = vi.fn(() => Promise.resolve(true));
+    rendreZoneQuestion({ reponse: null, onAjouterPhoto });
+    const champ = champObligatoire();
+    expect(champ.disabled).toBe(false);
+    await choisir(champ, [fichierImage()]);
+    expect(onAjouterPhoto).toHaveBeenCalledTimes(1);
+  });
+
   it('@critique anti-vacuité : le champ est rendu, ACTIF, image + caméra arrière', () => {
     rendreZoneQuestion();
     const champ = champObligatoire();
