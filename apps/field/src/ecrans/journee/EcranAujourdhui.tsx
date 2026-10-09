@@ -51,6 +51,7 @@ import {
   CLE_DERNIER_RITUEL,
   construireJournee,
   rappelFinDeJournee,
+  type EtatMissionDuJour,
   type JourneeTerrain,
 } from '../../agenda/jour.js';
 import { LIBELLE_TYPE_SESSION } from '../../agenda/sessions.js';
@@ -166,6 +167,11 @@ function LigneSession({
 
 export function EcranAujourdhui(): ReactNode {
   const { base, naviguer } = useTerrain();
+  // Le texte d'un « indisponible » est celui du port (arbitrage A01) — jamais recomposé ici.
+  const messageDeSync = (etatMission: EtatMissionDuJour): string | null =>
+    base === null || etatMission.sync.statut !== 'indisponible'
+      ? null
+      : portSyncDeLaBase(base).messageAffiche(etatMission.mission.id);
   const enLigne = useEnLigne();
 
   // `useLiveQuery` : le cockpit se rafraîchit quand la base bouge, sans qu'aucun
@@ -440,8 +446,7 @@ export function EcranAujourdhui(): ReactNode {
                   etatMission.sync.derniereSyncReussieLe,
                   etatMission.mission.timezone,
                 )}`}
-            {etatMission.sync.statut === 'indisponible' &&
-              ' · la synchronisation n’est pas encore disponible dans cette version'}
+            {(messageDeSync(etatMission) ?? '') !== '' && ` · ${messageDeSync(etatMission) ?? ''}`}
           </p>
           {/*
             NB-15 — LE COMPTEUR EST LE BOUTON, et il n'y a qu'un compteur.

@@ -780,6 +780,11 @@ describe('EcranAujourdhui — rappel discret tant que le rituel du jour n’est 
 // depuis L6a, qui enverrait l'auditeur attendre une mise à jour au lieu de se
 // reconnecter.
 // =============================================================================
+/** Les textes de `indisponible`, arbitrage A01 du 2026-10-09 (statut unique, message du port). */
+const MESSAGE_RECONNEXION_ARBITRE =
+  'Reconnexion requise pour synchroniser. Vos saisies restent en sécurité sur cet appareil.';
+const MESSAGE_AUCUNE_MISSION_ARBITRE = 'Aucune mission à synchroniser sur cet appareil.';
+
 describe('EcranAujourdhui — §31-3 : refresh refusé, reconnexion requise, la collecte continue', () => {
   /** Un port réel dont la sync vient de rendre « reconnexion requise » (aucun jeton rangé). */
   async function apresRefreshRefuse(): Promise<BaseLocale> {
@@ -790,10 +795,13 @@ describe('EcranAujourdhui — §31-3 : refresh refusé, reconnexion requise, la 
     // Aucun appel réseau n'est attendu : sans refresh rangé, le transport conclut
     // seul à la reconnexion. Un appel qui partirait recevrait un 401.
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ error: { code: 'NON_AUTHENTIFIE', message: 'Session expirée.' } }), {
-        status: 401,
-        headers: { 'content-type': 'application/json' },
-      }),
+      new Response(
+        JSON.stringify({ error: { code: 'NON_AUTHENTIFIE', message: 'Session expirée.' } }),
+        {
+          status: 401,
+          headers: { 'content-type': 'application/json' },
+        },
+      ),
     );
     const resultat = await portSyncDeLaBase(base).synchroniserMaintenant(MISSION_ALPHA);
     expect(resultat.statut).toBe('indisponible');
@@ -811,9 +819,8 @@ describe('EcranAujourdhui — §31-3 : refresh refusé, reconnexion requise, la 
     await attendreLecture();
 
     const texte = carte(/Alpha — mission fictive/).textContent;
-    expect(texte).toMatch(/reconnexion requise pour synchroniser/i);
-    expect(texte).toMatch(/en sécurité sur l.appareil/i);
-    expect(texte).toMatch(/collecte/i);
+    // Texte EXACT arbitré par A01 (2026-10-09), affiché tel que le port le rend.
+    expect(texte).toContain(MESSAGE_RECONNEXION_ARBITRE);
     expect(texte).not.toMatch(/pas encore disponible/i);
     expect(document.body.textContent).not.toMatch(/pas encore disponible dans cette version/i);
   });
@@ -825,10 +832,22 @@ describe('EcranAujourdhui — §31-3 : refresh refusé, reconnexion requise, la 
 
     await waitFor(() => {
       const porteuse = document.querySelector('[title]');
-      expect(porteuse?.getAttribute('title') ?? '').toMatch(/reconnexion requise/i);
+      expect(porteuse?.getAttribute('title') ?? '').toBe(MESSAGE_RECONNEXION_ARBITRE);
     });
-    const motif = document.querySelector('[title]')?.getAttribute('title') ?? '';
-    expect(motif).toMatch(/en sécurité sur l.appareil/i);
-    expect(motif).not.toMatch(/pas encore disponible/i);
+  });
+});
+
+describe('PastilleSyncCoquille — aucune mission embarquée (arbitrage A01 2026-10-09)', () => {
+  it('le motif dit exactement « Aucune mission à synchroniser sur cet appareil. » — ni reconnexion, ni « pas encore disponible »', async () => {
+    const base = await nouvelleBase();
+    await installer(base);
+    terrain = terrainDeBase(base);
+    render(<PastilleSyncCoquille />);
+
+    await waitFor(() => {
+      const porteuse = document.querySelector('[title]');
+      expect(porteuse?.getAttribute('title') ?? '').toBe(MESSAGE_AUCUNE_MISSION_ARBITRE);
+    });
+    expect(document.body.textContent).not.toMatch(/reconnexion requise|pas encore disponible/i);
   });
 });

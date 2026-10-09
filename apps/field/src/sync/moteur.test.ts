@@ -486,15 +486,23 @@ describe('moteur — scénario §9.8 n°2 : kill de l’app pendant un push', ()
     const avant = (await file()).map((o) => o.opId);
     const siege = siegeFictif();
 
-    // Le siège reçoit et applique, puis l'onglet meurt avant la réponse.
+    // Le siège reçoit et applique, puis l'onglet meurt avant la réponse. On attend
+    // l'ÉVÉNEMENT « le siège a appliqué le lot », jamais un délai fixe.
+    let siegeAApplique: () => void = () => undefined;
+    const lotApplique = new Promise<void>((resoudre) => {
+      siegeAApplique = resoudre;
+    });
     const transportTue: Pick<TransportSync, 'pousser'> = {
       async pousser(lot) {
         await siege.transport.pousser(lot);
+        siegeAApplique();
         return new Promise<never>(() => undefined);
       },
     };
     void creerMoteurSync({ base, coffre, transport: transportTue }).pousser(MISSION_A);
-    await new Promise((r) => setTimeout(r, 50));
+    await lotApplique;
+    expect(siege.lots).toHaveLength(1);
+    expect(siege.lots[0]?.operations.map((o) => o.opId)).toEqual(avant);
 
     // « Redémarrage » : nouvelle connexion à la MÊME base persistée.
     base.close();

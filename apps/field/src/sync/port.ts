@@ -30,7 +30,15 @@ import {
   type StatutSync,
 } from '../local/port-sync.js';
 import { creerMoteurSync, type BilanPush } from './moteur.js';
-import type { TransportSync } from './transport.js';
+import { MESSAGE_RECONNEXION_REQUISE, type TransportSync } from './transport.js';
+
+/**
+ * Arbitrage A01 (2026-10-09) : `indisponible` reste UN statut (interface gelée),
+ * mais il recouvre trois faits que l'écran ne doit pas confondre. Le TEXTE vient
+ * d'ici — `messageAffiche` —, les écrans l'affichent sans le recomposer.
+ */
+export const MESSAGE_VERIFICATION_SYNC = 'Vérification de la synchronisation…';
+export const MESSAGE_AUCUNE_MISSION = 'Aucune mission à synchroniser sur cet appareil.';
 
 export interface DependancesPort {
   readonly base: BaseLocale;
@@ -41,6 +49,20 @@ export interface DependancesPort {
 export interface PortSyncReel extends PortSync {
   /** Relit `meta` (dernier succès) et l'outbox, met à jour l'instantané de `etat()`. */
   actualiser(missionId: string): Promise<EtatSyncMission>;
+}
+
+/**
+ * Le port réel tel que `creerPortSync` le rend : avec le TEXTE de ses états.
+ * Séparé de `PortSyncReel` pour que les doubles de test d'un port réel (qui ne
+ * simulent que l'état) restent des `PortSyncReel` valides.
+ */
+export interface PortSyncAffichable extends PortSyncReel {
+  /**
+   * Le texte d'un `indisponible` : reconnexion requise (refresh refusé), état
+   * pas encore lu, ou — `null` en entrée — aucune mission sur l'appareil.
+   * Tout autre statut : `null`, l'écran n'a rien à ajouter.
+   */
+  messageAffiche(missionId: string | null): string | null;
 }
 
 const MESSAGE_HORS_LIGNE =
@@ -112,7 +134,7 @@ function etatNonLu(missionId: string): EtatSyncMission {
   };
 }
 
-export function creerPortSync(deps: DependancesPort): PortSyncReel {
+export function creerPortSync(deps: DependancesPort): PortSyncAffichable {
   const moteur = creerMoteurSync(deps);
   const instantanes = new Map<string, EtatSyncMission>();
   const echecs = new Map<string, EchecRetenu>();
@@ -176,6 +198,12 @@ export function creerPortSync(deps: DependancesPort): PortSyncReel {
       else echecs.set(missionId, retenu);
       await actualiser(missionId);
       return resultat;
+    },
+
+    messageAffiche(missionId: string | null): string | null {
+      if (missionId === null) return MESSAGE_AUCUNE_MISSION;
+      if (echecs.get(missionId) === 'indisponible') return MESSAGE_RECONNEXION_REQUISE;
+      return instantanes.has(missionId) ? null : MESSAGE_VERIFICATION_SYNC;
     },
 
     etat(missionId: string): EtatSyncMission {

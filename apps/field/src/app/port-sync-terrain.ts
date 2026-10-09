@@ -17,13 +17,13 @@ import type { BaseLocale } from '../local/base.js';
 import type { Coffre } from '../local/coffre.js';
 import { contexteLocal, contexteLocalInstalle } from '../local/contexte.js';
 import { ecouterRetourReseau } from '../sync/declencheurs.js';
-import { creerPortSync, type PortSyncReel } from '../sync/port.js';
+import { creerPortSync, type PortSyncAffichable } from '../sync/port.js';
 import { creerTransport } from '../sync/transport.js';
 
-const portsParBase = new WeakMap<BaseLocale, PortSyncReel>();
+const portsParBase = new WeakMap<BaseLocale, PortSyncAffichable>();
 
 /** Le port réel de cette base — créé une fois, partagé par tous les écrans. */
-export function portSyncDeLaBase(base: BaseLocale): PortSyncReel {
+export function portSyncDeLaBase(base: BaseLocale): PortSyncAffichable {
   const connu = portsParBase.get(base);
   if (connu !== undefined) return connu;
   const transport = creerTransport({
@@ -63,7 +63,7 @@ export function brancherRetourReseau(base: BaseLocale, cible: EventTarget): () =
  * la fin de journée et la pastille avant de rendre (`etat()` est synchrone et ne
  * sait que ce qui a été lu). Appelé dans une `useLiveQuery`, il en suit la base.
  */
-export async function portSyncActualise(base: BaseLocale): Promise<PortSyncReel> {
+export async function portSyncActualise(base: BaseLocale): Promise<PortSyncAffichable> {
   const port = portSyncDeLaBase(base);
   for (const mission of await base.missions.toArray()) await port.actualiser(mission.id);
   return port;

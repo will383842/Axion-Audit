@@ -313,8 +313,10 @@ describe('transport — scénario §9.8 n°8 : refresh refusé ou réseau absent
   });
 
   it('le message est celui du 05 §31-3, en français', () => {
-    expect(MESSAGE_RECONNEXION_REQUISE).toMatch(/reconnexion requise pour synchroniser/i);
-    expect(MESSAGE_RECONNEXION_REQUISE).toMatch(/vos données sont en sécurité sur l.appareil/i);
+    // Texte EXACT arbitré par A01 (2026-10-09).
+    expect(MESSAGE_RECONNEXION_REQUISE).toBe(
+      'Reconnexion requise pour synchroniser. Vos saisies restent en sécurité sur cet appareil.',
+    );
   });
 
   it('RÉSEAU absent pendant le refresh : « hors ligne », le refresh est CONSERVÉ (le piège du §31-3)', async () => {

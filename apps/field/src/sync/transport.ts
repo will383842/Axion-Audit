@@ -32,9 +32,9 @@ import {
 export const CHEMIN_PUSH = '/api/v1/sync/push';
 export const CHEMIN_REFRESH = '/api/v1/auth/refresh';
 
-/** 05 §31-3, mot pour mot sur le fond : la collecte continue, seule la sync attend. */
+/** 05 §31-3 — texte EXACT arbitré par A01 (2026-10-09) : seule la sync attend. */
 export const MESSAGE_RECONNEXION_REQUISE =
-  'Reconnexion requise pour synchroniser — vos données sont en sécurité sur l’appareil. Vous pouvez continuer la collecte.';
+  'Reconnexion requise pour synchroniser. Vos saisies restent en sécurité sur cet appareil.';
 
 const MESSAGE_REPONSE_ILLISIBLE =
   'Le siège a répondu dans un format inattendu. Rien n’a été retiré de cet appareil ; la synchronisation sera retentée.';

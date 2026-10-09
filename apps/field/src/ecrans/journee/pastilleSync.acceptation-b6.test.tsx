@@ -36,6 +36,7 @@ import { PastilleSync } from '@axion/ui';
 import { App } from '../../App.js';
 import type { ValeurTerrain } from '../../app/contexte.js';
 import { MENTION_SYNC_INDISPONIBLE, versEtatPastille } from '../../app/etat-sync-affiche.js';
+import { MESSAGE_AUCUNE_MISSION, MESSAGE_VERIFICATION_SYNC } from '../../sync/port.js';
 import { BaseLocale } from '../../local/base.js';
 import { creerDekEnveloppee, deriverKek, ouvrirCoffre } from '../../local/coffre.js';
 import { installerContexteLocal, retirerContexteLocal } from '../../local/contexte.js';
@@ -221,9 +222,19 @@ describe('B6 — sur l’écran où A54 en a vu deux, il n’y a qu’UNE pastil
       render(<App />);
       const mot = await screen.findByText(MOTS_DE_PASTILLE);
       const pastille = mot.parentElement;
-      expect(pastille?.getAttribute('title')).toBe(MENTION_SYNC_INDISPONIBLE);
+      // Arbitrage A01 (2026-10-09) : le motif est le MESSAGE DU PORT. Tant que la
+      // lecture n'a pas abouti, « Vérification de la synchronisation… » ; une fois
+      // lue, cet appareil sans mission dit « Aucune mission à synchroniser… ».
+      expect([MESSAGE_VERIFICATION_SYNC, MESSAGE_AUCUNE_MISSION]).toContain(
+        pastille?.getAttribute('title'),
+      );
+      await waitFor(() => {
+        expect(pastille?.getAttribute('title')).toBe(MESSAGE_AUCUNE_MISSION);
+      });
+      expect(pastille?.getAttribute('title')).not.toMatch(/pas encore disponible/i);
       // La mention nomme l'indisponibilité ET le geste qui protège la journée.
-      expect(MENTION_SYNC_INDISPONIBLE).toMatch(/n’est pas encore disponible/i);
+      // Depuis L6a, « indisponible » n'est plus « absente de cette version » (05 §31-3).
+      expect(MENTION_SYNC_INDISPONIBLE).not.toMatch(/pas encore disponible dans cette version/i);
       expect(MENTION_SYNC_INDISPONIBLE).toMatch(/sauvegarde de secours/i);
     } finally {
       bruit.restaurer();

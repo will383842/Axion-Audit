@@ -19,6 +19,14 @@
 //     actualiser(missionId: string): Promise<EtatSyncMission>;
 //   }
 //   export function creerPortSync(deps: DependancesPort): PortSyncReel;
+//   // Arbitrage A01 (2026-10-09) — `indisponible` reste UN statut ; le texte vient du port :
+//   //   PortSyncReel.messageAffiche(missionId: string | null): string | null
+//   //     · refresh refusé  → MESSAGE_RECONNEXION_REQUISE (transport.ts, texte exact)
+//   //     · pas encore lu   → MESSAGE_VERIFICATION_SYNC
+//   //     · `null` (appareil sans mission) → MESSAGE_AUCUNE_MISSION
+//   //     · tout autre statut → null (l'écran n'a rien à ajouter)
+//   export const MESSAGE_VERIFICATION_SYNC = 'Vérification de la synchronisation…';
+//   export const MESSAGE_AUCUNE_MISSION = 'Aucune mission à synchroniser sur cet appareil.';
 //
 // Correspondance figée (StatutSync / ResultatSync.statut) :
 //   push abouti, file vide      → 'a_jour'      / 'succes'
@@ -44,7 +52,7 @@ import { chargeInterviewSchema } from '../local/formes.js';
 import { enregistrerJetonRafraichissement, lireJetonRafraichissement } from '../local/jetons.js';
 import { reinitialiserHorloge } from '../local/horloge.js';
 import { evaluerAlerteSauvegarde, type PortSync } from '../local/port-sync.js';
-import { creerPortSync } from './port.js';
+import { MESSAGE_AUCUNE_MISSION, MESSAGE_VERIFICATION_SYNC, creerPortSync } from './port.js';
 import {
   CHEMIN_PUSH,
   CHEMIN_REFRESH,
@@ -409,5 +417,58 @@ describe('port réel — avant toute lecture, panne locale, messages', () => {
 
     expect(resultat.statut).toBe('echec');
     expect(resultat.message).toBe('Lot refusé (motif fictif).');
+  });
+});
+
+// =============================================================================
+// E. Arbitrage A01 (2026-10-09) — les trois textes de `indisponible`
+// =============================================================================
+describe('port réel — un statut « indisponible », trois messages exacts', () => {
+  it('les constantes portent le texte arbitré, mot pour mot', () => {
+    expect(MESSAGE_VERIFICATION_SYNC).toBe('Vérification de la synchronisation…');
+    expect(MESSAGE_AUCUNE_MISSION).toBe('Aucune mission à synchroniser sur cet appareil.');
+    expect(MESSAGE_RECONNEXION_REQUISE).toBe(
+      'Reconnexion requise pour synchroniser. Vos saisies restent en sécurité sur cet appareil.',
+    );
+  });
+
+  it('état pas encore lu : statut « indisponible », message « Vérification de la synchronisation… »', () => {
+    const port = creerPortSync({ base, coffre, transport: siege() });
+
+    expect(port.etat(MISSION).statut).toBe('indisponible');
+    expect(port.messageAffiche(MISSION)).toBe(MESSAGE_VERIFICATION_SYNC);
+  });
+
+  it('appareil sans mission : « Aucune mission à synchroniser sur cet appareil. »', () => {
+    const port = creerPortSync({ base, coffre, transport: siege() });
+
+    expect(port.messageAffiche(null)).toBe(MESSAGE_AUCUNE_MISSION);
+  });
+
+  it('refresh refusé : « indisponible » et le message de reconnexion, pas celui de la vérification', async () => {
+    await ecrireSession();
+    const port = creerPortSync({
+      base,
+      coffre,
+      transport: {
+        pousser: () =>
+          Promise.resolve({ type: 'reconnexion_requise', message: MESSAGE_RECONNEXION_REQUISE }),
+      },
+    });
+
+    await port.synchroniserMaintenant(MISSION);
+
+    expect(port.etat(MISSION).statut).toBe('indisponible');
+    expect(port.messageAffiche(MISSION)).toBe(MESSAGE_RECONNEXION_REQUISE);
+  });
+
+  it('une fois lu, sans reconnexion requise : aucun message d’indisponibilité', async () => {
+    await ecrireSession();
+    const port = creerPortSync({ base, coffre, transport: siege() });
+
+    await port.actualiser(MISSION);
+
+    expect(port.etat(MISSION).statut).not.toBe('indisponible');
+    expect(port.messageAffiche(MISSION)).toBeNull();
   });
 });
