@@ -135,7 +135,13 @@ export interface RubriqueRapport {
 // LES TABLES QU'AUCUN CODE DE PRODUCTION N'ÉCRIT — mesuré, pas recopié
 // -----------------------------------------------------------------------------
 /**
- * La liste DÉCLARÉE des tables sans écrivain de production, au 2026-09-09.
+ * La liste DÉCLARÉE des tables sans écrivain de production, au 2026-10-09.
+ *
+ * Re-notée le 2026-10-09 (L6a, PR #140) : `interviews`, `answers` et
+ * `attachments` ont gagné leur écrivain de production — `POST /v1/sync/push`
+ * (`apps/api/src/sync/depot.ts`). Leurs éléments passent d'ALIMENTATION_ABSENTE à
+ * PORTE ; les éléments FORMAT_ABSENT qui les citent (groupe d'interlocuteur) ne
+ * bougent pas, leur manque est une colonne, pas un écrivain.
  *
  * La recette ne la croit pas : elle inventorie elle-même les `insert(...)` de
  * `apps/api/src` et compare. Cette constante est donc l'ATTENDU d'une mesure, et
@@ -143,9 +149,6 @@ export interface RubriqueRapport {
  * comparaison rougit et le verdict de la rubrique se re-note.
  */
 export const TABLES_SANS_ECRIVAIN_DE_PRODUCTION: readonly TableSurveillee[] = [
-  'interviews',
-  'answers',
-  'attachments',
   'findings',
   'use_cases',
   'tools_inventory',
@@ -273,7 +276,7 @@ export const GRILLE_20_3: readonly RubriqueRapport[] = [
       },
       {
         nom: '« entretiens menés » — type, mode, unité, auditeur, durée, statut',
-        nature: 'ALIMENTATION_ABSENTE',
+        nature: 'PORTE',
         porteur: {
           fichier: SESSIONS,
           colonnes: [
@@ -302,7 +305,7 @@ export const GRILLE_20_3: readonly RubriqueRapport[] = [
       },
       {
         nom: 'le croisement unité × bloc, réponse par réponse',
-        nature: 'ALIMENTATION_ABSENTE',
+        nature: 'PORTE',
         porteur: {
           fichier: REPONSES,
           colonnes: ['bloc_code', 'bloc_libelle', 'unite_id', 'unite_nom', 'valeur'],
@@ -497,7 +500,7 @@ export const GRILLE_20_3: readonly RubriqueRapport[] = [
     elements: [
       {
         nom: 'la matière : niveau IA, tâches, outils (blocs 2 à 5) — §20.6',
-        nature: 'ALIMENTATION_ABSENTE',
+        nature: 'PORTE',
         porteur: {
           fichier: REPONSES,
           colonnes: ['bloc_code', 'question_texte', 'valeur', 'unite_nom'],
@@ -529,7 +532,7 @@ export const GRILLE_20_3: readonly RubriqueRapport[] = [
       },
       {
         nom: 'annexe « Limites et réserves » (§27.4) : refus et sans-objet motivés',
-        nature: 'ALIMENTATION_ABSENTE',
+        nature: 'PORTE',
         porteur: {
           fichier: REPONSES,
           colonnes: [
@@ -544,7 +547,7 @@ export const GRILLE_20_3: readonly RubriqueRapport[] = [
       },
       {
         nom: 'annexe pièces jointes : le manifeste de ce qui a été collecté',
-        nature: 'ALIMENTATION_ABSENTE',
+        nature: 'PORTE',
         porteur: {
           fichier: MANIFESTE,
           colonnes: ['attachment_id', 'session_id', 'type', 'fichier'],
@@ -580,7 +583,9 @@ export function verdictDeRubrique(rubrique: RubriqueRapport): NatureDuManque {
 }
 
 /**
- * LE VERDICT DÉCLARÉ du critère d'acceptation L7-min, au 2026-09-09.
+ * LE VERDICT DÉCLARÉ du critère d'acceptation L7-min, au 2026-10-09 (re-noté à L6a :
+ * les rubriques 3 et 12 deviennent rédigeables ; 4 et 11 restent bloquées par le
+ * FORMAT — groupe d'interlocuteur).
  *
  * Il est ÉCRIT ici pour être mis en défaut : la recette le recalcule depuis la
  * grille et depuis l'archive réelle, et rougit si les deux divergent. Le jour où
@@ -588,13 +593,13 @@ export function verdictDeRubrique(rubrique: RubriqueRapport): NatureDuManque {
  * est rouge, et c'est ce qu'on veut.
  */
 export const VERDICT_DECLARE = {
-  date: '2026-09-09',
-  rubriquesRedigeables: [1] as readonly number[],
+  date: '2026-10-09',
+  rubriquesRedigeables: [1, 3, 12] as readonly number[],
   critereL7Min: 'NON TENU' as const,
   /** Rubriques bloquées par un trou de FORMAT — dette de l'export (L7 / L10). */
   bloqueesParLeFormat: [4, 5, 9, 10, 11] as readonly number[],
   /** Rubriques bloquées par un trou de BRANCHEMENT — dette de L8. */
   bloqueesParLeBranchement: [2] as readonly number[],
   /** Rubriques bloquées par un trou d'ALIMENTATION seul — dette de L6 / Phase 2. */
-  bloqueesParLAlimentation: [3, 6, 7, 8, 12] as readonly number[],
+  bloqueesParLAlimentation: [6, 7, 8] as readonly number[],
 } as const;
