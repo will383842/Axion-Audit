@@ -394,6 +394,7 @@ export default tseslint.config(
       'apps/field/src/local/horloge.ts',
       'apps/field/src/local/ecriture.ts',
       'apps/field/src/local/base.ts',
+      'apps/field/src/sync/moteur.ts',
       '**/*.{test,spec}.{ts,tsx}',
     ],
     rules: {
@@ -426,7 +427,18 @@ export default tseslint.config(
     // dans Dexie. `base.ts` porte `meta`, qui ne se synchronise pas et n’a donc pas
     // d’op ; `ecriture.ts` porte tout le reste, ligne + op dans UNE transaction.
     // ① continue de s’appliquer à eux.
-    files: ['apps/field/src/local/ecriture.ts', 'apps/field/src/local/base.ts'],
+    //
+    // TROISIÈME ET DERNIER, ajouté par L6a (A25, 2026-10-09) : le moteur de montée
+    // (`sync/moteur.ts`). Il n’écrit QUE l’outbox, et seulement pour y appliquer
+    // une réponse serveur (sortie sur `applied`/`duplicate`/`superseded`, statut
+    // `rejetee`/`a_examiner`, `tentatives`) — la « sortie de file sur réponse
+    // serveur » que `local/depots/outbox.ts` et `LOT_L5.md` §3.3-① réservent à
+    // L6a. Il ne crée aucune ligne de donnée, donc aucune donnée sans op.
+    files: [
+      'apps/field/src/local/ecriture.ts',
+      'apps/field/src/local/base.ts',
+      'apps/field/src/sync/moteur.ts',
+    ],
     rules: {
       'no-restricted-syntax': [
         'error',

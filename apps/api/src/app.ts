@@ -28,6 +28,7 @@ import { routesAssignments } from './routes/assignments.js';
 import { routesInterviews } from './routes/interviews.js';
 import { routesPilotage } from './routes/pilotage.js';
 import { routesExport } from './routes/export.js';
+import { routesSync } from './sync/routes.js';
 
 // =============================================================================
 // PÉRIMÈTRE DE CONFIANCE DES EN-TÊTES DE PROXY — correctif de sécurité.
@@ -334,6 +335,12 @@ export async function construireApp(): Promise<FastifyInstance> {
   // « mission » : un non-membre reçoit 404, jamais 403. Aucune marque financière —
   // l’export ne lit aucune table de chiffrage (invariant 3).
   await app.register(routesExport, { prefix: '/v1' });
+  // Montée de synchronisation (05 §9.3) — lot L6/L6a. UNE route, listée au 05 §8.
+  // Politique `roles` admin/consultant à l'entrée ; l'appartenance à la mission et
+  // la propriété §9.9 PAR OP sont prouvées dans le service (`sync/service.ts`,
+  // `sync/proprietaire.ts`). Aucune marque financière : la montée ne touche aucune
+  // table de chiffrage (invariant 3).
+  await app.register(routesSync, { prefix: '/v1' });
 
   return app;
 }
