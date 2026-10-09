@@ -171,7 +171,19 @@ export function creerSiegePiecesFictif(reglages: ReglagesSiegePieces = {}) {
     ): Promise<ResultatTerminerFictif> {
       appels.push({ route: 'complete', id });
       if (reseauTombe()) return { type: 'hors_ligne' };
-      if (assembles.has(id)) return { type: 'ok', donnees: { statut: 'assemble' } };
+      const deja = assembles.get(id);
+      if (deja !== undefined) {
+        // `DECISIONS.md` [L6c] : même empreinte → 200 ; autre empreinte → 409
+        // `UPLOAD_ALREADY_ASSEMBLED`, terminal (rendu par le transport en refus).
+        if (sha256NodeHex(deja) === corps.sha256) {
+          return { type: 'ok', donnees: { statut: 'assemble' } };
+        }
+        return {
+          type: 'refus',
+          statut: 409,
+          message: 'Cette pièce est déjà assemblée au siège avec un autre contenu.',
+        };
+      }
       const m = morceaux(id);
       const manquants: number[] = [];
       for (let i = 0; i < corps.chunks; i += 1) if (!m.has(i)) manquants.push(i);
@@ -216,6 +228,11 @@ export function creerSiegePiecesFictif(reglages: ReglagesSiegePieces = {}) {
     assemble: (id: string): Uint8Array | undefined => assembles.get(id),
     indexEmis: (id: string): number[] =>
       appels.filter((a) => a.route === 'chunk' && a.id === id).map((a) => a.index ?? -1),
+    /** Pose une pièce DÉJÀ assemblée au siège (envoi antérieur, réponse perdue). */
+    preassembler(id: string, octets: Uint8Array): void {
+      assembles.set(id, new Uint8Array(octets));
+      recus.set(id, new Map());
+    },
     retablirReseau(): void {
       delete reglages.coupureApresMorceaux;
       reglages.horsLigne = false;

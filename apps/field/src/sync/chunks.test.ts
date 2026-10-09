@@ -439,6 +439,52 @@ describe('envoyerPiecesEnAttente — statut local, persistant au redémarrage', 
     expect(await lireOctetsPiece(base, coffre, id)).not.toBeNull();
   });
 
+  // `DECISIONS.md` [L6c] (2026-10-09) : le terrain appelle TOUJOURS `complete`
+  // avec son empreinte, même si `status` répond `assemble` — c'est la seule façon
+  // de savoir que ce que le siège a assemblé est bien CETTE photo.
+  it('@critique `status` = assemble, même empreinte : `complete` → 200, « envoyee », aucun morceau', async () => {
+    const id = uuidv7();
+    const octets = octetsVaries(3 * PETIT, 41);
+    await ecrirePieceAvecOctets(demandePhoto(id, octets), octets);
+    const siege = creerSiegePiecesFictif();
+    siege.preassembler(id, octets);
+
+    await envoyerPiecesEnAttente(
+      { base, coffre, transport: siege.transport, tailleMorceau: PETIT },
+      MISSION_PIECES,
+    );
+    expect(siege.appels.filter((a) => a.id === id).map((a) => a.route)).toEqual([
+      'status',
+      'complete',
+    ]);
+    expect(siege.indexEmis(id)).toEqual([]);
+    expect(await lireStatutEnvoi(base, id)).toBe('envoyee');
+  });
+
+  // IMPLÉMENTATION FAUSSE ATTRAPÉE : `if (statut === 'assemble') return envoyee` —
+  // le siège détient d'AUTRES octets sous cet id, et la photo de l'appareil est
+  // déclarée remontée alors qu'elle n'existe nulle part ailleurs (invariant 8).
+  it('@critique `status` = assemble, AUTRE empreinte : 409 ALREADY_ASSEMBLED → « en_echec », aucun morceau', async () => {
+    const id = uuidv7();
+    const octets = octetsVaries(3 * PETIT, 42);
+    await ecrirePieceAvecOctets(demandePhoto(id, octets), octets);
+    const siege = creerSiegePiecesFictif();
+    siege.preassembler(id, octetsVaries(3 * PETIT, 43));
+
+    const bilan = await envoyerPiecesEnAttente(
+      { base, coffre, transport: siege.transport, tailleMorceau: PETIT },
+      MISSION_PIECES,
+    );
+    expect(siege.appels.filter((a) => a.id === id).map((a) => a.route)).toEqual([
+      'status',
+      'complete',
+    ]);
+    expect(siege.indexEmis(id)).toEqual([]);
+    expect(bilan.enEchec).toBe(1);
+    expect(await lireStatutEnvoi(base, id)).toBe('en_echec');
+    expect(await lireOctetsPiece(base, coffre, id)).not.toBeNull();
+  });
+
   it('une pièce déjà « envoyee » ne repart pas', async () => {
     const siege = creerSiegePiecesFictif();
     const id = await photo(PETIT);
