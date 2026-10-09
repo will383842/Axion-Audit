@@ -41,6 +41,8 @@ import { BaseLocale, cleEmbarquement, ecrireMeta } from '../../local/base.js';
 import { creerDekEnveloppee, deriverKek, ouvrirCoffre } from '../../local/coffre.js';
 import { installerContexteLocal, retirerContexteLocal } from '../../local/contexte.js';
 import { appliquerDescente, ecrireLocal } from '../../local/ecriture.js';
+import { portSyncDeLaBase } from '../../app/port-sync-terrain.js';
+import { cleLignesIllisibles } from '../../sync/descente.js';
 import { cleReponsesArbitrees } from '../../sync/moteur.js';
 import { EcranSynchronisation } from './EcranSynchronisation.js';
 
@@ -472,5 +474,66 @@ describe('EcranSynchronisation — tokens du design system uniquement', () => {
         expect(motif.test(texte), `${fichier} : ${String(motif)}`).toBe(false);
       }
     }
+  });
+});
+
+// =============================================================================
+// RÉSERVES A29 (L6b) — lignes illisibles, échec de « Remettre en file »
+// =============================================================================
+describe('EcranSynchronisation — réserves A29', () => {
+  it('@critique lignes du siège illisibles : un statut en français, compté, qui invite à resynchroniser', async () => {
+    const base = await nouvelleBase();
+    await installer(base);
+    await ecrireMeta(base, cleLignesIllisibles(MISSION), 2);
+    terrain = terrainDeBase(base);
+    render(<EcranSynchronisation />);
+    await attendreLecture();
+
+    const statut = screen
+      .getAllByRole('status')
+      .find((el) => /illisible|non lisible/i.test(el.textContent));
+    if (statut === undefined) throw new Error('aucun statut ne dit les lignes illisibles');
+    expect(statut.textContent).toMatch(/\b2\b/);
+    expect(statut.textContent).toMatch(/synchronis/i);
+    expect(statut.hidden).toBe(false);
+    expect(screen.queryAllByRole('alert').length).toBeLessThanOrEqual(1);
+  });
+
+  it('aucune ligne illisible : rien n’en est dit', async () => {
+    const base = await nouvelleBase();
+    await installer(base);
+    await saisirReponse();
+    terrain = terrainDeBase(base);
+    render(<EcranSynchronisation />);
+    await attendreLecture();
+    expect(screen.queryByText(/illisible|non lisible/i)).toBeNull();
+  });
+
+  it('@critique « Remettre en file » qui échoue : un statut en français le dit, l’op reste à examiner, au plus UNE alerte', async () => {
+    const base = await nouvelleBase();
+    await installer(base);
+    const { opExamen } = await semerFileNominale(base);
+    const port = portSyncDeLaBase(base);
+    const refus = vi
+      .spyOn(port, 'remettreEnFile')
+      .mockRejectedValue(new Error('base verrouillée (fictif)'));
+    terrain = terrainDeBase(base);
+    render(<EcranSynchronisation />);
+    await attendreLecture();
+
+    fireEvent.click(screen.getByRole('button', { name: /remettre en file/i }));
+
+    await waitFor(() => {
+      expect(refus).toHaveBeenCalled();
+      const statut = screen
+        .getAllByRole('status')
+        .find((el) => /n’a pas pu|n'a pas pu|impossible|échec|échoué/i.test(el.textContent));
+      expect(statut).toBeDefined();
+      expect(statut?.textContent).toMatch(/[a-zéèàç]{4}/);
+    });
+    expect(screen.queryAllByRole('alert').length).toBeLessThanOrEqual(1);
+    expect((await base.outbox.get(opExamen))?.statut).toBe('a_examiner');
+    // Le geste reste offert : l'auditeur peut réessayer.
+    expect(screen.getByRole('button', { name: /remettre en file/i })).toBeTruthy();
   });
 });

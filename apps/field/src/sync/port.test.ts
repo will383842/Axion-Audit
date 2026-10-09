@@ -61,6 +61,7 @@ import {
   type ResultatTransport,
   type TransportSync,
 } from './transport.js';
+import { tirerSansChangement } from './fixtures/descente-vide.js';
 
 const MISSION = '0191e2a0-0000-7000-8000-00000000f1de';
 const ORG_UNIT = '0191e2a0-0000-7000-8000-00000000c001';
@@ -138,9 +139,10 @@ async function ecrireSession(): Promise<string> {
 
 function siege(
   regle: (rang: number) => ResultatOp = () => 'applied',
-): Pick<TransportSync, 'pousser'> {
+): Pick<TransportSync, 'pousser' | 'tirer'> {
   let rang = 0;
   return {
+    tirer: tirerSansChangement,
     // eslint-disable-next-line @typescript-eslint/require-await -- signature asynchrone du transport.
     async pousser(lot: LotPush): Promise<ResultatTransport<ReponsePush>> {
       return {
@@ -158,7 +160,8 @@ function siege(
   };
 }
 
-const injoignable: Pick<TransportSync, 'pousser'> = {
+const injoignable: Pick<TransportSync, 'pousser' | 'tirer'> = {
+  tirer: tirerSansChangement,
   // eslint-disable-next-line @typescript-eslint/require-await -- signature asynchrone du transport.
   async pousser() {
     return { type: 'hors_ligne' };
@@ -407,7 +410,8 @@ describe('port réel — avant toute lecture, panne locale, messages', () => {
 
   it('refus du lot par le siège : « echec », le motif du siège est rendu à l’auditeur', async () => {
     await ecrireSession();
-    const transport: Pick<TransportSync, 'pousser'> = {
+    const transport: Pick<TransportSync, 'pousser' | 'tirer'> = {
+      tirer: tirerSansChangement,
       pousser: () =>
         Promise.resolve({ type: 'refus', statut: 400, message: 'Lot refusé (motif fictif).' }),
     };
@@ -451,6 +455,7 @@ describe('port réel — un statut « indisponible », trois messages exacts', (
       base,
       coffre,
       transport: {
+        tirer: tirerSansChangement,
         pousser: () =>
           Promise.resolve({ type: 'reconnexion_requise', message: MESSAGE_RECONNEXION_REQUISE }),
       },
