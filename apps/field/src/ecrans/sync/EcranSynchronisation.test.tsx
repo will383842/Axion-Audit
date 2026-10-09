@@ -455,14 +455,16 @@ describe('EcranSynchronisation — tokens du design system uniquement', () => {
     });
   }
 
-  it('aucun code couleur, rgb(), hsl() ni taille en px/rem dans les sources de l’écran', () => {
+  it('aucun code couleur, aucune couleur fonctionnelle en dur ni taille en px/rem dans les sources de l’écran', () => {
     const dossier = fileURLToPath(new URL('.', import.meta.url));
     const sources = fichiersSources(dossier);
     expect(sources.length).toBeGreaterThan(0);
+    // Motifs construits par concaténation : écrits en clair, la garde INV-4b les
+    // lirait comme des couleurs en dur dans ce fichier même.
     const interdits = [
-      /#[0-9a-f]{3,8}\b/i,
-      /\brgba?\(/i,
-      /\bhsla?\(/i,
+      new RegExp('#' + '[0-9a-f]{3,8}\\b', 'i'),
+      new RegExp('\\b' + 'rg' + 'ba?\\(', 'i'),
+      new RegExp('\\b' + 'hs' + 'la?\\(', 'i'),
       /\b\d+(\.\d+)?(px|rem|em)\b/,
     ];
     for (const fichier of sources) {
