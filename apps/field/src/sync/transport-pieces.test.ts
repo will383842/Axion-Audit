@@ -13,8 +13,8 @@
 // refresh rotatif, 401/429/502-504/coupure = indisponibilité).
 //   · `envoyerMorceau` : corps = les octets du morceau, `content-type:
 //     application/octet-stream` (JAMAIS du JSON ni du base64) ;
-//   · `terminerPiece` : un 409 dont `details` est une liste d'entiers devient
-//     `{ type: 'a_reemettre', index }` — jamais un `refus` qui perdrait la liste.
+//   · `terminerPiece` : un 409 `UPLOAD_CHUNKS_MISSING` ou `UPLOAD_CHECKSUM_MISMATCH` dont
+//     `details` est une liste d'entiers devient `{ type: 'a_reemettre', code, index }`
 //
 // Le `fetch` est factice : aucun réseau réel. Rouge attendu tant que les trois
 // méthodes n'existent pas — pour cette seule raison.
@@ -148,13 +148,14 @@ describe('transport — POST …/attachments/:id/complete', () => {
     });
   });
 
-  it('@critique 409 avec details = [1, 4] → { type: a_reemettre, index: [1, 4] }', async () => {
+  // `DECISIONS.md` [L6c] (2026-10-09) : deux codes seulement, `details` = index triés.
+  it('@critique 409 UPLOAD_CHUNKS_MISSING [1, 4] → { a_reemettre, code, index: [1, 4] }', async () => {
     const { transport } = transportAvec(() =>
       json(
         {
           error: {
-            code: 'CHUNKS_A_REEMETTRE',
-            message: 'Morceaux à réémettre.',
+            code: 'UPLOAD_CHUNKS_MISSING',
+            message: 'Des morceaux manquent.',
             details: [1, 4],
           },
         },
@@ -163,13 +164,42 @@ describe('transport — POST …/attachments/:id/complete', () => {
     );
     expect(await transport.terminerPiece(PIECE, { sha256: SHA, chunks: 5 })).toEqual({
       type: 'a_reemettre',
+      code: 'UPLOAD_CHUNKS_MISSING',
       index: [1, 4],
     });
   });
 
+  it('@critique 409 UPLOAD_CHECKSUM_MISMATCH : tous les index à réémettre', async () => {
+    const { transport } = transportAvec(() =>
+      json(
+        {
+          error: {
+            code: 'UPLOAD_CHECKSUM_MISMATCH',
+            message: 'L’empreinte ne correspond pas.',
+            details: [0, 1, 2],
+          },
+        },
+        409,
+      ),
+    );
+    expect(await transport.terminerPiece(PIECE, { sha256: SHA, chunks: 3 })).toEqual({
+      type: 'a_reemettre',
+      code: 'UPLOAD_CHECKSUM_MISMATCH',
+      index: [0, 1, 2],
+    });
+  });
+
+  it('un 409 d’un AUTRE code, même avec une liste, reste un refus (pas de réémission inventée)', async () => {
+    const { transport } = transportAvec(() =>
+      json({ error: { code: 'CONFLICT', message: 'Conflit.', details: [1] } }, 409),
+    );
+    const resultat = await transport.terminerPiece(PIECE, { sha256: SHA, chunks: 5 });
+    expect(resultat.type).toBe('refus');
+  });
+
   it('un 409 SANS liste d’entiers exploitable reste un refus (pas de réémission inventée)', async () => {
     const { transport } = transportAvec(() =>
-      json({ error: { code: 'CONFLIT', message: 'Conflit.' } }, 409),
+      json({ error: { code: 'UPLOAD_CHUNKS_MISSING', message: 'Des morceaux manquent.' } }, 409),
     );
     const resultat = await transport.terminerPiece(PIECE, { sha256: SHA, chunks: 5 });
     expect(resultat.type).toBe('refus');

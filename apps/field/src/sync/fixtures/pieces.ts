@@ -82,9 +82,17 @@ export function demandePhoto(
 // ─────────────────────────────────────────────────────────────────────────────
 // Le siège fictif des trois routes §9.6
 // ─────────────────────────────────────────────────────────────────────────────
+/** Les deux codes du 409 de `complete` (`DECISIONS.md` [L6c], 2026-10-09). */
+export type CodeReemission = 'UPLOAD_CHUNKS_MISSING' | 'UPLOAD_CHECKSUM_MISMATCH';
+
 export type ResultatTerminerFictif =
   | ResultatTransport<{ readonly statut: 'assemble' }>
-  | { readonly type: 'a_reemettre'; readonly index: readonly number[] };
+  | {
+      readonly type: 'a_reemettre';
+      /** `DECISIONS.md` [L6c] : les deux seuls codes du 409. */
+      readonly code: CodeReemission;
+      readonly index: readonly number[];
+    };
 
 export interface AppelPiece {
   readonly route: 'status' | 'chunk' | 'complete';
@@ -167,11 +175,17 @@ export function creerSiegePiecesFictif(reglages: ReglagesSiegePieces = {}) {
       const m = morceaux(id);
       const manquants: number[] = [];
       for (let i = 0; i < corps.chunks; i += 1) if (!m.has(i)) manquants.push(i);
-      if (manquants.length > 0) return { type: 'a_reemettre', index: manquants };
+      if (manquants.length > 0) {
+        return { type: 'a_reemettre', code: 'UPLOAD_CHUNKS_MISSING', index: manquants };
+      }
       if (reemissionsRestantes > 0 && reglages.reemissionsForcees !== undefined) {
         reemissionsRestantes -= 1;
         for (const i of reglages.reemissionsForcees.index) m.delete(i);
-        return { type: 'a_reemettre', index: reglages.reemissionsForcees.index };
+        return {
+          type: 'a_reemettre',
+          code: 'UPLOAD_CHUNKS_MISSING',
+          index: [...reglages.reemissionsForcees.index].sort((a, b) => a - b),
+        };
       }
       const parties: Uint8Array[] = [];
       for (let i = 0; i < corps.chunks; i += 1) parties.push(m.get(i) ?? new Uint8Array());
@@ -187,6 +201,7 @@ export function creerSiegePiecesFictif(reglages: ReglagesSiegePieces = {}) {
         m.clear();
         return {
           type: 'a_reemettre',
+          code: 'UPLOAD_CHECKSUM_MISMATCH',
           index: Array.from({ length: corps.chunks }, (_, i) => i),
         };
       }
