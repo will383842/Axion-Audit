@@ -53,6 +53,7 @@ import { EcranFinDeSession } from '../ecrans/journee/EcranFinDeSession.js';
 import { EcranPilote } from '../ecrans/journee/EcranPilote.js';
 import { EcranRestauration } from '../ecrans/journee/EcranRestauration.js';
 import { CAPACITES_HORS_LIGNE } from './capacites-hors-ligne.js';
+import { EcranSynchronisation } from '../ecrans/sync/EcranSynchronisation.js';
 import type { ValeurTerrain } from './contexte.js';
 import { EcranAccueil } from './EcranAccueil.js';
 import { EcranDeverrouillage } from './EcranDeverrouillage.js';
@@ -101,6 +102,11 @@ const ECRANS = {
   // revoir » du cockpit (03 §34.2). Entrée ici par le même chemin que la
   // douzième : `pnpm typecheck` a refusé la compilation tant qu'elle manquait.
   aRevoir: { Composant: EcranARevoir, source: 'ecrans/journee/EcranARevoir.tsx' },
+  // LA QUATORZIÈME VUE (L6b, 2026-10-09) — la file de synchronisation.
+  synchronisation: {
+    Composant: EcranSynchronisation,
+    source: 'ecrans/sync/EcranSynchronisation.tsx',
+  },
 } as const satisfies Record<CodeVue, Ecran>;
 
 const CODES = Object.keys(ECRANS) as readonly CodeVue[];
@@ -538,6 +544,8 @@ describe('B6 — combien de pastilles l’auditeur voit-il réellement, coquille
     // La treizième vue ne rend que le RAPPEL des capacités : sa pastille est
     // celle de l'en-tête, comme partout depuis B6.
     aRevoir: 0,
+    // La quatorzième vue : sa pastille est celle de l’en-tête, comme partout depuis B6.
+    synchronisation: 0,
   } as const satisfies Record<CodeVue, number>;
 
   function pastilles(): readonly string[] {

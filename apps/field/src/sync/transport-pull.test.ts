@@ -25,6 +25,7 @@ import 'fake-indexeddb/auto';
 import Dexie from 'dexie';
 import { uuidv7 } from 'uuidv7';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ERROR_CODES } from '@axion/shared';
 import { BaseLocale } from '../local/base.js';
 import { creerDekEnveloppee, deriverKek, ouvrirCoffre, type Coffre } from '../local/coffre.js';
 import { CHEMIN_PULL, creerTransport } from './transport.js';
@@ -67,7 +68,7 @@ const PULL_VALIDE = { serverTime: SERVEUR, changes: { answer: [] }, nextSince: n
 function transportAvec(
   repondre: (url: string, init?: RequestInit) => Response | Promise<Response>,
 ) {
-  const appels: { url: string; init?: RequestInit }[] = [];
+  const appels: { url: string; init: RequestInit | undefined }[] = [];
   const fetchFactice = vi.fn(async (entree: RequestInfo | URL, init?: RequestInit) => {
     const url =
       typeof entree === 'string' ? entree : entree instanceof URL ? entree.href : entree.url;
@@ -124,7 +125,7 @@ describe('transport — tirer (GET /v1/sync/pull)', () => {
 
   it('401 sans refresh stocké → reconnexion requise (message français)', async () => {
     const { transport } = transportAvec(() =>
-      json({ error: { code: 'NON_AUTHENTIFIE', message: 'Session expirée.' } }, 401),
+      json({ error: { code: ERROR_CODES.UNAUTHENTICATED, message: 'Session expirée.' } }, 401),
     );
     const resultat = await transport.tirer(MISSION, SINCE);
     expect(resultat.type).toBe('reconnexion_requise');
@@ -132,7 +133,10 @@ describe('transport — tirer (GET /v1/sync/pull)', () => {
 
   it('403 → refus avec le message du siège (enveloppe 11 §3)', async () => {
     const { transport } = transportAvec(() =>
-      json({ error: { code: 'ACCES_REFUSE', message: 'Mission hors de vos affectations.' } }, 403),
+      json(
+        { error: { code: ERROR_CODES.FORBIDDEN, message: 'Mission hors de vos affectations.' } },
+        403,
+      ),
     );
     await expect(transport.tirer(MISSION, SINCE)).resolves.toEqual({
       type: 'refus',

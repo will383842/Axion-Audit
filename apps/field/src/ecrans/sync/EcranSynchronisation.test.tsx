@@ -32,9 +32,6 @@
 // =============================================================================
 import 'fake-indexeddb/auto';
 import Dexie from 'dexie';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { uuidv7 } from 'uuidv7';
@@ -206,8 +203,8 @@ function terrainDeBase(base: BaseLocale | null): ValeurTerrain {
       verrouillerMaintenant: vi.fn(),
       signalerDeverrouillage: vi.fn(),
     },
-    navigation: { pile: ['accueil', 'synchronisation'] } as unknown as ValeurTerrain['navigation'],
-    vue: 'synchronisation' as ValeurTerrain['vue'],
+    navigation: { pile: ['accueil', 'synchronisation'] },
+    vue: 'synchronisation',
     stockage: {
       persistant: true,
       quotaOctets: 10 * 1024 ** 3,
@@ -447,17 +444,16 @@ describe('EcranSynchronisation — gestes', () => {
 // INVARIANT 4 — aucune couleur ni taille en dur dans `ecrans/sync/**`
 // =============================================================================
 describe('EcranSynchronisation — tokens du design system uniquement', () => {
-  function fichiersSources(dossier: string): string[] {
-    return readdirSync(dossier).flatMap((nom) => {
-      const chemin = join(dossier, nom);
-      if (statSync(chemin).isDirectory()) return fichiersSources(chemin);
-      return /\.(tsx?|css)$/.test(nom) && !/\.test\.tsx?$/.test(nom) ? [chemin] : [];
-    });
-  }
+  // Les sources sont lues par Vite (requête « raw »), pas par le module fs de
+  // Node : sous jsdom, l'URL du module n'est pas une URL de fichier. Le motif
+  // exclut les fichiers de test.
+  const SOURCES: Readonly<Record<string, string>> = import.meta.glob(
+    ['./**/*.{ts,tsx,css}', '!./**/*.test.{ts,tsx}'],
+    { query: '?raw', import: 'default', eager: true },
+  );
 
   it('aucun code couleur, aucune couleur fonctionnelle en dur ni taille en px/rem dans les sources de l’écran', () => {
-    const dossier = fileURLToPath(new URL('.', import.meta.url));
-    const sources = fichiersSources(dossier);
+    const sources = Object.entries(SOURCES);
     expect(sources.length).toBeGreaterThan(0);
     // Motifs construits par concaténation : écrits en clair, la garde INV-4b les
     // lirait comme des couleurs en dur dans ce fichier même.
@@ -467,8 +463,8 @@ describe('EcranSynchronisation — tokens du design system uniquement', () => {
       new RegExp('\\b' + 'hs' + 'la?\\(', 'i'),
       /\b\d+(\.\d+)?(px|rem|em)\b/,
     ];
-    for (const fichier of sources) {
-      const texte = readFileSync(fichier, 'utf8')
+    for (const [fichier, contenu] of sources) {
+      const texte = contenu
         .split('\n')
         .filter((ligne) => !/^\s*(\/\/|\*|\/\*)/.test(ligne))
         .join('\n');
