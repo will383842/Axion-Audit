@@ -62,8 +62,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const RACINE_DEPOT = resolve(import.meta.dirname, '..', '..', '..');
 const IMAGE_POSTGRES = 'axion-audit-postgres:16-coolify';
-const IMAGE_MINIO = 'minio/minio:RELEASE.2025-04-22T22-12-26Z';
-const IMAGE_MC = 'minio/mc:RELEASE.2025-04-16T18-13-26Z';
+const IMAGE_MINIO = 'pgsty/minio:RELEASE.2026-08-04T00-00-00Z';
+const IMAGE_MC = 'pgsty/mc:RELEASE.2026-08-04T00-00-00Z';
 
 /**
  * Empreinte du jeu de référence, publiée par `docs/portes/` et vérifiée à la

@@ -53,8 +53,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=infra/scripts/lib/common.sh
 . "$SCRIPT_DIR/lib/common.sh"
 
-MC_IMAGE="${MC_IMAGE:-minio/mc:RELEASE.2025-04-16T18-13-26Z}"
-MINIO_IMAGE="${MINIO_IMAGE:-minio/minio:RELEASE.2025-04-22T22-12-26Z}"
+MC_IMAGE="${MC_IMAGE:-pgsty/mc:RELEASE.2026-08-04T00-00-00Z}"
+MINIO_IMAGE="${MINIO_IMAGE:-pgsty/minio:RELEASE.2026-08-04T00-00-00Z}"
 # PG_IMAGE : DÉCOUVERTE, comme le dépôt — et pour une raison plus forte que la
 # commodité. Ce script attendait « axion-audit-postgres:16 ». MESURÉ le
 # 2026-08-30 : l'image réelle est « axion-audit-postgres:16-coolify », et la
