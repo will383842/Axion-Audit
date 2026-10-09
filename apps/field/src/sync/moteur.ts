@@ -57,6 +57,7 @@ import { ErreurEnveloppe } from '../local/enveloppe.js';
 import { maintenant as horlogeMaintenant } from '../local/horloge.js';
 import { MonteeImpossibleError, operationDeLigne } from './montee.js';
 import { remapperALaSortie } from './remappage.js';
+import { compterPiecesNonEnvoyees } from '../local/octets.js';
 import type { TransportSync } from './transport.js';
 import { envoyerPiecesEnAttente, type BilanEnvoiPieces, type TransportPieces } from './chunks.js';
 
@@ -336,10 +337,16 @@ async function passage(deps: DependancesMoteur, missionId: string): Promise<Bila
     await cumulerArbitrages(base, missionId, compteurs.arbitrees - arbitreesAvant);
   }
 
+  // L6c-1 — les pièces partent APRÈS la montée JSON (05 §9.6), et AVANT le
+  // verdict du dernier succès : une photo non envoyée l'empêche (revue A29).
+  const pieces = statut === 'succes' ? await envoyerPieces(deps, missionId) : null;
+  const piecesRestantes = await compterPiecesNonEnvoyees(base, missionId);
+
   if (
     statut === 'succes' &&
     dejaEnvoyees.size === 0 &&
-    (await bloqueesDeLaMission(base, missionId)) === 0
+    (await bloqueesDeLaMission(base, missionId)) === 0 &&
+    piecesRestantes.aEnvoyer + piecesRestantes.enEchec === 0
   ) {
     await ecrireMeta(
       base,
@@ -352,8 +359,6 @@ async function passage(deps: DependancesMoteur, missionId: string): Promise<Bila
   // déjà descendue. Réalignée APRÈS le passage et après le dernier succès : les
   // ops relancées partent au passage suivant, elles ne comptent pas comme montées.
   await remapperALaSortie({ base, coffre }, missionId, compteurs.reponsesArbitrees);
-
-  const pieces = statut === 'succes' ? await envoyerPieces(deps, missionId) : null;
 
   return {
     ...(pieces === null ? {} : { pieces }),

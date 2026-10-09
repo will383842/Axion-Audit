@@ -70,10 +70,10 @@ import {
 } from '../../app/capacites-hors-ligne.js';
 import { useTerrain } from '../../app/contexte.js';
 import { exigerPersistance, guidageSansPersistance } from '../../local/stockage.js';
-import { deposerFichier } from '../../sauvegarde/depot.js';
+import { deposerFichier, messagePiecesIllisibles } from '../../sauvegarde/depot.js';
 import { EXTENSION_SAUVEGARDE, nomFichierSauvegarde } from '../../sauvegarde/format.js';
 import {
-  exporterSauvegarde,
+  ecrireSauvegarde,
   importerSauvegarde,
   MotDePasseExportInvalideError,
   type RapportImport,
@@ -110,7 +110,7 @@ type Reexport =
   | { readonly nature: 'repos' }
   | { readonly nature: 'saisie' }
   | { readonly nature: 'en_cours' }
-  | { readonly nature: 'fait'; readonly nom: string }
+  | { readonly nature: 'fait'; readonly nom: string; readonly piecesIllisibles: string | null }
   | { readonly nature: 'echec'; readonly message: string };
 
 const CAUSE_STOCKAGE_INJOIGNABLE =
@@ -269,11 +269,25 @@ export function EcranRestauration(): ReactNode {
     (missionId: string): void => {
       setReexport({ nature: 'en_cours' });
       void (async (): Promise<void> => {
-        const produit = await exporterSauvegarde({ missionId, motDePasse: motDePasseExport });
-        const nom = nomFichierSauvegarde(missionId, produit.enTete.creeLe);
-        deposerFichier(nom, JSON.stringify(produit));
+        // Revue A29 : écrite PAR SEGMENTS, jamais réunie en une seule chaîne.
+        const parties: string[] = [];
+        const bilan = await ecrireSauvegarde(
+          { missionId, motDePasse: motDePasseExport },
+          {
+            ecrire: (partie) => {
+              parties.push(partie);
+              return Promise.resolve();
+            },
+          },
+        );
+        const nom = nomFichierSauvegarde(missionId, bilan.enTete.creeLe);
+        deposerFichier(nom, parties);
         setMotDePasseExport('');
-        setReexport({ nature: 'fait', nom });
+        setReexport({
+          nature: 'fait',
+          nom,
+          piecesIllisibles: messagePiecesIllisibles(bilan.piecesIllisibles),
+        });
       })().catch((cause: unknown) => {
         setReexport({
           nature: 'echec',
@@ -458,6 +472,11 @@ export function EcranRestauration(): ReactNode {
                   Fichier déposé sur cet appareil : {reexport.nom}. Mettez-le à l’abri (clé USB,
                   second appareil) — aucune donnée ne doit vivre sur un seul appareil plus de 24 h
                   ouvrées.
+                </Message>
+              )}
+              {reexport.nature === 'fait' && reexport.piecesIllisibles !== null && (
+                <Message ton="alerte" titre="Photos absentes de la sauvegarde">
+                  {reexport.piecesIllisibles}
                 </Message>
               )}
 

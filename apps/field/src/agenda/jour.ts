@@ -40,6 +40,7 @@
 import { cleDerniereSyncReussie, lireMeta, type BaseLocale } from '../local/base.js';
 import { contexteLocal } from '../local/contexte.js';
 import { depotOutbox } from '../local/depots/outbox.js';
+import { compterPiecesNonEnvoyees } from '../local/octets.js';
 import { depotReponses } from '../local/depots/reponses.js';
 import { depotSessions, jourCivil, type SessionLocale } from '../local/depots/sessions.js';
 import { chargeMissionSchema, type ChargeMission, type IndexMission } from '../local/formes.js';
@@ -218,8 +219,13 @@ export async function construireJournee(
 
     // Le compte d'opérations est LU, pas supposé — c'est ce qui rend
     // `sync_log.outbox_remaining` vrai par construction (`LOT_L5.md` §3.3-②).
-    const comptes = await depotOutbox.compterParStatut(mission.id);
-    const bloquees = comptes.rejetee + comptes.a_examiner;
+    const comptesOps = await depotOutbox.compterParStatut(mission.id);
+    // L6c-1 (revue A29) : une photo non envoyée ne vit, elle aussi, que sur cet
+    // appareil — « à envoyer » compte comme une op en attente, « en échec » comme
+    // une op bloquée. Même somme que le port réel (`sync/port.ts`).
+    const pieces = await compterPiecesNonEnvoyees(base, mission.id);
+    const comptes = { en_attente: comptesOps.en_attente + pieces.aEnvoyer };
+    const bloquees = comptesOps.rejetee + comptesOps.a_examiner + pieces.enEchec;
 
     // Le dernier succès est LU lui aussi — dans `meta`, comme le compte ci-dessus
     // dans l'outbox — et non pris au port, qui ne persiste rien. Il nourrit À LA

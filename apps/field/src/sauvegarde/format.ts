@@ -100,9 +100,28 @@ export const enTeteSauvegardeSchema = z.object({
 export type EnTeteSauvegarde = z.infer<typeof enTeteSauvegardeSchema>;
 
 /** Le fichier complet : en-tête en clair + charge chiffrée sous la clé du mot de passe. */
+/**
+ * Format v2 (L6c-1, revue A29) — UNE photo par entrée, chiffrée À PART sous la
+ * clé du fichier (AES-GCM, nonce propre) : c'est ce qui permet d'écrire le
+ * fichier par segments, une photo à la fois, sans jamais tenir toutes les photos
+ * en mémoire. `n` et `c` ont le sens de l'enveloppe ; les octets ne sont jamais
+ * en clair dans le fichier — une photo d'atelier, de tableau blanc ou de badge
+ * est une donnée sensible.
+ */
+export const pieceSauvegardeeSchema = z.object({
+  id: z.uuid(),
+  missionId: z.uuid(),
+  statutEnvoi: z.enum(['a_envoyer', 'envoyee', 'en_echec']),
+  n: z.string().min(1),
+  c: z.string(),
+});
+export type PieceSauvegardee = z.infer<typeof pieceSauvegardeeSchema>;
+
 export const fichierSauvegardeSchema = z.object({
   enTete: enTeteSauvegardeSchema,
   charge: enveloppeSchema,
+  /** Absent d'un fichier v1. */
+  pieces: z.array(pieceSauvegardeeSchema).optional(),
 });
 export type FichierSauvegarde = z.infer<typeof fichierSauvegardeSchema>;
 
@@ -160,25 +179,10 @@ export const TABLES_SAUVEGARDEES = [
 export type TableSauvegardee = (typeof TABLES_SAUVEGARDEES)[number];
 
 /** Le contenu DÉCHIFFRÉ : « données de mission locales + outbox » (11 §4). */
-/**
- * Format v2 (L6c-1) — les octets d'une photo. Ils voyagent DANS le contenu
- * chiffré du fichier (en base64 sous l'AES-GCM du fichier), jamais à côté :
- * une photo d'atelier, de tableau blanc ou de badge est une donnée sensible.
- */
-export const octetsSauvegardesSchema = z.object({
-  id: z.uuid(),
-  missionId: z.uuid(),
-  statutEnvoi: z.enum(['a_envoyer', 'envoyee', 'en_echec']),
-  donnees: z.string(),
-});
-export type OctetsSauvegardes = z.infer<typeof octetsSauvegardesSchema>;
-
 export const contenuSauvegardeSchema = z.object({
   missionId: z.uuid(),
   lignes: z.record(z.enum(TABLES_SAUVEGARDEES), z.array(ligneSauvegardeeSchema)),
   operations: z.array(operationSauvegardeeSchema),
-  /** Absent d'un fichier v1. */
-  octets: z.array(octetsSauvegardesSchema).optional(),
 });
 export type ContenuSauvegarde = z.infer<typeof contenuSauvegardeSchema>;
 

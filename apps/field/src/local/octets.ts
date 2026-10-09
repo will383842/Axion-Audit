@@ -123,3 +123,39 @@ export async function lignesOctetsDeMission(
 export async function rangerOctets(base: BaseLocale, ligne: LigneOctetsPiece): Promise<void> {
   await rangerLigneOctetsPiece(base, TABLE_OCTETS, ligne);
 }
+
+/**
+ * Les pièces d'une mission qui ne vivent QUE sur cet appareil (DECISIONS [L6c],
+ * revue A29) : « à envoyer » compte comme une op en attente, « en échec » comme
+ * une op bloquée — pour l'état de sync, la clé de dernière sync réussie et
+ * l'alerte des 24 h (invariant 8).
+ */
+export async function compterPiecesNonEnvoyees(
+  base: BaseLocale,
+  missionId: string,
+): Promise<{ readonly aEnvoyer: number; readonly enEchec: number }> {
+  let aEnvoyer = 0;
+  let enEchec = 0;
+  await tableOctets(base)
+    .where('missionId')
+    .equals(missionId)
+    .each((ligne) => {
+      if (ligne.statutEnvoi === 'a_envoyer') aEnvoyer += 1;
+      else if (ligne.statutEnvoi === 'en_echec') enEchec += 1;
+    });
+  return { aEnvoyer, enEchec };
+}
+
+/** Les ids des pièces d'une mission — CLÉS seules : aucune photo n'est lue ici. */
+export async function idsOctetsDeMission(base: BaseLocale, missionId: string): Promise<string[]> {
+  const ids = await tableOctets(base).where('missionId').equals(missionId).primaryKeys();
+  return [...ids].sort();
+}
+
+/** La ligne d'octets (chiffrée) d'une pièce, ou `null`. */
+export async function lireLigneOctets(
+  base: BaseLocale,
+  id: string,
+): Promise<LigneOctetsPiece | null> {
+  return (await tableOctets(base).get(id)) ?? null;
+}

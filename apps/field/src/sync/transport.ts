@@ -17,7 +17,13 @@
 //
 // Traçabilité : E7, E38 ; 11 §3 ; 05 §31-3.
 // =============================================================================
-import { apiErrorSchema, authSessionSchema } from '@axion/shared';
+import {
+  ERROR_CODES,
+  apiErrorSchema,
+  authSessionSchema,
+  reponseStatutPieceSchema,
+  reponseTerminerPieceSchema,
+} from '@axion/shared';
 import { z } from 'zod';
 import {
   reponsePullSchema,
@@ -305,7 +311,7 @@ export function creerTransport(deps: DependancesTransport): TransportSync {
 
     // ── L6c-1 — les trois routes de chunks (05 §9.6), même authentification ──
     statutPiece(id: string): Promise<ResultatTransport<ReponseStatutPieceLocale>> {
-      return appeler(`${CHEMIN_PIECES}/${id}/status`, { method: 'GET' }, statutPieceSchema);
+      return appeler(`${CHEMIN_PIECES}/${id}/status`, { method: 'GET' }, reponseStatutPieceSchema);
     },
 
     envoyerMorceau(
@@ -328,7 +334,7 @@ export function creerTransport(deps: DependancesTransport): TransportSync {
       return appeler(
         `${CHEMIN_PIECES}/${id}/complete`,
         { method: 'POST', body: JSON.stringify({ sha256: corps.sha256, chunks: corps.chunks }) },
-        terminerPieceSchema,
+        reponseTerminerPieceSchema,
         lireReemission,
       );
     },
@@ -338,13 +344,6 @@ export function creerTransport(deps: DependancesTransport): TransportSync {
 /** Racine des routes de pièces (05 §9.6). */
 export const CHEMIN_PIECES = '/api/v1/sync/attachments';
 
-const statutPieceSchema = z.object({
-  statut: z.string(),
-  chunksRecus: z.array(z.number().int().min(0)),
-});
-
-const terminerPieceSchema = z.object({ statut: z.literal('assemble') });
-
 /**
  * Le 409 de `complete` (DECISIONS [L6c]) : SEULS les deux codes du protocole,
  * avec une liste d'entiers NON VIDE, deviennent une réémission. Tout autre 409
@@ -352,7 +351,9 @@ const terminerPieceSchema = z.object({ statut: z.literal('assemble') });
  */
 const reemissionSchema = z.object({
   error: z.object({
-    code: z.enum(['UPLOAD_CHUNKS_MISSING', 'UPLOAD_CHECKSUM_MISMATCH']),
+    // Seuls ces deux codes portent une liste à réémettre ; `UPLOAD_ALREADY_ASSEMBLED`
+    // est TERMINAL (revue A17) : il reste un refus, même avec une liste.
+    code: z.enum([ERROR_CODES.UPLOAD_CHUNKS_MISSING, ERROR_CODES.UPLOAD_CHECKSUM_MISMATCH]),
     details: z.array(z.number().int().min(0)).min(1),
   }),
 });
