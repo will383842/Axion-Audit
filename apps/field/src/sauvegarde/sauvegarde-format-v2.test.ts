@@ -29,7 +29,8 @@ import { installerContexteLocal, retirerContexteLocal } from '../local/contexte.
 import { depotSessions } from '../local/depots/sessions.js';
 import { chargeAttachmentSchema } from '../local/formes.js';
 import { TABLE_OCTETS } from '../local/octets.js';
-import { exporterSauvegarde, importerSauvegarde, VERSION_FORMAT_SAUVEGARDE } from './sauvegarde.js';
+import { importerSauvegarde, VERSION_FORMAT_SAUVEGARDE } from './sauvegarde.js';
+import { exporterParSegments } from './fixtures/ecrivain.js';
 
 const MOT_DE_PASSE = 'correct-cheval-pile-agrafe-2026';
 const MISSION_V1 = '0191e2a0-0000-7000-8000-00000000f1de';
@@ -75,7 +76,7 @@ describe('format de sauvegarde v2 (octets des photos)', () => {
   it('@critique la version de format est 2, et un export neuf la déclare', async () => {
     expect(VERSION_FORMAT_SAUVEGARDE).toBe(2);
     await appareilNeuf(31);
-    const fichier = await exporterSauvegarde({
+    const fichier = await exporterParSegments({
       missionId: MISSION_V1,
       motDePasse: MOT_DE_PASSE,
       parametresKdf: KDF_TEST,
