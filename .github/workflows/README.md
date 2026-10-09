@@ -452,7 +452,7 @@ réversible**. Ils doivent recevoir une entrée `DECISIONS.md` (09 §5.1 : un do
 
 - **Dockerfiles** : `apps/<api|worker|field|hq>/Dockerfile`, contexte = racine du dépôt — lu dans
   `infra/docker-compose.yml`. `apps/worker` est bien un espace de travail du monorepo.
-- **Image MinIO** : `minio/minio:RELEASE.2025-04-22T22-12-26Z`, alignée sur le compose.
+- **Image MinIO** : `pgsty/minio:RELEASE.2026-08-04T00-00-00Z`, alignée sur le compose.
 - **Nommage GHCR** : `ghcr.io/${GHCR_OWNER}/axion-audit-<app>:${IMAGE_TAG}` — les deux variables
   sont passées au serveur par `deploy-prod.yml`. **Le staging ne tire plus d'image de GHCR** : les
   paquets y sont privés et il construit sur le serveur (`DECISIONS.md` 2026-08-28).

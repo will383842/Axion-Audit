@@ -252,7 +252,7 @@ COPY scripts/lib/common.sh /usr/local/lib/axion/common.sh
 # ⚠️ SI CE TAG CHANGE DANS LE COMPOSE, IL CHANGE ICI — deux endroits, aucune
 # vérification automatique aujourd'hui. C'est la même dette que la duplication
 # assumée entre les composes (voir leur en-tête).
-COPY --from=minio/mc:RELEASE.2025-04-16T18-13-26Z /usr/bin/mc /usr/local/bin/mc
+COPY --from=pgsty/mc:RELEASE.2026-08-04T00-00-00Z /usr/bin/mc /usr/local/bin/mc
 
 # -----------------------------------------------------------------------------
 # ⚠️ LE MAGASIN DE CERTIFICATS — MESURÉ, ET IL MANQUAIT.

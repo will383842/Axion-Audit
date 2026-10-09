@@ -77,7 +77,7 @@ env:
   # 11 §1 : « MinIO, dernière release stable au démarrage, FIGÉE ensuite ».
   # Tag ALIGNÉ sur `infra/docker-compose.yml` (A11) — les deux doivent rester
   # identiques : une CI qui teste une autre version que la prod ne teste pas la prod.
-  MINIO_IMAGE: minio/minio:RELEASE.2025-04-22T22-12-26Z
+  MINIO_IMAGE: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
   # gitleaks épinglé (11 §1, gel des dépendances Phase 1).
   GITLEAKS_IMAGE: zricethezav/gitleaks:v8.18.4
   # Secrets FACTICES pour la CI (11 §2 : « les tests utilisent des secrets
