@@ -1518,6 +1518,7 @@ const COLONNES_ADMISES: Readonly<Record<EntiteDescendante, readonly string[]>> =
   mission: [
     'id',
     'companyId',
+    'roleSurMission',
     'title',
     'timezone',
     'auditLevel',
@@ -1718,6 +1719,85 @@ describe('L6b · GET /v1/sync/pull — colonnes fermées en sortie (revue A17) @
       for (const page of d.pages) {
         expect(JSON.stringify(page)).not.toContain(courrielA);
         expect(JSON.stringify(page)).not.toContain(courrielB);
+      }
+    }
+  });
+});
+
+// =============================================================================
+// 10. CHAMPS CALCULÉS POUR LA TABLETTE — `roleSurMission` et `blockCode`
+// =============================================================================
+// Deux champs que le miroir terrain exige (`apps/field/src/local/formes.ts`) et
+// qui ne sont PAS des colonnes de la table descendue :
+//   · `mission.roleSurMission` = `mission_users.role_on_mission` de l'ÉMETTEUR
+//     (`mission_users.mission_id` = la mission, `mission_users.user_id` = l'émetteur) ;
+//   · `mission_question.blockCode` = `blocks.code`, par `mission_questions.question_id`
+//     → `questions.block_id` (NOT NULL au 04) → `blocks.id`. Toujours non nul.
+describe('L6b · GET /v1/sync/pull — champs calculés pour la tablette @critique', () => {
+  it('chaque membre reçoit SON rôle sur la mission dans `roleSurMission`, jamais celui d’un autre @critique', async () => {
+    const m = await semerMonde();
+    const attendus: readonly (readonly [Compte, string])[] = [
+      [m.A, 'consultant'],
+      [m.LD, 'lead'],
+      [m.LM, 'lecteur'],
+      [m.ADM, 'lead'],
+    ];
+    for (const [compte, role] of attendus) {
+      const d = await descendre(compte.jeton, m.missionId);
+      const missions = elementsDeLaDescente(d, 'mission');
+      expect(missions).toHaveLength(1);
+      expect(missions[0]?.id).toBe(m.missionId);
+      expect(missions[0]?.roleSurMission, `rôle rendu à ${compte.id}`).toBe(role);
+      // Aucun autre membre ni aucun autre rôle ne voyage dans la ligne mission.
+      const texte = JSON.stringify(missions[0]);
+      for (const [autre, autreRole] of attendus) {
+        if (autre.id !== compte.id) expect(texte).not.toContain(autre.id);
+        if (autreRole !== role) expect(texte).not.toContain(`"${autreRole}"`);
+      }
+    }
+  });
+
+  it('le rôle suit l’émetteur : un même consultant, consultant sur une mission et lecteur sur une autre, reçoit chacun des deux @critique', async () => {
+    const m = await semerMonde();
+    const autre = await semerMission();
+    await rattacher(autre.missionId, m.A.id, 'lecteur');
+    const ici = elementsDeLaDescente(await descendre(m.A.jeton, m.missionId), 'mission');
+    const la = elementsDeLaDescente(await descendre(m.A.jeton, autre.missionId), 'mission');
+    expect(ici[0]?.roleSurMission).toBe('consultant');
+    expect(la[0]?.roleSurMission).toBe('lecteur');
+  });
+
+  it('chaque ligne mission_question porte `blockCode`, non nul, égal au code du bloc de sa question @critique', async () => {
+    const m = await semerMonde();
+    // Deux blocs distincts, pour qu'un code constant ne passe pas pour une résolution.
+    const [autreBloc] = await lignes('SELECT id FROM blocks WHERE id <> $1 ORDER BY id LIMIT 1', [
+      blocId,
+    ]);
+    expect(autreBloc, 'le seed L1 doit porter au moins deux blocs').toBeDefined();
+    await bd().query(
+      'UPDATE questions SET block_id = $2 WHERE id = (SELECT question_id FROM mission_questions WHERE id = $1)',
+      [m.mq2, autreBloc?.id],
+    );
+    const attendus = new Map(
+      (
+        await lignes(
+          `SELECT mq.id, b.code FROM mission_questions mq
+             JOIN questions q ON q.id = mq.question_id
+             JOIN blocks b ON b.id = q.block_id
+            WHERE mq.mission_id = $1`,
+          [m.missionId],
+        )
+      ).map((l) => [String(l.id), String(l.code)]),
+    );
+    expect(new Set(attendus.values()).size).toBe(2);
+    for (const compte of [m.A, m.LM]) {
+      const questions = elementsDeLaDescente(
+        await descendre(compte.jeton, m.missionId),
+        'mission_question',
+      );
+      expect(questions).toHaveLength(attendus.size);
+      for (const q of questions) {
+        expect(q.blockCode, `blockCode de ${String(q.id)}`).toBe(attendus.get(String(q.id)));
       }
     }
   });
