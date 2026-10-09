@@ -271,6 +271,12 @@ export const ERROR_CODES = {
    * Le serveur ne sait pas quel morceau est faux : `details` = TOUS les index.
    */
   UPLOAD_CHECKSUM_MISMATCH: 'UPLOAD_CHECKSUM_MISMATCH',
+  /**
+   * Protocole de chunks (05 §9.6, revue A17) : la pièce est déjà assemblée au siège
+   * avec une AUTRE empreinte. Terminal, `details` vide : rien n'est à réémettre,
+   * rien n'est modifié ; le terrain passe la pièce `en_echec`.
+   */
+  UPLOAD_ALREADY_ASSEMBLED: 'UPLOAD_ALREADY_ASSEMBLED',
 
   // --- 413 / 415 / 429 -------------------------------------------------------
   PAYLOAD_TOO_LARGE: 'PAYLOAD_TOO_LARGE',
@@ -418,6 +424,7 @@ export const HTTP_STATUS_BY_ERROR_CODE: Record<ErrorCode, number> = {
   IMPORT_REJECTED: 422,
   UPLOAD_CHUNKS_MISSING: 409,
   UPLOAD_CHECKSUM_MISMATCH: 409,
+  UPLOAD_ALREADY_ASSEMBLED: 409,
   PAYLOAD_TOO_LARGE: 413,
   UNSUPPORTED_MEDIA_TYPE: 415,
   RATE_LIMITED: 429,

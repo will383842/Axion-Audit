@@ -15,11 +15,18 @@
 //     (H3 : c'est ce qui permet de réparer un morceau corrompu) ; la liste des
 //     reçus est un ensemble trié. Un `complete` rejoué après succès rend 200 sans
 //     rien réécrire.
-//   · ASSEMBLAGE EN FLUX : les morceaux sont relus un à un depuis MinIO et
-//     poussés dans l'objet final pendant que le sha256 est calculé AU PASSAGE —
-//     aucune pièce n'est tenue entière en mémoire. Empreinte fausse → l'objet
-//     final est retiré, aucune clé n'est posée sur la pièce, l'envoi passe
-//     `echec` et sa liste est vidée : tous les index sont à réémettre.
+//   · ASSEMBLAGE : les morceaux sont relus un à un depuis MinIO et passés au
+//     client d'objet sous forme de flux, le sha256 étant calculé au passage.
+//     LIMITE CONNUE, dite telle quelle : le client `minio` découpe ce flux en
+//     parts de 64 Mio qu'il tient en mémoire pour les signer — une photo (moins
+//     de 64 Mio) est donc entièrement en mémoire pendant son assemblage, et un
+//     morceau reçu (5 Mio au plus) l'est pendant son dépôt. Empreinte fausse →
+//     l'objet final est retiré, aucune clé n'est posée sur la pièce, l'envoi
+//     passe `echec` et sa liste est vidée : tous les index sont à réémettre.
+//   · PIÈCE `note` : elle n'a pas d'octets → 400 `VALIDATION_FAILED` sur les
+//     trois routes. Pièce assemblée qui reçoit une AUTRE empreinte → 409
+//     `UPLOAD_ALREADY_ASSEMBLED`, terminal, rien n'est modifié (revue A17).
+//   · STOCKAGE : non configuré ou injoignable → 503 réessayable, jamais 500.
 //   · PD8 : MinIO n'est jamais exposé. Aucune URL présignée n'est fabriquée,
 //     aucune clé de stockage ni aucun nom de bucket ne sort dans une réponse.
 //   · 11 §2 : rien de ce que contient une pièce n'est journalisé — seulement des
@@ -27,11 +34,18 @@
 //   · D8 : `expire_le` = instant du dernier morceau reçu + 7 jours (la purge
 //     arrive en L6c-3).
 //
-// ── POURQUOI UNE TRANSACTION PAR APPEL, VERROU SUR LA LIGNE D'ENVOI ──────────
-// Deux morceaux d'une même pièce peuvent arriver en même temps (deux onglets, un
-// rejeu) : la liste `chunks_recus` est lue puis réécrite. Le `FOR UPDATE` sur la
-// ligne d'envoi sérialise ces écritures, et un `complete` concurrent attend que
-// le morceau en cours soit posé — l'assemblage ne lit jamais un état à moitié.
+// ── VERROUS : UNE TRANSACTION PAR APPEL, UN ORDRE UNIQUE (revue A17) ────────
+// Les trois routes prennent leurs verrous dans le MÊME ordre : d'abord la ligne
+// d'envoi (`attachment_uploads`, FOR UPDATE), ensuite la pièce et sa session
+// (FOR SHARE, via la propriété). Quand la ligne d'envoi EXISTE, deux appels sur
+// la même pièce sont sérialisés dès leur première requête, avant d'avoir pris
+// quoi que ce soit d'autre : un `complete` qui écrit `attachments` ne peut plus
+// attendre un verrou partagé tenu par un appel qui l'attend lui-même. Quand elle
+// n'existe pas encore (tout premier morceau), il n'y a rien à verrouiller : deux
+// premiers morceaux simultanés se rangent sur l'insertion (clé primaire), puis
+// relisent la ligne verrouillée. Ce raisonnement n'exclut pas tout interblocage
+// avec d'autres écritures de la base (un push concurrent) : un `40P01` ou un
+// `55P03` résiduel devient un 503 RÉESSAYABLE, jamais un 500.
 //
 // Traçabilité : E7, E9 · invariants 1, 3 et 8 · 05 §9.6, §9.8-7, §9.9.
 // =============================================================================
@@ -67,6 +81,11 @@ const MESSAGES = {
     'L’empreinte de la pièce jointe assemblée ne correspond pas : tous ses morceaux sont à renvoyer.',
   indisponible:
     'Le stockage des pièces jointes est momentanément indisponible. Rien n’est perdu sur l’appareil ; l’envoi sera retenté.',
+  occupe:
+    'La pièce jointe est en cours de traitement par un autre envoi. Rien n’est perdu sur l’appareil ; réessayez dans un instant.',
+  sansOctets: 'Cette pièce jointe est une note : elle n’a pas d’octets à envoyer.',
+  dejaAssemblee:
+    'Cette pièce jointe est déjà reconstituée au siège avec un autre contenu : elle n’est pas modifiée.',
   interne: 'Une erreur interne est survenue.',
 } as const;
 
@@ -95,6 +114,48 @@ function stockage(): Stockage {
     bucket: conf.MINIO_BUCKET_ATTACHMENTS,
   };
   return stockageCourant;
+}
+
+/**
+ * Un appel au stockage : toute panne (connexion refusée, délai, objet absent)
+ * devient un 503 réessayable. Une `AppError` déjà levée passe telle quelle.
+ */
+async function auStockage<T>(appel: () => Promise<T>): Promise<T> {
+  try {
+    return await appel();
+  } catch (erreur) {
+    if (erreur instanceof AppError) throw erreur;
+    throw new AppError('SERVICE_UNAVAILABLE', MESSAGES.indisponible);
+  }
+}
+
+/** Le code SQLSTATE d'une erreur PostgreSQL, même enveloppée par Drizzle (`cause`). */
+function codeSql(erreur: unknown): string | null {
+  let courante: unknown = erreur;
+  for (let profondeur = 0; profondeur < 5; profondeur += 1) {
+    if (typeof courante !== 'object' || courante === null) return null;
+    const code = (courante as { code?: unknown }).code;
+    if (typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code)) return code;
+    courante = (courante as { cause?: unknown }).cause;
+  }
+  return null;
+}
+
+/** Interblocage (40P01) ou verrou indisponible (55P03) : réessayable → 503. */
+const CODES_SQL_REESSAYABLES: ReadonlySet<string> = new Set(['40P01', '55P03']);
+
+type TransactionPg = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function enTransaction<T>(travail: (tx: TransactionPg) => Promise<T>): Promise<T> {
+  try {
+    return await db.transaction(travail);
+  } catch (erreur) {
+    const code = codeSql(erreur);
+    if (code !== null && CODES_SQL_REESSAYABLES.has(code)) {
+      throw new AppError('SERVICE_UNAVAILABLE', MESSAGES.occupe);
+    }
+    throw erreur;
+  }
 }
 
 /** Objet d'un morceau en attente d'assemblage. Jamais rendu au client (PD8). */
@@ -131,6 +192,7 @@ async function pieceDuProprietaire(
     { utilisateurId, missionId: piece.missionId },
   );
   if (propriete !== 'proprietaire') throw new AppError('FORBIDDEN', MESSAGES.interdite);
+  if (piece.kind === 'note') throw new AppError('VALIDATION_FAILED', MESSAGES.sansOctets);
   return piece;
 }
 
@@ -164,9 +226,11 @@ export async function recevoirMorceau(
   index: number,
   octets: Buffer,
 ): Promise<ReponseMorceau> {
-  return db.transaction(async (tx) => {
+  const { client, bucket } = stockage();
+  return enTransaction(async (tx) => {
+    // Ordre unique : l'envoi d'abord (s'il existe), la pièce ensuite.
+    await lireEnvoi(tx, pieceId);
     const piece = await pieceDuProprietaire(tx, utilisateurId, pieceId);
-    const { client, bucket } = stockage();
 
     await tx
       .insert(attachmentUploads)
@@ -190,9 +254,11 @@ export async function recevoirMorceau(
     // Déjà assemblée : rien à recevoir, la réponse dit ce qui est acquis.
     if (envoi.statut === 'assemble') return { chunksRecus: trier(envoi.chunksRecus) };
 
-    await client.putObject(bucket, cleMorceau(pieceId, index), octets, octets.byteLength, {
-      'Content-Type': 'application/octet-stream',
-    });
+    await auStockage(() =>
+      client.putObject(bucket, cleMorceau(pieceId, index), octets, octets.byteLength, {
+        'Content-Type': 'application/octet-stream',
+      }),
+    );
 
     const chunksRecus = trier([...envoi.chunksRecus, index]);
     await tx
@@ -215,9 +281,10 @@ export async function lireStatutEnvoi(
   utilisateurId: string,
   pieceId: string,
 ): Promise<ReponseStatutPiece> {
-  return db.transaction(async (tx) => {
-    await pieceDuProprietaire(tx, utilisateurId, pieceId);
+  stockage();
+  return enTransaction(async (tx) => {
     const envoi = await lireEnvoi(tx, pieceId);
+    await pieceDuProprietaire(tx, utilisateurId, pieceId);
     if (envoi === null) return { statut: 'aucun', chunksRecus: [] };
     return { statut: envoi.statut, chunksRecus: trier(envoi.chunksRecus) };
   });
@@ -246,7 +313,8 @@ async function* morceauxEnFlux(
 type IssueAssemblage =
   | { readonly type: 'assemble' }
   | { readonly type: 'manquants'; readonly index: number[] }
-  | { readonly type: 'empreinte'; readonly index: number[] };
+  | { readonly type: 'empreinte'; readonly index: number[] }
+  | { readonly type: 'deja_assemblee' };
 
 export async function terminerEnvoi(
   utilisateurId: string,
@@ -254,9 +322,10 @@ export async function terminerEnvoi(
   corps: CorpsTerminerPiece,
   journal: FastifyBaseLogger,
 ): Promise<ReponseTerminerPiece> {
-  const issue = await db.transaction(async (tx): Promise<IssueAssemblage> => {
-    const piece = await pieceDuProprietaire(tx, utilisateurId, pieceId);
+  const st = stockage();
+  const issue = await enTransaction(async (tx): Promise<IssueAssemblage> => {
     const envoi = await lireEnvoi(tx, pieceId);
+    const piece = await pieceDuProprietaire(tx, utilisateurId, pieceId);
     if (envoi === null) return { type: 'manquants', index: tous(corps.chunks) };
 
     if (envoi.statut === 'assemble') {
@@ -264,31 +333,33 @@ export async function terminerEnvoi(
       // Une AUTRE empreinte sur une pièce assemblée ne touche à rien.
       return envoi.sha256Attendu === corps.sha256
         ? { type: 'assemble' }
-        : { type: 'empreinte', index: tous(corps.chunks) };
+        : { type: 'deja_assemblee' };
     }
 
     const recus = new Set(envoi.chunksRecus);
     const manquants = tous(corps.chunks).filter((i) => !recus.has(i));
     if (manquants.length > 0) return { type: 'manquants', index: manquants };
 
-    const st = stockage();
     let taille = 0;
     for (let i = 0; i < corps.chunks; i += 1) {
-      taille += (await st.client.statObject(st.bucket, cleMorceau(pieceId, i))).size;
+      const info = await auStockage(() => st.client.statObject(st.bucket, cleMorceau(pieceId, i)));
+      taille += info.size;
     }
     const cle = cleDefinitive(piece.missionId, pieceId);
     const empreinte = createHash('sha256');
-    await st.client.putObject(
-      st.bucket,
-      cle,
-      Readable.from(morceauxEnFlux(st, pieceId, corps.chunks, empreinte)),
-      taille,
-      { 'Content-Type': 'application/octet-stream' },
+    await auStockage(() =>
+      st.client.putObject(
+        st.bucket,
+        cle,
+        Readable.from(morceauxEnFlux(st, pieceId, corps.chunks, empreinte)),
+        taille,
+        { 'Content-Type': 'application/octet-stream' },
+      ),
     );
     const calculee = empreinte.digest('hex');
 
     if (calculee !== corps.sha256) {
-      await st.client.removeObject(st.bucket, cle);
+      await auStockage(() => st.client.removeObject(st.bucket, cle));
       await tx
         .update(attachmentUploads)
         .set({
@@ -320,6 +391,9 @@ export async function terminerEnvoi(
 
   if (issue.type === 'manquants') {
     throw new AppErrorIndex('UPLOAD_CHUNKS_MISSING', MESSAGES.manquants, issue.index);
+  }
+  if (issue.type === 'deja_assemblee') {
+    throw new AppError('UPLOAD_ALREADY_ASSEMBLED', MESSAGES.dejaAssemblee);
   }
   if (issue.type === 'empreinte') {
     journal.warn({ pieceId, morceaux: corps.chunks }, 'Empreinte de pièce jointe refusée');
