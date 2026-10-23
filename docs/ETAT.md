@@ -2,10 +2,9 @@
 
 Historique précédent : `docs/archive/ETAT_2026-08-27_au_2026-09-10.md`.
 
-## 2026-10-09 — L6b « la descente » : revues A17 et A29 ACCEPTÉES, PR ouverte
+## 2026-10-23 — CI plus rapide : PR lot/ci-vitesse en cours
 
-Branche : `lot/l6b` (worktree `_axl6b`) · main au départ : `bfb3047` (L6a fusionnée, #140)
-Fait : `GET /v1/sync/pull` (curseur sans perte, projections fermées, sync_log pull) ; descente, remappage, minuterie 30 s + backoff 60 s, remise en file, écran de synchronisation.
-Prochaine action : fusion au vert, puis L6c (octets, preuve E2E des 8 scénarios, resynchronisation volontaire, horloge PostgreSQL côté siège).
-Rappels : séance P-C sur iPad due par Williams ; cotation croisée humaine de la banque non faite ; arbitrages [L6b] « à confirmer » pour la séance.
-Tests rouges connus : e2e `hors-ligne-l5.e2e.ts:370` intermittent sous 4 workers.
+Branche : `lot/ci-vitesse` (depuis main `ca46120`) · dernier commit vert : `ca46120`
+Fait : CI sans double run (push lot/** retiré), jobs en parallèle, images PR en parallèle ; `verify:rapide` parallèle (scripts/verify-rapide.mjs) ; autorisations du projet ; audit `docs/AUDIT_VITESSE_2026-10-23.md`.
+Prochaine action : lire le run CI de la PR et remesurer la durée ; puis briefs par lot (C12), enquête ZAP (A6), partage de l'intégration (A7).
+Tests rouges connus : e2e `hors-ligne-l5.e2e.ts:370` intermittent ; ZAP baseline rouge sur main.

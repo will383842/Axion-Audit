@@ -24,6 +24,10 @@
 | L7-L8 console/scoring           | 03 (§18, §22.3, M5, §27.1, §32.1, §33.4, §36.3) → 04                                          |
 | L10-L11 rapports/LLM            | 03 (M6, §26.2, §36.6) → 01 (§20.3) → 04 → 06 (pseudonymisation 2 passes)                      |
 
+**Ne jamais ouvrir en entier** `docs/TRACABILITE_E1-E47.md` (406 Ko, `check:tracabilite` le contrôle en CI) ni
+`AMELIORATIONS.md` (206 Ko) : `grep` ou `offset`/`limit` sur la section voulue. Pour `03` (120 Ko) et `04` (40 Ko),
+lire seulement les § cités ci-dessus.
+
 **Le brief d'un lot vient EXCLUSIVEMENT de la table du fichier 07** (contenu + critères d'acceptation).
 Interdiction de charger le pack entier dans un sous-agent (09 §5.8).
 

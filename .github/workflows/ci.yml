@@ -53,10 +53,14 @@ name: CI
 on:
   pull_request:
     branches: [main]
+  # Pas de `push` sur `lot/**` : chaque push d'une branche de lot lançait DEUX runs
+  # complets (un « push », un « pull_request »), dans deux groupes de concurrence
+  # différents donc sans s'annuler. Le run `pull_request` est celui que la
+  # protection de `main` exige ; le pre-push rejoue les gardes avant d'envoyer.
+  # Audit de vitesse du 2026-10-23 (docs/AUDIT_VITESSE_2026-10-23.md, A3).
   push:
     branches:
       - main
-      - 'lot/**' # 11 §9bis : une branche par incrément, `lot/<code>`.
 
 # Permissions MINIMALES par défaut (02 §30.4-7 « moindre accès »).
 # `packages: write` n'est accordé QUE dans le job qui pousse sur GHCR.
@@ -680,7 +684,8 @@ jobs:
   typecheck:
     name: 2 · typecheck
     runs-on: ubuntu-latest
-    needs: [lint]
+    # Parallèle à `lint` (audit de vitesse A2) : `pnpm typecheck` reconstruit
+    # lui-même les paquets (`build:packages` puis tsc), il ne dépend de rien.
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: ./.github/actions/setup-node-pnpm
@@ -712,7 +717,9 @@ jobs:
   build-sources:
     name: 2bis · build (sources)
     runs-on: ubuntu-latest
-    needs: [jonction]
+    # Plus de `needs: [jonction]` (audit de vitesse A2) : la jonction dure ~20 s
+    # et reste exigée seule par la protection de `main` ; l'attendre retardait
+    # toute la suite sans rien protéger de plus.
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: ./.github/actions/setup-node-pnpm
@@ -787,7 +794,7 @@ jobs:
   integration:
     name: 4 · integration (postgres, redis, minio)
     runs-on: ubuntu-latest
-    needs: [unit]
+    needs: [build-sources] # audit de vitesse A2 : indépendant de `unit`
     services:
       postgres:
         image: postgres:16-alpine
@@ -892,7 +899,7 @@ jobs:
   e2e:
     name: 5 · e2e (chromium)
     runs-on: ubuntu-latest
-    needs: [integration]
+    needs: [build-sources] # audit de vitesse A2 : indépendant de `integration`
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: ./.github/actions/setup-node-pnpm
@@ -942,7 +949,7 @@ jobs:
   schema-diff:
     name: 6 · schema-diff (vs fichier 04)
     runs-on: ubuntu-latest
-    needs: [e2e]
+    needs: [build-sources] # audit de vitesse A2 : indépendant de `e2e`
     services:
       postgres:
         image: postgres:16-alpine
@@ -1251,7 +1258,7 @@ jobs:
   coverage:
     name: couverture ≥ 90 % (modules critiques — 09 §3)
     runs-on: ubuntu-latest
-    needs: [unit]
+    needs: [build-sources] # audit de vitesse A2 : ne dépend pas de `unit` (mesure sa propre exécution)
     # -------------------------------------------------------------------------
     # POURQUOI CE JOB REPREND LE DÉCOR DU JOB `4 · integration` — 2026-08-29.
     # -------------------------------------------------------------------------
@@ -1636,15 +1643,33 @@ jobs:
   # aucun garde. Les trois issues de fond (faire déployer les images de GHCR,
   # garder ce job comme simple contrôle, ou le retirer) sont dans
   # AMELIORATIONS.md — elles engagent le plan de reprise, donc Williams.
+  #
+  # Audit de vitesse A2/A5 (2026-10-23) : sur une pull request, le build de
+  # vérification (sans push) n'a aucune raison d'attendre la fin des tests — il
+  # démarre en parallèle et ne rallonge plus le run de ~75 s. Sur `main`, le job
+  # `build` garde ses portes : on ne pousse JAMAIS d'image avant qu'elles soient vertes.
+  build-pr:
+    name: 7 · constructibilité des 4 images (PR, sans push)
+    if: github.event_name == 'pull_request'
+    needs: [build-sources]
+    uses: ./.github/workflows/build-images.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      pousser: false
+    secrets: inherit
+
   build:
     name: 7 · constructibilité des 4 images (NON déployées — voir AMELIORATIONS)
+    if: github.event_name == 'push'
     needs: [schema-diff, coverage, gitleaks, shellcheck, invariants, anti-skip]
     uses: ./.github/workflows/build-images.yml
     permissions:
       contents: read
       packages: write
     with:
-      pousser: ${{ github.event_name == 'push' }}
+      pousser: true
     secrets: inherit
 
   # ---------------------------------------------------------------------------

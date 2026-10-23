@@ -1,7 +1,25 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "permissions": {
-    "allow": ["Bash(gh secret set:*)"]
+    "allow": [
+      "Bash(gh secret set:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git branch:*)",
+      "Bash(pnpm lint:*)",
+      "Bash(pnpm typecheck:*)",
+      "Bash(pnpm test:unit:*)",
+      "Bash(pnpm test:interface:*)",
+      "Bash(pnpm verify:rapide)",
+      "Bash(pnpm check:*)",
+      "Bash(pnpm format:check)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh run watch:*)"
+    ]
   },
   "hooks": {
     "Stop": [
