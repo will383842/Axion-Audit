@@ -1030,7 +1030,10 @@ const LES_SEPT_BOUTONS: readonly {
   { nom: 'À revoir', motif: /^À revoir/, rangee: 'outils', bord: 'gauche' },
   { nom: 'N/A', motif: /^N\/A/, rangee: 'outils', bord: 'gauche' },
   { nom: 'Note', motif: /^Note$/, rangee: 'outils', bord: 'gauche' },
-  { nom: 'Photo', motif: /^Photo/, rangee: 'outils', bord: 'gauche' },
+  // L6c-1 : « Photo » n'est plus un `button` mais un champ fichier (`ChampPhoto`,
+  // un <label> en apparence de bouton) ; libellé exact, pour écarter « Ajouter
+  // une photo à l’entretien » du panneau de notes.
+  { nom: 'Photo', motif: /^Ajouter une photo$/, rangee: 'outils', bord: 'gauche' },
   { nom: 'Recherche', motif: /^Recherche/, rangee: 'outils', bord: 'gauche' },
   { nom: 'Précédent', motif: /^Précédent$/, rangee: 'navigation', bord: 'gauche' },
   {
@@ -1074,7 +1077,7 @@ async function releverLesBoutons(
   // réduits à ceux des sept qu'ils sont. Le nom accessible est celui que porte
   // `Bouton` : l'`aria-label` s'il existe, sinon le texte.
   const nomsDansLeDom = await carte
-    .getByRole('button')
+    .locator('button, label.axn-photo__declencheur')
     .evaluateAll((boutons) =>
       boutons.map((bouton) => bouton.getAttribute('aria-label') ?? bouton.textContent.trim()),
     );
@@ -1087,7 +1090,10 @@ async function releverLesBoutons(
   const places: PlaceDeBouton[] = [];
   const hautDeRangee = new Map<Rangee, number>();
   for (const bouton of LES_SEPT_BOUTONS) {
-    const cible = carte.getByRole('button', { name: bouton.motif });
+    const cible =
+      bouton.nom === 'Photo'
+        ? carte.locator('label.axn-photo__declencheur').filter({ hasText: bouton.motif })
+        : carte.getByRole('button', { name: bouton.motif });
     if (!attendus.includes(bouton.rangee)) {
       await expect(
         cible,
