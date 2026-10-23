@@ -52,11 +52,24 @@ let missionsQuiEchouent: readonly string[] = [];
 const ecrireMeta = vi.fn<(base: unknown, cle: string, valeur: unknown) => Promise<void>>(() =>
   Promise.resolve(),
 );
-interface SauvegardeProduite {
+// Format v2 : l'écran appelle `ecrireSauvegarde(demande, ecrivain)` — fichier écrit PAR
+// SEGMENTS (en-tête + charge, puis une pièce chiffrée par photo), jamais réuni en une
+// chaîne. Le double reproduit ce contrat : il remet des segments à l'écrivain et rend
+// un bilan `{ enTete, piecesIllisibles }`.
+interface BilanProduit {
   readonly enTete: { readonly creeLe: string; readonly operationsIncluses: number };
+  readonly piecesIllisibles: readonly string[];
 }
-const exporterSauvegarde =
-  vi.fn<(arg: { missionId: string; motDePasse: string }) => Promise<SauvegardeProduite>>();
+interface EcrivainFictif {
+  ecrire(partie: string): Promise<void>;
+}
+const ecrireSauvegarde =
+  vi.fn<
+    (
+      arg: { missionId: string; motDePasse: string },
+      ecrivain: EcrivainFictif,
+    ) => Promise<BilanProduit>
+  >();
 
 vi.mock('../../app/contexte.js', () => ({
   useTerrain: () => terrain,
@@ -92,7 +105,7 @@ vi.mock('../../local/base.js', () => ({
 }));
 
 vi.mock('../../sauvegarde/sauvegarde.js', () => ({
-  exporterSauvegarde,
+  ecrireSauvegarde,
   MotDePasseExportInvalideError: class MotDePasseExportInvalideError extends Error {
     constructor() {
       super('Mot de passe de sauvegarde invalide.');
@@ -174,14 +187,19 @@ beforeEach(() => {
   missionsQuiEchouent = [];
   fichiersDeposes = [];
   ecrireMeta.mockClear();
-  exporterSauvegarde.mockReset();
-  exporterSauvegarde.mockImplementation(({ missionId }: { missionId: string }) => {
+  ecrireSauvegarde.mockReset();
+  ecrireSauvegarde.mockImplementation(async ({ missionId }, ecrivain) => {
     if (missionsQuiEchouent.includes(missionId)) {
-      return Promise.reject(new Error('Panne fictive d’export sur cette mission.'));
+      throw new Error('Panne fictive d’export sur cette mission.');
     }
-    return Promise.resolve({
+    // Segments v2 : en-tête + charge, puis une pièce chiffrée (une photo).
+    await ecrivain.ecrire('{"enTete":{},"charge":"x","pieces":[');
+    await ecrivain.ecrire('{"id":"piece-fictive"}');
+    await ecrivain.ecrire(']}');
+    return {
       enTete: { creeLe: '2026-09-06T18:30:00.000Z', operationsIncluses: 3 },
-    });
+      piecesIllisibles: [],
+    };
   });
   Object.defineProperty(URL, 'createObjectURL', {
     configurable: true,
@@ -227,7 +245,7 @@ describe('B4 — mot de passe absent : rien n’est sauvegardé, et le rappel RE
     await monter();
     await terminerLaJournee();
 
-    expect(exporterSauvegarde).not.toHaveBeenCalled();
+    expect(ecrireSauvegarde).not.toHaveBeenCalled();
     expect(fichiersDeposes).toEqual([]);
     expect(dateDuRituelEcrite()).toBe(false);
   });
@@ -251,7 +269,7 @@ describe('B4 — mot de passe FAUX : un export qui échoue n’éteint pas davan
     saisirMotDePasse(MDP_A27);
     await terminerLaJournee();
 
-    expect(exporterSauvegarde).toHaveBeenCalledTimes(1);
+    expect(ecrireSauvegarde).toHaveBeenCalledTimes(1);
     expect(fichiersDeposes).toEqual([]);
     expect(dateDuRituelEcrite()).toBe(false);
   });
@@ -277,7 +295,7 @@ describe('B4 — deux missions, une seule réussit : la date n’est PAS écrite
     // Anti-vacuité : les DEUX missions ont bien été tentées. Un rituel qui
     // s'arrêterait à la première laisserait la seconde sans filet en disant
     // « sauvegarde produite ».
-    expect(exporterSauvegarde).toHaveBeenCalledTimes(2);
+    expect(ecrireSauvegarde).toHaveBeenCalledTimes(2);
     expect(fichiersDeposes).toHaveLength(1);
     // Et la date ne s'écrit pas : il reste des données sans filet sur l'appareil.
     expect(dateDuRituelEcrite()).toBe(false);
@@ -294,7 +312,7 @@ describe('B4 — deux missions, une seule réussit : la date n’est PAS écrite
     saisirMotDePasse(MDP_A27);
     await terminerLaJournee();
 
-    expect(exporterSauvegarde).toHaveBeenCalledTimes(2);
+    expect(ecrireSauvegarde).toHaveBeenCalledTimes(2);
     expect(fichiersDeposes).toHaveLength(2);
     await waitFor(() => {
       expect(dateDuRituelEcrite()).toBe(true);
