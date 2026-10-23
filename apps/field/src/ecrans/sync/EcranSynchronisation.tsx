@@ -13,7 +13,7 @@
 //
 // Traçabilité : E7, E38, E44 ; invariants 4, 5, 7, 8.
 // =============================================================================
-import { useCallback, useState, type ReactNode } from 'react';
+import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Bouton, Message, RappelHorsLigne, ZoneEtat, type EtatZone } from '@axion/ui';
 import {
@@ -22,9 +22,13 @@ import {
 } from '../../app/capacites-hors-ligne.js';
 import { useTerrain } from '../../app/contexte.js';
 import { portSyncDeLaBase } from '../../app/port-sync-terrain.js';
+import { lireMeta, type BaseLocale } from '../../local/base.js';
 import { contexteLocal } from '../../local/contexte.js';
+import { chargeMissionSchema } from '../../local/formes.js';
 import { useEnLigne } from '../../session/media.js';
+import { cleMissionRetiree } from '../../sync/descente.js';
 import { lireFileSync, type FileSync, type OpBloquee } from '../../sync/file-locale.js';
+import type { ResultatResynchronisation } from '../../sync/port.js';
 
 const MESSAGE_ECHEC_REMISE =
   'La remise en file n’a pas pu se faire : l’opération reste à examiner, rien n’a été retiré de cet appareil. Réessayez ; si le problème persiste, exportez une sauvegarde de secours.';
@@ -40,6 +44,126 @@ function LigneOp({ op, geste }: { readonly op: OpBloquee; readonly geste?: React
       <p>{op.motif}</p>
       {geste !== undefined && <div className="axn-journee__actions">{geste}</div>}
     </li>
+  );
+}
+
+const MESSAGE_ECHEC_RESYNCHRONISATION =
+  'La resynchronisation n’a pas pu se faire : rien n’a été retiré de cet appareil. Réessayez ; si le problème persiste, exportez une sauvegarde de secours.';
+
+const MESSAGE_RETIREE_PERSISTANT =
+  'Le siège vous a retiré l’accès à cette mission : toutes vos données restent sur cet appareil. Exportez une sauvegarde de secours et prenez contact avec le siège.';
+
+interface MissionLocale {
+  readonly id: string;
+  readonly titre: string;
+  readonly retiree: boolean;
+}
+
+/** Les missions présentes sur l'appareil, leur titre (déchiffré) et l'état « retirée ». */
+async function lireMissionsLocales(base: BaseLocale): Promise<MissionLocale[]> {
+  const { coffre } = contexteLocal();
+  const missions: MissionLocale[] = [];
+  for (const ligne of await base.missions.toArray()) {
+    let titre = 'Mission sans titre lisible';
+    try {
+      titre = (await coffre.dechiffrer(ligne.charge, chargeMissionSchema)).titre;
+    } catch {
+      // Titre illisible : la mission reste offerte, sous un libellé neutre.
+    }
+    const retiree = await lireMeta(base, cleMissionRetiree(ligne.id));
+    missions.push({ id: ligne.id, titre, retiree: retiree !== undefined && retiree !== null });
+  }
+  return missions;
+}
+
+type ResultatAffiche = ResultatResynchronisation & { readonly missionId: string };
+
+/**
+ * 05 §9.5 — la resynchronisation VOLONTAIRE, mission par mission. Quatre états :
+ * repos (bouton actif), en cours (bouton occupé, second clic sans effet), refus
+ * « envoyez d'abord » et échec / mission retirée — tous dits en role="status",
+ * jamais en alerte. L'écran affiche le message du port tel quel.
+ */
+function Resynchronisation({ base }: { readonly base: BaseLocale }): ReactNode {
+  const missions = useLiveQuery(async (): Promise<MissionLocale[] | null> => {
+    try {
+      return await lireMissionsLocales(base);
+    } catch {
+      return null;
+    }
+  }, [base]);
+  const [enCours, setEnCours] = useState<string | null>(null);
+  const [resultat, setResultat] = useState<ResultatAffiche | null>(null);
+  const occupe = useRef(false);
+
+  const resynchroniser = useCallback(
+    (missionId: string): void => {
+      if (occupe.current) return;
+      occupe.current = true;
+      setEnCours(missionId);
+      setResultat(null);
+      void portSyncDeLaBase(base)
+        .resynchroniser(missionId)
+        .then(
+          (r) => {
+            setResultat({ ...r, missionId });
+          },
+          () => {
+            // Aucune trace technique affichée (11 §2).
+            setResultat({ statut: 'echec', message: MESSAGE_ECHEC_RESYNCHRONISATION, missionId });
+          },
+        )
+        .finally(() => {
+          occupe.current = false;
+          setEnCours(null);
+        });
+    },
+    [base],
+  );
+
+  if (missions === undefined || missions === null || missions.length === 0) return null;
+
+  return (
+    <section className="axn-pile">
+      <h2 className="axn-journee__titre-carte">Questionnaire et affectations</h2>
+      <p className="axn-coquille__mention">
+        Les changements du siège sur le questionnaire n’arrivent sur cet appareil que si vous le
+        demandez. Envoyez d’abord vos saisies.
+      </p>
+      <ul className="axn-journee__liste">
+        {missions.map((mission) => {
+          const dernier = resultat?.missionId === mission.id ? resultat : null;
+          return (
+            <li key={mission.id} className="axn-journee__carte">
+              <p className="axn-coquille__mention">{`Mission : ${mission.titre}`}</p>
+              {mission.retiree && dernier?.statut !== 'mission_retiree' && (
+                <Message ton="avertissement" titre="Mission retirée">
+                  {MESSAGE_RETIREE_PERSISTANT}
+                </Message>
+              )}
+              {dernier !== null && (
+                <Message ton={dernier.statut === 'succes' ? 'info' : 'avertissement'}>
+                  {dernier.message}
+                </Message>
+              )}
+              <div className="axn-journee__actions">
+                <Bouton
+                  variante="secondaire"
+                  chargement={enCours === mission.id}
+                  disabled={enCours !== null}
+                  aria-label={`Resynchroniser la mission ${mission.titre}`}
+                  onClick={() => {
+                    resynchroniser(mission.id);
+                  }}
+                >
+                  Resynchroniser
+                </Bouton>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 
@@ -205,6 +329,9 @@ export function EcranSynchronisation(): ReactNode {
           </>
         )}
       </ZoneEtat>
+
+      {/* 05 §9.5 — offert même file vide : on envoie d'abord, puis on resynchronise. */}
+      {base !== null && <Resynchronisation base={base} />}
 
       {/* §33.2 — ce qui reste faisable sans réseau ; se tait en ligne. */}
       <RappelHorsLigne

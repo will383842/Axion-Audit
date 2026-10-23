@@ -75,6 +75,34 @@ export interface PortSyncAffichable extends PortSyncReel {
    * pour que ses doubles de test restent valides (même raison que ci-dessus).
    */
   remettreEnFile(missionId: string, opIds: readonly string[]): Promise<number>;
+  /**
+   * L6c-3 — la resynchronisation VOLONTAIRE (05 §9.5) : un passage de montée
+   * complet, puis — seulement si la file ET les pièces de la mission sont vides —
+   * une descente complète depuis `since = null`. Le `message` est en français,
+   * prêt à afficher ; l'écran ne le recompose pas.
+   */
+  resynchroniser(missionId: string): Promise<ResultatResynchronisation>;
+}
+
+export interface ResultatResynchronisation {
+  readonly statut: 'succes' | 'refusee' | 'mission_retiree' | 'echec';
+  readonly message: string;
+}
+
+const MESSAGE_RESYNCHRONISATION_REUSSIE =
+  'Resynchronisation terminée : mission, questionnaire et affectations à jour sur cet appareil.';
+
+const MESSAGE_MISSION_RETIREE =
+  'Cette mission vous a été retirée par le siège : toutes vos données restent sur cet appareil. Exportez une sauvegarde de secours et prenez contact avec le siège.';
+
+const MESSAGE_RESYNCHRONISATION_HORS_LIGNE =
+  'Le siège est injoignable : la resynchronisation n’a pas pu aller au bout. Vos données restent sur cet appareil ; réessayez au retour du réseau.';
+
+function messageRefusResynchronisation(ops: number, pieces: number): string {
+  const attentes: string[] = [];
+  if (ops > 0) attentes.push(pluriel(ops, 'opération', 'opérations'));
+  if (pieces > 0) attentes.push(pluriel(pieces, 'pièce jointe', 'pièces jointes'));
+  return `Envoyez d’abord vos saisies : ${attentes.join(' et ')} ${ops + pieces > 1 ? 'attendent' : 'attend'} encore sur cet appareil. Rien n’a été modifié ; la resynchronisation sera possible une fois tout envoyé.`;
 }
 
 const MESSAGE_HORS_LIGNE =
@@ -286,6 +314,58 @@ export function creerPortSync(deps: DependancesPort): PortSyncAffichable {
       const remises = await remettreOpsEnFile(deps.base, missionId, opIds);
       await actualiser(missionId);
       return remises;
+    },
+
+    async resynchroniser(missionId: string): Promise<ResultatResynchronisation> {
+      let resultat: ResultatResynchronisation;
+      let retenu: EchecRetenu | null = null;
+      try {
+        // 1. La montée d'abord : rien ne descend par-dessus une saisie non envoyée.
+        const bilan = await moteur.pousser(missionId);
+        retenu = ECHEC_RETENU[bilan.statut];
+        // 2. Tout ce qui ne vit que sur l'appareil bloque : file (tous statuts) et pièces.
+        const ops = await deps.base.outbox.where('missionId').equals(missionId).count();
+        const pieces = await compterPiecesNonEnvoyees(deps.base, missionId);
+        const piecesRestantes = pieces.aEnvoyer + pieces.enEchec;
+        if (ops + piecesRestantes > 0) {
+          resultat = {
+            statut: 'refusee',
+            message: messageRefusResynchronisation(ops, piecesRestantes),
+          };
+        } else {
+          // 3. La descente complète, depuis `since = null`.
+          const tiree = await descente.tirer(missionId, { complete: true });
+          if (tiree.statut === 'succes') {
+            const illisibles = tiree.enregistrementsIllisibles;
+            resultat = {
+              statut: 'succes',
+              message:
+                illisibles === 0
+                  ? MESSAGE_RESYNCHRONISATION_REUSSIE
+                  : `${MESSAGE_RESYNCHRONISATION_REUSSIE} ${pluriel(illisibles, 'ligne du siège non lisible', 'lignes du siège non lisibles')} sur cet appareil.`,
+            };
+          } else if (tiree.missionRetiree === true) {
+            resultat = { statut: 'mission_retiree', message: MESSAGE_MISSION_RETIREE };
+          } else {
+            retenu = ECHEC_DESCENTE[tiree.statut];
+            resultat = {
+              statut: 'echec',
+              message:
+                tiree.statut === 'reconnexion_requise'
+                  ? MESSAGE_RECONNEXION_REQUISE
+                  : (tiree.message ?? MESSAGE_RESYNCHRONISATION_HORS_LIGNE),
+            };
+          }
+        }
+      } catch {
+        // Panne locale (coffre, base) : dite en français, sans trace technique.
+        resultat = { statut: 'echec', message: MESSAGE_PANNE_LOCALE };
+        retenu = 'echec';
+      }
+      if (retenu === null) echecs.delete(missionId);
+      else echecs.set(missionId, retenu);
+      await actualiser(missionId);
+      return resultat;
     },
 
     messageAffiche(missionId: string | null): string | null {
