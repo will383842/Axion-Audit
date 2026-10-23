@@ -31,8 +31,8 @@
 //     aucune clé de stockage ni aucun nom de bucket ne sort dans une réponse.
 //   · 11 §2 : rien de ce que contient une pièce n'est journalisé — seulement des
 //     identifiants techniques et des compteurs.
-//   · D8 : `expire_le` = instant du dernier morceau reçu + 7 jours (la purge
-//     arrive en L6c-3).
+//   · D8 : `expire_le` = instant du dernier morceau reçu + 7 jours ; la purge
+//     (`purge-envois.ts`, L6c-3) retire ensuite les morceaux, jamais la ligne.
 //
 // ── VERROUS : UNE TRANSACTION PAR APPEL, UN ORDRE UNIQUE (revue A17) ────────
 // Les trois routes prennent leurs verrous dans le MÊME ordre : d'abord la ligne
@@ -92,17 +92,18 @@ const MESSAGES = {
 // -----------------------------------------------------------------------------
 // LE STOCKAGE — un seul client, construit à la demande
 // -----------------------------------------------------------------------------
-interface Stockage {
+export interface Stockage {
   readonly client: ClientMinio;
   readonly bucket: string;
 }
 
 let stockageCourant: Stockage | null = null;
 
-function stockage(): Stockage {
+/** Le stockage des pièces s'il est configuré, sinon `null` (la purge s'en sert). */
+export function stockageConfigure(): Stockage | null {
   if (stockageCourant !== null) return stockageCourant;
   const conf: ConfigStockage | null = configStockage;
-  if (conf === null) throw new AppError('SERVICE_UNAVAILABLE', MESSAGES.indisponible);
+  if (conf === null) return null;
   stockageCourant = {
     client: new ClientMinio({
       endPoint: conf.MINIO_ENDPOINT,
@@ -114,6 +115,12 @@ function stockage(): Stockage {
     bucket: conf.MINIO_BUCKET_ATTACHMENTS,
   };
   return stockageCourant;
+}
+
+function stockage(): Stockage {
+  const st = stockageConfigure();
+  if (st === null) throw new AppError('SERVICE_UNAVAILABLE', MESSAGES.indisponible);
+  return st;
 }
 
 /**
@@ -158,9 +165,17 @@ async function enTransaction<T>(travail: (tx: TransactionPg) => Promise<T>): Pro
   }
 }
 
+/**
+ * Préfixe de TOUS les morceaux d'une pièce (la purge de L6c-3 supprime par ce
+ * préfixe, jamais sous `pieces/…`). Jamais rendu au client (PD8).
+ */
+export function prefixeMorceaux(pieceId: string): string {
+  return `envois/${pieceId}/`;
+}
+
 /** Objet d'un morceau en attente d'assemblage. Jamais rendu au client (PD8). */
 export function cleMorceau(pieceId: string, index: number): string {
-  return `envois/${pieceId}/${String(index).padStart(5, '0')}`;
+  return `${prefixeMorceaux(pieceId)}${String(index).padStart(5, '0')}`;
 }
 
 /** Objet final d'une pièce assemblée. Jamais rendu au client (PD8). */
