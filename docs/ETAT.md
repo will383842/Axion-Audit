@@ -2,9 +2,9 @@
 
 Historique précédent : `docs/archive/ETAT_2026-08-27_au_2026-09-10.md`.
 
-## 2026-10-23 — L6c-1 fusionnée (#145) ; L6c-2 (preuve E2E des 8 scénarios) démarre
+## 2026-10-23 — L6c-2 fusionnée (#146) ; L6c-3 en deux PR, lot scoring S1 lancé
 
-Branche : `lot/l6c-2` (depuis main `5ca8dda`) · dernier commit vert : `5ca8dda`
-Fait : octets des pièces (chunks serveur, terrain chiffré, export v2) ; avis minio acceptés Phase 1 (à lever avant la production) ; fiches durée-cible et dossier entreprise arbitrées en Phase 2.
-Prochaine action : L6c-2, les 8 scénarios §9.8 rejoués en E2E ; puis L6c-3 (resync volontaire, horloge PG, purge).
-Tests rouges connus : e2e `hors-ligne-l5.e2e.ts:370` intermittent ; ZAP baseline rouge sur main.
+main `dd778bb` · PR ouverte : #147 (ZAP + fil rouge) · branches : `lot/l6c-3-siege` (horloge PG, purge), `lot/l6c-3-terrain` (resynchronisation, absorption perdue), `lot/l8-branche` (compute-scores + scores.csv)
+Fait : preuve E2E des 8 scénarios §9.8 sur vraie API ; reconnexion corrigée ; plan L6c-3 et plan scores/DOCX/audit fictif (DECISIONS `[Plan]`).
+Prochaine action : tests écrits avant le code (testeurs), puis auteurs, relecteurs A17/A29, PR-A puis PR-B ; ensuite S2 profil, S3 console, S4 DOCX, S6 audit fictif.
+Tests rouges connus : e2e `s4-horloge` oscille une fois sur main (à stabiliser) ; ZAP : voir #147.
