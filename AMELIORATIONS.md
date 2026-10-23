@@ -2802,3 +2802,83 @@ paysage, pendant **V-4.2 et V-5** de la séance P-C. _≈ 0,2 j pour rendre le t
 
 **Si l'observation de séance ne relève rien, cette fiche est REFUSÉE et disparaît** — c'est le
 résultat attendu, et le moins cher.
+
+## 2026-10-23 — [Phase 1/2] Étage 2, ARBITRÉE (Phase 2, après le rapport DOCX) — **DURÉE-CIBLE** : l'audit se construit pour tenir une durée fixée (2 h, 4 h, 1 jour…)
+
+**Demande de Williams (23/10/2026).** À la création d'une mission, choisir la durée de collecte
+(« deux heures, quatre heures ou autre ») ; l'outil compose un audit qui tient dans ce temps.
+
+**Ce qui existe déjà.** M2 assemble le questionnaire par palier × secteur × périmètre × niveau d'audit ;
+`questions.criticality` (`bloquant` / `important` / `informatif`) ; `estimation_params` (abaques
+administrables, durée-type par profil) ; §18.1.2 estime la charge ; §18.1.3 propose le nombre d'auditeurs
+pour un délai. **Ce qui manque :** partir d'une durée imposée et CHOISIR le contenu pour qu'il tienne.
+
+**Ce que ça fait.**
+
+1. À la création : champ « durée de collecte » (préréglages 2 h · 4 h · 1 j · 2 j · valeur libre, en minutes).
+2. Un temps estimé par question = abaque par type de réponse (`yes_no` 20 s … `table` 3 min), éditable dans
+   `estimation_params` ; surcharge possible question par question dans la banque.
+3. Sélection automatique dans l'ordre : toutes les `bloquant`, puis `important`, puis `informatif`, par bloc
+   actif, jusqu'à remplir le budget (marge de 15 % pour l'imprévu). Plafond par unité et par profil
+   (on ne passe pas 4 h avec le seul dirigeant).
+4. Aperçu avant validation : « 118 questions · 3 h 42 sur 4 h » ; ce qui est écarté est LISTÉ (rien n'est
+   perdu en silence, invariant 7) et rattrapable à la main.
+5. Écran de séance : jauge « temps restant / questions restantes » et rappel des `bloquant` non traités.
+6. Le rapport indique le périmètre réellement couvert (« audit de 4 h : 118 questions sur 412 »).
+
+**Hors périmètre de la fiche.** Réordonner les questions en séance ; apprentissage des durées réelles
+(§18.3 s'en charge déjà) ; tarification liée à la durée.
+
+**Impact.** Schéma 04 : **oui, une colonne** `missions.target_duration_min INT NULL` (et, selon arbitrage,
+`questions.estimated_seconds INT NULL`) → **décision humaine requise (11 §3)**. API : un champ à la création
+de mission + une route d'aperçu. Moteur M2 : un tri/remplissage de plus, testable à 100 % (fonction pure).
+Terrain : jauge de séance (4 états). _≈ 4 à 5 j (schéma 0,5 · M2 1,5 · aperçu console 1 · jauge terrain 1 ·
+tests 1)._
+
+**Risques.** Une banque sans `criticality` fiable donne une sélection arbitraire → à contrôler à la cotation
+croisée de la banque. Une durée trop courte pour les `bloquant` seuls : l'outil doit REFUSER et dire le
+minimum possible, pas tronquer.
+
+**À trancher par Williams.** ① Phase 1 (avant le rapport) ou Phase 2 ? ② Le temps par question : abaque par
+type seulement (simple), ou mesuré question par question ? ③ Préréglages de durée à proposer.
+
+## 2026-10-23 — [Phase 1/2] Étage 2, ARBITRÉE (Phase 2, documents et saisie d'abord) — **DOSSIER ENTREPRISE ASSISTÉ PAR LLM** : renseigner l'entreprise, le LLM complète au maximum
+
+**Demande de Williams (23/10/2026).** Pouvoir saisir des informations sur l'entreprise à auditer et qu'un LLM
+complète le plus possible, pour que l'audit soit préparé au mieux.
+
+**Ce qui existe déjà.** `companies` (SIREN, NAF → secteur R4) ; `llm_calls` (modèle, tokens, coût, plafond
+par mission) ; M6.3 : l'IA rédige le rapport avec trois états brut / généré / validé, sans invention ;
+pseudonymisation en 2 passes (06) ; pré-audit en ligne par le client (§6.3, Phase 3). **Ce qui manque :** un
+dossier entreprise structuré, enrichi par un LLM AVANT l'audit.
+
+**Ce que ça fait.**
+
+1. **Saisie** (console) : champs libres et structurés sur l'entreprise (activité, sites, effectifs, outils,
+   contexte, enjeux) + dépôt de documents (plaquette, organigramme, site web copié, compte rendu d'appel).
+2. **Enrichissement** : un appel LLM par rubrique propose des FAITS, chacun avec sa **source** (extrait du
+   document ou de la saisie), un **niveau de confiance** et un état **proposé** ; le LLM n'invente rien :
+   un fait sans source est refusé à l'enregistrement.
+3. **Validation humaine** : proposé → validé / rejeté (qui, quand, journalisé). Seul le validé sert ensuite.
+4. **Usages** (une fois validé) : palier et secteur suggérés ; plan d'entretiens prérempli ; questions de
+   faits (effectifs, outils) PRÉ-REMPLIES et marquées « à confirmer en entretien » ; questions pertinentes
+   mises en avant ; section « contexte » du rapport.
+5. **Pilotage des coûts** : tout passe par `llm_calls` ; plafond par mission ; blocage au plafond.
+
+**Décisions à prendre AVANT toute conception.** ① **Sources** : documents et saisie seulement (simple, sûr),
+ou aussi sources publiques (registres, site de l'entreprise) ? Une recherche web par LLM ajoute un fournisseur,
+un coût et un risque de données erronées. ② **Données personnelles** : les documents peuvent en contenir ;
+pseudonymisation avant envoi (06) obligatoire, et option « modèle hébergé UE » (M6.3) pour les clients sensibles.
+③ **Fournisseur** : API Anthropic (facturée À PART du forfait Max — le plafond par mission protège). ④ Invariant 2 :
+rien de spécifique à un client dans le code, tout est donnée de mission.
+
+**Impact.** Schéma 04 : **oui, nouvelles tables** (dossier, faits avec source / confiance / état) → **décision
+humaine (11 §3)**. API : routes admin uniquement (RBAC systématique) ; worker BullMQ pour les appels. Dépend
+du lot L10-L11 pour la mécanique LLM (clé, prompts versionnés, journal). _≈ 8 à 10 j (schéma 1 · saisie et
+dépôt 2 · enrichissement worker 3 · validation 1,5 · usages dans M2/terrain 2 · tests dont non-invention 1,5)._
+
+**Risques.** Faux faits plausibles : la source obligatoire et la validation humaine sont la parade ;
+dépassement de coût : plafond ; fuite de données personnelles : pseudonymisation testée en CI.
+
+**À trancher par Williams.** ① Phase 2 (après le rapport DOCX, qui en fournit la mécanique) — recommandé.
+② Sources : documents + saisie d'abord, sources publiques ensuite ? ③ Quelles rubriques en premier.

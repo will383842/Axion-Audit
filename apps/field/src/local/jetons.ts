@@ -40,7 +40,12 @@ export async function enregistrerJetonRafraichissement(
   jeton: JetonRafraichissement,
 ): Promise<void> {
   const enveloppe = await coffre.chiffrer(jetonSchema.parse(jeton));
-  await ecrireMeta(base, CLES_META.jetonRafraichissement, enveloppe);
+  // Un jeton neuf ÉTEINT la reconnexion requise, dans la même transaction : jamais
+  // un appareil qui synchronise en affichant qu'il ne le peut pas.
+  await base.transaction('rw', base.meta, async () => {
+    await ecrireMeta(base, CLES_META.jetonRafraichissement, enveloppe);
+    await effacerMeta(base, CLES_META.reconnexionRequise);
+  });
 }
 
 /**
@@ -71,4 +76,23 @@ export async function lireJetonRafraichissement(
 /** Déconnexion, ou détection de réutilisation côté serveur (11 §3). */
 export async function effacerJetonRafraichissement(base: BaseLocale): Promise<void> {
   await effacerMeta(base, CLES_META.jetonRafraichissement);
+}
+
+/**
+ * Le siège a REFUSÉ le jeton (401/403, 05 §31-3) : il est effacé — le garder ferait
+ * marteler `/auth/*` — et le refus est RETENU, dans la même transaction. Seul ce
+ * refus vaut « reconnexion requise » : un appareil jamais connecté n'a pas de
+ * jeton non plus, et n'a rien à reconnecter.
+ */
+export async function constaterRefusDuJeton(base: BaseLocale, instant: string): Promise<void> {
+  await base.transaction('rw', base.meta, async () => {
+    await effacerMeta(base, CLES_META.jetonRafraichissement);
+    await ecrireMeta(base, CLES_META.reconnexionRequise, instant);
+  });
+}
+
+/** Un refus du siège attend-il une reconnexion ? Lecture d'une clé, aucun déchiffrement. */
+export async function reconnexionRequise(base: BaseLocale): Promise<boolean> {
+  const valeur = await lireMeta(base, CLES_META.reconnexionRequise);
+  return valeur !== undefined && valeur !== null;
 }

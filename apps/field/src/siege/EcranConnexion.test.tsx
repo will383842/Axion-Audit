@@ -29,6 +29,11 @@ import { useEffect, type ReactNode } from 'react';
 import { FournisseurTerrain, useTerrain, type ValeurTerrain } from '../app/contexte.js';
 import { NOM_BASE_LOCALE } from '../local/base.js';
 import { contexteLocal } from '../local/contexte.js';
+import {
+  constaterRefusDuJeton,
+  lireJetonRafraichissement,
+  reconnexionRequise,
+} from '../local/jetons.js';
 import { lireIdentiteAuditeur, memoriserIdentiteAuditeur } from '../session/auditeur.js';
 import { EcranConnexion } from './EcranConnexion.js';
 
@@ -267,4 +272,84 @@ describe('EcranConnexion — le chemin de production de l’identité d’audite
     });
     expect(screen.queryByLabelText(/mot de passe/i)).toBeNull();
   }, 30_000);
+
+  describe('05 §31-3 — refresh refusé : la reconnexion du MÊME auditeur', () => {
+    async function monterRefuse(): Promise<void> {
+      const rendu = await monter();
+      const { base, coffre } = contexteLocal();
+      await act(async () => {
+        await memoriserIdentiteAuditeur(base, coffre, { id: AUDITEUR_ID, profil: 'expert' });
+        await constaterRefusDuJeton(base, '2026-10-23T08:00:00.000Z');
+      });
+      rendu.rerender(
+        <FournisseurTerrain>
+          <Sonde />
+          <EcranConnexion />
+        </FournisseurTerrain>,
+      );
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /se reconnecter/i })).toBeTruthy();
+      });
+    }
+
+    async function reconnecter(): Promise<void> {
+      const { fireEvent } = await import('@testing-library/react');
+      fireEvent.change(champ(/adresse/i), { target: { value: 'auditeur@exemple.fr' } });
+      fireEvent.change(champ(/mot de passe/i), { target: { value: 'un-mot-de-passe-assez-long' } });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /se reconnecter/i }));
+        await Promise.resolve();
+      });
+    }
+
+    it('le formulaire REVIENT, le message §31-3 est dit, et la reconnexion range un jeton neuf', async () => {
+      await monterRefuse();
+      expect(document.body.textContent).toMatch(/Reconnexion requise pour synchroniser/);
+      expect(screen.queryByRole('button', { name: /rattacher cet appareil/i })).toBeNull();
+
+      await reconnecter();
+
+      const { base, coffre } = contexteLocal();
+      await waitFor(async () => {
+        expect(await reconnexionRequise(base)).toBe(false);
+      });
+      expect((await lireJetonRafraichissement(base, coffre))?.valeur).toBe(
+        'rafraichissement-factice',
+      );
+      // Le profil déjà connu est conservé (rattacherAppareil) ; l'écran revient à « rattaché ».
+      expect(await lireIdentiteAuditeur(base, coffre)).toEqual({
+        id: AUDITEUR_ID,
+        profil: 'expert',
+      });
+      await waitFor(() => {
+        expect(screen.queryByLabelText(/mot de passe/i)).toBeNull();
+      });
+      expect(document.body.textContent).toMatch(/Appareil rattaché/);
+    }, 30_000);
+
+    it('invariant 7 — un AUTRE auditeur est refusé : identité intacte, la reconnexion reste requise', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() =>
+          Promise.resolve(
+            reponse({ ...sessionServeur(), userId: '01922f4e-0000-7000-8000-00000000b0b0' }),
+          ),
+        ),
+      );
+      await monterRefuse();
+      await reconnecter();
+
+      await waitFor(() => {
+        expect(document.body.textContent).toMatch(/déjà rattaché à un autre auditeur/);
+      });
+      expect(document.body.textContent).toMatch(/Reconnexion non aboutie/);
+      const { base, coffre } = contexteLocal();
+      expect(await lireIdentiteAuditeur(base, coffre)).toEqual({
+        id: AUDITEUR_ID,
+        profil: 'expert',
+      });
+      expect(await reconnexionRequise(base)).toBe(true);
+      expect(await lireJetonRafraichissement(base, coffre)).toBeNull();
+    }, 30_000);
+  });
 });

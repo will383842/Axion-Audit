@@ -112,6 +112,13 @@ export const CLES_META = {
   decalageHorloge: 'horloge:decalage',
   /** Jeton de rafraîchissement, CHIFFRÉ (11 §3, 05 §31-3). */
   jetonRafraichissement: 'auth:refresh',
+  /**
+   * Le siège a REFUSÉ le refresh (401/403) : instant ISO du refus, sans autre
+   * donnée. Survit au verrouillage — c'est ce qui permet de dire « reconnexion
+   * requise » (05 §31-3) le lendemain, et d'offrir le geste. Effacé dès qu'un
+   * jeton neuf est rangé.
+   */
+  reconnexionRequise: 'auth:reconnexion-requise',
   /** Dernière vue affichée, pour la reprise instantanée (03 §17.4). */
   vueCourante: 'nav:vue-courante',
   /** Préfixe du curseur de pull, une entrée par mission (05 §9.5). */

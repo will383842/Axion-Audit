@@ -16,9 +16,11 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { BaseLocale, CLES_META } from './base.js';
 import { creerDekEnveloppee, deriverKek, ouvrirCoffre, type Coffre } from './coffre.js';
 import {
+  constaterRefusDuJeton,
   effacerJetonRafraichissement,
   enregistrerJetonRafraichissement,
   lireJetonRafraichissement,
+  reconnexionRequise,
 } from './jetons.js';
 
 const JETON_SENTINELLE = 'SENTINELLE_JETON_RAFRAICHISSEMENT_VB4T9K';
@@ -119,5 +121,22 @@ describe('jetons — enregistrer / lire / effacer (11 §3, 05 §31-3)', () => {
     const base = await nouvelleBase();
     await base.meta.put({ cle: CLES_META.jetonRafraichissement, valeur: 'pas une enveloppe' });
     await expect(lireJetonRafraichissement(base, coffre)).rejects.toThrow();
+  });
+
+  it('05 §31-3 — un refus du siège efface le jeton ET se retient ; un jeton neuf l’éteint', async () => {
+    const base = await nouvelleBase();
+    expect(await reconnexionRequise(base)).toBe(false);
+    await enregistrerJetonRafraichissement(base, coffre, jeton);
+    await constaterRefusDuJeton(base, '2026-10-23T08:00:00.000Z');
+    expect(await lireJetonRafraichissement(base, coffre)).toBeNull();
+    expect(await reconnexionRequise(base)).toBe(true);
+    await enregistrerJetonRafraichissement(base, coffre, jeton);
+    expect(await reconnexionRequise(base)).toBe(false);
+  });
+
+  it('un appareil sans jeton, jamais refusé, n’a RIEN à reconnecter', async () => {
+    const base = await nouvelleBase();
+    await effacerJetonRafraichissement(base);
+    expect(await reconnexionRequise(base)).toBe(false);
   });
 });

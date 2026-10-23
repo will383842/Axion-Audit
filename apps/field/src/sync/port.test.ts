@@ -49,7 +49,11 @@ import { creerDekEnveloppee, deriverKek, ouvrirCoffre, type Coffre } from '../lo
 import { installerContexteLocal } from '../local/contexte.js';
 import { ecrireLocal } from '../local/ecriture.js';
 import { chargeInterviewSchema } from '../local/formes.js';
-import { enregistrerJetonRafraichissement, lireJetonRafraichissement } from '../local/jetons.js';
+import {
+  constaterRefusDuJeton,
+  enregistrerJetonRafraichissement,
+  lireJetonRafraichissement,
+} from '../local/jetons.js';
 import { reinitialiserHorloge } from '../local/horloge.js';
 import { evaluerAlerteSauvegarde, type PortSync } from '../local/port-sync.js';
 import { MESSAGE_AUCUNE_MISSION, MESSAGE_VERIFICATION_SYNC, creerPortSync } from './port.js';
@@ -465,6 +469,27 @@ describe('port réel — un statut « indisponible », trois messages exacts', (
 
     expect(port.etat(MISSION).statut).toBe('indisponible');
     expect(port.messageAffiche(MISSION)).toBe(MESSAGE_RECONNEXION_REQUISE);
+  });
+
+  it('05 §31-3 — le refus RETENU en base survit au rechargement : un port NEUF le dit encore', async () => {
+    await ecrireSession();
+    await constaterRefusDuJeton(base, '2026-10-23T08:00:00.000Z');
+    // Un port neuf = l'application rouverte le lendemain : rien en mémoire.
+    const port = creerPortSync({ base, coffre, transport: siege() });
+
+    await port.actualiser(MISSION);
+
+    expect(port.etat(MISSION).statut).toBe('indisponible');
+    expect(port.messageAffiche(MISSION)).toBe(MESSAGE_RECONNEXION_REQUISE);
+
+    // Un jeton neuf (reconnexion) l'éteint à la lecture suivante.
+    await enregistrerJetonRafraichissement(base, coffre, {
+      valeur: 'jeton-factice-neuf',
+      expireLe: null,
+      enregistreLe: '2026-10-23T09:00:00.000Z',
+    });
+    await port.actualiser(MISSION);
+    expect(port.messageAffiche(MISSION)).toBeNull();
   });
 
   it('une fois lu, sans reconnexion requise : aucun message d’indisponibilité', async () => {

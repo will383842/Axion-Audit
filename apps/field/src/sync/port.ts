@@ -22,6 +22,7 @@
 import { cleDerniereSyncReussie, lireMeta, type BaseLocale } from '../local/base.js';
 import type { Coffre } from '../local/coffre.js';
 import { instantMs } from '../local/horloge.js';
+import { reconnexionRequise } from '../local/jetons.js';
 import { compterPiecesNonEnvoyees } from '../local/octets.js';
 import {
   evaluerAlerteSauvegarde,
@@ -197,10 +198,18 @@ export function creerPortSync(deps: DependancesPort): PortSyncAffichable {
   });
   const instantanes = new Map<string, EtatSyncMission>();
   const echecs = new Map<string, EchecRetenu>();
+  /**
+   * Le refus du refresh RETENU en base (05 §31-3) : relu à chaque `actualiser`.
+   * C'est la dépendance qui manquait aux `useLiveQuery` de la pastille et du
+   * cockpit — `echecs` est en mémoire, aucune écriture ne les réveillait, et un
+   * rechargement l'oubliait. La clé `meta`, elle, est observée et survit.
+   */
+  let refusRetenu = false;
 
   async function actualiser(missionId: string): Promise<EtatSyncMission> {
     const valeur = await lireMeta(deps.base, cleDerniereSyncReussie(missionId));
     const derniereSyncReussieLe = typeof valeur === 'string' ? valeur : null;
+    refusRetenu = await reconnexionRequise(deps.base);
     let enAttente = 0;
     let bloquees = 0;
     await deps.base.outbox
@@ -218,7 +227,8 @@ export function creerPortSync(deps: DependancesPort): PortSyncAffichable {
 
     let statut: StatutSync;
     const echec = echecs.get(missionId);
-    if (echec !== undefined) statut = echec;
+    if (refusRetenu) statut = 'indisponible';
+    else if (echec !== undefined) statut = echec;
     else if (bloquees > 0) statut = 'echec';
     else if (derniereSyncReussieLe === null) statut = 'jamais_synchronisee';
     else statut = enAttente > 0 ? 'en_attente' : 'a_jour';
@@ -280,7 +290,9 @@ export function creerPortSync(deps: DependancesPort): PortSyncAffichable {
 
     messageAffiche(missionId: string | null): string | null {
       if (missionId === null) return MESSAGE_AUCUNE_MISSION;
-      if (echecs.get(missionId) === 'indisponible') return MESSAGE_RECONNEXION_REQUISE;
+      if (refusRetenu || echecs.get(missionId) === 'indisponible') {
+        return MESSAGE_RECONNEXION_REQUISE;
+      }
       return instantanes.has(missionId) ? null : MESSAGE_VERIFICATION_SYNC;
     },
 

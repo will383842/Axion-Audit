@@ -33,6 +33,7 @@ import type { CodeVue } from '../app/vues.js';
 import { BaseLocale } from '../local/base.js';
 import { creerDekEnveloppee, deriverKek, ouvrirCoffre } from '../local/coffre.js';
 import { contexteLocal, installerContexteLocal, retirerContexteLocal } from '../local/contexte.js';
+import { constaterRefusDuJeton, enregistrerJetonRafraichissement } from '../local/jetons.js';
 import { memoriserIdentiteAuditeur } from '../session/auditeur.js';
 
 const KDF_TEST = {
@@ -186,6 +187,69 @@ describe('le rappel de rattachement vit dans la coquille, jamais dans un écran'
         { timeout: 10_000 },
       );
       expect(document.body.textContent).not.toMatch(/n’est rattaché à aucun auditeur/);
+    } finally {
+      silence.mockRestore();
+    }
+  });
+});
+
+describe('05 §31-3 — refresh refusé : la reconnexion est DITE et OFFERTE depuis la coquille', () => {
+  async function baseRattachee(): Promise<BaseLocale> {
+    const base = await nouvelleBase();
+    await memoriserIdentiteAuditeur(base, contexteLocal().coffre, {
+      id: AUDITEUR_ID,
+      profil: 'guide_strict',
+    });
+    return base;
+  }
+
+  it('refus retenu : le message §31-3 est lisible, et « Se reconnecter » mène à l’écran de connexion', async () => {
+    const base = await baseRattachee();
+    await constaterRefusDuJeton(base, '2026-10-23T08:00:00.000Z');
+    terrain = terrainSur(base, ['accueil', 'agenda']);
+    const silence = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      render(<App />);
+      const geste = await screen.findByRole(
+        'button',
+        { name: /se reconnecter/i },
+        { timeout: 10_000 },
+      );
+      expect(document.body.textContent).toMatch(
+        /Reconnexion requise pour synchroniser\. Vos saisies restent en sécurité sur cet appareil\./,
+      );
+      geste.click();
+      await waitFor(() => {
+        expect(terrain.naviguer).toHaveBeenCalledWith({ type: 'aller', vue: 'connexionSiege' });
+      });
+    } finally {
+      silence.mockRestore();
+    }
+  });
+
+  it('un jeton neuf éteint le rappel ; un appareil rattaché SANS refus n’en montre aucun', async () => {
+    const base = await baseRattachee();
+    await constaterRefusDuJeton(base, '2026-10-23T08:00:00.000Z');
+    terrain = terrainSur(base, ['accueil']);
+    const silence = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      render(<App />);
+      await screen.findByRole('button', { name: /se reconnecter/i }, { timeout: 10_000 });
+      await enregistrerJetonRafraichissement(base, contexteLocal().coffre, {
+        valeur: 'jeton-factice-neuf',
+        expireLe: null,
+        enregistreLe: '2026-10-23T09:00:00.000Z',
+      });
+      await waitFor(
+        () => {
+          expect(screen.queryByRole('button', { name: /se reconnecter/i })).toBeNull();
+        },
+        { timeout: 10_000 },
+      );
+      // L'accueil garde son propre texte (jeton absent simulé) : c'est le message
+      // §31-3 de la COQUILLE qui doit avoir disparu.
+      expect(document.body.textContent).not.toMatch(/Reconnexion requise pour synchroniser\./);
+      expect(screen.queryByRole('button', { name: /rattacher cet appareil/i })).toBeNull();
     } finally {
       silence.mockRestore();
     }

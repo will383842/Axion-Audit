@@ -42,7 +42,11 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { type LotPush } from '../local/contrat-sync.js';
 import { BaseLocale } from '../local/base.js';
 import { creerDekEnveloppee, deriverKek, ouvrirCoffre, type Coffre } from '../local/coffre.js';
-import { enregistrerJetonRafraichissement, lireJetonRafraichissement } from '../local/jetons.js';
+import {
+  enregistrerJetonRafraichissement,
+  lireJetonRafraichissement,
+  reconnexionRequise,
+} from '../local/jetons.js';
 import {
   CHEMIN_PUSH,
   CHEMIN_REFRESH,
@@ -310,6 +314,21 @@ describe('transport — scénario §9.8 n°8 : refresh refusé ou réseau absent
 
     expect(resultat.type).toBe('reconnexion_requise');
     expect(await lireJetonRafraichissement(base, coffre)).toBeNull();
+  });
+
+  it('05 §31-3 — le refus est RETENU en base (survit au verrouillage) ; une coupure ne l’est pas', async () => {
+    expect(await reconnexionRequise(base)).toBe(false);
+    const coupure = fetchScripte([() => json(erreur401, 401)], [horsLigne]);
+    const transportCoupe = creerTransport({ fetch: coupure.fetch, base, coffre });
+    transportCoupe.definirJetonAcces(ACCES_ANCIEN);
+    await transportCoupe.pousser(lot());
+    expect(await reconnexionRequise(base)).toBe(false);
+
+    const banc = fetchScripte([() => json(erreur401, 401)], [() => json(erreur401, 401)]);
+    const transport = creerTransport({ fetch: banc.fetch, base, coffre });
+    transport.definirJetonAcces(ACCES_ANCIEN);
+    await transport.pousser(lot());
+    expect(await reconnexionRequise(base)).toBe(true);
   });
 
   it('le message est celui du 05 §31-3, en français', () => {
