@@ -126,7 +126,7 @@ describe('export de secours v2 — écrit par segments, une photo à la fois', (
               return r;
             },
             getMany: async (req) => {
-              const r = await table.getMany(req);
+              const r: unknown[] = await table.getMany(req);
               for (const k of req.keys) noter(k);
               return r;
             },
