@@ -44,6 +44,8 @@
 // Traçabilité : E33 (sécurité), E42 (RGPD renforcé : rétention activity_log).
 // =============================================================================
 import { z } from 'zod';
+// `temps.ts` est une FEUILLE (zod seul) : l'horodatage ISO UTC du calcul remplacé.
+import { isoUtcSchema } from './temps.js';
 // Le vocabulaire des statuts vient de la machine à états, jamais d'une seconde
 // liste : une action `mission.status_change` qui accepterait un statut absent du
 // 03 §32.2 écrirait dans la table d'audit un état que le produit ne connaît pas.
@@ -291,6 +293,11 @@ export const ACTIONS_JOURNAL = [
   // appelant ni exigence est du code mort.
   'mission.questionnaire_freeze',
   'interview.reassign',
+  // ── scoring branché (lot L8, incrément S1) ─────────────────────────────────
+  // Le calcul REMPLACE l'ancien (DELETE puis INSERT) : invariant 7, « rien n'est
+  // jamais silencieusement écrasé ». La ligne dit QUI a recalculé et QUEL calcul a
+  // été remplacé (`calcul_precedent_le`), jamais ce que les scores valaient.
+  'mission.compute_scores',
 ] as const;
 
 export type ActionJournal = (typeof ACTIONS_JOURNAL)[number];
@@ -731,6 +738,19 @@ export const evenementJournalSchema = z.discriminatedUnion('action', [
      */
     questionsFigees: z.number().int().min(1),
   }),
+  // ── scoring branché (lot L8, incrément S1) ─────────────────────────────────
+  z.strictObject({
+    action: z.literal('mission.compute_scores'),
+    utilisateurId: idUtilisateur,
+    missionId: z.uuid(),
+    /**
+     * L'horodatage (ISO 8601 UTC) du calcul que celui-ci REMPLACE, ou `null` au
+     * premier calcul. C'est la trace de l'écrasement (invariant 7) : un ISO tient
+     * dans le vocabulaire technique du journal (`MOTIF_VALEUR_JOURNAL`) ; un score,
+     * un nom d'unité ou une valeur de réponse n'y entrent jamais.
+     */
+    calculPrecedentLe: isoUtcSchema.nullable(),
+  }),
   z.strictObject({
     action: z.literal('interview.reassign'),
     /** L'admin ou le lead qui réaffecte — jamais la personne rencontrée. */
@@ -1026,6 +1046,17 @@ export function versLigneJournal(evenement: EvenementJournal): ContenuLigneJourn
         entityType: 'mission',
         entityId: evenement.missionId,
         meta: { questions_figees: evenement.questionsFigees },
+      };
+
+    // Le calcul porte sur la MISSION : c'est d'elle qu'on demandera « qui a recalculé,
+    // et quand ? ». `meta` ne porte que la date du calcul remplacé.
+    case 'mission.compute_scores':
+      return {
+        action: evenement.action,
+        utilisateurId: evenement.utilisateurId,
+        entityType: 'mission',
+        entityId: evenement.missionId,
+        meta: { calcul_precedent_le: evenement.calculPrecedentLe },
       };
 
     // La réaffectation porte sur la SESSION, jamais sur l'un des deux auditeurs :

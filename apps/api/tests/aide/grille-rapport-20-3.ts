@@ -60,6 +60,7 @@
 //
 // Invariant 2 : aucune référence client. Traçabilité : E14 · E22 · E36 · E43.
 // =============================================================================
+import { COLONNES_SCORES_CSV } from './colonnes-scores-csv.js';
 
 /** Les trois natures de manque, séparées parce que leurs remèdes le sont. */
 export type NatureDuManque =
@@ -154,7 +155,6 @@ export const TABLES_SANS_ECRIVAIN_DE_PRODUCTION: readonly TableSurveillee[] = [
   'tools_inventory',
   'ai_systems',
   'roadmap_items',
-  'unit_scores',
 ];
 
 /** Les fichiers de l'archive, par leur nom du §36.3 — jamais réécrits ici. */
@@ -168,6 +168,7 @@ const OUTILS = 'inventaire_outils.csv';
 const REGISTRE_IA = 'registre_ia.csv';
 const HORS_PERIMETRE = 'unites_hors_perimetre.csv';
 const MANIFESTE = 'pieces_jointes/manifest.csv';
+const SCORES = 'scores.csv';
 
 /**
  * Le renvoi commun aux deux rubriques que la MÊME colonne absente ferme.
@@ -188,10 +189,6 @@ const RENVOI_ROADMAP =
   'DECISIONS.md 2026-09-05 [L7c] « Les rubriques 9 et 10 du §20.3 n’ont AUCUN fichier dans la ' +
   'liste du §36.3 » — arbitrage MAINTENU le 2026-09-09 (fiche P-D §9, « ce que ce verdict ne ' +
   'couvre pas », point 2) : l’ajout se tranche au brief de L10.';
-
-const RENVOI_SCORES =
-  'DECISIONS.md 2026-09-05 [L7c] « `scores.csv` et “score unitaire (si L8)” : absents, et ' +
-  'signalés dans mission.json » — §36.3 : « si L8, sinon absent et signalé ».';
 
 // -----------------------------------------------------------------------------
 // LA GRILLE — les douze rubriques du §20.3, dans leur ordre
@@ -225,11 +222,9 @@ export const GRILLE_20_3: readonly RubriqueRapport[] = [
     elements: [
       {
         nom: '« où vous en êtes » — la maturité mesurée',
-        nature: 'BRANCHEMENT_ABSENT',
-        porteur: null,
+        nature: 'PORTE',
+        porteur: { fichier: SCORES, colonnes: COLONNES_SCORES_CSV },
         table: 'unit_scores',
-        graphiesAttendues: ['score_bloc', 'score_unite', 'maturite'],
-        source: RENVOI_SCORES,
       },
       {
         nom: '« où sont les gains » — les cas d’usage chiffrés',
@@ -333,11 +328,9 @@ export const GRILLE_20_3: readonly RubriqueRapport[] = [
     elements: [
       {
         nom: 'le radar — scores par bloc × unité',
-        nature: 'BRANCHEMENT_ABSENT',
-        porteur: null,
+        nature: 'PORTE',
+        porteur: { fichier: SCORES, colonnes: COLONNES_SCORES_CSV },
         table: 'unit_scores',
-        graphiesAttendues: ['score_bloc', 'score_unite', 'completude_bloc'],
-        source: RENVOI_SCORES,
       },
       {
         nom: 'les benchmarks — repères secteur × palier (§6.2)',

@@ -44,6 +44,7 @@ import { LIBELLES_MOTIF_NON_COMMUNIQUE, SEPARATEUR_LISTE_CELLULE } from '@axion/
 import { aplatirValeur } from '../pilotage/valeur.js';
 import { ecrireCsv, type ValeurCellule } from './csv.js';
 import { horodatageExport } from './horodatage.js';
+import type { ScoreBlocPourExport, ScoreUnitePourExport } from './depot.js';
 
 // -----------------------------------------------------------------------------
 // OUTILS COMMUNS
@@ -906,4 +907,97 @@ export function assemblerLignesArbre(
       sessionsRealisees: compte?.realisees ?? 0,
     };
   });
+}
+
+// -----------------------------------------------------------------------------
+// scores.csv — §36.3 : « bloc × unité + complétude + indicatif (si L8) »
+// -----------------------------------------------------------------------------
+
+/** Les colonnes de `scores.csv`, dans l'ordre (déclarées par la grille du rapport §20.3). */
+export const ENTETE_SCORES = [
+  'portee',
+  'unite_id',
+  'unite_nom',
+  'bloc_code',
+  'bloc_libelle',
+  'score',
+  'completude',
+  'indicatif',
+  'calcule_le',
+] as const;
+
+/** Un décimal du `NUMERIC` rendu sans zéros inutiles ; vide si inconnu (jamais 0). */
+function decimalOuVide(valeur: string | null): string {
+  if (valeur === null) return '';
+  const nombre = Number(valeur);
+  return Number.isFinite(nombre) ? String(nombre) : '';
+}
+
+/** Indicatif : complétude connue ET sous le seuil. Complétude inconnue → non (rien à alerter). */
+function estIndicatif(completude: string | null, seuil: number): boolean {
+  if (completude === null) return false;
+  const ratio = Number(completude);
+  return Number.isFinite(ratio) && ratio < seuil;
+}
+
+/** `calcule_le` : ISO 8601 UTC avec `Z` — un fait du siège, pas d'un site audité (invariant 5). */
+function calculeLeUtc(date: Date | null): string {
+  return date === null ? '' : date.toISOString();
+}
+
+function parBloc<T extends ScoreBlocPourExport>(lignes: readonly T[]): T[] {
+  return [...lignes].sort(
+    (a, b) =>
+      (a.blocPosition ?? Number.MAX_SAFE_INTEGER) - (b.blocPosition ?? Number.MAX_SAFE_INTEGER) ||
+      a.blocCode.localeCompare(b.blocCode),
+  );
+}
+
+/**
+ * `scores.csv` : d'abord la portée `mission` (le score d'entreprise par bloc), puis la
+ * portée `unite` (une ligne par unité × bloc, lecture CONSOLIDÉE), les unités dans
+ * l'ORDRE d'`arbre.csv`, les blocs par position. Score vide = non cotable (jamais 0).
+ * `indicatif` d'une ligne d'unité = complétude < `seuilCompletude` (`unit_scores` n'a pas
+ * de colonne `is_indicative` au 04) ; celui d'une ligne `mission` est celui du calcul.
+ */
+export function ecrireScores(
+  unitesArbre: readonly LigneArbreExport[],
+  blocs: readonly ScoreBlocPourExport[],
+  unites: readonly ScoreUnitePourExport[],
+  seuilCompletude: number,
+): string {
+  const lignes: ValeurCellule[][] = [[...ENTETE_SCORES]];
+
+  for (const bloc of parBloc(blocs)) {
+    lignes.push([
+      'mission',
+      '',
+      '',
+      bloc.blocCode,
+      bloc.blocLibelle,
+      decimalOuVide(bloc.score),
+      decimalOuVide(bloc.completude),
+      bloc.indicatif ?? estIndicatif(bloc.completude, seuilCompletude),
+      calculeLeUtc(bloc.calculeLe),
+    ]);
+  }
+
+  const triees = [...unitesArbre].sort((a, b) => a.chemin.localeCompare(b.chemin, 'fr'));
+  for (const unite of triees) {
+    const siennes = parBloc(unites.filter((ligne) => ligne.orgUnitId === unite.id));
+    for (const bloc of siennes) {
+      lignes.push([
+        'unite',
+        unite.id,
+        unite.nom,
+        bloc.blocCode,
+        bloc.blocLibelle,
+        decimalOuVide(bloc.score),
+        decimalOuVide(bloc.completude),
+        estIndicatif(bloc.completude, seuilCompletude),
+        calculeLeUtc(bloc.calculeLe),
+      ]);
+    }
+  }
+  return ecrireCsv(lignes);
 }

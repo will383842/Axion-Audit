@@ -48,6 +48,7 @@ import { z } from 'zod';
 
 import { CRITICITES, SCORE_MAX, SCORE_MIN } from './banque-questions.js';
 import { GROUPES_INTERLOCUTEUR } from './plan-entretiens.js';
+import { isoUtcSchema } from './temps.js';
 
 // -----------------------------------------------------------------------------
 // LES PARAMÈTRES — ILS VIENNENT DE LA DONNÉE, JAMAIS DU CODE
@@ -414,3 +415,21 @@ export const resultatScoringMissionSchema = z.strictObject({
 });
 
 export type ResultatScoringMission = z.infer<typeof resultatScoringMissionSchema>;
+
+// -----------------------------------------------------------------------------
+// LA ROUTE DE CALCUL — `POST /v1/missions/:id/compute-scores` (lot S1, E14)
+// -----------------------------------------------------------------------------
+
+/**
+ * La réponse du calcul : l'horodatage UTC du calcul qui vient d'être PERSISTÉ
+ * (`block_scores.computed_at`), et le résultat complet du moteur — scores, signaux
+ * et anomalies. Pas de corps en entrée : le calcul ne prend aucun paramètre, ses
+ * seuils viennent d'`estimation_params` et ses données de la mission.
+ */
+export const calculScoresReponseSchema = z.strictObject({
+  missionId: z.uuid(),
+  calculeLe: isoUtcSchema,
+  resultat: resultatScoringMissionSchema,
+});
+
+export type CalculScoresReponse = z.infer<typeof calculScoresReponseSchema>;

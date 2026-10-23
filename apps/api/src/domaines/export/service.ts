@@ -30,9 +30,11 @@
 // n'est renvoyé au navigateur pour être assemblé, et rien, jamais, à `apps/field`.
 //
 // ── INVARIANT 3 : AUCUNE DONNÉE FINANCIÈRE ────────────────────────────────
-// Aucune des dix lectures ne touche `scoping_financials`, `scoping_estimates`,
-// `estimation_params` ni `mission_rebaselines`. La route ne porte donc AUCUNE
-// marque `financier`, et un balayage le vérifie table par table.
+// Aucune des lectures ne touche `scoping_financials`, `scoping_estimates` ni
+// `mission_rebaselines`. Seule exception, et elle est bornée : `scores.csv` lit la
+// CLÉ `seuil_completude_bloc` d'`estimation_params` (un seuil de scoring, pas un
+// montant) pour marquer « indicatif » les lignes d'unité. La route ne porte donc
+// AUCUNE marque `financier`, et un balayage le vérifie table par table.
 //
 // Traçabilité : E14 (consolidation, divergences) · E21 · E22 · E36 · E43.
 // =============================================================================
@@ -56,6 +58,7 @@ import {
   ecrireInventaireOutils,
   ecrireManifestePiecesJointes,
   ecrireRegistreIa,
+  ecrireScores,
   ecrireReponses,
   ecrireSessions,
   ecrireUnitesHorsPerimetre,
@@ -70,6 +73,7 @@ import {
   listerOutilsPourExport,
   listerPiecesJointesPourExport,
   listerReponsesPourExport,
+  listerScoresPourExport,
   listerSessionsPourExport,
   listerSystemesIaPourExport,
   listerUnitesPourExport,
@@ -82,9 +86,10 @@ import {
   horodatageExport,
   FORMAT_HORODATAGE_EXPORT,
 } from './horodatage.js';
+import { lireParametresScoring } from '../../scoring/depot.js';
 import { construireZip, type EntreeZip } from './zip.js';
 
-/** La clé du fichier de scores — absent tant que L8 n'est pas livré (§36.3). */
+/** La clé du fichier de scores — absent tant qu'aucun calcul n'a été persisté (§36.3). */
 const CLE_SCORES: CleFichierExport = 'scores';
 
 /** Le même message que partout ailleurs, et il couvre AUSSI le non-membre (L7b). */
@@ -101,7 +106,7 @@ const DEFINITION_COMPLETUDE =
   'Part des questions du questionnaire figé ayant reçu au moins une réponse, quelle qu’elle soit (y compris « non communiqué » et « sans objet »). Ce n’est PAS la complétude du scoring (03 §32.1-3), qui exclut les réponses non communiquées et qui sera calculée par le lot L8.';
 
 const MOTIF_SCORES_ABSENTS =
-  'Aucun score n’existe pour cette mission. Le moteur de scoring (03 §32.1) est livré depuis le lot L8, mais il n’est encore relié à aucune route ni à aucun dépôt : les tables block_scores et unit_scores ne sont écrites par personne, et scores.csv est donc absent de cette archive (03 §36.3 : « si L8, sinon absent et signalé »). Il apparaîtra dès que le calcul sera déclenché et persisté.';
+  'Aucun calcul de scores n’a encore été lancé pour cette mission : scores.csv est donc absent de cette archive (03 §36.3 : « si L8, sinon absent et signalé »). Il apparaîtra dès que le calcul aura été déclenché (POST /v1/missions/:id/compute-scores) par un administrateur ou le responsable de la mission.';
 
 const MOTIF_PIECES_JOINTES =
   'Les fichiers eux-mêmes ne sont pas inclus : le téléchargement des pièces jointes appartient au lot L6c et n’est pas livré. Le manifeste liste ce qui a été collecté et permet de le réclamer.';
@@ -203,6 +208,7 @@ export async function produireExportDeMission(
     systemesIa,
     piecesJointes,
     comptes,
+    scores,
   ] = await Promise.all([
     listerAuditeurs(db, missionId),
     listerUnitesPourExport(db, missionId),
@@ -215,7 +221,11 @@ export async function produireExportDeMission(
     listerSystemesIaPourExport(db, missionId),
     listerPiecesJointesPourExport(db, missionId),
     compterPourExport(db, missionId),
+    listerScoresPourExport(db, missionId),
   ]);
+
+  // `scores.csv` n'existe que si un calcul a été PERSISTÉ (§36.3 : « si L8, sinon absent et signalé »).
+  const scoresPresents = scores.blocs.length > 0 || scores.unites.length > 0;
 
   // ① Le fuseau de chaque site AVANT tout le reste : c'est lui qui date les lignes.
   const fuseauDe = resolveurDeFuseau(unitesBrutes, fuseau);
@@ -282,7 +292,7 @@ export async function produireExportDeMission(
       sessionsPlanifiees: comptes.sessionsPlanifiees,
       sessionsRealisees: comptes.sessionsRealisees,
     },
-    scores: { presents: false, motif: MOTIF_SCORES_ABSENTS },
+    scores: { presents: scoresPresents, motif: scoresPresents ? null : MOTIF_SCORES_ABSENTS },
     piecesJointes: {
       manifeste: FICHIERS_EXPORT.manifestePiecesJointes,
       nombre: piecesJointes.length,
@@ -293,7 +303,7 @@ export async function produireExportDeMission(
       nomsInclus: avecNoms,
       regle: avecNoms ? REGLE_REPONDANTS_OUVERTE : REGLE_REPONDANTS_FERMEE,
     },
-    fichiers: inventaireDesFichiers(),
+    fichiers: inventaireDesFichiers(scoresPresents),
   });
 
   const entrees: EntreeZip[] = [
@@ -310,10 +320,21 @@ export async function produireExportDeMission(
       FICHIERS_EXPORT.manifestePiecesJointes,
       ecrireManifestePiecesJointes(piecesJointesDatees),
     ),
-    // `scores.csv` est ABSENT, et son absence est dite dans `mission.json` —
-    // §36.3 : « si L8, sinon absent et signalé ». Un fichier vide se lirait
-    // « aucun score n'a été calculé », ce qui est un autre message.
   ];
+
+  // `scores.csv` : PRÉSENT après un calcul, ABSENT et signalé sinon (§36.3). Un fichier
+  // vide se lirait « le calcul n'a rien trouvé », ce qui est un autre message. Le seuil
+  // d'« indicatif » des lignes d'unité est lu à l'export, par sa clé (`unit_scores` n'a
+  // pas de colonne `is_indicative` au 04) ; aucune autre ligne d'`estimation_params`.
+  if (scoresPresents) {
+    const parametres = await lireParametresScoring(db);
+    entrees.push(
+      texte(
+        FICHIERS_EXPORT.scores,
+        ecrireScores(unites, scores.blocs, scores.unites, parametres.seuilCompletudeBloc),
+      ),
+    );
+  }
 
   return {
     nomFichier: nomFichierExport(mission.id, dateDuJourDansLeFuseau(maintenant, fuseau)),
@@ -340,12 +361,12 @@ function partDeCompletude(avecReponse: number, total: number): number | null {
 /**
  * L'inventaire du ZIP, écrit DANS le ZIP.
  *
- * `scores.csv` n'y figure pas : il n'est pas dans l'archive, et l'annoncer ferait
- * chercher un fichier absent. Son absence est dite au champ `scores`.
+ * `scores.csv` n'y figure QUE s'il est dans l'archive : l'annoncer absent ferait
+ * chercher un fichier qui n'existe pas. Son absence est dite au champ `scores`.
  */
-function inventaireDesFichiers(): { nom: string; contenu: string }[] {
+function inventaireDesFichiers(scoresPresents: boolean): { nom: string; contenu: string }[] {
   return Object.entries(FICHIERS_EXPORT)
-    .filter(([cle]) => cle !== CLE_SCORES)
+    .filter(([cle]) => scoresPresents || cle !== CLE_SCORES)
     .map(([cle, nom]) => ({
       nom,
       contenu: DESCRIPTIONS_FICHIERS_EXPORT[cle as CleFichierExport],

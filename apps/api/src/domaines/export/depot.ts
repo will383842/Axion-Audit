@@ -58,6 +58,7 @@ import {
   aiSystems,
   answers,
   attachments,
+  blockScores,
   blocks,
   companies,
   findings,
@@ -69,6 +70,7 @@ import {
   questions,
   services,
   toolsInventory,
+  unitScores,
   useCases,
   users,
 } from '../../db/schema.js';
@@ -727,4 +729,70 @@ export async function compterSessionsParUnitePourExport(
     planifiees: Number(ligne.planifiees),
     realisees: Number(ligne.realisees),
   }));
+}
+
+// -----------------------------------------------------------------------------
+// scores.csv — LES SCORES PERSISTÉS PAR LE CALCUL (lot L8/S1)
+// -----------------------------------------------------------------------------
+
+/** Un score d'entreprise (`block_scores`) tel que l'export l'écrit. */
+export interface ScoreBlocPourExport {
+  readonly blocCode: string;
+  readonly blocLibelle: string;
+  readonly blocPosition: number | null;
+  readonly score: string | null;
+  readonly completude: string | null;
+  /** `block_scores.is_indicative` pour une ligne de bloc ; non porté par `unit_scores`. */
+  readonly indicatif: boolean | null;
+  readonly calculeLe: Date | null;
+}
+
+/** Un score d'unité × bloc (`unit_scores`, lecture consolidée) tel que l'export l'écrit. */
+export interface ScoreUnitePourExport extends ScoreBlocPourExport {
+  readonly orgUnitId: string;
+}
+
+/**
+ * LES SCORES DU DERNIER CALCUL — lecture seule de `block_scores` et `unit_scores`.
+ *
+ * Rien n'est recalculé ici : l'export est une PHOTO de ce que le calcul a persisté.
+ * Une mission jamais calculée rend deux listes vides, et le service en conclut que
+ * `scores.csv` est absent (§36.3 : « si L8, sinon absent et signalé »).
+ */
+export async function listerScoresPourExport(
+  executeur: ExecuteurSql,
+  missionId: string,
+): Promise<{
+  readonly blocs: readonly ScoreBlocPourExport[];
+  readonly unites: readonly ScoreUnitePourExport[];
+}> {
+  const blocs = await executeur
+    .select({
+      blocCode: blocks.code,
+      blocLibelle: blocks.labelFr,
+      blocPosition: blocks.position,
+      score: blockScores.score,
+      completude: blockScores.completeness,
+      indicatif: blockScores.isIndicative,
+      calculeLe: blockScores.computedAt,
+    })
+    .from(blockScores)
+    .innerJoin(blocks, eq(blocks.id, blockScores.blockId))
+    .where(eq(blockScores.missionId, missionId));
+
+  const unites = await executeur
+    .select({
+      orgUnitId: unitScores.orgUnitId,
+      blocCode: blocks.code,
+      blocLibelle: blocks.labelFr,
+      blocPosition: blocks.position,
+      score: unitScores.score,
+      completude: unitScores.completeness,
+      calculeLe: unitScores.computedAt,
+    })
+    .from(unitScores)
+    .innerJoin(blocks, eq(blocks.id, unitScores.blockId))
+    .where(eq(unitScores.missionId, missionId));
+
+  return { blocs, unites: unites.map((ligne) => ({ ...ligne, indicatif: null })) };
 }
