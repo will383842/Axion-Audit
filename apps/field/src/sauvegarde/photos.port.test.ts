@@ -25,7 +25,7 @@
 //     : Promise<PhotoCompressee>;              // signature existante, 3e paramètre ajouté
 //
 // Rouge attendu tant que le port n'existe pas — pour cette seule raison.
-// Traçabilité : E6 (quota d'appareil), E7.
+// Traçabilité : E6, E7.
 // =============================================================================
 import { describe, expect, it } from 'vitest';
 import {
