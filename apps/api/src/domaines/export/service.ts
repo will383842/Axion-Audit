@@ -30,11 +30,9 @@
 // n'est renvoyé au navigateur pour être assemblé, et rien, jamais, à `apps/field`.
 //
 // ── INVARIANT 3 : AUCUNE DONNÉE FINANCIÈRE ────────────────────────────────
-// Aucune des lectures ne touche `scoping_financials`, `scoping_estimates` ni
-// `mission_rebaselines`. Seule exception, et elle est bornée : `scores.csv` lit la
-// CLÉ `seuil_completude_bloc` d'`estimation_params` (un seuil de scoring, pas un
-// montant) pour marquer « indicatif » les lignes d'unité. La route ne porte donc
-// AUCUNE marque `financier`, et un balayage le vérifie table par table.
+// Aucune des lectures ne touche `scoping_financials`, `scoping_estimates`,
+// `estimation_params` ni `mission_rebaselines`. La route ne porte donc AUCUNE
+// marque `financier`, et un balayage le vérifie table par table.
 //
 // Traçabilité : E14 (consolidation, divergences) · E21 · E22 · E36 · E43.
 // =============================================================================
@@ -67,6 +65,7 @@ import {
   compterPourExport,
   compterSessionsParUnitePourExport,
   lireMissionPourExport,
+  calculAEuLieu,
   listerAuditeurs,
   listerCasUsagePourExport,
   listerConstatsPourExport,
@@ -86,13 +85,15 @@ import {
   horodatageExport,
   FORMAT_HORODATAGE_EXPORT,
 } from './horodatage.js';
-import { lireParametresScoring } from '../../scoring/depot.js';
 import { construireZip, type EntreeZip } from './zip.js';
 
 /** La clé du fichier de scores — absent tant qu'aucun calcul n'a été persisté (§36.3). */
 const CLE_SCORES: CleFichierExport = 'scores';
 
 /** Le même message que partout ailleurs, et il couvre AUSSI le non-membre (L7b). */
+/** Repli si les lignes de bloc ne portent pas le seuil figé (calcul antérieur à ce champ). */
+const SEUIL_COMPLETUDE_DE_REPLI = 0.6;
+
 const MESSAGE_MISSION_INTROUVABLE = "Cette mission n'existe pas.";
 
 /**
@@ -225,7 +226,11 @@ export async function produireExportDeMission(
   ]);
 
   // `scores.csv` n'existe que si un calcul a été PERSISTÉ (§36.3 : « si L8, sinon absent et signalé »).
-  const scoresPresents = scores.blocs.length > 0 || scores.unites.length > 0;
+  const scoresPresents = await calculAEuLieu(
+    db,
+    missionId,
+    scores.blocs.length > 0 || scores.unites.length > 0,
+  );
 
   // ① Le fuseau de chaque site AVANT tout le reste : c'est lui qui date les lignes.
   const fuseauDe = resolveurDeFuseau(unitesBrutes, fuseau);
@@ -324,14 +329,13 @@ export async function produireExportDeMission(
 
   // `scores.csv` : PRÉSENT après un calcul, ABSENT et signalé sinon (§36.3). Un fichier
   // vide se lirait « le calcul n'a rien trouvé », ce qui est un autre message. Le seuil
-  // d'« indicatif » des lignes d'unité est lu à l'export, par sa clé (`unit_scores` n'a
-  // pas de colonne `is_indicative` au 04) ; aucune autre ligne d'`estimation_params`.
+  // d'« indicatif » des lignes d'unité est celui FIGÉ au calcul (`block_scores.details`),
+  // jamais celui du jour : l'export ne lit aucune ligne d'`estimation_params`.
   if (scoresPresents) {
-    const parametres = await lireParametresScoring(db);
     entrees.push(
       texte(
         FICHIERS_EXPORT.scores,
-        ecrireScores(unites, scores.blocs, scores.unites, parametres.seuilCompletudeBloc),
+        ecrireScores(unites, scores.blocs, scores.unites, SEUIL_COMPLETUDE_DE_REPLI),
       ),
     );
   }

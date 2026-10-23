@@ -964,8 +964,14 @@ export function ecrireScores(
   unitesArbre: readonly LigneArbreExport[],
   blocs: readonly ScoreBlocPourExport[],
   unites: readonly ScoreUnitePourExport[],
-  seuilCompletude: number,
+  seuilParDefaut: number,
 ): string {
+  // Le seuil FIGÉ au calcul (porté par les lignes de bloc) prime sur toute valeur du jour.
+  const figes = blocs
+    .filter((b) => b.seuil !== null)
+    .map((b) => Number(b.seuil))
+    .filter((v) => Number.isFinite(v));
+  const seuilCompletude = figes[0] ?? seuilParDefaut;
   const lignes: ValeurCellule[][] = [[...ENTETE_SCORES]];
 
   for (const bloc of parBloc(blocs)) {

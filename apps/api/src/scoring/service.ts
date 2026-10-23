@@ -35,6 +35,7 @@ import {
   type ScoreBloc,
 } from '@axion/shared';
 import { db } from '../db.js';
+import { lireDerniereActivite } from '../domaines/journal/depot.js';
 import { journaliserActivite, type ContexteJournal } from '../domaines/journal/service.js';
 import {
   lireDernierCalcul,
@@ -80,6 +81,7 @@ export function versLignesDeScores(
   resultat: ResultatScoringMission,
   blocsReferentiel: readonly BlocReferentiel[],
   blocParQuestion: ReadonlyMap<string, string>,
+  seuilCompletudeBloc: number,
 ): { blocs: LigneBlocAEcrire[]; unites: LigneUniteAEcrire[] } {
   const idDeBloc = new Map(blocsReferentiel.map((bloc) => [bloc.code, bloc.id]));
   const blocDe = (missionQuestionId: string | null): string | null =>
@@ -95,7 +97,7 @@ export function versLignesDeScores(
       score: versNumeric(noeud.score),
       completeness: versNumeric(noeud.completude.ratio),
       isIndicative: noeud.indicatif,
-      details: detailsDeBloc(noeud, resultat, blocDe, transverses),
+      details: detailsDeBloc(noeud, resultat, blocDe, transverses, seuilCompletudeBloc),
     });
   }
 
@@ -121,8 +123,12 @@ function detailsDeBloc(
   resultat: ResultatScoringMission,
   blocDe: (missionQuestionId: string | null) => string | null,
   transverses: ResultatScoringMission['anomalies'],
+  seuilCompletudeBloc: number,
 ): Record<string, unknown> {
   return {
+    // Le seuil FIGÉ au calcul : l'export marque « indicatif » les lignes d'unité avec lui
+    // (`unit_scores` n'a pas de colonne `is_indicative` au 04), pas avec le seuil du jour.
+    seuilCompletudeBloc,
     completude: noeud.completude,
     poidsTotal: noeud.poidsTotal,
     drapeauxRouges: resultat.drapeauxRouges.filter((d) => d.blocCode === noeud.blocCode),
@@ -159,7 +165,17 @@ export async function calculerScoresDeMission(
     const unites = await lireUnitesPourScoring(tx, missionId);
     const questions = await lireQuestionsFigees(tx, missionId);
     const reponses = await lireReponsesPourScoring(tx, missionId);
-    const dernier = await lireDernierCalcul(tx, missionId);
+    // Le calcul remplacé : les lignes persistées, à défaut la trace du journal (une mission
+    // sans question ni bloc actif ne persiste AUCUNE ligne, mais le calcul a bien eu lieu).
+    const dernier =
+      (await lireDernierCalcul(tx, missionId)) ??
+      (
+        await lireDerniereActivite(
+          { entiteType: 'mission', entiteId: missionId, action: 'mission.compute_scores' },
+          tx,
+        )
+      )?.dateUtc ??
+      null;
 
     // Les blocs du score d'entreprise : les blocs ACTIFS de la mission (dans l'ordre
     // d'affichage), ou à défaut ceux que le questionnaire figé touche.
@@ -179,7 +195,12 @@ export async function calculerScoresDeMission(
     const calcule = calculerScoringMission(entree);
 
     const blocParQuestion = new Map(questions.map((q) => [q.missionQuestionId, q.blocCode]));
-    const lignes = versLignesDeScores(calcule, referentiel, blocParQuestion);
+    const lignes = versLignesDeScores(
+      calcule,
+      referentiel,
+      blocParQuestion,
+      parametres.seuilCompletudeBloc,
+    );
 
     // ③ DELETE puis INSERT, dans CETTE transaction.
     const instant = new Date();

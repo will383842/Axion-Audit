@@ -75,6 +75,7 @@ import {
   users,
 } from '../../db/schema.js';
 import type { ExecuteurSql } from '../auth/depot.js';
+import { lireDerniereActivite } from '../journal/depot.js';
 import type { DemandeurDePilotage } from '../pilotage/depot.js';
 import type {
   LigneCasUsageExport,
@@ -744,6 +745,8 @@ export interface ScoreBlocPourExport {
   readonly completude: string | null;
   /** `block_scores.is_indicative` pour une ligne de bloc ; non porté par `unit_scores`. */
   readonly indicatif: boolean | null;
+  /** Seuil de complétude FIGÉ au calcul (`block_scores.details`) ; `null` pour une ligne d'unité. */
+  readonly seuil: string | null;
   readonly calculeLe: Date | null;
 }
 
@@ -759,6 +762,20 @@ export interface ScoreUnitePourExport extends ScoreBlocPourExport {
  * Une mission jamais calculée rend deux listes vides, et le service en conclut que
  * `scores.csv` est absent (§36.3 : « si L8, sinon absent et signalé »).
  */
+/** Une mission a-t-elle été calculée ? Les lignes, à défaut la trace du journal (mission vide). */
+export async function calculAEuLieu(
+  executeur: ExecuteurSql,
+  missionId: string,
+  lignesPresentes: boolean,
+): Promise<boolean> {
+  if (lignesPresentes) return true;
+  const trace = await lireDerniereActivite(
+    { entiteType: 'mission', entiteId: missionId, action: 'mission.compute_scores' },
+    executeur,
+  );
+  return trace !== null;
+}
+
 export async function listerScoresPourExport(
   executeur: ExecuteurSql,
   missionId: string,
@@ -774,6 +791,7 @@ export async function listerScoresPourExport(
       score: blockScores.score,
       completude: blockScores.completeness,
       indicatif: blockScores.isIndicative,
+      seuil: sql<string | null>`${blockScores.details}->>'seuilCompletudeBloc'`,
       calculeLe: blockScores.computedAt,
     })
     .from(blockScores)
@@ -794,5 +812,5 @@ export async function listerScoresPourExport(
     .innerJoin(blocks, eq(blocks.id, unitScores.blockId))
     .where(eq(unitScores.missionId, missionId));
 
-  return { blocs, unites: unites.map((ligne) => ({ ...ligne, indicatif: null })) };
+  return { blocs, unites: unites.map((ligne) => ({ ...ligne, indicatif: null, seuil: null })) };
 }
