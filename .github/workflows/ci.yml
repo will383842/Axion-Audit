@@ -907,17 +907,60 @@ jobs:
       - name: Installer le navigateur chromium (Playwright)
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: pnpm test:e2e
+      # L6c-2 : les scénarios de synchronisation (e2e/sync/) tournent contre la VRAIE
+      # API (banc e2e/banc/ : PostgreSQL, Redis et MinIO par Docker, déjà présent sur
+      # ubuntu-latest). Le volume (scénario 6) est dans le job 5b, en parallèle.
+      - name: Construire les sources
+        run: pnpm build
+
+      - name: e2e hors ligne
         env:
           APP_ENV: dev
           TZ: UTC
-        run: pnpm test:e2e
+        run: pnpm exec playwright test --project=hors-ligne
+
+      - name: e2e synchronisation (vraie API)
+        env:
+          APP_ENV: dev
+          TZ: UTC
+        run: pnpm exec playwright test --project=sync-critique --workers=2
 
       - name: Conserver le rapport Playwright
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: rapport-playwright
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  e2e-charge:
+    name: 5b · e2e charge (5 000 réponses, 200 photos)
+    runs-on: ubuntu-latest
+    needs: [build-sources] # audit de vitesse A2 : indépendant de `integration`
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: ./.github/actions/setup-node-pnpm
+
+      - name: Installer le navigateur chromium (Playwright)
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Construire les sources
+        run: pnpm build
+
+      - name: e2e charge (scénario 6, 05 §9.8)
+        env:
+          APP_ENV: dev
+          TZ: UTC
+        run: pnpm exec playwright test --project=charge --workers=1
+
+      - name: Conserver le rapport Playwright
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: rapport-playwright-charge
           path: |
             playwright-report/
             test-results/
