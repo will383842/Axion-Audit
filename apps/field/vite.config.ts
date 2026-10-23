@@ -106,4 +106,17 @@ export default defineConfig({
     target: 'es2022',
   },
   server: { port: 5173, host: true },
+  // « Même domaine, pas de CORS » (CLAUDE.md §2). En production Caddy sert `/` et
+  // `/api` sous un seul domaine et RETIRE le préfixe `/api` ; `vite preview` doit
+  // faire pareil pour le banc E2E avec vraie API (e2e/banc/). Sans cible joignable,
+  // le proxy répond 5xx : le front le lit comme « siège injoignable », ce que
+  // `context.setOffline` simule déjà aux tests hors ligne.
+  preview: {
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:3000',
+        rewrite: (chemin) => chemin.replace(/^\/api/, ''),
+      },
+    },
+  },
 });

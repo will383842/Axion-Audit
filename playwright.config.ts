@@ -22,6 +22,12 @@ export default defineConfig({
   testDir: './e2e',
   testMatch: '**/*.e2e.ts',
 
+  // BANC AVEC VRAIE API (L6c-2) : bases, migrations, semis, MinIO, Redis puis l'API
+  // CONSTRUITE, lancés ICI et non par un `webServer` — Playwright démarre les
+  // `webServer` AVANT le `globalSetup`, donc avant que la base existe. Le banc ne
+  // démarre pas pour une exécution limitée au projet `hors-ligne` (voir global-setup).
+  globalSetup: './e2e/banc/global-setup.ts',
+
   // Un test E2E qui échoue par intermittence est un test qui ment. En CI on
   // autorise UNE reprise (aléas d'infrastructure) et zéro en local, pour que
   // l'instabilité se voie pendant qu'on la crée plutôt que six semaines plus tard.
@@ -54,8 +60,31 @@ export default defineConfig({
   },
 
   projects: [
+    // Le parcours hors ligne EXISTANT (L0 → L6b), inchangé : renommé de `chromium`
+    // en `hors-ligne` pour le distinguer des deux projets qui parlent à la vraie API.
     {
-      name: 'chromium',
+      name: 'hors-ligne',
+      testIgnore: ['**/sync/**', '**/charge/**'],
+      use: { ...devices['Desktop Chrome'] },
+    },
+    // Les 8 scénarios du 05 §9.8 et tout ce qui traverse la VRAIE API (`@critique`).
+    // `retries: 0` MÊME en CI : un test qui ne passe qu'à la deuxième tentative est un
+    // test de sync qui ment. `failOnFlakyTests` n'existe qu'au niveau de la
+    // configuration (il s'appliquerait aussi à `hors-ligne`) ; zéro reprise produit le
+    // même effet pour ce projet seul. 2 workers : `pnpm test:e2e:sync`.
+    {
+      name: 'sync-critique',
+      testDir: './e2e/sync',
+      retries: 0,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    // Charge / volumétrie : UN worker (`pnpm test:e2e:charge`), les mesures ne
+    // doivent pas se disputer la machine.
+    {
+      name: 'charge',
+      testDir: './e2e/charge',
+      retries: 0,
+      fullyParallel: false,
       use: { ...devices['Desktop Chrome'] },
     },
     // L'iPad arrive au lot L5 (A27 — testeur multi-appareils). L'ajouter avant
