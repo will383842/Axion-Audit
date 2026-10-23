@@ -349,7 +349,8 @@ describe('L6c-3 · V4 purge des envois expirés @critique', () => {
       'SELECT storage_key, size_bytes FROM attachments WHERE id = $1',
       [e.pieceId],
     );
-    expect(piece.rows[0]).toEqual({ storage_key: cleDefinitive, size_bytes: 22 });
+    expect(piece.rows[0]?.storage_key).toBe(cleDefinitive);
+    expect(Number(piece.rows[0]?.size_bytes)).toBe(22);
   });
 
   it('journal pino « purge_envoi » : pieceId, missionId, morceaux, octets — AUCUNE donnée personnelle @critique', async () => {
