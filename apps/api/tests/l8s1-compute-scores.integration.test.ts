@@ -144,15 +144,15 @@ describe('@critique le calcul nominal — scores attendus calculés à la main',
     expect(lignes.map((l) => l.code)).toEqual(['bloc_1', 'bloc_2']);
 
     const b1 = ligneBloc(lignes, 'bloc_1');
-    // (20 × 2,5 + 30 × 2,2) / 50 = 2,32
+    // (20 × 2,5 + 30 × 2,2) / 50 = 2,32 ; complétude : 6 cotées sur 9 posées (P comprise, 3 non répondues, §27.1) = 2/3
     expect(nombreOuNull(b1.score)).toBe(2.32);
-    expect(nombreOuNull(b1.completeness)).toBe(1);
+    expect(nombreOuNull(b1.completeness)).toBeCloseTo(2 / 3, 10);
     expect(b1.is_indicative).toBe(false);
 
     const b2 = ligneBloc(lignes, 'bloc_2');
-    // B n'a aucune question cotée : seul A compte → 1,67, et 2 cotées sur 4 posées = 0,5 < 0,6.
+    // B n'a aucune question cotée : seul A compte → 1,67, et 2 cotées sur 6 posées (P elle-même comprise, jamais interrogée : 2 non répondues) = 1/3 < 0,6.
     expect(nombreOuNull(b2.score)).toBe(1.67);
-    expect(nombreOuNull(b2.completeness)).toBe(0.5);
+    expect(nombreOuNull(b2.completeness)).toBeCloseTo(1 / 3, 10);
     expect(b2.is_indicative).toBe(true);
 
     for (const ligne of lignes) {
@@ -186,12 +186,12 @@ describe('@critique le calcul nominal — scores attendus calculés à la main',
     const bloc2 = ligneBloc(await lireBlockScores(c(), jeu.mission.id), 'bloc_2');
     const completude = bloc2.details?.completude as Record<string, unknown>;
     expect(completude).toMatchObject({
-      posees: 4,
+      posees: 6,
       cotees: 2,
       nonCommuniquees: 1,
       sansObjet: 0,
-      nonRepondues: 1,
-      ratio: 0.5,
+      nonRepondues: 3,
+      ratio: 1 / 3,
       sousSeuil: true,
     });
   });
@@ -282,9 +282,9 @@ describe('@critique drapeaux rouges, divergences, anomalies — conservés dans 
   it('@critique `details` porte aussi la complétude du bloc et le poids total, pour refaire le calcul à la main', async () => {
     const b1 = ligneBloc(await lireBlockScores(c(), jeu.mission.id), 'bloc_1');
     expect(b1.details?.completude).toMatchObject({
-      posees: 6,
+      posees: 9,
       cotees: 6,
-      ratio: 1,
+      ratio: 2 / 3,
       sousSeuil: false,
     });
     expect(b1.details?.poidsTotal).toBe(10); // (1 + 3 + 1) × 2 unités
@@ -580,8 +580,8 @@ describe('@critique invariant 7 — aucune réponse touchée, remplacement trac�
     const jeu = await semerJeuPrincipal(c());
     // On archive l'ancienne valeur de Q2/A2 comme le ferait la sync, puis on corrige.
     await c().bd.query(
-      `INSERT INTO answer_revisions (id, answer_id, previous_value, changed_by, change_origin)
-       VALUES ($1, $2, $3::jsonb, $4, 'correction_siege')`,
+      `INSERT INTO answer_revisions (id, entity_type, entity_id, answer_id, previous_value, changed_by, change_origin)
+       VALUES ($1, 'answer', $2, $2, $3::jsonb, $4, 'correction_siege')`,
       [uuidv7(), jeu.reponses.a2q2, JSON.stringify({ type: 'scale_1_5', v: 1 }), jeu.lead.id],
     );
     await corrigerReponse(c(), jeu.reponses.a2q2, { type: 'scale_1_5', v: 4 });
@@ -720,7 +720,7 @@ describe('@critique invariant 3 — aucun montant de `scoping_financials` dans l
       position: 1,
       typeReponse: 'number',
       poids: 0,
-      criticite: 'secondaire',
+      criticite: 'informatif',
       scoring: {},
     });
     await semerReponse(c(), {

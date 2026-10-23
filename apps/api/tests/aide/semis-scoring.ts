@@ -236,7 +236,7 @@ export interface QuestionSemis {
   readonly position: number;
   readonly typeReponse: 'yes_no' | 'scale_1_5' | 'number';
   readonly poids: number;
-  readonly criticite: 'bloquant' | 'important' | 'secondaire';
+  readonly criticite: 'bloquant' | 'important' | 'informatif';
   readonly scoring: unknown;
 }
 

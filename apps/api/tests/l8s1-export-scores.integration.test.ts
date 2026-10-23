@@ -168,11 +168,11 @@ describe('@critique `scores.csv` présent après calcul — contenu exact vérif
     const attendu = [
       ENTETE_SCORES_CSV,
       // portée mission : un score d'entreprise par bloc actif
-      `mission;;;bloc_1;${libelle1};2.32;1;non;${horodatage}`,
-      `mission;;;bloc_2;${libelle2};1.67;0.5;oui;${horodatage}`,
+      `mission;;;bloc_1;${libelle1};2.32;${String(2 / 3)};non;${horodatage}`,
+      `mission;;;bloc_2;${libelle2};1.67;${String(1 / 3)};oui;${horodatage}`,
       // portée unité : P (racine, lecture consolidée), A, B
-      `unite;${jeu.unites.p};Unité racine P;bloc_1;${libelle1};2.32;1;non;${horodatage}`,
-      `unite;${jeu.unites.p};Unité racine P;bloc_2;${libelle2};1.67;0.5;oui;${horodatage}`,
+      `unite;${jeu.unites.p};Unité racine P;bloc_1;${libelle1};2.32;${String(2 / 3)};non;${horodatage}`,
+      `unite;${jeu.unites.p};Unité racine P;bloc_2;${libelle2};1.67;${String(1 / 3)};oui;${horodatage}`,
       `unite;${jeu.unites.a};Unité A;bloc_1;${libelle1};2.5;1;non;${horodatage}`,
       `unite;${jeu.unites.a};Unité A;bloc_2;${libelle2};1.67;1;non;${horodatage}`,
       `unite;${jeu.unites.b};Unité B;bloc_1;${libelle1};2.2;1;non;${horodatage}`,

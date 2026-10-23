@@ -586,13 +586,13 @@ export function verdictDeRubrique(rubrique: RubriqueRapport): NatureDuManque {
  * est rouge, et c'est ce qu'on veut.
  */
 export const VERDICT_DECLARE = {
-  date: '2026-10-09',
+  date: '2026-10-23',
   rubriquesRedigeables: [1, 3, 12] as readonly number[],
   critereL7Min: 'NON TENU' as const,
   /** Rubriques bloquées par un trou de FORMAT — dette de l'export (L7 / L10). */
   bloqueesParLeFormat: [4, 5, 9, 10, 11] as readonly number[],
   /** Rubriques bloquées par un trou de BRANCHEMENT — dette de L8. */
-  bloqueesParLeBranchement: [2] as readonly number[],
+  bloqueesParLeBranchement: [] as readonly number[],
   /** Rubriques bloquées par un trou d'ALIMENTATION seul — dette de L6 / Phase 2. */
-  bloqueesParLAlimentation: [6, 7, 8] as readonly number[],
+  bloqueesParLAlimentation: [2, 6, 7, 8] as readonly number[],
 } as const;

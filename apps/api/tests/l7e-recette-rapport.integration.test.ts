@@ -263,6 +263,20 @@ async function creerAdmin(): Promise<string> {
   return api().jwt.sign({ sub: id });
 }
 
+/** Déclenche le calcul des scores par la route RÉELLE (05 §8.5) — et exige qu'il réussisse. */
+async function calculerLesScores(mission: MissionCanonique, jeton: string): Promise<void> {
+  const reponse = await api().inject({
+    method: 'POST',
+    url: `/v1/missions/${mission.missionId}/compute-scores`,
+    headers: { 'x-forwarded-for': ipUnique(), authorization: `Bearer ${jeton}` },
+  });
+  if (reponse.statusCode !== 200) {
+    throw new Error(
+      `le calcul des scores de ${mission.nom} a répondu ${String(reponse.statusCode)} : ${reponse.body}`,
+    );
+  }
+}
+
 /** Télécharge l'export de la route RÉELLE, le décompresse, et le chronomètre. */
 async function exporter(mission: MissionCanonique, jeton: string): Promise<ArchiveDeRecette> {
   const debut = process.hrtime.bigint();
@@ -322,8 +336,14 @@ beforeAll(async () => {
   app = instance;
 
   const jeton = await creerAdmin();
-  filTpe = await exporter(await genererFilTpe(bd()), jeton);
-  filGc = await exporter(await genererFilGc(bd()), jeton);
+  // L8 branché (lot S1) : scores.csv n’existe qu’APRÈS un calcul — on calcule d’abord,
+  // comme le fait la console avant d’exporter.
+  const missionTpe = await genererFilTpe(bd());
+  await calculerLesScores(missionTpe, jeton);
+  filTpe = await exporter(missionTpe, jeton);
+  const missionGc = await genererFilGc(bd());
+  await calculerLesScores(missionGc, jeton);
+  filGc = await exporter(missionGc, jeton);
 }, 600_000);
 
 afterAll(async () => {
@@ -515,47 +535,31 @@ describe('@critique les TROUS D’ALIMENTATION : le fichier est correct, rien ne
 // =============================================================================
 // ④ LE TROU DE BRANCHEMENT — le producteur existe, aucune route ne l'appelle
 // =============================================================================
-describe('@critique le TROU DE BRANCHEMENT du scoring : un moteur sans route', () => {
-  it('@critique le moteur de scoring existe et est testé — ce n’est pas un trou d’alimentation', () => {
+describe('@critique le BRANCHEMENT du scoring (lot S1) : le moteur a sa route, scores.csv sort de l’export', () => {
+  it('@critique le moteur de scoring existe et est testé', () => {
     const moteurs = fichiersDeProduction(join(RACINE_API, 'src', 'scoring'));
-    expect(
-      moteurs.length,
-      'le moteur de scoring a disparu : ce n’est plus un trou de branchement',
-    ).toBeGreaterThan(0);
+    expect(moteurs.length, 'le moteur de scoring a disparu').toBeGreaterThan(0);
   });
 
-  it('@critique aucune route de l’API n’atteint `src/scoring` — la mesure, pas la parole', () => {
+  it('@critique une route de l’API atteint désormais `src/scoring` — le trou de branchement est refermé', () => {
     const routes = fichiersDeProduction(join(RACINE_API, 'src', 'routes'))
       .map((chemin) => readFileSync(chemin, 'utf8'))
       .join('\n');
-    const domaines = fichiersDeProduction(join(RACINE_API, 'src', 'domaines'))
-      .map((chemin) => readFileSync(chemin, 'utf8'))
-      .join('\n');
     const importeLeScoring = /from '[^']*scoring\/[^']*'/;
-
     expect(
       importeLeScoring.test(routes),
-      'une route importe désormais le moteur de scoring : le trou de BRANCHEMENT se referme, ' +
-        'les rubriques 2 et 5 se re-notent',
-    ).toBe(false);
-    expect(
-      importeLeScoring.test(domaines),
-      'un domaine importe désormais le moteur de scoring : re-noter les rubriques 2 et 5',
-    ).toBe(false);
+      'plus aucune route n’importe le scoring : le branchement a disparu, rubriques 2 et 5 à re-noter',
+    ).toBe(true);
   });
 
-  it('@critique `scores.csv` est ABSENT et son absence est SIGNALÉE (§36.3 : « absent et signalé »)', () => {
+  it('@critique `scores.csv` est PRÉSENT après calcul, signalé `presents=true`, sans motif d’absence', () => {
     for (const archive of lesDeux()) {
       expect(
         archive.fichiers.has('scores.csv'),
-        `scores.csv est apparu dans ${archive.mission.nom} : L8 est branché, re-noter la grille`,
-      ).toBe(false);
-      expect(valeurMeta(archive, 'scores.presents')).toBe(false);
-      const motif = valeurMeta(archive, 'scores.motif');
-      expect(typeof motif, 'l’absence des scores doit être signalée, pas seulement vraie').toBe(
-        'string',
-      );
-      expect(String(motif).length).toBeGreaterThan(20);
+        `scores.csv absent de ${archive.mission.nom} malgré le calcul`,
+      ).toBe(true);
+      expect(valeurMeta(archive, 'scores.presents')).toBe(true);
+      expect(valeurMeta(archive, 'scores.motif')).toBeNull();
     }
   });
 
@@ -735,7 +739,7 @@ describe('@filrouge l’export §36.3 sur les DEUX missions canoniques (09 §4bi
     const PROSE: readonly string[] = [
       'formatHorodatage',
       'completudeGlobale.definition',
-      'scores.motif',
+      // `scores.motif` est nul quand les scores existent (lot S1) : il est éprouvé dans les tests de branchement.
       'piecesJointes.motif',
       'repondants.regle',
     ];
