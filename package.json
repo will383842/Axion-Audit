@@ -39,6 +39,8 @@
     "check:porte-journal": "node scripts/check-porte-journal.mjs",
     "check:executabilite": "node scripts/check-executabilite-scripts.mjs",
     "check:tracabilite": "node scripts/check-tracabilite-exigences.mjs",
+    "briefs:generer": "node scripts/generer-briefs.mjs",
+    "check:briefs": "node scripts/generer-briefs.mjs --verifier",
     "check:pack": "node scripts/check-pack-integrity.mjs",
     "schema:diff": "node scripts/schema-diff.mjs",
     "check:schema-inventaire": "node scripts/check-schema-inventaire.mjs",

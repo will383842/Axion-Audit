@@ -24,6 +24,11 @@
 | L7-L8 console/scoring           | 03 (§18, §22.3, M5, §27.1, §32.1, §33.4, §36.3) → 04                                          |
 | L10-L11 rapports/LLM            | 03 (M6, §26.2, §36.6) → 01 (§20.3) → 04 → 06 (pseudonymisation 2 passes)                      |
 
+**Briefs générés : lire `docs/briefs/<lot>.md` AVANT d'ouvrir le pack** (`L0`…`L6`, `L7-L8`, `L10-L11`) : la ligne
+du lot (07), les fichiers à lire en entier, et les § de la table ci-dessus copiés à l'identique. On n'ouvre
+le fichier d'origine que si le brief ne suffit pas. `pnpm briefs:generer` les régénère (`check:briefs` les
+vérifie dans `verify:rapide`) ; ne jamais les éditer à la main.
+
 **Ne jamais ouvrir en entier** `docs/TRACABILITE_E1-E47.md` (406 Ko, `check:tracabilite` le contrôle en CI) ni
 `AMELIORATIONS.md` (206 Ko) : `grep` ou `offset`/`limit` sur la section voulue. Pour `03` (120 Ko) et `04` (40 Ko),
 lire seulement les § cités ci-dessus.

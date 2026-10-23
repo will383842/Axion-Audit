@@ -7,7 +7,8 @@
 //
 // Trois vagues, parce que lint et typecheck lisent `packages/*/dist` :
 //   1. gardes + format + fixtures, et la construction des paquets (une seule fois)  — en parallèle ;
-//   2. lint, typecheck, tests unit + interface                                       — en parallèle ;
+//   2. lint, typecheck                                                               — en parallèle ;
+//   3. tests unit + interface, SEULS (charge CPU : voir le commentaire de VAGUES) ;
 // Une vague n'est lancée que si la précédente est entièrement verte.
 //
 // Aucune dépendance : node:child_process seulement (CLAUDE.md §3-1).
@@ -26,6 +27,7 @@ const GARDES = [
   'check:compose-coolify',
   'check:executabilite',
   'check:fixtures',
+  'check:briefs',
   'format:check',
 ];
 
@@ -34,8 +36,10 @@ const VAGUES = [
   [
     ['pnpm', 'lint:sans-build'],
     ['pnpm', 'typecheck:sans-build'],
-    ['pnpm', 'exec', 'vitest', 'run', '--project', 'unit', '--project', 'interface'],
   ],
+  // Seule dans sa vague : lancés avec eslint et tsc, des tests à délai court (Argon2, coffre local)
+  // dépassaient leur timeout sous la charge CPU — échec au pre-push, vert quand on les rejoue seuls.
+  [['pnpm', 'exec', 'vitest', 'run', '--project', 'unit', '--project', 'interface']],
 ];
 
 const nom = (cmd) => cmd.join(' ');
