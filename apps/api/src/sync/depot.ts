@@ -744,26 +744,5 @@ export async function journaliserPull(ex: ExecuteurSql, ligne: LigneJournalPull)
 // L'HORLOGE ET LES DÉLAIS DU LOT DE PUSH — revue A17
 // -----------------------------------------------------------------------------
 
-/**
- * L'heure de la BASE au début de la transaction du lot (`now()`) : tous les
- * `updated_at` du lot la partagent. C'est elle, et non l'heure de l'application,
- * que le plafond du pull compare — une seule horloge pour écrire et pour lire.
- */
-export async function lireHorlogeDuLot(ex: ExecuteurSql): Promise<Date> {
-  const resultat = await ex.execute<{ maintenant: Date | string }>(sql`SELECT now() AS maintenant`);
-  const [ligne] = resultat.rows;
-  if (ligne === undefined) throw new Error('horloge de la base illisible');
-  return new Date(ligne.maintenant);
-}
-
-/**
- * Borne chaque instruction ET chaque attente de verrou du lot à `dureeMs`, pour la
- * seule transaction en cours (`set_config(…, true)` = `SET LOCAL`, paramétré).
- */
-export async function bornerLaTransaction(ex: ExecuteurSql, dureeMs: number): Promise<void> {
-  const valeur = `${String(Math.max(1, Math.floor(dureeMs)))}ms`;
-  await ex.execute(
-    sql`SELECT set_config('statement_timeout', ${valeur}, true),
-               set_config('lock_timeout', ${valeur}, true)`,
-  );
-}
+// Déplacées en L6c-3 vers `db/horloge.ts` : les écritures du siège s'en servent aussi.
+export { bornerLaTransaction, lireHorlogeDuLot } from '../db/horloge.js';

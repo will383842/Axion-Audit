@@ -56,6 +56,7 @@ import {
   type StatutSessionApi,
 } from '@axion/shared';
 import { db } from '../../db.js';
+import { ouvrirEcritureDescendante } from '../../db/horloge.js';
 import type { PageCurseur } from '../../http/pagination.js';
 import type { ExecuteurSql } from '../auth/depot.js';
 import { journaliserActivite, type ContexteJournal } from '../journal/service.js';
@@ -376,6 +377,7 @@ export async function reaffecterUneSession(
   contexte: ContexteJournal,
 ): Promise<ResultatReaffectation> {
   const resultat = await db.transaction(async (tx) => {
+    const maintenant = await ouvrirEcritureDescendante(tx);
     // ①
     const avant = await lireSessionPourReaffectation(tx, interviewId);
     if (avant === null) throw new AppError('NOT_FOUND', MESSAGE_SESSION_INTROUVABLE);
@@ -439,7 +441,7 @@ export async function reaffecterUneSession(
     exigerHabilitation(compte);
 
     // ⑤
-    const apres = await reaffecterSession(tx, interviewId, corps.newUserId, new Date());
+    const apres = await reaffecterSession(tx, interviewId, corps.newUserId, maintenant);
     if (apres === null) throw new AppError('INTERNAL_ERROR', 'Une erreur interne est survenue.');
 
     // ⑥ — LA CEINTURE DU COUPLE (état, propriétaire), amendement du 04 du 2026-09-02.

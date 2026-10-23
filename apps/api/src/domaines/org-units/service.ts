@@ -57,6 +57,7 @@ import {
   type UpdateOrgUnitRequest,
 } from '@axion/shared';
 import { db } from '../../db.js';
+import { ouvrirEcritureDescendante } from '../../db/horloge.js';
 import type { PageCurseur } from '../../http/pagination.js';
 import type { ExecuteurSql } from '../auth/depot.js';
 import { journaliserActivite, type ContexteJournal } from '../journal/service.js';
@@ -199,11 +200,11 @@ export async function creerUneUnite(
   entree: CreateOrgUnitRequest,
   contexte: ContexteJournal,
 ): Promise<CreationUnite> {
-  const maintenant = new Date();
   const idFourniParLAppelant = entree.id !== undefined;
   const id = entree.id ?? uuidv7();
 
   const ligne = await db.transaction(async (tx) => {
+    const maintenant = await ouvrirEcritureDescendante(tx);
     await exigerMission(tx, missionId);
 
     if (entree.parentId !== null) {
@@ -350,6 +351,7 @@ export async function modifierUneUnite(
   contexte: ContexteJournal,
 ): Promise<LigneUniteOrg> {
   const resultat = await db.transaction(async (tx) => {
+    const maintenant = await ouvrirEcritureDescendante(tx);
     const avant = await lireUnitePourEcriture(tx, uniteId);
     if (avant === null) throw new AppError('NOT_FOUND', MESSAGE_UNITE_INTROUVABLE);
 
@@ -494,7 +496,7 @@ export async function modifierUneUnite(
       return { ligne: avant, touches };
     }
 
-    const apres = await mettreAJourUnite(tx, uniteId, champs, new Date());
+    const apres = await mettreAJourUnite(tx, uniteId, champs, maintenant);
     if (apres === null) throw incoherenceInterne();
 
     return { ligne: apres, touches };
@@ -543,6 +545,7 @@ export async function validerUneUnite(
   contexte: ContexteJournal,
 ): Promise<LigneUniteOrg> {
   const ligne = await db.transaction(async (tx) => {
+    const maintenant = await ouvrirEcritureDescendante(tx);
     const avant = await lireUnitePourEcriture(tx, uniteId);
     if (avant === null) throw new AppError('NOT_FOUND', MESSAGE_UNITE_INTROUVABLE);
 
@@ -556,7 +559,7 @@ export async function validerUneUnite(
       );
     }
 
-    const apres = await poserStatutUnite(tx, uniteId, 'proposee', 'active', undefined, new Date());
+    const apres = await poserStatutUnite(tx, uniteId, 'proposee', 'active', undefined, maintenant);
     if (apres === null) throw incoherenceInterne();
     return apres;
   });
@@ -690,6 +693,7 @@ export async function fusionnerUneUnite(
   contexte: ContexteJournal,
 ): Promise<ResultatFusion> {
   const resultat = await db.transaction(async (tx) => {
+    const maintenant = await ouvrirEcritureDescendante(tx);
     // ④ — VÉRIFIÉ AVANT TOUT VERROU. C'est le seul cas où « source » et « cible »
     // désignent la même ligne : le contrôler ici évite d'avoir à décider ce que
     // signifierait un ordre canonique sur deux identifiants égaux.
@@ -812,7 +816,6 @@ export async function fusionnerUneUnite(
     await exigerMission(tx, source.missionId, true);
     await exigerCibleNonDescendante(tx, source.missionId, uniteId, cible.id);
 
-    const maintenant = new Date();
     const enfantsReattaches = await reparenterEnfants(tx, uniteId, cible.id, maintenant);
     const entretiensReattaches = await reattacherEntretiens(tx, uniteId, cible.id, maintenant);
 
@@ -1025,9 +1028,8 @@ export async function importerLArbre(
   verification: boolean,
   contexte: ContexteJournal,
 ): Promise<RapportImportArbre> {
-  const maintenant = new Date();
-
   const resultat = await db.transaction(async (tx) => {
+    const maintenant = await ouvrirEcritureDescendante(tx);
     // ① La mission — et, EN MODE RÉEL, son VERROU.
     //
     // ═══════════════════════════════════════════════════════════════════════════

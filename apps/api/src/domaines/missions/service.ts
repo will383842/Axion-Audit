@@ -54,6 +54,7 @@ import {
   type UpdateMissionRequest,
 } from '@axion/shared';
 import { db } from '../../db.js';
+import { ouvrirEcritureDescendante } from '../../db/horloge.js';
 import type { PageCurseur } from '../../http/pagination.js';
 import { journaliserActivite, type ContexteJournal } from '../journal/service.js';
 import {
@@ -152,11 +153,11 @@ export async function creerUneMission(
   entree: CreateMissionRequest,
   contexte: ContexteJournal,
 ): Promise<CreationMission> {
-  const maintenant = new Date();
   const missionId = uuidv7();
   const racineId = uuidv7();
 
   const resultat = await db.transaction(async (tx) => {
+    const maintenant = await ouvrirEcritureDescendante(tx);
     const nomEntreprise = await lireNomEntreprise(tx, entree.companyId);
     if (nomEntreprise === null) {
       throw new AppError('VALIDATION_FAILED', "Cette entreprise n'existe pas.", [
@@ -286,6 +287,7 @@ export async function modifierUneMission(
   contexte: ContexteJournal,
 ): Promise<LigneMission> {
   const resultat = await db.transaction(async (tx) => {
+    const maintenant = await ouvrirEcritureDescendante(tx);
     const avant = await lireMissionPourEcriture(tx, missionId);
     if (avant === null) throw new AppError('NOT_FOUND', MESSAGE_MISSION_INTROUVABLE);
 
@@ -404,7 +406,7 @@ export async function modifierUneMission(
       return { ligne: avant, touches };
     }
 
-    const apres = await mettreAJourMission(tx, missionId, champs, new Date());
+    const apres = await mettreAJourMission(tx, missionId, champs, maintenant);
     if (apres === null) throw incoherenceInterne();
 
     return { ligne: apres, touches };
@@ -630,6 +632,7 @@ export async function transitionnerMission(
   contexte: ContexteJournal,
 ): Promise<ResultatTransition> {
   const resultat = await db.transaction(async (tx) => {
+    const maintenant = await ouvrirEcritureDescendante(tx);
     // ① + ②
     const avant = await lireMissionPourEcriture(tx, missionId);
     if (avant === null) throw new AppError('NOT_FOUND', MESSAGE_MISSION_INTROUVABLE);
@@ -668,7 +671,6 @@ export async function transitionnerMission(
     // `livree → en_analyse → livree` conserve la date de PREMIÈRE livraison :
     // invariant 7, « rien n'est jamais silencieusement écrasé ». Le pack ne dit pas
     // explicitement qui pose cette colonne — remonté comme candidat `DECISIONS.md`.
-    const maintenant = new Date();
     const deliveredAt =
       corps.vers === 'livree' && avant.deliveredAt === null ? maintenant : undefined;
 
