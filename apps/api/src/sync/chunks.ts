@@ -398,6 +398,9 @@ export async function terminerEnvoi(
         statut: 'assemble',
         chunksAttendus: corps.chunks,
         sha256Attendu: corps.sha256,
+        // Assemblée : plus d'échéance (décision L6c-3). Seul un retrait de morceaux
+        // raté la réarme, pour que la purge rattrape les objets restés.
+        expireLe: null,
         updatedAt: sql`now()`,
       })
       .where(eq(attachmentUploads.attachmentId, pieceId));
@@ -421,7 +424,8 @@ export async function terminerEnvoi(
 /**
  * Les morceaux d'une pièce assemblée ne servent plus : ils sont retirés APRÈS le
  * commit. Un échec ici ne défait rien (l'objet final et la clé sont posés) ; il
- * laisse des objets que la purge de L6c-3 rattrapera, et il est journalisé.
+ * est journalisé et RÉARME `expire_le` à maintenant : la purge de L6c-3 retire
+ * alors les objets restés à sa prochaine passe (statut `assemble` inchangé).
  */
 async function retirerMorceaux(
   pieceId: string,
@@ -436,5 +440,14 @@ async function retirerMorceaux(
     );
   } catch {
     journal.warn({ pieceId }, 'Morceaux d’une pièce assemblée non retirés');
+    await db
+      .update(attachmentUploads)
+      .set({ expireLe: sql`now()`, updatedAt: sql`now()` })
+      .where(
+        and(eq(attachmentUploads.attachmentId, pieceId), eq(attachmentUploads.statut, 'assemble')),
+      )
+      .catch(() => {
+        journal.warn({ pieceId }, 'Échéance de purge non réarmée');
+      });
   }
 }
