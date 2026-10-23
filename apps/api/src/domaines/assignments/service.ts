@@ -56,7 +56,7 @@ import {
   type StatutSessionApi,
 } from '@axion/shared';
 import { db } from '../../db.js';
-import { ouvrirEcritureDescendante } from '../../db/horloge.js';
+import { transactionDescendante } from '../../db/horloge.js';
 import type { PageCurseur } from '../../http/pagination.js';
 import type { ExecuteurSql } from '../auth/depot.js';
 import { journaliserActivite, type ContexteJournal } from '../journal/service.js';
@@ -376,8 +376,7 @@ export async function reaffecterUneSession(
   corps: InterviewReassignRequest,
   contexte: ContexteJournal,
 ): Promise<ResultatReaffectation> {
-  const resultat = await db.transaction(async (tx) => {
-    const maintenant = await ouvrirEcritureDescendante(tx);
+  const resultat = await transactionDescendante(db, async (tx, maintenant) => {
     // ①
     const avant = await lireSessionPourReaffectation(tx, interviewId);
     if (avant === null) throw new AppError('NOT_FOUND', MESSAGE_SESSION_INTROUVABLE);

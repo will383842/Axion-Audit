@@ -54,7 +54,7 @@ import {
   type UpdateMissionRequest,
 } from '@axion/shared';
 import { db } from '../../db.js';
-import { ouvrirEcritureDescendante } from '../../db/horloge.js';
+import { transactionDescendante } from '../../db/horloge.js';
 import type { PageCurseur } from '../../http/pagination.js';
 import { journaliserActivite, type ContexteJournal } from '../journal/service.js';
 import {
@@ -156,8 +156,7 @@ export async function creerUneMission(
   const missionId = uuidv7();
   const racineId = uuidv7();
 
-  const resultat = await db.transaction(async (tx) => {
-    const maintenant = await ouvrirEcritureDescendante(tx);
+  const resultat = await transactionDescendante(db, async (tx, maintenant) => {
     const nomEntreprise = await lireNomEntreprise(tx, entree.companyId);
     if (nomEntreprise === null) {
       throw new AppError('VALIDATION_FAILED', "Cette entreprise n'existe pas.", [
@@ -286,8 +285,7 @@ export async function modifierUneMission(
   corps: UpdateMissionRequest,
   contexte: ContexteJournal,
 ): Promise<LigneMission> {
-  const resultat = await db.transaction(async (tx) => {
-    const maintenant = await ouvrirEcritureDescendante(tx);
+  const resultat = await transactionDescendante(db, async (tx, maintenant) => {
     const avant = await lireMissionPourEcriture(tx, missionId);
     if (avant === null) throw new AppError('NOT_FOUND', MESSAGE_MISSION_INTROUVABLE);
 
@@ -631,8 +629,7 @@ export async function transitionnerMission(
   corps: MissionStatusRequest,
   contexte: ContexteJournal,
 ): Promise<ResultatTransition> {
-  const resultat = await db.transaction(async (tx) => {
-    const maintenant = await ouvrirEcritureDescendante(tx);
+  const resultat = await transactionDescendante(db, async (tx, maintenant) => {
     // ① + ②
     const avant = await lireMissionPourEcriture(tx, missionId);
     if (avant === null) throw new AppError('NOT_FOUND', MESSAGE_MISSION_INTROUVABLE);

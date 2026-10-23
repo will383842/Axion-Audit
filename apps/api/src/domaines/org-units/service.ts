@@ -57,7 +57,7 @@ import {
   type UpdateOrgUnitRequest,
 } from '@axion/shared';
 import { db } from '../../db.js';
-import { ouvrirEcritureDescendante } from '../../db/horloge.js';
+import { transactionDescendante } from '../../db/horloge.js';
 import type { PageCurseur } from '../../http/pagination.js';
 import type { ExecuteurSql } from '../auth/depot.js';
 import { journaliserActivite, type ContexteJournal } from '../journal/service.js';
@@ -203,8 +203,7 @@ export async function creerUneUnite(
   const idFourniParLAppelant = entree.id !== undefined;
   const id = entree.id ?? uuidv7();
 
-  const ligne = await db.transaction(async (tx) => {
-    const maintenant = await ouvrirEcritureDescendante(tx);
+  const ligne = await transactionDescendante(db, async (tx, maintenant) => {
     await exigerMission(tx, missionId);
 
     if (entree.parentId !== null) {
@@ -350,8 +349,7 @@ export async function modifierUneUnite(
   corps: UpdateOrgUnitRequest,
   contexte: ContexteJournal,
 ): Promise<LigneUniteOrg> {
-  const resultat = await db.transaction(async (tx) => {
-    const maintenant = await ouvrirEcritureDescendante(tx);
+  const resultat = await transactionDescendante(db, async (tx, maintenant) => {
     const avant = await lireUnitePourEcriture(tx, uniteId);
     if (avant === null) throw new AppError('NOT_FOUND', MESSAGE_UNITE_INTROUVABLE);
 
@@ -544,8 +542,7 @@ export async function validerUneUnite(
   uniteId: string,
   contexte: ContexteJournal,
 ): Promise<LigneUniteOrg> {
-  const ligne = await db.transaction(async (tx) => {
-    const maintenant = await ouvrirEcritureDescendante(tx);
+  const ligne = await transactionDescendante(db, async (tx, maintenant) => {
     const avant = await lireUnitePourEcriture(tx, uniteId);
     if (avant === null) throw new AppError('NOT_FOUND', MESSAGE_UNITE_INTROUVABLE);
 
@@ -692,8 +689,7 @@ export async function fusionnerUneUnite(
   corps: MergeOrgUnitRequest,
   contexte: ContexteJournal,
 ): Promise<ResultatFusion> {
-  const resultat = await db.transaction(async (tx) => {
-    const maintenant = await ouvrirEcritureDescendante(tx);
+  const resultat = await transactionDescendante(db, async (tx, maintenant) => {
     // ④ — VÉRIFIÉ AVANT TOUT VERROU. C'est le seul cas où « source » et « cible »
     // désignent la même ligne : le contrôler ici évite d'avoir à décider ce que
     // signifierait un ordre canonique sur deux identifiants égaux.
@@ -1028,8 +1024,7 @@ export async function importerLArbre(
   verification: boolean,
   contexte: ContexteJournal,
 ): Promise<RapportImportArbre> {
-  const resultat = await db.transaction(async (tx) => {
-    const maintenant = await ouvrirEcritureDescendante(tx);
+  const resultat = await transactionDescendante(db, async (tx, maintenant) => {
     // ① La mission — et, EN MODE RÉEL, son VERROU.
     //
     // ═══════════════════════════════════════════════════════════════════════════

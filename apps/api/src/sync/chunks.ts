@@ -153,9 +153,19 @@ const CODES_SQL_REESSAYABLES: ReadonlySet<string> = new Set(['40P01', '55P03']);
 
 type TransactionPg = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
+/**
+ * Attente de verrou bornée (revue A17 de L6c-3) : la purge tient la ligne d'envoi
+ * pendant ses appels au stockage ; une route ne l'attend pas indéfiniment, elle
+ * rend un 503 réessayable (`55P03`).
+ */
+const ATTENTE_VERROU_ROUTE = '30000ms';
+
 async function enTransaction<T>(travail: (tx: TransactionPg) => Promise<T>): Promise<T> {
   try {
-    return await db.transaction(travail);
+    return await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT set_config('lock_timeout', ${ATTENTE_VERROU_ROUTE}, true)`);
+      return travail(tx);
+    });
   } catch (erreur) {
     const code = codeSql(erreur);
     if (code !== null && CODES_SQL_REESSAYABLES.has(code)) {
@@ -179,15 +189,56 @@ export interface ObjetMorceau {
 }
 
 /** Tous les objets sous `envois/<pieceId>/`, avec leur taille (jamais `pieces/…`). */
-export async function listerMorceaux(st: Stockage, pieceId: string): Promise<ObjetMorceau[]> {
-  const objets: ObjetMorceau[] = [];
-  const flux = st.client.listObjectsV2(st.bucket, prefixeMorceaux(pieceId), true);
-  for await (const objet of flux as AsyncIterable<{ name?: string; size?: number }>) {
-    if (typeof objet.name === 'string' && objet.name.startsWith(prefixeMorceaux(pieceId))) {
-      objets.push({ nom: objet.name, taille: objet.size ?? 0 });
+export async function listerMorceaux(
+  st: Stockage,
+  pieceId: string,
+  delaiMs = DELAI_STOCKAGE_MS,
+): Promise<ObjetMorceau[]> {
+  const lister = async (): Promise<ObjetMorceau[]> => {
+    const objets: ObjetMorceau[] = [];
+    const flux = st.client.listObjectsV2(st.bucket, prefixeMorceaux(pieceId), true);
+    for await (const objet of flux as AsyncIterable<{ name?: string; size?: number }>) {
+      if (typeof objet.name === 'string' && objet.name.startsWith(prefixeMorceaux(pieceId))) {
+        objets.push({ nom: objet.name, taille: objet.size ?? 0 });
+      }
     }
+    return objets;
+  };
+  return avecDelai(lister(), delaiMs);
+}
+
+/** Délai par défaut d'un appel au stockage hors chemin de réception. */
+export const DELAI_STOCKAGE_MS = 10_000;
+
+/** La promesse, ou un échec si elle dépasse `delaiMs` (on cesse d'attendre). */
+export async function avecDelai<T>(promesse: Promise<T>, delaiMs: number): Promise<T> {
+  let minuterie: NodeJS.Timeout | undefined;
+  const delai = new Promise<never>((_, rejeter) => {
+    minuterie = setTimeout(() => {
+      rejeter(new Error('delai du stockage depasse'));
+    }, delaiMs);
+  });
+  try {
+    return await Promise.race([promesse, delai]);
+  } finally {
+    clearTimeout(minuterie);
   }
-  return objets;
+}
+
+/**
+ * Supprime des objets ; LÈVE si un seul n'a pas été supprimé. `removeObjects`
+ * de minio 8 ne lève pas dans ce cas : il rend la liste des erreurs (revue A17).
+ */
+export async function retirerObjets(
+  st: Stockage,
+  noms: readonly string[],
+  delaiMs = DELAI_STOCKAGE_MS,
+): Promise<void> {
+  if (noms.length === 0) return;
+  const erreurs = await avecDelai(st.client.removeObjects(st.bucket, [...noms]), delaiMs);
+  if (erreurs.some((e) => e !== null && e !== undefined)) {
+    throw new Error('objets non supprimes');
+  }
 }
 
 /** Objet d'un morceau en attente d'assemblage. Jamais rendu au client (PD8). */
@@ -450,12 +501,10 @@ async function retirerMorceaux(pieceId: string, journal: FastifyBaseLogger): Pro
     // PAR PRÉFIXE `envois/<id>/` : un morceau d'indice au-delà du nombre déclaré
     // ne reste pas orphelin (réserve A17 de L6c-1). Jamais sous `pieces/…`.
     const objets = await listerMorceaux(st, pieceId);
-    if (objets.length > 0) {
-      await st.client.removeObjects(
-        st.bucket,
-        objets.map((o) => o.nom),
-      );
-    }
+    await retirerObjets(
+      st,
+      objets.map((o) => o.nom),
+    );
   } catch {
     journal.warn({ pieceId }, 'Morceaux d’une pièce assemblée non retirés');
     await db

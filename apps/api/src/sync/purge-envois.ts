@@ -34,16 +34,29 @@ import type pg from 'pg';
 import { attachmentUploads } from '../db/schema.js';
 import { bornerLaTransaction } from '../db/horloge.js';
 import { logger } from '../logger.js';
-import { listerMorceaux, type Stockage } from './chunks.js';
+import { listerMorceaux, retirerObjets, type Stockage } from './chunks.js';
 
 /** Durée max d'une instruction ou d'une attente de verrou dans un lot de purge. */
 const DUREE_MAX_LOT_MS = 30_000;
+
+/**
+ * Durée pendant laquelle un lot peut tenir ses verrous de lignes (revue A17) :
+ * passé ce budget, les envois restants du lot sont laissés tels quels (toujours
+ * échus, repris au lot suivant). Avec le délai de chaque appel au stockage, un
+ * lot rend ses verrous bien avant l'attente de verrou des routes (30 s).
+ */
+const BUDGET_LOT_MS = 15_000;
+
+/** Délai de chaque appel au stockage pendant la purge (liste, suppression). */
+const DELAI_APPEL_STOCKAGE_MS = 5_000;
 
 export interface EntreePurge {
   readonly db: NodePgDatabase;
   readonly stockage: Stockage;
   readonly maintenant: Date;
   readonly tailleLot: number;
+  /** Arrêt demandé (fermeture de l'API) : la purge s'arrête entre deux envois. */
+  readonly signal?: AbortSignal;
 }
 
 export interface ResultatPurge {
@@ -61,13 +74,13 @@ async function retirerParPrefixe(
   pieceId: string,
 ): Promise<{ morceaux: number; octets: number } | null> {
   try {
-    const objets = await listerMorceaux(st, pieceId);
-    if (objets.length > 0) {
-      await st.client.removeObjects(
-        st.bucket,
-        objets.map((o) => o.nom),
-      );
-    }
+    const objets = await listerMorceaux(st, pieceId, DELAI_APPEL_STOCKAGE_MS);
+    // Une suppression partielle est un ÉCHEC (minio 8 rend les erreurs sans lever).
+    await retirerObjets(
+      st,
+      objets.map((o) => o.nom),
+      DELAI_APPEL_STOCKAGE_MS,
+    );
     return { morceaux: objets.length, octets: objets.reduce((s, o) => s + o.taille, 0) };
   } catch {
     return null;
@@ -79,6 +92,7 @@ async function purgerUnLot(
   entree: EntreePurge,
 ): Promise<{ candidats: number; resultat: ResultatPurge }> {
   const echeance = sql`LEAST(now(), ${entree.maintenant.toISOString()}::timestamptz)`;
+  const chrono = performance.now();
   return entree.db.transaction(async (tx) => {
     await bornerLaTransaction(tx, DUREE_MAX_LOT_MS);
     const verrouilles = await tx
@@ -121,6 +135,7 @@ async function purgerUnLot(
     let morceaux = 0;
     let octets = 0;
     for (const envoi of confirmes) {
+      if (entree.signal?.aborted === true || performance.now() - chrono > BUDGET_LOT_MS) break;
       const enCours = envoi.statut !== 'assemble';
       if (enCours) {
         // D'abord l'état : « rien de reçu », échéance gardée (une passe suivante
@@ -167,6 +182,7 @@ export async function purgerEnvoisExpires(entree: EntreePurge): Promise<Resultat
   let morceaux = 0;
   let octets = 0;
   for (;;) {
+    if (entree.signal?.aborted === true) break;
     const lot = await purgerUnLot({ ...entree, tailleLot });
     purges += lot.resultat.purges;
     morceaux += lot.resultat.morceaux;
@@ -201,6 +217,7 @@ export async function passeDePurge(entree: {
   readonly pool: pg.Pool;
   readonly stockage: Stockage;
   readonly tailleLot: number;
+  readonly signal?: AbortSignal;
 }): Promise<ResultatPurge | null> {
   let connexion: pg.PoolClient | undefined;
   let verrouPris = false;
@@ -216,18 +233,25 @@ export async function passeDePurge(entree: {
       stockage: entree.stockage,
       maintenant: new Date(),
       tailleLot: entree.tailleLot,
+      ...(entree.signal === undefined ? {} : { signal: entree.signal }),
     });
   } catch (err) {
     logger.error({ err }, 'purge_envoi_echec');
     return null;
   } finally {
     if (connexion !== undefined) {
+      let connexionSaine = true;
       if (verrouPris) {
-        await connexion
-          .query('SELECT pg_advisory_unlock($1)', [CLE_VERROU_PURGE])
-          .catch(() => undefined);
+        try {
+          await connexion.query('SELECT pg_advisory_unlock($1)', [CLE_VERROU_PURGE]);
+        } catch {
+          // Verrou consultatif peut-être encore tenu : la connexion est DÉTRUITE
+          // (le verrou meurt avec la session), jamais rendue au pool.
+          connexionSaine = false;
+        }
       }
-      connexion.release();
+      if (connexionSaine) connexion.release();
+      else connexion.release(true);
     }
   }
 }
@@ -240,7 +264,14 @@ export function demarrerPurgePeriodique(entree: {
   readonly tailleLot?: number;
   readonly intervalleMs?: number;
 }): PurgePeriodique {
-  const parametres = { ...entree, tailleLot: entree.tailleLot ?? 100 };
+  const arret = new AbortController();
+  const parametres = {
+    db: entree.db,
+    pool: entree.pool,
+    stockage: entree.stockage,
+    tailleLot: entree.tailleLot ?? 20,
+    signal: arret.signal,
+  };
   let enCours: Promise<unknown> = Promise.resolve();
   let arretee = false;
   const lancer = (): void => {
@@ -253,6 +284,7 @@ export function demarrerPurgePeriodique(entree: {
   return {
     async arreter(): Promise<void> {
       arretee = true;
+      arret.abort();
       clearInterval(minuterie);
       await enCours;
     },
