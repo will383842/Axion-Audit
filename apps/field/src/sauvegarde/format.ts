@@ -49,7 +49,14 @@ import { ligneStockeeSchema } from '../local/formes.js';
  * stable pendant que le schéma évolue, et l'inverse. Les confondre reviendrait à
  * refuser un fichier parfaitement lisible parce qu'une table a gagné un index.
  */
-export const VERSION_FORMAT_SAUVEGARDE = 1;
+export const VERSION_FORMAT_SAUVEGARDE = 2;
+
+/**
+ * Les formats que cette version sait RESTAURER. Le v1 (avant L6c-1, sans octets)
+ * reste lisible : la sauvegarde d'hier peut être la seule copie d'une journée de
+ * collecte (DECISIONS [L6c], 2026-10-09).
+ */
+export const VERSIONS_FORMAT_LISIBLES: readonly number[] = [1, 2];
 
 /** L'extension du fichier déposé sur l'appareil ou la clé USB (05 §9.7). */
 export const EXTENSION_SAUVEGARDE = '.axionbackup';
@@ -93,9 +100,28 @@ export const enTeteSauvegardeSchema = z.object({
 export type EnTeteSauvegarde = z.infer<typeof enTeteSauvegardeSchema>;
 
 /** Le fichier complet : en-tête en clair + charge chiffrée sous la clé du mot de passe. */
+/**
+ * Format v2 (L6c-1, revue A29) — UNE photo par entrée, chiffrée À PART sous la
+ * clé du fichier (AES-GCM, nonce propre) : c'est ce qui permet d'écrire le
+ * fichier par segments, une photo à la fois, sans jamais tenir toutes les photos
+ * en mémoire. `n` et `c` ont le sens de l'enveloppe ; les octets ne sont jamais
+ * en clair dans le fichier — une photo d'atelier, de tableau blanc ou de badge
+ * est une donnée sensible.
+ */
+export const pieceSauvegardeeSchema = z.object({
+  id: z.uuid(),
+  missionId: z.uuid(),
+  statutEnvoi: z.enum(['a_envoyer', 'envoyee', 'en_echec']),
+  n: z.string().min(1),
+  c: z.string(),
+});
+export type PieceSauvegardee = z.infer<typeof pieceSauvegardeeSchema>;
+
 export const fichierSauvegardeSchema = z.object({
   enTete: enTeteSauvegardeSchema,
   charge: enveloppeSchema,
+  /** Absent d'un fichier v1. */
+  pieces: z.array(pieceSauvegardeeSchema).optional(),
 });
 export type FichierSauvegarde = z.infer<typeof fichierSauvegardeSchema>;
 

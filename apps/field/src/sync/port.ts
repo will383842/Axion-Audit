@@ -22,6 +22,7 @@
 import { cleDerniereSyncReussie, lireMeta, type BaseLocale } from '../local/base.js';
 import type { Coffre } from '../local/coffre.js';
 import { instantMs } from '../local/horloge.js';
+import { compterPiecesNonEnvoyees } from '../local/octets.js';
 import {
   evaluerAlerteSauvegarde,
   type EtatSyncMission,
@@ -209,6 +210,11 @@ export function creerPortSync(deps: DependancesPort): PortSyncAffichable {
         if (op.statut === 'en_attente') enAttente += 1;
         else bloquees += 1;
       });
+    // L6c-1 (revue A29) : une photo « à envoyer » compte comme une op en attente,
+    // une photo « en échec » comme une op bloquée — état, statut et alerte des 24 h.
+    const pieces = await compterPiecesNonEnvoyees(deps.base, missionId);
+    enAttente += pieces.aEnvoyer;
+    bloquees += pieces.enEchec;
 
     let statut: StatutSync;
     const echec = echecs.get(missionId);

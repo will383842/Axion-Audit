@@ -164,7 +164,7 @@ const VERBES_ECRITURE_DEXIE =
   'put|add|delete|update|modify|clear|bulkPut|bulkAdd|bulkDelete|bulkUpdate';
 
 /**
- * Les NEUF tables de `SCHEMA_LOCAL` (05 §9.1, `local/base.ts`).
+ * Les DIX tables de `SCHEMA_LOCAL` (05 §9.1, `local/base.ts`).
  *
  * La liste est recopiée ici parce qu’un sélecteur esquery ne sait pas lire un
  * module : c’est le prix de la précision, et le seul entretien que cette règle
@@ -181,6 +181,7 @@ const LISTE_TABLES_LOCALES = [
   'workAssignments',
   'outbox',
   'meta',
+  'octetsPieces',
 ];
 const TABLES_LOCALES = LISTE_TABLES_LOCALES.join('|');
 
@@ -195,7 +196,7 @@ const ecritureDexieSur = (tables) => [
     // `enAttente.current.delete(cle)` (une file `useRef<Map>`) faisaient rougir le
     // lint, alors que la glose promettait le contraire. Nommer les tables ferme le
     // faux positif SANS relâcher la garde : `current` n’est pas une table, et
-    // aucune des neuf n’a échappé au sélecteur.
+    // aucune des dix n’a échappé au sélecteur.
     selector: `CallExpression[callee.object.type='MemberExpression'][callee.object.property.name=/^(${tables})$/][callee.property.name=/^(${VERBES_ECRITURE_DEXIE})$/]`,
     message: MESSAGE_ECRITURE_DEXIE,
   },

@@ -1211,6 +1211,14 @@ describe('T5 — les ceintures 3 et 4 : sources et exécution', () => {
     // un gabarit distinct, donc une ligne distincte. La verbosité est le prix de la
     // propriété qu'on achète — rien ne déborde d'un gabarit à l'autre.
     '/essai/socle-casse/scoping/:id/financials': { id: cadrageAvecFinancier },
+    // ── LES OCTETS DES PIÈCES (L6c-1, §9.6) ─────────────────────────────────
+    // Trois gabarits, trois lignes. Ces routes ne lisent AUCUNE table financière :
+    // elles rendent l'état d'un envoi par morceaux. Pièce non semée (UUID v7
+    // neuf) : le balayage les traverse et observe le refus ; la propriété et
+    // l'étanchéité réelles sont prouvées dans les tests `l6c-sync-chunks-*`.
+    '/v1/sync/attachments/:id/chunks/:index': { id: uuidv7(), index: '0' },
+    '/v1/sync/attachments/:id/complete': { id: uuidv7() },
+    '/v1/sync/attachments/:id/status': { id: uuidv7() },
     '/essai/missions/:missionId': { missionId: uuidv7() },
     '/essai/sessions/:sessionId': { sessionId: uuidv7() },
   };

@@ -62,9 +62,9 @@ import { useTerrain } from '../../app/contexte.js';
 import { ecrireMeta, lireMeta } from '../../local/base.js';
 import { maintenant } from '../../local/horloge.js';
 import { portSyncDeLaBase } from '../../app/port-sync-terrain.js';
-import { deposerFichier } from '../../sauvegarde/depot.js';
+import { deposerFichier, messagePiecesIllisibles } from '../../sauvegarde/depot.js';
 import { nomFichierSauvegarde } from '../../sauvegarde/format.js';
-import { exporterSauvegarde, MotDePasseExportInvalideError } from '../../sauvegarde/sauvegarde.js';
+import { ecrireSauvegarde, MotDePasseExportInvalideError } from '../../sauvegarde/sauvegarde.js';
 import { PROFIL_PAR_DEFAUT } from '../../session/auditeur.js';
 import { formaterDateHeureMission } from '../../session/fuseau.js';
 import { useEnLigne } from '../../session/media.js';
@@ -207,11 +207,23 @@ export function EcranFinDeJournee(): ReactNode {
             'Sauvegarde NON produite : le mot de passe de cet appareil — celui qui déverrouille cette application — est nécessaire pour la chiffrer (c’est lui, et lui seul, qui permettra de la rouvrir sur un autre appareil).';
         } else {
           try {
-            const produit = await exporterSauvegarde({ missionId, motDePasse });
-            const nom = nomFichierSauvegarde(missionId, produit.enTete.creeLe);
-            deposerFichier(nom, JSON.stringify(produit));
+            // Revue A29 : écrite PAR SEGMENTS, une photo à la fois ; le fichier
+            // n'est jamais réuni en une seule chaîne (Blob construit par parties).
+            const parties: string[] = [];
+            const bilan = await ecrireSauvegarde(
+              { missionId, motDePasse },
+              {
+                ecrire: (partie) => {
+                  parties.push(partie);
+                  return Promise.resolve();
+                },
+              },
+            );
+            const nom = nomFichierSauvegarde(missionId, bilan.enTete.creeLe);
+            deposerFichier(nom, parties);
             fichierProduit = true;
-            sauvegarde = `Sauvegarde chiffrée produite : ${nom} (${String(produit.enTete.operationsIncluses)} élément(s) non encore synchronisé(s) inclus).`;
+            const illisibles = messagePiecesIllisibles(bilan.piecesIllisibles);
+            sauvegarde = `Sauvegarde chiffrée produite : ${nom} (${String(bilan.enTete.operationsIncluses)} élément(s) non encore synchronisé(s) inclus).${illisibles === null ? '' : ` ${illisibles}`}`;
           } catch (cause) {
             // M5 (A29) : un mot de passe FAUX est un refus NOMMÉ, pas un échec
             // technique. Les deux appellent des gestes différents — retaper son

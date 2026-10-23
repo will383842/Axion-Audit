@@ -76,10 +76,21 @@ import {
 import { SCHEMA_CHARGE, ligneStockeeSchema } from '../local/formes.js';
 import { maintenant } from '../local/horloge.js';
 import {
+  chiffrerOctets,
+  idsOctetsDeMission,
+  lireLigneOctets,
+  lireOctetsPiece,
+  lireStatutEnvoi,
+  rangerOctets,
+} from '../local/octets.js';
+import {
   contenuSauvegardeSchema,
   fichierSauvegardeSchema,
   TABLES_SAUVEGARDEES,
   VERSION_FORMAT_SAUVEGARDE,
+  VERSIONS_FORMAT_LISIBLES,
+  type EnTeteSauvegarde,
+  type PieceSauvegardee,
   type ContenuSauvegarde,
   type FichierSauvegarde,
   type LigneSauvegardee,
@@ -248,11 +259,48 @@ async function lireTable(nom: TableSauvegardee, missionId: string): Promise<Lign
   return lignes;
 }
 
+/** Reçoit le fichier de secours partie par partie, dans l'ordre (revue A29). */
+export interface EcrivainSauvegarde {
+  ecrire(partie: string): Promise<void>;
+}
+
+export interface BilanEcritureSauvegarde {
+  readonly enTete: EnTeteSauvegarde;
+  /** Pièces dont les octets locaux sont illisibles : NON incluses, signalées. */
+  readonly piecesIllisibles: readonly string[];
+}
+
 /**
- * Produit le fichier de secours. **Aucun réseau, aucune permission, aucun
- * serveur** — il se fabrique en mode avion, et c'est toute sa valeur.
+ * Produit le fichier de secours en mémoire (outillage, tests). Les écrans passent
+ * par `ecrireSauvegarde`, qui ne réunit jamais le fichier entier.
  */
 export async function exporterSauvegarde(demande: DemandeExport): Promise<FichierSauvegarde> {
+  const parties: string[] = [];
+  await ecrireSauvegarde(demande, {
+    ecrire: (partie) => {
+      parties.push(partie);
+      return Promise.resolve();
+    },
+  });
+  return fichierSauvegardeSchema.parse(JSON.parse(parties.join('')));
+}
+
+/**
+ * Écrit le fichier de secours PAR SEGMENTS (revue A29). **Aucun réseau, aucune
+ * permission, aucun serveur** — il se fabrique en mode avion, et c'est toute sa
+ * valeur.
+ *
+ * Première partie : l'en-tête et le contenu chiffré (tables + outbox). Puis UNE
+ * partie par photo : ses octets sont lus, déchiffrés, rechiffrés sous la clé du
+ * fichier et remis à l'écrivain AVANT que la photo suivante ne soit lue — le pic
+ * mémoire est borné à une photo. Une photo dont l'enveloppe locale est illisible
+ * est signalée dans le bilan et l'export aboutit quand même : une photo abîmée ne
+ * prive pas l'auditeur de toute sa sauvegarde.
+ */
+export async function ecrireSauvegarde(
+  demande: DemandeExport,
+  ecrivain: EcrivainSauvegarde,
+): Promise<BilanEcritureSauvegarde> {
   const { base, coffre } = contexteLocal();
   const parametres: ParametresKdfSauvegarde = demande.parametresKdf ?? PARAMETRES_KDF_DEFAUT;
 
@@ -315,22 +363,60 @@ export async function exporterSauvegarde(demande: DemandeExport): Promise<Fichie
 
   const libelle = await lireMeta(base, CLES_META.libelleAppareil);
 
-  return {
-    enTete: {
-      versionFormat: VERSION_FORMAT_SAUVEGARDE,
-      missionId: demande.missionId,
-      libelleAppareil: typeof libelle === 'string' ? libelle : 'Appareil non nommé',
-      creeLe: maintenant(),
-      versionSchemaLocal: VERSION_SCHEMA_LOCAL,
-      operationsIncluses: operations.length,
-      kdf: { algo: 'argon2id', sel: versBase64(sel), parametres },
-    },
-    charge: {
-      v: VERSION_ENVELOPPE,
-      n: versBase64(nonce),
-      c: versBase64(new Uint8Array(chiffre)),
-    } satisfies Enveloppe,
+  const enTete: EnTeteSauvegarde = {
+    versionFormat: VERSION_FORMAT_SAUVEGARDE,
+    missionId: demande.missionId,
+    libelleAppareil: typeof libelle === 'string' ? libelle : 'Appareil non nommé',
+    creeLe: maintenant(),
+    versionSchemaLocal: VERSION_SCHEMA_LOCAL,
+    operationsIncluses: operations.length,
+    kdf: { algo: 'argon2id', sel: versBase64(sel), parametres },
   };
+  const charge: Enveloppe = {
+    v: VERSION_ENVELOPPE,
+    n: versBase64(nonce),
+    c: versBase64(new Uint8Array(chiffre)),
+  };
+
+  // ── Segment 1 : l'en-tête et le contenu. Le tableau des photos s'ouvre. ──
+  await ecrivain.ecrire(
+    `{"enTete":${JSON.stringify(enTete)},"charge":${JSON.stringify(charge)},"pieces":[`,
+  );
+
+  // ── Puis une photo à la fois : seules les CLÉS sont lues d'avance ─────────
+  const piecesIllisibles: string[] = [];
+  let premiere = true;
+  for (const id of await idsOctetsDeMission(base, demande.missionId)) {
+    const ligne = await lireLigneOctets(base, id);
+    if (ligne === null) continue;
+    let clair: Uint8Array | null;
+    try {
+      clair = await lireOctetsPiece(base, coffre, id);
+    } catch {
+      piecesIllisibles.push(id);
+      continue;
+    }
+    if (clair === null) continue;
+    const noncePiece = crypto.getRandomValues(new Uint8Array(LONGUEUR_NONCE_OCTETS));
+    const chiffrePiece = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv: noncePiece },
+      cle,
+      new Uint8Array(clair),
+    );
+    clair = null;
+    const piece: PieceSauvegardee = {
+      id,
+      missionId: ligne.missionId,
+      statutEnvoi: ligne.statutEnvoi,
+      n: versBase64(noncePiece),
+      c: versBase64(new Uint8Array(chiffrePiece)),
+    };
+    await ecrivain.ecrire(`${premiere ? '' : ','}${JSON.stringify(piece)}`);
+    premiere = false;
+  }
+  await ecrivain.ecrire(']}');
+
+  return { enTete, piecesIllisibles };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -482,9 +568,9 @@ export async function importerSauvegarde(
   }
   const valide: FichierSauvegarde = analyse.data;
 
-  if (valide.enTete.versionFormat !== VERSION_FORMAT_SAUVEGARDE) {
+  if (!VERSIONS_FORMAT_LISIBLES.includes(valide.enTete.versionFormat)) {
     throw new SauvegardeIllisibleError(
-      `il a été produit au format ${String(valide.enTete.versionFormat)}, cette version de l’application lit le format ${String(VERSION_FORMAT_SAUVEGARDE)}`,
+      `il a été produit au format ${String(valide.enTete.versionFormat)}, cette version de l’application lit jusqu’au format ${String(VERSION_FORMAT_SAUVEGARDE)}`,
     );
   }
 
@@ -506,8 +592,9 @@ export async function importerSauvegarde(
   }
 
   let clair: string;
+  let cle: CryptoKey;
   try {
-    const cle = await cleDuFichier(
+    cle = await cleDuFichier(
       motDePasse,
       depuisBase64(valide.enTete.kdf.sel),
       valide.enTete.kdf.parametres,
@@ -559,6 +646,36 @@ export async function importerSauvegarde(
   };
   await appliquerDescente(lot);
 
+  // L6c-1 — les octets, rechiffrés par le coffre de CET appareil. Un fichier v1
+  // n'en porte aucun. Une pièce qui a déjà ses octets ici n'est pas écrasée
+  // (invariant 7 : la copie locale peut être plus récente que la sauvegarde).
+  // Une photo qui ne se déchiffre pas est COMPTÉE et dite dans l'avertissement.
+  const { coffre: coffreCible } = contexteLocal();
+  let piecesNonRestaurees = 0;
+  for (const entree of valide.pieces ?? []) {
+    if (entree.missionId !== contenu.data.missionId) continue;
+    if ((await lireStatutEnvoi(base, entree.id)) !== null) continue;
+    let octetsPiece: Uint8Array;
+    try {
+      octetsPiece = new Uint8Array(
+        await crypto.subtle.decrypt(
+          { name: 'AES-GCM', iv: depuisBase64(entree.n) },
+          cle,
+          depuisBase64(entree.c),
+        ),
+      );
+    } catch {
+      piecesNonRestaurees += 1;
+      continue;
+    }
+    await rangerOctets(base, {
+      id: entree.id,
+      missionId: entree.missionId,
+      statutEnvoi: entree.statutEnvoi,
+      octets: await chiffrerOctets(coffreCible, octetsPiece),
+    });
+  }
+
   // ── La mission restaurée est EMBARQUÉE ────────────────────────────────────
   // DECISIONS.md 2026-09-02 : « mission embarquée signifie DONNÉES PRÉSENTES,
   // jamais persistance accordée ». Après l'import, les données SONT présentes.
@@ -579,9 +696,22 @@ export async function importerSauvegarde(
     sauvegardeCreeeLe: valide.enTete.creeLe,
     lignesRestaurees: enregistrements.length,
     operationsNonReinjectees: operations,
-    avertissement:
-      operations === 0
-        ? null
-        : `Cette sauvegarde contient ${String(operations)} élément(s) de collecte qui n’avaient pas encore été synchronisés. Leurs données sont restaurées, mais la file d’envoi ne l’est pas dans cette version : ils repartiront au prochain envoi complet de la mission.`,
+    avertissement: avertissementImport(operations, piecesNonRestaurees),
   };
+}
+
+/** L'avertissement du rapport d'import, en français ; `null` si rien n'est à dire. */
+function avertissementImport(operations: number, piecesNonRestaurees: number): string | null {
+  const phrases: string[] = [];
+  if (operations > 0) {
+    phrases.push(
+      `Cette sauvegarde contient ${String(operations)} élément(s) de collecte qui n’avaient pas encore été synchronisés. Leurs données sont restaurées, mais la file d’envoi ne l’est pas dans cette version : ils repartiront au prochain envoi complet de la mission.`,
+    );
+  }
+  if (piecesNonRestaurees > 0) {
+    phrases.push(
+      `${String(piecesNonRestaurees)} photo(s) de cette sauvegarde n’ont pas pu être relues et n’ont pas été restaurées ; les autres données le sont.`,
+    );
+  }
+  return phrases.length === 0 ? null : phrases.join(' ');
 }

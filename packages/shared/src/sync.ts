@@ -216,3 +216,68 @@ export const reponsePullSchema = z.object({
 });
 
 export type ReponsePull = z.infer<typeof reponsePullSchema>;
+
+// =============================================================================
+// PROTOCOLE DE CHUNKS DES PIÈCES JOINTES — 05 §9.6, lot L6c
+//
+//   POST /v1/sync/attachments/:id/chunks/:index   corps = octets bruts
+//        → 200 { chunksRecus }                    (idempotent par couple id+index)
+//   GET  /v1/sync/attachments/:id/status          → 200 { statut, chunksRecus }
+//   POST /v1/sync/attachments/:id/complete        { sha256, chunks }
+//        → 200 { statut: 'assemble' } | 409 (details = index à réémettre)
+//
+// Un morceau fait AU PLUS 5 Mio (05 §9.6) ; une petite photo est un envoi d'un
+// seul morceau (DECISIONS [L6c] D4). Les noms des champs sont en camelCase comme
+// le reste du contrat de sync (11 §3).
+// =============================================================================
+
+/** Taille maximale d'un morceau : 5 × 1024 × 1024 octets (05 §9.6). */
+export const TAILLE_MORCEAU_MAX_OCTETS = 5 * 1024 * 1024;
+
+/** Borne haute d'un index de morceau : 10 000 × 5 Mio ≈ 48 Gio, très au-delà d'une pièce. */
+export const INDEX_MORCEAU_MAX = 9_999;
+
+/** États d'un envoi tels que `status` les rend ; `aucun` = aucun morceau reçu. */
+export const STATUTS_ENVOI_PIECE = ['en_cours', 'assemble', 'echec', 'aucun'] as const;
+export type StatutEnvoiPiece = (typeof STATUTS_ENVOI_PIECE)[number];
+
+/** Paramètres d'URL des routes de pièces. L'index est un entier décimal, sans signe. */
+export const parametresPieceSchema = z.object({ id: z.uuid() });
+export const parametresMorceauSchema = z.object({
+  id: z.uuid(),
+  index: z
+    .string()
+    .regex(/^\d{1,4}$/, { message: 'L’index de morceau doit être un entier positif.' })
+    .transform(Number)
+    .pipe(z.number().int().min(0).max(INDEX_MORCEAU_MAX)),
+});
+
+const listeIndexSchema = z.array(z.number().int().min(0));
+
+export const reponseMorceauSchema = z.object({ chunksRecus: listeIndexSchema });
+export type ReponseMorceau = z.infer<typeof reponseMorceauSchema>;
+
+export const reponseStatutPieceSchema = z.object({
+  statut: z.enum(STATUTS_ENVOI_PIECE),
+  chunksRecus: listeIndexSchema,
+});
+export type ReponseStatutPiece = z.infer<typeof reponseStatutPieceSchema>;
+
+/** `complete` : l'empreinte du TOUT (hexadécimal, 64) et le nombre de morceaux. */
+export const corpsTerminerPieceSchema = z.object({
+  sha256: z
+    .string()
+    .regex(/^[0-9a-fA-F]{64}$/, {
+      message: 'L’empreinte sha256 doit faire 64 caractères hexadécimaux.',
+    })
+    .transform((v) => v.toLowerCase()),
+  chunks: z
+    .number()
+    .int()
+    .min(1)
+    .max(INDEX_MORCEAU_MAX + 1),
+});
+export type CorpsTerminerPiece = z.infer<typeof corpsTerminerPieceSchema>;
+
+export const reponseTerminerPieceSchema = z.object({ statut: z.literal('assemble') });
+export type ReponseTerminerPiece = z.infer<typeof reponseTerminerPieceSchema>;

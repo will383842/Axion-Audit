@@ -1,5 +1,6 @@
 // =============================================================================
 // TESTS D'ACCEPTATION A27 — bloquant **B3**, moitié « balayage des sources ».
+// Révisé par A26 le 2026-10-09 (L6c-1) : voir le bloc « RÉVISION » en fin de fichier.
 // (La moitié « ce que l'œil voit » vit dans `photo.acceptation-b3.test.tsx` : le
 // projet `interface` sert un `import.meta.url` en HTTP, illisible pour `node:fs`.
 // Le découpage suit l'outillage, pas le sujet.)
@@ -121,7 +122,7 @@ describe('B3 — AUCUNE source de `apps/field/src` ne promet la capture photo', 
     expect(promessesDePhoto('<li>Prendre des photos et les joindre</li>')).toHaveLength(1);
   });
 
-  it('@critique il n’attrape PAS le démenti : dire que la capture n’existe pas reste permis', () => {
+  it('@critique le balayage des PROMESSES n’attrape pas le démenti (les démentis ont leur balayage, plus bas)', () => {
     expect(
       promessesDePhoto("const x = 'La capture photo n’est pas disponible dans cette version.';"),
     ).toEqual([]);
@@ -132,5 +133,58 @@ describe('B3 — AUCUNE source de `apps/field/src` ne promet la capture photo', 
     expect(promessesDePhoto('// on pourrait photographier une pièce ici')).toEqual([]);
     expect(promessesDePhoto('/* photographier une pièce */')).toEqual([]);
     expect(promessesDePhoto("const x = 'photographier une pièce'; // commentaire")).toHaveLength(1);
+  });
+});
+
+// =============================================================================
+// RÉVISION A26 du 2026-10-09 (lot L6c-1, `DECISIONS.md` [L6c] : « La capture
+// photo devient réelle : les acceptations B3 sont révisées par le testeur »).
+//
+// L'interdit des promesses NON TENUES reste entier, et il gagne son symétrique :
+// maintenant que la capture existe, la phrase qui la DÉMENT est à son tour une
+// promesse non tenue (« n'est pas disponible », « bientôt »). Le balayage
+// ci-dessus continue d'interdire les verbes de capture hors de l'unique geste
+// réel ; celui-ci interdit les démentis devenus faux. Le libellé du geste réel,
+// « Ajouter une photo », ne doit être attrapé par aucun des deux.
+// =============================================================================
+const DEMENTI_DEVENU_FAUX = /(n’est pas disponible|n'est pas disponible|bientôt)/i;
+
+/** Les lignes (hors commentaires) qui démentent la capture photo, désormais réelle. */
+export function dementisDePhoto(source: string): readonly string[] {
+  return sansCommentaires(source)
+    .split(/\r?\n/)
+    .filter((ligne) => /photo/i.test(ligne) && DEMENTI_DEVENU_FAUX.test(ligne))
+    .map((ligne) => ligne.trim());
+}
+
+describe('B3 révisé — la capture est réelle : aucun démenti, aucune promesse de trop', () => {
+  it('@critique aucune source de `apps/field/src` ne dit plus que la photo est indisponible', () => {
+    const fichiers = sources(RACINE_SOURCES);
+    expect(fichiers.length).toBeGreaterThan(30);
+    const coupables = fichiers
+      .map((fichier) => ({
+        fichier: fichier.replace(RACINE_SOURCES, ''),
+        lignes: dementisDePhoto(readFileSync(fichier, 'utf8')),
+      }))
+      .filter((resultat) => resultat.lignes.length > 0);
+    expect(coupables).toEqual([]);
+  });
+
+  it('@critique il attrape les deux démentis retirés (motif et « Photo (bientôt) »)', () => {
+    expect(
+      dementisDePhoto("const x = 'La capture photo n’est pas disponible dans cette version.';"),
+    ).toHaveLength(1);
+    expect(dementisDePhoto('<span>Photo (bientôt)</span>')).toHaveLength(1);
+  });
+
+  it('@critique le libellé du geste réel « Ajouter une photo » n’est attrapé par AUCUN balayage', () => {
+    const libelle = '<label>Ajouter une photo</label>';
+    expect(promessesDePhoto(libelle)).toEqual([]);
+    expect(dementisDePhoto(libelle)).toEqual([]);
+  });
+
+  it('@critique l’interdit des verbes de capture tient toujours hors du geste réel', () => {
+    expect(promessesDePhoto("const x = 'Prendre des photos de l’atelier';")).toHaveLength(1);
+    expect(promessesDePhoto("const x = 'Photographiez chaque poste';")).toHaveLength(1);
   });
 });

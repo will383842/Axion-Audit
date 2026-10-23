@@ -321,14 +321,22 @@ for (const echelle of ECHELLES) {
         .toBe(2);
 
       // ── ÉTAPE 5 — LA PHOTO, ET SON ÉTAT RÉEL À DATE ──────────────────────
-      // §4bis nomme la photo dans le segment L5. Elle n'est pas livrée : le
-      // bouton garde sa place, désactivé, et il DIT pourquoi (03 §17.4). Le
-      // parcours le constate ici. Le jour où la chaîne photo arrive, c'est cette
-      // assertion qui rougit et réclame la suite du scénario — c'est exactement
-      // ce qu'on veut d'un fil rouge, et l'inverse d'une étape passée sous silence.
-      const photo = page.getByRole('button', { name: /^Photo/ });
-      await expect(photo).toBeVisible();
-      await expect(photo).toBeDisabled();
+      // §4bis nomme la photo dans le segment L5. La chaîne photo est LIVRÉE
+      // (L6c-1) : le tripwire « Photo (bientôt), désactivé » a rougi comme prévu,
+      // et l'étape constate le nouvel état réel. Ce n'est plus un `button` mais
+      // un champ fichier (`ChampPhoto`) étiqueté « Ajouter une photo », ACTIF
+      // sur une question cotée, image + caméra arrière. Le libellé exact écarte
+      // « Ajouter une photo à l'entretien » (panneau de notes).
+      // Non prouvé ici : la capture elle-même (compression canvas d'un vrai
+      // JPEG, non déterministe en E2E) — couverte par les tests unitaires
+      // `boutonPhoto.acceptation-b3` et `photos.rendu`.
+      const photo = page.getByLabel('Ajouter une photo', { exact: true });
+      await expect(photo).toHaveCount(1);
+      await expect(photo).toBeEnabled();
+      await expect(photo).toHaveAttribute('type', 'file');
+      await expect(photo).toHaveAttribute('accept', 'image/*');
+      await expect(photo).toHaveAttribute('capture', 'environment');
+      await expect(page.getByText(/bientôt/i)).toHaveCount(0);
 
       // ── ÉTAPE 6 — L'À-REVOIR : une zone d'ombre, posée avant de partir ────
       await page.getByRole('button', { name: /^À revoir/ }).click();
