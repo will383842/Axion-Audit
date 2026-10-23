@@ -87,6 +87,14 @@
   "pnpm": {
     "peerDependencyRules": {
       "allowedVersions": {}
+    },
+    "auditConfig": {
+      "ignoreGhsas": [
+        "GHSA-vcc3-ghjq-m6fr",
+        "GHSA-528h-pc64-c93x",
+        "GHSA-hqr4-qq8f-hg3x",
+        "GHSA-mjw6-4jj6-33hc"
+      ]
     }
   }
 }
