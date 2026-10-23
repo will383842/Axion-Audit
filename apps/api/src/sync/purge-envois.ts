@@ -30,12 +30,11 @@
 // =============================================================================
 import { and, asc, eq, inArray, lt, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import type { Client as ClientMinio } from 'minio';
 import type pg from 'pg';
 import { attachmentUploads } from '../db/schema.js';
 import { bornerLaTransaction } from '../db/horloge.js';
 import { logger } from '../logger.js';
-import { prefixeMorceaux, type Stockage } from './chunks.js';
+import { listerMorceaux, type Stockage } from './chunks.js';
 
 /** Durée max d'une instruction ou d'une attente de verrou dans un lot de purge. */
 const DUREE_MAX_LOT_MS = 30_000;
@@ -53,25 +52,6 @@ export interface ResultatPurge {
   readonly octets: number;
 }
 
-interface ObjetMorceau {
-  readonly nom: string;
-  readonly taille: number;
-}
-
-/** Tous les objets sous `envois/<pieceId>/`, avec leur taille. */
-async function listerMorceaux(
-  client: ClientMinio,
-  bucket: string,
-  pieceId: string,
-): Promise<ObjetMorceau[]> {
-  const objets: ObjetMorceau[] = [];
-  const flux = client.listObjectsV2(bucket, prefixeMorceaux(pieceId), true);
-  for await (const objet of flux as AsyncIterable<{ name?: string; size?: number }>) {
-    if (typeof objet.name === 'string') objets.push({ nom: objet.name, taille: objet.size ?? 0 });
-  }
-  return objets;
-}
-
 /**
  * Retire les morceaux d'une pièce ; rend ce qui a été retiré, ou `null` si le
  * stockage a échoué (rien n'est alors compté comme purgé).
@@ -81,7 +61,7 @@ async function retirerParPrefixe(
   pieceId: string,
 ): Promise<{ morceaux: number; octets: number } | null> {
   try {
-    const objets = await listerMorceaux(st.client, st.bucket, pieceId);
+    const objets = await listerMorceaux(st, pieceId);
     if (objets.length > 0) {
       await st.client.removeObjects(
         st.bucket,

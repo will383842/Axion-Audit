@@ -173,6 +173,23 @@ export function prefixeMorceaux(pieceId: string): string {
   return `envois/${pieceId}/`;
 }
 
+export interface ObjetMorceau {
+  readonly nom: string;
+  readonly taille: number;
+}
+
+/** Tous les objets sous `envois/<pieceId>/`, avec leur taille (jamais `pieces/…`). */
+export async function listerMorceaux(st: Stockage, pieceId: string): Promise<ObjetMorceau[]> {
+  const objets: ObjetMorceau[] = [];
+  const flux = st.client.listObjectsV2(st.bucket, prefixeMorceaux(pieceId), true);
+  for await (const objet of flux as AsyncIterable<{ name?: string; size?: number }>) {
+    if (typeof objet.name === 'string' && objet.name.startsWith(prefixeMorceaux(pieceId))) {
+      objets.push({ nom: objet.name, taille: objet.size ?? 0 });
+    }
+  }
+  return objets;
+}
+
 /** Objet d'un morceau en attente d'assemblage. Jamais rendu au client (PD8). */
 export function cleMorceau(pieceId: string, index: number): string {
   return `${prefixeMorceaux(pieceId)}${String(index).padStart(5, '0')}`;
@@ -417,7 +434,7 @@ export async function terminerEnvoi(
     journal.warn({ pieceId, morceaux: corps.chunks }, 'Empreinte de pièce jointe refusée');
     throw new AppErrorIndex('UPLOAD_CHECKSUM_MISMATCH', MESSAGES.empreinte, issue.index);
   }
-  await retirerMorceaux(pieceId, corps.chunks, journal);
+  await retirerMorceaux(pieceId, journal);
   return { statut: 'assemble' };
 }
 
@@ -427,17 +444,18 @@ export async function terminerEnvoi(
  * est journalisé et RÉARME `expire_le` à maintenant : la purge de L6c-3 retire
  * alors les objets restés à sa prochaine passe (statut `assemble` inchangé).
  */
-async function retirerMorceaux(
-  pieceId: string,
-  chunks: number,
-  journal: FastifyBaseLogger,
-): Promise<void> {
+async function retirerMorceaux(pieceId: string, journal: FastifyBaseLogger): Promise<void> {
   try {
     const st = stockage();
-    await st.client.removeObjects(
-      st.bucket,
-      tous(chunks).map((i) => cleMorceau(pieceId, i)),
-    );
+    // PAR PRÉFIXE `envois/<id>/` : un morceau d'indice au-delà du nombre déclaré
+    // ne reste pas orphelin (réserve A17 de L6c-1). Jamais sous `pieces/…`.
+    const objets = await listerMorceaux(st, pieceId);
+    if (objets.length > 0) {
+      await st.client.removeObjects(
+        st.bucket,
+        objets.map((o) => o.nom),
+      );
+    }
   } catch {
     journal.warn({ pieceId }, 'Morceaux d’une pièce assemblée non retirés');
     await db
