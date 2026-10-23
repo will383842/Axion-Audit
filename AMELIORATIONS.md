@@ -2803,7 +2803,7 @@ paysage, pendant **V-4.2 et V-5** de la séance P-C. _≈ 0,2 j pour rendre le t
 **Si l'observation de séance ne relève rien, cette fiche est REFUSÉE et disparaît** — c'est le
 résultat attendu, et le moins cher.
 
-## 2026-10-23 — [Phase 1/2] Étage 2, PROPOSÉE — **DURÉE-CIBLE** : l'audit se construit pour tenir une durée fixée (2 h, 4 h, 1 jour…)
+## 2026-10-23 — [Phase 1/2] Étage 2, ARBITRÉE (Phase 2, après le rapport DOCX) — **DURÉE-CIBLE** : l'audit se construit pour tenir une durée fixée (2 h, 4 h, 1 jour…)
 
 **Demande de Williams (23/10/2026).** À la création d'une mission, choisir la durée de collecte
 (« deux heures, quatre heures ou autre ») ; l'outil compose un audit qui tient dans ce temps.
@@ -2842,7 +2842,7 @@ minimum possible, pas tronquer.
 **À trancher par Williams.** ① Phase 1 (avant le rapport) ou Phase 2 ? ② Le temps par question : abaque par
 type seulement (simple), ou mesuré question par question ? ③ Préréglages de durée à proposer.
 
-## 2026-10-23 — [Phase 1/2] Étage 2, PROPOSÉE — **DOSSIER ENTREPRISE ASSISTÉ PAR LLM** : renseigner l'entreprise, le LLM complète au maximum
+## 2026-10-23 — [Phase 1/2] Étage 2, ARBITRÉE (Phase 2, documents et saisie d'abord) — **DOSSIER ENTREPRISE ASSISTÉ PAR LLM** : renseigner l'entreprise, le LLM complète au maximum
 
 **Demande de Williams (23/10/2026).** Pouvoir saisir des informations sur l'entreprise à auditer et qu'un LLM
 complète le plus possible, pour que l'audit soit préparé au mieux.
