@@ -2,9 +2,11 @@
 
 Historique précédent : `docs/archive/ETAT_2026-08-27_au_2026-09-10.md`.
 
-## 2026-10-23 — L6c-2 fusionnée (#146) ; L6c-3 en deux PR, lot scoring S1 lancé
+## 2026-10-23 — PAUSE (Williams) : L6c-3 et scoring S1 codés et relus, PR en cours d'ouverture
 
-main `dd778bb` · PR ouverte : #147 (ZAP + fil rouge) · branches : `lot/l6c-3-siege` (horloge PG, purge), `lot/l6c-3-terrain` (resynchronisation, absorption perdue), `lot/l8-branche` (compute-scores + scores.csv)
-Fait : preuve E2E des 8 scénarios §9.8 sur vraie API ; reconnexion corrigée ; plan L6c-3 et plan scores/DOCX/audit fictif (DECISIONS `[Plan]`).
-Prochaine action : tests écrits avant le code (testeurs), puis auteurs, relecteurs A17/A29, PR-A puis PR-B ; ensuite S2 profil, S3 console, S4 DOCX, S6 audit fictif.
-Tests rouges connus : e2e `s4-horloge` oscille une fois sur main (à stabiliser) ; ZAP : voir #147.
+main  (L6c-2 fusionné #146) · PR ouverte : #147 (ZAP + fil rouge) · branches en ligne : , , , ,  (plan) · worktrees : _axfixs4, _axl6c3a, _axl6c3b, _axl8s1
+Fait : preuve E2E des 8 scénarios §9.8 ; reconnexion corrigée ; L6c-3 siège (horloge PG, purge, borne de durée totale) et terrain (resynchronisation, absorption) ; S1 scoring (compute-scores + scores.csv). Relectures A17/A29 faites ; la re-relecture A17 du siège après correctif du bloquant reste à faire.
+Prochaine action : (1) ouvrir les PR terrain, S1 et siège (siège en brouillon tant que A17 n'a pas re-relu), suivre la CI jusqu'au vert, fusion squash ; (2) test d'horloge scénario 4 : correctif dans #147 ; (3) puis S2 profil, S3 écran scores, S4 DOCX v1, S6 audit fictif (plan DECISIONS ).
+Machine : lancer UN SEUL test lourd à la fois (verrou C:/Users/Will/AppData/Local/Temp/verrou-e2e-l6c2) ; pre-push expire sous charge (vitest RPC timeout) : pousser quand rien d'autre ne tourne.
+Tests rouges connus : aucun connu sur les branches ; main : ZAP corrigé par #147 (règle 10094 re-datée).
+Attend Williams : liste oui/non DECISIONS  (docxtemplater, DOCX en Phase 1, écrêtage de l'horloge, purge par l'API) ; séance iPad P-C.
