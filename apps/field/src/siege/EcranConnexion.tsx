@@ -20,6 +20,10 @@
 //                 geste dont le seul effet possible serait d'écraser un
 //                 propriétaire de session). Il n'y a pas d'état « vide » : l'écran
 //                 EST son contenu, comme le déverrouillage.
+//   reconnexion requise → le siège a REFUSÉ le refresh (05 §31-3) : le formulaire
+//                 revient, pour le MÊME auditeur seulement (`rattacherAppareil`
+//                 refuse tout autre compte, invariant 7), et la file repart dès
+//                 que le jeton neuf est rangé.
 //
 // ── LA LEÇON B1, APPLIQUÉE ICI AVANT D'ÊTRE REDEMANDÉE ──────────────────────
 // Recette novice A54 : un écran ne DIAGNOSTIQUE jamais une erreur qui n'a pas eu
@@ -44,9 +48,12 @@ import {
   PASTILLE_PORTEE_PAR_LA_COQUILLE,
 } from '../app/capacites-hors-ligne.js';
 import { useTerrain } from '../app/contexte.js';
+import { portSyncDeLaBase } from '../app/port-sync-terrain.js';
 import { contexteLocal } from '../local/contexte.js';
+import { reconnexionRequise } from '../local/jetons.js';
 import { useEnLigne } from '../session/media.js';
 import { lireIdentiteAuditeur } from '../session/auditeur.js';
+import { MESSAGE_RECONNEXION_REQUISE } from '../sync/transport.js';
 import {
   AutreAuditeurSurCetAppareilError,
   IdentifiantsRefusesError,
@@ -109,6 +116,12 @@ export function EcranConnexion(): ReactNode {
     [base],
     undefined,
   );
+  const refus = useLiveQuery(
+    async () => (base === null ? false : reconnexionRequise(base)),
+    [base],
+    undefined,
+  );
+  const reconnexion = identite !== null && identite !== undefined && refus === true;
 
   const [courriel, setCourriel] = useState('');
   const [motDePasse, setMotDePasse] = useState('');
@@ -143,6 +156,16 @@ export function EcranConnexion(): ReactNode {
             motDePasse,
           });
           await rattacherAppareil(base, contexteLocal().coffre, session);
+          if (reconnexion) {
+            // La file attendait CE geste (05 §31-3) : elle repart sans attendre la
+            // minuterie. Un échec est déjà rendu visible par le port.
+            const port = portSyncDeLaBase(base);
+            void (async () => {
+              for (const mission of await base.missions.toArray()) {
+                await port.synchroniserMaintenant(mission.id).catch(() => undefined);
+              }
+            })().catch(() => undefined);
+          }
           // Le mot de passe ne survit pas au geste ; l'adresse non plus, elle
           // n'a plus d'usage. `useLiveQuery` fera basculer l'écran tout seul.
           setMotDePasse('');
@@ -155,10 +178,10 @@ export function EcranConnexion(): ReactNode {
         }
       })();
     },
-    [base, courriel, enCours, motDePasse],
+    [base, courriel, enCours, motDePasse, reconnexion],
   );
 
-  if (identite === undefined) {
+  if (identite === undefined || refus === undefined) {
     return (
       <section className="axn-pile axn-pile--large" aria-busy="true">
         <Squelette forme="titre" />
@@ -168,7 +191,7 @@ export function EcranConnexion(): ReactNode {
   }
 
   // ── Déjà rattaché : le formulaire n'a plus de raison d'exister ─────────────
-  if (identite !== null) {
+  if (identite !== null && !reconnexion) {
     return (
       <section className="axn-pile axn-pile--large" aria-labelledby={`${identifiant}-titre`}>
         {/* `h2` et non `h1` : la coquille porte le titre de la vue (règle A01
@@ -207,10 +230,21 @@ export function EcranConnexion(): ReactNode {
     // Ici, au contraire, le titre redisait celui de la vue : il part, et son
     // `aria-labelledby` avec lui, pour ne pas laisser la région sans nom.
     <section className="axn-pile axn-pile--large">
-      <Message ton="info" titre="Pourquoi cette étape">
-        Un entretien a toujours un propriétaire, et l’application ne l’invente pas. Rattachez cet
-        appareil à votre compte une fois, en ligne : ensuite, toute la collecte se fait sans réseau.
-      </Message>
+      {reconnexion ? (
+        <Message ton="avertissement" titre="Synchronisation en attente">
+          <p>{MESSAGE_RECONNEXION_REQUISE}</p>
+          <p>
+            Reconnectez-vous avec le compte auquel cet appareil est rattaché : tout ce qui attend
+            sera envoyé au siège.
+          </p>
+        </Message>
+      ) : (
+        <Message ton="info" titre="Pourquoi cette étape">
+          Un entretien a toujours un propriétaire, et l’application ne l’invente pas. Rattachez cet
+          appareil à votre compte une fois, en ligne : ensuite, toute la collecte se fait sans
+          réseau.
+        </Message>
+      )}
 
       {/* L'état hors ligne : ici le réseau est NÉCESSAIRE, et le taire enverrait
           l'auditeur essayer en boucle. Le bouton reste actif — c'est la tentative
@@ -228,7 +262,11 @@ export function EcranConnexion(): ReactNode {
             `app/hors-ligne.test.tsx` (bloc D). */}
       <RappelHorsLigne
         enLigne={enLigne}
-        introduction="Cet appareil semble hors ligne. Le rattachement demande une connexion, une seule fois. Sans réseau, cet appareil sait encore :"
+        introduction={
+          reconnexion
+            ? 'Cet appareil semble hors ligne. La reconnexion demande une connexion. Sans réseau, cet appareil sait encore :'
+            : 'Cet appareil semble hors ligne. Le rattachement demande une connexion, une seule fois. Sans réseau, cet appareil sait encore :'
+        }
         capacites={CAPACITES_HORS_LIGNE.connexionSiege}
         avecPastille={PASTILLE_PORTEE_PAR_LA_COQUILLE}
       />
@@ -285,14 +323,18 @@ export function EcranConnexion(): ReactNode {
         </div>
 
         {erreur !== null && (
-          <Message ton="alerte" titre="Appareil non rattaché" role="alert">
+          <Message
+            ton="alerte"
+            titre={reconnexion ? 'Reconnexion non aboutie' : 'Appareil non rattaché'}
+            role="alert"
+          >
             <p>{erreur.cause}</p>
             {erreur.action !== null && <p>{erreur.action}</p>}
           </Message>
         )}
 
         <Bouton type="submit" pleineLargeur taille="large" chargement={enCours}>
-          Rattacher cet appareil
+          {reconnexion ? 'Se reconnecter' : 'Rattacher cet appareil'}
         </Bouton>
       </form>
     </section>

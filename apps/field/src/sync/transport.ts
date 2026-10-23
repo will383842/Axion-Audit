@@ -42,7 +42,7 @@ import type {
 import type { Coffre } from '../local/coffre.js';
 import { maintenant } from '../local/horloge.js';
 import {
-  effacerJetonRafraichissement,
+  constaterRefusDuJeton,
   enregistrerJetonRafraichissement,
   lireJetonRafraichissement,
 } from '../local/jetons.js';
@@ -197,7 +197,9 @@ export function creerTransport(deps: DependancesTransport): TransportSync {
 
     if (reponse.status === 401 || reponse.status === 403) {
       // Refus EXPLICITE : le jeton est mort, le garder ferait marteler `/auth/*`.
-      await effacerJetonRafraichissement(deps.base);
+      // Le refus est RETENU : il survit au verrouillage, et c'est lui que la
+      // coquille dit (05 §31-3) en offrant la reconnexion.
+      await constaterRefusDuJeton(deps.base, maintenant());
       auth.acces = null;
       return 'reconnexion_requise';
     }
