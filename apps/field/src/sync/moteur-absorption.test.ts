@@ -386,6 +386,8 @@ describe('V3 — le remappage est rejoué au début du passage suivant', () => {
     const moteur = creerMoteurSync({ base, coffre, transport: siege(opX) });
     await passageEnEchec(moteur);
     await moteur.pousser(MISSION_A);
+    // L'op de la pièce relancée par le rejeu part au passage suivant : on le laisse se vider.
+    await moteur.pousser(MISSION_A);
     const apres = await instantane();
 
     const ordre: string[] = [];

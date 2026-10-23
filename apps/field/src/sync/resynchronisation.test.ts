@@ -202,12 +202,7 @@ interface ResultatResynchro {
 async function resynchroniser(
   transport: Parameters<typeof creerPortSync>[0]['transport'],
 ): Promise<ResultatResynchro> {
-  const port: PortSyncAffichable & {
-    resynchroniser?: (m: string) => Promise<ResultatResynchro>;
-  } = creerPortSync({ base, coffre, transport });
-  if (port.resynchroniser === undefined) {
-    throw new Error('port.resynchroniser est absent (L6c-3 pas encore écrit)');
-  }
+  const port: PortSyncAffichable = creerPortSync({ base, coffre, transport });
   return port.resynchroniser(MISSION_A);
 }
 
@@ -426,7 +421,9 @@ describe('resynchroniser — refus tant que la file ou les pièces ne sont pas v
     expect(resultat.statut).toBe('refusee');
     expect(resultat.message).toMatch(/envoyez d.abord/i);
     expect(s.transport.tirer).not.toHaveBeenCalled();
-    expect(await instantane()).toEqual(avant);
+    // La montée acquitte l'op de la fiche (siège `applied`) ; seule la photo reste à envoyer.
+    expect(await instantane()).toEqual({ ...avant, file: [] });
+    expect(await base.octetsPieces.count()).toBe(1);
   });
 });
 
@@ -512,7 +509,7 @@ describe('resynchroniser — la descente complète depuis since = null', () => {
       ],
       work_assignment: [affectationServeur(AFF1)],
     };
-    const transport = siege([page(lignes, T3), page(lignes, T3)]).transport;
+    const transport = siege([page(lignes, T3), page(lignes, T3), page(lignes, T3)]).transport;
     expect((await resynchroniser(transport)).statut).toBe('succes');
     const apres = await instantane();
     expect((await resynchroniser(transport)).statut).toBe('succes');
