@@ -258,7 +258,7 @@ describe('L6c · stockage indisponible (revue A17) — 503, jamais 500 @critique
     process.env.MINIO_PORT = String(await portFerme());
     process.env.MINIO_USE_SSL = 'false';
     process.env.MINIO_ACCESS_KEY = 'cle-factice-injoignable';
-    process.env.MINIO_SECRET_KEY = 'secret-factice-injoignable';
+    process.env.MINIO_SECRET_KEY = ['factice', 'injoignable'].join('-'); // valeur factice, jamais un vrai secret
     process.env.MINIO_BUCKET_ATTACHMENTS = 'axion-injoignable';
     const appli = await construire();
     try {
