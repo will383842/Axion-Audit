@@ -91,6 +91,12 @@ export interface BilanPush {
   readonly message: string | null;
   /** L6c-1 — l'envoi des pièces de ce passage ; absent si aucun n'a été tenté. */
   readonly pieces?: BilanEnvoiPieces;
+  /**
+   * L6c-3 (revue A29, R2) — 1 si le rejeu du remappage en attente a levé en
+   * début de passage (la clé `sortie:a-remapper:` reste, le passage a monté
+   * quand même) ; 0 sinon. Le signal n'est jamais avalé en silence.
+   */
+  readonly rejeuxEnPanne: number;
 }
 
 /**
@@ -449,6 +455,7 @@ async function passage(deps: DependancesMoteur, missionId: string): Promise<Bila
     enErreur: compteurs.enErreur,
     operationsRestantes: await compterEnAttente(base, missionId),
     message,
+    rejeuxEnPanne: remappageEnPanne ? 1 : 0,
   };
 }
 

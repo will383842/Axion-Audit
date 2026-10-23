@@ -111,7 +111,13 @@ export function cleMissionRetiree(missionId: string): string {
 /** Le préfixe commun des états « mission retirée ». */
 export const PREFIXE_MISSION_RETIREE = 'descente:mission-retiree:';
 
-/** Les tables dont le siège fait foi à la descente complète (jamais écrites par le terrain). */
+/**
+ * Les tables dont le siège fait foi à la descente complète. `missions` et
+ * `workAssignments` ne sont jamais écrites par le terrain ; `missionQuestions`
+ * l'est par une question ad hoc (`question_adhoc`, `local/ecriture.ts`) : tant
+ * que son op est en file, `appliquerDescente` la protège ; une fois acceptée, la
+ * version du siège fait foi.
+ */
 const TABLES_DU_SIEGE: ReadonlySet<EnregistrementDescendant['table']> = new Set([
   'missions',
   'missionQuestions',
@@ -809,8 +815,11 @@ async function passage(
         if (enr.table === 'workAssignments') affectationsVues.add(enr.index.id);
       }
       // Le remplacement du miroir voyage avec la DERNIÈRE page : il n'a lieu que
-      // si la descente va au bout, dans la même transaction qu'elle.
-      if (derniere) {
+      // si la descente va au bout, dans la même transaction qu'elle. Revue A29
+      // (R1) : il est SUSPENDU dès qu'une ligne du siège est illisible — une
+      // affectation illisible n'entre pas dans `affectationsVues`, et sa copie
+      // locale valide serait retirée à tort (invariant 7).
+      if (derniere && illisibles === 0) {
         enregistrements = [
           ...enregistrements,
           ...(await affectationsRetirees(deps, missionId, affectationsVues)),
