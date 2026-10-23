@@ -26,6 +26,7 @@ const GARDES = [
   'check:compose-coolify',
   'check:executabilite',
   'check:fixtures',
+  'check:briefs',
   'format:check',
 ];
 
