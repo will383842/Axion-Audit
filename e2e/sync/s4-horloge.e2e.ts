@@ -94,12 +94,20 @@ test.describe('05 §9.8 n°4 — horloge locale déréglée de +3 h', () => {
       // On quitte l'écran de rattachement AVANT le rechargement : la vue mémorisée est alors
       // « Aujourd'hui », qui porte l'accès à l'agenda.
       await page.getByRole('button', { name: 'Revenir à la collecte' }).click();
+      // Attendre que la collecte soit réellement affichée : la vue mémorisée s'écrit après le clic, et
+      // un rechargement trop rapide (runner CI lent) retombe sur l'écran de rattachement.
+      await expect(page.getByRole('button', { name: /l’agenda/ })).toBeVisible();
 
       // ── LE DÉRÈGLEMENT : le navigateur avance de +3 h, le serveur non ────────
       const reelAvant = Date.now();
       await page.clock.install({ time: new Date(reelAvant + TROIS_HEURES_MS) });
       await page.reload();
       await deverrouillerAppareil(page, MOT_DE_PASSE_APPAREIL_CONNECTE);
+      // Filet : si la vue mémorisée n'a pas survécu au rechargement, on repart de la collecte.
+      const retour = page.getByRole('button', { name: 'Revenir à la collecte' });
+      const agenda = page.getByRole('button', { name: /l’agenda/ });
+      await expect(agenda.or(retour)).toBeVisible();
+      if (await retour.isVisible()) await retour.click();
 
       const horlogePage = await page.evaluate(() => Date.now());
       expect(
