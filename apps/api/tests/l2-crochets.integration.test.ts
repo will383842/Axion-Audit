@@ -1182,6 +1182,7 @@ describe('T5 — les ceintures 3 et 4 : sources et exécution', () => {
     // balayage sentinelle doit traverser, parce qu'un agregat est l'endroit ou
     // un montant se glisse sans que personne ait ecrit son nom.
     '/v1/missions/:id/export': { id: missionSemee },
+    '/v1/missions/:id/compute-scores': { id: missionSemee },
     '/v1/org-units/:id': { id: uniteSemee },
     '/v1/org-units/:id/validate': { id: uniteSemee },
     '/v1/org-units/:id/merge': { id: uniteSemee },

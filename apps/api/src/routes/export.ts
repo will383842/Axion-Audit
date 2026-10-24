@@ -25,7 +25,7 @@
 // `DECISIONS.md` 2026-09-02).
 //
 // ── AUCUNE MARQUE `financier`, ET C'EST VÉRIFIABLE ────────────────────────
-// L'export ne lit ni `scoping_financials`, ni `scoping_estimates`, ni
+// L’export ne lit ni `scoping_financials`, ni `scoping_estimates`, ni
 // `estimation_params`, ni `mission_rebaselines` (§25.1, admin seul). Il rend ce
 // que le CLIENT a dit et ce que le consultant a constaté ; jamais ce que la
 // mission coûte (invariant 3, §18.3).

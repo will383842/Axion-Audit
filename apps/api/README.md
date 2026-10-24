@@ -313,11 +313,12 @@ Trois routes de LECTURE sous une mission, toutes en politique `type: 'mission'` 
 l'identité, l'**appartenance se prouve dans le dépôt**, et un non-membre reçoit **404, jamais 403** —
 un 403 dirait « elle existe, mais pas pour vous ».
 
-| Route                              | Lot     | Rend                                             |
-| ---------------------------------- | ------- | ------------------------------------------------ |
-| `GET /v1/missions/:id/coverage`    | **L7b** | couverture unité × source (§16.6, §27.1), keyset |
-| `GET /v1/missions/:id/aggregation` | **L7b** | réponses par question (M5.1, §27.4), keyset      |
-| `GET /v1/missions/:id/export`      | **L7c** | **un ZIP** au format §36.3 — `application/zip`   |
+| Route                                  | Lot             | Rend                                                                                                                                                                                                  |
+| -------------------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /v1/missions/:id/coverage`        | **L7b**         | couverture unité × source (§16.6, §27.1), keyset                                                                                                                                                      |
+| `GET /v1/missions/:id/aggregation`     | **L7b**         | réponses par question (M5.1, §27.4), keyset                                                                                                                                                           |
+| `GET /v1/missions/:id/export`          | **L7c**         | **un ZIP** au format §36.3 — `application/zip`                                                                                                                                                        |
+| `POST /v1/missions/:id/compute-scores` | **L8/S1** (E14) | calcule et persiste `block_scores` + `unit_scores` ; `200 { missionId, calculeLe, resultat }` ; **admin ou lead** de la mission (403 membre non lead, 404 non-membre) ; `scores.csv` rejoint l'export |
 
 Aucune n'est listée au 05 §8 dans sa forme livrée : les trois écarts sont documentés en en-tête de
 leur greffon **et** dans `DECISIONS.md` (2026-09-05), comme le 11 §8-6 l'exige.
