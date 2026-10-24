@@ -47,6 +47,7 @@ import {
   CLES_META,
   cleDerniereSyncReussie,
   ecrireMeta,
+  effacerMeta,
   lireMeta,
   type BaseLocale,
   type LigneOutbox,
@@ -90,6 +91,12 @@ export interface BilanPush {
   readonly message: string | null;
   /** L6c-1 — l'envoi des pièces de ce passage ; absent si aucun n'a été tenté. */
   readonly pieces?: BilanEnvoiPieces;
+  /**
+   * L6c-3 (revue A29, R2) — 1 si le rejeu du remappage en attente a levé en
+   * début de passage (la clé `sortie:a-remapper:` reste, le passage a monté
+   * quand même) ; 0 sinon. Le signal n'est jamais avalé en silence.
+   */
+  readonly rejeuxEnPanne: number;
 }
 
 /**
@@ -115,6 +122,48 @@ async function cumulerArbitrages(base: BaseLocale, missionId: string, n: number)
   });
 }
 
+/**
+ * L6c-3 (V3) — clé `meta` des réponses arbitrées `superseded` dont le remappage
+ * reste à faire. Écrite dans la MÊME transaction que la sortie de leurs ops :
+ * l'id survit à une panne du remappage (coffre verrouillé en plein passage),
+ * sans quoi la pièce et la session liée désigneraient pour toujours un UUID que
+ * le siège ne connaît pas (invariants 1 et 7). Effacée après réussite seulement.
+ */
+export function cleARemapper(missionId: string): string {
+  return `${PREFIXE_A_REMAPPER}${missionId}`;
+}
+
+/** Le préfixe commun des clés de remappage en attente. */
+export const PREFIXE_A_REMAPPER = 'sortie:a-remapper:';
+
+/** Les ids que porte la clé (tableau de chaînes) ; toute autre forme = aucun. */
+function idsARemapper(valeur: unknown): string[] {
+  if (!Array.isArray(valeur)) return [];
+  return valeur.filter((id): id is string => typeof id === 'string');
+}
+
+/**
+ * Rejoue le remappage en attente de la mission, puis retire de la clé les ids
+ * rejoués. Si le remappage lève, la clé reste intacte et l'erreur remonte (panne
+ * locale : rien d'autre ne bouge). Idempotent : clé vide = aucun appel.
+ */
+async function rejouerRemappage(
+  base: BaseLocale,
+  coffre: Coffre,
+  missionId: string,
+): Promise<void> {
+  const cle = cleARemapper(missionId);
+  const ids = idsARemapper(await lireMeta(base, cle));
+  if (ids.length === 0) return;
+  await remapperALaSortie({ base, coffre }, missionId, ids);
+  const rejoues = new Set(ids);
+  await base.transaction('rw', base.meta, async () => {
+    const restants = idsARemapper(await lireMeta(base, cle)).filter((id) => !rejoues.has(id));
+    if (restants.length === 0) await effacerMeta(base, cle);
+    else await ecrireMeta(base, cle, restants);
+  });
+}
+
 export interface MoteurSync {
   pousser(missionId: string): Promise<BilanPush>;
 }
@@ -136,8 +185,6 @@ interface Compteurs {
   arbitrees: number;
   rejetees: number;
   enErreur: number;
-  /** Les réponses dont l'op est sortie `superseded` : à réaligner en fin de passage (A29-2). */
-  reponsesArbitrees: string[];
 }
 
 async function prochainLot(
@@ -159,13 +206,17 @@ async function prochainLot(
 
 async function appliquerReponse(
   base: BaseLocale,
+  missionId: string,
   lignes: readonly LigneOutbox[],
   reponse: ReponsePush,
   compteurs: Compteurs,
   dejaEnvoyees: Set<string>,
 ): Promise<void> {
   const resultats = new Map(reponse.results.map((r) => [r.opId, r]));
-  await base.transaction('rw', base.outbox, async () => {
+  // V3 : la sortie des ops et la persistance des ids arbitrés sont UNE écriture —
+  // pas de clé sans suppression, pas de suppression sans clé.
+  await base.transaction('rw', base.outbox, base.meta, async () => {
+    const arbitreesDuLot: string[] = [];
     for (const ligne of lignes) {
       const resultat = resultats.get(ligne.opId);
       if (resultat === undefined) {
@@ -181,7 +232,7 @@ async function appliquerReponse(
           // comptée, pour « n réponse(s) arbitrée(s) » (05 §9.3).
           if (resultat.result === 'superseded') {
             compteurs.arbitrees += 1;
-            if (ligne.entite === 'answer') compteurs.reponsesArbitrees.push(ligne.entiteId);
+            if (ligne.entite === 'answer') arbitreesDuLot.push(ligne.entiteId);
           }
           compteurs.acquittees += 1;
           await base.outbox.delete(ligne.opId);
@@ -205,6 +256,11 @@ async function appliquerReponse(
           break;
         }
       }
+    }
+    if (arbitreesDuLot.length > 0) {
+      const cle = cleARemapper(missionId);
+      const connus = idsARemapper(await lireMeta(base, cle));
+      await ecrireMeta(base, cle, [...new Set([...connus, ...arbitreesDuLot])]);
     }
   });
 }
@@ -270,6 +326,15 @@ async function preparer(
   return preparees;
 }
 
+async function opsEnAttente(base: BaseLocale, missionId: string): Promise<Set<string>> {
+  const ops = await base.outbox
+    .where('statut')
+    .equals('en_attente')
+    .filter((op) => op.missionId === missionId)
+    .toArray();
+  return new Set(ops.map((op) => op.opId));
+}
+
 async function compterEnAttente(base: BaseLocale, missionId: string): Promise<number> {
   return base.outbox
     .where('statut')
@@ -298,14 +363,32 @@ async function passage(deps: DependancesMoteur, missionId: string): Promise<Bila
     arbitrees: 0,
     rejetees: 0,
     enErreur: 0,
-    reponsesArbitrees: [],
   };
+
+  // V3 : un remappage resté en attente (panne au passage précédent) est rejoué
+  // AVANT tout envoi. Les ops qu'il relance partent au passage SUIVANT (comme à
+  // la sortie, A29-2) : elles sont écartées de celui-ci et empêchent le dernier
+  // succès, puisqu'elles ne vivent encore que sur l'appareil.
+  // S'il lève encore, la clé reste intacte (transaction du remappage) et le
+  // passage MONTE quand même : un remappage en panne ne doit pas bloquer la
+  // sauvegarde de toute la mission (invariant 8). Le remappage de fin de passage
+  // est alors sauté — tout reste dans la clé pour le passage suivant.
+  const enAttenteAvant = await opsEnAttente(base, missionId);
+  let remappageEnPanne = false;
+  try {
+    await rejouerRemappage(base, coffre, missionId);
+  } catch {
+    remappageEnPanne = true;
+  }
+  const differees = new Set(
+    [...(await opsEnAttente(base, missionId))].filter((opId) => !enAttenteAvant.has(opId)),
+  );
   const dejaEnvoyees = new Set<string>();
   let statut: BilanPush['statut'] = 'succes';
   let message: string | null = null;
 
   for (;;) {
-    const lues = await prochainLot(base, missionId, dejaEnvoyees);
+    const lues = await prochainLot(base, missionId, new Set([...differees, ...dejaEnvoyees]));
     if (lues.length === 0) break;
 
     const preparees = await preparer(base, coffre, lues);
@@ -333,7 +416,7 @@ async function passage(deps: DependancesMoteur, missionId: string): Promise<Bila
       break;
     }
     const arbitreesAvant = compteurs.arbitrees;
-    await appliquerReponse(base, lignes, resultat.donnees, compteurs, dejaEnvoyees);
+    await appliquerReponse(base, missionId, lignes, resultat.donnees, compteurs, dejaEnvoyees);
     await cumulerArbitrages(base, missionId, compteurs.arbitrees - arbitreesAvant);
   }
 
@@ -345,6 +428,7 @@ async function passage(deps: DependancesMoteur, missionId: string): Promise<Bila
   if (
     statut === 'succes' &&
     dejaEnvoyees.size === 0 &&
+    differees.size === 0 &&
     (await bloqueesDeLaMission(base, missionId)) === 0 &&
     piecesRestantes.aEnvoyer + piecesRestantes.enEchec === 0
   ) {
@@ -358,7 +442,9 @@ async function passage(deps: DependancesMoteur, missionId: string): Promise<Bila
   // A29-2 : une réponse arbitrée `superseded` a pu être absorbée par une ligne
   // déjà descendue. Réalignée APRÈS le passage et après le dernier succès : les
   // ops relancées partent au passage suivant, elles ne comptent pas comme montées.
-  await remapperALaSortie({ base, coffre }, missionId, compteurs.reponsesArbitrees);
+  // V3 : les ids viennent de la clé `meta` écrite avec la sortie des ops ; si le
+  // remappage lève ici, ils y restent et le passage suivant le rejoue.
+  if (!remappageEnPanne) await rejouerRemappage(base, coffre, missionId);
 
   return {
     ...(pieces === null ? {} : { pieces }),
@@ -369,6 +455,7 @@ async function passage(deps: DependancesMoteur, missionId: string): Promise<Bila
     enErreur: compteurs.enErreur,
     operationsRestantes: await compterEnAttente(base, missionId),
     message,
+    rejeuxEnPanne: remappageEnPanne ? 1 : 0,
   };
 }
 

@@ -27,7 +27,14 @@
 // =============================================================================
 import { CRITICITES, TYPES_DE_REPONSE } from '@axion/shared';
 import { z } from 'zod';
-import { cleCurseurPull, ecrireMeta, lireMeta, type BaseLocale } from '../local/base.js';
+import {
+  cleCurseurPull,
+  ecrireMeta,
+  effacerMeta,
+  lireMeta,
+  type BaseLocale,
+} from '../local/base.js';
+import { maintenant } from '../local/horloge.js';
 import type { Coffre } from '../local/coffre.js';
 import type { ReponsePull } from '../local/contrat-sync.js';
 import { appliquerDescente, type EnregistrementDescendant } from '../local/ecriture.js';
@@ -68,11 +75,54 @@ export interface BilanPull {
   readonly referencesRemappees: number;
   /** Message du transport quand le passage n'a pas abouti ; `null` sinon. */
   readonly message: string | null;
+  /**
+   * L6c-3 — descente COMPLÈTE seulement : le siège a répondu 404, l'accès à la
+   * mission est retiré. Les données locales restent toutes ; `cleMissionRetiree`
+   * est posée.
+   */
+  readonly missionRetiree?: true;
+}
+
+export interface OptionsDescente {
+  /**
+   * L6c-3 (05 §9.5, resynchronisation VOLONTAIRE) : repartir de `since = null`
+   * malgré un curseur connu. Le siège fait foi pour la mission, le questionnaire
+   * et les affectations : leurs lignes sont rafraîchies même si le tampon local
+   * est plus récent ; le miroir des affectations est REMPLACÉ (une absente du
+   * siège reçoit `supprimeLe`, jamais une suppression physique) ; le compte
+   * d'illisibles est REMPLACÉ par celui de cette descente si elle va au bout.
+   */
+  readonly complete?: boolean;
 }
 
 export interface Descente {
-  tirer(missionId: string): Promise<BilanPull>;
+  tirer(missionId: string, options?: OptionsDescente): Promise<BilanPull>;
 }
+
+/**
+ * L6c-3 — clé `meta` « mission retirée » : posée (instant ISO) quand une
+ * descente complète reçoit un 404 ; effacée par la resynchronisation réussie
+ * suivante. Aucune donnée locale n'est retirée pour autant (invariant 7).
+ */
+export function cleMissionRetiree(missionId: string): string {
+  return `${PREFIXE_MISSION_RETIREE}${missionId}`;
+}
+
+/** Le préfixe commun des états « mission retirée ». */
+export const PREFIXE_MISSION_RETIREE = 'descente:mission-retiree:';
+
+/**
+ * Les tables dont le siège fait foi à la descente complète. `missions` et
+ * `workAssignments` ne sont jamais écrites par le terrain ; `missionQuestions`
+ * l'est par une question ad hoc (`question_adhoc`, `local/ecriture.ts`) : tant
+ * que son op est en file, `appliquerDescente` la protège ; une fois acceptée, la
+ * version du siège fait foi.
+ */
+const TABLES_DU_SIEGE: ReadonlySet<EnregistrementDescendant['table']> = new Set([
+  'missions',
+  'missionQuestions',
+  'workAssignments',
+]);
 
 /**
  * L'horodatage d'une ligne de RÉFÉRENTIEL sans `updated_at` au 04 (questionnaire
@@ -579,6 +629,107 @@ async function completerDepuisLocal(
   return { enregistrements: complets, illisibles };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// LA DESCENTE COMPLÈTE (L6c-3) — le siège fait foi pour ses propres tables
+// ─────────────────────────────────────────────────────────────────────────────
+function instant(iso: string | null | undefined): number | null {
+  if (iso === null || iso === undefined) return null;
+  const ms = Date.parse(iso);
+  return Number.isNaN(ms) ? null : ms;
+}
+
+/** Le tampon de la ligne locale de même id, dans une table dont le siège fait foi. */
+async function tamponLocal(
+  base: BaseLocale,
+  enr: EnregistrementDescendant,
+): Promise<string | undefined> {
+  switch (enr.table) {
+    case 'missions':
+      return (await base.missions.get(enr.index.id))?.clientUpdatedAt;
+    case 'missionQuestions':
+      return (await base.missionQuestions.get(enr.index.id))?.clientUpdatedAt;
+    case 'workAssignments':
+      return (await base.workAssignments.get(enr.index.id))?.clientUpdatedAt;
+    case 'orgUnits':
+    case 'interviews':
+    case 'answers':
+    case 'attachments':
+      // Tables écrites par le terrain : le dernier-écrit-gagne ordinaire s'applique.
+      return undefined;
+  }
+}
+
+/**
+ * Décision L6c-3 : à la descente complète, la ligne du siège ÉCRASE la ligne
+ * locale de mission, de questionnaire et d'affectation, même si le tampon local
+ * est plus récent. Le dernier-écrit-gagne de `appliquerDescente` (non modifié)
+ * est respecté en portant le tampon de la ligne entrante au plus récent des
+ * deux ; une ligne qui porte une op non appliquée reste protégée par lui.
+ */
+async function forcerLeSiege(
+  base: BaseLocale,
+  enregistrements: readonly EnregistrementDescendant[],
+): Promise<EnregistrementDescendant[]> {
+  const forces: EnregistrementDescendant[] = [];
+  for (const enr of enregistrements) {
+    if (!TABLES_DU_SIEGE.has(enr.table)) {
+      forces.push(enr);
+      continue;
+    }
+    const local = await tamponLocal(base, enr);
+    const msLocal = instant(local);
+    const msEntrant = instant(enr.index.clientUpdatedAt);
+    if (local !== undefined && msLocal !== null && (msEntrant === null || msLocal > msEntrant)) {
+      forces.push(avecTampon(enr, local));
+    } else {
+      forces.push(enr);
+    }
+  }
+  return forces;
+}
+
+function avecTampon(enr: EnregistrementDescendant, tampon: string): EnregistrementDescendant {
+  switch (enr.table) {
+    case 'missions':
+      return { ...enr, index: { ...enr.index, clientUpdatedAt: tampon } };
+    case 'missionQuestions':
+      return { ...enr, index: { ...enr.index, clientUpdatedAt: tampon } };
+    case 'workAssignments':
+      return { ...enr, index: { ...enr.index, clientUpdatedAt: tampon } };
+    case 'orgUnits':
+    case 'interviews':
+    case 'answers':
+    case 'attachments':
+      return enr;
+  }
+}
+
+/**
+ * Le miroir des affectations REMPLACÉ : une affectation visible localement que
+ * la descente complète n'a pas apportée reçoit `supprimeLe` (invariant 7 : la
+ * ligne reste, elle sort de la vue). Même tampon que la ligne locale : le
+ * dernier-écrit-gagne laisse passer l'écriture.
+ */
+async function affectationsRetirees(
+  deps: DependancesDescente,
+  missionId: string,
+  vues: ReadonlySet<string>,
+): Promise<EnregistrementDescendant[]> {
+  const horodatage = maintenant();
+  const retirees: EnregistrementDescendant[] = [];
+  const locales = await deps.base.workAssignments.where('missionId').equals(missionId).toArray();
+  for (const locale of locales) {
+    if (locale.supprimeLe !== null || vues.has(locale.id)) continue;
+    const { charge, ...index } = locale;
+    retirees.push({
+      table: 'workAssignments',
+      index: { ...index, supprimeLe: horodatage },
+      charge: await deps.coffre.dechiffrer(charge, chargeWorkAssignmentSchema),
+    });
+  }
+  return retirees;
+}
+
 /** Ajoute `n` au compte d'illisibles de la mission ; jamais remis à zéro. */
 async function cumulerIllisibles(base: BaseLocale, missionId: string, n: number): Promise<void> {
   if (n <= 0) return;
@@ -608,17 +759,30 @@ async function tirerUnePage(
   }
 }
 
-async function passage(deps: DependancesDescente, missionId: string): Promise<BilanPull> {
-  const connu = await lireMeta(deps.base, cleCurseurPull(missionId));
-  let since: string | null = typeof connu === 'string' ? connu : null;
+async function passage(
+  deps: DependancesDescente,
+  missionId: string,
+  complete: boolean,
+): Promise<BilanPull> {
+  const lu = await lireMeta(deps.base, cleCurseurPull(missionId));
+  const connu = typeof lu === 'string' ? lu : null;
+  // La descente complète repart de `since = null`, mais garde le curseur connu
+  // pour le cas où le siège ne rendrait aucun `nextSince`.
+  let since: string | null = complete ? null : connu;
   let pages = 0;
   let recus = 0;
   let illisibles = 0;
   let remappees = 0;
+  /** Descente complète : les affectations apportées, pour remplacer le miroir. */
+  const affectationsVues = new Set<string>();
 
   for (;;) {
     const resultat = await tirerUnePage(deps.transport, missionId, since);
     if (resultat.type !== 'ok') {
+      // L6c-3 : un 404 à la descente complète = accès retiré. L'état est posé,
+      // rien de local n'est touché ; le compte d'illisibles reste l'ancien.
+      const retiree = complete && resultat.type === 'refus' && resultat.statut === 404;
+      if (retiree) await ecrireMeta(deps.base, cleMissionRetiree(missionId), maintenant());
       return {
         statut: resultat.type,
         pages,
@@ -626,6 +790,7 @@ async function passage(deps: DependancesDescente, missionId: string): Promise<Bi
         enregistrementsIllisibles: illisibles,
         referencesRemappees: remappees,
         message: resultat.type === 'hors_ligne' ? null : resultat.message,
+        ...(retiree ? { missionRetiree: true as const } : {}),
       };
     }
     pages += 1;
@@ -640,20 +805,49 @@ async function passage(deps: DependancesDescente, missionId: string): Promise<Bi
     const illisiblesDeLaPage = traduction.illisibles + completee.illisibles;
     illisibles += illisiblesDeLaPage;
 
+    // Fin du delta, ou curseur qui n'avance pas : la boucle s'arrêtera après
+    // cette page.
+    const derniere = nextSince === null || nextSince === since;
+    let enregistrements = completee.enregistrements;
+    if (complete) {
+      enregistrements = await forcerLeSiege(deps.base, enregistrements);
+      for (const enr of enregistrements) {
+        if (enr.table === 'workAssignments') affectationsVues.add(enr.index.id);
+      }
+      // Le remplacement du miroir voyage avec la DERNIÈRE page : il n'a lieu que
+      // si la descente va au bout, dans la même transaction qu'elle. Revue A29
+      // (R1) : il est SUSPENDU dès qu'une ligne du siège est illisible — une
+      // affectation illisible n'entre pas dans `affectationsVues`, et sa copie
+      // locale valide serait retirée à tort (invariant 7).
+      if (derniere && illisibles === 0) {
+        enregistrements = [
+          ...enregistrements,
+          ...(await affectationsRetirees(deps, missionId, affectationsVues)),
+        ];
+      }
+    }
+
     // Un `nextSince` nul n'efface jamais un curseur connu.
-    const curseur = nextSince ?? since;
+    const curseur = nextSince ?? since ?? connu;
     await appliquerDescente({
       missionId,
       serverTime,
       prochainSince: curseur,
-      enregistrements: completee.enregistrements,
+      enregistrements,
     });
-    await cumulerIllisibles(deps.base, missionId, illisiblesDeLaPage);
+    // Descente complète : le compte est RETENU jusqu'au bout, puis remplacé.
+    if (!complete) await cumulerIllisibles(deps.base, missionId, illisiblesDeLaPage);
     remappees += await remapperAbsorptions(deps, missionId, completee.enregistrements);
 
-    // Fin du delta, ou curseur qui n'avance pas : la boucle s'arrête.
-    if (nextSince === null || nextSince === since) break;
+    if (derniere) break;
     since = nextSince;
+  }
+
+  if (complete) {
+    await deps.base.transaction('rw', deps.base.meta, async () => {
+      await ecrireMeta(deps.base, cleLignesIllisibles(missionId), illisibles);
+      await effacerMeta(deps.base, cleMissionRetiree(missionId));
+    });
   }
 
   return {
@@ -668,7 +862,7 @@ async function passage(deps: DependancesDescente, missionId: string): Promise<Bi
 
 export function creerDescente(deps: DependancesDescente): Descente {
   return {
-    tirer(missionId: string): Promise<BilanPull> {
+    tirer(missionId: string, options: OptionsDescente = {}): Promise<BilanPull> {
       let parMission = descentesEnCours.get(deps.base);
       if (parMission === undefined) {
         parMission = new Map();
@@ -677,7 +871,7 @@ export function creerDescente(deps: DependancesDescente): Descente {
       const table = parMission;
       const suivant = (table.get(missionId) ?? Promise.resolve())
         .catch(() => undefined)
-        .then(() => passage(deps, missionId));
+        .then(() => passage(deps, missionId, options.complete === true));
       table.set(missionId, suivant);
       const liberer = (): void => {
         if (table.get(missionId) === suivant) table.delete(missionId);
