@@ -43,6 +43,7 @@ import {
 } from '@axion/shared';
 import { db } from '../db.js';
 import { type RoleSurMission, type StatutSession } from '../db/schema.js';
+import { CODES_DELAI_DEPASSE, DelaiDepasse, reglerDureeMaxEcriture } from '../db/horloge.js';
 import {
   archiver,
   bornerLaTransaction,
@@ -181,17 +182,12 @@ let delais: DelaisSync = { ...DELAIS_SYNC_DEFAUT };
 /** Réglage des délais (tests, et seul point d'injection). Les clés absentes restent. */
 export function reglerDelaisSync(nouveaux: Partial<DelaisSync>): void {
   delais = { ...delais, ...nouveaux };
+  // Une seule durée max pour le push ET les écritures descendantes du siège.
+  reglerDureeMaxEcriture(delais.dureeMaxPushMs);
 }
 
-/** Durée maximale du lot dépassée, mesurée juste avant le commit. */
-class DelaiDepasse extends Error {
-  constructor() {
-    super('delai');
-  }
-}
-
-/** SQLSTATE `57014` (statement_timeout) et `55P03` (lock_timeout). */
-const CODES_DELAI_DEPASSE: ReadonlySet<string> = new Set(['57014', '55P03']);
+// `DelaiDepasse` et `CODES_DELAI_DEPASSE` vivent dans `db/horloge.ts` (L6c-3) :
+// le siège s'en sert aussi.
 
 /** Un verdict de propriété qui n'autorise pas → l'issue correspondante. */
 function issueDeRefus(propriete: Exclude<Propriete, 'proprietaire'>, inconnu: string): Issue {
